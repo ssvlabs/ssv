@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.24
+ARG GO_VERSION=1.26
 
 #
 # STEP 1: Base image with common dependencies
@@ -17,6 +17,7 @@ WORKDIR /go/src/github.com/ssvlabs/ssv/
 
 # Cache dependencies
 COPY go.mod go.sum ./
+COPY ssvsigner/go.mod ssvsigner/go.sum ./ssvsigner/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,mode=0755,target=/go/pkg \
     go mod download && go mod verify

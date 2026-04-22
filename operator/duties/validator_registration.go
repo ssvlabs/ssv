@@ -45,6 +45,8 @@ func (h *ValidatorRegistrationHandler) Name() string {
 	return spectypes.BNRoleValidatorRegistration.String()
 }
 
+func (h *ValidatorRegistrationHandler) WaitShutdown() {}
+
 // HandleDuties generates registration duties every N epochs for every participating validator, then
 // validator-registrations are aggregated into batches and sent periodically to Beacon node by
 // ValidatorRegistrationRunner (sending validator-registrations periodically ensures various
@@ -60,17 +62,22 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
 				defer cancel()
 
-				h.processExecution(tickCtx, currentEpoch, slot)
+				h.processExecution(tickCtx, currentEpoch, currentSlot)
 			}()
 
 		case regDescriptor, ok := <-h.validatorRegCh:
@@ -99,17 +106,17 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: regDescriptor.ValidatorIndex,
 				PubKey:         regDescriptor.ValidatorPubkey,
 				Slot:           dutySlot,
-			}})
+			}}, h.dutyExecutionDeadline(dutySlot))
 			h.logger.Debug("validator registration duty sent",
 				zap.Uint64("slot", uint64(dutySlot)),
 				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
 				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
 				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient)))
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			h.logger.Debug("🛠 indicesChange event")
 
-		case <-h.reorg:
+		case <-h.reorgEventsCh:
 			h.logger.Debug("🛠 reorg event")
 		}
 	}
@@ -145,7 +152,7 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 			zap.String("validator_pubkey", pk.String()))
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, duties)
+	h.dutiesExecutor.ExecuteDuties(ctx, duties, h.dutyExecutionDeadline(slot))
 }
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.
@@ -175,4 +182,10 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 	}
 
 	return blockSlot, nil
+}
+
+func (h *ValidatorRegistrationHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
+	// 1 slot of time since the target slot should be sufficient for this duty-type.
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	return dutyDeadline
 }

@@ -70,7 +70,7 @@ func (c *SeenMsgTypes) RecordConsensusMessage(signedSSVMessage *spectypes.Signed
 	case specqbft.RoundChangeMsgType:
 		c.recordRoundChange()
 	default:
-		return fmt.Errorf("unexpected signed message type: %d", msg.MsgType) // should be checked before
+		return fmt.Errorf("unexpected signed message type: %d", msg.MsgType) // should be checked for already by now
 	}
 	return nil
 }
@@ -83,7 +83,7 @@ func (c *SeenMsgTypes) RecordPartialSignatureMessage(messages *spectypes.Partial
 	case spectypes.PostConsensusPartialSig:
 		c.recordPostConsensus()
 	default:
-		return fmt.Errorf("unexpected partial signature message type") // should be checked before
+		return fmt.Errorf("unexpected partial signature message type") // should be checked for already by now
 	}
 	return nil
 }

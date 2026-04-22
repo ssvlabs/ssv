@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -83,18 +84,16 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 		Finished:               pcs.Finished,
 	}
 
-	if pcs.CurrentDuty != nil {
-		if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
-			alias.ValidatorDuty = ValidatorDuty
-		} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {
-			alias.CommitteeDuty = committeeDuty
-		} else {
-			return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't ValidatorDuty or CommitteeDuty")
-		}
+	// Note: pcs.CurrentDuty is not nil by construction.
+	if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
+		alias.ValidatorDuty = ValidatorDuty
+	} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {
+		alias.CommitteeDuty = committeeDuty
+	} else {
+		return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't ValidatorDuty or CommitteeDuty")
 	}
-	byts, err := json.Marshal(alias)
 
-	return byts, err
+	return json.Marshal(alias)
 }
 
 func (pcs *State) UnmarshalJSON(data []byte) error {
@@ -128,7 +127,7 @@ func (pcs *State) UnmarshalJSON(data []byte) error {
 	} else if aux.CommitteeDuty != nil {
 		pcs.CurrentDuty = aux.CommitteeDuty
 	} else {
-		panic("no starting duty")
+		return fmt.Errorf("no starting duty in state JSON")
 	}
 
 	return nil

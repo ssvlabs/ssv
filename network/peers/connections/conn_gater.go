@@ -63,14 +63,18 @@ func NewConnectionGater(
 // InterceptPeerDial is called on an imminent outbound peer dial request, prior
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
-func (n *connGater) InterceptPeerDial(id peer.ID) bool {
+func (n *connGater) InterceptPeerDial(id peer.ID) (allow bool) {
+	if n.isBadPeer(id) {
+		n.logger.Debug("preventing outbound dial to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
-func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
+func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) (allow bool) {
 	if n.isBadPeer(id) {
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
@@ -82,15 +86,20 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 // inbound connection request, before any upgrade takes place. Transports who
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
-func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) (allow bool) {
 	if n.disable {
 		return true
 	}
+
+	remoteAddr := multiaddrs.RemoteMultiaddr()
+
 	if n.atInboundLimit() {
+		n.logger.Debug("connection rejected due to inbound limit",
+			zap.String("remote_addr", remoteAddr.String()),
+		)
 		return false
 	}
 
-	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.
 		runtime.Gosched()
@@ -98,15 +107,22 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
 		return false
 	}
-	return !n.atMaxPeersLimit()
+	if n.atMaxPeersLimit() {
+		n.logger.Debug("connection rejected due to max peers limit",
+			zap.String("remote_addr", remoteAddr.String()),
+		)
+		return false
+	}
+	return true
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
-func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) (allow bool) {
 	if n.trimmedRecently.Has(id) {
 		n.logger.Debug(
 			"InterceptSecured: trying to connect a peer we've recently trimmed",
+			fields.PeerID(id),
 			zap.String("conn_direction", direction.String()),
 		)
 		return false
@@ -123,7 +139,7 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 // InterceptUpgraded is called for inbound and outbound connections, after
 // libp2p has finished upgrading the connection entirely to a secure,
 // multiplexed channel.
-func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.DisconnectReason) {
+func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (allow bool, reason control.DisconnectReason) {
 	return true, 0
 }
 

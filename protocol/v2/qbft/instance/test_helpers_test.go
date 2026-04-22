@@ -1,0 +1,295 @@
+package instance
+
+import (
+	"bytes"
+	"crypto/rsa"
+	"testing"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	qbftconfig "github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+)
+
+type instanceTestEnv struct {
+	t       *testing.T
+	keys    *spectestingutils.TestKeySet
+	config  *qbftconfig.Config
+	inst    *Instance
+	network *spectestingutils.TestingNetwork
+	timer   *roundtimer.TestQBFTTimer
+}
+
+type recordingNetwork struct {
+	broadcasted []*spectypes.SignedSSVMessage
+	onBroadcast func(*spectypes.SignedSSVMessage) error
+}
+
+func (n *recordingNetwork) Broadcast(msgID spectypes.MessageID, message *spectypes.SignedSSVMessage) error {
+	n.broadcasted = append(n.broadcasted, message)
+	if n.onBroadcast != nil {
+		return n.onBroadcast(message)
+	}
+	return nil
+}
+
+type testValueChecker struct{}
+
+func (testValueChecker) CheckValue(data []byte) error {
+	if len(data) == 0 {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+	}
+	if bytes.Equal(data, []byte("invalid-value")) {
+		return spectypes.NewError(spectypes.QBFTValueInvalidErrorCode, "invalid value")
+	}
+	return nil
+}
+
+func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instanceTestEnv {
+	t.Helper()
+	require.GreaterOrEqual(t, int(operatorID), 1, "operatorID must be in Testing4SharesSet range [1,4]")
+	require.LessOrEqual(t, int(operatorID), 4, "operatorID must be in Testing4SharesSet range [1,4]")
+
+	keys := spectestingutils.Testing4SharesSet()
+	committeeMember := spectestingutils.TestingCommitteeMember(keys)
+	committeeMember.OperatorID = operatorID
+
+	pubKey, err := spectypes.GetPublicKeyPem(keys.OperatorKeys[operatorID])
+	require.NoError(t, err)
+	committeeMember.SSVOperatorPubKey = pubKey
+
+	config := &qbftconfig.Config{
+		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+		Domain:       spectestingutils.TestingSSVDomainType,
+		ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+			return 1
+		},
+		Network:     spectestingutils.NewTestingNetwork(operatorID, keys.OperatorKeys[operatorID]),
+		CutOffRound: spectestingutils.TestingCutOffRound,
+	}
+
+	testTimer := roundtimer.NewTestingTimer()
+
+	inst := NewInstance(
+		zap.NewNop(),
+		config,
+		committeeMember,
+		spectestingutils.TestingIdentifier,
+		specqbft.FirstHeight,
+		spectestingutils.NewOperatorSigner(keys, operatorID),
+		testTimer,
+	)
+	inst.StartValue = []byte("start-value")
+	inst.ValueChecker = testValueChecker{}
+
+	timer, ok := testTimer.(*roundtimer.TestQBFTTimer)
+	require.True(t, ok)
+
+	network, ok := config.GetNetwork().(*spectestingutils.TestingNetwork)
+	require.True(t, ok)
+
+	return &instanceTestEnv{
+		t:       t,
+		keys:    keys,
+		config:  config,
+		inst:    inst,
+		network: network,
+		timer:   timer,
+	}
+}
+
+func (e *instanceTestEnv) setLeader(operatorID spectypes.OperatorID) {
+	e.config.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+		return operatorID
+	}
+}
+
+func (e *instanceTestEnv) setNetwork(network specqbft.Network) {
+	e.config.Network = network
+}
+
+func (e *instanceTestEnv) hash(fullData []byte) [32]byte {
+	e.t.Helper()
+
+	root, err := specqbft.HashDataRoot(fullData)
+	require.NoError(e.t, err)
+	return root
+}
+
+func (e *instanceTestEnv) marshalJustifications(msgs []*specqbft.ProcessingMessage) [][]byte {
+	e.t.Helper()
+
+	signedMessages := make([]*spectypes.SignedSSVMessage, 0, len(msgs))
+	for _, msg := range msgs {
+		signedMessages = append(signedMessages, msg.SignedMessage)
+	}
+
+	justifications, err := specqbft.MarshalJustifications(signedMessages)
+	require.NoError(e.t, err)
+	return justifications
+}
+
+func (e *instanceTestEnv) processingMessage(msg *specqbft.Message, signerID spectypes.OperatorID, fullData []byte) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	signed := spectestingutils.SignQBFTMsg(e.keys.OperatorKeys[signerID], signerID, msg)
+	signed.FullData = fullData
+
+	procMsg, err := specqbft.NewProcessingMessage(signed)
+	require.NoError(e.t, err)
+	return procMsg
+}
+
+func (e *instanceTestEnv) processingMessageWithKey(
+	msg *specqbft.Message,
+	signerID spectypes.OperatorID,
+	signerKey *rsa.PrivateKey,
+	fullData []byte,
+) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	signed := spectestingutils.SignQBFTMsg(signerKey, signerID, msg)
+	signed.FullData = fullData
+
+	procMsg, err := specqbft.NewProcessingMessage(signed)
+	require.NoError(e.t, err)
+	return procMsg
+}
+
+func (e *instanceTestEnv) proposal(
+	round specqbft.Round,
+	signerID spectypes.OperatorID,
+	fullData []byte,
+	root [32]byte,
+	roundChanges []*specqbft.ProcessingMessage,
+	prepares []*specqbft.ProcessingMessage,
+) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	return e.processingMessage(&specqbft.Message{
+		MsgType:                  specqbft.ProposalMsgType,
+		Height:                   e.inst.State.Height,
+		Round:                    round,
+		Identifier:               e.inst.State.ID,
+		Root:                     root,
+		RoundChangeJustification: e.marshalJustifications(roundChanges),
+		PrepareJustification:     e.marshalJustifications(prepares),
+	}, signerID, fullData)
+}
+
+func (e *instanceTestEnv) prepare(
+	round specqbft.Round,
+	signerID spectypes.OperatorID,
+	root [32]byte,
+) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	return e.processingMessage(&specqbft.Message{
+		MsgType:    specqbft.PrepareMsgType,
+		Height:     e.inst.State.Height,
+		Round:      round,
+		Identifier: e.inst.State.ID,
+		Root:       root,
+	}, signerID, nil)
+}
+
+func (e *instanceTestEnv) commit(
+	round specqbft.Round,
+	signerID spectypes.OperatorID,
+	root [32]byte,
+) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	return e.processingMessage(&specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     e.inst.State.Height,
+		Round:      round,
+		Identifier: e.inst.State.ID,
+		Root:       root,
+	}, signerID, nil)
+}
+
+func (e *instanceTestEnv) roundChange(
+	round specqbft.Round,
+	signerID spectypes.OperatorID,
+	dataRound specqbft.Round,
+	root [32]byte,
+	fullData []byte,
+	prepares []*specqbft.ProcessingMessage,
+) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	return e.processingMessage(&specqbft.Message{
+		MsgType:                  specqbft.RoundChangeMsgType,
+		Height:                   e.inst.State.Height,
+		Round:                    round,
+		Identifier:               e.inst.State.ID,
+		Root:                     root,
+		DataRound:                dataRound,
+		RoundChangeJustification: e.marshalJustifications(prepares),
+	}, signerID, fullData)
+}
+
+func (e *instanceTestEnv) addMessages(container *specqbft.MsgContainer, msgs ...*specqbft.ProcessingMessage) {
+	e.t.Helper()
+
+	for _, msg := range msgs {
+		added, err := container.AddFirstMsgForSignerAndRound(msg)
+		require.NoError(e.t, err)
+		require.True(e.t, added)
+	}
+}
+
+func (e *instanceTestEnv) broadcastedProcessingMessage(index int) *specqbft.ProcessingMessage {
+	e.t.Helper()
+
+	require.Len(e.t, e.network.BroadcastedMsgs, index+1)
+
+	msg, err := specqbft.NewProcessingMessage(e.network.BroadcastedMsgs[index])
+	require.NoError(e.t, err)
+	return msg
+}
+
+func (e *instanceTestEnv) aggregateMessages(msgs ...*specqbft.ProcessingMessage) *specqbft.ProcessingMessage {
+	e.t.Helper()
+	require.NotEmpty(e.t, msgs)
+
+	ret := msgs[0].SignedMessage.DeepCopy()
+	for _, msg := range msgs[1:] {
+		require.NoError(e.t, ret.Aggregate(msg.SignedMessage))
+	}
+
+	procMsg, err := specqbft.NewProcessingMessage(ret)
+	require.NoError(e.t, err)
+	procMsg.SignedMessage.FullData = msgs[0].SignedMessage.FullData
+	return procMsg
+}
+
+func (e *instanceTestEnv) preparedRoundChangeSet(
+	round specqbft.Round,
+	preparedRound specqbft.Round,
+	fullData []byte,
+	prepareSigners []spectypes.OperatorID,
+	roundChangeSigners []spectypes.OperatorID,
+) ([]*specqbft.ProcessingMessage, []*specqbft.ProcessingMessage) {
+	e.t.Helper()
+
+	root := e.hash(fullData)
+
+	prepares := make([]*specqbft.ProcessingMessage, 0, len(prepareSigners))
+	for _, signerID := range prepareSigners {
+		prepares = append(prepares, e.prepare(preparedRound, signerID, root))
+	}
+
+	roundChanges := make([]*specqbft.ProcessingMessage, 0, len(roundChangeSigners))
+	for _, signerID := range roundChangeSigners {
+		roundChanges = append(roundChanges, e.roundChange(round, signerID, preparedRound, root, fullData, prepares))
+	}
+
+	return roundChanges, prepares
+}

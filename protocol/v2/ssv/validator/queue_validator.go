@@ -127,7 +127,7 @@ func (v *Validator) StartQueueConsumer(
 				// If no duty is running, pop only ExecuteDuty messages.
 				filter = func(m *queue.SSVMessage) bool {
 					e, ok := m.Body.(*types.EventMsg)
-					if !ok {
+					if !ok || e == nil {
 						return false
 					}
 					return e.Type == types.ExecuteDuty
@@ -137,7 +137,7 @@ func (v *Validator) StartQueueConsumer(
 				// for the current height and round.
 				filter = func(m *queue.SSVMessage) bool {
 					qbftMsg, ok := m.Body.(*specqbft.Message)
-					if !ok {
+					if !ok || qbftMsg == nil {
 						return true
 					}
 
@@ -165,7 +165,11 @@ func (v *Validator) StartQueueConsumer(
 				continue
 			}
 
-			msgKey := v.mKey(msg)
+			msgKey, err := mKey(msg)
+			if err != nil {
+				v.logger.Error("couldn't build msgKey, dropping message", zap.Error(err))
+				continue
+			}
 
 			var msgState *messageProcessingState
 			msgStateItem := msgStates.Get(msgKey)
@@ -306,27 +310,25 @@ func (v *Validator) logWithMessageFields(logger *zap.Logger, msg *queue.SSVMessa
 		With(fields.EstimatedCurrentSlot(v.NetworkConfig.EstimatedCurrentSlot()))
 
 	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		qbftMsg := msg.Body.(*specqbft.Message)
+		qbftMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || qbftMsg == nil {
+			return nil, fmt.Errorf("invalid qbft msg body, type: %T", msg.Body)
+		}
 		logger = logger.With(fields.QBFTRound(qbftMsg.Round), fields.QBFTHeight(qbftMsg.Height))
 	}
 	if msg.MsgType == message.SSVEventMsgType {
 		eventMsg, ok := msg.Body.(*types.EventMsg)
-		if !ok {
-			return nil, fmt.Errorf("could not decode event message")
+		if !ok || eventMsg == nil {
+			return nil, fmt.Errorf("event message: invalid msg body, type: %T", msg.Body)
 		}
 		if eventMsg.Type == types.Timeout {
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return nil, fmt.Errorf("get timeout data: %w", err)
+				return nil, fmt.Errorf("event message: get timeout data: %w", err)
 			}
 			logger = logger.With(fields.QBFTRound(timeoutData.Round), fields.QBFTHeight(timeoutData.Height))
 		}
 	}
 
 	return logger, nil
-}
-
-// mKey is a wrapper that provides a logger to report errors (if any).
-func (v *Validator) mKey(msg *queue.SSVMessage) messageKey {
-	return mKey(msg, v.logger)
 }

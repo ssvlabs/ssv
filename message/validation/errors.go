@@ -40,6 +40,11 @@ func (e Error) Error() string {
 	return sb.String()
 }
 
+const (
+	validationTimeoutReason  = "validation_timeout"
+	validationCanceledReason = "validation_canceled"
+)
+
 func (e Error) Reject() bool {
 	return e.reject
 }
@@ -86,7 +91,10 @@ var (
 	ErrEstimatedRoundNotInAllowedSpread = Error{text: "message round is too far from estimated"}
 	ErrUnknownOperator                  = Error{text: "operator is unknown"}
 	ErrOperatorValidation               = Error{text: "failed to validate operator data"}
-	ErrDecidedWithSameSigners           = Error{text: "decided with same number of signers"}
+	ErrDuplicatedMessage                = Error{text: "got duplicate message"}
+	ErrTooManyPartialSigMessage         = Error{text: "got more partial signature messages of a certain type than allowed"}
+	ErrDifferentProposalData            = Error{text: "got different proposal data"}
+	ErrDecidedMessageWithTooFewSigners  = Error{text: "got decided message with too few signers (same number or less)"}
 )
 
 // Messages with these errors are rejected (regardless of what peer they come from).
@@ -133,9 +141,6 @@ var (
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
-	ErrDuplicatedMessage                       = Error{text: "got duplicate message", reject: true}
-	ErrTooManyPartialSigMessage                = Error{text: "got more partial signature messages of a certain type than allowed", reject: true}
-	ErrDifferentProposalData                   = Error{text: "got different proposal data", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
@@ -144,6 +149,17 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
 		With(fields.PeerID(peerID))
+
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		recordIgnoredMessage(ctx, loggerFields.Role, validationTimeoutReason)
+		logger.Debug("ignoring message due to validation timeout", zap.Error(err))
+		return pubsub.ValidationIgnore
+	case errors.Is(err, context.Canceled):
+		recordIgnoredMessage(ctx, loggerFields.Role, validationCanceledReason)
+		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
+		return pubsub.ValidationIgnore
+	}
 
 	var valErr Error
 	if !errors.As(err, &valErr) {
@@ -169,6 +185,6 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 }
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
+	recordAcceptedMessage(ctx, messageRole(decodedMessage))
 	return pubsub.ValidationAccept
 }

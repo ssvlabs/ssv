@@ -590,6 +590,57 @@
                     }
                 }
             }
+        },
+        "/v1/validators": {
+            "get": {
+                "description": "Returns the list of validators managed by the SSV node. Pagination is provided via the JSON request body under \"pagination\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Validators"
+                ],
+                "summary": "Get validators",
+                "parameters": [
+                    {
+                        "description": "Filters and pagination as JSON body",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/validators.ValidatorsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/validators.ValidatorsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -603,6 +654,34 @@
                 "status": {
                     "description": "user-level status message",
                     "type": "string"
+                }
+            }
+        },
+        "api.PaginationRequest": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "per_page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.PaginationResponse": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "per_page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
                 }
             }
         },
@@ -1182,6 +1261,130 @@
                     "items": {
                         "$ref": "#/definitions/exporter.ValidatorSchedule"
                     }
+                }
+            }
+        },
+        "validators.Validator": {
+            "type": "object",
+            "properties": {
+                "activation_epoch": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "committee": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    }
+                },
+                "exit_epoch": {
+                    "type": "string",
+                    "example": "0"
+                },
+                "graffiti": {
+                    "type": "string"
+                },
+                "index": {
+                    "type": "string",
+                    "example": "123"
+                },
+                "liquidated": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "partial_quorum": {
+                    "type": "integer"
+                },
+                "public_key": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "quorum": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "validators.ValidatorsRequest": {
+            "type": "object",
+            "properties": {
+                "clusters": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                },
+                "indices": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    }
+                },
+                "operators": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0
+                    }
+                },
+                "owners": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "hex"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/api.PaginationRequest"
+                },
+                "pubkeys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "format": "hex"
+                    }
+                },
+                "subclusters": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                }
+            }
+        },
+        "validators.ValidatorsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/validators.Validator"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/api.PaginationResponse"
                 }
             }
         }

@@ -14,8 +14,6 @@ import (
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/observability/log/fields"
-
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -97,7 +95,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (status
 	defer func() {
 		duration := time.Since(start)
 		recordClientRequest(ctx, opAddValidator, err, duration)
-		c.logger.Debug("requested to add keys to remote signer", fields.Count(len(shares)), zap.Duration("duration", duration), zap.Error(err))
+		c.logger.Debug("requested to add keys to remote signer", zap.Int("count", len(shares)), zap.Duration("duration", duration), zap.Error(err))
 	}()
 
 	if len(shares) > addShareLimit {
@@ -153,7 +151,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	defer func() {
 		duration := time.Since(start)
 		recordClientRequest(ctx, opRemoveValidator, err, duration)
-		c.logger.Debug("requested to remove keys from remote signer", fields.Count(len(pubKeys)), zap.Duration("duration", duration), zap.Error(err))
+		c.logger.Debug("requested to remove keys from remote signer", zap.Int("count", len(pubKeys)), zap.Duration("duration", duration), zap.Error(err))
 	}()
 	req := web3signer.DeleteKeystoreRequest{
 		Pubkeys: pubKeys,
@@ -190,7 +188,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 	defer func() {
 		duration := time.Since(start)
 		recordClientRequest(ctx, opSignValidator, err, duration)
-		c.logger.Debug("requested to sign with share key", fields.PubKey(sharePubKey[:]), zap.Duration("duration", duration), zap.Error(err))
+		c.logger.Debug("requested to sign with share key", zap.Stringer("share_pubkey", sharePubKey), zap.Duration("duration", duration), zap.Error(err))
 	}()
 	err = requests.
 		URL(c.baseURL).
@@ -233,7 +231,7 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
-		recordClientRequest(ctx, opSignOperator, err, duration)
+		recordClientRequest(ctx, opOperatorSign, err, duration)
 		c.logger.Debug("requested to sign with operator key", zap.Duration("duration", duration), zap.Error(err))
 	}()
 	err = requests.
@@ -245,6 +243,58 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		ToBytesBuffer(&respBuf).
 		Fetch(ctx)
 	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	return respBuf.Bytes(), nil
+}
+
+func (c *Client) OperatorEncrypt(ctx context.Context, payload []byte) (encrypted []byte, err error) {
+	var respBuf bytes.Buffer
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opOperatorEncrypt, err, duration)
+		c.logger.Debug("requested operator encrypt", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path(PathOperatorEncrypt).
+		BodyBytes(payload).
+		Post().
+		ToBytesBuffer(&respBuf).
+		Fetch(ctx)
+	if err != nil {
+		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
+			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
+		}
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	return respBuf.Bytes(), nil
+}
+
+func (c *Client) OperatorDecrypt(ctx context.Context, payload []byte) (decrypted []byte, err error) {
+	var respBuf bytes.Buffer
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opOperatorDecrypt, err, duration)
+		c.logger.Debug("requested operator decrypt", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path(PathOperatorDecrypt).
+		BodyBytes(payload).
+		Post().
+		ToBytesBuffer(&respBuf).
+		Fetch(ctx)
+	if err != nil {
+		if requests.HasStatusErr(err, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented) {
+			return nil, fmt.Errorf("%w: %w", ErrOperatorDataProtectionUnsupported, err)
+		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 

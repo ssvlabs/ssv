@@ -21,6 +21,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -32,6 +33,38 @@ func TestGetMaxPeers(t *testing.T) {
 
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
+}
+
+func TestCurrentSubnetsConcurrentAccess(t *testing.T) {
+	n := &p2pNetwork{}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := uint64(0); i < 5000; i++ {
+			subnets := commons.ZeroSubnets
+			subnets.Set(i % commons.SubnetsCount)
+			n.setCurrentSubnets(subnets)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 5000; i++ {
+			subnets := n.ActiveSubnets()
+			_ = subnets.ActiveCount()
+			_ = subnets.StringHex()
+		}
+	}()
+
+	close(start)
+	wg.Wait()
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
@@ -68,6 +101,12 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
+	broadcastErrCh := make(chan error, 12)
+	recordBroadcastErr := func(err error) {
+		if err != nil {
+			broadcastErrCh <- err
+		}
+	}
 	wg.Add(1)
 
 	go func() {
@@ -78,17 +117,17 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
 		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
-		require.NoError(t, node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
+		recordBroadcastErr(node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		recordBroadcastErr(node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		recordBroadcastErr(node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
+		recordBroadcastErr(node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Add(1)
@@ -103,20 +142,22 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
 		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
-		require.NoError(t, err)
+		time.Sleep(time.Millisecond * 20)
+		recordBroadcastErr(node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
 
 		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
-
-		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
-		require.NoError(t, node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
-		require.NoError(t, node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
-		require.NoError(t, node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
-		require.NoError(t, node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
+		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
+		recordBroadcastErr(node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		recordBroadcastErr(node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		recordBroadcastErr(node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Wait()
+	close(broadcastErrCh)
+	for err := range broadcastErrCh {
+		require.NoError(t, err)
+	}
 
 	// waiting for messages
 	wg.Add(1)
@@ -291,6 +332,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 		}
 	}
 	wg.Wait()
+
 	// let the nodes subscribe
 	for {
 		noPeers := false
@@ -301,7 +343,6 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 			}
 		}
 		if noPeers {
-			noPeers = false
 			time.Sleep(time.Second * 1)
 			continue
 		}
@@ -309,4 +350,15 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 
 	return ln, routers, nil
+}
+
+func TestStartReturnsErrorWhenAlreadyStarted(t *testing.T) {
+	n := &p2pNetwork{}
+	atomic.StoreInt32(&n.state, stateReady)
+
+	err := n.Start()
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "network already started")
+	require.Equal(t, stateReady, atomic.LoadInt32(&n.state), "state should remain stateReady after double-start error")
 }

@@ -1,6 +1,7 @@
 package ssvsigner
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,7 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/internal/mocks"
-
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -423,6 +424,70 @@ func (s *ServerTestSuite) TestOperatorSign() {
 		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
 		s.operatorPrivKey.SignError = nil
+	})
+}
+
+func (s *ServerTestSuite) TestOperatorDataProtection() {
+	t := s.T()
+
+	encryptionKey := []byte("0123456789abcdef0123456789abcdef")
+	payload := bytes.Repeat([]byte{0x23}, 32)
+	encryptedPayload, err := keys.EncryptPayload(encryptionKey, payload)
+	require.NoError(t, err)
+
+	s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+		return encryptionKey, nil
+	}
+	t.Cleanup(func() { s.operatorPrivKey.EKMEncryptionKeyFunc = nil })
+
+	t.Run("encrypt success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, payload)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+		decrypted, err := keys.DecryptPayload(encryptionKey, resp.Body())
+		require.NoError(t, err)
+		assert.Equal(t, payload, decrypted)
+	})
+
+	t.Run("decrypt success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, encryptedPayload)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+		assert.Equal(t, payload, resp.Body())
+	})
+
+	t.Run("returns internal error when operator key derivation fails on decrypt", func(t *testing.T) {
+		s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+			return nil, errors.New("derive failed")
+		}
+		defer func() { s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
+
+		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, encryptedPayload)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	})
+
+	t.Run("returns internal error when operator key derivation fails", func(t *testing.T) {
+		s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) {
+			return nil, errors.New("derive failed")
+		}
+		defer func() { s.operatorPrivKey.EKMEncryptionKeyFunc = func() ([]byte, error) { return encryptionKey, nil } }()
+
+		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, payload)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	})
+
+	t.Run("returns bad request when encrypt payload is empty", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", PathOperatorEncrypt, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	})
+
+	t.Run("returns bad request when decrypt payload is empty", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", PathOperatorDecrypt, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 	})
 }
 

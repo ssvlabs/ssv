@@ -22,7 +22,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -51,7 +50,7 @@ func (test *CommitteeSpecTest) FullName() string {
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	lastErr := test.runPreTesting(logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
@@ -200,7 +199,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
 	for slot := range committee.Runners {
-		committee.Runners[slot].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		committee.Runners[slot].NetworkConfig = networkconfig.TestNetwork
 		// Use test runner as signer source since deserialized runner has no signer
 		var signerSource runner.Runner
 		if testRunner, ok := test.Committee.Runners[slot]; ok {

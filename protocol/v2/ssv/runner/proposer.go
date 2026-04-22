@@ -16,12 +16,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -32,7 +32,7 @@ import (
 )
 
 type ProposerRunner struct {
-	BaseRunner *BaseRunner
+	*BaseRunner
 
 	beacon              beacon.BeaconNode
 	network             specqbft.Network
@@ -60,61 +60,62 @@ type ProposerRunner struct {
 	cachedBlindedBlockSSZ []byte
 }
 
-func NewProposerRunner(
-	logger *zap.Logger,
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	doppelgangerHandler DoppelgangerProvider,
-	valCheck ssv.ValueChecker,
-	highestDecidedSlot phase0.Slot,
-	graffiti []byte,
-	proposerDelay time.Duration,
-) (Runner, error) {
-	if len(share) != 1 {
+// ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
+type ProposerRunnerOptions struct {
+	BaseRunnerOptions
+
+	QBFTController      *controller.Controller
+	DoppelgangerHandler DoppelgangerProvider
+	ValCheck            ssv.ValueChecker
+	HighestDecidedSlot  phase0.Slot
+	Graffiti            []byte
+	// ProposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
+	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
+	// higher MEV.
+	ProposerDelay time.Duration
+}
+
+func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
-			NetworkConfig:      networkConfig,
-			Share:              share,
-			QBFTController:     qbftController,
-			highestDecidedSlot: highestDecidedSlot,
+			NetworkConfig:      opts.NetworkConfig,
+			Share:              opts.Share,
+			QBFTController:     opts.QBFTController,
+			highestDecidedSlot: opts.HighestDecidedSlot,
 		},
 
-		beacon:              beacon,
-		network:             network,
-		signer:              signer,
-		operatorSigner:      operatorSigner,
-		doppelgangerHandler: doppelgangerHandler,
-		ValCheck:            valCheck,
+		beacon:              opts.Beacon,
+		network:             opts.Network,
+		signer:              opts.Signer,
+		operatorSigner:      opts.OperatorSigner,
+		doppelgangerHandler: opts.DoppelgangerHandler,
+		ValCheck:            opts.ValCheck,
 		measurements:        newMeasurementsStore(),
-		graffiti:            graffiti,
+		graffiti:            opts.Graffiti,
 
-		proposerDelay: proposerDelay,
+		proposerDelay: opts.ProposerDelay,
 	}, nil
 }
 
 func (r *ProposerRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.BaseRunner.baseStartNewDuty(ctx, logger, r, duty, quorum)
-}
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
 
-// HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
-func (r *ProposerRunner) HasRunningDuty() bool {
-	return r.BaseRunner.hasRunningDuty()
+	return r.baseStartNewDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.basePreConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
 		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
 		// also needs to be retried.
@@ -134,19 +135,20 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// only 1 root, verified in expectedPreConsensusRootsAndDomain
 	root := roots[0]
 
-	fullSig, err := r.state().ReconstructBeaconSig(r.state().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	fullSig, err := r.State.ReconstructBeaconSig(r.State.PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.FallBackAndVerifyEachSignature(r.State.PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
-	duty := r.state().CurrentDuty.(*spectypes.ValidatorDuty)
+	duty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
-	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
-	proposeTime := slotTime.Add(r.proposerDelay)
-	if timeLeft := time.Until(proposeTime); timeLeft > 0 {
+	if timeLeft := r.remainingProposerDelay(duty.Slot, time.Now()); timeLeft > 0 {
 		select {
 		case <-time.After(timeLeft):
 		case <-ctx.Done():
@@ -158,7 +160,10 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	logger.Debug(waitedOutProposerDelayEvent)
 	span.AddEvent(waitedOutProposerDelayEvent)
 
-	duty = r.state().CurrentDuty.(*spectypes.ValidatorDuty)
+	duty, err = r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
@@ -169,18 +174,13 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("get beacon block: %w", err)
 	}
 	// Log essentials about the retrieved block.
-	logFields := []zap.Field{
-		zap.String("version", vBlk.Version.String()),
-		zap.Bool("blinded", vBlk.Blinded),
+	logFields, proposalTraceAttrs := proposalCommonFields(vBlk)
+	logFields = append(
+		logFields,
 		zap.Duration("proposer_delay", r.proposerDelay),
 		fields.Took(time.Since(start)),
-	}
-	blockHash, err := extractBlockHash(vBlk)
-	if err != nil {
-		logFields = append(logFields, zap.NamedError("blockHash_err", err))
-	} else {
-		logFields = append(logFields, fields.BlockHash(blockHash))
-	}
+	)
+
 	feeRecipient, err := vBlk.FeeRecipient()
 	if err != nil {
 		logFields = append(logFields, zap.NamedError("feeRecipient_err", err))
@@ -189,10 +189,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 	const eventMsg = "🧊 got beacon block proposal"
 	logger.Info(eventMsg, logFields...)
-	span.AddEvent(eventMsg, trace.WithAttributes(
-		observability.BeaconBlockHashAttribute(blockHash),
-		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
-	))
+	span.AddEvent(eventMsg, trace.WithAttributes(proposalTraceAttrs...))
 
 	// Ensure we propose a blinded block in QBFT. If the beacon returned a full
 	// block, convert it to blinded form by swapping the execution payload with
@@ -223,7 +220,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	}
 
 	r.measurements.StartConsensus()
-	if err := r.BaseRunner.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
+	if err := r.decide(ctx, logger, duty.Slot, input, r.ValCheck); err != nil {
 		return fmt.Errorf("qbft-decide: %w", err)
 	}
 
@@ -235,7 +232,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	span := trace.SpanFromContext(ctx)
 
 	span.AddEvent("processing QBFT consensus msg")
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
+	decided, decidedValue, err := r.baseConsensusMsgProcessing(ctx, logger, r.ValCheck.CheckValue, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return fmt.Errorf("failed processing consensus message: %w", err)
 	}
@@ -248,7 +245,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
 
-	cd := decidedValue.(*spectypes.ValidatorConsensusData)
+	cd, err := validatorConsensusDataFromEncoder(decidedValue)
+	if err != nil {
+		return fmt.Errorf("decided value: %w", err)
+	}
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(cd.Duty.Slot),
 		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
@@ -265,7 +265,10 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		span.AddEvent("decided has a vanilla block")
 	}
 
-	duty := r.BaseRunner.State.CurrentDuty.(*spectypes.ValidatorDuty)
+	duty, err := r.currentValidatorDuty()
+	if err != nil {
+		return fmt.Errorf("current validator duty: %w", err)
+	}
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
@@ -275,6 +278,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	msg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		duty,
 		blkRootToSign,
 		cd.Duty.Slot,
@@ -290,7 +294,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
 		return fmt.Errorf("could not encode post consensus partial signature message: %w", err)
@@ -326,15 +330,11 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	return nil
 }
 
-func (r *ProposerRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
-	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, timeoutData)
-}
-
 func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
+	hasQuorum, roots, err := r.basePostConsensusMsgProcessing(ctx, logger, r, signedMsg)
 	if errors.Is(err, ErrNoDutyAssigned) || errors.Is(err, ErrRunningDutyFinished) {
 		// Since we are re-using the same runner for different duties, ErrRunningDutyFinished error
 		// also needs to be retried.
@@ -353,10 +353,10 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// only 1 root, verified by expectedPostConsensusRootsAndDomain
 	root := roots[0]
 
-	sig, err := r.state().ReconstructBeaconSig(r.state().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	sig, err := r.State.ReconstructBeaconSig(r.State.PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.state().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		r.FallBackAndVerifyEachSignature(r.State.PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return fmt.Errorf("got post-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
@@ -376,7 +376,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	// TODO: should we send the block at all if we're not the leader? It's probably not effective but
 	//		I left it for now to keep backwards compatibility.
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err = validatorConsensusData.Decode(r.state().DecidedValue)
+	err = validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return fmt.Errorf("could not decode decided validator consensus data: %w", err)
 	}
@@ -384,7 +384,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
-	leaderID := r.state().RunningInstance.Proposer()
+	leaderID := r.State.RunningInstance.Proposer()
 	if r.cachedFullBlock != nil && leaderID == r.operatorSigner.GetOperatorID() {
 		if bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ) {
 			logger.Debug("leader will use the original full block for proposal submission")
@@ -398,17 +398,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 	}
 
-	loggerFields := []zap.Field{
-		zap.String("version", vBlk.Version.String()),
-		zap.Bool("blinded", vBlk.Blinded),
-	}
-
-	blockHash, err := extractBlockHash(vBlk)
-	if err != nil {
-		loggerFields = append(loggerFields, zap.NamedError("blockHash_err", err))
-	} else {
-		loggerFields = append(loggerFields, fields.BlockHash(blockHash))
-	}
+	loggerFields, proposalTraceAttrs := proposalCommonFields(vBlk)
 
 	logger = logger.With(loggerFields...)
 
@@ -417,24 +407,27 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		return fmt.Errorf("submit beacon block: %w", err)
 	}
-	recordSuccessfulSubmission(ctx, 1, r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot()), spectypes.BNRoleProposer)
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return fmt.Errorf("current duty slot: %w", err)
+	}
+	recordSuccessfulSubmission(ctx, 1, r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleProposer)
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
-	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(
-		observability.BeaconSlotAttribute(r.BaseRunner.State.CurrentDuty.DutySlot()),
-		observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-		observability.BeaconBlockHashAttribute(blockHash),
-		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
-	))
+	submittedAttrs := append([]attribute.KeyValue{
+		observability.BeaconSlotAttribute(currentDutySlot),
+		observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
+	}, proposalTraceAttrs...)
+	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
-	r.state().Finished = true
+	r.finishDuty()
 	r.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.state().RunningInstance.State.Round)
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
-		fields.ConsensusRounds(uint64(r.state().RunningInstance.State.Round)),
+		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
@@ -445,14 +438,18 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.state().CurrentDuty.DutySlot())
+	currentDutySlot, err := r.currentDutySlot()
+	if err != nil {
+		return nil, phase0.DomainType{}, fmt.Errorf("current duty slot: %w", err)
+	}
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
-	err := validatorConsensusData.Decode(r.state().DecidedValue)
+	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not decode consensus data")
 	}
@@ -476,7 +473,10 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	r.measurements.StartDutyFlow()
 
-	proposerDuty := duty.(*spectypes.ValidatorDuty)
+	proposerDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
 	if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
 		return nil
@@ -488,13 +488,14 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
-	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	msg, err := signBeaconObject(
 		ctx,
 		r,
+		r.NetworkConfig,
 		proposerDuty,
 		spectypes.SSZUint64(epoch),
-		duty.DutySlot(),
+		proposerDuty.DutySlot(),
 		spectypes.DomainRandao,
 	)
 	if err != nil {
@@ -503,99 +504,35 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.RandaoPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     proposerDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode randao partial signature message: %w", err)
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
+	logger.Debug("signing and broadcasting randao partial sig", fields.Slot(duty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast randao partial sig: %w", err)
 	}
-
-	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
 
 	return nil
 }
 
-func (r *ProposerRunner) HasRunningQBFTInstance() bool {
-	return r.BaseRunner.HasRunningQBFTInstance()
-}
-
-func (r *ProposerRunner) HasAcceptedProposalForCurrentRound() bool {
-	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
-}
-
-func (r *ProposerRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
-	return r.BaseRunner.GetShares()
-}
-
-func (r *ProposerRunner) GetRole() spectypes.RunnerRole {
-	return r.BaseRunner.GetRole()
-}
-
-func (r *ProposerRunner) GetLastHeight() specqbft.Height {
-	return r.BaseRunner.GetLastHeight()
-}
-
-func (r *ProposerRunner) GetLastRound() specqbft.Round {
-	return r.BaseRunner.GetLastRound()
-}
-
-func (r *ProposerRunner) GetStateRoot() ([32]byte, error) {
-	return r.BaseRunner.GetStateRoot()
-}
-
-func (r *ProposerRunner) SetTimeoutFunc(fn TimeoutF) {
-	r.BaseRunner.SetTimeoutFunc(fn)
+func (r *ProposerRunner) remainingProposerDelay(slot phase0.Slot, now time.Time) time.Duration {
+	slotTime := r.NetworkConfig.SlotStartTime(slot)
+	proposeTime := slotTime.Add(r.proposerDelay)
+	if wait := proposeTime.Sub(now); wait > 0 {
+		return wait
+	}
+	return 0
 }
 
 func (r *ProposerRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetNetworkConfig() *networkconfig.Network {
-	return r.BaseRunner.NetworkConfig
-}
-
 func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
-}
-
-func (r *ProposerRunner) GetShare() *spectypes.Share {
-	// TODO better solution for this
-	for _, share := range r.BaseRunner.Share {
-		return share
-	}
-	return nil
-}
-
-func (r *ProposerRunner) state() *State {
-	return r.BaseRunner.State
 }
 
 func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {
@@ -606,6 +543,42 @@ func (r *ProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
 
+func (r *ProposerRunner) MarshalJSON() ([]byte, error) {
+	type proposerRunnerJSON struct {
+		BaseRunner *BaseRunner `json:"BaseRunner"`
+		// ValCheck is intentionally kept in the JSON to preserve the historical runner state shape
+		// (and thus runner state roots used by spec tests). It is a runtime-only dependency and
+		// is ignored on decode, so it is always marshaled as `null` for determinism.
+		ValCheck any `json:"ValCheck"`
+	}
+
+	return json.Marshal(&proposerRunnerJSON{
+		BaseRunner: r.BaseRunner,
+		ValCheck:   nil,
+	})
+}
+
+func (r *ProposerRunner) UnmarshalJSON(data []byte) error {
+	type proposerRunnerJSON struct {
+		BaseRunner *BaseRunner     `json:"BaseRunner"`
+		ValCheck   json.RawMessage `json:"ValCheck"`
+	}
+
+	aux := &proposerRunnerJSON{}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if aux.BaseRunner == nil {
+		return fmt.Errorf("missing BaseRunner")
+	}
+
+	r.BaseRunner = aux.BaseRunner
+	// ValCheck is not restored from JSON. Callers must rehydrate it explicitly.
+	r.ValCheck = nil
+	return nil
+}
+
 // Encode returns the encoded struct in bytes or error
 func (r *ProposerRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)
@@ -613,7 +586,7 @@ func (r *ProposerRunner) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (r *ProposerRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &r)
+	return json.Unmarshal(data, r)
 }
 
 // GetRoot returns the root used for signing and verification
@@ -626,11 +599,17 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
-// extractBlockHash extracts the block hash from a VersionedProposal.
+type executionInfo struct {
+	BlockHash   phase0.Hash32
+	ParentHash  phase0.Hash32
+	BlockNumber uint64
+}
+
+// extractExecutionInfo extracts execution-layer info (hashes and block number) from a VersionedProposal.
 // It handles both regular and blinded blocks across all supported versions.
-func extractBlockHash(vBlk *api.VersionedProposal) (phase0.Hash32, error) {
+func extractExecutionInfo(vBlk *api.VersionedProposal) (executionInfo, error) {
 	if vBlk == nil {
-		return phase0.Hash32{}, fmt.Errorf("block is nil")
+		return executionInfo{}, fmt.Errorf("block is nil")
 	}
 
 	switch vBlk.Version {
@@ -638,59 +617,113 @@ func extractBlockHash(vBlk *api.VersionedProposal) (phase0.Hash32, error) {
 		if vBlk.Blinded {
 			if vBlk.CapellaBlinded == nil || vBlk.CapellaBlinded.Body == nil ||
 				vBlk.CapellaBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("capella blinded block data missing")
+				return executionInfo{}, fmt.Errorf("capella blinded block data missing")
 			}
-			return vBlk.CapellaBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.CapellaBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Capella == nil || vBlk.Capella.Body == nil ||
 			vBlk.Capella.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("capella block data missing")
+			return executionInfo{}, fmt.Errorf("capella block data missing")
 		}
-		return vBlk.Capella.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Capella.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	case spec.DataVersionDeneb:
 		if vBlk.Blinded {
 			if vBlk.DenebBlinded == nil || vBlk.DenebBlinded.Body == nil ||
 				vBlk.DenebBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("deneb blinded block data missing")
+				return executionInfo{}, fmt.Errorf("deneb blinded block data missing")
 			}
-			return vBlk.DenebBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.DenebBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Deneb == nil || vBlk.Deneb.Block == nil || vBlk.Deneb.Block.Body == nil ||
 			vBlk.Deneb.Block.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("deneb block data missing")
+			return executionInfo{}, fmt.Errorf("deneb block data missing")
 		}
-		return vBlk.Deneb.Block.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Deneb.Block.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	case spec.DataVersionElectra:
 		if vBlk.Blinded {
 			if vBlk.ElectraBlinded == nil || vBlk.ElectraBlinded.Body == nil ||
 				vBlk.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("electra blinded block data missing")
+				return executionInfo{}, fmt.Errorf("electra blinded block data missing")
 			}
-			return vBlk.ElectraBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.ElectraBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Electra == nil || vBlk.Electra.Block == nil || vBlk.Electra.Block.Body == nil ||
 			vBlk.Electra.Block.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("electra block data missing")
+			return executionInfo{}, fmt.Errorf("electra block data missing")
 		}
-		return vBlk.Electra.Block.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Electra.Block.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	case spec.DataVersionFulu:
 		if vBlk.Blinded {
 			if vBlk.FuluBlinded == nil || vBlk.FuluBlinded.Body == nil ||
 				vBlk.FuluBlinded.Body.ExecutionPayloadHeader == nil {
-				return phase0.Hash32{}, fmt.Errorf("fulu blinded block data missing")
+				return executionInfo{}, fmt.Errorf("fulu blinded block data missing")
 			}
-			return vBlk.FuluBlinded.Body.ExecutionPayloadHeader.BlockHash, nil
+			h := vBlk.FuluBlinded.Body.ExecutionPayloadHeader
+			return executionInfo{BlockHash: h.BlockHash, ParentHash: h.ParentHash, BlockNumber: h.BlockNumber}, nil
 		}
 		if vBlk.Fulu == nil || vBlk.Fulu.Block == nil || vBlk.Fulu.Block.Body == nil ||
 			vBlk.Fulu.Block.Body.ExecutionPayload == nil {
-			return phase0.Hash32{}, fmt.Errorf("fulu block data missing")
+			return executionInfo{}, fmt.Errorf("fulu block data missing")
 		}
-		return vBlk.Fulu.Block.Body.ExecutionPayload.BlockHash, nil
+		p := vBlk.Fulu.Block.Body.ExecutionPayload
+		return executionInfo{BlockHash: p.BlockHash, ParentHash: p.ParentHash, BlockNumber: p.BlockNumber}, nil
 
 	default:
-		return phase0.Hash32{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
+		return executionInfo{}, fmt.Errorf("unsupported block version %d", vBlk.Version)
 	}
+}
+
+func proposalCommonFields(vBlk *api.VersionedProposal) ([]zap.Field, []attribute.KeyValue) {
+	if vBlk == nil {
+		err := fmt.Errorf("proposal is nil")
+		return []zap.Field{zap.NamedError("proposal_err", err)}, []attribute.KeyValue{observability.BeaconBlockIsBlindedAttribute(false)}
+	}
+
+	logFields := []zap.Field{
+		zap.String("version", vBlk.Version.String()),
+		zap.Bool("blinded", vBlk.Blinded),
+	}
+	traceAttrs := []attribute.KeyValue{
+		observability.BeaconBlockIsBlindedAttribute(vBlk.Blinded),
+	}
+
+	blockRoot, err := vBlk.Root()
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("blockRoot_err", err))
+	} else {
+		logFields = append(logFields, fields.BlockRoot(blockRoot))
+		traceAttrs = append(traceAttrs, observability.BeaconBlockRootAttribute(blockRoot))
+	}
+
+	parentRoot, err := vBlk.ParentRoot()
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("parentRoot_err", err))
+	} else {
+		logFields = append(logFields, zap.String("parent_root", hex.EncodeToString(parentRoot[:])))
+		traceAttrs = append(traceAttrs, observability.BeaconBlockParentRootAttribute(parentRoot))
+	}
+
+	execInfo, err := extractExecutionInfo(vBlk)
+	if err != nil {
+		logFields = append(logFields, zap.NamedError("execution_err", err))
+	} else {
+		logFields = append(
+			logFields,
+			fields.BlockHash(execInfo.BlockHash),
+			zap.String("execution_parent_hash", hex.EncodeToString(execInfo.ParentHash[:])),
+			zap.Uint64("execution_block_number", execInfo.BlockNumber),
+		)
+		traceAttrs = append(traceAttrs, observability.BeaconBlockHashAttribute(execInfo.BlockHash))
+	}
+
+	return logFields, traceAttrs
 }

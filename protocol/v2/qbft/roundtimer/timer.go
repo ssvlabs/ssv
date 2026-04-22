@@ -3,7 +3,6 @@ package roundtimer
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,8 +14,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate go tool -modfile=../../../../tool.mod mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
-
 type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
@@ -27,43 +24,35 @@ const (
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
-// Timer is an interface for a round timer, calling the UponRoundTimeout when times out
-type Timer interface {
-	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
-	TimeoutForRound(height specqbft.Height, round specqbft.Round)
-}
-
 type TimeoutOptions struct {
 	quickThreshold specqbft.Round
 	quick          time.Duration
 	slow           time.Duration
 }
 
-// RoundTimer helps to manage current instance rounds.
+// RoundTimer manages round timeouts for a single duty.
+// Created per duty with the callback wired at construction.
+// Implements specqbft.Timer.
 type RoundTimer struct {
-	mtx *sync.RWMutex
-	ctx context.Context
-	// timer is the underlying time.Timer
-	timer *time.Timer
-	// result holds the result of the timer
-	done OnRoundTimeoutF
-	// round is the current round of the timer
-	round uint64
-	// timeoutOptions holds the timeoutOptions for the timer
+	mtx            *sync.RWMutex
+	ctx            context.Context
+	timer          *time.Timer
+	callback       OnRoundTimeoutF
+	round          specqbft.Round
+	height         specqbft.Height
 	timeoutOptions TimeoutOptions
-	// role is the role of the instance
-	role spectypes.RunnerRole
-	// beaconConfig is the beacon config
-	beaconConfig *networkconfig.Beacon
+	role           spectypes.RunnerRole
+	beaconConfig   *networkconfig.Beacon
 }
 
-// New creates a new instance of RoundTimer.
-func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+// New creates a per-duty RoundTimer with the callback wired at construction.
+// callback must not be nil.
+func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, height specqbft.Height, callback OnRoundTimeoutF) *RoundTimer {
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
-		timer:        nil,
-		done:         done,
+		height:       height,
+		callback:     callback,
 		role:         role,
 		beaconConfig: beaconConfig,
 		timeoutOptions: TimeoutOptions{
@@ -95,7 +84,7 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
 // which is calculated from the slot height. The base timeout is set based on the role,
 // and the additional timeout is added based on the round number.
-func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
+func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
 	// Initialize duration to zero
 	var baseDuration time.Duration
 
@@ -128,59 +117,37 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	timeoutDuration := baseDuration + additionalTimeout
 
 	// Get the start time of the duty
-	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(height))
+	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(t.height))
 
 	// Calculate the time until the duty should start plus the timeout duration
 	return time.Until(dutyStartTime.Add(timeoutDuration))
 }
 
-// OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
-	t.mtx.Lock() // write to t.done
+// TimeoutForRound implements specqbft.Timer.
+func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
+	if t.ctx.Err() != nil {
+		return
+	}
+
+	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	t.done = done
-}
-
-// Round returns a round.
-func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
-}
-
-// TimeoutForRound times out for a given round.
-func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreUint64(&t.round, uint64(round))
-	timeout := t.RoundTimeout(height, round)
-
-	// preparing the underlying timer
-	timer := t.timer
-	if timer == nil {
-		timer = time.NewTimer(timeout)
-	} else {
-		timer.Stop()
-		// draining the channel of existing timer
-		select {
-		case <-timer.C:
-		default:
-		}
+	if t.timer != nil {
+		t.timer.Stop()
 	}
-	timer.Reset(timeout)
-	// spawns a new goroutine to listen to the timer
-	go t.waitForRound(round, timer.C)
-}
-
-func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
-	select {
-	case <-t.ctx.Done():
-	case <-timeout:
-		if t.Round() == round {
-			func() {
-				t.mtx.RLock() // read t.done
-				defer t.mtx.RUnlock()
-				if done := t.done; done != nil {
-					done(round)
-				}
-			}()
+	t.round = round
+	// RoundTimeout can be negative for late-start duties — AfterFunc fires
+	// immediately but the callback blocks on RLock until we release mtx.
+	t.timer = time.AfterFunc(t.RoundTimeout(round), func() {
+		if t.ctx.Err() != nil {
+			return
 		}
-	}
+		t.mtx.RLock()
+		defer t.mtx.RUnlock()
+		// Stale-round guard: if the timer moved to a newer round, this callback is outdated.
+		if t.round != round {
+			return
+		}
+		t.callback(round)
+	})
 }

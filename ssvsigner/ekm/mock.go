@@ -7,8 +7,6 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/ssvlabs/ssv/storage/basedb"
-
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -56,138 +54,44 @@ type MockBeaconNetwork struct {
 	mock.Mock
 }
 
+func (m *MockBeaconNetwork) NetworkName() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+func (m *MockBeaconNetwork) GenesisRoot() phase0.Root {
+	args := m.Called()
+	return args.Get(0).(phase0.Root)
+}
+
 type MockDatabase struct {
 	mock.Mock
 }
 
-func (m *MockDatabase) Begin() basedb.Txn {
-	args := m.Called()
-	return args.Get(0).(basedb.Txn)
+func (m *MockDatabase) Get(txn ReadTxn, prefix []byte, key []byte) (Obj, bool, error) {
+	args := m.Called(txn, prefix, key)
+	if args.Get(0) == nil {
+		return Obj{}, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).(Obj), args.Bool(1), args.Error(2)
 }
 
-func (m *MockDatabase) BeginRead() basedb.ReadTxn {
-	args := m.Called()
-	return args.Get(0).(basedb.ReadTxn)
-}
-
-func (m *MockDatabase) Close() error {
-	args := m.Called()
+func (m *MockDatabase) Set(txn ReadWriteTxn, prefix []byte, key []byte, value []byte) error {
+	args := m.Called(txn, prefix, key, value)
 	return args.Error(0)
 }
 
-func (m *MockDatabase) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-	args := m.Called(prefix, key)
-	return args.Get(0).(basedb.Obj), args.Bool(1), args.Error(2)
-}
-
-func (m *MockDatabase) Set(prefix []byte, key []byte, value []byte) error {
-	args := m.Called(prefix, key, value)
+func (m *MockDatabase) Delete(txn ReadWriteTxn, prefix []byte, key []byte) error {
+	args := m.Called(txn, prefix, key)
 	return args.Error(0)
 }
 
-func (m *MockDatabase) Delete(prefix []byte, key []byte) error {
-	args := m.Called(prefix, key)
+func (m *MockDatabase) GetAll(txn ReadTxn, prefix []byte, handler func(int, Obj) error) error {
+	args := m.Called(txn, prefix, handler)
 	return args.Error(0)
-}
-
-func (m *MockDatabase) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
-	return nil
-}
-
-func (m *MockDatabase) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
-	return nil
-}
-
-func (m *MockDatabase) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
-	return nil
-}
-
-func (m *MockDatabase) Using(rw basedb.ReadWriter) basedb.ReadWriter {
-	return nil
-}
-
-func (m *MockDatabase) UsingReader(r basedb.Reader) basedb.Reader {
-	return nil
-}
-
-func (m *MockDatabase) CountPrefix(prefix []byte) (int64, error) {
-	return 0, nil
 }
 
 func (m *MockDatabase) DropPrefix(prefix []byte) error {
-	return nil
-}
-
-func (m *MockDatabase) Update(fn func(basedb.Txn) error) error {
-	return nil
-}
-
-func (m *MockDatabase) FullGC(arg0 context.Context) error {
-	return nil
-}
-
-func (m *MockDatabase) QuickGC(arg0 context.Context) error {
-	return nil
-}
-
-type MockTxn struct {
-	mock.Mock
-}
-
-func (m *MockTxn) Commit() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockTxn) Discard() {
-	m.Called()
-}
-
-func (m *MockTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-	args := m.Called(prefix, key)
-	return args.Get(0).(basedb.Obj), args.Bool(1), args.Error(2)
-}
-
-func (m *MockTxn) Set(prefix []byte, key []byte, value []byte) error {
-	args := m.Called(prefix, key, value)
-	return args.Error(0)
-}
-
-func (m *MockTxn) Delete(prefix []byte, key []byte) error {
-	args := m.Called(prefix, key)
-	return args.Error(0)
-}
-
-func (m *MockTxn) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
-	return nil
-}
-
-func (m *MockTxn) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
-	return nil
-}
-
-func (m *MockTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
-	return nil
-}
-
-type MockReadTxn struct {
-	mock.Mock
-}
-
-func (m *MockReadTxn) Discard() {
-	m.Called()
-}
-
-func (m *MockReadTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-	args := m.Called(prefix, key)
-	return args.Get(0).(basedb.Obj), args.Bool(1), args.Error(2)
-}
-
-func (m *MockReadTxn) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
-	return nil
-}
-
-func (m *MockReadTxn) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	return nil
 }
 
@@ -255,17 +159,17 @@ func (m *MockSlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, s
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (m *MockSlashingProtector) BumpSlashingProtectionTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (m *MockSlashingProtector) RemoveHighestAttestationTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (m *MockSlashingProtector) RemoveHighestProposalTxn(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }

@@ -11,10 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	defaultIteratorTimeout = 5 * time.Second
-)
-
 // forkingDV5Listener wraps a pre-fork and a post-fork listener.
 // Before the fork, it performs operations on both services.
 // After the fork, it performs operations only on the post-fork service.
@@ -26,9 +22,6 @@ type forkingDV5Listener struct {
 }
 
 func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, iteratorTimeout time.Duration) *forkingDV5Listener {
-	if iteratorTimeout == 0 {
-		iteratorTimeout = defaultIteratorTimeout
-	}
 	return &forkingDV5Listener{
 		logger:           logger,
 		preForkListener:  preFork,

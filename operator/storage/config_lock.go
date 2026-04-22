@@ -10,7 +10,7 @@ type ConfigLock struct {
 	UsingSSVSigner   bool   `json:"using_ssv_signer"`
 }
 
-func (stored *ConfigLock) ValidateCompatibility(current *ConfigLock) error {
+func (stored *ConfigLock) ValidateCompatibility(current *ConfigLock, exporterMode bool) error {
 	if stored.NetworkName != current.NetworkName {
 		return fmt.Errorf("network mismatch. Stored network %s does not match current network %s. The database must be removed or reinitialized", stored.NetworkName, current.NetworkName)
 	}
@@ -23,12 +23,16 @@ func (stored *ConfigLock) ValidateCompatibility(current *ConfigLock) error {
 		return fmt.Errorf("enabling local events is not allowed. The database must be removed or reinitialized")
 	}
 
-	if stored.UsingSSVSigner && !current.UsingSSVSigner {
-		return fmt.Errorf("disabling ssv-signer is not allowed. The database must be removed or reinitialized")
-	}
+	// Exporter no longer uses signer storage, so signer-mode changes must remain
+	// compatible with existing exporter databases.
+	if !exporterMode {
+		if stored.UsingSSVSigner && !current.UsingSSVSigner {
+			return fmt.Errorf("disabling ssv-signer is not allowed. The database must be removed or reinitialized")
+		}
 
-	if !stored.UsingSSVSigner && current.UsingSSVSigner {
-		return fmt.Errorf("enabling ssv-signer is not allowed. The database must be removed or reinitialized")
+		if !stored.UsingSSVSigner && current.UsingSSVSigner {
+			return fmt.Errorf("enabling ssv-signer is not allowed. The database must be removed or reinitialized")
+		}
 	}
 
 	return nil

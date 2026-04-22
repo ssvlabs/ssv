@@ -12,9 +12,11 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -165,7 +167,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.Beacon, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), testNetworkConfig.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -182,7 +184,8 @@ func setupEventHandler(
 	if useMockCtrl {
 		tExecutor := mocks.NewMockTaskExecutor(ctrl)
 
-		parser := eventparser.New(contractFilterer)
+		parser, err := eventparser.New(contractFilterer)
+		require.NoError(t, err)
 
 		eh, err := eventhandler.New(
 			nodeStorage,
@@ -190,7 +193,6 @@ func setupEventHandler(
 			tExecutor,
 			testNetworkConfig,
 			operatorDataStore,
-			operator.privateKey,
 			keyManager,
 			dgHandler,
 			eventhandler.WithFullNode(),
@@ -213,7 +215,8 @@ func setupEventHandler(
 		OperatorDataStore: operatorDataStore,
 	}, exporter.Options{})
 
-	parser := eventparser.New(contractFilterer)
+	parser, err := eventparser.New(contractFilterer)
+	require.NoError(t, err)
 
 	eh, err := eventhandler.New(
 		nodeStorage,
@@ -221,7 +224,6 @@ func setupEventHandler(
 		validatorCtrl,
 		testNetworkConfig,
 		operatorDataStore,
-		operator.privateKey,
 		keyManager,
 		dgHandler,
 		eventhandler.WithFullNode(),

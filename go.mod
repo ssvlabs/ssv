@@ -1,8 +1,6 @@
 module github.com/ssvlabs/ssv
 
-go 1.24.6
-
-toolchain go1.24.10
+go 1.26
 
 require (
 	github.com/RoaringBitmap/roaring/v2 v2.10.0
@@ -44,7 +42,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.6
 	github.com/ssvlabs/ssv-spec v1.2.2
-	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20251027161822-0b67ab2cd4f3
+	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20260414203712-ca63d2dfc121
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.11.1
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -55,9 +53,9 @@ require (
 	go.uber.org/mock v0.5.2
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/mod v0.28.0
-	golang.org/x/sync v0.17.0
-	golang.org/x/text v0.29.0
+	golang.org/x/mod v0.29.0
+	golang.org/x/sync v0.18.0
+	golang.org/x/text v0.31.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
@@ -100,7 +98,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
-	golang.org/x/telemetry v0.0.0-20250908211612-aef8a434d053 // indirect
+	golang.org/x/telemetry v0.0.0-20251008203120-078029d740a8 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5 // indirect
 	google.golang.org/grpc v1.75.0 // indirect
@@ -262,12 +260,12 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/fx v1.24.0 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
-	golang.org/x/net v0.44.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/term v0.35.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
@@ -284,3 +282,5 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 // SSV fork of go-eth2-client based on upstream v0.27.0 (includes Fulu support) with SSV-specific changes.
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250922150906-26179dd60c9c
+
+replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner

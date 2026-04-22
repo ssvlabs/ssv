@@ -6,37 +6,38 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/hprobe"
 )
 
-// List of prober prober-nodes.
+// List of health-prober components.
 const (
-	clNodeName          = "consensus client"
-	elNodeName          = "execution client"
-	eventSyncerNodeName = "event-syncer"
+	clComponentName          = "consensus client"
+	elComponentName          = "execution client"
+	eventSyncerComponentName = "event-syncer"
+	p2pComponentName         = "p2p"
 )
 
-// Common prober parameters we use for various prober-nodes.
+// Common prober parameters we use to health check various prober-components.
 const (
 	proberHealthcheckTimeout = 10 * time.Second
 	proberRetriesMax         = 5
 	proberRetryDelay         = 10 * time.Second
 )
 
-const ethereumNodesUnhealthyFatalErrorMsg = "ethereum node(s) are not healthy"
+const componentsUnhealthyFatalErrorMsg = "component(s) are not healthy"
 
-func ensureEthereumNodesHealthy(ctx context.Context, logger *zap.Logger, p *nodeprobe.Prober) {
+func ensureComponentsHealthy(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := p.ProbeAll(probeCtx); err != nil {
-		logger.Fatal(ethereumNodesUnhealthyFatalErrorMsg, zap.Error(err))
+		logger.Fatal(componentsUnhealthyFatalErrorMsg, zap.Error(err))
 	}
 
-	logger.Info("ethereum node(s) are healthy")
+	logger.Info("all component(s) are healthy")
 }
 
-func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Prober) {
+func startHealthProber(ctx context.Context, logger *zap.Logger, p *hprobe.HealthProber) {
 	const probeFrequency = 60 * time.Second
 
 	ticker := time.NewTicker(probeFrequency)
@@ -44,14 +45,14 @@ func startNodeProber(ctx context.Context, logger *zap.Logger, p *nodeprobe.Probe
 
 	for {
 		func() {
-			logger.Debug("node-prober tick: probing all nodes")
-			defer logger.Debug("node-prober tick: probing all nodes done")
+			logger.Debug("health-prober tick: probing all components")
+			defer logger.Debug("health-prober tick: probing all components done")
 
 			probeCtx, cancel := context.WithTimeout(ctx, probeFrequency)
 			defer cancel()
 
 			if err := p.ProbeAll(probeCtx); err != nil {
-				logger.Fatal(ethereumNodesUnhealthyFatalErrorMsg, zap.Error(err))
+				logger.Fatal(componentsUnhealthyFatalErrorMsg, zap.Error(err))
 			}
 		}()
 

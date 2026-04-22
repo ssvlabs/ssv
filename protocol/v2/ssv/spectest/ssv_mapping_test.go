@@ -25,7 +25,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -40,7 +39,7 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := storage.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	untypedTests := map[string]any{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -376,7 +375,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]any) *MsgProcessing
 }
 
 func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutils.TestKeySet) runner.Runner {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]any)
 
@@ -390,11 +389,9 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]any, ks *spectestingutil
 
 	if baseRunner.QBFTController != nil {
 		baseRunner.QBFTController = fixControllerForRun(logger, baseRunner.QBFTController, ks)
-		if baseRunner.State != nil {
-			if baseRunner.State.RunningInstance != nil {
-				operator := spectestingutils.TestingCommitteeMember(ks)
-				baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
-			}
+		if baseRunner.HasStartedQBFTInstance() {
+			operator := spectestingutils.TestingCommitteeMember(ks)
+			baseRunner.State.RunningInstance = fixInstanceForRun(logger, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 		}
 	}
 
@@ -438,6 +435,7 @@ func fixInstanceForRun(
 		contr.Identifier,
 		contr.Height,
 		signer,
+		nil,
 	)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue
@@ -588,7 +586,7 @@ func fixCommitteeForRun(t *testing.T, logger *zap.Logger, committeeMap map[strin
 
 	for slot := range c.Runners {
 		var shareInstance *spectypes.Share
-		for _, share := range c.Runners[slot].BaseRunner.Share {
+		for _, share := range c.Runners[slot].Share {
 			shareInstance = share
 			break
 		}

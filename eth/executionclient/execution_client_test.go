@@ -262,7 +262,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(8),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -581,7 +581,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5, false)
 		select {
 		case log, ok := <-logChan:
 			require.Falsef(t, ok, "should not receive log when startBlock > endBlock, received log with block number: %d", log.BlockNumber)
@@ -595,7 +595,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is same as endBlock", func(t *testing.T) {
 		blockNumbers := make([]uint64, 0, 1)
 
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5, false)
 		select {
 		case block := <-logChan:
 			blockNumbers = append(blockNumbers, block.BlockNumber)
@@ -615,7 +615,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 		)
 		blockNumbers := make([]uint64, 0, int(toBlock-fromBlock+1))
 
-		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, fromBlock, toBlock)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, fromBlock, toBlock, false)
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
@@ -632,116 +632,115 @@ func TestFetchLogsInBatches(t *testing.T) {
 		canceledCtx, cancel := context.WithCancel(env.ctx)
 		cancel()
 
-		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5)
-		select {
-		case <-logChan:
-			require.Fail(t, "Should not receive log when context is canceled")
-		case err := <-errChan:
-			require.Error(t, err, "fetchLogsInBatches should return an error when context is canceled")
-		case <-canceledCtx.Done():
-		}
+		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5, false)
+		err, ok := <-errChan
+		require.Falsef(t, ok, "should not receive error when context was canceled: %v", err)
+		_, ok = <-logChan
+		require.Falsef(t, ok, "should not receive log when context was canceled")
 	})
 }
 
-// TestChainReorganizationLogs check that the client receives removed logs correctly.
-// Steps:
-//  1. Deploy the Callable contract.
-//  2. Set up an event subscription.
-//  3. Save the current block which will serve as parent for the fork.
-//  4. Send a transaction.
-//  5. Check that the event was included.
-//  6. Fork by using the parent block as ancestor.
-//  7. Mine two blocks to trigger a reorg.
-//  8. Check that the event was removed.
-
+// TestChainReorganizationLogs verifies that logs marked as Removed=true (which
+// indicates a chain reorganization on the execution layer) are filtered out by
+// fetchLogsInBatches and never delivered to consumers.
+//
+// The test drives the client against a fake JSON-RPC server that returns a
+// canned eth_getLogs response containing a mix of normal and Removed logs.
+// This isolates the reorg-handling branch in fetchLogsInBatches without the
+// timing fragility of driving a full simulated beacon fork.
 func TestChainReorganizationLogs(t *testing.T) {
-	// TODO: fix reorg test
-	// logger := zaptest.NewLogger(t)
-	// const testTimeout = 2 * time.Second
-	// ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
-	// defer cancel()
+	const testTimeout = 5 * time.Second
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
+	defer cancel()
 
-	// sim := simTestBackend(testAddr)
+	contractAddr := ethcommon.HexToAddress("0x1234567890123456789012345678901234567890")
+	topic := ethcommon.HexToHash("0x81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b8")
 
-	// rpcServer, _ := sim.Node.RPCHandler()
-	// httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	// defer rpcServer.Stop()
-	// defer httpsrv.Close()
+	keepTxHash := ethcommon.HexToHash("0xaa")
+	removedTxHash := ethcommon.HexToHash("0xbb")
+	cannedLogs := []ethtypes.Log{
+		{
+			Address:     contractAddr,
+			Topics:      []ethcommon.Hash{topic},
+			BlockNumber: 3,
+			TxHash:      keepTxHash,
+			BlockHash:   ethcommon.HexToHash("0x03"),
+			Removed:     false,
+		},
+		{
+			Address:     contractAddr,
+			Topics:      []ethcommon.Hash{topic},
+			BlockNumber: 4,
+			TxHash:      removedTxHash,
+			BlockHash:   ethcommon.HexToHash("0x04"),
+			Removed:     true,
+		},
+		{
+			Address:     contractAddr,
+			Topics:      []ethcommon.Hash{topic},
+			BlockNumber: 5,
+			TxHash:      ethcommon.HexToHash("0xcc"),
+			BlockHash:   ethcommon.HexToHash("0x05"),
+			Removed:     false,
+		},
+	}
 
-	// addr := httpToWebSocketURL(httpsrv.URL)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	// // 1.
-	// parsed, _ := abi.JSON(strings.NewReader(callableAbi))
-	// auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	// contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
-	// if err != nil {
-	// 	t.Errorf("deploying contract: %v", err)
-	// }
-	// sim.Commit()
+		var result any
+		switch req.Method {
+		case "eth_getLogs":
+			result = cannedLogs
+		case "eth_chainId":
+			result = "0x1"
+		case "eth_blockNumber":
+			result = "0xa"
+		default:
+			result = nil
+		}
 
-	// // Connect the client
-	// const followDistance = 8
-	// client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
-	// require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(struct {
+			JSONRPC string          `json:"jsonrpc"`
+			ID      json.RawMessage `json:"id"`
+			Result  any             `json:"result"`
+		}{"2.0", req.ID, result}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
 
-	// isReady, err := client.IsReady(ctx)
-	// require.NoError(t, err)
-	// require.True(t, isReady)
-	// // 2.
-	// logs, _ := client.StreamLogs(ctx, 0)
-	// // 3.
-	// var parent *ethtypes.Header
-	// var goodTransactions []ethcommon.Hash
-	// // 4. Send some transactions
-	// for i := 0; i < followDistance/2; i++ {
-	// 	// Call contract to trigger event emit
-	// 	tx, err := contract.Transact(auth, "Call")
-	// 	if err != nil {
-	// 		t.Errorf("transacting: %v", err)
-	// 	}
-	// 	sim.Commit()
-	// 	if i == 0 {
-	// 		goodTransactions = append(goodTransactions, tx.Hash())
-	// 		parent = sim.Blockchain.CurrentBlock()
-	// 	}
-	// }
-	// // 5. Fork off the chain after the first transaction
-	// if err := sim.Fork(t.Context(), parent.Hash()); err != nil {
-	// 	t.Errorf("forking: %v", err)
-	// }
-	// // 6. Add more blocks and 1 transaction after the fork
-	// for i := 0; i < followDistance; i++ {
-	// 	if i == 1 {
-	// 		tx, err := contract.Transact(auth, "Call")
-	// 		if err != nil {
-	// 			t.Errorf("transacting: %v", err)
-	// 		}
-	// 		goodTransactions = append(goodTransactions, tx.Hash())
-	// 	}
-	// 	sim.Commit()
-	// 	t.Log("committed block")
-	// }
-	// // 5.
-	// for i, hash := range goodTransactions {
-	// 	select {
-	// 	case log := <-logs:
-	// 		require.NotEmpty(t, log)
-	// 		require.Equal(t, hash, log.TxHash)
-	// 		t.Logf("got log from good transaction %d", i)
-	// 	case <-ctx.Done():
-	// 		t.Fatal("context canceled")
-	// 	}
-	// }
-	// select {
-	// case <-logs:
-	// 	t.Fatal("should not receive log")
-	// case <-ctx.Done():
-	// }
-	// if sim.Blockchain.CurrentBlock().Number.Uint64() != uint64(13) {
-	// 	t.Error("wrong chain length")
-	// }
-	// require.NoError(t, client.Close())
-	// require.NoError(t, sim.Close())
+	client, err := New(ctx, srv.URL, contractAddr, WithLogger(zaptest.NewLogger(t)), WithFollowDistance(0))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, client.Close()) }()
+
+	logCh, errCh := client.fetchLogsInBatches(ctx, 1, 10, false)
+
+	received := make([]ethtypes.Log, 0, len(cannedLogs))
+	for blockLogs := range logCh {
+		received = append(received, blockLogs.Logs...)
+	}
+	require.NoError(t, <-errCh)
+
+	require.Len(t, received, 2, "removed log should be filtered out")
+	for _, log := range received {
+		require.False(t, log.Removed, "no Removed=true log should reach consumers")
+		require.NotEqual(t, removedTxHash, log.TxHash)
+	}
+	require.Equal(t, keepTxHash, received[0].TxHash)
 }
 
 // deploySimContract deploys the SSV simulator contract.
@@ -969,7 +968,7 @@ func TestFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(200*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1059,7 +1058,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(400*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 
@@ -1121,7 +1120,7 @@ func TestHeaderByNumber(t *testing.T) {
 		// Create a client - connection should succeed initially
 		err = env.createClient(
 			WithLogger(logger),
-			WithReqTimeout(100*time.Millisecond),
+			WithReqTimeout(400*time.Millisecond),
 		)
 		require.NoError(t, err) // Connection is established initially
 

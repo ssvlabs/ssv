@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -17,12 +18,16 @@ import (
 func signBeaconObject(
 	ctx context.Context,
 	runner Runner,
+	networkConfig *networkconfig.Network,
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
+	if networkConfig == nil {
+		return nil, fmt.Errorf("network config is nil")
+	}
+	epoch := networkConfig.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)

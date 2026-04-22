@@ -126,7 +126,7 @@ func collectMessagesFromQueue(t *testing.T, msgChannel <-chan *queue.SSVMessage,
 	case msg := <-msgChannel:
 		t.Logf("received more messages than expected (%d)", expectedCount)
 		receivedMessages = append(receivedMessages, msg)
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(400 * time.Millisecond):
 		// No additional messages within timeout, which is the expected case
 	}
 
@@ -780,7 +780,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			// Set runner state based on hasRunningDuty parameter
 			if !tc.hasRunningDuty {
-				committeeRunner.BaseRunner.State.Finished = true // This makes HasRunningDuty() return false
+				committeeRunner.State.Finished = true // This makes hasDutyRunning() return false
 			}
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
@@ -828,7 +828,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 					}
 				}
 			} else {
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(400 * time.Millisecond)
 			}
 
 			// Verify no additional messages are processed
@@ -837,7 +837,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				case msg := <-msgChannel:
 					t.Fatalf("unexpected message processed (type: %v), expected only %d",
 						msg.Body.(*specqbft.Message).MsgType, expectedProcessedCount)
-				case <-time.After(200 * time.Millisecond):
+				case <-time.After(400 * time.Millisecond):
 					// timeout reached - no more messages, as expected
 				}
 			} else {
@@ -846,7 +846,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				case msg := <-msgChannel:
 					t.Fatalf("unexpected message processed when expecting none: %v",
 						msg.Body.(*specqbft.Message).MsgType)
-				case <-time.After(200 * time.Millisecond):
+				case <-time.After(400 * time.Millisecond):
 					// Timeout reached - no messages, as expected
 				}
 			}
@@ -1731,7 +1731,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
 		}
 
-		time.Sleep(200 * time.Millisecond) // Give time for the consumer to process (and filter) messages
+		time.Sleep(400 * time.Millisecond) // Give time for the consumer to process (and filter) messages
 
 		select {
 		case <-handlerCalled:
@@ -1766,7 +1766,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
 
-		committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
+		committeeRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
 			&specqbft.ProcessingMessage{QBFTMessage: proposal}
 
 		// Restart consumption

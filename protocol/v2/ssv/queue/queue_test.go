@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
@@ -207,17 +209,18 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, 2, queue.Len())
 	expectedMsg := decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(2), Type: specqbft.CommitMsgType}, state)
+	poppedCh := make(chan *SSVMessage, 1)
 
 	go func() {
 		defer wg.Done()
 		matchHeight2 := func(msg *SSVMessage) bool {
 			return msg.Body.(*specqbft.Message).Height == 2
 		}
-		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
-		require.Equal(t, expectedMsg, popped)
+		poppedCh <- queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
 	}()
 
 	wg.Wait()
+	require.Equal(t, expectedMsg, <-poppedCh)
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.Equal(t, queue.Len(), 2)
@@ -229,6 +232,7 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
+	poppedCh := make(chan *SSVMessage, 1)
 
 	state := &State{
 		HasRunningInstance: true,
@@ -241,14 +245,13 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	// Pop in a separate goroutine. The first two pops should get the matching messages, and the third should return nil.
 	go func() {
 		defer wg.Done()
-		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
+		poppedCh <- queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
 			_, ok := msg.Body.(*specqbft.Message)
 			if !ok {
 				return true
 			}
 			return msg.Body.(*specqbft.Message).MsgType != specqbft.CommitMsgType
 		})
-		require.NotNil(t, popped)
 	}()
 
 	// Simulate delay before pushing messages.
@@ -264,9 +267,50 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(1), Type: specqbft.CommitMsgType}, state)
 
 	wg.Wait()
+	require.NotNil(t, <-poppedCh)
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.False(t, queue.Empty())
+}
+
+func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
+	reader := metric.NewManualReader()
+	provider := metric.NewMeterProvider(metric.WithReader(reader))
+	testMeter := provider.Meter("test")
+
+	gauge, err := testMeter.Int64Gauge("test_inbox_size")
+	require.NoError(t, err)
+
+	const (
+		queueType = ValidatorQueueMetricType
+		queueID   = "attester"
+	)
+
+	queue := New(log.TestLogger(t), 4, WithInboxSizeMetric(gauge, queueType, queueID))
+	decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
+
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(t.Context(), &rm)
+	require.NoError(t, err)
+
+	require.Len(t, rm.ScopeMetrics, 1)
+	require.Len(t, rm.ScopeMetrics[0].Metrics, 1)
+	require.Equal(t, "test_inbox_size", rm.ScopeMetrics[0].Metrics[0].Name)
+
+	gaugeData, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Gauge[int64])
+	require.True(t, ok)
+	require.Len(t, gaugeData.DataPoints, 1)
+
+	dataPoint := gaugeData.DataPoints[0]
+	require.EqualValues(t, 1, dataPoint.Value)
+
+	queueTypeAttr, ok := dataPoint.Attributes.Value("ssv.queue.type")
+	require.True(t, ok)
+	require.Equal(t, queueType, queueTypeAttr.AsString())
+
+	queueIDAttr, ok := dataPoint.Attributes.Value("ssv.queue.id")
+	require.True(t, ok)
+	require.Equal(t, queueID, queueIDAttr.AsString())
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
@@ -344,11 +388,12 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		// Assert pushed messages.
 		var pushersAssertionWg sync.WaitGroup
 		pushersAssertionWg.Add(1)
+		pushedCountCh := make(chan int64, 1)
 		go func() {
 			pushersWg.Wait()
 			defer pushersAssertionWg.Done()
 			totalPushed += messageCount
-			require.Equal(b, int64(messageCount), pushedCount.Load())
+			pushedCountCh <- pushedCount.Load()
 		}()
 
 		// Pop all messages.
@@ -371,6 +416,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 		// Wait for pushed messages assertion.
 		pushersAssertionWg.Wait()
+		require.Equal(b, int64(messageCount), <-pushedCountCh)
 		stopPopping()
 
 		// Wait for poppers.

@@ -33,9 +33,11 @@ func newTopicsContainer(ps *pubsub.PubSub, onTopicJoined onTopicJoined) *topicsC
 	}
 }
 
-func (tc *topicsContainer) Get(name string) *pubsub.Topic {
-	topic, _ := tc.Join(name)
-	return topic
+// Lookup returns a cached topic by name, or nil if not found.
+func (tc *topicsContainer) Lookup(name string) *pubsub.Topic {
+	tc.lock.RLock()
+	defer tc.lock.RUnlock()
+	return tc.topics[name]
 }
 
 func (tc *topicsContainer) Leave(name string) error {
