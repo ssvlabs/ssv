@@ -284,7 +284,7 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 		queueID   = "attester"
 	)
 
-	queue := New(log.TestLogger(t), 4, WithInboxSizeMetric(gauge, queueType, queueID))
+	queue := New(log.TestLogger(t), 4, WithQueueMetrics(gauge, queueType, queueID))
 	decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
 
 	var rm metricdata.ResourceMetrics
@@ -324,7 +324,7 @@ func TestPriorityQueue_TryPushInboxSizeMetricDoesNotExceedCapacityOnDrop(t *test
 		queueID   = "attester"
 	)
 
-	queue := New(log.TestLogger(t), 1, WithInboxSizeMetric(gauge, queueType, queueID))
+	queue := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID))
 	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 

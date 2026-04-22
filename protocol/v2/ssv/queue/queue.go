@@ -5,11 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/observability/log"
 )
 
 const (
@@ -50,41 +46,21 @@ type Queue interface {
 }
 
 type priorityQueue struct {
-	logger *zap.Logger
-
 	head     *item
 	inbox    chan *SSVMessage
 	lastRead time.Time
 	size     atomic.Int64
-
-	inboxSizeMetric    metric.Int64Gauge
-	inboxSizeRecordOps []metric.RecordOption
-	queueType          string
-	queueID            string
+	observer queueObserver
 }
 
 type Option func(*priorityQueue)
 
-func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType string, queueId string) Option {
-	attrSet := attribute.NewSet(
-		attribute.String("ssv.queue.type", queueType),
-		attribute.String("ssv.queue.id", queueId),
-	)
-
-	return func(q *priorityQueue) {
-		q.inboxSizeMetric = inboxSizeMetric
-		q.inboxSizeRecordOps = []metric.RecordOption{metric.WithAttributeSet(attrSet)}
-		q.queueType = queueType
-		q.queueID = queueId
-	}
-}
-
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
-func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
+func New(_ *zap.Logger, capacity int, opts ...Option) Queue {
 	q := &priorityQueue{
-		logger: logger.Named(log.NameSSVMessageQueue),
-		inbox:  make(chan *SSVMessage, capacity),
+		inbox:    make(chan *SSVMessage, capacity),
+		observer: noopQueueObserver{},
 	}
 
 	for _, opt := range opts {
@@ -97,17 +73,17 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.inbox <- msg
 	q.size.Add(1)
-	q.recordInboxSize(int64(len(q.inbox)))
+	q.observer.recordInboxSize(int64(len(q.inbox)))
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 	select {
 	case q.inbox <- msg:
 		q.size.Add(1)
-		q.recordInboxSize(int64(len(q.inbox)))
+		q.observer.recordInboxSize(int64(len(q.inbox)))
 		return true
 	default:
-		q.recordDrop(DropReasonBufferFull)
+		q.observer.recordDrop(DropReasonBufferFull)
 		return false
 	}
 }
@@ -236,24 +212,6 @@ func (q *priorityQueue) Len() int {
 
 func (q *priorityQueue) Cap() int {
 	return cap(q.inbox)
-}
-
-func (q *priorityQueue) recordInboxSize(inboxSize int64) {
-	if q.inboxSizeMetric == nil {
-		return
-	}
-	q.inboxSizeMetric.Record(
-		context.Background(),
-		inboxSize,
-		q.inboxSizeRecordOps...,
-	)
-}
-
-func (q *priorityQueue) recordDrop(reason string) {
-	if q.queueType == "" || q.queueID == "" {
-		return
-	}
-	RecordDroppedMessage(q.queueType, q.queueID, reason)
 }
 
 // item is a node in a linked list of DecodedSSVMessage.
