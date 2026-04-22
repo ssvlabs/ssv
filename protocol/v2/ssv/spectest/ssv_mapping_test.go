@@ -410,7 +410,7 @@ func fixControllerForRun(logger *zap.Logger, contr *controller.Controller, ks *s
 		spectestingutils.NewOperatorSigner(ks, 1),
 		false,
 	)
-	newContr.CurrentInstanceHeight = contr.CurrentInstanceHeight
+	newContr.LatestInstanceHeight = contr.LatestInstanceHeight
 	newContr.RecentInstances = contr.RecentInstances
 
 	for i, inst := range newContr.RecentInstances {
@@ -437,7 +437,7 @@ func fixInstanceForRun(
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
-		contr.CurrentInstanceHeight,
+		contr.LatestInstanceHeight,
 		signer,
 		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
 			return roundtimer.NewTestingTimer()

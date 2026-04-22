@@ -35,7 +35,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {
-		contr.CurrentInstanceHeight = *test.StartHeight
+		contr.LatestInstanceHeight = *test.StartHeight
 	}
 
 	var lastErr error
@@ -70,8 +70,8 @@ func testTimerState(
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
-		inst := contr.RecentInstances.FindInstance(contr.CurrentInstanceHeight)
-		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.CurrentInstanceHeight)
+		inst := contr.RecentInstances.FindInstance(contr.LatestInstanceHeight)
+		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.LatestInstanceHeight)
 		timer, ok := inst.Timer().(*roundtimer.TestQBFTTimer)
 		require.True(t, ok)
 		require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)

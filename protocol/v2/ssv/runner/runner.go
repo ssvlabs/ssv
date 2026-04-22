@@ -163,7 +163,7 @@ func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 
 func (b *BaseRunner) GetLastHeight() specqbft.Height {
 	if ctrl := b.QBFTController; ctrl != nil {
-		return ctrl.CurrentInstanceHeight
+		return ctrl.LatestInstanceHeight
 	}
 	return specqbft.Height(0)
 }
@@ -550,10 +550,10 @@ func (b *BaseRunner) markDutyFinished() {
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
-	if b.QBFTController.CurrentInstanceHeight >= specqbft.Height(duty.DutySlot()) && b.QBFTController.CurrentInstanceHeight != 0 {
+	if b.QBFTController.LatestInstanceHeight >= specqbft.Height(duty.DutySlot()) && b.QBFTController.LatestInstanceHeight != 0 {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,
-			fmt.Sprintf("duty for slot %d already passed. Current height is %d", duty.DutySlot(), b.QBFTController.CurrentInstanceHeight),
+			fmt.Sprintf("duty for slot %d already passed. Current height is %d", duty.DutySlot(), b.QBFTController.LatestInstanceHeight),
 		)
 	}
 	return nil

@@ -32,10 +32,10 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 type Controller struct {
 	Identifier []byte
 
-	// CurrentInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
+	// LatestInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
 	// is the "relevant" one currently driving consensus.
 	// JSON-tagged as "Height" to preserve compatibility with existing spec-test fixtures.
-	CurrentInstanceHeight specqbft.Height `json:"Height"`
+	LatestInstanceHeight specqbft.Height `json:"Height"`
 	// RecentInstances keeps track of N latest instances Controller has worked with, so late messages can still be
 	// matched to their respective instance.
 	// JSON-tagged as "StoredInstances" to preserve compatibility with existing spec-test fixtures.
@@ -56,13 +56,13 @@ func NewController(
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		Identifier:            identifier,
-		CurrentInstanceHeight: specqbft.FirstHeight,
-		CommitteeMember:       committeeMember,
-		RecentInstances:       make(Instances, 0, InstancesDefaultCapacity),
-		config:                config,
-		OperatorSigner:        signer,
-		fullNode:              fullNode,
+		Identifier:           identifier,
+		LatestInstanceHeight: specqbft.FirstHeight,
+		CommitteeMember:      committeeMember,
+		RecentInstances:      make(Instances, 0, InstancesDefaultCapacity),
+		config:               config,
+		OperatorSigner:       signer,
+		fullNode:             fullNode,
 	}
 }
 
@@ -84,12 +84,12 @@ func (c *Controller) StartNewInstance(
 		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
-	if height < c.CurrentInstanceHeight {
+	if height < c.LatestInstanceHeight {
 		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(
 			span,
 			"attempting to start an instance with a past height %d, current instance height %d",
 			height,
-			c.CurrentInstanceHeight,
+			c.LatestInstanceHeight,
 		),
 		)
 	}
@@ -118,7 +118,7 @@ func (c *Controller) StartNewInstance(
 	)
 	newInstance.Start(ctx, value, valueChecker)
 	c.RecentInstances.addNewInstance(newInstance)
-	c.CurrentInstanceHeight = height
+	c.LatestInstanceHeight = height
 
 	span.SetStatus(codes.Ok, "")
 
@@ -216,10 +216,10 @@ func (c *Controller) GetIdentifier() []byte {
 // It takes into consideration a special case where FirstHeight instance didn't start yet
 // but c.CurrentInstanceHeight == FirstHeight.
 func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
-	if c.CurrentInstanceHeight == specqbft.FirstHeight && c.RecentInstances.FindInstance(c.CurrentInstanceHeight) == nil {
+	if c.LatestInstanceHeight == specqbft.FirstHeight && c.RecentInstances.FindInstance(c.LatestInstanceHeight) == nil {
 		return true
 	}
-	if msg.QBFTMessage.Height > c.CurrentInstanceHeight {
+	if msg.QBFTMessage.Height > c.LatestInstanceHeight {
 		return true
 	}
 	return false
