@@ -331,15 +331,17 @@ var baseCommitteeWithRunner = func(
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			)
-			r, err := runner.NewAggregatorCommitteeRunner(
-				networkconfig.TestNetwork,
-				shareMap,
-				ctrl,
-				runnerSample.GetBeaconNode(),
-				runnerSample.GetNetwork(),
-				runnerSample.GetSigner(),
-				runnerSample.GetOperatorSigner(),
-			)
+			r, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+				BaseRunnerOptions: runner.BaseRunnerOptions{
+					NetworkConfig:  networkconfig.TestNetwork,
+					Share:          shareMap,
+					Beacon:         runnerSample.GetBeaconNode(),
+					Network:        runnerSample.GetNetwork(),
+					Signer:         runnerSample.GetSigner(),
+					OperatorSigner: runnerSample.GetOperatorSigner(),
+				},
+				QBFTController: ctrl,
+			})
 			return r, err
 		default:
 			return nil, fmt.Errorf("invalid duty type %T", duty)

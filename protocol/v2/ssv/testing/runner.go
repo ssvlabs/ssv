@@ -157,15 +157,10 @@ var ConstructBaseRunner = func(
 			DoppelgangerHandler: dgHandler,
 		})
 	case spectypes.RoleAggregatorCommittee:
-		rnr, err := runner.NewAggregatorCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-		)
+		rnr, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+			QBFTController:    contr,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -345,15 +340,10 @@ var ConstructBaseRunnerWithShareMap = func(
 			DoppelgangerHandler: dgHandler,
 		})
 	case spectypes.RoleAggregatorCommittee:
-		rnr, err := runner.NewAggregatorCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-		)
+		rnr, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+			QBFTController:    contr,
+		})
 		if err != nil {
 			return nil, err
 		}

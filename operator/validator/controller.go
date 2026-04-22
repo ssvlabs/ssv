@@ -1100,15 +1100,17 @@ func SetupCommitteeRunners(
 			}
 			return crunner, nil
 		case *spectypes.AggregatorCommitteeDuty:
-			acrunner, err := runner.NewAggregatorCommitteeRunner(
-				options.NetworkConfig,
-				shares,
-				buildController(spectypes.RoleAggregatorCommittee),
-				options.Beacon,
-				options.Network,
-				options.Signer,
-				options.OperatorSigner,
-			)
+			acrunner, err := runner.NewAggregatorCommitteeRunner(runner.AggregatorCommitteeRunnerOptions{
+				BaseRunnerOptions: runner.BaseRunnerOptions{
+					NetworkConfig:  options.NetworkConfig,
+					Share:          shares,
+					Beacon:         options.Beacon,
+					Network:        options.Network,
+					Signer:         options.Signer,
+					OperatorSigner: options.OperatorSigner,
+				},
+				QBFTController: buildController(spectypes.RoleAggregatorCommittee),
+			})
 			if err != nil {
 				return nil, err
 			}

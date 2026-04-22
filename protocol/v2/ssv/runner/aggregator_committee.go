@@ -23,7 +23,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -68,37 +67,38 @@ type AggregatorCommitteeRunner struct {
 	) bool `json:"-"`
 }
 
+// AggregatorCommitteeRunnerOptions bundles all dependencies required by NewAggregatorCommitteeRunner.
+type AggregatorCommitteeRunnerOptions struct {
+	BaseRunnerOptions
+
+	QBFTController *controller.Controller
+}
+
 func NewAggregatorCommitteeRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network protocolp2p.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
+	opts AggregatorCommitteeRunnerOptions,
 ) (Runner, error) {
-	if len(share) == 0 {
+	if len(opts.Share) == 0 {
 		return nil, errors.New("no shares")
 	}
 
 	return &AggregatorCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleAggregatorCommittee,
-			NetworkConfig:  networkConfig,
-			Share:          share,
-			QBFTController: qbftController,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
+			QBFTController: opts.QBFTController,
 		},
 		ValCheck:                              ssv.NewAggregatorCommitteeChecker(),
-		beacon:                                beacon,
-		network:                               network,
-		signer:                                signer,
-		operatorSigner:                        operatorSigner,
+		beacon:                                opts.Beacon,
+		network:                               opts.Network,
+		signer:                                opts.Signer,
+		operatorSigner:                        opts.OperatorSigner,
 		submittedDuties:                       make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]map[[32]byte]struct{}),
 		measurements:                          newMeasurementsStore(),
 		preConsensusSeenSigners:               make(map[spectypes.OperatorID]struct{}),
 		preConsensusDutiesCheckedForSelection: make(map[phase0.ValidatorIndex]map[[32]byte]struct{}),
 
-		IsAggregator: beacon.IsAggregator,
+		IsAggregator: opts.Beacon.IsAggregator,
 	}, nil
 }
 
