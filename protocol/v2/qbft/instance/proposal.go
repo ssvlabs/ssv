@@ -3,9 +3,9 @@ package instance
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -18,7 +18,7 @@ import (
 func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) error {
 	addedMsg, err := i.State.ProposeContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
-		return errors.Wrap(err, "could not add proposal msg to container")
+		return fmt.Errorf("could not add proposal msg to container: %w", err)
 	}
 	if !addedMsg {
 		return nil // uponProposal was already called
@@ -44,18 +44,18 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
-		return errors.Wrap(err, "could not hash input data")
+		return fmt.Errorf("could not hash input data: %w", err)
 	}
 
 	prepare, err := i.CreatePrepare(msgRound, r)
 	if err != nil {
-		return errors.Wrap(err, "could not create prepare msg")
+		return fmt.Errorf("could not create prepare msg: %w", err)
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message", zap.Any("prepare_signers", prepare.OperatorIDs))
 
 	if err := i.Broadcast(prepare); err != nil {
-		return errors.Wrap(err, "failed to broadcast prepare message")
+		return fmt.Errorf("failed to broadcast prepare message: %w", err)
 	}
 	return nil
 }
@@ -86,7 +86,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 	// verify full data integrity
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
-		return errors.Wrap(err, "could not hash input data")
+		return fmt.Errorf("could not hash input data: %w", err)
 	}
 	if !bytes.Equal(msg.QBFTMessage.Root[:], r[:]) {
 		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")
@@ -100,7 +100,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 	for _, rcSignedMessage := range roundChangeJustificationSignedMessages {
 		rc, err := specqbft.NewProcessingMessage(rcSignedMessage)
 		if err != nil {
-			return errors.Wrap(err, "could not create ProcessingMessage from round change justification")
+			return fmt.Errorf("could not create ProcessingMessage from round change justification: %w", err)
 		}
 		roundChangeJustification = append(roundChangeJustification, rc)
 	}
@@ -108,7 +108,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 	for _, prepareSignedMessage := range prepareJustificationSignedMessages {
 		procMsg, err := specqbft.NewProcessingMessage(prepareSignedMessage)
 		if err != nil {
-			return errors.Wrap(err, "could not create ProcessingMessage from prepare justification")
+			return fmt.Errorf("could not create ProcessingMessage from prepare justification: %w", err)
 		}
 		prepareJustification = append(prepareJustification, procMsg)
 	}
@@ -119,7 +119,7 @@ func (i *Instance) isValidProposal(msg *specqbft.ProcessingMessage) error {
 		msg.QBFTMessage.Round,
 		msg.SignedMessage.FullData,
 	); err != nil {
-		return errors.Wrap(err, "proposal not justified")
+		return fmt.Errorf("proposal not justified: %w", err)
 	}
 
 	if (i.State.ProposalAcceptedForCurrentRound == nil && msg.QBFTMessage.Round == i.State.Round) ||
@@ -137,7 +137,7 @@ func (i *Instance) isProposalJustification(
 	fullData []byte,
 ) error {
 	if err := i.ValueChecker.CheckValue(fullData); err != nil {
-		return errors.Wrap(err, "proposal fullData invalid")
+		return fmt.Errorf("proposal fullData invalid: %w", err)
 	}
 
 	if round == specqbft.FirstRound {
@@ -149,7 +149,7 @@ func (i *Instance) isProposalJustification(
 	// prepared
 	for _, rc := range roundChangeMsgs {
 		if err := i.validRoundChangeForDataVerifySignature(rc, round, fullData); err != nil {
-			return errors.Wrap(err, "change round msg not valid")
+			return fmt.Errorf("change round msg not valid: %w", err)
 		}
 	}
 
@@ -168,7 +168,7 @@ func (i *Instance) isProposalJustification(
 		return false, nil
 	}(roundChangeMsgs)
 	if err != nil {
-		return errors.Wrap(err, "could not calculate if previously prepared")
+		return fmt.Errorf("could not calculate if previously prepared: %w", err)
 	}
 
 	if !previouslyPrepared {
@@ -183,7 +183,7 @@ func (i *Instance) isProposalJustification(
 	// get a round change data for which there is a justification for the highest previously prepared round
 	rcMsg, err := highestPrepared(roundChangeMsgs)
 	if err != nil {
-		return errors.Wrap(err, "could not get highest prepared")
+		return fmt.Errorf("could not get highest prepared: %w", err)
 	}
 	if rcMsg == nil {
 		return errors.New("no highest prepared")
@@ -192,7 +192,7 @@ func (i *Instance) isProposalJustification(
 	// proposed fullData must equal highest prepared fullData
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
-		return errors.Wrap(err, "could not hash input data")
+		return fmt.Errorf("could not hash input data: %w", err)
 	}
 	if !bytes.Equal(r[:], rcMsg.QBFTMessage.Root[:]) {
 		return errors.New("proposed data doesn't match highest prepared")
@@ -236,7 +236,7 @@ func (i *Instance) ProposerForRound(round specqbft.Round) spectypes.OperatorID {
 func (i *Instance) CreateProposal(fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not hash input data")
+		return nil, fmt.Errorf("could not hash input data: %w", err)
 	}
 
 	roundChangeSignedMessages := make([]*spectypes.SignedSSVMessage, 0)
@@ -250,11 +250,11 @@ func (i *Instance) CreateProposal(fullData []byte, roundChanges, prepares []*spe
 
 	roundChangesData, err := specqbft.MarshalJustifications(roundChangeSignedMessages)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal justifications")
+		return nil, fmt.Errorf("could not marshal justifications: %w", err)
 	}
 	preparesData, err := specqbft.MarshalJustifications(prepareSignedMessages)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal justifications")
+		return nil, fmt.Errorf("could not marshal justifications: %w", err)
 	}
 
 	msg := &specqbft.Message{
@@ -270,7 +270,7 @@ func (i *Instance) CreateProposal(fullData []byte, roundChanges, prepares []*spe
 
 	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not wrap proposal message")
+		return nil, fmt.Errorf("could not wrap proposal message: %w", err)
 	}
 	signedMsg.FullData = fullData
 	return signedMsg, nil

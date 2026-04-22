@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -193,7 +192,7 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 	}
 
 	if err := i.BaseMsgValidation(msg); err != nil {
-		return false, nil, nil, errors.Wrap(err, "invalid signed message")
+		return false, nil, nil, fmt.Errorf("invalid signed message: %w", err)
 	}
 
 	res := i.processMsgF.Run(func() any {
@@ -207,14 +206,14 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 			if decided {
 				err := i.MarkDecided(msg.QBFTMessage.Round, decidedValue)
 				if err != nil {
-					return errors.Wrap(err, "mark as decided")
+					return fmt.Errorf("mark as decided: %w", err)
 				}
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
 			return i.uponRoundChange(ctx, logger, msg)
 		default:
-			return errors.New("signed message type not supported")
+			return fmt.Errorf("signed message type not supported")
 		}
 	})
 	if res != nil {
@@ -259,7 +258,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	case specqbft.RoundChangeMsgType:
 		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
 	default:
-		return errors.New("signed message type not supported")
+		return fmt.Errorf("signed message type not supported")
 	}
 }
 

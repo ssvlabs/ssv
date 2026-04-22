@@ -5,13 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
@@ -442,11 +442,11 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
 	dContribAndProof, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
-		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")
+		return nil, phase0.Root{}, fmt.Errorf("could not get domain data: %w", err)
 	}
 	contribAndProofRoot, err := spectypes.ComputeETHSigningRoot(contribAndProof, dContribAndProof)
 	if err != nil {
-		return nil, phase0.Root{}, errors.Wrap(err, "could not compute signing root")
+		return nil, phase0.Root{}, fmt.Errorf("could not compute signing root: %w", err)
 	}
 	return contribAndProof, contribAndProofRoot, nil
 }
@@ -476,18 +476,18 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx 
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
+		return nil, spectypes.DomainError, fmt.Errorf("could not create consensus data: %w", err)
 	}
 	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get contributions")
+		return nil, phase0.DomainType{}, fmt.Errorf("could not get contributions: %w", err)
 	}
 
 	ret := make([]ssz.HashRoot, 0)
 	for _, contrib := range contributions {
 		contribAndProof, _, err := r.generateContributionAndProof(ctx, contrib.Contribution, contrib.SelectionProofSig)
 		if err != nil {
-			return nil, spectypes.DomainError, errors.Wrap(err, "could not generate contribution and proof")
+			return nil, spectypes.DomainError, fmt.Errorf("could not generate contribution and proof: %w", err)
 		}
 		ret = append(ret, contribAndProof)
 	}
@@ -545,34 +545,11 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		r.rootToSyncCommitteeIdx[msg.SigningRoot] = phase0.ValidatorIndex(vIdx)
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode partial signature messages: %w", err)
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
+	logger.Debug("signing and broadcasting contribution proof partial sig", fields.Slot(duty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast partial contribution proof sig: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast contribution proof partial sig: %w", err)
 	}
 
 	return nil
@@ -644,7 +621,7 @@ func (r *SyncCommitteeAggregatorRunner) Decode(data []byte) error {
 func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode SyncCommitteeAggregatorRunner")
+		return [32]byte{}, fmt.Errorf("could not encode SyncCommitteeAggregatorRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

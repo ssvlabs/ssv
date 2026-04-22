@@ -3,9 +3,9 @@ package validator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -62,7 +62,7 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	}
 	data, err := json.Marshal(td)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal timeout data")
+		return nil, fmt.Errorf("failed to marshal timeout data: %w", err)
 	}
 	eventMsg := &types.EventMsg{
 		Type: types.Timeout,
@@ -71,7 +71,7 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 
 	eventMsgData, err := eventMsg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode timeout signed msg")
+		return nil, fmt.Errorf("failed to encode timeout signed msg: %w", err)
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
@@ -124,7 +124,7 @@ func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height sp
 	}
 	data, err := json.Marshal(td)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal timeout data")
+		return nil, fmt.Errorf("failed to marshal timeout data: %w", err)
 	}
 	eventMsg := &types.EventMsg{
 		Type: types.Timeout,
@@ -133,7 +133,7 @@ func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height sp
 
 	eventMsgData, err := eventMsg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode timeout signed msg")
+		return nil, fmt.Errorf("failed to encode timeout signed msg: %w", err)
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,

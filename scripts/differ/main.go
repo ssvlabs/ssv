@@ -14,7 +14,6 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/aquasecurity/table"
 	"github.com/cespare/xxhash/v2"
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -60,11 +59,11 @@ func run() (changes int, err error) {
 	var config Config
 	yamlFile, err := ioutil.ReadFile(cli.Config)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to read config file")
+		return 0, fmt.Errorf("failed to read config file: %w", err)
 	}
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to unmarshal YAML")
+		return 0, fmt.Errorf("failed to unmarshal YAML: %w", err)
 	}
 
 	// Prepare the transformers.
@@ -83,7 +82,7 @@ func run() (changes int, err error) {
 	// Create the diff file.
 	diffFile, err := os.Create(cli.Output)
 	if err != nil {
-		return 0, errors.Wrap(err, "failed to create diff file")
+		return 0, fmt.Errorf("failed to create diff file: %w", err)
 	}
 	defer diffFile.Close()
 
@@ -94,11 +93,11 @@ func run() (changes int, err error) {
 	for _, pair := range config.Comparisons {
 		lefts, err := NewParser(cli.Left, pair.Packages.Left, config.IgnoredIdentifiers).Parse()
 		if err != nil {
-			return 0, errors.Wrap(err, "failed to parse left package")
+			return 0, fmt.Errorf("failed to parse left package: %w", err)
 		}
 		rights, err := NewParser(cli.Right, pair.Packages.Right, config.IgnoredIdentifiers).Parse()
 		if err != nil {
-			return 0, errors.Wrap(err, "failed to parse right package")
+			return 0, fmt.Errorf("failed to parse right package: %w", err)
 		}
 
 		// For each element in the left package, find the corresponding element
@@ -136,7 +135,7 @@ func run() (changes int, err error) {
 				rightName := fmt.Sprintf("b/%s@%s", right.Path, right.Name)
 				diff, err := Diff(leftName, rightName, []byte(left.Code), []byte(right.Code), 100)
 				if err != nil {
-					return 0, errors.Wrap(err, "failed to generate diff")
+					return 0, fmt.Errorf("failed to generate diff: %w", err)
 				}
 				if len(diff) == 0 {
 					// No changes.

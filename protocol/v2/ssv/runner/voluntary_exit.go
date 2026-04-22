@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
@@ -149,12 +149,12 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	validatorDuty, err := r.currentValidatorDuty()
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "current validator duty")
+		return nil, spectypes.DomainError, fmt.Errorf("current validator duty: %w", err)
 	}
 
 	vr, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate voluntary exit")
+		return nil, spectypes.DomainError, fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
 	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
 }
@@ -199,33 +199,10 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode PartialSignatureMessages: %w", err)
-	}
+	logger.Debug("signing and broadcasting voluntary exit partial sig", fields.Slot(duty.DutySlot()))
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
-
-	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast voluntary exit partial sig: %w", err)
 	}
 
 	// stores value for later using in ProcessPreConsensus
@@ -304,7 +281,7 @@ func (r *VoluntaryExitRunner) Decode(data []byte) error {
 func (r *VoluntaryExitRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode VoluntaryExitRunner")
+		return [32]byte{}, fmt.Errorf("could not encode VoluntaryExitRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

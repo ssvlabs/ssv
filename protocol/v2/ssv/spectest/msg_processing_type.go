@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -243,7 +243,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*MsgProcessingSpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
 	overrideStateComparison(t, test, test.Name, testType)
 }

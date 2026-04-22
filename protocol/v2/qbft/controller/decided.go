@@ -3,8 +3,8 @@ package controller
 import (
 	"bytes"
 	"context"
+	"fmt"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -21,7 +21,7 @@ func (c *Controller) UponDecided(
 	roundTimerF ssv.QBFTRoundTimerF,
 ) (*spectypes.SignedSSVMessage, error) {
 	if err := c.ValidateDecided(msg); err != nil {
-		return nil, errors.Wrap(err, "invalid decided msg")
+		return nil, fmt.Errorf("invalid decided msg: %w", err)
 	}
 
 	inst := c.RecentInstances.FindInstance(msg.QBFTMessage.Height)
@@ -42,10 +42,10 @@ func (c *Controller) UponDecided(
 		)
 
 		if err := inst.MarkDecided(msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
-			return nil, errors.Wrap(err, "mark as decided")
+			return nil, fmt.Errorf("mark as decided: %w", err)
 		}
 		if err := inst.State.CommitContainer.AddMsg(msg); err != nil {
-			return nil, errors.Wrap(err, "add message to commit-container")
+			return nil, fmt.Errorf("add message to commit-container: %w", err)
 		}
 		c.RecentInstances.addNewInstance(inst)
 		if msg.QBFTMessage.Height > c.CurrentInstanceHeight {
@@ -66,10 +66,10 @@ func (c *Controller) UponDecided(
 		// We can do so now.
 
 		if err := inst.MarkDecided(msg.QBFTMessage.Round, msg.SignedMessage.FullData); err != nil {
-			return nil, errors.Wrap(err, "mark as decided")
+			return nil, fmt.Errorf("mark as decided: %w", err)
 		}
 		if err := inst.State.CommitContainer.AddMsg(msg); err != nil {
-			return nil, errors.Wrap(err, "add message to commit-container")
+			return nil, fmt.Errorf("add message to commit-container: %w", err)
 		}
 
 		// Signal "newly decided" to the caller.
@@ -90,16 +90,16 @@ func (c *Controller) UponDecided(
 
 func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
 	if !c.isDecidedMsg(msg) {
-		return errors.New("not a decided msg")
+		return fmt.Errorf("not a decided msg")
 	}
 
 	if err := instance.BaseCommitValidationVerifySignature(msg, msg.QBFTMessage.Height, c.CommitteeMember.Committee); err != nil {
-		return errors.Wrap(err, "invalid decided msg")
+		return fmt.Errorf("invalid decided msg: %w", err)
 	}
 
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
-		return errors.Wrap(err, "could not hash input data")
+		return fmt.Errorf("could not hash input data: %w", err)
 	}
 	if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
 		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")

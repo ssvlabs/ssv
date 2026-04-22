@@ -192,7 +192,7 @@ func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.
 	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")
-	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())
+	dir := typescomparable.GetSCDir(specDir, reflect.TypeFor[*spectests.ControllerSpecTest]().String())
 	path := filepath.Join(dir, fmt.Sprintf("%s.json", test.TestName()))
 	byteValue, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
