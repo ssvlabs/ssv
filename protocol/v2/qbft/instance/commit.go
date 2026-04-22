@@ -21,12 +21,23 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 
 	logger.Debug("📬 got commit message", zap.Any("commit_signers", msg.SignedMessage.OperatorIDs))
 
+	// Only the first quorum transition should be treated as a new decision. Later
+	// commit messages for the same round/root still need to be recorded for
+	// bookkeeping, but must not re-trigger the decision path.
+	hadQuorumBefore, _, err := i.commitQuorumForRoundRoot(msg.QBFTMessage.Root, msg.QBFTMessage.Round)
+	if err != nil {
+		return false, nil, nil, fmt.Errorf("could not calculate pre-add commit quorum: %w", err)
+	}
+
 	addMsg, err := i.State.CommitContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return false, nil, nil, fmt.Errorf("could not add commit msg to container: %w", err)
 	}
 	if !addMsg {
 		return false, nil, nil, nil // UponCommit was already called
+	}
+	if hadQuorumBefore {
+		return false, nil, nil, nil
 	}
 
 	// calculate commit quorum and act upon it
