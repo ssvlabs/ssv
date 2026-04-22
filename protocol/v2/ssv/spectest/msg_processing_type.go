@@ -242,7 +242,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*MsgProcessingSpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
 	overrideStateComparison(t, test, test.Name, testType)
 }
