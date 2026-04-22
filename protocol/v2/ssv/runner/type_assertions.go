@@ -24,30 +24,45 @@ func validatorDutyFromDuty(duty spectypes.Duty) (*spectypes.ValidatorDuty, error
 }
 
 func (b *BaseRunner) currentValidatorDuty() (*spectypes.ValidatorDuty, error) {
-	if b == nil {
-		return nil, fmt.Errorf("runner is nil")
-	}
-	if b.State == nil {
-		return nil, fmt.Errorf("runner state is nil")
-	}
-	if b.State.CurrentDuty == nil {
-		return nil, fmt.Errorf("current duty is nil")
+	if !b.hasDutyAssigned() {
+		return nil, fmt.Errorf("no current duty assigned")
 	}
 
+	// CurrentDuty is not nil if State is not nil by construction.
 	return validatorDutyFromDuty(b.State.CurrentDuty)
 }
 
-func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
-	if b == nil {
-		return 0, fmt.Errorf("runner is nil")
-	}
-	if b.State == nil {
-		return 0, fmt.Errorf("runner state is nil")
-	}
-	if b.State.CurrentDuty == nil {
-		return 0, fmt.Errorf("current duty is nil")
+func committeeDutyFromDuty(duty spectypes.Duty) (*spectypes.CommitteeDuty, error) {
+	if duty == nil {
+		return nil, fmt.Errorf("duty is nil")
 	}
 
+	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
+	if !ok {
+		return nil, fmt.Errorf("duty is not a CommitteeDuty: %T", duty)
+	}
+	if committeeDuty == nil {
+		return nil, fmt.Errorf("committee duty is nil")
+	}
+
+	return committeeDuty, nil
+}
+
+func (b *BaseRunner) currentCommitteeDuty() (*spectypes.CommitteeDuty, error) {
+	if !b.hasDutyAssigned() {
+		return nil, fmt.Errorf("no current duty assigned")
+	}
+
+	// CurrentDuty is not nil if State is not nil by construction.
+	return committeeDutyFromDuty(b.State.CurrentDuty)
+}
+
+func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
+	if !b.hasDutyAssigned() {
+		return 0, fmt.Errorf("no current duty assigned")
+	}
+
+	// CurrentDuty is not nil if State is not nil by construction.
 	switch duty := b.State.CurrentDuty.(type) {
 	case *spectypes.ValidatorDuty:
 		if duty == nil {

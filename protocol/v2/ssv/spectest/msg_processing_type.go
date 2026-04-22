@@ -236,13 +236,18 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*MsgProcessingSpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
 	overrideStateComparison(t, test, test.Name, testType)
 }
 
 func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name string, testType string) {
 	r := runnerForTest(t, test.Runner, name, testType)
+	if !test.DontStartDuty {
+		if proposerRunner, ok := r.(*runner.ProposerRunner); ok {
+			normalizeExpectedProposerStartValues(proposerRunner)
+		}
+	}
 
 	test.PostDutyRunnerState = r
 
@@ -303,18 +308,20 @@ var baseCommitteeWithRunner = func(
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			)
-			r, err := runner.NewCommitteeRunner(
-				networkconfig.TestNetwork,
-				shareMap,
-				attestingValidators,
-				ctrl,
-				runnerSample.GetBeaconNode(),
-				runnerSample.GetNetwork(),
-				runnerSample.GetSigner(),
-				runnerSample.GetOperatorSigner(),
-				committeeDutyGuard,
-				dgHandler,
-			)
+			r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+				BaseRunnerOptions: runner.BaseRunnerOptions{
+					NetworkConfig:  networkconfig.TestNetwork,
+					Share:          shareMap,
+					Beacon:         runnerSample.GetBeaconNode(),
+					Network:        runnerSample.GetNetwork(),
+					Signer:         runnerSample.GetSigner(),
+					OperatorSigner: runnerSample.GetOperatorSigner(),
+				},
+				AttestingValidators: attestingValidators,
+				QBFTController:      ctrl,
+				DutyGuard:           committeeDutyGuard,
+				DoppelgangerHandler: dgHandler,
+			})
 			return r, err
 		case *spectypes.AggregatorCommitteeDuty:
 			ctrl := controller.NewController(

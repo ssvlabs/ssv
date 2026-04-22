@@ -12,6 +12,6 @@ func TestVoluntaryExitRunnerExpectedPreConsensusRootsHandlesMissingCurrentDuty(t
 	require.NotPanics(t, func() {
 		_, _, err := runner.expectedPreConsensusRootsAndDomain()
 		require.ErrorContains(t, err, "current validator duty")
-		require.ErrorContains(t, err, "current duty is nil")
+		require.ErrorContains(t, err, "duty is nil")
 	})
 }

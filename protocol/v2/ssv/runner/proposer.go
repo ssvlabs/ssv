@@ -21,7 +21,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -61,44 +60,45 @@ type ProposerRunner struct {
 	cachedBlindedBlockSSZ []byte
 }
 
-func NewProposerRunner(
-	logger *zap.Logger,
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller,
-	beacon beacon.BeaconNode,
-	network protocolp2p.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	doppelgangerHandler DoppelgangerProvider,
-	valCheck ssv.ValueChecker,
-	highestDecidedSlot phase0.Slot,
-	graffiti []byte,
-	proposerDelay time.Duration,
-) (Runner, error) {
-	if len(share) != 1 {
+// ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
+type ProposerRunnerOptions struct {
+	BaseRunnerOptions
+
+	QBFTController      *controller.Controller
+	DoppelgangerHandler DoppelgangerProvider
+	ValCheck            ssv.ValueChecker
+	HighestDecidedSlot  phase0.Slot
+	Graffiti            []byte
+	// ProposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
+	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
+	// higher MEV.
+	ProposerDelay time.Duration
+}
+
+func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
-			NetworkConfig:      networkConfig,
-			Share:              share,
-			QBFTController:     qbftController,
-			highestDecidedSlot: highestDecidedSlot,
+			NetworkConfig:      opts.NetworkConfig,
+			Share:              opts.Share,
+			QBFTController:     opts.QBFTController,
+			highestDecidedSlot: opts.HighestDecidedSlot,
 		},
 
-		beacon:              beacon,
-		network:             network,
-		signer:              signer,
-		operatorSigner:      operatorSigner,
-		doppelgangerHandler: doppelgangerHandler,
-		ValCheck:            valCheck,
+		beacon:              opts.Beacon,
+		network:             opts.Network,
+		signer:              opts.Signer,
+		operatorSigner:      opts.OperatorSigner,
+		doppelgangerHandler: opts.DoppelgangerHandler,
+		ValCheck:            opts.ValCheck,
 		measurements:        newMeasurementsStore(),
-		graffiti:            graffiti,
+		graffiti:            opts.Graffiti,
 
-		proposerDelay: proposerDelay,
+		proposerDelay: opts.ProposerDelay,
 	}, nil
 }
 
@@ -481,38 +481,12 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	domain := r.NetworkConfig.DomainTypeAtSlot(duty.DutySlot())
-	msgID := spectypes.NewMsgID(domain, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode randao partial signature message: %w", err)
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
+	logger.Debug("signing and broadcasting randao partial sig", fields.Slot(duty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().BroadcastAtSlot(msgToBroadcast, duty.DutySlot()); err != nil {
-		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast randao partial sig: %w", err)
 	}
-
-	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
 
 	return nil
 }

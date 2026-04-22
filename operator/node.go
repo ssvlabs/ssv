@@ -124,7 +124,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			ValidatorProvider:       validatorProvider,
 			ValidatorController:     opts.ValidatorController,
 			DutyExecutor:            dutyExecutor,
-			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
+			IndicesChgCh:            opts.ValidatorController.IndicesChangeChan(),
 			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
 			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
 			DutyStore:               opts.DutyStore,

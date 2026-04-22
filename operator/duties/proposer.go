@@ -120,7 +120,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 				indicesChangeDeadline := h.netCfg.SlotStartTime(currentSlot).Add(h.netCfg.IntervalDuration())
 				select {
-				case <-h.indicesChange:
+				case <-h.indicesChangeCh:
 					logger.Info("🔁 indices change received")
 
 					// 1) Declare intents.
@@ -152,7 +152,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				}
 			}()
 
-		case reorgEvent := <-h.reorg:
+		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.netCfg.EstimatedCurrentSlot()
 			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			nextEpoch := currentEpoch + 1

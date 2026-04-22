@@ -122,14 +122,15 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 		numSubnets = commons.SubnetsCount
 	}
 
-	availableSubnetsCount := commons.SubnetsCount - n.currentSubnets.ActiveCount()
+	currentSubnets := n.currentSubnetsSnapshot()
+	availableSubnetsCount := commons.SubnetsCount - currentSubnets.ActiveCount()
 	if numSubnets > availableSubnetsCount {
 		return fmt.Errorf("not enough available subnets: requested %d, available %d", numSubnets, availableSubnetsCount)
 	}
 
 	availableSubnets := make([]uint64, 0, availableSubnetsCount)
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
-		if !n.currentSubnets.IsSet(commons.Subnet(subnet)) {
+		if !currentSubnets.IsSet(commons.Subnet(subnet)) {
 			availableSubnets = append(availableSubnets, subnet)
 		}
 	}

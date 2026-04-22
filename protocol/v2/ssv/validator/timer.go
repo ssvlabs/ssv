@@ -22,38 +22,27 @@ func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifie
 		v.mtx.RLock() // read-lock for v.Queues
 		defer v.mtx.RUnlock()
 
-		// The relevant queue might not have been initialized yet, hence we need to check for nil here
+		// If the relevant queue hasn't been initialized yet, there isn't a running duty we can issue a
+		// timeout for, in practice this should never happen - but we need to handle this just in case.
 		q := v.Queues[identifier.GetRoleType()]
 		if q == nil {
-			return
-		}
-
-		dr := v.DutyRunners[identifier.GetRoleType()]
-		if dr == nil {
-			// runner can be nil: expired committee runners are removed, but timeout event can still be. in this case we should just skip it
-			logger.Warn("❗no duty runner found for role", fields.RunnerRole(identifier.GetRoleType()))
-			return
-		}
-		hasDuty := dr.HasRunningDuty()
-		if !hasDuty {
+			logger.Error("❗ couldn't schedule timeout event due to missing queue")
 			return
 		}
 
 		msg, err := v.createTimerMessage(identifier, height, round)
 		if err != nil {
-			logger.Debug("❗ failed to create timer msg", zap.Error(err))
+			logger.Error("❌ failed to create timer msg", zap.Error(err))
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
+			logger.Error("❌ failed to decode timer msg", zap.Error(err))
 			return
 		}
 
 		if pushed := q.TryPush(dec); !pushed {
-			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.RunnerRole(identifier.GetRoleType()),
-			)
+			logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
 			return
 		}
 	}
@@ -86,48 +75,33 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 
 func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
-		c.mtx.RLock() // read-lock for c.Queues, c.Runners
+		c.mtx.RLock() // read-lock for c.Queues
 		defer c.mtx.RUnlock()
 
+		var q queueContainer
 		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
-			dr := c.AggregatorRunners[phase0.Slot(height)]
-			if dr == nil { // only happens when we prune expired runners
-				logger.Debug("❗no aggregator committee runner found for slot")
-				return
-			}
-			if !dr.HasRunningDuty() {
-				return
-			}
+			q = c.AggregatorQueues[phase0.Slot(height)]
 		} else {
-			dr := c.Runners[phase0.Slot(height)]
-			if dr == nil { // only happens when we prune expired runners
-				logger.Debug("❗no committee runner found for slot")
-				return
-			}
-			if !dr.HasRunningDuty() {
-				return
-			}
+			q = c.Queues[phase0.Slot(height)]
+		}
+		if q.Q == nil {
+			logger.Debug("couldn't schedule timeout event due to missing queue (likely was pruned)")
+			return
 		}
 
 		msg, err := c.createTimerMessage(identifier, height, round)
 		if err != nil {
-			logger.Debug("❗ failed to create timer msg", zap.Error(err))
+			logger.Error("❌ failed to create timer msg", zap.Error(err))
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
+			logger.Error("❌ failed to decode timer msg", zap.Error(err))
 			return
 		}
 
-		var qc queueContainer
-		if identifier.GetRoleType() == spectypes.RoleAggregatorCommittee {
-			qc = c.AggregatorQueues[phase0.Slot(height)]
-		} else {
-			qc = c.Queues[phase0.Slot(height)]
-		}
-		if pushed := qc.Q.TryPush(dec); !pushed {
-			logger.Warn("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
+		if pushed := q.Q.TryPush(dec); !pushed {
+			logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(identifier.GetRoleType()))
 		}
 	}
 }

@@ -167,8 +167,8 @@ func hashStructJSON(v any) (string, error) {
 func TestFieldPreservation(t *testing.T) {
 	t.Run("test all fields are present after marshaling", func(t *testing.T) {
 		// Get all field names from SSV config
-		configType := reflect.TypeOf(SSV{})
-		marshaledType := reflect.TypeOf(marshaledConfig{})
+		configType := reflect.TypeFor[SSV]()
+		marshaledType := reflect.TypeFor[marshaledConfig]()
 
 		var configFields, marshaledFields []string
 

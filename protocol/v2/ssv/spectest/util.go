@@ -4,11 +4,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
@@ -43,11 +45,11 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	// Pass runnerType as signerSource since it has the signer (r was deserialized and lacks one)
 	applyRunnerNetworkConfig(r, networkconfig.TestNetwork)
 	switch runnerType.(type) {
-	case *runner.CommitteeRunner, *runner.AggregatorRunner, *runner.ProposerRunner, *runner.SyncCommitteeAggregatorRunner:
+	case *runner.CommitteeRunner, *runner.AggregatorRunner, *runner.ProposerRunner, *runner.SyncCommitteeAggregatorRunner, *runner.AggregatorCommitteeRunner:
 		valCheck := createValueChecker(r, runnerType)
 		setRunnerValCheck(r, valCheck)
 		setRunnerValueCheckers(r, valCheck)
-	case *runner.ValidatorRegistrationRunner, *runner.VoluntaryExitRunner, *runner.AggregatorCommitteeRunner:
+	case *runner.ValidatorRegistrationRunner, *runner.VoluntaryExitRunner:
 	default:
 		t.Fatalf("unknown runner type")
 	}
@@ -76,6 +78,64 @@ func runnerBase(r runner.Runner) *runner.BaseRunner {
 	}
 }
 
+func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
+	if pr == nil || pr.BaseRunner == nil {
+		return
+	}
+	if state := pr.State; state != nil {
+		state.DecidedValue = normalizeProposerConsensusValue(state.DecidedValue)
+		if pr.HasStartedQBFTInstance() {
+			state.RunningInstance.StartValue = normalizeProposerConsensusValue(state.RunningInstance.StartValue)
+			if state.RunningInstance.State != nil {
+				state.RunningInstance.State.LastPreparedValue = normalizeProposerConsensusValue(state.RunningInstance.State.LastPreparedValue)
+				state.RunningInstance.State.DecidedValue = normalizeProposerConsensusValue(state.RunningInstance.State.DecidedValue)
+			}
+		}
+	}
+	if pr.QBFTController == nil {
+		return
+	}
+	for _, inst := range pr.QBFTController.StoredInstances {
+		if inst == nil {
+			continue
+		}
+		inst.StartValue = normalizeProposerConsensusValue(inst.StartValue)
+		if inst.State != nil {
+			inst.State.LastPreparedValue = normalizeProposerConsensusValue(inst.State.LastPreparedValue)
+			inst.State.DecidedValue = normalizeProposerConsensusValue(inst.State.DecidedValue)
+		}
+	}
+}
+
+func normalizeProposerConsensusValue(value []byte) []byte {
+	if len(value) == 0 {
+		return value
+	}
+	cd := &spectypes.ProposerConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return value
+	}
+	vBlk, _, err := cd.GetBlockData()
+	if err != nil {
+		return value
+	}
+	blindedVBlk, blindedMarshaler, err := blindutil.EnsureBlinded(vBlk)
+	if err != nil {
+		return value
+	}
+	blindedDataSSZ, err := blindedMarshaler.MarshalSSZ()
+	if err != nil {
+		return value
+	}
+	cd.Version = blindedVBlk.Version
+	cd.DataSSZ = blindedDataSSZ
+	encoded, err := cd.Encode()
+	if err != nil {
+		return value
+	}
+	return encoded
+}
+
 func applyRunnerNetworkConfig(r runner.Runner, netCfg *networkconfig.Network) {
 	base := runnerBase(r)
 	if base == nil || netCfg == nil {
@@ -86,7 +146,7 @@ func applyRunnerNetworkConfig(r runner.Runner, netCfg *networkconfig.Network) {
 
 func runnerSupportsValueCheckers(r runner.Runner) bool {
 	switch r.(type) {
-	case *runner.CommitteeRunner, *runner.AggregatorRunner, *runner.ProposerRunner, *runner.SyncCommitteeAggregatorRunner:
+	case *runner.CommitteeRunner, *runner.AggregatorRunner, *runner.ProposerRunner, *runner.SyncCommitteeAggregatorRunner, *runner.AggregatorCommitteeRunner:
 		return true
 	default:
 		return false
@@ -105,6 +165,8 @@ func setRunnerValCheck(r runner.Runner, valCheck ssv.ValueChecker) {
 	case *runner.ProposerRunner:
 		typed.ValCheck = valCheck
 	case *runner.SyncCommitteeAggregatorRunner:
+		typed.ValCheck = valCheck
+	case *runner.AggregatorCommitteeRunner:
 		typed.ValCheck = valCheck
 	}
 }

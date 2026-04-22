@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -112,7 +113,8 @@ type p2pNetwork struct {
 	// these subnets should not be unsubscribed from even if all validators associated with them are removed
 	persistentSubnets commons.Subnets
 	// currentSubnets holds current subnets which depend on current active validators and committees
-	currentSubnets commons.Subnets
+	currentSubnets   commons.Subnets
+	currentSubnetsMu sync.RWMutex
 
 	libConnManager connmgrcore.ConnManager
 
@@ -330,13 +332,14 @@ func (n *p2pNetwork) peersTrimming() func() {
 		}
 
 		connectedPeers := n.host.Network().Peers()
+		currentSubnets := n.currentSubnetsSnapshot()
 
 		const maximumIrrelevantPeersToDisconnect = 3
 		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(
 			maximumIrrelevantPeersToDisconnect,
 			n.host.Network(),
 			connectedPeers,
-			n.currentSubnets,
+			currentSubnets,
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
@@ -535,8 +538,9 @@ func (n *p2pNetwork) UpdateSubnets() {
 		start := time.Now()
 
 		alanSubnets, booleSubnets := n.subscribedSubnetsForCurrentEpoch()
-		currentSubnets := unionSubnets(alanSubnets, booleSubnets)
-		n.currentSubnets = currentSubnets
+		updatedSubnets := unionSubnets(alanSubnets, booleSubnets)
+		n.setCurrentSubnets(updatedSubnets)
+		currentSubnets := updatedSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]commons.Subnet, 0)
@@ -566,7 +570,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		hasBooleChanges := addedBooleSubnets.HasActive() || removedBooleSubnets.HasActive()
 		if hasSubnetChanges || hasAlanChanges || hasBooleChanges {
 			n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-				self.Metadata.Subnets = n.currentSubnets.StringHex()
+				self.Metadata.Subnets = updatedSubnets.StringHex()
 				return self
 			})
 
@@ -662,7 +666,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 				go n.disc.PublishENR()
 			}
 
-			subnetsList := commons.AllSubnets.SharedSubnets(n.currentSubnets)
+			subnetsList := commons.AllSubnets.SharedSubnets(updatedSubnets)
 			n.logger.Debug("updated subnets",
 				zap.Any("added", addedSubnets),
 				zap.Any("removed", removedSubnets),
@@ -680,6 +684,20 @@ func (n *p2pNetwork) UpdateSubnets() {
 		case <-ticker.C:
 		}
 	}
+}
+
+func (n *p2pNetwork) currentSubnetsSnapshot() commons.Subnets {
+	n.currentSubnetsMu.RLock()
+	defer n.currentSubnetsMu.RUnlock()
+
+	return n.currentSubnets
+}
+
+func (n *p2pNetwork) setCurrentSubnets(subnets commons.Subnets) {
+	n.currentSubnetsMu.Lock()
+	defer n.currentSubnetsMu.Unlock()
+
+	n.currentSubnets = subnets
 }
 
 // UpdateScoreParams updates the scoring parameters once per epoch through the call of n.topicsCtrl.UpdateScoreParams

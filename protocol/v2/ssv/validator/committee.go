@@ -202,7 +202,7 @@ func (c *Committee) getQueueForRole(logger *zap.Logger, slot phase0.Slot, role s
 		q = queueContainer{
 			Q: queue.New(
 				logger,
-				1000,
+				defaultValidatorQueueSize,
 				queue.WithInboxSizeMetric(
 					queue.InboxSizeMetric,
 					qType,
@@ -381,10 +381,12 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			span.AddEvent("process committee message = event(timeout)")
 
 			c.mtx.RLock()
-			r, ok := c.runnerForRole(role, slot)
+			r, found := c.runnerForRole(role, slot)
 			c.mtx.RUnlock()
-			if !ok {
-				return spectypes.WrapError(spectypes.NoRunnerForSlotErrorCode, fmt.Errorf("event message: no runner found for message's slot %d", slot))
+			if !found {
+				// Old runners are pruned, timeout-event issuer is unaware of that - that's why we can end up here
+				logger.Debug("event message: timeout event arrived, but targeted runner not found (likely was pruned)")
+				return nil
 			}
 
 			timeoutData, err := eventMsg.GetTimeoutData()

@@ -27,15 +27,8 @@ func TestValidatorDutyFromDuty(t *testing.T) {
 }
 
 func TestCurrentValidatorDuty(t *testing.T) {
-	var runner *BaseRunner
-	_, err := runner.currentValidatorDuty()
-	require.ErrorContains(t, err, "runner is nil")
-
-	_, err = (&BaseRunner{}).currentValidatorDuty()
-	require.ErrorContains(t, err, "runner state is nil")
-
-	_, err = (&BaseRunner{State: &State{}}).currentValidatorDuty()
-	require.ErrorContains(t, err, "current duty is nil")
+	_, err := (&BaseRunner{}).currentValidatorDuty()
+	require.ErrorContains(t, err, "no current duty assigned")
 
 	typedNilRunner := &BaseRunner{State: &State{CurrentDuty: (*spectypes.ValidatorDuty)(nil)}}
 	_, err = typedNilRunner.currentValidatorDuty()
@@ -45,16 +38,27 @@ func TestCurrentValidatorDuty(t *testing.T) {
 	require.ErrorContains(t, err, "duty is not a ValidatorDuty")
 }
 
+func TestCurrentCommitteeDuty(t *testing.T) {
+	_, err := (&BaseRunner{}).currentCommitteeDuty()
+	require.ErrorContains(t, err, "no current duty assigned")
+
+	committeeDuty := &spectypes.CommitteeDuty{}
+
+	got, err := (&BaseRunner{State: &State{CurrentDuty: committeeDuty}}).currentCommitteeDuty()
+	require.NoError(t, err)
+	require.Same(t, committeeDuty, got)
+
+	typedNilRunner := &BaseRunner{State: &State{CurrentDuty: (*spectypes.CommitteeDuty)(nil)}}
+	_, err = typedNilRunner.currentCommitteeDuty()
+	require.ErrorContains(t, err, "committee duty is nil")
+
+	_, err = (&BaseRunner{State: &State{CurrentDuty: &spectypes.ValidatorDuty{}}}).currentCommitteeDuty()
+	require.ErrorContains(t, err, "duty is not a CommitteeDuty")
+}
+
 func TestCurrentDutySlot(t *testing.T) {
-	var runner *BaseRunner
-	_, err := runner.currentDutySlot()
-	require.ErrorContains(t, err, "runner is nil")
-
-	_, err = (&BaseRunner{}).currentDutySlot()
-	require.ErrorContains(t, err, "runner state is nil")
-
-	_, err = (&BaseRunner{State: &State{}}).currentDutySlot()
-	require.ErrorContains(t, err, "current duty is nil")
+	_, err := (&BaseRunner{}).currentDutySlot()
+	require.ErrorContains(t, err, "no current duty assigned")
 
 	validatorDuty := &spectypes.ValidatorDuty{Slot: 11}
 	slot, err := (&BaseRunner{State: &State{CurrentDuty: validatorDuty}}).currentDutySlot()

@@ -128,7 +128,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.duties.Reset(currentPeriod - 1)
 			}
 
-		case reorgEvent := <-h.reorg:
+		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.netCfg.EstimatedCurrentSlot()
 			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
@@ -143,7 +143,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			currentSlot := h.netCfg.EstimatedCurrentSlot()
 			currentEpoch := h.netCfg.EstimatedEpochAtSlot(currentSlot)
 			currentPeriod := h.netCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)

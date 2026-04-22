@@ -22,6 +22,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -34,6 +35,38 @@ func TestGetMaxPeers(t *testing.T) {
 
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
+}
+
+func TestCurrentSubnetsConcurrentAccess(t *testing.T) {
+	n := &p2pNetwork{}
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := uint64(0); i < 5000; i++ {
+			subnets := commons.ZeroSubnets
+			subnets.Set(commons.Subnet(i % commons.SubnetsCount))
+			n.setCurrentSubnets(subnets)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 5000; i++ {
+			subnets := n.ActiveSubnets()
+			_ = subnets.ActiveCount()
+			_ = subnets.StringHex()
+		}
+	}()
+
+	close(start)
+	wg.Wait()
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
@@ -70,27 +103,33 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
+	broadcastErrCh := make(chan error, 12)
+	recordBroadcastErr := func(err error) {
+		if err != nil {
+			broadcastErrCh <- err
+		}
+	}
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		msgCommittee1, msgCommittee1Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
-		msgCommittee3, msgCommittee3Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
-		msgProposer, msgProposerSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
-		msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
-		msgRoleVoluntaryExit, msgRoleVoluntaryExitSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
+		msgCommittee1, _ := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
+		msgCommittee3, _ := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
+		msgProposer, _ := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
+		msgSyncCommitteeContribution, _ := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
+		msgRoleVoluntaryExit, _ := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
-		require.NoError(t, node1.BroadcastAtSlot(msgCommittee1, msgCommittee1Slot))
+		recordBroadcastErr(node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.BroadcastAtSlot(msgCommittee3, msgCommittee3Slot))
+		recordBroadcastErr(node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.BroadcastAtSlot(msgCommittee1, msgCommittee1Slot))
+		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.BroadcastAtSlot(msgProposer, msgProposerSlot))
+		recordBroadcastErr(node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.BroadcastAtSlot(msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot))
+		recordBroadcastErr(node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node1.BroadcastAtSlot(msgRoleVoluntaryExit, msgRoleVoluntaryExitSlot))
+		recordBroadcastErr(node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Add(1)
@@ -98,27 +137,29 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		msgCommittee1, msgCommittee1Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
-		msgCommittee2, msgCommittee2Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 2)
-		msgCommittee3, msgCommittee3Slot := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
-		msgProposer, msgProposerSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
-		msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
-		msgRoleVoluntaryExit, msgRoleVoluntaryExitSlot := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
-
-		require.NoError(t, err)
+		msgCommittee1, _ := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
+		msgCommittee2, _ := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 2)
+		msgCommittee3, _ := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
+		msgProposer, _ := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
+		msgSyncCommitteeContribution, _ := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, ssvtypes.RoleSyncCommitteeContribution)
+		msgRoleVoluntaryExit, _ := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
 		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node1.BroadcastAtSlot(msgCommittee2, msgCommittee2Slot))
+		recordBroadcastErr(node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
 
 		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node2.BroadcastAtSlot(msgCommittee1, msgCommittee1Slot))
-		require.NoError(t, node1.BroadcastAtSlot(msgCommittee3, msgCommittee3Slot))
-		require.NoError(t, node1.BroadcastAtSlot(msgProposer, msgProposerSlot))
-		require.NoError(t, node1.BroadcastAtSlot(msgSyncCommitteeContribution, msgSyncCommitteeContributionSlot))
-		require.NoError(t, node2.BroadcastAtSlot(msgRoleVoluntaryExit, msgRoleVoluntaryExitSlot))
+		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
+		recordBroadcastErr(node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		recordBroadcastErr(node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		recordBroadcastErr(node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Wait()
+	close(broadcastErrCh)
+	for err := range broadcastErrCh {
+		require.NoError(t, err)
+	}
 
 	// waiting for messages
 	wg.Add(1)

@@ -16,7 +16,7 @@ import (
 )
 
 func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest, name string) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "synccommitteeaggregator.", 1)
 
 	runnerState := &runner.State{}

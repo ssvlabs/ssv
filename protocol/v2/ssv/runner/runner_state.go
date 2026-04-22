@@ -96,9 +96,8 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 			return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't a supported duty type")
 		}
 	}
-	byts, err := json.Marshal(alias)
 
-	return byts, err
+	return json.Marshal(alias)
 }
 
 func (pcs *State) UnmarshalJSON(data []byte) error {

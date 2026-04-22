@@ -7,7 +7,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -47,17 +46,14 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	r, err := NewAggregatorRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		dummyValueChecker{},
-		0,
-	)
+	r, err := NewAggregatorRunner(AggregatorRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+		ValCheck:           dummyValueChecker{},
+		HighestDecidedSlot: 0,
+	})
 	require.NoError(t, err)
 
 	beforeRoot, err := r.GetRoot()
@@ -76,9 +72,9 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, ssvtypes.RoleAggregator, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
+	require.False(t, decoded.hasDutyRunning())
 }
 
 func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
@@ -87,21 +83,16 @@ func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewProposerRunner(
-		zap.NewNop(),
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		dummyValueChecker{},
-		0,
-		nil,
-		0,
-	)
+	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+		ValCheck:           dummyValueChecker{},
+		HighestDecidedSlot: 0,
+		Graffiti:           nil,
+		ProposerDelay:      0,
+	})
 	require.NoError(t, err)
 
 	r := runnerIface.(*ProposerRunner)
@@ -121,9 +112,9 @@ func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, spectypes.RoleProposer, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
+	require.False(t, decoded.hasDutyRunning())
 }
 
 func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
@@ -132,17 +123,14 @@ func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	keySet := spectestingutils.Testing4SharesSet()
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 
-	runnerIface, err := NewSyncCommitteeAggregatorRunner(
-		cloneTestNetworkConfig(),
-		map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		dummyValueChecker{},
-		0,
-	)
+	runnerIface, err := NewSyncCommitteeAggregatorRunner(SyncCommitteeAggregatorRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig: cloneTestNetworkConfig(),
+			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
+		},
+		ValCheck:           dummyValueChecker{},
+		HighestDecidedSlot: 0,
+	})
 	require.NoError(t, err)
 
 	r := runnerIface.(*SyncCommitteeAggregatorRunner)
@@ -162,7 +150,7 @@ func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 
 	require.Equal(t, beforeRoot, afterRoot)
 	require.Equal(t, ssvtypes.RoleSyncCommitteeContribution, decoded.GetRole())
-	require.False(t, decoded.HasRunningDuty())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Nil(t, decoded.ValCheck)
+	require.False(t, decoded.hasDutyRunning())
 }
