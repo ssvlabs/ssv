@@ -6,7 +6,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/network"
 )
 
@@ -14,7 +13,7 @@ import (
 func IPAddr() (net.IP, error) {
 	ip, err := network.ExternalIP()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get IPv4 address")
+		return nil, fmt.Errorf("could not get IPv4 address: %w", err)
 	}
 	return net.ParseIP(ip), nil
 }
@@ -23,7 +22,7 @@ func IPAddr() (net.IP, error) {
 func BuildMultiAddress(ipAddr, protocol string, port uint, id peer.ID) (ma.Multiaddr, error) {
 	parsedIP := net.ParseIP(ipAddr)
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {
-		return nil, errors.Errorf("invalid ip address provided: %s", ipAddr)
+		return nil, fmt.Errorf("invalid ip address provided: %s", ipAddr)
 	}
 	maStr := fmt.Sprintf("/ip6/%s/%s/%d", ipAddr, protocol, port)
 	if parsedIP.To4() != nil {

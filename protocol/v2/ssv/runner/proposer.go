@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -451,12 +451,12 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err := validatorConsensusData.Decode(r.State.DecidedValue)
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not decode consensus data")
+		return nil, phase0.DomainType{}, fmt.Errorf("could not decode consensus data: %w", err)
 	}
 
 	_, signedRoot, err := validatorConsensusData.GetBlockData()
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
+		return nil, phase0.DomainType{}, fmt.Errorf("could not get block data: %w", err)
 	}
 	return []ssz.HashRoot{signedRoot}, spectypes.DomainProposer, nil
 }
@@ -593,7 +593,7 @@ func (r *ProposerRunner) Decode(data []byte) error {
 func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode ProposerRunner")
+		return [32]byte{}, fmt.Errorf("could not encode ProposerRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

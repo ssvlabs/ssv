@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -112,7 +111,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	validateMsg := func() error {
 		decidedValue := &spectypes.ValidatorConsensusData{}
 		if err := decidedValue.Decode(decidedValueBytes); err != nil {
-			return errors.Wrap(err, "failed to parse decided value to ValidatorConsensusData")
+			return fmt.Errorf("failed to parse decided value to ValidatorConsensusData: %w", err)
 		}
 
 		// Use the slot we have in decidedValue since b.State.CurrentDuty might have already moved on
@@ -137,7 +136,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 		validateMsg = func() error {
 			decidedValue := &spectypes.BeaconVote{}
 			if err := decidedValue.Decode(decidedValueBytes); err != nil {
-				return errors.Wrap(err, "failed to parse decided value to BeaconVote")
+				return fmt.Errorf("failed to parse decided value to BeaconVote: %w", err)
 			}
 
 			// Use current duty slot since CurrentDuty never changes for CommitteeRunner
@@ -156,10 +155,10 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 func (b *BaseRunner) validateDecidedConsensusData(valueCheckFn specqbft.ProposedValueCheckF, val spectypes.Encoder) error {
 	byts, err := val.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not encode decided value")
+		return fmt.Errorf("could not encode decided value: %w", err)
 	}
 	if err := valueCheckFn(byts); err != nil {
-		return errors.Wrap(err, "decided value is invalid")
+		return fmt.Errorf("decided value is invalid: %w", err)
 	}
 
 	return nil
@@ -185,14 +184,14 @@ func (b *BaseRunner) verifyExpectedRoot(
 		epoch := b.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
 		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not get pre consensus root domain")
+			return nil, fmt.Errorf("could not get pre consensus root domain: %w", err)
 		}
 
 		ret := make([][32]byte, 0, len(expectedRootObjs))
 		for _, rootI := range expectedRootObjs {
 			r, err := spectypes.ComputeETHSigningRoot(rootI, d)
 			if err != nil {
-				return nil, errors.Wrap(err, "could not compute ETH signing root")
+				return nil, fmt.Errorf("could not compute ETH signing root: %w", err)
 			}
 			ret = append(ret, r)
 		}

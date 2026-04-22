@@ -1,10 +1,10 @@
 package tasks
 
 import (
+	"errors"
 	"sync/atomic"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
