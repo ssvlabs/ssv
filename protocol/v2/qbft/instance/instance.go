@@ -22,33 +22,33 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// Instance is a single QBFT instance that starts with a Start call (including a value).
-// Every new msg the ProcessMsg function needs to be called
+// Instance represents a single QBFT instance. It is NOT thread-safe.
 type Instance struct {
 	logger *zap.Logger
 
-	State  *specqbft.State
 	config qbft.IConfig
 	signer ssvtypes.OperatorSigner
-	timer  specqbft.Timer
 
-	processMsgF *spectypes.ThreadSafeF
-
-	forceStop    bool
+	State        *specqbft.State
+	processMsgF  *spectypes.ThreadSafeF
 	StartValue   []byte
 	ValueChecker ssv.ValueChecker `json:"-"`
+	roundTimer   ssv.QBFTRoundTimer
+	// killed is set when Instance has been forcefully stopped as irrelevant.
+	killed bool
 
 	metrics *metricsRecorder
 }
 
 func NewInstance(
+	ctx context.Context,
 	logger *zap.Logger,
 	config qbft.IConfig,
 	committeeMember *spectypes.CommitteeMember,
 	identifier []byte,
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
-	timer specqbft.Timer,
+	roundTimerF ssv.QBFTRoundTimerF,
 ) *Instance {
 	runnerRole := spectypes.RunnerRole(spectypes.RoleUnknown) // RoleUnknown is of int type, hence have to type-cast
 	if len(identifier) == 56 {
@@ -59,6 +59,8 @@ func NewInstance(
 
 	return &Instance{
 		logger: logger,
+		config: config,
+		signer: signer,
 		State: &specqbft.State{
 			CommitteeMember:      committeeMember,
 			ID:                   identifier,
@@ -70,24 +72,22 @@ func NewInstance(
 			CommitContainer:      specqbft.NewMsgContainer(),
 			RoundChangeContainer: specqbft.NewMsgContainer(),
 		},
-		config:      config,
-		signer:      signer,
-		timer:       timer,
 		processMsgF: spectypes.NewThreadSafeF(),
+		roundTimer:  roundTimerF(ctx, logger, height),
 		metrics:     newMetrics(logger, runnerRole),
 	}
 }
 
-func (i *Instance) ForceStop() {
-	i.forceStop = true
+func (i *Instance) Kill() {
+	i.killed = true
+	i.Stop()
 }
 
 // Timer returns the instance timer.
 func (i *Instance) Timer() specqbft.Timer {
-	return i.timer
+	return i.roundTimer
 }
 
-// Start is an interface implementation
 func (i *Instance) Start(
 	ctx context.Context,
 	value []byte,
@@ -112,7 +112,7 @@ func (i *Instance) Start(
 
 	i.StartValue = value
 	i.ValueChecker = valueChecker
-	i.timer.TimeoutForRound(specqbft.FirstRound)
+	i.roundTimer.TimeoutForRound(specqbft.FirstRound)
 	i.metrics.StartStage(stageProposal)
 
 	// propose if this node is the proposer
@@ -144,6 +144,10 @@ func (i *Instance) Start(
 	}
 
 	span.SetStatus(codes.Ok, "")
+}
+
+func (i *Instance) Stop() {
+	i.roundTimer.Stop()
 }
 
 func (i *Instance) Broadcast(msg *spectypes.SignedSSVMessage) error {
@@ -282,5 +286,5 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 
 // CanProcessMessages will return true if instance can process messages
 func (i *Instance) CanProcessMessages() bool {
-	return !i.forceStop && i.State.Round < i.config.GetCutOffRound()
+	return !i.killed && i.State.Round < i.config.GetCutOffRound()
 }

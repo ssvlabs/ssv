@@ -116,10 +116,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
-	// timer is nil for skeleton (decided) and decoded instances
-	if i.timer != nil {
-		i.timer.TimeoutForRound(i.State.Round)
-	}
+	i.roundTimer.TimeoutForRound(newRound)
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {

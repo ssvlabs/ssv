@@ -9,12 +9,12 @@ import "encoding/json"
 // MarshalJSON is a custom JSON marshaller for Instance
 func (i *Instance) MarshalJSON() ([]byte, error) {
 	type Alias Instance
-	if i.forceStop {
+	if i.killed {
 		return json.Marshal(&struct {
 			ForceStop bool `json:"forceStop"`
 			*Alias
 		}{
-			ForceStop: i.forceStop,
+			ForceStop: i.killed,
 			Alias:     (*Alias)(i),
 		})
 	}
@@ -39,7 +39,7 @@ func (i *Instance) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if aux.ForceStop != nil {
-		i.forceStop = *aux.ForceStop
+		i.killed = *aux.ForceStop
 	}
 	return nil
 }

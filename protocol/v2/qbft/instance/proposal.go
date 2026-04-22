@@ -32,10 +32,9 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 
 	msgRound := msg.QBFTMessage.Round
 
-	// A future justified proposal should bump us into future round and reset timer
-	// timer is nil for skeleton (decided) and decoded instances
-	if msgRound > i.State.Round && i.timer != nil {
-		i.timer.TimeoutForRound(msgRound)
+	// A future justified proposal should bump us into future round and reset the round timer.
+	if msgRound > i.State.Round {
+		i.roundTimer.TimeoutForRound(msgRound)
 	}
 	i.bumpToRound(msgRound)
 
