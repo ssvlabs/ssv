@@ -178,15 +178,14 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 		return nil, spectypes.NewError(spectypes.SkipConsensusMessageAsInstanceIsDecidedErrorCode, "not processing consensus message since instance is already decided")
 	}
 
-	newlyDecided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
 	if instance.IsRetryable(err) {
 		return nil, NewRetryableError(err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("could not process msg: %w", err)
 	}
-
-	if !newlyDecided {
+	if !decided {
 		return nil, nil
 	}
 
