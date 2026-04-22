@@ -433,34 +433,11 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode selection proof partial signature message: %w", err)
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
+	logger.Debug("signing and broadcasting selection proof partial sig", fields.Slot(duty.DutySlot()))
 
 	r.measurements.StartPreConsensus()
-	span.AddEvent("broadcasting signed SSV message")
-	if err := r.network.Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast partial selection proof sig: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast selection proof partial sig: %w", err)
 	}
 
 	return nil

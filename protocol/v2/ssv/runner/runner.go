@@ -252,6 +252,51 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 	return runner.executeDuty(ctx, logger, duty)
 }
 
+// signAndBroadcastPartialSigMsgs encodes msgs into an SSVMessage, signs it with opSigner,
+// wraps it in a SignedSSVMessage, and broadcasts via network. Shared by runners whose
+// executeDuty tails are otherwise identical.
+func (b *BaseRunner) signAndBroadcastPartialSigMsgs(
+	ctx context.Context,
+	network specqbft.Network,
+	opSigner ssvtypes.OperatorSigner,
+	validatorPubKey []byte,
+	msgs *spectypes.PartialSignatureMessages,
+) error {
+	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
+	span := trace.SpanFromContext(ctx)
+
+	msgID := spectypes.NewMsgID(b.NetworkConfig.DomainType, validatorPubKey, b.RunnerRoleType)
+	encodedMsg, err := msgs.Encode()
+	if err != nil {
+		return fmt.Errorf("could not encode partial signature messages: %w", err)
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	span.AddEvent("signing SSV message")
+	sig, err := opSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("could not sign SSVMessage: %w", err)
+	}
+
+	signed := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{opSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
+	span.AddEvent("broadcasting signed SSV message")
+	if err := network.Broadcast(msgID, signed); err != nil {
+		return fmt.Errorf("could not broadcast signed SSV message: %w", err)
+	}
+
+	return nil
+}
+
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
 func (b *BaseRunner) basePreConsensusMsgProcessing(ctx context.Context, logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
