@@ -121,24 +121,27 @@ func (b *BaseRunner) HasRunningDuty() bool {
 	return b.hasDutyRunning()
 }
 
+func (b *BaseRunner) CurrentInstance() *instance.Instance {
+	return b.currentInstance()
+}
+
 func (b *BaseRunner) HasStartedQBFTInstance() bool {
-	return b.hasDutyAssigned() && b.State.RunningInstance != nil
+	return b.hasDutyAssigned() && b.currentInstance() != nil
 }
 
 func (b *BaseRunner) HasRunningQBFTInstance() bool {
-	// Note: RunningInstance.State cannot be nil for existing RunningInstance by construction.
-	return b.hasDutyRunning() && b.State.RunningInstance != nil && !b.State.RunningInstance.State.Decided
+	// Note: Instance.State cannot be nil for existing instances by construction.
+	inst := b.currentInstance()
+	return b.hasDutyRunning() && inst != nil && !inst.State.Decided
 }
 
 func (b *BaseRunner) HasAcceptedProposalForCurrentRound() bool {
-	var runningInstance *instance.Instance
-	if b.hasDutyRunning() {
-		runningInstance = b.State.RunningInstance
-		if runningInstance != nil {
-			return runningInstance.State.ProposalAcceptedForCurrentRound != nil
-		}
+	if !b.hasDutyRunning() {
+		return false
 	}
-	return false
+
+	runningInstance := b.currentInstance()
+	return runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound != nil
 }
 
 func (b *BaseRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
@@ -170,7 +173,7 @@ func (b *BaseRunner) GetLastHeight() specqbft.Height {
 
 func (b *BaseRunner) GetLastRound() specqbft.Round {
 	if b.hasDutyRunning() {
-		inst := b.State.RunningInstance
+		inst := b.currentInstance()
 		if inst != nil {
 			return inst.State.Round
 		}
@@ -179,7 +182,11 @@ func (b *BaseRunner) GetLastRound() specqbft.Round {
 }
 
 func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
-	return b.State.GetRoot()
+	state := b.stateForEncoding()
+	if state == nil {
+		return [32]byte{}, fmt.Errorf("nil State")
+	}
+	return state.GetRoot()
 }
 
 func (b *BaseRunner) SetQBFTRoundTimerF(factory ssv.QBFTRoundTimerF) {
@@ -215,7 +222,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 
 	// Create object and marshal
 	alias := &BaseRunnerAlias{
-		State:              b.State,
+		State:              b.stateForEncoding(),
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
 		BeaconConfig:       b.NetworkConfig.Beacon,
@@ -226,6 +233,34 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 	byts, err := json.Marshal(alias)
 
 	return byts, err
+}
+
+func (b *BaseRunner) currentInstance() *instance.Instance {
+	if inst := b.currentControllerInstance(); inst != nil {
+		return inst
+	}
+	if b == nil || b.State == nil {
+		return nil
+	}
+	return b.State.RunningInstance
+}
+
+func (b *BaseRunner) currentControllerInstance() *instance.Instance {
+	if b == nil || b.State == nil || b.State.CurrentDuty == nil || b.QBFTController == nil {
+		return nil
+	}
+
+	return b.QBFTController.RecentInstances.FindInstance(specqbft.Height(b.State.CurrentDuty.DutySlot()))
+}
+
+func (b *BaseRunner) stateForEncoding() *State {
+	if b == nil || b.State == nil {
+		return nil
+	}
+
+	state := *b.State
+	state.RunningInstance = b.currentInstance()
+	return &state
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -334,8 +369,10 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 	span := trace.SpanFromContext(ctx)
 
 	prevDecided := false
-	if b.hasDutyRunning() && b.HasStartedQBFTInstance() {
-		prevDecided, _ = b.State.RunningInstance.IsDecided()
+	if b.hasDutyRunning() {
+		if inst := b.currentInstance(); inst != nil {
+			prevDecided, _ = inst.IsDecided()
+		}
 	}
 	if prevDecided {
 		return true, nil, spectypes.NewError(spectypes.SkipConsensusMessageAsConsensusHasFinishedErrorCode, "not processing consensus message since consensus has already finished")
@@ -478,11 +515,12 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 		return false, spectypes.NewError(spectypes.DecidedWrongInstanceErrorCode, "decided wrong instance (running instance is nil)")
 	}
 
-	if decidedMessage.Height != b.State.RunningInstance.GetHeight() {
+	currentInstance := b.currentInstance()
+	if decidedMessage.Height != currentInstance.GetHeight() {
 		return false, spectypes.WrapError(spectypes.DecidedWrongInstanceErrorCode, fmt.Errorf(
 			"decided wrong instance (msg_height = %d, running_instance_height = %d)",
 			decidedMessage.Height,
-			b.State.RunningInstance.GetHeight(),
+			currentInstance.GetHeight(),
 		))
 	}
 
@@ -526,8 +564,6 @@ func (b *BaseRunner) decide(
 	if newInstance == nil {
 		return fmt.Errorf("could not start new QBFT instance: instance is nil")
 	}
-
-	b.State.RunningInstance = newInstance
 
 	return nil
 }

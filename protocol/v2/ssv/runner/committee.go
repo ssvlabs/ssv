@@ -714,9 +714,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			return fmt.Errorf("could not get attestation data: %w", err)
 		}
 		const eventMsg = "✅ successfully submitted attestations"
+		currentInstance := r.currentInstance()
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconBlockRootAttribute(attData.BeaconBlockRoot),
-			observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
+			observability.DutyRoundAttribute(currentInstance.State.Round),
 			observability.ValidatorCountAttribute(len(attestations)),
 		))
 		aLogger.Info(eventMsg,
@@ -774,9 +775,10 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			return fmt.Errorf("current duty slot: %w", err)
 		}
 		const eventMsg = "✅ successfully submitted sync committee"
+		currentInstance := r.currentInstance()
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconSlotAttribute(currentDutySlot),
-			observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
+			observability.DutyRoundAttribute(currentInstance.State.Round),
 			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
@@ -799,13 +801,14 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 	}
 
 	if r.HasSubmittedAllValidatorDuties(attestationMap, committeeMap) {
+		currentInstance := r.currentInstance()
 		r.markDutyFinished()
 		r.measurements.EndDutyFlow()
-		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, r.State.RunningInstance.State.Round)
+		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleCommittee, currentInstance.State.Round)
 		const dutyFinishedEvent = "✔️finished duty processing (100% success)"
 		logger.Info(dutyFinishedEvent,
 			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+			fields.ConsensusRounds(uint64(currentInstance.State.Round)),
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 			fields.TotalDutyTime(r.measurements.TotalDutyTime()),
@@ -814,10 +817,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
+	currentInstance := r.currentInstance()
 	const dutyFinishedEvent = "✔️finished duty processing (partial success)"
 	logger.Info(dutyFinishedEvent,
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
-		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		fields.ConsensusRounds(uint64(currentInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()),

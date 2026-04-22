@@ -354,14 +354,15 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span.AddEvent(submittedSignedAggregateProofEvent)
 	logger.Debug(submittedSignedAggregateProofEvent, fields.Took(time.Since(start)))
 
+	currentInstance := r.currentInstance()
 	r.markDutyFinished()
 	r.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, r.State.RunningInstance.State.Round)
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, currentInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
-		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		fields.ConsensusRounds(uint64(currentInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()),

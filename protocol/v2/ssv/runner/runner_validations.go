@@ -102,7 +102,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 	}
 
 	// TODO https://github.com/ssvlabs/ssv-spec/issues/142 need to fix with this issue solution instead.
-	decided, decidedValueBytes := b.State.RunningInstance.IsDecided()
+	decided, decidedValueBytes := b.currentInstance().IsDecided()
 	if !decided || len(b.State.DecidedValue) == 0 {
 		return NewRetryableError(spectypes.WrapError(spectypes.NoDecidedValueErrorCode, ErrNoDecidedValue))
 	}

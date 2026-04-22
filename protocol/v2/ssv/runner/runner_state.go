@@ -17,8 +17,10 @@ import (
 type State struct {
 	PreConsensusContainer  *ssv.PartialSigContainer
 	PostConsensusContainer *ssv.PartialSigContainer
-	RunningInstance        *instance.Instance
-	DecidedValue           []byte //spectypes.Encoder
+	// RunningInstance is kept for backward-compatible state encoding. Runtime code should resolve
+	// the active instance through BaseRunner.CurrentInstance(), which sources it from the controller.
+	RunningInstance *instance.Instance
+	DecidedValue    []byte //spectypes.Encoder
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different
 	// from the actual duty operators will have decided upon.
 	CurrentDuty spectypes.Duty `json:"CurrentDuty,omitempty"`

@@ -384,7 +384,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	if err != nil {
 		return fmt.Errorf("could not get block data from consensus data: %w", err)
 	}
-	leaderID := r.State.RunningInstance.Proposer()
+	currentInstance := r.currentInstance()
+	leaderID := currentInstance.Proposer()
 	if r.cachedFullBlock != nil && leaderID == r.operatorSigner.GetOperatorID() {
 		if bytes.Equal(validatorConsensusData.DataSSZ, r.cachedBlindedBlockSSZ) {
 			logger.Debug("leader will use the original full block for proposal submission")
@@ -415,19 +416,19 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	const submittedBlockProposalEvent = "✅ successfully submitted block proposal"
 	submittedAttrs := append([]attribute.KeyValue{
 		observability.BeaconSlotAttribute(currentDutySlot),
-		observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
+		observability.DutyRoundAttribute(currentInstance.State.Round),
 	}, proposalTraceAttrs...)
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
 	r.markDutyFinished()
 	r.measurements.EndDutyFlow()
-	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.State.RunningInstance.State.Round)
+	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, currentInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent,
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 		fields.ConsensusTime(r.measurements.ConsensusTime()),
-		fields.ConsensusRounds(uint64(r.State.RunningInstance.State.Round)),
+		fields.ConsensusRounds(uint64(currentInstance.State.Round)),
 		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()),

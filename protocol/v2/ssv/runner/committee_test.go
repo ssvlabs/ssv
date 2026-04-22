@@ -261,7 +261,7 @@ func TestCommitteeRunnerStartNewDuty_StartsGuardAndResetsSubmissions(t *testing.
 	}, gotRoles)
 	require.False(t, env.runner.HasSubmitted(spectypes.BNRoleAttester, 1))
 	require.False(t, env.runner.HasSubmitted(spectypes.BNRoleSyncCommittee, 2))
-	require.NotNil(t, env.runner.State.RunningInstance)
+	require.NotNil(t, env.runner.CurrentInstance())
 }
 
 func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *testing.T) {
@@ -272,8 +272,8 @@ func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *
 
 	require.NoError(t, env.runner.executeDuty(context.Background(), env.logger, duty))
 	require.NotNil(t, env.runner.ValCheck)
-	require.NotNil(t, env.runner.State.RunningInstance)
-	require.Equal(t, specqbft.Height(duty.Slot), env.runner.State.RunningInstance.GetHeight())
+	require.NotNil(t, env.runner.CurrentInstance())
+	require.Equal(t, specqbft.Height(duty.Slot), env.runner.CurrentInstance().GetHeight())
 
 	expectedVote := &spectypes.BeaconVote{
 		BlockRoot: spectestingutils.TestBeaconVote.BlockRoot,

@@ -128,7 +128,7 @@ func TestProposerRunnerProcessPreConsensusCachesFullBlockAndFetchesWithReconstru
 	require.Equal(t, expectedRandao, beacon.lastGetRandao)
 	require.Same(t, fullBlock, runner.cachedFullBlock)
 	require.Equal(t, expectedBlindedSSZ, runner.cachedBlindedBlockSSZ)
-	require.NotNil(t, runner.State.RunningInstance)
+	require.NotNil(t, runner.CurrentInstance())
 }
 
 func TestProposerRunnerProcessPreConsensusDoesNotCacheBlindedBlock(t *testing.T) {
@@ -178,7 +178,7 @@ func TestProposerRunnerProcessPreConsensusReturnsContextCanceledDuringProposerDe
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 0, beacon.getCalls)
 	require.Nil(t, runner.cachedFullBlock)
-	require.Nil(t, runner.State.RunningInstance)
+	require.Nil(t, runner.CurrentInstance())
 }
 
 func TestRemainingProposerDelay(t *testing.T) {
@@ -248,7 +248,7 @@ func TestProposerRunnerStartNewDutySkipsRandaoSigningWhenDoppelgangerBlocks(t *t
 	require.Equal(t, 0, countPartialSignatureBroadcastsByType(t, network, spectypes.RandaoPartialSig))
 	require.Equal(t, 0, beacon.getCalls)
 	require.Nil(t, runner.cachedFullBlock)
-	require.Nil(t, runner.State.RunningInstance)
+	require.Nil(t, runner.CurrentInstance())
 	require.False(t, runner.State.Finished)
 	require.Empty(t, dg.reportQuorum)
 }
