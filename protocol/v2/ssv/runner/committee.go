@@ -267,11 +267,15 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
 		dutiesCh     = make(chan *spectypes.ValidatorDuty)
 
-		beaconVote = decidedValue.(*spectypes.BeaconVote)
 		totalAttesterDuties,
 		totalSyncCommitteeDuties,
 		blockedAttesterDuties atomic.Uint32
 	)
+
+	beaconVote, err := beaconVoteFromEncoder(decidedValue)
+	if err != nil {
+		return fmt.Errorf("beacon vote: %w", err)
+	}
 
 	// The worker pool will throttle the parallel processing of validator duties.
 	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
@@ -705,7 +709,11 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 			return fmt.Errorf("%s: %w", errMsg, err)
 		}
 
-		recordSuccessfulSubmission(ctx, int64(len(attestations)), r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()), spectypes.BNRoleAttester)
+		currentDutySlot, err := r.currentDutySlot()
+		if err != nil {
+			return fmt.Errorf("current duty slot: %w", err)
+		}
+		recordSuccessfulSubmission(ctx, int64(len(attestations)), r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot), spectypes.BNRoleAttester)
 		attData, err := attestations[0].Data()
 		if err != nil {
 			return fmt.Errorf("could not get attestation data: %w", err)
@@ -754,17 +762,25 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
+			currentDutySlot, err := r.currentDutySlot()
+			if err != nil {
+				return fmt.Errorf("current duty slot: %w", err)
+			}
 			recordSuccessfulSubmission(
 				ctx,
 				int64(syncMsgsCount),
-				r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot()),
+				r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot),
 				spectypes.BNRoleSyncCommittee,
 			)
 		}
 
+		currentDutySlot, err := r.currentDutySlot()
+		if err != nil {
+			return fmt.Errorf("current duty slot: %w", err)
+		}
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
-			observability.BeaconSlotAttribute(r.State.CurrentDuty.DutySlot()),
+			observability.BeaconSlotAttribute(currentDutySlot),
 			observability.DutyRoundAttribute(r.State.RunningInstance.State.Round),
 			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),

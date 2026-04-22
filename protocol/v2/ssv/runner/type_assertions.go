@@ -83,3 +83,19 @@ func (b *BaseRunner) currentDutySlot() (phase0.Slot, error) {
 		return 0, fmt.Errorf("unsupported duty type: %T", b.State.CurrentDuty)
 	}
 }
+
+func beaconVoteFromEncoder(value spectypes.Encoder) (*spectypes.BeaconVote, error) {
+	if value == nil {
+		return nil, fmt.Errorf("decided value is nil")
+	}
+
+	beaconVote, ok := value.(*spectypes.BeaconVote)
+	if !ok {
+		return nil, fmt.Errorf("decided value is not a BeaconVote: %T", value)
+	}
+	if beaconVote == nil {
+		return nil, fmt.Errorf("beacon vote is nil")
+	}
+
+	return beaconVote, nil
+}

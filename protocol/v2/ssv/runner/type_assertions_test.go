@@ -81,3 +81,21 @@ func TestCurrentDutySlot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, aggregatorCommitteeDuty.DutySlot(), slot)
 }
+
+func TestBeaconVoteFromEncoder(t *testing.T) {
+	beaconVote := &spectypes.BeaconVote{}
+
+	gotBeaconVote, err := beaconVoteFromEncoder(beaconVote)
+	require.NoError(t, err)
+	require.Same(t, beaconVote, gotBeaconVote)
+
+	_, err = beaconVoteFromEncoder(nil)
+	require.ErrorContains(t, err, "decided value is nil")
+
+	var nilBeaconVote *spectypes.BeaconVote
+	_, err = beaconVoteFromEncoder(nilBeaconVote)
+	require.ErrorContains(t, err, "beacon vote is nil")
+
+	_, err = beaconVoteFromEncoder(&spectypes.ProposerConsensusData{})
+	require.ErrorContains(t, err, "decided value is not a BeaconVote")
+}
