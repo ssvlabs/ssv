@@ -183,7 +183,7 @@ func testValidatorForQueueAdmission(
 			},
 		},
 		Queues: map[spectypes.RunnerRole]queue.Queue{
-			role: queue.New(logger, queueCapacity),
+			role: queue.New(queueCapacity),
 		},
 		DutyRunners: runner.ValidatorDutyRunners{
 			role: r,

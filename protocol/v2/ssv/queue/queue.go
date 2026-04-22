@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -57,7 +55,7 @@ type Option func(*priorityQueue)
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
-func New(_ *zap.Logger, capacity int, opts ...Option) Queue {
+func New(capacity int, opts ...Option) Queue {
 	q := &priorityQueue{
 		inbox:    make(chan *SSVMessage, capacity),
 		observer: noopQueueObserver{},

@@ -170,7 +170,6 @@ func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queueContaine
 	if !exists {
 		q = queueContainer{
 			Q: queue.New(
-				logger,
 				1000,
 				queue.WithQueueMetrics(
 					queue.InboxSizeMetric,

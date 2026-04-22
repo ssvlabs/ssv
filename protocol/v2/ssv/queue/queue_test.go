@@ -17,8 +17,6 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/observability/log"
 )
 
 var mockState = &State{
@@ -29,7 +27,7 @@ var mockState = &State{
 }
 
 func TestPriorityQueue_TryPop(t *testing.T) {
-	queue := New(log.TestLogger(t), 32)
+	queue := New(32)
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
@@ -53,7 +51,7 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 }
 
 func TestPriorityQueue_Filter(t *testing.T) {
-	queue := New(log.TestLogger(t), 32)
+	queue := New(32)
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
@@ -111,7 +109,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		pushDelay      = 50 * time.Millisecond
 		precision      = 50 * time.Millisecond
 	)
-	queue := New(log.TestLogger(t), capacity)
+	queue := New(capacity)
 	require.True(t, queue.Empty())
 
 	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
@@ -163,7 +161,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := New(log.TestLogger(t), 32)
+			q := New(32)
 
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
@@ -190,7 +188,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
-	queue := New(log.TestLogger(t), 32)
+	queue := New(32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -226,7 +224,7 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 }
 
 func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.T) {
-	queue := New(log.TestLogger(t), 32)
+	queue := New(32)
 	require.True(t, queue.Empty())
 
 	wg := sync.WaitGroup{}
@@ -284,7 +282,7 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 		queueID   = "attester"
 	)
 
-	queue := New(log.TestLogger(t), 4, WithQueueMetrics(gauge, queueType, queueID))
+	queue := New(4, WithQueueMetrics(gauge, queueType, queueID))
 	decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
 
 	var rm metricdata.ResourceMetrics
@@ -324,7 +322,7 @@ func TestPriorityQueue_TryPushInboxSizeMetricDoesNotExceedCapacityOnDrop(t *test
 		queueID   = "attester"
 	)
 
-	queue := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID))
+	queue := New(1, WithQueueMetrics(gauge, queueType, queueID))
 	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 
@@ -342,7 +340,7 @@ func TestPriorityQueue_TryPushInboxSizeMetricDoesNotExceedCapacityOnDrop(t *test
 }
 
 func TestPriorityQueue_LenTracksBacklogAfterInboxDrain(t *testing.T) {
-	q := New(log.TestLogger(t), 4).(*priorityQueue)
+	q := New(4).(*priorityQueue)
 
 	for i := 0; i < 3; i++ {
 		decodeAndPush(t, q, mockConsensusMessage{Height: specqbft.Height(100 + i), Type: specqbft.PrepareMsgType}, mockState)
@@ -481,13 +479,13 @@ func TestShouldAcceptUnderPressure(t *testing.T) {
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(log.BenchLogger(b), 32)
+		return New(32)
 	}, false)
 }
 
 func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(log.BenchLogger(b), 32)
+		return New(32)
 	}, true)
 }
 
@@ -622,7 +620,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := New(log.BenchLogger(b), 32)
+	queue := New(32)
 
 	messageCount := 10_000
 	types := []specqbft.MessageType{specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType}

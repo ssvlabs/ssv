@@ -80,7 +80,6 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 	for _, dutyRunner := range options.DutyRunners {
 		dutyRunner.SetTimeoutFunc(v.onTimeout)
 		v.Queues[dutyRunner.GetRole()] = queue.New(
-			logger,
 			options.QueueSize,
 			queue.WithQueueMetrics(
 				queue.InboxSizeMetric,
