@@ -102,7 +102,10 @@ func (c *Controller) StartNewInstance(
 		))
 	}
 
-	// Create & start a new instance, and terminate all the older instances after that as "no longer relevant".
+	// Create & start a new instance, and also terminate all the older instances after that as "no longer relevant".
+	// NOTE: the c.markOlderInstancesIrrelevant() call comes first because `addNewInstance` might evict an instance
+	//       from c.RecentInstances, meaning c.markOlderInstancesIrrelevant() will miss it if called after.
+	c.markOlderInstancesIrrelevant()
 	newInstance := instance.NewInstance(
 		ctx,
 		logger,
@@ -116,19 +119,16 @@ func (c *Controller) StartNewInstance(
 	newInstance.Start(ctx, value, valueChecker)
 	c.RecentInstances.addNewInstance(newInstance)
 	c.CurrentInstanceHeight = height
-	c.markInstancesIrrelevantExceptCurrent()
 
 	span.SetStatus(codes.Ok, "")
 
 	return newInstance, nil
 }
 
-// markInstancesIrrelevantExceptCurrent marks all instances except for the current one as irrelevant.
-func (c *Controller) markInstancesIrrelevantExceptCurrent() {
+// markInstancesIrrelevant marks all recent instances as irrelevant.
+func (c *Controller) markOlderInstancesIrrelevant() {
 	for _, i := range c.RecentInstances {
-		if i.State.Height != c.CurrentInstanceHeight {
-			i.MarkIrrelevant()
-		}
+		i.MarkIrrelevant()
 	}
 }
 
