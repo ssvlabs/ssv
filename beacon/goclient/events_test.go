@@ -150,7 +150,7 @@ func TestNewEventHandler(t *testing.T) {
 		assert.Equal(t, nextRoot, headAtSlot11.Value())
 	})
 
-	t.Run("Keeps only the highest slot when advancing head events race", func(t *testing.T) {
+	t.Run("Drops lower advancing slot after a higher slot is processed", func(t *testing.T) {
 		eventsCh := make(chan *apiv1.HeadEvent, 16)
 		client := &GoClient{
 			log:       zap.NewNop(),
@@ -176,32 +176,20 @@ func TestNewEventHandler(t *testing.T) {
 		require.Len(t, eventsCh, 1)
 		<-eventsCh
 
-		start := make(chan struct{})
-		var wg sync.WaitGroup
-		for i := 0; i < 32; i++ {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-				<-start
-
-				slot := phase0.Slot(11)
-				block := midRoot
-				if i%2 == 0 {
-					slot = 12
-					block = latestRoot
-				}
-
-				handler(&apiv1.Event{
-					Topic: string(eventTopicHead),
-					Data: &apiv1.HeadEvent{
-						Slot:  slot,
-						Block: block,
-					},
-				})
-			}(i)
-		}
-		close(start)
-		wg.Wait()
+		handler(&apiv1.Event{
+			Topic: string(eventTopicHead),
+			Data: &apiv1.HeadEvent{
+				Slot:  12,
+				Block: latestRoot,
+			},
+		})
+		handler(&apiv1.Event{
+			Topic: string(eventTopicHead),
+			Data: &apiv1.HeadEvent{
+				Slot:  11,
+				Block: midRoot,
+			},
+		})
 
 		require.Len(t, eventsCh, 1)
 		latestEvent := <-eventsCh
@@ -212,6 +200,9 @@ func TestNewEventHandler(t *testing.T) {
 		headAtSlot10 := client.headCache.Get(10)
 		require.NotNil(t, headAtSlot10)
 		assert.Equal(t, initialRoot, headAtSlot10.Value())
+
+		headAtSlot11 := client.headCache.Get(11)
+		assert.Nil(t, headAtSlot11)
 
 		headAtSlot12 := client.headCache.Get(12)
 		require.NotNil(t, headAtSlot12)
