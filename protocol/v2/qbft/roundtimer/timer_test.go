@@ -18,17 +18,15 @@ import (
 )
 
 const (
-	slotDuration = 600 * time.Millisecond
-
-	quickTimeout = 300 * time.Millisecond
-	slowTimeout  = 600 * time.Millisecond
-
 	// safeTestDelay is a safety buffer (a guesstimate) to use in tests that set expectations making certain
 	// assumptions regarding the go-routine scheduling.
 	safeTestDelay = 100 * time.Millisecond
 )
 
 func TestTimeoutForRound(t *testing.T) {
+	quickRound := specqbft.FirstRound
+	slowRound := QuickTimeoutThreshold + 1
+
 	roles := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
 		spectypes.RoleAggregator,
@@ -39,37 +37,37 @@ func TestTimeoutForRound(t *testing.T) {
 	for _, role := range roles {
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: <= quickTimeoutThreshold", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRound(t, role, specqbft.Round(1))
+				testTimeoutForRound(t, role, quickRound)
 			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: > quickTimeoutThreshold", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRound(t, role, specqbft.Round(2))
+				testTimeoutForRound(t, role, slowRound)
 			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: before elapsed", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRoundElapsed(t, role, specqbft.Round(2))
+				testTimeoutForRoundElapsed(t, role, slowRound)
 			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: timer stored and reused", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRoundTimerStored(t, role, specqbft.Round(1))
+				testTimeoutForRoundTimerStored(t, role, quickRound)
 			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: context canceled before arm", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRoundContextCancelled(t, role, specqbft.Round(1))
+				testTimeoutForRoundContextCancelled(t, role, quickRound)
 			})
 		})
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: context canceled after arm", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRoundContextCancelledAfterArm(t, role, specqbft.Round(1))
+				testTimeoutForRoundContextCancelledAfterArm(t, role, quickRound)
 			})
 		})
 
@@ -81,13 +79,15 @@ func TestTimeoutForRound(t *testing.T) {
 
 		t.Run(fmt.Sprintf("TimeoutForRound - %s: multiple synchronized timers", role), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				testTimeoutForRoundMulti(t, role, specqbft.Round(1))
+				testTimeoutForRoundMulti(t, role)
 			})
 		})
 	}
 }
 
 func TestEstimatedRoundAt(t *testing.T) {
+	const slotDuration = 600 * time.Millisecond
+
 	testBeaconConfig := setupTestBeaconConfig()
 
 	tt := []struct {
@@ -138,20 +138,17 @@ func TestEstimatedRoundAt(t *testing.T) {
 }
 
 // TestRoundTimeoutOffset covers the pure helper directly, which is the single source of truth
-// both RoundTimeout and EstimatedRoundAt derive from. Uses custom timeout options (not the
-// package constants) so the arithmetic is obvious at a glance, and picks a slot duration
-// that lands the role-derived head starts on round numbers:
+// both RoundTimeout and EstimatedRoundAt derive from. It uses the production timeout constants
+// and picks a slot duration that lands the role-derived head starts on round numbers:
 //
 //	proposer   → head start = 0
 //	committee  → head start = 12s / 3        = 4s
 //	aggregator → head start = 12s / 3 * 2    = 8s
 func TestRoundTimeoutOffset(t *testing.T) {
-	opts := TimeoutOptions{
-		quickThreshold: 3, // small threshold makes the quick/slow split easy to reason about
-		quick:          10 * time.Second,
-		slow:           60 * time.Second,
-	}
-	const testSlotDuration = 12 * time.Second
+	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
+	// SlowTimeout (2m) values.
+	slotDuration := networkconfig.TestNetwork.Beacon.SlotDuration
+	quickPhase := time.Duration(QuickTimeoutThreshold) * QuickTimeout
 
 	tt := []struct {
 		name  string
@@ -160,30 +157,30 @@ func TestRoundTimeoutOffset(t *testing.T) {
 		want  time.Duration
 	}{
 		// Proposer (head start = 0): offset is r*quick for quick rounds.
-		{name: "proposer, round 1 (first quick)", role: spectypes.RoleProposer, round: 1, want: 10 * time.Second},
-		{name: "proposer, round 2", role: spectypes.RoleProposer, round: 2, want: 20 * time.Second},
-		{name: "proposer, round 3 (= quickThreshold)", role: spectypes.RoleProposer, round: 3, want: 30 * time.Second},
+		{name: "proposer, round 1 (first quick)", role: spectypes.RoleProposer, round: 1, want: QuickTimeout},
+		{name: "proposer, round 2", role: spectypes.RoleProposer, round: 2, want: 2 * QuickTimeout},
+		{name: "proposer, round 8 (= quickThreshold)", role: spectypes.RoleProposer, round: QuickTimeoutThreshold, want: quickPhase},
 		// First slow round: quickThreshold * quick + 1 * slow.
-		{name: "proposer, round 4 (first slow)", role: spectypes.RoleProposer, round: 4, want: 30*time.Second + 60*time.Second},
-		{name: "proposer, round 5", role: spectypes.RoleProposer, round: 5, want: 30*time.Second + 2*60*time.Second},
+		{name: "proposer, round 9 (first slow)", role: spectypes.RoleProposer, round: QuickTimeoutThreshold + 1, want: quickPhase + SlowTimeout},
+		{name: "proposer, round 10", role: spectypes.RoleProposer, round: QuickTimeoutThreshold + 2, want: quickPhase + 2*SlowTimeout},
 
 		// Committee (head start = 4s): offset starts with head start added.
-		{name: "committee, round 1", role: spectypes.RoleCommittee, round: 1, want: 14 * time.Second},
-		{name: "committee, round 2", role: spectypes.RoleCommittee, round: 2, want: 24 * time.Second},
-		{name: "committee, round 3", role: spectypes.RoleCommittee, round: 3, want: 34 * time.Second},
-		{name: "committee, round 4 (first slow)", role: spectypes.RoleCommittee, round: 4, want: 4*time.Second + 30*time.Second + 60*time.Second},
+		{name: "committee, round 1", role: spectypes.RoleCommittee, round: 1, want: 4*time.Second + QuickTimeout},
+		{name: "committee, round 2", role: spectypes.RoleCommittee, round: 2, want: 4*time.Second + 2*QuickTimeout},
+		{name: "committee, round 8", role: spectypes.RoleCommittee, round: QuickTimeoutThreshold, want: 4*time.Second + quickPhase},
+		{name: "committee, round 9 (first slow)", role: spectypes.RoleCommittee, round: QuickTimeoutThreshold + 1, want: 4*time.Second + quickPhase + SlowTimeout},
 
 		// Aggregator (head start = 8s): covers the 2/3-slot branch.
-		{name: "aggregator, round 1", role: spectypes.RoleAggregator, round: 1, want: 18 * time.Second},
-		{name: "aggregator, round 3", role: spectypes.RoleAggregator, round: 3, want: 38 * time.Second},
-		{name: "aggregator, round 4 (first slow)", role: spectypes.RoleAggregator, round: 4, want: 8*time.Second + 30*time.Second + 60*time.Second},
+		{name: "aggregator, round 1", role: spectypes.RoleAggregator, round: 1, want: 8*time.Second + QuickTimeout},
+		{name: "aggregator, round 8", role: spectypes.RoleAggregator, round: QuickTimeoutThreshold, want: 8*time.Second + quickPhase},
+		{name: "aggregator, round 9 (first slow)", role: spectypes.RoleAggregator, round: QuickTimeoutThreshold + 1, want: 8*time.Second + quickPhase + SlowTimeout},
 
 		// Sync committee contribution uses the same 2/3-slot branch as aggregator.
-		{name: "sync_committee_contribution, round 1", role: spectypes.RoleSyncCommitteeContribution, round: 1, want: 18 * time.Second},
+		{name: "sync_committee_contribution, round 1", role: spectypes.RoleSyncCommitteeContribution, round: 1, want: 8*time.Second + QuickTimeout},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got := opts.roundTimeoutForRound(tc.role, testSlotDuration, tc.round)
+			got := roundTimeoutForRound(tc.role, slotDuration, tc.round)
 			require.Equal(t, tc.want, got)
 		})
 	}
@@ -198,10 +195,9 @@ func TestRoundTimeoutOffset(t *testing.T) {
 // This is the test that would have caught an off-by-one `<` vs `<=` in EstimatedRoundAt's loop,
 // or a wrong starting `r` — none of which the pre-existing tests directly exercised.
 func TestEstimatedRoundAtBoundaries(t *testing.T) {
-	// Use a realistic slot duration (12s) rather than the timer_test package's 600ms so the
-	// numbers line up with the real QuickTimeout (2s) and SlowTimeout (2m) that
-	// EstimatedRoundAt uses via defaultTimeoutOptions.
-	const realSlotDuration = 12 * time.Second
+	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
+	// SlowTimeout (2m) values.
+	slotDuration := networkconfig.TestNetwork.Beacon.SlotDuration
 
 	roles := []struct {
 		name string
@@ -219,20 +215,20 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 			// "late message" territory but EstimatedRoundAt is still defined and should
 			// keep incrementing with the same rules.
 			for round := specqbft.Round(1); round <= CutOffRound+2; round++ {
-				offset := defaultTimeoutOptions.roundTimeoutForRound(rc.role, realSlotDuration, round)
+				offset := roundTimeoutForRound(rc.role, slotDuration, round)
 
 				// 1 ns before the boundary: round r has not yet timed out.
-				got, err := EstimatedRoundAt(rc.role, realSlotDuration, offset-time.Nanosecond)
+				got, err := EstimatedRoundAt(rc.role, slotDuration, offset-time.Nanosecond)
 				require.NoError(t, err)
 				require.Equal(t, round, got, "round %d: 1ns before boundary", round)
 
 				// Exactly at the boundary: round r has timed out, we are now in round r+1.
-				got, err = EstimatedRoundAt(rc.role, realSlotDuration, offset)
+				got, err = EstimatedRoundAt(rc.role, slotDuration, offset)
 				require.NoError(t, err)
 				require.Equal(t, round+1, got, "round %d: exactly at boundary", round)
 
 				// 1 ns after the boundary: still in round r+1 (until next boundary).
-				got, err = EstimatedRoundAt(rc.role, realSlotDuration, offset+time.Nanosecond)
+				got, err = EstimatedRoundAt(rc.role, slotDuration, offset+time.Nanosecond)
 				require.NoError(t, err)
 				require.Equal(t, round+1, got, "round %d: 1ns after boundary", round)
 			}
@@ -245,7 +241,9 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 // special-case. After the refactor the loop itself handles them; this test regression-guards
 // that behavior.
 func TestEstimatedRoundAtEdgeCases(t *testing.T) {
-	const realSlotDuration = 12 * time.Second
+	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
+	// SlowTimeout (2m) values.
+	slotDuration := networkconfig.TestNetwork.Beacon.SlotDuration
 
 	tt := []struct {
 		name         string
@@ -266,13 +264,13 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 
 		// Inside the committee head start (2s into a 4s head start) — still Round 1.
 		{name: "committee mid-head-start", role: spectypes.RoleCommittee, timeIntoSlot: 2 * time.Second},
-		{name: "committee end of head start", role: spectypes.RoleCommittee, timeIntoSlot: realSlotDuration / 3},
+		{name: "committee end of head start", role: spectypes.RoleCommittee, timeIntoSlot: slotDuration / 3},
 		// Aggregator head start is 8s; at 7s we're still in Round 1.
 		{name: "aggregator mid-head-start", role: spectypes.RoleAggregator, timeIntoSlot: 7 * time.Second},
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := EstimatedRoundAt(tc.role, realSlotDuration, tc.timeIntoSlot)
+			got, err := EstimatedRoundAt(tc.role, slotDuration, tc.timeIntoSlot)
 			require.NoError(t, err)
 			require.Equal(t, specqbft.FirstRound, got)
 		})
@@ -280,13 +278,13 @@ func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 }
 
 // TestRoundTimeoutMatchesRoundTimeoutOffset is a regression guard for RoundTimeout vs the
-// shared roundTimeoutOffset helper. Non-proposer RoundTimeout is defined as
+// shared roundTimeoutForRound helper. Non-proposer RoundTimeout is defined as
 //
-//	time.Until(slotStart + roundTimeoutOffset(headStart, round))
+//	time.Until(slotStart + roundTimeoutForRound(role, slotDuration, round))
 //
 // so with GenesisTime pinned to `time.Now()` under synctest (frozen clock), slot 0 starts
-// "now" and the returned duration must exactly equal roundTimeoutOffset. If anyone changes
-// RoundTimeout's math without updating roundTimeoutOffset (or vice versa), this test fails.
+// "now" and the returned duration must exactly equal roundTimeoutForRound. If anyone changes
+// RoundTimeout's math without updating roundTimeoutForRound (or vice versa), this test fails.
 func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 	// Proposer uses a relative timeout, not slot-start-based, so it's exempt from the
 	// "equals roundTimeoutOffset" property. We cover non-proposer roles only.
@@ -308,7 +306,7 @@ func TestRoundTimeoutMatchesRoundTimeoutOffset(t *testing.T) {
 				timer := New(t.Context(), beaconConfig, rc.role, 0, func(round specqbft.Round) {})
 
 				for round := specqbft.Round(1); round <= CutOffRound; round++ {
-					expected := defaultTimeoutOptions.roundTimeoutForRound(rc.role, beaconConfig.SlotDuration, round)
+					expected := roundTimeoutForRound(rc.role, beaconConfig.SlotDuration, round)
 					got := timer.RoundTimeout(round)
 					require.Equal(t, expected, got, "round %d", round)
 				}
@@ -370,30 +368,13 @@ func TestEstimatedRoundAtMatchesRoundTimeout(t *testing.T) {
 
 func setupTestBeaconConfig() *networkconfig.Beacon {
 	config := *networkconfig.TestNetwork.Beacon
-	config.SlotDuration = slotDuration
+	config.SlotDuration = 600 * time.Millisecond
 	config.GenesisTime = time.Now()
 
 	return &config
 }
 
-func setupTimer(
-	t *testing.T,
-	beaconConfig *networkconfig.Beacon,
-	role spectypes.RunnerRole,
-	round specqbft.Round,
-	callback OnRoundTimeoutF,
-) *RoundTimer {
-	timer := New(t.Context(), beaconConfig, role, 0, callback)
-	timer.timeoutOptions = TimeoutOptions{
-		quickThreshold: round,
-		quick:          quickTimeout,
-		slow:           slowTimeout,
-	}
-
-	return timer
-}
-
-func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, round specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
 
 	count := int32(0)
@@ -401,16 +382,16 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(t, testBeaconConfig, role, threshold, onTimeout)
+	timer := New(t.Context(), testBeaconConfig, role, 0, onTimeout)
 
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
 
-	timer.TimeoutForRound(threshold)
-	<-time.After(timer.RoundTimeout(threshold) + safeTestDelay)
+	timer.TimeoutForRound(round)
+	<-time.After(timer.RoundTimeout(round) + safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
-func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, round specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
 
 	count := int32(0)
@@ -418,23 +399,23 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(t, testBeaconConfig, role, threshold, onTimeout)
+	timer := New(t.Context(), testBeaconConfig, role, 0, onTimeout)
 
 	timer.TimeoutForRound(specqbft.FirstRound)
 	<-time.After(timer.RoundTimeout(specqbft.FirstRound) / 2)
-	timer.TimeoutForRound(specqbft.Round(2)) // reset before elapsed
+	timer.TimeoutForRound(round) // reset before elapsed
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.Round(2)) + safeTestDelay)
+	<-time.After(timer.RoundTimeout(round) + safeTestDelay)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
-func testTimeoutForRoundTimerStored(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+func testTimeoutForRoundTimerStored(t *testing.T, role spectypes.RunnerRole, round specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
-	timer := setupTimer(t, testBeaconConfig, role, threshold, func(specqbft.Round) {})
+	timer := New(t.Context(), testBeaconConfig, role, 0, func(specqbft.Round) {})
 
 	require.Nil(t, timer.timer, "timer should be nil before first call")
 
-	timer.TimeoutForRound(threshold)
+	timer.TimeoutForRound(round)
 
 	timer.mtx.RLock()
 	firstTimer := timer.timer
@@ -442,7 +423,7 @@ func testTimeoutForRoundTimerStored(t *testing.T, role spectypes.RunnerRole, thr
 	require.NotNil(t, firstTimer, "timer must be stored after TimeoutForRound")
 
 	// Second call must replace the timer (stop old, create new).
-	timer.TimeoutForRound(specqbft.Round(2))
+	timer.TimeoutForRound(round + 1)
 
 	timer.mtx.RLock()
 	secondTimer := timer.timer
@@ -451,7 +432,7 @@ func testTimeoutForRoundTimerStored(t *testing.T, role spectypes.RunnerRole, thr
 	require.NotSame(t, firstTimer, secondTimer, "each call must create a new timer")
 }
 
-func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole, round specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
 
 	var count int32
@@ -463,13 +444,7 @@ func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole
 	cancel() // cancel before arming
 
 	timer := New(ctx, testBeaconConfig, role, 0, onTimeout)
-	timer.timeoutOptions = TimeoutOptions{
-		quickThreshold: threshold,
-		quick:          quickTimeout,
-		slow:           slowTimeout,
-	}
-
-	timer.TimeoutForRound(threshold)
+	timer.TimeoutForRound(round)
 
 	// Early return should skip timer creation entirely.
 	timer.mtx.RLock()
@@ -477,11 +452,11 @@ func testTimeoutForRoundContextCancelled(t *testing.T, role spectypes.RunnerRole
 	timer.mtx.RUnlock()
 
 	// Wait for the full round timeout to confirm no callback fires.
-	<-time.After(timer.RoundTimeout(threshold) + safeTestDelay)
+	<-time.After(timer.RoundTimeout(round) + safeTestDelay)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count), "callback must not fire after context cancellation")
 }
 
-func testTimeoutForRoundContextCancelledAfterArm(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+func testTimeoutForRoundContextCancelledAfterArm(t *testing.T, role spectypes.RunnerRole, round specqbft.Round) {
 	testBeaconConfig := setupTestBeaconConfig()
 
 	var count int32
@@ -492,15 +467,9 @@ func testTimeoutForRoundContextCancelledAfterArm(t *testing.T, role spectypes.Ru
 	ctx, cancel := context.WithCancel(t.Context())
 
 	timer := New(ctx, testBeaconConfig, role, 0, onTimeout)
-	timer.timeoutOptions = TimeoutOptions{
-		quickThreshold: threshold,
-		quick:          quickTimeout,
-		slow:           slowTimeout,
-	}
-
-	timer.TimeoutForRound(threshold)
+	timer.TimeoutForRound(round)
 	cancel() // cancel after arming but before timeout fires
-	<-time.After(timer.RoundTimeout(threshold) + safeTestDelay)
+	<-time.After(timer.RoundTimeout(round) + safeTestDelay)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count), "callback must not fire after context cancellation")
 }
 
@@ -524,18 +493,13 @@ func TestNegativeTimeout(t *testing.T) {
 
 func testNegativeTimeout(t *testing.T, role spectypes.RunnerRole) {
 	config := *networkconfig.TestNetwork.Beacon
-	config.SlotDuration = slotDuration
+	config.SlotDuration = 600 * time.Millisecond
 	config.GenesisTime = time.Now().Add(-10 * time.Minute)
 
 	var count int32
 	timer := New(t.Context(), &config, role, 0, func(round specqbft.Round) {
 		atomic.AddInt32(&count, 1)
 	})
-	timer.timeoutOptions = TimeoutOptions{
-		quickThreshold: specqbft.Round(1),
-		quick:          quickTimeout,
-		slow:           slowTimeout,
-	}
 
 	timeout := timer.RoundTimeout(specqbft.FirstRound)
 	require.Less(t, timeout, time.Duration(0), "timeout must be negative for a late-start duty")
@@ -546,7 +510,7 @@ func testNegativeTimeout(t *testing.T, role spectypes.RunnerRole) {
 	require.Equal(t, int32(1), atomic.LoadInt32(&count), "callback must fire immediately for negative timeout")
 }
 
-func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
+func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole) {
 	testBeaconConfig := setupTestBeaconConfig()
 
 	var count int32
@@ -563,21 +527,13 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 	for i := 0; i < 4; i++ {
 		go func(index int) {
 			timer := New(t.Context(), testBeaconConfig, role, 0, func(round specqbft.Round) { onTimeout(index) })
-			timer.timeoutOptions = TimeoutOptions{
-				quickThreshold: threshold,
-				quick:          quickTimeout,
-			}
 			timer.TimeoutForRound(specqbft.FirstRound)
 		}(i)
 		time.Sleep(time.Millisecond * 10)
 	}
 
 	referenceTimer := New(t.Context(), testBeaconConfig, role, 0, func(specqbft.Round) {})
-	referenceTimer.timeoutOptions = TimeoutOptions{
-		quickThreshold: specqbft.Round(1),
-		quick:          quickTimeout,
-	}
-	expectedTimeout := referenceTimer.RoundTimeout(specqbft.FirstRound) + quickTimeout
+	expectedTimeout := referenceTimer.RoundTimeout(specqbft.FirstRound) + QuickTimeout
 	<-time.After(expectedTimeout + safeTestDelay)
 
 	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
