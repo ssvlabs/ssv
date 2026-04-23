@@ -9,15 +9,15 @@ import (
 )
 
 var deepCopyTypes = []reflect.Type{
-	reflect.TypeOf(DecidedTrace{}),
-	reflect.TypeOf(RoundTrace{}),
-	reflect.TypeOf(RoundChangeTrace{}),
-	reflect.TypeOf(ProposalTrace{}),
-	reflect.TypeOf(QBFTTrace{}),
-	reflect.TypeOf(CommitteeDutyTrace{}),
-	reflect.TypeOf(SignerData{}),
-	reflect.TypeOf(ValidatorDutyTrace{}),
-	reflect.TypeOf(PartialSigTrace{}),
+	reflect.TypeFor[DecidedTrace](),
+	reflect.TypeFor[RoundTrace](),
+	reflect.TypeFor[RoundChangeTrace](),
+	reflect.TypeFor[ProposalTrace](),
+	reflect.TypeFor[QBFTTrace](),
+	reflect.TypeFor[CommitteeDutyTrace](),
+	reflect.TypeFor[SignerData](),
+	reflect.TypeFor[ValidatorDutyTrace](),
+	reflect.TypeFor[PartialSigTrace](),
 }
 
 func TestDeepCopy(t *testing.T) {

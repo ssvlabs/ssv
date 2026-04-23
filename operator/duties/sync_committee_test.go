@@ -297,7 +297,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		waitForDutiesFetch(t, fetchDutiesCall, timeout)
 
 		// STEP 2: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(1)
 		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
@@ -353,7 +353,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 2: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 			{
 				PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -363,7 +363,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(1)
 		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
@@ -541,7 +541,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 		// STEP 3: trigger a change in active indices
-		scheduler.indicesChg <- struct{}{}
+		scheduler.indicesChgCh <- struct{}{}
 		duties, _ := dutiesMap.Get(1)
 		dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 			PubKey:         phase0.BLSPubKey{1, 2, 5},

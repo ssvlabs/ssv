@@ -193,8 +193,8 @@ func setupSchedulerAndMocksWithParams(
 
 	s := NewScheduler(logger, opts)
 	s.blockPropagateDelay = testBlockPropagateDelay
-	s.indicesChg = make(chan struct{})
-	s.handlers = handlers
+	s.indicesChgCh = make(chan struct{})
+	s.dutyHandlers = handlers
 
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 
@@ -430,7 +430,7 @@ func setupSchedulerForHeadEventTest(currentSlot phase0.Slot) *Scheduler {
 		logger:              zap.NewNop(),
 		beaconConfig:        &beaconCfg,
 		blockPropagateDelay: 0,
-		reorg:               make(chan ReorgEvent, reorgChannelBuffer),
+		reorgCh:             make(chan ReorgEvent, reorgChannelBuffer),
 		waitCond:            sync.NewCond(&sync.Mutex{}),
 	}
 }
@@ -479,13 +479,13 @@ func TestScheduler_Run(t *testing.T) {
 
 		s := NewScheduler(logger, opts)
 		// add multiple mock duty handlers
-		s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
+		s.dutyHandlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
 		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
 		// setup mock duty handler expectations
-		for _, mockDutyHandler := range s.handlers {
+		for _, mockDutyHandler := range s.dutyHandlers {
 			mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any()).Times(1)
 			mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
 				DoAndReturn(func(ctx context.Context) {
@@ -527,13 +527,13 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 			SlotTickerProvider: func() slotticker.SlotTicker {
 				return mockTicker
 			},
-			IndicesChg: make(chan struct{}),
+			IndicesChgCh: make(chan struct{}),
 		}
 
 		s := NewScheduler(logger, opts)
 
 		// add multiple mock duty handlers
-		s.handlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
+		s.dutyHandlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
 		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 		err := s.Start(ctx)
@@ -543,9 +543,9 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 			require.NoError(t, s.Wait())
 		})
 
-		s.indicesChg <- struct{}{} // first time make fanout stuck
+		s.indicesChgCh <- struct{}{} // first time make fanout stuck
 		select {
-		case s.indicesChg <- struct{}{}: // second send should hang
+		case s.indicesChgCh <- struct{}{}: // second send should hang
 			break
 		case <-time.After(timeout):
 			t.Fatal("Channel is jammed")
@@ -656,7 +656,7 @@ func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
 			tt.configure(s, event)
 			s.HandleHeadEvent()(t.Context(), event)
 
-			require.Equal(t, tt.expected, drainReorgEvents(s.reorg))
+			require.Equal(t, tt.expected, drainReorgEvents(s.reorgCh))
 		})
 	}
 }
@@ -691,5 +691,5 @@ func TestScheduler_HandleHeadEvent_DoesNotBlockWithoutReorgConsumer(t *testing.T
 	require.Equal(t, []ReorgEvent{{
 		CurrentDutyDependentRootChanged:  true,
 		PreviousDutyDependentRootChanged: true,
-	}}, drainReorgEvents(s.reorg))
+	}}, drainReorgEvents(s.reorgCh))
 }

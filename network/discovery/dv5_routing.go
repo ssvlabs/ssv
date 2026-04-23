@@ -2,11 +2,11 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
@@ -21,7 +21,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	logger := log.FromContext(ctx).Named(log.NameDiscoveryService)
 	opts := discovery.Options{}
 	if err := opts.Apply(opt...); err != nil {
-		return 0, errors.Wrap(err, "could not apply options")
+		return 0, fmt.Errorf("could not apply options: %w", err)
 	}
 	if opts.Ttl == 0 {
 		opts.Ttl = time.Hour

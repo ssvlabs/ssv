@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -26,7 +26,7 @@ func (i *Instance) uponRoundChange(
 	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := i.State.RoundChangeContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
-		return errors.Wrap(err, "could not add round change msg to container")
+		return fmt.Errorf("could not add round change msg to container: %w", err)
 	}
 	if !addedMsg {
 		return nil // message was already added from signer
@@ -50,7 +50,7 @@ func (i *Instance) uponRoundChange(
 
 	justifiedRoundChangeMsg, valueToPropose, err := i.hasReceivedProposalJustificationForLeadingRound(msg)
 	if err != nil {
-		return errors.Wrap(err, "could not get proposal justification for leading round")
+		return fmt.Errorf("could not get proposal justification for leading round: %w", err)
 	}
 
 	if justifiedRoundChangeMsg != nil {
@@ -60,7 +60,7 @@ func (i *Instance) uponRoundChange(
 		for _, rcSignedMessage := range roundChangeJustificationSignedMessages {
 			rc, err := specqbft.NewProcessingMessage(rcSignedMessage)
 			if err != nil {
-				return errors.Wrap(err, "could not create ProcessingMessage from round change justification")
+				return fmt.Errorf("could not create ProcessingMessage from round change justification: %w", err)
 			}
 			roundChangeJustification = append(roundChangeJustification, rc)
 		}
@@ -71,12 +71,12 @@ func (i *Instance) uponRoundChange(
 			roundChangeJustification,
 		)
 		if err != nil {
-			return errors.Wrap(err, "failed to create proposal")
+			return fmt.Errorf("failed to create proposal: %w", err)
 		}
 
 		valueToProposeRoot, err := specqbft.HashDataRoot(valueToPropose)
 		if err != nil {
-			return errors.Wrap(err, "failed to hash value-to-propose")
+			return fmt.Errorf("failed to hash value-to-propose: %w", err)
 		}
 		logger = logger.With(zap.String("qbft_value_to_propose_root", hex.EncodeToString(valueToProposeRoot[:])))
 
@@ -90,7 +90,7 @@ func (i *Instance) uponRoundChange(
 		)
 
 		if err := i.Broadcast(proposal); err != nil {
-			return errors.Wrap(err, "failed to broadcast proposal message")
+			return fmt.Errorf("failed to broadcast proposal message: %w", err)
 		}
 	} else if partialQuorum, rcs := i.hasReceivedPartialQuorum(); partialQuorum {
 		newRound := minRound(rcs)
@@ -123,12 +123,12 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
-		return errors.Wrap(err, "failed to create round change message")
+		return fmt.Errorf("failed to create round change message: %w", err)
 	}
 
 	startValueRoot, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
-		return errors.Wrap(err, "failed to hash instance start value")
+		return fmt.Errorf("failed to hash instance start value: %w", err)
 	}
 	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
 
@@ -138,7 +138,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	)
 
 	if err := i.Broadcast(roundChange); err != nil {
-		return errors.Wrap(err, "failed to broadcast round change message")
+		return fmt.Errorf("failed to broadcast round change message: %w", err)
 	}
 
 	return nil
@@ -190,7 +190,7 @@ func (i *Instance) hasReceivedProposalJustificationForLeadingRound(
 		for _, signedMessage := range roundChangeSignedMessagesJustification {
 			msg, err := specqbft.NewProcessingMessage(signedMessage)
 			if err != nil {
-				return nil, nil, errors.Wrap(err, "could not create ProcessingMessage from round change justification")
+				return nil, nil, fmt.Errorf("could not create ProcessingMessage from round change justification: %w", err)
 			}
 			roundChangeJustification = append(roundChangeJustification, msg)
 		}
@@ -252,7 +252,7 @@ func (i *Instance) isReceivedProposalJustification(
 		newRound,
 		value,
 	); err != nil {
-		return errors.Wrap(err, "proposal not justified")
+		return fmt.Errorf("proposal not justified: %w", err)
 	}
 	return nil
 }
@@ -276,7 +276,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 	}
 
 	if err := msg.Validate(); err != nil {
-		return errors.Wrap(err, "roundChange invalid")
+		return fmt.Errorf("roundChange invalid: %w", err)
 	}
 
 	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
@@ -288,7 +288,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 	if msg.QBFTMessage.RoundChangePrepared() {
 		r, err := specqbft.HashDataRoot(fullData)
 		if err != nil {
-			return errors.Wrap(err, "could not hash input data")
+			return fmt.Errorf("could not hash input data: %w", err)
 		}
 
 		// validate prepare message justifications
@@ -298,7 +298,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 		for _, signedMessage := range prepareSignedMsgs {
 			procMsg, err := specqbft.NewProcessingMessage(signedMessage)
 			if err != nil {
-				return errors.Wrap(err, "could not create ProcessingMessage from prepare message in round change justification")
+				return fmt.Errorf("could not create ProcessingMessage from prepare message in round change justification: %w", err)
 			}
 			prepareMsgs = append(prepareMsgs, procMsg)
 		}
@@ -309,7 +309,7 @@ func (i *Instance) validRoundChangeForDataIgnoreSignature(
 				msg.QBFTMessage.DataRound,
 				msg.QBFTMessage.Root,
 			); err != nil {
-				return errors.Wrap(err, "round change justification invalid")
+				return fmt.Errorf("round change justification invalid: %w", err)
 			}
 		}
 
@@ -385,12 +385,12 @@ func (i *Instance) getRoundChangeData() (specqbft.Round, [32]byte, []byte, []*sp
 	if i.State.LastPreparedRound != specqbft.NoRound && i.State.LastPreparedValue != nil {
 		justifications, err := i.getRoundChangeJustification()
 		if err != nil {
-			return specqbft.NoRound, [32]byte{}, nil, nil, errors.Wrap(err, "could not get round change justification")
+			return specqbft.NoRound, [32]byte{}, nil, nil, fmt.Errorf("could not get round change justification: %w", err)
 		}
 
 		r, err := specqbft.HashDataRoot(i.State.LastPreparedValue)
 		if err != nil {
-			return specqbft.NoRound, [32]byte{}, nil, nil, errors.Wrap(err, "could not hash input data")
+			return specqbft.NoRound, [32]byte{}, nil, nil, fmt.Errorf("could not hash input data: %w", err)
 		}
 
 		return i.State.LastPreparedRound, r, i.State.LastPreparedValue, justifications, nil
@@ -415,7 +415,7 @@ RoundChange(
 func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.SignedSSVMessage, error) {
 	round, root, fullData, justifications, err := i.getRoundChangeData()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not generate round change data")
+		return nil, fmt.Errorf("could not generate round change data: %w", err)
 	}
 
 	justificationsSignedMessages := make([]*spectypes.SignedSSVMessage, 0)
@@ -425,7 +425,7 @@ func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.Signed
 
 	justificationsData, err := specqbft.MarshalJustifications(justificationsSignedMessages)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal justifications")
+		return nil, fmt.Errorf("could not marshal justifications: %w", err)
 	}
 	msg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
@@ -440,7 +440,7 @@ func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.Signed
 
 	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not sign round change message")
+		return nil, fmt.Errorf("could not sign round change message: %w", err)
 	}
 	signedMsg.FullData = fullData
 	return signedMsg, nil
