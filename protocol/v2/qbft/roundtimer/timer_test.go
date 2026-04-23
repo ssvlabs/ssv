@@ -147,7 +147,7 @@ func TestEstimatedRoundAt(t *testing.T) {
 func TestRoundTimeoutOffset(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.
-	slotDuration := networkconfig.TestNetwork.Beacon.SlotDuration
+	slotDuration := networkconfig.TestNetwork.SlotDuration
 	quickPhase := time.Duration(QuickTimeoutThreshold) * QuickTimeout
 
 	tt := []struct {
@@ -197,7 +197,7 @@ func TestRoundTimeoutOffset(t *testing.T) {
 func TestEstimatedRoundAtBoundaries(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.
-	slotDuration := networkconfig.TestNetwork.Beacon.SlotDuration
+	slotDuration := networkconfig.TestNetwork.SlotDuration
 
 	roles := []struct {
 		name string
@@ -243,7 +243,7 @@ func TestEstimatedRoundAtBoundaries(t *testing.T) {
 func TestEstimatedRoundAtEdgeCases(t *testing.T) {
 	// Use a realistic slot duration (12s) so the numbers line up with the real QuickTimeout (2s) and
 	// SlowTimeout (2m) values.
-	slotDuration := networkconfig.TestNetwork.Beacon.SlotDuration
+	slotDuration := networkconfig.TestNetwork.SlotDuration
 
 	tt := []struct {
 		name         string
