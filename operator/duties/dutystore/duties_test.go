@@ -97,6 +97,7 @@ func TestStoreDutyTypesUseIndependentLocks(t *testing.T) {
 				InCommittee:    true,
 			},
 		})
+		store.VoluntaryExit.AddDuty(slot, pk)
 
 		return store
 	}
@@ -156,7 +157,6 @@ func TestStoreDutyTypesUseIndependentLocks(t *testing.T) {
 				store.VoluntaryExit.mu.Unlock()
 			},
 			assertOpen: func(store *Store) error {
-				store.VoluntaryExit.AddDuty(slot, pk)
 				if count := store.VoluntaryExit.GetDutyCount(slot, pk); count != 1 {
 					return fmt.Errorf("expected voluntary exit count 1, got %d", count)
 				}
