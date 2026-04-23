@@ -232,7 +232,7 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPubKeyBase64 string
 
 		if cfg.ExporterOptions.Enabled {
-			logger.Info("exporter mode: running without operator signing key and key manager")
+			logger.Info("exporter mode: skipping operator signing and key manager services")
 		} else if usingSSVSigner {
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
@@ -456,7 +456,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork := setupP2P(cmd.Context(), logger, db, operatorPrivKey, ssvSignerClient)
+		p2pNetwork := setupP2P(cmd.Context(), logger, db, cfg.ExporterOptions.Enabled, operatorPrivKey, ssvSignerClient)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -1113,42 +1113,10 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 	return ssvConfig, nil
 }
 
-func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) network.P2PNetwork {
-	var protectFn func(context.Context, []byte) ([]byte, error)
-	var unprotectFn func(context.Context, []byte) ([]byte, error)
-
-	// The configured startup mode determines how the persisted P2P network key is protected.
-	if operatorPrivKey != nil {
-		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
-		if err != nil {
-			logger.Fatal("failed to derive operator-based network key protection secret", zap.Error(err))
-		}
-		protectFn = func(_ context.Context, plaintext []byte) ([]byte, error) {
-			return keys.EncryptPayload(encryptionKey, plaintext)
-		}
-		unprotectFn = func(_ context.Context, protectedValue []byte) ([]byte, error) {
-			return keys.DecryptPayload(encryptionKey, protectedValue)
-		}
-	} else if signerClient != nil {
-		err := probeRemoteNetworkKeyProtector(ctx, signerClient)
-		if err == nil {
-			protectFn = signerClient.OperatorEncrypt
-			unprotectFn = signerClient.OperatorDecrypt
-		} else if !errors.Is(err, ssvsigner.ErrOperatorDataProtectionUnsupported) {
-			logger.Fatal("failed to probe ssv-signer p2p network key protection", zap.Error(err))
-		} else {
-			hasEncryptedKey, hasEncryptedKeyErr := ssv_identity.HasEncryptedNetworkKey(db)
-			if hasEncryptedKeyErr != nil {
-				logger.Fatal("failed to inspect stored p2p network private key format", zap.Error(hasEncryptedKeyErr))
-			}
-			if hasEncryptedKey {
-				logger.Fatal("existing database contains an encrypted p2p network private key, but the configured ssv-signer cannot encrypt or decrypt it. Upgrade ssv-signer to a version that supports /v1/operator/encrypt and /v1/operator/decrypt, or restore the operator key and signing mode that originally encrypted this database", zap.Error(err))
-			}
-
-			logger.Warn("ssv-signer does not support remote p2p network key protection, falling back to local compatibility mode",
-				zap.Error(err),
-			)
-		}
+func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, exporterEnabled bool, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) network.P2PNetwork {
+	protectFn, unprotectFn, err := decideNetworkKeyProtectors(ctx, logger, db, exporterEnabled, operatorPrivKey, signerClient)
+	if err != nil {
+		logger.Fatal("failed to decide p2p network key protection", zap.Error(err))
 	}
 
 	istore := ssv_identity.NewIdentityStore(logger, db, protectFn, unprotectFn)
@@ -1163,6 +1131,61 @@ func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, opera
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
 	return n
+}
+
+func decideNetworkKeyProtectors(
+	ctx context.Context,
+	logger *zap.Logger,
+	db basedb.Database,
+	exporterEnabled bool,
+	operatorPrivKey keys.OperatorPrivateKey,
+	signerClient *ssvsigner.Client,
+) (
+	func(context.Context, []byte) ([]byte, error),
+	func(context.Context, []byte) ([]byte, error),
+	error,
+) {
+	if exporterEnabled {
+		return nil, nil, nil
+	}
+
+	if operatorPrivKey != nil {
+		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+		if err != nil {
+			return nil, nil, fmt.Errorf("derive operator-based network key protection secret: %w", err)
+		}
+		protectFn := func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(encryptionKey, plaintext)
+		}
+		unprotectFn := func(_ context.Context, protectedValue []byte) ([]byte, error) {
+			return keys.DecryptPayload(encryptionKey, protectedValue)
+		}
+		return protectFn, unprotectFn, nil
+	}
+
+	if signerClient != nil {
+		err := probeRemoteNetworkKeyProtector(ctx, signerClient)
+		if err == nil {
+			return signerClient.OperatorEncrypt, signerClient.OperatorDecrypt, nil
+		}
+		if !errors.Is(err, ssvsigner.ErrOperatorDataProtectionUnsupported) {
+			return nil, nil, fmt.Errorf("probe ssv-signer p2p network key protection: %w", err)
+		}
+
+		hasEncryptedKey, hasEncryptedKeyErr := ssv_identity.HasEncryptedNetworkKey(db)
+		if hasEncryptedKeyErr != nil {
+			return nil, nil, fmt.Errorf("inspect stored p2p network private key format: %w", hasEncryptedKeyErr)
+		}
+		if hasEncryptedKey {
+			return nil, nil, fmt.Errorf("existing database contains an encrypted p2p network private key, but the configured ssv-signer cannot encrypt or decrypt it. Upgrade ssv-signer to a version that supports /v1/operator/encrypt and /v1/operator/decrypt, or restore the operator key and signing mode that originally encrypted this database: %w", err)
+		}
+
+		logger.Warn("ssv-signer does not support remote p2p network key protection, falling back to local compatibility mode",
+			zap.Error(err),
+		)
+	}
+
+	return nil, nil, nil
 }
 
 func probeRemoteNetworkKeyProtector(

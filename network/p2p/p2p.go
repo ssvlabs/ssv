@@ -88,7 +88,7 @@ type p2pNetwork struct {
 	logger *zap.Logger
 	cfg    *Config
 
-	host            host.Host
+	host            atomic.Pointer[host.Host]
 	streamCtrl      streams.StreamController
 	idx             peers.Index
 	isIdxSet        atomic.Bool
@@ -181,9 +181,17 @@ func (n *p2pNetwork) parseTrustedPeers() error {
 	return nil
 }
 
-// Host implements HostProvider
+// Host implements HostProvider.
+// Returns nil if the host has not yet been initialized (i.e. before SetupHost
+// has stored it). The atomic load synchronizes-with the store in SetupHost,
+// so callers can read the returned host safely from any goroutine — including
+// the libp2p listener goroutines that fire connection-gater callbacks during
+// SetupHost itself (see #2448).
 func (n *p2pNetwork) Host() host.Host {
-	return n.host
+	if h := n.host.Load(); h != nil {
+		return *h
+	}
+	return nil
 }
 
 // PeersIndex returns the peers index
@@ -233,7 +241,7 @@ func (n *p2pNetwork) Close() error {
 	if err := n.topicsCtrl.Close(); err != nil {
 		n.logger.Warn("could not close topics controller", zap.Error(err))
 	}
-	return n.host.Close()
+	return n.Host().Close()
 }
 
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
@@ -274,9 +282,10 @@ func (n *p2pNetwork) Start() (err error) {
 		}
 	}()
 
+	host := n.Host()
 	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
-		ID:    n.host.ID(),
-		Addrs: n.host.Addrs(),
+		ID:    host.ID(),
+		Addrs: host.Addrs(),
 	})
 	if err != nil {
 		return fmt.Errorf("resolve p2p address: %w", err)
@@ -297,9 +306,9 @@ func (n *p2pNetwork) Start() (err error) {
 
 	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming())
 
-	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.logger, n.host))
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, n.logger, host))
 
-	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
+	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, host, n.idx))
 
 	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, n.logger, n.topicsCtrl))
 
@@ -323,21 +332,22 @@ func (n *p2pNetwork) peersTrimming() func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
 		}()
 
+		hostNetwork := n.Host().Network()
 		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
 
-		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.host.Network().Peers())
+		disconnectedCnt := connMgr.DisconnectFromBadPeers(hostNetwork, hostNetwork.Peers())
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
 			return
 		}
 
-		connectedPeers := n.host.Network().Peers()
+		connectedPeers := hostNetwork.Peers()
 		currentSubnets := n.currentSubnetsSnapshot()
 
 		const maximumIrrelevantPeersToDisconnect = 3
 		disconnectedCnt = connMgr.DisconnectFromIrrelevantPeers(
 			maximumIrrelevantPeersToDisconnect,
-			n.host.Network(),
+			hostNetwork,
 			connectedPeers,
 			currentSubnets,
 		)
@@ -358,7 +368,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
 		// enough to it - this ensures we don't skip trim iteration because of "random fluctuations"
 		// in currently connected peer count at that limit boundary
-		connectedPeers = n.host.Network().Peers()
+		connectedPeers = hostNetwork.Peers()
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
 			// We probably don't want to trim outgoing connections then, but from time-to-time we want to
 			// trim (and rotate) some incoming connections when inbound limit is hit just to make sure
@@ -388,7 +398,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			)
 			return
 		}
-		connMgr.TrimPeers(ctx, n.host.Network(), peersToTrim)
+		connMgr.TrimPeers(ctx, hostNetwork, peersToTrim)
 		for pid := range peersToTrim {
 			n.trimmedRecently.Set(pid, struct{}{})
 		}
@@ -431,11 +441,12 @@ func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[pe
 
 	result := make(map[peer.ID]struct{}, trimCnt)
 	ownSubnets := n.SubscribedSubnets()
+	hostNetwork := n.Host().Network()
 	for _, p := range myPeers {
 		if trimCnt <= 0 {
 			break
 		}
-		pConns := n.host.Network().ConnsToPeer(p)
+		pConns := hostNetwork.ConnsToPeer(p)
 		// we shouldn't have more than 1 connection per peer, but if we do we'd want a
 		// warning about it logged, and we'd want to handle it to the best of our ability
 		if len(pConns) > 1 {
