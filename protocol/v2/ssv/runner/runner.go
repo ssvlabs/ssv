@@ -246,11 +246,11 @@ func (b *BaseRunner) currentInstance() *instance.Instance {
 }
 
 func (b *BaseRunner) currentControllerInstance() *instance.Instance {
-	if b == nil || b.State == nil || b.State.CurrentDuty == nil || b.QBFTController == nil {
+	if b == nil || b.QBFTController == nil {
 		return nil
 	}
 
-	return b.QBFTController.RecentInstances.FindInstance(specqbft.Height(b.State.CurrentDuty.DutySlot()))
+	return b.QBFTController.CurrentInstance()
 }
 
 func (b *BaseRunner) stateForEncoding() *State {

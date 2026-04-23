@@ -98,3 +98,45 @@ func TestController_OnQBFTRoundTimeoutWithRoundCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, specqbft.Round(2), inst.State.Round, "Round should bump")
 }
+
+func TestControllerCurrentInstanceUsesTrackedHeight(t *testing.T) {
+	logger := log.TestLogger(t)
+
+	keySet := spectestingutils.Testing4SharesSet()
+	testConfig := &qbft.Config{
+		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		CutOffRound:  spectestingutils.TestingCutOffRound,
+	}
+
+	identifier := []byte{1, 2, 3, 4}
+	share := spectestingutils.TestingCommitteeMember(keySet)
+
+	newInstance := func(height specqbft.Height) *instance.Instance {
+		return instance.NewInstance(
+			t.Context(),
+			logger,
+			testConfig,
+			share,
+			identifier,
+			height,
+			spectestingutils.TestingOperatorSigner(keySet),
+			func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+				return roundtimer.NewTestingTimer()
+			},
+		)
+	}
+
+	current := newInstance(specqbft.FirstHeight)
+	future := newInstance(specqbft.FirstHeight + 1)
+
+	contr := &Controller{
+		RecentInstances: make(Instances, 0, InstancesTestCapacity),
+	}
+	contr.RecentInstances.addNewInstance(current)
+	contr.RecentInstances.addNewInstance(future)
+	contr.LatestInstanceHeight = future.GetHeight()
+	contr.setCurrentInstance(current.GetHeight())
+
+	require.Same(t, current, contr.CurrentInstance())
+}

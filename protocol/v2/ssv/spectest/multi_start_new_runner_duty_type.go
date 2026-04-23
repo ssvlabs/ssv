@@ -96,33 +96,13 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 
 	switch r := test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		for _, inst := range r.QBFTController.RecentInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
-		if inst := r.CurrentInstance(); inst != nil {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
+		rehydrateRunnerQBFTValueCheckers(r, protocoltesting.TestingValueChecker{}, true)
 	case *runner.AggregatorRunner:
-		for _, inst := range r.QBFTController.RecentInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
-		if inst := r.CurrentInstance(); inst != nil {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
+		rehydrateRunnerQBFTValueCheckers(r, protocoltesting.TestingValueChecker{}, true)
 	case *runner.ProposerRunner:
-		for _, inst := range r.QBFTController.RecentInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
-		if inst := r.CurrentInstance(); inst != nil {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
+		rehydrateRunnerQBFTValueCheckers(r, protocoltesting.TestingValueChecker{}, true)
 	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range r.QBFTController.RecentInstances {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
-		if inst := r.CurrentInstance(); inst != nil {
-			inst.ValueChecker = protocoltesting.TestingValueChecker{}
-		}
+		rehydrateRunnerQBFTValueCheckers(r, protocoltesting.TestingValueChecker{}, true)
 	}
 
 	// post root

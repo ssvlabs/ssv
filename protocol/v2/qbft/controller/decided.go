@@ -48,10 +48,13 @@ func (c *Controller) UponDecided(
 			return nil, fmt.Errorf("add message to commit-container: %w", err)
 		}
 		c.RecentInstances.addNewInstance(inst)
+		if c.CurrentInstance() == nil {
+			c.setCurrentInstance(msg.QBFTMessage.Height)
+		}
 		if msg.QBFTMessage.Height > c.LatestInstanceHeight {
 			// If the new instance turned out to be "from the future", it means other nodes in our cluster are
-			// already ahead working with an instance we haven't gotten to. We accept it as our current (latest
-			// known) height.
+			// already ahead working with an instance we haven't gotten to. We accept it as our latest known height,
+			// while keeping the currently active instance unchanged.
 			// NOTE: we could also mark older instances as irrelevant now - but spectests do not expect this,
 			// and we are doing it in `Controller.StartNewInstance` periodically anyway.
 			c.LatestInstanceHeight = msg.QBFTMessage.Height
@@ -70,6 +73,9 @@ func (c *Controller) UponDecided(
 		}
 		if err := inst.State.CommitContainer.AddMsg(msg); err != nil {
 			return nil, fmt.Errorf("add message to commit-container: %w", err)
+		}
+		if c.CurrentInstance() == nil {
+			c.setCurrentInstance(msg.QBFTMessage.Height)
 		}
 
 		// Signal "newly decided" to the caller.

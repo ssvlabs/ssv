@@ -76,32 +76,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	}
 
 	valCheck := createValueChecker(test.Runner)
-	switch test.Runner.(type) {
-	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).QBFTController.RecentInstances {
-			if inst.ValueChecker == nil {
-				inst.ValueChecker = valCheck
-			}
-		}
-	}
+	rehydrateRunnerQBFTValueCheckers(test.Runner, valCheck, false)
 
 	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()

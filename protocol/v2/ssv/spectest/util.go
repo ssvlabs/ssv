@@ -11,6 +11,8 @@ import (
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
@@ -46,45 +48,25 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		cr.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		cr.ValCheck = valCheck
-		for _, inst := range cr.QBFTController.RecentInstances {
-			inst.ValueChecker = valCheck
-		}
-		if inst := cr.CurrentInstance(); inst != nil {
-			inst.ValueChecker = valCheck
-		}
+		rehydrateRunnerQBFTValueCheckers(cr, valCheck, true)
 	case *runner.AggregatorRunner:
 		ar := r.(*runner.AggregatorRunner)
 		ar.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		ar.ValCheck = valCheck
-		for _, inst := range ar.QBFTController.RecentInstances {
-			inst.ValueChecker = valCheck
-		}
-		if inst := ar.CurrentInstance(); inst != nil {
-			inst.ValueChecker = valCheck
-		}
+		rehydrateRunnerQBFTValueCheckers(ar, valCheck, true)
 	case *runner.ProposerRunner:
 		pr := r.(*runner.ProposerRunner)
 		pr.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		pr.ValCheck = valCheck
-		for _, inst := range pr.QBFTController.RecentInstances {
-			inst.ValueChecker = valCheck
-		}
-		if inst := pr.CurrentInstance(); inst != nil {
-			inst.ValueChecker = valCheck
-		}
+		rehydrateRunnerQBFTValueCheckers(pr, valCheck, true)
 	case *runner.SyncCommitteeAggregatorRunner:
 		scr := r.(*runner.SyncCommitteeAggregatorRunner)
 		scr.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		scr.ValCheck = valCheck
-		for _, inst := range scr.QBFTController.RecentInstances {
-			inst.ValueChecker = valCheck
-		}
-		if inst := scr.CurrentInstance(); inst != nil {
-			inst.ValueChecker = valCheck
-		}
+		rehydrateRunnerQBFTValueCheckers(scr, valCheck, true)
 	case *runner.ValidatorRegistrationRunner:
 		r.(*runner.ValidatorRegistrationRunner).NetworkConfig = networkconfig.TestNetwork
 	case *runner.VoluntaryExitRunner:
@@ -152,4 +134,58 @@ func normalizeProposerConsensusValue(value []byte) []byte {
 		return value
 	}
 	return encoded
+}
+
+func rehydrateRunnerQBFTValueCheckers(r runner.Runner, valCheck ssv.ValueChecker, overwrite bool) {
+	if valCheck == nil {
+		return
+	}
+
+	for _, inst := range qbftInstancesForRunner(r) {
+		if overwrite || inst.ValueChecker == nil {
+			inst.ValueChecker = valCheck
+		}
+	}
+}
+
+func qbftInstancesForRunner(r runner.Runner) []*instance.Instance {
+	base := baseRunnerForSpectest(r)
+	if base == nil || base.QBFTController == nil {
+		return nil
+	}
+
+	instances := make([]*instance.Instance, 0, len(base.QBFTController.RecentInstances)+1)
+	seen := make(map[*instance.Instance]struct{}, len(base.QBFTController.RecentInstances)+1)
+	add := func(inst *instance.Instance) {
+		if inst == nil {
+			return
+		}
+		if _, ok := seen[inst]; ok {
+			return
+		}
+		seen[inst] = struct{}{}
+		instances = append(instances, inst)
+	}
+
+	for _, inst := range base.QBFTController.RecentInstances {
+		add(inst)
+	}
+	add(base.CurrentInstance())
+
+	return instances
+}
+
+func baseRunnerForSpectest(r runner.Runner) *runner.BaseRunner {
+	switch typedRunner := r.(type) {
+	case *runner.CommitteeRunner:
+		return typedRunner.BaseRunner
+	case *runner.AggregatorRunner:
+		return typedRunner.BaseRunner
+	case *runner.ProposerRunner:
+		return typedRunner.BaseRunner
+	case *runner.SyncCommitteeAggregatorRunner:
+		return typedRunner.BaseRunner
+	default:
+		return nil
+	}
 }

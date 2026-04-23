@@ -32,8 +32,8 @@ type NewDecidedHandler func(msg qbftstorage.Participation)
 type Controller struct {
 	Identifier []byte
 
-	// LatestInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
-	// is the "relevant" one currently driving consensus.
+	// LatestInstanceHeight is the highest instance height this controller is aware of.
+	// The currently active instance is tracked separately via CurrentInstance().
 	// JSON-tagged as "Height" to preserve compatibility with existing spec-test fixtures.
 	LatestInstanceHeight specqbft.Height `json:"Height"`
 	// RecentInstances keeps track of N latest instances Controller has worked with, so late messages can still be
@@ -46,6 +46,7 @@ type Controller struct {
 	NewDecidedHandler NewDecidedHandler       `json:"-"`
 	config            qbft.IConfig
 	fullNode          bool
+	currentInstance   *specqbft.Height
 }
 
 func NewController(
@@ -64,6 +65,22 @@ func NewController(
 		OperatorSigner:       signer,
 		fullNode:             fullNode,
 	}
+}
+
+// CurrentInstance returns the instance currently considered active by the controller.
+// This is tracked separately from LatestInstanceHeight so that learning about a higher
+// decided height does not automatically retarget callers still working with the current duty.
+func (c *Controller) CurrentInstance() *instance.Instance {
+	if c == nil || c.currentInstance == nil {
+		return nil
+	}
+
+	return c.RecentInstances.FindInstance(*c.currentInstance)
+}
+
+func (c *Controller) setCurrentInstance(height specqbft.Height) {
+	current := height
+	c.currentInstance = &current
 }
 
 // StartNewInstance will attempt to start a new QBFT instance.
@@ -119,6 +136,7 @@ func (c *Controller) StartNewInstance(
 	newInstance.Start(ctx, value, valueChecker)
 	c.RecentInstances.addNewInstance(newInstance)
 	c.LatestInstanceHeight = height
+	c.setCurrentInstance(height)
 
 	span.SetStatus(codes.Ok, "")
 
