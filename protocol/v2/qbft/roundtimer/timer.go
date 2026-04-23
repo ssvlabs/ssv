@@ -164,7 +164,9 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 
 func (t *RoundTimer) Stop() {
 	t.cancel()
+	t.mtx.Lock()
 	if t.timer != nil {
 		t.timer.Stop()
 	}
+	t.mtx.Unlock()
 }
