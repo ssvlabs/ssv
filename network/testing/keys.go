@@ -2,6 +2,7 @@ package testing
 
 import (
 	"crypto/ecdsa"
+	"fmt"
 
 	crand "crypto/rand"
 
@@ -9,8 +10,6 @@ import (
 	"github.com/ssvlabs/ssv/v2/network/commons"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
-
-	"github.com/pkg/errors"
 )
 
 // NodeKeys holds node's keys
@@ -45,7 +44,7 @@ func CreateKeys(n int) ([]NodeKeys, error) {
 func GenNetworkKey() (*ecdsa.PrivateKey, error) {
 	privInterfaceKey, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	if err != nil {
-		return nil, errors.WithMessage(err, "could not generate 256k1 key")
+		return nil, fmt.Errorf("could not generate 256k1 key: %w", err)
 	}
 	return commons.ECDSAPrivFromInterface(privInterfaceKey)
 }

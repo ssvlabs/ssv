@@ -1,8 +1,10 @@
 package connections
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/v2/network/peers"
 	"github.com/ssvlabs/ssv/v2/network/records"
@@ -13,7 +15,7 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 	return func(sender peer.ID, ni *records.NodeInfo) error {
 		nid := ni.GetNodeInfo().NetworkID
 		if networkID != nid {
-			return errors.Errorf("mismatching domain type (want %s, got %s)", networkID, nid)
+			return fmt.Errorf("mismatching domain type (want %s, got %s)", networkID, nid)
 		}
 		return nil
 	}

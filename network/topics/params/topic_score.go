@@ -1,11 +1,12 @@
 package params
 
 import (
+	"errors"
+	"fmt"
 	"math"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/v2/networkconfig"
 	"github.com/ssvlabs/ssv/v2/registry/storage"
@@ -200,7 +201,7 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	if expectedMessagesPerDecayInterval > 0 {
 		firstMessageDeliveriesCap, err = decayConvergence(firstMessageDeliveriesDecay, 2*(expectedMessagesPerDecayInterval)/float64(opts.Topic.D))
 		if err != nil {
-			return nil, errors.Wrap(err, "could not calculate decay convergence for first message delivery cap")
+			return nil, fmt.Errorf("could not calculate decay convergence for first message delivery cap: %w", err)
 		}
 	}
 
@@ -210,7 +211,7 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	if expectedMessagesPerDecayInterval > 0 {
 		meshMessageDeliveriesThreshold, err = decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor))
 		if err != nil {
-			return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
+			return nil, fmt.Errorf("could not calculate threshold for mesh message deliveries threshold: %w", err)
 		}
 	}
 	var meshMessageDeliveriesWeight float64

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -24,7 +23,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 
 	addMsg, err := i.State.CommitContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
-		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
+		return false, nil, nil, fmt.Errorf("could not add commit msg to container: %w", err)
 	}
 	if !addMsg {
 		return false, nil, nil, nil // UponCommit was already called
@@ -33,7 +32,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 	// calculate commit quorum and act upon it
 	quorum, commitMsgs, err := i.commitQuorumForRoundRoot(msg.QBFTMessage.Root, msg.QBFTMessage.Round)
 	if err != nil {
-		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
+		return false, nil, nil, fmt.Errorf("could not calculate commit quorum: %w", err)
 	}
 
 	if quorum {
@@ -41,7 +40,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 
 		agg, err := aggregateCommitMsgs(commitMsgs, fullData)
 		if err != nil {
-			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
+			return false, nil, nil, fmt.Errorf("could not aggregate commit msgs: %w", err)
 		}
 
 		logger.Debug("🎯 got commit quorum", zap.Any("agg_signers", agg.OperatorIDs))
@@ -71,7 +70,7 @@ func aggregateCommitMsgs(msgs []*specqbft.ProcessingMessage, fullData []byte) (*
 			ret = m.SignedMessage.DeepCopy()
 		} else {
 			if err := ret.Aggregate(m.SignedMessage); err != nil {
-				return nil, errors.Wrap(err, "could not aggregate commit msg")
+				return nil, fmt.Errorf("could not aggregate commit msg: %w", err)
 			}
 		}
 	}

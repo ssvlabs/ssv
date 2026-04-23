@@ -122,7 +122,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.duties.Reset(currentPeriod - 1)
 			}
 
-		case reorgEvent := <-h.reorg:
+		case reorgEvent := <-h.reorgEventsCh:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
@@ -137,7 +137,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 			currentPeriod := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)

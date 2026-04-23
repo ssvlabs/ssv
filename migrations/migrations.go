@@ -3,9 +3,9 @@ package migrations
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -101,7 +101,7 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 			},
 		)
 		if err != nil {
-			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
+			return applied, fmt.Errorf("migration %q failed: %w", migration.Name, err)
 		}
 		applied++
 

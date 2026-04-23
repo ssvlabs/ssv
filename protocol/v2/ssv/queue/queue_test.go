@@ -209,17 +209,18 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	require.Equal(t, 2, queue.Len())
 	expectedMsg := decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(2), Type: specqbft.CommitMsgType}, state)
+	poppedCh := make(chan *SSVMessage, 1)
 
 	go func() {
 		defer wg.Done()
 		matchHeight2 := func(msg *SSVMessage) bool {
 			return msg.Body.(*specqbft.Message).Height == 2
 		}
-		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
-		require.Equal(t, expectedMsg, popped)
+		poppedCh <- queue.Pop(t.Context(), NewMessagePrioritizer(state), matchHeight2)
 	}()
 
 	wg.Wait()
+	require.Equal(t, expectedMsg, <-poppedCh)
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.Equal(t, queue.Len(), 2)
@@ -231,6 +232,7 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
+	poppedCh := make(chan *SSVMessage, 1)
 
 	state := &State{
 		HasRunningInstance: true,
@@ -243,14 +245,13 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	// Pop in a separate goroutine. The first two pops should get the matching messages, and the third should return nil.
 	go func() {
 		defer wg.Done()
-		popped := queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
+		poppedCh <- queue.Pop(t.Context(), NewMessagePrioritizer(state), func(msg *SSVMessage) bool {
 			_, ok := msg.Body.(*specqbft.Message)
 			if !ok {
 				return true
 			}
 			return msg.Body.(*specqbft.Message).MsgType != specqbft.CommitMsgType
 		})
-		require.NotNil(t, popped)
 	}()
 
 	// Simulate delay before pushing messages.
@@ -266,6 +267,7 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 	decodeAndPush(t, queue, mockConsensusMessage{Height: specqbft.Height(1), Type: specqbft.CommitMsgType}, state)
 
 	wg.Wait()
+	require.NotNil(t, <-poppedCh)
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.False(t, queue.Empty())
@@ -386,11 +388,12 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		// Assert pushed messages.
 		var pushersAssertionWg sync.WaitGroup
 		pushersAssertionWg.Add(1)
+		pushedCountCh := make(chan int64, 1)
 		go func() {
 			pushersWg.Wait()
 			defer pushersAssertionWg.Done()
 			totalPushed += messageCount
-			require.Equal(b, int64(messageCount), pushedCount.Load())
+			pushedCountCh <- pushedCount.Load()
 		}()
 
 		// Pop all messages.
@@ -413,6 +416,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 		// Wait for pushed messages assertion.
 		pushersAssertionWg.Wait()
+		require.Equal(b, int64(messageCount), <-pushedCountCh)
 		stopPopping()
 
 		// Wait for poppers.

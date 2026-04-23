@@ -18,6 +18,14 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
+// defaultValidatorQueueSize is the default capacity of the per-validator-per-role
+// message queue and per-committee-per-slot message queue. Observed peak depth in
+// production is single-digit messages per queue (see ssv_queue_inbox_size metric);
+// 128 keeps a 30x+ headroom while keeping memory footprint bounded. The
+// `warnIfInboxIsTooBig` log fires at >50% capacity and will surface any tuning
+// regression. Full nodes still bump this to max(default, historySyncBatchSize*2).
+const defaultValidatorQueueSize = 128
+
 // Options represents validator-specific options.
 type Options struct {
 	CommonOptions
@@ -74,7 +82,7 @@ func NewCommonOptions(
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
 		ExporterOptions:     exporterOptions,
-		QueueSize:           1000,
+		QueueSize:           defaultValidatorQueueSize,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,
 		Graffiti:            graffiti,

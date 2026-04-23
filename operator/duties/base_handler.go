@@ -22,8 +22,8 @@ type SetupOptions struct {
 	ValidatorController ValidatorController
 	DutiesExecutor      DutiesExecutor
 	SlotTickerProvider  slotticker.Provider
-	ReorgEvents         chan ReorgEvent
-	IndicesChange       chan struct{}
+	ReorgEventsCh       chan ReorgEvent
+	IndicesChangeCh     chan struct{}
 }
 
 type dutyHandler interface {
@@ -48,8 +48,8 @@ type baseHandler struct {
 	dutiesExecutor      DutiesExecutor
 	ticker              slotticker.SlotTicker
 
-	reorg         chan ReorgEvent
-	indicesChange chan struct{}
+	reorgEventsCh   chan ReorgEvent
+	indicesChangeCh chan struct{}
 }
 
 func (h *baseHandler) Setup(ctx context.Context, opts SetupOptions) {
@@ -62,8 +62,8 @@ func (h *baseHandler) Setup(ctx context.Context, opts SetupOptions) {
 	h.validatorController = opts.ValidatorController
 	h.dutiesExecutor = opts.DutiesExecutor
 	h.ticker = opts.SlotTickerProvider()
-	h.reorg = opts.ReorgEvents
-	h.indicesChange = opts.IndicesChange
+	h.reorgEventsCh = opts.ReorgEventsCh
+	h.indicesChangeCh = opts.IndicesChangeCh
 }
 
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {

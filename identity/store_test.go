@@ -157,6 +157,25 @@ func TestSetupPrivateKey(t *testing.T) {
 		})
 	}
 
+	t.Run("generates and stores plaintext key when encryption secret is missing", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		p2pStorage := identityStore{
+			db:     db,
+			logger: logger,
+		}
+
+		privateKey, err := p2pStorage.SetupNetworkKey(ctx, "")
+		require.NoError(t, err)
+		require.NotNil(t, privateKey)
+
+		hasEncryptedKey, err := HasEncryptedNetworkKey(db)
+		require.NoError(t, err)
+		require.False(t, hasEncryptedKey)
+	})
+
 	t.Run("migrates legacy plaintext key to encrypted storage", func(t *testing.T) {
 		db, err := kv.NewInMemory(logger, basedb.Options{})
 		require.NoError(t, err)
@@ -426,6 +445,34 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		}
 
 		_, _, err = storeWithoutProtector.GetNetworkKey(ctx)
+		require.ErrorContains(t, err, "network key is encrypted but no compatible network key protector is configured")
+	})
+
+	t.Run("errors clearly when encrypted key cannot be decrypted via SetupNetworkKey", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		p2pStorage := identityStore{
+			db:     db,
+			logger: logger,
+			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
+				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+			},
+			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
+				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
+			},
+		}
+
+		_, err = p2pStorage.SetupNetworkKey(ctx, sk)
+		require.NoError(t, err)
+
+		storeWithoutProtector := identityStore{
+			db:     db,
+			logger: logger,
+		}
+
+		_, err = storeWithoutProtector.SetupNetworkKey(ctx, "")
 		require.ErrorContains(t, err, "network key is encrypted but no compatible network key protector is configured")
 	})
 

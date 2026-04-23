@@ -123,105 +123,78 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
+	beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+	baseOpts := runner.BaseRunnerOptions{
+		NetworkConfig:  networkconfig.TestNetwork,
+		Share:          shareMap,
+		Beacon:         beaconNode,
+		Network:        net,
+		Signer:         km,
+		OperatorSigner: opSigner,
+	}
+
 	var r runner.Runner
 	var err error
 	switch role {
 	case spectypes.RoleCommittee:
-		r, err = runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			dutyGuard,
-			dgHandler,
-		)
+		r, err = runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions:   baseOpts,
+			AttestingValidators: []phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
+			QBFTController:      contr,
+			DutyGuard:           dutyGuard,
+			DoppelgangerHandler: dgHandler,
+		})
 	case spectypes.RoleAggregator:
-		rnr, err := runner.NewAggregatorRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			valCheck,
-			TestingHighestDecidedSlot,
-		)
+		rnr, err := runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
+			BaseRunnerOptions:  baseOpts,
+			QBFTController:     contr,
+			ValCheck:           valCheck,
+			HighestDecidedSlot: TestingHighestDecidedSlot,
+		})
 		if err != nil {
 			return nil, err
 		}
-		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+		rnr.(*runner.AggregatorRunner).IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
 			return true
 		}
 		r = rnr
 	case spectypes.RoleProposer:
-		r, err = runner.NewProposerRunner(
-			logger,
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			dgHandler,
-			valCheck,
-			TestingHighestDecidedSlot,
-			[]byte("graffiti"),
-			0,
-		)
+		r, err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
+			BaseRunnerOptions:   baseOpts,
+			QBFTController:      contr,
+			DoppelgangerHandler: dgHandler,
+			ValCheck:            valCheck,
+			HighestDecidedSlot:  TestingHighestDecidedSlot,
+			Graffiti:            []byte("graffiti"),
+			ProposerDelay:       0,
+		})
 	case spectypes.RoleSyncCommitteeContribution:
-		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			valCheck,
-			TestingHighestDecidedSlot,
-		)
+		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
+			BaseRunnerOptions:  baseOpts,
+			QBFTController:     contr,
+			ValCheck:           valCheck,
+			HighestDecidedSlot: TestingHighestDecidedSlot,
+		})
 	case spectypes.RoleValidatorRegistration:
-		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
 		mockFeeProvider := &mocks.FeeRecipientProvider{}
-		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			beaconNode,
-			net,
-			km,
-			opSigner,
-			mocks.NewValidatorRegistrationSubmitter(beaconNode),
-			mockFeeProvider,
-			spectypes.DefaultGasLimit,
-		)
+		r, err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
+			BaseRunnerOptions:              baseOpts,
+			ValidatorRegistrationSubmitter: mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			FeeRecipientProvider:           mockFeeProvider,
+			GasLimit:                       spectypes.DefaultGasLimit,
+		})
 	case spectypes.RoleVoluntaryExit:
-		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-		)
+		r, err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+		})
 	case spectestingutils.UnknownDutyType:
-		r, err = runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			dutyGuard,
-			dgHandler,
-		)
+		r, err = runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions:   baseOpts,
+			AttestingValidators: []phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)},
+			QBFTController:      contr,
+			DutyGuard:           dutyGuard,
+			DoppelgangerHandler: dgHandler,
+		})
 		r.(*runner.CommitteeRunner).RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
 		return nil, fmt.Errorf("unknown role type: %s", role)
@@ -319,105 +292,78 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	}
 
+	beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
+	baseOpts := runner.BaseRunnerOptions{
+		NetworkConfig:  networkconfig.TestNetwork,
+		Share:          shareMap,
+		Beacon:         beaconNode,
+		Network:        net,
+		Signer:         km,
+		OperatorSigner: opSigner,
+	}
+
 	var r runner.Runner
 	var err error
 	switch role {
 	case spectypes.RoleCommittee:
-		r, err = runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			sharePubKeys,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			dutyGuard,
-			dgHandler,
-		)
+		r, err = runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions:   baseOpts,
+			AttestingValidators: sharePubKeys,
+			QBFTController:      contr,
+			DutyGuard:           dutyGuard,
+			DoppelgangerHandler: dgHandler,
+		})
 	case spectypes.RoleAggregator:
-		rnr, err := runner.NewAggregatorRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			valCheck,
-			TestingHighestDecidedSlot,
-		)
+		rnr, err := runner.NewAggregatorRunner(runner.AggregatorRunnerOptions{
+			BaseRunnerOptions:  baseOpts,
+			QBFTController:     contr,
+			ValCheck:           valCheck,
+			HighestDecidedSlot: TestingHighestDecidedSlot,
+		})
 		if err != nil {
 			return nil, err
 		}
-		rnr.IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
+		rnr.(*runner.AggregatorRunner).IsAggregator = func(_ uint64, _ uint64, _ []byte) bool {
 			return true
 		}
 		r = rnr
 	case spectypes.RoleProposer:
-		r, err = runner.NewProposerRunner(
-			logger,
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			dgHandler,
-			valCheck,
-			TestingHighestDecidedSlot,
-			[]byte("graffiti"),
-			0,
-		)
+		r, err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
+			BaseRunnerOptions:   baseOpts,
+			QBFTController:      contr,
+			DoppelgangerHandler: dgHandler,
+			ValCheck:            valCheck,
+			HighestDecidedSlot:  TestingHighestDecidedSlot,
+			Graffiti:            []byte("graffiti"),
+			ProposerDelay:       0,
+		})
 	case spectypes.RoleSyncCommitteeContribution:
-		r, err = runner.NewSyncCommitteeAggregatorRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			valCheck,
-			TestingHighestDecidedSlot,
-		)
+		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
+			BaseRunnerOptions:  baseOpts,
+			QBFTController:     contr,
+			ValCheck:           valCheck,
+			HighestDecidedSlot: TestingHighestDecidedSlot,
+		})
 	case spectypes.RoleValidatorRegistration:
-		beaconNode := protocoltesting.NewTestingBeaconNodeWrapped()
 		mockFeeProvider := &mocks.FeeRecipientProvider{}
-		r, err = runner.NewValidatorRegistrationRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			beaconNode,
-			net,
-			km,
-			opSigner,
-			mocks.NewValidatorRegistrationSubmitter(beaconNode),
-			mockFeeProvider,
-			spectypes.DefaultGasLimit,
-		)
+		r, err = runner.NewValidatorRegistrationRunner(runner.ValidatorRegistrationRunnerOptions{
+			BaseRunnerOptions:              baseOpts,
+			ValidatorRegistrationSubmitter: mocks.NewValidatorRegistrationSubmitter(beaconNode),
+			FeeRecipientProvider:           mockFeeProvider,
+			GasLimit:                       spectypes.DefaultGasLimit,
+		})
 	case spectypes.RoleVoluntaryExit:
-		r, err = runner.NewVoluntaryExitRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-		)
+		r, err = runner.NewVoluntaryExitRunner(runner.VoluntaryExitRunnerOptions{
+			BaseRunnerOptions: baseOpts,
+		})
 	case spectestingutils.UnknownDutyType:
-		r, err = runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			sharePubKeys,
-			contr,
-			protocoltesting.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			dutyGuard,
-			dgHandler,
-		)
+		r, err = runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions:   baseOpts,
+			AttestingValidators: sharePubKeys,
+			QBFTController:      contr,
+			DutyGuard:           dutyGuard,
+			DoppelgangerHandler: dgHandler,
+		})
 		if r != nil {
 			r.(*runner.CommitteeRunner).RunnerRoleType = spectestingutils.UnknownDutyType
 		}

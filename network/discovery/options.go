@@ -2,11 +2,12 @@ package discovery
 
 import (
 	"crypto/ecdsa"
+	"errors"
+	"fmt"
 	"net"
 
 	ethlogger "github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/v2/network/commons"
@@ -96,7 +97,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger, funcOpts ...func(config
 	if len(opts.Bootnodes) > 0 {
 		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not parse bootnodes records")
+			return nil, fmt.Errorf("could not parse bootnodes records: %w", err)
 		}
 		dv5Cfg.Bootnodes = bootnodes
 	}

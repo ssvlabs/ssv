@@ -3,10 +3,10 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/instance"
@@ -39,7 +39,7 @@ func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 func (pcs *State) ReconstructBeaconSig(container *ssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	signature, err := container.ReconstructSignature(root, validatorPubKey, validatorIndex)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
+		return nil, fmt.Errorf("could not reconstruct beacon sig: %w", err)
 	}
 	return signature, nil
 }
@@ -48,7 +48,7 @@ func (pcs *State) ReconstructBeaconSig(container *ssv.PartialSigContainer, root 
 func (pcs *State) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := pcs.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode State")
+		return [32]byte{}, fmt.Errorf("could not encode State: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -84,18 +84,16 @@ func (pcs *State) MarshalJSON() ([]byte, error) {
 		Finished:               pcs.Finished,
 	}
 
-	if pcs.CurrentDuty != nil {
-		if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
-			alias.ValidatorDuty = ValidatorDuty
-		} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {
-			alias.CommitteeDuty = committeeDuty
-		} else {
-			return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't ValidatorDuty or CommitteeDuty")
-		}
+	// Note: pcs.CurrentDuty is not nil by construction.
+	if ValidatorDuty, ok := pcs.CurrentDuty.(*spectypes.ValidatorDuty); ok {
+		alias.ValidatorDuty = ValidatorDuty
+	} else if committeeDuty, ok := pcs.CurrentDuty.(*spectypes.CommitteeDuty); ok {
+		alias.CommitteeDuty = committeeDuty
+	} else {
+		return nil, errors.New("can't marshal because BaseRunner.State.CurrentDuty isn't ValidatorDuty or CommitteeDuty")
 	}
-	byts, err := json.Marshal(alias)
 
-	return byts, err
+	return json.Marshal(alias)
 }
 
 func (pcs *State) UnmarshalJSON(data []byte) error {

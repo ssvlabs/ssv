@@ -7,7 +7,6 @@ import (
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/v2/network/records"
@@ -187,7 +186,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 // Close closes peer index
 func (pi *peersIndex) Close() error {
 	if err := pi.network.Peerstore().Close(); err != nil {
-		return errors.Wrap(err, "could not close peerstore")
+		return fmt.Errorf("could not close peerstore: %w", err)
 	}
 	return nil
 }

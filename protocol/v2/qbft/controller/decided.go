@@ -2,8 +2,9 @@ package controller
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -14,7 +15,7 @@ import (
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	if err := c.ValidateDecided(msg); err != nil {
-		return nil, errors.Wrap(err, "invalid decided msg")
+		return nil, fmt.Errorf("invalid decided msg: %w", err)
 	}
 
 	// try to find instance
@@ -69,12 +70,12 @@ func (c *Controller) ValidateDecided(msg *specqbft.ProcessingMessage) error {
 	}
 
 	if err := instance.BaseCommitValidationVerifySignature(msg, msg.QBFTMessage.Height, c.CommitteeMember.Committee); err != nil {
-		return errors.Wrap(err, "invalid decided msg")
+		return fmt.Errorf("invalid decided msg: %w", err)
 	}
 
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
-		return errors.Wrap(err, "could not hash input data")
+		return fmt.Errorf("could not hash input data: %w", err)
 	}
 	if !bytes.Equal(r[:], msg.QBFTMessage.Root[:]) {
 		return spectypes.NewError(spectypes.RootHashInvalidErrorCode, "H(data) != root")

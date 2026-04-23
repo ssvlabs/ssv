@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/v2/message/validation"
