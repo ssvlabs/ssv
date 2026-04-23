@@ -26,11 +26,11 @@ jobs:
       - name: Run benchmark
         id: bench
         run: |
-          go test -benchmem -run=^$ -bench ^BenchmarkTracer$ github.com/ssvlabs/ssv/operator/dutytracer -v
+          go test -benchmem -run=^$ -bench ^BenchmarkTracer$ github.com/ssvlabs/ssv/v2/operator/dutytracer -v
 
       - name: Run eviction test
         id: eviction
         run: |
-          go test -tags lfs -timeout 5s -run ^TestEviction$ github.com/ssvlabs/ssv/operator/dutytracer -v
+          go test -tags lfs -timeout 5s -run ^TestEviction$ github.com/ssvlabs/ssv/v2/operator/dutytracer -v
 
       - run: echo "🍏 This job's status is ${{ job.status }}."

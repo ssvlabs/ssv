@@ -12,7 +12,7 @@ ALL_IMPORTS="$(
 OUT="$(
   printf '%s\n' "$ALL_IMPORTS" \
     | sort -u \
-    | grep '^github.com/ssvlabs/ssv/' \
+    | grep -E '^github.com/ssvlabs/ssv($|/)' \
     | grep -Ev '^github.com/ssvlabs/ssv/ssvsigner($|/)' || true
 )"
 

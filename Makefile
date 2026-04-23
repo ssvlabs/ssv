@@ -193,4 +193,4 @@ format:
 	# (see https://github.com/golang/go/issues/71676 for details). In practice however
 	# it's not always possible to fix that on the generator side, so we have to use a
 	# work-around here to filter out generated files on our own.
-	$(RUN_TOOL) goimports -l -w -local github.com/ssvlabs/ssv/ $$(find . -name '*.go' -not -path "*mock*")
+	$(RUN_TOOL) goimports -l -w -local github.com/ssvlabs/ssv/v2 $$(find . -name '*.go' -not -path "*mock*")
