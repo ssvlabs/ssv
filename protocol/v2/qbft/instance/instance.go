@@ -143,7 +143,8 @@ func (i *Instance) Start(
 }
 
 // MarkDecided marks instance as decided, recording the decided-round and decided-value.
-// This func essentially terminates instance, rendering it read-only, releasing all the resources it spawned.
+// This func essentially terminates instance (no QBFT-related progress is done afterward), releasing all the resources
+// it spawned.
 // Both MarkDecided and MarkIrrelevant can be called on the same instance, these calls do not conflict.
 func (i *Instance) MarkDecided(round specqbft.Round, value []byte) error {
 	if i.State.Decided {
@@ -162,7 +163,8 @@ func (i *Instance) MarkDecided(round specqbft.Round, value []byte) error {
 
 // MarkIrrelevant marks instance as irrelevant to signal that it will no longer process messages, hence no further
 // progress will be made on this instance.
-// This func essentially terminates instance, rendering it read-only, releasing all the resources it spawned.
+// This func essentially terminates instance (no QBFT-related progress is done afterward), releasing all the resources
+// it spawned.
 // Both MarkDecided and MarkIrrelevant can be called on the same instance, these calls do not conflict.
 func (i *Instance) MarkIrrelevant() {
 	i.markedIrrelevant = true

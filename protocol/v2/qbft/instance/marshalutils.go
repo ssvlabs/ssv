@@ -26,7 +26,8 @@ func (i *Instance) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON is a custom JSON unmarshaller for Instance
+// UnmarshalJSON overlays spec-test state; the receiver must already be constructed via NewInstance as i.roundTimer
+// is not restored.
 func (i *Instance) UnmarshalJSON(data []byte) error {
 	type Alias Instance
 	aux := &struct {
