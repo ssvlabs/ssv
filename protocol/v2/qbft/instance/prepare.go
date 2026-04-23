@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -21,7 +20,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 
 	addedMsg, err := i.State.PrepareContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
-		return errors.Wrap(err, "could not add prepare msg to container")
+		return fmt.Errorf("could not add prepare msg to container: %w", err)
 	}
 	if !addedMsg {
 		return nil // uponPrepare was already called
@@ -53,13 +52,13 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 
 	commitMsg, err := i.CreateCommit(proposedRoot)
 	if err != nil {
-		return errors.Wrap(err, "could not create commit msg")
+		return fmt.Errorf("could not create commit msg: %w", err)
 	}
 
 	logger.Debug("📢 broadcasting commit message", zap.Any("commit_signers", commitMsg.OperatorIDs))
 
 	if err := i.Broadcast(commitMsg); err != nil {
-		return errors.Wrap(err, "failed to broadcast commit message")
+		return fmt.Errorf("failed to broadcast commit message: %w", err)
 	}
 
 	return nil
@@ -74,7 +73,7 @@ func (i *Instance) getRoundChangeJustification() ([]*specqbft.ProcessingMessage,
 
 	r, err := specqbft.HashDataRoot(i.State.LastPreparedValue)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not hash input data")
+		return nil, fmt.Errorf("could not hash input data: %w", err)
 	}
 
 	prepareMsgs := i.State.PrepareContainer.MessagesForRound(i.State.LastPreparedRound)
@@ -114,7 +113,7 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	}
 
 	if err := msg.Validate(); err != nil {
-		return errors.Wrap(err, "prepareData invalid")
+		return fmt.Errorf("prepareData invalid: %w", err)
 	}
 
 	if !bytes.Equal(msg.QBFTMessage.Root[:], root[:]) {

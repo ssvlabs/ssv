@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 )
@@ -63,7 +63,7 @@ func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) {
 func (b *broadcaster) Broadcast(msg Message) error {
 	data, err := json.Marshal(&msg)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal msg")
+		return fmt.Errorf("could not marshal msg: %w", err)
 	}
 
 	// lock is applied only when reading from the connections map

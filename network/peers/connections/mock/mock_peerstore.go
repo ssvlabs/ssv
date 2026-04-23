@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -9,7 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
 )
 
 var _ peerstore.Peerstore = Peerstore{}

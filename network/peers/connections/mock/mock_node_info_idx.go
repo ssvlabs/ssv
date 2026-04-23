@@ -1,8 +1,9 @@
 package mock
 
 import (
+	"errors"
+
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"

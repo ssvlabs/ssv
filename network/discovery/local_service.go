@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -11,7 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -47,7 +47,7 @@ func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host, 
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create DHT")
+		return nil, fmt.Errorf("could not create DHT: %w", err)
 	}
 
 	return &localDiscovery{
@@ -83,7 +83,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
 	err := md.svc.Start()
 	if err != nil {
-		return errors.Wrap(err, "could not start mdns service")
+		return fmt.Errorf("could not start mdns service: %w", err)
 	}
 	return md.routingTbl.Bootstrap(md.ctx)
 }

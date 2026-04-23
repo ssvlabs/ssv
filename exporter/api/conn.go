@@ -3,13 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -209,15 +210,15 @@ func (c *conn) sendMsg(msg []byte) (int, error) {
 	_ = c.ws.SetWriteDeadline(time.Now().Add(pingTimeout))
 	w, err := c.ws.NextWriter(websocket.TextMessage)
 	if err != nil {
-		return 0, errors.Wrap(err, "could not create ws writer")
+		return 0, fmt.Errorf("could not create ws writer: %w", err)
 	}
 	n, err := w.Write(msg)
 	if err != nil {
-		return 0, errors.Wrap(err, "could not write ws message")
+		return 0, fmt.Errorf("could not write ws message: %w", err)
 	}
 	err = w.Close()
 	if err != nil {
-		return 0, errors.Wrap(err, "could not close writer")
+		return 0, fmt.Errorf("could not close writer: %w", err)
 	}
 	return n, nil
 }

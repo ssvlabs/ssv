@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
@@ -182,7 +181,7 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
 	db, err := enode.OpenDB(filepath.Join(n.dbPath, "enode"))
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not open node's peer database")
+		return nil, fmt.Errorf("could not open node's peer database: %w", err)
 	}
 	external := net.ParseIP(n.externalIP)
 	if n.externalIP == "" {

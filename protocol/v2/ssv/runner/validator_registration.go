@@ -48,36 +48,35 @@ type ValidatorRegistrationRunner struct {
 	gasLimit uint64
 }
 
-func NewValidatorRegistrationRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-	validatorRegistrationSubmitter ValidatorRegistrationSubmitter,
-	feeRecipientProvider feeRecipientProvider,
-	gasLimit uint64,
-) (Runner, error) {
-	if len(share) != 1 {
+// ValidatorRegistrationRunnerOptions bundles all dependencies required by NewValidatorRegistrationRunner.
+type ValidatorRegistrationRunnerOptions struct {
+	BaseRunnerOptions
+
+	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter
+	FeeRecipientProvider           feeRecipientProvider
+	GasLimit                       uint64
+}
+
+func NewValidatorRegistrationRunner(opts ValidatorRegistrationRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, fmt.Errorf("must have one share")
 	}
 
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
-			NetworkConfig:  networkConfig,
-			Share:          share,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
 		},
 
-		beacon:                         beacon,
-		network:                        network,
-		signer:                         signer,
-		operatorSigner:                 operatorSigner,
-		validatorRegistrationSubmitter: validatorRegistrationSubmitter,
-		feeRecipientProvider:           feeRecipientProvider,
+		beacon:                         opts.Beacon,
+		network:                        opts.Network,
+		signer:                         opts.Signer,
+		operatorSigner:                 opts.OperatorSigner,
+		validatorRegistrationSubmitter: opts.ValidatorRegistrationSubmitter,
+		feeRecipientProvider:           opts.FeeRecipientProvider,
 
-		gasLimit: gasLimit,
+		gasLimit: opts.GasLimit,
 	}, nil
 }
 
@@ -220,34 +219,10 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode validator registration partial sig message: %w", err)
-	}
+	logger.Debug("signing and broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
-
-	logger.Debug("broadcasting validator registration partial sig", zap.Any("validator_registration", vr))
-
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast partial randao sig: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast validator registration partial sig: %w", err)
 	}
 
 	return nil
@@ -288,6 +263,7 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
 func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }

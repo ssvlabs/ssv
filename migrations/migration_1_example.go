@@ -2,8 +2,8 @@ package migrations
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -29,7 +29,7 @@ var migration_1_example = Migration{
 				return err
 			}
 			if !found {
-				return errors.Errorf("the key %s is not found", string(obj.Key))
+				return fmt.Errorf("the key %s is not found", string(obj.Key))
 			}
 			logger.Debug("migration_1_example: key found", zap.String("key", string(obj.Key)), zap.String("value", string(obj.Value)))
 			return completed(txn)

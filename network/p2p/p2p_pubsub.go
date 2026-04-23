@@ -3,13 +3,13 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -98,14 +98,15 @@ func (n *p2pNetwork) SubscribeRandoms(numSubnets int) error {
 		numSubnets = commons.SubnetsCount
 	}
 
-	availableSubnetsCount := commons.SubnetsCount - n.currentSubnets.ActiveCount()
+	currentSubnets := n.currentSubnetsSnapshot()
+	availableSubnetsCount := commons.SubnetsCount - currentSubnets.ActiveCount()
 	if numSubnets > availableSubnetsCount {
 		return fmt.Errorf("not enough available subnets: requested %d, available %d", numSubnets, availableSubnetsCount)
 	}
 
 	availableSubnets := make([]uint64, 0, availableSubnetsCount)
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
-		if !n.currentSubnets.IsSet(subnet) {
+		if !currentSubnets.IsSet(subnet) {
 			availableSubnets = append(availableSubnets, subnet)
 		}
 	}

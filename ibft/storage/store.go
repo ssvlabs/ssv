@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -155,7 +154,7 @@ func (i *ParticipantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 // CleanAllInstances removes all records in old format.
 func (i *ParticipantStorage) CleanAllInstances() error {
 	if err := i.db.DropPrefix([]byte(i.oldPrefix)); err != nil {
-		return errors.Wrap(err, "failed to drop all records")
+		return fmt.Errorf("failed to drop all records: %w", err)
 	}
 
 	return nil
