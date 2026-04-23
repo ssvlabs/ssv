@@ -209,6 +209,12 @@ func TestMessageValidator_roundBelongsToAllowedSpread(t *testing.T) {
 			timeIntoSlot: roundtimer.QuickTimeout * 5,
 			round:        specqbft.FirstRound,
 		},
+		{
+			name:         "proposer bypasses allowed spread for higher rounds",
+			role:         spectypes.RoleProposer,
+			timeIntoSlot: roundtimer.QuickTimeout * 5,
+			round:        specqbft.FirstRound + 7,
+		},
 	}
 
 	for _, tc := range tt {

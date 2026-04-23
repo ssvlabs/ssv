@@ -1791,7 +1791,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		tests := map[spectypes.RunnerRole]specqbft.Round{
 			spectypes.RoleCommittee:                 13,
 			spectypes.RoleAggregator:                13,
-			spectypes.RoleProposer:                  7,
+			spectypes.RoleProposer:                  specqbft.FirstRound + 2,
 			spectypes.RoleSyncCommitteeContribution: 7,
 		}
 
@@ -1823,7 +1823,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				receivedAt := netCfg.SlotStartTime(slot).Add(timeIntoSlot)
 				_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
-				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
+				require.ErrorIs(t, err, ErrRoundTooHigh)
 			})
 		}
 	})
