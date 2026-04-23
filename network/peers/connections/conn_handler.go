@@ -2,13 +2,13 @@ package connections
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
@@ -91,7 +91,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = errors.Errorf("panic: %v", r)
+				err = fmt.Errorf("panic: %v", r)
 			}
 		}()
 

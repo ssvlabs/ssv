@@ -2,6 +2,8 @@ package streams
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core"
@@ -9,7 +11,6 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
@@ -70,17 +71,17 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	}()
 
 	if err := s.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
-		return nil, errors.Wrap(err, "could not write to stream")
+		return nil, fmt.Errorf("could not write to stream: %w", err)
 	}
 	if err := s.CloseWrite(); err != nil {
-		return nil, errors.Wrap(err, "could not close write stream")
+		return nil, fmt.Errorf("could not close write stream: %w", err)
 	}
 	res, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
 		if errors.Is(err, ErrStreamMessageTooLarge) {
 			n.observeOversizedPayload(logger, peerID, s.Protocol(), "response")
 		}
-		return nil, errors.Wrap(err, "could not read stream msg")
+		return nil, fmt.Errorf("could not read stream msg: %w", err)
 	}
 
 	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
@@ -105,14 +106,14 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		if errors.Is(err, ErrStreamMessageTooLarge) {
 			n.observeOversizedPayload(logger, s.Conn().RemotePeer(), s.Protocol(), "request")
 		}
-		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
+		return nil, nil, done, fmt.Errorf("could not read stream msg: %w", err)
 	}
 
 	return data, func(res []byte) error {
 		cp := make([]byte, len(res))
 		copy(cp, res)
 		if err := s.WriteWithTimeout(cp, n.readWriteTimeout); err != nil {
-			return errors.Wrap(err, "could not write to stream")
+			return fmt.Errorf("could not write to stream: %w", err)
 		}
 
 		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))

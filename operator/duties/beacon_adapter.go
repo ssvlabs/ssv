@@ -203,10 +203,7 @@ func (p *prefetchingBeacon) ensureProposerEpoch(ctx context.Context, epoch phase
 	const batch = 2048
 	collected := make(map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty)
 	for i := 0; i < len(indices); i += batch {
-		end := i + batch
-		if end > len(indices) {
-			end = len(indices)
-		}
+		end := min(i+batch, len(indices))
 		part := indices[i:end]
 		start := time.Now()
 		duties, err := p.inner.ProposerDuties(ctx, epoch, part)
@@ -238,10 +235,7 @@ func (p *prefetchingBeacon) ensureSyncPeriod(ctx context.Context, epoch phase0.E
 	const batch = 2048
 	collected := make(map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty)
 	for i := 0; i < len(indices); i += batch {
-		end := i + batch
-		if end > len(indices) {
-			end = len(indices)
-		}
+		end := min(i+batch, len(indices))
 		part := indices[i:end]
 		start := time.Now()
 		duties, err := p.inner.SyncCommitteeDuties(ctx, epoch, part)

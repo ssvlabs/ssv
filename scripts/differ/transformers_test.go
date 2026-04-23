@@ -52,7 +52,7 @@ One qbft.Two`
 
 func TestAll(t *testing.T) {
 	input := `func (r *ProposerRunner) ProcessPreConsensus(signedMsg *types.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing randao message")
 	}
@@ -68,7 +68,7 @@ func TestAll(t *testing.T) {
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
+		r.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
@@ -101,7 +101,7 @@ func TestAll(t *testing.T) {
 		DataSSZ: byts,
 	}
 
-	if err := r.BaseRunner.decide(r, input); err != nil {
+	if err := r.decide(r, input); err != nil {
 		return errors.Wrap(err, "qbft-decide")
 	}
 
@@ -109,7 +109,7 @@ func TestAll(t *testing.T) {
 }`
 
 	expected := `func (r *ProposerRunner) ProcessPreConsensus(signedMsg *SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing randao message")
 	}
@@ -119,7 +119,7 @@ func TestAll(t *testing.T) {
 	root := roots[0]
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
+		r.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	duty := r.GetState().CurrentDuty
@@ -145,7 +145,7 @@ func TestAll(t *testing.T) {
 		Version: ver,
 		DataSSZ: byts,
 	}
-	if err := r.BaseRunner.decide(r, input); err != nil {
+	if err := r.decide(r, input); err != nil {
 		return errors.Wrap(err, "qbft-decide")
 	}
 	return nil

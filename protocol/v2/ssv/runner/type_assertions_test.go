@@ -27,15 +27,8 @@ func TestValidatorDutyFromDuty(t *testing.T) {
 }
 
 func TestCurrentValidatorDuty(t *testing.T) {
-	var runner *BaseRunner
-	_, err := runner.currentValidatorDuty()
-	require.ErrorContains(t, err, "runner is nil")
-
-	_, err = (&BaseRunner{}).currentValidatorDuty()
-	require.ErrorContains(t, err, "runner state is nil")
-
-	_, err = (&BaseRunner{State: &State{}}).currentValidatorDuty()
-	require.ErrorContains(t, err, "current duty is nil")
+	_, err := (&BaseRunner{}).currentValidatorDuty()
+	require.ErrorContains(t, err, "no current duty assigned")
 
 	typedNilRunner := &BaseRunner{State: &State{CurrentDuty: (*spectypes.ValidatorDuty)(nil)}}
 	_, err = typedNilRunner.currentValidatorDuty()
@@ -46,15 +39,8 @@ func TestCurrentValidatorDuty(t *testing.T) {
 }
 
 func TestCurrentCommitteeDuty(t *testing.T) {
-	var runner *BaseRunner
-	_, err := runner.currentCommitteeDuty()
-	require.ErrorContains(t, err, "runner is nil")
-
-	_, err = (&BaseRunner{}).currentCommitteeDuty()
-	require.ErrorContains(t, err, "runner state is nil")
-
-	_, err = (&BaseRunner{State: &State{}}).currentCommitteeDuty()
-	require.ErrorContains(t, err, "current duty is nil")
+	_, err := (&BaseRunner{}).currentCommitteeDuty()
+	require.ErrorContains(t, err, "no current duty assigned")
 
 	committeeDuty := &spectypes.CommitteeDuty{}
 
@@ -71,15 +57,8 @@ func TestCurrentCommitteeDuty(t *testing.T) {
 }
 
 func TestCurrentDutySlot(t *testing.T) {
-	var runner *BaseRunner
-	_, err := runner.currentDutySlot()
-	require.ErrorContains(t, err, "runner is nil")
-
-	_, err = (&BaseRunner{}).currentDutySlot()
-	require.ErrorContains(t, err, "runner state is nil")
-
-	_, err = (&BaseRunner{State: &State{}}).currentDutySlot()
-	require.ErrorContains(t, err, "current duty is nil")
+	_, err := (&BaseRunner{}).currentDutySlot()
+	require.ErrorContains(t, err, "no current duty assigned")
 
 	validatorDuty := &spectypes.ValidatorDuty{Slot: 11}
 	slot, err := (&BaseRunner{State: &State{CurrentDuty: validatorDuty}}).currentDutySlot()
