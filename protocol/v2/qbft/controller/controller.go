@@ -105,7 +105,7 @@ func (c *Controller) StartNewInstance(
 	// Create & start a new instance, and also terminate all the older instances after that as "no longer relevant".
 	// NOTE: the c.markOlderInstancesIrrelevant() call comes first because `addNewInstance` might evict an instance
 	//       from c.RecentInstances, meaning c.markOlderInstancesIrrelevant() will miss it if called after.
-	c.markOlderInstancesIrrelevant()
+	c.markRecentInstancesIrrelevant()
 	newInstance := instance.NewInstance(
 		ctx,
 		logger,
@@ -126,7 +126,7 @@ func (c *Controller) StartNewInstance(
 }
 
 // markInstancesIrrelevant marks all recent instances as irrelevant.
-func (c *Controller) markOlderInstancesIrrelevant() {
+func (c *Controller) markRecentInstancesIrrelevant() {
 	for _, i := range c.RecentInstances {
 		i.MarkIrrelevant()
 	}
