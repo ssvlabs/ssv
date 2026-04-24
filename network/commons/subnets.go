@@ -41,22 +41,22 @@ func (s Subnet) BooleTopic(networkName string) string {
 }
 
 // ParseTopicSubnet extracts the subnet number from a full topic name.
-func ParseTopicSubnet(topicName string) (Subnet, error) {
+func ParseTopicSubnet(topicName string) (s Subnet, boole bool, err error) {
 	if strings.HasPrefix(topicName, alanTopicPrefix+".") {
 		trimmed := strings.TrimPrefix(topicName, alanTopicPrefix+".")
 		subnet, err := strconv.ParseUint(trimmed, 10, 64)
-		return Subnet(subnet), err
+		return Subnet(subnet), false, err
 	}
 	if strings.HasPrefix(topicName, topicRoot+"/") {
 		remainder := strings.TrimPrefix(topicName, topicRoot+"/")
 		parts := strings.SplitN(remainder, "/", 3)
 		if len(parts) != 3 || parts[1] != booleTopicFork || parts[2] == "" {
-			return 0, fmt.Errorf("invalid topic format: %s", topicName)
+			return 0, false, fmt.Errorf("invalid topic format: %s", topicName)
 		}
 		subnet, err := strconv.ParseUint(parts[2], 10, 64)
-		return Subnet(subnet), err
+		return Subnet(subnet), true, err
 	}
-	return 0, fmt.Errorf("invalid topic format: %s", topicName)
+	return 0, false, fmt.Errorf("invalid topic format: %s", topicName)
 }
 
 // BooleCommitteeSubnet returns the subnet for the given committee calculated as (lowestHash % bigIntSubnetsCount).

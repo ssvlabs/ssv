@@ -278,7 +278,7 @@ func newTrimTestNetwork(host host.Host, topicsCtrl topics.Controller, idx peers.
 		}
 		if topicsCtrl != nil {
 			for _, topic := range topicsCtrl.Topics() {
-				subnet, err := commons.ParseTopicSubnet(topic)
+				subnet, _, err := commons.ParseTopicSubnet(topic)
 				if err != nil || subnet >= commons.SubnetsCount {
 					continue
 				}

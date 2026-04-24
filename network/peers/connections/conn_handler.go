@@ -145,7 +145,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 				}
 			}
 
-			if !ch.sharesEnoughSubnets(conn) {
+			if !ch.inboundSharesEnoughSubnets(conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
 
@@ -232,7 +232,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 	}
 }
 
-func (ch *connHandler) sharesEnoughSubnets(conn libp2pnetwork.Conn) bool {
+func (ch *connHandler) inboundSharesEnoughSubnets(conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
 
 	peerSubnets, ok := ch.subnetsIndex.GetPeerSubnets(pid)
@@ -251,5 +251,13 @@ func (ch *connHandler) sharesEnoughSubnets(conn libp2pnetwork.Conn) bool {
 		zap.String("peer_subnets", peerSubnets.StringHumanReadable()),
 	)
 
+	// TODO: remove this comment as irrelevant past Boole-fork
+	// During Boole-fork transition period we are connected to Alan-topics and Boole-topics some of which can map
+	// onto the same subnet (by construction). This means we might be accepting inbound connections when we shouldn't
+	// be - it's not a big deal in practice since SSV nodes typically run well below their configured MaxPeers limit
+	// (meaning SSV nodes can afford connecting a bunch of extra useless peers). Exporter node running at MaxPeers
+	// limit might be affected by this to a higher extent, but it is not mission-critical to warrant a dedicated
+	// handling due to the Alan->Boole transition period lasting for ~1 epoch, and honest peers will stop participating
+	// in Alan topics after that - eventually the 1:1 mapping between Boole topic <-> subnet gets established.
 	return len(mySubnets.SharedSubnetsN(peerSubnets, 1)) == 1
 }

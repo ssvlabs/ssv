@@ -373,19 +373,19 @@ func TestConnHandlerSharesEnoughSubnets(t *testing.T) {
 	}
 	conn := &testConn{remotePeer: pid}
 
-	require.False(t, handler.sharesEnoughSubnets(conn))
+	require.False(t, handler.inboundSharesEnoughSubnets(conn))
 
 	peerSubnets := commons.ZeroSubnets
 	peerSubnets.Set(2)
 	subnetsIndex.UpdatePeerSubnets(pid, peerSubnets)
-	require.True(t, handler.sharesEnoughSubnets(conn))
+	require.True(t, handler.inboundSharesEnoughSubnets(conn))
 
 	mySubnets := commons.ZeroSubnets
 	mySubnets.Set(3)
 	handler.subnetsProvider = func() commons.Subnets { return mySubnets }
-	require.False(t, handler.sharesEnoughSubnets(conn))
+	require.False(t, handler.inboundSharesEnoughSubnets(conn))
 
 	mySubnets.Set(2)
 	handler.subnetsProvider = func() commons.Subnets { return mySubnets }
-	require.True(t, handler.sharesEnoughSubnets(conn))
+	require.True(t, handler.inboundSharesEnoughSubnets(conn))
 }
