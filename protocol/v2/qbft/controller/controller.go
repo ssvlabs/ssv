@@ -143,8 +143,8 @@ func (c *Controller) ProcessMsg(
 		return nil, fmt.Errorf("could not create ProcessingMessage from signed message: %w", err)
 	}
 
-	if err := c.BaseMsgValidation(msg); err != nil {
-		return nil, fmt.Errorf("invalid msg: %w", err)
+	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+		return nil, spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
 	if c.isDecidedMsg(msg) {
@@ -186,16 +186,6 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	}
 
 	return decidedMsg, nil
-}
-
-// BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
-	// verify msg belongs to controller
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
-		return spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
-	}
-
-	return nil
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages
