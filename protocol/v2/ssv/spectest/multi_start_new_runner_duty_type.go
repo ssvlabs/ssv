@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -18,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -96,28 +96,28 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 
 	switch r := test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		for _, inst := range r.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.HasStartedQBFTInstance() {
 			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.AggregatorRunner:
-		for _, inst := range r.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.HasStartedQBFTInstance() {
 			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.ProposerRunner:
-		for _, inst := range r.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.HasStartedQBFTInstance() {
 			r.State.RunningInstance.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range r.QBFTController.StoredInstances {
+		for _, inst := range r.QBFTController.RecentInstances {
 			inst.ValueChecker = protocoltesting.TestingValueChecker{}
 		}
 		if r.HasStartedQBFTInstance() {
@@ -182,8 +182,8 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ phase0.Slot) roundtimer.OnRoundTimeoutF {
-		return func(specqbft.Round) {}
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
 	})
 	return test.Runner.StartNewDuty(context.TODO(), logger, test.Duty, test.Threshold)
 }

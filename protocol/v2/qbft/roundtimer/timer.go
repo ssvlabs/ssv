@@ -94,27 +94,36 @@ func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time
 // Created per duty with the callback wired at construction.
 // Implements specqbft.Timer.
 type RoundTimer struct {
-	mtx          *sync.RWMutex
-	ctx          context.Context
-	timer        *time.Timer
-	callback     OnRoundTimeoutF
-	slot         phase0.Slot
-	round        specqbft.Round
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	role         spectypes.RunnerRole
 	beaconConfig *networkconfig.Beacon
+
+	// callback is a func called when currently stored round times out.
+	callback OnRoundTimeoutF
+
+	mtx   *sync.RWMutex
+	slot  phase0.Slot
+	round specqbft.Round
+	timer *time.Timer
 }
 
 // New creates a per-duty RoundTimer with the callback wired at construction.
 // callback must not be nil.
 func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, slot phase0.Slot, callback OnRoundTimeoutF) *RoundTimer {
+	ctx, cancel := context.WithCancel(ctx)
+
 	return &RoundTimer{
-		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
-		slot:         slot,
-		round:        specqbft.NoRound, // set/updated in TimeoutForRound
-		callback:     callback,
-		role:         role,
+		cancel:       cancel,
 		beaconConfig: beaconConfig,
+		role:         role,
+		callback:     callback,
+		mtx:          &sync.RWMutex{},
+		slot:         slot,
+		round:        specqbft.NoRound, // set in TimeoutForRound
+		timer:        nil,              // set in TimeoutForRound
 	}
 }
 
@@ -181,4 +190,13 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 		}
 		t.callback(round)
 	})
+}
+
+func (t *RoundTimer) Stop() {
+	t.cancel()
+	t.mtx.Lock()
+	if t.timer != nil {
+		t.timer.Stop()
+	}
+	t.mtx.Unlock()
 }

@@ -55,17 +55,50 @@ func TestProcessMsgDispatchCommitUpdatesDecision(t *testing.T) {
 		env.commit(1, 2, root),
 	)
 
-	decided, decidedValue, aggregated, err := env.inst.ProcessMsg(
+	newlyDecided, newlyDecidedValue, aggregated, err := env.inst.ProcessMsg(
 		context.Background(),
 		zap.NewNop(),
 		env.commit(1, 3, root),
 	)
 	require.NoError(t, err)
-	require.True(t, decided)
-	require.Equal(t, fullData, decidedValue)
+	require.True(t, newlyDecided)
+	require.Equal(t, fullData, newlyDecidedValue)
 	require.NotNil(t, aggregated)
 	require.True(t, env.inst.State.Decided)
 	require.Equal(t, fullData, env.inst.State.DecidedValue)
+}
+
+func TestProcessMsgLateCommitAfterDecisionReturnsNoNewDecision(t *testing.T) {
+	env := newInstanceTestEnv(t, 4)
+	env.setLeader(1)
+
+	fullData := []byte("commit-value")
+	root := env.hash(fullData)
+	env.inst.State.ProposalAcceptedForCurrentRound = env.proposal(1, 1, fullData, root, nil, nil)
+	env.inst.State.Decided = true
+	env.inst.State.DecidedValue = fullData
+	env.addMessages(
+		env.inst.State.CommitContainer,
+		env.commit(1, 1, root),
+		env.commit(1, 2, root),
+		env.commit(1, 3, root),
+	)
+
+	newlyDecided, newlyDecidedValue, aggregated, err := env.inst.ProcessMsg(
+		context.Background(),
+		zap.NewNop(),
+		env.commit(1, 4, root),
+	)
+	require.NoError(t, err)
+	require.False(t, newlyDecided)
+	require.Nil(t, newlyDecidedValue)
+	require.Nil(t, aggregated)
+	require.True(t, env.inst.State.Decided)
+	require.Equal(t, fullData, env.inst.State.DecidedValue)
+
+	signers, msgs := env.inst.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(1, root)
+	require.Len(t, signers, 4)
+	require.Len(t, msgs, 4)
 }
 
 func TestProcessMsgConcurrentAccess(t *testing.T) {

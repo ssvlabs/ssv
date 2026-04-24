@@ -150,7 +150,8 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
-	r.SetTimeoutFunc(c.onTimeout)
+	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.DomainType, c.CommitteeMember.CommitteeID[:], spectypes.RoleCommittee)
+	r.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
 	c.Runners[duty.Slot] = r
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
@@ -335,7 +336,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
-			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+			if err := dutyRunner.OnQBFTRoundTimeout(ctx, logger, timeoutData); err != nil {
 				return fmt.Errorf("event message: process timeout event: %w", err)
 			}
 

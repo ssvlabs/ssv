@@ -148,7 +148,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	// to perform this aggregation duty or not
 	ok := r.IsAggregator(r.NetworkConfig.TargetAggregatorsPerCommittee, duty.CommitteeLength, fullSig)
 	if !ok {
-		r.finishDuty()
+		r.markDutyFinished()
 		r.measurements.EndDutyFlow()
 		recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, 0)
 		return nil
@@ -354,7 +354,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span.AddEvent(submittedSignedAggregateProofEvent)
 	logger.Debug(submittedSignedAggregateProofEvent, fields.Took(time.Since(start)))
 
-	r.finishDuty()
+	r.markDutyFinished()
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleAggregator, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
