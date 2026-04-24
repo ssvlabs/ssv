@@ -261,7 +261,7 @@ func formatInvalidMessageStats(filtered []*topicScoreSnapshot) string {
 			b.WriteString(" ")
 		}
 		label := snapshot.topic
-		if subnet, err := commons.ParseTopicSubnet(snapshot.topic); err == nil {
+		if subnet, _, err := commons.ParseTopicSubnet(snapshot.topic); err == nil {
 			label = strconv.FormatUint(uint64(subnet), 10)
 		}
 		fmt.Fprintf(
