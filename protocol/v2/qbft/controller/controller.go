@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -141,26 +140,18 @@ func (c *Controller) ProcessMsg(
 ) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
-		return nil, errors.New("could not create ProcessingMessage from signed message")
+		return nil, fmt.Errorf("could not create ProcessingMessage from signed message: %w", err)
 	}
 
 	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, fmt.Errorf("invalid msg: %w", err)
 	}
 
-	/**
-	Main controller processing flow
-	_______________________________
-	All decided msgs are processed the same, out of instance.
-	All valid future msgs are saved in a container and might be referenced later if/when a not-future message arrives.
-	All other msgs (not future or decided) are processed normally by an existing instance (if found).
-	*/
 	if c.isDecidedMsg(msg) {
 		return c.UponDecided(logger, msg, roundTimerF)
 	}
 
-	isFutureMsg := c.isFutureMessage(msg)
-	if isFutureMsg {
+	if c.isFutureMessage(msg) {
 		return nil, NewRetryableError(spectypes.WrapError(spectypes.FutureMessageErrorCode, ErrFutureConsensusMsg))
 	}
 
