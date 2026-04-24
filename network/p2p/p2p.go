@@ -833,7 +833,7 @@ func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 
 	return scores
 }
 
-// topicSubnet parses a topic name into a subnet index and logs malformed topics.
+// topicSubnet parses a topic name as a subnet index.
 func (n *p2pNetwork) topicSubnet(topic string) (s commons.Subnet, boole bool, err error) {
 	s, boole, err = commons.ParseTopicSubnet(topic)
 	if err != nil {

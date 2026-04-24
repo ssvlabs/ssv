@@ -22,8 +22,8 @@ func createSubnets(activeSubnets ...commons.Subnet) commons.Subnets {
 }
 
 // createSubnetPeers creates a SubnetPeers with the specified number of peers on the
-// Alan side of each subnet. Boole side stays zero. Use createBooleSubnetPeers or
-// createMixedSubnetPeers to populate the Boole side.
+// Alan side of each subnet. Boole side stays zero. Use createBooleSubnetPeers to
+// populate the Boole side.
 func createSubnetPeers(peerCounts map[int]uint16) SubnetPeers {
 	var peers SubnetPeers
 	for subnet, count := range peerCounts {
