@@ -46,10 +46,10 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		cr.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		cr.ValCheck = valCheck
-		for _, inst := range cr.QBFTController.StoredInstances {
+		for _, inst := range cr.QBFTController.RecentInstances {
 			inst.ValueChecker = valCheck
 		}
-		if cr.State != nil && cr.State.RunningInstance != nil {
+		if cr.HasStartedQBFTInstance() {
 			cr.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.AggregatorRunner:
@@ -57,10 +57,10 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		ar.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		ar.ValCheck = valCheck
-		for _, inst := range ar.QBFTController.StoredInstances {
+		for _, inst := range ar.QBFTController.RecentInstances {
 			inst.ValueChecker = valCheck
 		}
-		if ar.State != nil && ar.State.RunningInstance != nil {
+		if ar.HasStartedQBFTInstance() {
 			ar.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ProposerRunner:
@@ -68,10 +68,10 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		pr.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		pr.ValCheck = valCheck
-		for _, inst := range pr.QBFTController.StoredInstances {
+		for _, inst := range pr.QBFTController.RecentInstances {
 			inst.ValueChecker = valCheck
 		}
-		if pr.State != nil && pr.State.RunningInstance != nil {
+		if pr.HasStartedQBFTInstance() {
 			pr.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
@@ -79,10 +79,10 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 		scr.NetworkConfig = networkconfig.TestNetwork
 		valCheck := createValueChecker(r, runnerType)
 		scr.ValCheck = valCheck
-		for _, inst := range scr.QBFTController.StoredInstances {
+		for _, inst := range scr.QBFTController.RecentInstances {
 			inst.ValueChecker = valCheck
 		}
-		if scr.State != nil && scr.State.RunningInstance != nil {
+		if scr.HasStartedQBFTInstance() {
 			scr.State.RunningInstance.ValueChecker = valCheck
 		}
 	case *runner.ValidatorRegistrationRunner:
@@ -102,7 +102,7 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 	}
 	if state := pr.State; state != nil {
 		state.DecidedValue = normalizeProposerConsensusValue(state.DecidedValue)
-		if state.RunningInstance != nil {
+		if pr.HasStartedQBFTInstance() {
 			state.RunningInstance.StartValue = normalizeProposerConsensusValue(state.RunningInstance.StartValue)
 			if state.RunningInstance.State != nil {
 				state.RunningInstance.State.LastPreparedValue = normalizeProposerConsensusValue(state.RunningInstance.State.LastPreparedValue)
@@ -113,7 +113,7 @@ func normalizeExpectedProposerStartValues(pr *runner.ProposerRunner) {
 	if pr.QBFTController == nil {
 		return
 	}
-	for _, inst := range pr.QBFTController.StoredInstances {
+	for _, inst := range pr.QBFTController.RecentInstances {
 		if inst == nil {
 			continue
 		}

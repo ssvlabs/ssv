@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -12,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -26,7 +26,8 @@ import (
 )
 
 const (
-	defaultDiscoveryInterval = time.Millisecond * 2
+	defaultDiscoveryInterval = 100 * time.Millisecond
+	publishENRInterval       = 500 * time.Millisecond
 	publishENRTimeout        = time.Minute
 )
 
@@ -138,7 +139,10 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 	if err != nil {
 		return nil, err
 	}
-	pk := commons.ECDSAPubFromInterface(pki)
+	pk, err := commons.ECDSAPubFromInterface(pki)
+	if err != nil {
+		return nil, fmt.Errorf("convert peer public key: %w", err)
+	}
 	id := enode.PubkeyToIDV4(pk)
 	logger = logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))
@@ -245,14 +249,14 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 		pid, err = PeerID(e.Node)
 		if err != nil {
 			recordPeerSkipped(ctx, skipReasonInvalidPeerID)
-			return newPeerSkipError(skipReasonInvalidPeerID, errors.Wrap(err, "could not get peer ID from node record"))
+			return newPeerSkipError(skipReasonInvalidPeerID, fmt.Errorf("could not get peer ID from node record: %w", err))
 		}
 	}
 
 	isSSV, err := readSSVNodeFlag(e.Node)
 	if err != nil {
 		recordPeerSkipped(ctx, skipReasonNotSSV)
-		return newPeerSkipError(skipReasonNotSSV, errors.Wrap(err, "could not read ssv entry"))
+		return newPeerSkipError(skipReasonNotSSV, fmt.Errorf("could not read ssv entry: %w", err))
 	}
 	if !isSSV {
 		recordPeerSkipped(ctx, skipReasonNotSSV)
@@ -264,7 +268,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
 		recordPeerSkipped(ctx, skipReasonInvalidDomainType)
-		return newPeerSkipError(skipReasonInvalidDomainType, errors.Wrap(err, "could not read domain type"))
+		return newPeerSkipError(skipReasonInvalidDomainType, fmt.Errorf("could not read domain type: %w", err))
 	}
 	if dvs.ssvConfig.DomainType != nodeDomainType {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
@@ -325,20 +329,20 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	opts := discOpts.DiscV5Opts
 	if err := opts.Validate(); err != nil {
-		return errors.Wrap(err, "invalid opts")
+		return fmt.Errorf("invalid opts: %w", err)
 	}
 
 	ipAddr, bindIP, n := opts.IPs()
 
 	udpConn, err := newUDPListener(bindIP, opts.Port, n)
 	if err != nil {
-		return errors.Wrap(err, "could not listen UDP")
+		return fmt.Errorf("could not listen UDP: %w", err)
 	}
 	dvs.conn = udpConn
 
 	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
 	if err != nil {
-		return errors.Wrap(err, "could not create local node")
+		return fmt.Errorf("could not create local node: %w", err)
 	}
 
 	// Get the protocol ID, or set to default if not provided
@@ -360,7 +364,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 
 	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
 	if err != nil {
-		return errors.Wrap(err, "could not create discV5 listener")
+		return fmt.Errorf("could not create discV5 listener: %w", err)
 	}
 
 	dvs.logger.Debug("started discv5 post-fork listener (UDP)",
@@ -379,7 +383,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 
 	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
 	if err != nil {
-		return errors.Wrap(err, "could not create discV5 pre-fork listener")
+		return fmt.Errorf("could not create discV5 pre-fork listener: %w", err)
 	}
 
 	dvs.logger.Debug("started discv5 pre-fork listener (UDP)",
@@ -447,7 +451,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err 
 	}
 	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), subnets, nil)
 	if err != nil {
-		return false, errors.Wrap(err, "could not update ENR")
+		return false, fmt.Errorf("could not update ENR: %w", err)
 	}
 	if isUpdated {
 		dvs.subnets = updatedSubnets
@@ -464,7 +468,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, er
 	}
 	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), nil, subnets)
 	if err != nil {
-		return false, errors.Wrap(err, "could not update ENR")
+		return false, fmt.Errorf("could not update ENR: %w", err)
 	}
 	if isUpdated {
 		dvs.subnets = updatedSubnets
@@ -528,7 +532,7 @@ func (dvs *DiscV5Service) PublishENR() {
 		}
 		pings++
 		peerIDs[e.AddrInfo.ID] = struct{}{}
-	}, time.Millisecond*100, dvs.ssvNodeFilter(), dvs.badNodeFilter())
+	}, publishENRInterval, dvs.ssvNodeFilter(), dvs.badNodeFilter())
 
 	// Log metrics.
 	dvs.logger.Debug("done publishing ENR",
@@ -543,11 +547,11 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 	opts := discOpts.DiscV5Opts
 	localNode, err := createLocalNode(opts.NetworkKey, opts.StoragePath, ipAddr, opts.Port, opts.TCPPort)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create local node")
+		return nil, fmt.Errorf("could not create local node: %w", err)
 	}
 	err = addAddresses(localNode, discOpts.HostAddress, discOpts.HostDNS)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not add configured addresses")
+		return nil, fmt.Errorf("could not add configured addresses: %w", err)
 	}
 	err = DecorateNode(
 		localNode,
@@ -558,7 +562,7 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not decorate local node")
+		return nil, fmt.Errorf("could not decorate local node: %w", err)
 	}
 
 	logFields := []zapcore.Field{
@@ -583,7 +587,7 @@ func newUDPListener(bindIP net.IP, port uint16, network string) (*net.UDPConn, e
 	}
 	conn, err := net.ListenUDP(network, udpAddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not listen to UDP")
+		return nil, fmt.Errorf("could not listen to UDP: %w", err)
 	}
 	return conn, nil
 }

@@ -1,11 +1,11 @@
 package discovery
 
 import (
+	"errors"
 	"net"
 	"net/netip"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
-	"github.com/pkg/errors"
 )
 
 // SharedUDPConn implements a shared connection. Write sends messages to the underlying connection while read returns

@@ -7,6 +7,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -24,9 +26,9 @@ func TestController_Marshaling(t *testing.T) {
 	require.NoError(t, err)
 
 	decoded := &Controller{
-		// Since StoredInstances is an interface, it wouldn't be decoded properly.
-		// Therefore, we set it to NewInstanceContainer which implements json.Unmarshaler
-		StoredInstances: make(InstanceContainer, 0, InstanceContainerTestCapacity),
+		// Instances is a concrete slice type with custom UnmarshalJSON — we must pre-size it so
+		// unmarshaling populates it correctly (the capacity bounds how many instances are kept).
+		RecentInstances: make(Instances, 0, InstancesTestCapacity),
 	}
 	require.NoError(t, decoded.Decode(byts))
 
@@ -35,7 +37,7 @@ func TestController_Marshaling(t *testing.T) {
 	require.EqualValues(t, byts, bytsDecoded)
 }
 
-func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
+func TestController_OnQBFTRoundTimeoutWithRoundCheck(t *testing.T) {
 	// Initialize logger
 	logger := log.TestLogger(t)
 
@@ -43,7 +45,6 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	testConfig := &qbft.Config{
 		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Timer:        roundtimer.NewTestingTimer(),
 		CutOffRound:  spectestingutils.TestingCutOffRound,
 	}
 
@@ -55,12 +56,16 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	share := spectestingutils.TestingCommitteeMember(keySet)
 	inst := instance.NewInstance(
+		t.Context(),
 		logger,
 		testConfig,
 		share,
 		identifier,
 		specqbft.FirstHeight,
 		spectestingutils.TestingOperatorSigner(keySet),
+		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 
 	// Initialize Controller
@@ -74,10 +79,10 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Simulate a scenario where the instance is at a higher round
 	inst.State.Round = specqbft.Round(2)
-	contr.StoredInstances.addNewInstance(inst)
+	contr.RecentInstances.addNewInstance(inst)
 
-	// Call OnTimeout and capture the error
-	err := contr.OnTimeout(context.TODO(), logger, timeoutData)
+	// Call OnQBFTRoundTimeout and capture the error
+	err := contr.OnQBFTRoundTimeout(context.TODO(), logger, timeoutData)
 
 	// Assert that the error is nil and the round did not bump
 	require.NoError(t, err)
@@ -86,8 +91,8 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	// Simulate a scenario where the instance is at the same or lower round
 	inst.State.Round = specqbft.FirstRound
 
-	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(context.TODO(), logger, timeoutData)
+	// Call OnQBFTRoundTimeout and capture the error
+	err = contr.OnQBFTRoundTimeout(context.TODO(), logger, timeoutData)
 
 	// Assert that the error is nil and the round did bump
 	require.NoError(t, err)

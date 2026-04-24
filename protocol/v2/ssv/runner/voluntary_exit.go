@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/trace"
@@ -17,7 +17,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -38,34 +37,39 @@ type VoluntaryExitRunner struct {
 	voluntaryExit *phase0.VoluntaryExit
 }
 
-func NewVoluntaryExitRunner(
-	networkConfig *networkconfig.Network,
-	share map[phase0.ValidatorIndex]*spectypes.Share,
-	beacon beacon.BeaconNode,
-	network specqbft.Network,
-	signer ekm.BeaconSigner,
-	operatorSigner ssvtypes.OperatorSigner,
-) (Runner, error) {
-	if len(share) != 1 {
+// VoluntaryExitRunnerOptions bundles all dependencies required by NewVoluntaryExitRunner.
+// It currently only embeds BaseRunnerOptions since the runner has no role-specific fields,
+// but wrapping it keeps the constructor signature consistent with other runners.
+type VoluntaryExitRunnerOptions struct {
+	BaseRunnerOptions
+}
+
+func NewVoluntaryExitRunner(opts VoluntaryExitRunnerOptions) (Runner, error) {
+	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
-			NetworkConfig:  networkConfig,
-			Share:          share,
+			NetworkConfig:  opts.NetworkConfig,
+			Share:          opts.Share,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
+		beacon:         opts.Beacon,
+		network:        opts.Network,
+		signer:         opts.Signer,
+		operatorSigner: opts.OperatorSigner,
 	}, nil
 }
 
 func (r *VoluntaryExitRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
-	return r.baseStartNewNonBeaconDuty(ctx, logger, r, duty.(*spectypes.ValidatorDuty), quorum)
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	return r.baseStartNewNonBeaconDuty(ctx, logger, r, validatorDuty, quorum)
 }
 
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
@@ -126,7 +130,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
-	r.State.Finished = true
+	r.markDutyFinished()
 	const dutyFinishedEvent = "✔️successfully finished duty processing"
 	logger.Info(dutyFinishedEvent)
 	span.AddEvent(dutyFinishedEvent)
@@ -143,9 +147,14 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 }
 
 func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	vr, err := r.calculateVoluntaryExit()
+	validatorDuty, err := r.currentValidatorDuty()
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate voluntary exit")
+		return nil, spectypes.DomainError, fmt.Errorf("current validator duty: %w", err)
+	}
+
+	vr, err := r.calculateVoluntaryExit(validatorDuty)
+	if err != nil {
+		return nil, spectypes.DomainError, fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
 	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
 }
@@ -159,7 +168,12 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	// Reuse the existing span instead of generating new one to keep tracing-data lightweight.
 	span := trace.SpanFromContext(ctx)
 
-	voluntaryExit, err := r.calculateVoluntaryExit()
+	validatorDuty, err := validatorDutyFromDuty(duty)
+	if err != nil {
+		return err
+	}
+
+	voluntaryExit, err := r.calculateVoluntaryExit(validatorDuty)
 	if err != nil {
 		return fmt.Errorf("could not calculate voluntary exit: %w", err)
 	}
@@ -170,9 +184,9 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 		ctx,
 		r,
 		r.NetworkConfig,
-		duty.(*spectypes.ValidatorDuty),
+		validatorDuty,
 		voluntaryExit,
-		duty.DutySlot(),
+		validatorDuty.DutySlot(),
 		spectypes.DomainVoluntaryExit,
 	)
 	if err != nil {
@@ -181,37 +195,14 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.VoluntaryExitPartialSig,
-		Slot:     duty.DutySlot(),
+		Slot:     validatorDuty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
-	encodedMsg, err := msgs.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode PartialSignatureMessages: %w", err)
-	}
+	logger.Debug("signing and broadcasting voluntary exit partial sig", fields.Slot(duty.DutySlot()))
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   msgID,
-		Data:    encodedMsg,
-	}
-
-	span.AddEvent("signing SSV message")
-	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
-	if err != nil {
-		return fmt.Errorf("could not sign SSVMessage: %w", err)
-	}
-
-	msgToBroadcast := &spectypes.SignedSSVMessage{
-		Signatures:  [][]byte{sig},
-		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
-		SSVMessage:  ssvMsg,
-	}
-
-	span.AddEvent("broadcasting signed SSV message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return fmt.Errorf("can't broadcast signedPartialMsg with VoluntaryExit: %w", err)
+	if err := r.signAndBroadcastPartialSigMsgs(ctx, r.network, r.operatorSigner, r.GetShare().ValidatorPubKey[:], msgs); err != nil {
+		return fmt.Errorf("could not sign/broadcast voluntary exit partial sig: %w", err)
 	}
 
 	// stores value for later using in ProcessPreConsensus
@@ -221,12 +212,14 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 }
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
-func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.NetworkConfig.EstimatedEpochAtSlot(r.State.CurrentDuty.DutySlot())
-	validatorIndex := r.State.CurrentDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDuty) (*phase0.VoluntaryExit, error) {
+	if duty == nil {
+		return nil, fmt.Errorf("validator duty is nil")
+	}
+
 	return &phase0.VoluntaryExit{
-		Epoch:          epoch,
-		ValidatorIndex: validatorIndex,
+		Epoch:          r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot()),
+		ValidatorIndex: duty.ValidatorIndex,
 	}, nil
 }
 
@@ -238,16 +231,10 @@ func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
-func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	for _, share := range r.Share {
-		return share
-	}
-	return nil
-}
-
 func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
+
 func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return r.operatorSigner
 }
@@ -294,7 +281,7 @@ func (r *VoluntaryExitRunner) Decode(data []byte) error {
 func (r *VoluntaryExitRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode VoluntaryExitRunner")
+		return [32]byte{}, fmt.Errorf("could not encode VoluntaryExitRunner: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

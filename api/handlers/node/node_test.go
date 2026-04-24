@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,27 +14,26 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/hprobe"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
 // CreateTestNode builds a test Node using a local network.
 func CreateTestNode(t *testing.T) *Node {
-	nodeMock := &NodeMock{}
-	nodeMock.HealthyMock.Store(nil)
-	nodeProber := nodeprobe.New(zap.L())
-	const node1 = "node_1"
-	const node2 = "node_2"
-	const node3 = "node_3"
-	nodeProber.AddNode(node1, nodeMock, 10*time.Second, 5, 0)
-	nodeProber.AddNode(node2, nodeMock, 10*time.Second, 5, 0)
-	nodeProber.AddNode(node3, nodeMock, 10*time.Second, 5, 0)
+	componentMock := &ComponentMock{}
+	componentMock.HealthyMock.Store(nil)
+	healthProber := hprobe.NewHealthProber(zap.L())
+	const component1 = "component_1"
+	const component2 = "component_2"
+	const component3 = "component_3"
+	healthProber.AddComponent(component1, componentMock, 10*time.Second, 5, 0)
+	healthProber.AddComponent(component2, componentMock, 10*time.Second, 5, 0)
+	healthProber.AddComponent(component3, componentMock, 10*time.Second, 5, 0)
 
 	pIndex := &MockPeersIndex{
 		self: &records.NodeInfo{
@@ -97,19 +97,19 @@ func CreateTestNode(t *testing.T) *Node {
 		pIndex,
 		net,
 		tIndex,
-		nodeProber,
-		node1,
-		node2,
-		node3,
+		healthProber,
+		component1,
+		component2,
+		component3,
 	)
 }
 
-// NodeMock is a dummy implementation of nodeprobe.Node.
-type NodeMock struct {
+// ComponentMock is a dummy implementation of hprobe component.
+type ComponentMock struct {
 	HealthyMock atomic.Pointer[error]
 }
 
-func (nm *NodeMock) Healthy(context.Context) error {
+func (nm *ComponentMock) Healthy(context.Context) error {
 	if err := nm.HealthyMock.Load(); err != nil {
 		return *err
 	}

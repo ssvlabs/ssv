@@ -116,7 +116,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 func TestSetupRunnersExporter(t *testing.T) {
 	runners, err := SetupRunners(
 		t.Context(),
-		log.TestLogger(t),
 		&types.SSVShare{},
 		nil,
 		nil,
@@ -977,7 +976,10 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 	if err != nil {
 		return nil, func() {}
 	}
-	s := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	s, err := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	if err != nil {
+		return nil, func() {}
+	}
 	return s, func() {
 		db.Close()
 	}

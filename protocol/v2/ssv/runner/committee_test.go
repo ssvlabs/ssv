@@ -19,6 +19,8 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -129,23 +131,30 @@ func newCommitteeRunnerEnv(
 		doppelganger = &doppelgangerStub{}
 	}
 
-	runnerI, err := NewCommitteeRunner(
-		networkconfig.TestNetwork,
-		shareMap,
-		sharePubKeys,
-		controller,
-		beacon,
-		network,
-		signer,
-		spectestingutils.NewOperatorSigner(sampleKey, 1),
-		guard,
-		doppelganger,
-	)
+	runnerI, err := NewCommitteeRunner(CommitteeRunnerOptions{
+		BaseRunnerOptions: BaseRunnerOptions{
+			NetworkConfig:  networkconfig.TestNetwork,
+			Share:          shareMap,
+			Beacon:         beacon,
+			Network:        network,
+			Signer:         signer,
+			OperatorSigner: spectestingutils.NewOperatorSigner(sampleKey, 1),
+		},
+		AttestingValidators: sharePubKeys,
+		QBFTController:      controller,
+		DutyGuard:           guard,
+		DoppelgangerHandler: doppelganger,
+	})
 	require.NoError(t, err)
+
+	crunner := runnerI.(*CommitteeRunner)
+	crunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
+	})
 
 	return &committeeRunnerEnv{
 		logger:     logger,
-		runner:     runnerI.(*CommitteeRunner),
+		runner:     crunner,
 		beacon:     beacon,
 		network:    network,
 		keySetMap:  keySetMap,
@@ -259,7 +268,7 @@ func TestCommitteeRunnerExecuteDuty_FetchesAttestationDataAndStartsConsensus(t *
 	env := newCommitteeRunnerEnv(t, []int{1}, &committeeDutyGuardStub{}, &doppelgangerStub{})
 	duty := spectestingutils.TestingAttesterDuty(spec.DataVersionElectra)
 
-	env.runner.baseSetupForNewDuty(duty, env.sampleKey.Threshold)
+	env.runner.State = NewRunnerState(env.sampleKey.Threshold, duty)
 
 	require.NoError(t, env.runner.executeDuty(context.Background(), env.logger, duty))
 	require.NotNil(t, env.runner.ValCheck)

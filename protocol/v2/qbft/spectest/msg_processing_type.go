@@ -15,10 +15,13 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -32,12 +35,16 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
+		t.Context(),
 		logger,
 		protocoltesting.TestingConfig(logger, ks),
 		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
 		signer,
+		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 	pre.ValueChecker = protocoltesting.TestingValueChecker{}
 	require.NoError(t, pre.Decode(preByts))
@@ -90,7 +97,7 @@ func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectes
 	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	test.PostState, err = typescomparable.UnmarshalStateComparison(specDir, test.TestName(),
-		reflect.TypeOf(test).String(),
+		reflect.TypeFor[*spectests.MsgProcessingSpecTest]().String(),
 		&specqbft.State{})
 	require.NoError(t, err)
 

@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -150,7 +150,8 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
-	r.SetTimeoutFunc(c.onTimeout)
+	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.DomainType, c.CommitteeMember.CommitteeID[:], spectypes.RoleCommittee)
+	r.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
 	c.Runners[duty.Slot] = r
 
 	// Initialize the corresponding queue preemptively (so we can skip this during duty execution).
@@ -171,7 +172,7 @@ func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queueContaine
 		q = queueContainer{
 			Q: queue.New(
 				logger,
-				1000,
+				defaultValidatorQueueSize,
 				queue.WithInboxSizeMetric(
 					queue.InboxSizeMetric,
 					queue.CommitteeQueueMetricType,
@@ -325,7 +326,9 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			dutyRunner, found := c.Runners[slot]
 			c.mtx.RUnlock()
 			if !found {
-				return fmt.Errorf("event message: no committee runner found for slot %d", slot)
+				// Old runners are pruned, timeout-event issuer is unaware of that - that's why we can end up here
+				logger.Debug("event message: timeout event arrived, but targeted runner not found (likely was pruned)")
+				return nil
 			}
 
 			timeoutData, err := eventMsg.GetTimeoutData()
@@ -333,7 +336,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
-			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+			if err := dutyRunner.OnQBFTRoundTimeout(ctx, logger, timeoutData); err != nil {
 				return fmt.Errorf("event message: process timeout event: %w", err)
 			}
 
@@ -381,7 +384,7 @@ func (c *Committee) Decode(data []byte) error {
 func (c *Committee) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := c.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, fmt.Errorf("could not encode state: %w", err)
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil

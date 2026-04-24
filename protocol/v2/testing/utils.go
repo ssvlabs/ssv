@@ -12,7 +12,6 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
 type TestingValueChecker struct{}
@@ -37,7 +36,6 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *q
 			return 1
 		},
 		Network:     testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
-		Timer:       roundtimer.NewTestingTimer(),
 		CutOffRound: testingutils.TestingCutOffRound,
 	}
 }
@@ -80,6 +78,6 @@ func NewTestingQBFTController(
 		testingutils.TestingOperatorSigner(keySet),
 		fullNode,
 	)
-	ctrl.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
+	ctrl.RecentInstances = make(controller.Instances, 0, controller.InstancesTestCapacity)
 	return ctrl
 }
