@@ -282,6 +282,25 @@ func TestPebbleDB_GC(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPebbleDB_FullGC_EmptyDB(t *testing.T) {
+	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	require.NoError(t, db.FullGC(t.Context()))
+}
+
+func TestPebbleDB_FullGC_SingleKeyDB(t *testing.T) {
+	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	require.NoError(t, db.Set([]byte("test-prefix"), []byte("test-key"), []byte("test-value")))
+	require.NoError(t, db.FullGC(t.Context()))
+}
+
 func TestPebbleDB_CountPrefix(t *testing.T) {
 	db := setupTestDB(t)
 

@@ -1,6 +1,7 @@
 package pebble
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -196,6 +197,12 @@ func (pdb *DB) FullGC(context.Context) error {
 	}
 	if err := iter.Close(); err != nil {
 		return err
+	}
+	if len(first) == 0 || len(last) == 0 {
+		return nil
+	}
+	if bytes.Equal(first, last) {
+		return nil
 	}
 
 	return pdb.Compact(first, last, true)
