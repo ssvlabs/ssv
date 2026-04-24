@@ -28,12 +28,19 @@ import (
 // it will be called in a new goroutine to avoid concurrency issues
 type NewDecidedHandler func(msg qbftstorage.Participation)
 
-// Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
+// Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT Instances
 type Controller struct {
 	Identifier []byte
-	Height     specqbft.Height // incremental Height for InstanceContainer
-	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
-	StoredInstances   InstanceContainer
+
+	// LatestInstanceHeight is the height of the latest Instance Controller spun up. That latest instance
+	// is the "relevant" one currently driving consensus.
+	// JSON-tagged as "Height" to preserve compatibility with existing spec-test fixtures.
+	LatestInstanceHeight specqbft.Height `json:"Height"`
+	// RecentInstances keeps track of N latest instances Controller has worked with, so late messages can still be
+	// matched to their respective instance.
+	// JSON-tagged as "StoredInstances" to preserve compatibility with existing spec-test fixtures.
+	RecentInstances Instances `json:"StoredInstances"`
+
 	CommitteeMember   *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner `json:"-"`
 	NewDecidedHandler NewDecidedHandler       `json:"-"`
@@ -49,13 +56,13 @@ func NewController(
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		Identifier:      identifier,
-		Height:          specqbft.FirstHeight,
-		CommitteeMember: committeeMember,
-		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
-		config:          config,
-		OperatorSigner:  signer,
-		fullNode:        fullNode,
+		Identifier:           identifier,
+		LatestInstanceHeight: specqbft.FirstHeight,
+		CommitteeMember:      committeeMember,
+		RecentInstances:      make(Instances, 0, InstancesDefaultCapacity),
+		config:               config,
+		OperatorSigner:       signer,
+		fullNode:             fullNode,
 	}
 }
 
@@ -64,9 +71,9 @@ func (c *Controller) StartNewInstance(
 	ctx context.Context,
 	logger *zap.Logger,
 	height specqbft.Height,
-	timer specqbft.Timer,
 	value []byte,
 	valueChecker ssv.ValueChecker,
+	roundTimerF ssv.QBFTRoundTimerF,
 ) (*instance.Instance, error) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "qbft.controller.start"),
@@ -77,36 +84,61 @@ func (c *Controller) StartNewInstance(
 		return nil, traces.Errorf(span, "value invalid: %w", err)
 	}
 
-	if height < c.Height {
-		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(span, "attempting to start an instance with a past height"))
+	if height < c.LatestInstanceHeight {
+		return nil, spectypes.WrapError(spectypes.StartInstanceErrorCode, traces.Errorf(
+			span,
+			"attempting to start an instance with a past height %d, current instance height %d",
+			height,
+			c.LatestInstanceHeight,
+		),
+		)
 	}
 
-	if c.StoredInstances.FindInstance(height) != nil {
-		return nil, spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(span, "instance already running"))
+	if c.RecentInstances.FindInstance(height) != nil {
+		return nil, spectypes.WrapError(spectypes.InstanceAlreadyRunningErrorCode, traces.Errorf(
+			span,
+			"instance with height %d already running",
+			height,
+		))
 	}
 
-	c.Height = height
-
-	newInstance := instance.NewInstance(logger, c.GetConfig(), c.CommitteeMember, c.Identifier, c.Height, c.OperatorSigner, timer)
-	c.StoredInstances.addNewInstance(newInstance)
-	c.forceStopAllInstanceExceptCurrent()
+	// Create & start a new instance, and also terminate all the older instances after that as "no longer relevant".
+	// NOTE: the c.markRecentInstancesIrrelevant() call comes first because `addNewInstance` might evict an instance
+	//       from c.RecentInstances, meaning c.markRecentInstancesIrrelevant() will miss it if called after.
+	c.markRecentInstancesIrrelevant()
+	newInstance := instance.NewInstance(
+		ctx,
+		logger,
+		c.GetConfig(),
+		c.CommitteeMember,
+		c.Identifier,
+		height,
+		c.OperatorSigner,
+		roundTimerF,
+	)
 	newInstance.Start(ctx, value, valueChecker)
+	c.RecentInstances.addNewInstance(newInstance)
+	c.LatestInstanceHeight = height
 
 	span.SetStatus(codes.Ok, "")
 
 	return newInstance, nil
 }
 
-func (c *Controller) forceStopAllInstanceExceptCurrent() {
-	for _, i := range c.StoredInstances {
-		if i.State.Height != c.Height {
-			i.ForceStop()
-		}
+// markRecentInstancesIrrelevant marks all recent instances as irrelevant.
+func (c *Controller) markRecentInstancesIrrelevant() {
+	for _, i := range c.RecentInstances {
+		i.MarkIrrelevant()
 	}
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+func (c *Controller) ProcessMsg(
+	ctx context.Context,
+	logger *zap.Logger,
+	signedMessage *spectypes.SignedSSVMessage,
+	roundTimerF ssv.QBFTRoundTimerF,
+) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
 		return nil, errors.New("could not create ProcessingMessage from signed message")
@@ -124,7 +156,7 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 	All other msgs (not future or decided) are processed normally by an existing instance (if found).
 	*/
 	if c.isDecidedMsg(msg) {
-		return c.UponDecided(msg)
+		return c.UponDecided(logger, msg, roundTimerF)
 	}
 
 	isFutureMsg := c.isFutureMessage(msg)
@@ -136,14 +168,12 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 }
 
 func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
+	inst := c.RecentInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, NewRetryableError(ErrInstanceNotFound)
 	}
 
 	prevDecided, _ := inst.IsDecided()
-
-	// if previously decided, we don't process more messages
 	if prevDecided {
 		return nil, spectypes.NewError(spectypes.SkipConsensusMessageAsInstanceIsDecidedErrorCode, "not processing consensus message since instance is already decided")
 	}
@@ -155,7 +185,6 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	if err != nil {
 		return nil, fmt.Errorf("could not process msg: %w", err)
 	}
-
 	if !decided {
 		return nil, nil
 	}
@@ -185,12 +214,12 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage tells whether the provided message height is from a future instance.
 // It takes into consideration a special case where FirstHeight instance didn't start yet
-// but c.Height == FirstHeight.
+// but c.CurrentInstanceHeight == FirstHeight.
 func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
-	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
+	if c.LatestInstanceHeight == specqbft.FirstHeight && c.RecentInstances.FindInstance(c.LatestInstanceHeight) == nil {
 		return true
 	}
-	if msg.QBFTMessage.Height > c.Height {
+	if msg.QBFTMessage.Height > c.LatestInstanceHeight {
 		return true
 	}
 	return false
@@ -216,14 +245,6 @@ func (c *Controller) Decode(data []byte) error {
 	err := json.Unmarshal(data, &c)
 	if err != nil {
 		return fmt.Errorf("could not decode controller: %w", err)
-	}
-
-	config := c.GetConfig()
-	for _, i := range c.StoredInstances {
-		if i != nil {
-			// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?
-			i.SetConfig(config)
-		}
 	}
 	return nil
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// OnTimeout is trigger upon timeout for the given height
-func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, timeoutData *types.TimeoutData) error {
+// OnQBFTRoundTimeout is trigger upon timeout for the given height
+func (c *Controller) OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *types.TimeoutData) error {
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "on_timeout"))
 	defer span.End()
 
@@ -22,7 +22,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, timeoutD
 		observability.BeaconSlotAttribute(phase0.Slot(timeoutData.Height)),
 	)
 
-	instance := c.StoredInstances.FindInstance(timeoutData.Height)
+	instance := c.RecentInstances.FindInstance(timeoutData.Height)
 	if instance == nil {
 		return traces.Errorf(span, "instance is nil")
 	}

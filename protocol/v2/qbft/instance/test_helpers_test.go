@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"context"
 	"crypto/rsa"
 	"testing"
 
@@ -13,16 +14,17 @@ import (
 
 	qbftconfig "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type instanceTestEnv struct {
-	t       *testing.T
-	keys    *spectestingutils.TestKeySet
-	config  *qbftconfig.Config
-	inst    *Instance
-	network *spectestingutils.TestingNetwork
-	timer   *roundtimer.TestQBFTTimer
+	t          *testing.T
+	keys       *spectestingutils.TestKeySet
+	config     *qbftconfig.Config
+	inst       *Instance
+	network    *spectestingutils.TestingNetwork
+	roundTimer *roundtimer.TestQBFTTimer
 }
 
 type recordingNetwork struct {
@@ -73,33 +75,32 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 		CutOffRound: spectestingutils.TestingCutOffRound,
 	}
 
-	testTimer := roundtimer.NewTestingTimer()
-
+	roundTimer := roundtimer.NewTestingTimer()
 	inst := NewInstance(
+		t.Context(),
 		zap.NewNop(),
 		config,
 		committeeMember,
 		spectestingutils.TestingIdentifier,
 		specqbft.FirstHeight,
 		spectestingutils.NewOperatorSigner(keys, operatorID),
-		testTimer,
+		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+			return roundTimer
+		},
 	)
 	inst.StartValue = []byte("start-value")
 	inst.ValueChecker = testValueChecker{}
-
-	timer, ok := testTimer.(*roundtimer.TestQBFTTimer)
-	require.True(t, ok)
 
 	network, ok := config.GetNetwork().(*spectestingutils.TestingNetwork)
 	require.True(t, ok)
 
 	return &instanceTestEnv{
-		t:       t,
-		keys:    keys,
-		config:  config,
-		inst:    inst,
-		network: network,
-		timer:   timer,
+		t:          t,
+		keys:       keys,
+		config:     config,
+		inst:       inst,
+		network:    network,
+		roundTimer: roundTimer,
 	}
 }
 

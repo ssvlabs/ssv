@@ -421,8 +421,8 @@ func newProposerRunnerForTest(
 	require.NoError(t, err)
 
 	proposerRunner := runnerIface.(*ProposerRunner)
-	proposerRunner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
-		return func(specqbft.Round) {}
+	proposerRunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
 	})
 	return proposerRunner, keySet, network
 }
@@ -456,13 +456,16 @@ func setupRunnerForPostConsensus(
 	qbftConfig.BeaconSigner = runner.signer
 
 	runner.State.RunningInstance = instance.NewInstance(
+		t.Context(),
 		zap.NewNop(),
 		qbftConfig,
 		spectestingutils.TestingCommitteeMember(keySet),
 		msgID[:],
 		specqbft.Height(duty.Slot),
 		runner.operatorSigner,
-		nil,
+		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 	runner.State.RunningInstance.State.Decided = true
 	runner.State.RunningInstance.State.DecidedValue = encodedDecidedValue

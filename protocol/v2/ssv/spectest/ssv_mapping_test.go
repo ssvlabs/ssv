@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,9 +10,7 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
@@ -22,11 +21,15 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -407,15 +410,15 @@ func fixControllerForRun(logger *zap.Logger, contr *controller.Controller, ks *s
 		spectestingutils.NewOperatorSigner(ks, 1),
 		false,
 	)
-	newContr.Height = contr.Height
-	newContr.StoredInstances = contr.StoredInstances
+	newContr.LatestInstanceHeight = contr.LatestInstanceHeight
+	newContr.RecentInstances = contr.RecentInstances
 
-	for i, inst := range newContr.StoredInstances {
+	for i, inst := range newContr.RecentInstances {
 		if inst == nil {
 			continue
 		}
 		operator := spectestingutils.TestingCommitteeMember(ks)
-		newContr.StoredInstances[i] = fixInstanceForRun(logger, ks, inst, newContr, operator)
+		newContr.RecentInstances[i] = fixInstanceForRun(logger, ks, inst, newContr, operator)
 	}
 	return newContr
 }
@@ -429,13 +432,16 @@ func fixInstanceForRun(
 ) *instance.Instance {
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	newInst := instance.NewInstance(
+		context.Background(),
 		logger,
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
-		contr.Height,
+		contr.LatestInstanceHeight,
 		signer,
-		nil,
+		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
 	)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue

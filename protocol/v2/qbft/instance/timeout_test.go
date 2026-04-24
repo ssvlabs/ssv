@@ -38,8 +38,8 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 
 	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
 	require.Nil(t, env.inst.State.ProposalAcceptedForCurrentRound)
-	require.Equal(t, 1, env.timer.State.Timeouts)
-	require.Equal(t, specqbft.Round(2), env.timer.State.Round)
+	require.Equal(t, 1, env.roundTimer.State.Timeouts)
+	require.Equal(t, specqbft.Round(2), env.roundTimer.State.Round)
 	require.Len(t, network.broadcasted, 1)
 
 	msg, err := specqbft.NewProcessingMessage(network.broadcasted[0])
@@ -51,9 +51,9 @@ func TestUponRoundTimeoutBumpsRoundAfterBroadcast(t *testing.T) {
 	require.Equal(t, env.inst.State.LastPreparedValue, msg.SignedMessage.FullData)
 }
 
-func TestUponRoundTimeoutForceStoppedInstance(t *testing.T) {
+func TestUponRoundTimeoutKilledInstance(t *testing.T) {
 	env := newInstanceTestEnv(t, 2)
-	env.inst.ForceStop()
+	env.inst.MarkIrrelevant()
 
 	err := env.inst.UponRoundTimeout(t.Context(), zap.NewNop())
 	require.ErrorContains(t, err, "instance stopped processing timeouts")
