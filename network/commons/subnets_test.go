@@ -112,6 +112,64 @@ func TestAlanCommitteeSubnet(t *testing.T) {
 	}
 }
 
+func TestParseTopicSubnet(t *testing.T) {
+	tests := []struct {
+		name           string
+		topic          string
+		expectedSubnet Subnet
+		expectedBoole  bool
+		expectedErr    bool
+	}{
+		{
+			name:           "alan topic",
+			topic:          Subnet(12).AlanTopic(),
+			expectedSubnet: 12,
+			expectedBoole:  false,
+		},
+		{
+			name:           "boole topic",
+			topic:          Subnet(42).BooleTopic("mainnet"),
+			expectedSubnet: 42,
+			expectedBoole:  true,
+		},
+		{
+			name:        "invalid alan subnet",
+			topic:       "ssv.v2.not-a-subnet",
+			expectedErr: true,
+		},
+		{
+			name:        "invalid boole fork segment",
+			topic:       "/ssv/mainnet/alan/42",
+			expectedErr: true,
+		},
+		{
+			name:        "missing boole subnet",
+			topic:       "/ssv/mainnet/boole/",
+			expectedErr: true,
+		},
+		{
+			name:        "invalid topic root",
+			topic:       "/other/mainnet/boole/42",
+			expectedErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			subnet, boole, err := ParseTopicSubnet(test.topic)
+			if test.expectedErr {
+				require.Error(t, err)
+				require.False(t, boole)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, test.expectedSubnet, subnet)
+			require.Equal(t, test.expectedBoole, boole)
+		})
+	}
+}
+
 func TestSubnetsParsing(t *testing.T) {
 	subtests := []struct {
 		name        string
@@ -129,7 +187,7 @@ func TestSubnetsParsing(t *testing.T) {
 			false,
 		},
 		{
-			"wrong size",
+			"without 0x prefix",
 			"57b080fffd743d9878dc41a184ab1600",
 			false,
 		},

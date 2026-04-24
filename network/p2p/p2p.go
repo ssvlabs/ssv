@@ -759,117 +759,178 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 // for the given peers.
 //
 // The peer-scores are calculated based on:
-//   - ownSubnets is the desired set of subnets we want to be connected to
-//   - ownSubnetPeers is our own currently connected peer count per subnet across all
-//     peers in our topic mesh
-//   - peerSubnets tracks all the subnets each of our peers is connected to
+//   - ownAlanSubnets / ownBooleSubnets: subnets we're subscribed to, per-fork.
+//     During the Boole-fork transition both sets may be populated.
+//   - ownSubnetPeers: our currently connected peer count per (fork, subnet) across
+//     all peers in our topic mesh. Alan-N and Boole-N are tracked separately since
+//     they are distinct gossipsub topics even though they share the subnet index.
+//   - peerObservedSubnets: each peer's observed Alan/Boole participation from our
+//     own topic mesh (precise, unlike the ENR bitfield).
 //
 // Algo:
-//   - calculate (take snapshot of) ownSubnets, ownSubnetPeers, peerSubnets
-//   - for each candidate peer we need to score:
-//   - calculate subnetPeersExcluding (currently connected subnets IF that candidate peer is excluded/disconnected)
-//   - use SubnetPeers.Score to calculate the final peer-score for each peer (based on: subnetPeersExcluding, desired
-//     set of subnets, subnets this peer is connected to)
+//   - snapshot ownAlanSubnets, ownBooleSubnets, ownSubnetPeers, peerObservedSubnets
+//   - for each candidate peer:
+//   - build subnetPeersExcluding by decrementing the (fork, subnet) slots the peer actually serves
+//   - Score the peer against the excluding-counts
 func (n *p2pNetwork) buildPeerTrimScores(peerIDs []peer.ID) map[peer.ID]float64 {
-	ownSubnets := n.SubscribedSubnets()
+	ownAlanSubnets, ownBooleSubnets := n.subscribedSubnetsForCurrentEpoch()
 	ownSubnetPeers := newSubnetPeers()
-	peerSubnets := make(map[peer.ID]commons.Subnets)
+
+	// peerPresence tracks a peer's observed Alan/Boole participation from our own
+	// topic mesh. Unlike the ENR subnet bitfield (a union of Alan and Boole that
+	// can't be disambiguated), this is precise — we know which topics we've seen
+	// the peer on.
+	type peerPresence struct {
+		alan  commons.Subnets
+		boole commons.Subnets
+	}
+	peerObservedSubnets := make(map[peer.ID]peerPresence)
 
 	for topic, peers := range n.PeersByTopic() {
-		subnet, ok := n.topicSubnet(topic)
-		if !ok {
+		subnet, isBoole, err := n.topicSubnet(topic)
+		if err != nil {
+			n.logger.Error("failed to convert topic to subnet",
+				zap.String("topic", topic),
+				zap.Error(err),
+			)
 			continue
 		}
 
-		ownSubnetPeers[subnet] = uint16(len(peers)) //nolint: gosec
+		if isBoole {
+			ownSubnetPeers.boole[subnet] = uint16(len(peers)) //nolint: gosec
+		} else {
+			ownSubnetPeers.alan[subnet] = uint16(len(peers)) //nolint: gosec
+		}
+
 		for _, peerID := range peers {
-			peerContribution := peerSubnets[peerID]
-			peerContribution.Set(subnet)
-			peerSubnets[peerID] = peerContribution
+			presence := peerObservedSubnets[peerID]
+			if isBoole {
+				presence.boole.Set(subnet)
+			} else {
+				presence.alan.Set(subnet)
+			}
+			peerObservedSubnets[peerID] = presence
 		}
 	}
 
 	scores := make(map[peer.ID]float64, len(peerIDs))
 	for _, peerID := range peerIDs {
-		pSubnets := peerSubnets[peerID]
+		presence := peerObservedSubnets[peerID]
 		subnetPeersExcluding := ownSubnetPeers
-		for subnet := range ownSubnetPeers {
-			if pSubnets.IsSet(commons.Subnet(subnet)) { //nolint: gosec
-				// This subtraction here should never result into an underflow in practice (by construction),
-				// clamp to zero just in case that invariant is ever broken by a future change.
-				if subnetPeersExcluding[subnet] >= 1 {
-					subnetPeersExcluding[subnet] -= 1
-				}
+		for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
+			// Clamp to zero just in case the invariant "peer-observed implies count >= 1"
+			// is ever broken by a future change.
+			if presence.alan.IsSet(subnet) && subnetPeersExcluding.alan[subnet] >= 1 {
+				subnetPeersExcluding.alan[subnet] -= 1
+			}
+			if presence.boole.IsSet(subnet) && subnetPeersExcluding.boole[subnet] >= 1 {
+				subnetPeersExcluding.boole[subnet] -= 1
 			}
 		}
 
-		scores[peerID] = subnetPeersExcluding.Score(ownSubnets, pSubnets)
+		scores[peerID] = subnetPeersExcluding.Score(ownAlanSubnets, ownBooleSubnets, presence.alan, presence.boole)
 	}
 	return scores
 }
 
-// topicSubnet parses a topic name into a subnet index and logs malformed topics.
-func (n *p2pNetwork) topicSubnet(topic string) (commons.Subnet, bool) {
-	subnet, err := commons.ParseTopicSubnet(topic)
+// topicSubnet parses a topic name as a subnet index.
+func (n *p2pNetwork) topicSubnet(topic string) (s commons.Subnet, boole bool, err error) {
+	s, boole, err = commons.ParseTopicSubnet(topic)
 	if err != nil {
-		n.logger.Error("failed to parse topic",
-			zap.String("topic", topic),
-			zap.Error(err))
-		return 0, false
+		return 0, false, fmt.Errorf("parse topic subnet: %w", err)
 	}
-	if subnet >= commons.SubnetsCount {
-		n.logger.Error("invalid topic",
-			zap.String("topic", topic),
-			fields.Subnet(subnet))
-		return 0, false
+	if s >= commons.SubnetsCount {
+		return 0, false, fmt.Errorf("subnet must be in range [0, %d], got subnet: %d", commons.SubnetsCount, s)
 	}
-	return subnet, true
+	return s, boole, nil
 }
 
-// SubnetPeers maps subnets to the number of peers connected to each of those subnets.
-type SubnetPeers [commons.SubnetsCount]uint16
+// SubnetPeers tracks peer counts per (fork, subnet) across our gossipsub topic mesh.
+//
+// During the Boole-fork transition the same subnet index (0..127) maps to two
+// distinct gossipsub topics — Alan (ssv.v2.N) and Boole (/ssv/<net>/boole/N) —
+// which have independent peer populations. Merging the counts (as a prior
+// implementation did via `+=`) hides a dead Alan-N behind a healthy Boole-N (or
+// vice versa) and misguides scoring. Tracking per-fork lets `Score` credit
+// each (fork, subnet) we care about separately. After the transition the Alan
+// side naturally stays zero for all new peers.
+type SubnetPeers struct {
+	alan  [commons.SubnetsCount]uint16
+	boole [commons.SubnetsCount]uint16
+}
 
 func newSubnetPeers() SubnetPeers {
 	return SubnetPeers{}
 }
 
-func newSubnetPeersFromSubnets(s commons.Subnets) SubnetPeers {
+// newSubnetPeersFromPeerENR builds the optimistic contribution a newly-connected
+// peer would make, given their advertised ENR subnet bitfield. The ENR is a union
+// of the peer's Alan and Boole subnets (indistinguishable), so for each bit set
+// we bump exactly the sides we are subscribed to — the peer might help with
+// either or both, and we only ever track topics we actually care about.
+func newSubnetPeersFromPeerENR(peerENR, ourAlan, ourBoole commons.Subnets) SubnetPeers {
 	var result SubnetPeers
-	for _, subnet := range s.SubnetList() {
-		result[subnet] = 1
+	for _, subnet := range peerENR.SubnetList() {
+		if ourAlan.IsSet(subnet) {
+			result.alan[subnet] = 1
+		}
+		if ourBoole.IsSet(subnet) {
+			result.boole[subnet] = 1
+		}
 	}
 	return result
 }
 
 func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 	var sum SubnetPeers
-	for i := range a {
-		sum[i] = a[i] + b[i]
+	for i := range a.alan {
+		sum.alan[i] = a.alan[i] + b.alan[i]
+		sum.boole[i] = a.boole[i] + b.boole[i]
 	}
 	return sum
 }
 
-// Score estimates how many valuable subnets the given peer would contribute.
-// Param ours defines subnets we are interested in.
-// Param theirs defines subnets given peer has to offer.
-func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
+// Score estimates the value of a peer's (potential or observed) contribution to
+// our topic mesh, summed across every (fork, subnet) pair we are subscribed to
+// and the peer participates in.
+//
+// Parameters:
+//   - ourAlan, ourBoole: subnets we are subscribed to, per-fork.
+//   - theirAlan, theirBoole: the peer's participation per-fork.
+//     For discovery (ENR-based scoring) pass the ENR bitfield for both sides —
+//     a bit set in the ENR means the peer could be on Alan-N, Boole-N, or both,
+//     so we credit every side we care about.
+//     For trim scoring pass the peer's actually-observed Alan/Boole presence —
+//     this credits the peer precisely for the topics they serve.
+//
+// For each (fork, subnet) pair we are subscribed to AND the peer participates in,
+// the priority is based on how many other peers we have on that specific topic:
+// dead (0) > solo (1) > duo (2) > healthy (3+). Summed across pairs.
+func (a SubnetPeers) Score(ourAlan, ourBoole, theirAlan, theirBoole commons.Subnets) float64 {
 	const (
 		duoSubnetPriority  = 1
 		soloSubnetPriority = 4
 		deadSubnetPriority = 16
 	)
-	score := float64(0)
+	priority := func(count uint16) float64 {
+		switch count {
+		case 0:
+			return deadSubnetPriority
+		case 1:
+			return soloSubnetPriority
+		case 2:
+			return duoSubnetPriority
+		}
+		return 0
+	}
 
+	score := float64(0)
 	for subnet := commons.Subnet(0); subnet < commons.Subnet(commons.SubnetsCount); subnet++ {
-		if ours.IsSet(subnet) && theirs.IsSet(subnet) {
-			switch a[subnet] {
-			case 0:
-				score += deadSubnetPriority
-			case 1:
-				score += soloSubnetPriority
-			case 2:
-				score += duoSubnetPriority
-			}
+		if ourAlan.IsSet(subnet) && theirAlan.IsSet(subnet) {
+			score += priority(a.alan[subnet])
+		}
+		if ourBoole.IsSet(subnet) && theirBoole.IsSet(subnet) {
+			score += priority(a.boole[subnet])
 		}
 	}
 	return score
@@ -877,10 +938,11 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 
 func (a SubnetPeers) String() string {
 	var result strings.Builder
-	for i, v := range a {
-		if v > 0 {
-			_, _ = fmt.Fprintf(&result, "%d:%d ", i, v)
+	for i := range a.alan {
+		if a.alan[i] == 0 && a.boole[i] == 0 {
+			continue
 		}
+		_, _ = fmt.Fprintf(&result, "%d:%d/%d ", i, a.alan[i], a.boole[i])
 	}
 	return strings.TrimSuffix(result.String(), " ")
 }
