@@ -93,7 +93,7 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 			// timeout for, in practice this should never happen - but we need to handle this just in case.
 			// This is also possible if the queue got pruned already (due to becoming old and irrelevant).
 			q := c.Queues[phase0.Slot(height)]
-			if q.Q == nil {
+			if q == nil {
 				logger.Debug("couldn't schedule timeout event due to missing queue (likely was pruned)")
 				return
 			}
@@ -109,7 +109,7 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				return
 			}
 
-			if pushed := q.Q.TryPush(dec); !pushed {
+			if pushed := q.TryPush(dec); !pushed {
 				logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(runnerIdentifier.GetRoleType()))
 			}
 		}
