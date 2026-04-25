@@ -157,7 +157,7 @@ func newCommitteeQueueStateForTest(slot phase0.Slot, round specqbft.Round, hasRu
 }
 
 // newCommitteeRunnerForTest builds a minimal CommitteeRunner whose getters expose just enough state for
-// queue-consumer tests to exercise filtering and prioritisation without spinning up the full runner stack.
+// queue-consumer tests to exercise filtering and prioritization without spinning up the full runner stack.
 //   - slot     → drives QBFTController.LatestInstanceHeight, so r.GetLastHeight() returns specqbft.Height(slot).
 //   - round    → drives the running QBFT instance's Round, so r.GetLastRound() returns it.
 //   - decided  → marks the running instance as decided (used by the "skip PSM until decided" filter).
