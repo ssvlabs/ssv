@@ -126,12 +126,16 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The result will be 0 if equal, -1 if lower, 1 if higher.
+//
+// state.Slot doubles as the QBFT height: every runner starts its QBFT instance at height = slot,
+// so we cast state.Slot to specqbft.Height when comparing QBFT messages.
 func compareHeightOrSlot(state *State, m *SSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok && qbftMsg != nil {
-		if qbftMsg.Height == state.Height {
+		stateHeight := specqbft.Height(state.Slot)
+		if qbftMsg.Height == stateHeight {
 			return 0
 		}
-		if qbftMsg.Height > state.Height {
+		if qbftMsg.Height > stateHeight {
 			return 1
 		}
 	} else if pms, ok := m.Body.(*spectypes.PartialSignatureMessages); ok && pms != nil { // everyone likes pms

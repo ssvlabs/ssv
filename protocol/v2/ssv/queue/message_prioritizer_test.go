@@ -30,8 +30,7 @@ var messagePriorityTests = []struct {
 		name: "Running instance",
 		state: &State{
 			HasRunningInstance: true,
-			Height:             100,
-			Slot:               64,
+			Slot:               100,
 			Quorum:             4,
 		},
 		messages: []mockMessage{
@@ -52,19 +51,19 @@ var messagePriorityTests = []struct {
 			// 2.1.4. Consensus/<Other>
 			mockConsensusMessage{Height: 100, Type: specqbft.RoundChangeMsgType},
 			// 2.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.SelectionProofPartialSig},
 			// 2.3. Post-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.PostConsensusPartialSig},
 
 			// 3. Higher height/slot:
 			// 3.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
 			// 3.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.SelectionProofPartialSig},
 			// 3.3. Consensus
 			mockConsensusMessage{Height: 101},
 			// 3.4. Post-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.PostConsensusPartialSig},
 
 			// 4. Lower height/slot:
 			// 4.1 Decided
@@ -72,23 +71,22 @@ var messagePriorityTests = []struct {
 			// 4.2. Commit
 			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 4.3. Pre-consensus
-			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 99, Type: spectypes.SelectionProofPartialSig},
 		},
 	},
 	{
 		name: "No running instance",
 		state: &State{
 			HasRunningInstance: false,
-			Height:             100,
-			Slot:               64,
+			Slot:               100,
 			Quorum:             4,
 		},
 		messages: []mockMessage{
 			// 1. Current height/slot:
 			// 1.1. Pre-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.SelectionProofPartialSig},
 			// 1.2. Post-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.PostConsensusPartialSig},
 			// 1.3. Consensus
 			// 1.3.1. Consensus/Proposal
 			mockConsensusMessage{Height: 100, Type: specqbft.ProposalMsgType},
@@ -103,11 +101,11 @@ var messagePriorityTests = []struct {
 			// 2.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
 			// 2.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.SelectionProofPartialSig},
 			// 2.3. Consensus
 			mockConsensusMessage{Height: 101},
 			// 2.4. Post-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.PostConsensusPartialSig},
 
 			// 3. Lower height/slot:
 			// 3.1 Decided
@@ -115,7 +113,7 @@ var messagePriorityTests = []struct {
 			// 3.2. Commit
 			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 3.3. Pre-consensus
-			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 99, Type: spectypes.SelectionProofPartialSig},
 		},
 	},
 }

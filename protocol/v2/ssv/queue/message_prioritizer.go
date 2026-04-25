@@ -7,9 +7,12 @@ import (
 
 // State represents Runner state that is useful for comparing the priority of various messages (message priority
 // depends on what the current runner state is).
+//
+// Slot doubles as the QBFT height: by construction in this codebase a runner's QBFT instance is always
+// started at height = slot, so callers populate Slot only and the prioritizer casts to specqbft.Height
+// when comparing QBFT messages.
 type State struct {
 	HasRunningInstance bool
-	Height             specqbft.Height
 	Round              specqbft.Round
 	Slot               phase0.Slot
 	Quorum             uint64

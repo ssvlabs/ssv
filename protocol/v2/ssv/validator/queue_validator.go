@@ -110,8 +110,9 @@ func (v *Validator) StartQueueConsumer(
 		defer msgStates.Stop()
 
 		// rState defines current runner state that will be used for deciding which messages we want to process
-		// sooner (vs which ones can wait till later). Slot is intentionally left zero: matches pre-refactor
-		// behavior and is a partial-signature-only signal that the validator consumer doesn't rely on.
+		// sooner (vs which ones can wait till later). Slot is intentionally left zero here to preserve the
+		// pre-merge PSM-ordering behavior of the validator consumer (which never populated Slot). The QBFT
+		// height filter below reads the runner's height directly rather than relying on rState.Slot.
 		rState := queue.State{
 			Quorum: v.Operator.GetQuorum(), // never changes for duty runner
 		}
@@ -125,7 +126,6 @@ func (v *Validator) StartQueueConsumer(
 			// Update rState to incorporate the effects that the previously handled message might have
 			// had on the runner state.
 			rState.HasRunningInstance = r.HasRunningQBFTInstance()
-			rState.Height = r.GetLastHeight()
 			rState.Round = r.GetLastRound()
 
 			filter := queue.FilterAny
@@ -140,14 +140,16 @@ func (v *Validator) StartQueueConsumer(
 				}
 			} else if rState.HasRunningInstance && !r.HasAcceptedProposalForCurrentRound() {
 				// If no proposal was accepted for the current round, skip prepare & commit messages
-				// for the current height and round.
+				// for the current height and round. We read the runner's height locally because rState.Slot
+				// is intentionally kept at zero on the validator path (see rState comment above).
+				runnerHeight := r.GetLastHeight()
 				filter = func(m *queue.SSVMessage) bool {
 					qbftMsg, ok := m.Body.(*specqbft.Message)
 					if !ok || qbftMsg == nil {
 						return true
 					}
 
-					if qbftMsg.Height != rState.Height || qbftMsg.Round != rState.Round {
+					if qbftMsg.Height != runnerHeight || qbftMsg.Round != rState.Round {
 						return true
 					}
 					return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType

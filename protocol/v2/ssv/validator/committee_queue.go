@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -94,8 +95,7 @@ func (c *Committee) ConsumeQueue(
 	defer msgStates.Stop()
 
 	// rState defines current runner state that will be used for deciding which messages we want to process
-	// sooner (vs which ones can wait till later). Slot is intentionally left zero: every message in a
-	// committee queue belongs to the same slot, so Slot cannot affect intra-queue ordering.
+	// sooner (vs which ones can wait till later).
 	rState := queue.State{
 		Quorum: c.CommitteeMember.GetQuorum(), // never changes for duty runner
 	}
@@ -104,7 +104,7 @@ func (c *Committee) ConsumeQueue(
 		// Update rState to incorporate the effects that the previously handled message might have had
 		// on the runner state.
 		rState.HasRunningInstance = r.HasRunningQBFTInstance()
-		rState.Height = r.GetLastHeight()
+		rState.Slot = phase0.Slot(r.GetLastHeight())
 		rState.Round = r.GetLastRound()
 
 		filter := queue.FilterAny

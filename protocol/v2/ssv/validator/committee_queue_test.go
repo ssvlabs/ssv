@@ -150,13 +150,18 @@ func setupMessageCollection(capacity int) (chan *queue.SSVMessage, MessageHandle
 func newCommitteeQueueStateForTest(slot phase0.Slot, round specqbft.Round, hasRunningInstance bool, quorum uint64) *queue.State {
 	return &queue.State{
 		HasRunningInstance: hasRunningInstance,
-		Height:             specqbft.Height(slot),
 		Slot:               slot,
 		Round:              round,
 		Quorum:             quorum,
 	}
 }
 
+// newCommitteeRunnerForTest builds a minimal CommitteeRunner whose getters expose just enough state for
+// queue-consumer tests to exercise filtering and prioritisation without spinning up the full runner stack.
+//   - slot     → drives QBFTController.LatestInstanceHeight, so r.GetLastHeight() returns specqbft.Height(slot).
+//   - round    → drives the running QBFT instance's Round, so r.GetLastRound() returns it.
+//   - decided  → marks the running instance as decided (used by the "skip PSM until decided" filter).
+//   - proposal → if non-nil, sets ProposalAcceptedForCurrentRound (used by HasAcceptedProposalForCurrentRound).
 func newCommitteeRunnerForTest(
 	slot phase0.Slot,
 	round specqbft.Round,
@@ -655,6 +660,65 @@ func TestFilterUsesCurrentRunnerRound(t *testing.T) {
 	seen := runOnce(prepareAtOtherRound)
 	require.NotNil(t, seen, "prepare at a different round should not be filtered")
 	assert.Equal(t, specqbft.PrepareMsgType, seen.Body.(*specqbft.Message).MsgType)
+}
+
+// TestPostConsensusOutranksConsensusAtRunnerSlot is a regression test that pins the
+// committee prioritiser invariant "PostConsensus PSM outranks same-slot consensus message"
+// while driving rState construction through ConsumeQueue. Historically the priority arithmetic
+// ranked QBFT above PSM whenever rState's slot/height fields disagreed about the runner's
+// current slot — see queue.compareHeightOrSlot — so the test pushes one of each and asserts
+// the PSM is delivered first.
+func TestPostConsensusOutranksConsensusAtRunnerSlot(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+	defer cancel()
+
+	slot := phase0.Slot(100)
+
+	committee := &Committee{
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queue.Queue),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
+	}
+
+	// Decided runner: HasRunningQBFTInstance() returns false so ConsumeQueue applies no
+	// PSM-blocking filter. The order observed by the handler is therefore set entirely by
+	// the prioritiser — which is exactly what we want to assert here.
+	committeeRunner := newCommitteeRunnerForTest(slot, 1, true, &specqbft.ProcessingMessage{
+		QBFTMessage: &specqbft.Message{},
+	})
+
+	qbftMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{1},
+		&specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.CommitMsgType},
+	)
+	psmMsg := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType,
+		spectypes.MessageID{2},
+		&spectypes.PartialSignatureMessages{
+			Slot: slot,
+			Type: spectypes.PostConsensusPartialSig,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				Signer:           1,
+				SigningRoot:      [32]byte{},
+				ValidatorIndex:   0,
+				PartialSignature: make([]byte, 96),
+			}},
+		},
+	)
+
+	q := queue.New(logger, 10)
+	require.True(t, q.TryPush(qbftMsg))
+	require.True(t, q.TryPush(psmMsg))
+
+	msgChannel, handler := setupMessageCollection(2)
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+
+	received := collectMessagesFromQueue(t, msgChannel, 2, 1*time.Second)
+	require.Len(t, received, 2)
+	assert.Equal(t, spectypes.SSVPartialSignatureMsgType, received[0].MsgType,
+		"PSM must be popped before same-slot consensus message")
+	assert.Equal(t, spectypes.SSVConsensusMsgType, received[1].MsgType)
 }
 
 // TestCommitteeQueueFilteringScenarios verifies the message filtering logic of the ConsumeQueue method
