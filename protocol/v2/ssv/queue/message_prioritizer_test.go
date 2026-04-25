@@ -175,6 +175,87 @@ func TestMessagePrioritizer_LowerHeightCommitOutranksLowerSlotPreConsensusAtAdva
 	require.False(t, prioritizer.Prior(lowerSlotPreConsensus, lowerHeightCommit))
 }
 
+// TestMessagePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus verifies that at lower
+// QBFT heights, a Commit message outranks any other consensus message type. This guards against the
+// historical type-confusion in scoreMessageSubtype where the lower-height Commit branch never matched
+// (it cast SSVMessage.MsgType to specqbft.MessageType instead of reading the inner QBFT MsgType),
+// which let scoreConsensusType promote stale Proposal/Prepare messages above stale Commits.
+func TestMessagePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Slot:               100,
+		Quorum:             4,
+	}
+
+	cases := []struct {
+		name      string
+		otherType specqbft.MessageType
+	}{
+		{name: "Proposal", otherType: specqbft.ProposalMsgType},
+		{name: "Prepare", otherType: specqbft.PrepareMsgType},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lowerHeightCommit, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			lowerHeightOther, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: tc.otherType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			prioritizer := NewMessagePrioritizer(state)
+			require.True(t, prioritizer.Prior(lowerHeightCommit, lowerHeightOther),
+				"expected lower-height Commit to outrank lower-height %s", tc.name)
+			require.False(t, prioritizer.Prior(lowerHeightOther, lowerHeightCommit),
+				"expected lower-height %s to NOT outrank lower-height Commit", tc.name)
+		})
+	}
+}
+
+// TestCommitteeQueuePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus mirrors the
+// validator-path test above for the committee prioritizer. The committee chain has no scoreRound
+// step, but the same scoreCommitteeMessageSubtype type-confusion existed in its lower-height
+// branch — letting scoreConsensusType promote stale Proposals/Prepares above stale Commits.
+func TestCommitteeQueuePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Slot:               100,
+		Quorum:             4,
+	}
+
+	cases := []struct {
+		name      string
+		otherType specqbft.MessageType
+	}{
+		{name: "Proposal", otherType: specqbft.ProposalMsgType},
+		{name: "Prepare", otherType: specqbft.PrepareMsgType},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lowerHeightCommit, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			lowerHeightOther, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: tc.otherType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			prioritizer := NewCommitteeQueuePrioritizer(state)
+			require.True(t, prioritizer.Prior(lowerHeightCommit, lowerHeightOther),
+				"expected lower-height Commit to outrank lower-height %s (committee)", tc.name)
+			require.False(t, prioritizer.Prior(lowerHeightOther, lowerHeightCommit),
+				"expected lower-height %s to NOT outrank lower-height Commit (committee)", tc.name)
+		})
+	}
+}
+
 type mockMessage interface {
 	ssvMessage(*State) *spectypes.SignedSSVMessage
 }
