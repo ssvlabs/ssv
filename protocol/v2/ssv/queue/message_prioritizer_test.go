@@ -152,6 +152,29 @@ func TestMessagePrioritizer(t *testing.T) {
 	}
 }
 
+func TestMessagePrioritizer_LowerHeightCommitOutranksLowerSlotPreConsensusAtAdvancedRound(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Slot:               100,
+		Round:              3,
+		Quorum:             4,
+	}
+
+	lowerHeightCommit, err := DecodeSignedSSVMessage(
+		mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType}.ssvMessage(state),
+	)
+	require.NoError(t, err)
+
+	lowerSlotPreConsensus, err := DecodeSignedSSVMessage(
+		mockNonConsensusMessage{Slot: 99, Type: spectypes.SelectionProofPartialSig}.ssvMessage(state),
+	)
+	require.NoError(t, err)
+
+	prioritizer := NewMessagePrioritizer(state)
+	require.True(t, prioritizer.Prior(lowerHeightCommit, lowerSlotPreConsensus))
+	require.False(t, prioritizer.Prior(lowerSlotPreConsensus, lowerHeightCommit))
+}
+
 type mockMessage interface {
 	ssvMessage(*State) *spectypes.SignedSSVMessage
 }
