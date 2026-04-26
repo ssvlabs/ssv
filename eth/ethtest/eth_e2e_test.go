@@ -1,6 +1,7 @@
 package ethtest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/big"
@@ -27,6 +28,11 @@ var (
 
 // E2E tests for ETH package
 func TestEthExecLayer(t *testing.T) {
+	const (
+		asyncWaitTimeout = 15 * time.Second
+		asyncPollTick    = 50 * time.Millisecond
+	)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -125,23 +131,14 @@ func TestEthExecLayer(t *testing.T) {
 	// Main difference between "online" events handling and syncing the historical (old) events
 	// is that here we have to check that the controller was triggered
 	t.Run("SyncOngoing happy flow", func(t *testing.T) {
+		syncCtx, syncCancel := context.WithCancel(ctx)
+		syncOngoingErrCh := make(chan error, 1)
 		go func() {
-			err = eventSyncer.SyncOngoing(ctx, lastHandledBlockNum+1)
-			require.NoError(t, err)
+			syncOngoingErrCh <- eventSyncer.SyncOngoing(syncCtx, lastHandledBlockNum+1)
 		}()
-
-		stopChan := make(chan struct{})
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-stopChan:
-					return
-				default:
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
+		defer func() {
+			syncCancel()
+			require.NoError(t, <-syncOngoingErrCh)
 		}()
 
 		// Step 1: Add more validators
@@ -156,8 +153,10 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			require.Eventually(t, func() bool {
+				nextNonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+				return err == nil && nextNonce == expectedNonce && len(nodeStorage.Shares().List(nil)) == 7
+			}, asyncWaitTimeout, asyncPollTick)
 
 			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
 			require.NoError(t, err)
@@ -187,8 +186,9 @@ func TestEthExecLayer(t *testing.T) {
 			valExit.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait to make sure the state is not changed
-			time.Sleep(time.Millisecond * 500)
+			require.Never(t, func() bool {
+				return len(nodeStorage.Shares().List(nil)) != 7
+			}, 500*time.Millisecond, asyncPollTick)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
@@ -212,8 +212,9 @@ func TestEthExecLayer(t *testing.T) {
 			valRemove.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			require.Eventually(t, func() bool {
+				return len(nodeStorage.Shares().List(nil)) == 5
+			}, asyncWaitTimeout, asyncPollTick)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 5, len(shares))
@@ -242,10 +243,19 @@ func TestEthExecLayer(t *testing.T) {
 			clusterLiquidate.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
-
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
+			require.Eventually(t, func() bool {
+				shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
+				if len(shares) != 5 {
+					return false
+				}
+				for _, s := range shares {
+					if !s.Liquidated {
+						return false
+					}
+				}
+				return true
+			}, asyncWaitTimeout, asyncPollTick)
 
 			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
@@ -282,8 +292,18 @@ func TestEthExecLayer(t *testing.T) {
 			clusterReactivated.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			require.Eventually(t, func() bool {
+				clusterShares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
+				if len(clusterShares) != 5 {
+					return false
+				}
+				for _, s := range clusterShares {
+					if s.Liquidated {
+						return false
+					}
+				}
+				return true
+			}, asyncWaitTimeout, asyncPollTick)
 
 			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
@@ -319,14 +339,14 @@ func TestEthExecLayer(t *testing.T) {
 			setFeeRecipient.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			require.Eventually(t, func() bool {
+				feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
+				return err == nil && bytes.Equal(testAddrBob.Bytes(), feeRecipient[:])
+			}, asyncWaitTimeout, asyncPollTick)
 
 			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
 			require.NoError(t, err)
 			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
 		}
-
-		stopChan <- struct{}{}
 	})
 }
