@@ -158,7 +158,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 
 	t.Run("generates and stores plaintext key when encryption secret is missing", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -449,7 +449,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("errors clearly when encrypted key cannot be decrypted via SetupNetworkKey", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 

@@ -232,7 +232,7 @@ func TestStorage_PubKeyIndexConsistency(t *testing.T) {
 
 func TestStorage_PubKeyIndexPopulatedOnInit(t *testing.T) {
 	logger := log.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
