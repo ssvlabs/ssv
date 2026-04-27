@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -10,9 +11,32 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
+
+// beaconNodeFromRunner extracts the beacon.BeaconNode from a runner.Runner.
+// The Runner interface intentionally does not expose the beacon node, so spec
+// tests that need direct access (e.g. to inspect broadcasted roots) must
+// type-switch on the concrete runner type.
+func beaconNodeFromRunner(r runner.Runner) beacon.BeaconNode {
+	switch r := r.(type) {
+	case *runner.CommitteeRunner:
+		return r.Beacon
+	case *runner.AggregatorRunner:
+		return r.Beacon
+	case *runner.ProposerRunner:
+		return r.Beacon
+	case *runner.SyncCommitteeAggregatorRunner:
+		return r.Beacon
+	case *runner.ValidatorRegistrationRunner:
+		return r.Beacon
+	case *runner.VoluntaryExitRunner:
+		return r.Beacon
+	}
+	panic(fmt.Sprintf("unknown runner type: %T", r))
+}
 
 func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType string) runner.Runner {
 	var r runner.Runner

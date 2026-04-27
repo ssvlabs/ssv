@@ -17,11 +17,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -30,9 +27,7 @@ import (
 type SyncCommitteeAggregatorRunner struct {
 	*BaseRunner
 
-	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	measurements   dutyMeasurements
 
@@ -64,11 +59,12 @@ func NewSyncCommitteeAggregatorRunner(opts SyncCommitteeAggregatorRunnerOptions)
 			Share:              opts.Share,
 			QBFTController:     opts.QBFTController,
 			highestDecidedSlot: opts.HighestDecidedSlot,
+			Beacon:             opts.Beacon,
+			Signer:             opts.Signer,
+			OperatorSigner:     opts.OperatorSigner,
 		},
 
-		beacon:         opts.Beacon,
 		network:        opts.Network,
-		signer:         opts.Signer,
 		ValCheck:       opts.ValCheck,
 		operatorSigner: opts.OperatorSigner,
 		measurements:   *newMeasurementsStore(),
@@ -127,7 +123,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		blsSigSelectionProof := phase0.BLSSignature{}
 		copy(blsSigSelectionProof[:], sig)
 
-		aggregator := r.GetBeaconNode().IsSyncCommitteeAggregator(sig)
+		aggregator := r.Beacon.IsSyncCommitteeAggregator(sig)
 		if !aggregator {
 			continue
 		}
@@ -138,7 +134,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 			logger.Warn("root got a quorum, but is unknown to us", fields.Root(root))
 			continue
 		}
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
+		subnet := r.Beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
@@ -164,7 +160,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	span.AddEvent("fetching sync committee contributions")
-	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(ctx, duty.DutySlot(), selectionProofs, subnets)
+	contributions, ver, err := r.Beacon.GetSyncCommitteeContribution(ctx, duty.DutySlot(), selectionProofs, subnets)
 	if err != nil {
 		return fmt.Errorf("could not get sync committee contribution: %w", err)
 	}
@@ -234,10 +230,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 			return fmt.Errorf("could not generate contribution and proof: %w", err)
 		}
 
-		signed, err := signBeaconObject(
+		signed, err := r.signBeaconObject(
 			ctx,
-			r,
-			r.NetworkConfig,
 			duty,
 			contribAndProof,
 			cd.Duty.Slot,
@@ -283,7 +277,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.network.Broadcast(msgID, msgToBroadcast); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -371,7 +365,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			logger.Debug(submittingSyncCommitteeEvent)
 
 			reqStart := time.Now()
-			err = r.GetBeaconNode().SubmitSignedContributionAndProof(ctx, signedContribAndProof)
+			err = r.Beacon.SubmitSignedContributionAndProof(ctx, signedContribAndProof)
 			if err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
@@ -440,7 +434,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 		return nil, phase0.Root{}, fmt.Errorf("current duty slot: %w", err)
 	}
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
-	dContribAndProof, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
+	dContribAndProof, err := r.Beacon.DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, fmt.Errorf("could not get domain data: %w", err)
 	}
@@ -460,7 +454,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 	indices := duty.ValidatorSyncCommitteeIndices
 	sszIndexes := make([]ssz.HashRoot, 0, len(indices))
 	for _, index := range indices {
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+		subnet := r.Beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              duty.DutySlot(),
 			SubcommitteeIndex: subnet,
@@ -521,16 +515,14 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	r.rootToSyncCommitteeIdx = make(map[phase0.Root]phase0.ValidatorIndex)
 
 	for _, vIdx := range validatorDuty.ValidatorSyncCommitteeIndices {
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
+		subnet := r.Beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(vIdx))
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              validatorDuty.DutySlot(),
 			SubcommitteeIndex: subnet,
 		}
 		span.AddEvent("signing beacon object")
-		msg, err := signBeaconObject(
+		msg, err := r.signBeaconObject(
 			ctx,
-			r,
-			r.NetworkConfig,
 			validatorDuty,
 			data,
 			validatorDuty.DutySlot(),
@@ -557,14 +549,6 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 
 func (r *SyncCommitteeAggregatorRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
-}
-
-func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

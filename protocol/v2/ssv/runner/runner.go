@@ -32,14 +32,12 @@ type Getters interface {
 	HasAcceptedProposalForCurrentRound() bool
 	GetShares() map[phase0.ValidatorIndex]*spectypes.Share
 	GetShare() *spectypes.Share
-	GetRole() spectypes.RunnerRole
 	GetLastHeight() specqbft.Height
 	GetLastRound() specqbft.Round
 	GetStateRoot() ([32]byte, error)
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
-	GetBeaconNode() beacon.BeaconNode
 }
 
 type Setters interface {
@@ -108,7 +106,14 @@ type BaseRunner struct {
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
-	qbftRoundTimerF ssv.QBFTRoundTimerF `json:"-"`
+	// Beacon, Signer are runtime-only dependencies, not persisted across restarts. They are set
+	// by the runner's constructor and rehydrated by the caller after Decode.
+	Beacon beacon.BeaconNode  `json:"-"`
+	Signer ekm.BeaconSigner   `json:"-"`
+
+	// qbftRoundTimerF is a factory that allows us to create a slot(height)-specific QBFT round-timer to supply
+	// to corresponding QBFT instance.
+	qbftRoundTimerF ssv.QBFTRoundTimerF
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -157,10 +162,6 @@ func (b *BaseRunner) GetShare() *spectypes.Share {
 	return nil
 }
 
-func (b *BaseRunner) GetRole() spectypes.RunnerRole {
-	return b.RunnerRoleType
-}
-
 func (b *BaseRunner) GetLastHeight() specqbft.Height {
 	if ctrl := b.QBFTController; ctrl != nil {
 		return ctrl.LatestInstanceHeight
@@ -180,6 +181,10 @@ func (b *BaseRunner) GetLastRound() specqbft.Round {
 
 func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
 	return b.State.GetRoot()
+}
+
+func (b *BaseRunner) GetSigner() ekm.BeaconSigner {
+	return b.Signer
 }
 
 func (b *BaseRunner) SetQBFTRoundTimerF(factory ssv.QBFTRoundTimerF) {

@@ -10,45 +10,41 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func signBeaconObject(
+func (b *BaseRunner) signBeaconObject(
 	ctx context.Context,
-	runner Runner,
-	networkConfig *networkconfig.Network,
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	if networkConfig == nil {
+	if b.NetworkConfig == nil {
 		return nil, fmt.Errorf("network config is nil")
 	}
-	epoch := networkConfig.EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
+	epoch := b.NetworkConfig.EstimatedEpochAtSlot(slot)
+	domain, err := b.Beacon.DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	return signAsValidator(ctx, runner, duty.ValidatorIndex, obj, slot, signatureDomain, domain)
+	return b.signAsValidator(ctx, duty.ValidatorIndex, obj, slot, signatureDomain, domain)
 }
 
-func signAsValidator(
+func (b *BaseRunner) signAsValidator(
 	ctx context.Context,
-	runner Runner,
 	validatorIndex phase0.ValidatorIndex,
 	obj ssz.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 	domain phase0.Domain,
 ) (*spectypes.PartialSignatureMessage, error) {
-	share, ok := runner.GetShares()[validatorIndex]
+	share, ok := b.Share[validatorIndex]
 	if !ok {
 		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(
+	sig, r, err := b.Signer.SignBeaconObject(
 		ctx,
 		obj,
 		domain,
@@ -63,7 +59,7 @@ func signAsValidator(
 	return &spectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
-		Signer:           runner.GetOperatorSigner().GetOperatorID(),
+		Signer:           b.OperatorSigner.GetOperatorID(),
 		ValidatorIndex:   validatorIndex,
 	}, nil
 }

@@ -40,7 +40,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return fmt.Errorf("compute pre-consensus roots and domain: %w", err)
 	}
 
-	return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+	return b.verifyExpectedRoot(ctx, psigMsgs, roots, domain)
 }
 
 // Verify each signature in container removing the invalid ones
@@ -130,9 +130,9 @@ func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner
 			return err
 		}
 
-		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
+		return b.verifyExpectedRoot(ctx, psigMsgs, roots, domain)
 	}
-	if runner.GetRole() == spectypes.RoleCommittee {
+	if b.RunnerRoleType == spectypes.RoleCommittee {
 		validateMsg = func() error {
 			decidedValue := &spectypes.BeaconVote{}
 			if err := decidedValue.Decode(decidedValueBytes); err != nil {
@@ -166,7 +166,6 @@ func (b *BaseRunner) validateDecidedConsensusData(valueCheckFn specqbft.Proposed
 
 func (b *BaseRunner) verifyExpectedRoot(
 	ctx context.Context,
-	runner Runner,
 	psigMsgs *spectypes.PartialSignatureMessages,
 	expectedRootObjs []ssz.HashRoot,
 	domain phase0.DomainType,
@@ -182,7 +181,7 @@ func (b *BaseRunner) verifyExpectedRoot(
 			return nil, fmt.Errorf("current duty slot: %w", err)
 		}
 		epoch := b.NetworkConfig.EstimatedEpochAtSlot(currentDutySlot)
-		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
+		d, err := b.Beacon.DomainData(ctx, epoch, domain)
 		if err != nil {
 			return nil, fmt.Errorf("could not get pre consensus root domain: %w", err)
 		}

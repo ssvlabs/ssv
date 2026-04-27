@@ -39,7 +39,6 @@ func TestVoluntaryExitRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.
 	require.NoError(t, err)
 
 	require.Equal(t, beforeRoot, afterRoot)
-	require.Equal(t, spectypes.RoleVoluntaryExit, decoded.GetRole())
 	require.Len(t, decoded.GetShares(), 1)
 	require.Equal(t, share.ValidatorIndex, decoded.GetShare().ValidatorIndex)
 	require.False(t, decoded.hasDutyRunning())
@@ -70,7 +69,6 @@ func TestVoluntaryExitRunnerUsesReplacedBaseRunner(t *testing.T) {
 		},
 	}
 
-	require.Equal(t, spectypes.RoleVoluntaryExit, runner.GetRole())
 	require.Len(t, runner.GetShares(), 1)
 	require.Equal(t, replacementShare.ValidatorIndex, runner.GetShare().ValidatorIndex)
 }
@@ -95,7 +93,6 @@ func TestCommitteeRunnerDecodePreservesEmbeddedBaseRunnerMethods(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, beforeRoot, afterRoot)
-	require.Equal(t, spectypes.RoleCommittee, decoded.GetRole())
 	require.Len(t, decoded.GetShares(), 1)
 	require.False(t, decoded.hasDutyRunning())
 }

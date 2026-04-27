@@ -138,7 +138,7 @@ func compareHeightOrSlot(state *State, m *SSVMessage) int {
 		if qbftMsg.Height > stateHeight {
 			return 1
 		}
-	} else if pms, ok := m.Body.(*spectypes.PartialSignatureMessages); ok && pms != nil { // everyone likes pms
+	} else if pms, ok := m.Body.(*spectypes.PartialSignatureMessages); ok && pms != nil {
 		if pms.Slot == state.Slot {
 			return 0
 		}

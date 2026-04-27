@@ -15,11 +15,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -29,9 +26,7 @@ import (
 type VoluntaryExitRunner struct {
 	*BaseRunner
 
-	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -54,11 +49,12 @@ func NewVoluntaryExitRunner(opts VoluntaryExitRunnerOptions) (Runner, error) {
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
+			Beacon:         opts.Beacon,
+			Signer:         opts.Signer,
+			OperatorSigner: opts.OperatorSigner,
 		},
 
-		beacon:         opts.Beacon,
 		network:        opts.Network,
-		signer:         opts.Signer,
 		operatorSigner: opts.OperatorSigner,
 	}, nil
 }
@@ -118,7 +114,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	}
 
 	span.AddEvent("submitting voluntary exit")
-	if err := r.beacon.SubmitVoluntaryExit(ctx, signedVoluntaryExit); err != nil {
+	if err := r.Beacon.SubmitVoluntaryExit(ctx, signedVoluntaryExit); err != nil {
 		return fmt.Errorf("could not submit voluntary exit: %w", err)
 	}
 
@@ -180,10 +176,8 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
 	span.AddEvent("signing beacon object")
-	msg, err := signBeaconObject(
+	msg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		validatorDuty,
 		voluntaryExit,
 		validatorDuty.DutySlot(),
@@ -225,14 +219,6 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit(duty *spectypes.ValidatorDu
 
 func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *VoluntaryExitRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
-}
-
-func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

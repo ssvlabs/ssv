@@ -20,11 +20,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -33,9 +30,7 @@ import (
 type AggregatorRunner struct {
 	*BaseRunner
 
-	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	measurements   *dutyMeasurements
 
@@ -80,11 +75,12 @@ func NewAggregatorRunner(opts AggregatorRunnerOptions) (Runner, error) {
 			Share:              opts.Share,
 			QBFTController:     opts.QBFTController,
 			highestDecidedSlot: opts.HighestDecidedSlot,
+			Beacon:             opts.Beacon,
+			Signer:             opts.Signer,
+			OperatorSigner:     opts.OperatorSigner,
 		},
 
-		beacon:         opts.Beacon,
 		network:        opts.Network,
-		signer:         opts.Signer,
 		operatorSigner: opts.OperatorSigner,
 		ValCheck:       opts.ValCheck,
 		measurements:   newMeasurementsStore(),
@@ -159,7 +155,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex)),
 	)
-	res, ver, err := r.beacon.SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+	res, ver, err := r.Beacon.SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return fmt.Errorf("failed to submit aggregate and proof: %w", err)
 	}
@@ -224,10 +220,8 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	span.AddEvent("signing post consensus")
 	// specific duty sig
-	msg, err := signBeaconObject(
+	msg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		duty,
 		aggregateAndProofHashRoot,
 		decidedValue.Duty.Slot,
@@ -339,7 +333,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	span.AddEvent(submittingSignedAggregateProofEvent)
 
 	start := time.Now()
-	if err := r.beacon.SubmitSignedAggregateSelectionProof(ctx, msg); err != nil {
+	if err := r.Beacon.SubmitSignedAggregateSelectionProof(ctx, msg); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
 		const errMsg = "could not submit to Beacon chain reconstructed contribution and proof"
 		logger.Error(errMsg, fields.Took(time.Since(start)), zap.Error(err))
@@ -414,10 +408,8 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	// sign selection proof
 	span.AddEvent("signing beacon object")
-	msg, err := signBeaconObject(
+	msg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		validatorDuty,
 		spectypes.SSZUint64(validatorDuty.DutySlot()),
 		validatorDuty.DutySlot(),
@@ -445,14 +437,6 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 func (r *AggregatorRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
-}
-
-func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

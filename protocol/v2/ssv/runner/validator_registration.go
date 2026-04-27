@@ -21,8 +21,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -38,9 +36,7 @@ const (
 type ValidatorRegistrationRunner struct {
 	*BaseRunner
 
-	beacon                         beacon.BeaconNode
 	network                        specqbft.Network
-	signer                         ekm.BeaconSigner
 	operatorSigner                 ssvtypes.OperatorSigner
 	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
 	feeRecipientProvider           feeRecipientProvider
@@ -67,11 +63,12 @@ func NewValidatorRegistrationRunner(opts ValidatorRegistrationRunnerOptions) (Ru
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
+			Beacon:         opts.Beacon,
+			Signer:         opts.Signer,
+			OperatorSigner: opts.OperatorSigner,
 		},
 
-		beacon:                         opts.Beacon,
 		network:                        opts.Network,
-		signer:                         opts.Signer,
 		operatorSigner:                 opts.OperatorSigner,
 		validatorRegistrationSubmitter: opts.ValidatorRegistrationSubmitter,
 		feeRecipientProvider:           opts.FeeRecipientProvider,
@@ -200,10 +197,8 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")
-	msg, err := signBeaconObject(
+	msg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		validatorDuty,
 		vr,
 		validatorDuty.DutySlot(),
@@ -254,14 +249,6 @@ func (r *ValidatorRegistrationRunner) buildValidatorRegistration(slot phase0.Slo
 
 func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *ValidatorRegistrationRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
-}
-
-func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

@@ -453,7 +453,7 @@ func setupRunnerForPostConsensus(
 		return leaderID
 	}
 	qbftConfig.Network = runner.network
-	qbftConfig.BeaconSigner = runner.signer
+	qbftConfig.BeaconSigner = runner.Signer
 
 	runner.State.RunningInstance = instance.NewInstance(
 		t.Context(),

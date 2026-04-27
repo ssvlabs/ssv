@@ -462,33 +462,50 @@ func fixInstanceForRun(
 }
 
 func createRunnerWithBaseRunner(logger *zap.Logger, role spectypes.RunnerRole, base *runner.BaseRunner, ks *spectestingutils.TestKeySet) runner.Runner {
+	// rehydrateBaseRunner copies the runtime-only deps (Beacon, Signer, OperatorSigner) from the
+	// freshly-constructed runner's BaseRunner onto the deserialized one. These fields are tagged
+	// `json:"-"` and are therefore lost on encode/decode, so the deserialized BaseRunner cannot
+	// execute duties on its own.
+	rehydrateBaseRunner := func(fresh *runner.BaseRunner) {
+		base.Beacon = fresh.Beacon
+		base.Signer = fresh.Signer
+		base.OperatorSigner = fresh.OperatorSigner
+	}
+
 	switch role {
 	case spectypes.RoleCommittee:
 		ret := ssvtesting.CommitteeRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.CommitteeRunner).BaseRunner)
 		ret.(*runner.CommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleAggregator:
 		ret := ssvtesting.AggregatorRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.AggregatorRunner).BaseRunner)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleProposer:
 		ret := ssvtesting.ProposerRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.ProposerRunner).BaseRunner)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleSyncCommitteeContribution:
 		ret := ssvtesting.SyncCommitteeContributionRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.ValidatorRegistrationRunner).BaseRunner)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
 		return ret
 	case spectypes.RoleVoluntaryExit:
 		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.VoluntaryExitRunner).BaseRunner)
 		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
 	case spectestingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)
+		rehydrateBaseRunner(ret.(*runner.CommitteeRunner).BaseRunner)
 		ret.(*runner.CommitteeRunner).BaseRunner = base
 		return ret
 	default:

@@ -165,7 +165,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		}
 	default:
 		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-		v.DutyRunners[test.Runner.GetRole()] = test.Runner
+		v.DutyRunners[test.Duty.RunnerRole()] = test.Runner
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
@@ -206,12 +206,12 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		}
 		actualRunner = runnerInstance
 		network = runnerInstance.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork = runnerInstance.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		beaconNetwork = runnerInstance.Beacon.(*protocoltesting.BeaconNodeWrapped)
 		committee = c.CommitteeMember.Committee
 	default:
 		network = v.Network.(*spectestingutils.TestingNetwork)
 		committee = v.Operator.Committee
-		beaconNetwork = test.Runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		beaconNetwork = beaconNodeFromRunner(test.Runner).(*protocoltesting.BeaconNodeWrapped)
 	}
 
 	// test output message
@@ -291,7 +291,7 @@ var baseCommitteeWithRunnerSample = func(
 			BaseRunnerOptions: runner.BaseRunnerOptions{
 				NetworkConfig:  networkconfig.TestNetwork,
 				Share:          shareMap,
-				Beacon:         runnerSample.GetBeaconNode(),
+				Beacon:         runnerSample.Beacon,
 				Network:        runnerSample.GetNetwork(),
 				Signer:         runnerSample.GetSigner(),
 				OperatorSigner: runnerSample.GetOperatorSigner(),

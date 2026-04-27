@@ -20,11 +20,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -34,9 +31,7 @@ import (
 type ProposerRunner struct {
 	*BaseRunner
 
-	beacon              beacon.BeaconNode
 	network             specqbft.Network
-	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
 	measurements        *dutyMeasurements
@@ -87,11 +82,12 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 			Share:              opts.Share,
 			QBFTController:     opts.QBFTController,
 			highestDecidedSlot: opts.HighestDecidedSlot,
+			Beacon:             opts.Beacon,
+			Signer:             opts.Signer,
+			OperatorSigner:     opts.OperatorSigner,
 		},
 
-		beacon:              opts.Beacon,
 		network:             opts.Network,
-		signer:              opts.Signer,
 		operatorSigner:      opts.OperatorSigner,
 		doppelgangerHandler: opts.DoppelgangerHandler,
 		ValCheck:            opts.ValCheck,
@@ -169,7 +165,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
 	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
-	vBlk, _, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	vBlk, _, err := r.Beacon.GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		return fmt.Errorf("get beacon block: %w", err)
 	}
@@ -275,10 +271,8 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	span.AddEvent("signing beacon object")
-	msg, err := signBeaconObject(
+	msg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		duty,
 		blkRootToSign,
 		cd.Duty.Slot,
@@ -320,7 +314,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 
 	r.measurements.StartPostConsensus()
 	span.AddEvent("broadcasting post consensus partial signature message")
-	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+	if err := r.network.Broadcast(msgID, msgToBroadcast); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -403,7 +397,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	logger = logger.With(loggerFields...)
 
 	start := time.Now()
-	if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
+	if err := r.Beacon.SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 		return fmt.Errorf("submit beacon block: %w", err)
 	}
@@ -489,10 +483,8 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	// sign partial randao
 	span.AddEvent("signing beacon object")
 	epoch := r.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := signBeaconObject(
+	msg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		proposerDuty,
 		spectypes.SSZUint64(epoch),
 		proposerDuty.DutySlot(),
@@ -529,14 +521,6 @@ func (r *ProposerRunner) remainingProposerDelay(slot phase0.Slot, now time.Time)
 
 func (r *ProposerRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
-}
-
-func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *ProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

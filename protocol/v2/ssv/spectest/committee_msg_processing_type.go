@@ -57,7 +57,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	broadcastedRootsCap := 0
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		beaconNetwork := runner.Beacon.(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgsCap += len(network.BroadcastedMsgs)
 		broadcastedRootsCap += len(beaconNetwork.GetBroadcastedRoots())
 	}
@@ -66,7 +66,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	broadcastedRoots := make([]phase0.Root, 0, broadcastedRootsCap)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
-		beaconNetwork := runner.GetBeaconNode().(*protocoltesting.BeaconNodeWrapped)
+		beaconNetwork := runner.Beacon.(*protocoltesting.BeaconNodeWrapped)
 		broadcastedMsgs = append(broadcastedMsgs, network.BroadcastedMsgs...)
 		broadcastedRoots = append(broadcastedRoots, beaconNetwork.GetBroadcastedRoots()...)
 	}

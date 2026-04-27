@@ -25,11 +25,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -47,8 +44,6 @@ type CommitteeRunner struct {
 	attestingValidators []phase0.BLSPubKey
 
 	network             specqbft.Network
-	beacon              beacon.BeaconNode
-	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
@@ -81,13 +76,14 @@ func NewCommitteeRunner(opts CommitteeRunnerOptions) (Runner, error) {
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 			QBFTController: opts.QBFTController,
+			Beacon:         opts.Beacon,
+			Signer:         opts.Signer,
+			OperatorSigner: opts.OperatorSigner,
 		},
 
 		attestingValidators: opts.AttestingValidators,
 
-		beacon:              opts.Beacon,
 		network:             opts.Network,
-		signer:              opts.Signer,
 		operatorSigner:      opts.OperatorSigner,
 		submittedDuties:     make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
 		DutyGuard:           opts.DutyGuard,
@@ -146,22 +142,12 @@ func (r *CommitteeRunner) GetRoot() ([32]byte, error) {
 
 func (r *CommitteeRunner) MarshalJSON() ([]byte, error) {
 	type CommitteeRunnerAlias struct {
-		BaseRunner     *BaseRunner
-		beacon         beacon.BeaconNode
-		network        specqbft.Network
-		signer         ekm.BeaconSigner
-		operatorSigner ssvtypes.OperatorSigner
-		valCheck       ssv.ValueChecker
+		BaseRunner *BaseRunner
 	}
 
 	// Create object and marshal
 	alias := &CommitteeRunnerAlias{
-		BaseRunner:     r.BaseRunner,
-		beacon:         r.beacon,
-		network:        r.network,
-		signer:         r.signer,
-		operatorSigner: r.operatorSigner,
-		valCheck:       r.ValCheck,
+		BaseRunner: r.BaseRunner,
 	}
 
 	byts, err := json.Marshal(alias)
@@ -171,12 +157,7 @@ func (r *CommitteeRunner) MarshalJSON() ([]byte, error) {
 
 func (r *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	type CommitteeRunnerAlias struct {
-		BaseRunner     *BaseRunner
-		beacon         beacon.BeaconNode
-		network        specqbft.Network
-		signer         ekm.BeaconSigner
-		operatorSigner ssvtypes.OperatorSigner
-		valCheck       ssv.ValueChecker
+		BaseRunner *BaseRunner
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -191,24 +172,13 @@ func (r *CommitteeRunner) UnmarshalJSON(data []byte) error {
 
 	// Assign fields
 	r.BaseRunner = aux.BaseRunner
-	r.beacon = aux.beacon
-	r.network = aux.network
-	r.signer = aux.signer
-	r.operatorSigner = aux.operatorSigner
-	r.ValCheck = aux.valCheck
+	// ValCheck is not restored from JSON. Callers must rehydrate it explicitly.
+	r.ValCheck = nil
 	return nil
-}
-
-func (r *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
-	return r.beacon
 }
 
 func (r *CommitteeRunner) GetNetwork() specqbft.Network {
 	return r.network
-}
-
-func (r *CommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -331,10 +301,8 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 				case spectypes.BNRoleSyncCommittee:
 					totalSyncCommitteeDuties.Add(1)
 
-					partialSigMsg, err := signBeaconObject(
+					partialSigMsg, err := r.signBeaconObject(
 						ctx,
-						r,
-						r.NetworkConfig,
 						validatorDuty,
 						spectypes.SSZBytes(beaconVote.BlockRoot[:]),
 						validatorDuty.DutySlot(),
@@ -424,7 +392,7 @@ listener:
 	}
 
 	r.measurements.StartPostConsensus()
-	if err := r.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
+	if err := r.network.Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
 	}
 	const broadcastedPostConsensusMsgEvent = "broadcasted post-consensus partial signature message"
@@ -457,10 +425,8 @@ func (r *CommitteeRunner) signAttesterDuty(
 	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 
 	span.AddEvent("signing beacon object")
-	partialMsg, err := signBeaconObject(
+	partialMsg, err := r.signBeaconObject(
 		ctx,
-		r,
-		r.NetworkConfig,
 		validatorDuty,
 		attestationData,
 		validatorDuty.DutySlot(),
@@ -697,7 +663,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		submissionStart := time.Now()
 
 		// Submit multiple attestations
-		if err := r.beacon.SubmitAttestations(ctx, attestations); err != nil {
+		if err := r.Beacon.SubmitAttestations(ctx, attestations); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 			const errMsg = "could not submit attestations"
 			aLogger.Error(errMsg, zap.Error(err))
@@ -748,7 +714,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.
 		span.AddEvent(submittingSyncCommitteeEvent)
 
 		submissionStart := time.Now()
-		if err := r.beacon.SubmitSyncMessages(ctx, syncCommitteeMessages); err != nil {
+		if err := r.Beacon.SubmitSyncMessages(ctx, syncCommitteeMessages); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
 			const errMsg = "could not submit sync committee messages"
 			scLogger.Error(errMsg, zap.Error(err))
@@ -948,7 +914,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			}
 
 			// Root
-			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainAttester)
+			domain, err := r.Beacon.DomainData(ctx, epoch, spectypes.DomainAttester)
 			if err != nil {
 				logger.Debug("failed to get attester domain", zap.Error(err))
 				continue
@@ -975,7 +941,7 @@ func (r *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context
 			}
 
 			// Root
-			domain, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
+			domain, err := r.Beacon.DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
 			if err != nil {
 				logger.Debug("failed to get sync committee domain", zap.Error(err))
 				continue
@@ -1014,7 +980,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	start := time.Now()
 	slot := duty.DutySlot()
 
-	attData, _, err := r.GetBeaconNode().GetAttestationData(ctx, slot)
+	attData, _, err := r.Beacon.GetAttestationData(ctx, slot)
 	if err != nil {
 		return fmt.Errorf("failed to get attestation data: %w", err)
 	}
@@ -1031,7 +997,7 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 
 	r.measurements.StartConsensus()
 	r.ValCheck = ssv.NewVoteChecker(
-		r.signer,
+		r.Signer,
 		slot,
 		r.attestingValidators,
 		vote,
@@ -1041,10 +1007,6 @@ func (r *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, d
 	}
 
 	return nil
-}
-
-func (r *CommitteeRunner) GetSigner() ekm.BeaconSigner {
-	return r.signer
 }
 
 func (r *CommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
