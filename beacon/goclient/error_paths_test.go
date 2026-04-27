@@ -101,7 +101,6 @@ func newHTTPService(t *testing.T, addr string, timeout time.Duration) *eth2clien
 		eth2clienthttp.WithLogLevel(zerolog.Disabled),
 		eth2clienthttp.WithTimeout(timeout),
 		eth2clienthttp.WithReducedMemoryUsage(true),
-		eth2clienthttp.WithAllowDelayedStart(true),
 	)
 	require.NoError(t, err)
 
