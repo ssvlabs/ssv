@@ -53,7 +53,8 @@ import (
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	// Chosen from BenchmarkRouterFanout to keep fan-out low on one shared channel.
+	// Chosen from BenchmarkRouterFanout for the current pod shape, where the
+	// 3.6 CPU cgroup quota rounds to GOMAXPROCS=4.
 	defaultNetworkRouterConcurrency = 16
 )
 
@@ -178,11 +179,6 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		WorkersCount: options.WorkersCount,
 		Buffer:       options.QueueBufferSize,
 	}
-	routerConcurrency := options.MsgRouterConcurrency
-	if routerConcurrency <= 0 {
-		routerConcurrency = defaultNetworkRouterConcurrency
-	}
-
 	validatorCommonOpts := validator.NewCommonOptions(
 		options.NetworkConfig,
 		options.Network,
@@ -227,7 +223,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		operatorsIDs: operatorsIDs,
 
 		messageRouter:        newMessageRouter(logger),
-		msgRouterConcurrency: routerConcurrency,
+		msgRouterConcurrency: options.MsgRouterConcurrency,
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
@@ -307,10 +303,8 @@ func (c *Controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 }
 
 func (c *Controller) handleRouterMessages() {
-	ctx, cancel := context.WithCancel(c.ctx)
-	defer cancel()
 	for {
-		msg, ok := c.messageRouter.Receive(ctx)
+		msg, ok := c.messageRouter.Receive(c.ctx)
 		if !ok {
 			c.logger.Debug("router message handler stopped")
 			return
@@ -328,9 +322,9 @@ func (c *Controller) handleRouterMessages() {
 			copy(cid[:], dutyExecutorID[16:])
 
 			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-				v.EnqueueMessage(ctx, m)
+				v.EnqueueMessage(c.ctx, m)
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-				vc.EnqueueMessage(ctx, m)
+				vc.EnqueueMessage(c.ctx, m)
 			} else if c.validatorCommonOpts.ExporterOptions.Enabled {
 				if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue

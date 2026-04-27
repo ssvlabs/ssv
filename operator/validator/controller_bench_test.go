@@ -61,7 +61,7 @@ func BenchmarkRouterFanout(b *testing.B) {
 						msg := state.messageFor(sequence)
 						for {
 							state.attempted.Add(1)
-							if ctrl.messageRouter.Route(ctrl.ctx, msg) {
+							if ctrl.messageRouter.route(ctrl.ctx, msg) {
 								state.routerEnqueued.Add(1)
 								state.observeOutstanding(state.outstanding.Add(1))
 								break
