@@ -503,6 +503,7 @@ func TestIssue1682(t *testing.T) {
 						defer wg.Done()
 						<-start
 						_, found := m.GetOrSet(cmtID, validatorStatusSubscribing)
+						// `attempted` tracks the "reached GetOrSet" barrier, while `wg` still tracks full goroutine completion.
 						attempted.Done()
 						if !found {
 							<-releaseSubscribed

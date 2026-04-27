@@ -229,7 +229,16 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 4 Liquidate Cluster
 		{
-			taskExecutor.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			liquidatedDone := make(chan struct{}, 1)
+			taskExecutor.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ethcommon.Address, []uint64, []*ssvtypes.SSVShare) error {
+					select {
+					case liquidatedDone <- struct{}{}:
+					default:
+					}
+					return nil
+				},
+			).AnyTimes()
 
 			clusterLiquidate := NewTestClusterLiquidatedInput(common)
 			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
@@ -244,18 +253,11 @@ func TestEthExecLayer(t *testing.T) {
 			testEnv.CloseFollowDistance(&blockNum)
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
-			require.Eventually(t, func() bool {
-				shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
-				if len(shares) != 5 {
-					return false
-				}
-				for _, s := range shares {
-					if !s.Liquidated {
-						return false
-					}
-				}
-				return true
-			}, asyncWaitTimeout, asyncPollTick)
+			select {
+			case <-liquidatedDone:
+			case <-time.After(asyncWaitTimeout):
+				t.Fatal("timed out waiting for cluster liquidation task")
+			}
 
 			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
@@ -268,7 +270,16 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 5 Reactivate Cluster
 		{
-			taskExecutor.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			reactivatedDone := make(chan struct{}, 1)
+			taskExecutor.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ethcommon.Address, []uint64, []*ssvtypes.SSVShare) error {
+					select {
+					case reactivatedDone <- struct{}{}:
+					default:
+					}
+					return nil
+				},
+			).AnyTimes()
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
@@ -292,18 +303,11 @@ func TestEthExecLayer(t *testing.T) {
 			clusterReactivated.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			require.Eventually(t, func() bool {
-				clusterShares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
-				if len(clusterShares) != 5 {
-					return false
-				}
-				for _, s := range clusterShares {
-					if s.Liquidated {
-						return false
-					}
-				}
-				return true
-			}, asyncWaitTimeout, asyncPollTick)
+			select {
+			case <-reactivatedDone:
+			case <-time.After(asyncWaitTimeout):
+				t.Fatal("timed out waiting for cluster reactivation task")
+			}
 
 			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)

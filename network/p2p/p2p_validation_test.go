@@ -234,13 +234,15 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			}
 		}
 
+		var peers []peerScore
 		require.Eventually(t, func() bool {
-			peers, ok := sortedPeerScores(node)
-			return ok && peerScoresMatchAnyOrder(peers, validOrders)
+			snapshot, ok := sortedPeerScores(node)
+			if ok && peerScoresMatchAnyOrder(snapshot, validOrders) {
+				peers = snapshot
+				return true
+			}
+			return false
 		}, 15*time.Second, 100*time.Millisecond, "node %d", node.Index)
-
-		peers, ok := sortedPeerScores(node)
-		require.True(t, ok)
 
 		// Print a pretty table of each node's peers and their scores.
 		defer func() {
@@ -262,6 +264,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			tbl.Render()
 		}()
 
+		require.NotEmpty(t, peers)
 		require.True(t, peerScoresMatchAnyOrder(peers, validOrders), "node %d, peers %v", node.Index, peers)
 	}
 }
