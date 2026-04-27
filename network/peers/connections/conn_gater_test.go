@@ -13,21 +13,32 @@ import (
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
+const (
+	badPeerID     peer.ID = "bad-peer"
+	goodPeerID    peer.ID = "good-peer"
+	trimmedPeerID peer.ID = "trimmed-peer"
+)
+
 func TestConnGaterInterceptAddrDial(t *testing.T) {
 	gater := &connGater{
 		logger:          zap.NewNop(),
-		isBadPeer:       func(id peer.ID) bool { return id == "bad-peer" },
+		isBadPeer:       func(id peer.ID) bool { return id == badPeerID },
 		trimmedRecently: ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute),
 	}
 
-	require.False(t, gater.InterceptAddrDial("bad-peer", mustMultiaddr("/ip4/127.0.0.1/tcp/13000")))
-	require.True(t, gater.InterceptAddrDial("good-peer", mustMultiaddr("/ip4/127.0.0.1/tcp/13000")))
+	require.False(t, gater.InterceptAddrDial(badPeerID, mustMultiaddr("/ip4/127.0.0.1/tcp/13000")))
+	require.True(t, gater.InterceptAddrDial(goodPeerID, mustMultiaddr("/ip4/127.0.0.1/tcp/13000")))
 }
 
 func TestConnGaterInterceptPeerDial(t *testing.T) {
-	gater := &connGater{}
+	gater := &connGater{
+		logger:          zap.NewNop(),
+		isBadPeer:       func(id peer.ID) bool { return id == badPeerID },
+		trimmedRecently: ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute),
+	}
 
-	require.True(t, gater.InterceptPeerDial("peer"))
+	require.False(t, gater.InterceptPeerDial(badPeerID))
+	require.True(t, gater.InterceptPeerDial(goodPeerID))
 }
 
 func TestConnGaterInterceptAcceptHonorsLimits(t *testing.T) {
@@ -100,17 +111,17 @@ func TestConnGaterInterceptAcceptRejectsDNSAddresses(t *testing.T) {
 
 func TestConnGaterInterceptSecured(t *testing.T) {
 	trimmedRecently := ttl.New[peer.ID, struct{}](t.Context(), time.Minute, time.Minute)
-	trimmedRecently.Set("trimmed-peer", struct{}{})
+	trimmedRecently.Set(trimmedPeerID, struct{}{})
 
 	gater := &connGater{
 		logger:          zap.NewNop(),
-		isBadPeer:       func(id peer.ID) bool { return id == "bad-peer" },
+		isBadPeer:       func(id peer.ID) bool { return id == badPeerID },
 		trimmedRecently: trimmedRecently,
 	}
 
-	require.False(t, gater.InterceptSecured(libp2pnetwork.DirInbound, "trimmed-peer", nil))
-	require.False(t, gater.InterceptSecured(libp2pnetwork.DirInbound, "bad-peer", nil))
-	require.True(t, gater.InterceptSecured(libp2pnetwork.DirOutbound, "good-peer", nil))
+	require.False(t, gater.InterceptSecured(libp2pnetwork.DirInbound, trimmedPeerID, nil))
+	require.False(t, gater.InterceptSecured(libp2pnetwork.DirInbound, badPeerID, nil))
+	require.True(t, gater.InterceptSecured(libp2pnetwork.DirOutbound, goodPeerID, nil))
 }
 
 func TestConnGaterInterceptUpgraded(t *testing.T) {

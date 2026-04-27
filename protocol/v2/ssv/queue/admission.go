@@ -1,7 +1,6 @@
 package queue
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -32,24 +31,21 @@ func ShouldAcceptUnderPressure(state *State, msg *SSVMessage, buffered, capacity
 		if body == nil {
 			return false, DropReasonMalformed
 		}
-		if body.Height < state.Height {
+		stateHeight := specqbft.Height(state.Slot)
+		if body.Height < stateHeight {
 			return false, DropReasonStaleHeight
 		}
-		if state.HasRunningInstance && body.Height == state.Height && body.Round < state.Round {
+		if state.HasRunningInstance && body.Height == stateHeight && body.Round < state.Round {
 			return false, DropReasonStaleRound
 		}
 	case *spectypes.PartialSignatureMessages:
 		if body == nil {
 			return false, DropReasonMalformed
 		}
-		currentSlot := state.Slot
-		if currentSlot == 0 {
-			currentSlot = phase0.Slot(state.Height)
-		}
 		// Match runner's [currentDutySlot-1, currentDutySlot] acceptance window.
-		minAcceptableSlot := currentSlot
-		if currentSlot > 0 {
-			minAcceptableSlot = currentSlot - 1
+		minAcceptableSlot := state.Slot
+		if state.Slot > 0 {
+			minAcceptableSlot = state.Slot - 1
 		}
 		if body.Slot < minAcceptableSlot {
 			return false, DropReasonStaleSlot

@@ -167,7 +167,7 @@ func testValidatorForQueueAdmission(
 		BaseRunner: &runner.BaseRunner{
 			RunnerRoleType: role,
 			QBFTController: &controller.Controller{
-				Height: specqbft.Height(slot),
+				LatestInstanceHeight: specqbft.Height(slot),
 			},
 			State: state,
 		},

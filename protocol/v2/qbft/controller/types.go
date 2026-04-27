@@ -11,16 +11,16 @@ import (
 )
 
 const (
-	// InstanceContainerDefaultCapacity is the default capacity for InstanceContainer.
-	InstanceContainerDefaultCapacity int = 2
-	// InstanceContainerTestCapacity is the capacity for InstanceContainer used in tests.
-	InstanceContainerTestCapacity int = 1024
+	// InstancesDefaultCapacity is the default capacity for Instances.
+	InstancesDefaultCapacity int = 2
+	// InstancesTestCapacity is the capacity for Instances used in tests.
+	InstancesTestCapacity int = 1024
 )
 
-// InstanceContainer is a fixed-capacity container for instances.
-type InstanceContainer []*instance.Instance
+// Instances is a fixed-capacity container for instances.
+type Instances []*instance.Instance
 
-func (ic *InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
+func (ic *Instances) FindInstance(height specqbft.Height) *instance.Instance {
 	for _, inst := range *ic {
 		if inst != nil {
 			if inst.GetHeight() == height {
@@ -31,11 +31,11 @@ func (ic *InstanceContainer) FindInstance(height specqbft.Height) *instance.Inst
 	return nil
 }
 
-// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up
+// addNewInstance will add the new instance at index 0, pushing all other stored Instances one index up
 // (ejecting the last one if necessary)
-func (ic *InstanceContainer) addNewInstance(instance *instance.Instance) {
+func (ic *Instances) addNewInstance(instance *instance.Instance) {
 	if cap(*ic) == 0 {
-		*ic = make(InstanceContainer, 0, InstanceContainerDefaultCapacity)
+		*ic = make(Instances, 0, InstancesDefaultCapacity)
 	}
 
 	indexToInsert := len(*ic)
@@ -66,7 +66,7 @@ func (ic *InstanceContainer) addNewInstance(instance *instance.Instance) {
 }
 
 // String returns a human-readable representation of the instances. Useful for debugging.
-func (ic *InstanceContainer) String() string {
+func (ic *Instances) String() string {
 	heights := make([]string, len(*ic))
 	for index, inst := range *ic {
 		heights[index] = fmt.Sprint(inst.GetHeight())
@@ -74,13 +74,12 @@ func (ic *InstanceContainer) String() string {
 	return fmt.Sprintf("Instances(len=%d, cap=%d, heights=(%s))", len(*ic), cap(*ic), strings.Join(heights, ", "))
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface for InstanceContainer
-func (ic *InstanceContainer) UnmarshalJSON(data []byte) error {
-	// InstanceContainer must always have correct capacity on initialization
-	// because addition to instance container doesn't grow beyond cap removing values that don't fit.
-	// Therefore, we need to initialize it properly on unmarshaling
-	// to allow spec tests grow StoredInstances as much as they need to.
-	instances := make([]*instance.Instance, 0, InstanceContainerTestCapacity)
+// UnmarshalJSON implements the json.Unmarshaler interface for Instances
+func (ic *Instances) UnmarshalJSON(data []byte) error {
+	// Instances must always have correct capacity on initialization because addNewInstance
+	// doesn't grow beyond cap (it ejects values that don't fit). Therefore, we need to
+	// initialize it properly on unmarshaling to allow spec tests to grow as much as they need to.
+	instances := make([]*instance.Instance, 0, InstancesTestCapacity)
 	if cap(*ic) != 0 {
 		instances = *ic
 	}

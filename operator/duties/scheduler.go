@@ -34,6 +34,9 @@ const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
 	blockPropagationDelay = 300 * time.Millisecond
+	// reorgChannelBuffer allows HandleHeadEvent to emit a reorg notification without blocking on
+	// downstream fanout startup or temporary consumer lag.
+	reorgChannelBuffer = 1
 )
 
 // DutiesExecutor is an interface for executing duties.
@@ -82,7 +85,7 @@ type SchedulerOptions struct {
 	ValidatorProvider       ValidatorProvider
 	ValidatorController     ValidatorController
 	DutyExecutor            DutyExecutor
-	IndicesChg              chan struct{}
+	IndicesChgCh            chan struct{}
 	ValidatorRegistrationCh <-chan RegistrationDescriptor
 	ValidatorExitCh         <-chan ExitDescriptor
 	SlotTickerProvider      slotticker.Provider
@@ -110,12 +113,12 @@ type Scheduler struct {
 	slotTickerProvider  slotticker.Provider
 	dutyExecutor        DutyExecutor
 
-	handlers            []dutyHandler
+	dutyHandlers        []dutyHandler
 	blockPropagateDelay time.Duration
 
-	reorg      chan ReorgEvent
-	indicesChg chan struct{}
-	ticker     slotticker.SlotTicker
+	reorgCh      chan ReorgEvent
+	indicesChgCh chan struct{}
+	ticker       slotticker.SlotTicker
 
 	// waitCond coordinates access to headSlot for different go-routines.
 	waitCond *sync.Cond
@@ -150,13 +153,13 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 		dutyExecutor:        opts.DutyExecutor,
 		validatorProvider:   opts.ValidatorProvider,
 		validatorController: opts.ValidatorController,
-		indicesChg:          opts.IndicesChg,
+		indicesChgCh:        opts.IndicesChgCh,
 		blockPropagateDelay: blockPropagationDelay,
 
-		handlers: []dutyHandler{},
+		dutyHandlers: []dutyHandler{},
 
 		ticker:   opts.SlotTickerProvider(),
-		reorg:    make(chan ReorgEvent),
+		reorgCh:  make(chan ReorgEvent, reorgChannelBuffer),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
 
@@ -164,14 +167,14 @@ func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 
 	// These handlers fetch & record duties from the beacon node and are needed in both operator & exporter modes.
 	// When adding a new handler here, ensure it supports both modes.
-	s.handlers = append(s.handlers,
+	s.dutyHandlers = append(s.dutyHandlers,
 		NewAttesterHandler(dutyStore.Attester, opts.ExporterMode),
 		NewProposerHandler(dutyStore.Proposer, opts.ExporterMode),
 		NewSyncCommitteeHandler(dutyStore.SyncCommittee, opts.ExporterMode),
 	)
 	// These handlers only execute duties and are not needed in exporter mode.
 	if !opts.ExporterMode {
-		s.handlers = append(s.handlers,
+		s.dutyHandlers = append(s.dutyHandlers,
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
@@ -201,13 +204,15 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	}
 
 	indicesChangeFeed := NewEventFeed[struct{}]()
-	reorgFeed := NewEventFeed[ReorgEvent]()
+	reorgEventsFeed := NewEventFeed[ReorgEvent]()
 
-	for _, handler := range s.handlers {
-		indicesChangeCh := make(chan struct{})
+	for _, handler := range s.dutyHandlers {
+		// indicesChangeCh is buffered as a temporary work-around to mitigate https://github.com/ssvlabs/ssv-node-board/issues/992
+		indicesChangeCh := make(chan struct{}, 1)
 		indicesChangeFeed.Subscribe(indicesChangeCh)
-		reorgCh := make(chan ReorgEvent)
-		reorgFeed.Subscribe(reorgCh)
+		// reorgEventsCh is buffered as a temporary work-around to mitigate https://github.com/ssvlabs/ssv-node-board/issues/992
+		reorgEventsCh := make(chan ReorgEvent, 1)
+		reorgEventsFeed.Subscribe(reorgEventsCh)
 
 		handler.Setup(ctx, SetupOptions{
 			Name:                handler.Name(),
@@ -219,8 +224,8 @@ func (s *Scheduler) Start(ctx context.Context) error {
 			ValidatorController: s.validatorController,
 			DutiesExecutor:      s,
 			SlotTickerProvider:  s.slotTickerProvider,
-			ReorgEvents:         reorgCh,
-			IndicesChange:       indicesChangeCh,
+			ReorgEventsCh:       reorgEventsCh,
+			IndicesChangeCh:     indicesChangeCh,
 		})
 
 		// This call is blocking.
@@ -236,13 +241,13 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	s.backgroundTasks.Add(1)
 	go func() {
 		defer s.backgroundTasks.Done()
-		indicesChangeFeed.FanOut(s.ctx, s.indicesChg)
+		indicesChangeFeed.FanOut(s.ctx, s.indicesChgCh)
 	}()
 
 	s.backgroundTasks.Add(1)
 	go func() {
 		defer s.backgroundTasks.Done()
-		reorgFeed.FanOut(s.ctx, s.reorg)
+		reorgEventsFeed.FanOut(s.ctx, s.reorgCh)
 	}()
 
 	s.backgroundTasks.Add(1)
@@ -297,7 +302,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 func (s *Scheduler) Wait() error {
 	s.backgroundTasks.Wait()
 
-	for _, handler := range s.handlers {
+	for _, handler := range s.dutyHandlers {
 		handler.WaitShutdown()
 	}
 
@@ -418,7 +423,7 @@ func (s *Scheduler) HandleHeadEvent() func(ctx context.Context, event *eth2apiv1
 					zap.String("expected_current_dependent_root", fmt.Sprintf("%#x", expectedCurrentDutyDependentRoot)),
 					zap.String("got_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])),
 				)
-				s.reorg <- ReorgEvent{
+				s.reorgCh <- ReorgEvent{
 					CurrentDutyDependentRootChanged:  currentDutyDependentRootChanged,
 					PreviousDutyDependentRootChanged: previousDutyDependentRootChanged,
 				}

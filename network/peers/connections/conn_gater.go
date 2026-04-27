@@ -63,14 +63,18 @@ func NewConnectionGater(
 // InterceptPeerDial is called on an imminent outbound peer dial request, prior
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
-func (n *connGater) InterceptPeerDial(id peer.ID) bool {
+func (n *connGater) InterceptPeerDial(id peer.ID) (allow bool) {
+	if n.isBadPeer(id) {
+		n.logger.Debug("preventing outbound dial to bad peer", fields.PeerID(id))
+		return false
+	}
 	return true
 }
 
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
-func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
+func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) (allow bool) {
 	if n.isBadPeer(id) {
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
@@ -82,7 +86,7 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 // inbound connection request, before any upgrade takes place. Transports who
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
-func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) (allow bool) {
 	if n.disable {
 		return true
 	}
@@ -114,7 +118,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
-func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) (allow bool) {
 	if n.trimmedRecently.Has(id) {
 		n.logger.Debug(
 			"InterceptSecured: trying to connect a peer we've recently trimmed",
@@ -135,7 +139,7 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 // InterceptUpgraded is called for inbound and outbound connections, after
 // libp2p has finished upgrading the connection entirely to a secure,
 // multiplexed channel.
-func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.DisconnectReason) {
+func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (allow bool, reason control.DisconnectReason) {
 	return true, 0
 }
 

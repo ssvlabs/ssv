@@ -113,10 +113,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
 				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient)))
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			h.logger.Debug("🛠 indicesChange event")
 
-		case <-h.reorg:
+		case <-h.reorgEventsCh:
 			h.logger.Debug("🛠 reorg event")
 		}
 	}

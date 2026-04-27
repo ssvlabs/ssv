@@ -2,10 +2,11 @@ package badger
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -55,7 +56,7 @@ func (b *DB) FullGC(ctx context.Context) error {
 			break
 		}
 		if err != nil {
-			return errors.Wrap(err, "failed to collect garbage")
+			return fmt.Errorf("failed to collect garbage: %w", err)
 		}
 	}
 	return nil

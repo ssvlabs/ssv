@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -80,7 +81,7 @@ func runConsumeQueueAsync(
 	t *testing.T,
 	ctx context.Context,
 	committee *Committee,
-	q queueContainer,
+	q queue.Queue,
 	logger *zap.Logger,
 	handler MessageHandler,
 	committeeRunner *runner.CommitteeRunner,
@@ -146,6 +147,45 @@ func setupMessageCollection(capacity int) (chan *queue.SSVMessage, MessageHandle
 	return msgChannel, handler
 }
 
+func newCommitteeQueueStateForTest(slot phase0.Slot, round specqbft.Round, hasRunningInstance bool, quorum uint64) *queue.State {
+	return &queue.State{
+		HasRunningInstance: hasRunningInstance,
+		Slot:               slot,
+		Round:              round,
+		Quorum:             quorum,
+	}
+}
+
+// newCommitteeRunnerForTest builds a minimal CommitteeRunner whose getters expose just enough state for
+// queue-consumer tests to exercise filtering and prioritization without spinning up the full runner stack.
+//   - slot     → drives QBFTController.LatestInstanceHeight, so r.GetLastHeight() returns specqbft.Height(slot).
+//   - round    → drives the running QBFT instance's Round, so r.GetLastRound() returns it.
+//   - decided  → marks the running instance as decided (used by the "skip PSM until decided" filter).
+//   - proposal → if non-nil, sets ProposalAcceptedForCurrentRound (used by HasAcceptedProposalForCurrentRound).
+func newCommitteeRunnerForTest(
+	slot phase0.Slot,
+	round specqbft.Round,
+	decided bool,
+	proposal *specqbft.ProcessingMessage,
+) *runner.CommitteeRunner {
+	return &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{
+			QBFTController: &controller.Controller{
+				LatestInstanceHeight: specqbft.Height(slot),
+			},
+			State: &runner.State{
+				RunningInstance: &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         decided,
+						ProposalAcceptedForCurrentRound: proposal,
+						Round:                           round,
+					},
+				},
+			},
+		},
+	}
+}
+
 // TestHandleMessageCreatesQueue verifies that the HandleMessage method correctly
 // initializes a new queue when receiving a message for a slot that doesn't have
 // an associated queue yet.
@@ -170,7 +210,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	committee := &Committee{
 		logger:          logger,
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
@@ -189,13 +229,18 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 
 	require.True(t, ok)
 
-	assert.NotNil(t, q.Q)
-	assert.Equal(t, slot, q.queueState.Slot)
-	assert.False(t, q.queueState.HasRunningInstance)
-	assert.Equal(t, specqbft.Height(slot), q.queueState.Height)
+	assert.NotNil(t, q)
+	assert.Equal(t, 1, q.Len())
 
-	// default, the queueState.Round is not explicitly initialized from the incoming message
-	assert.Equal(t, specqbft.Round(0), q.queueState.Round)
+	queuedMsg := q.TryPop(
+		queue.NewCommitteeQueuePrioritizer(
+			newCommitteeQueueStateForTest(slot, 0, false, committee.CommitteeMember.GetQuorum()),
+		),
+		queue.FilterAny,
+	)
+	require.NotNil(t, queuedMsg)
+	assert.Equal(t, testMsg.MsgID, queuedMsg.MsgID)
+	assert.Equal(t, testMsg.MsgType, queuedMsg.MsgType)
 }
 
 // TestConsumeQueueBasic tests the fundamental queue consumption functionality
@@ -222,7 +267,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 	committee := &Committee{
 		logger:          logger,
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
@@ -245,35 +290,15 @@ func TestConsumeQueueBasic(t *testing.T) {
 	}
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID2, qbftMsg2)
 
-	q := queueContainer{
-		Q: queue.New(logger, 1000),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
-	q.Q.TryPush(testMsg1)
-	q.Q.TryPush(testMsg2)
+	q := queue.New(logger, 1000)
+	q.TryPush(testMsg1)
+	q.TryPush(testMsg2)
 
 	proposalMsg := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftMsg1,
 	}
 
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: proposalMsg,
-						Round:                           1,
-					},
-				},
-			},
-		},
-	}
+	committeeRunner := newCommitteeRunnerForTest(slot, 1, false, proposalMsg)
 
 	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -307,7 +332,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 
 	committee := &Committee{
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
@@ -351,34 +376,14 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		combinedMessages[i], combinedMessages[j] = combinedMessages[j], combinedMessages[i]
 	})
 
-	q := queueContainer{
-		Q: queue.New(logger, 1000),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              currentRound,
-		},
-	}
+	q := queue.New(logger, 1000)
 
 	for _, combined := range combinedMessages {
 		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, combined.ID, combined.Message)
-		q.Q.TryPush(testMsg)
+		q.TryPush(testMsg)
 	}
 
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil,
-						Round:                           currentRound,
-					},
-				},
-			},
-		},
-	}
+	committeeRunner := newCommitteeRunnerForTest(slot, currentRound, false, nil)
 
 	msgChannel, handler := setupMessageCollection(4)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -427,7 +432,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 
 	committee := &Committee{
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
@@ -458,36 +463,16 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	testMsg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID1, qbftMsg)
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
-	q := queueContainer{
-		Q: queue.New(logger, 1000),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
+	q := queue.New(logger, 1000)
 
-	q.Q.TryPush(testMsg1)
-	q.Q.TryPush(testMsg2)
+	q.TryPush(testMsg1)
+	q.TryPush(testMsg2)
 
 	proposalMsg := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftMsg,
 	}
 
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: proposalMsg,
-						Round:                           1,
-					},
-				},
-			},
-		},
-	}
+	committeeRunner := newCommitteeRunnerForTest(slot, 1, false, proposalMsg)
 
 	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -507,7 +492,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 
 	committee := &Committee{
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
@@ -538,36 +523,16 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	testMsg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID1, qbftMsg)
 	testMsg2 := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID2, partialSigMsg)
 
-	q := queueContainer{
-		Q: queue.New(logger, 1000),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
+	q := queue.New(logger, 1000)
 
-	q.Q.TryPush(testMsg1)
-	q.Q.TryPush(testMsg2)
+	q.TryPush(testMsg1)
+	q.TryPush(testMsg2)
 
 	proposalMsg := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftMsg,
 	}
 
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         true,
-						ProposalAcceptedForCurrentRound: proposalMsg,
-						Round:                           1,
-					},
-				},
-			},
-		},
-	}
+	committeeRunner := newCommitteeRunnerForTest(slot, 1, true, proposalMsg)
 
 	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
@@ -619,16 +584,8 @@ func TestChangingFilterState(t *testing.T) {
 			return fmt.Errorf("intentionally stopping ConsumeQueue after first message")
 		}
 
-		q := queueContainer{
-			Q: queue.New(logger, 1),
-			queueState: &queue.State{
-				HasRunningInstance: true,
-				Height:             specqbft.Height(slot),
-				Slot:               slot,
-				Round:              round,
-			},
-		}
-		q.Q.TryPush(prepareMsg)
+		q := queue.New(logger, 1)
+		q.TryPush(prepareMsg)
 
 		c := &Committee{
 			networkConfig:   networkconfig.TestNetwork,
@@ -639,40 +596,129 @@ func TestChangingFilterState(t *testing.T) {
 	}
 
 	// 1) No proposal accepted => Prepare should be filtered out
-	r1 := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil,
-						Round:                           round,
-					},
-				},
-			},
-		},
-	}
+	r1 := newCommitteeRunnerForTest(slot, round, false, nil)
 	seen1 := runOnce(r1)
 	assert.Nil(t, seen1)
 
 	// 2) Proposal accepted => now we should see exactly one Prepare
-	r2 := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{QBFTMessage: prepareBody},
-						Round:                           round,
-					},
-				},
-			},
-		},
-	}
+	r2 := newCommitteeRunnerForTest(slot, round, false, &specqbft.ProcessingMessage{QBFTMessage: prepareBody})
 	seen2 := runOnce(r2)
 
 	require.NotNil(t, seen2)
 	assert.Equal(t, specqbft.PrepareMsgType, seen2.Body.(*specqbft.Message).MsgType)
+}
+
+// TestFilterUsesCurrentRunnerRound is a regression test for a bug where the committee
+// queue consumer's state.Round was never updated from its default zero, so the
+// "skip prepare/commit for current round when no proposal accepted" filter only
+// worked at round 0 (i.e. never, in practice — QBFT starts at round 1).
+//
+// The runner is placed at round 3 with no proposal accepted for the current round.
+// A prepare message at round 3 must be filtered out; a prepare message at round 2
+// (a stale/lower round) must pass the filter.
+func TestFilterUsesCurrentRunnerRound(t *testing.T) {
+	logger := log.TestLogger(t)
+
+	slot := phase0.Slot(123)
+	currentRound := specqbft.Round(3) // past round 1 — exercises the Round-update fix
+
+	runOnce := func(msg *queue.SSVMessage) *queue.SSVMessage {
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+		defer cancel()
+
+		q := queue.New(logger, 1)
+		q.TryPush(msg)
+
+		var seen *queue.SSVMessage
+		handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
+			seen = m
+			// Return error to make ConsumeQueue exit early after processing one message.
+			return fmt.Errorf("intentionally stopping ConsumeQueue after first message")
+		}
+
+		c := &Committee{
+			networkConfig:   networkconfig.TestNetwork,
+			CommitteeMember: &spectypes.CommitteeMember{},
+		}
+		r := newCommitteeRunnerForTest(slot, currentRound, false, nil)
+		c.ConsumeQueue(ctx, logger, q, handler, r)
+		return seen
+	}
+
+	// 1) Prepare at the runner's current round (3) — must be filtered out.
+	prepareAtCurrentRound := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{1},
+		&specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType},
+	)
+	assert.Nil(t, runOnce(prepareAtCurrentRound), "prepare at current round should be filtered out")
+
+	// 2) Prepare at a different (earlier) round — must pass the filter.
+	prepareAtOtherRound := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{2},
+		&specqbft.Message{Height: specqbft.Height(slot), Round: currentRound - 1, MsgType: specqbft.PrepareMsgType},
+	)
+	seen := runOnce(prepareAtOtherRound)
+	require.NotNil(t, seen, "prepare at a different round should not be filtered")
+	assert.Equal(t, specqbft.PrepareMsgType, seen.Body.(*specqbft.Message).MsgType)
+}
+
+// TestPostConsensusOutranksConsensusAtRunnerSlot is a regression test that pins the
+// committee prioritiser invariant "PostConsensus PSM outranks same-slot consensus message"
+// while driving rState construction through ConsumeQueue. Historically the priority arithmetic
+// ranked QBFT above PSM whenever rState's slot/height fields disagreed about the runner's
+// current slot — see queue.compareHeightOrSlot — so the test pushes one of each and asserts
+// the PSM is delivered first.
+func TestPostConsensusOutranksConsensusAtRunnerSlot(t *testing.T) {
+	logger := log.TestLogger(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+	defer cancel()
+
+	slot := phase0.Slot(100)
+
+	committee := &Committee{
+		networkConfig:   networkconfig.TestNetwork,
+		Queues:          make(map[phase0.Slot]queue.Queue),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		CommitteeMember: &spectypes.CommitteeMember{},
+	}
+
+	// Decided runner: HasRunningQBFTInstance() returns false so ConsumeQueue applies no
+	// PSM-blocking filter. The order observed by the handler is therefore set entirely by
+	// the prioritiser — which is exactly what we want to assert here.
+	committeeRunner := newCommitteeRunnerForTest(slot, 1, true, &specqbft.ProcessingMessage{
+		QBFTMessage: &specqbft.Message{},
+	})
+
+	qbftMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType,
+		spectypes.MessageID{1},
+		&specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.CommitMsgType},
+	)
+	psmMsg := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType,
+		spectypes.MessageID{2},
+		&spectypes.PartialSignatureMessages{
+			Slot: slot,
+			Type: spectypes.PostConsensusPartialSig,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				Signer:           1,
+				SigningRoot:      [32]byte{},
+				ValidatorIndex:   0,
+				PartialSignature: make([]byte, 96),
+			}},
+		},
+	)
+
+	q := queue.New(logger, 10)
+	require.True(t, q.TryPush(qbftMsg))
+	require.True(t, q.TryPush(psmMsg))
+
+	msgChannel, handler := setupMessageCollection(2)
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+
+	received := collectMessagesFromQueue(t, msgChannel, 2, 1*time.Second)
+	require.Len(t, received, 2)
+	assert.Equal(t, spectypes.SSVPartialSignatureMsgType, received[0].MsgType,
+		"PSM must be popped before same-slot consensus message")
+	assert.Equal(t, spectypes.SSVConsensusMsgType, received[1].MsgType)
 }
 
 // TestCommitteeQueueFilteringScenarios verifies the message filtering logic of the ConsumeQueue method
@@ -740,22 +786,14 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 			committee := &Committee{
 				networkConfig:   networkconfig.TestNetwork,
-				Queues:          make(map[phase0.Slot]queueContainer),
+				Queues:          make(map[phase0.Slot]queue.Queue),
 				Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 				CommitteeMember: &spectypes.CommitteeMember{},
 			}
 
 			slot := phase0.Slot(123)
 
-			q := queueContainer{
-				Q: queue.New(logger, 10),
-				queueState: &queue.State{
-					HasRunningInstance: tc.hasRunningDuty,
-					Height:             specqbft.Height(slot),
-					Slot:               slot,
-					Round:              1,
-				},
-			}
+			q := queue.New(logger, 10)
 
 			var proposalMsg *specqbft.ProcessingMessage
 			if tc.proposalAccepted {
@@ -764,23 +802,11 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				}
 			}
 
-			committeeRunner := &runner.CommitteeRunner{
-				BaseRunner: &runner.BaseRunner{
-					State: &runner.State{
-						RunningInstance: &instance.Instance{
-							State: &specqbft.State{
-								Decided:                         tc.decided,
-								ProposalAcceptedForCurrentRound: proposalMsg,
-								Round:                           1,
-							},
-						},
-					},
-				},
-			}
+			committeeRunner := newCommitteeRunnerForTest(slot, 1, tc.decided, proposalMsg)
 
 			// Set runner state based on hasRunningDuty parameter
 			if !tc.hasRunningDuty {
-				committeeRunner.State.Finished = true // This makes HasRunningDuty() return false
+				committeeRunner.State.Finished = true // This makes hasDutyRunning() return false
 			}
 
 			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
@@ -799,7 +825,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 					MsgType: msgType,
 				}
 				testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
-				pushed := q.Q.TryPush(testMsg)
+				pushed := q.TryPush(testMsg)
 				require.True(t, pushed)
 			}
 
@@ -902,36 +928,16 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 
 			committee := &Committee{
 				networkConfig:   networkconfig.TestNetwork,
-				Queues:          make(map[phase0.Slot]queueContainer),
+				Queues:          make(map[phase0.Slot]queue.Queue),
 				Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 				CommitteeMember: &spectypes.CommitteeMember{},
 			}
 
 			slot := phase0.Slot(123)
 
-			q := queueContainer{
-				Q: queue.New(logger, 10),
-				queueState: &queue.State{
-					HasRunningInstance: true,
-					Height:             specqbft.Height(slot),
-					Slot:               slot,
-					Round:              1,
-				},
-			}
+			q := queue.New(logger, 10)
 
-			committeeRunner := &runner.CommitteeRunner{
-				BaseRunner: &runner.BaseRunner{
-					State: &runner.State{
-						RunningInstance: &instance.Instance{
-							State: &specqbft.State{
-								Decided:                         tc.decided,
-								ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{},
-								Round:                           1,
-							},
-						},
-					},
-				},
-			}
+			committeeRunner := newCommitteeRunnerForTest(slot, 1, tc.decided, &specqbft.ProcessingMessage{})
 
 			msgID := spectypes.MessageID{0x10}
 			partialSigMsg := &spectypes.PartialSignatureMessages{
@@ -947,7 +953,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			}
 			testMsg := makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, msgID, partialSigMsg)
 
-			pushed := q.Q.TryPush(testMsg)
+			pushed := q.TryPush(testMsg)
 			require.True(t, pushed)
 
 			if tc.shouldBeFiltered {
@@ -989,7 +995,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 
 	committee := &Committee{
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
@@ -1018,30 +1024,14 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{5}, eventMsgBody),
 	}
 
-	q := queueContainer{
-		Q: queue.New(logger, 10),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              currentRound,
-		},
-	}
+	q := queue.New(logger, 10)
 	for _, msg := range testMessages {
-		q.Q.TryPush(msg)
+		q.TryPush(msg)
 	}
 
 	// Runner with a proposal already accepted, not yet decided
 	acceptedProposal := &specqbft.ProcessingMessage{QBFTMessage: proposalMsgBody}
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{
-				Decided:                         false,
-				ProposalAcceptedForCurrentRound: acceptedProposal,
-				Round:                           currentRound,
-			}}},
-		},
-	}
+	committeeRunner := newCommitteeRunnerForTest(slot, currentRound, false, acceptedProposal)
 
 	msgChannel := make(chan *queue.SSVMessage, len(testMessages))
 
@@ -1116,19 +1106,13 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	committee := &Committee{
 		logger:          logger,
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
-	qContainer := queueContainer{
-		Q: queue.New(logger, queueCapacity),
-		queueState: &queue.State{
-			HasRunningInstance: false,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-		},
-	}
+	qContainer := queue.New(logger, queueCapacity)
+	qState := newCommitteeQueueStateForTest(slot, 0, false, committee.CommitteeMember.GetQuorum())
 	committee.Queues[slot] = qContainer
 
 	// Step 1: Fill the pre-made queue to its capacity by calling HandleMessage
@@ -1142,7 +1126,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		committee.EnqueueMessage(ctx, testMsg)
 	}
 
-	require.Equal(t, queueCapacity, qContainer.Q.Len())
+	require.Equal(t, queueCapacity, qContainer.Len())
 
 	// Step 2: Clear log buffer and attempt to push one more message (this one should be dropped)
 	droppedMsgID := msgIDBase
@@ -1152,7 +1136,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	committee.EnqueueMessage(ctx, testMsgDrop)
 
-	assert.Equal(t, queueCapacity, qContainer.Q.Len())
+	assert.Equal(t, queueCapacity, qContainer.Len())
 
 	// Step 3: Verify that the dropped message is not in the queue and original messages are intact.
 	// Pop messages one by one and check their MsgID and Type.
@@ -1164,7 +1148,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 		// Use FilterAny since we are just checking the contents, not a live consumption scenario.
 		// The prioritizer does not matter here as we drain the queue completely.
-		msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+		msg := qContainer.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qState), queue.FilterAny)
 		popCancel()
 
 		require.NotNil(t, msg)
@@ -1194,7 +1178,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer finalPopCancel()
 
-	assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny))
+	assert.Nil(t, qContainer.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qState), queue.FilterAny))
 }
 
 func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
@@ -1209,7 +1193,7 @@ func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
 	committee := &Committee{
 		logger:        logger,
 		networkConfig: networkconfig.TestNetwork,
-		Queues:        make(map[phase0.Slot]queueContainer),
+		Queues:        make(map[phase0.Slot]queue.Queue),
 		Runners: map[phase0.Slot]*runner.CommitteeRunner{
 			slot: {
 				BaseRunner: &runner.BaseRunner{
@@ -1226,16 +1210,13 @@ func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
-	qContainer := queueContainer{
-		Q: queue.New(logger, queueCapacity),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              currentRound,
-		},
+	qState := &queue.State{
+		HasRunningInstance: true,
+		Slot:               slot,
+		Round:              currentRound,
 	}
-	committee.Queues[slot] = qContainer
+	q := queue.New(logger, queueCapacity)
+	committee.Queues[slot] = q
 
 	for i := 0; i < 3; i++ {
 		msg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{byte(i + 1)}, &specqbft.Message{
@@ -1245,7 +1226,7 @@ func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
 		})
 		committee.EnqueueMessage(ctx, msg)
 	}
-	require.Equal(t, 3, qContainer.Q.Len())
+	require.Equal(t, 3, q.Len())
 
 	staleMsgID := spectypes.MessageID{0xAA}
 	staleMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, staleMsgID, &specqbft.Message{
@@ -1254,7 +1235,7 @@ func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
 		MsgType: specqbft.PrepareMsgType,
 	})
 	committee.EnqueueMessage(ctx, staleMsg)
-	require.Equal(t, 3, qContainer.Q.Len())
+	require.Equal(t, 3, q.Len())
 
 	currentMsgID := spectypes.MessageID{0xBB}
 	currentMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, currentMsgID, &specqbft.Message{
@@ -1263,13 +1244,13 @@ func TestHandleMessageDropsStaleRoundUnderPressure(t *testing.T) {
 		MsgType: specqbft.ProposalMsgType,
 	})
 	committee.EnqueueMessage(ctx, currentMsg)
-	require.Equal(t, queueCapacity, qContainer.Q.Len())
+	require.Equal(t, queueCapacity, q.Len())
 
 	foundStale := false
 	foundCurrent := false
 	for i := 0; i < queueCapacity; i++ {
 		popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-		msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+		msg := q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qState), queue.FilterAny)
 		popCancel()
 		require.NotNil(t, msg)
 
@@ -1308,27 +1289,17 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	}
 
 	slot := phase0.Slot(123)
-	q := queueContainer{
-		Q: queue.New(logger, 10),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
+	q := queue.New(logger, 10)
 
 	// Add multiple messages
-	msg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{1}, &specqbft.Message{Height: specqbft.Height(slot), MsgType: specqbft.ProposalMsgType})
-	msg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{2}, &specqbft.Message{Height: specqbft.Height(slot), MsgType: specqbft.PrepareMsgType})
-	msg3 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{3}, &specqbft.Message{Height: specqbft.Height(slot), MsgType: specqbft.CommitMsgType})
-	q.Q.TryPush(msg1)
-	q.Q.TryPush(msg2)
-	q.Q.TryPush(msg3)
+	msg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{1}, &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType})
+	msg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{2}, &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType})
+	msg3 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{3}, &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.CommitMsgType})
+	q.TryPush(msg1)
+	q.TryPush(msg2)
+	q.TryPush(msg3)
 
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{State: &runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{}}}},
-	}
+	committeeRunner := newCommitteeRunnerForTest(slot, 1, false, nil)
 
 	var processedMessagesCount int32
 	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
@@ -1347,21 +1318,23 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	committee.ConsumeQueue(ctx, logger, q, handler, committeeRunner)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
-	assert.Equal(t, 2, q.Q.Len())
+	assert.Equal(t, 2, q.Len())
 }
 
 // TestConsumeQueueBurstTraffic verifies that under a burst of interleaved messages,
-// the queue pops messages in non-decreasing priority order and processes all enqueued messages.
+// the queue pops messages in a way that never emits a strictly-lower-priority message
+// before a higher-priority one, and drains the entire queue.
 //
 // Flow:
-//  1. Set up a committee with a single slot, its queue, and a runner in a "decided" state (allowing all message types).
-//  2. Generate a large number (e.g., 200) of randomized messages of different types (ExecuteDuty, PartialSignature, Proposal, Prepare, Commit, RoundChange).
-//  3. Keep track of the expected count for each message priority bucket.
-//  4. Shuffle all generated messages and push them onto the queue.
-//  5. Start consuming the queue with a handler that records the priority bucket of each popped message.
-//  6. Wait for all messages to be processed.
-//  7. Verify that the priorities of popped messages are non-decreasing.
-//  8. Verify that the actual counts of processed messages per priority bucket match the expected counts.
+//  1. Set up a single-slot committee and its queue.
+//  2. Generate a large number (e.g., 200) of randomized messages of different types
+//     (ExecuteDuty, PartialSignature, Proposal, Prepare, Commit, RoundChange) and
+//     count the expected per-type totals.
+//  3. Shuffle all generated messages and push them onto the queue.
+//  4. Drain the queue via Pop using the committee prioritizer.
+//  5. Verify that no popped message was ever strictly higher priority than the one
+//     popped before it (monotonic non-decreasing priority).
+//  6. Verify that the per-type counts of popped messages match the expected counts.
 func TestConsumeQueueBurstTraffic(t *testing.T) {
 	logger := log.TestLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -1371,42 +1344,12 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	slot := phase0.Slot(42)
 	committee := &Committee{
 		networkConfig:   networkconfig.TestNetwork,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		CommitteeMember: &spectypes.CommitteeMember{},
 	}
-	qc := queueContainer{
-		Q: queue.New(logger, 1000),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
+	qc := queue.New(logger, 1000)
 	committee.Queues[slot] = qc
-
-	// Mark that consensus is already decided & proposal accepted → partial-sigs allowed
-	acceptedProposal := &specqbft.ProcessingMessage{
-		QBFTMessage: &specqbft.Message{
-			Height:  specqbft.Height(slot),
-			Round:   1,
-			MsgType: specqbft.ProposalMsgType,
-		},
-	}
-	committee.Runners[slot] = &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         true,
-						ProposalAcceptedForCurrentRound: acceptedProposal,
-						Round:                           1,
-					},
-				},
-			},
-		},
-	}
 
 	// --- Build 200 randomized messages and count expected per priority bucket ---
 	var (
@@ -1492,50 +1435,35 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 		allMsgs[i], allMsgs[j] = allMsgs[j], allMsgs[i]
 	})
 	for _, m := range allMsgs {
-		require.True(t, qc.Q.TryPush(m))
+		require.True(t, qc.TryPush(m))
 	}
 
-	// --- Drain the queue, capturing the priority bucket of each popped message ---
-	bucketChan := make(chan int, len(allMsgs))
-	handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
-		bucketChan <- priority(m)
-		return nil
-	}
-
-	go func() {
-		defer close(bucketChan)
-		committee.ConsumeQueue(ctx, logger, qc, handler, committee.Runners[slot])
-	}()
-
-	// Wait for exactly len(allMsgs) messages (or fail on timeout)
-	var buckets []int
+	received := make([]*queue.SSVMessage, 0, len(allMsgs))
+	prioritizer := queue.NewCommitteeQueuePrioritizer(
+		newCommitteeQueueStateForTest(slot, 1, false, committee.CommitteeMember.GetQuorum()),
+	)
 	for i := 0; i < len(allMsgs); i++ {
-		select {
-		case bucketPriority, ok := <-bucketChan:
-			if !ok {
-				t.Fatalf("bucketChan closed prematurely, received %d/%d messages", i, len(allMsgs))
-			}
-			buckets = append(buckets, bucketPriority)
-		case <-time.After(2 * time.Second):
-			t.Fatalf("timed out waiting for message %d/%d", i+1, len(allMsgs))
-		}
+		msg := qc.Pop(ctx, prioritizer, queue.FilterAny)
+		require.NotNilf(t, msg, "timed out waiting for message %d/%d", i+1, len(allMsgs))
+		received = append(received, msg)
 	}
 
-	// --- 1) Assert monotonic (non-decreasing) priorities ---
-	for i := 1; i < len(buckets); i++ {
-		require.LessOrEqualf(
+	// --- 1) Assert the queue never emitted a message that was lower priority than the next one ---
+	for i := 1; i < len(received); i++ {
+		laterStrictlyHigherPriority := prioritizer.Prior(received[i], received[i-1]) &&
+			!prioritizer.Prior(received[i-1], received[i])
+		require.Falsef(
 			t,
-			buckets[i-1],
-			buckets[i],
-			"priority dropped at index %d: %d → %d",
-			i-1, buckets[i-1], buckets[i],
+			laterStrictlyHigherPriority,
+			"later message outranked earlier one at index %d: %T -> %T",
+			i-1, received[i-1].Body, received[i].Body,
 		)
 	}
 
 	// --- 2) Assert we popped exactly the same counts per bucket ---
 	actualCounts := make(map[int]int)
-	for _, b := range buckets {
-		actualCounts[b]++
+	for _, msg := range received {
+		actualCounts[priority(msg)]++
 	}
 
 	require.Equal(t, expectedCounts, actualCounts)
@@ -1585,7 +1513,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee := &Committee{
 			logger:          logger,
 			networkConfig:   networkconfig.TestNetwork,
-			Queues:          make(map[phase0.Slot]queueContainer),
+			Queues:          make(map[phase0.Slot]queue.Queue),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
 		}
@@ -1594,15 +1522,8 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		nextRound := specqbft.Round(2)
 		queueCapacity := 3
 
-		qContainer := queueContainer{
-			Q: queue.New(logger, queueCapacity),
-			queueState: &queue.State{
-				HasRunningInstance: true,
-				Height:             specqbft.Height(slot),
-				Slot:               slot,
-				Round:              currentRound,
-			},
-		}
+		qContainer := queue.New(logger, queueCapacity)
+		qState := newCommitteeQueueStateForTest(slot, currentRound, true, committee.CommitteeMember.GetQuorum())
 		committee.Queues[slot] = qContainer
 
 		// 1. Fill the queue's inbox channel to capacity using HandleMessage.
@@ -1612,7 +1533,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareMsgBody)
 			committee.EnqueueMessage(ctx, testMsg)
 		}
-		require.Equal(t, queueCapacity, qContainer.Q.Len())
+		require.Equal(t, queueCapacity, qContainer.Len())
 
 		// 2. Attempt to HandleMessage a new Prepare message for the *nextRound*.
 		poppableMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.PrepareMsgType}
@@ -1620,13 +1541,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee.EnqueueMessage(ctx, poppableTestMsg)
 
 		// 3. Verify the poppable message was dropped.
-		assert.Equal(t, queueCapacity, qContainer.Q.Len())
+		assert.Equal(t, queueCapacity, qContainer.Len())
 
 		// 4. Verify the content of the queue.
 		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
 		for i := 0; i < queueCapacity; i++ {
 			popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+			msg := qContainer.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qState), queue.FilterAny)
 			popCancel() // Ensure cancellation happens after Pop or timeout
 			require.NotNil(t, msg)
 			drainedMessages = append(drainedMessages, msg)
@@ -1635,7 +1556,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 		defer finalPopCancel()
 
-		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny), "Queue should be empty after draining initial messages")
+		assert.Nil(t, qContainer.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qState), queue.FilterAny), "Queue should be empty after draining initial messages")
 
 		foundNextRoundMessage := false
 		for _, msg := range drainedMessages {
@@ -1661,7 +1582,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee := &Committee{
 			logger:          logger,
 			networkConfig:   networkconfig.TestNetwork,
-			Queues:          make(map[phase0.Slot]queueContainer),
+			Queues:          make(map[phase0.Slot]queue.Queue),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
 		}
@@ -1669,15 +1590,8 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		currentRound := specqbft.Round(1)
 		queueCapacity := 3
 
-		qContainer := queueContainer{
-			Q: queue.New(logger, queueCapacity),
-			queueState: &queue.State{
-				HasRunningInstance: true,
-				Height:             specqbft.Height(slot),
-				Slot:               slot,
-				Round:              currentRound,
-			},
-		}
+		qContainer := queue.New(logger, queueCapacity)
+		qState := newCommitteeQueueStateForTest(slot, currentRound, true, committee.CommitteeMember.GetQuorum())
 		committee.Queues[slot] = qContainer
 
 		// 1. Fill the queue with low-priority consensus messages
@@ -1691,7 +1605,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, commitMsgBody)
 			committee.EnqueueMessage(ctx, testMsg)
 		}
-		require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be at capacity")
+		require.Equal(t, queueCapacity, qContainer.Len(), "Queue should be at capacity")
 
 		// 2. Try to add a high-priority proposal message (proposals are higher priority than commits)
 		highPriorityMsgBody := &specqbft.Message{
@@ -1711,13 +1625,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee.EnqueueMessage(ctx, highPriorityMsg)
 
 		// 3. Verify queue length still at capacity
-		assert.Equal(t, queueCapacity, qContainer.Q.Len())
+		assert.Equal(t, queueCapacity, qContainer.Len())
 
 		// 4. Verify only the original messages are in the queue
 		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
 		for i := 0; i < queueCapacity; i++ {
 			popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+			msg := qContainer.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qState), queue.FilterAny)
 			popCancel()
 			require.NotNil(t, msg)
 			drainedMessages = append(drainedMessages, msg)
@@ -1755,39 +1669,18 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		committee := &Committee{
 			networkConfig:   networkconfig.TestNetwork,
-			Queues:          make(map[phase0.Slot]queueContainer),
+			Queues:          make(map[phase0.Slot]queue.Queue),
 			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 			CommitteeMember: &spectypes.CommitteeMember{},
 		}
 
 		queueCapacity := 5
 		currentRound := specqbft.Round(1)
-
-		committeeRunner := &runner.CommitteeRunner{
-			BaseRunner: &runner.BaseRunner{
-				State: &runner.State{
-					RunningInstance: &instance.Instance{
-						State: &specqbft.State{
-							Decided:                         false,
-							ProposalAcceptedForCurrentRound: nil,
-							Round:                           currentRound,
-						},
-					},
-				},
-			},
-		}
-
 		slot := phase0.Slot(456)
 
-		q := queueContainer{
-			Q: queue.New(logger, queueCapacity),
-			queueState: &queue.State{
-				HasRunningInstance: true,
-				Height:             specqbft.Height(slot),
-				Slot:               slot,
-				Round:              currentRound,
-			},
-		}
+		committeeRunner := newCommitteeRunnerForTest(slot, currentRound, false, nil)
+
+		q := queue.New(logger, queueCapacity)
 
 		var (
 			processedMsgs    []*queue.SSVMessage
@@ -1816,7 +1709,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		for i := 0; i < queueCapacity; i++ {
 			msgID := spectypes.MessageID{byte(i + 1)}
 			prepare := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
-			require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
+			require.True(t, q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
 		}
 
 		time.Sleep(400 * time.Millisecond) // Give time for the consumer to process (and filter) messages
@@ -1830,7 +1723,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// Push ExecuteDuty
 		execData, _ := json.Marshal(&types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}})
 		execMsg := makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{0xEE}, &types.EventMsg{Type: types.ExecuteDuty, Data: execData})
-		require.True(t, q.Q.TryPush(execMsg))
+		require.True(t, q.TryPush(execMsg))
 		select {
 		case <-handlerCalled: // Good
 		case <-time.After(1 * time.Second):
@@ -1840,7 +1733,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// Push Proposal
 		proposal := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType}
 		propMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xFF}, proposal)
-		require.True(t, q.Q.TryPush(propMsg))
+		require.True(t, q.TryPush(propMsg))
 		select {
 		case <-handlerCalled: // Good
 		case <-time.After(1 * time.Second):
