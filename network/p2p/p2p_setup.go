@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -18,7 +19,6 @@ import (
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
@@ -71,7 +71,7 @@ func (n *p2pNetwork) Setup() error {
 		return err
 	}
 
-	logger = logger.With(zap.String("selfPeer", n.host.ID().String()))
+	logger = logger.With(zap.String("selfPeer", n.Host().ID().String()))
 	logger.Debug("host configured")
 
 	err = n.SetupServices()
@@ -120,14 +120,14 @@ func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
 func (n *p2pNetwork) SetupHost() error {
 	opts, err := n.cfg.Libp2pOptions(n.logger)
 	if err != nil {
-		return errors.Wrap(err, "could not create libp2p options")
+		return fmt.Errorf("could not create libp2p options: %w", err)
 	}
 
 	limitsCfg := rcmgr.DefaultLimits.AutoScale()
 	// TODO: enable and extract resource manager params as config
 	rmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limitsCfg))
 	if err != nil {
-		return errors.Wrap(err, "could not create resource manager")
+		return fmt.Errorf("could not create resource manager: %w", err)
 	}
 	n.connGater = connections.NewConnectionGater(
 		n.logger,
@@ -138,12 +138,12 @@ func (n *p2pNetwork) SetupHost() error {
 		n.trimmedRecently,
 	)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
-	host, err := libp2p.New(opts...)
+	h, err := libp2p.New(opts...)
 	if err != nil {
-		return errors.Wrap(err, "could not create p2p host")
+		return fmt.Errorf("could not create p2p host: %w", err)
 	}
-	n.host = host
-	n.libConnManager = host.ConnManager()
+	n.host.Store(&h)
+	n.libConnManager = h.ConnManager()
 
 	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(
 		backoffLow,
@@ -151,9 +151,9 @@ func (n *p2pNetwork) SetupHost() error {
 		backoffExponentBase,
 		rand.NewSource(time.Now().UnixNano()),
 	)
-	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
+	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(h, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
-		return errors.Wrap(err, "could not create backoff connector")
+		return fmt.Errorf("could not create backoff connector: %w", err)
 	}
 	n.backoffConnector = backoffConnector
 
@@ -164,27 +164,27 @@ func (n *p2pNetwork) SetupHost() error {
 // IMPORTANT: setupPeerServices must be invoked before setupPubsub to ensure n.idx is correctly initialized.
 func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupStreamCtrl(); err != nil {
-		return errors.Wrap(err, "could not setup stream controller")
+		return fmt.Errorf("could not setup stream controller: %w", err)
 	}
 
 	if err := n.setupPeerServices(); err != nil {
-		return errors.Wrap(err, "could not setup peer services")
+		return fmt.Errorf("could not setup peer services: %w", err)
 	}
 
 	_, err := n.setupPubsub()
 	if err != nil {
-		return errors.Wrap(err, "could not setup topic controller")
+		return fmt.Errorf("could not setup topic controller: %w", err)
 	}
 
 	if err := n.setupDiscovery(); err != nil {
-		return errors.Wrap(err, "could not setup discovery service")
+		return fmt.Errorf("could not setup discovery service: %w", err)
 	}
 
 	return nil
 }
 
 func (n *p2pNetwork) setupStreamCtrl() error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.cfg.RequestTimeout, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.Host(), n.cfg.RequestTimeout, n.cfg.RequestTimeout)
 	n.logger.Debug("stream controller is ready")
 	return nil
 }
@@ -205,18 +205,19 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, peers.NewGossipScoreIndex())
+	h := n.Host()
+	n.idx = peers.NewPeersIndex(n.logger, h.Network(), self, n.getMaxPeers, getPrivKey, peers.NewGossipScoreIndex())
 	n.isIdxSet.Store(true)
 
 	n.logger.Debug("peers index is ready")
 
 	var ids identify.IDService
-	if bh, ok := n.host.(*basichost.BasicHost); ok {
+	if bh, ok := h.(*basichost.BasicHost); ok {
 		ids = bh.IDService()
 	} else {
-		ids, err = identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
+		ids, err = identify.NewIDService(h, identify.UserAgent(userAgent(n.cfg.UserAgent)))
 		if err != nil {
-			return errors.Wrap(err, "could not create ID service")
+			return fmt.Errorf("could not create ID service: %w", err)
 		}
 		ids.Start()
 	}
@@ -241,23 +242,23 @@ func (n *p2pNetwork) setupPeerServices() error {
 			ConnIdx:         n.idx,
 			SubnetsIdx:      n.idx,
 			IDService:       ids,
-			Network:         n.host.Network(),
+			Network:         h.Network(),
 			DomainType:      n.cfg.NetworkConfig.DomainType,
 			SubnetsProvider: n.ActiveSubnets,
 		}, filters)
 
-	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
+	h.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
 	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
-	n.host.Network().Notify(n.connHandler.Handle())
+	h.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
 	return nil
 }
 
 func (n *p2pNetwork) ActiveSubnets() p2pcommons.Subnets {
-	return n.currentSubnets
+	return n.currentSubnetsSnapshot()
 }
 
 func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
@@ -269,7 +270,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
-		return errors.Wrap(err, "could not get ip addr")
+		return fmt.Errorf("could not get ip addr: %w", err)
 	}
 	var discV5Opts *discovery.DiscV5Options
 	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
@@ -294,7 +295,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Host:                n.host,
+		Host:                n.Host(),
 		DiscV5Opts:          discV5Opts,
 		ConnIndex:           n.idx,
 		SubnetsIdx:          n.idx,
@@ -318,7 +319,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
 		NetworkConfig: n.cfg.NetworkConfig,
-		Host:          n.host,
+		Host:          n.Host(),
 		TraceLog:      n.cfg.PubSubTrace,
 		MsgValidator:  n.msgValidator,
 		MsgHandler:    n.handlePubsubMessages(),
@@ -350,7 +351,7 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 
 	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not setup pubsub")
+		return nil, fmt.Errorf("could not setup pubsub: %w", err)
 	}
 
 	n.topicsCtrl = tc
@@ -386,16 +387,18 @@ func (n *p2pNetwork) inboundLimit() int {
 }
 
 // connectionStats returns the number of inbound and outbound connections.
-// It safely handles the case where the host is not yet initialized, which can
-// occur during network setup when the connection gater is active but libp2p.New()
-// hasn't completed yet. In this case, it returns (0, 0) since no connections
-// exist before the host is fully initialized.
+//
+// The Host() nil check matters here: the connection gater can fire
+// InterceptAccept from libp2p listener goroutines while SetupHost is still
+// inside libp2p.New(), i.e. before the host has been stored. Host() reads
+// the pointer atomically, so the check is race-free (see #2448). Pre-setup
+// there are no connections, so (0, 0) is the correct answer.
 func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
-	if n.host == nil {
+	h := n.Host()
+	if h == nil {
 		return 0, 0
 	}
-
-	return connectionStats(n.host)
+	return connectionStats(h)
 }
 
 func connectionStats(host host.Host) (inbound, outbound int) {

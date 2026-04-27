@@ -77,15 +77,16 @@ func NewValidator(ctx context.Context, cancel func(), logger *zap.Logger, option
 	}
 
 	// some additional steps to prepare duty runners for handling duties
-	for _, dutyRunner := range options.DutyRunners {
-		dutyRunner.SetTimeoutFunc(v.onTimeout)
-		v.Queues[dutyRunner.GetRole()] = queue.New(
+	for role, dutyRunner := range options.DutyRunners {
+		runnerIdentifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		dutyRunner.SetQBFTRoundTimerF(v.newQBFTRoundTimerF(runnerIdentifier))
+		v.Queues[role] = queue.New(
 			logger,
 			options.QueueSize,
 			queue.WithInboxSizeMetric(
 				queue.InboxSizeMetric,
 				queue.ValidatorQueueMetricType,
-				queue.ValidatorMetricID(dutyRunner.GetRole()),
+				queue.ValidatorMetricID(role),
 			),
 		)
 	}
@@ -212,10 +213,10 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 			timeoutData, err := eventMsg.GetTimeoutData()
 			if err != nil {
-				return fmt.Errorf("get event message timeout data: %w", err)
+				return fmt.Errorf("event message: get timeout data: %w", err)
 			}
 
-			if err := dutyRunner.OnTimeoutQBFT(ctx, logger, timeoutData); err != nil {
+			if err := dutyRunner.OnQBFTRoundTimeout(ctx, logger, timeoutData); err != nil {
 				return fmt.Errorf("process event message qbft-timeout: %w", err)
 			}
 

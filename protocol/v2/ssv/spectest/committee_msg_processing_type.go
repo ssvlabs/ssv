@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spec "github.com/ssvlabs/ssv-spec/ssv"
 	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
@@ -108,7 +107,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		case *spectypes.SignedSSVMessage:
 			msg, err := queue.DecodeSignedSSVMessage(input)
 			if err != nil {
-				return errors.Wrap(err, "failed to decode SignedSSVMessage")
+				return fmt.Errorf("failed to decode SignedSSVMessage: %w", err)
 			}
 			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
@@ -123,7 +122,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 }
 
 func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
-	strType := reflect.TypeOf(test).String()
+	strType := reflect.TypeFor[*CommitteeSpecTest]().String()
 	strType = strings.Replace(strType, "spectest.", "committee.", 1)
 	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, strType)
 }
@@ -162,7 +161,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		strType := reflect.TypeOf(tests).String()
+		strType := reflect.TypeFor[*MultiCommitteeSpecTest]().String()
 		strType = strings.Replace(strType, "spectest.", "committee.", 1)
 		overrideStateComparisonCommitteeSpecTest(t, test, path, strType)
 	}

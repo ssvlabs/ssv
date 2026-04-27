@@ -1,7 +1,8 @@
 package types
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -50,7 +51,7 @@ func (s *SsvOperatorSigner) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 func Sign(msg *specqbft.Message, operatorID spectypes.OperatorID, operatorSigner OperatorSigner) (*spectypes.SignedSSVMessage, error) {
 	byts, err := msg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode message")
+		return nil, fmt.Errorf("could not encode message: %w", err)
 	}
 
 	msgID := spectypes.MessageID{}
@@ -64,7 +65,7 @@ func Sign(msg *specqbft.Message, operatorID spectypes.OperatorID, operatorSigner
 
 	sig, err := operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not sign SSVMessage")
+		return nil, fmt.Errorf("could not sign SSVMessage: %w", err)
 	}
 
 	signedSSVMessage := &spectypes.SignedSSVMessage{

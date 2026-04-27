@@ -49,7 +49,7 @@ func TestUponCommitReturnsDecidedOnQuorum(t *testing.T) {
 		env.commit(1, 2, root),
 	)
 
-	decided, decidedValue, aggregated, err := env.inst.UponCommit(
+	decided, decidedValue, aggregated, err := env.inst.uponCommit(
 		context.Background(),
 		zap.NewNop(),
 		env.commit(1, 3, root),
@@ -70,17 +70,45 @@ func TestUponCommitNoQuorumOrDuplicateReturnsNoDecision(t *testing.T) {
 	msg := env.commit(1, 1, root)
 	env.inst.State.ProposalAcceptedForCurrentRound = env.proposal(1, 1, fullData, root, nil, nil)
 
-	decided, decidedValue, aggregated, err := env.inst.UponCommit(context.Background(), zap.NewNop(), msg)
+	decided, decidedValue, aggregated, err := env.inst.uponCommit(context.Background(), zap.NewNop(), msg)
 	require.NoError(t, err)
 	require.False(t, decided)
 	require.Nil(t, decidedValue)
 	require.Nil(t, aggregated)
 
-	decided, decidedValue, aggregated, err = env.inst.UponCommit(context.Background(), zap.NewNop(), msg)
+	decided, decidedValue, aggregated, err = env.inst.uponCommit(context.Background(), zap.NewNop(), msg)
 	require.NoError(t, err)
 	require.False(t, decided)
 	require.Nil(t, decidedValue)
 	require.Nil(t, aggregated)
+}
+
+func TestUponCommitPostDecisionRecordsLateCommitWithoutRedeciding(t *testing.T) {
+	env := newInstanceTestEnv(t, 4)
+	env.setLeader(1)
+
+	fullData := []byte("commit-value")
+	root := env.hash(fullData)
+	env.inst.State.ProposalAcceptedForCurrentRound = env.proposal(1, 1, fullData, root, nil, nil)
+	env.inst.State.Decided = true
+	env.inst.State.DecidedValue = fullData
+	env.addMessages(
+		env.inst.State.CommitContainer,
+		env.commit(1, 1, root),
+		env.commit(1, 2, root),
+		env.commit(1, 3, root),
+	)
+
+	lateCommit := env.commit(1, 4, root)
+	decided, decidedValue, aggregated, err := env.inst.uponCommit(context.Background(), zap.NewNop(), lateCommit)
+	require.NoError(t, err)
+	require.False(t, decided)
+	require.Nil(t, decidedValue)
+	require.Nil(t, aggregated)
+
+	signers, msgs := env.inst.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(1, root)
+	require.Len(t, signers, 4)
+	require.Len(t, msgs, 4)
 }
 
 func TestBaseCommitValidation(t *testing.T) {

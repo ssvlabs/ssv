@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
@@ -43,7 +43,7 @@ func (client *WSClient) StartStream(addr, path string) error {
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		return errors.Wrap(err, "dial error")
+		return fmt.Errorf("dial error: %w", err)
 	}
 	defer func() {
 		_ = c.Close()
@@ -55,7 +55,7 @@ func (client *WSClient) StartStream(addr, path string) error {
 		}
 		_, raw, err := c.ReadMessage()
 		if err != nil {
-			return errors.Wrap(err, "read error")
+			return fmt.Errorf("read error: %w", err)
 		}
 		var msg Message
 		if err := json.Unmarshal(raw, &msg); err != nil {
@@ -76,7 +76,7 @@ func (client *WSClient) StartQuery(addr, path string) error {
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		return errors.Wrap(err, "dial error")
+		return fmt.Errorf("dial error: %w", err)
 	}
 	defer func() {
 		_ = c.Close()
@@ -89,11 +89,11 @@ msgLoop:
 			return nil
 		case m := <-client.out:
 			if err := c.WriteJSON(&m); err != nil {
-				return errors.Wrap(err, "send error")
+				return fmt.Errorf("send error: %w", err)
 			}
 			_, raw, err := c.ReadMessage()
 			if err != nil {
-				return errors.Wrap(err, "read error")
+				return fmt.Errorf("read error: %w", err)
 			}
 			var msg Message
 			if err := json.Unmarshal(raw, &msg); err != nil {
