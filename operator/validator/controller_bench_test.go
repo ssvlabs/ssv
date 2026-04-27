@@ -182,9 +182,8 @@ func benchmarkCommitteeFixture(
 
 	warmupMsg := benchmarkRouterMessage(committeeID, slot)
 	committee.EnqueueMessage(ctx, warmupMsg)
-	committeeQueue := committee.Queues[slot].Q
+	committeeQueue := committee.Queues[slot]
 	committeeQueue.TryPop(queue.NewCommitteeQueuePrioritizer(&queue.State{
-		Height: specqbft.Height(slot),
 		Slot:   slot,
 		Quorum: 3,
 	}), queue.FilterAny)
@@ -218,7 +217,6 @@ func benchmarkRouterMessage(committeeID spectypes.CommitteeID, slot phase0.Slot)
 
 func benchmarkConsumeCommitteeQueue(ctx context.Context, state *benchmarkState, q queue.Queue, slot phase0.Slot) {
 	prioritizer := queue.NewCommitteeQueuePrioritizer(&queue.State{
-		Height: specqbft.Height(slot),
 		Slot:   slot,
 		Quorum: 3,
 	})
