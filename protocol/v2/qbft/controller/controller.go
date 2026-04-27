@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -141,26 +140,18 @@ func (c *Controller) ProcessMsg(
 ) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
-		return nil, errors.New("could not create ProcessingMessage from signed message")
+		return nil, fmt.Errorf("could not create ProcessingMessage from signed message: %w", err)
 	}
 
-	if err := c.BaseMsgValidation(msg); err != nil {
-		return nil, fmt.Errorf("invalid msg: %w", err)
+	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
+		return nil, spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
 	}
 
-	/**
-	Main controller processing flow
-	_______________________________
-	All decided msgs are processed the same, out of instance.
-	All valid future msgs are saved in a container and might be referenced later if/when a not-future message arrives.
-	All other msgs (not future or decided) are processed normally by an existing instance (if found).
-	*/
 	if c.isDecidedMsg(msg) {
 		return c.UponDecided(logger, msg, roundTimerF)
 	}
 
-	isFutureMsg := c.isFutureMessage(msg)
-	if isFutureMsg {
+	if c.isFutureMessage(msg) {
 		return nil, NewRetryableError(spectypes.WrapError(spectypes.FutureMessageErrorCode, ErrFutureConsensusMsg))
 	}
 
@@ -195,16 +186,6 @@ func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Lo
 	}
 
 	return decidedMsg, nil
-}
-
-// BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
-	// verify msg belongs to controller
-	if !bytes.Equal(c.Identifier, msg.QBFTMessage.Identifier) {
-		return spectypes.NewError(spectypes.MessageIdentifierInvalidErrorCode, "message doesn't belong to Identifier")
-	}
-
-	return nil
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages
