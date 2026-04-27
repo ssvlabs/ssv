@@ -23,8 +23,7 @@ import (
 
 var mockState = &State{
 	HasRunningInstance: true,
-	Height:             100,
-	Slot:               64,
+	Slot:               100,
 	Quorum:             4,
 }
 
@@ -198,7 +197,6 @@ func TestPriorityQueue_Pop_NothingThenSomething(t *testing.T) {
 
 	state := &State{
 		HasRunningInstance: true,
-		Height:             1,
 		Slot:               1,
 		Round:              1,
 		Quorum:             4,
@@ -236,7 +234,6 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	state := &State{
 		HasRunningInstance: true,
-		Height:             1,
 		Slot:               1,
 		Round:              1,
 		Quorum:             4,

@@ -126,12 +126,16 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The result will be 0 if equal, -1 if lower, 1 if higher.
+//
+// state.Slot doubles as the QBFT height: every runner starts its QBFT instance at height = slot,
+// so we cast state.Slot to specqbft.Height when comparing QBFT messages.
 func compareHeightOrSlot(state *State, m *SSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok && qbftMsg != nil {
-		if qbftMsg.Height == state.Height {
+		stateHeight := specqbft.Height(state.Slot)
+		if qbftMsg.Height == stateHeight {
 			return 0
 		}
-		if qbftMsg.Height > state.Height {
+		if qbftMsg.Height > stateHeight {
 			return 1
 		}
 	} else if pms, ok := m.Body.(*spectypes.PartialSignatureMessages); ok && pms != nil { // everyone likes pms
@@ -178,45 +182,53 @@ func scoreMessageType(m *SSVMessage) int {
 	}
 }
 
-// scoreMessageSubtype returns an integer score for the message's type.
-func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
-	var (
-		isConsensusMessage     = false
-		isPreConsensusMessage  = false
-		isPostConsensusMessage = false
-	)
+type messageClassification struct {
+	isConsensusMessage     bool
+	isPreConsensusMessage  bool
+	isPostConsensusMessage bool
+	consensusMsgType       specqbft.MessageType
+}
 
+func classifyMessage(m *SSVMessage) messageClassification {
+	var classification messageClassification
 	switch mm := m.Body.(type) {
 	case *specqbft.Message:
 		if mm != nil {
-			isConsensusMessage = true
+			classification.isConsensusMessage = true
+			classification.consensusMsgType = mm.MsgType
 		}
 	case *spectypes.PartialSignatureMessages:
 		if mm != nil {
-			isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
-			isPreConsensusMessage = !isPostConsensusMessage
+			classification.isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
+			classification.isPreConsensusMessage = !classification.isPostConsensusMessage
 		}
 	}
+	return classification
+}
+
+// scoreMessageSubtype returns an integer score for the message's type.
+func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
+	classification := classifyMessage(m)
 
 	// Current height.
 	if relativeHeight == 0 {
 		if state.HasRunningInstance {
 			switch {
-			case isConsensusMessage:
+			case classification.isConsensusMessage:
 				return 3
-			case isPreConsensusMessage:
+			case classification.isPreConsensusMessage:
 				return 2
-			case isPostConsensusMessage:
+			case classification.isPostConsensusMessage:
 				return 1
 			}
 			return 0
 		}
 		switch {
-		case isPreConsensusMessage:
+		case classification.isPreConsensusMessage:
 			return 3
-		case isPostConsensusMessage:
+		case classification.isPostConsensusMessage:
 			return 2
-		case isConsensusMessage:
+		case classification.isConsensusMessage:
 			return 1
 		}
 		return 0
@@ -227,11 +239,11 @@ func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 		switch {
 		case isDecidedMessage(state, m):
 			return 4
-		case isPreConsensusMessage:
+		case classification.isPreConsensusMessage:
 			return 3
-		case isConsensusMessage:
+		case classification.isConsensusMessage:
 			return 2
-		case isPostConsensusMessage:
+		case classification.isPostConsensusMessage:
 			return 1
 		}
 		return 0
@@ -241,7 +253,7 @@ func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
+	case classification.isConsensusMessage && classification.consensusMsgType == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
@@ -276,43 +288,27 @@ func isDecidedMessage(s *State, m *SSVMessage) bool {
 
 // scoreCommitteeMessageSubtype returns an integer score for the message's type.
 func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
-	var (
-		isConsensusMessage     = false
-		isPreConsensusMessage  = false
-		isPostConsensusMessage = false
-	)
-
-	switch mm := m.Body.(type) {
-	case *specqbft.Message:
-		if mm != nil {
-			isConsensusMessage = true
-		}
-	case *spectypes.PartialSignatureMessages:
-		if mm != nil {
-			isPostConsensusMessage = mm.Type == spectypes.PostConsensusPartialSig
-			isPreConsensusMessage = !isPostConsensusMessage
-		}
-	}
+	classification := classifyMessage(m)
 
 	// Current height.
 	if relativeHeight == 0 {
 		if state.HasRunningInstance {
 			switch {
-			case isPostConsensusMessage:
+			case classification.isPostConsensusMessage:
 				return 4
-			case isConsensusMessage:
+			case classification.isConsensusMessage:
 				return 3
-			case isPreConsensusMessage:
+			case classification.isPreConsensusMessage:
 				return 2
 			}
 			return 0
 		}
 		switch {
-		case isPostConsensusMessage:
+		case classification.isPostConsensusMessage:
 			return 3
-		case isPreConsensusMessage:
+		case classification.isPreConsensusMessage:
 			return 2
-		case isConsensusMessage:
+		case classification.isConsensusMessage:
 			return 1
 		}
 		return 0
@@ -321,13 +317,13 @@ func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight in
 	// Higher height.
 	if relativeHeight == 1 {
 		switch {
-		case isPostConsensusMessage:
+		case classification.isPostConsensusMessage:
 			return 4
 		case isDecidedMessage(state, m):
 			return 3
-		case isPreConsensusMessage:
+		case classification.isPreConsensusMessage:
 			return 2
-		case isConsensusMessage:
+		case classification.isConsensusMessage:
 			return 1
 		}
 		return 0
@@ -337,7 +333,7 @@ func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight in
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
+	case classification.isConsensusMessage && classification.consensusMsgType == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
