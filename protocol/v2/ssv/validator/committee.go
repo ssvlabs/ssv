@@ -35,7 +35,7 @@ type Committee struct {
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
-	Queues  map[phase0.Slot]queueContainer
+	Queues  map[phase0.Slot]queue.Queue
 	Runners map[phase0.Slot]*runner.CommitteeRunner
 	Shares  map[phase0.ValidatorIndex]*spectypes.Share
 
@@ -65,7 +65,7 @@ func NewCommittee(
 	return &Committee{
 		logger:          logger,
 		networkConfig:   networkConfig,
-		Queues:          make(map[phase0.Slot]queueContainer),
+		Queues:          make(map[phase0.Slot]queue.Queue),
 		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:          shares,
 		CommitteeMember: operator,
@@ -92,7 +92,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	*runner.CommitteeRunner,
-	queueContainer,
+	queue.Queue,
 	error,
 ) {
 	ctx, span := tracer.Start(ctx,
@@ -106,13 +106,13 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	span.AddEvent("prepare duty and runner")
 	r, q, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
 	if err != nil {
-		return nil, queueContainer{}, traces.Errorf(span, "prepare duty and runner: %w", err)
+		return nil, nil, traces.Errorf(span, "prepare duty and runner: %w", err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
 	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
-		return nil, queueContainer{}, traces.Errorf(span, "runner failed to start duty: %w", err)
+		return nil, nil, traces.Errorf(span, "runner failed to start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -121,7 +121,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 
 func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	r *runner.CommitteeRunner,
-	q queueContainer,
+	q queue.Queue,
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
@@ -137,18 +137,18 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	defer c.mtx.Unlock()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
+		return nil, nil, nil, traces.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return nil, queueContainer{}, nil, traces.Error(span, err)
+		return nil, nil, nil, traces.Error(span, err)
 	}
 
 	// Create the corresponding runner.
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
-		return nil, queueContainer{}, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
+		return nil, nil, nil, traces.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
 	runnerIdentifier := spectypes.NewMsgID(c.networkConfig.DomainType, c.CommitteeMember.CommitteeID[:], spectypes.RoleCommittee)
 	r.SetQBFTRoundTimerF(c.newQBFTRoundTimerF(runnerIdentifier))
@@ -166,26 +166,18 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 
 // getQueue returns queue for the provided slot, lazily initializing it if it didn't exist previously.
 // MUST be called with c.mtx locked!
-func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queueContainer {
+func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queue.Queue {
 	q, exists := c.Queues[slot]
 	if !exists {
-		q = queueContainer{
-			Q: queue.New(
-				logger,
-				defaultValidatorQueueSize,
-				queue.WithInboxSizeMetric(
-					queue.InboxSizeMetric,
-					queue.CommitteeQueueMetricType,
-					queue.CommitteeMetricID(slot),
-				),
+		q = queue.New(
+			logger,
+			defaultValidatorQueueSize,
+			queue.WithInboxSizeMetric(
+				queue.InboxSizeMetric,
+				queue.CommitteeQueueMetricType,
+				queue.CommitteeMetricID(slot),
 			),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             specqbft.Height(slot),
-				Slot:               slot,
-				Quorum:             c.CommitteeMember.GetQuorum(),
-			},
-		}
+		)
 		c.Queues[slot] = q
 	}
 

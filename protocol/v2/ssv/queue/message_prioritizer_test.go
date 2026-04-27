@@ -30,8 +30,7 @@ var messagePriorityTests = []struct {
 		name: "Running instance",
 		state: &State{
 			HasRunningInstance: true,
-			Height:             100,
-			Slot:               64,
+			Slot:               100,
 			Quorum:             4,
 		},
 		messages: []mockMessage{
@@ -52,19 +51,19 @@ var messagePriorityTests = []struct {
 			// 2.1.4. Consensus/<Other>
 			mockConsensusMessage{Height: 100, Type: specqbft.RoundChangeMsgType},
 			// 2.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.SelectionProofPartialSig},
 			// 2.3. Post-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.PostConsensusPartialSig},
 
 			// 3. Higher height/slot:
 			// 3.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
 			// 3.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.SelectionProofPartialSig},
 			// 3.3. Consensus
 			mockConsensusMessage{Height: 101},
 			// 3.4. Post-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.PostConsensusPartialSig},
 
 			// 4. Lower height/slot:
 			// 4.1 Decided
@@ -72,23 +71,22 @@ var messagePriorityTests = []struct {
 			// 4.2. Commit
 			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 4.3. Pre-consensus
-			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 99, Type: spectypes.SelectionProofPartialSig},
 		},
 	},
 	{
 		name: "No running instance",
 		state: &State{
 			HasRunningInstance: false,
-			Height:             100,
-			Slot:               64,
+			Slot:               100,
 			Quorum:             4,
 		},
 		messages: []mockMessage{
 			// 1. Current height/slot:
 			// 1.1. Pre-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.SelectionProofPartialSig},
 			// 1.2. Post-consensus
-			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 100, Type: spectypes.PostConsensusPartialSig},
 			// 1.3. Consensus
 			// 1.3.1. Consensus/Proposal
 			mockConsensusMessage{Height: 100, Type: specqbft.ProposalMsgType},
@@ -103,11 +101,11 @@ var messagePriorityTests = []struct {
 			// 2.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
 			// 2.2. Pre-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.SelectionProofPartialSig},
 			// 2.3. Consensus
 			mockConsensusMessage{Height: 101},
 			// 2.4. Post-consensus
-			mockNonConsensusMessage{Slot: 65, Type: spectypes.PostConsensusPartialSig},
+			mockNonConsensusMessage{Slot: 101, Type: spectypes.PostConsensusPartialSig},
 
 			// 3. Lower height/slot:
 			// 3.1 Decided
@@ -115,7 +113,7 @@ var messagePriorityTests = []struct {
 			// 3.2. Commit
 			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 3.3. Pre-consensus
-			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
+			mockNonConsensusMessage{Slot: 99, Type: spectypes.SelectionProofPartialSig},
 		},
 	},
 }
@@ -150,6 +148,110 @@ func TestMessagePrioritizer(t *testing.T) {
 					require.Fail(t, "incorrect order:\n"+shuffle.dump(test.state))
 				}
 			}
+		})
+	}
+}
+
+func TestMessagePrioritizer_LowerHeightCommitOutranksLowerSlotPreConsensusAtAdvancedRound(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Slot:               100,
+		Round:              3,
+		Quorum:             4,
+	}
+
+	lowerHeightCommit, err := DecodeSignedSSVMessage(
+		mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType}.ssvMessage(state),
+	)
+	require.NoError(t, err)
+
+	lowerSlotPreConsensus, err := DecodeSignedSSVMessage(
+		mockNonConsensusMessage{Slot: 99, Type: spectypes.SelectionProofPartialSig}.ssvMessage(state),
+	)
+	require.NoError(t, err)
+
+	prioritizer := NewMessagePrioritizer(state)
+	require.True(t, prioritizer.Prior(lowerHeightCommit, lowerSlotPreConsensus))
+	require.False(t, prioritizer.Prior(lowerSlotPreConsensus, lowerHeightCommit))
+}
+
+// TestMessagePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus verifies that at lower
+// QBFT heights, a Commit message outranks any other consensus message type. This guards against the
+// historical type-confusion in scoreMessageSubtype where the lower-height Commit branch never matched
+// (it cast SSVMessage.MsgType to specqbft.MessageType instead of reading the inner QBFT MsgType),
+// which let scoreConsensusType promote stale Proposal/Prepare messages above stale Commits.
+func TestMessagePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Slot:               100,
+		Quorum:             4,
+	}
+
+	cases := []struct {
+		name      string
+		otherType specqbft.MessageType
+	}{
+		{name: "Proposal", otherType: specqbft.ProposalMsgType},
+		{name: "Prepare", otherType: specqbft.PrepareMsgType},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lowerHeightCommit, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			lowerHeightOther, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: tc.otherType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			prioritizer := NewMessagePrioritizer(state)
+			require.True(t, prioritizer.Prior(lowerHeightCommit, lowerHeightOther),
+				"expected lower-height Commit to outrank lower-height %s", tc.name)
+			require.False(t, prioritizer.Prior(lowerHeightOther, lowerHeightCommit),
+				"expected lower-height %s to NOT outrank lower-height Commit", tc.name)
+		})
+	}
+}
+
+// TestCommitteeQueuePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus mirrors the
+// validator-path test above for the committee prioritizer. The committee chain has no scoreRound
+// step, but the same scoreCommitteeMessageSubtype type-confusion existed in its lower-height
+// branch — letting scoreConsensusType promote stale Proposals/Prepares above stale Commits.
+func TestCommitteeQueuePrioritizer_LowerHeightCommitOutranksOtherLowerHeightConsensus(t *testing.T) {
+	state := &State{
+		HasRunningInstance: true,
+		Slot:               100,
+		Quorum:             4,
+	}
+
+	cases := []struct {
+		name      string
+		otherType specqbft.MessageType
+	}{
+		{name: "Proposal", otherType: specqbft.ProposalMsgType},
+		{name: "Prepare", otherType: specqbft.PrepareMsgType},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lowerHeightCommit, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			lowerHeightOther, err := DecodeSignedSSVMessage(
+				mockConsensusMessage{Height: 99, Type: tc.otherType}.ssvMessage(state),
+			)
+			require.NoError(t, err)
+
+			prioritizer := NewCommitteeQueuePrioritizer(state)
+			require.True(t, prioritizer.Prior(lowerHeightCommit, lowerHeightOther),
+				"expected lower-height Commit to outrank lower-height %s (committee)", tc.name)
+			require.False(t, prioritizer.Prior(lowerHeightOther, lowerHeightCommit),
+				"expected lower-height %s to NOT outrank lower-height Commit (committee)", tc.name)
 		})
 	}
 }
