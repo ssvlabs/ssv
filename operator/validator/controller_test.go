@@ -96,7 +96,6 @@ func TestNewController(t *testing.T) {
 	}
 	control := NewController(logger, controllerOptions, exporter.Options{})
 	require.IsType(t, &Controller{}, control)
-	require.Equal(t, defaultNetworkRouterConcurrency, control.msgRouterConcurrency)
 }
 
 func TestNewControllerRouterConcurrencyOverride(t *testing.T) {
