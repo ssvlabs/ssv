@@ -38,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -1559,8 +1560,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		anotherFullData := []byte{1}
 		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
-			message.Root, err = specqbft.HashDataRoot(anotherFullData)
-			require.NoError(t, err)
+			message.Root = qbft.HashDataRoot(anotherFullData)
 		})
 		signedSSVMessage.FullData = anotherFullData
 
