@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -138,7 +140,7 @@ func TestEthExecLayer(t *testing.T) {
 		}()
 		defer func() {
 			syncCancel()
-			require.NoError(t, <-syncOngoingErrCh)
+			assert.NoError(t, <-syncOngoingErrCh)
 		}()
 
 		// Step 1: Add more validators
@@ -153,14 +155,17 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
+			var syncedNonce registrystorage.Nonce
 			require.Eventually(t, func() bool {
 				nextNonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
-				return err == nil && nextNonce == expectedNonce && len(nodeStorage.Shares().List(nil)) == 7
+				if err != nil || nextNonce != expectedNonce || len(nodeStorage.Shares().List(nil)) != 7 {
+					return false
+				}
+				syncedNonce = nextNonce
+				return true
 			}, asyncWaitTimeout, asyncPollTick)
 
-			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
-			require.NoError(t, err)
-			require.Equal(t, expectedNonce, nonce)
+			require.Equal(t, expectedNonce, syncedNonce)
 
 			lastBlockNum, err := testEnv.sim.Client().BlockByNumber(ctx, nil)
 			require.NoError(t, err)
@@ -232,13 +237,10 @@ func TestEthExecLayer(t *testing.T) {
 			liquidatedDone := make(chan struct{}, 1)
 			taskExecutor.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 				func(ethcommon.Address, []uint64, []*ssvtypes.SSVShare) error {
-					select {
-					case liquidatedDone <- struct{}{}:
-					default:
-					}
+					liquidatedDone <- struct{}{}
 					return nil
 				},
-			).AnyTimes()
+			).Times(1)
 
 			clusterLiquidate := NewTestClusterLiquidatedInput(common)
 			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
@@ -273,13 +275,10 @@ func TestEthExecLayer(t *testing.T) {
 			reactivatedDone := make(chan struct{}, 1)
 			taskExecutor.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 				func(ethcommon.Address, []uint64, []*ssvtypes.SSVShare) error {
-					select {
-					case reactivatedDone <- struct{}{}:
-					default:
-					}
+					reactivatedDone <- struct{}{}
 					return nil
 				},
-			).AnyTimes()
+			).Times(1)
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
@@ -343,14 +342,17 @@ func TestEthExecLayer(t *testing.T) {
 			setFeeRecipient.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
+			var updatedFeeRecipient bellatrix.ExecutionAddress
 			require.Eventually(t, func() bool {
 				feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
-				return err == nil && bytes.Equal(testAddrBob.Bytes(), feeRecipient[:])
+				if err != nil || !bytes.Equal(testAddrBob.Bytes(), feeRecipient[:]) {
+					return false
+				}
+				updatedFeeRecipient = feeRecipient
+				return true
 			}, asyncWaitTimeout, asyncPollTick)
 
-			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
-			require.NoError(t, err)
-			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
+			require.Equal(t, testAddrBob.Bytes(), updatedFeeRecipient[:])
 		}
 	})
 }
