@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -18,10 +19,10 @@ func Test_specForClient_errorPaths(t *testing.T) {
 	t.Parallel()
 
 	tt := []struct {
-		name     string
-		response mocks.Response
-		wantErr  string
-		timeout  time.Duration
+		name           string
+		response       mocks.Response
+		wantErr        string
+		requestTimeout time.Duration
 	}{
 		{
 			name: "rate limited",
@@ -31,7 +32,6 @@ func Test_specForClient_errorPaths(t *testing.T) {
 				mocks.WithHeader("Retry-After", "1"),
 			),
 			wantErr: "GET failed with status 429",
-			timeout: 100 * time.Millisecond,
 		},
 		{
 			name: "internal server error",
@@ -40,7 +40,6 @@ func Test_specForClient_errorPaths(t *testing.T) {
 				mocks.WithStatusCode(http.StatusInternalServerError),
 			),
 			wantErr: "GET failed with status 500",
-			timeout: 100 * time.Millisecond,
 		},
 		{
 			name: "timeout",
@@ -48,8 +47,8 @@ func Test_specForClient_errorPaths(t *testing.T) {
 				nil,
 				mocks.WithDelay(200*time.Millisecond),
 			),
-			wantErr: "context deadline exceeded",
-			timeout: 50 * time.Millisecond,
+			wantErr:        "context deadline exceeded",
+			requestTimeout: 50 * time.Millisecond,
 		},
 	}
 
@@ -66,9 +65,16 @@ func Test_specForClient_errorPaths(t *testing.T) {
 			defer server.Close()
 
 			client := &GoClient{log: zap.NewNop()}
-			provider := newHTTPService(t, server.URL, tc.timeout)
+			provider := newHTTPService(t, server.URL)
 
-			_, err := client.specForClient(t.Context(), provider)
+			ctx := t.Context()
+			if tc.requestTimeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.requestTimeout)
+				defer cancel()
+			}
+
+			_, err := client.specForClient(ctx, provider)
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
@@ -86,23 +92,26 @@ func Test_genesisForClient_malformedJSON(t *testing.T) {
 	defer server.Close()
 
 	client := &GoClient{log: zap.NewNop()}
-	provider := newHTTPService(t, server.URL, 100*time.Millisecond)
+	provider := newHTTPService(t, server.URL)
 
 	_, err := client.genesisForClient(t.Context(), provider)
 	require.ErrorContains(t, err, "invalid character")
 }
 
-func newHTTPService(t *testing.T, addr string, timeout time.Duration) *eth2clienthttp.Service {
+func newHTTPService(t *testing.T, addr string) *eth2clienthttp.Service {
 	t.Helper()
 
 	service, err := eth2clienthttp.New(
 		t.Context(),
 		eth2clienthttp.WithAddress(addr),
 		eth2clienthttp.WithLogLevel(zerolog.Disabled),
-		eth2clienthttp.WithTimeout(timeout),
+		eth2clienthttp.WithTimeout(time.Second),
 		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	require.NoError(t, err)
 
-	return service.(*eth2clienthttp.Service)
+	provider := service.(*eth2clienthttp.Service)
+	require.Eventually(t, provider.IsActive, time.Second, 10*time.Millisecond)
+
+	return provider
 }
