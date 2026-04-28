@@ -289,6 +289,8 @@ func (r *dummyRouter) Route(_ context.Context, _ network.DecodedSSVMessage) {
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions) (*LocalNet, []*dummyRouter, error) {
+	t.Helper()
+
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
