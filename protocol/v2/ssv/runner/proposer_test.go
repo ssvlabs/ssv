@@ -421,7 +421,7 @@ func newProposerRunnerForTest(
 	require.NoError(t, err)
 
 	proposerRunner := runnerIface.(*ProposerRunner)
-	proposerRunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+	proposerRunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()
 	})
 	return proposerRunner, keySet, network
@@ -463,7 +463,7 @@ func setupRunnerForPostConsensus(
 		msgID[:],
 		specqbft.Height(duty.Slot),
 		runner.operatorSigner,
-		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 			return roundtimer.NewTestingTimer()
 		},
 	)
