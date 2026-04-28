@@ -48,10 +48,6 @@ const (
 	CommitteeQueueMetricType = "committee"
 
 	DropReasonBufferFull      = "buffer_full"
-	DropReasonMalformed       = "malformed"
-	DropReasonStaleHeight     = "stale_height"
-	DropReasonStaleRound      = "stale_round"
-	DropReasonStaleSlot       = "stale_slot"
 	DropReasonContextCanceled = "context_canceled"
 )
 
@@ -69,7 +65,7 @@ func CommitteeMetricID(slot phase0.Slot) string {
 	return fmt.Sprintf("%d", slotInEpoch)
 }
 
-func RecordDroppedMessage(queueType, queueID, reason string) {
+func recordDroppedMessage(queueType, queueID, reason string) {
 	DroppedMessagesMetric.Add(
 		context.Background(),
 		1,

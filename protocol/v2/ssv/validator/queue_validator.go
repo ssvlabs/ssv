@@ -58,19 +58,6 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
-		queueID := queue.ValidatorMetricID(msg.MsgID.GetRoleType())
-		if accepted, dropReason := queue.ShouldAcceptUnderPressure(v.messageQueueState(msg.MsgID, slot), msg, q.Len(), q.Cap()); !accepted {
-			const eventMsg = "❗ dropping stale message because the queue is under pressure"
-			queue.RecordDroppedMessage(queue.ValidatorQueueMetricType, queueID, dropReason)
-			logger.Warn(eventMsg,
-				zap.String("drop_reason", dropReason),
-				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msg.MsgID.String()))
-			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("drop_reason", dropReason)))
-			span.SetStatus(codes.Error, eventMsg)
-			return
-		}
-
 		span.AddEvent("pushing message to queue")
 		if pushed := q.TryPush(msg); !pushed {
 			const eventMsg = "❗ dropping message because the queue is full"
@@ -90,26 +77,6 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	const errMsg = "❌ missing queue for role type"
 	logger.Error(errMsg, fields.RunnerRole(msg.MsgID.GetRoleType()))
 	span.SetStatus(codes.Error, errMsg)
-}
-
-func (v *Validator) messageQueueState(msgID spectypes.MessageID, msgSlot phase0.Slot) *queue.State {
-	state := &queue.State{
-		Slot:   msgSlot,
-		Quorum: v.Operator.GetQuorum(),
-	}
-
-	r := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if r == nil {
-		return state
-	}
-
-	if height := r.GetLastHeight(); height != 0 {
-		state.Slot = phase0.Slot(height)
-	}
-
-	state.HasRunningInstance = r.HasRunningQBFTInstance()
-	state.Round = r.GetLastRound()
-	return state
 }
 
 // StartQueueConsumer start consuming p2p message queue with the supplied handler

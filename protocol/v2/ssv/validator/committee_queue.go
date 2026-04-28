@@ -59,18 +59,7 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 
 	c.mtx.Lock()
 	q := c.getQueue(logger, slot)
-	state := c.messageQueueState(slot)
 	c.mtx.Unlock()
-
-	queueID := queue.CommitteeMetricID(slot)
-	if accepted, dropReason := queue.ShouldAcceptUnderPressure(state, msg, q.Len(), q.Cap()); !accepted {
-		const errMsg = "❗ dropping stale message because the queue is under pressure"
-		queue.RecordDroppedMessage(queue.CommitteeQueueMetricType, queueID, dropReason)
-		logger.Warn(errMsg, zap.String("drop_reason", dropReason))
-		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("drop_reason", dropReason)))
-		span.SetStatus(codes.Error, errMsg)
-		return
-	}
 
 	span.AddEvent("pushing message to the queue")
 	if pushed := q.TryPush(msg); !pushed {
@@ -82,23 +71,6 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	}
 
 	span.SetStatus(codes.Ok, "")
-}
-
-func (c *Committee) messageQueueState(slot phase0.Slot) *queue.State {
-	state := &queue.State{
-		Slot:   slot,
-		Quorum: c.CommitteeMember.GetQuorum(),
-	}
-
-	if r, ok := c.Runners[slot]; ok && r != nil {
-		state.HasRunningInstance = r.HasRunningQBFTInstance()
-		if height := r.GetLastHeight(); height != 0 {
-			state.Slot = phase0.Slot(height)
-		}
-		state.Round = r.GetLastRound()
-	}
-
-	return state
 }
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller

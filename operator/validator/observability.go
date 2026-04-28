@@ -32,6 +32,12 @@ const (
 	statusUnknown       validatorStatus = "unknown"
 )
 
+// router drop reasons reported via routerDroppedMessagesCounter.
+const (
+	routerDropReasonContextCanceled = "context_canceled"
+	routerDropReasonBufferFull      = "buffer_full"
+)
+
 var (
 	tracer = otel.Tracer(observabilityName)
 	meter  = otel.Meter(observabilityName)
