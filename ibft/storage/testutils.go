@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -257,7 +257,7 @@ func GetSpecDir(path, module string) (string, error) {
 			}
 		}
 		if req == nil {
-			return "", errors.Errorf("could not find %s module", specModule)
+			return "", fmt.Errorf("could not find %s module", specModule)
 		}
 		modPath = req.Mod.Path
 		modVersion = req.Mod.Version
@@ -266,11 +266,11 @@ func GetSpecDir(path, module string) (string, error) {
 	// get module path
 	p, err := GetModulePath(modPath, modVersion)
 	if err != nil {
-		return "", errors.Wrap(err, "could not get module path")
+		return "", fmt.Errorf("could not get module path: %w", err)
 	}
 
 	if _, err := os.Stat(p); os.IsNotExist(err) {
-		return "", errors.Wrapf(err, "you don't have this module-%s/version-%s installed", modPath, modVersion)
+		return "", fmt.Errorf("you don't have this module-%s/version-%s installed: %w", modPath, modVersion, err)
 	}
 
 	return filepath.Join(filepath.Clean(p), module), nil

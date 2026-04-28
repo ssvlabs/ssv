@@ -1,10 +1,9 @@
 package params
 
 import (
+	"fmt"
 	"math"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // scoreDecay determines the decay rate from the provided time period till
@@ -29,7 +28,7 @@ func decayThreshold(decayRate, rate float64) (float64, error) {
 // it has the given issuance rate per decay interval and the given decay factor.
 func decayConvergence(decayRate, rate float64) (float64, error) {
 	if 1 <= decayRate {
-		return 0, errors.Errorf("invalid rate: %f", decayRate)
+		return 0, fmt.Errorf("invalid rate: %f", decayRate)
 	}
 	return rate / (1 - decayRate), nil
 }

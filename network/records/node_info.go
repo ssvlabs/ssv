@@ -2,10 +2,11 @@ package records
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/record"
-	"github.com/pkg/errors"
 )
 
 const domain = "ssv"
@@ -33,12 +34,12 @@ func NewNodeInfo(networkID string) *NodeInfo {
 func (ni *NodeInfo) Seal(privateKey crypto.PrivKey) ([]byte, error) {
 	ev, err := record.Seal(ni, privateKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not seal record")
+		return nil, fmt.Errorf("could not seal record: %w", err)
 	}
 
 	data, err := ev.Marshal()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal envelope")
+		return nil, fmt.Errorf("could not marshal envelope: %w", err)
 	}
 	return data, nil
 }
@@ -47,11 +48,11 @@ func (ni *NodeInfo) Seal(privateKey crypto.PrivKey) ([]byte, error) {
 func (ni *NodeInfo) Consume(data []byte) error {
 	evParsed, err := record.ConsumeTypedEnvelope(data, &NodeInfo{})
 	if err != nil {
-		return errors.Wrap(err, "could not consume envelope")
+		return fmt.Errorf("could not consume envelope: %w", err)
 	}
 	parsed, err := evParsed.Record()
 	if err != nil {
-		return errors.Wrap(err, "could not get record")
+		return fmt.Errorf("could not get record: %w", err)
 	}
 	rec, ok := parsed.(*NodeInfo)
 	if !ok {
@@ -85,7 +86,7 @@ func (ni *NodeInfo) MarshalRecord() ([]byte, error) {
 	if ni.Metadata != nil {
 		rawMeta, err := ni.Metadata.Encode()
 		if err != nil {
-			return nil, errors.Wrap(err, "could not encode metadata")
+			return nil, fmt.Errorf("could not encode metadata: %w", err)
 		}
 		parts = append(parts, string(rawMeta))
 	}
@@ -119,7 +120,7 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 	ni.Metadata = new(NodeMetadata)
 	err := ni.Metadata.Decode([]byte(ser.Entries[2]))
 	if err != nil {
-		return errors.Wrap(err, "could not decode metadata")
+		return fmt.Errorf("could not decode metadata: %w", err)
 	}
 
 	return nil

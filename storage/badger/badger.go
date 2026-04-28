@@ -3,12 +3,12 @@ package badger
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/observability/log"
@@ -57,7 +57,7 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*DB, e
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
 	db, err := badger.Open(opt)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open badger")
+		return nil, fmt.Errorf("failed to open badger: %w", err)
 	}
 
 	// Set up context/cancel to control background goroutines.

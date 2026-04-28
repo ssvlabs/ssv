@@ -5,13 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -101,6 +101,12 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
+	broadcastErrCh := make(chan error, 12)
+	recordBroadcastErr := func(err error) {
+		if err != nil {
+			broadcastErrCh <- err
+		}
+	}
 	wg.Add(1)
 
 	go func() {
@@ -111,17 +117,17 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
 		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
-		require.NoError(t, node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node1.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
+		recordBroadcastErr(node2.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		recordBroadcastErr(node2.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		recordBroadcastErr(node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
 		<-time.After(time.Millisecond * 20)
-		require.NoError(t, node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
+		recordBroadcastErr(node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Add(1)
@@ -136,20 +142,22 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		msgSyncCommitteeContribution := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 5, spectypes.RoleSyncCommitteeContribution)
 		msgRoleVoluntaryExit := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 6, spectypes.RoleVoluntaryExit)
 
-		require.NoError(t, err)
+		time.Sleep(time.Millisecond * 20)
+		recordBroadcastErr(node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
 
 		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node1.Broadcast(msgCommittee2.SSVMessage.GetID(), msgCommittee2))
-
-		time.Sleep(time.Millisecond * 20)
-		require.NoError(t, node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
-		require.NoError(t, node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
-		require.NoError(t, node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
-		require.NoError(t, node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
-		require.NoError(t, node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
+		recordBroadcastErr(node2.Broadcast(msgCommittee1.SSVMessage.GetID(), msgCommittee1))
+		recordBroadcastErr(node1.Broadcast(msgCommittee3.SSVMessage.GetID(), msgCommittee3))
+		recordBroadcastErr(node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
+		recordBroadcastErr(node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
+		recordBroadcastErr(node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
 	}()
 
 	wg.Wait()
+	close(broadcastErrCh)
+	for err := range broadcastErrCh {
+		require.NoError(t, err)
+	}
 
 	// waiting for messages
 	wg.Add(1)
@@ -298,7 +306,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 		return nil, nil, err
 	}
 	if len(ln.Nodes) != options.Nodes {
-		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), options.Nodes)
+		return nil, nil, fmt.Errorf("only %d peers created, expected %d", len(ln.Nodes), options.Nodes)
 	}
 
 	logger.Debug("created local network")

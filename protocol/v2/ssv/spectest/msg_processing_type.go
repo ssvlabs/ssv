@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
@@ -77,33 +78,33 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 	valCheck := createValueChecker(test.Runner)
 	switch test.Runner.(type) {
 	case *runner.CommitteeRunner:
-		for _, inst := range test.Runner.(*runner.CommitteeRunner).QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.CommitteeRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.AggregatorRunner:
-		for _, inst := range test.Runner.(*runner.AggregatorRunner).QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.AggregatorRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.ProposerRunner:
-		for _, inst := range test.Runner.(*runner.ProposerRunner).QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.ProposerRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	case *runner.SyncCommitteeAggregatorRunner:
-		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).QBFTController.StoredInstances {
+		for _, inst := range test.Runner.(*runner.SyncCommitteeAggregatorRunner).QBFTController.RecentInstances {
 			if inst.ValueChecker == nil {
 				inst.ValueChecker = valCheck
 			}
 		}
 	}
 
-	test.Runner.SetTimeoutFunc(func(_ context.Context, _ *zap.Logger, _ spectypes.MessageID, _ specqbft.Height) roundtimer.OnRoundTimeoutF {
-		return func(specqbft.Round) {}
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+		return roundtimer.NewTestingTimer()
 	})
 
 	var v *validator.Validator
@@ -242,7 +243,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 }
 
 func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
-	testType := reflect.TypeOf(test).String()
+	testType := reflect.TypeFor[*MsgProcessingSpecTest]().String()
 	testType = strings.Replace(testType, "spectest.", "tests.", 1)
 	overrideStateComparison(t, test, test.Name, testType)
 }
@@ -286,24 +287,26 @@ var baseCommitteeWithRunnerSample = func(
 		attestingValidators []phase0.BLSPubKey,
 		_ runner.CommitteeDutyGuard,
 	) (*runner.CommitteeRunner, error) {
-		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
-			shareMap,
-			attestingValidators,
-			controller.NewController(
+		r, err := runner.NewCommitteeRunner(runner.CommitteeRunnerOptions{
+			BaseRunnerOptions: runner.BaseRunnerOptions{
+				NetworkConfig:  networkconfig.TestNetwork,
+				Share:          shareMap,
+				Beacon:         runnerSample.GetBeaconNode(),
+				Network:        runnerSample.GetNetwork(),
+				Signer:         runnerSample.GetSigner(),
+				OperatorSigner: runnerSample.GetOperatorSigner(),
+			},
+			AttestingValidators: attestingValidators,
+			QBFTController: controller.NewController(
 				runnerSample.QBFTController.Identifier,
 				runnerSample.QBFTController.CommitteeMember,
 				runnerSample.QBFTController.GetConfig(),
 				spectestingutils.TestingOperatorSigner(keySetSample),
 				false,
 			),
-			runnerSample.GetBeaconNode(),
-			runnerSample.GetNetwork(),
-			runnerSample.GetSigner(),
-			runnerSample.GetOperatorSigner(),
-			committeeDutyGuard,
-			runnerSample.GetDoppelgangerHandler(),
-		)
+			DutyGuard:           committeeDutyGuard,
+			DoppelgangerHandler: runnerSample.GetDoppelgangerHandler(),
+		})
 		return r.(*runner.CommitteeRunner), err
 	}
 
