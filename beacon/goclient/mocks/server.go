@@ -86,7 +86,10 @@ func NewServerWithHandler(onRequestFn requestHandler) *httptest.Server {
 		}
 
 		if resp.Delay > 0 {
-			time.Sleep(resp.Delay)
+			select {
+			case <-time.After(resp.Delay):
+			case <-r.Context().Done():
+			}
 		}
 
 		writeResponse(w, resp)
