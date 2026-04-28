@@ -35,13 +35,13 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	i.metrics.EndStage(ctx, currentRound)
 	i.metrics.StartStage(stagePrepare)
 
-	i.State.ProposalAcceptedForCurrentRound = msg
-
 	// A future justified proposal should move us into the future round, hence we try to bump the round here.
 	// Always move on to the message-round. The round-change message broadcast is a best-effort thing, the QBFT
 	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
 	// for whatever reason.
 	i.bumpToRound(msgRound)
+
+	i.State.ProposalAcceptedForCurrentRound = msg
 
 	r := qbft.HashDataRoot(msg.SignedMessage.FullData)
 	prepare, err := i.CreatePrepare(msgRound, r)

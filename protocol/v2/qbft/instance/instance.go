@@ -302,6 +302,7 @@ func (i *Instance) Decode(data []byte) error {
 // bumpToRound pushes this instance to a higher round, also scheduling a timeout for it.
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	if round > i.State.Round {
+		i.State.ProposalAcceptedForCurrentRound = nil
 		i.State.Round = round
 		i.roundTimer.TimeoutForRound(round)
 	}

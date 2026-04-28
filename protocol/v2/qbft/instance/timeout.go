@@ -37,7 +37,6 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
 	// for whatever reason.
 	i.bumpToRound(newRound)
-	i.State.ProposalAcceptedForCurrentRound = nil
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {

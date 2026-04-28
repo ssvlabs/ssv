@@ -115,7 +115,6 @@ func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap
 	// cluster as a whole can progress further even if our round-change message cannot be created/broadcast
 	// for whatever reason.
 	i.bumpToRound(newRound)
-	i.State.ProposalAcceptedForCurrentRound = nil
 
 	startValueRoot := qbft.HashDataRoot(i.StartValue)
 	logger = logger.With(zap.String("qbft_start_value_root", hex.EncodeToString(startValueRoot[:])))
