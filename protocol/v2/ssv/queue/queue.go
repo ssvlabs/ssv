@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -53,7 +52,6 @@ type priorityQueue struct {
 	head     *item
 	inbox    chan *SSVMessage
 	lastRead time.Time
-	size     atomic.Int64
 	observer queueObserver
 }
 
@@ -77,14 +75,12 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.inbox <- msg
-	q.size.Add(1)
 	q.observer.recordInboxSize(int64(len(q.inbox)))
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 	select {
 	case q.inbox <- msg:
-		q.size.Add(1)
 		q.observer.recordInboxSize(int64(len(q.inbox)))
 		return true
 	default:
@@ -170,7 +166,6 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVM
 	if q.head.next == nil {
 		if m := q.head.message; filter(m) {
 			q.head = nil
-			q.size.Add(-1)
 			return m
 		}
 		return nil
@@ -203,16 +198,19 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *SSVM
 	} else {
 		prior.next = highest.next
 	}
-	q.size.Add(-1)
 	return highest.message
 }
 
 func (q *priorityQueue) Empty() bool {
-	return q.Len() == 0
+	return q.head == nil && len(q.inbox) == 0
 }
 
 func (q *priorityQueue) Len() int {
-	return int(q.size.Load())
+	n := len(q.inbox)
+	for i := q.head; i != nil; i = i.next {
+		n++
+	}
+	return n
 }
 
 func (q *priorityQueue) Cap() int {
