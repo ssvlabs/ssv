@@ -251,6 +251,32 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				}
 			}
 		}
+
+		// In addition to the rate check, assert the bucket invariant:
+		// accepted-only peer (node 0) ≥ ignored-only peer (node 1) ≥ rejected-only peer (node 2).
+		// Without this, a regression that stops rewarding accepts or starts rewarding ignores
+		// would slip through — both nodes 0 and 1 share rejected-rate=0 so the rate check
+		// alone treats them as interchangeable.
+		const (
+			acceptedOnlyIdx = NodeIndex(0)
+			ignoredOnlyIdx  = NodeIndex(1)
+			rejectedOnlyIdx = NodeIndex(2)
+		)
+		scoreByIdx := map[NodeIndex]float64{}
+		for _, p := range peers {
+			scoreByIdx[p.index] = p.score
+		}
+		assertBucketOrder := func(higher, lower NodeIndex) {
+			if node.Index == higher || node.Index == lower {
+				return
+			}
+			require.GreaterOrEqualf(t, scoreByIdx[higher], scoreByIdx[lower],
+				"observer %d: peer %d (score=%.2f) ranked below peer %d (score=%.2f)",
+				node.Index, higher, scoreByIdx[higher], lower, scoreByIdx[lower],
+			)
+		}
+		assertBucketOrder(acceptedOnlyIdx, ignoredOnlyIdx)
+		assertBucketOrder(ignoredOnlyIdx, rejectedOnlyIdx)
 	}
 }
 
