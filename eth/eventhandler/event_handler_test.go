@@ -46,8 +46,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
@@ -1390,10 +1390,11 @@ func setupEventHandler(
 	operator *testOperator,
 	useMockCtrl bool,
 ) (*EventHandler, *mocks.MockTaskExecutor, error) {
-	db, err := kv.NewInMemory(logger, basedb.Options{
+	db, err := pebble.NewTempDB(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)

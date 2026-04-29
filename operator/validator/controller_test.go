@@ -43,8 +43,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 var secretKeyStrings = []string{
@@ -78,7 +78,7 @@ func TestNewController(t *testing.T) {
 	require.NoError(t, err)
 
 	_, logger, _, network, _, bc := setupCommonTestComponents(t, operatorSigner)
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
 
 	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
@@ -905,8 +905,13 @@ func setupTestValidator(t *testing.T, validatorPk spectypes.ValidatorPK, ownerAd
 	}
 }
 
-func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return kv.NewInMemory(logger, basedb.Options{})
+func getBaseStorage(t *testing.T, logger *zap.Logger) (basedb.Database, error) {
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db, nil
 }
 
 func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {
@@ -940,7 +945,7 @@ func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivat
 	p2pNet := mocks.NewMockP2PNetwork(ctrl)
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 
-	db, err := getBaseStorage(logger)
+	db, err := getBaseStorage(t, logger)
 	require.NoError(t, err)
 	km, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon, operatorPrivKey)
 	require.NoError(t, err)
@@ -967,7 +972,7 @@ func createPubKey(input byte) spectypes.ValidatorPK {
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

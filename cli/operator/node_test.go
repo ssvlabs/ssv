@@ -20,8 +20,8 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func newTestSSVSignerClient(t *testing.T, register func(mux *http.ServeMux)) *ssvsigner.Client {
@@ -174,8 +174,9 @@ func Test_ssvAPIListenAddress(t *testing.T) {
 func Test_verifyConfig(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	netCfg := networkconfig.TestNetwork
 	nodeStorage, err := operatorstorage.NewNodeStorage(netCfg.Beacon, logger, db)

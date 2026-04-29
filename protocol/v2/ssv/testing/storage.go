@@ -1,31 +1,27 @@
 package testing
 
 import (
-	"context"
-	"sync"
+	"testing"
 
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
-var db basedb.Database
-var dbOnce sync.Once
+func newDB(t *testing.T, logger *zap.Logger) basedb.Database {
+	t.Helper()
 
-func getDB(logger *zap.Logger) basedb.Database {
-	dbOnce.Do(func() {
-		dbInstance, err := kv.NewInMemory(logger, basedb.Options{
-			Ctx: context.TODO(),
-		})
-		if err != nil {
-			panic(err)
-		}
-		db = dbInstance
-	})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
+	if err != nil {
+		t.Fatalf("create temporary pebble db: %v", err)
+	}
+
+	t.Cleanup(func() { _ = db.Close() })
+
 	return db
 }
 
@@ -47,6 +43,7 @@ func newStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectyp
 	return stores
 }
 
-func testingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return newStoresFromRoles(logger, getDB(logger), allRoles...)
+func testingStores(t *testing.T, logger *zap.Logger) *qbftstorage.ParticipantStores {
+	t.Helper()
+	return newStoresFromRoles(logger, newDB(t, logger), allRoles...)
 }

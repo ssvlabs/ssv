@@ -94,7 +94,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	defer func() {
 		for _, node := range ln.Nodes {
-			require.NoError(t, node.(*p2pNetwork).Close())
+			require.NoError(t, node.Close())
 		}
 	}()
 
@@ -301,7 +301,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
+	ln, err := CreateAndStartLocalNet(t, ctx, logger.Named("createNetworkAndSubscribe"), options)
 	if err != nil {
 		return nil, nil, err
 	}

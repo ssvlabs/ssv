@@ -22,8 +22,8 @@ import (
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/validator"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 type validatorDutyKey struct {
@@ -77,7 +77,7 @@ func newWSQueryHarness(t *testing.T) *wsQueryHarness {
 	ctrl := gomock.NewController(t)
 	validatorMock := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := pebble.NewTempDB(zap.NewNop(), basedb.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 

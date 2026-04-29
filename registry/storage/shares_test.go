@@ -32,8 +32,8 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -700,7 +700,7 @@ func generateMaxPossibleShare() (*Share, error) {
 }
 
 type testStorage struct {
-	db             *kv.DB
+	db             *pebble.TempDB
 	Operators      Operators
 	Shares         Shares
 	ValidatorStore ValidatorStore
@@ -708,7 +708,7 @@ type testStorage struct {
 }
 
 func newTestStorage(logger *zap.Logger) (*testStorage, error) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return nil, err
 	}
@@ -746,7 +746,7 @@ func (t *testStorage) Recreate(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	t.db, err = kv.NewInMemory(logger, basedb.Options{})
+	t.db, err = pebble.NewTempDB(logger, basedb.Options{})
 	if err != nil {
 		return err
 	}

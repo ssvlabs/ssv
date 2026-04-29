@@ -1,6 +1,7 @@
 package testenv
 
 import (
+	"errors"
 	"fmt"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -31,7 +32,6 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 	if err != nil {
 		return fmt.Errorf("failed to create local database: %w", err)
 	}
-	env.localDB = localDB
 
 	localKeyManager, err := ekm.NewLocalKeyManager(
 		logger,
@@ -40,8 +40,13 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 		env.operatorKey,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create local key manager: %w", err)
+		err = fmt.Errorf("failed to create local key manager: %w", err)
+		if closeErr := localDB.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("close local database after key manager setup failure: %w", closeErr))
+		}
+		return err
 	}
+	env.localDB = localDB
 	env.localKeyManager = localKeyManager
 
 	return nil
@@ -49,13 +54,16 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 
 // createRemoteKeyManager creates and configures the RemoteKeyManager
 func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
+	remoteDB := env.remoteDB
+	createdRemoteDB := false
 	// Only create database on first initialization
-	if env.remoteDB == nil {
-		remoteDB, err := newTestPersistentDB(env.remoteKeyManagerPath)
+	if remoteDB == nil {
+		var err error
+		remoteDB, err = newTestPersistentDB(env.remoteKeyManagerPath)
 		if err != nil {
 			return fmt.Errorf("failed to create remote database: %w", err)
 		}
-		env.remoteDB = remoteDB
+		createdRemoteDB = true
 	}
 
 	remoteKeyManager, err := ekm.NewRemoteKeyManager(
@@ -63,12 +71,19 @@ func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
 		logger,
 		env.beaconConfig,
 		env, // TestEnvironment implements signerClient interface by delegating to ssvSignerClient
-		env.remoteDB,
+		remoteDB,
 		func() spectypes.OperatorID { return 1 }, // operator ID getter
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create remote key manager: %w", err)
+		err = fmt.Errorf("failed to create remote key manager: %w", err)
+		if createdRemoteDB {
+			if closeErr := remoteDB.Close(); closeErr != nil {
+				return errors.Join(err, fmt.Errorf("close remote database after key manager setup failure: %w", closeErr))
+			}
+		}
+		return err
 	}
+	env.remoteDB = remoteDB
 	env.remoteKeyManager = remoteKeyManager
 
 	return nil

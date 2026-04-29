@@ -80,8 +80,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	storagemigration "github.com/ssvlabs/ssv/storage/migration"
 	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
@@ -314,14 +314,8 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		var db basedb.Database
-		if cfg.ExporterOptions.Enabled {
-			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig.Beacon, operatorPrivKey)
-		} else {
-			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig.Beacon, operatorPrivKey)
-		}
+		logger.Info("using pebble db")
+		db, err := setupPebbleDB(logger, networkConfig.Beacon, operatorPrivKey)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -889,37 +883,62 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupBadgerDB(
-	logger *zap.Logger,
-	beaconConfig *networkconfig.Beacon,
-	operatorPrivKey keys.OperatorPrivateKey,
-) (*badger.DB, error) {
-	db, err := badger.New(logger, cfg.DBOptions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open db: %w", err)
-	}
-
-	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, cfg.DBOptions.Path); err != nil {
-		return nil, fmt.Errorf("apply migrations: %w", err)
-	}
-
-	return db, nil
-}
-
 func setupPebbleDB(
 	logger *zap.Logger,
 	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
-	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
+	layout, err := storagemigration.ResolveDBLayout(cfg.DBOptions.Path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve database layout: %w", err)
+	}
+	// layout.PebblePath may differ from the configured base path when startup resolves a
+	// legacy Badger/Pebble on-disk layout to the correct Pebble directory.
+	if layout.PebblePath != cfg.DBOptions.Path {
+		logger.Warn("using legacy pebble directory selected during db layout resolution",
+			zap.String("configured_path", cfg.DBOptions.Path),
+			zap.String("selected_path", layout.PebblePath),
+		)
+	}
 
-	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
+	db, err := pebble.New(logger, layout.PebblePath, &cockroachdb.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
+	closeOnSetupError := func(setupErr error) error {
+		closeErr := db.Close()
+		if closeErr == nil {
+			return setupErr
+		}
+		logger.Warn("failed to close db after setup error",
+			zap.String("path", layout.PebblePath),
+			zap.Error(closeErr),
+		)
+		return errors.Join(setupErr, fmt.Errorf("close db after setup error: %w", closeErr))
+	}
 
-	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, dbPath); err != nil {
-		return nil, fmt.Errorf("apply migrations: %w", err)
+	if layout.BadgerImportPath != "" {
+		migrated, migratedKeys, err := storagemigration.MigrateBadgerToPebbleIfNeeded(
+			cfg.DBOptions.Ctx,
+			logger,
+			layout.BadgerImportPath,
+			layout.PebblePath,
+			db,
+		)
+		if err != nil {
+			return nil, closeOnSetupError(fmt.Errorf("migrate badger to pebble: %w", err))
+		}
+		if migrated {
+			logger.Info("migrated legacy badger db to pebble",
+				zap.String("from_path", layout.BadgerImportPath),
+				zap.String("to_path", layout.PebblePath),
+				zap.Int("keys", migratedKeys),
+			)
+		}
+	}
+
+	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, layout.PebblePath); err != nil {
+		return nil, closeOnSetupError(fmt.Errorf("apply migrations: %w", err))
 	}
 
 	return db, nil

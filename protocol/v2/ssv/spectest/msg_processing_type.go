@@ -60,7 +60,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	test.RunAsPartOfMultiTest(t, logger)
 }
 
-func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
+func (test *MsgProcessingSpecTest) runPreTesting(t *testing.T, ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
 	keySetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
 	if len(test.Runner.GetShares()) == 0 {
@@ -164,7 +164,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 		}
 	default:
-		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
+		v = ssvprotocoltesting.BaseValidator(t, logger, spectestingutils.KeySetForShare(share))
 		v.DutyRunners[test.Runner.GetRole()] = test.Runner
 		v.Network = test.Runner.GetNetwork()
 
@@ -189,7 +189,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
-	v, c, lastErr := test.runPreTesting(ctx, logger)
+	v, c, lastErr := test.runPreTesting(t, ctx, logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
 	network := &spectestingutils.TestingNetwork{}

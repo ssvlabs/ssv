@@ -19,8 +19,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/operator/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
@@ -162,7 +162,7 @@ func setupTest(t *testing.T) (basedb.Database, *zap.Logger) {
 	t.Helper()
 
 	logger := log.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

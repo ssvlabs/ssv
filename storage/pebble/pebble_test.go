@@ -2,6 +2,7 @@ package pebble
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/pebble"
@@ -19,6 +20,22 @@ func setupTestDB(t *testing.T) *DB {
 	require.NoError(t, err)
 
 	return db
+}
+
+func TestPebbleDB_NewTemporary_RemovesDirectoryOnClose(t *testing.T) {
+	db, err := NewTempDB(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+
+	tempDir := db.cleanupPath
+	require.NotEmpty(t, tempDir)
+	_, err = os.Stat(tempDir)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Close())
+
+	_, err = os.Stat(tempDir)
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestPebbleDB_GetDelete(t *testing.T) {
@@ -263,6 +280,25 @@ func TestPebbleDB_GC(t *testing.T) {
 
 	err = db.FullGC(t.Context())
 	require.NoError(t, err)
+}
+
+func TestPebbleDB_FullGC_EmptyDB(t *testing.T) {
+	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	require.NoError(t, db.FullGC(t.Context()))
+}
+
+func TestPebbleDB_FullGC_SingleKeyDB(t *testing.T) {
+	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	require.NoError(t, db.Set([]byte("test-prefix"), []byte("test-key"), []byte("test-value")))
+	require.NoError(t, db.FullGC(t.Context()))
 }
 
 func TestPebbleDB_CountPrefix(t *testing.T) {

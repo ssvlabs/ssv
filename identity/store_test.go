@@ -18,8 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 var (
@@ -98,7 +98,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			db, err := kv.NewInMemory(logger, basedb.Options{})
+			db, err := pebble.NewTempDB(logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
@@ -158,7 +158,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 
 	t.Run("generates and stores plaintext key when encryption secret is missing", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -177,7 +177,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("migrates legacy plaintext key to encrypted storage", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -213,7 +213,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("persists configured key in legacy plaintext when encryption secret is missing", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -233,7 +233,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("uses legacy plaintext key from storage when encryption secret is missing", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -258,7 +258,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("generates and persists a legacy plaintext key when encryption secret is missing", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -278,7 +278,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("returns DB errors from GetNetworkKey even when key is not found", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -298,7 +298,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("returns decode-specific error when stored key cannot be decrypted", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -323,7 +323,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	})
 
 	t.Run("NewIdentityStore", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -360,7 +360,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("stores and loads encrypted network key", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -397,7 +397,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("detects encrypted network key format", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -421,7 +421,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("errors clearly when encrypted key cannot be decrypted", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -449,7 +449,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("errors clearly when encrypted key cannot be decrypted via SetupNetworkKey", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -477,7 +477,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("stores and loads remotely protected network key using encrypted format", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -505,7 +505,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("detects remotely protected network key as encrypted format", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -526,7 +526,7 @@ func TestEncryptedNetworkKey(t *testing.T) {
 	})
 
 	t.Run("errors clearly when remotely protected key cannot be unprotected", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{})
+		db, err := pebble.NewTempDB(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 

@@ -1,6 +1,7 @@
 package pebble
 
 import (
+	"bytes"
 	"context"
 	"io"
 
@@ -30,7 +31,11 @@ func New(logger *zap.Logger, path string, opts *pebble.Options) (*DB, error) {
 }
 
 func (pdb *DB) Close() error {
-	return pdb.DB.Close()
+	var err error
+	if pdb.DB != nil {
+		err = pdb.DB.Close()
+	}
+	return err
 }
 
 func (pdb *DB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
@@ -154,6 +159,7 @@ func (pdb *DB) DropPrefix(prefix []byte) error {
 
 func (pdb *DB) Update(fn func(basedb.Txn) error) error {
 	batch := pdb.NewIndexedBatch()
+	defer func() { _ = batch.Close() }()
 	txn := newTxn(pdb.logger, batch)
 	if err := fn(txn); err != nil {
 		return err
@@ -163,6 +169,7 @@ func (pdb *DB) Update(fn func(basedb.Txn) error) error {
 
 func (pdb *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
 	batch := pdb.NewBatch()
+	defer func() { _ = batch.Close() }()
 	txn := newTxn(pdb.logger, batch)
 	if err := txn.SetMany(prefix, n, next); err != nil {
 		return err
@@ -190,6 +197,12 @@ func (pdb *DB) FullGC(context.Context) error {
 	}
 	if err := iter.Close(); err != nil {
 		return err
+	}
+	if len(first) == 0 || len(last) == 0 {
+		return nil
+	}
+	if bytes.Equal(first, last) {
+		return nil
 	}
 
 	return pdb.Compact(first, last, true)

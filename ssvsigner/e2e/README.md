@@ -6,8 +6,8 @@ End-to-end testing suite for SSV-Signer slashing protection functionality.
 
 This E2E suite tests all three slashing protection databases:
 
-1. **LocalKeyManager's BadgerDB** - Used when SSV Node signs directly
-2. **RemoteKeyManager's BadgerDB** - Used when SSV-Signer handles signing
+1. **LocalKeyManager's PebbleDB** - Used when SSV Node signs directly
+2. **RemoteKeyManager's PebbleDB** - Used when SSV-Signer handles signing
 3. **Web3Signer's PostgreSQL** - Final protection layer for remote signing
 
 The tests validate that each database correctly prevents slashable operations in both signing paths:
@@ -96,4 +96,3 @@ go test ./signing/ -run TestBlockSlashing            # Proposer tests only
 - **Container Isolation**: Fresh environment per test with persistent volumes to test slashing protection database persistence across restarts
 - **Comprehensive Coverage**: Slashing protection, concurrency, and restart scenarios
 - **Easy Extension**: Shared test suite enables adding new signing domains
-

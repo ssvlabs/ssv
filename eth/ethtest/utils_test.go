@@ -33,8 +33,8 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
@@ -155,12 +155,13 @@ func setupEventHandler(
 	ownerAddress *ethcommon.Address,
 	useMockCtrl bool,
 ) (*eventhandler.EventHandler, *mocks.MockTaskExecutor, *gomock.Controller, operatorstorage.Storage, error) {
-	db, err := kv.NewInMemory(logger, basedb.Options{
+	db, err := pebble.NewTempDB(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)

@@ -18,8 +18,6 @@ const (
 	NameConnHandler            = "ConnHandler"
 	NameSlotTicker             = "SlotTicker"
 	NameShareMetadataSyncer    = "ShareMetadataSyncer"
-	NameBadgerDBLog            = "BadgerDBLog"
-	NameBadgerDBReporting      = "BadgerDBReporting"
 	NameCreateThreshold        = "CreateThreshold"
 	NameDiscoveryV5Logger      = "DiscoveryV5Logger"
 	NameExportKeys             = "ExportKeys"

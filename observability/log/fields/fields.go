@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -32,7 +31,6 @@ const (
 	FieldBindIP                = "bind_ip"
 	FieldBlock                 = "block"
 	FieldBlockHash             = "block_hash"
-	FieldBlockCacheMetrics     = "block_cache_metrics_field"
 	FieldCommittee             = "committee"
 	FieldCommitteeID           = "committee_id"
 	FieldConnectionID          = "connection_id"
@@ -54,7 +52,6 @@ const (
 	FieldFromBlock             = "from_block"
 	FieldQBFTHeight            = "qbft_height"
 	FieldQBFTRound             = "qbft_round"
-	FieldIndexCacheMetrics     = "index_cache_metrics"
 	FieldMessageID             = "msg_id"
 	FieldMessageType           = "msg_type"
 	FieldName                  = "name"
@@ -143,14 +140,6 @@ func PeerScore(val float64) zapcore.Field {
 
 func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
-}
-
-func BlockCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
-	return zap.Stringer(FieldBlockCacheMetrics, metrics)
-}
-
-func IndexCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
-	return zap.Stringer(FieldIndexCacheMetrics, metrics)
 }
 
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {

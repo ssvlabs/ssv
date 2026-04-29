@@ -25,8 +25,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 // testRecipientStorage: in-memory overrides for owner->custom recipient
@@ -95,8 +95,7 @@ func TestSubmitProposal(t *testing.T) {
 	operatorData := &registrystorage.OperatorData{ID: 123456789}
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	db, shareStorage := createStorage(t)
-	defer func() { require.NoError(t, db.Close()) }()
+	shareStorage := createStorage(t)
 
 	beaconConfig := networkconfig.TestNetwork.Beacon
 	populateStorage(t, shareStorage, operatorData)
@@ -268,8 +267,7 @@ func TestSubmitProposal(t *testing.T) {
 
 	t.Run("500 preparations created (no batching at controller level)", func(t *testing.T) {
 		// fresh storage with exactly 500 committee validators
-		db2, shareStorage2 := createStorage(t)
-		defer func() { require.NoError(t, db2.Close()) }()
+		shareStorage2 := createStorage(t)
 
 		for i := 0; i < 500; i++ {
 			owner := common.HexToAddress(fmt.Sprintf("0x%040x", i))
@@ -311,10 +309,11 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
+func createStorage(t *testing.T) registrystorage.Shares {
 	logger := log.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	// Minimal recipients storage just to satisfy SharesStorage init (if needed)
 	recipientStorage, err := registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
@@ -328,7 +327,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares) {
 	)
 	require.NoError(t, err)
 
-	return db, shareStorage
+	return shareStorage
 }
 
 func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {

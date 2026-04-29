@@ -41,8 +41,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 var (
@@ -109,10 +109,11 @@ func TestEventSyncer(t *testing.T) {
 	}
 
 	t.Run("client closed", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{
+		db, err := pebble.NewTempDB(logger, basedb.Options{
 			Ctx: ctx,
 		})
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = db.Close() })
 		privateKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
@@ -147,10 +148,11 @@ func TestEventSyncer(t *testing.T) {
 	})
 
 	t.Run("context canceled", func(t *testing.T) {
-		db, err := kv.NewInMemory(logger, basedb.Options{
+		db, err := pebble.NewTempDB(logger, basedb.Options{
 			Ctx: ctx,
 		})
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = db.Close() })
 		privateKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
@@ -191,7 +193,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	db *kv.DB,
+	db *pebble.TempDB,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,

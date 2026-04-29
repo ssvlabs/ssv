@@ -25,8 +25,8 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/pebble"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -49,8 +49,9 @@ func TestMsgValidator(t *testing.T) {
 		Liquidated: false,
 	}
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := pebble.NewTempDB(logger, basedb.Options{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
 
 	ns, err := operatorstorage.NewNodeStorage(testNet.Beacon, logger, db)
 	require.NoError(t, err)

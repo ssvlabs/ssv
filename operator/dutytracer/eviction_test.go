@@ -17,7 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
-	kv "github.com/ssvlabs/ssv/storage/pebble"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -34,7 +34,7 @@ func TestEviction(t *testing.T) {
 
 	_ = f.Close()
 
-	db, err := kv.New(zap.NewNop(), t.TempDir(), nil)
+	db, err := pebble.New(zap.NewNop(), t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
