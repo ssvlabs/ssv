@@ -16,6 +16,8 @@ import (
 // uponProposal process proposal message
 // Assumes proposal message is valid!
 func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) error {
+	logger = logger.With(zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
+
 	addedMsg, err := i.State.ProposeContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return fmt.Errorf("could not add proposal msg to container: %w", err)
@@ -24,25 +26,21 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 		return nil // uponProposal was already called
 	}
 
-	logger = logger.With(zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
-
 	logger.Debug("📬 got proposal message")
 
 	i.State.ProposalAcceptedForCurrentRound = msg
 
 	msgRound := msg.QBFTMessage.Round
 
-	// A future justified proposal should bump us into future round and reset timer
-	// timer is nil for skeleton (decided) and decoded instances
-	if msgRound > i.State.Round && i.timer != nil {
-		i.timer.TimeoutForRound(msgRound)
+	// A future justified proposal should bump us into future round and reset the round timer.
+	if msgRound > i.State.Round {
+		i.roundTimer.TimeoutForRound(msgRound)
 	}
 	i.bumpToRound(msgRound)
 
 	i.metrics.EndStage(ctx, msgRound)
 	i.metrics.StartStage(stagePrepare)
 
-	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
 		return fmt.Errorf("could not hash input data: %w", err)

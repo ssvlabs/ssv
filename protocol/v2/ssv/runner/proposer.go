@@ -420,7 +420,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	span.AddEvent(submittedBlockProposalEvent, trace.WithAttributes(submittedAttrs...))
 	logger.Info(submittedBlockProposalEvent, fields.Took(time.Since(start)))
 
-	r.finishDuty()
+	r.markDutyFinished()
 	r.measurements.EndDutyFlow()
 	recordTotalDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.RoleProposer, r.State.RunningInstance.State.Round)
 	const dutyFinishedEvent = "✔️successfully finished duty processing"

@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -23,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -34,7 +36,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {
-		contr.Height = *test.StartHeight
+		contr.LatestInstanceHeight = *test.StartHeight
 	}
 
 	var lastErr error
@@ -69,8 +71,8 @@ func testTimerState(
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
-		inst := contr.StoredInstances.FindInstance(contr.Height)
-		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.Height)
+		inst := contr.RecentInstances.FindInstance(contr.LatestInstanceHeight)
+		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.LatestInstanceHeight)
 		timer, ok := inst.Timer().(*roundtimer.TestQBFTTimer)
 		require.True(t, ok)
 		require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
@@ -88,7 +90,14 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decidedMsg, err := contr.ProcessMsg(context.TODO(), logger, msg)
+		decidedMsg, err := contr.ProcessMsg(
+			context.TODO(),
+			logger,
+			msg,
+			func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+				return roundtimer.NewTestingTimer()
+			},
+		)
 		if err != nil {
 			lastErr = err
 		}
@@ -150,8 +159,16 @@ func runInstanceWithData(
 	runData *spectests.RunInstanceData,
 ) error {
 	var lastErr error
-	testTimer := roundtimer.NewTestingTimer()
-	_, err := contr.StartNewInstance(context.TODO(), logger, height, testTimer, runData.InputValue, protocoltesting.TestingValueChecker{})
+	_, err := contr.StartNewInstance(
+		context.TODO(),
+		logger,
+		height,
+		runData.InputValue,
+		protocoltesting.TestingValueChecker{},
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
+	)
 	if err != nil {
 		lastErr = err
 	}

@@ -1734,7 +1734,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 
 		signedSSVMessage := generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
-			message.Height = 8
+			message.Height = specqbft.Height(slot)
 		})
 
 		receivedAt := netCfg.SlotStartTime(slot)
@@ -1743,7 +1743,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		signedSSVMessage = generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
-			message.Height = 4
+			message.Height = specqbft.Height(slot - 4)
 		})
 
 		_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
@@ -1791,7 +1791,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		tests := map[spectypes.RunnerRole]specqbft.Round{
 			spectypes.RoleCommittee:                 13,
 			spectypes.RoleAggregator:                13,
-			spectypes.RoleProposer:                  7,
+			spectypes.RoleProposer:                  specqbft.FirstRound + 2,
 			spectypes.RoleSyncCommitteeContribution: 7,
 		}
 
@@ -1811,19 +1811,19 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				topicID := commons.CommitteeTopicID(committeeID)[0]
 
-				sinceSlotStart := time.Duration(0)
+				timeIntoSlot := time.Duration(0)
 				for {
-					currentRound, err := validator.currentEstimatedRound(sinceSlotStart)
+					currentRound, err := validator.estimatedRoundAt(role, timeIntoSlot)
 					require.NoError(t, err)
 					if currentRound == round {
 						break
 					}
-					sinceSlotStart += roundtimer.QuickTimeout
+					timeIntoSlot += roundtimer.QuickTimeout
 				}
 
-				receivedAt := netCfg.SlotStartTime(slot).Add(sinceSlotStart)
+				receivedAt := netCfg.SlotStartTime(slot).Add(timeIntoSlot)
 				_, err = validator.handleSignedSSVMessage(context.Background(), signedSSVMessage, topicID, peerID, receivedAt)
-				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
+				require.ErrorIs(t, err, ErrRoundTooHigh)
 			})
 		}
 	})

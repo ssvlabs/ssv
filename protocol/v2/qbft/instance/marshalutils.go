@@ -9,12 +9,12 @@ import "encoding/json"
 // MarshalJSON is a custom JSON marshaller for Instance
 func (i *Instance) MarshalJSON() ([]byte, error) {
 	type Alias Instance
-	if i.forceStop {
+	if i.markedIrrelevant {
 		return json.Marshal(&struct {
 			ForceStop bool `json:"forceStop"`
 			*Alias
 		}{
-			ForceStop: i.forceStop,
+			ForceStop: i.markedIrrelevant,
 			Alias:     (*Alias)(i),
 		})
 	}
@@ -26,7 +26,8 @@ func (i *Instance) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON is a custom JSON unmarshaller for Instance
+// UnmarshalJSON overlays spec-test state; the receiver must already be constructed via NewInstance as i.roundTimer
+// is not restored.
 func (i *Instance) UnmarshalJSON(data []byte) error {
 	type Alias Instance
 	aux := &struct {
@@ -39,7 +40,7 @@ func (i *Instance) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if aux.ForceStop != nil {
-		i.forceStop = *aux.ForceStop
+		i.markedIrrelevant = *aux.ForceStop
 	}
 	return nil
 }

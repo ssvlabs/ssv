@@ -21,8 +21,8 @@ func TestUponProposalFutureRoundBumpsAndBroadcastsPrepare(t *testing.T) {
 
 	require.Equal(t, specqbft.Round(2), env.inst.State.Round)
 	require.Same(t, proposal, env.inst.State.ProposalAcceptedForCurrentRound)
-	require.Equal(t, 1, env.timer.State.Timeouts)
-	require.Equal(t, specqbft.Round(2), env.timer.State.Round)
+	require.Equal(t, 1, env.roundTimer.State.Timeouts)
+	require.Equal(t, specqbft.Round(2), env.roundTimer.State.Round)
 
 	prepare := env.broadcastedProcessingMessage(0)
 	require.Equal(t, specqbft.PrepareMsgType, prepare.QBFTMessage.MsgType)
