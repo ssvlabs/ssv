@@ -50,9 +50,10 @@ type Conn interface {
 }
 
 type conn struct {
-	ctx context.Context
-	id  string
-	ws  *websocket.Conn
+	ctx       context.Context
+	cancelCtx context.CancelFunc
+	id        string
+	ws        *websocket.Conn
 
 	writeTimeout time.Duration
 
@@ -64,9 +65,11 @@ type conn struct {
 	withPing bool
 }
 
-func newConn(ctx context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
+func newConn(parent context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
+	ctx, cancel := context.WithCancel(parent)
 	return &conn{
 		ctx:          ctx,
+		cancelCtx:    cancel,
 		id:           id,
 		ws:           ws,
 		writeTimeout: writeTimeout,
@@ -87,8 +90,15 @@ func (c *conn) RemoteAddr() net.Addr {
 	return c.ws.RemoteAddr()
 }
 
-// Close closes the connection
+// Close cancels the conn ctx (signaling WriteLoop and ReadLoop to exit)
+// and closes the underlying websocket. Idempotent: subsequent calls
+// hit ws.Close on an already-closed connection, which returns an error
+// that all callers ignore.
 func (c *conn) Close() error {
+	c.cancelCtx()
+	if c.ws == nil {
+		return nil
+	}
 	return c.ws.Close()
 }
 
@@ -97,20 +107,23 @@ func (c *conn) ReadNext() []byte {
 	return <-c.read
 }
 
-// Send sends the given message
+// Send queues msg for the WriteLoop. Non-blocking: if the queue is full the
+// client cannot keep up, so we tear the conn down via Close — a silent
+// gap in this stream is undetectable client-side, so reconnecting (with
+// a fresh, consistent view) is the kindest outcome.
 func (c *conn) Send(msg []byte) {
-	if len(c.send) >= chanSize {
-		// don't send on full channel
-		return
+	select {
+	case c.send <- msg:
+	default:
+		_ = c.Close()
 	}
-	c.send <- msg
 }
 
-// WriteLoop a loop to activate writes on the socket
+// WriteLoop a loop to activate writes on the socket. Always tears down
+// on exit via c.Close so a write error reaches ReadLoop (via ctx +
+// ws.Close) without waiting for handleStream's defer.
 func (c *conn) WriteLoop(logger *zap.Logger) {
-	defer func() {
-		_ = c.ws.Close()
-	}()
+	defer func() { _ = c.Close() }()
 
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
@@ -129,12 +142,15 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 		case <-ctx.Done():
 			c.writeLock.Lock()
 			logger.Debug("context done, sending close message")
+			// Best-effort graceful close-message; ws may already be
+			// closed (c.Close cancels ctx and closes ws together), so
+			// failure here is expected and not actionable.
 			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
 			c.writeLock.Unlock()
 			if err != nil {
-				logger.Error("could not send close message", zap.Error(err))
-				return
+				logger.Debug("could not send close message", zap.Error(err))
 			}
+			return
 		case message := <-c.send:
 			c.writeLock.Lock()
 			_, err := c.sendMsg(message)
@@ -147,11 +163,13 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 	}
 }
 
-// ReadLoop is a loop to read messages from the socket
+// ReadLoop is a loop to read messages from the socket. Tearing down via
+// c.Close on exit is essential: it cancels ctx, which is the only thing
+// that unblocks WriteLoop's select on a quiet conn (no in-flight writes
+// to fail). Without this, a client disconnect on an idle conn would
+// leak the WriteLoop goroutine.
 func (c *conn) ReadLoop(logger *zap.Logger) {
-	defer func() {
-		_ = c.ws.Close()
-	}()
+	defer func() { _ = c.Close() }()
 	c.ws.SetReadLimit(maxMessageSize)
 	// ping helps to keep the connection alive from our POV
 	if c.withPing {

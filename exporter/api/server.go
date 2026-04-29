@@ -118,7 +118,9 @@ func (ws *wsServer) BroadcastFeed() *event.Feed {
 	return ws.outFeed
 }
 
-// RegisterHandler registers an end point
+// RegisterHandler registers an end point. Each handler is responsible
+// for closing the websocket it receives — handleStream via its conn
+// struct (which owns ws.Close via Close), handleQuery directly.
 func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *websocket.Conn)) {
 	wrappedHandler := func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, w.Header())
@@ -127,13 +129,6 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *we
 			return
 		}
 		ws.logger.Debug("new websocket connection")
-		defer func() {
-			ws.logger.Debug("closing connection")
-			err := conn.Close()
-			if err != nil {
-				ws.logger.Error("could not close connection", zap.Error(err))
-			}
-		}()
 		handler(conn)
 	}
 
@@ -143,6 +138,7 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *we
 
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleQuery(conn *websocket.Conn) {
+	defer func() { _ = conn.Close() }()
 	if ws.handler == nil {
 		return
 	}
@@ -190,9 +186,8 @@ func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 		With(zap.String("remote addr", wsc.RemoteAddr().String()))
 	defer logger.Debug("stream handler done")
 
-	ctx, cancel := context.WithCancel(ws.ctx)
-	c := newConn(ctx, wsc, cid, sendTimeout, ws.withPing)
-	defer cancel()
+	c := newConn(ws.ctx, wsc, cid, sendTimeout, ws.withPing)
+	defer func() { _ = c.Close() }()
 
 	if !ws.broadcaster.Register(c) {
 		logger.Warn("known connection")
