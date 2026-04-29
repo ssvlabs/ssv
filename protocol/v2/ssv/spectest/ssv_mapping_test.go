@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/committee"
@@ -439,7 +438,7 @@ func fixInstanceForRun(
 		contr.Identifier,
 		contr.LatestInstanceHeight,
 		signer,
-		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 			return roundtimer.NewTestingTimer()
 		},
 	)

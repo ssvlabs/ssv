@@ -55,7 +55,7 @@ func (d *SSVMessage) Slot() (phase0.Slot, error) {
 			if err != nil {
 				return 0, fmt.Errorf("get Timeout data: %w", err)
 			}
-			return phase0.Slot(data.Height), nil
+			return data.Slot, nil
 		case ssvtypes.ExecuteDuty:
 			data, err := m.GetExecuteDutyData()
 			if err != nil {

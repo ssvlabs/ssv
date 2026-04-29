@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -33,8 +34,8 @@ type EventMsg struct {
 }
 
 type TimeoutData struct {
-	Height specqbft.Height
-	Round  specqbft.Round
+	Slot  phase0.Slot
+	Round specqbft.Round
 }
 
 type ExecuteDutyData struct {

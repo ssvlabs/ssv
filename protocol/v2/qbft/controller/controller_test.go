@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func TestController_OnQBFTRoundTimeoutWithRoundCheck(t *testing.T) {
 		identifier,
 		specqbft.FirstHeight,
 		spectestingutils.TestingOperatorSigner(keySet),
-		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 			return roundtimer.NewTestingTimer()
 		},
 	)
@@ -73,8 +74,8 @@ func TestController_OnQBFTRoundTimeoutWithRoundCheck(t *testing.T) {
 
 	// Initialize EventMsg for the test
 	timeoutData := &types.TimeoutData{
-		Height: specqbft.FirstHeight,
-		Round:  specqbft.FirstRound,
+		Slot:  0,
+		Round: specqbft.FirstRound,
 	}
 
 	// Simulate a scenario where the instance is at a higher round

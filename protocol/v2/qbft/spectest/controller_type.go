@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -93,7 +94,7 @@ func testProcessMsg(
 			context.TODO(),
 			logger,
 			msg,
-			func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+			func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 				return roundtimer.NewTestingTimer()
 			},
 		)
@@ -164,7 +165,7 @@ func runInstanceWithData(
 		height,
 		runData.InputValue,
 		protocoltesting.TestingValueChecker{},
-		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 			return roundtimer.NewTestingTimer()
 		},
 	)

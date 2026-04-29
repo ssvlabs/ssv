@@ -74,7 +74,7 @@ func NewInstance(
 			RoundChangeContainer: specqbft.NewMsgContainer(),
 		},
 		processMsgF: spectypes.NewThreadSafeF(),
-		roundTimer:  roundTimerF(ctx, logger, height),
+		roundTimer:  roundTimerF(ctx, logger, phase0.Slot(height)),
 		metrics:     newMetrics(logger, runnerRole),
 	}
 }

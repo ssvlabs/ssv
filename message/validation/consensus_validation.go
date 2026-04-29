@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
@@ -153,6 +152,7 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	// Rule: Round cut-offs for roles:
 	// - 12 (committee and aggregation)
+	// - 2 (proposer)
 	// - 6 (other types)
 	maxRound, err := mv.maxRound(role)
 	if err != nil {
@@ -258,13 +258,6 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 	}
 
-	if len(signedSSVMessage.OperatorIDs) == 1 {
-		// Rule: Round must not be smaller than current peer's round -1 or +1. Only for non-decided messages
-		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -301,6 +294,16 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - duty's starting slot + 3 (other types)
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
+	}
+
+	if len(signedSSVMessage.OperatorIDs) == 1 {
+		// Rule: Round must be between `estimated round msg received at` - allowedRoundsInPast and
+		// `estimated round msg received at` + allowedRoundsInFuture. Only for non-decided messages.
+		// Keep this after slot-time and slot-advance validation so late/old-slot messages preserve
+		// their original errors.
+		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
+			return err
+		}
 	}
 
 	// Rule: valid number of duties per epoch:
@@ -413,29 +416,17 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) (specqbft.Round,
 	switch role {
 	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12, nil // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
+	case spectypes.RoleProposer:
+		return 2, nil
+	case spectypes.RoleSyncCommitteeContribution:
 		return 6, nil
 	default:
 		return 0, fmt.Errorf("unknown role")
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) (specqbft.Round, error) {
-	delta, err := casts.DurationToUint64(sinceSlotStart / roundtimer.QuickTimeout)
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
-	}
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(delta); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound, nil
-	}
-
-	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	delta, err = casts.DurationToUint64(sinceFirstSlowRound / roundtimer.SlowTimeout)
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert time duration to uint64: %w", err)
-	}
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(delta)
-	return estimatedRound, nil
+func (mv *messageValidator) estimatedRoundAt(role spectypes.RunnerRole, timeIntoSlot time.Duration) (specqbft.Round, error) {
+	return roundtimer.EstimatedRoundAt(role, mv.netCfg.SlotDuration, timeIntoSlot)
 }
 
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
@@ -530,29 +521,35 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	consensusMessage *specqbft.Message,
 	receivedAt time.Time,
 ) error {
-	slotStartTime := mv.netCfg.SlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
-	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
-
-	sinceSlotStart := time.Duration(0)
-	estimatedRound := specqbft.FirstRound
-	if receivedAt.After(slotStartTime) {
-		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		currentEstimatedRound, err := mv.currentEstimatedRound(sinceSlotStart)
-		if err != nil {
-			return err
-		}
-		estimatedRound = currentEstimatedRound
-	}
-
-	lowestAllowed := specqbft.FirstRound
-	highestAllowed := estimatedRound + allowedRoundsInFuture
-
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	if consensusMessage.Round < lowestAllowed || consensusMessage.Round > highestAllowed {
+	// Proposer round timeouts are relative to QBFT instance start times rather than absolute time-into-slot values
+	// (until https://github.com/ssvlabs/ssv/issues/2429 is implemented), since we don't have any visibility into
+	// the actual QBFT instance state here - we can't really check whether message round belongs to allowed spread.
+	if role == spectypes.RoleProposer {
+		return nil
+	}
+
+	slotStartTime := mv.netCfg.SlotStartTime(phase0.Slot(consensusMessage.Height))
+	timeIntoSlot := receivedAt.Sub(slotStartTime)
+
+	estimatedRoundMsgReceivedAt, err := mv.estimatedRoundAt(role, timeIntoSlot)
+	if err != nil {
+		return err
+	}
+
+	lowestAllowedRound := specqbft.FirstRound
+	if estimatedRoundMsgReceivedAt > allowedRoundsInPast {
+		lowestAllowedRound = estimatedRoundMsgReceivedAt - allowedRoundsInPast
+	}
+	// No overflow bug here: estimatedRoundMsgReceivedAt comes from elapsed slot time,
+	// so adding allowedRoundsInFuture cannot get close to uint64 overflow.
+	highestAllowedRound := estimatedRoundMsgReceivedAt + allowedRoundsInFuture
+
+	if consensusMessage.Round < lowestAllowedRound || consensusMessage.Round > highestAllowedRound {
 		e := ErrEstimatedRoundNotInAllowedSpread
 		e.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
-		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, message.RunnerRoleToString(role), sinceSlotStart)
+		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowedRound, highestAllowedRound, message.RunnerRoleToString(role), timeIntoSlot)
 		return e
 	}
 
