@@ -437,9 +437,15 @@ func (n *Node) startWSServer() error {
 
 		n.ws.UseQueryHandler(n.handleQueryRequests)
 
-		if _, err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+		_, serveErr, err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort))
+		if err != nil {
 			return err
 		}
+		go func() {
+			if err := <-serveErr; err != nil {
+				n.logger.Fatal("WS server serve loop exited", zap.Error(err))
+			}
+		}()
 	}
 
 	return nil

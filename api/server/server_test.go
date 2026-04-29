@@ -162,7 +162,7 @@ func TestStart_ActualExecution(t *testing.T) {
 		false,
 	)
 
-	addr, err := srv.Start(ctx)
+	addr, _, err := srv.Start(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 
@@ -200,7 +200,7 @@ func TestStart_ActualExecutionFullMode(t *testing.T) {
 		true,
 	)
 
-	addr, err := srv.Start(ctx)
+	addr, _, err := srv.Start(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, addr)
 

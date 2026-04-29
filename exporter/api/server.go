@@ -26,9 +26,10 @@ const (
 type WebSocketServer interface {
 	// Start binds a listener on addr and begins serving in the background.
 	// It returns the bound address (useful when addr has a :0 port) once the
-	// listener is ready to accept connections. Serve-loop errors are logged,
-	// not returned.
-	Start(addr string) (string, error)
+	// listener is ready to accept connections, plus a channel that emits a
+	// non-graceful serve error (the channel is closed silently when the
+	// ctx-driven shutdown completes).
+	Start(addr string) (string, <-chan error, error)
 	BroadcastFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
@@ -70,12 +71,14 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 
 // Start binds a listener on addr and serves the websocket server in the
 // background. It returns the bound address once the listener is ready (so
-// callers using a :0 port can discover the kernel-assigned one). The server
-// shuts down when the ctx passed to NewWsServer is canceled
-func (ws *wsServer) Start(addr string) (string, error) {
+// callers using a :0 port can discover the kernel-assigned one) and a channel
+// that emits a non-graceful serve error (the channel is closed silently when
+// the ctx-driven shutdown completes). The server shuts down when the ctx
+// passed to NewWsServer is canceled.
+func (ws *wsServer) Start(addr string) (string, <-chan error, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		return "", fmt.Errorf("listen on %s: %w", addr, err)
+		return "", nil, fmt.Errorf("listen on %s: %w", addr, err)
 	}
 	boundAddr := l.Addr().String()
 
@@ -99,13 +102,15 @@ func (ws *wsServer) Start(addr string) (string, error) {
 		}
 	}()
 
+	serveErr := make(chan error, 1)
 	go func() {
+		defer close(serveErr)
 		if err := httpServer.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			ws.logger.Error("serve loop exited", zap.Error(err))
+			serveErr <- err
 		}
 	}()
 
-	return boundAddr, nil
+	return boundAddr, serveErr, nil
 }
 
 // BroadcastFeed returns the feed for stream messages

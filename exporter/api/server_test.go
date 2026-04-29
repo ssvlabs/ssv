@@ -24,7 +24,7 @@ func TestHandleQuery(t *testing.T) {
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false)
-	addr, err := ws.Start("127.0.0.1:0")
+	addr, _, err := ws.Start("127.0.0.1:0")
 	require.NoError(t, err)
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
@@ -60,7 +60,7 @@ func TestHandleStream(t *testing.T) {
 	ctx := t.Context()
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false)
-	addr, err := ws.Start("127.0.0.1:0")
+	addr, _, err := ws.Start("127.0.0.1:0")
 	require.NoError(t, err)
 
 	testCtx, cancelCtx := context.WithCancel(ctx)

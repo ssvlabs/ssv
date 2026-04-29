@@ -693,9 +693,15 @@ var StartNodeCmd = &cobra.Command{
 				hexporter.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
 				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
-			if _, err := apiServer.Start(cfg.SSVOptions.Context); err != nil {
+			_, apiServeErr, err := apiServer.Start(cfg.SSVOptions.Context)
+			if err != nil {
 				logger.Fatal("failed to start API server", zap.Error(err))
 			}
+			go func() {
+				if err := <-apiServeErr; err != nil {
+					logger.Fatal("API server serve loop exited", zap.Error(err))
+				}
+			}()
 		}
 		if err := operatorNode.Start(cfg.SSVOptions.Context); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))

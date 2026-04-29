@@ -112,12 +112,13 @@ func New(
 
 // Start binds a listener on the configured address and serves the HTTP API in
 // the background. It returns the bound address once the listener is ready (so
-// callers using a :0 port can discover the kernel-assigned one). The server
-// shuts down when ctx is canceled.
-func (s *Server) Start(ctx context.Context) (string, error) {
+// callers using a :0 port can discover the kernel-assigned one) and a channel
+// that emits a non-graceful serve error (the channel is closed silently when
+// ctx-driven shutdown completes). The server shuts down when ctx is canceled.
+func (s *Server) Start(ctx context.Context) (string, <-chan error, error) {
 	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
-		return "", fmt.Errorf("listen on %s: %w", s.addr, err)
+		return "", nil, fmt.Errorf("listen on %s: %w", s.addr, err)
 	}
 	boundAddr := l.Addr().String()
 
@@ -139,13 +140,15 @@ func (s *Server) Start(ctx context.Context) (string, error) {
 		}
 	}()
 
+	serveErr := make(chan error, 1)
 	go func() {
+		defer close(serveErr)
 		if err := httpServer.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.logger.Error("serve loop exited", zap.Error(err))
+			serveErr <- err
 		}
 	}()
 
-	return boundAddr, nil
+	return boundAddr, serveErr, nil
 }
 
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
