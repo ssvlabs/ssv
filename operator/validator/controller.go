@@ -1127,9 +1127,9 @@ func SetupRunners(
 			// when the local signer can't supply share bytes (remote
 			// signing) or doesn't have this share registered yet — both
 			// cases fall back to the QBFT path.
-			tbftCtrl, err := buildTBFTControllerForProposer(share, operator, options)
-			if err != nil {
-				return nil, fmt.Errorf("could not build TBFT controller: %w", err)
+			tbftCtrl, tbftErr := buildTBFTControllerForProposer(share, operator, options)
+			if tbftErr != nil {
+				return nil, fmt.Errorf("could not build TBFT controller: %w", tbftErr)
 			}
 
 			runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
