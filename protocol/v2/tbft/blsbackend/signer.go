@@ -39,7 +39,16 @@ func ensureInit() {
 	})
 }
 
-// BLSSigner is the herumi/bls-backed implementation of tbft.Signer.
+// BLSSigner is the herumi/bls-backed implementation of tbft.Signer. A
+// BLSSigner is bound to one operator's secret share at construction. The
+// share material never leaves this struct via the public API (SignPartial
+// takes only a message; the bound share is used internally).
+//
+// Aggregation and verification are stateless wrt the bound share — they
+// can be called on any BLSSigner instance regardless of which share it
+// was constructed for. In production the local operator's BLSSigner does
+// double duty: signing for that operator, plus aggregating / verifying
+// across the cluster.
 //
 // All inputs and outputs are serialized BLS bytes:
 //
@@ -48,28 +57,40 @@ func ensureInit() {
 //   - clusterPubKey: serialized bls.PublicKey bytes (the master / validator pubkey)
 //   - msg          : arbitrary bytes (signed via bls.SecretKey.SignByte / bls.Sign.VerifyByte)
 //   - partial / sig: serialized bls.Sign bytes
-type BLSSigner struct{}
-
-// New creates a BLSSigner. Calls bls.Init once per process.
-func New() *BLSSigner {
-	ensureInit()
-	return &BLSSigner{}
+type BLSSigner struct {
+	// share is the operator's serialized BLS secret share. May be empty
+	// for verify-only / aggregate-only use cases (SignPartial then
+	// returns an error).
+	share []byte
 }
 
-// SignPartial signs `msg` using `share` and returns a serialized partial
-// signature. Each invocation deserializes the share fresh; if the SSV
-// adapter wants to amortize, it can keep a parsed key alongside and call
-// the herumi API directly. Per-call deserialization keeps this package
-// trivially safe to use from multiple goroutines without sharing state.
-func (s *BLSSigner) SignPartial(share []byte, msg []byte) (tbft.Signature, error) {
-	if len(share) == 0 {
-		return nil, fmt.Errorf("blsbackend: empty share")
+// New creates a BLSSigner bound to `share`. Calls bls.Init once per
+// process. `share` may be nil/empty for verify-only / aggregate-only use
+// cases — SignPartial then returns an error.
+func New(share []byte) *BLSSigner {
+	ensureInit()
+	out := &BLSSigner{}
+	if len(share) > 0 {
+		out.share = append([]byte(nil), share...)
+	}
+	return out
+}
+
+// SignPartial signs `msg` with the operator's share that this signer was
+// constructed against, and returns a serialised partial signature. Each
+// invocation deserialises the share fresh; if the SSV adapter wants to
+// amortise, it can keep a parsed key alongside and call the herumi API
+// directly. Per-call deserialisation keeps this package trivially safe to
+// use from multiple goroutines without sharing state.
+func (s *BLSSigner) SignPartial(msg []byte) (tbft.Signature, error) {
+	if len(s.share) == 0 {
+		return nil, fmt.Errorf("blsbackend: signer has no share bound (verify-only)")
 	}
 	if len(msg) == 0 {
 		return nil, fmt.Errorf("blsbackend: empty message")
 	}
 	sk := &bls.SecretKey{}
-	if err := sk.Deserialize(share); err != nil {
+	if err := sk.Deserialize(s.share); err != nil {
 		return nil, fmt.Errorf("blsbackend: deserialize share: %w", err)
 	}
 	sig := sk.SignByte(msg)

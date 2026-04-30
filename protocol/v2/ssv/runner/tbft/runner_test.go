@@ -30,7 +30,6 @@ import (
 // runnerNode holds one operator's runtime state for the e2e test.
 type runnerNode struct {
 	op    spectypes.OperatorID
-	share []byte
 	ctrl  *Controller
 	sched *Scheduler
 	rl    *RateLimiter
@@ -193,18 +192,19 @@ func buildCluster(t *testing.T, n int, overrides *ConfigOverrides) []*runnerNode
 		committee[i] = spectypes.OperatorID(i + 1)
 	}
 
-	signer := blsbackend.New()
-	ibe := blsbackend.NewSignerGatedIBE(signer, masterPub)
+	verifier := blsbackend.New(nil)
+	ibe := blsbackend.NewSignerGatedIBE(verifier, masterPub)
 
 	nodes := make([]*runnerNode, 0, n)
 	for _, op := range committee {
+		opSigner := blsbackend.New(shares[uint64(op)].Serialize())
 		ctrl, err := NewController(ControllerOptions{
 			OperatorID:    op,
 			Committee:     committee,
 			ClusterID:     [32]byte{0xCA, 0xFE},
 			ClusterPubKey: masterPub,
 			PubKeyShares:  pubShares,
-			Signer:        signer,
+			Signer:        opSigner,
 			IBE:           ibe,
 			Overrides:     overrides,
 		})
@@ -221,12 +221,11 @@ func buildCluster(t *testing.T, n int, overrides *ConfigOverrides) []*runnerNode
 			return []byte(fmt.Sprintf("slot-%d-layer-%d-block", slot, layer)), nil
 		}
 
-		s, err := NewScheduler(ctrl, hooks.LifecycleHooks(), shares[uint64(op)].Serialize())
+		s, err := NewScheduler(ctrl, hooks.LifecycleHooks())
 		require.NoError(t, err)
 
 		nodes = append(nodes, &runnerNode{
 			op:    op,
-			share: shares[uint64(op)].Serialize(),
 			ctrl:  ctrl,
 			sched: s,
 			rl:    NewRateLimiter(),

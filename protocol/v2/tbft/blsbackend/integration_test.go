@@ -44,8 +44,8 @@ func TestProtocol_Healthy_n7_BLSBackend(t *testing.T) {
 		pubKeyShares[tbft.OperatorID(id)] = sk.GetPublicKey().Serialize()
 	}
 
-	signer := blsbackend.New()
-	ibe := tbft.NewStubIBE(q) // unused in this test (no fallthrough)
+	verifier := blsbackend.New(nil) // for verify-only checks
+	ibe := tbft.NewStubIBE(q)       // unused in this test (no fallthrough)
 
 	// 2. Build the cluster Config.
 	operators := make([]tbft.OperatorID, n)
@@ -82,14 +82,15 @@ func TestProtocol_Healthy_n7_BLSBackend(t *testing.T) {
 
 	for _, op := range operators {
 		share := shares[uint64(op)].Serialize()
-		inst, err := tbft.NewInstance(cfg, signer, ibe, masterPub, pubKeyShares)
+		opSigner := blsbackend.New(share) // share-bound signer for this operator
+		inst, err := tbft.NewInstance(cfg, opSigner, ibe, masterPub, pubKeyShares)
 		require.NoError(t, err)
 		instances[op] = inst
 
 		for k := 0; k < K; k++ {
 			require.NoError(t, inst.ObserveCandidate(k, candidates[k]))
 		}
-		onion, err := inst.BuildOwnOnion(op, share)
+		onion, err := inst.BuildOwnOnion(op)
 		require.NoError(t, err)
 		produces[op] = &produced{onion: onion}
 	}
@@ -123,7 +124,7 @@ func TestProtocol_Healthy_n7_BLSBackend(t *testing.T) {
 	// 7. The reconstructed signature MUST verify against the master pubkey
 	//    for the decided value — this is the property SSV's beacon-side
 	//    submission relies on.
-	require.True(t, signer.VerifyAggregate(masterPub, ref.Value, ref.Signature),
+	require.True(t, verifier.VerifyAggregate(masterPub, ref.Value, ref.Signature),
 		"reconstructed cluster signature must verify under the master pubkey")
 
 	// And it must equal what the master key would sign directly (BLS
@@ -164,8 +165,8 @@ func TestProtocol_TopLeaderSilent_n7_BLSBackend(t *testing.T) {
 		pubKeyShares[tbft.OperatorID(id)] = sk.GetPublicKey().Serialize()
 	}
 
-	signer := blsbackend.New()
-	ibe := blsbackend.NewSignerGatedIBE(signer, masterPub) // real BLS access gate
+	verifier := blsbackend.New(nil)
+	ibe := blsbackend.NewSignerGatedIBE(verifier, masterPub) // real BLS access gate
 
 	operators := make([]tbft.OperatorID, n)
 	for i := 0; i < n; i++ {
@@ -200,7 +201,8 @@ func TestProtocol_TopLeaderSilent_n7_BLSBackend(t *testing.T) {
 
 	for _, op := range operators {
 		share := shares[uint64(op)].Serialize()
-		inst, err := tbft.NewInstance(cfg, signer, ibe, masterPub, pubKeyShares)
+		opSigner := blsbackend.New(share)
+		inst, err := tbft.NewInstance(cfg, opSigner, ibe, masterPub, pubKeyShares)
 		require.NoError(t, err)
 		instances[op] = inst
 
@@ -209,9 +211,9 @@ func TestProtocol_TopLeaderSilent_n7_BLSBackend(t *testing.T) {
 			require.NoError(t, inst.ObserveCandidate(k, v))
 		}
 
-		onion, err := inst.BuildOwnOnion(op, share)
+		onion, err := inst.BuildOwnOnion(op)
 		require.NoError(t, err)
-		nrs, err := inst.BuildOwnNonReceipts(op, share)
+		nrs, err := inst.BuildOwnNonReceipts(op)
 		require.NoError(t, err)
 		produces[op] = &produced{onion: onion, nonReceipts: nrs}
 	}
@@ -245,7 +247,7 @@ func TestProtocol_TopLeaderSilent_n7_BLSBackend(t *testing.T) {
 
 	// The reconstructed signature must verify against the master pubkey
 	// for layer 1's value.
-	require.True(t, signer.VerifyAggregate(masterPub, ref.Value, ref.Signature),
+	require.True(t, verifier.VerifyAggregate(masterPub, ref.Value, ref.Signature),
 		"reconstructed layer-1 signature must verify under the master pubkey")
 	require.True(t, bytes.Equal(master.SignByte(ref.Value).Serialize(), ref.Signature),
 		"reconstructed signature should match what the master would sign")

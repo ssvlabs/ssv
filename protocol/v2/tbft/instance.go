@@ -207,8 +207,11 @@ func (i *Instance) InconsistencyFaults() []InconsistencyFault {
 // candidates already observed via ObserveCandidate. The SSV runner
 // adapter will typically use this rather than the standalone BuildOnion
 // function.
-func (i *Instance) BuildOwnOnion(operatorID OperatorID, share []byte) (*Onion, error) {
-	return BuildOnion(i.cfg, operatorID, share, i.clusterPubKey, i.candidates, i.signer, i.ibe)
+//
+// Signing uses i.signer, which is bound to this operator's share at
+// Instance construction.
+func (i *Instance) BuildOwnOnion(operatorID OperatorID) (*Onion, error) {
+	return BuildOnion(i.cfg, operatorID, i.clusterPubKey, i.candidates, i.signer, i.ibe)
 }
 
 // BuildOwnNonReceipts returns a non-receipt attestation for each layer in
@@ -225,14 +228,14 @@ func (i *Instance) BuildOwnOnion(operatorID OperatorID, share []byte) (*Onion, e
 // should NOT have called ObserveCandidate for that layer — leaving it
 // absent from i.candidates means BuildOwnNonReceipts will produce a
 // non-receipt for it, which is the correct behavior.
-func (i *Instance) BuildOwnNonReceipts(operatorID OperatorID, share []byte) ([]*NonReceiptAttestation, error) {
+func (i *Instance) BuildOwnNonReceipts(operatorID OperatorID) ([]*NonReceiptAttestation, error) {
 	K := i.cfg.K()
 	var out []*NonReceiptAttestation
 	for layer := 0; layer < K-1; layer++ {
 		if _, has := i.candidates[layer]; has {
 			continue
 		}
-		nr, err := BuildNonReceipt(i.cfg, operatorID, share, layer, i.tagSigner)
+		nr, err := BuildNonReceipt(i.cfg, operatorID, layer, i.tagSigner)
 		if err != nil {
 			return nil, err
 		}

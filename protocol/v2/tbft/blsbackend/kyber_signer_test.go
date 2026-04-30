@@ -57,49 +57,56 @@ func newKyberKeyset(t *testing.T, n int) *kyberKeyset {
 	}
 }
 
+// kyberSignFor produces a partial sig from operator `id` over `msg` using
+// a freshly-bound KyberSigner — matching the production model where each
+// operator constructs their own kyber signer.
+func kyberSignFor(t *testing.T, ks *kyberKeyset, id uint64, msg []byte) tbft.Signature {
+	t.Helper()
+	signer := NewKyberSigner(ks.shares[id])
+	p, err := signer.SignPartial(msg)
+	require.NoError(t, err)
+	return p
+}
+
 func TestKyberSigner_RoundTrip_n7(t *testing.T) {
 	ks := newKyberKeyset(t, 7)
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 
 	msg := []byte("a-no-quorum-tag")
 
 	partials := make(map[tbft.OperatorID]tbft.Signature, ks.q)
 	for id := uint64(1); id <= uint64(ks.q); id++ {
-		p, err := signer.SignPartial(ks.shares[id], msg)
-		require.NoError(t, err)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = kyberSignFor(t, ks, id, msg)
 	}
 
-	full, err := signer.AggregatePartials(partials)
+	full, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	// Verify under the master pubkey.
-	require.True(t, signer.VerifyAggregate(ks.masterPub, msg, full),
+	require.True(t, verifier.VerifyAggregate(ks.masterPub, msg, full),
 		"kyber-aggregated signature must verify under herumi-derived master pubkey")
 }
 
 func TestKyberSigner_AnyQuorumSubsetYieldsSameAggregate(t *testing.T) {
 	// THE critical TBFT-cluster property, mirrored to kyber.
 	ks := newKyberKeyset(t, 7) // q=5, n=7
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	msg := []byte("the-cluster's-decision-tag")
 
 	all := make(map[tbft.OperatorID]tbft.Signature, ks.n)
 	for id := uint64(1); id <= uint64(ks.n); id++ {
-		p, err := signer.SignPartial(ks.shares[id], msg)
-		require.NoError(t, err)
-		all[tbft.OperatorID(id)] = p
+		all[tbft.OperatorID(id)] = kyberSignFor(t, ks, id, msg)
 	}
 
 	subset1 := mapSubset(all, 1, 2, 3, 4, 5)
 	subset2 := mapSubset(all, 3, 4, 5, 6, 7)
 	subset3 := mapSubset(all, 1, 3, 5, 6, 7)
 
-	a1, err := signer.AggregatePartials(subset1)
+	a1, err := verifier.AggregatePartials(subset1)
 	require.NoError(t, err)
-	a2, err := signer.AggregatePartials(subset2)
+	a2, err := verifier.AggregatePartials(subset2)
 	require.NoError(t, err)
-	a3, err := signer.AggregatePartials(subset3)
+	a3, err := verifier.AggregatePartials(subset3)
 	require.NoError(t, err)
 
 	require.True(t, bytes.Equal(a1, a2),
@@ -107,47 +114,49 @@ func TestKyberSigner_AnyQuorumSubsetYieldsSameAggregate(t *testing.T) {
 	require.True(t, bytes.Equal(a2, a3),
 		"distinct quorum subsets must produce identical kyber aggregates")
 
-	require.True(t, signer.VerifyAggregate(ks.masterPub, msg, a1))
+	require.True(t, verifier.VerifyAggregate(ks.masterPub, msg, a1))
 }
 
 func TestKyberSigner_VerifyPartial(t *testing.T) {
 	ks := newKyberKeyset(t, 7)
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	msg := []byte("verify-me")
 
-	p, err := signer.SignPartial(ks.shares[3], msg)
-	require.NoError(t, err)
+	p := kyberSignFor(t, ks, 3, msg)
 
-	require.True(t, signer.VerifyPartial(ks.pubShares[3], msg, p))
-	require.False(t, signer.VerifyPartial(ks.pubShares[4], msg, p),
+	require.True(t, verifier.VerifyPartial(ks.pubShares[3], msg, p))
+	require.False(t, verifier.VerifyPartial(ks.pubShares[4], msg, p),
 		"wrong pubkey share must not verify")
-	require.False(t, signer.VerifyPartial(ks.pubShares[3], []byte("other"), p),
+	require.False(t, verifier.VerifyPartial(ks.pubShares[3], []byte("other"), p),
 		"wrong message must not verify")
 }
 
 func TestKyberSigner_AggregateRejectsBelowQuorum(t *testing.T) {
 	ks := newKyberKeyset(t, 7)
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	msg := []byte("not-enough-partials")
 
 	partials := make(map[tbft.OperatorID]tbft.Signature, 4)
 	for id := uint64(1); id <= 4; id++ {
-		p, err := signer.SignPartial(ks.shares[id], msg)
-		require.NoError(t, err)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = kyberSignFor(t, ks, id, msg)
 	}
-	bogus, err := signer.AggregatePartials(partials)
+	bogus, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err, "below-quorum aggregation produces output but it shouldn't verify")
-	require.False(t, signer.VerifyAggregate(ks.masterPub, msg, bogus),
+	require.False(t, verifier.VerifyAggregate(ks.masterPub, msg, bogus),
 		"below-quorum aggregate must not verify under the master pubkey")
 }
 
 func TestKyberSigner_EmptyInputs(t *testing.T) {
-	signer := NewKyberSigner()
-	_, err := signer.SignPartial(nil, []byte("m"))
+	// Unbound signer (verify-only) refuses to sign.
+	verifier := NewKyberSigner(nil)
+	_, err := verifier.SignPartial([]byte("m"))
 	require.Error(t, err)
-	_, err = signer.SignPartial(make([]byte, HerumiSecretShareSize), nil)
+
+	// Bound signer refuses an empty message.
+	bound := NewKyberSigner(make([]byte, HerumiSecretShareSize))
+	_, err = bound.SignPartial(nil)
 	require.Error(t, err)
-	_, err = signer.AggregatePartials(map[tbft.OperatorID]tbft.Signature{})
+
+	_, err = verifier.AggregatePartials(map[tbft.OperatorID]tbft.Signature{})
 	require.Error(t, err)
 }

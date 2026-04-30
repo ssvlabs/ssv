@@ -26,8 +26,8 @@ import (
 //	StartNewInstance(slot) → RunningInstance
 //	  ObserveCandidate(slot, layer, value)  // for layers we / others lead
 //	  ProcessOnion(o) / ProcessNonReceipt(nr)  // as peers' messages arrive
-//	  BuildOwnOnion(slot, share) → Onion
-//	  BuildOwnNonReceipts(slot, share) → []*NonReceiptAttestation
+//	  BuildOwnOnion(slot) → Onion
+//	  BuildOwnNonReceipts(slot) → []*NonReceiptAttestation
 //	Resolve(slot) → *Output, error
 //	EndInstance(slot)
 //
@@ -288,29 +288,31 @@ func (c *Controller) ProcessCandidate(cb *tbftcore.CandidateBroadcast) error {
 	return r.instance.ObserveCandidate(cb.Layer, cb.Value)
 }
 
-// BuildOwnOnion produces the local operator's onion for the slot's instance,
-// using `share` as the BLS secret share to sign each layer's value.
-func (c *Controller) BuildOwnOnion(slot phase0.Slot, share []byte) (*tbftcore.Onion, error) {
+// BuildOwnOnion produces the local operator's onion for the slot's
+// instance. Signing uses the share-bound Signer the Controller was
+// constructed with.
+func (c *Controller) BuildOwnOnion(slot phase0.Slot) (*tbftcore.Onion, error) {
 	r, err := c.lookup(slot)
 	if err != nil {
 		return nil, err
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
-	return r.instance.BuildOwnOnion(tbftcore.OperatorID(c.operatorID), share)
+	return r.instance.BuildOwnOnion(tbftcore.OperatorID(c.operatorID))
 }
 
 // BuildOwnNonReceipts produces the local operator's non-receipt
-// attestations for layers without a candidate, using `share` to sign
-// each no-quorum tag.
-func (c *Controller) BuildOwnNonReceipts(slot phase0.Slot, share []byte) ([]*tbftcore.NonReceiptAttestation, error) {
+// attestations for layers without a candidate. Signing uses the share-
+// bound TagSigner (or Signer, if no separate TagSigner is configured)
+// the Controller was constructed with.
+func (c *Controller) BuildOwnNonReceipts(slot phase0.Slot) ([]*tbftcore.NonReceiptAttestation, error) {
 	r, err := c.lookup(slot)
 	if err != nil {
 		return nil, err
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
-	return r.instance.BuildOwnNonReceipts(tbftcore.OperatorID(c.operatorID), share)
+	return r.instance.BuildOwnNonReceipts(tbftcore.OperatorID(c.operatorID))
 }
 
 // Resolve runs the Phase-3 decryption walk for the slot's instance and

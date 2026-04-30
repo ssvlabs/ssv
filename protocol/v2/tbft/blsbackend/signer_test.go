@@ -64,33 +64,36 @@ func newKeyset(t *testing.T, n int) *keyset {
 	}
 }
 
-// signWith produces a partial sig from operator `id` over `msg`.
-func (k *keyset) signWith(t *testing.T, signer *BLSSigner, id uint64, msg []byte) tbft.Signature {
+// signWith produces a partial sig from operator `id` over `msg`. Each call
+// builds a fresh share-bound signer for that operator — matching the
+// production model where each operator has their own BLSSigner.
+func (k *keyset) signWith(t *testing.T, id uint64, msg []byte) tbft.Signature {
 	t.Helper()
 	share := k.shares[id]
 	require.NotNil(t, share, "no share for id %d", id)
-	p, err := signer.SignPartial(share.Serialize(), msg)
+	opSigner := New(share.Serialize())
+	p, err := opSigner.SignPartial(msg)
 	require.NoError(t, err)
 	return p
 }
 
 func TestSigner_RoundTrip_n7(t *testing.T) {
 	ks := newKeyset(t, 7)
-	signer := New()
+	verifier := New(nil) // verify-only / aggregate-only
 
 	msg := []byte("hello, threshold world")
 
 	// Operators 1..q sign.
 	partials := make(map[tbft.OperatorID]tbft.Signature, ks.q)
 	for id := uint64(1); id <= uint64(ks.q); id++ {
-		partials[tbft.OperatorID(id)] = ks.signWith(t, signer, id, msg)
+		partials[tbft.OperatorID(id)] = ks.signWith(t, id, msg)
 	}
 
-	full, err := signer.AggregatePartials(partials)
+	full, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	// Reconstructed signature verifies against the master pubkey.
-	require.True(t, signer.VerifyAggregate(ks.masterPub.Serialize(), msg, full),
+	require.True(t, verifier.VerifyAggregate(ks.masterPub.Serialize(), msg, full),
 		"aggregated signature should verify under the master/cluster pubkey")
 
 	// Sanity: it should EQUAL what the master key would have signed itself.
@@ -102,25 +105,25 @@ func TestSigner_RoundTrip_n7(t *testing.T) {
 func TestSigner_AnyQuorumSubsetYieldsSameAggregate(t *testing.T) {
 	// THE critical TBFT-cluster property under Option A.
 	ks := newKeyset(t, 7) // q=5, n=7
-	signer := New()
+	verifier := New(nil)
 
 	msg := []byte("the cluster's decision")
 
 	// Generate all 7 partials; we'll pick different 5-element subsets.
 	allPartials := make(map[tbft.OperatorID]tbft.Signature, ks.n)
 	for id := uint64(1); id <= uint64(ks.n); id++ {
-		allPartials[tbft.OperatorID(id)] = ks.signWith(t, signer, id, msg)
+		allPartials[tbft.OperatorID(id)] = ks.signWith(t, id, msg)
 	}
 
 	subset1 := mapSubset(allPartials, 1, 2, 3, 4, 5) // first five
 	subset2 := mapSubset(allPartials, 3, 4, 5, 6, 7) // last five
 	subset3 := mapSubset(allPartials, 1, 3, 5, 6, 7) // mixed
 
-	agg1, err := signer.AggregatePartials(subset1)
+	agg1, err := verifier.AggregatePartials(subset1)
 	require.NoError(t, err)
-	agg2, err := signer.AggregatePartials(subset2)
+	agg2, err := verifier.AggregatePartials(subset2)
 	require.NoError(t, err)
-	agg3, err := signer.AggregatePartials(subset3)
+	agg3, err := verifier.AggregatePartials(subset3)
 	require.NoError(t, err)
 
 	require.True(t, bytes.Equal(agg1, agg2),
@@ -129,22 +132,22 @@ func TestSigner_AnyQuorumSubsetYieldsSameAggregate(t *testing.T) {
 		"distinct quorum subsets must aggregate to the SAME signature (subset 2 vs 3)")
 
 	// And all aggregations verify against the same master pubkey.
-	require.True(t, signer.VerifyAggregate(ks.masterPub.Serialize(), msg, agg1))
+	require.True(t, verifier.VerifyAggregate(ks.masterPub.Serialize(), msg, agg1))
 }
 
 func TestSigner_VerifyPartial(t *testing.T) {
 	ks := newKeyset(t, 7)
-	signer := New()
+	verifier := New(nil)
 	msg := []byte("verify me")
 
-	p := ks.signWith(t, signer, 3, msg)
+	p := ks.signWith(t, 3, msg)
 
 	// Correct pubkey share verifies.
-	require.True(t, signer.VerifyPartial(ks.pubShares[3].Serialize(), msg, p))
+	require.True(t, verifier.VerifyPartial(ks.pubShares[3].Serialize(), msg, p))
 	// Wrong pubkey share does NOT verify.
-	require.False(t, signer.VerifyPartial(ks.pubShares[4].Serialize(), msg, p))
+	require.False(t, verifier.VerifyPartial(ks.pubShares[4].Serialize(), msg, p))
 	// Wrong message does NOT verify.
-	require.False(t, signer.VerifyPartial(ks.pubShares[3].Serialize(), []byte("other"), p))
+	require.False(t, verifier.VerifyPartial(ks.pubShares[3].Serialize(), []byte("other"), p))
 }
 
 func TestSigner_AggregateRejectsBelowQuorum(t *testing.T) {
@@ -154,18 +157,18 @@ func TestSigner_AggregateRejectsBelowQuorum(t *testing.T) {
 	// counting the partials. Verify the resulting signature does NOT match
 	// the master signature.
 	ks := newKeyset(t, 7) // q=5
-	signer := New()
+	verifier := New(nil)
 	msg := []byte("not enough partials")
 
 	// Only 4 partials (one short).
 	partials := make(map[tbft.OperatorID]tbft.Signature, 4)
 	for id := uint64(1); id <= 4; id++ {
-		partials[tbft.OperatorID(id)] = ks.signWith(t, signer, id, msg)
+		partials[tbft.OperatorID(id)] = ks.signWith(t, id, msg)
 	}
 
-	bogus, err := signer.AggregatePartials(partials)
+	bogus, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err, "below-quorum aggregation produces output but it shouldn't verify")
-	require.False(t, signer.VerifyAggregate(ks.masterPub.Serialize(), msg, bogus),
+	require.False(t, verifier.VerifyAggregate(ks.masterPub.Serialize(), msg, bogus),
 		"below-quorum aggregate must not verify against the master pubkey")
 }
 
@@ -173,32 +176,34 @@ func TestSigner_AggregateRejectsCrossMessagePartials(t *testing.T) {
 	// Partials on different messages don't aggregate to a meaningful signature.
 	// herumi may produce SOMETHING, but it won't verify.
 	ks := newKeyset(t, 4) // q=3
-	signer := New()
+	verifier := New(nil)
 	msgA := []byte("message a")
 	msgB := []byte("message b")
 
 	partials := map[tbft.OperatorID]tbft.Signature{
-		tbft.OperatorID(1): ks.signWith(t, signer, 1, msgA),
-		tbft.OperatorID(2): ks.signWith(t, signer, 2, msgA),
-		tbft.OperatorID(3): ks.signWith(t, signer, 3, msgB), // wrong message
+		tbft.OperatorID(1): ks.signWith(t, 1, msgA),
+		tbft.OperatorID(2): ks.signWith(t, 2, msgA),
+		tbft.OperatorID(3): ks.signWith(t, 3, msgB), // wrong message
 	}
 
-	bogus, err := signer.AggregatePartials(partials)
+	bogus, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
-	require.False(t, signer.VerifyAggregate(ks.masterPub.Serialize(), msgA, bogus))
-	require.False(t, signer.VerifyAggregate(ks.masterPub.Serialize(), msgB, bogus))
+	require.False(t, verifier.VerifyAggregate(ks.masterPub.Serialize(), msgA, bogus))
+	require.False(t, verifier.VerifyAggregate(ks.masterPub.Serialize(), msgB, bogus))
 }
 
 func TestSigner_EmptyInputs(t *testing.T) {
-	signer := New()
-
-	_, err := signer.SignPartial(nil, []byte("msg"))
+	// An unbound signer (verify-only) refuses to sign.
+	verifier := New(nil)
+	_, err := verifier.SignPartial([]byte("msg"))
 	require.Error(t, err)
 
-	_, err = signer.SignPartial([]byte("share"), nil)
+	// A bound signer refuses an empty message.
+	bound := New([]byte{1, 2, 3, 4})
+	_, err = bound.SignPartial(nil)
 	require.Error(t, err)
 
-	_, err = signer.AggregatePartials(map[tbft.OperatorID]tbft.Signature{})
+	_, err = verifier.AggregatePartials(map[tbft.OperatorID]tbft.Signature{})
 	require.Error(t, err)
 }
 

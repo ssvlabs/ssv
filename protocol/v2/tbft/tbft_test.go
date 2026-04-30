@@ -106,10 +106,21 @@ func TestLayerTag_LayerKEqualsNoQuorumTagKMinus1(t *testing.T) {
 
 // ---- Stub IBE + Signer round-trip ----------------------------------------
 
+// stubPartial returns a stub partial sig from "operator" `i` over `msg`,
+// constructing a fresh share-bound StubSigner each call. The "share" is
+// just the operator's ID byte.
+func stubPartial(t *testing.T, quorum int, i OperatorID, msg []byte) Signature {
+	t.Helper()
+	op := NewStubSigner(quorum, []byte{byte(i)})
+	p, err := op.SignPartial(msg)
+	require.NoError(t, err)
+	return p
+}
+
 func TestStubCrypto_EndToEnd(t *testing.T) {
 	// Demonstrates the Option-A composition: Signer signs/aggregates BLS
 	// partial sigs on a tag; the aggregate becomes the IBE decryption key.
-	signer := NewStubSigner(5)
+	verifier := NewStubSigner(5, nil)
 	ibe := NewStubIBE(5)
 
 	tag := []byte("test-tag")
@@ -121,13 +132,10 @@ func TestStubCrypto_EndToEnd(t *testing.T) {
 	// 5 operators each sign the tag with their own share.
 	partials := make(map[OperatorID]Signature, 5)
 	for i := OperatorID(1); i <= 5; i++ {
-		share := []byte{byte(i)}
-		p, err := signer.SignPartial(share, tag)
-		require.NoError(t, err)
-		partials[i] = p
+		partials[i] = stubPartial(t, 5, i, tag)
 	}
 
-	key, err := signer.AggregatePartials(partials)
+	key, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	got, err := ibe.Decrypt(ct, key)
@@ -136,13 +144,12 @@ func TestStubCrypto_EndToEnd(t *testing.T) {
 }
 
 func TestStubCrypto_BelowQuorumFails(t *testing.T) {
-	signer := NewStubSigner(5)
+	verifier := NewStubSigner(5, nil)
 	partials := make(map[OperatorID]Signature, 4)
 	for i := OperatorID(1); i <= 4; i++ {
-		p, _ := signer.SignPartial([]byte{byte(i)}, []byte("tag"))
-		partials[i] = p
+		partials[i] = stubPartial(t, 5, i, []byte("tag"))
 	}
-	_, err := signer.AggregatePartials(partials)
+	_, err := verifier.AggregatePartials(partials)
 	require.ErrorContains(t, err, "need 5 partials, got 4")
 }
 
@@ -151,25 +158,24 @@ func TestStubCrypto_DifferentSubsetsYieldSameAggregate(t *testing.T) {
 	// aggregate (otherwise different operators with different received
 	// subsets would compute different "decryption keys" for the same
 	// ciphertext).
-	signer := NewStubSigner(3)
+	verifier := NewStubSigner(3, nil)
 	allPartials := make(map[OperatorID]Signature, 5)
 	for i := OperatorID(1); i <= 5; i++ {
-		p, _ := signer.SignPartial([]byte{byte(i)}, []byte("tag"))
-		allPartials[i] = p
+		allPartials[i] = stubPartial(t, 3, i, []byte("tag"))
 	}
 	subset1 := map[OperatorID]Signature{1: allPartials[1], 2: allPartials[2], 3: allPartials[3]}
 	subset2 := map[OperatorID]Signature{2: allPartials[2], 4: allPartials[4], 5: allPartials[5]}
 
-	agg1, err := signer.AggregatePartials(subset1)
+	agg1, err := verifier.AggregatePartials(subset1)
 	require.NoError(t, err)
-	agg2, err := signer.AggregatePartials(subset2)
+	agg2, err := verifier.AggregatePartials(subset2)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(agg1, agg2),
 		"distinct 2f+1 subsets of partials on the same message must aggregate to the same value")
 }
 
 func TestStubCrypto_TagMismatchAtDecrypt(t *testing.T) {
-	signer := NewStubSigner(3)
+	verifier := NewStubSigner(3, nil)
 	ibe := NewStubIBE(3)
 
 	ct, err := ibe.Encrypt(nil, []byte("real-tag"), []byte("plaintext"))
@@ -178,10 +184,9 @@ func TestStubCrypto_TagMismatchAtDecrypt(t *testing.T) {
 	// Build a key for a different tag.
 	partials := make(map[OperatorID]Signature, 3)
 	for i := OperatorID(1); i <= 3; i++ {
-		p, _ := signer.SignPartial([]byte{byte(i)}, []byte("wrong-tag"))
-		partials[i] = p
+		partials[i] = stubPartial(t, 3, i, []byte("wrong-tag"))
 	}
-	key, err := signer.AggregatePartials(partials)
+	key, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	_, err = ibe.Decrypt(ct, key)

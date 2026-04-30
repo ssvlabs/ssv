@@ -182,10 +182,14 @@ func TestResolve_InconsistencyFault(t *testing.T) {
 
 // sim is a per-test in-memory cluster simulator. It runs all operators in
 // the same goroutine and lets each one independently build/observe/resolve.
+//
+// Each operator constructs its own share-bound StubSigner inside runAll —
+// the share is just the operator's ID byte (the stub doesn't have a real
+// keypair concept).
 type sim struct {
 	cfg          *Config
 	clusterPK    []byte
-	signer       *StubSigner
+	quorum       int
 	ibe          *StubIBE
 	operators    []OperatorID
 	candidates   []Value // candidate values per layer (cluster-wide canonical view)
@@ -225,7 +229,7 @@ func newSim(t *testing.T, n int) *sim {
 	s := &sim{
 		cfg:          cfg,
 		clusterPK:    []byte("cluster-pubkey"),
-		signer:       NewStubSigner(q),
+		quorum:       q,
 		ibe:          NewStubIBE(q),
 		operators:    cfg.Operators,
 		candidates:   candidates,
@@ -290,10 +294,11 @@ func (s *sim) runAll(t *testing.T) map[OperatorID]*Output {
 			continue
 		}
 
-		share := []byte{byte(op)} // stub: share = operator-id-byte
+		share := []byte{byte(op)}                  // stub: share = operator-id-byte
+		opSigner := NewStubSigner(s.quorum, share) // share-bound, per operator
 
 		// Build instance for this operator.
-		inst, err := NewInstance(s.cfg, s.signer, s.ibe, s.clusterPK, s.pubKeyShares)
+		inst, err := NewInstance(s.cfg, opSigner, s.ibe, s.clusterPK, s.pubKeyShares)
 		require.NoError(t, err)
 		s.instances[op] = inst
 
@@ -303,10 +308,10 @@ func (s *sim) runAll(t *testing.T) map[OperatorID]*Output {
 		}
 
 		// Phase 2: build onion + non-receipts using the Instance's API.
-		onion, err := inst.BuildOwnOnion(op, share)
+		onion, err := inst.BuildOwnOnion(op)
 		require.NoError(t, err)
 
-		nrs, err := inst.BuildOwnNonReceipts(op, share)
+		nrs, err := inst.BuildOwnNonReceipts(op)
 		require.NoError(t, err)
 
 		// Inject any "force NR" attestations on top of the standard
@@ -321,7 +326,7 @@ func (s *sim) runAll(t *testing.T) map[OperatorID]*Output {
 				// Already covered by BuildOwnNonReceipts; skip duplicate.
 				continue
 			}
-			extra, err := BuildNonReceipt(s.cfg, op, share, layer, s.signer)
+			extra, err := BuildNonReceipt(s.cfg, op, layer, opSigner)
 			require.NoError(t, err)
 			nrs = append(nrs, extra)
 		}

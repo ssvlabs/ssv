@@ -72,24 +72,24 @@ func TestValidateOnion_EmptyLayerOK(t *testing.T) {
 
 func TestValidateNonReceipt_OK(t *testing.T) {
 	cfg := validProposerConfig(t, 7)
-	signer := NewStubSigner(cfg.Quorum())
-	nr, err := BuildNonReceipt(cfg, OperatorID(2), []byte{2}, 0, signer)
+	signer := NewStubSigner(cfg.Quorum(), []byte{2})
+	nr, err := BuildNonReceipt(cfg, OperatorID(2), 0, signer)
 	require.NoError(t, err)
 	require.NoError(t, ValidateNonReceipt(nr, cfg))
 }
 
 func TestValidateNonReceipt_HeightMismatch(t *testing.T) {
 	cfg := validProposerConfig(t, 7)
-	signer := NewStubSigner(cfg.Quorum())
-	nr, _ := BuildNonReceipt(cfg, OperatorID(2), []byte{2}, 0, signer)
+	signer := NewStubSigner(cfg.Quorum(), []byte{2})
+	nr, _ := BuildNonReceipt(cfg, OperatorID(2), 0, signer)
 	nr.Height = cfg.Height + 1
 	require.ErrorContains(t, ValidateNonReceipt(nr, cfg), "height")
 }
 
 func TestValidateNonReceipt_LayerOutOfRange(t *testing.T) {
 	cfg := validProposerConfig(t, 7)
-	signer := NewStubSigner(cfg.Quorum())
-	nr, _ := BuildNonReceipt(cfg, OperatorID(2), []byte{2}, 0, signer)
+	signer := NewStubSigner(cfg.Quorum(), []byte{2})
+	nr, _ := BuildNonReceipt(cfg, OperatorID(2), 0, signer)
 	// Last layer (K-1) is invalid for non-receipt.
 	nr.Layer = cfg.K() - 1
 	require.ErrorContains(t, ValidateNonReceipt(nr, cfg), "out of valid range")
@@ -97,16 +97,16 @@ func TestValidateNonReceipt_LayerOutOfRange(t *testing.T) {
 
 func TestValidateNonReceipt_SenderNotInCluster(t *testing.T) {
 	cfg := validProposerConfig(t, 7)
-	signer := NewStubSigner(cfg.Quorum())
-	nr, _ := BuildNonReceipt(cfg, OperatorID(2), []byte{2}, 0, signer)
+	signer := NewStubSigner(cfg.Quorum(), []byte{2})
+	nr, _ := BuildNonReceipt(cfg, OperatorID(2), 0, signer)
 	nr.OperatorID = OperatorID(999)
 	require.ErrorContains(t, ValidateNonReceipt(nr, cfg), "not in cluster")
 }
 
 func TestValidateNonReceipt_EmptyPartialSig(t *testing.T) {
 	cfg := validProposerConfig(t, 7)
-	signer := NewStubSigner(cfg.Quorum())
-	nr, _ := BuildNonReceipt(cfg, OperatorID(2), []byte{2}, 0, signer)
+	signer := NewStubSigner(cfg.Quorum(), []byte{2})
+	nr, _ := BuildNonReceipt(cfg, OperatorID(2), 0, signer)
 	nr.PartialSig = nil
 	require.ErrorContains(t, ValidateNonReceipt(nr, cfg), "empty PartialSig")
 }
@@ -115,7 +115,7 @@ func TestValidateNonReceipt_EmptyPartialSig(t *testing.T) {
 
 func buildHealthyOnion(t *testing.T, cfg *Config, opID OperatorID) *Onion {
 	t.Helper()
-	signer := NewStubSigner(cfg.Quorum())
+	signer := NewStubSigner(cfg.Quorum(), []byte{byte(opID)})
 	ibe := NewStubIBE(cfg.Quorum())
 
 	// Provide a candidate value at every layer.
@@ -124,7 +124,7 @@ func buildHealthyOnion(t *testing.T, cfg *Config, opID OperatorID) *Onion {
 		candidates[k] = Value("layer-value-")
 	}
 
-	o, err := BuildOnion(cfg, opID, []byte{byte(opID)}, []byte("clusterPK"), candidates, signer, ibe)
+	o, err := BuildOnion(cfg, opID, []byte("clusterPK"), candidates, signer, ibe)
 	require.NoError(t, err)
 	return o
 }

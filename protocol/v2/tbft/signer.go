@@ -19,15 +19,20 @@ import (
 //     reconstructed validator signature on the decided value and for
 //     the IBE decryption key derivation.
 //
-// For Option A (reuse the validator's existing threshold BLS key as the
-// IBE trust anchor), this primitive is just the standard BLS threshold
-// signing operation, identical for tag-signing and value-signing — the
-// underlying message is the only difference.
+// A Signer is bound to a single operator's secret share at construction
+// time — the share never travels through the call stack as a parameter.
+// This matches SSV's existing `ekm.BeaconSigner` shape: the key store is
+// the only thing that ever touches share material, callers only ever
+// produce signatures by message + identity.
+//
+// The `AggregatePartials` / `VerifyPartial` / `VerifyAggregate` operations
+// don't need the bound share — they're stateless wrt operator identity and
+// the same Signer instance can serve all three regardless of which share
+// it was constructed for.
 type Signer interface {
-	// SignPartial signs `msg` using `share` (operator's secret key share)
-	// and returns the partial signature. For Option A this is exactly a
-	// herumi/bls partial signature.
-	SignPartial(share []byte, msg []byte) (Signature, error)
+	// SignPartial signs `msg` with the operator's secret share that this
+	// Signer was constructed against, and returns the partial signature.
+	SignPartial(msg []byte) (Signature, error)
 
 	// AggregatePartials reconstructs a full signature from a set of
 	// partial signatures, keyed by operator ID for Lagrange interpolation.
@@ -64,12 +69,20 @@ type Signer interface {
 //
 //	partial    = []byte{0x10} || H(share)[:8] || sha256(msg)[:8] || sha256(share || msg)
 //	aggregate  = []byte{0x11} || sha256(msg)[:8] || quorum(big-endian 4 bytes)
+//
+// In the stub the "share" is just an opaque identity tag — typically the
+// operator's ID byte. Each operator constructs their own StubSigner with
+// their own share bytes.
 type StubSigner struct {
 	Quorum int
+	share  []byte
 }
 
-func NewStubSigner(quorum int) *StubSigner {
-	return &StubSigner{Quorum: quorum}
+// NewStubSigner constructs a StubSigner bound to `share`. `share` may be
+// empty for verify-only / aggregate-only use cases; SignPartial then
+// returns an error.
+func NewStubSigner(quorum int, share []byte) *StubSigner {
+	return &StubSigner{Quorum: quorum, share: share}
 }
 
 const (
@@ -91,14 +104,21 @@ func shareHash(share []byte) [8]byte {
 	return out
 }
 
-// SignPartial produces []byte{0x10} || share-id-tag || msg-tag || H(share || msg).
-func (s *StubSigner) SignPartial(share []byte, msg []byte) (Signature, error) {
-	if len(share) == 0 {
-		return nil, errors.New("stub signer: empty share")
+// SignPartial produces []byte{0x10} || share-id-tag || msg-tag || H(share || msg)
+// using the share that this signer was constructed with.
+func (s *StubSigner) SignPartial(msg []byte) (Signature, error) {
+	if len(s.share) == 0 {
+		return nil, errors.New("stub signer: signer has no share bound (verify-only)")
 	}
 	if len(msg) == 0 {
 		return nil, errors.New("stub signer: empty message")
 	}
+	return stubPartialFor(s.share, msg), nil
+}
+
+// stubPartialFor is the share/msg → partial computation factored out so
+// VerifyPartial can recompute it without instantiating another signer.
+func stubPartialFor(share, msg []byte) Signature {
 	shareID := shareHash(share)
 	msgID := msgHash(msg)
 	full := sha256.Sum256(append(append([]byte{}, share...), msg...))
@@ -108,7 +128,7 @@ func (s *StubSigner) SignPartial(share []byte, msg []byte) (Signature, error) {
 	out = append(out, shareID[:]...)
 	out = append(out, msgID[:]...)
 	out = append(out, full[:]...)
-	return out, nil
+	return out
 }
 
 // AggregatePartials verifies all partials are well-formed, share the same
@@ -152,11 +172,10 @@ func (s *StubSigner) AggregatePartials(partials map[OperatorID]Signature) (Signa
 // In the stub, "pubKeyShare" must be the same bytes used as the share in
 // SignPartial (since the stub doesn't have a real keypair concept).
 func (s *StubSigner) VerifyPartial(pubKeyShare []byte, msg []byte, partial Signature) bool {
-	expected, err := s.SignPartial(pubKeyShare, msg)
-	if err != nil {
+	if len(pubKeyShare) == 0 || len(msg) == 0 {
 		return false
 	}
-	return bytes.Equal(expected, partial)
+	return bytes.Equal(stubPartialFor(pubKeyShare, msg), partial)
 }
 
 // VerifyAggregate checks that `sig` matches what AggregatePartials would

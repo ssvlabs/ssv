@@ -82,25 +82,21 @@ func (h *LifecycleHooks) validate() error {
 type Scheduler struct {
 	controller *Controller
 	hooks      *LifecycleHooks
-	share      []byte
 }
 
-// NewScheduler constructs a Scheduler. Returns an error if hooks are
-// incomplete or `share` is empty.
-func NewScheduler(controller *Controller, hooks *LifecycleHooks, share []byte) (*Scheduler, error) {
+// NewScheduler constructs a Scheduler. The Controller's Signer / TagSigner
+// already carry the operator's share — the Scheduler doesn't need its own
+// copy. Returns an error if hooks are incomplete.
+func NewScheduler(controller *Controller, hooks *LifecycleHooks) (*Scheduler, error) {
 	if controller == nil {
 		return nil, errors.New("tbft adapter: nil Controller")
 	}
 	if err := hooks.validate(); err != nil {
 		return nil, err
 	}
-	if len(share) == 0 {
-		return nil, errors.New("tbft adapter: empty share")
-	}
 	return &Scheduler{
 		controller: controller,
 		hooks:      hooks,
-		share:      share,
 	}, nil
 }
 
@@ -152,7 +148,7 @@ func (s *Scheduler) FetchAndBroadcastCandidate(ctx context.Context, slot phase0.
 // at the slot's deadline (T_d) after Phase-1 candidates have had a chance
 // to propagate.
 func (s *Scheduler) BuildAndBroadcastOnion(ctx context.Context, slot phase0.Slot) error {
-	onion, err := s.controller.BuildOwnOnion(slot, s.share)
+	onion, err := s.controller.BuildOwnOnion(slot)
 	if err != nil {
 		return fmt.Errorf("tbft scheduler: build own onion: %w", err)
 	}
@@ -164,7 +160,7 @@ func (s *Scheduler) BuildAndBroadcastOnion(ctx context.Context, slot phase0.Slot
 		return fmt.Errorf("tbft scheduler: broadcast onion: %w", err)
 	}
 
-	nrs, err := s.controller.BuildOwnNonReceipts(slot, s.share)
+	nrs, err := s.controller.BuildOwnNonReceipts(slot)
 	if err != nil {
 		return fmt.Errorf("tbft scheduler: build own non-receipts: %w", err)
 	}

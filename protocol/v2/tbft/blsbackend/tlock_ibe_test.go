@@ -24,6 +24,16 @@ import (
 // operator shares can serve both validator-output signing AND IBE-tag
 // signing. See docs/IBE-INTEGRATION.md.
 
+// kyberSignTag returns a kyber partial sig from operator `id` over `tag`,
+// using a freshly-constructed share-bound KyberSigner.
+func kyberSignTag(t *testing.T, shares map[uint64]*bls.SecretKey, id uint64, tag []byte) tbft.Signature {
+	t.Helper()
+	op := NewKyberSigner(shares[id].Serialize())
+	p, err := op.SignPartial(tag)
+	require.NoError(t, err)
+	return p
+}
+
 func TestTLockIBE_RoundTripWithHerumiShares(t *testing.T) {
 	threshold.Init()
 	const n, q = 7, 5
@@ -35,7 +45,7 @@ func TestTLockIBE_RoundTripWithHerumiShares(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	ibeImpl := NewTLockIBE()
 
 	tag := []byte("tbft-no-quorum-tag-for-slot-100-layer-0")
@@ -50,13 +60,11 @@ func TestTLockIBE_RoundTripWithHerumiShares(t *testing.T) {
 	// q operators sign the tag using their herumi shares (via kyber).
 	partials := make(map[tbft.OperatorID]tbft.Signature, q)
 	for id := uint64(1); id <= q; id++ {
-		p, err := signer.SignPartial(shares[id].Serialize(), tag)
-		require.NoError(t, err)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = kyberSignTag(t, shares, id, tag)
 	}
 
 	// Aggregate to derive the kyber-format decryption key.
-	key, err := signer.AggregatePartials(partials)
+	key, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	// Decrypt using the aggregated kyber sig.
@@ -77,7 +85,7 @@ func TestTLockIBE_DifferentSubsetsDecryptIdentically(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	ibeImpl := NewTLockIBE()
 
 	tag := []byte("a-tag")
@@ -88,17 +96,15 @@ func TestTLockIBE_DifferentSubsetsDecryptIdentically(t *testing.T) {
 
 	partials := make(map[tbft.OperatorID]tbft.Signature, n)
 	for id := uint64(1); id <= n; id++ {
-		p, err := signer.SignPartial(shares[id].Serialize(), tag)
-		require.NoError(t, err)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = kyberSignTag(t, shares, id, tag)
 	}
 
 	subset1 := mapSubset(partials, 1, 2, 3, 4, 5)
 	subset2 := mapSubset(partials, 3, 4, 5, 6, 7)
 
-	key1, err := signer.AggregatePartials(subset1)
+	key1, err := verifier.AggregatePartials(subset1)
 	require.NoError(t, err)
-	key2, err := signer.AggregatePartials(subset2)
+	key2, err := verifier.AggregatePartials(subset2)
 	require.NoError(t, err)
 
 	pt1, err := ibeImpl.Decrypt(ct, key1)
@@ -121,7 +127,7 @@ func TestTLockIBE_WrongTagKeyFails(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	ibeImpl := NewTLockIBE()
 
 	ct, err := ibeImpl.Encrypt(masterPub, []byte("real-tag"), []byte("plaintext"))
@@ -130,10 +136,9 @@ func TestTLockIBE_WrongTagKeyFails(t *testing.T) {
 	// Build a key for a DIFFERENT tag.
 	partials := make(map[tbft.OperatorID]tbft.Signature, q)
 	for id := uint64(1); id <= q; id++ {
-		p, _ := signer.SignPartial(shares[id].Serialize(), []byte("wrong-tag"))
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = kyberSignTag(t, shares, id, []byte("wrong-tag"))
 	}
-	wrongKey, err := signer.AggregatePartials(partials)
+	wrongKey, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	_, err = ibeImpl.Decrypt(ct, wrongKey)
@@ -149,7 +154,7 @@ func TestTLockIBE_BelowQuorumKeyFails(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := NewKyberSigner()
+	verifier := NewKyberSigner(nil)
 	ibeImpl := NewTLockIBE()
 
 	tag := []byte("tag")
@@ -159,10 +164,9 @@ func TestTLockIBE_BelowQuorumKeyFails(t *testing.T) {
 	// Aggregate only 4 partials (below quorum).
 	partials := make(map[tbft.OperatorID]tbft.Signature, 4)
 	for id := uint64(1); id <= 4; id++ {
-		p, _ := signer.SignPartial(shares[id].Serialize(), tag)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = kyberSignTag(t, shares, id, tag)
 	}
-	bogusKey, err := signer.AggregatePartials(partials)
+	bogusKey, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	_, err = ibeImpl.Decrypt(ct, bogusKey)

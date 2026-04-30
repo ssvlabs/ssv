@@ -15,6 +15,16 @@ import (
 // is intentionally not tested (it's not a property the implementation
 // claims).
 
+// signTag returns operator `id`'s partial sig on `tag` using a freshly-
+// constructed share-bound BLSSigner.
+func signTag(t *testing.T, shares map[uint64]*bls.SecretKey, id uint64, tag []byte) tbft.Signature {
+	t.Helper()
+	op := New(shares[id].Serialize())
+	p, err := op.SignPartial(tag)
+	require.NoError(t, err)
+	return p
+}
+
 func TestSignerGatedIBE_RoundTripWithBLS(t *testing.T) {
 	threshold.Init()
 	const n, q = 7, 5
@@ -26,8 +36,8 @@ func TestSignerGatedIBE_RoundTripWithBLS(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := New()
-	ibe := NewSignerGatedIBE(signer, masterPub)
+	verifier := New(nil)
+	ibe := NewSignerGatedIBE(verifier, masterPub)
 
 	tag := []byte("test-tag")
 	plaintext := []byte("the cluster's secret payload")
@@ -39,11 +49,9 @@ func TestSignerGatedIBE_RoundTripWithBLS(t *testing.T) {
 	// Build a valid decryption key: q operators sign the tag and aggregate.
 	partials := make(map[tbft.OperatorID]tbft.Signature, q)
 	for id := uint64(1); id <= q; id++ {
-		p, err := signer.SignPartial(shares[id].Serialize(), tag)
-		require.NoError(t, err)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = signTag(t, shares, id, tag)
 	}
-	key, err := signer.AggregatePartials(partials)
+	key, err := verifier.AggregatePartials(partials)
 	require.NoError(t, err)
 
 	got, err := ibe.Decrypt(ct, key)
@@ -61,8 +69,8 @@ func TestSignerGatedIBE_RejectsKeyForDifferentTag(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := New()
-	ibe := NewSignerGatedIBE(signer, masterPub)
+	verifier := New(nil)
+	ibe := NewSignerGatedIBE(verifier, masterPub)
 
 	ct, err := ibe.Encrypt(nil, []byte("real-tag"), []byte("plaintext"))
 	require.NoError(t, err)
@@ -70,10 +78,9 @@ func TestSignerGatedIBE_RejectsKeyForDifferentTag(t *testing.T) {
 	// Build a key signed over a DIFFERENT tag.
 	partials := make(map[tbft.OperatorID]tbft.Signature, q)
 	for id := uint64(1); id <= q; id++ {
-		p, _ := signer.SignPartial(shares[id].Serialize(), []byte("wrong-tag"))
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = signTag(t, shares, id, []byte("wrong-tag"))
 	}
-	wrongKey, _ := signer.AggregatePartials(partials)
+	wrongKey, _ := verifier.AggregatePartials(partials)
 
 	_, err = ibe.Decrypt(ct, wrongKey)
 	require.ErrorContains(t, err, "not a valid signature on the ciphertext's tag")
@@ -89,8 +96,8 @@ func TestSignerGatedIBE_RejectsBelowQuorumKey(t *testing.T) {
 	shares, err := threshold.Create(master.Serialize(), q, n)
 	require.NoError(t, err)
 
-	signer := New()
-	ibe := NewSignerGatedIBE(signer, masterPub)
+	verifier := New(nil)
+	ibe := NewSignerGatedIBE(verifier, masterPub)
 
 	tag := []byte("test-tag")
 	ct, err := ibe.Encrypt(nil, tag, []byte("plaintext"))
@@ -100,10 +107,9 @@ func TestSignerGatedIBE_RejectsBelowQuorumKey(t *testing.T) {
 	// produces *something* but it won't verify under the master pubkey.
 	partials := make(map[tbft.OperatorID]tbft.Signature, 4)
 	for id := uint64(1); id <= 4; id++ {
-		p, _ := signer.SignPartial(shares[id].Serialize(), tag)
-		partials[tbft.OperatorID(id)] = p
+		partials[tbft.OperatorID(id)] = signTag(t, shares, id, tag)
 	}
-	bogusKey, _ := signer.AggregatePartials(partials)
+	bogusKey, _ := verifier.AggregatePartials(partials)
 
 	_, err = ibe.Decrypt(ct, bogusKey)
 	require.Error(t, err, "below-quorum aggregate must not unlock decryption")
@@ -113,8 +119,8 @@ func TestSignerGatedIBE_MalformedCiphertext(t *testing.T) {
 	threshold.Init()
 	master := &bls.SecretKey{}
 	master.SetByCSPRNG()
-	signer := New()
-	ibe := NewSignerGatedIBE(signer, master.GetPublicKey().Serialize())
+	verifier := New(nil)
+	ibe := NewSignerGatedIBE(verifier, master.GetPublicKey().Serialize())
 
 	tests := []struct {
 		name string

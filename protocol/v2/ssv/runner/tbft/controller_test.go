@@ -33,12 +33,13 @@ func TestController_New_ValidationErrors(t *testing.T) {
 				PubKeyShares: pubShares,
 				Committee:    committee,
 			},
+			// Signer left nil → constructor errors.
 			wantErr: "nil Signer",
 		},
 		{
 			name: "nil ibe",
 			opts: ControllerOptions{
-				Signer:       tbftcore.NewStubSigner(3),
+				Signer:       tbftcore.NewStubSigner(3, []byte{1}),
 				PubKeyShares: pubShares,
 				Committee:    committee,
 			},
@@ -47,7 +48,7 @@ func TestController_New_ValidationErrors(t *testing.T) {
 		{
 			name: "nil pubkeyshares",
 			opts: ControllerOptions{
-				Signer:    tbftcore.NewStubSigner(3),
+				Signer:    tbftcore.NewStubSigner(3, []byte{1}),
 				IBE:       tbftcore.NewStubIBE(3),
 				Committee: committee,
 			},
@@ -56,7 +57,7 @@ func TestController_New_ValidationErrors(t *testing.T) {
 		{
 			name: "empty committee",
 			opts: ControllerOptions{
-				Signer:       tbftcore.NewStubSigner(3),
+				Signer:       tbftcore.NewStubSigner(3, []byte{1}),
 				IBE:          tbftcore.NewStubIBE(3),
 				PubKeyShares: pubShares,
 			},
@@ -118,7 +119,7 @@ func TestController_LeaderAtLayers(t *testing.T) {
 			ClusterID:     [32]byte{0xAB},
 			ClusterPubKey: []byte("clusterpk"),
 			PubKeyShares:  pubShares,
-			Signer:        tbftcore.NewStubSigner(5),
+			Signer:        tbftcore.NewStubSigner(5, []byte{byte(opID)}),
 			IBE:           tbftcore.NewStubIBE(5),
 		})
 		require.NoError(t, err)
@@ -147,7 +148,7 @@ func TestController_NoSuchInstanceErrors(t *testing.T) {
 	err = c.ObserveCandidate(phase0.Slot(99), 0, []byte("v"))
 	require.ErrorContains(t, err, "no active instance")
 
-	_, err = c.BuildOwnOnion(phase0.Slot(99), []byte("share"))
+	_, err = c.BuildOwnOnion(phase0.Slot(99))
 	require.ErrorContains(t, err, "no active instance")
 }
 
@@ -246,19 +247,22 @@ func TestController_MultiCluster_HealthyEndToEnd(t *testing.T) {
 		committee[i] = spectypes.OperatorID(i + 1)
 	}
 
-	signer := blsbackend.New()
-	ibe := blsbackend.NewSignerGatedIBE(signer, masterPub)
+	verifier := blsbackend.New(nil)
+	ibe := blsbackend.NewSignerGatedIBE(verifier, masterPub)
 
-	// Build one Controller per operator.
+	// Build one Controller per operator, each with its own share-bound
+	// BLSSigner. Aggregation/verification are share-independent so any of
+	// the controllers' signers can do them.
 	controllers := make(map[spectypes.OperatorID]*Controller, n)
 	for _, op := range committee {
+		opSigner := blsbackend.New(shares[uint64(op)].Serialize())
 		c, err := NewController(ControllerOptions{
 			OperatorID:    op,
 			Committee:     committee,
 			ClusterID:     [32]byte{0xCC, 0xCC},
 			ClusterPubKey: masterPub,
 			PubKeyShares:  pubShares,
-			Signer:        signer,
+			Signer:        opSigner,
 			IBE:           ibe,
 		})
 		require.NoError(t, err)
@@ -298,10 +302,9 @@ func TestController_MultiCluster_HealthyEndToEnd(t *testing.T) {
 	produces := make(map[spectypes.OperatorID]*prod, n)
 
 	for _, op := range committee {
-		share := shares[uint64(op)].Serialize()
-		o, err := controllers[op].BuildOwnOnion(slot, share)
+		o, err := controllers[op].BuildOwnOnion(slot)
 		require.NoError(t, err)
-		nrs, err := controllers[op].BuildOwnNonReceipts(slot, share)
+		nrs, err := controllers[op].BuildOwnNonReceipts(slot)
 		require.NoError(t, err)
 		produces[op] = &prod{onion: o, nonReceipts: nrs}
 	}
@@ -333,7 +336,7 @@ func TestController_MultiCluster_HealthyEndToEnd(t *testing.T) {
 	}
 
 	// Reconstructed signature must verify under the master pubkey.
-	require.True(t, signer.VerifyAggregate(masterPub, ref.Value, ref.Signature))
+	require.True(t, verifier.VerifyAggregate(masterPub, ref.Value, ref.Signature))
 
 	// Lifecycle: end the instance on every controller; subsequent operations error.
 	for _, op := range committee {
@@ -363,7 +366,7 @@ func newStubController(t *testing.T, n int) *Controller {
 		ClusterID:     [32]byte{},
 		ClusterPubKey: []byte("clusterpk"),
 		PubKeyShares:  pubShares,
-		Signer:        tbftcore.NewStubSigner(q),
+		Signer:        tbftcore.NewStubSigner(q, []byte{1}),
 		IBE:           tbftcore.NewStubIBE(q),
 	})
 	require.NoError(t, err)

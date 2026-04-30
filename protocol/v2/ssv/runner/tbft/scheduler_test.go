@@ -25,11 +25,11 @@ func TestNewScheduler_ValidationErrors(t *testing.T) {
 	c := newStubController(t, 7)
 
 	// Nil controller.
-	_, err := NewScheduler(nil, &LifecycleHooks{}, []byte{1})
+	_, err := NewScheduler(nil, &LifecycleHooks{})
 	require.ErrorContains(t, err, "nil Controller")
 
 	// Nil hooks.
-	_, err = NewScheduler(c, nil, []byte{1})
+	_, err = NewScheduler(c, nil)
 	require.ErrorContains(t, err, "nil LifecycleHooks")
 
 	// Missing required hook fields.
@@ -65,14 +65,10 @@ func TestNewScheduler_ValidationErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewScheduler(c, tc.hooks, []byte{1})
+			_, err := NewScheduler(c, tc.hooks)
 			require.ErrorContains(t, err, tc.wantErr)
 		})
 	}
-
-	// Empty share.
-	_, err = NewScheduler(c, mockHooks().hooks, nil)
-	require.ErrorContains(t, err, "empty share")
 }
 
 // ---- FetchAndBroadcastCandidate ------------------------------------------
@@ -85,7 +81,7 @@ func TestScheduler_FetchAndBroadcastCandidate_HappyPath(t *testing.T) {
 	mh := mockHooks()
 	mh.fetchValues[layerKey{100, 0}] = []byte("fetched-block-bytes")
 
-	s, err := NewScheduler(c, mh.hooks, []byte{1})
+	s, err := NewScheduler(c, mh.hooks)
 	require.NoError(t, err)
 
 	require.NoError(t, s.FetchAndBroadcastCandidate(context.Background(), phase0.Slot(100), 0))
@@ -113,7 +109,7 @@ func TestScheduler_FetchAndBroadcastCandidate_FetchError(t *testing.T) {
 
 	mh := mockHooks()
 	mh.fetchErr = errors.New("beacon node unreachable")
-	s, err := NewScheduler(c, mh.hooks, []byte{1})
+	s, err := NewScheduler(c, mh.hooks)
 	require.NoError(t, err)
 
 	err = s.FetchAndBroadcastCandidate(context.Background(), phase0.Slot(100), 0)
@@ -130,7 +126,7 @@ func TestScheduler_FetchAndBroadcastCandidate_BroadcastError(t *testing.T) {
 	mh := mockHooks()
 	mh.fetchValues[layerKey{100, 0}] = []byte("v")
 	mh.broadcastErr = errors.New("p2p down")
-	s, err := NewScheduler(c, mh.hooks, []byte{1})
+	s, err := NewScheduler(c, mh.hooks)
 	require.NoError(t, err)
 
 	err = s.FetchAndBroadcastCandidate(context.Background(), phase0.Slot(100), 0)
@@ -158,8 +154,9 @@ func TestScheduler_BuildAndBroadcastOnion_HappyPath(t *testing.T) {
 		committee[i] = spectypes.OperatorID(i + 1)
 	}
 
-	signer := blsbackend.New()
-	ibe := blsbackend.NewSignerGatedIBE(signer, masterPub)
+	verifier := blsbackend.New(nil)
+	ibe := blsbackend.NewSignerGatedIBE(verifier, masterPub)
+	op1Signer := blsbackend.New(shares[1].Serialize())
 
 	c, err := NewController(ControllerOptions{
 		OperatorID:    1,
@@ -167,7 +164,7 @@ func TestScheduler_BuildAndBroadcastOnion_HappyPath(t *testing.T) {
 		ClusterID:     [32]byte{0x01},
 		ClusterPubKey: masterPub,
 		PubKeyShares:  pubShares,
-		Signer:        signer,
+		Signer:        op1Signer,
 		IBE:           ibe,
 	})
 	require.NoError(t, err)
@@ -179,7 +176,7 @@ func TestScheduler_BuildAndBroadcastOnion_HappyPath(t *testing.T) {
 	// Operator 1 has no candidates → onion has all-empty layers, all
 	// non-receipts emitted (for layers in [0, K-1)).
 	mh := mockHooks()
-	s, err := NewScheduler(c, mh.hooks, shares[1].Serialize())
+	s, err := NewScheduler(c, mh.hooks)
 	require.NoError(t, err)
 
 	require.NoError(t, s.BuildAndBroadcastOnion(context.Background(), slot))
@@ -217,7 +214,7 @@ func TestScheduler_ResolveAndSubmit_NoQuorum_CallsOnMissedSlot(t *testing.T) {
 		missedCalled++
 	}
 
-	s, err := NewScheduler(c, mh.hooks, []byte{1})
+	s, err := NewScheduler(c, mh.hooks)
 	require.NoError(t, err)
 
 	err = s.ResolveAndSubmit(context.Background(), phase0.Slot(100))
@@ -229,7 +226,7 @@ func TestScheduler_ResolveAndSubmit_NoQuorum_CallsOnMissedSlot(t *testing.T) {
 func TestScheduler_ResolveAndSubmit_NoSuchInstance(t *testing.T) {
 	c := newStubController(t, 7)
 	mh := mockHooks()
-	s, err := NewScheduler(c, mh.hooks, []byte{1})
+	s, err := NewScheduler(c, mh.hooks)
 	require.NoError(t, err)
 
 	err = s.ResolveAndSubmit(context.Background(), phase0.Slot(99))
@@ -258,8 +255,8 @@ func TestScheduler_BelowQuorumCausesMissedSlot(t *testing.T) {
 	for i := 0; i < n; i++ {
 		committee[i] = spectypes.OperatorID(i + 1)
 	}
-	signer := blsbackend.New()
-	ibe := blsbackend.NewSignerGatedIBE(signer, masterPub)
+	verifier := blsbackend.New(nil)
+	ibe := blsbackend.NewSignerGatedIBE(verifier, masterPub)
 
 	const slot = phase0.Slot(7)
 
@@ -267,13 +264,14 @@ func TestScheduler_BelowQuorumCausesMissedSlot(t *testing.T) {
 	mhs := make(map[spectypes.OperatorID]*mockHooksRecorder, 2)
 	scheds := make(map[spectypes.OperatorID]*Scheduler, 2)
 	for _, op := range []spectypes.OperatorID{1, 2} {
+		opSigner := blsbackend.New(shares[uint64(op)].Serialize())
 		c, err := NewController(ControllerOptions{
 			OperatorID:    op,
 			Committee:     committee,
 			ClusterID:     [32]byte{0xAA},
 			ClusterPubKey: masterPub,
 			PubKeyShares:  pubShares,
-			Signer:        signer,
+			Signer:        opSigner,
 			IBE:           ibe,
 		})
 		require.NoError(t, err)
@@ -281,7 +279,7 @@ func TestScheduler_BelowQuorumCausesMissedSlot(t *testing.T) {
 		require.NoError(t, err)
 
 		mh := mockHooks()
-		s, err := NewScheduler(c, mh.hooks, shares[uint64(op)].Serialize())
+		s, err := NewScheduler(c, mh.hooks)
 		require.NoError(t, err)
 		mhs[op] = mh
 		scheds[op] = s

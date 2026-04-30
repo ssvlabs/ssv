@@ -51,10 +51,8 @@ func TestEndToEndRealIBE_LayerFallthrough(t *testing.T) {
 		pubKeyShares[tbft.OperatorID(id)] = sk.GetPublicKey().Serialize()
 	}
 
-	// Two signers: BLSSigner (value-signing, Eth2 DST) + KyberSigner
-	// (tag-signing, drand DST). BOTH consume the same operator share.
-	valueSigner := blsbackend.New()
-	tagSigner := blsbackend.NewKyberSigner()
+	// Verifier-only signers used for cluster-wide verification at the end.
+	valueVerifier := blsbackend.New(nil)
 	ibeImpl := blsbackend.NewTLockIBE()
 
 	// Build cluster Config.
@@ -90,10 +88,15 @@ func TestEndToEndRealIBE_LayerFallthrough(t *testing.T) {
 	produces := make(map[tbft.OperatorID]*produced)
 	instances := make(map[tbft.OperatorID]*tbft.Instance)
 
-	// Each operator builds an Instance with BOTH signers.
+	// Each operator builds an Instance with their OWN pair of signers
+	// (value-signer + tag-signer), both bound to that operator's share.
+	// This matches the production model: each ProposerRunner has one
+	// share and constructs its own pair of share-bound signers.
 	for _, op := range operators {
 		share := shares[uint64(op)].Serialize()
-		inst, err := tbft.NewInstanceWithTagSigner(cfg, valueSigner, tagSigner, ibeImpl, masterPub, pubKeyShares)
+		opValueSigner := blsbackend.New(share)          // Eth2 DST, share-bound
+		opTagSigner := blsbackend.NewKyberSigner(share) // drand DST, same share
+		inst, err := tbft.NewInstanceWithTagSigner(cfg, opValueSigner, opTagSigner, ibeImpl, masterPub, pubKeyShares)
 		require.NoError(t, err)
 		instances[op] = inst
 
@@ -101,9 +104,9 @@ func TestEndToEndRealIBE_LayerFallthrough(t *testing.T) {
 			require.NoError(t, inst.ObserveCandidate(k, v))
 		}
 
-		onion, err := inst.BuildOwnOnion(op, share)
+		onion, err := inst.BuildOwnOnion(op)
 		require.NoError(t, err)
-		nrs, err := inst.BuildOwnNonReceipts(op, share)
+		nrs, err := inst.BuildOwnNonReceipts(op)
 		require.NoError(t, err)
 		produces[op] = &produced{onion: onion, nonReceipts: nrs}
 	}
@@ -139,7 +142,7 @@ func TestEndToEndRealIBE_LayerFallthrough(t *testing.T) {
 	// for the decided value — and should equal what the master would
 	// sign directly (BLS determinism). This is the Eth2-compatible
 	// signature SSV's beacon submission expects.
-	require.True(t, valueSigner.VerifyAggregate(masterPub, ref.Value, ref.Signature),
+	require.True(t, valueVerifier.VerifyAggregate(masterPub, ref.Value, ref.Signature),
 		"reconstructed signature must verify under master pubkey (Eth2 BLS)")
 	masterDirect := master.SignByte(ref.Value).Serialize()
 	require.True(t, bytes.Equal(masterDirect, ref.Signature),

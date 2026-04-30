@@ -20,6 +20,11 @@ import (
 // herumi-generated validator share serves both validator-output signing
 // and IBE-tag signing. No separate DKG is required.
 //
+// A KyberSigner is bound to one operator's secret share at construction —
+// the share never travels through the call stack as a parameter. As with
+// BLSSigner, aggregation and verification are stateless wrt the bound
+// share and work on any KyberSigner instance.
+//
 // Wire format for partial / aggregate signatures: kyber's G2 compressed
 // point bytes (96 bytes). The IBE decryption path takes the aggregated
 // signature bytes, parses them back into a kyber G2 point, and uses it
@@ -35,21 +40,35 @@ import (
 //   - partial / sig: kyber G2 compressed point bytes (96 bytes)
 type KyberSigner struct {
 	suite pairing.Suite
+	// share is the herumi-format BLS secret-share bytes the signer is
+	// bound to (interpreted as a kyber scalar via HerumiShareToKyberScalar).
+	// May be empty for verify-only / aggregate-only use cases (SignPartial
+	// then returns an error).
+	share []byte
 }
 
-// NewKyberSigner constructs a KyberSigner using kyber-bls12381's default
-// suite (with default DSTs — drand's NUL DST for G2).
-func NewKyberSigner() *KyberSigner {
-	return &KyberSigner{suite: bls12381.NewBLS12381Suite()}
+// NewKyberSigner constructs a KyberSigner bound to `share`, using
+// kyber-bls12381's default suite (with default DSTs — drand's NUL DST for
+// G2). `share` may be nil/empty for verify-only / aggregate-only use cases.
+func NewKyberSigner(share []byte) *KyberSigner {
+	out := &KyberSigner{suite: bls12381.NewBLS12381Suite()}
+	if len(share) > 0 {
+		out.share = append([]byte(nil), share...)
+	}
+	return out
 }
 
 // SignPartial computes `share · H_G2(msg)` using kyber's hash-to-G2 with
-// drand's DST. Returns the kyber G2 compressed point bytes.
-func (k *KyberSigner) SignPartial(share []byte, msg []byte) (tbft.Signature, error) {
+// drand's DST, where `share` is the bound share from construction. Returns
+// the kyber G2 compressed point bytes.
+func (k *KyberSigner) SignPartial(msg []byte) (tbft.Signature, error) {
+	if len(k.share) == 0 {
+		return nil, errors.New("blsbackend: KyberSigner has no share bound (verify-only)")
+	}
 	if len(msg) == 0 {
 		return nil, errors.New("blsbackend: KyberSigner: empty message")
 	}
-	scalar, err := HerumiShareToKyberScalar(share)
+	scalar, err := HerumiShareToKyberScalar(k.share)
 	if err != nil {
 		return nil, err
 	}
