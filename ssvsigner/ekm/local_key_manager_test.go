@@ -354,3 +354,64 @@ func TestEkmListAccounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, accounts, 2)
 }
+
+func TestGetShareBytes(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, operatorPrivateKey).(*LocalKeyManager)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+	pk1 := phase0.BLSPubKey(sk1.GetPublicKey().Serialize())
+
+	t.Run("returns cached bytes after AddShare", func(t *testing.T) {
+		got, err := km.GetShareBytes(pk1)
+		require.NoError(t, err)
+		require.Equal(t, sk1.Serialize(), got, "cached path returns the share bytes that AddShare ingested")
+	})
+
+	t.Run("falls back to wallet when cache is empty", func(t *testing.T) {
+		// Drop the cache entry — this simulates a process restart
+		// where the wallet is loaded from disk but AddShare hasn't
+		// been replayed for this share.
+		km.shareBytesMu.Lock()
+		delete(km.shareBytes, pk1)
+		km.shareBytesMu.Unlock()
+
+		got, err := km.GetShareBytes(pk1)
+		require.NoError(t, err)
+		require.Equal(t, sk1.Serialize(), got, "wallet fallback returns the same bytes as AddShare cached")
+
+		// And the result should now be cached for next time.
+		km.shareBytesMu.RLock()
+		_, ok := km.shareBytes[pk1]
+		km.shareBytesMu.RUnlock()
+		require.True(t, ok, "wallet fallback populated the cache")
+	})
+
+	t.Run("returns error for an unregistered pubkey", func(t *testing.T) {
+		var unknown phase0.BLSPubKey
+		// 48 bytes of an arbitrary value — almost certainly not a real account.
+		for i := range unknown {
+			unknown[i] = 0x42
+		}
+		_, err := km.GetShareBytes(unknown)
+		require.ErrorContains(t, err, "no share registered")
+	})
+
+	t.Run("RemoveShare clears the cache", func(t *testing.T) {
+		require.NoError(t, km.RemoveShare(t.Context(), nil, pk1))
+
+		km.shareBytesMu.RLock()
+		_, ok := km.shareBytes[pk1]
+		km.shareBytesMu.RUnlock()
+		require.False(t, ok, "RemoveShare removed the cache entry")
+
+		_, err := km.GetShareBytes(pk1)
+		require.ErrorContains(t, err, "no share registered",
+			"after RemoveShare the wallet account is also gone, so the fallback errors too")
+	})
+}

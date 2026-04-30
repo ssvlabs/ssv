@@ -313,7 +313,7 @@ Most Phase 0 questions resolved. Remaining:
 
 ### Deferred follow-ups
 
-- [ ] **EKM "share-bytes" Option B (production-grade).** The current Option A path exposes share bytes from `LocalKeyManager` to construct `BLSSigner` / `KyberSigner`. This works for local-mode operators but does NOT work for remote-signing operators (ssv-signer + Web3Signer never put share bytes on the SSV node). Production-grade fix: add new endpoints to ssv-signer / Web3Signer that produce signatures under both Eth2 DST (already there) and drand DST (new), and refactor `tbft.Signer` to call into ekm rather than holding share bytes locally. Multi-repo scope. Defer until devnet validation establishes TBFT is keepers-of-the-light mainnet-shaped.
+- [ ] **EKM "share-bytes" Option B (production-grade).** The current Option A path exposes share bytes from `LocalKeyManager` to construct `BLSSigner` / `KyberSigner`. This works for local-mode operators (the bytes are pulled from the loaded wallet account on demand, see `LocalKeyManager.GetShareBytes`) but does NOT work for remote-signing operators (ssv-signer + Web3Signer never put share bytes on the SSV node). Production-grade fix: add new endpoints to ssv-signer / Web3Signer that produce signatures under both Eth2 DST (already there) and drand DST (new), and refactor `tbft.Signer` to call into ekm rather than holding share bytes locally. Multi-repo scope. Defer until devnet validation establishes TBFT is mainnet-shaped.
 - [ ] **Allocate stable `MsgType` byte for TBFT envelopes.** Current placeholder `0xF0` (= 240). Coordinate with SSV-team for a permanent ecosystem-wide allocation before mainnet. Older SSV nodes seeing this type will *reject* the message via `ErrUnknownSSVMessageType` (`reject: true`) — a libp2p-pubsub `ValidationReject` outcome that drops the message and decrements the sender's peer score. Mixed-cluster rollouts (some operators on TBFT-binary, some on QBFT-only binary) will therefore degrade gossip; the rollout model must hard-prevent this (covered in Phase 7 / registry signaling). For a coordinated "everyone upgrades together" rollout this isn't an issue.
 
 ## Risks register
@@ -426,7 +426,7 @@ Companion docs:
 
 1. **`proposer.go` modifications — DONE.** TBFT path lives behind `ProposerRunnerOptions.TBFTController`; nil keeps the QBFT path. See [proposer.go](protocol/v2/ssv/runner/proposer.go) and [proposer_tbft.go](protocol/v2/ssv/runner/proposer_tbft.go).
 
-2. **EKM share-bytes accessor (Option A).** Local-mode-only path so the validator controller can hand raw share bytes to `BLSSigner` / `KyberSigner` constructors. New in-memory cache populated at `AddShare`. Remote-mode operators are blocked until Option B (above) lands.
+2. **EKM share-bytes accessor (Option A).** Local-mode-only path so the validator controller can hand raw share bytes to `BLSSigner` / `KyberSigner` constructors. In-memory cache populated at `AddShare`, with a fallback that extracts bytes from the loaded wallet account on cache miss (so shares persisted across process restarts are usable without re-replaying contract events). Remote-mode operators stay blocked until Option B (above) lands.
 
 3. **Validator-controller wiring.** `operator/validator/controller.go`'s `SetupRunners` constructs the `tbftadapter.Controller` with the operator's share + cluster config + signers + TLockIBE, and passes `TBFTController` to `NewProposerRunner`.
 

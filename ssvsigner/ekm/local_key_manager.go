@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -382,6 +383,14 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn ReadWriteTxn, pubK
 // share corresponding to `pubKey`. Returns an error if no share for the
 // given pubkey is registered.
 //
+// On a cache miss, falls back to extracting the bytes from the loaded
+// wallet account — the share is sitting in memory inside the eth2-key-
+// manager `HDAccount.validationKey`, just behind an unexported field.
+// We round-trip through its JSON marshaller (the same one the wallet
+// uses to persist itself) to read the private-key hex out. This makes
+// shares loaded from disk on process restart usable here without
+// re-replaying contract events.
+//
 // Security note: the returned bytes are sensitive material. Callers
 // should hold them only as long as needed and avoid logging.
 //
@@ -392,12 +401,70 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn ReadWriteTxn, pubK
 // case (e.g. by skipping TBFT-related setup for that runner).
 func (km *LocalKeyManager) GetShareBytes(pubKey phase0.BLSPubKey) ([]byte, error) {
 	km.shareBytesMu.RLock()
-	bytes, ok := km.shareBytes[pubKey]
+	cached, ok := km.shareBytes[pubKey]
 	km.shareBytesMu.RUnlock()
-	if !ok {
+	if ok {
+		return append([]byte(nil), cached...), nil
+	}
+
+	bytes, err := km.extractShareBytesFromWallet(pubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	km.shareBytesMu.Lock()
+	km.shareBytes[pubKey] = bytes
+	km.shareBytesMu.Unlock()
+	return append([]byte(nil), bytes...), nil
+}
+
+// extractShareBytesFromWallet pulls the BLS private-key bytes out of
+// the eth2-key-manager wallet account whose validator pubkey matches
+// `pubKey`. The wallet stores these bytes in memory (loaded from
+// encrypted DB at startup) but only exposes them via JSON marshal/
+// unmarshal. We piggyback on that.
+//
+// Returns ("ekm: no share registered for pubkey ..." error) if no
+// wallet account matches.
+func (km *LocalKeyManager) extractShareBytesFromWallet(pubKey phase0.BLSPubKey) ([]byte, error) {
+	km.walletLock.RLock()
+	defer km.walletLock.RUnlock()
+
+	pubKeyHex := hex.EncodeToString(pubKey[:])
+	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
+	if err != nil {
+		// "account not found" surfaces through this error path; map
+		// to the same not-registered shape as the cache miss.
 		return nil, fmt.Errorf("ekm: no share registered for pubkey %x", pubKey[:])
 	}
-	return append([]byte(nil), bytes...), nil
+	if acc == nil {
+		return nil, fmt.Errorf("ekm: no share registered for pubkey %x", pubKey[:])
+	}
+
+	// HDAccount.MarshalJSON writes the validation key (an HDKey) as a
+	// nested object whose `privKey` is hex-serialised secret-key bytes.
+	// This format is stable — it's how the wallet itself round-trips
+	// to and from the encrypted DB on every load.
+	raw, err := json.Marshal(acc)
+	if err != nil {
+		return nil, fmt.Errorf("ekm: marshal wallet account: %w", err)
+	}
+	var aux struct {
+		ValidationKey struct {
+			PrivKey string `json:"privKey"`
+		} `json:"validationKey"`
+	}
+	if err := json.Unmarshal(raw, &aux); err != nil {
+		return nil, fmt.Errorf("ekm: parse wallet account JSON: %w", err)
+	}
+	if aux.ValidationKey.PrivKey == "" {
+		return nil, fmt.Errorf("ekm: wallet account missing privKey for pubkey %x", pubKey[:])
+	}
+	out, err := hex.DecodeString(aux.ValidationKey.PrivKey)
+	if err != nil {
+		return nil, fmt.Errorf("ekm: decode privKey hex: %w", err)
+	}
+	return out, nil
 }
 
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
