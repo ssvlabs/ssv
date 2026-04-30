@@ -28,8 +28,21 @@ import (
 // SSV adapter runs each Instance in its own goroutine fed by a message
 // queue.
 type Instance struct {
-	cfg           *Config
-	signer        Signer
+	cfg *Config
+
+	// signer signs candidate values (Phase-2 onion contents) and verifies
+	// per-partial sigs during Resolve. For SSV, this is the BLSSigner
+	// (herumi-backed, Eth2 DST).
+	signer Signer
+
+	// tagSigner signs no-quorum tags (NonReceiptAttestations) and
+	// aggregates them to derive IBE decryption keys. For real IBE under
+	// the "DST trick" (see docs/IBE-INTEGRATION.md), this is the
+	// KyberSigner (kyber-backed, drand DST). If nil, falls back to
+	// `signer` — sufficient when paired with SignerGatedIBE / StubIBE
+	// where one DST suffices.
+	tagSigner Signer
+
 	ibe           ThresholdIBE
 	clusterPubKey []byte
 
@@ -70,16 +83,38 @@ type InconsistencyFault struct {
 	Layer      int
 }
 
-// NewInstance creates a new consensus instance for the given config.
+// NewInstance creates a new consensus instance with `signer` used for both
+// value-signing AND tag-signing. Equivalent to NewInstanceWithTagSigner
+// with `tagSigner == nil`. Suitable when the IBE primitive accepts the
+// same Signer's aggregates as decryption keys (e.g. SignerGatedIBE).
 //
-//   - `clusterPubKey` is the validator's BLS pubkey (the IBE trust anchor
-//     under the Option-A keypair model — see docs/TASKS.md).
+//   - `clusterPubKey` is the validator's BLS pubkey (the IBE trust anchor).
 //   - `pubKeyShares` maps operator IDs to their pubkey shares; used by
 //     Resolve to verify per-operator partial signatures via
 //     `Signer.VerifyPartial`.
 func NewInstance(
 	cfg *Config,
 	signer Signer,
+	ibe ThresholdIBE,
+	clusterPubKey []byte,
+	pubKeyShares map[OperatorID][]byte,
+) (*Instance, error) {
+	return NewInstanceWithTagSigner(cfg, signer, nil, ibe, clusterPubKey, pubKeyShares)
+}
+
+// NewInstanceWithTagSigner creates a new consensus instance with separate
+// signers for value-signing and tag-signing. This is the constructor used
+// when the IBE primitive expects a *different* signature format for its
+// decryption keys than the validator-output sigs (e.g. real cryptographic
+// IBE via TLockIBE, where IBE-tag sigs are kyber-format and validator-output
+// sigs are herumi-format). See docs/IBE-INTEGRATION.md.
+//
+// If `tagSigner` is nil, falls back to using `signer` for both purposes —
+// matching the behavior of NewInstance.
+func NewInstanceWithTagSigner(
+	cfg *Config,
+	signer Signer,
+	tagSigner Signer,
 	ibe ThresholdIBE,
 	clusterPubKey []byte,
 	pubKeyShares map[OperatorID][]byte,
@@ -93,9 +128,13 @@ func NewInstance(
 	if pubKeyShares == nil {
 		return nil, errors.New("tbft: nil pubKeyShares (need at least an empty map)")
 	}
+	if tagSigner == nil {
+		tagSigner = signer
+	}
 	return &Instance{
 		cfg:           cfg,
 		signer:        signer,
+		tagSigner:     tagSigner,
 		ibe:           ibe,
 		clusterPubKey: clusterPubKey,
 		pubKeyShares:  pubKeyShares,
@@ -176,6 +215,11 @@ func (i *Instance) BuildOwnOnion(operatorID OperatorID, share []byte) (*Onion, e
 // [0, K-1) where this operator does NOT have a candidate. These are the
 // non-receipts the operator should broadcast given its current view.
 //
+// Tag-signing uses i.tagSigner (which falls back to i.signer if not
+// separately configured). Under the DST-trick approach, tagSigner is the
+// kyber-backed Signer so the resulting partial sigs can aggregate into
+// a valid IBE decryption key.
+//
 // Per the equivocation-handling rule: if the operator has detected leader
 // equivocation at a layer (multiple distinct values broadcast), the caller
 // should NOT have called ObserveCandidate for that layer — leaving it
@@ -188,7 +232,7 @@ func (i *Instance) BuildOwnNonReceipts(operatorID OperatorID, share []byte) ([]*
 		if _, has := i.candidates[layer]; has {
 			continue
 		}
-		nr, err := BuildNonReceipt(i.cfg, operatorID, share, layer, i.signer)
+		nr, err := BuildNonReceipt(i.cfg, operatorID, share, layer, i.tagSigner)
 		if err != nil {
 			return nil, err
 		}
@@ -363,10 +407,11 @@ func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 		return nil, nil
 	}
 	// Aggregate the non-receipt partials into a full BLS signature on the
-	// no-quorum tag. Under Option A, this aggregate IS the IBE decryption
-	// key for layer+1 directly — the IBE primitive's encryption is bound
-	// to whatever message the cluster's threshold signature signs.
-	full, err := i.signer.AggregatePartials(partials)
+	// no-quorum tag. Under the DST-trick approach, this aggregate IS the
+	// IBE decryption key for layer+1 directly — the IBE primitive's
+	// encryption is bound to a message the cluster's tagSigner-aggregated
+	// threshold signature signs.
+	full, err := i.tagSigner.AggregatePartials(partials)
 	if err != nil {
 		return nil, err
 	}

@@ -41,6 +41,7 @@ type Controller struct {
 	pubKeyShares  map[tbftcore.OperatorID][]byte
 
 	signer    tbftcore.Signer
+	tagSigner tbftcore.Signer // may be nil → falls back to signer in Instance ctor
 	ibe       tbftcore.ThresholdIBE
 	overrides *ConfigOverrides
 
@@ -93,9 +94,24 @@ type ControllerOptions struct {
 	// to verify per-partial signatures during Resolve.
 	PubKeyShares map[tbftcore.OperatorID][]byte
 
-	// Signer + IBE — concrete primitive backends.
+	// Signer is used for value-signing (Phase-2 onion contents) and for
+	// per-partial verification during Resolve. For SSV this is typically
+	// `blsbackend.BLSSigner` (herumi-backed, Eth2 DST).
 	Signer tbftcore.Signer
-	IBE    tbftcore.ThresholdIBE
+
+	// TagSigner is used for IBE-tag signing (NonReceiptAttestations) and
+	// for aggregating non-receipts into IBE decryption keys. If nil,
+	// `Signer` is used for both purposes — sufficient when the IBE
+	// implementation accepts the value-signer's aggregate format (e.g.
+	// `SignerGatedIBE` or `StubIBE`).
+	//
+	// For real cryptographic IBE under the DST-trick approach (see
+	// docs/IBE-INTEGRATION.md), set this to `blsbackend.KyberSigner`
+	// alongside an IBE of `blsbackend.TLockIBE`.
+	TagSigner tbftcore.Signer
+
+	// IBE — concrete primitive backend for layer-encryption.
+	IBE tbftcore.ThresholdIBE
 
 	// Overrides — optional protocol parameter overrides; nil uses defaults.
 	Overrides *ConfigOverrides
@@ -127,6 +143,7 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		clusterPubKey: opts.ClusterPubKey,
 		pubKeyShares:  opts.PubKeyShares,
 		signer:        opts.Signer,
+		tagSigner:     opts.TagSigner, // may be nil; Instance ctor handles fallback
 		ibe:           opts.IBE,
 		overrides:     opts.Overrides,
 		instances:     make(map[phase0.Slot]*RunningInstance),
@@ -152,7 +169,9 @@ func (c *Controller) StartNewInstance(slot phase0.Slot) (*RunningInstance, error
 		return nil, fmt.Errorf("tbft adapter: build config: %w", err)
 	}
 
-	inst, err := tbftcore.NewInstance(cfg, c.signer, c.ibe, c.clusterPubKey, c.pubKeyShares)
+	inst, err := tbftcore.NewInstanceWithTagSigner(
+		cfg, c.signer, c.tagSigner, c.ibe, c.clusterPubKey, c.pubKeyShares,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("tbft adapter: new instance: %w", err)
 	}

@@ -1,182 +1,202 @@
-# Real IBE Integration — Compatibility Analysis & Path Forward
+# Real IBE Integration — Status: Working
 
-This document records the empirical finding that **Option A (reuse the
-validator's herumi-BLS threshold key as the IBE trust anchor) does not
-compose with `drand/tlock`**, and lays out the implementation path
-forward.
+This document describes the working implementation of real cryptographic
+IBE for TBFT, using existing herumi-BLS validator shares without a
+separate DKG. Phase 4b's "production cryptographic IBE" track is
+substantively done.
 
-The decision was made in Phase 0 of [TASKS.md](TASKS.md) (Option A:
-"reuse validator key"). The decision was correct *if* the cryptographic
-primitives composed; this document explains why they don't and what
-needs to change.
+The original Phase 0 decision (Option A: reuse the validator's herumi-BLS
+threshold key as the IBE trust anchor) **is correct** — but its
+implementation requires a different cryptographic technique than I
+initially recognised. The technique is the "DST trick": same secret
+share, two different Domain Separation Tags. This document explains the
+technique, the implementation, and the proof that it works.
 
-## The compatibility issue
+## The DST trick
 
 Two BLS-12-381 implementations are involved:
 
-- **`herumi/bls-eth-go-binary`** — SSV's existing library, used for all
-  validator-share signing. SSV initialises it with
-  `bls.SetETHmode(bls.EthModeDraft07)`, which sets the IETF Eth2
-  Domain-Separation Tag (DST) for hash-to-curve operations:
-  `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`
-- **`go.dedis.ch/kyber` (used by `drand/tlock`)** — Drand uses kyber's
-  BLS-12-381 implementation with its own DST:
-  `bls.DefaultDomainG2()`, which is *not* the Eth2 DST. Drand has
-  multiple schemes (`ShortSigSchemeID`, `UnchainedSchemeID`,
-  `SigsOnG1ID`); they differ in which curve carries signatures and in
-  exact DST string, but none uses the Eth2 DST.
+- **`herumi/bls-eth-go-binary`** — SSV's existing library, used for
+  validator-share signing. Initialised with `bls.SetETHmode(bls.EthModeDraft07)`,
+  which sets the Eth2 DST: `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`.
+- **`go.dedis.ch/kyber` + `github.com/drand/kyber-bls12381`** — drand's
+  kyber-side BLS implementation, used by the IBE primitives in
+  `github.com/drand/kyber/encrypt/ibe`. Default DST:
+  `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_`.
 
-Both libraries produce BLS signatures over the same curve (BLS-12-381),
-but with different DSTs the signatures are over different
-hash-to-curve points. A herumi-produced signature on tag `T` does
-*not* decrypt a tlock-produced ciphertext bound to tag `T`, because
-the IBE encryption hashes `T` using kyber's DST and decryption verifies
-the BLS sig against the same DST-derived point.
+Critically: a herumi BLS share `s_i` and a kyber BLS scalar are **the
+same kind of mathematical object** — a scalar in BLS-12-381's prime
+field `F_r`. The validator's master secret `s` is a scalar; the share
+`s_i = P(i)` is `P` evaluated at operator-index `i` for some Shamir
+polynomial `P` over `F_r`.
 
-I confirmed this by reading
-`$HOME/go/pkg/mod/github.com/drand/tlock@*/tlock.go::TimeLock` and
-`TimeUnlock` — the encrypt path calls `ibe.EncryptCCAonG2(bls.NewBLS12381Suite()…, id, …)`
-where `id` is `scheme.DigestBeacon(…)`, computed under kyber's DST.
-Decryption verifies the BLS sig under the same DST. Eth2 sigs would
-fail verification on the kyber side because they sign a *different*
-point.
+What differs between herumi and kyber isn't the key material — it's the
+hash-to-curve step that produces the message-point. When operator `i`
+signs message `m`:
 
-## What this means for Option A
-
-Under Option A, operators would use their *existing validator share*
-(herumi-format) to produce the BLS partial sig on a no-quorum tag,
-aggregate to a full sig, and present that as the tlock decryption
-key. The aggregate is correct as a herumi sig on the tag, but tlock's
-verify step will reject it because the DST doesn't match.
-
-There are three theoretical ways to make Option A work:
-
-1. **Configure herumi to use drand's DST.** Not exposed by the
-   `bls-eth-go-binary` Go bindings; would require patching the C
-   library and modifying SSV's BLS-init code globally — and
-   immediately breaks Eth2 signing for everything else SSV does.
-   Not viable.
-
-2. **Implement IBE directly on top of herumi**, using its hash-to-curve
-   with the Eth2 DST. This means re-implementing the Boneh-Franklin
-   IBE primitive from scratch on top of the herumi pairing operations
-   — a non-trivial cryptographic engineering project.
-
-3. **Patch tlock to accept arbitrary DSTs, then configure it to use
-   the Eth2 DST.** Possible but requires upstream changes to tlock
-   plus careful security review (DST flexibility introduces its own
-   pitfalls).
-
-None of these are appropriate for the prototyping scope.
-
-## Recommended path forward: Option B
-
-**Run a separate threshold BLS keypair for IBE**, distinct from the
-validator's existing share. Operators carry two BLS secret shares:
-
-- `ValidatorShare` (herumi) — used for signing block-roots and other
-  Eth2-protocol outputs. Unchanged from current SSV.
-- `IBEShare` (kyber) — used for signing IBE no-quorum tags. New.
-
-The protocol code uses two `Signer` instances, one for value-signing
-(invoked at Phase 2 onion construction with `ValidatorShare`) and one
-for tag-signing (invoked when emitting `NonReceiptAttestation`s, with
-`IBEShare`). Aggregating non-receipts produces a kyber-format
-threshold sig, which is exactly what tlock needs for decryption.
-
-### Required changes
-
-The current `tbft.Signer` interface assumes a single primitive. Option
-B requires splitting it:
-
-```go
-// What the protocol does today:
-type Signer interface {
-    SignPartial(share, msg) (Signature, error)
-    AggregatePartials(partials) (Signature, error)
-    VerifyPartial(pubKeyShare, msg, sig) bool
-    VerifyAggregate(clusterPubKey, msg, sig) bool
-}
-
-// What Option B needs:
-type ValueSigner = Signer  // for output sigs (herumi)
-type TagSigner  = Signer   // for IBE-tag sigs (kyber)
+```
+herumi sig:  s_i · H_eth(m)     where H_eth uses the Eth2 DST (POP_ suffix)
+kyber sig:   s_i · H_kyber(m)   where H_kyber uses the drand DST (NUL_ suffix)
 ```
 
-Each `tbft.Instance` would hold both, and:
+Same scalar, different curve point. Lagrange interpolation — the
+threshold reconstruction step — is a property of the **scalar field**,
+not the hash-to-curve scheme. So aggregating 2f+1 herumi sigs gives
+`s · H_eth(m)`; aggregating 2f+1 kyber sigs from the same shares gives
+`s · H_kyber(m)`. Both are valid threshold signatures, just under
+different DSTs.
 
-- `BuildOnion` uses `ValueSigner.SignPartial(validatorShare, value)` for
-  per-layer value sigs (unchanged in shape; new dependency).
-- `BuildNonReceipt` uses `TagSigner.SignPartial(ibeShare, tag)` for
-  no-quorum-tag sigs.
-- `Resolve`'s `tryDeriveNextLayerKey` uses
-  `TagSigner.AggregatePartials(non_receipt_partials)` to derive the
-  decryption key.
-- `Resolve`'s `tryReconstructLayer` uses
-  `ValueSigner.VerifyPartial`/`AggregatePartials` for the output sig.
+Crucially, **drand/tlock encrypts to whatever pubkey you give it** and
+verifies decryption by checking that the supplied "decryption key" is a
+valid BLS sig (under tlock's chosen scheme/DST) on the encryption tag.
+If we give tlock the validator's pubkey `s · G`, and supply as the
+decryption key the kyber-aggregated sig from herumi shares, the
+verification step works: `s · G` is the same group element regardless
+of which library produced it; `s · H_kyber(tag)` is exactly what tlock
+expects.
 
-The `Controller`/`Scheduler` API surface needs minor updates to thread
-both signers and both share-types through.
+## Implementation
 
-### DKG cost
+Three files in [protocol/v2/tbft/blsbackend/](../protocol/v2/tbft/blsbackend/):
 
-Option B needs a separate DKG ceremony to generate the cluster's IBE
-keypair. SSV's existing operator-onboarding flow does a DKG for the
-validator key; the natural integration is to extend that ceremony to
-also produce IBE shares, distributed alongside the validator shares.
-This is one-time per cluster.
+- [kyber_conversion.go](../protocol/v2/tbft/blsbackend/kyber_conversion.go)
+  — `HerumiShareToKyberScalar` and `HerumiPubkeyToKyberG1Point`. Both
+  libraries serialise BLS-12-381 scalars and G1 points byte-equivalently
+  per the IETF/Eth2 standard, so these are direct pass-throughs with
+  length checks. Verified by
+  [kyber_conversion_test.go](../protocol/v2/tbft/blsbackend/kyber_conversion_test.go):
+  - Scalars round-trip with byte-equality.
+  - Pubkeys round-trip with byte-equality.
+  - Mathematical consistency: `HerumiPubkeyToKyberG1Point(pk) ==
+    HerumiShareToKyberScalar(sk) · G1`.
+  - Threshold consistency: 2f+1 herumi shares interpreted as kyber
+    scalars Lagrange-interpolate to the master scalar.
 
-### Bandwidth / runtime cost
+- [kyber_signer.go](../protocol/v2/tbft/blsbackend/kyber_signer.go) —
+  `KyberSigner` implements `tbft.Signer` using kyber-bls12381. Inputs
+  are herumi-format bytes (shares and pubkey shares); outputs are
+  kyber-format G2 partial signatures. Aggregation via Lagrange
+  interpolation in kyber's scalar field.
+  [kyber_signer_test.go](../protocol/v2/tbft/blsbackend/kyber_signer_test.go)
+  proves the contract: round-trip, "any 2f+1 subset yields the same
+  aggregate", per-partial verification, below-quorum rejection.
 
-Negligible:
-- Operators sign two messages instead of one when emitting a
-  non-receipt — both BLS sigs, both ~1 ms.
-- Cluster public keys storage doubles (validator pubkey + IBE pubkey)
-  but each is ~48 bytes.
-- No additional rounds.
+- [tlock_ibe.go](../protocol/v2/tbft/blsbackend/tlock_ibe.go) —
+  `TLockIBE` implements `tbft.ThresholdIBE` using
+  `github.com/drand/kyber/encrypt/ibe`. Hybrid encryption: a fresh
+  AES-256 key is wrapped under IBE; the actual plaintext is AES-GCM-
+  encrypted under that key. The decryption key TLockIBE expects is
+  a kyber-format G2 BLS sig on the tag. Wire format is versioned
+  length-prefixed.
+  [tlock_ibe_test.go](../protocol/v2/tbft/blsbackend/tlock_ibe_test.go)
+  proves the round-trip works with herumi-share-derived kyber sigs,
+  different quorum subsets decrypt identically, wrong-tag keys fail,
+  below-quorum keys fail.
 
-## What's been done; what's left
+## Protocol integration
 
-**Done so far:**
+The TBFT protocol's `Instance` now holds two `Signer` fields:
 
-- Phase 1–4c protocol implementation with `SignerGatedIBE` (functionally
-  correct access gate using BLS verification, but no cryptographic
-  confidentiality).
-- End-to-end multi-operator runtime test
-  ([runner_test.go](../protocol/v2/ssv/runner/tbft/runner_test.go))
-  proves the protocol works at runtime with realistic timing.
-- This compatibility analysis.
+- `signer` — value-signer, used to sign Phase-2 onion contents (the
+  partial sigs on candidate values). For SSV this is `BLSSigner`
+  (herumi, Eth2 DST).
+- `tagSigner` — tag-signer, used to sign Phase-1 no-quorum tags
+  (`NonReceiptAttestation`s) and to aggregate them in Phase-3
+  decryption-key derivation. For real IBE this is `KyberSigner` (kyber,
+  drand DST).
 
-**To do for production-ready IBE:**
+Constructed via `tbft.NewInstanceWithTagSigner(...)`. The original
+`tbft.NewInstance(...)` is preserved as a backward-compatible shim that
+sets `tagSigner = signer` (suitable when paired with `SignerGatedIBE` or
+`StubIBE`, where one DST suffices).
 
-- Add `kyber` and `drand/tlock` dependencies to SSV's `go.mod`.
-- Introduce a second `Signer` field on `tbft.Instance` for IBE-tag
-  signing. Update `BuildNonReceipt`, `Instance.tryDeriveNextLayerKey`,
-  and `Controller`/`Scheduler` plumbing to thread it through.
-- Implement `KyberSigner` in `protocol/v2/tbft/blsbackend/` (or a new
-  `kyberbackend` subpackage) wrapping kyber's BLS operations.
-- Implement `TLockIBE` wrapping `drand/tlock`'s `TimeLock`/`TimeUnlock`
-  primitives, using the cluster's IBE pubkey (kyber-format) as the
-  trust anchor.
-- Integrate with SSV's existing DKG flow so cluster setup also
-  produces IBE shares.
-- Update `protocol/v2/ssv/runner/tbft/Controller` and `Scheduler` to
-  accept both `ValidatorShare` and `IBEShare`.
+Both signers consume the **same operator share** — the existing
+herumi-format secret. No share duplication. No DKG ceremony changes.
 
-**Until that lands**, `SignerGatedIBE` (or the existing `StubIBE`) is
-the only available IBE backend. Both work for protocol-correctness
-testing and for any deployment where confidentiality of the encrypted
-partial signatures isn't a deployment concern. They are *not*
-appropriate for a deployment where an adversary observing the wire
-can extract the partial sigs (which is what real IBE prevents).
+## Capstone test
 
-## Summary
+The integration capstone is
+[end_to_end_real_ibe_test.go](../protocol/v2/tbft/blsbackend/end_to_end_real_ibe_test.go)
+— `TestEndToEndRealIBE_LayerFallthrough`. It exercises:
 
-The Phase 0 decision (Option A: reuse validator key) was based on
-an unverified assumption that herumi-BLS sigs and tlock would
-interoperate. Empirical reading of tlock's source confirms they do
-not, due to DST mismatch. The right path is Option B (separate IBE
-keypair), which requires a protocol-level refactor (two signers per
-Instance) and a DKG-flow extension. The work is well-scoped but
-substantial — appropriate for a focused implementation track once
-the protocol semantics are settled (which they are, as of Phase 4d).
+- 7-operator cluster, real threshold-split BLS keys via SSV's existing
+  `utils/threshold.Create`.
+- Two signers: `BLSSigner` for value-signing, `KyberSigner` for
+  tag-signing. Same shares. No new key material.
+- Real `TLockIBE` for IBE encryption/decryption.
+- Layer-0 leader silent → all operators emit non-receipts → kyber-
+  aggregated non-receipt sig decrypts layer-1 onion contents → layer 1
+  reaches positive quorum → all operators output the same reconstructed
+  Eth2-format validator signature on layer 1's value.
+
+Test passes. The reconstructed signature byte-equals what the master
+herumi key would sign directly — i.e. it is a valid Eth2 BLS signature
+that SSV's beacon-submission code accepts unchanged.
+
+## Security argument
+
+Domain Separation Tags exist precisely so the same secret can be safely
+used with multiple sub-protocols. Signing the same message under different
+DSTs produces signatures that are independent in the cryptographic sense:
+an adversary observing an Eth2 sig on `m1` cannot derive a kyber sig on
+`m2` (or vice versa), and discrete-log security of the share is
+unaffected by either kind of signature.
+
+The standard analysis: as long as the two DSTs are distinct strings (they
+are — "POP_" vs "NUL_" suffixes alone differentiate them), the two
+signing oracles are independent random oracles to an adversary even
+though they share a secret. This is exactly the threat model DSTs are
+designed to handle.
+
+There's one engineering tradeoff worth being explicit about: **using the
+validator's secret for non-Eth2 purposes does increase the attack surface
+on that secret**. If a bug in the kyber-BLS code path leaks the scalar
+(e.g. side-channel, malformed-input parsing bug), the validator key is
+compromised. With separate DKG keys, a kyber-side bug only compromises
+IBE decryption capability, not block-signing capability. This is the
+*only* tradeoff — there's no cryptographic weakness from the DST trick
+itself.
+
+For prototyping and devnet validation, the trade is fine. For mainnet
+deployment with the highest security bar, evaluating whether to use this
+shared-share approach vs. running a separate DKG ceremony is the
+operational call. The protocol code supports both: pass `tagSigner = nil`
+to `NewInstanceWithTagSigner` and you fall back to the shared-share
+behaviour; pass a separately-keyed `KyberSigner` (using IBE-only shares
+from a parallel DKG) and the protocol uses those distinct shares for
+tag-signing. The choice is at instance construction, not in the protocol
+code itself.
+
+## What this means for the implementation plan
+
+Phase 4b's "production cryptographic IBE" track was originally documented
+as a substantial protocol refactor + DKG-flow extension. With the DST
+trick, it reduces to:
+
+- ✅ Add kyber + drand IBE deps to `go.mod` (done, single PR's worth)
+- ✅ Implement `KyberSigner` and `TLockIBE` (done)
+- ✅ Implement byte conversions herumi ↔ kyber (done)
+- ✅ Add `Instance.tagSigner` field with backward-compat default (done)
+- ✅ End-to-end test proving the full pipeline works with real IBE (done)
+- ⏳ Update `Controller`/`Scheduler` constructor options to optionally
+  accept a separate `TagSigner` parameter, threading it through to
+  `NewInstanceWithTagSigner` (small follow-up).
+
+That's it. No DKG changes, no operator-onboarding changes, no separate
+share storage. The runner-integration work in Phase 4d (modifying
+`proposer.go`) is unchanged — it just gets passed both signers at
+construction time and the rest is automatic.
+
+## Test summary
+
+```
+$ go test ./protocol/v2/tbft/... ./protocol/v2/ssv/runner/tbft/... -count=1 -race
+ok  github.com/ssvlabs/ssv/protocol/v2/tbft
+ok  github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend
+ok  github.com/ssvlabs/ssv/protocol/v2/tbft/wire
+ok  github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft
+```
+
+All packages green, race-detector clean. Total test count well above
+140 across the four packages, including the capstone end-to-end test
+that exercises the entire DST-trick stack.

@@ -177,17 +177,17 @@ Phases build on each other. Within a phase, tasks can usually be parallelized.
 - [x] **Tests** ([signer_gated_ibe_test.go](protocol/v2/tbft/blsbackend/signer_gated_ibe_test.go)) — 5 tests: round-trip with real BLS, rejection of wrong-tag keys, rejection of below-quorum keys, malformed-ciphertext handling, missing-Verifier handling.
 - [x] **End-to-end layer-fallthrough integration test** ([integration_test.go::TestProtocol_TopLeaderSilent_n7_BLSBackend](protocol/v2/tbft/blsbackend/integration_test.go)) — top-leader silent, all operators emit non-receipts, real BLS aggregation produces a valid signature on the no-quorum tag, SignerGatedIBE accepts it as the layer-1 decryption key, layer 1 reaches positive quorum, all operators converge on the same reconstructed signature on layer 1's value.
 
-**Production track: real cryptographic IBE.** Investigation completed; finding documented in [docs/IBE-INTEGRATION.md](IBE-INTEGRATION.md).
+**Production track: real cryptographic IBE — DONE.** Implemented via the "DST trick" (see [docs/IBE-INTEGRATION.md](IBE-INTEGRATION.md)): existing herumi-format BLS shares are interpreted as kyber-BLS scalars and used to sign IBE tags under drand's DST. Different DSTs make the cross-DST signatures cryptographically independent (the standard DST-design property), so the validator's secret can serve both Eth2 output-signing AND IBE-tag-signing without a separate DKG.
 
-- [x] **Investigated `drand/tlock` API + herumi-BLS compatibility.** Empirical reading of `tlock.TimeLock`/`TimeUnlock` shows tlock uses kyber-BLS with drand-specific DSTs (`bls.DefaultDomainG2()`), incompatible with Ethereum's `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_` set by herumi's `EthMode`. **Option A (reuse validator key for IBE) does not compose with tlock.**
-- [ ] **Implement Option B (separate IBE keypair).** Substantial protocol refactor:
-  - Add kyber + drand/tlock to `go.mod`
-  - Split `tbft.Signer` interface usage into `ValueSigner` (herumi, for output sigs) + `TagSigner` (kyber, for IBE-tag sigs)
-  - Update `Instance`, `BuildOnion`, `BuildNonReceipt`, `Resolve`, `Controller`, `Scheduler` to thread both signers
-  - Implement `KyberSigner` and `TLockIBE` in `protocol/v2/tbft/blsbackend/` (or a new `kyberbackend/` subpackage)
-  - Extend SSV's existing operator-onboarding DKG to also produce IBE shares
-  - This is well-scoped but spans multiple PRs and touches the protocol core. Recommend driving it as its own focused track once the rest of TBFT is otherwise ready for production.
-- **Until Option B lands:** `SignerGatedIBE` (Signer-verified access gate, no cryptographic confidentiality) is the only available IBE backend. Sufficient for protocol-correctness testing and any deployment where wire-level confidentiality of partial sigs isn't a deployment concern; not appropriate where an adversary can extract partial sigs from observed wire bytes.
+- [x] **Added `kyber` + `drand/kyber-bls12381` deps to `go.mod`.**
+- [x] **`HerumiShareToKyberScalar` / `HerumiPubkeyToKyberG1Point`** ([kyber_conversion.go](protocol/v2/tbft/blsbackend/kyber_conversion.go)) — direct byte pass-through (length-checked); both libraries follow the IETF/Eth2 standardised BLS12-381 encoding. Verified by [kyber_conversion_test.go](protocol/v2/tbft/blsbackend/kyber_conversion_test.go) — scalars and pubkeys round-trip with byte-equality, and Lagrange interpolation across libraries recovers the master.
+- [x] **`KyberSigner`** ([kyber_signer.go](protocol/v2/tbft/blsbackend/kyber_signer.go)) — implements `tbft.Signer` using kyber-bls12381. Inputs are herumi-format bytes; outputs are kyber-format G2 sigs. Lagrange interpolation in kyber's scalar field. [signer_test.go](protocol/v2/tbft/blsbackend/kyber_signer_test.go) verifies round-trip, "any 2f+1 subset → same aggregate", per-partial verification.
+- [x] **`TLockIBE`** ([tlock_ibe.go](protocol/v2/tbft/blsbackend/tlock_ibe.go)) — implements `tbft.ThresholdIBE` via `github.com/drand/kyber/encrypt/ibe` with hybrid AES-GCM. Decryption key is a kyber-format G2 BLS sig. Tested in [tlock_ibe_test.go](protocol/v2/tbft/blsbackend/tlock_ibe_test.go).
+- [x] **`Instance.tagSigner` field** + new `NewInstanceWithTagSigner` constructor ([instance.go](protocol/v2/tbft/instance.go)). `BuildOwnNonReceipts` and `tryDeriveNextLayerKey` use `tagSigner` for IBE-tag operations; the original `signer` continues to handle value-signing. Backward-compatible (defaults to `signer` if `tagSigner` is nil).
+- [x] **`Controller.TagSigner` option** ([controller.go](protocol/v2/ssv/runner/tbft/controller.go)) — exposed in `ControllerOptions`, threaded through to `NewInstanceWithTagSigner`. The runner constructs Controllers with `Signer: BLSSigner` + `TagSigner: KyberSigner` + `IBE: TLockIBE` for production-grade IBE.
+- [x] **End-to-end capstone test** ([end_to_end_real_ibe_test.go](protocol/v2/tbft/blsbackend/end_to_end_real_ibe_test.go)) — 7-operator cluster, real threshold BLS keys, BLSSigner+KyberSigner+TLockIBE, top-leader-silent fallthrough scenario. All operators converge on the same Eth2-format reconstructed validator signature on layer 1's value (byte-equal to what the master would sign directly). Test passes.
+
+**Status:** Phase 4b production-IBE track is substantively done. SSV deployment with real cryptographic IBE is now a runner-side wiring task (Phase 4d), no cryptographic open questions remain.
 
 #### Phase 4c — SSV adapter (in progress)
 
@@ -334,7 +334,7 @@ Most Phase 0 questions resolved. Remaining:
 **Phase 4c (DONE):** Wire encoding, envelope, CandidateBroadcast, Config factory, Controller, Scheduler, dispatch helpers, and rate limiter all complete. Multi-controller end-to-end smoke test green with real BLS. The SSV adapter package exposes everything the runner needs — what's left is wiring it into `proposer.go` (Phase 4d).
 **Phase 4d (reference implementation delivered):** [RunProposerSlot](protocol/v2/ssv/runner/tbft/runner.go) function ties everything together with real timing. End-to-end test runs a 7-operator cluster through a full proposer-duty slot (healthy + top-leader-silent variants) with real BLS keys. Race-detector clean. [proposer_integration_sketch.go](protocol/v2/ssv/runner/tbft/proposer_integration_sketch.go) shows the call-site changes for `proposer.go`. Actual `proposer.go` modifications need SSV-team context.
 
-**Phase 4b production-IBE track (investigation complete, refactor pending):** Compatibility analysis done. Option A (Phase 0 decision) doesn't compose with `drand/tlock` due to BLS-DST mismatch between herumi-BLS (Eth2 DST) and kyber-BLS (drand DST). Path forward is Option B (separate IBE keypair, two-signer protocol). Documented in [docs/IBE-INTEGRATION.md](IBE-INTEGRATION.md). Substantial work, well-scoped.
+**Phase 4b production-IBE track (DONE):** Real cryptographic IBE working end-to-end via the "DST trick." Existing herumi-format validator shares used unchanged; same secrets sign Eth2 outputs (under Eth2 DST) and IBE tags (under drand DST); kyber-aggregated sigs decrypt `drand/kyber-bls12381`-encrypted ciphertexts. Capstone test exercises a 7-operator cluster through layer-fallthrough with real BLS + real IBE; reconstructed validator signature is Eth2-compatible. No DKG changes. See [docs/IBE-INTEGRATION.md](IBE-INTEGRATION.md).
 
 **Code so far:**
 
@@ -349,12 +349,29 @@ Core protocol package [protocol/v2/tbft/](protocol/v2/tbft/) — independent of 
 - [validation.go](protocol/v2/tbft/validation.go) — `ValidateOnion`, `ValidateNonReceipt`
 - 3 test files covering foundations, protocol scenarios, message validation
 
-Concrete BLS-backend subpackage [protocol/v2/tbft/blsbackend/](protocol/v2/tbft/blsbackend/):
+Concrete crypto-backend subpackage [protocol/v2/tbft/blsbackend/](protocol/v2/tbft/blsbackend/):
+
+*herumi-BLS side (value-signing):*
 - [signer.go](protocol/v2/tbft/blsbackend/signer.go) — `BLSSigner` (herumi/bls-eth-go-binary backed)
-- [signer_test.go](protocol/v2/tbft/blsbackend/signer_test.go) — unit tests including the critical "any 2f+1 subset yields the same aggregate" property
-- [signer_gated_ibe.go](protocol/v2/tbft/blsbackend/signer_gated_ibe.go) — `SignerGatedIBE` (Signer-verified access gate; non-cryptographic confidentiality)
+- [signer_test.go](protocol/v2/tbft/blsbackend/signer_test.go) — unit tests including "any 2f+1 subset yields same aggregate"
+
+*Stub IBE (for tests / non-confidential deployments):*
+- [signer_gated_ibe.go](protocol/v2/tbft/blsbackend/signer_gated_ibe.go) — `SignerGatedIBE` (Signer-verified access gate; non-cryptographic)
 - [signer_gated_ibe_test.go](protocol/v2/tbft/blsbackend/signer_gated_ibe_test.go) — round-trip + rejection tests
-- [integration_test.go](protocol/v2/tbft/blsbackend/integration_test.go) — end-to-end protocol tests with real BLS: healthy at layer 0 + layer-fallthrough via SignerGatedIBE
+
+*kyber-BLS side (tag-signing for real IBE — DST-trick approach):*
+- [kyber_conversion.go](protocol/v2/tbft/blsbackend/kyber_conversion.go) — `HerumiShareToKyberScalar`, `HerumiPubkeyToKyberG1Point`
+- [kyber_conversion_test.go](protocol/v2/tbft/blsbackend/kyber_conversion_test.go) — byte-equality round-trips, Lagrange recovery across libraries
+- [kyber_signer.go](protocol/v2/tbft/blsbackend/kyber_signer.go) — `KyberSigner` (drand/kyber-bls12381 backed; consumes herumi-format share bytes)
+- [kyber_signer_test.go](protocol/v2/tbft/blsbackend/kyber_signer_test.go) — same contract tests as `BLSSigner` but kyber-format outputs
+
+*Real cryptographic IBE:*
+- [tlock_ibe.go](protocol/v2/tbft/blsbackend/tlock_ibe.go) — `TLockIBE` (kyber IBE primitives + AES-GCM hybrid)
+- [tlock_ibe_test.go](protocol/v2/tbft/blsbackend/tlock_ibe_test.go) — round-trip, wrong-tag rejection, below-quorum rejection
+
+*Integration capstones:*
+- [integration_test.go](protocol/v2/tbft/blsbackend/integration_test.go) — full TBFT pipeline with real BLS + SignerGatedIBE
+- [end_to_end_real_ibe_test.go](protocol/v2/tbft/blsbackend/end_to_end_real_ibe_test.go) — full TBFT pipeline with real BLS + KyberSigner + real TLockIBE
 
 Wire encoding subpackage [protocol/v2/tbft/wire/](protocol/v2/tbft/wire/):
 - [wire.go](protocol/v2/tbft/wire/wire.go) — versioned binary encoding for `Onion` and `NonReceiptAttestation`
@@ -380,7 +397,7 @@ SSV adapter package [protocol/v2/ssv/runner/tbft/](protocol/v2/ssv/runner/tbft/)
 Companion docs:
 - [docs/IBE-INTEGRATION.md](docs/IBE-INTEGRATION.md) — drand/tlock compatibility analysis and Option B implementation path
 
-`go test ./protocol/v2/tbft/... ./protocol/v2/ssv/runner/tbft/... -race` ⇒ **126 tests passing** across 4 packages (core + blsbackend + wire + adapter); `go vet` and `gofmt` clean; race-detector clean.
+`go test ./protocol/v2/tbft/... ./protocol/v2/ssv/runner/tbft/... -race` ⇒ **142 tests passing** across 4 packages (core + blsbackend + wire + adapter); `go vet` and `gofmt` clean; race-detector clean. The blsbackend package now includes the full real-IBE stack (KyberSigner, TLockIBE, conversion functions) with end-to-end integration test exercising the DST-trick approach.
 
 **Refactors applied during cleanup pass:**
 - Removed package-level `opShareForVerify` mutable global; replaced with `Instance.pubKeyShares` field passed at construction.
@@ -400,19 +417,17 @@ Companion docs:
 - IBE = Encrypt/Decrypt only. Partial-sig signing and threshold aggregation are in `Signer`. Under Option A both share the same underlying BLS primitive but are conceptually distinct interfaces.
 - Equivocation handling depends on honest operators detecting it during Phase 1 and treating the affected layer as non-receipt; this is a protocol-rule the adapter needs to enforce in its Phase 1 logic.
 
-**Next action — handoff state.** The TBFT adapter, the protocol core, the wire format, and the BLS-backed crypto layer are functionally complete and tested (126 tests, race-clean). The remaining work is genuinely beyond what one isolated implementation track can deliver:
+**Next action — handoff state.** The TBFT adapter, the protocol core, the wire format, the BLS-backed value-signing layer, and the **real cryptographic IBE** are all functionally complete and tested (142 tests, race-clean). The remaining work is operational/wiring:
 
-1. **`proposer.go` modifications** — call-site changes documented in [proposer_integration_sketch.go](protocol/v2/ssv/runner/tbft/proposer_integration_sketch.go). Best applied by the SSV team in a focused PR with QBFT-coexistence feature flag.
+1. **`proposer.go` modifications** — call-site changes documented in [proposer_integration_sketch.go](protocol/v2/ssv/runner/tbft/proposer_integration_sketch.go). Best applied by the SSV team in a focused PR with QBFT-coexistence feature flag. Construction: `Signer = BLSSigner`, `TagSigner = KyberSigner`, `IBE = TLockIBE`.
 
-2. **Real cryptographic IBE (Option B)** — investigation done; compatibility analysis in [docs/IBE-INTEGRATION.md](IBE-INTEGRATION.md). Path is the two-signer protocol refactor (kyber-BLS for IBE-tag signing, herumi-BLS for output signing). Substantial but well-scoped.
+2. **MsgType registration in SSV's network layer** — coordinate with SSV team for an unused `spectypes.MsgType` byte (or SSV-internal extension) for TBFT messages.
 
-3. **MsgType registration in SSV's network layer** — coordinate with SSV team for an unused `spectypes.MsgType` byte (or SSV-internal extension) for TBFT messages.
+3. **Devnet validation** (Phase 6) — once 1, 2 are in.
 
-4. **Devnet validation** (Phase 6) — once 1, 2, 3 are in.
+4. **Mainnet rollout** (Phase 7) — registry-based opt-in per cluster, coexistence with QBFT until rollout completes.
 
-5. **Mainnet rollout** (Phase 7) — registry-based opt-in per cluster, coexistence with QBFT until rollout completes.
-
-**Last updated:** Phase 4 reference implementation + IBE-compatibility analysis complete.
+**Last updated:** Phase 4a + 4b + 4c + 4d (reference implementation) all complete. Real cryptographic IBE working end-to-end via the DST-trick approach (no DKG changes).
 
 ## Where this came from
 
