@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -28,6 +29,7 @@ import (
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+	tbftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -58,6 +60,29 @@ type ProposerRunner struct {
 	// cachedBlindedBlockSSZ is a fingerprint of the cachedFullBlock, it is stored here
 	// for efficient validation (so we re-use it instead of re-calculating).
 	cachedBlindedBlockSSZ []byte
+
+	// TBFT integration. When tbftCtrl is non-nil, the runner uses TBFT
+	// instead of QBFT for the consensus phase. The Scheduler and
+	// RateLimiter are constructed in NewProposerRunner alongside the
+	// caller-supplied Controller. tbftSlots tracks per-slot state
+	// (RANDAO sig, fetched block version) that the lifecycle hooks
+	// need but isn't carried in the protocol's wire types.
+	tbftCtrl  *tbftadapter.Controller
+	tbftSched *tbftadapter.Scheduler
+	tbftRL    *tbftadapter.RateLimiter
+
+	tbftMu    sync.Mutex
+	tbftSlots map[phase0.Slot]*tbftSlotState
+}
+
+// tbftSlotState holds the per-slot scratch space the TBFT lifecycle
+// hooks need: the RANDAO signature for block fetches, the spec version
+// observed at fetch time (so SubmitOutput can decode the agreed-upon
+// blinded block), and the cancel func for the slot's driver goroutine.
+type tbftSlotState struct {
+	randao  phase0.BLSSignature
+	cancel  context.CancelFunc
+	version spec.DataVersion // set when this operator fetches a candidate; zero otherwise
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -73,6 +98,18 @@ type ProposerRunnerOptions struct {
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
 	// higher MEV.
 	ProposerDelay time.Duration
+
+	// TBFTController, if non-nil, switches the runner from QBFT to TBFT
+	// for the consensus phase of proposer duties. The caller is
+	// responsible for constructing the Controller with the right Signer
+	// (BLSSigner), TagSigner (KyberSigner) for IBE-tag signing under the
+	// DST-trick approach, IBE backend (TLockIBE), pubkey shares, and
+	// committee — see docs/IBE-INTEGRATION.md and
+	// protocol/v2/ssv/runner/tbft for the adapter API.
+	//
+	// When nil, the runner uses the QBFTController path unchanged. The
+	// two paths are mutually exclusive per runner.
+	TBFTController *tbftadapter.Controller
 }
 
 func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
@@ -80,7 +117,7 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		return nil, errors.New("must have one share")
 	}
 
-	return &ProposerRunner{
+	r := &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
 			NetworkConfig:      opts.NetworkConfig,
@@ -99,7 +136,32 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		graffiti:            opts.Graffiti,
 
 		proposerDelay: opts.ProposerDelay,
-	}, nil
+	}
+
+	if opts.TBFTController != nil {
+		hooks := &tbftadapter.LifecycleHooks{
+			FetchCandidate: r.tbftFetchCandidate,
+			Broadcast:      r.tbftBroadcast,
+			SubmitOutput:   r.tbftSubmitOutput,
+			OnMissedSlot:   r.tbftOnMissedSlot,
+		}
+		sched, err := tbftadapter.NewScheduler(opts.TBFTController, hooks)
+		if err != nil {
+			return nil, fmt.Errorf("build TBFT scheduler: %w", err)
+		}
+		r.tbftCtrl = opts.TBFTController
+		r.tbftSched = sched
+		r.tbftRL = tbftadapter.NewRateLimiter()
+		r.tbftSlots = make(map[phase0.Slot]*tbftSlotState)
+	}
+
+	return r, nil
+}
+
+// usesTBFT reports whether this runner is configured to drive consensus
+// via TBFT instead of QBFT. Set at construction time and immutable.
+func (r *ProposerRunner) usesTBFT() bool {
+	return r.tbftCtrl != nil
 }
 
 func (r *ProposerRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
@@ -163,6 +225,16 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	duty, err = r.currentValidatorDuty()
 	if err != nil {
 		return fmt.Errorf("current validator duty: %w", err)
+	}
+
+	// TBFT branch: instead of pre-fetching the block ourselves, hand off
+	// to the TBFT driver. Each layer leader will fetch via the
+	// FetchCandidate hook at its own FetchAt offset; SubmitOutput delivers
+	// the agreed-upon block to the beacon node. RANDAO is plumbed via
+	// per-slot state so the FetchCandidate hook can use it.
+	if r.usesTBFT() {
+		r.measurements.StartConsensus()
+		return r.tbftStartSlot(ctx, logger, duty.Slot, fullSig)
 	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
