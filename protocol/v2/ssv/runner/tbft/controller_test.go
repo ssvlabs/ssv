@@ -255,7 +255,11 @@ func TestController_MultiCluster_HealthyEndToEnd(t *testing.T) {
 	// the controllers' signers can do them.
 	controllers := make(map[spectypes.OperatorID]*Controller, n)
 	for _, op := range committee {
-		opSigner := blsbackend.New(shares[uint64(op)].Serialize())
+		// `shares` is keyed by uint64; spectypes.OperatorID has the same
+		// underlying type but Go requires the explicit cross-named-type
+		// conversion at the index expression.
+		opSigner := blsbackend.New(shares[uint64(op)].Serialize()) //nolint:unconvert
+
 		c, err := NewController(ControllerOptions{
 			OperatorID:    op,
 			Committee:     committee,

@@ -6,7 +6,7 @@
 //
 // The wire format is independent of any specific p2p envelope: the SSV
 // adapter wraps the bytes produced here in a SignedSSVMessage (or whatever
-// the runtime uses). This package only handles the (un)marshalling of
+// the runtime uses). This package only handles the (un)marshaling of
 // TBFT message bodies.
 package wire
 
@@ -40,7 +40,7 @@ const MaxLayers = 32
 // malformed message.
 const MaxFieldSize = 16 * 1024 * 1024
 
-// EncodeOnion serialises an Onion to bytes.
+// EncodeOnion serializes an Onion to bytes.
 //
 // Format (version 0x01):
 //
@@ -73,7 +73,8 @@ func EncodeOnion(o *tbft.Onion) ([]byte, error) {
 	out = append(out, OnionVersionV1)
 	out = appendUint64(out, uint64(o.OperatorID))
 	out = appendUint64(out, uint64(o.Height))
-	out = appendUint16(out, uint16(len(o.Layers)))
+	// MaxLayers (32) ≪ uint16 max — already bounds-checked above.
+	out = appendUint16(out, uint16(len(o.Layers))) //nolint:gosec // bounds-checked
 	for i, el := range o.Layers {
 		if len(el.Tag) > 0xFFFF {
 			return nil, fmt.Errorf("wire: layer %d tag too long (%d)", i, len(el.Tag))
@@ -84,11 +85,12 @@ func EncodeOnion(o *tbft.Onion) ([]byte, error) {
 		if len(el.Ciphertext) > MaxFieldSize {
 			return nil, fmt.Errorf("wire: layer %d ciphertext too long (%d)", i, len(el.Ciphertext))
 		}
-		out = appendUint16(out, uint16(len(el.Tag)))
-		out = append(out, el.Tag...)
-		out = appendUint32(out, uint32(len(el.Value)))
-		out = append(out, el.Value...)
-		out = appendUint32(out, uint32(len(el.Ciphertext)))
+		// All three lengths bounds-checked just above (Tag ≤ 0xFFFF; Value/Ciphertext ≤ MaxFieldSize ≪ uint32 max).
+		out = appendUint16(out, uint16(len(el.Tag)))        //nolint:gosec // bounds-checked
+		out = append(out, el.Tag...)                        //
+		out = appendUint32(out, uint32(len(el.Value)))      //nolint:gosec // bounds-checked
+		out = append(out, el.Value...)                      //
+		out = appendUint32(out, uint32(len(el.Ciphertext))) //nolint:gosec // bounds-checked
 		out = append(out, el.Ciphertext...)
 	}
 	return out, nil
@@ -175,7 +177,7 @@ func DecodeOnion(data []byte) (*tbft.Onion, error) {
 	}, nil
 }
 
-// EncodeNonReceipt serialises a NonReceiptAttestation.
+// EncodeNonReceipt serializes a NonReceiptAttestation.
 //
 // Format (version 0x01):
 //
@@ -201,13 +203,14 @@ func EncodeNonReceipt(nr *tbft.NonReceiptAttestation) ([]byte, error) {
 	out = append(out, NonReceiptVersionV1)
 	out = appendUint64(out, uint64(nr.OperatorID))
 	out = appendUint64(out, uint64(nr.Height))
-	out = appendUint32(out, uint32(nr.Layer))
-	out = appendUint32(out, uint32(len(nr.PartialSig)))
+	// Layer non-negative (checked above); PartialSig length ≤ MaxFieldSize.
+	out = appendUint32(out, uint32(nr.Layer))           //nolint:gosec // bounds-checked
+	out = appendUint32(out, uint32(len(nr.PartialSig))) //nolint:gosec // bounds-checked
 	out = append(out, nr.PartialSig...)
 	return out, nil
 }
 
-// EncodeCandidate serialises a CandidateBroadcast.
+// EncodeCandidate serializes a CandidateBroadcast.
 //
 // Format (version 0x01):
 //
@@ -233,8 +236,9 @@ func EncodeCandidate(cb *tbft.CandidateBroadcast) ([]byte, error) {
 	out = append(out, CandidateVersionV1)
 	out = appendUint64(out, uint64(cb.OperatorID))
 	out = appendUint64(out, uint64(cb.Height))
-	out = appendUint32(out, uint32(cb.Layer))
-	out = appendUint32(out, uint32(len(cb.Value)))
+	// Layer non-negative (checked above); Value length ≤ MaxFieldSize.
+	out = appendUint32(out, uint32(cb.Layer))      //nolint:gosec // bounds-checked
+	out = appendUint32(out, uint32(len(cb.Value))) //nolint:gosec // bounds-checked
 	out = append(out, cb.Value...)
 	return out, nil
 }

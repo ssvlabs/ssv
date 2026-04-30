@@ -63,7 +63,7 @@ type RunningInstance struct {
 	// Empty if the local operator is not a leader for this slot.
 	LeaderAtLayers []int
 
-	// instanceMu serialises access to `instance`. The Controller's own
+	// instanceMu serializes access to `instance`. The Controller's own
 	// mutex (`c.mu`) only protects the `instances` map; per-Instance
 	// access needs its own lock so concurrent ProcessOnion /
 	// ProcessNonReceipt / ProcessCandidate / Resolve calls (which can
@@ -150,7 +150,7 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	}, nil
 }
 
-// StartNewInstance initialises a TBFT instance for the given slot and
+// StartNewInstance initializes a TBFT instance for the given slot and
 // records it in the active-instances map. Returns a RunningInstance with
 // the Config and the layer indices where the local operator is the leader.
 //

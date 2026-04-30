@@ -264,7 +264,11 @@ func TestScheduler_BelowQuorumCausesMissedSlot(t *testing.T) {
 	mhs := make(map[spectypes.OperatorID]*mockHooksRecorder, 2)
 	scheds := make(map[spectypes.OperatorID]*Scheduler, 2)
 	for _, op := range []spectypes.OperatorID{1, 2} {
-		opSigner := blsbackend.New(shares[uint64(op)].Serialize())
+		// `shares` is keyed by uint64; spectypes.OperatorID has the same
+		// underlying type but Go requires the explicit cross-named-type
+		// conversion at the index expression.
+		opSigner := blsbackend.New(shares[uint64(op)].Serialize()) //nolint:unconvert
+
 		c, err := NewController(ControllerOptions{
 			OperatorID:    op,
 			Committee:     committee,
@@ -304,6 +308,8 @@ func TestScheduler_BelowQuorumCausesMissedSlot(t *testing.T) {
 					require.NoError(t, scheds[recv].Controller().ProcessOnion(env.Onion))
 				case wire.KindNonReceipt:
 					require.NoError(t, scheds[recv].Controller().ProcessNonReceipt(env.NonReceipt))
+				case wire.KindCandidate:
+					require.NoError(t, scheds[recv].Controller().ProcessCandidate(env.Candidate))
 				}
 			}
 		}

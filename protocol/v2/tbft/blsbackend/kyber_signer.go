@@ -33,9 +33,9 @@ import (
 // All inputs and outputs follow the same `tbft.Signer` semantics as
 // `BLSSigner`:
 //
-//   - share        : serialised herumi BLS secret-key bytes (32 bytes)
-//   - pubKeyShare  : serialised herumi BLS public-key bytes (48 bytes, G1)
-//   - clusterPubKey: serialised herumi BLS master pubkey bytes (48 bytes, G1)
+//   - share        : serialized herumi BLS secret-key bytes (32 bytes)
+//   - pubKeyShare  : serialized herumi BLS public-key bytes (48 bytes, G1)
+//   - clusterPubKey: serialized herumi BLS master pubkey bytes (48 bytes, G1)
 //   - msg          : arbitrary bytes
 //   - partial / sig: kyber G2 compressed point bytes (96 bytes)
 type KyberSigner struct {
@@ -135,7 +135,7 @@ func (k *KyberSigner) AggregatePartials(partials map[tbft.OperatorID]tbft.Signat
 // VerifyPartial checks that `partial = pubKeyShareScalar · H_G2(msg)` via
 // the BLS pairing equation: e(G1, partial) == e(pubKeyShare, H_G2(msg)).
 //
-// `pubKeyShare` is the operator's public-key share in herumi-serialised
+// `pubKeyShare` is the operator's public-key share in herumi-serialized
 // G1 format (48 bytes). It's converted to kyber-G1 internally.
 func (k *KyberSigner) VerifyPartial(pubKeyShare []byte, msg []byte, partial tbft.Signature) bool {
 	if len(msg) == 0 || len(partial) == 0 {
@@ -174,13 +174,15 @@ func (k *KyberSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig tbft
 func lagrangeCoeffAtZero(suite pairing.Suite, xj uint64, pts []indexedPoint) kyber.Scalar {
 	num := suite.G2().Scalar().One()
 	den := suite.G2().Scalar().One()
-	xjScalar := suite.G2().Scalar().SetInt64(int64(xj))
+	// Operator IDs (the x-coordinates) are well within int64 range — they're
+	// 1-indexed cluster positions in practice (≤ tens at the absolute extreme).
+	xjScalar := suite.G2().Scalar().SetInt64(int64(xj)) //nolint:gosec // operator id
 
 	for _, idx := range pts {
 		if idx.x == xj {
 			continue
 		}
-		xmScalar := suite.G2().Scalar().SetInt64(int64(idx.x))
+		xmScalar := suite.G2().Scalar().SetInt64(int64(idx.x)) //nolint:gosec // operator id
 		negXm := suite.G2().Scalar().Neg(xmScalar)
 		num = num.Mul(num, negXm)
 		diff := suite.G2().Scalar().Sub(xjScalar, xmScalar)

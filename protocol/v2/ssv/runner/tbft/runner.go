@@ -108,12 +108,12 @@ func RunProposerSlotWithGossipWindow(
 }
 
 // sleepUntil blocks until `t` or context cancellation. Returns true if it
-// reached `t`, false if cancelled.
+// reached `t`, false if canceled.
 func sleepUntil(ctx context.Context, t time.Time) bool {
 	d := time.Until(t)
 	if d <= 0 {
 		// Already past `t` — return immediately, but still respect a
-		// cancelled context.
+		// canceled context.
 		select {
 		case <-ctx.Done():
 			return false

@@ -78,12 +78,13 @@ func (s *SignerGatedIBE) Encrypt(_ []byte, tag []byte, plaintext []byte) ([]byte
 	out = append(out, sigGatedIBEVersion)
 
 	var tagLen [2]byte
-	binary.BigEndian.PutUint16(tagLen[:], uint16(len(tag)))
+	// Bounds-checked above (len(tag) ≤ 0xFFFF / len(plaintext) ≤ 0xFFFFFFFF).
+	binary.BigEndian.PutUint16(tagLen[:], uint16(len(tag))) //nolint:gosec // bounds-checked
 	out = append(out, tagLen[:]...)
 	out = append(out, tag...)
 
 	var plLen [4]byte
-	binary.BigEndian.PutUint32(plLen[:], uint32(len(plaintext)))
+	binary.BigEndian.PutUint32(plLen[:], uint32(len(plaintext))) //nolint:gosec // bounds-checked
 	out = append(out, plLen[:]...)
 	out = append(out, plaintext...)
 	return out, nil

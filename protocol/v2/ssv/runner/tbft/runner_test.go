@@ -197,7 +197,11 @@ func buildCluster(t *testing.T, n int, overrides *ConfigOverrides) []*runnerNode
 
 	nodes := make([]*runnerNode, 0, n)
 	for _, op := range committee {
-		opSigner := blsbackend.New(shares[uint64(op)].Serialize())
+		// `shares` is keyed by uint64; spectypes.OperatorID has the same
+		// underlying type but Go requires the explicit cross-named-type
+		// conversion at the index expression.
+		opSigner := blsbackend.New(shares[uint64(op)].Serialize()) //nolint:unconvert
+
 		ctrl, err := NewController(ControllerOptions{
 			OperatorID:    op,
 			Committee:     committee,

@@ -118,7 +118,8 @@ func ConfigForCluster(
 	// convention so the same operator distribution applies.
 	layers := make([]tbftcore.LayerSpec, K)
 	for k := 0; k < K; k++ {
-		idx := (uint64(slot) + uint64(k)) % uint64(n)
+		// k ∈ [0, K) and n > 0 — both small positive ints, conversion is safe.
+		idx := (uint64(slot) + uint64(k)) % uint64(n) //nolint:gosec // small positive ints
 		layers[k] = tbftcore.LayerSpec{
 			Leader:  tbftcore.OperatorID(sorted[idx]),
 			FetchAt: overrides.lateFetch(),

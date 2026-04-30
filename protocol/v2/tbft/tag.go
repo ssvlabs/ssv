@@ -53,7 +53,9 @@ func NoQuorumTag(clusterID [32]byte, height Height, layer int) []byte {
 	h.Write(heightBytes[:])
 
 	var layerBytes [4]byte
-	binary.BigEndian.PutUint32(layerBytes[:], uint32(layer))
+	// Layer is a small non-negative onion-layer index (≤ K ≤ ~5), well
+	// within uint32 range.
+	binary.BigEndian.PutUint32(layerBytes[:], uint32(layer)) //nolint:gosec // small non-negative
 	h.Write(layerBytes[:])
 
 	return h.Sum(nil)

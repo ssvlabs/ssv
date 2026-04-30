@@ -26,7 +26,7 @@ import (
 // existing QBFT path in proposer.go runs unchanged.
 
 // proposerSlotDeadline is the upper bound on how long the TBFT driver
-// goroutine may run for a given slot before the context is cancelled.
+// goroutine may run for a given slot before the context is canceled.
 // The TBFT instance itself uses a tighter, layer-relative deadline
 // (cfg.Deadline + gossip window) — this is just the outer-bound safety
 // net so a stuck goroutine doesn't outlive the slot indefinitely.
@@ -67,7 +67,7 @@ func (r *ProposerRunner) tbftStartSlot(ctx context.Context, logger *zap.Logger, 
 		defer cancel()
 		// Always finish the duty when the goroutine exits, regardless
 		// of which path closed it (success, no-quorum, BuildAndBroadcast
-		// error, ctx cancelled). markDutyFinished + EndDutyFlow are
+		// error, ctx canceled). markDutyFinished + EndDutyFlow are
 		// idempotent — SubmitOutput/OnMissedSlot may have already
 		// called them, this is the safety net.
 		defer func() {
@@ -228,7 +228,7 @@ func (r *ProposerRunner) tbftSubmitOutput(ctx context.Context, slot phase0.Slot,
 		return fmt.Errorf("tbft submit: current validator duty: %w", err)
 	}
 	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
-		// Match the existing QBFT path's behaviour: log + skip, not
+		// Match the existing QBFT path's behavior: log + skip, not
 		// error. The slot is missed; the runner doesn't keep retrying.
 		return nil
 	}

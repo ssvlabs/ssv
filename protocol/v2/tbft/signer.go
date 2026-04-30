@@ -162,7 +162,9 @@ func (s *StubSigner) AggregatePartials(partials map[OperatorID]Signature) (Signa
 	out = append(out, stubVersionAggregateSig)
 	out = append(out, canonicalMsgID...)
 	var qBytes [4]byte
-	binary.BigEndian.PutUint32(qBytes[:], uint32(s.Quorum))
+	// Quorum is a small non-negative cluster-size-derived int (≤ 2f+1 ≤ ~10
+	// in realistic clusters), well within uint32 range.
+	binary.BigEndian.PutUint32(qBytes[:], uint32(s.Quorum)) //nolint:gosec // small non-negative
 	out = append(out, qBytes[:]...)
 	return out, nil
 }

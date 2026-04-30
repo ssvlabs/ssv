@@ -7,7 +7,7 @@ import (
 	bls12381 "github.com/drand/kyber-bls12381"
 )
 
-// Conversions between herumi/bls-eth-go-binary serialised bytes and
+// Conversions between herumi/bls-eth-go-binary serialized bytes and
 // kyber-bls12381 typed values.
 //
 // The cryptographic key material is identical across the two libraries —
@@ -40,8 +40,8 @@ const HerumiSecretShareSize = 32
 // produces in Eth2's min-pk variant (compressed G1 point, 48 bytes).
 const HerumiPubkeyG1Size = 48
 
-// HerumiShareToKyberScalar reinterprets a herumi-serialised BLS secret share
-// as a kyber-bls12381 Scalar. herumi serialises scalars as 32-byte big-endian
+// HerumiShareToKyberScalar reinterprets a herumi-serialized BLS secret share
+// as a kyber-bls12381 Scalar. herumi serializes scalars as 32-byte big-endian
 // integers reduced modulo the curve order; kyber's mod.Int.SetBytes also
 // interprets bytes big-endian and reduces modulo the curve order. This is a
 // direct pass-through with a length check.
@@ -57,7 +57,7 @@ func HerumiShareToKyberScalar(shareBytes []byte) (kyber.Scalar, error) {
 	return s, nil
 }
 
-// HerumiPubkeyToKyberG1Point reinterprets a herumi-serialised BLS public key
+// HerumiPubkeyToKyberG1Point reinterprets a herumi-serialized BLS public key
 // (compressed G1 point in Eth2 min-pk format) as a kyber-bls12381 G1 Point.
 // Both libraries follow the IETF/Eth2 compressed-point encoding for BLS12-381,
 // so this is a direct pass-through with a length check.

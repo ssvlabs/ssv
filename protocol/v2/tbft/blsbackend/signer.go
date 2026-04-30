@@ -77,9 +77,9 @@ func New(share []byte) *BLSSigner {
 }
 
 // SignPartial signs `msg` with the operator's share that this signer was
-// constructed against, and returns a serialised partial signature. Each
+// constructed against, and returns a serialized partial signature. Each
 // invocation deserialises the share fresh; if the SSV adapter wants to
-// amortise, it can keep a parsed key alongside and call the herumi API
+// amortize, it can keep a parsed key alongside and call the herumi API
 // directly. Per-call deserialisation keeps this package trivially safe to
 // use from multiple goroutines without sharing state.
 func (s *BLSSigner) SignPartial(msg []byte) (tbft.Signature, error) {

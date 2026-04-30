@@ -26,7 +26,7 @@ import (
 // the body.
 //
 // The decryption key TLockIBE expects (the `key []byte` argument to
-// `Decrypt`) is a serialised kyber G2 point — the aggregated BLS
+// `Decrypt`) is a serialized kyber G2 point — the aggregated BLS
 // signature on the IBE tag, produced by `KyberSigner.AggregatePartials`
 // over 2f+1 partial sigs. Under Option A's "DST trick" (see
 // docs/IBE-INTEGRATION.md), those partial sigs come from operators'
@@ -40,7 +40,7 @@ import (
 //
 //	[1] version (0x05)
 //	[2] ibe-U-len (uint16 BE; expected 48 for G1)
-//	[ibe-U-len] ibe.Ciphertext.U (kyber G1 marshalled)
+//	[ibe-U-len] ibe.Ciphertext.U (kyber G1 marshaled)
 //	[2] ibe-V-len (uint16 BE)
 //	[ibe-V-len] ibe.Ciphertext.V
 //	[2] ibe-W-len (uint16 BE)
@@ -59,10 +59,11 @@ func NewTLockIBE() *TLockIBE {
 	return &TLockIBE{suite: bls12381.NewBLS12381Suite()}
 }
 
+const tlockIBEVersionV1 byte = 0x05
+
 const (
-	tlockIBEVersionV1 byte = 0x05
-	aesKeySize             = 32 // AES-256
-	aesGCMNonceSize        = 12
+	aesKeySize      = 32 // AES-256
+	aesGCMNonceSize = 12
 )
 
 // Encrypt produces a hybrid ciphertext: a fresh AES-256 key wrapped under
@@ -128,7 +129,7 @@ func (t *TLockIBE) Encrypt(clusterPubKey []byte, tag []byte, plaintext []byte) (
 // AES key using the supplied threshold-BLS sig as the IBE decryption key,
 // then AES-GCM-decrypts the body.
 //
-// `key` must be a kyber-G2-marshalled BLS signature on the same tag the
+// `key` must be a kyber-G2-marshaled BLS signature on the same tag the
 // ciphertext is bound to (i.e. the aggregate of 2f+1 KyberSigner partial
 // sigs over the tag).
 func (t *TLockIBE) Decrypt(ciphertext []byte, key []byte) ([]byte, error) {
@@ -222,13 +223,13 @@ func newGCM(key []byte) (cipher.AEAD, error) {
 }
 
 func appendU16(b []byte, v int) []byte {
-	if v > 0xFFFF {
+	if v < 0 || v > 0xFFFF {
 		// caller is responsible — this is an internal helper called from
 		// Encrypt where lengths are bounded by IBE primitive output size.
 		panic(fmt.Sprintf("blsbackend: TLockIBE: u16 overflow: %d", v))
 	}
 	var buf [2]byte
-	binary.BigEndian.PutUint16(buf[:], uint16(v))
+	binary.BigEndian.PutUint16(buf[:], uint16(v)) //nolint:gosec // bounds-checked above
 	return append(b, buf[:]...)
 }
 
