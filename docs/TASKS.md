@@ -311,6 +311,11 @@ Most Phase 0 questions resolved. Remaining:
 - [?] **What happens to the existing QBFT for proposer code?** Keep both for transition period, or replace outright? Default: keep both behind a feature flag, deprecate QBFT-for-proposer after ≥2 mainnet stable releases.
 - [?] **Verify Option A (reuse validator key for IBE) composes cryptographically.** Phase 1 task: verify that BLS partial sigs on a tag — produced by the validator's existing operator shares — can serve as a tlock-style threshold IBE decryption key. If not, fall back to Option B (separate DKG).
 
+### Deferred follow-ups
+
+- [ ] **EKM "share-bytes" Option B (production-grade).** The current Option A path exposes share bytes from `LocalKeyManager` to construct `BLSSigner` / `KyberSigner`. This works for local-mode operators but does NOT work for remote-signing operators (ssv-signer + Web3Signer never put share bytes on the SSV node). Production-grade fix: add new endpoints to ssv-signer / Web3Signer that produce signatures under both Eth2 DST (already there) and drand DST (new), and refactor `tbft.Signer` to call into ekm rather than holding share bytes locally. Multi-repo scope. Defer until devnet validation establishes TBFT is keepers-of-the-light mainnet-shaped.
+- [ ] **Allocate stable `MsgType` byte for TBFT envelopes.** Current placeholder `0xF0` (= 240). Coordinate with SSV-team for a permanent ecosystem-wide allocation before mainnet. Older SSV nodes seeing this type will *reject* the message via `ErrUnknownSSVMessageType` (`reject: true`) — a libp2p-pubsub `ValidationReject` outcome that drops the message and decrements the sender's peer score. Mixed-cluster rollouts (some operators on TBFT-binary, some on QBFT-only binary) will therefore degrade gossip; the rollout model must hard-prevent this (covered in Phase 7 / registry signaling). For a coordinated "everyone upgrades together" rollout this isn't an issue.
+
 ## Risks register
 
 | Risk | Probability | Impact | Mitigation |
@@ -417,17 +422,21 @@ Companion docs:
 - IBE = Encrypt/Decrypt only. Partial-sig signing and threshold aggregation are in `Signer`. Under Option A both share the same underlying BLS primitive but are conceptually distinct interfaces.
 - Equivocation handling depends on honest operators detecting it during Phase 1 and treating the affected layer as non-receipt; this is a protocol-rule the adapter needs to enforce in its Phase 1 logic.
 
-**Next action — handoff state.** The TBFT adapter, the protocol core, the wire format, the BLS-backed value-signing layer, and the **real cryptographic IBE** are all functionally complete and tested (142 tests, race-clean). The remaining work is operational/wiring:
+**Next action — handoff state.** The TBFT adapter, the protocol core, the wire format, the BLS-backed value-signing layer, the **real cryptographic IBE**, and the `proposer.go` integration are all functionally complete. The remaining work to actually flip the switch (proposer-duty runs on TBFT instead of QBFT):
 
-1. **`proposer.go` modifications** — call-site changes documented in [proposer_integration_sketch.go](protocol/v2/ssv/runner/tbft/proposer_integration_sketch.go). Best applied by the SSV team in a focused PR with QBFT-coexistence feature flag. Construction: `Signer = BLSSigner`, `TagSigner = KyberSigner`, `IBE = TLockIBE`.
+1. **`proposer.go` modifications — DONE.** TBFT path lives behind `ProposerRunnerOptions.TBFTController`; nil keeps the QBFT path. See [proposer.go](protocol/v2/ssv/runner/proposer.go) and [proposer_tbft.go](protocol/v2/ssv/runner/proposer_tbft.go).
 
-2. **MsgType registration in SSV's network layer** — coordinate with SSV team for an unused `spectypes.MsgType` byte (or SSV-internal extension) for TBFT messages.
+2. **EKM share-bytes accessor (Option A).** Local-mode-only path so the validator controller can hand raw share bytes to `BLSSigner` / `KyberSigner` constructors. New in-memory cache populated at `AddShare`. Remote-mode operators are blocked until Option B (above) lands.
 
-3. **Devnet validation** (Phase 6) — once 1, 2 are in.
+3. **Validator-controller wiring.** `operator/validator/controller.go`'s `SetupRunners` constructs the `tbftadapter.Controller` with the operator's share + cluster config + signers + TLockIBE, and passes `TBFTController` to `NewProposerRunner`.
 
-4. **Mainnet rollout** (Phase 7) — registry-based opt-in per cluster, coexistence with QBFT until rollout completes.
+4. **Network message validation + queue decode + dispatch.** `MsgTypeTBFT` (placeholder `0xF0`) is recognised by `message/validation/`, `protocol/v2/ssv/queue/`, and `protocol/v2/ssv/validator/validator.go` so inbound TBFT envelopes route to `ProposerRunner.ProcessTBFTEnvelope`.
 
-**Last updated:** Phase 4a + 4b + 4c + 4d (reference implementation) all complete. Real cryptographic IBE working end-to-end via the DST-trick approach (no DKG changes).
+5. **Devnet validation** (Phase 6) — once 2-4 are in. User-driven.
+
+6. **Mainnet rollout** (Phase 7) — registry-based opt-in per cluster, coexistence with QBFT until rollout completes.
+
+**Last updated:** Phase 4a + 4b + 4c + 4d complete. `proposer.go` integration committed. Real cryptographic IBE working end-to-end via the DST-trick approach (no DKG changes).
 
 ## Where this came from
 

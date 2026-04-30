@@ -8,6 +8,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/tbft/wire"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -22,7 +23,7 @@ type SSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body any // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
+	Body any // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg | *wire.Envelope (TBFT)
 }
 
 func (d *SSVMessage) DecodedSSVMessage() {}
@@ -117,6 +118,12 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
 			return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
 		}
 		body = msg
+	case ssvmessage.SSVTBFTMsgType:
+		env, err := wire.Unwrap(m.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode TBFT envelope: %w", err)
+		}
+		body = env
 	default:
 		return nil, ErrUnknownMessageType
 	}

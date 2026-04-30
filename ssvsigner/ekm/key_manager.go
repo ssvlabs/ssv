@@ -66,3 +66,21 @@ type BeaconSigner interface {
 	// IsBeaconBlockSlashable returns error if the given block is slashable
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 }
+
+// ShareBytesProvider is implemented by signers that can hand back the
+// raw BLS share bytes for a given pubkey. Used by callers that need the
+// share material for non-Eth2 BLS operations under the DST-trick
+// approach (e.g. TBFT's IBE-tag KyberSigner — see the IBE-INTEGRATION
+// doc).
+//
+// Only LocalKeyManager implements this. RemoteKeyManager intentionally
+// does not — share material never leaves the remote signer in that
+// configuration. Callers must type-assert and gracefully handle the
+// not-implemented case (e.g. by skipping TBFT setup for the relevant
+// runner). A future ssv-signer protocol extension may expose
+// drand-DST signing remotely so the share bytes never need to be
+// exposed locally; that's the production replacement for this
+// interface.
+type ShareBytesProvider interface {
+	GetShareBytes(pubKey phase0.BLSPubKey) ([]byte, error)
+}

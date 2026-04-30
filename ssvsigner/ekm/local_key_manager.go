@@ -55,6 +55,21 @@ type LocalKeyManager struct {
 	signer            signer.ValidatorSigner
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector slashingProtector
+
+	// shareBytesMu guards shareBytes. Separate from walletLock because
+	// the read-path (TBFT signer construction) is called on a hotter
+	// path than wallet operations and shouldn't block on AddShare /
+	// RemoveShare wallet I/O.
+	shareBytesMu sync.RWMutex
+	// shareBytes maps validator share pubkeys to the raw 32-byte BLS
+	// scalar the operator's share corresponds to. Populated at AddShare
+	// time, cleared at RemoveShare time. Used by callers that need the
+	// share material for non-Eth2 BLS operations under the DST-trick
+	// approach (TBFT's KyberSigner, see docs/IBE-INTEGRATION.md).
+	//
+	// Local-mode-only — RemoteKeyManager keeps shares behind ssv-signer
+	// and does not implement ShareBytesProvider.
+	shareBytes map[phase0.BLSPubKey][]byte
 }
 
 // NewLocalKeyManager returns a new LocalKeyManager.
@@ -102,6 +117,7 @@ func NewLocalKeyManager(
 		signer:            beaconSigner,
 		slashingProtector: NewSlashingProtector(logger, beacon, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
+		shareBytes:        make(map[phase0.BLSPubKey][]byte),
 	}, nil
 }
 
@@ -318,6 +334,13 @@ func (km *LocalKeyManager) AddShare(
 		}
 	}
 
+	// Cache raw share bytes for callers that need them outside the
+	// standard signing path (e.g. TBFT's KyberSigner under the DST-trick
+	// approach). See ShareBytesProvider for usage and security context.
+	km.shareBytesMu.Lock()
+	km.shareBytes[pubKey] = append([]byte(nil), sharePrivKey.Serialize()...)
+	km.shareBytesMu.Unlock()
+
 	return nil
 }
 
@@ -348,7 +371,33 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn ReadWriteTxn, pubK
 			return fmt.Errorf("could not delete share: %w", err)
 		}
 	}
+
+	km.shareBytesMu.Lock()
+	delete(km.shareBytes, pubKey)
+	km.shareBytesMu.Unlock()
 	return nil
+}
+
+// GetShareBytes returns the raw 32-byte BLS scalar for the operator's
+// share corresponding to `pubKey`. Returns an error if no share for the
+// given pubkey is registered.
+//
+// Security note: the returned bytes are sensitive material. Callers
+// should hold them only as long as needed and avoid logging.
+//
+// Local-mode only: implementations of `ekm.BeaconSigner` that route to
+// remote signers (ssv-signer + Web3Signer) intentionally do NOT
+// implement ShareBytesProvider — share bytes never leave those services.
+// Callers should type-assert and gracefully handle the not-implemented
+// case (e.g. by skipping TBFT-related setup for that runner).
+func (km *LocalKeyManager) GetShareBytes(pubKey phase0.BLSPubKey) ([]byte, error) {
+	km.shareBytesMu.RLock()
+	bytes, ok := km.shareBytes[pubKey]
+	km.shareBytesMu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("ekm: no share registered for pubkey %x", pubKey[:])
+	}
+	return append([]byte(nil), bytes...), nil
 }
 
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {

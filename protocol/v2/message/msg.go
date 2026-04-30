@@ -10,6 +10,17 @@ import (
 const (
 	// SSVEventMsgType extends spec msg type
 	SSVEventMsgType spectypes.MsgType = 200
+
+	// SSVTBFTMsgType carries TBFT-protocol envelopes (Onion / NonReceipt /
+	// Candidate, see protocol/v2/tbft/wire) inside a SignedSSVMessage.
+	//
+	// PLACEHOLDER VALUE: 0xF0 (= 240). Allocate a stable ecosystem-wide
+	// value before mainnet — older SSV nodes that don't recognise this
+	// type will reject the message via ErrUnknownSSVMessageType (a
+	// libp2p-pubsub `Reject` outcome that drops the message and decrements
+	// the sender's peer score). Mixed-cluster rollouts therefore degrade
+	// gossip; rollout must be coordinated cluster-wide.
+	SSVTBFTMsgType spectypes.MsgType = 0xF0
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -21,6 +32,8 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "partial_signature"
 	case SSVEventMsgType:
 		return "event"
+	case SSVTBFTMsgType:
+		return "tbft"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
 	}

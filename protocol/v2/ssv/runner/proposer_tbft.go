@@ -14,6 +14,7 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	tbftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft"
 	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
 	"github.com/ssvlabs/ssv/protocol/v2/tbft/wire"
@@ -23,16 +24,6 @@ import (
 // supporting helpers for ProposerRunner. The runner only enters this
 // path when constructed with a non-nil TBFTController; otherwise the
 // existing QBFT path in proposer.go runs unchanged.
-
-// MsgTypeTBFT is the SSV-internal MsgType for TBFT envelopes (Onion,
-// NonReceipt, Candidate). The network layer must dispatch incoming
-// SSVMessages with this type to ProcessTBFTEnvelope.
-//
-// NOTE: this is a placeholder value. Allocating a stable, ecosystem-
-// wide MsgType byte is SSV-team coordination work — do not deploy with
-// this value as-is. The constant exists here so the runner-side
-// integration can compile and be exercised in tests.
-const MsgTypeTBFT spectypes.MsgType = 0xF0
 
 // proposerSlotDeadline is the upper bound on how long the TBFT driver
 // goroutine may run for a given slot before the context is cancelled.
@@ -106,22 +97,21 @@ func (r *ProposerRunner) tbftStartSlot(ctx context.Context, logger *zap.Logger, 
 	return nil
 }
 
-// ProcessTBFTEnvelope is the network-side entry point for TBFT messages.
-// The network layer parses the SignedSSVMessage, authenticates the
-// sender, and hands the inner data + sender ID here.
+// ProcessTBFTEnvelopeMsg is the network-side entry point for TBFT
+// messages. The network layer (validation + queue) already parses the
+// SignedSSVMessage, authenticates the sender, and decodes the inner
+// envelope, then hands the parsed envelope + sender ID here.
 //
 // Returns an error if the runner isn't on the TBFT path, if the rate
 // limit is exceeded, or if the controller rejects the dispatched
 // envelope. Errors are non-fatal at the runner level; the caller may
 // log and drop.
-func (r *ProposerRunner) ProcessTBFTEnvelope(senderID spectypes.OperatorID, data []byte) error {
+func (r *ProposerRunner) ProcessTBFTEnvelopeMsg(senderID spectypes.OperatorID, env *wire.Envelope) error {
 	if !r.usesTBFT() {
 		return fmt.Errorf("tbft: runner not configured for TBFT consensus")
 	}
-
-	env, err := wire.Unwrap(data)
-	if err != nil {
-		return fmt.Errorf("tbft: unwrap envelope: %w", err)
+	if env == nil {
+		return fmt.Errorf("tbft: nil envelope")
 	}
 
 	switch env.Kind {
@@ -200,7 +190,7 @@ func (r *ProposerRunner) tbftFetchCandidate(ctx context.Context, slot phase0.Slo
 func (r *ProposerRunner) tbftBroadcast(ctx context.Context, slot phase0.Slot, data []byte) error {
 	msgID := spectypes.NewMsgID(r.NetworkConfig.DomainType, r.GetShare().ValidatorPubKey[:], r.RunnerRoleType)
 	ssvMsg := &spectypes.SSVMessage{
-		MsgType: MsgTypeTBFT,
+		MsgType: ssvmessage.SSVTBFTMsgType,
 		MsgID:   msgID,
 		Data:    data,
 	}
@@ -339,4 +329,3 @@ func decodeBlindedProposal(version spec.DataVersion, blindedSSZ []byte) (*api.Ve
 	}
 	return vBlk, nil
 }
-

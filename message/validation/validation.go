@@ -24,6 +24,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -221,6 +222,13 @@ func (mv *messageValidator) handleSignedSSVMessage(
 	case spectypes.SSVPartialSignatureMsgType:
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
+		if err != nil {
+			return decodedMessage, err
+		}
+
+	case ssvmessage.SSVTBFTMsgType:
+		envelope, err := mv.validateTBFTMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		decodedMessage.Body = envelope
 		if err != nil {
 			return decodedMessage, err
 		}

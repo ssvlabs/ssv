@@ -1121,6 +1121,17 @@ func SetupRunners(
 		switch role {
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
+
+			// TBFT is opt-in per share at runner-construction time.
+			// `buildTBFTControllerForProposer` returns nil + nil-error
+			// when the local signer can't supply share bytes (remote
+			// signing) or doesn't have this share registered yet — both
+			// cases fall back to the QBFT path.
+			tbftCtrl, err := buildTBFTControllerForProposer(share, operator, options)
+			if err != nil {
+				return nil, fmt.Errorf("could not build TBFT controller: %w", err)
+			}
+
 			runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 				BaseRunnerOptions:   baseOpts,
 				QBFTController:      buildController(spectypes.RoleProposer),
@@ -1129,6 +1140,7 @@ func SetupRunners(
 				HighestDecidedSlot:  0,
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
+				TBFTController:      tbftCtrl,
 			})
 		case spectypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)
