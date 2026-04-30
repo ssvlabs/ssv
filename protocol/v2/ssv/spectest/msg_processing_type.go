@@ -55,6 +55,14 @@ func (test *MsgProcessingSpecTest) FullName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
+	if _, ok := test.Runner.(*runner.ProposerRunner); ok {
+		// Proposer-runner spec tests exercise QBFT decided-value behavior
+		// that no longer exists (the proposer runs on TBFT exclusively
+		// after the QBFT-removal change). Per the Phase 0 / Phase 5
+		// decision in docs/TASKS.md, proposer spec tests are out of
+		// scope for the TBFT effort.
+		t.Skip("proposer spec tests are obsolete after QBFT removal — TBFT proposer has its own test suite")
+	}
 	logger := protocoltesting.SpectestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)

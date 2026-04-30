@@ -1120,23 +1120,27 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.NewProposerChecker(options.Signer, options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
-
-			// TBFT is opt-in per share at runner-construction time.
-			// `buildTBFTControllerForProposer` returns nil + nil-error
-			// when the local signer can't supply share bytes (remote
-			// signing) or doesn't have this share registered yet — both
-			// cases fall back to the QBFT path.
+			// Proposer duty runs on TBFT exclusively (the QBFT path was
+			// removed). Build the TBFT controller from the operator's
+			// share + cluster pubkey shares.
 			tbftCtrl, tbftErr := buildTBFTControllerForProposer(share, operator, options)
 			if tbftErr != nil {
 				return nil, fmt.Errorf("could not build TBFT controller: %w", tbftErr)
 			}
+			if tbftCtrl == nil {
+				// TBFT not available for this share — typically a
+				// remote-signing setup before the drand-DST EKM
+				// extension lands, or a test setup that hasn't
+				// registered the share with the local signer. The
+				// validator boots without a proposer runner; other
+				// duties still work. (Callers can detect this by
+				// asking the runners map whether RoleProposer is set.)
+				continue
+			}
 
 			runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 				BaseRunnerOptions:   baseOpts,
-				QBFTController:      buildController(spectypes.RoleProposer),
 				DoppelgangerHandler: options.DoppelgangerHandler,
-				ValCheck:            proposedValueCheck,
 				HighestDecidedSlot:  0,
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,

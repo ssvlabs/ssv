@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -28,6 +29,11 @@ func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
 
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			if _, ok := test.Runner.(*runner.ProposerRunner); ok {
+				// See RunMsgProcessing — proposer spec tests are
+				// obsolete after the QBFT-removal change.
+				t.Skip("proposer spec tests are obsolete after QBFT removal")
+			}
 			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t, tests.logger)
 		})

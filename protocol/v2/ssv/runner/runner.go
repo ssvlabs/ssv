@@ -548,6 +548,13 @@ func (b *BaseRunner) markDutyFinished() {
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
+	// QBFTController is nil for runners that don't use QBFT (e.g. the
+	// TBFT-only proposer). Such runners track "duty already passed" via
+	// the slot-keyed state inside their own protocol controller, not
+	// here.
+	if b.QBFTController == nil {
+		return nil
+	}
 	if b.QBFTController.LatestInstanceHeight >= specqbft.Height(duty.DutySlot()) && b.QBFTController.LatestInstanceHeight != 0 {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,

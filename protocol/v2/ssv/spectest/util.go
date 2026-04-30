@@ -66,14 +66,11 @@ func runnerForTest(t *testing.T, runnerType runner.Runner, name string, testType
 	case *runner.ProposerRunner:
 		pr := r.(*runner.ProposerRunner)
 		pr.NetworkConfig = networkconfig.TestNetwork
-		valCheck := createValueChecker(r, runnerType)
-		pr.ValCheck = valCheck
-		for _, inst := range pr.QBFTController.RecentInstances {
-			inst.ValueChecker = valCheck
-		}
-		if pr.HasStartedQBFTInstance() {
-			pr.State.RunningInstance.ValueChecker = valCheck
-		}
+		// ProposerRunner runs on TBFT (no QBFTController, no ValCheck).
+		// Spec-test rehydration of TBFT runtime state is not implemented;
+		// the proposer spec tests are out of scope for the QBFT-removal
+		// effort. NetworkConfig is enough to keep base-runner JSON-decoded
+		// state usable for non-runtime assertions.
 	case *runner.SyncCommitteeAggregatorRunner:
 		scr := r.(*runner.SyncCommitteeAggregatorRunner)
 		scr.NetworkConfig = networkconfig.TestNetwork

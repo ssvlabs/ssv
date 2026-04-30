@@ -40,10 +40,6 @@ const proposerSlotDeadline = 12 * time.Second
 // keyed by slot — the FetchCandidate hook needs the RANDAO and the
 // SubmitOutput hook needs the version.
 func (r *ProposerRunner) tbftStartSlot(ctx context.Context, logger *zap.Logger, slot phase0.Slot, randaoSig spectypes.Signature) error {
-	if !r.usesTBFT() {
-		return fmt.Errorf("tbft start slot called with TBFT not configured")
-	}
-
 	var randao phase0.BLSSignature
 	if len(randaoSig) != len(randao) {
 		return fmt.Errorf("tbft start slot: unexpected RANDAO length %d (want %d)", len(randaoSig), len(randao))
@@ -107,9 +103,6 @@ func (r *ProposerRunner) tbftStartSlot(ctx context.Context, logger *zap.Logger, 
 // envelope. Errors are non-fatal at the runner level; the caller may
 // log and drop.
 func (r *ProposerRunner) ProcessTBFTEnvelopeMsg(senderID spectypes.OperatorID, env *wire.Envelope) error {
-	if !r.usesTBFT() {
-		return fmt.Errorf("tbft: runner not configured for TBFT consensus")
-	}
 	if env == nil {
 		return fmt.Errorf("tbft: nil envelope")
 	}

@@ -75,46 +75,6 @@ func TestAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	require.False(t, decoded.hasDutyRunning())
 }
 
-func TestProposerRunnerDecodeIgnoresValCheck(t *testing.T) {
-	t.Parallel()
-
-	keySet := spectestingutils.Testing4SharesSet()
-	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-
-	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
-		BaseRunnerOptions: BaseRunnerOptions{
-			NetworkConfig: cloneTestNetworkConfig(),
-			Share:         map[phase0.ValidatorIndex]*spectypes.Share{share.ValidatorIndex: share},
-		},
-		ValCheck:           dummyValueChecker{},
-		HighestDecidedSlot: 0,
-		Graffiti:           nil,
-		ProposerDelay:      0,
-	})
-	require.NoError(t, err)
-
-	r := runnerIface.(*ProposerRunner)
-	beforeRoot, err := r.GetRoot()
-	require.NoError(t, err)
-
-	data, err := r.Encode()
-	require.NoError(t, err)
-	require.Contains(t, string(data), "\"ValCheck\":null")
-
-	var decoded ProposerRunner
-	require.NoError(t, decoded.Decode(data))
-	decoded.NetworkConfig = cloneTestNetworkConfig()
-
-	afterRoot, err := decoded.GetRoot()
-	require.NoError(t, err)
-
-	require.Equal(t, beforeRoot, afterRoot)
-	require.Equal(t, spectypes.RoleProposer, decoded.GetRole())
-	require.Len(t, decoded.GetShares(), 1)
-	require.Nil(t, decoded.ValCheck)
-	require.False(t, decoded.hasDutyRunning())
-}
-
 func TestSyncCommitteeAggregatorRunnerDecodeIgnoresValCheck(t *testing.T) {
 	t.Parallel()
 

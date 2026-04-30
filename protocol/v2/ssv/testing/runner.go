@@ -18,8 +18,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	tbftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
+	"github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -159,14 +162,18 @@ var ConstructBaseRunner = func(
 		}
 		r = rnr
 	case spectypes.RoleProposer:
+		var tbftCtrl *tbftadapter.Controller
+		tbftCtrl, err = buildTestTBFTController(keySet, 1)
+		if err != nil {
+			return nil, fmt.Errorf("build test TBFT controller: %w", err)
+		}
 		r, err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 			BaseRunnerOptions:   baseOpts,
-			QBFTController:      contr,
 			DoppelgangerHandler: dgHandler,
-			ValCheck:            valCheck,
 			HighestDecidedSlot:  TestingHighestDecidedSlot,
 			Graffiti:            []byte("graffiti"),
 			ProposerDelay:       0,
+			TBFTController:      tbftCtrl,
 		})
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
@@ -226,8 +233,8 @@ var ConstructBaseRunnerWithShareMap = func(
 	dgHandler := doppelganger.NoOpHandler{}
 
 	sharePubKeys := make([]phase0.BLSPubKey, 0)
+	var keySetInstance *spectestingutils.TestKeySet
 	if len(shareMap) > 0 {
-		var keySetInstance *spectestingutils.TestKeySet
 		var shareInstance *spectypes.Share
 		for _, share := range shareMap {
 			keySetInstance = spectestingutils.KeySetForShare(share)
@@ -328,14 +335,23 @@ var ConstructBaseRunnerWithShareMap = func(
 		}
 		r = rnr
 	case spectypes.RoleProposer:
+		var tbftCtrl *tbftadapter.Controller
+		if keySetInstance != nil {
+			tbftCtrl, err = buildTestTBFTController(keySetInstance, 1)
+			if err != nil {
+				return nil, fmt.Errorf("build test TBFT controller: %w", err)
+			}
+		}
+		// When the shareMap is empty (the "RunnerConstruction_no_shares"
+		// spec test), NewProposerRunner errors first on the missing
+		// share — the nil TBFTController never gets validated.
 		r, err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 			BaseRunnerOptions:   baseOpts,
-			QBFTController:      contr,
 			DoppelgangerHandler: dgHandler,
-			ValCheck:            valCheck,
 			HighestDecidedSlot:  TestingHighestDecidedSlot,
 			Graffiti:            []byte("graffiti"),
 			ProposerDelay:       0,
+			TBFTController:      tbftCtrl,
 		})
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
@@ -371,4 +387,32 @@ var ConstructBaseRunnerWithShareMap = func(
 		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
+}
+
+// buildTestTBFTController constructs a TBFT Controller for the test
+// proposer-runner using a spec-testing keyset. Each operator's share
+// becomes a BLSSigner / KyberSigner pair (DST-trick); IBE is TLockIBE.
+//
+// Tests that exercise the spec proposer-flow won't pass under this
+// controller — they expect QBFT-decided behavior. The constructor is
+// here to keep the test harness compileable; the user opted to skip
+// the proposer spec-test rework when QBFT was removed.
+func buildTestTBFTController(keySet *spectestingutils.TestKeySet, operatorID spectypes.OperatorID) (*tbftadapter.Controller, error) {
+	shareBytes := keySet.Shares[operatorID].Serialize()
+	pubKeyShares := make(map[tbftcore.OperatorID][]byte, len(keySet.Shares))
+	committee := make([]spectypes.OperatorID, 0, len(keySet.Shares))
+	for opID, sk := range keySet.Shares {
+		pubKeyShares[tbftcore.OperatorID(opID)] = sk.GetPublicKey().Serialize()
+		committee = append(committee, opID)
+	}
+	return tbftadapter.NewController(tbftadapter.ControllerOptions{
+		OperatorID:    operatorID,
+		Committee:     committee,
+		ClusterID:     [32]byte{0xAA, 0xBB}, // arbitrary cluster ID for tests
+		ClusterPubKey: keySet.ValidatorPK.Serialize(),
+		PubKeyShares:  pubKeyShares,
+		Signer:        blsbackend.New(shareBytes),
+		TagSigner:     blsbackend.NewKyberSigner(shareBytes),
+		IBE:           blsbackend.NewTLockIBE(),
+	})
 }
