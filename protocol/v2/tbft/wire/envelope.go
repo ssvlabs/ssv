@@ -1,10 +1,10 @@
 package wire
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/ssvlabs/ssv/protocol/v2/tbft"
+	sharedwire "github.com/ssvlabs/ssv/protocol/v2/wire"
 )
 
 // Wire envelope for TBFT messages.
@@ -34,9 +34,9 @@ import (
 //	[1] kind            (KindOnion=0x01 or KindNonReceipt=0x02)
 //	[N] body bytes      (output of EncodeOnion / EncodeNonReceipt)
 
-// EnvelopeVersionV1 is the current wire-envelope version. Encoders write
-// this; decoders accept this and any future versions they understand.
-const EnvelopeVersionV1 byte = 0x01
+// EnvelopeVersionV1 re-exports the shared frame version for backward
+// compatibility with existing TBFT-wire callers.
+const EnvelopeVersionV1 = sharedwire.EnvelopeVersionV1
 
 // MessageKind discriminates the body of a TBFT wire envelope.
 type MessageKind byte
@@ -97,14 +97,11 @@ func WrapCandidate(cb *tbft.CandidateBroadcast) ([]byte, error) {
 // Errors on: malformed/truncated envelope, unknown version, unknown kind,
 // or decoder error from the body.
 func Unwrap(data []byte) (*Envelope, error) {
-	if len(data) < 2 {
-		return nil, errors.New("wire: envelope truncated (need at least version + kind)")
+	kindByte, body, err := sharedwire.Unframe(data)
+	if err != nil {
+		return nil, err
 	}
-	if data[0] != EnvelopeVersionV1 {
-		return nil, fmt.Errorf("wire: unsupported envelope version 0x%02x", data[0])
-	}
-	kind := MessageKind(data[1])
-	body := data[2:]
+	kind := MessageKind(kindByte)
 
 	out := &Envelope{Kind: kind}
 	switch kind {
@@ -133,9 +130,5 @@ func Unwrap(data []byte) (*Envelope, error) {
 }
 
 func wrap(kind MessageKind, body []byte) []byte {
-	out := make([]byte, 0, 2+len(body))
-	out = append(out, EnvelopeVersionV1)
-	out = append(out, byte(kind))
-	out = append(out, body...)
-	return out
+	return sharedwire.Frame(byte(kind), body)
 }
