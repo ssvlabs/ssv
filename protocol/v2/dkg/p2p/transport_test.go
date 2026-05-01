@@ -231,7 +231,7 @@ func (b *busBroadcaster) Broadcast(_ spectypes.MessageID, m *spectypes.SignedSSV
 
 func TestTransport_EndToEnd_DKG_4Of4(t *testing.T) {
 	committee := []uint64{1, 2, 3, 4}
-	threshold := 2 // f+1 for n=4
+	threshold := 3 // 2f+1 for n=4, matches production qEnc=qV
 
 	bus := newDKGBus()
 	transports := make(map[uint64]*Transport, len(committee))

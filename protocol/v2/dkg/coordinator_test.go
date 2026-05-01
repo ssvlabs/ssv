@@ -150,14 +150,15 @@ func cidFor(seed byte) [32]byte {
 }
 
 // TestCoordinator_HappyPath_7Of7 — the canonical happy path. Seven
-// operators, threshold 3 (= f+1 for f=2), all honest, all online. DKG
+// operators, threshold 5 (= 2f+1 for f=2, the unified qEnc=qV per
+// docs/TBFT.md "Why it's safe"), all honest, all online. DKG
 // completes; every operator's Commits[0] is the same point.
 func TestCoordinator_HappyPath_7Of7(t *testing.T) {
 	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	results, errs := runCluster(t, ctx, committee, 3, cidFor(0xa1), 0, nil)
+	results, errs := runCluster(t, ctx, committee, 5, cidFor(0xa1), 0, nil)
 	require.Empty(t, errs, "all operators should succeed")
 	require.Len(t, results, len(committee))
 
@@ -180,7 +181,7 @@ func TestCoordinator_HappyPath_7Of7(t *testing.T) {
 // the IBE keypair usable as a threshold trust anchor.
 func TestCoordinator_ThresholdProperty(t *testing.T) {
 	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
-	threshold := 3
+	threshold := 5 // 2f+1 for f=2, matches production qEnc=qV
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -191,9 +192,9 @@ func TestCoordinator_ThresholdProperty(t *testing.T) {
 	suite := bls12381.NewBLS12381Suite()
 	g1 := suite.G1().(kyber_dkg.Suite)
 
-	// Take exactly `threshold` shares (operators 1..3) and reconstruct
-	// the master scalar via Lagrange interpolation. The reconstructed
-	// scalar's public point must equal Commits[0].
+	// Take exactly `threshold` shares (operators 1..threshold) and
+	// reconstruct the master scalar via Lagrange interpolation. The
+	// reconstructed scalar's public point must equal Commits[0].
 	subset := make([]*share.PriShare, 0, threshold)
 	for _, opID := range committee[:threshold] {
 		subset = append(subset, results[opID].Share)
@@ -211,7 +212,7 @@ func TestCoordinator_ThresholdProperty(t *testing.T) {
 // distinct points; with fewer, kyber's RecoverSecret returns an error.
 func TestCoordinator_BelowThreshold(t *testing.T) {
 	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
-	threshold := 3
+	threshold := 5 // 2f+1 for f=2, matches production qEnc=qV
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -221,10 +222,10 @@ func TestCoordinator_BelowThreshold(t *testing.T) {
 	suite := bls12381.NewBLS12381Suite()
 	g1 := suite.G1().(kyber_dkg.Suite)
 
-	// Two shares < threshold of 3.
-	subset := []*share.PriShare{
-		results[committee[0]].Share,
-		results[committee[1]].Share,
+	// 2f = 4 shares < threshold of 5.
+	subset := make([]*share.PriShare, 0, threshold-1)
+	for _, opID := range committee[:threshold-1] {
+		subset = append(subset, results[opID].Share)
 	}
 	_, err := share.RecoverSecret(g1, subset, threshold, len(committee))
 	require.Error(t, err, "below-threshold reconstruction must fail")
@@ -234,9 +235,9 @@ func TestCoordinator_BelowThreshold(t *testing.T) {
 // are offline, no operator can complete the exchange phase (we wait for
 // every committee member). Each surviving operator times out cleanly.
 func TestCoordinator_LivenessLimit(t *testing.T) {
-	threshold := 3
+	threshold := 5 // 2f+1 for f=2
 	// Committee is 7; 5 of 7 are online (2 offline). Even though
-	// threshold (3) is reachable arithmetically, the exchange phase
+	// threshold (5) is reachable arithmetically, the exchange phase
 	// requires ALL committee members; this test asserts the surviving
 	// operators time out cleanly rather than hang.
 	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
@@ -298,7 +299,7 @@ func TestCoordinator_LivenessLimit(t *testing.T) {
 // silently produce wrong threshold signatures.
 func TestCoordinator_DKGOutput_KyberSignerRoundTrip(t *testing.T) {
 	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
-	threshold := 3 // f+1 for n=7
+	threshold := 5 // 2f+1 for n=7, matches production qEnc=qV
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

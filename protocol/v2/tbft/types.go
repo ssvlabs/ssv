@@ -79,14 +79,8 @@ type Config struct {
 	F         int
 }
 
-// Quorum returns the σ-quorum threshold qV = 2f + 1. Retained for
-// backward compatibility with callers using the symmetric naming;
-// equivalent to QV.
-//
-// Deprecated: use QV() for σ-quorum (positive partial-sig quorum) or
-// QEnc() for the IBE-unlock threshold. The two are now distinct
-// (qV = 2f+1, qEnc = f+1) per docs/TBFT.md; this alias hides the
-// distinction and should not be used in new code.
+// Quorum returns the unified threshold qV = qEnc = 2f+1. Retained as
+// an alias of QV() / QEnc().
 func (c *Config) Quorum() int {
 	return c.QV()
 }
@@ -99,13 +93,13 @@ func (c *Config) QV() int {
 }
 
 // QEnc returns the IBE-unlock threshold (NonReceipt-attestation quorum)
-// used at tryDeriveNextLayerKey. qEnc = f+1 per [docs/TBFT.md] under
-// Option B; under Option A (DST-trick on the validator key) the IBE
-// primitive still requires 2f+1 partials, so this count is naming-only
-// until the IBE keypair is established at threshold f+1 — see
-// docs/TBFT-DKG-TASKS.md.
+// used at tryDeriveNextLayerKey. qEnc = qV = 2f+1 per [docs/TBFT.md]
+// "Why it's safe" — the unified threshold gives cryptographic safety
+// against byzantine cross-signing. The IBE keypair is distinct from
+// the V-keypair (different cryptographic backend so the IBE primitive
+// can use its expected DST), even though the threshold is the same.
 func (c *Config) QEnc() int {
-	return c.F + 1
+	return 2*c.F + 1
 }
 
 // K returns the fallback depth (number of layers).

@@ -444,12 +444,14 @@ func (i *Instance) tryReconstructLayer(layer int, decryptionKey []byte) (*Output
 // attestations on NoQuorumTag(layer). Returns the derived decryption
 // key for layer+1, or nil if the NR-quorum threshold wasn't reached.
 //
-// Under Option B (separate IBE keypair at threshold f+1), aggregating
-// f+1 IBE-share partials yields the IBE master signature on the tag —
-// directly usable as a decryption key. Under Option A (DST-trick on
-// validator key), the IBE primitive still requires 2f+1 partials, so
-// the qEnc=f+1 protocol-level count is naming-only until the IBE
-// keypair is established at threshold f+1 (see docs/TBFT-DKG-TASKS.md).
+// qEnc = qV = 2f+1 per docs/TBFT.md "Why it's safe" — the unified
+// threshold gives cryptographic safety against byzantine cross-signing.
+// Aggregating 2f+1 IBE-share partials yields the IBE master signature
+// on the tag, directly usable as a decryption key for layer+1. Under
+// Option A (DST-trick on validator key), the same threshold is enforced
+// by the validator-share's natural 2f+1 quorum; under Option B (separate
+// IBE keypair) the DKG runs at 2f+1 to match (see
+// docs/TBFT-DKG-TASKS.md).
 func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 	partials := i.nonReceipts[layer]
 	if len(partials) < i.cfg.QEnc() {

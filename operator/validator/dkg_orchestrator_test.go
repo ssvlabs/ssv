@@ -373,11 +373,11 @@ func TestIBEThresholdForCommitteeSize(t *testing.T) {
 		n        int
 		expected int
 	}{
-		{4, 2},   // f=1, qEnc=2
-		{7, 3},   // f=2, qEnc=3
-		{10, 4},  // f=3, qEnc=4
-		{13, 5},  // f=4, qEnc=5
-		{3, 0},   // below SSV's minimum cluster size
+		{4, 3},  // f=1, qEnc=2f+1=3
+		{7, 5},  // f=2, qEnc=2f+1=5
+		{10, 7}, // f=3, qEnc=2f+1=7
+		{13, 9}, // f=4, qEnc=2f+1=9
+		{3, 0},  // below SSV's minimum cluster size
 		{0, 0},
 	}
 	for _, c := range cases {
