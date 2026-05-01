@@ -233,6 +233,13 @@ func (mv *messageValidator) handleSignedSSVMessage(
 			return decodedMessage, err
 		}
 
+	case ssvmessage.SSVDKGMsgType:
+		raw, err := mv.validateDKGMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		decodedMessage.Body = raw
+		if err != nil {
+			return decodedMessage, err
+		}
+
 	default:
 		return decodedMessage, fmt.Errorf("unreachable: message type assertion should have been done")
 	}

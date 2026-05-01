@@ -32,6 +32,18 @@ const (
 	SSVDKGMsgType spectypes.MsgType = 0xF1
 )
 
+// RoleDKG is the RunnerRole used in DKG-ceremony MsgIDs. The dutyExecutorID
+// slot of the MsgID carries the 32-byte clusterID (left-padded), mirroring
+// the existing committee-MsgID pattern at
+// protocol/v2/ssv/validator/committee.go: NewMsgID(domain, CommitteeID[:],
+// RoleCommittee). Operators are already subscribed to the committee
+// subnet for committee duties, so DKG envelopes naturally land where
+// every cluster operator is listening.
+//
+// PLACEHOLDER VALUE: 0xF0 (= 240). Out of the spec's 0..5 range; allocate
+// a stable ecosystem-wide value before mainnet alongside SSVDKGMsgType.
+const RoleDKG spectypes.RunnerRole = 0xF0
+
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
 func MsgTypeToString(mt spectypes.MsgType) string {
 	switch mt {

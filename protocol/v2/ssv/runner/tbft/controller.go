@@ -34,11 +34,12 @@ import (
 // Concurrency: all methods are safe to call from multiple goroutines
 // (operations are mutexed). Internal Instance access is serialized.
 type Controller struct {
-	operatorID    spectypes.OperatorID
-	committee     []spectypes.OperatorID
-	clusterID     [32]byte
-	clusterPubKey []byte
-	pubKeyShares  map[tbftcore.OperatorID][]byte
+	operatorID      spectypes.OperatorID
+	committee       []spectypes.OperatorID
+	clusterID       [32]byte
+	clusterPubKey   []byte
+	pubKeyShares    map[tbftcore.OperatorID][]byte
+	ibePubKeyShares map[tbftcore.OperatorID][]byte // may be nil (Option A or unset)
 
 	signer    tbftcore.Signer
 	tagSigner tbftcore.Signer // may be nil → falls back to signer in Instance ctor
@@ -90,9 +91,16 @@ type ControllerOptions struct {
 	// validator's pubkey under Option A, the IBE trust anchor).
 	ClusterPubKey []byte
 
-	// PubKeyShares maps each operator's ID to their pubkey share, used
-	// to verify per-partial signatures during Resolve.
+	// PubKeyShares maps each operator's ID to their validator pubkey
+	// share, used to verify per-partial signatures during Resolve.
 	PubKeyShares map[tbftcore.OperatorID][]byte
+
+	// IBEPubKeyShares optionally maps each operator's ID to their IBE
+	// pubkey share (the cluster IBE polynomial evaluated at x = opID).
+	// When set, the Instance verifies NonReceipt partial sigs at observe
+	// time. May be nil under Option A; under Option B it carries one
+	// entry per cluster operator.
+	IBEPubKeyShares map[tbftcore.OperatorID][]byte
 
 	// Signer is used for value-signing (Phase-2 onion contents) and for
 	// per-partial verification during Resolve. For SSV this is typically
@@ -137,16 +145,17 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	copy(committee, opts.Committee)
 
 	return &Controller{
-		operatorID:    opts.OperatorID,
-		committee:     committee,
-		clusterID:     opts.ClusterID,
-		clusterPubKey: opts.ClusterPubKey,
-		pubKeyShares:  opts.PubKeyShares,
-		signer:        opts.Signer,
-		tagSigner:     opts.TagSigner, // may be nil; Instance ctor handles fallback
-		ibe:           opts.IBE,
-		overrides:     opts.Overrides,
-		instances:     make(map[phase0.Slot]*RunningInstance),
+		operatorID:      opts.OperatorID,
+		committee:       committee,
+		clusterID:       opts.ClusterID,
+		clusterPubKey:   opts.ClusterPubKey,
+		pubKeyShares:    opts.PubKeyShares,
+		ibePubKeyShares: opts.IBEPubKeyShares,
+		signer:          opts.Signer,
+		tagSigner:       opts.TagSigner, // may be nil; Instance ctor handles fallback
+		ibe:             opts.IBE,
+		overrides:       opts.Overrides,
+		instances:       make(map[phase0.Slot]*RunningInstance),
 	}, nil
 }
 
@@ -174,6 +183,9 @@ func (c *Controller) StartNewInstance(slot phase0.Slot) (*RunningInstance, error
 	)
 	if err != nil {
 		return nil, fmt.Errorf("tbft adapter: new instance: %w", err)
+	}
+	if c.ibePubKeyShares != nil {
+		inst.SetIBEPubKeyShares(c.ibePubKeyShares)
 	}
 
 	leaderAt := computeLeaderLayers(cfg, c.operatorID)

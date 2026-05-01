@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	bls12381 "github.com/drand/kyber-bls12381"
 	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -145,6 +146,13 @@ type Controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
+	// dkgOrchestrator drives Pedersen DKG ceremonies for clusters this
+	// operator participates in (TBFT Option B; see
+	// docs/TBFT-DKG-TASKS.md). nil for remote-signer setups whose
+	// BeaconSigner doesn't expose IBE share storage — those operators
+	// continue to run without a TBFT proposer runner (FW1).
+	dkgOrchestrator *DKGOrchestrator
+
 	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
@@ -259,6 +267,28 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
+	// Wire the DKG orchestrator if the local BeaconSigner exposes IBE
+	// share storage (LocalKeyManager). Remote-signer setups don't yet
+	// support TBFT-IBE (FW1 in docs/TBFT-DKG-TASKS.md); they leave the
+	// orchestrator nil and run without a TBFT proposer runner.
+	if store, ok := options.BeaconSigner.(ibeShareStore); ok {
+		dkgOrch, err := NewDKGOrchestrator(DKGOrchestratorOptions{
+			Logger:     logger.Named("dkg-orchestrator"),
+			OperatorID: options.OperatorDataStore.GetOperatorID(),
+			Domain:     options.NetworkConfig.DomainType,
+			Suite:      bls12381.NewBLS12381Suite(),
+			Network:    options.Network,
+			Signer:     options.OperatorSigner,
+			Store:      store,
+		})
+		if err != nil {
+			logger.Warn("could not build DKG orchestrator; TBFT proposer runner will be unavailable",
+				zap.Error(err))
+		} else {
+			ctrl.dkgOrchestrator = dkgOrch
+		}
+	}
+
 	return ctrl
 }
 
@@ -311,6 +341,19 @@ func (c *Controller) handleRouterMessages() {
 		case msg := <-ch:
 			switch m := msg.(type) {
 			case *queue.SSVMessage:
+				// DKG-ceremony envelopes bypass the per-validator /
+				// per-committee dispatch — they're per-cluster
+				// ceremony messages owned by the orchestrator.
+				if m.MsgType == message.SSVDKGMsgType {
+					if c.dkgOrchestrator != nil {
+						if err := c.dkgOrchestrator.Receive(m.SSVMessage.Data); err != nil {
+							c.logger.Debug("could not deliver DKG envelope",
+								zap.Error(err))
+						}
+					}
+					continue
+				}
+
 				if m.MsgType == message.SSVEventMsgType {
 					continue
 				}
@@ -713,6 +756,17 @@ func (c *Controller) onShareStop(pubKey spectypes.ValidatorPK) {
 				)
 				return
 			}
+			// Last validator for this committee is gone — clean up the
+			// orphaned IBE share so a future cluster with the same
+			// committee composition starts a fresh DKG (Phase F1).
+			if c.dkgOrchestrator != nil {
+				if err := c.dkgOrchestrator.RemoveClusterIBE(v.Share.CommitteeID()); err != nil {
+					c.logger.Warn("could not remove orphaned IBE share",
+						fields.CommitteeID(v.Share.CommitteeID()),
+						zap.Error(err),
+					)
+				}
+			}
 		}
 	}
 }
@@ -726,6 +780,24 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	operator, err := c.committeeMemberFromShare(share)
 	if err != nil {
 		return nil, true, fmt.Errorf("build committee member from share: %w", err)
+	}
+
+	// Ensure the cluster's IBE share is established before any runner is
+	// constructed (TBFT proposer runner depends on it). Per
+	// docs/TBFT-DKG-TASKS.md D7, this blocks duties for the share until
+	// DKG completes. Idempotent: returns immediately if a share is
+	// already persisted for this cluster. Skipped when the orchestrator
+	// is unavailable (remote-signer setup) — the proposer runner is
+	// silently skipped downstream in that case.
+	if c.dkgOrchestrator != nil {
+		clusterID := share.CommitteeID()
+		committee := make([]spectypes.OperatorID, len(share.Committee))
+		for i, m := range share.Committee {
+			committee[i] = m.Signer
+		}
+		if err := c.dkgOrchestrator.EnsureClusterIBE(c.ctx, clusterID, committee, 0); err != nil {
+			return nil, true, fmt.Errorf("ensure cluster IBE: %w", err)
+		}
 	}
 
 	// Start a committee validator.

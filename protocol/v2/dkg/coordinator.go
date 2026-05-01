@@ -264,8 +264,12 @@ func (c *Coordinator) runExchangePhase(
 }
 
 // buildNodes constructs kyber's NewNodes list from collected exchanges,
-// sorted by Index. Each node's Index is the operator ID minus one
-// (kyber expects 0-based indices; SSV operator IDs are 1-based).
+// sorted by Index. Each node's Index is the operator ID minus one —
+// kyber's PriPoly.Eval and PubPoly.Eval use x = 1 + Index internally, so
+// Index = opID - 1 places each operator's share at x = opID, matching
+// the Lagrange x-coordinates `KyberSigner.AggregatePartials` uses
+// (operator IDs directly). This aligns with the existing validator-
+// share split convention.
 func (c *Coordinator) buildNodes(exchanges map[uint64]*dkgwire.Exchange) ([]kyber_dkg.Node, error) {
 	nodes := make([]kyber_dkg.Node, 0, len(exchanges))
 	for opID, e := range exchanges {

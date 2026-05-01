@@ -4,6 +4,9 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/drand/kyber"
+	bls12381 "github.com/drand/kyber-bls12381"
+	"github.com/drand/kyber/share"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -16,66 +19,124 @@ import (
 )
 
 // buildTBFTControllerForProposer constructs a TBFT Controller for the
-// proposer duty of `share`, using `options.Signer` as the source of
-// raw share material (Option A — see docs/IBE-INTEGRATION.md and
-// docs/TASKS.md).
+// proposer duty of `share`. Under Option B (see docs/TBFT-DKG-TASKS.md),
+// value-signing uses the validator share via BLSSigner; tag-signing uses
+// the cluster's IBE share via KyberSigner; the IBE encryption anchor is
+// the cluster's IBE pubkey (NOT the validator pubkey).
 //
-// Returns (nil, nil) if the signer does not expose share bytes (typical
-// for remote-signing setups) or if the share is not yet registered with
-// the local signer. The caller treats this as "TBFT not available for
-// this validator on this node" and falls back to QBFT.
+// Returns (nil, nil) if the signer does not expose either the validator
+// share bytes or the IBE share material — typical for remote-signing
+// setups (FW1 in docs/TBFT-DKG-TASKS.md). The caller treats this as
+// "TBFT not available for this validator on this node" and skips the
+// proposer runner.
 //
 // Returns a non-nil error only on Controller construction failure
 // (malformed inputs, etc.).
 func buildTBFTControllerForProposer(
-	share *ssvtypes.SSVShare,
+	ssvShare *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
 	options *validator.CommonOptions,
 ) (*tbftadapter.Controller, error) {
-	provider, ok := options.Signer.(ekm.ShareBytesProvider)
+	shareProvider, ok := options.Signer.(ekm.ShareBytesProvider)
 	if !ok {
-		// Remote signer: share material isn't on this node. The TBFT
-		// path needs raw share bytes for the BLSSigner / KyberSigner
-		// constructors, so the validator runs on QBFT instead.
+		return nil, nil
+	}
+	ibeProvider, ok := options.Signer.(ekm.IBEShareBytesProvider)
+	if !ok {
 		return nil, nil
 	}
 
-	shareBytes, err := provider.GetShareBytes(phase0.BLSPubKey(share.SharePubKey))
+	shareBytes, err := shareProvider.GetShareBytes(phase0.BLSPubKey(ssvShare.SharePubKey))
 	if err != nil {
-		// Share not registered with the local signer (e.g. node was
-		// started after the share was added in a previous process and
-		// AddShare hasn't been replayed in this process). Treat as
-		// "TBFT not available for this validator" rather than fatal —
-		// the QBFT path still works.
 		return nil, nil
 	}
 
-	// Build the cluster's pubkey-shares map (operator ID → share public
-	// key bytes). Each share member's SharePubKey IS its operator
-	// share's BLS public key.
-	pubKeyShares := make(map[tbftcore.OperatorID][]byte, len(share.Committee))
-	committee := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, m := range share.Committee {
+	clusterID := ssvShare.CommitteeID()
+
+	ibeShareBytes, err := ibeProvider.GetIBEShareBytes(clusterID)
+	if err != nil {
+		// DKG hasn't established an IBE share for this cluster yet (the
+		// orchestrator's EnsureClusterIBE hook in onShareInit should
+		// have run before this point — bail out rather than building a
+		// half-wired runner).
+		return nil, nil
+	}
+	clusterIBEPubKey, err := ibeProvider.GetClusterIBEPubKey(clusterID)
+	if err != nil {
+		return nil, nil
+	}
+	polyCommits, err := ibeProvider.GetClusterIBEPolyCommits(clusterID)
+	if err != nil {
+		return nil, nil
+	}
+
+	pubKeyShares := make(map[tbftcore.OperatorID][]byte, len(ssvShare.Committee))
+	committee := make([]spectypes.OperatorID, 0, len(ssvShare.Committee))
+	for _, m := range ssvShare.Committee {
 		pubKeyShares[tbftcore.OperatorID(m.Signer)] = append([]byte(nil), m.SharePubKey...)
 		committee = append(committee, m.Signer)
 	}
 
-	clusterID := share.CommitteeID()
+	ibePubKeyShares, err := computeIBEPubKeyShares(polyCommits, committee)
+	if err != nil {
+		return nil, fmt.Errorf("compute IBE pubkey shares: %w", err)
+	}
 
 	ctrl, err := tbftadapter.NewController(tbftadapter.ControllerOptions{
-		OperatorID:    operator.OperatorID,
-		Committee:     committee,
-		ClusterID:     clusterID, // [32]byte by definition
-		ClusterPubKey: append([]byte(nil), share.ValidatorPubKey[:]...),
-		PubKeyShares:  pubKeyShares,
-		// Two share-bound signers consuming the same share — see the
-		// DST-trick rationale in docs/IBE-INTEGRATION.md.
+		OperatorID:      operator.OperatorID,
+		Committee:       committee,
+		ClusterID:       clusterID,
+		ClusterPubKey:   clusterIBEPubKey,
+		PubKeyShares:    pubKeyShares,
+		IBEPubKeyShares: ibePubKeyShares,
+		// Value-signing keeps using the validator share (BLSSigner /
+		// herumi DST). Tag-signing uses the cluster's IBE share
+		// (KyberSigner / drand DST) under Option B.
 		Signer:    blsbackend.New(shareBytes),
-		TagSigner: blsbackend.NewKyberSigner(shareBytes),
+		TagSigner: blsbackend.NewKyberSigner(ibeShareBytes),
 		IBE:       blsbackend.NewTLockIBE(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build TBFT controller: %w", err)
 	}
 	return ctrl, nil
+}
+
+// computeIBEPubKeyShares evaluates the cluster's IBE polynomial at each
+// operator's index to produce per-operator IBE pubkey shares used for
+// observe-time NonReceipt-attestation verification.
+//
+// Kyber's PubPoly.Eval(idx) computes the polynomial at x = 1 + idx, so
+// using idx = opID - 1 places each operator's pubkey share at x = opID
+// — matching the Lagrange x-coordinates KyberSigner uses (operator
+// IDs). Aligns with protocol/v2/dkg/coordinator.go's buildNodes choice.
+func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.OperatorID) (map[tbftcore.OperatorID][]byte, error) {
+	if len(polyCommits) == 0 {
+		return nil, fmt.Errorf("empty polyCommits")
+	}
+	g1 := bls12381.NewBLS12381Suite().G1()
+	commits := make([]kyber.Point, len(polyCommits))
+	for i, b := range polyCommits {
+		pt := g1.Point()
+		if err := pt.UnmarshalBinary(b); err != nil {
+			return nil, fmt.Errorf("unmarshal polyCommits[%d]: %w", i, err)
+		}
+		commits[i] = pt
+	}
+	pp := share.NewPubPoly(g1, nil, commits)
+
+	out := make(map[tbftcore.OperatorID][]byte, len(committee))
+	for _, opID := range committee {
+		if opID == 0 {
+			return nil, fmt.Errorf("operator id 0 not supported")
+		}
+		// idx = opID - 1; PubPoly.Eval(idx) returns share at x = 1 + idx = opID.
+		s := pp.Eval(int(opID) - 1) //nolint:gosec // bounded by SSV committee sizes
+		b, err := s.V.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("marshal IBE pubkey share for op %d: %w", opID, err)
+		}
+		out[tbftcore.OperatorID(opID)] = b
+	}
+	return out, nil
 }

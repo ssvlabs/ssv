@@ -11,6 +11,9 @@ import (
 	kyber_dkg "github.com/drand/kyber/share/dkg"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
+	"github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend"
 )
 
 // inMemBus is a synthetic broadcast bus that fans out each operator's
@@ -280,4 +283,72 @@ func TestCoordinator_LivenessLimit(t *testing.T) {
 	for opID, err := range errs {
 		require.Contains(t, err.Error(), "exchange", "op %d: expected exchange-phase error, got %v", opID, err)
 	}
+}
+
+// TestCoordinator_DKGOutput_KyberSignerRoundTrip — the indexing-alignment
+// regression test. Verifies that a DKG-output share, fed into KyberSigner,
+// produces partial sigs that aggregate into a valid threshold signature
+// under the cluster IBE pubkey (= Commits[0]).
+//
+// The kyber-DKG node Index, kyber's PubPoly.Eval x-coord (= 1+Index), and
+// KyberSigner.AggregatePartials Lagrange x-coord (= operator ID) must all
+// align — Index = opID-1 places each share at x = opID, matching what
+// KyberSigner expects. If that alignment ever drifts, VerifyAggregate
+// here fails and this test goes red before downstream integration paths
+// silently produce wrong threshold signatures.
+func TestCoordinator_DKGOutput_KyberSignerRoundTrip(t *testing.T) {
+	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
+	threshold := 3 // f+1 for n=7
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	results, errs := runCluster(t, ctx, committee, threshold, cidFor(0xc1), 0, nil)
+	require.Empty(t, errs)
+	require.Len(t, results, len(committee))
+
+	// Each operator's KyberSigner consumes the marshaled Share.V bytes —
+	// the same shape Phase E3's setup_tbft.go would produce from the
+	// IBEShareWriter persistence. Sign a fixed test tag with each
+	// operator and aggregate any threshold-sized subset.
+	tag := []byte("dkg-roundtrip-tag/v1")
+	signer := blsbackend.NewKyberSigner(nil) // verify-only base instance
+
+	partials := make(map[tbftcore.OperatorID]tbftcore.Signature, len(committee))
+	for _, opID := range committee {
+		shareBytes, err := results[opID].Share.V.MarshalBinary()
+		require.NoError(t, err)
+		opSigner := blsbackend.NewKyberSigner(shareBytes)
+		sig, err := opSigner.SignPartial(tag)
+		require.NoError(t, err)
+		partials[tbftcore.OperatorID(opID)] = sig
+	}
+
+	// Take the first `threshold` partials and aggregate.
+	subset := make(map[tbftcore.OperatorID]tbftcore.Signature, threshold)
+	for i, opID := range committee[:threshold] {
+		subset[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+		_ = i
+	}
+	aggregate, err := signer.AggregatePartials(subset)
+	require.NoError(t, err)
+
+	// Cluster IBE pubkey = Commits[0], in kyber-G1 marshaled form. The
+	// KyberSigner's VerifyAggregate accepts kyber-format pubkey bytes
+	// directly (HerumiPubkeyToKyberG1Point round-trips byte-equally).
+	pubKeyBytes, err := results[committee[0]].Commits[0].MarshalBinary()
+	require.NoError(t, err)
+	require.True(t, signer.VerifyAggregate(pubKeyBytes, tag, aggregate),
+		"DKG share + KyberSigner threshold sig must verify against Commits[0]")
+
+	// And: a different threshold-sized subset must produce a byte-
+	// equivalent aggregate (Lagrange interpolation is subset-invariant).
+	subset2 := make(map[tbftcore.OperatorID]tbftcore.Signature, threshold)
+	for _, opID := range committee[len(committee)-threshold:] {
+		subset2[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+	}
+	aggregate2, err := signer.AggregatePartials(subset2)
+	require.NoError(t, err)
+	require.Equal(t, aggregate, aggregate2,
+		"different threshold subsets must produce identical aggregate signatures")
 }

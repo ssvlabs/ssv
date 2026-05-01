@@ -5,12 +5,16 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleCommittee
+	// RoleCommittee and the DKG role both carry a clusterID-anchored MsgID
+	// (32-byte committee ID in the dutyExecutorID slot, left-padded), so
+	// committee-level lookup applies to both.
+	return role == spectypes.RoleCommittee || role == ssvmessage.RoleDKG
 }
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {

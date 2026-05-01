@@ -79,9 +79,33 @@ type Config struct {
 	F         int
 }
 
-// Quorum returns the quorum threshold q = 2f + 1.
+// Quorum returns the σ-quorum threshold qV = 2f + 1. Retained for
+// backward compatibility with callers using the symmetric naming;
+// equivalent to QV.
+//
+// Deprecated: use QV() for σ-quorum (positive partial-sig quorum) or
+// QEnc() for the IBE-unlock threshold. The two are now distinct
+// (qV = 2f+1, qEnc = f+1) per docs/TBFT.md; this alias hides the
+// distinction and should not be used in new code.
 func (c *Config) Quorum() int {
+	return c.QV()
+}
+
+// QV returns the σ-quorum threshold (positive partial-sig quorum) used
+// at the σ-pool reconstruction step in tryReconstructLayer. qV = 2f+1
+// per [docs/TBFT.md].
+func (c *Config) QV() int {
 	return 2*c.F + 1
+}
+
+// QEnc returns the IBE-unlock threshold (NonReceipt-attestation quorum)
+// used at tryDeriveNextLayerKey. qEnc = f+1 per [docs/TBFT.md] under
+// Option B; under Option A (DST-trick on the validator key) the IBE
+// primitive still requires 2f+1 partials, so this count is naming-only
+// until the IBE keypair is established at threshold f+1 — see
+// docs/TBFT-DKG-TASKS.md.
+func (c *Config) QEnc() int {
+	return c.F + 1
 }
 
 // K returns the fallback depth (number of layers).

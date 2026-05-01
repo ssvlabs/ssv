@@ -395,3 +395,98 @@ func requireAllAgreeAmongOnline(t *testing.T, outputs map[OperatorID]*Output, s 
 	}
 	requireAllAgree(t, online)
 }
+
+
+// ---- IBE pubkey-share verification (Phase E5) -------------------------
+
+func TestObserveNonReceipt_IBEVerification_Accepts(t *testing.T) {
+	cfg := validProposerConfig(t, 7)
+	q := cfg.Quorum()
+
+	pubKeyShares := make(map[OperatorID][]byte, len(cfg.Operators))
+	ibePubKeyShares := make(map[OperatorID][]byte, len(cfg.Operators))
+	for _, op := range cfg.Operators {
+		pubKeyShares[op] = []byte{byte(op)}
+		ibePubKeyShares[op] = []byte{byte(op)}
+	}
+
+	signer := NewStubSigner(q, []byte{42})
+	inst, err := NewInstance(cfg, signer, NewStubIBE(q), []byte("cluster"), pubKeyShares)
+	require.NoError(t, err)
+	inst.SetIBEPubKeyShares(ibePubKeyShares)
+
+	op := cfg.Operators[3]
+	tag := NoQuorumTag(cfg.ClusterID, cfg.Height, 0)
+	signerOp := NewStubSigner(q, []byte{byte(op)})
+	partial, err := signerOp.SignPartial(tag)
+	require.NoError(t, err)
+
+	require.NoError(t, inst.ObserveNonReceipt(&NonReceiptAttestation{
+		OperatorID: op,
+		Height:     cfg.Height,
+		Layer:      0,
+		PartialSig: partial,
+	}))
+}
+
+func TestObserveNonReceipt_IBEVerification_Rejects(t *testing.T) {
+	cfg := validProposerConfig(t, 7)
+	q := cfg.Quorum()
+
+	pubKeyShares := make(map[OperatorID][]byte, len(cfg.Operators))
+	ibePubKeyShares := make(map[OperatorID][]byte, len(cfg.Operators))
+	for _, op := range cfg.Operators {
+		pubKeyShares[op] = []byte{byte(op)}
+		ibePubKeyShares[op] = []byte{byte(op)}
+	}
+
+	signer := NewStubSigner(q, []byte{42})
+	inst, err := NewInstance(cfg, signer, NewStubIBE(q), []byte("cluster"), pubKeyShares)
+	require.NoError(t, err)
+	inst.SetIBEPubKeyShares(ibePubKeyShares)
+
+	op := cfg.Operators[3]
+	// Forged: partial produced with a different key than ibePubKeyShares[op].
+	tag := NoQuorumTag(cfg.ClusterID, cfg.Height, 0)
+	forger := NewStubSigner(q, []byte{0xff})
+	partial, err := forger.SignPartial(tag)
+	require.NoError(t, err)
+
+	err = inst.ObserveNonReceipt(&NonReceiptAttestation{
+		OperatorID: op,
+		Height:     cfg.Height,
+		Layer:      0,
+		PartialSig: partial,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "verification")
+}
+
+func TestObserveNonReceipt_NoIBEShares_SkipsVerification(t *testing.T) {
+	cfg := validProposerConfig(t, 7)
+	q := cfg.Quorum()
+
+	pubKeyShares := make(map[OperatorID][]byte, len(cfg.Operators))
+	for _, op := range cfg.Operators {
+		pubKeyShares[op] = []byte{byte(op)}
+	}
+
+	signer := NewStubSigner(q, []byte{42})
+	inst, err := NewInstance(cfg, signer, NewStubIBE(q), []byte("cluster"), pubKeyShares)
+	require.NoError(t, err)
+	// No SetIBEPubKeyShares call — verification stays disabled.
+
+	op := cfg.Operators[3]
+	tag := NoQuorumTag(cfg.ClusterID, cfg.Height, 0)
+	forger := NewStubSigner(q, []byte{0xff})
+	partial, err := forger.SignPartial(tag)
+	require.NoError(t, err)
+
+	// Even a forged partial is accepted when verification is off.
+	require.NoError(t, inst.ObserveNonReceipt(&NonReceiptAttestation{
+		OperatorID: op,
+		Height:     cfg.Height,
+		Layer:      0,
+		PartialSig: partial,
+	}))
+}

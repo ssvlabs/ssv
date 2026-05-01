@@ -124,6 +124,11 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (any, error) {
 			return nil, fmt.Errorf("failed to decode TBFT envelope: %w", err)
 		}
 		body = env
+	case ssvmessage.SSVDKGMsgType:
+		// DKG envelopes are decoded by the per-cluster orchestrator (which
+		// owns the kyber suite). The queue layer passes the raw bytes
+		// through; the dispatcher reads m.SSVMessage.Data directly.
+		body = nil
 	default:
 		return nil, ErrUnknownMessageType
 	}

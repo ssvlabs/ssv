@@ -108,7 +108,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	switch ssvMessage.MsgType {
-	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType, ssvmessage.SSVTBFTMsgType:
+	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType, ssvmessage.SSVTBFTMsgType, ssvmessage.SSVDKGMsgType:
 		break
 	case ssvmessage.SSVEventMsgType:
 		// Rule: Event message
@@ -144,7 +144,8 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 		spectypes.RoleProposer,
 		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
+		spectypes.RoleVoluntaryExit,
+		ssvmessage.RoleDKG:
 		return true
 	default:
 		return false

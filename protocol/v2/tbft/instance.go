@@ -54,6 +54,18 @@ type Instance struct {
 	// signature contributions.
 	pubKeyShares map[OperatorID][]byte
 
+	// ibePubKeyShares maps each operator's ID to their IBE pubkey share
+	// (the cluster IBE polynomial evaluated at x=opID). When non-nil,
+	// ObserveNonReceipt verifies each incoming NonReceipt partial sig
+	// against the matching pubkey share before storing it — catching
+	// byzantine NR partials at observe time rather than letting them
+	// silently corrupt the aggregated IBE decryption key.
+	//
+	// Optional: nil under Option A (no separate IBE keypair). Set via
+	// SetIBEPubKeyShares after construction; left nil for legacy /
+	// stub-signer tests where the verification adds no value.
+	ibePubKeyShares map[OperatorID][]byte
+
 	// Phase 1: candidate values per layer (typically only the leader's
 	// view at each layer). For a given layer there is at most one value
 	// the operator considers "the canonical candidate." Equivocation by
@@ -147,6 +159,18 @@ func NewInstanceWithTagSigner(
 // Config returns the instance's config (read-only).
 func (i *Instance) Config() *Config { return i.cfg }
 
+// SetIBEPubKeyShares enables per-NonReceipt-attestation partial-sig
+// verification at ObserveNonReceipt time. Each entry maps an operator's
+// ID to their IBE pubkey share (cluster IBE polynomial evaluated at
+// x=opID). When set, byzantine NR partials are rejected as they arrive
+// instead of silently corrupting the aggregated decryption key.
+//
+// Pass nil (or never call) to skip verification — appropriate for
+// Option A (no separate IBE keypair) and stub-signer tests.
+func (i *Instance) SetIBEPubKeyShares(shares map[OperatorID][]byte) {
+	i.ibePubKeyShares = shares
+}
+
 // ObserveCandidate records a candidate value at a given layer. Caller must
 // have already validated `value` against the application-specific rules
 // (e.g. SSV's slashing-protection, value-checker logic). The first
@@ -180,9 +204,24 @@ func (i *Instance) ObserveOnion(o *Onion) error {
 
 // ObserveNonReceipt records a peer's non-receipt attestation. Re-observations
 // from the same operator at the same layer are silently ignored.
+//
+// When ibePubKeyShares is set (typically post-DKG, Option B), this
+// method verifies the NR partial sig against the operator's IBE pubkey
+// share before storing — catching byzantine garbage NRs that would
+// otherwise silently corrupt the aggregated decryption key.
 func (i *Instance) ObserveNonReceipt(nr *NonReceiptAttestation) error {
 	if err := ValidateNonReceipt(nr, i.cfg); err != nil {
 		return err
+	}
+	if i.ibePubKeyShares != nil {
+		pubShare, ok := i.ibePubKeyShares[nr.OperatorID]
+		if !ok {
+			return fmt.Errorf("tbft: no IBE pubkey share for operator %d", nr.OperatorID)
+		}
+		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, nr.Layer)
+		if !i.tagSigner.VerifyPartial(pubShare, tag, nr.PartialSig) {
+			return fmt.Errorf("tbft: non-receipt partial sig from op %d failed verification", nr.OperatorID)
+		}
 	}
 	if i.nonReceipts[nr.Layer] == nil {
 		i.nonReceipts[nr.Layer] = make(map[OperatorID]Signature)
@@ -384,7 +423,7 @@ func (i *Instance) tryReconstructLayer(layer int, decryptionKey []byte) (*Output
 			winning = g
 		}
 	}
-	if winning == nil || len(winning.partials) < i.cfg.Quorum() {
+	if winning == nil || len(winning.partials) < i.cfg.QV() {
 		return nil, nil
 	}
 
@@ -401,12 +440,19 @@ func (i *Instance) tryReconstructLayer(layer int, decryptionKey []byte) (*Output
 	}, nil
 }
 
-// tryDeriveNextLayerKey attempts to aggregate q non-receipt attestations on
-// NoQuorumTag(layer). Returns the derived decryption key for layer+1, or
-// nil if quorum wasn't reached.
+// tryDeriveNextLayerKey attempts to aggregate qEnc non-receipt
+// attestations on NoQuorumTag(layer). Returns the derived decryption
+// key for layer+1, or nil if the NR-quorum threshold wasn't reached.
+//
+// Under Option B (separate IBE keypair at threshold f+1), aggregating
+// f+1 IBE-share partials yields the IBE master signature on the tag —
+// directly usable as a decryption key. Under Option A (DST-trick on
+// validator key), the IBE primitive still requires 2f+1 partials, so
+// the qEnc=f+1 protocol-level count is naming-only until the IBE
+// keypair is established at threshold f+1 (see docs/TBFT-DKG-TASKS.md).
 func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 	partials := i.nonReceipts[layer]
-	if len(partials) < i.cfg.Quorum() {
+	if len(partials) < i.cfg.QEnc() {
 		return nil, nil
 	}
 	// Aggregate the non-receipt partials into a full BLS signature on the
