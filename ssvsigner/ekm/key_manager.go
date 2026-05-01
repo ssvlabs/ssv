@@ -65,6 +65,16 @@ type BeaconSigner interface {
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	// IsBeaconBlockSlashable returns error if the given block is slashable
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
+	// UpdateHighestProposal records `slot` as the highest slot the operator
+	// has signed a block for under `pubKey`. Future IsBeaconBlockSlashable
+	// checks compare against this record.
+	//
+	// Callers that go through SignBeaconObject get this update for free
+	// inside that path. Callers that sign outside of SignBeaconObject —
+	// notably the TBFT proposer, where the threshold-reconstructed master
+	// signature isn't produced via the EKM signing path — must invoke
+	// this explicitly after a successful submission.
+	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 }
 
 // ShareBytesProvider is implemented by signers that can hand back the

@@ -274,6 +274,10 @@ func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot 
 	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
 }
 
+func (km *LocalKeyManager) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+	return km.slashingProtector.UpdateHighestProposal(pubKey, slot)
+}
+
 func (km *LocalKeyManager) BumpSlashingProtection(txn ReadWriteTxn, pubKey phase0.BLSPubKey) error {
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
@@ -442,7 +446,7 @@ func (km *LocalKeyManager) extractShareBytesFromWallet(pubKey phase0.BLSPubKey) 
 	}
 
 	// HDAccount.MarshalJSON writes the validation key (an HDKey) as a
-	// nested object whose `privKey` is hex-serialised secret-key bytes.
+	// nested object whose `privKey` is hex-serialized secret-key bytes.
 	// This format is stable — it's how the wallet itself round-trips
 	// to and from the encrypted DB on every load.
 	raw, err := json.Marshal(acc)

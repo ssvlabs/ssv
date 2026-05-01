@@ -30,3 +30,12 @@ func (b TestingKeyManagerAdapter) IsAttestationSlashable(pk phase0.BLSPubKey, da
 func (b TestingKeyManagerAdapter) IsBeaconBlockSlashable(pk phase0.BLSPubKey, slot phase0.Slot) error {
 	return b.TestingKeyManager.IsBeaconBlockSlashable(pk[:], slot)
 }
+
+// UpdateHighestProposal records `slot` as already signed so future
+// IsBeaconBlockSlashable calls reject re-signing the same slot. Mapped
+// onto the spec testing key manager's slashable-slot tracker since
+// that's the same internal record set IsBeaconBlockSlashable consults.
+func (b TestingKeyManagerAdapter) UpdateHighestProposal(pk phase0.BLSPubKey, slot phase0.Slot) error {
+	b.AddSlashableSlot(pk[:], slot)
+	return nil
+}

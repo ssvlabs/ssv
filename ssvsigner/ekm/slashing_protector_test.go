@@ -17,6 +17,48 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
+// TestUpdateHighestProposal verifies the BeaconSigner.UpdateHighestProposal
+// bridge added for the TBFT proposer path. TBFT reconstructs the master
+// signature outside the EKM signing flow, so it can't piggyback on
+// SignBeaconObject's built-in slashing-state update — it has to call
+// UpdateHighestProposal directly. This test checks the contract: after
+// UpdateHighestProposal(slot), IsBeaconBlockSlashable rejects the same
+// slot. Without this bridge, a process restart could re-participate in
+// TBFT for an already-signed slot.
+func TestUpdateHighestProposal(t *testing.T) {
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, operatorPrivateKey).(*LocalKeyManager)
+
+	sk := &bls.SecretKey{}
+	require.NoError(t, sk.SetHexString(sk1Str))
+	pk := phase0.BLSPubKey(sk.GetPublicKey().Serialize())
+
+	currentSlot := testBeaconConfig().EstimatedCurrentSlot()
+	signedSlot := currentSlot + minSPProposalSlotGap + 1
+
+	// A fresh share is just past BumpSlashingProtection — current slot
+	// is not slashable.
+	require.NoError(t, km.IsBeaconBlockSlashable(pk, signedSlot),
+		"fresh share: signedSlot should not be slashable")
+
+	// Record signedSlot as having been signed.
+	require.NoError(t, km.UpdateHighestProposal(pk, signedSlot))
+
+	// IsBeaconBlockSlashable should now reject re-signing the same slot.
+	require.Error(t, km.IsBeaconBlockSlashable(pk, signedSlot),
+		"after UpdateHighestProposal, the same slot must be slashable")
+
+	// Earlier slots should also be slashable now.
+	require.Error(t, km.IsBeaconBlockSlashable(pk, signedSlot-1),
+		"after UpdateHighestProposal, an earlier slot must be slashable")
+
+	// Strictly later slots remain signable.
+	require.NoError(t, km.IsBeaconBlockSlashable(pk, signedSlot+1),
+		"a strictly later slot must still be signable")
+}
+
 func TestSlashing(t *testing.T) {
 	ctx := t.Context()
 

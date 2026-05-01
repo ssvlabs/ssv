@@ -40,6 +40,18 @@ const proposerSlotDeadline = 12 * time.Second
 // keyed by slot — the FetchCandidate hook needs the RANDAO and the
 // SubmitOutput hook needs the version.
 func (r *ProposerRunner) tbftStartSlot(ctx context.Context, logger *zap.Logger, slot phase0.Slot, randaoSig spectypes.Signature) error {
+	// Slashing protection: refuse to start the slot driver if signing a
+	// block for `slot` would be slashable. This is best-effort — the
+	// authoritative check + record happens at submit time
+	// (tbftSubmitOutput). Catching it here just saves the protocol round
+	// when we already know the slot is off-limits.
+	sharePubkey := phase0.BLSPubKey(r.GetShare().SharePubKey)
+	if err := r.signer.IsBeaconBlockSlashable(sharePubkey, slot); err != nil {
+		logger.Warn("TBFT slot skipped: slashing protection",
+			fields.Slot(slot), zap.Error(err))
+		return nil
+	}
+
 	var randao phase0.BLSSignature
 	if len(randaoSig) != len(randao) {
 		return fmt.Errorf("tbft start slot: unexpected RANDAO length %d (want %d)", len(randaoSig), len(randao))
@@ -261,6 +273,26 @@ func (r *ProposerRunner) tbftSubmitOutput(ctx context.Context, slot phase0.Slot,
 
 	var specSig phase0.BLSSignature
 	copy(specSig[:], output.Signature)
+
+	// Slashing protection. The TBFT path doesn't go through
+	// ekm.SignBeaconObject (the master signature is reconstructed from
+	// peer partials, not produced by the local EKM), so we have to drive
+	// the slashing-protector record manually. Order matters:
+	//   1. Re-check IsBeaconBlockSlashable here (defense-in-depth — the
+	//      pre-flight check in tbftStartSlot may be stale by submit time).
+	//   2. UpdateHighestProposal BEFORE SubmitBeaconBlock — if the record
+	//      lands but the submit fails, future re-runs for this slot are
+	//      blocked, which is the safe direction. If the record fails,
+	//      we don't submit and are free to retry next slot.
+	sharePubkey := phase0.BLSPubKey(r.GetShare().SharePubKey)
+	if err := r.signer.IsBeaconBlockSlashable(sharePubkey, slot); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+		return fmt.Errorf("tbft submit: slashable block for slot %d: %w", slot, err)
+	}
+	if err := r.signer.UpdateHighestProposal(sharePubkey, slot); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+		return fmt.Errorf("tbft submit: update highest proposal: %w", err)
+	}
 
 	r.doppelgangerHandler.ReportQuorum(duty.ValidatorIndex)
 
