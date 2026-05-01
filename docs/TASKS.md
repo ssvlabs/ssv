@@ -29,7 +29,7 @@ RANDAO partial-sig collection → top-K leaders fetch in parallel → onion broa
 
 The replacement removes QBFT's 3-phase ceremony and the separate post-consensus phase, replacing both with TBFT's 1-RTT onion broadcast that carries partial validator-signatures inside it.
 
-## Unified TBFT / TBFT2 design
+## Unified TBFT design
 
 Per the design exploration, a single implementation can serve both protocols by parameterization. TBFT2 is just TBFT with `K=2` plus per-layer fetch timing.
 
@@ -78,7 +78,6 @@ Phases build on each other. Within a phase, tasks can usually be parallelized.
   - `Δ_1` (block-fetch window): default `1s`.
   - `Δ_2` (onion-gossip window): default `500ms`.
   - For TBFT2 (n=4): `T_b` (early backup fetch) at `slot_start − 4s`.
-- [x] **Leader semantics for TBFT2's `L_p` / `L_b`.** Distinct operators chosen via per-slot rotation, deterministic from `(slot, cluster_operators)`. Specifically: priority order for TBFT2 is the same priority order as TBFT-K=2. `L_p` = priority[0], `L_b` = priority[1].
 - [x] **Backwards compatibility / mixed-cluster prevention.** Out of scope for the protocol implementation. Operator deployment ensures a cluster runs one protocol or the other, not both.
 - [x] **ssv-spec coupling.** The TBFT protocol implementation is **independent of `github.com/ssvlabs/ssv-spec` in every way**. We define our own message types, our own value-checker hooks, our own controller interface. Spec-tests are not part of this work.
 - [x] **Inconsistency-slashing.** Detect and log only; no punishment hook (SSV doesn't have an operator-slashing mechanism today).
@@ -196,7 +195,7 @@ Phases build on each other. Within a phase, tasks can usually be parallelized.
 - [x] Round-trip tests + truncation/version-rejection tests ([protocol/v2/tbft/wire/wire_test.go](protocol/v2/tbft/wire/wire_test.go)).
 
 **Config factory** (SSV-side, depends on ssv-spec):
-- [x] [protocol/v2/ssv/runner/tbft/config.go](protocol/v2/ssv/runner/tbft/config.go) — `ConfigForCluster(slot, committee, clusterID, overrides) → *tbft.Config` with cluster-size-aware TBFT vs TBFT2 selection: n=4 → K=2 with split fetch times (TBFT2); n≥7 → K=max(3, f+1) with uniform late fetch (TBFT). Leader rotation matches SSV's existing `RoundRobinProposer` convention.
+- [x] [protocol/v2/ssv/runner/tbft/config.go](protocol/v2/ssv/runner/tbft/config.go) — `ConfigForCluster(slot, committee, clusterID, overrides) → *tbft.Config` with cluster-size-aware TBFT selection: n=4 → K=2 with split fetch times (TBFT2); n≥7 → K=max(3, f+1) with uniform late fetch (TBFT). Leader rotation matches SSV's existing `RoundRobinProposer` convention.
 - [x] Tests for all SSV cluster sizes (4, 7, 10, 13), leader-rotation correctness, validation rejection of non-3f+1 sizes, override propagation, deterministic sorting of unsorted committees ([config_test.go](protocol/v2/ssv/runner/tbft/config_test.go)).
 
 **Done:**
@@ -231,7 +230,7 @@ The integration shape is now fully defined in code. What remains is the runner-s
 - **Keep RANDAO pre-consensus phase as-is.** Pre-consensus is independent of TBFT.
 - **Replace `r.QBFTController.StartNewInstance(...)` with adapter's `Controller.StartNewInstance(slot)`.** Hold the returned `RunningInstance` for the slot's lifecycle.
 - **Use `Scheduler.FetchAndBroadcastCandidate` / `BuildAndBroadcastOnion` / `ResolveAndSubmit`** as the per-phase primitives, scheduled via SSV's existing time-based scheduler at `cfg.Layers[k].FetchAt` / `cfg.Deadline` / `cfg.Deadline + gossipWindow`.
-- **Block-fetch coordination.** Top-K leaders each fetch in parallel; for TBFT2 (n=4), `L_b` fetches early. The Scheduler's hooks make this straightforward — `FetchCandidate` is the only callback that needs to call out to the beacon node / relay.
+- **Block-fetch coordination.** Top-K leaders each fetch in parallel. The Scheduler's hooks make this straightforward — `FetchCandidate` is the only callback that needs to call out to the beacon node / relay.
 - **Remove `ProcessPostConsensus`.** TBFT's Phase 3 produces the signature directly via `SubmitOutput` hook.
 - **Doppelganger / slashing-protection integration.** `CanSign()` check ([protocol/v2/ssv/runner/proposer.go:272-275](protocol/v2/ssv/runner/proposer.go:272)) must run before the Scheduler builds the onion. Easiest place: just before calling `BuildAndBroadcastOnion`, if `CanSign()` returns false, skip Phase 2 (the slot will miss).
 - **Wire the network-receive path** through `DispatchBytes` + `RateLimiter`. SSV's existing message-validation layer parses the outer `SignedSSVMessage`, then the TBFT-specific dispatch happens after.
@@ -254,7 +253,6 @@ The integration shape is now fully defined in code. What remains is the runner-s
   - Top-leader silent: 2f+1 non-receipt → unlocks layer 1, succeeds there
   - Top-leader byzantine equivocating: rejected, falls through to layer 1
   - `f` byzantine + degraded network: scenario-specific outcomes per the comparison tables
-  - TBFT2 specifically: `L_p` byzantine → fallback to `V_b`; both byzantine → miss
 - [ ] **Cluster-size matrix.** Run protocol-scenario tests for n ∈ {4, 7, 10, 13}.
 - [ ] **`make unit-test` and `make lint` clean** for the new TBFT package and its integration points.
 - [ ] **Existing QBFT spec-tests untouched.** They still pass because we don't modify the QBFT codepath; TBFT lives in a separate package.
@@ -262,54 +260,6 @@ The integration shape is now fully defined in code. What remains is the runner-s
 **Exit criteria:** TBFT package's own test suite green at all four cluster sizes; `make unit-test` and `make lint` clean.
 
 ---
-
-### Phase 6 — Devnet validation
-
-**Goal:** TBFT runs in a real-network environment (Holesky or similar) and produces measurable telemetry comparable to QBFT.
-
-**Tasks:**
-
-- [ ] **Deploy TBFT-enabled binary to a devnet cluster.** Ideally a 4-of-13 cluster deployment so we exercise both TBFT2 (n=4) and TBFT-K=5 (n=13).
-- [ ] **Telemetry / metrics.** Emit per-slot metrics:
-  - Time from slot start to validator-signed-block ready
-  - Bandwidth used (onion + non-receipt + RANDAO)
-  - Layer reached (0, 1, 2, ... K-1) — distribution shows how often fallback fires
-  - Reconstruction success/failure
-  - Comparison metric: alongside-QBFT-run results for the same slots if feasible
-- [ ] **Soak test.** Run for ~1 week. Look for:
-  - Stuck consensus, missed slots
-  - Bandwidth spikes
-  - Memory leaks in IBE/onion paths
-  - Negative-attestation honesty exploits in the wild
-- [ ] **Performance comparison vs QBFT baseline.** Quantify the actual gain in latency and the actual cost in bandwidth, per cluster size.
-
-**Exit criteria:** ≥1 week of clean operation on devnet at multiple cluster sizes; measured numbers within design predictions (≤2× of [TBFT-comparison.md](TBFT-comparison.md) projections).
-
----
-
-### Phase 7 — Mainnet rollout
-
-**Goal:** TBFT available on mainnet, opt-in per cluster, with monitoring.
-
-**Tasks:**
-
-- [ ] **Registry signaling.** New clusters can specify "TBFT" as their consensus protocol at registration. Existing clusters stay on QBFT until they re-register. (Subject to Phase 0 decision.)
-- [ ] **Operator config flag.** Optional override allowing operators to advertise TBFT support or refuse it (depending on rollout model).
-- [ ] **Documentation.** Update [docs/MEV_CONSIDERATIONS.md](docs/MEV_CONSIDERATIONS.md) and operator-facing docs to explain TBFT, when it kicks in, what changes operationally.
-- [ ] **Monitoring & alerting.** Production dashboards showing TBFT-vs-QBFT proposer-duty success rates, latency, bandwidth.
-- [ ] **Rollback plan.** If TBFT misbehaves in production, mechanism to disable per-cluster or globally.
-
-**Exit criteria:** TBFT available on mainnet; ≥10 clusters opted in; success rate ≥ QBFT baseline; rollback mechanism tested.
-
----
-
-## Open design questions
-
-Most Phase 0 questions resolved. Remaining:
-
-- [?] **Retry / re-attempt within the slot.** TBFT is single-shot by design. Should we allow a "second attempt" if Phase 2 deadline passes without output? This compromises the protocol's properties but might be a reasonable practical concession. Default: no, per design; revisit if telemetry shows it would help.
-- [?] **What happens to the existing QBFT for proposer code?** Keep both for transition period, or replace outright? Default: keep both behind a feature flag, deprecate QBFT-for-proposer after ≥2 mainnet stable releases.
-- [?] **Verify Option A (reuse validator key for IBE) composes cryptographically.** Phase 1 task: verify that BLS partial sigs on a tag — produced by the validator's existing operator shares — can serve as a tlock-style threshold IBE decryption key. If not, fall back to Option B (separate DKG).
 
 ### Deferred follow-ups
 
@@ -385,7 +335,7 @@ Wire encoding subpackage [protocol/v2/tbft/wire/](protocol/v2/tbft/wire/):
 - [envelope_test.go](protocol/v2/tbft/wire/envelope_test.go) — round-trip, version, kind, truncation, body-decode-error propagation
 
 SSV adapter package [protocol/v2/ssv/runner/tbft/](protocol/v2/ssv/runner/tbft/) (the bridge layer; depends on ssv-spec):
-- [config.go](protocol/v2/ssv/runner/tbft/config.go) — `ConfigForCluster` with cluster-size-aware TBFT/TBFT2 selection, leader rotation matching SSV's existing `RoundRobinProposer`
+- [config.go](protocol/v2/ssv/runner/tbft/config.go) — `ConfigForCluster` with cluster-size-aware TBFT selection, leader rotation matching SSV's existing `RoundRobinProposer`
 - [config_test.go](protocol/v2/ssv/runner/tbft/config_test.go) — n∈{4,7,10,13} factory tests, leader rotation, sorting, validation, overrides
 - [controller.go](protocol/v2/ssv/runner/tbft/controller.go) — `Controller` (per-cluster state machine wrapping `tbft.Instance`s by slot, with per-Instance mutex, `ProcessOnion`/`ProcessNonReceipt`/`ProcessCandidate` routing, `OperatorID` accessor)
 - [controller_test.go](protocol/v2/ssv/runner/tbft/controller_test.go) — API-surface tests + multi-controller end-to-end smoke test with real BLS + SignerGatedIBE
@@ -444,7 +394,7 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 
 ### Resolved design decisions
 
-- **D1 — Threshold separation: keep `qEnc = f+1` in [TBFT.md](TBFT.md); upgrade to Option B is future work.** Spec stays as written (`qV = 2f+1` σ-quorum, `qEnc = f+1` unlock). Implementation today runs Option A from Phase 0 (one DKG, threshold 2f+1, DST-trick role separation), so the cluster is effectively at `qEnc = qV = 2f+1` cryptographically — the threshold-separation liveness benefit (TBFT.md "Liveness profile / What threshold separation buys") is documented in spec but not yet realized in code. Until T5 below lands, the safety algebra in [TBFT.md](TBFT.md) "Why it's safe" describes the *target* state; the impl's current state has σ-NR slashing as nice-to-have rather than load-bearing.
+- **D1 — Threshold separation: keep `qEnc = f+1` in [TBFT.md](TBFT.md); upgrade to Option B is future work.** Spec stays as written (`qV = 2f+1` σ-quorum, `qEnc = f+1` unlock). Implementation today runs Option A from Phase 0 (one DKG, threshold 2f+1, DST-trick role separation), so the cluster is effectively at `qEnc = qV = 2f+1` cryptographically — the threshold-separation liveness benefit (TBFT.md "Liveness profile / What threshold separation buys") is documented in spec but not yet realized in code. T5 below tracks the upgrade. Safety is unconditional in either configuration once T6's σ+NR exclusion rule lands at aggregation time: the σ+NR mutual exclusion is algebraic regardless of byz behavior. The σ+NR slashing rule is for attribution, not safety.
 
 - **D2 — V-plaintext in onion: track via T9.** Implementation's [`EncryptedLayer.Value`](../protocol/v2/tbft/types.go) carries `V_{L_k}` plaintext, realizing [TBFTR](TBFTR.md) core ahead of [TBFT.md](TBFT.md) Phase 2. No change to either today; T9 below tracks the eventual reconciliation.
 
@@ -487,10 +437,20 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
   - **Effectively a no-op until T5 lands**: under Option A the IBE primitive still needs `2f+1` partials to decrypt, so counting at `f+1` for unlock doesn't enable actual fall-through. Lands the spec's naming in code; cryptographic effect comes with T5.
   - Tests: protocol-level counting at the new thresholds; mutual-exclusion preserved at the impl-level (still 2f+1 effective until T5).
 
-- [ ] **T6. Cross-onion partial-sig equivocation detection** ([TBFT.md](TBFT.md) caveat 2 third rule; closes audit P1.5 first bullet).
-  - In [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) grouping loop, detect same-operator partial appearing in two different value-groups at the same layer → record an `InconsistencyFault` and exclude that operator's contribution from both groups.
-  - Extend [`InconsistencyFault`](../protocol/v2/tbft/instance.go) with a `Kind` enum: `SigmaPlusNR`, `LeaderEquivocation`, `CrossOnionPartial`.
-  - Tests: two distinct partial sigs from same operator at same layer detected; neither group counts that contribution.
+- [ ] **T6. Aggregator-level fault exclusion (σ+NR + cross-onion σ+σ')** ([TBFT.md](TBFT.md) "Why it's safe" + caveat 2; closes audit P1.5 first bullet AND replaces the load-bearing-slashing safety assumption with a structural guard).
+
+  Two related exclusions in the [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) and [`tryDeriveNextLayerKey`](../protocol/v2/tbft/instance.go) aggregation paths:
+
+  - **σ+NR exclusion**: an operator that has both a non-empty σ partial at layer `k` (in their onion) AND an NR attestation on `nr_tag_k` (broadcast separately) has *both* contributions excluded from their respective quorum pools at layer `k`. Implementation: in `tryReconstructLayer`, when iterating onions, skip operators that appear in `i.nonReceipts[layer]`. Symmetrically in `tryDeriveNextLayerKey`, skip operators whose onion at `layer` has a non-empty σ partial. **This is what makes the threshold-separation safety argument hold structurally** (TBFT.md "Why it's safe"), rather than depending on slashing-deterred byzantine behavior.
+
+  - **Cross-onion σ+σ' exclusion**: an operator's partial sig appearing in two different value-groups at the same layer (signed two different `V`'s) has both contributions excluded. Implementation: in `tryReconstructLayer`'s grouping loop, when adding `(opID, partial)` to a sigGroup, check if `opID` already appears in any *other* group at this layer. If yes, record an `InconsistencyFault` of kind `CrossOnionPartial` and remove `opID` from both groups.
+
+  Both exclusions feed a shared `InconsistencyFault` `Kind` enum: `SigmaPlusNR`, `LeaderEquivocation`, `CrossOnionPartial` (T7 carries the evidence representation). The existing [`detectInconsistencyAt`](../protocol/v2/tbft/instance.go) detector remains for attribution-time recording; the new behavior is *applying the exclusion at aggregation time* (not just recording faults silently).
+
+  Tests:
+  - **σ+NR exclusion**: byz operator broadcasts σ at layer k AND NR on nr_tag_k → both contributions excluded from their pools; with byz attempting σ+NR equivocation, at most one of {σ-quorum, NR-quorum} reaches at the same layer regardless of byz behavior. **No two outputs cluster-wide even under hostile byz.**
+  - **Cross-onion σ+σ'**: byz operator's σ on V and σ on V' at same layer → recorded as fault; neither value-group counts that contribution; standard σ-quorum still reachable for honest-only V.
+  - **Liveness regression check**: under the standard P0.1 attack (byz silent on Phase-2 votes), exclusion is a no-op (byz didn't σ+NR), slot outcome unchanged from current behavior.
 
 - [ ] **T7. Slashable fault-proof representation** ([TBFT.md](TBFT.md) caveat 2).
   - Extend [`InconsistencyFault`](../protocol/v2/tbft/instance.go) to carry the cryptographic evidence per Kind:
@@ -532,7 +492,7 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 - [ ] **T5. Upgrade Option A → Option B: separate IBE keypair at threshold `qEnc = f+1` via Pedersen DKG between operators.** Detailed plan tracked in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md). Lands T4 (protocol-counting refactor) coincidentally — under Option B those new thresholds are cryptographically meaningful for the first time.
 
 - [ ] **T13. Worst-of-K beacon-fetch latency tuning** ([TBFT.md](TBFT.md) application section; audit P2.4).
-- [ ] **T14. Head-change handling during Phase 1 for TBFT proper** (analogous to [TBFT2.md](TBFT2.md) Phase 1A; audit P2.4).
+- [ ] **T14. Head-change handling during Phase 1 for TBFT proper**.
 - [ ] **T15. Final-certificate gossip (`KindCertificate`)** (audit P2.2).
 - [ ] **T16. End-to-end timing budget with telemetry** (audit P2.3).
 - [ ] **T17. TBFTR composition** ([TBFTR.md](TBFTR.md)) — closes audit P0.1/P0.2 at the protocol level. Foundations come from T1 (leader-auth) + T9 keep-V-plaintext.
@@ -561,7 +521,6 @@ Backlog (T5, T13–T19) — not on the spec-alignment critical path. T5 (Option 
 This plan is the implementation track of the design exploration documented in:
 
 - [TBFT.md](TBFT.md) — the n-layer protocol design
-- [TBFT2.md](TBFT2.md) — the 2-layer specialization for n=4
 - [TBFT-comparison.md](TBFT-comparison.md) — failure-mode comparison vs QBFT
 
 The motivation traces back to [ssvlabs/ssv#1829](https://github.com/ssvlabs/ssv/issues/1829), specifically the MEV-driven concern that QBFT's round-change time can blow past relays' 4 s cutoff for proposer duty.
