@@ -26,11 +26,11 @@ The protocol description is generic. SSV's Ethereum proposer duty is used as the
 - A leader-authentication signature scheme (operator-identity key) for candidate broadcasts. Practical choice: reuse each operator's long-term P2P/SSV identity key.
 - For each slot, a **leader priority order** `(L_0, L_1, …, L_{n-1})` deterministically derived from slot data. `L_0` is the highest-priority leader. (0-based indexing throughout.)
 - A **fallback depth** `K = max(3, f+1)` per cluster: `K=3` for n=7, `K=4` for n=10, `K=5` for n=13.
-- Per-slot deadlines: `T_d` (Phase 1 ends, Phase 2a starts), `T_d + Δ_2a` (Phase 2a ends, Phase 2b starts), `T_d + Δ_2a + Δ_2b` (Phase 2b ends, Phase 3 starts).
+- Per-slot deadlines: `T_commit` (Phase 1 ends, Phase 2a starts), `T_commit + Δ_2a` (Phase 2a ends, Phase 2b starts), `T_commit + Δ_2a + Δ_2b` (Phase 2b ends, Phase 3 starts).
 
 ## Protocol
 
-### Phase 1 — Candidate broadcast `[T_d − Δ_1, T_d]`
+### Phase 1 — Candidate broadcast `[T_commit − Δ_1, T_commit]`
 
 Each leader `L_k` for `k ∈ {0, …, K−1}`:
 
@@ -49,7 +49,7 @@ If a participant observes two distinct, validly-signed candidates `V_{L_k}` and 
 1. Locally treat layer `k` as non-receipt: don't include a positive partial signature for layer `k` in the onion (Phase 2a); broadcast the matching non-receipt attestation in Phase 2b instead.
 2. The pair is a self-contained slashable fault proof against `L_k`.
 
-### Phase 2a — Onion broadcast with V plaintext `[T_d, T_d + Δ_2a]`
+### Phase 2a — Onion broadcast with V plaintext `[T_commit, T_commit + Δ_2a]`
 
 Each participant `i` constructs a `K`-layer onion. Layer `k` is structured as:
 
@@ -72,7 +72,7 @@ For layers where `i` doesn't have a valid `V_{L_k}` (or observed `L_k` equivocat
 
 (Bandwidth optimization, the "hash variant": instead of full V plaintext at every layer, operators may carry `hash(V_{L_k})` (32 B) at each layer they signed and full `V_{L_k}` plaintext only at the layer where `i` is the leader. Any single full-V delivery is sufficient for cluster-wide recovery; everyone else verifies by hash. This is the recommended default for n=10/13 where bandwidth matters; the spec algebra is unchanged. See "Practical caveats" for the bandwidth analysis.)
 
-### Phase 2b — Late σ or non-receipt commitment `[T_d + Δ_2a, T_d + Δ_2a + Δ_2b]`
+### Phase 2b — Late σ or non-receipt commitment `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`
 
 For each layer `k` where the operator hasn't yet broadcast σ in their Phase 2a onion:
 
@@ -81,7 +81,7 @@ For each layer `k` where the operator hasn't yet broadcast σ in their Phase 2a 
 
 Each operator commits to **exactly one** of `{σ, NR}` per layer (whether the σ commit lands in Phase 2a's onion or Phase 2b's late-σ broadcast). Cross-signing σ and NR for the same layer triggers the σ+NR exclusion rule at aggregation (see "Why it's safe").
 
-### Phase 3 — Local decryption and reconstruction `[T_d + Δ_2a + Δ_2b, finalize]`
+### Phase 3 — Local decryption and reconstruction `[T_commit + Δ_2a + Δ_2b, finalize]`
 
 Each operator runs the σ+NR exclusion at aggregation, then attempts reconstruction:
 
@@ -160,7 +160,7 @@ The Phase-2 split doesn't change this — each operator commits to exactly one o
 
 TBFTR does **not** guarantee termination. If the network is bad enough that no σ-quorum and no NR-quorum reach their thresholds at any layer up to `K`, the slot is missed.
 
-**P0.1/P0.2 fully closed at n=7, 10, 13.** Walking the worst-case byzantine attack at any of these sizes: byzantine `L_k` delivers `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators just before `T_d`, withholds from the remaining `f` honest, refuses to vote in Phase 2a:
+**P0.1/P0.2 fully closed at n=7, 10, 13.** Walking the worst-case byzantine attack at any of these sizes: byzantine `L_k` delivers `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators just before `T_commit`, withholds from the remaining `f` honest, refuses to vote in Phase 2a:
 
 - **Phase 2a**: `f+1` honest broadcast σ on V in their onions (with V plaintext per TBFTR core). `f` honest didn't have V from Phase 1 — their onion's layer-k slot is null.
 - **Recovery**: the `f` missing-V honest receive V via peer onions in Phase 2a, validate against `L_k`'s leader sig + app rules.
@@ -199,7 +199,7 @@ For an SSV cluster of `n = 7, 10, or 13` proposing an Ethereum block:
 | IBE keypair | new per-cluster key from a separate DKG at cluster init |
 | Operator-identity key | existing SSV operator key |
 | Leader priority `(L_0, …, L_{n-1})` | reuse existing rotation order |
-| `T_d` | derived from the relay 4s cutoff — e.g. `T_d ≈ slot_start + 2.7s` |
+| `T_commit` | derived from the relay 4s cutoff — e.g. `T_commit ≈ slot_start + 2.7s` |
 | `Δ_1` | block-fetch window (~1s, accommodating worst-of-K beacon-fetch latency) |
 | `Δ_2a` | onion broadcast window (~300ms) |
 | `Δ_2b` | late-σ window (~150ms) |
@@ -232,13 +232,13 @@ slot_start
 
 Concrete numbers for each leg should come from production telemetry. Until that lands, the Phase-timeline above is a placeholder default; tighten per cluster size as data arrives.
 
-The deadline-tuning rule from caveat 5 below applies: `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
+The deadline-tuning rule from caveat 5 below applies: `T_commit − T_arrival > D + δ` where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
 
 ### Head-change handling
 
-If the head changes during the Phase-1 fetch window (between `T_d − Δ_1` and `T_d`), all candidate values fetched from the previous head are stale (their parent root no longer matches the new head). Each leader detects head changes during its fetch window and refreshes its candidate by re-fetching from the new head, then re-broadcasts `(V_{L_k}', σ_{L_k}^V(V_{L_k}'), σ_{L_k}^{op}(V_{L_k}'))` — superseding the stale bundle.
+If the head changes during the Phase-1 fetch window (between `T_commit − Δ_1` and `T_commit`), all candidate values fetched from the previous head are stale (their parent root no longer matches the new head). Each leader detects head changes during its fetch window and refreshes its candidate by re-fetching from the new head, then re-broadcasts `(V_{L_k}', σ_{L_k}^V(V_{L_k}'), σ_{L_k}^{op}(V_{L_k}'))` — superseding the stale bundle.
 
-Honest receivers that observe two distinct signed candidates from the same `L_k` for the same slot at different parent roots accept the latest (matching the current head); the equivocation-to-non-receipt rule (Phase 1) does not fire here because there's no contradiction at the protocol level — both are valid candidates against their respective heads, and only one matches the current head at `T_d`.
+Honest receivers that observe two distinct signed candidates from the same `L_k` for the same slot at different parent roots accept the latest (matching the current head); the equivocation-to-non-receipt rule (Phase 1) does not fire here because there's no contradiction at the protocol level — both are valid candidates against their respective heads, and only one matches the current head at `T_commit`.
 
 Implementation note: each operator must track the current head locally and validate `parent_root` of received candidates against it. Stale candidates fail the application-validity check and are silently dropped.
 
@@ -278,7 +278,7 @@ Together they close the P0.1/P0.2 grief residual `[f+1, 2f-1]` that the leader-�
 | Equivocation-to-NR rule | Yes | Yes |
 | Threshold separation | qV=3, qEnc=2 | qV=2f+1, qEnc=f+1 |
 | Onion at layer k | `E_{enc_tag_k}(σ_i^V(V_{L_k}))` (encrypted partial only) | `V_{L_k} ‖ E_{enc_tag_k}(σ_i^V(V_{L_k}))` (V plaintext + encrypted partial) — **TBFTR core** |
-| Phase 2 timing | Single window `[T_d, T_d + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) — **composition** |
+| Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) — **composition** |
 | Late σ broadcasts | None | Phase 2b — operators who recovered V via TBFTR core sign σ then |
 | P0.1/P0.2 closure | Closed by leader-σ-V + algebra at f=1 | Closed by composition at all sizes |
 | Bandwidth (worst case) | ~21 KB | n=7: ~108 KB, n=10: ~253 KB, n=13: ~497 KB (hash variant) |

@@ -220,12 +220,12 @@ func validProposerConfig(t *testing.T, n int) *Config {
 	for i := 0; i < K; i++ {
 		layers[i] = LayerSpec{
 			Leader:  OperatorID(i + 1),
-			FetchAt: 1 * time.Second, // late fetch (T_d - ~2s)
+			FetchAt: 1 * time.Second, // late fetch (T_commit - ~2s)
 		}
 	}
 	if n == 4 {
 		// TBFT2: layer 1 (backup) fetches early.
-		layers[1].FetchAt = -4 * time.Second // T_b = T_d - ~7s before deadline
+		layers[1].FetchAt = -4 * time.Second // T_b = T_commit - ~7s before deadline
 	}
 
 	return &Config{

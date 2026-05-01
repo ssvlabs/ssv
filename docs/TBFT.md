@@ -20,7 +20,7 @@ The protocol description is generic. SSV's Ethereum proposer duty is used as the
   - **IBE keypair** at threshold `qEnc = f+1 = 2`. Used (a) to sign the no-quorum tag and (b) as the decryption oracle for threshold identity-based encryption (IBE) / signature-based witness encryption (SWE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair.
 - A leader-authentication signature scheme (operator-identity key) for candidate broadcasts, distinct from the two threshold keypairs. Practical choice: reuse each operator's long-term P2P/SSV identity key.
 - Two designated leaders per slot, deterministically derived from slot data: a **primary leader** `L_p` and a **backup leader** `L_b`, required to be distinct.
-- Two leader-fetch deadlines, `T_b < T_p`, plus a final cluster deadline `T_d`. (`T_d` is a *view-fix point*: each operator commits its stance based on what it observed by `T_d`. Reconstruction and submission happen after `T_d`.)
+- Two leader-fetch deadlines, `T_b < T_p`, plus a final cluster deadline `T_commit`. (`T_commit` is a *view-fix point*: each operator commits its stance based on what it observed by `T_commit`. Reconstruction and submission happen after `T_commit`.)
 - A single tag `nr_tag_p = ("slot", N, "cluster", C, "no-primary-quorum")`.
 
 The two thresholds are deliberately different. `qV = 3` is the standard BFT quorum and is what makes a reconstructed `V` signature valid against the cluster's pubkey. `qEnc = 2` is the layer-unlock threshold.
@@ -29,7 +29,7 @@ The two thresholds are deliberately different. `qV = 3` is the standard BFT quor
 
 ### Phase 1A — Backup candidate broadcast `[T_b, T_b + Δ_1]`
 
-`T_b` is set early (e.g. `T_d − 4s`). `L_b`:
+`T_b` is set early (e.g. `T_commit − 4s`). `L_b`:
 
 1. Produces a backup candidate `V_b` and validates it against application-level rules (see "Preconditions on the host application").
 2. Signs `V_b` with **two** keys:
@@ -43,7 +43,7 @@ If `L_b` fails to broadcast, the backup path is unavailable for this slot.
 
 ### Phase 1B — Primary candidate broadcast `[T_p, T_p + Δ_2]`
 
-`T_p` is set late (e.g. `T_d − 1s`), to allow the primary candidate to capture as much late-arriving value (e.g. MEV) as possible. `L_p` follows the same shape as Phase 1A: produces `V_p`, validates, signs with both keys, and gossips `(V_p, σ_{L_p}^V(V_p), σ_{L_p}^{op}(V_p))`.
+`T_p` is set late (e.g. `T_commit − 1s`), to allow the primary candidate to capture as much late-arriving value (e.g. MEV) as possible. `L_p` follows the same shape as Phase 1A: produces `V_p`, validates, signs with both keys, and gossips `(V_p, σ_{L_p}^V(V_p), σ_{L_p}^{op}(V_p))`.
 
 Some peers may not receive `V_p` in time.
 
@@ -66,7 +66,7 @@ If a participant observes two distinct, validly-signed candidates from the same 
 1. Locally treat that leader's slot as non-receipt: don't include the corresponding partial signature in the onion (Phase 2); broadcast the matching non-receipt instead (for primary equivocation, broadcast a non-receipt attestation on `nr_tag_p`; for backup equivocation, omit layer 1 of the onion entirely).
 2. The pair of signed candidates is a self-contained slashable fault proof against that leader.
 
-### Phase 2 — Onion broadcast `[T_d, T_d + Δ_3]`
+### Phase 2 — Onion broadcast `[T_commit, T_commit + Δ_3]`
 
 Each participant `i` constructs a 2-layer onion:
 
@@ -86,7 +86,7 @@ If `i` did not receive a valid `V_b` either, it omits layer 1 entirely.
 
 `i` gossips its onion together with any non-receipt attestation.
 
-### Phase 3 — Local decryption and reconstruction `[T_d + Δ_3, finalize]`
+### Phase 3 — Local decryption and reconstruction `[T_commit + Δ_3, finalize]`
 
 Each operator runs the **σ+NR exclusion rule** (see "Why it's safe") then attempts reconstruction:
 
@@ -230,7 +230,7 @@ For an SSV `n=4` cluster proposing an Ethereum block:
 | `V_b` | safe early-fetched block from a vanilla beacon-node payload, refreshed on head changes |
 | `T_b` | early backup window (e.g. `slot_start − 4s`) |
 | `T_p` | late primary window (e.g. `slot_start + 2s`) |
-| `T_d` | submission deadline (e.g. `slot_start + 3s` to leave headroom for the relay 4s cutoff) |
+| `T_commit` | submission deadline (e.g. `slot_start + 3s` to leave headroom for the relay 4s cutoff) |
 
 Phase timeline:
 
@@ -257,7 +257,7 @@ slot_start
 
 Concrete numbers for each leg should come from production telemetry (P99 / P999 tails of gossip propagation, EKM signing latency, beacon submit latency, relay submission latency). Until that lands, the values above are placeholder defaults; tighten per cluster as data arrives.
 
-The deadline-tuning rule from caveat 3 below applies: `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
+The deadline-tuning rule from caveat 3 below applies: `T_commit − T_arrival > D + δ` where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
 
 ## Practical caveats
 
@@ -269,7 +269,7 @@ The deadline-tuning rule from caveat 3 below applies: `T_d − T_arrival > D + �
 
 2. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 3` and IBE at `qEnc = 2` — one DKG each at cluster init. Long-lived, no per-slot rotation.
 
-3. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. The deadline rule is `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999. This is a *liveness* requirement — under unbounded skew some operators miss the deadline and the slot fails to finalize. Safety is unaffected: the σ+NR pigeonhole is a global property over cluster-wide signed messages, not over per-operator views.
+3. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. The deadline rule is `T_commit − T_arrival > D + δ` where `D` is the propagation P99/P999. This is a *liveness* requirement — under unbounded skew some operators miss the deadline and the slot fails to finalize. Safety is unaffected: the σ+NR pigeonhole is a global property over cluster-wide signed messages, not over per-operator views.
 
 4. **Tag construction and replay.** The single `nr_tag_p` per slot must uniquely bind `(slot, cluster)` to prevent replay across slots. Structure: `("slot", N, "cluster", C, "no-primary-quorum")`.
 

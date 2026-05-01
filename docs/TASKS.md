@@ -74,7 +74,7 @@ Phases build on each other. Within a phase, tasks can usually be parallelized.
 - [x] **Decide rollout model. → Per-cluster opt-in via registry.** Operator-side deployment will hard-prevent mixed clusters; not the protocol implementation's problem.
 - [x] **Pin protocol parameters.**
   - `K` per cluster size: `max(3, f+1)` per [TBFT.md](TBFT.md).
-  - `T_d` (deadline): default `slot_start + 3s`, configurable per cluster.
+  - `T_commit` (deadline): default `slot_start + 3s`, configurable per cluster.
   - `Δ_1` (block-fetch window): default `1s`.
   - `Δ_2` (onion-gossip window): default `500ms`.
   - For TBFT2 (n=4): `T_b` (early backup fetch) at `slot_start − 4s`.
@@ -275,7 +275,7 @@ The integration shape is now fully defined in code. What remains is the runner-s
 | Negative-attestation grief in production | Low | Medium | Inconsistency-slashing detection logged; deadline tuning per [TBFT.md](TBFT.md) caveat 1; revisit if observed |
 | Mixed cluster (some QBFT some TBFT) accidentally happens | High if rollout is wrong | Catastrophic (slot misses, possible safety) | Rollout model decided in Phase 0 must hard-prevent mixed clusters; registry signaling |
 | Spec drift between SSV impl and ssv-spec | Medium | Medium | Coordinate spec changes early; spec tests catch divergence |
-| `T_d = 3s` is too aggressive (squeezes block fetch) | Medium | Medium | Configurable per cluster; default conservative; tune from production data |
+| `T_commit = 3s` is too aggressive (squeezes block fetch) | Medium | Medium | Configurable per cluster; default conservative; tune from production data |
 
 ## Status summary
 
@@ -527,16 +527,16 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
 - [ ] **T17. TBFTR composition (Phase 2a/2b split, late σ)** ([TBFTR.md](TBFTR.md) Phase 2a + 2b). **Required for any n≥7 deployment** — gated on T0 lifting. Foundations come from T1 (leader-auth) + T9 (V-plaintext for TBFTR mode).
 
   Implementation:
-  - Phase 2a: each operator broadcasts onion (with V-plaintext per T9 TBFTR mode) at `T_d`. No NR yet.
-  - Phase 2b at `T_d + Δ_2a`: for each layer where the operator hasn't yet broadcast σ — if they recovered V from a peer's Phase-2a onion and validated, broadcast a late `σ_i^V(V_{L_k})` plaintext (separate message, not encrypted). Otherwise broadcast NR attestation.
-  - Phase 3 starts at `T_d + Δ_2a + Δ_2b`. Aggregator pool at layer `k` = leader's σ from Phase 1 ∪ onion partials at layer k ∪ late-σ broadcasts at layer k, with σ+NR exclusion (T6).
+  - Phase 2a: each operator broadcasts onion (with V-plaintext per T9 TBFTR mode) at `T_commit`. No NR yet.
+  - Phase 2b at `T_commit + Δ_2a`: for each layer where the operator hasn't yet broadcast σ — if they recovered V from a peer's Phase-2a onion and validated, broadcast a late `σ_i^V(V_{L_k})` plaintext (separate message, not encrypted). Otherwise broadcast NR attestation.
+  - Phase 3 starts at `T_commit + Δ_2a + Δ_2b`. Aggregator pool at layer `k` = leader's σ from Phase 1 ∪ onion partials at layer k ∪ late-σ broadcasts at layer k, with σ+NR exclusion (T6).
   - New scheduler / timing logic for Phase 2 split. New message kind for late σ broadcasts (or reuse onion format with a flag).
   - Tests: P0.1 worst-case attack at n=7 (byz selective delivery to 3 honest + dark on Phase-2a votes) → cluster reaches qV=5 via late σ in Phase 2b, slot succeeds. Same shape at n=10, n=13.
 
   At n=4 (TBFT) the composition is not used.
 
 - [ ] **T21. Head-change handling during Phase 1.** Both [TBFT.md](TBFT.md) Phase 1A and [TBFTR.md](TBFTR.md) "Head-change handling" specify that leaders refresh their candidate (and re-broadcast `(V', σ^V', σ^op')`) if the head changes during their fetch window. Implementation:
-  - **For TBFT (n=4)**: `L_b` (backup) and `L_p` (primary) detect head-change between `T_b`/`T_p` and `T_d`, refresh candidate from new head, re-broadcast bundle. Honest receivers accept the latest validly-signed candidate matching the current head; older candidates fail `parent_root` validity and are silently dropped.
+  - **For TBFT (n=4)**: `L_b` (backup) and `L_p` (primary) detect head-change between `T_b`/`T_p` and `T_commit`, refresh candidate from new head, re-broadcast bundle. Honest receivers accept the latest validly-signed candidate matching the current head; older candidates fail `parent_root` validity and are silently dropped.
   - **For TBFTR (n≥7)**: same shape applied to top-K leaders during their parallel fetch windows. Gated on T0 lifting.
   - Implementation lives in the runner's fetch path ([proposer_tbft.go](../protocol/v2/ssv/runner/proposer_tbft.go) `tbftFetchCandidate`). Subscribe to head-change events; on head-change-during-fetch, abort current fetch, re-fetch from new head, re-broadcast.
   - Tests: head changes mid-fetch → cluster receives the refreshed candidate; old candidate is dropped by `parent_root` check.

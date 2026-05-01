@@ -74,7 +74,7 @@ func (h *LifecycleHooks) validate() error {
 //	r, err := scheduler.Controller().StartNewInstance(slot)
 //	... at FetchAt for each layer in r.LeaderAtLayers, on a goroutine:
 //	    scheduler.FetchAndBroadcastCandidate(ctx, slot, layer)
-//	... at Deadline (T_d):
+//	... at Deadline (T_commit):
 //	    scheduler.BuildAndBroadcastOnion(ctx, slot)
 //	... at Deadline + GossipWindow:
 //	    scheduler.ResolveAndSubmit(ctx, slot)
@@ -145,7 +145,7 @@ func (s *Scheduler) FetchAndBroadcastCandidate(ctx context.Context, slot phase0.
 
 // BuildAndBroadcastOnion executes Phase 2: builds the local operator's
 // onion + non-receipt attestations and broadcasts them. Should be called
-// at the slot's deadline (T_d) after Phase-1 candidates have had a chance
+// at the slot's deadline (T_commit) after Phase-1 candidates have had a chance
 // to propagate.
 func (s *Scheduler) BuildAndBroadcastOnion(ctx context.Context, slot phase0.Slot) error {
 	onion, err := s.controller.BuildOwnOnion(slot)

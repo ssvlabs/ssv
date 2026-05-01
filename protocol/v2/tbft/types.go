@@ -38,9 +38,9 @@ type Signature []byte
 // at this layer, and when (relative to the consensus deadline) they should
 // fetch.
 //
-// For TBFT proposer duty: all layers have the same FetchAt (e.g. T_d − 1s).
+// For TBFT proposer duty: all layers have the same FetchAt (e.g. T_commit − 1s).
 // For TBFT2 proposer duty: layer 0 (primary) has a late FetchAt, layer 1
-// (backup) has an early FetchAt (e.g. T_d − 4s).
+// (backup) has an early FetchAt (e.g. T_commit − 4s).
 type LayerSpec struct {
 	// Leader is the operator responsible for producing and broadcasting the
 	// candidate value at this layer.
