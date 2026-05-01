@@ -390,7 +390,24 @@ Companion docs:
 
 ## Spec-alignment tasks (post-rewrite — current work)
 
-This section enumerates the implementation work needed to bring `protocol/v2/tbft/` up to date with the post-rewrite [TBFT.md](TBFT.md). The rewrite tightened candidate authenticity, equivocation handling, threshold separation, slashable evidence, and validity preconditions. The work below picks up from the Phase 4d baseline. Audit residual: [TBFT-audit.md](TBFT-audit.md).
+This section enumerates the implementation work needed to bring `protocol/v2/tbft/` up to date with the post-rewrite [TBFT.md](TBFT.md) (n=4) and [TBFTR.md](TBFTR.md) (n≥7). The work picks up from the Phase 4d baseline. Audit residual: [TBFT-audit.md](TBFT-audit.md).
+
+### ⚠ T0 (highest priority) — Constrain current implementation to n=4
+
+**Before any other implementation work, the existing `protocol/v2/tbft/` must be locked to n=4 only.**
+
+The current code is generic over K and n (parameterized through [`Config`](../protocol/v2/tbft/types.go)). With the spec rewrite, [TBFT.md](TBFT.md) is the n=4-only protocol; [TBFTR.md](TBFTR.md) is the separate n≥7 protocol that requires *additional* implementation work (V plaintext in onions, Phase 2a/2b composition, head-change refresh, worst-of-K timing — see T9, T17, T21, T22 below). **Allowing the current code to instantiate at n ≥ 7 would deploy a vulnerable protocol** — the byzantine-leader selective-delivery grief residual `[f+1, 2f-1]` is non-empty at f ≥ 2 without TBFTR's additions, which the current code doesn't have.
+
+The code can/should stay generic in shape (parameterized by K, n, threshold) — *but only allow instance creation at n=4*. This makes future TBFTR support a smaller diff (lift the n=4 restriction once T9/T17/T21/T22 land).
+
+- [ ] **T0. n=4-only instantiation guard.**
+
+  - In [`Config.Validate`](../protocol/v2/tbft/types.go), add a check: `if len(c.Operators) != 4 { return errors.New("tbft: only n=4 clusters supported; for n≥7 see TBFTR (separate impl track)") }`. Remove later when TBFTR is implemented.
+  - In [`ConfigForCluster`](../protocol/v2/ssv/runner/tbft/config.go) (or wherever the runner builds TBFT configs), add the same guard before constructing `*tbft.Config` for non-n=4 clusters. Surface a clear error message.
+  - Update package doc-comments to reflect that the implementation is n=4-only until TBFTR support lands.
+  - Tests: `n=4` succeeds; `n=7`, `n=10`, `n=13` rejected at instance creation with the expected error message.
+
+  This task is not a long-term constraint — it's a guard rail until the TBFTR-specific tasks (T9, T17, T21, T22) land, at which point the runner can route n=4 to TBFT-mode and n≥7 to TBFTR-mode based on cluster size.
 
 ### Resolved design decisions
 
@@ -475,11 +492,7 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 
   Implementation: parameterize `EncryptedLayer` and onion construction by mode. The runner picks mode based on cluster size at config time. Same instance.go aggregation path handles both — operators that haven't received V from any source contribute null at that layer regardless of mode. Tests for both modes.
 
-  Two paths once a decision is made:
-  - **Strip from impl**: remove `Value` from [`EncryptedLayer`](../protocol/v2/tbft/types.go); receivers track V from [`Instance.candidates`](../protocol/v2/tbft/instance.go) instead. Aligns with TBFT.md as written; mild regression — operators that miss V in Phase 1 lose early per-partial verification.
-  - **Update TBFT.md**: acknowledge V-plaintext as standard. Shrinks [TBFTR](TBFTR.md)'s distinct contribution to the deferred-NR composition only.
-
-  No urgency. Decide and act when convenient; not on the critical path.
+  Today the impl carries V-plaintext at every layer (legacy from before the cluster-size split). For TBFT n=4 mode, strip the `Value` field from `EncryptedLayer` (or leave it but ignore it during aggregation). For TBFTR mode, keep it — but TBFTR support is gated on T0 lifting, so this task primarily delivers the TBFT-mode-strips-V part now.
 
 - [ ] **T10. EKM behavior under multi-block-signing-per-slot** ([TBFT.md](TBFT.md) caveat 8).
   - Verify EKM allows K candidate-value signatures per slot inside onion build (one per layer). Today's EKM check is at submit time on the winning block; partial-sig signing in onion build should not collide with duplicate-block protection.
@@ -496,11 +509,22 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 
 - [ ] **T5. Upgrade Option A → Option B: separate IBE keypair at threshold `qEnc = f+1` via Pedersen DKG between operators.** Detailed plan tracked in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md). Lands T4 (protocol-counting refactor) coincidentally — under Option B those new thresholds are cryptographically meaningful for the first time.
 
-- [ ] **T13. Worst-of-K beacon-fetch latency tuning** ([TBFT.md](TBFT.md) application section; audit P2.4).
-- [ ] **T14. Head-change handling during Phase 1 for TBFT proper**.
-- [ ] **T15. Final-certificate gossip (`KindCertificate`)** (audit P2.2).
-- [ ] **T16. End-to-end timing budget with telemetry** (audit P2.3).
-- [ ] **T17. TBFTR composition (Phase 2a/2b split, late σ)** ([TBFTR.md](TBFTR.md) Phase 2a + 2b). **Required for any n≥7 deployment** (TBFTR is the n≥7 protocol; the composition closes P0.1 there). Foundations come from T1 (leader-auth) + T9 (V-plaintext for TBFTR mode).
+- [ ] **T15. Final-certificate gossip — `KindCertificate(slot, V, S)`** ([TBFT.md](TBFT.md) Phase 3 / [TBFTR.md](TBFTR.md) Phase 3). **Applies to both protocols.** After successful Phase-3 reconstruction, the operator broadcasts a `KindCertificate` envelope carrying `(slot, V, S)`. Receivers verify `S` against the cluster's V-keypair pubkey on `V`; valid certificates can be submitted downstream by anyone, mitigating the "lone-reconstructor's beacon path fails" failure mode. Implementation:
+  - Add `KindCertificate = 0x04` to [wire/envelope.go](../protocol/v2/tbft/wire/envelope.go) along with encode/decode.
+  - In the runner, after `Resolve()` returns a non-nil `Output`, broadcast the certificate in parallel with the local submit attempt.
+  - On receiving a certificate, verify `S` and submit if not already submitted (idempotent; downstream dedupes).
+  - Replay/cache: dedupe on `(slot, V hash)` to prevent gossip storm.
+  - Tests: lone-reconstructor scenario — only one operator reaches qV in their local view, but the certificate gossip lets every operator submit, slot succeeds even when the reconstructor's own submit fails.
+
+- [ ] **T16. End-to-end timing budget with telemetry** ([TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md) "Timing budget" subsections). Framework specified in spec; numbers TBD. Production data needed:
+  - Pre-consensus (RANDAO partial-sig collection) tail latency.
+  - Block-fetch latency (worst-of-K for TBFTR).
+  - Gossipsub propagation (P99/P999) for onion + late-σ broadcasts.
+  - EKM signing latency.
+  - Beacon submit + relay submission tails.
+  - Once collected, commit per-leg budget defaults; tighten Δ_1, Δ_2 (and Δ_2a, Δ_2b for TBFTR) accordingly.
+
+- [ ] **T17. TBFTR composition (Phase 2a/2b split, late σ)** ([TBFTR.md](TBFTR.md) Phase 2a + 2b). **Required for any n≥7 deployment** — gated on T0 lifting. Foundations come from T1 (leader-auth) + T9 (V-plaintext for TBFTR mode).
 
   Implementation:
   - Phase 2a: each operator broadcasts onion (with V-plaintext per T9 TBFTR mode) at `T_d`. No NR yet.
@@ -509,31 +533,45 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
   - New scheduler / timing logic for Phase 2 split. New message kind for late σ broadcasts (or reuse onion format with a flag).
   - Tests: P0.1 worst-case attack at n=7 (byz selective delivery to 3 honest + dark on Phase-2a votes) → cluster reaches qV=5 via late σ in Phase 2b, slot succeeds. Same shape at n=10, n=13.
 
-  This is no longer a "follow-up" — it's part of the n≥7 implementation track. At n=4 (TBFT) the composition is not used.
-- [ ] **T18. Path-conditional detection mitigation choice** (audit P1.5 second bullet) — pick post-protocol gossip or accept the limit.
-- [ ] **T19. `T_d` rename for clarity** (audit P3).
+  At n=4 (TBFT) the composition is not used.
+
+- [ ] **T21. Head-change handling during Phase 1.** Both [TBFT.md](TBFT.md) Phase 1A and [TBFTR.md](TBFTR.md) "Head-change handling" specify that leaders refresh their candidate (and re-broadcast `(V', σ^V', σ^op')`) if the head changes during their fetch window. Implementation:
+  - **For TBFT (n=4)**: `L_b` (backup) and `L_p` (primary) detect head-change between `T_b`/`T_p` and `T_d`, refresh candidate from new head, re-broadcast bundle. Honest receivers accept the latest validly-signed candidate matching the current head; older candidates fail `parent_root` validity and are silently dropped.
+  - **For TBFTR (n≥7)**: same shape applied to top-K leaders during their parallel fetch windows. Gated on T0 lifting.
+  - Implementation lives in the runner's fetch path ([proposer_tbft.go](../protocol/v2/ssv/runner/proposer_tbft.go) `tbftFetchCandidate`). Subscribe to head-change events; on head-change-during-fetch, abort current fetch, re-fetch from new head, re-broadcast.
+  - Tests: head changes mid-fetch → cluster receives the refreshed candidate; old candidate is dropped by `parent_root` check.
+
+- [ ] **T22. Worst-of-K beacon-fetch timing** ([TBFTR.md](TBFTR.md) "Timing budget" / "Worst-of-K beacon-fetch latency"). TBFTR-only (TBFT K=2 doesn't have meaningful worst-of-K, since `L_b` and `L_p` fetch at different times anyway). Gated on T0 lifting.
+  - Configure `Δ_1` to accommodate the slowest-of-K parallel beacon fetches (P99/P999 over all K fetchers in parallel, not single-fetch P99).
+  - Production telemetry on K-parallel-fetch tails feeds into this; ties to T16.
 
 ### Sequencing recommendation
 
-The work splits along three axes: (1) shared infrastructure for both TBFT and TBFTR, (2) TBFTR-specific additions (n≥7), (3) operational backlog.
+**🚧 PR-Z (must land before any other implementation work)**: T0. Constrain the current implementation to n=4 only. Defensive guard rail; all other tasks below assume this is in place.
 
-**Shared (both protocols)**:
+**Shared (both protocols, n=4 deployment first)**:
 
-- **PR-A**: T1 + T2 + T3 + their tests. Closes audit P1.2 end-to-end. Likely the right *first* PR. Required for both n=4 (TBFT) and n≥7 (TBFTR) deployments.
+- **PR-A**: T1 + T2 + T3 + their tests. Closes audit P1.2 end-to-end. The right *first* PR after T0.
 - **PR-B**: T6 + T7 + tests. Aggregator-level fault exclusion (σ+NR + cross-onion σ+σ'). Builds on T1's evidence shape.
-- **PR-C**: T12. Comment cleanup; rides along.
-- **PR-D**: T8 (candidate-signing slashing gate). Touches runner + EKM behavior.
+- **PR-C**: T8 (candidate-signing slashing gate). Touches runner + EKM behavior.
+- **PR-D**: T9 (TBFT-mode V-plaintext stripping). Aligns onion shape with TBFT.md spec for n=4.
+- **PR-E**: T15 (KindCertificate). Real liveness improvement. Both protocols use it.
+- **PR-F**: T21 (head-change handling, TBFT n=4 part). Runner-side; TBFTR n≥7 part is gated.
+- **PR-G**: T12 (comment cleanup); rides along with any of the above.
 
-**TBFTR-specific (n≥7 only)**:
-
-- **PR-E**: T9 + T17. V-plaintext in onions (TBFTR mode) + Phase 2a/2b composition. Material new functionality. The runner config picks TBFT-mode or TBFTR-mode based on cluster size; the implementation supports both.
-
-**Lighter-touch**:
+**Lighter-touch (in parallel with above)**:
 
 - T10 (EKM compatibility audit) — verify; act if EKM dedupe-by-slot-only would flag partial-sig signing.
-- T11 (aggregate test pass) — integrates with PR-A through PR-E.
+- T11 (aggregate test pass) — integrates with all PRs above.
 
-**Backlog (T5, T13–T16, T18, T19)** — operational follow-ups or longer-horizon design. T5 (Option B upgrade) is the largest deferred item and unblocks T4's cryptographic realization (currently both protocols run "Option A" with effective qEnc=qV until T5 lands).
+**TBFTR-specific (gated on T0 lifting + TBFTR-spec implementation)**:
+
+- T9 (TBFTR-mode V-plaintext path) + T17 (Phase 2a/2b composition) + T21 (TBFTR head-change) + T22 (TBFTR worst-of-K timing). All these work together to deliver n≥7 support per [TBFTR.md](TBFTR.md).
+
+**Backlog**:
+
+- T5 (Option B upgrade — separate IBE DKG at threshold f+1). Blocks T4's cryptographic realization (currently both protocols run "Option A" with effective qEnc=qV until T5 lands). Multi-PR effort; tracked separately in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md).
+- T16 (end-to-end timing budget). Production telemetry needed.
 
 ## Where this came from
 

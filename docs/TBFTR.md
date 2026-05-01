@@ -113,6 +113,14 @@ The leader's Phase-1 σ partial appears unencrypted in the σ pool at every laye
 
 Once a participant produces an output `(V, S)`, it submits to the downstream system. Multiple operators may submit independently; the downstream system de-duplicates.
 
+#### Final-certificate gossip
+
+Once an operator successfully reconstructs `(V, S)`, it gossips a **final certificate** to peers as a fourth wire-envelope kind: `KindCertificate(slot, V, S)`. The certificate carries the agreed value and the full reconstructed BLS signature on it.
+
+Receivers verify `S` against the cluster's V-keypair pubkey on `V`. A valid certificate gives any operator (whether or not they reconstructed locally) what they need to submit `(V, S)` downstream — protecting against the "lone-reconstructor's beacon path fails" failure mode where the cluster had a quorum but only one operator assembled it and that operator's submit failed.
+
+Operators broadcast the certificate in parallel with their own submission attempt; the downstream system continues to de-duplicate.
+
 ### Treatment of missing onions / late broadcasts
 
 A participant that hasn't received `j`'s onion / late σ / NR at decryption time treats `j` as not having contributed at all. Standard threshold cryptography — only signed messages count.
@@ -201,9 +209,38 @@ Phase timeline (n=7 example):
 - Phase 1: `slot_start + 1.7s` to `slot_start + 2.7s` (top-K leaders fetch and broadcast bundles).
 - Phase 2a: `slot_start + 2.7s` to `slot_start + 3.0s` (onions with V plaintext).
 - Phase 2b: `slot_start + 3.0s` to `slot_start + 3.15s` (late σ or NR).
-- Phase 3: `slot_start + 3.15s` onwards (reconstruct + submit, headroom for relay 4s cutoff).
+- Phase 3: `slot_start + 3.15s` onwards (reconstruct + submit + certificate gossip, headroom for relay 4s cutoff).
 
 The compressed timeline at larger cluster sizes (n=10, 13) is tighter against the relay cutoff; production telemetry should validate the budget.
+
+### Timing budget
+
+The end-to-end budget for a proposer slot must fit inside the relay submission cutoff (~4 s after `slot_start`). The structure:
+
+```
+slot_start
+  + pre-consensus            (RANDAO partial-sig collection, ~T_pre)
+  + block fetch              (Δ_1; worst-of-K parallel fetches — see below)
+  + Phase 2a broadcast       (Δ_2a ≈ 300 ms)
+  + Phase 2b broadcast       (Δ_2b ≈ 150 ms)
+  + Phase 3 reconstruct      (BLS aggregate, ~few ms)
+  + downstream submission    (relay round-trip, ~T_submit)
+≤ slot_start + 4s            (relay cutoff)
+```
+
+**Worst-of-K beacon-fetch latency.** The top-K leaders fetch in parallel from K distinct beacons. `Δ_1` must accommodate the *slowest* of K independent block-fetch RTTs, not the typical one. Tail-percentile estimation: if a single beacon's fetch is at P99 = `t`, the worst-of-K is approximately at the `(1 − (1−P99)^K)`-percentile of the underlying distribution. For K=3 (n=7) at single-fetch P99 = 800 ms, worst-of-3 P99 ≈ 950–1000 ms; for K=5 (n=13), worst-of-5 ≈ 1.1–1.2 s. Δ_1 must be sized accordingly.
+
+Concrete numbers for each leg should come from production telemetry. Until that lands, the Phase-timeline above is a placeholder default; tighten per cluster size as data arrives.
+
+The deadline-tuning rule from caveat 5 below applies: `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
+
+### Head-change handling
+
+If the head changes during the Phase-1 fetch window (between `T_d − Δ_1` and `T_d`), all candidate values fetched from the previous head are stale (their parent root no longer matches the new head). Each leader detects head changes during its fetch window and refreshes its candidate by re-fetching from the new head, then re-broadcasts `(V_{L_k}', σ_{L_k}^V(V_{L_k}'), σ_{L_k}^{op}(V_{L_k}'))` — superseding the stale bundle.
+
+Honest receivers that observe two distinct signed candidates from the same `L_k` for the same slot at different parent roots accept the latest (matching the current head); the equivocation-to-non-receipt rule (Phase 1) does not fire here because there's no contradiction at the protocol level — both are valid candidates against their respective heads, and only one matches the current head at `T_d`.
+
+Implementation note: each operator must track the current head locally and validate `parent_root` of received candidates against it. Stale candidates fail the application-validity check and are silently dropped.
 
 ## Practical caveats
 
@@ -211,7 +248,7 @@ The compressed timeline at larger cluster sizes (n=10, 13) is tighter against th
 
 2. **Phase 2b latency.** The composition adds `Δ_2b` (~100–200 ms on a healthy mesh) over plain TBFT-style timing. Tight against the 4s relay cutoff at n=10/13; the timing budget needs to be tracked against production gossip-propagation P99/P999.
 
-3. **Inconsistency-slashing — three rules.** Same as [TBFT](TBFT.md); not load-bearing for safety (σ+NR exclusion handles that). Useful for attribution and punishment.
+3. **Inconsistency-slashing — three rules.** Same as [TBFT](TBFT.md); not load-bearing for safety (σ+NR exclusion handles that). Useful for attribution and punishment. **Path-conditional detection limit at deep layers** — at K ≥ 3, σ partials at deep layers are encrypted; if an upper layer succeeds, the deep layer doesn't open and σ+NR cross-signing at that depth goes undetected for *attribution*. Doesn't affect safety (the exclusion rule applies wherever aggregation actually happens; at unopened layers no aggregation occurs to be subverted). Accepted as a path-conditional limit; deep-layer cross-signers may escape attribution but cannot break safety.
 
 4. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation.
 

@@ -19,16 +19,19 @@ The spec is now split by cluster size: **TBFT** is the n=4 protocol; **TBFTR** i
 - **P1.5 first bullet** (cross-onion partial-sig equivocation) — Both specs list this as the third inconsistency-slashing rule. Implementation work in [TASKS.md](TASKS.md).
 - **P2.1** (equivocation detection overstated) — Both specs' Properties summaries describe the actual mechanism (leader-signed candidates → equivocation-to-NR rule → slashable evidence).
 
-**Partially addressed** (residual below):
+**Closed by accepting the path-conditional limit:**
 
-- **P1.5 second bullet** — hidden equivocation in unopened layers (attribution-only concern; doesn't affect safety under σ+NR exclusion rule).
+- **P1.5 second bullet** (hidden equivocation in unopened layers) — only relevant at K ≥ 3 (TBFTR). Doesn't affect safety under σ+NR exclusion; deep-layer cross-signers may escape attribution but cannot break safety. Engineering decision: accept the limit. Documented in [TBFTR.md](TBFTR.md) caveat 3.
 
-**Open** (no spec-rewrite action; tracked here):
+**Closed by spec additions:**
 
-- **P2.2** — no final-certificate gossip.
-- **P2.3** — end-to-end adversarial timing budget.
-- **P2.4** — operational items (some addressed by the TBFT-comparison rewrite).
-- **P3** — smaller cleanups (some closed below).
+- **P2.2** (final-certificate gossip) — `KindCertificate(slot, V, S)` envelope kind specified in [TBFT.md](TBFT.md) Phase 3 and [TBFTR.md](TBFTR.md) Phase 3, broadcast after successful reconstruction. Implementation tracked in TASKS.md.
+- **P2.4 worst-of-K beacon-fetch** — note added to [TBFTR.md](TBFTR.md) "Timing budget" subsection (only TBFTR has K ≥ 3 parallel fetchers). Implementation tracked in TASKS.md.
+- **P2.4 head-change handling** — TBFT.md (n=4) already had `L_b` refresh rule; TBFTR.md now has analogous "Head-change handling" subsection for top-K leaders. Implementation tracked in TASKS.md.
+
+**Framework specified, numbers TBD with telemetry:**
+
+- **P2.3** (end-to-end timing budget) — [TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md) "Application: SSV Ethereum proposer duty" sections include a "Timing budget" subsection with the per-leg structure. Concrete numbers must come from production telemetry; tracked in TASKS.md as a follow-up.
 
 ## What still holds (reaffirmed)
 
@@ -36,41 +39,8 @@ The spec is now split by cluster size: **TBFT** is the n=4 protocol; **TBFTR** i
 - Single-RTT decision path (1.5-RTT in TBFTR with Δ_2b) vs QBFT's three.
 - V-signing keypair reuses SSV's existing operator-share setup. The IBE keypair is a new separate DKG at threshold `qEnc = f+1`, run once at cluster init.
 
-## Residual P1 findings
+## P3 findings (smaller cleanups)
 
-### P1.5 second bullet — hidden equivocation in unopened layers
-
-If layer 0 succeeds, layers 1+ are never decrypted, so an operator's σ+NR cross-signing at deep layers escapes detection in that execution path. Under the σ+NR exclusion rule (TBFT.md "Why it's safe"), this **doesn't affect safety** — the exclusion rule applies wherever aggregation actually happens (at opened layers), and at unopened layers no aggregation occurs to be subverted. The remaining concern is purely *attribution*: undetected deep-layer cross-signers escape slashing.
-
-TBFT.md caveat 2 acknowledges this as the *path-conditional detection limit* and lists two mitigation options:
-
-- (a) Post-protocol gossip of all-layer σ partials so deep layers can be retroactively verified for slashing material — adds a wire-format change and a post-slot gossip round.
-- (b) Accept that path-conditional escape is rare relative to attacker payoff and let unattributed faults remain unattributed (deep layers rarely matter when upper layers succeed) — engineering choice.
-
-No protocol-level resolution chosen; left as an engineering decision for attribution coverage. Tracked in [TASKS.md](TASKS.md) as a follow-up.
-
-## Open P2 findings
-
-### P2.2 — no final-certificate gossip
-
-[envelope.go](../protocol/v2/tbft/wire/envelope.go) defines `KindOnion`, `KindNonReceipt`, `KindCandidate`. No certificate kind. Operators may have different views; each who reconstructs submits independently to the beacon node, which de-duplicates. If only one operator's local view crossed quorum and that operator's beacon/relay path fails after reconstruction, the slot is missed even though the cluster *had* enough sigs to reconstruct.
-
-**Action (deferred design)**: add `KindCertificate(slot, V, S)` so any operator with the certificate can submit. Wire-format change with replay/cache implications. Tracked in [TASKS.md](TASKS.md).
-
-### P2.3 — end-to-end adversarial timing budget
-
-TBFT.md caveat 6 states the deadline rule (`T_d − T_arrival > D + δ`, `D = P99/P999`) but doesn't commit a full end-to-end budget across pre-consensus, gossip, EKM signing, beacon submit, relay submission. Production telemetry is needed to commit numbers.
-
-**Action**: collect production tail data for each leg; commit a budget; update timing tables in TBFT.md application section. Tracked in [TASKS.md](TASKS.md).
-
-### P2.4 — other operational items (mostly still open)
-
-- **Worst-of-K beacon-fetch latency for `Δ_1`.** The K leaders fetch in parallel from K distinct beacons; `Δ_1` must accommodate the slowest of K independent block-fetch RTTs. Worth a sentence in TBFT.md application section; not yet added.
-- **Head-change handling during Phase 1** for TBFT's any-of-K candidates. Not yet specified.
-
-## Open P3 findings (smaller cleanups)
-
-- **`T_d` is named "deadline" but the protocol finalizes after it.** TBFT.md adds clarification ("`T_d` is a *view-fix point*"), but the symbol name itself is unchanged. Renaming would prevent downstream timing-budget mistakes.
 - **Comparison-doc scope drift** — addressed in the TBFT-comparison.md update. Closed.
 - **`K=3` floor for n=4** — addressed in the TBFT-comparison.md update. Closed.
 - **Multiple submitters / beacon de-dup** — addressed in TBFT.md Phase 3 ("Multiple operators may reconstruct and submit independently; the downstream system de-duplicates"). Closed.
@@ -82,24 +52,26 @@ TBFT.md caveat 6 states the deadline rule (`T_d − T_arrival > D + δ`, `D = P9
 - **Spec rewrite, cluster-size split.** TBFT.md is now the n=4 protocol (K=2, primary + backup); TBFTR.md is the n≥7 protocol (K = max(3, f+1), with V plaintext in onions and Phase 2a/2b split). Both share leader-authenticated candidates, threshold separation, distinct tag symbols, σ+NR exclusion rule, validity preconditions, three-rule slashing model.
 - **TBFT-comparison.md** updated for apples-to-apples comparison: QBFT vs TBFT (n=4) and QBFT vs TBFTR (n=7+).
 - **TBFT2.md** deleted (subsumed into TBFT.md).
+- **Final-certificate gossip** (`KindCertificate`) specified in both protocol docs.
+- **Worst-of-K beacon-fetch** and **head-change handling** documented in TBFTR.md.
+- **Timing budget framework** added to both protocol docs (concrete numbers TBD with telemetry).
+- **Path-conditional detection limit** at deep TBFTR layers acknowledged as accepted-attribution-only.
 
 ### Implementation alignment (next)
 
 See [TASKS.md](TASKS.md) for the breakdown of changes in `protocol/v2/tbft/` and `protocol/v2/ssv/runner/tbft/`. Priority shape:
 
 - Protocol-correctness gaps (leader-auth with leader-σ-V-in-Phase-1, equivocation-to-NR rule, sender check).
+- σ+NR exclusion at aggregation.
+- Final-certificate gossip implementation (new envelope kind).
 - Threshold-separation gaps (separate IBE DKG at `qEnc = f+1`; per-keypair signers and aggregation thresholds).
-- σ+NR exclusion at aggregation (T6).
-- TBFTR-specific (V plaintext in onions, Phase 2a/2b composition) for n≥7 cluster deployments.
+- TBFTR-specific (V plaintext in onions, Phase 2a/2b composition, head-change refresh) for n≥7 cluster deployments.
 - Slashable-evidence collection (three rules from caveat 2).
 - Tests.
 
 ### Backlog
 
-- Final-certificate gossip (P2.2).
-- End-to-end timing budget with production data (P2.3).
-- Worst-of-K beacon-fetch and head-change handling (P2.4).
-- Path-conditional detection mitigation choice (P1.5 second bullet).
+- End-to-end timing budget with production data (P2.3 — framework specified, numbers TBD).
 
 ## Deployment recommendation
 

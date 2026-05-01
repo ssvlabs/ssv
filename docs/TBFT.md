@@ -114,6 +114,14 @@ halt with no output                               # missed slot
 
 Multiple operators may reconstruct and submit independently; the downstream system de-duplicates.
 
+#### Final-certificate gossip
+
+Once an operator successfully reconstructs `(V, S)`, it gossips a **final certificate** to peers as a fourth wire-envelope kind: `KindCertificate(slot, V, S)`. The certificate carries the agreed value and the full reconstructed BLS signature on it.
+
+Receivers verify `S` against the cluster's V-keypair pubkey on `V`. A valid certificate gives any operator (whether or not they reconstructed locally) what they need to submit `(V, S)` downstream — protecting against the "lone-reconstructor's beacon path fails" failure mode where the cluster had a quorum but only one operator assembled it and that operator's submit failed.
+
+Operators broadcast the certificate in parallel with their own submission attempt; the downstream system continues to de-duplicate.
+
 ### Treatment of missing onions
 
 A participant that hasn't received `j`'s onion at decryption time treats `j` as not having contributed at all: no positive partial signature, no non-receipt attestation. Standard threshold cryptography — only signed messages count.
@@ -229,9 +237,27 @@ Phase timeline:
 - Phase 1A: ~`slot_start − 4s` (backup fetch and broadcast).
 - Phase 1B: ~`slot_start + 2s` to `slot_start + 3s` (primary fetch and broadcast).
 - Phase 2: `slot_start + 3s` to `slot_start + 3.5s` (onion + non-receipt broadcast).
-- Phase 3: `slot_start + 3.5s` onwards (reconstruct + submit).
+- Phase 3: `slot_start + 3.5s` onwards (reconstruct + submit + certificate gossip).
 
 Cryptography plus σ+NR exclusion ensures only one block can ever get a valid validator signature.
+
+### Timing budget
+
+The end-to-end budget for a proposer slot must fit inside the relay submission cutoff (~4 s after `slot_start`). The structure:
+
+```
+slot_start
+  + pre-consensus            (RANDAO partial-sig collection, ~T_pre)
+  + block fetch              (Δ_1 above; for primary, slot_start + 2s onward)
+  + Phase 2 broadcast        (Δ_3 ≈ 500 ms)
+  + Phase 3 reconstruct      (BLS aggregate, ~few ms)
+  + downstream submission    (relay round-trip, ~T_submit)
+≤ slot_start + 4s            (relay cutoff)
+```
+
+Concrete numbers for each leg should come from production telemetry (P99 / P999 tails of gossip propagation, EKM signing latency, beacon submit latency, relay submission latency). Until that lands, the values above are placeholder defaults; tighten per cluster as data arrives.
+
+The deadline-tuning rule from caveat 3 below applies: `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
 
 ## Practical caveats
 
