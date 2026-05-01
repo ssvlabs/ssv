@@ -44,26 +44,22 @@ Status conventions follow [TASKS.md](TASKS.md): `[ ]` not started · `[~]` in pr
 ### Phase A — Design alignment
 
 - [x] **A1.** This document. D1–D11 captured above; phases below committed.
-- [ ] **A2.** Wire format draft for DKG envelopes — `SSVDKGMsgType` outer envelope and inner `Kind*` discriminants for `Exchange`, `Deal`, `Response`, `Justification`. Encode/decode kyber bundles via the kyber-side serialization (`DealBundle.Hash()` round-trips already exist; `wire2.EncodeDealBundle` shape from ssv-dkg is informative). Land in `protocol/v2/dkg/wire/` as a stub PR before Phase C makes it real.
-- [ ] **A3.** Storage schema sketch — what `LocalKeyManager` persists per `(clusterID, generation)`, where in BadgerDB, encryption-at-rest scheme. Land as a written sketch + interface stub in `ssvsigner/ekm/ibe_share_storage.go` before Phase D fills it in.
+- [x] **A2.** Wire format draft for DKG envelopes. Landed at `protocol/v2/dkg/wire/{envelope,exchange,bundles}.go` with round-trip tests; the `[version][kind][body]` framing was factored to `protocol/v2/wire/framing.go` and now also backs the existing TBFT-wire envelope.
+- [x] **A3.** Storage schema sketch + interface stub at `ssvsigner/ekm/ibe_share_storage.go` (`IBEShareBytesProvider` / `IBEShareWriter`, bytes-only so kyber stays out of ssvsigner; top-of-file schema sketch covers BadgerDB layout, encryption-at-rest, generation pointer).
 
 ### Phase B — DKG core in-process
 
-- [ ] **B1. `protocol/v2/dkg/board.go`** — implement kyber's `Board` interface over an injected broadcast function. Mirror ssv-dkg's `pkgs/board/board.go`: channel-buffered `dealC`/`responseC`/`justificationC`; encode-and-broadcast on push; route inbound packets into the channels. In-tests use a synchronous in-memory broadcaster that fans out to all peer Boards directly.
-- [ ] **B2. `protocol/v2/dkg/keys.go`** — kyber-side keypair generation per ceremony: fresh scalar, G1 point, marshal/unmarshal helpers. No KDF, no derivation — a fresh keypair per DKG run, lifetime ends with the ceremony.
-- [ ] **B3. `protocol/v2/dkg/coordinator.go`** — the per-cluster ceremony driver. Public API:
-    ```go
-    type Coordinator interface {
-        Run(ctx context.Context, clusterID [32]byte, committee []spectypes.OperatorID, threshold int, generation uint64) (*kyber_dkg.DistKeyShare, error)
-    }
-    ```
-    Internally drives the Exchange → Deal → Response → Justification pipeline. Uses `kyber_dkg.NewProtocol` in FastSync mode with `Auth = drand_bls.NewSchemeOnG2(suite)`. Returns the full `DistKeyShare` on success; the caller handles persistence.
-- [ ] **B4. Unit tests with synthetic transport.**
-    - Happy-path: 7-operator cluster, all honest, DKG completes; assert `Result.Key.Commits[0]` is identical across operators.
-    - Threshold property: assert any `f+1 = 3` of the resulting shares Lagrange-interpolate (in kyber's scalar field) to the master scalar `Commits[0]`.
-    - Below-threshold property: any `f = 2` of the resulting shares do NOT Lagrange-interpolate to the master.
-    - Byzantine-dealer happy path: one operator sends a bad `DealBundle`; complaint → justification → DKG completes with QUAL excluding the byzantine dealer. (n=7 so QUAL of 6 still ≥ threshold 3.)
-    - Liveness limit: f+1 = 3 operators offline ⇒ DKG fails to reach threshold; assert clean error rather than hang.
+- [x] **B1. `protocol/v2/dkg/board.go`** — kyber `Board` adapter over an injected broadcast function. Channel-buffered `dealCh` / `responseCh` / `justificationCh`; outbound bundles wrapped in DKG envelopes (with cluster/generation routing) and broadcast; inbound bundles routed via `Receive(*Envelope)` after cluster/generation filter.
+- [x] **B2. `protocol/v2/dkg/keys.go`** — `Keypair` struct + `GenerateKeypair(group)` (fresh scalar, computed pubkey). Throwaway per ceremony.
+- [x] **B3. `protocol/v2/dkg/coordinator.go`** — concrete `Coordinator` type with the planned `Run` signature. Drives Exchange phase synchronously, then constructs `kyber_dkg.NewProtocol` in FastSync mode with `Auth = bdn.NewSchemeOnG2(suite)`, pumps the inbox into the Board until completion. Nonce derivation per D5: `H(clusterID || generation)`.
+- [~] **B4. Unit tests with synthetic transport.** Four of the five planned tests landed at `protocol/v2/dkg/coordinator_test.go`:
+    - [x] Happy-path 7-of-7 — DKG completes; `Commits[0]` matches across operators.
+    - [x] Threshold property — exactly `f+1 = 3` shares Lagrange-interpolate to a scalar whose public matches `Commits[0]`.
+    - [x] Below-threshold — `f = 2` shares fail to recover.
+    - [x] Liveness limit — 5/7 online ⇒ exchange phase times out cleanly on every survivor.
+    - [ ] **Byzantine-dealer test deferred.** Constructing a kyber `DealBundle` with internally-inconsistent shares (the case that triggers the complaint→justification path) requires bypassing kyber's signing or hooking into internals; not trivial without forking. Will be exercised naturally in Phase G3 over the real transport via fault injection. Tracked here so it isn't lost.
+
+  Phaser period note: in fresh DKG (`OldNodes == NewNodes`, every node both issues and receives), kyber's FastSync auto-advance condition `deals.Len() == oldN` is unreachable — each node misses its own broadcast. The phaser-period timeout therefore drives phase advancement; tests use 1s, production wires the existing 2s default. Worth keeping in mind when tuning C3.
 
 ### Phase C — Wire & transport
 
