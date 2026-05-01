@@ -436,7 +436,125 @@ Companion docs:
 
 6. **Mainnet rollout** (Phase 7) — registry-based opt-in per cluster, coexistence with QBFT until rollout completes.
 
-**Last updated:** Phase 4a + 4b + 4c + 4d complete. `proposer.go` integration committed. Real cryptographic IBE working end-to-end via the DST-trick approach (no DKG changes).
+**Last updated:** Phase 4a + 4b + 4c + 4d complete. `proposer.go` integration committed. Real cryptographic IBE working end-to-end via the DST-trick approach (no DKG changes). **Spec rewrite landed; new spec-alignment work tracked in the "Spec-alignment tasks" section below.**
+
+## Spec-alignment tasks (post-rewrite — current work)
+
+This section enumerates the implementation work needed to bring `protocol/v2/tbft/` up to date with the post-rewrite [TBFT.md](TBFT.md). The rewrite tightened candidate authenticity, equivocation handling, threshold separation, slashable evidence, and validity preconditions. The work below picks up from the Phase 4d baseline. Audit residual: [TBFT-audit.md](TBFT-audit.md).
+
+### Resolved design decisions
+
+- **D1 — Threshold separation: keep `qEnc = f+1` in [TBFT.md](TBFT.md); upgrade to Option B is future work.** Spec stays as written (`qV = 2f+1` σ-quorum, `qEnc = f+1` unlock). Implementation today runs Option A from Phase 0 (one DKG, threshold 2f+1, DST-trick role separation), so the cluster is effectively at `qEnc = qV = 2f+1` cryptographically — the threshold-separation liveness benefit (TBFT.md "Liveness profile / What threshold separation buys") is documented in spec but not yet realized in code. Until T5 below lands, the safety algebra in [TBFT.md](TBFT.md) "Why it's safe" describes the *target* state; the impl's current state has σ-NR slashing as nice-to-have rather than load-bearing.
+
+- **D2 — V-plaintext in onion: track via T9.** Implementation's [`EncryptedLayer.Value`](../protocol/v2/tbft/types.go) carries `V_{L_k}` plaintext, realizing [TBFTR](TBFTR.md) core ahead of [TBFT.md](TBFT.md) Phase 2. No change to either today; T9 below tracks the eventual reconciliation.
+
+### P0 — correctness / safety (blocks deployment)
+
+- [ ] **T1. Leader-authenticated candidates with leader's σ-on-V** ([TBFT.md](TBFT.md) Phase 1; closes audit P1.2 first action AND P0.1/P0.2 at n=4).
+
+  Phase-1 bundle becomes `(V_{L_k}, σ_{L_k}^V(V_{L_k}), σ_{L_k}^{op}(V_{L_k}))` — the leader signs V with both their V-keypair share (a partial threshold sig that gives the cluster a head-start partial toward qV) and their operator-identity key (leader-auth proof). At n=4 (f=1), the leader's σ^V plus the f+1=2 honest partials in Phase 2 sum to qV=3, closing the byzantine-leader selective-delivery grief mechanically (P0.1/P0.2). At n≥7 it narrows the grief window by one without closing it.
+
+  - Add `LeaderSigOp Signature` and `LeaderSigV Signature` fields to [`CandidateBroadcast`](../protocol/v2/tbft/types.go):
+    - `LeaderSigOp` is the operator-identity-key signature over `(ClusterID, Height, Layer, Value)`.
+    - `LeaderSigV` is the leader's V-keypair partial sig on `Value` (same domain / DST as Phase-2 onion threshold partials, so the aggregator at [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) treats it as one of the σ partials).
+  - Update [`wire/`](../protocol/v2/tbft/wire/) encoder/decoder for both new fields.
+  - Leader signs at fetch time in [`tbftFetchCandidate`](../protocol/v2/ssv/runner/proposer_tbft.go) (or its broadcast wrapper) — produces both signatures alongside V.
+  - Verify both signatures in [`Controller.ProcessCandidate`](../protocol/v2/ssv/runner/tbft/controller.go) before `ObserveCandidate`. Reject bundles missing or failing either sig.
+  - On the receiver side, when the bundle is accepted, the `LeaderSigV` partial is fed into the layer-`k` σ pool of the receiver's local [`Instance`](../protocol/v2/tbft/instance.go) (extend `ObserveCandidate` or add a sibling method to record the leader's σ partial). [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) then includes it in σ aggregation alongside Phase-2 onion partials — same value `V_{L_k}`, same threshold qV.
+  - Tests: candidate from non-leader rejected; bad operator-sig rejected; bad V-sig rejected; happy-path with both sigs verifies; **n=4 P0.1/P0.2 closure end-to-end** (byz layer-0 leader delivers to 2 honest, refuses to vote in Phase 2 — cluster still reconstructs at qV=3 because leader's σ-on-V from Phase 1 is the third partial); **n=7 residual grief** (byz delivers to exactly 3 honest at f=2, σ count = 4 < qV=5, NR count = 2 < qEnc=3, slot stuck).
+
+- [ ] **T2. Equivocation-to-non-receipt rule** ([TBFT.md](TBFT.md) Phase 1; closes audit P1.2 second action).
+  - Replace [`Instance.candidates map[int]Value`](../protocol/v2/tbft/instance.go) with a structure that records multiple validly-signed observations per layer.
+  - On second distinct validly-signed observation at the same layer from the same leader: mark layer as equivocated locally.
+  - [`BuildOwnOnion`](../protocol/v2/tbft/instance.go) skips equivocated layers; [`BuildOwnNonReceipts`](../protocol/v2/tbft/instance.go) emits NR for them.
+  - Keep the two signed candidates as fault evidence (see T7).
+  - Tests: two distinct candidates from same leader → that layer's onion slot empty + matching NR generated.
+
+- [ ] **T3. Sender / authenticity check at envelope dispatch** ([TBFT.md](TBFT.md); closes audit P1.2 third action).
+  - In [`ProcessTBFTEnvelopeMsg`](../protocol/v2/ssv/runner/proposer_tbft.go), before dispatch:
+    - `KindOnion`: `senderID == env.Onion.OperatorID`.
+    - `KindNonReceipt`: `senderID == env.NonReceipt.OperatorID`.
+    - `KindCandidate`: `senderID == env.Candidate.OperatorID` AND `senderID == cfg.Layers[env.Candidate.Layer].Leader`.
+  - With T1, the leader sig is the load-bearing check; sender-equality is defense-in-depth.
+  - Tests: each kind with mismatched sender rejected.
+
+### P1 — spec compliance
+
+- [ ] **T4. Threshold separation in protocol counting — naming-only refactor** ([TBFT.md](TBFT.md) Setting + Why it's safe). Coupled with T5 below; lands together cryptographically but the naming change can land independently as a small refactor.
+  - Add `Config.QV() = 2f+1` and `Config.QEnc() = f+1`; update callers.
+  - σ-quorum check in [`tryReconstructLayer`](../protocol/v2/tbft/instance.go): `< QV()`.
+  - NR-quorum check in [`tryDeriveNextLayerKey`](../protocol/v2/tbft/instance.go): `< QEnc()`.
+  - **Effectively a no-op until T5 lands**: under Option A the IBE primitive still needs `2f+1` partials to decrypt, so counting at `f+1` for unlock doesn't enable actual fall-through. Lands the spec's naming in code; cryptographic effect comes with T5.
+  - Tests: protocol-level counting at the new thresholds; mutual-exclusion preserved at the impl-level (still 2f+1 effective until T5).
+
+- [ ] **T6. Cross-onion partial-sig equivocation detection** ([TBFT.md](TBFT.md) caveat 2 third rule; closes audit P1.5 first bullet).
+  - In [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) grouping loop, detect same-operator partial appearing in two different value-groups at the same layer → record an `InconsistencyFault` and exclude that operator's contribution from both groups.
+  - Extend [`InconsistencyFault`](../protocol/v2/tbft/instance.go) with a `Kind` enum: `SigmaPlusNR`, `LeaderEquivocation`, `CrossOnionPartial`.
+  - Tests: two distinct partial sigs from same operator at same layer detected; neither group counts that contribution.
+
+- [ ] **T7. Slashable fault-proof representation** ([TBFT.md](TBFT.md) caveat 2).
+  - Extend [`InconsistencyFault`](../protocol/v2/tbft/instance.go) to carry the cryptographic evidence per Kind:
+    - `SigmaPlusNR`: σ partial + NR attestation, both signed.
+    - `LeaderEquivocation`: two leader-signed candidates.
+    - `CrossOnionPartial`: two distinct σ partials on different values.
+  - Decide: in-protocol gossip (new `KindFaultProof` envelope) vs out-of-band export. Default: out-of-band.
+  - Persistence so faults aren't lost on restart.
+  - Tests: each kind round-trips; verifying evidence in isolation reproduces the contradiction.
+
+- [ ] **T8. Application-validity gates candidate signing** ([TBFT.md](TBFT.md) Preconditions + caveat 8; closes audit P1.3 + P1.4 implementation halves).
+  - Audit the runner onion-build path: before signing `σ_i^V(V_{L_k})` at any layer, run app-level checks (slot, proposer index, fork/domain, parent root, relay metadata, doppelganger, slashing protection, encoding).
+  - Move `IsBeaconBlockSlashable` + `UpdateHighestProposal` to also gate **candidate signing** (in addition to today's submit-time check). Submit-time check stays as defense-in-depth.
+  - Tests: a slashable candidate doesn't make it into the operator's onion.
+
+### P2 — polish
+
+- [ ] **T9. Reconcile V-plaintext design vs implementation gap.** [`EncryptedLayer.Value`](../protocol/v2/tbft/types.go) carries `V_{L_k}` plaintext alongside the encrypted ciphertext, realizing [TBFTR](TBFTR.md) core ahead of [TBFT.md](TBFT.md) Phase 2. No safety implication either direction; tracked here so the gap doesn't drift unnoticed.
+
+  Two paths once a decision is made:
+  - **Strip from impl**: remove `Value` from [`EncryptedLayer`](../protocol/v2/tbft/types.go); receivers track V from [`Instance.candidates`](../protocol/v2/tbft/instance.go) instead. Aligns with TBFT.md as written; mild regression — operators that miss V in Phase 1 lose early per-partial verification.
+  - **Update TBFT.md**: acknowledge V-plaintext as standard. Shrinks [TBFTR](TBFTR.md)'s distinct contribution to the deferred-NR composition only.
+
+  No urgency. Decide and act when convenient; not on the critical path.
+
+- [ ] **T10. EKM behavior under multi-block-signing-per-slot** ([TBFT.md](TBFT.md) caveat 8).
+  - Verify EKM allows K candidate-value signatures per slot inside onion build (one per layer). Today's EKM check is at submit time on the winning block; partial-sig signing in onion build should not collide with duplicate-block protection.
+  - If EKM dedupes by slot only and would flag partial-sig signing, adjust to dedupe by (slot, layer) or use a separate signing API for partials.
+  - Tests: end-to-end onion build at K=3 layers without EKM rejection; submit still applies the proper full-block slashing check.
+
+- [ ] **T11. Aggregate test pass for the new rules** (integrates with T1–T8).
+  - Many tests are listed under each task; this is the consolidated coverage commitment.
+
+- [ ] **T12. Code comment cleanup**.
+  - Update comments in [`instance.go`](../protocol/v2/tbft/instance.go) (notably the punt-to-host comment around lines 319–323, now actually wired up by T2), [`types.go`](../protocol/v2/tbft/types.go) (Quorum vs QV/QEnc), [`tag.go`](../protocol/v2/tbft/tag.go) (post-rewrite terminology).
+
+### P3 — backlog (don't gate spec-alignment; tracked here)
+
+- [ ] **T5. Upgrade Option A → Option B: separate IBE keypair at threshold `qEnc = f+1` via Pedersen DKG between operators.** Detailed plan tracked in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md). Lands T4 (protocol-counting refactor) coincidentally — under Option B those new thresholds are cryptographically meaningful for the first time.
+
+- [ ] **T13. Worst-of-K beacon-fetch latency tuning** ([TBFT.md](TBFT.md) application section; audit P2.4).
+- [ ] **T14. Head-change handling during Phase 1 for TBFT proper** (analogous to [TBFT2.md](TBFT2.md) Phase 1A; audit P2.4).
+- [ ] **T15. Final-certificate gossip (`KindCertificate`)** (audit P2.2).
+- [ ] **T16. End-to-end timing budget with telemetry** (audit P2.3).
+- [ ] **T17. TBFTR composition** ([TBFTR.md](TBFTR.md)) — closes audit P0.1/P0.2 at the protocol level. Foundations come from T1 (leader-auth) + T9 keep-V-plaintext.
+- [ ] **T18. Path-conditional detection mitigation choice** (audit P1.5 second bullet) — pick post-protocol gossip or accept the limit.
+- [ ] **T19. `T_d` rename for clarity** (audit P3).
+
+### Sequencing recommendation
+
+Single-PR-able:
+
+- **PR-A**: T1 + T2 + T3 + their tests. Closes audit P1.2 end-to-end. Likely the right *first* PR.
+- **PR-B**: T6 + T7 + tests. Builds on T1's evidence shape. Single area of code (instance.go inconsistency-fault detector + InconsistencyFault type).
+- **PR-C**: T12. Comment cleanup; rides along with any of the above.
+- **PR-D**: T8 (candidate-signing slashing gate). Touches runner + EKM behavior.
+
+Lighter-touch:
+
+- T9 (V-plaintext reconciliation) — investigation + decide + act. Not urgent.
+- T10 (EKM compatibility audit) — verify only; act if EKM dedupe-by-slot-only would flag partial-sig signing.
+- T11 (aggregate test pass) — integrates with PR-A through PR-D.
+
+Backlog (T5, T13–T19) — not on the spec-alignment critical path. T5 (Option B upgrade) is the largest deferred item and unblocks T4's cryptographic realization; the rest are operational follow-ups or longer-horizon design work.
 
 ## Where this came from
 
