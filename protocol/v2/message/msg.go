@@ -21,6 +21,15 @@ const (
 	// the sender's peer score). Mixed-cluster rollouts therefore degrade
 	// gossip; rollout must be coordinated cluster-wide.
 	SSVTBFTMsgType spectypes.MsgType = 0xF0
+
+	// SSVDKGMsgType carries TBFT-IBE DKG ceremony envelopes (Exchange /
+	// Deal / Response / Justification, see protocol/v2/dkg/wire) inside
+	// a SignedSSVMessage. Used once-per-cluster-lifetime to establish
+	// the IBE keypair under Option B (see docs/TBFT-DKG-TASKS.md).
+	//
+	// PLACEHOLDER VALUE: 0xF1 (= 241). Same mainnet-allocation caveat as
+	// SSVTBFTMsgType.
+	SSVDKGMsgType spectypes.MsgType = 0xF1
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -34,6 +43,8 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "event"
 	case SSVTBFTMsgType:
 		return "tbft"
+	case SSVDKGMsgType:
+		return "dkg"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
 	}

@@ -31,6 +31,7 @@ const (
 	accountsPath            = "accounts_%s"
 	highestAttPrefix        = prefix + "highest_att-"
 	highestProposalPrefix   = prefix + "highest_prop-"
+	ibeSharePrefix          = prefix + "ibe_share-"
 )
 
 var (
@@ -49,6 +50,19 @@ type Storage interface {
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
 	SetEncryptionKey(hexKey []byte)
+
+	// SaveIBEShare persists `record` for `clusterID`. The blob is JSON-
+	// encoded and passed through encryptData (same encryption-at-rest as
+	// wallet accounts).
+	SaveIBEShare(clusterID [32]byte, record *IBEShareRecord) error
+
+	// GetIBEShare returns the stored record for `clusterID`. Returns
+	// (nil, ErrIBEShareNotFound) when no record exists; other errors
+	// indicate decode or decryption failure.
+	GetIBEShare(clusterID [32]byte) (*IBEShareRecord, error)
+
+	// RemoveIBEShare deletes the record for `clusterID`. Idempotent.
+	RemoveIBEShare(clusterID [32]byte) error
 }
 
 // SlashingStoreTxn represents the behavior of the slashing store with transaction support
@@ -415,4 +429,57 @@ func (s *storage) encryptData(objectValue []byte) ([]byte, error) {
 	}
 
 	return encryptedData, nil
+}
+
+// SaveIBEShare persists `record` for `clusterID` under the IBE-share
+// prefix. The record is JSON-encoded and wrapped with encryptData,
+// matching the wallet-account encryption-at-rest scheme.
+func (s *storage) SaveIBEShare(clusterID [32]byte, record *IBEShareRecord) error {
+	if record == nil {
+		return errors.New("ekm: nil IBE share record")
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	data, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshal IBE share record: %w", err)
+	}
+	encrypted, err := s.encryptData(data)
+	if err != nil {
+		return fmt.Errorf("encrypt IBE share record: %w", err)
+	}
+	return s.db.Set(nil, s.objPrefix(ibeSharePrefix), clusterID[:], encrypted)
+}
+
+// GetIBEShare reads the IBE-share record for `clusterID`. Returns
+// (nil, ErrIBEShareNotFound) when no record exists.
+func (s *storage) GetIBEShare(clusterID [32]byte) (*IBEShareRecord, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	obj, found, err := s.db.Get(nil, s.objPrefix(ibeSharePrefix), clusterID[:])
+	if err != nil {
+		return nil, fmt.Errorf("read IBE share record: %w", err)
+	}
+	if !found {
+		return nil, ErrIBEShareNotFound
+	}
+	decrypted, err := s.decryptData(obj.Value)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt IBE share record: %w", err)
+	}
+	var rec IBEShareRecord
+	if err := json.Unmarshal(decrypted, &rec); err != nil {
+		return nil, fmt.Errorf("unmarshal IBE share record: %w", err)
+	}
+	return &rec, nil
+}
+
+// RemoveIBEShare deletes the IBE-share record for `clusterID`. Idempotent.
+func (s *storage) RemoveIBEShare(clusterID [32]byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(nil, s.objPrefix(ibeSharePrefix), clusterID[:])
 }

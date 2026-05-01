@@ -2,11 +2,11 @@ package ekm
 
 import "errors"
 
-// ibe_share_storage.go declares the interfaces and storage schema for
-// per-cluster IBE share material used by the TBFT proposer-duty path under
-// Option B. See docs/TBFT-DKG-TASKS.md (Phase D) for the full plan; this
-// file lands in Phase A3 as the design stub. The concrete implementation
-// on LocalKeyManager lands in Phase D.
+// ibe_share_storage.go declares the interfaces, on-disk record shape, and
+// storage schema for per-cluster IBE share material used by the TBFT
+// proposer-duty path under Option B. See docs/TBFT-DKG-TASKS.md (Phase D)
+// for the full plan; the design stub landed in Phase A3 and the
+// implementation now lives alongside.
 //
 // Why this lives in ssvsigner/ekm:
 //
@@ -18,27 +18,16 @@ import "errors"
 //     bytes (the kyber-format scalar / point bytes); marshaling /
 //     unmarshaling lives in protocol/v2/dkg/ in the main module.
 //
-// Schema sketch (concrete encoding TBD in Phase D):
+// Schema:
 //
-//   - One BadgerDB record per (clusterID, generation), under a new
-//     prefix `signer_data-ibe_share-`. The persisted blob is the
-//     concatenation of:
-//       - shareBytes        — kyber-format scalar (32 bytes for BLS-12-381)
-//       - clusterIBEPubKey  — kyber-format G1 point (~48 bytes)
-//       - polyCommits       — length-prefixed list of kyber-format G1
-//                             points (one per polynomial coefficient,
-//                             threshold = f+1 entries; polyCommits[0] is
-//                             clusterIBEPubKey, repeated for convenience).
-//   - Encryption-at-rest reuses the storage's existing SetEncryptionKey
-//     mechanism (see signer_storage.go); the IBE-share blob is treated
-//     identically to wallet-account data.
-//   - The "current" generation per clusterID is recorded in a sibling
-//     record `signer_data-ibe_generation-` mapping clusterID → uint64,
-//     written atomically alongside the share blob. Lookup by clusterID
-//     resolves through this pointer.
-//   - On reconfig (committee change ⇒ clusterID change), a new (clusterID,
-//     generation=0) row appears; the old clusterID's row is removed once
-//     the new generation is durably persisted.
+//   - One BadgerDB record per clusterID, under the prefix
+//     `signer_data-ibe_share-`. The value is a JSON-encoded
+//     IBEShareRecord wrapped through encryptData (the same encryption
+//     applied to wallet-account records — see signer_storage.go).
+//   - Only the current generation is kept per cluster. On reconfig
+//     (committee change ⇒ different clusterID) or re-DKG, the orchestrator
+//     calls RemoveIBEShare for the old cluster after the new record has
+//     durably landed.
 
 // ErrIBEShareNotFound is returned by IBEShareBytesProvider methods when no
 // IBE share is registered for the given clusterID.
@@ -78,8 +67,6 @@ type IBEShareBytesProvider interface {
 // not persisted.
 type IBEShareWriter interface {
 	// AddIBEShare persists the share material for (clusterID, generation).
-	// Implementations write atomically: either both the share blob and the
-	// generation pointer land, or neither does.
 	//
 	//   - shareBytes        : kyber-format scalar (operator's share).
 	//   - clusterIBEPubKey  : kyber-format G1 point (master IBE pubkey).
@@ -94,8 +81,23 @@ type IBEShareWriter interface {
 		polyCommits [][]byte,
 	) error
 
-	// RemoveIBEShare deletes any persisted share material for clusterID
-	// (across all generations). Idempotent — a clusterID with no record
-	// is a no-op.
+	// RemoveIBEShare deletes any persisted share material for clusterID.
+	// Idempotent — a clusterID with no record is a no-op.
 	RemoveIBEShare(clusterID [32]byte) error
+}
+
+// IBEShareRecord is the on-disk shape of a per-cluster IBE-share entry.
+// Stored as JSON inside the encrypted blob (encryption-at-rest reuses
+// signer_storage.go's encryptData / decryptData wrapper).
+//
+// Field order is the natural reading order: identity (Generation), then
+// the operator's secret share, then public material (cluster IBE pubkey
+// + polynomial commitments). Generation is part of the value rather than
+// the key so a successful AddIBEShare for a new generation atomically
+// supersedes any prior record for the same clusterID.
+type IBEShareRecord struct {
+	Generation       uint64   `json:"generation"`
+	ShareBytes       []byte   `json:"share_bytes"`
+	ClusterIBEPubKey []byte   `json:"cluster_ibe_pubkey"`
+	PolyCommits      [][]byte `json:"poly_commits"`
 }

@@ -57,6 +57,12 @@ type LocalKeyManager struct {
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector slashingProtector
 
+	// signerStore is the persistent backing for non-wallet records (IBE
+	// share material today; future per-cluster non-validator-key state
+	// can extend it). Captured at construction so per-cluster reads/writes
+	// don't have to re-instantiate it.
+	signerStore Storage
+
 	// shareBytesMu guards shareBytes. Separate from walletLock because
 	// the read-path (TBFT signer construction) is called on a hotter
 	// path than wallet operations and shouldn't block on AddShare /
@@ -118,6 +124,7 @@ func NewLocalKeyManager(
 		signer:            beaconSigner,
 		slashingProtector: NewSlashingProtector(logger, beacon, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
+		signerStore:       signerStore,
 		shareBytes:        make(map[phase0.BLSPubKey][]byte),
 	}, nil
 }
@@ -482,4 +489,87 @@ func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
 		return fmt.Errorf("add validator account to wallet: %w", err)
 	}
 	return nil
+}
+
+// ---- IBE share storage (TBFT Option B) --------------------------------
+//
+// LocalKeyManager satisfies IBEShareWriter and IBEShareBytesProvider. The
+// data lives in the same DB as the validator wallet, encrypted under the
+// same operator-derived key. See ibe_share_storage.go for the schema.
+
+// AddIBEShare persists a successful DKG ceremony's output for `clusterID`.
+// The shareBytes / clusterIBEPubKey / polyCommits arguments come straight
+// from the caller's (orchestrator's) kyber DistKeyShare serialization;
+// LocalKeyManager treats them as opaque bytes.
+func (km *LocalKeyManager) AddIBEShare(
+	clusterID [32]byte,
+	generation uint64,
+	shareBytes []byte,
+	clusterIBEPubKey []byte,
+	polyCommits [][]byte,
+) error {
+	if len(shareBytes) == 0 {
+		return errors.New("ekm: IBE shareBytes empty")
+	}
+	if len(clusterIBEPubKey) == 0 {
+		return errors.New("ekm: IBE clusterIBEPubKey empty")
+	}
+	if len(polyCommits) == 0 {
+		return errors.New("ekm: IBE polyCommits empty")
+	}
+	record := &IBEShareRecord{
+		Generation:       generation,
+		ShareBytes:       append([]byte(nil), shareBytes...),
+		ClusterIBEPubKey: append([]byte(nil), clusterIBEPubKey...),
+		PolyCommits:      cloneByteSlices(polyCommits),
+	}
+	return km.signerStore.SaveIBEShare(clusterID, record)
+}
+
+// RemoveIBEShare deletes the IBE share record for `clusterID`. Idempotent.
+func (km *LocalKeyManager) RemoveIBEShare(clusterID [32]byte) error {
+	return km.signerStore.RemoveIBEShare(clusterID)
+}
+
+// GetIBEShareBytes returns the operator's IBE share scalar bytes for
+// `clusterID`. ErrIBEShareNotFound when no share is registered.
+func (km *LocalKeyManager) GetIBEShareBytes(clusterID [32]byte) ([]byte, error) {
+	rec, err := km.signerStore.GetIBEShare(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), rec.ShareBytes...), nil
+}
+
+// GetClusterIBEPubKey returns the cluster's IBE master pubkey
+// (== polyCommits[0]) for `clusterID`. ErrIBEShareNotFound when no
+// share is registered.
+func (km *LocalKeyManager) GetClusterIBEPubKey(clusterID [32]byte) ([]byte, error) {
+	rec, err := km.signerStore.GetIBEShare(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), rec.ClusterIBEPubKey...), nil
+}
+
+// GetClusterIBEPolyCommits returns the full polynomial-commitment array
+// (one G1 point per coefficient, threshold = f+1 entries) for the
+// cluster's IBE keypair. polyCommits[0] equals GetClusterIBEPubKey.
+func (km *LocalKeyManager) GetClusterIBEPolyCommits(clusterID [32]byte) ([][]byte, error) {
+	rec, err := km.signerStore.GetIBEShare(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return cloneByteSlices(rec.PolyCommits), nil
+}
+
+func cloneByteSlices(in [][]byte) [][]byte {
+	if in == nil {
+		return nil
+	}
+	out := make([][]byte, len(in))
+	for i, b := range in {
+		out[i] = append([]byte(nil), b...)
+	}
+	return out
 }

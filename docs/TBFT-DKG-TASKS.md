@@ -63,23 +63,22 @@ Status conventions follow [TASKS.md](TASKS.md): `[ ]` not started · `[~]` in pr
 
 ### Phase C — Wire & transport
 
-- [ ] **C1. `protocol/v2/dkg/wire/`** — versioned envelope + kind enum + encoders. Outer envelope analogous to [tbft/wire/envelope.go](../protocol/v2/tbft/wire/envelope.go) but for `SSVDKGMsgType`. Inner kinds `KindExchange = 0x01`, `KindDeal = 0x02`, `KindResponse = 0x03`, `KindJustification = 0x04`. Round-trip tests for each.
-- [ ] **C2. SSV-side `Board` adapter** — a `protocol/v2/dkg.Board` impl that broadcasts via [protocolp2p.Network.Broadcast](../protocol/v2/p2p/network.go) over the validator subnet, signing the outbound message with the operator identity key (matching how TBFT envelopes are signed today). Inbound: hooked into the existing message router via a new `MsgType` dispatch arm; the validator's running coordinator (Phase E) consumes the inbound channels.
-- [ ] **C3. Phaser** — kyber's `TimePhaser` is fine in FastSync mode; only `DealPhase` start needs explicit signaling. Custom phaser only if we need to coordinate phase boundaries with the receive-Exchange barrier (which precedes the kyber DKG proper, so it sits outside kyber's phaser anyway).
-- [ ] **C4. End-to-end transport tests.**
-    - 4-operator cluster over the in-process P2P stub used by other TBFT tests, DKG completes.
-    - 7-operator cluster, one byzantine dealer, complaint+justification path runs over real wire envelopes; DKG completes with QUAL=6.
-    - Network-loss resilience: drop X% of DKG packets randomly; assert DKG either completes or fails cleanly within a bounded retry window.
+- [x] **C1.** Subsumed by A2: the wire format is at `protocol/v2/dkg/wire/` with the four kinds (`KindExchange = 0x01`, `KindDeal = 0x02`, `KindResponse = 0x03`, `KindJustification = 0x04`), built on the shared framing in `protocol/v2/wire/`.
+- [x] **C2. P2P transport adapter** at `protocol/v2/dkg/p2p/transport.go`. `Broadcast(envelope)` wraps in a `SignedSSVMessage` with `MsgType = SSVDKGMsgType` (new constant in [protocol/v2/message/msg.go](../protocol/v2/message/msg.go), placeholder value `0xF1`), signs with the supplied `ssvtypes.OperatorSigner`, and publishes via `protocolp2p.Broadcaster.Broadcast`. `Inbox()` returns a buffered channel; `Deliver(envelope)` pushes inbound bytes in (caller is the per-node DKG dispatcher in Phase E). MsgID is supplied per ceremony — typically derived from one of the cluster's validator pubkeys so the message lands on a subnet every cluster operator is already subscribed to.
+- [x] **C3. Phaser.** Kyber's `TimePhaser` works as-is. The exchange-barrier sits outside kyber's phaser (it's our pre-DKG addition) so no custom phaser is needed. See the phaser-period note under B4 — fresh-DKG FastSync auto-advance never fires, so phase advancement is phaser-driven and the period must allow round propagation under load.
+- [~] **C4. Tests at `protocol/v2/dkg/p2p/transport_test.go`.**
+    - [x] Unit: New() validation, BroadcastShape (correct MsgType / MsgID / signed wrapper), BroadcastEmpty, BroadcastNetworkError, DeliverInbox, DeliverEmpty, DeliverFull.
+    - [x] End-to-end: 4-of-4 DKG completes through `dkgcore.Coordinator` instances wired via `*p2p.Transport` and a fanout test network, asserting `Commits[0]` matches across operators.
+    - [ ] Network-loss resilience and byzantine-dealer-over-real-transport tests deferred to Phase G3 (devnet fault injection); both depend on real-transport plumbing that's Phase E's domain (per-cluster dispatcher + validator-side validation arm).
+
+  Phase E will also wire the inbound side end-to-end: `SSVDKGMsgType` decoder in [queue/messages.go](../protocol/v2/ssv/queue/messages.go), a per-node DKG dispatcher routing by clusterID, and the corresponding case in `Validator.ProcessMessage` (or a node-level handler that bypasses the per-validator router, since DKG is per-committee not per-validator).
 
 ### Phase D — Persistence & EKM accessor
 
-- [ ] **D1. `ssvsigner/ekm/ibe_share_storage.go`** — store `DistKeyShare` (`Commits[]` + `Share.PriShare`) keyed by `(clusterID, generation)`. Encrypted-at-rest using the operator key, mirroring the wallet storage at [signer_storage.go](../ssvsigner/ekm/signer_storage.go). Atomic write at FinishPhase only (per D9).
-- [ ] **D2. Extend `LocalKeyManager`** with:
-    - `AddIBEShare(clusterID [32]byte, generation uint64, share *kyber_dkg.DistKeyShare) error`
-    - `GetIBEShareBytes(clusterID [32]byte) ([]byte, error)` — returns the operator's serialized scalar share.
-    - `GetClusterIBEPubKey(clusterID [32]byte) ([]byte, error)` — returns `Commits[0]` marshaled to bytes.
-    - `GetClusterIBEPolyCommits(clusterID [32]byte) ([]kyber.Point, error)` — full `Commits` array. Useful if Phase E1 below adds per-NR-partial verification.
-- [ ] **D3. Add `IBEShareBytesProvider` interface** in [ssvsigner/ekm/key_manager.go](../ssvsigner/ekm/key_manager.go), parallel to `ShareBytesProvider`. Only `LocalKeyManager` implements; `RemoteKeyManager` returns `ErrNotImplemented` (tracked under "Future work" below).
+- [x] **D1. `ssvsigner/ekm/ibe_share_storage.go`** — `IBEShareRecord` struct (Generation, ShareBytes, ClusterIBEPubKey, PolyCommits). `Storage` interface gains `SaveIBEShare` / `GetIBEShare` / `RemoveIBEShare`; the `*storage` impl JSON-encodes the record and wraps it through the existing `encryptData` / `decryptData` (same encryption-at-rest as wallet accounts). One record per clusterID under the new prefix `signer_data-ibe_share-`. Generation lives inside the value, so a successful save for a new generation atomically supersedes any prior record.
+- [x] **D2. `LocalKeyManager` IBE methods.** `AddIBEShare(clusterID, generation, shareBytes, clusterIBEPubKey, polyCommits)`, `RemoveIBEShare(clusterID)`, `GetIBEShareBytes(clusterID)`, `GetClusterIBEPubKey(clusterID)`, `GetClusterIBEPolyCommits(clusterID)`. Bytes-only contract — kyber stays out of ssvsigner; the orchestrator (Phase E) serializes the kyber `DistKeyShare` to bytes before calling. All getters return defensive copies. The signerStore reference is now captured on `LocalKeyManager` at construction.
+- [x] **D3. Interfaces in [ibe_share_storage.go](../ssvsigner/ekm/ibe_share_storage.go).** `IBEShareBytesProvider` (read-side) and `IBEShareWriter` (write-side) declared from Phase A3; only `LocalKeyManager` implements. `RemoteKeyManager` does not (FW1: ssv-signer extension exposes drand-DST signing remotely).
+- [x] **D4. Tests at `ssvsigner/ekm/ibe_share_storage_test.go`** — round-trip (with and without encryption-at-rest), missing → `ErrIBEShareNotFound`, overwrite, idempotent remove, distinct clusters, nil-record rejection, plus `LocalKeyManager`-level round-trip + empty-input rejection.
 
 ### Phase E — Trigger & lifecycle
 
