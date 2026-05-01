@@ -396,7 +396,7 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 
 - **D1 — Threshold separation: keep `qEnc = f+1` in [TBFT.md](TBFT.md); upgrade to Option B is future work.** Spec stays as written (`qV = 2f+1` σ-quorum, `qEnc = f+1` unlock). Implementation today runs Option A from Phase 0 (one DKG, threshold 2f+1, DST-trick role separation), so the cluster is effectively at `qEnc = qV = 2f+1` cryptographically — the threshold-separation liveness benefit (TBFT.md "Liveness profile / What threshold separation buys") is documented in spec but not yet realized in code. T5 below tracks the upgrade. Safety is unconditional in either configuration once T6's σ+NR exclusion rule lands at aggregation time: the σ+NR mutual exclusion is algebraic regardless of byz behavior. The σ+NR slashing rule is for attribution, not safety.
 
-- **D2 — V-plaintext in onion: track via T9.** Implementation's [`EncryptedLayer.Value`](../protocol/v2/tbft/types.go) carries `V_{L_k}` plaintext, realizing [TBFTR](TBFTR.md) core ahead of [TBFT.md](TBFT.md) Phase 2. No change to either today; T9 below tracks the eventual reconciliation.
+- **D2 — V-plaintext in onion: cluster-size-conditional per the new TBFT/TBFTR split.** TBFT (n=4) doesn't include V plaintext in onions — the leader-σ-V mechanism + algebra at f=1 closes P0.1 without it. TBFTR (n≥7) requires V plaintext in onions as part of its core (recovery channel for missing-V honest in Phase 2a, fed into Phase 2b late σ). Implementation should be conditional on cluster config: at n=4, omit V plaintext from `EncryptedLayer`; at n≥7, include it (or include hash + leader-V per the hash variant). T9 below tracks the implementation; T17 tracks the broader TBFTR composition.
 
 ### P0 — correctness / safety (blocks deployment)
 
@@ -468,7 +468,12 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 
 ### P2 — polish
 
-- [ ] **T9. Reconcile V-plaintext design vs implementation gap.** [`EncryptedLayer.Value`](../protocol/v2/tbft/types.go) carries `V_{L_k}` plaintext alongside the encrypted ciphertext, realizing [TBFTR](TBFTR.md) core ahead of [TBFT.md](TBFT.md) Phase 2. No safety implication either direction; tracked here so the gap doesn't drift unnoticed.
+- [ ] **T9. Cluster-size-conditional V-plaintext in onions.** With the new TBFT (n=4) / TBFTR (n≥7) split:
+
+  - **TBFT mode (n=4)**: `EncryptedLayer` should NOT carry `V_{L_k}` plaintext (TBFT.md Phase 2 doesn't include it; the leader-σ-V mechanism + algebra at f=1 closes P0.1 without a recovery channel).
+  - **TBFTR mode (n≥7)**: `EncryptedLayer` carries `V_{L_k}` plaintext (or hash, with full V at leader's own layer per hash variant) — see [TBFTR.md](TBFTR.md) Phase 2a. Required for the late-σ recovery in Phase 2b.
+
+  Implementation: parameterize `EncryptedLayer` and onion construction by mode. The runner picks mode based on cluster size at config time. Same instance.go aggregation path handles both — operators that haven't received V from any source contribute null at that layer regardless of mode. Tests for both modes.
 
   Two paths once a decision is made:
   - **Strip from impl**: remove `Value` from [`EncryptedLayer`](../protocol/v2/tbft/types.go); receivers track V from [`Instance.candidates`](../protocol/v2/tbft/instance.go) instead. Aligns with TBFT.md as written; mild regression — operators that miss V in Phase 1 lose early per-partial verification.
@@ -495,26 +500,40 @@ This section enumerates the implementation work needed to bring `protocol/v2/tbf
 - [ ] **T14. Head-change handling during Phase 1 for TBFT proper**.
 - [ ] **T15. Final-certificate gossip (`KindCertificate`)** (audit P2.2).
 - [ ] **T16. End-to-end timing budget with telemetry** (audit P2.3).
-- [ ] **T17. TBFTR composition** ([TBFTR.md](TBFTR.md)) — closes audit P0.1/P0.2 at the protocol level. Foundations come from T1 (leader-auth) + T9 keep-V-plaintext.
+- [ ] **T17. TBFTR composition (Phase 2a/2b split, late σ)** ([TBFTR.md](TBFTR.md) Phase 2a + 2b). **Required for any n≥7 deployment** (TBFTR is the n≥7 protocol; the composition closes P0.1 there). Foundations come from T1 (leader-auth) + T9 (V-plaintext for TBFTR mode).
+
+  Implementation:
+  - Phase 2a: each operator broadcasts onion (with V-plaintext per T9 TBFTR mode) at `T_d`. No NR yet.
+  - Phase 2b at `T_d + Δ_2a`: for each layer where the operator hasn't yet broadcast σ — if they recovered V from a peer's Phase-2a onion and validated, broadcast a late `σ_i^V(V_{L_k})` plaintext (separate message, not encrypted). Otherwise broadcast NR attestation.
+  - Phase 3 starts at `T_d + Δ_2a + Δ_2b`. Aggregator pool at layer `k` = leader's σ from Phase 1 ∪ onion partials at layer k ∪ late-σ broadcasts at layer k, with σ+NR exclusion (T6).
+  - New scheduler / timing logic for Phase 2 split. New message kind for late σ broadcasts (or reuse onion format with a flag).
+  - Tests: P0.1 worst-case attack at n=7 (byz selective delivery to 3 honest + dark on Phase-2a votes) → cluster reaches qV=5 via late σ in Phase 2b, slot succeeds. Same shape at n=10, n=13.
+
+  This is no longer a "follow-up" — it's part of the n≥7 implementation track. At n=4 (TBFT) the composition is not used.
 - [ ] **T18. Path-conditional detection mitigation choice** (audit P1.5 second bullet) — pick post-protocol gossip or accept the limit.
 - [ ] **T19. `T_d` rename for clarity** (audit P3).
 
 ### Sequencing recommendation
 
-Single-PR-able:
+The work splits along three axes: (1) shared infrastructure for both TBFT and TBFTR, (2) TBFTR-specific additions (n≥7), (3) operational backlog.
 
-- **PR-A**: T1 + T2 + T3 + their tests. Closes audit P1.2 end-to-end. Likely the right *first* PR.
-- **PR-B**: T6 + T7 + tests. Builds on T1's evidence shape. Single area of code (instance.go inconsistency-fault detector + InconsistencyFault type).
-- **PR-C**: T12. Comment cleanup; rides along with any of the above.
+**Shared (both protocols)**:
+
+- **PR-A**: T1 + T2 + T3 + their tests. Closes audit P1.2 end-to-end. Likely the right *first* PR. Required for both n=4 (TBFT) and n≥7 (TBFTR) deployments.
+- **PR-B**: T6 + T7 + tests. Aggregator-level fault exclusion (σ+NR + cross-onion σ+σ'). Builds on T1's evidence shape.
+- **PR-C**: T12. Comment cleanup; rides along.
 - **PR-D**: T8 (candidate-signing slashing gate). Touches runner + EKM behavior.
 
-Lighter-touch:
+**TBFTR-specific (n≥7 only)**:
 
-- T9 (V-plaintext reconciliation) — investigation + decide + act. Not urgent.
-- T10 (EKM compatibility audit) — verify only; act if EKM dedupe-by-slot-only would flag partial-sig signing.
-- T11 (aggregate test pass) — integrates with PR-A through PR-D.
+- **PR-E**: T9 + T17. V-plaintext in onions (TBFTR mode) + Phase 2a/2b composition. Material new functionality. The runner config picks TBFT-mode or TBFTR-mode based on cluster size; the implementation supports both.
 
-Backlog (T5, T13–T19) — not on the spec-alignment critical path. T5 (Option B upgrade) is the largest deferred item and unblocks T4's cryptographic realization; the rest are operational follow-ups or longer-horizon design work.
+**Lighter-touch**:
+
+- T10 (EKM compatibility audit) — verify; act if EKM dedupe-by-slot-only would flag partial-sig signing.
+- T11 (aggregate test pass) — integrates with PR-A through PR-E.
+
+**Backlog (T5, T13–T16, T18, T19)** — operational follow-ups or longer-horizon design. T5 (Option B upgrade) is the largest deferred item and unblocks T4's cryptographic realization (currently both protocols run "Option A" with effective qEnc=qV until T5 lands).
 
 ## Where this came from
 
