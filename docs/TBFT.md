@@ -112,7 +112,7 @@ Implication: liveness is bounded by the standard `3f+1` byzantine assumption. If
 
 #### Why not "absent = ALL-value"
 
-An earlier design (the original Proposal 3) treated missing onions as if the absent operator had signed positively at every layer, combined with a lowered ~`f+1` NR-quorum threshold. The combined rule is unsafe under standard threshold semantics (both quorums simultaneously reachable at `f ≥ 1`) and cryptographically infeasible (phantom partial sigs from absent operators don't exist as a usable IBE decryption witness). Threshold separation in this spec — `qV = 2f+1` σ + `qEnc = f+1` NR via a separate DKG — is the safe way to lower the NR threshold without invoking phantom signatures. See "Why it's safe" for the algebra and "Practical caveats" for the load-bearing slashing assumption that comes with it.
+An earlier design (the original Proposal 3) treated missing onions as if the absent operator had signed positively at every layer, combined with a lowered ~`f+1` NR-quorum threshold. The combined rule is unsafe under standard threshold semantics (both quorums simultaneously reachable at `f ≥ 1`) and cryptographically infeasible (phantom partial sigs from absent operators don't exist as a usable IBE decryption witness). Threshold separation in this spec — `qV = 2f+1` σ + `qEnc = f+1` NR via a separate DKG — is the safe way to lower the NR threshold without invoking phantom signatures. See "Why it's safe" for the algebra; the σ+NR exclusion rule at aggregation is what keeps both quorums mutually exclusive at the asymmetric thresholds.
 
 ## Preconditions on the host application
 
@@ -136,22 +136,24 @@ Slashing protection should gate **candidate signing** (Phase 2 onion constructio
 
 **Safety claim**: at most one full `V` signature is ever produced per TBFT instance per slot.
 
-The safety pigeonhole at any layer `k`: σ-quorum on `V_{L_k}` and NR-quorum on `nr_tag_k` cannot both be reached, given that byzantine actors avoid σ+NR self-contradiction at the same layer (deterred by slashing — see caveats).
+**The σ+NR exclusion rule at aggregation.** Every operator running Phase 3 builds two pools at each layer `k`: σ partials at layer `k`, and NR partials on `nr_tag_k`. Any operator whose published messages contain *both* a σ partial at layer `k` (in their onion) AND an NR attestation on `nr_tag_k` (broadcast separately) has both contributions excluded from their respective pools at this layer. This is a structural exclusion — it happens at aggregation time regardless of byzantine intent or economic incentives.
 
-Algebra. Let `h_σ`, `h_NR` be honest operators contributing positive (σ on V) and non-receipt (σ on nr_tag) partials respectively at layer `k`; `byz_σ`, `byz_NR` the byzantine analogues.
+**The safety pigeonhole at any layer `k`** under this rule: σ-quorum on `V_{L_k}` and NR-quorum on `nr_tag_k` cannot both be reached.
 
-- σ-quorum reached: `h_σ + byz_σ ≥ qV = 2f+1` ⇒ `h_σ ≥ 2f+1 − byz_σ`.
-- NR-quorum reached: `h_NR + byz_NR ≥ qEnc = f+1` ⇒ `h_NR ≥ f+1 − byz_NR`.
-- Slashing-deterred byzantine don't σ+NR at the same layer: `byz_σ + byz_NR ≤ f`.
-- Sum: `h_σ + h_NR ≥ (2f+1 − byz_σ) + (f+1 − byz_NR) = 3f+2 − (byz_σ + byz_NR) ≥ 3f+2 − f = 2f+2`.
+Algebra. Let `h_σ`, `h_NR` be honest operators contributing σ on V and NR on nr_tag respectively at layer `k`; `byz_σ_alone`, `byz_NR_alone` the byzantine operators contributing to *exactly one* side (cross-signers contribute to neither side under the exclusion rule).
+
+- σ-quorum reached: `h_σ + byz_σ_alone ≥ qV = 2f+1` ⇒ `h_σ ≥ 2f+1 − byz_σ_alone`.
+- NR-quorum reached: `h_NR + byz_NR_alone ≥ qEnc = f+1` ⇒ `h_NR ≥ f+1 − byz_NR_alone`.
+- Each byzantine operator contributes to at most one side after exclusion: `byz_σ_alone + byz_NR_alone ≤ f`.
+- Sum: `h_σ + h_NR ≥ 3f+2 − (byz_σ_alone + byz_NR_alone) ≥ 3f+2 − f = 2f+2`.
 - Honest don't sign both: `h_σ + h_NR ≤ 2f+1`.
 - Contradiction: `2f+2 ≤ 2f+1` is impossible.
 
-Therefore the layer at which the cluster first reaches σ-quorum is uniquely determined cluster-wide, and at most one full `V` signature ever materializes. Two participants cannot independently reconstruct two contradictory outputs.
+Therefore the layer at which the cluster first reaches σ-quorum is uniquely determined cluster-wide, and at most one full `V` signature ever materializes. Two participants cannot independently reconstruct two contradictory outputs. **Byzantine σ+NR cross-signing has at worst a *liveness* impact** — their excluded contributions might prevent a quorum from reaching at this layer — **never a safety impact**: they cannot produce two outputs by attempting it.
 
-This is a different shape of safety than QBFT. QBFT enforces safety via *agreement* (all honest operators decide the same value at decision time). TBFT enforces it via *cryptography plus economic deterrence*: operators may have different local views or no output at all, but the math precludes contradictory outputs given honest behavior plus byzantine being deterred from σ+NR cross-signing by slashing.
+This is a different shape of safety than QBFT. QBFT enforces safety via *agreement* (all honest operators decide the same value at decision time). TBFT enforces it via *cryptography*: aggregator-level filtering of σ+NR cross-signers makes the same-layer quorum exclusion algebraic, so the math precludes contradictory outputs regardless of byzantine behavior.
 
-The cross-signing slashing assumption is real and load-bearing. Current TBFT at `qEnc = qV` would not need it — slashing would be nice-to-have. Lowering `qEnc = f+1` shifts the burden onto detection-and-slashing of σ+NR. See the "Inconsistency-slashing" caveat for the detection rules and the path-conditional detection limit at deep layers.
+The σ+NR slashing rule (caveat 2) remains useful for *attribution and punishment* of byzantine cross-signers — collecting slashable evidence, monitoring, reputation. It is **not load-bearing for safety**. The same is true of the path-conditional detection limit at deep layers (also caveat 2): undetected deep-layer cross-signers escape attribution but cannot break safety, because the exclusion rule applies wherever aggregation actually happens (at opened layers) and at unopened layers no aggregation occurs to be subverted.
 
 ## Liveness profile
 
@@ -169,7 +171,7 @@ So the separation saves all moderate-degradation slots in the range `x ∈ [f+1,
 
 The boundary case `x = f` exactly — a byzantine leader selectively splitting honest at the worst possible point (caveat 1's selective-delivery attack) — is **not** saved by this threshold change alone; that's the gap TBFTR's deferred-NR composition closes.
 
-**What it costs.** A second DKG, run once at cluster init for the IBE keypair at threshold `qEnc = f+1` (caveat 5). And the σ+NR cross-signing slashing rule becomes load-bearing for safety: at `qEnc = qV = 2f+1` the rule was nice-to-have, at `qEnc = f+1` the safety algebra (see "Why it's safe") *requires* byzantine being deterred from cross-signing by the slashing penalty. Per-slot bandwidth and latency are unchanged.
+**What it costs.** A second DKG, run once at cluster init for the IBE keypair at threshold `qEnc = f+1` (caveat 5). And the σ+NR exclusion rule at aggregation must be in place — under threshold separation it's what keeps the same-layer σ-quorum and NR-quorum mutually exclusive (see "Why it's safe"). At `qEnc = qV = 2f+1` the exclusion rule isn't strictly needed for safety (algebra holds without it), but at `qEnc = f+1` it is — and it's a small, structural addition (no extra messages or trust assumptions). Per-slot bandwidth and latency are unchanged.
 
 ## Cryptographic primitive
 
@@ -186,7 +188,7 @@ A TBFT implementation can integrate `drand/tlock`-style ciphertext construction 
 
 | Property | TBFT |
 |---|---|
-| Safety (no contradictory outputs) | Yes — cryptographic + load-bearing σ/NR slashing |
+| Safety (no contradictory outputs) | Yes — cryptographic, structural via σ+NR exclusion at aggregation |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition |
 | Termination (output guaranteed) | **No**, single-shot |
 | Equivocation detection | Yes — leaders sign candidates; conflicting signed candidates trigger non-receipt at that layer; pair forms slashable evidence |
@@ -223,7 +225,7 @@ For an SSV cluster proposing an Ethereum block:
 
 The bandwidth and round-trip comparison is unchanged from earlier specs of TBFT — the threshold-separation refinement adds a one-time DKG for the IBE keypair at cluster init but doesn't change per-slot bandwidth. See [TBFT-comparison.md](TBFT-comparison.md) for scenario-by-scenario detail.
 
-Headline: TBFT is 1 RTT vs QBFT's 3 RTTs in the common case, at the cost of `O(K · n²)` constant-factor bandwidth and the load-bearing slashing assumption.
+Headline: TBFT is 1 RTT vs QBFT's 3 RTTs in the common case, at the cost of `O(K · n²)` constant-factor bandwidth and a second DKG at cluster init.
 
 ## Practical caveats and open questions
 
@@ -260,13 +262,15 @@ Headline: TBFT is 1 RTT vs QBFT's 3 RTTs in the common case, at the cost of `O(K
 
 2. **Inconsistency-slashing — three rules.**
 
-   - **Self-contradiction (σ + NR at same layer).** If operator `i`'s onion contains `σ_i^V(V_{L_k})` *and* `i` broadcasts `σ_i^{IBE}(nr_tag_k)`, that's a slashable contradiction. With threshold separation, this slashing is **load-bearing for safety** — the safety argument relies on byzantine avoiding this contradiction because of the slashing penalty.
+   These rules surface byzantine fault evidence for *attribution and punishment* (out-of-band slashing, reputation, monitoring). Under the σ+NR exclusion rule (see "Why it's safe"), they are **not load-bearing for safety** — aggregator-level filtering of cross-signers makes the σ-quorum / NR-quorum mutual exclusion algebraic regardless of byzantine behavior. The slashing rules are about consequences, not safety enforcement.
+
+   - **Self-contradiction (σ + NR at same layer).** If operator `i`'s onion contains `σ_i^V(V_{L_k})` *and* `i` broadcasts `σ_i^{IBE}(nr_tag_k)`, that's a slashable contradiction. The same publicly-signed pair is what triggers the σ+NR exclusion rule at aggregation time: aggregators exclude `i`'s contributions from both pools at layer `k`.
 
    - **Leader equivocation.** Two distinct, validly-signed candidates `(V_{L_k}, σ_{L_k}^{op}(V_{L_k}))` and `(V'_{L_k}, σ_{L_k}^{op}(V'_{L_k}))` from the same `L_k` at the same layer are a self-contained slashable fault proof against `L_k`. Honest operators that observe both treat layer `k` as non-receipt locally (Phase 1 equivocation handling) and may broadcast the pair as a fault claim.
 
-   - **Cross-onion partial-sig equivocation by an operator.** If operator `i` appears in two onions with `σ_i^V(V)` and `σ_i^V(V')` at the same layer for different `V`, that's detectable from the partial sigs alone (two distinct partials from the same identity at the same `(slot, layer)`). Slashable on the same logic as the σ + NR case. The aggregator at layer `k` already groups partials by value; same-identity contributions to two different value groups surface this.
+   - **Cross-onion partial-sig equivocation by an operator.** If operator `i` appears in two onions with `σ_i^V(V)` and `σ_i^V(V')` at the same layer for different `V`, that's detectable from the partial sigs alone (two distinct partials from the same identity at the same `(slot, layer)`). Slashable on the same logic as the σ + NR case. The aggregator at layer `k` already groups partials by value; same-identity contributions to two different value groups surface this — and the cross-signer's contributions are excluded from all groups at this layer (analogous to σ+NR exclusion).
 
-   **Path-conditional detection limit.** The σ + NR detector requires observing `σ_i^V` at the relevant layer. At deep layers (those whose ciphertext only opens when an upper layer fails the σ-quorum check), if the upper layer succeeds, the deep layer's σ partials are never decrypted and an operator's σ+NR contradiction at that depth is undetected for that execution path. This means the load-bearing slashing assumption is partially eroded at deep layers; an attacker willing to risk slashing only when caught might cross-sign at deep layers preferentially. Mitigations: post-protocol gossip of all-layer σ partials (so deep layers can be retroactively verified), or accept that path-conditional escape is rare relative to attacker payoff. Engineering choice.
+   **Path-conditional detection limit.** The σ+NR detector requires observing `σ_i^V` at the relevant layer. At deep layers (those whose ciphertext only opens when an upper layer fails σ-quorum), if the upper layer succeeds, the deep layer's σ partials are never decrypted and an operator's σ+NR contradiction at that depth goes undetected *for attribution purposes*. This doesn't affect safety: the σ+NR exclusion rule applies wherever aggregation actually happens (at opened layers), and at unopened layers no aggregation occurs to be subverted. The mitigation question is purely about how aggressive we want attribution to be — post-protocol gossip of all-layer σ partials would catch deep-layer cross-signers retroactively for slashing, at a wire-format and bandwidth cost. Engineering choice.
 
 3. **Bandwidth scales with `K`.** With the recommended cap `K = max(3, f+1)`, bandwidth is `O(K · n²)`, viable for all current SSV cluster sizes (n=4, 7, 10, 13). Larger clusters or higher byzantine bounds would require larger `K`, increasing constant-factor bandwidth proportionally.
 
@@ -274,7 +278,7 @@ Headline: TBFT is 1 RTT vs QBFT's 3 RTTs in the common case, at the cost of `O(K
 
 5. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. The IBE DKG is a one-time setup cost on top of the existing V-keypair DKG.
 
-6. **Deadline coordination.** Safety relies on participants agreeing on what `T_d` means. Clock skew across operators must be bounded by `δ` and known. The deadline rule is `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999.
+6. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. The deadline rule is `T_d − T_arrival > D + δ` where `D` is the propagation P99/P999. This is a *liveness* requirement — under unbounded skew some operators miss the deadline and the slot fails to finalize. Safety is unaffected: the σ+NR pigeonhole is a global property over cluster-wide signed messages, not over per-operator views.
 
 7. **Tag construction and replay.** The `nr_tag_k` tags must uniquely bind `(slot, cluster, layer)` so that ciphertexts from one slot/cluster/layer cannot be replayed/reused. The structure `("slot", N, "cluster", C, "layer", k, "no-quorum")` provides this. Standard hygiene but easy to get wrong.
 

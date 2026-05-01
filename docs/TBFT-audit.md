@@ -31,7 +31,7 @@ Aggregated review of `docs/TBFT.md`, `docs/TBFT2.md`, and `docs/TBFT-comparison.
 
 ## What still holds (reaffirmed)
 
-- The pigeonhole safety argument in TBFT.md "Why it's safe" still holds, now in the form: at any layer, σ-quorum (`qV = 2f+1`) and NR-quorum (`qEnc = f+1`) cannot both be reached given honest non-cross-signing plus byzantine being deterred from σ+NR cross-signing by slashing. The slashing assumption is now **load-bearing** under threshold separation; see TBFT.md "Why it's safe" and caveat 2.
+- The pigeonhole safety argument in TBFT.md "Why it's safe" holds: at any layer, σ-quorum (`qV = 2f+1`) and NR-quorum (`qEnc = f+1`) cannot both be reached, made structural by the σ+NR exclusion rule at aggregation. The slashing rule is for attribution, not load-bearing for safety — even under threshold separation. See TBFT.md "Why it's safe" and caveat 2.
 - Single-RTT decision path vs QBFT's three.
 - V-signing keypair reuses SSV's existing operator-share setup. The IBE keypair is a new separate DKG at threshold `qEnc = f+1`, run once at cluster init.
 
@@ -66,14 +66,14 @@ P0.2 considered closed for the n=4 cluster size TBFT2 is targeted at.
 
 ### P1.5 second bullet — hidden equivocation in unopened layers
 
-If layer 0 succeeds, layers 1+ are never decrypted, so an operator's σ+NR cross-signing at deep layers escapes detection in that execution path. Under threshold separation (`qEnc = f+1`), σ+NR cross-signing is now load-bearing for safety — undetected cross-signing at deep layers partially erodes the safety guarantee.
+If layer 0 succeeds, layers 1+ are never decrypted, so an operator's σ+NR cross-signing at deep layers escapes detection in that execution path. Under the σ+NR exclusion rule (TBFT.md "Why it's safe"), this **doesn't affect safety** — the exclusion rule applies wherever aggregation actually happens (at opened layers), and at unopened layers no aggregation occurs to be subverted. The remaining concern is purely *attribution*: undetected deep-layer cross-signers escape slashing.
 
 TBFT.md caveat 2 acknowledges this as the *path-conditional detection limit* and lists two mitigation options:
 
 - (a) Post-protocol gossip of all-layer σ partials so deep layers can be retroactively verified for slashing material — adds a wire-format change and a post-slot gossip round.
-- (b) Accept that path-conditional escape is rare relative to attacker payoff (deep layers rarely matter when upper layers succeed) — engineering choice.
+- (b) Accept that path-conditional escape is rare relative to attacker payoff and let unattributed faults remain unattributed (deep layers rarely matter when upper layers succeed) — engineering choice.
 
-No protocol-level resolution chosen; left as an engineering decision. Tracked in [TASKS.md](TASKS.md) as a follow-up.
+No protocol-level resolution chosen; left as an engineering decision for attribution coverage. Tracked in [TASKS.md](TASKS.md) as a follow-up.
 
 ## Open P2 findings
 

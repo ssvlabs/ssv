@@ -123,9 +123,9 @@ Same as [TBFT](TBFT.md): each honest operator must validate `V_p` and `V_b` agai
 
 ## Why it's safe
 
-The safety pigeonhole at the single layer transition: σ-quorum on `V_p` (`qV = 2f+1` partial sigs) and NR-quorum on `nr_tag_p` (`qEnc = f+1` partial sigs from the IBE keypair) cannot both be reached, given that byzantine actors avoid σ+NR self-contradiction (deterred by slashing — see caveats).
+The safety pigeonhole at the single layer transition: σ-quorum on `V_p` (`qV = 2f+1` partial sigs) and NR-quorum on `nr_tag_p` (`qEnc = f+1` partial sigs from the IBE keypair) cannot both be reached, given the σ+NR exclusion rule at aggregation (TBFT.md "Why it's safe") — any operator that publishes both a σ partial on V_p AND an NR attestation on nr_tag_p has both contributions excluded from their respective pools.
 
-Algebra is identical in shape to [TBFT](TBFT.md) "Why it's safe" with `K = 2`. The slashing assumption is **load-bearing** here just like in TBFT under threshold separation.
+Algebra is identical in shape to [TBFT](TBFT.md) "Why it's safe" with `K = 2`. Safety is structural — byzantine σ+NR cross-signing has at worst a liveness impact (excluded contributions might prevent quorum), never a safety one. The σ+NR slashing rule is for attribution, not safety enforcement.
 
 Therefore: at most one V signature can ever be reconstructed cluster-wide. Either `V_p` (if positive quorum at layer 0) or `V_b` (if non-receipt quorum unlocks layer 1 and backup positive quorum is also met) — never both.
 
@@ -212,7 +212,7 @@ TBFT and TBFT2 have the same RTT advantage: 1 RTT vs 3 for QBFT.
 | RTTs | 1 | 1 | 3 per round |
 | Liveness recovery within a slot | none | none | yes (round changes) |
 | Implementation complexity | low (1 tag, 2 layers) | medium (`K` tags, `K` layers) | high (mature in SSV) |
-| Cryptographic safety | yes (load-bearing slashing) | yes (load-bearing slashing) | no (consensus-based) |
+| Cryptographic safety | yes (structural — σ+NR exclusion) | yes (structural — σ+NR exclusion) | no (consensus-based) |
 
 ## Practical caveats
 

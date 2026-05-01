@@ -36,7 +36,7 @@ For SSV's proposer duty: a node that didn't get the block in Phase 1 can still b
 
 ## What this does not enable (under TBFTR alone)
 
-Under TBFTR by itself (with TBFT's existing Phase 2 timing), the operator still cannot retroactively contribute their own `σ_i^V(V_{L_k})` after extracting `V_{L_k}` from a peer's onion. They've already broadcast a non-receipt attestation `σ_i^{IBE}(nr_tag_k)` alongside their onion, and switching to a positive partial would be the slashable σ+NR self-contradiction defined in TBFT.md "Inconsistency-slashing". The protocol's commitment point at `T_d` is unchanged.
+Under TBFTR by itself (with TBFT's existing Phase 2 timing), the operator still cannot meaningfully contribute their own `σ_i^V(V_{L_k})` after extracting `V_{L_k}` from a peer's onion. They've already broadcast a non-receipt attestation `σ_i^{IBE}(nr_tag_k)` alongside their onion; under the σ+NR exclusion rule (TBFT.md "Why it's safe"), publishing a σ partial at the same layer would cause aggregators to exclude both their σ and their NR contributions. The σ doesn't reach the σ-quorum pool, the NR doesn't help fall-through, and the operator is also recorded as a fault for attribution. The protocol's commitment point at `T_d` is unchanged.
 
 This constraint is lifted under the **TBFTR + deferred-NR composition** below, which is what closes the selective-delivery grief described in TBFT.md caveat 1 (P0.1 in [TBFT-audit.md](TBFT-audit.md)).
 
@@ -92,7 +92,7 @@ The byzantine has no useful counter-move. Going dark in Phase 2a contributes not
 
 ### Safety
 
-Each operator commits to exactly one of `{σ, NR}` per layer, regardless of whether the σ commit lands in Phase 2a or 2b. The σ+NR slashable rule is unchanged. Cluster-wide σ-vs-NR quorum exclusion (TBFT.md "Why it's safe") is unchanged. The change is timing-only — no new safety assumption beyond the load-bearing slashing already required by threshold separation.
+Each operator commits to exactly one of `{σ, NR}` per layer, regardless of whether the σ commit lands in Phase 2a or 2b. The σ+NR exclusion rule and slashable-fault detection are unchanged. Cluster-wide σ-vs-NR quorum exclusion (TBFT.md "Why it's safe") is unchanged — and remains structurally guaranteed via the exclusion rule, not via a slashing deterrent. The change is timing-only; no new safety assumption beyond what TBFT already provides.
 
 ### Cost
 
