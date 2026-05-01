@@ -23,7 +23,7 @@ Assumptions:
 - BLS verify/aggregate: ~ms-scale, treated as instant.
 - QBFT round timeout: 2 s, matching current SSV ([protocol/v2/qbft/roundtimer/timer.go:154-158](protocol/v2/qbft/roundtimer/timer.go:154)).
 - "Miss" means the cluster fails to produce a validator signature before the slot deadline — the proposer duty is missed.
-- TBFT (n=4) and TBFTR (n≥7) here are the post-rewrite versions: leader-authenticated candidates, leaders publish their own σ-on-V in Phase 1, threshold separation (`qV = 2f+1`, `qEnc = f+1`), σ+NR exclusion at aggregation, equivocation-to-non-receipt rule. TBFTR additionally carries V plaintext in onions and splits Phase 2 into 2a/2b. See [TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md) for the specs.
+- TBFT (n=4) and TBFTR (n≥7) here are the post-rewrite versions: leader-authenticated candidates over a structured envelope, leaders publish their own σ-on-V in Phase 1, unified threshold `qV = qEnc = 2f+1` (cryptographic safety), equivocation-to-non-receipt rule. TBFTR additionally carries V plaintext in onions and splits Phase 2 into 2a/2b. Both specs hold safety unconditionally and rely on partial synchrony within the slot window for liveness — same envelope SSV's QBFT relies on per round. See [TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md) for the specs.
 
 ## n=4 cluster (f=1) — QBFT vs TBFT
 
@@ -42,11 +42,11 @@ Bandwidth constants for this cluster size: QBFT 1 round + post-consensus ~14 KB;
 
 ¹ Equivocation triggers TBFT's equivocation-to-non-receipt rule cluster-wide — falls through cleanly to the backup.
 ² QBFT recovers via round change.
-³ At n=4 the byzantine-layer-leader selective-delivery grief is closed by the leader-publishes-σ-on-V mechanism in Phase 1: the leader's forced threshold partial plus the f+1 = 2 honest partials sum to qV = 3 exactly, leaving no `k` value where both σ-quorum and NR-quorum can fail simultaneously. See [TBFT.md](TBFT.md) "Liveness profile" for the per-`k` table.
+³ At n=4, under partial synchrony, the byzantine-layer-leader selective-delivery grief is closed by leader-σ-V-in-Phase-1 plus gossipsub re-flooding of the leader's bundle: every honest operator ends up with the bundle by `T_commit`, all 3 sign σ in Phase 2, σ-quorum reaches `qV = 3` cleanly. See [TBFT.md](TBFT.md) "Liveness profile" for the per-`m` table.
 
 ### Reading the n=4 table
 
-- **Scenarios 3, 5, 6a, 6b all collapse to clean outcomes for TBFT.** With f=1, all of "top leader silent" / "f offline including top" / "f byz passive" / "active byz-leader grief" finish in ~250 ms via fall-through to backup or via the σ-quorum reaching `qV = 3` exactly through the leader's Phase-1 σ + 2 honest σ partials. The leader-σ-in-Phase-1 mechanism closes scenario 6b mechanically; an active byzantine has no `k` value that produces grief. **No in-bound miss scenarios for TBFT at n=4.**
+- **Scenarios 3, 5, 6a, 6b all collapse to clean outcomes for TBFT under partial synchrony.** With f=1, all of "top leader silent" / "f offline including top" / "f byz passive" / "active byz-leader grief" finish in ~250 ms via fall-through to backup or via the σ-quorum reaching `qV = 3` through the leader's Phase-1 σ + 2 honest σ partials (which all 3 honest reach via gossipsub re-flooding even when the leader selectively delivers). **No in-bound miss scenarios for TBFT at n=4 under partial synchrony**; if the synchrony envelope is violated inside the slot window, slots may miss but no safety violation occurs (cf. [TBFT.md](TBFT.md) "Why it's safe").
 - **Scenario 1 favors QBFT on bandwidth** (14 KB vs 21 KB). QBFT's round-1-success path is genuinely the cheapest in bytes. TBFT trades some extra bandwidth for the cryptographic guarantee that all in-bound failure modes stay flat.
 - **Scenario 2 (slow network, no failures) is the cleanest comparison of pure protocol latency.** TBFT finishes in ~600 ms vs QBFT's ~2.0 s — ~3× advantage from 1-RTT vs 3-RTT structure. Inside MEV's 4 s budget this is the difference between making the relay cutoff and not.
 - **Scenario 3 (top leader silent) is the proposer-duty MEV killer for QBFT.** ~3.0 s of consensus puts the validator on the wrong side of the 4 s relay cutoff once you add ~1.5 s of pre-consensus + block-fetch. TBFT just uses the backup, well within the cutoff.
@@ -71,7 +71,7 @@ Bandwidth constants: QBFT 1 round + post-consensus ~37 KB; QBFT round-change add
 
 ¹ Equivocation triggers the equivocation-to-non-receipt rule cluster-wide — falls through cleanly to the next layer.
 ² QBFT recovers via round change — round 1 fails to reach prepare-quorum, new leader elected in round 2.
-³ TBFTR closes the n ≥ 7 selective-delivery residual via its Phase-2 split: f honest who missed V via selective delivery recover V via peer onions in Phase 2a (TBFTR core), then sign late σ in Phase 2b. Real σ count = (f+1) onion + f late-σ + 1 leader = 2f+2 ≥ qV = 2f+1. Reconstruction succeeds at the same layer the byzantine tried to grief. See [TBFTR.md](TBFTR.md) "Liveness profile".
+³ Under partial synchrony, TBFTR closes the n ≥ 7 selective-delivery residual via its Phase-2 split: f honest who missed V via selective delivery recover V via peer onions in Phase 2a (TBFTR core), then sign late σ in Phase 2b. Real σ count = (f+1) onion + f late-σ + 1 leader = 2f+2 ≥ qV = 2f+1. Reconstruction succeeds at the same layer the byzantine tried to grief. Outside that envelope, slots may miss but safety holds cryptographically (qEnc=qV). See [TBFTR.md](TBFTR.md) "Liveness profile".
 
 ### Reading the n=7 table
 
@@ -101,9 +101,9 @@ If bandwidth at n=13 is the binding constraint, the engineering options are:
 
 - **The protocols differ in shape, not just in performance.** QBFT decides on a value first, then runs a separate post-consensus phase to sign it. TBFT/TBFTR embed partial signatures inside the consensus-bearing onion (and TBFTR adds late-σ broadcasts in Phase 2b) so that consensus and signing happen in the same broadcast window. Most numerical advantages above trace back to this structural difference.
 
-- **TBFT/TBFTR have constant-cost handling for *all* in-bound failures** at their respective cluster sizes. At n=4, leader-σ-V-in-Phase-1 closes byzantine-leader grief mechanically. At n≥7, the TBFTR composition closes the residual via late-σ recovery. QBFT is fundamentally different in shape: failures cost real time (~2 s per round change) and real bandwidth (~12 KB plus another full round per round change).
+- **TBFT/TBFTR have constant-cost handling for *all* in-bound failures under partial synchrony** at their respective cluster sizes. At n=4, leader-σ-V-in-Phase-1 plus gossipsub re-flooding closes byzantine-leader grief. At n≥7, the TBFTR composition closes the residual via late-σ recovery. QBFT is fundamentally different in shape: failures cost real time (~2 s per round change) and real bandwidth (~12 KB plus another full round per round change). All three protocols share the same partial-synchrony assumption for liveness; safety in TBFT/TBFTR is cryptographic and unconditional via `qEnc = qV = 2f+1`.
 
-- **TBFT (n=4) and TBFTR (n≥7) close P0.1/P0.2 at all SSV-supported cluster sizes.** TBFT does it at n=4 via the leader-σ algebra; TBFTR does it at n≥7 via the Phase-2 split + V plaintext. QBFT also handles the byzantine-leader-grief case (via round change), but with larger latency cost.
+- **TBFT (n=4) and TBFTR (n≥7) close P0.1/P0.2 at all SSV-supported cluster sizes under partial synchrony.** TBFT does it at n=4 via leader-σ-V-in-Phase-1 plus gossipsub re-flooding of the leader's bundle; TBFTR does it at n≥7 via the Phase-2 split + V plaintext. QBFT also handles the byzantine-leader-grief case (via round change), but with larger latency cost.
 
 - **Bandwidth ordering depends on conditions, not just on protocol.** QBFT is cheapest in the healthy case across all cluster sizes. TBFT/TBFTR become cheaper in time and competitive in bandwidth once round changes accumulate, with the crossover happening earlier at larger cluster sizes.
 

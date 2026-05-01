@@ -1,15 +1,17 @@
 # TBFT-DKG — Pedersen DKG for IBE Keypair (Option B)
 
-This document is the implementation plan for T5 in [TASKS.md](TASKS.md) — upgrading TBFT from Option A (reuse the validator threshold key for IBE under the DST-trick) to Option B (separate IBE keypair at threshold `qEnc = f+1`, established via Pedersen DKG between operators). The T5 entry in [TASKS.md](TASKS.md) is now a pointer to this document.
+This document is the implementation plan for T5 in [TASKS.md](TASKS.md) — upgrading TBFT from Option A (reuse the validator threshold key for IBE under the DST-trick) to Option B (separate IBE keypair at threshold `qEnc = 2f+1`, established via Pedersen DKG between operators). The T5 entry in [TASKS.md](TASKS.md) is now a pointer to this document.
+
+> **Threshold note (post-audit-P0).** This doc was originally written assuming `qEnc = f+1` (threshold separation between σ and NR sides). Post-audit-P0, the protocol design moved to a unified `qEnc = qV = 2f+1` for cryptographic safety against byzantine cross-signing — see [TASKS.md](TASKS.md) D1 and [TBFT.md](TBFT.md) "Why it's safe". Option B is still required (the IBE keypair must be distinct from the V-keypair so the IBE primitive can use its expected DST), but the DKG threshold is now `2f+1`. References to `f+1` below are kept where they describe historical decisions or completed code; references to the *target* threshold are `2f+1`. Code/test deltas to apply this change are tracked in T4/T5 of [TASKS.md](TASKS.md).
 
 ## Scope
 
 In scope:
-- Pedersen DKG ceremony between an SSV cluster's operators, run once per cluster, at threshold `f+1`, producing a per-cluster IBE keypair `(s_IBE, P_IBE)` with each operator holding a share `s_IBE_i`.
+- Pedersen DKG ceremony between an SSV cluster's operators, run once per cluster, at threshold `2f+1`, producing a per-cluster IBE keypair `(s_IBE, P_IBE)` with each operator holding a share `s_IBE_i`.
 - Persistence of the resulting share material on the SSV node alongside the validator share, with restart durability.
-- Wiring this material into the existing TBFT controller construction so the IBE-tag signing path uses the IBE keypair at threshold `f+1` rather than the validator keypair at `2f+1`.
-- Realization of the protocol-level threshold separation [TBFT.md](TBFT.md) describes — `Config.QV() = 2f+1` for σ-quorum, `Config.QEnc() = f+1` for layer-unlock — coincident with this work (T4 lands here).
-- End-to-end test proving `f+1` IBE-share partials decrypt a layer-1 ciphertext, where `2f+1` validator-share partials would not (i.e. threshold separation is *real*, not symbolic).
+- Wiring this material into the existing TBFT controller construction so the IBE-tag signing path uses the IBE keypair (distinct cryptographic backend; same `2f+1` threshold as the V-keypair).
+- Coincident landing of the unified-threshold protocol counting `Config.QV() = Config.QEnc() = 2f+1` (T4 in [TASKS.md](TASKS.md)).
+- End-to-end test proving `2f+1` IBE-share partials decrypt a layer-1 ciphertext, where `2f` IBE-share partials do not, and `2f+1` *validator-share* partials on the same tag do not (proving keypair distinctness — the IBE keypair is genuinely separate from the V-keypair, not just the same key under a different DST).
 
 Explicitly out of scope (tracked under "Future work" below): remote-signer parity, kyber resharing on cluster reconfig, in-flight DKG recovery on restart, migration of any pre-existing Option-A cluster.
 
@@ -54,8 +56,8 @@ Status conventions follow [TASKS.md](TASKS.md): `[ ]` not started · `[~]` in pr
 - [x] **B3. `protocol/v2/dkg/coordinator.go`** — concrete `Coordinator` type with the planned `Run` signature. Drives Exchange phase synchronously, then constructs `kyber_dkg.NewProtocol` in FastSync mode with `Auth = bdn.NewSchemeOnG2(suite)`, pumps the inbox into the Board until completion. Nonce derivation per D5: `H(clusterID || generation)`.
 - [~] **B4. Unit tests with synthetic transport.** Four of the five planned tests landed at `protocol/v2/dkg/coordinator_test.go`:
     - [x] Happy-path 7-of-7 — DKG completes; `Commits[0]` matches across operators.
-    - [x] Threshold property — exactly `f+1 = 3` shares Lagrange-interpolate to a scalar whose public matches `Commits[0]`.
-    - [x] Below-threshold — `f = 2` shares fail to recover.
+    - [x] Threshold property — exactly `f+1 = 3` shares Lagrange-interpolate to a scalar whose public matches `Commits[0]`. **Note:** these tests were written for the original `qEnc = f+1` design. Under the post-audit unified threshold (`qEnc = 2f+1`), the threshold-property test should be updated to use `2f+1 = 5` shares for n=7, and the below-threshold test should use `2f = 4` shares — see T4 in [TASKS.md](TASKS.md).
+    - [x] Below-threshold — `f = 2` shares fail to recover. (See note above.)
     - [x] Liveness limit — 5/7 online ⇒ exchange phase times out cleanly on every survivor.
     - [ ] **Byzantine-dealer test deferred.** Constructing a kyber `DealBundle` with internally-inconsistent shares (the case that triggers the complaint→justification path) requires bypassing kyber's signing or hooking into internals; not trivial without forking. Will be exercised naturally in Phase G3 over the real transport via fault injection. Tracked here so it isn't lost.
 
@@ -93,7 +95,7 @@ Status conventions follow [TASKS.md](TASKS.md): `[ ]` not started · `[~]` in pr
     - `TagSigner:     blsbackend.NewKyberSigner(ibeShareBytes)` — NEW source: `LocalKeyManager.GetIBEShareBytes(clusterID)`.
     - `ClusterPubKey: clusterIBEPubKey` — NEW source: `LocalKeyManager.GetClusterIBEPubKey(clusterID)`.
     - `IBEPubKeyShares: ...` — NEW: computed from `GetClusterIBEPolyCommits(clusterID)` via kyber's `share.NewPubPoly(...).Eval(opID-1).V`, marshaled to bytes per operator. Used by E5 verification.
-- [x] **E4. T4 — `Config.QV()` / `Config.QEnc()`** ([types.go](../protocol/v2/tbft/types.go)). `tryReconstructLayer` σ-quorum check uses `cfg.QV()` (2f+1); `tryDeriveNextLayerKey` NR-quorum check uses `cfg.QEnc()` (f+1). Existing `Config.Quorum()` retained as a backward-compat alias for `QV()`. Cryptographic effect of `qEnc = f+1` realizes under Option B with the DKG-derived IBE keypair (a real degree-`f` polynomial); StubSigner-based tests don't exercise the threshold separation directly.
+- [x] **E4. T4 — `Config.QV()` / `Config.QEnc()`** ([types.go](../protocol/v2/tbft/types.go)). `tryReconstructLayer` σ-quorum check uses `cfg.QV()` (2f+1); `tryDeriveNextLayerKey` NR-quorum check uses `cfg.QEnc()`. Existing `Config.Quorum()` retained as a backward-compat alias for `QV()`. **Originally landed with `QEnc() = f+1` per the threshold-separation design; the post-audit unified-threshold refactor (T4 in [TASKS.md](TASKS.md)) sets `QEnc() = 2f+1` to match `QV()` cryptographically.** The DKG (B3, E1) is updated alongside via `ibeThresholdForCommitteeSize` returning `2f+1`.
 - [x] **E5. Per-NR-partial verification at observe time** ([instance.go](../protocol/v2/tbft/instance.go)):
     - `Instance.ibePubKeyShares map[OperatorID][]byte` field + `SetIBEPubKeyShares` setter (post-construction).
     - `ObserveNonReceipt` verifies the partial sig against `ibePubKeyShares[op]` via `tagSigner.VerifyPartial(pub, NoQuorumTag(...), partial)` BEFORE storing — catches byzantine garbage NRs at observe time rather than letting them silently corrupt the aggregate. nil-safe: when unset, falls back to existing aggregate-time-only behavior.
@@ -110,10 +112,10 @@ Status conventions follow [TASKS.md](TASKS.md): `[ ]` not started · `[~]` in pr
 
 ### Phase G — End-to-end devnet validation
 
-- [ ] **G1.** Adapt or fork [end_to_end_real_ibe_test.go](../protocol/v2/tbft/blsbackend/end_to_end_real_ibe_test.go) — a setup where the IBE master scalar is *distinct* from the validator master scalar (i.e. truly Option B, not the DST-trick-on-validator-share that today's test exercises). Same DST machinery applies, just keyed differently. Critical assertions:
-    - With exactly `f+1 = 3` (n=7) IBE-share partials on a no-quorum tag, the layer-1 ciphertext decrypts.
-    - With `f = 2` IBE-share partials, decryption fails — proving threshold separation is real (not symbolic).
-    - With `2f+1 = 5` *validator-share* partials on the same tag, decryption fails — proving the IBE keypair is genuinely distinct from the validator keypair.
+- [ ] **G1.** Adapt or fork [end_to_end_real_ibe_test.go](../protocol/v2/tbft/blsbackend/end_to_end_real_ibe_test.go) — a setup where the IBE master scalar is *distinct* from the validator master scalar (i.e. truly Option B, not the DST-trick-on-validator-share that today's test exercises). Same DST machinery applies, just keyed differently. Critical assertions (under the unified threshold `qEnc = qV = 2f+1`):
+    - With exactly `2f+1 = 5` (n=7) IBE-share partials on a no-quorum tag, the layer-1 ciphertext decrypts.
+    - With `2f = 4` IBE-share partials, decryption fails — proving the threshold is genuinely `2f+1`.
+    - With `2f+1 = 5` *validator-share* partials on the same tag, decryption fails — proving the IBE keypair is genuinely distinct from the validator keypair (the original "threshold separation is real" assertion is now repurposed as "keypair distinctness is real": the IBE keypair has its own DKG-derived polynomial, not the V-keypair re-tagged).
     - The reconstructed validator-output signature still byte-equals what the master herumi key would sign directly (i.e. the σ-side path is unaffected).
 - [ ] **G2.** Multi-node devnet: 4-node and 7-node clusters complete DKG over real P2P, run TBFT proposer slots. Observe layer-1 fall-through under simulated layer-0 leader silence.
 - [ ] **G3.** Failure scenarios:

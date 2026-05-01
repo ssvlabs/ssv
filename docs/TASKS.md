@@ -411,7 +411,7 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
 
 ### Resolved design decisions
 
-- **D1 — Threshold separation: keep `qEnc = f+1` in [TBFT.md](TBFT.md); upgrade to Option B is future work.** Spec stays as written (`qV = 2f+1` σ-quorum, `qEnc = f+1` unlock). Implementation today runs Option A from Phase 0 (one DKG, threshold 2f+1, DST-trick role separation), so the cluster is effectively at `qEnc = qV = 2f+1` cryptographically — the threshold-separation liveness benefit (TBFT.md "Liveness profile / What threshold separation buys") is documented in spec but not yet realized in code. T5 below tracks the upgrade. Safety is unconditional in either configuration once T6's σ+NR exclusion rule lands at aggregation time: the σ+NR mutual exclusion is algebraic regardless of byz behavior. The σ+NR slashing rule is for attribution, not safety.
+- **D1 — Unified threshold `qEnc = qV = 2f+1` for cryptographic safety.** Spec is now [TBFT.md](TBFT.md) "Why it's safe" with `qV = qEnc = 2f+1`. The earlier `qEnc = f+1` design relied on an honest-only σ+NR exclusion rule whose safety claim could be subverted by a byzantine aggregating partials offline (see audit P0). The unified-threshold algebra makes safety cryptographic and unconditional regardless of byz behavior or honest-side aggregation choices. Implementation under Option A already ran at `qEnc = qV = 2f+1` cryptographically (DST-trick); Option B's DKG threshold also lands at `2f+1` rather than the original `f+1`. The σ+NR exclusion rule (T6) is preserved as an attribution mechanism but is no longer load-bearing for safety. Liveness in the byzantine-leader-grief scenario is now closed via leader-σ-V-in-Phase-1 plus gossipsub re-flooding under partial synchrony (no need for a threshold-separation-driven NR-quorum fall-through).
 
 - **D2 — V-plaintext in onion: cluster-size-conditional per the new TBFT/TBFTR split.** TBFT (n=4) doesn't include V plaintext in onions — the leader-σ-V mechanism + algebra at f=1 closes P0.1 without it. TBFTR (n≥7) requires V plaintext in onions as part of its core (recovery channel for missing-V honest in Phase 2a, fed into Phase 2b late σ). Implementation should be conditional on cluster config: at n=4, omit V plaintext from `EncryptedLayer`; at n≥7, include it (or include hash + leader-V per the hash variant). T9 below tracks the implementation; T17 tracks the broader TBFTR composition.
 
@@ -428,7 +428,7 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
   - Leader signs at fetch time in [`tbftFetchCandidate`](../protocol/v2/ssv/runner/proposer_tbft.go) (or its broadcast wrapper) — produces both signatures alongside V.
   - Verify both signatures in [`Controller.ProcessCandidate`](../protocol/v2/ssv/runner/tbft/controller.go) before `ObserveCandidate`. Reject bundles missing or failing either sig.
   - On the receiver side, when the bundle is accepted, the `LeaderSigV` partial is fed into the layer-`k` σ pool of the receiver's local [`Instance`](../protocol/v2/tbft/instance.go) (extend `ObserveCandidate` or add a sibling method to record the leader's σ partial). [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) then includes it in σ aggregation alongside Phase-2 onion partials — same value `V_{L_k}`, same threshold qV.
-  - Tests: candidate from non-leader rejected; bad operator-sig rejected; bad V-sig rejected; happy-path with both sigs verifies; **n=4 P0.1/P0.2 closure end-to-end** (byz layer-0 leader delivers to 2 honest, refuses to vote in Phase 2 — cluster still reconstructs at qV=3 because leader's σ-on-V from Phase 1 is the third partial); **n=7 residual grief** (byz delivers to exactly 3 honest at f=2, σ count = 4 < qV=5, NR count = 2 < qEnc=3, slot stuck).
+  - Tests: candidate from non-leader rejected; bad operator-sig rejected; bad V-sig rejected; happy-path with both sigs verifies; **n=4 P0.1/P0.2 closure end-to-end under partial synchrony** (byz layer-0 leader delivers to ≥1 honest, refuses to vote in Phase 2 — gossipsub re-flooding gets the bundle to all 3 honest, cluster reconstructs at qV=3); **n=7 residual grief without TBFTR recovery** (byz delivers to exactly 3 honest at f=2, σ count = 4 < qV=5, NR count = 2 < qEnc=5, slot stuck — closure for n=7 requires TBFTR's V-plaintext + Phase-2 split, see T9/T17).
 
 - [ ] **T2. Equivocation-to-non-receipt rule** ([TBFT.md](TBFT.md) Phase 1; closes audit P1.2 second action).
   - Replace [`Instance.candidates map[int]Value`](../protocol/v2/tbft/instance.go) with a structure that records multiple validly-signed observations per layer.
@@ -447,25 +447,28 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
 
 ### P1 — spec compliance
 
-- [ ] **T4. Threshold separation in protocol counting — naming-only refactor** ([TBFT.md](TBFT.md) Setting + Why it's safe). Coupled with T5 below; lands together cryptographically but the naming change can land independently as a small refactor.
-  - Add `Config.QV() = 2f+1` and `Config.QEnc() = f+1`; update callers.
+- [ ] **T4. Unified-threshold protocol counting — naming-only refactor** ([TBFT.md](TBFT.md) Setting + Why it's safe). Lands the unified `qEnc = qV = 2f+1` design in code.
+  - Set `Config.QV() = 2f+1` and `Config.QEnc() = 2f+1` (or fold `QEnc` into `QV` since they're equal); update callers.
   - σ-quorum check in [`tryReconstructLayer`](../protocol/v2/tbft/instance.go): `< QV()`.
   - NR-quorum check in [`tryDeriveNextLayerKey`](../protocol/v2/tbft/instance.go): `< QEnc()`.
-  - **Effectively a no-op until T5 lands**: under Option A the IBE primitive still needs `2f+1` partials to decrypt, so counting at `f+1` for unlock doesn't enable actual fall-through. Lands the spec's naming in code; cryptographic effect comes with T5.
-  - Tests: protocol-level counting at the new thresholds; mutual-exclusion preserved at the impl-level (still 2f+1 effective until T5).
+  - Update doc comments in [`types.go`](../protocol/v2/tbft/types.go), [`instance.go`](../protocol/v2/tbft/instance.go) — they currently reference the old `qEnc = f+1` design.
+  - Update [`ibeThresholdForCommitteeSize`](../operator/validator/dkg_orchestrator.go) to return `2f+1` instead of `f+1`; this is what the Pedersen DKG (T5) uses for the IBE keypair.
+  - Tests: protocol-level counting at the unified threshold; safety algebra holds under cross-signing (T6 covers).
 
-- [ ] **T6. Aggregator-level fault exclusion (σ+NR + cross-onion σ+σ')** ([TBFT.md](TBFT.md) "Why it's safe" + caveat 2; closes audit P1.5 first bullet AND replaces the load-bearing-slashing safety assumption with a structural guard).
+- [ ] **T6. Aggregator-level fault exclusion (σ+NR + cross-onion σ+σ')** ([TBFT.md](TBFT.md) caveat 1; attribution-only after the qEnc=qV change).
+
+  With the unified `qEnc = qV = 2f+1` (D1, T4), safety is cryptographic regardless of how honest aggregation handles cross-signers — the safety pigeonhole at [TBFT.md](TBFT.md) "Why it's safe" holds even if cross-signers contribute to both pools. The exclusion rules below are still useful for **attribution and fault evidence**, not safety. They surface byzantine cross-signing publicly so it's slashable.
 
   Two related exclusions in the [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) and [`tryDeriveNextLayerKey`](../protocol/v2/tbft/instance.go) aggregation paths:
 
-  - **σ+NR exclusion**: an operator that has both a non-empty σ partial at layer `k` (in their onion) AND an NR attestation on `nr_tag_k` (broadcast separately) has *both* contributions excluded from their respective quorum pools at layer `k`. Implementation: in `tryReconstructLayer`, when iterating onions, skip operators that appear in `i.nonReceipts[layer]`. Symmetrically in `tryDeriveNextLayerKey`, skip operators whose onion at `layer` has a non-empty σ partial. **This is what makes the threshold-separation safety argument hold structurally** (TBFT.md "Why it's safe"), rather than depending on slashing-deterred byzantine behavior.
+  - **σ+NR exclusion**: an operator that has both a non-empty σ partial at layer `k` (in their onion) AND an NR attestation on `nr_tag_k` (broadcast separately) has *both* contributions excluded from their respective quorum pools at layer `k`. Implementation: in `tryReconstructLayer`, when iterating onions, skip operators that appear in `i.nonReceipts[layer]`. Symmetrically in `tryDeriveNextLayerKey`, skip operators whose onion at `layer` has a non-empty σ partial.
 
   - **Cross-onion σ+σ' exclusion**: an operator's partial sig appearing in two different value-groups at the same layer (signed two different `V`'s) has both contributions excluded. Implementation: in `tryReconstructLayer`'s grouping loop, when adding `(opID, partial)` to a sigGroup, check if `opID` already appears in any *other* group at this layer. If yes, record an `InconsistencyFault` of kind `CrossOnionPartial` and remove `opID` from both groups.
 
   Both exclusions feed a shared `InconsistencyFault` `Kind` enum: `SigmaPlusNR`, `LeaderEquivocation`, `CrossOnionPartial` (T7 carries the evidence representation). The existing [`detectInconsistencyAt`](../protocol/v2/tbft/instance.go) detector remains for attribution-time recording; the new behavior is *applying the exclusion at aggregation time* (not just recording faults silently).
 
   Tests:
-  - **σ+NR exclusion**: byz operator broadcasts σ at layer k AND NR on nr_tag_k → both contributions excluded from their pools; with byz attempting σ+NR equivocation, at most one of {σ-quorum, NR-quorum} reaches at the same layer regardless of byz behavior. **No two outputs cluster-wide even under hostile byz.**
+  - **σ+NR exclusion**: byz operator broadcasts σ at layer k AND NR on nr_tag_k → both contributions excluded from their pools; cross-signing is publicly detectable as fault evidence. Safety holds via the qEnc=qV algebra regardless.
   - **Cross-onion σ+σ'**: byz operator's σ on V and σ on V' at same layer → recorded as fault; neither value-group counts that contribution; standard σ-quorum still reachable for honest-only V.
   - **Liveness regression check**: under the standard P0.1 attack (byz silent on Phase-2 votes), exclusion is a no-op (byz didn't σ+NR), slot outcome unchanged from current behavior.
 
@@ -507,7 +510,7 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
 
 ### P3 — backlog (don't gate spec-alignment; tracked here)
 
-- [ ] **T5. Upgrade Option A → Option B: separate IBE keypair at threshold `qEnc = f+1` via Pedersen DKG between operators.** Detailed plan tracked in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md). Lands T4 (protocol-counting refactor) coincidentally — under Option B those new thresholds are cryptographically meaningful for the first time.
+- [ ] **T5. Upgrade Option A → Option B: separate IBE keypair at threshold `qEnc = 2f+1` via Pedersen DKG between operators.** Detailed plan tracked in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md). The IBE keypair is distinct from the V-keypair (different cryptographic backend so the IBE primitive can use its expected DST), even though the threshold is the same. Original plan targeted `qEnc = f+1`; revised to match the unified-threshold cryptographic safety model (D1, T4).
 
 - [ ] **T15. Final-certificate gossip — `KindCertificate(slot, V, S)`** ([TBFT.md](TBFT.md) Phase 3 / [TBFTR.md](TBFTR.md) Phase 3). **Applies to both protocols.** After successful Phase-3 reconstruction, the operator broadcasts a `KindCertificate` envelope carrying `(slot, V, S)`. Receivers verify `S` against the cluster's V-keypair pubkey on `V`; valid certificates can be submitted downstream by anyone, mitigating the "lone-reconstructor's beacon path fails" failure mode. Implementation:
   - Add `KindCertificate = 0x04` to [wire/envelope.go](../protocol/v2/tbft/wire/envelope.go) along with encode/decode.
@@ -570,7 +573,7 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
 
 **Backlog**:
 
-- T5 (Option B upgrade — separate IBE DKG at threshold f+1). Blocks T4's cryptographic realization (currently both protocols run "Option A" with effective qEnc=qV until T5 lands). Multi-PR effort; tracked separately in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md).
+- T5 (Option B upgrade — separate IBE DKG at threshold 2f+1). The IBE keypair is distinct from the V-keypair (different cryptographic backend so the IBE primitive can use its expected DST), even though the threshold is the same. Multi-PR effort; tracked separately in [TBFT-DKG-TASKS.md](TBFT-DKG-TASKS.md).
 - T16 (end-to-end timing budget). Production telemetry needed.
 
 ## Where this came from
