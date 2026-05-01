@@ -156,9 +156,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 	wg.Wait()
 
 	// let the messages propagate
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// check number of peers and messages
 		for i := 0; i < nValidators; i++ {
 			wg.Add(1)
@@ -178,7 +176,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				}
 			}(cids[i])
 		}
-	}()
+	})
 	wg.Wait()
 
 	t.Log("unsubscribing")

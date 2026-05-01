@@ -441,19 +441,15 @@ func TestGetOrInsertHangIssue67(t *testing.T) {
 	var wg sync.WaitGroup
 	key := "key"
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		m.GetOrSet(key, 9)
 		m.Delete(key)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		m.GetOrSet(key, 9)
 		m.Delete(key)
-	}()
+	})
 
 	wg.Wait()
 }
@@ -485,10 +481,7 @@ func TestIssue1682(t *testing.T) {
 	var errs []error
 	var mu sync.Mutex
 	for i := 0; i < 10; i++ {
-		wwg.Add(1)
-		go func() {
-			defer wwg.Done()
-
+		wwg.Go(func() {
 			m := New[string, validatorStatus]()
 			var wg sync.WaitGroup
 			var attempted sync.WaitGroup
@@ -558,7 +551,7 @@ func TestIssue1682(t *testing.T) {
 				case <-ticker.C:
 				}
 			}
-		}()
+		})
 	}
 	wwg.Wait()
 	require.Empty(t, errs)

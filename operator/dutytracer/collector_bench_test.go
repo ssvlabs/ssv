@@ -60,11 +60,9 @@ func BenchmarkTracer(b *testing.B) {
 
 				var wg sync.WaitGroup
 				for _, msg := range traces[:actualCount] {
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
+					wg.Go(func() {
 						_ = collector.Collect(b.Context(), msg, dummyVerify)
-					}()
+					})
 				}
 				wg.Wait()
 			}

@@ -367,9 +367,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 			pushedCount atomic.Int64
 		)
 		for i := 0; i < pushers; i++ {
-			pushersWg.Add(1)
-			go func() {
-				defer pushersWg.Done()
+			pushersWg.Go(func() {
 				for m := range messageStream {
 					if lossy {
 						queue.TryPush(m)
@@ -379,7 +377,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 					pushedCount.Add(1)
 					time.Sleep(time.Duration(rand.Intn(300)) * time.Microsecond)
 				}
-			}()
+			})
 		}
 
 		// Assert pushed messages.
@@ -398,9 +396,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		popped := make(chan *SSVMessage, messageCount*2)
 		poppingCtx, stopPopping := context.WithCancel(b.Context())
 		for i := 0; i < poppers; i++ {
-			poppersWg.Add(1)
-			go func() {
-				defer poppersWg.Done()
+			poppersWg.Go(func() {
 				for {
 					msg := queue.Pop(poppingCtx, NewMessagePrioritizer(mockState), FilterAny)
 					if msg == nil {
@@ -408,7 +404,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 					}
 					popped <- msg
 				}
-			}()
+			})
 		}
 
 		// Wait for pushed messages assertion.
@@ -475,9 +471,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	var pushersWg sync.WaitGroup
 	var pushed atomic.Int32
 	for i := 0; i < 16; i++ {
-		pushersWg.Add(1)
-		go func() {
-			defer pushersWg.Done()
+		pushersWg.Go(func() {
 			for n := b.N; n > 0; n-- {
 				select {
 				case msg := <-msgs:
@@ -486,7 +480,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 				default:
 				}
 			}
-		}()
+		})
 	}
 
 	pushersCtx, cancel := context.WithCancel(b.Context())

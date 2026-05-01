@@ -231,30 +231,22 @@ func (s *Scheduler) Start(ctx context.Context) error {
 		// This call is blocking.
 		handler.HandleInitialDuties(s.ctx)
 
-		s.backgroundTasks.Add(1)
-		go func() {
-			defer s.backgroundTasks.Done()
+		s.backgroundTasks.Go(func() {
 			handler.HandleDuties(s.ctx)
-		}()
+		})
 	}
 
-	s.backgroundTasks.Add(1)
-	go func() {
-		defer s.backgroundTasks.Done()
+	s.backgroundTasks.Go(func() {
 		indicesChangeFeed.FanOut(s.ctx, s.indicesChgCh)
-	}()
+	})
 
-	s.backgroundTasks.Add(1)
-	go func() {
-		defer s.backgroundTasks.Done()
+	s.backgroundTasks.Go(func() {
 		reorgEventsFeed.FanOut(s.ctx, s.reorgCh)
-	}()
+	})
 
-	s.backgroundTasks.Add(1)
-	go func() {
-		defer s.backgroundTasks.Done()
+	s.backgroundTasks.Go(func() {
 		s.SlotTicker(s.ctx)
-	}()
+	})
 
 	s.logger.Info("duty scheduler has started")
 
@@ -272,9 +264,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
 
-	s.backgroundTasks.Add(1)
-	go func() {
-		defer s.backgroundTasks.Done()
+	s.backgroundTasks.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -292,7 +282,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
 				headEventHandler(ctx, headEvent)
 			}
 		}
-	}()
+	})
 
 	return nil
 }
@@ -487,18 +477,14 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		}
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
-
-		s.backgroundTasks.Add(1)
-		go func() {
-			defer s.backgroundTasks.Done()
-
+		s.backgroundTasks.Go(func() {
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
 			dutyCtx, cancel := context.WithDeadline(s.ctx, dutyDeadline)
 			defer cancel()
 
 			s.dutyExecutor.ExecuteDuty(dutyCtx, logger, duty)
-		}()
+		})
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -540,9 +526,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
-		s.backgroundTasks.Add(1)
-		go func() {
-			defer s.backgroundTasks.Done()
+		s.backgroundTasks.Go(func() {
 
 			// Cannot use parent-context itself here, have to create independent instance
 			// to be able to continue working in background.
@@ -551,7 +535,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 			s.waitOneThirdIntoSlotOrValidBlock(duty.Slot)
 			s.dutyExecutor.ExecuteCommitteeDuty(dutyCtx, logger, committee.id, duty)
-		}()
+		})
 	}
 
 	span.SetStatus(codes.Ok, "")

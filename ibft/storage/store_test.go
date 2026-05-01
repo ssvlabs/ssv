@@ -211,11 +211,9 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// run normal gc
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		storage.PruneContinuously(ctx, tickerProv, 1)
-	}()
+	})
 
 	mockTimeChan <- time.Now()
 	mockSlotChan <- phase0.Slot(5)

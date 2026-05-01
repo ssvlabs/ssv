@@ -53,17 +53,14 @@ func (p *HealthProber) ProbeAll(ctx context.Context) error {
 	errsCh := make(chan error)
 
 	p.components.Range(func(name string, n pComponent) bool {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			err := p.probeComponent(ctx, n)
 			if err != nil {
 				// Relay the error and quit early.
 				errsCh <- fmt.Errorf("probe component %s: %w", name, err)
 				cancel()
 			}
-		}()
+		})
 		return true
 	})
 

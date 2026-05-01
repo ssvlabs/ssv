@@ -436,10 +436,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
-	h.backgroundTasks.Add(1)
-	go func() {
-		defer h.backgroundTasks.Done()
-
+	h.backgroundTasks.Go(func() {
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel := context.WithCancel(h.ctx)
@@ -448,7 +445,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, logger *zap
 		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to submit beacon committee subscription", zap.Error(err))
 		}
-	}()
+	})
 
 	span.SetStatus(codes.Ok, "")
 	return nil

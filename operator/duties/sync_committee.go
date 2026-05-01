@@ -333,10 +333,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 
-	h.backgroundTasks.Add(1)
-	go func() {
-		defer h.backgroundTasks.Done()
-
+	h.backgroundTasks.Go(func() {
 		// Cannot use parent-context itself here, have to create independent instance
 		// to be able to continue working in background.
 		subscriptionCtx, cancel := context.WithCancel(h.ctx)
@@ -345,7 +342,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Error("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
-	}()
+	})
 
 	span.SetStatus(codes.Ok, "")
 	return nil

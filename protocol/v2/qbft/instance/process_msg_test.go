@@ -119,14 +119,12 @@ func TestProcessMsgConcurrentAccess(t *testing.T) {
 	errs := make(chan error, workers)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Intentionally reuse the same message pointer to exercise dedup/idempotent
 			// processing while ProcessMsg serializes handler execution through processMsgF.
 			_, _, _, err := env.inst.ProcessMsg(context.Background(), zap.NewNop(), msg)
 			errs <- err
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

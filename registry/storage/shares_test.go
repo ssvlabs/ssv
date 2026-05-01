@@ -472,9 +472,7 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 	defer cancel()
 	for i := 0; i < 100; i++ {
 		for _, op := range []string{"add", "update", "remove1", "remove4", "read"} {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for ctx.Err() == nil {
 					switch op {
 					case "add":
@@ -500,7 +498,7 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 						_ = storage.ValidatorStore.Committees()
 					}
 				}
-			}()
+			})
 		}
 	}
 	wg.Wait()

@@ -1357,11 +1357,9 @@ func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores,
 
 	// async perform initial slot gc
 	_ = stores.Each(func(_ spectypes.BeaconRole, store ibftstorage.ParticipantStore) error {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			store.Prune(ctx, threshold)
-		}()
+		})
 		return nil
 	})
 

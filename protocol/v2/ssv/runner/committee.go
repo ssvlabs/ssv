@@ -294,11 +294,8 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 	}()
 
 	for range workerCount {
-		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for validatorDuty := range dutiesCh {
 				if ctx.Err() != nil {
 					return
@@ -351,7 +348,7 @@ func (r *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logg
 					return
 				}
 			}
-		}()
+		})
 	}
 
 	go func() {

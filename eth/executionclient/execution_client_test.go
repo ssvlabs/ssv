@@ -1016,9 +1016,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		// Create a goroutine to collect logs
 		var receivedLogs []ethtypes.Log
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := 0; i < 3; i++ {
 				select {
 				case log := <-logCh:
@@ -1030,7 +1028,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 
 		// Create blocks with transactions
 		err = env.createBlocksWithLogs(contract, 3, 10*time.Millisecond)

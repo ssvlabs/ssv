@@ -441,19 +441,15 @@ func TestGetOrInsertHangIssue67(t *testing.T) {
 	var wg sync.WaitGroup
 	key := "key"
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		m.GetOrSet(key, 9)
 		m.Delete(key)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		m.GetOrSet(key, 9)
 		m.Delete(key)
-	}()
+	})
 
 	wg.Wait()
 }
@@ -485,25 +481,21 @@ func TestIssue1682(t *testing.T) {
 	var errs []error
 	var mu sync.Mutex
 	for i := 0; i < 10; i++ {
-		wwg.Add(1)
-		go func() {
-			defer wwg.Done()
+		wwg.Go(func() {
 
 			m := New[string, validatorStatus](t.Context(), 1*time.Hour, 1*time.Hour)
 			var wg sync.WaitGroup
 			for _, cmtID := range cmtIDs {
 				n := 50 + randSeed().Intn(200)
 				for j := 0; j < n; j++ {
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
+					wg.Go(func() {
 						time.Sleep(time.Duration(randSeed().Intn(2000)) * time.Millisecond)
 						_, found := m.GetOrSet(cmtID, validatorStatusSubscribing)
 						time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 						if !found {
 							m.Set(cmtID, validatorStatusSubscribed)
 						}
-					}()
+					})
 				}
 			}
 
@@ -545,7 +537,7 @@ func TestIssue1682(t *testing.T) {
 				case <-ticker.C:
 				}
 			}
-		}()
+		})
 	}
 	wwg.Wait()
 	require.Empty(t, errs)

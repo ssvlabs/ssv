@@ -1613,12 +1613,10 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		consumerCtx, consumerCancel := context.WithCancel(ctx)
 		var consumerWg sync.WaitGroup
-		consumerWg.Add(1)
 
-		go func() {
-			defer consumerWg.Done()
+		consumerWg.Go(func() {
 			committee.ConsumeQueue(consumerCtx, logger, q, processFn, committeeRunner)
-		}()
+		})
 
 		// Fill with filtered Prepare messages
 		for i := 0; i < queueCapacity; i++ {
@@ -1668,12 +1666,10 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// Restart consumption
 		consumer2Ctx, consumer2Cancel := context.WithCancel(ctx2)
 		var consumer2Wg sync.WaitGroup
-		consumer2Wg.Add(1)
 
-		go func() {
-			defer consumer2Wg.Done()
+		consumer2Wg.Go(func() {
 			committee.ConsumeQueue(consumer2Ctx, logger, q, processFn, committeeRunner)
-		}()
+		})
 
 		// Observe how many of the old Prepares now drain
 		timeout := time.After(2 * time.Second)

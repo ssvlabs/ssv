@@ -41,27 +41,23 @@ func TestCurrentSubnetsConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-start
 		for i := uint64(0); i < 5000; i++ {
 			subnets := commons.ZeroSubnets
 			subnets.Set(i % commons.SubnetsCount)
 			n.setCurrentSubnets(subnets)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-start
 		for i := 0; i < 5000; i++ {
 			subnets := n.ActiveSubnets()
 			_ = subnets.ActiveCount()
 			_ = subnets.StringHex()
 		}
-	}()
+	})
 
 	close(start)
 	wg.Wait()
@@ -107,10 +103,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 			broadcastErrCh <- err
 		}
 	}
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
 		msgCommittee3 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
 		msgProposer := generateValidatorMsg(spectestingutils.Testing4SharesSet(), 4, spectypes.RoleProposer)
@@ -128,13 +122,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		recordBroadcastErr(node2.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
 		<-time.After(time.Millisecond * 20)
 		recordBroadcastErr(node1.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
-	}()
+	})
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		msgCommittee1 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 1)
 		msgCommittee2 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 2)
 		msgCommittee3 := generateCommitteeMsg(spectestingutils.Testing4SharesSet(), 3)
@@ -151,7 +141,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		recordBroadcastErr(node1.Broadcast(msgProposer.SSVMessage.GetID(), msgProposer))
 		recordBroadcastErr(node1.Broadcast(msgSyncCommitteeContribution.SSVMessage.GetID(), msgSyncCommitteeContribution))
 		recordBroadcastErr(node2.Broadcast(msgRoleVoluntaryExit.SSVMessage.GetID(), msgRoleVoluntaryExit))
-	}()
+	})
 
 	wg.Wait()
 	close(broadcastErrCh)

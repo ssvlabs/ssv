@@ -27,10 +27,7 @@ func TestRouter(t *testing.T) {
 	count := 0
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		cn := router.GetMessageChan()
 		for msg := range cn {
 			require.NotNil(t, msg)
@@ -39,7 +36,7 @@ func TestRouter(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
 	for i := 0; i < expectedCount; i++ {
 		msg := &queue.SSVMessage{
