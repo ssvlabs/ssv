@@ -1,78 +1,33 @@
-# TBFT audit (residual)
+Reviewed [`docs/TBFT.md` at `100bbe5`](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md). I focused on TBFT only and did not review TBFTR beyond confirming TBFT now delegates `n >= 7` to it.
 
-Aggregated review of `docs/TBFT.md`, `docs/TBFTR.md`, and `docs/TBFT-comparison.md` against the implementation under `protocol/v2/tbft/` and `protocol/v2/ssv/runner/tbft/`. The original audit listed several findings; this document is the residual after the spec rewrite landing in the same change.
+**Findings**
 
-The spec is now split by cluster size: **TBFT** is the n=4 protocol; **TBFTR** is the n≥7 protocol with the V-plaintext / Phase-2-split additions that close P0.1 at f≥2.
+- **[P0] The new `σ+NR` exclusion rule is not cryptographic safety.** [TBFT.md:L91-L108](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L91-L108) and [TBFT.md:L153-L168](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L153-L168) rely on honest aggregators excluding cross-signers, but a Byzantine operator can ignore that rule and aggregate valid shares offline. Example: one Byzantine signs primary `V_p` and also emits `NR`; two honest operators sign `V_p`; one honest emits `NR`. That gives `qV=3` for `V_p` and `qEnc=2` to decrypt backup. If the three honest backup partials are present, the Byzantine can also reconstruct `V_b`. Beacon submission validates only the final BLS signature, not the signer set or exclusion rule. This makes the current `qEnc=2` design unsafe unless exclusion is enforced cryptographically or by a downstream-verifiable certificate, which Ethereum block submission does not provide.
 
-## Status of original findings
+- **[P1] Phase-1 V-share signing is under-specified for slashing protection.** [TBFT.md:L35-L38](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L35-L38) and [TBFT.md:L46-L46](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L46-L46) require leaders to sign candidates with the real V-share before consensus, but [TBFT.md:L147-L147](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L147-L147) only calls out Phase 2 onion signing. EKM/slashing policy must explicitly cover Phase 1 leader signatures too, including backup refreshes.
 
-**Closed by the spec rewrite + cluster-size specialization:**
+- **[P1] Backup refresh conflicts with equivocation handling.** [TBFT.md:L40-L40](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L40-L40) says `L_b` should refresh and re-broadcast if the head changes, while [TBFT.md:L64-L67](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L64-L67) says two distinct signed candidates from the same leader are equivocation. The doc needs a supersession rule: when a new-head candidate replaces a stale-head candidate, what metadata proves it is a legitimate refresh rather than slashable equivocation?
 
-- **P0.1** (byzantine-leader selective-delivery grief) — Closed at all SSV cluster sizes:
-  - At n=4 by [TBFT.md](TBFT.md) leader-publishes-σ-on-V mechanism (the leader's forced threshold partial + f+1 = 2 honest partials sum to qV = 3 exactly).
-  - At n≥7 by [TBFTR.md](TBFTR.md) Phase-2 split: V plaintext in Phase-2a onions provides a recovery channel for missing-V honest, who then sign late σ in Phase-2b. σ count reaches qV = 2f+1.
-- **P0.2** (TBFT2 at n=4) — subsumed by P0.1 closure at n=4. TBFT2.md has been deleted; [TBFT.md](TBFT.md) is now the n=4 spec.
-- **P1.1** (tag indexing) — TBFT.md and TBFTR.md use 0-based indexing with distinct `enc_tag_k` / `nr_tag_k` symbols, matching the implementation.
-- **P1.2** (candidate authenticity) — Both specs add leader-authenticated candidates and the equivocation-to-non-receipt rule. Implementation work tracked in [TASKS.md](TASKS.md).
-- **P1.3** (validity precondition) — Both specs add an explicit "Preconditions on the host application" section enumerating SSV's validation rules.
-- **P1.4** (one-sig-per-instance scope) — Both specs tighten the claim with the listed preconditions and document the per-share multi-block-signing pattern.
-- **P1.5 first bullet** (cross-onion partial-sig equivocation) — Both specs list this as the third inconsistency-slashing rule. Implementation work in [TASKS.md](TASKS.md).
-- **P2.1** (equivocation detection overstated) — Both specs' Properties summaries describe the actual mechanism (leader-signed candidates → equivocation-to-NR rule → slashable evidence).
+- **[P2] Candidate authentication is improved, but the signed payload should bind context.** [TBFT.md:L52-L58](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L52-L58) now requires leader identity and V-share checks. The operator-identity signature should sign a structured envelope, not just `V`: protocol version, cluster, slot, role/layer, leader id, and value root. Otherwise replay or role confusion has to be ruled out indirectly by application validity.
 
-**Closed by accepting the path-conditional limit:**
+- **[P2] “No in-bound miss scenarios” is still too strong.** [TBFT.md:L172-L190](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L172-L190) correctly says TBFT has no termination guarantee, but [TBFT-comparison.md:L49-L50](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT-comparison.md#L49-L50) says there are no in-bound misses. With one Byzantine backup leader silent and one honest operator missing an honest primary before `T_commit`, the primary can fail to reach `qV` and backup can be unavailable. This is synchrony-dependent, not just “more than f failures.”
 
-- **P1.5 second bullet** (hidden equivocation in unopened layers) — only relevant at K ≥ 3 (TBFTR). Doesn't affect safety under σ+NR exclusion; deep-layer cross-signers may escape attribution but cannot break safety. Engineering decision: accept the limit. Documented in [TBFTR.md](TBFTR.md) caveat 3.
+**Previous Feedback Status**
 
-**Closed by spec additions:**
+- **Fully addressed: TBFT is now scoped to `n=4`.** [TBFT.md:L1-L5](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L1-L5) cleanly moves larger clusters to TBFTR, so my old `n=7+` TBFT fallback critique is no longer directly in TBFT scope.
 
-- **P2.2** (final-certificate gossip) — `KindCertificate(slot, V, S)` envelope kind specified in [TBFT.md](TBFT.md) Phase 3 and [TBFTR.md](TBFTR.md) Phase 3, broadcast after successful reconstruction. Implementation tracked in TASKS.md.
-- **P2.4 worst-of-K beacon-fetch** — note added to [TBFTR.md](TBFTR.md) "Timing budget" subsection (only TBFTR has K ≥ 3 parallel fetchers). Implementation tracked in TASKS.md.
-- **P2.4 head-change handling** — TBFT.md (n=4) already had `L_b` refresh rule; TBFTR.md now has analogous "Head-change handling" subsection for top-K leaders. Implementation tracked in TASKS.md.
+- **Fully addressed: tag indexing ambiguity is gone.** [TBFT.md:L24-L24](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L24-L24) and [TBFT.md:L73-L83](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L73-L83) use one clear 0-based primary-to-backup tag.
 
-**Framework specified, numbers TBD with telemetry:**
+- **Fully addressed: final-certificate gossip is specified.** [TBFT.md:L117-L123](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L117-L123) covers the lone-reconstructor submission failure I called out.
 
-- **P2.3** (end-to-end timing budget) — [TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md) "Application: SSV Ethereum proposer duty" sections include a "Timing budget" subsection with the per-leg structure. Concrete numbers must come from production telemetry; tracked in TASKS.md as a follow-up.
+- **Mostly addressed: application validity is now explicit.** [TBFT.md:L131-L147](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L131-L147) is a strong improvement. Remaining gap: include Phase 1 leader V-share signing in the same slashing-protection discussion.
 
-## What still holds (reaffirmed)
+- **Mostly addressed: “at most one full sig” is now scoped per instance.** [TBFT.md:L276-L280](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L276-L280) addresses the wording issue. The underlying safety claim remains blocked by the `qEnc=2` cross-signing problem above.
 
-- The pigeonhole safety argument in TBFT.md / TBFTR.md "Why it's safe" holds: at any layer, σ-quorum (`qV = 2f+1`) and NR-quorum (`qEnc = f+1`) cannot both be reached, made structural by the σ+NR exclusion rule at aggregation. The slashing rule is for attribution, not load-bearing for safety. See TBFT.md "Why it's safe" and caveat 1.
-- Single-RTT decision path (1.5-RTT in TBFTR with Δ_2b) vs QBFT's three.
-- V-signing keypair reuses SSV's existing operator-share setup. The IBE keypair is a new separate DKG at threshold `qEnc = f+1`, run once at cluster init.
+- **Partially addressed: selective-delivery liveness is improved but not safe as written.** [TBFT.md:L174-L188](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L174-L188) closes the old no-quorum table if Byzantine actors do not cross-sign. In a Byzantine model, cross-signing must be assumed, and with `qEnc=2` it becomes a safety issue.
 
-## P3 findings (smaller cleanups)
+**Cleanup Notes**
 
-- **Comparison-doc scope drift** — addressed in the TBFT-comparison.md update. Closed.
-- **`K=3` floor for n=4** — addressed in the TBFT-comparison.md update. Closed.
-- **Multiple submitters / beacon de-dup** — addressed in TBFT.md Phase 3 ("Multiple operators may reconstruct and submit independently; the downstream system de-duplicates"). Closed.
+- Define `T_arrival` in [TBFT.md:L260-L260](https://github.com/ssvlabs/ssv/blob/100bbe529ea931bb11a912154ecc38c1dd148367/docs/TBFT.md#L260-L260), since it is not obvious whether it refers to Phase 1 candidate arrival, onion arrival, or both.
 
-## Sequencing
-
-### Done in this round
-
-- **Spec rewrite, cluster-size split.** TBFT.md is now the n=4 protocol (K=2, primary + backup); TBFTR.md is the n≥7 protocol (K = max(3, f+1), with V plaintext in onions and Phase 2a/2b split). Both share leader-authenticated candidates, threshold separation, distinct tag symbols, σ+NR exclusion rule, validity preconditions, three-rule slashing model.
-- **TBFT-comparison.md** updated for apples-to-apples comparison: QBFT vs TBFT (n=4) and QBFT vs TBFTR (n=7+).
-- **TBFT2.md** deleted (subsumed into TBFT.md).
-- **Final-certificate gossip** (`KindCertificate`) specified in both protocol docs.
-- **Worst-of-K beacon-fetch** and **head-change handling** documented in TBFTR.md.
-- **Timing budget framework** added to both protocol docs (concrete numbers TBD with telemetry).
-- **Path-conditional detection limit** at deep TBFTR layers acknowledged as accepted-attribution-only.
-
-### Implementation alignment (next)
-
-See [TASKS.md](TASKS.md) for the breakdown of changes in `protocol/v2/tbft/` and `protocol/v2/ssv/runner/tbft/`. Priority shape:
-
-- Protocol-correctness gaps (leader-auth with leader-σ-V-in-Phase-1, equivocation-to-NR rule, sender check).
-- σ+NR exclusion at aggregation.
-- Final-certificate gossip implementation (new envelope kind).
-- Threshold-separation gaps (separate IBE DKG at `qEnc = f+1`; per-keypair signers and aggregation thresholds).
-- TBFTR-specific (V plaintext in onions, Phase 2a/2b composition, head-change refresh) for n≥7 cluster deployments.
-- Slashable-evidence collection (three rules from caveat 2).
-- Tests.
-
-### Backlog
-
-- End-to-end timing budget with production data (P2.3 — framework specified, numbers TBD).
-
-## Deployment recommendation
-
-Before mainnet: (a) the implementation work in [TASKS.md](TASKS.md) lands for the cluster size in question (TBFT for n=4, TBFTR for n≥7), (b) the inputs feeding the deadline-tuning rule (TBFT/TBFTR caveat on deadline coordination) are measured against the cluster's gossip-propagation tail. P0.1/P0.2 are now closed at all SSV cluster sizes once the implementation matches the spec.
+- State explicitly that duplicate shares from the same operator are counted once, especially for the leader’s Phase 1 V-share plus its Phase 2 onion share.
