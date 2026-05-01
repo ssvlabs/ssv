@@ -1,6 +1,6 @@
 # TBFT audit (residual)
 
-Aggregated review of `docs/TBFT.md`, `docs/TBFT2.md`, and `docs/TBFT-comparison.md` against the implementation under `protocol/v2/tbft/` and `protocol/v2/ssv/runner/tbft/`. The original audit listed several findings; this document is the residual after the spec-rewrite landing in the same change.
+Aggregated review of `docs/TBFT.md` and `docs/TBFT-comparison.md` against the implementation under `protocol/v2/tbft/` and `protocol/v2/ssv/runner/tbft/`. The original audit listed several findings; this document is the residual after the spec-rewrite landing in the same change.
 
 ## Status of original findings
 
@@ -15,7 +15,6 @@ Aggregated review of `docs/TBFT.md`, `docs/TBFT2.md`, and `docs/TBFT-comparison.
 
 **Closed at n=4 (and narrowed at n ≥ 7) by the leader-publishes-σ-on-V Phase-1 mechanism:**
 
-- **P0.2** — selective-delivery grief in TBFT2 at n=4. Closed mechanically.
 - **P0.1** — selective-delivery grief in TBFT. Closed at n=4; residual `[f+1, 2f-1]` window at n ≥ 7.
 
 **Partially addressed** (residual below):
@@ -26,7 +25,7 @@ Aggregated review of `docs/TBFT.md`, `docs/TBFT2.md`, and `docs/TBFT-comparison.
 
 - **P2.2** — no final-certificate gossip.
 - **P2.3** — end-to-end adversarial timing budget.
-- **P2.4** — operational items (some addressed by the TBFT2 / TBFT-comparison rewrites).
+- **P2.4** — operational items (some addressed by the TBFT-comparison rewrite).
 - **P3** — smaller cleanups (some closed below).
 
 ## What still holds (reaffirmed)
@@ -49,18 +48,6 @@ Doc-honesty actions completed in TBFT.md caveat 1:
 - Added the algebra showing the new grief window `k ∈ [f+1, 2f-1]` (size `f-1`), which is empty at n=4 and narrows by one at every cluster size compared to the pre-leader-σ design.
 
 Residual at n ≥ 7: a small grief window remains (1 point at n=7, 2 at n=10, 3 at n=13). The protocol-level fix that closes this residual at all cluster sizes is documented in [TBFTR.md](TBFTR.md) as the deferred-NR composition.
-
-### P0.2 Selective-delivery grief in TBFT2 at n=4 — closed
-
-The same leader-publishes-σ-on-V mechanism applied to TBFT2's Phase 1A (`L_b` broadcasting `V_b`) and Phase 1B (`L_p` broadcasting `V_p`) closes P0.2 at n=4 by the same algebra as P0.1 (TBFT2.md caveat 1 walk-through). Both TBFT2 leaders are forced to publish their σ-on-V along with the candidate; receivers reject malformed bundles; the cluster reaches qV = 3 at n=4 in any non-griefable `k` configuration.
-
-[TBFT2.md](TBFT2.md) and [TBFT-comparison.md](TBFT-comparison.md) updated:
-
-- TBFT2.md Phase 1A/1B describe the new bundle shape with both signatures.
-- TBFT2.md caveat 1 walks the closed-at-n=4 algebra and notes residual at n ≥ 7 if TBFT2 is run there (it shouldn't be — see comparison recommendation table).
-- TBFT-comparison.md scenario 6b at n=4 now succeeds for both TBFT and TBFT2; recommendation reasoning updated to reflect that TBFT2 wins on bandwidth/simplicity at n=4 *and* has equivalent byz resilience to TBFT (both clean at n=4).
-
-P0.2 considered closed for the n=4 cluster size TBFT2 is targeted at.
 
 ## Residual P1 findings
 
@@ -92,9 +79,7 @@ TBFT.md caveat 6 states the deadline rule (`T_d − T_arrival > D + δ`, `D = P9
 ### P2.4 — other operational items (mostly still open)
 
 - **Worst-of-K beacon-fetch latency for `Δ_1`.** The K leaders fetch in parallel from K distinct beacons; `Δ_1` must accommodate the slowest of K independent block-fetch RTTs. Worth a sentence in TBFT.md application section; not yet added.
-- **Head-change handling during Phase 1** for TBFT's any-of-K candidates (analogous to TBFT2's `V_b` handling). Not yet specified.
-- **TBFT2 "deterministic backup"** non-determinism — addressed in TBFT2.md update. Closed.
-- **TBFT2 dual-leader-byzantine probabilities** — addressed in TBFT-comparison.md update. Closed.
+- **Head-change handling during Phase 1** for TBFT's any-of-K candidates. Not yet specified.
 
 ## Open P3 findings (smaller cleanups)
 
@@ -108,8 +93,8 @@ TBFT.md caveat 6 states the deadline rule (`T_d − T_arrival > D + δ`, `D = P9
 ### Done in this round
 
 - **Spec rewrite** — TBFT.md restructured around leader-authenticated candidates, threshold separation, distinct tag symbols, validity preconditions, three-rule slashing model.
-- **TBFT2.md and TBFT-comparison.md** updated for P0.2 doc-honesty and threshold separation alignment.
-- **TBFTR.md** created and extended with the deferred-NR composition that targets P0.1/P0.2 protocol-level resolution.
+- **TBFT-comparison.md** updated for doc-honesty and threshold separation alignment.
+- **TBFTR.md** created and extended with the deferred-NR composition that targets P0.1 protocol-level resolution.
 
 ### Implementation alignment (next)
 
@@ -126,7 +111,7 @@ See [TASKS.md](TASKS.md) for the breakdown of changes in `protocol/v2/tbft/` and
 - End-to-end timing budget with production data (P2.3).
 - Worst-of-K beacon-fetch and head-change handling (P2.4).
 - Path-conditional detection mitigation choice (P1.5 second bullet).
-- TBFTR composition for genuine P0.1/P0.2 closure.
+- TBFTR composition for genuine P0.1 closure.
 
 ## Deployment recommendation
 

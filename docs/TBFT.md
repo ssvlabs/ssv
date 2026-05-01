@@ -246,7 +246,7 @@ Headline: TBFT is 1 RTT vs QBFT's 3 RTTs in the common case, at the cost of `O(K
    | 10 | 3 | {4, 5} | 2 |
    | 13 | 4 | {5, 6, 7} | 3 |
 
-   **At n=4** the leader's Phase-1 `σ^V` plus the `f+1 = 2` honest partials sum to exactly `qV = 3`. Byzantine has no `k` value that produces grief: deliver to 0–1 honest and NR-quorum reaches qEnc=2; deliver to 2+ honest and σ-quorum reaches qV=3. **n=4 P0.1 closed; TBFT2 P0.2 closed by the same algebra.**
+   **At n=4** the leader's Phase-1 `σ^V` plus the `f+1 = 2` honest partials sum to exactly `qV = 3`. Byzantine has no `k` value that produces grief: deliver to 0–1 honest and NR-quorum reaches qEnc=2; deliver to 2+ honest and σ-quorum reaches qV=3. **n=4 P0.1 closed**
 
    **At larger n** a residual grief window remains (size `f − 1`). At n=7 it's a single point (`k = 3`); at n=13 it's three points. The byzantine attacker must time delivery to land precisely in the window, which constrains the attack significantly but does not eliminate it.
 

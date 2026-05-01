@@ -108,7 +108,7 @@ Requires both:
 
 ### What this does for the audit
 
-Resolves P0.1 (TBFT selective-delivery grief) at the protocol level — no DKG change, no phantom signatures, no further-lowered thresholds. The cost is one extra gossip window (`Δ_2b`). The analogous fix for P0.2 (TBFT2 n=4) is structurally the same: split Phase 2 of TBFT2 likewise; out of scope here.
+Resolves P0.1 (TBFT selective-delivery grief) at the protocol level — no DKG change, no phantom signatures, no further-lowered thresholds. The cost is one extra gossip window (`Δ_2b`).
 
 ## Open questions
 
