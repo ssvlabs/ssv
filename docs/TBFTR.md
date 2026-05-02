@@ -62,7 +62,14 @@ Bundles passing cryptographic-auth checks are then classified by the first-obser
 
 The split is load-bearing: a malformed or bad-signature bundle has no use at all — drop it. A late-but-cryptographically-valid bundle has limited use — its leader auth is the evidence the secondary closure path needs in Phase 2b, even though the bundle itself can no longer fragment the σ-pool by being accepted as a Phase-1 candidate.
 
-**Bundle propagation.** Honest receivers re-flood the bundle via standard gossipsub — this is what closes selective-delivery attempts by a byzantine leader. The argument requires the **candidate acceptance cutoff** above: an honest receiver accepting a bundle at time `t ≤ T_candidate_accept` has `T_commit − t ≥ D + δ` left for re-flooding to reach every other honest operator before *their* `T_candidate_accept` (clock skew bounded by `δ`). Without the cutoff, a byzantine could release the bundle at `T_commit − ε` for `ε < D + δ`, fragmenting the cluster within the synchrony bound; with the cutoff, late releases are uniformly rejected. This is the same partial-synchrony envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)), made operational by a concrete cutoff.
+**Bundle propagation.** Honest receivers re-flood the bundle via standard gossipsub. The **candidate acceptance cutoff** is what bounds the byzantine leader's late-release window: a bundle first observed after `T_candidate_accept` is treated as auth-only and cannot fragment the σ-pool via timing.
+
+A subtlety in the clock-skew arithmetic: the cutoff `T_candidate_accept = T_commit − (D + δ)` is enough to bound *late* delivery (the byzantine cannot first-deliver to any honest after their `T_candidate_accept` without all of them rejecting), but it does **not** by itself guarantee that a re-flood from an honest receiver who accepted *exactly at* `T_candidate_accept` (in their own clock) reaches all *other* honest receivers before *their* `T_candidate_accept` in the worst-case clock-skew scenario — the re-flood still takes `D` to propagate, and a slow-clock peer's cutoff (in absolute time) can be earlier than the fast-clock acceptor's, so the re-flood arrival can land in the late-retention window for some peers. In that edge case, those peers retain leader auth but cannot sign Phase-2a σ. Whether the cluster still closes:
+
+- **Full-V variant**: the f peers that fell into late-retention can still recover V from a Phase-2a peer onion (carried plaintext by the f+1 honest who did sign Phase-2a σ on time) and contribute Phase-2b late σ — gated by the witness threshold, which is met because f+1 honest signed Phase-2a σ. The σ pool reaches `qV` via the secondary closure (see "Liveness").
+- **Hash variant** (and TBFT-shape protocols generally): no peer-onion V-recovery, so the f late-retainers cannot late-sign. σ pool = `f+1` honest Phase-2a σ + 1 leader Phase-1 σ = `f+2`, reaching `qV = 2f+1` only at `f = 1`. At `f ≥ 2` the slot misses in this byzantine-leader-at-cutoff edge under the hash variant.
+
+This is the same partial-synchrony envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)), made operational by a concrete cutoff. The cutoff could be tightened (e.g., to `T_commit − (2D + δ)` to give re-flood a full propagation budget) at the cost of shrinking the leader's fetch window — see "Practical caveats / Deadline coordination" for the trade-off; the docs as written use the looser `T_commit − (D + δ)` cutoff and rely on full-V secondary closure to handle the byzantine-leader-at-cutoff edge.
 
 **Equivocation handling.** If a participant observes two distinct `σ_V` partials from the same `L_k` at the same slot/layer, that's leader equivocation: locally treat layer `k` as non-receipt (don't include a positive partial signature for it in the onion; broadcast the matching non-σ attestation in Phase 2b instead, for `k ≤ K-2`). The pair of signed bundles is self-contained slashing evidence — see "Fault tolerance / Equivocation handling" for the analysis. The leader is required to sign σ_V exactly once per slot/layer (refreshes during the fetch window are pre-signing only — see "Head-change handling" in the Application section); any second σ_V from the same leader is a protocol violation regardless of intent.
 
@@ -161,7 +168,7 @@ loop k = 0..K-1:
         halt with no output                         # missed slot
 ```
 
-**`T_arrival`** for the deadline rule is the cutoff by which the operator must have received any Phase-2a onion or Phase-2b broadcast it intends to count — practically, it's `T_commit + Δ_2a + Δ_2b`. The deadline rule bounds the gap between `T_commit` and `T_arrival` against propagation P99/P999 and clock skew (see "Practical caveats / Deadline coordination").
+**`T_arrival`** for the deadline rule is the cutoff by which the operator must have received any Phase-2a onion or Phase-2b broadcast it intends to count — practically, it's `T_commit + Δ_2a + Δ_2b`. The deadline rules bound *each* Phase-2 sub-window independently against propagation P99/P999 and clock skew — `Δ_2a > D + δ` AND `Δ_2b > D + δ` — see "Practical caveats / Deadline coordination" for why the aggregate-only bound is insufficient.
 
 The leader's Phase-1 σ partial appears unencrypted in the σ pool at every layer. At layer `k > 0` this means one partial is visible early, before the chain is peeled — but one partial alone can't reconstruct (need `qV`), and the remaining onion + late σ partials are wrapped in `C_k` and stay sealed until every prior layer's NR-quorum unlocks the chain.
 
@@ -246,15 +253,22 @@ None of the three proofs depend on honest operators excluding cross-signers from
 
 ### Liveness (synchrony-conditional)
 
-TBFTR has **two layered closure mechanisms** for byzantine-leader selective-delivery grief. Under partial synchrony with `T_candidate_accept` enforced, the *primary* mechanism — gossipsub re-flooding of Phase-1 bundles — already suffices. The *secondary* mechanism — Phase-2a peer-onion V-plaintext + Phase-2b late σ — extends the synchrony band where the cluster still completes.
+TBFTR has **two layered closure mechanisms** for byzantine-leader selective-delivery grief. Under partial synchrony with `T_candidate_accept` enforced, the *primary* mechanism — gossipsub re-flooding of Phase-1 bundles — handles the common case. The *secondary* mechanism — Phase-2a peer-onion V-plaintext + Phase-2b late σ — covers the byzantine-at-cutoff edge that primary alone doesn't fully close, and extends the synchrony band more broadly at `f ≥ 2`.
 
-**Primary closure (partial synchrony).** Byzantine `L_k` releases `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators *before `T_candidate_accept`*, withholds from the remaining `f` honest:
+**Primary closure (partial synchrony, byzantine releases bundle with re-flood headroom).** Byzantine `L_k` releases `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators **at least `D + δ` before `T_candidate_accept`**, withholds from the remaining `f`:
 
-- The `f+1` honest who received V via Phase 1 re-flood the bundle via gossipsub. Within `D + δ`, the bundle reaches the remaining `f` honest before *their* `T_candidate_accept`.
+- The `f+1` honest who received V via Phase 1 re-flood the bundle via gossipsub. Within `D + δ`, the bundle reaches the remaining `f` honest before *their* `T_candidate_accept` (with the headroom on the original release time covering worst-case clock skew).
 - All `2f+1` honest hold V by Phase 2a start. They include V plaintext + encrypted σ in their onions.
 - Cluster-wide σ count on V: `2f+1` honest σ + `1` leader Phase-1 σ = `2f+2 ≥ qV`. **Slot succeeds.**
 
 No Phase-2b late σ is needed in this regime; the recovery channel is dormant.
+
+**Byzantine-at-cutoff edge (full-V handles it; hash variant misses at `f ≥ 2`).** If byzantine releases the bundle to `f+1` honest *exactly at* their `T_candidate_accept` (or in a worst-case-clock-skew window where re-flood arrives at the remaining `f` honest just after their own cutoffs), those `f` peers retain leader auth but cannot sign Phase-2a σ. Outcomes:
+
+- **Full-V variant**: the `f` late-retainers recover V from a Phase-2a peer onion (carried plaintext by the `f+1` honest who signed Phase-2a σ on time) and contribute Phase-2b late σ — the witness threshold (`f+1` distinct Phase-2a σ-signers) is met. σ pool = `f+1` Phase-2a + `f` late + 1 leader = `2f+2 ≥ qV`. **Slot succeeds via secondary closure.**
+- **Hash variant** (or any TBFT-shape protocol): no peer-onion V-recovery, so the `f` late-retainers cannot late-sign. σ pool = `f+1` Phase-2a + 1 leader = `f+2`. At `f = 1` this equals `qV = 3` (slot succeeds). At `f ≥ 2`, `f+2 < qV = 2f+1` — slot misses in this byzantine-at-cutoff edge. NR pool = `f` honest non-signers (others are σ-committed) < qEnc when byz withholds NR.
+
+So at `f ≥ 2` the hash variant's byzantine-leader-grief closure has a residual hole at the byzantine-at-cutoff edge — only the full-V variant's secondary closure covers it. This is one of the central reasons full-V is the right deployment at `n ≥ 7` when bandwidth allows; if the cluster runs the hash variant for bandwidth reasons, the cluster accepts the byzantine-at-cutoff edge as a residual miss surface (typically rare in practice, since byzantine has to time the release within the worst-case-clock-skew window of every honest receiver's cutoff). See "Comparison with a leaner (TBFT-shape) protocol" below for the per-`f` widening this implies.
 
 **Secondary closure (marginal synchrony, gated by the witness-threshold precondition).** When **`f+1` honest signed Phase-2a σ on V** but the remaining `≤ f` honest didn't get V via Phase 1 (re-flooding fell short for them), the recovery channel kicks in:
 
@@ -276,17 +290,20 @@ The widening is `f − 1` at each `f`. **At `f = 1` (n=4) the secondary closure 
 
 **Coordinated grief across layers.** If multiple byzantine operators each grief a different layer (one does selective delivery at layer 0, another at layer 1, etc.), the cluster falls through to whichever layer has an honest leader. With `K = f+1`, at least one honest leader exists in the top-`K` (byz hold at most `f`); at that honest leader's layer the closure above applies cleanly.
 
-**Late-bundle bypass — prevented by the witness threshold.** Without the timely-acceptance witness threshold on Phase-2b late σ (Phase 2b condition 3), a byzantine leader could bypass `T_candidate_accept`'s liveness role. The attack:
+**Late-bundle bypass — prevented by the witness threshold (relevant at `f ≥ 2`).** Without the timely-acceptance witness threshold on Phase-2b late σ (Phase 2b condition 3), a byzantine leader could try to bypass `T_candidate_accept`'s liveness role. The attack construction:
 
 1. Byzantine `L_k` releases the bundle *strictly after* `T_candidate_accept` to `f+1` honest operators. They retain it auth-only per Phase-1 receiver checks but cannot sign Phase-2a σ on it.
 2. The `f` byzantine operators selectively deliver Phase-2a onions carrying `V_{L_k}` plaintext to those same `f+1` honest operators (and not to the remaining `f` honest who never received the bundle).
 3. Without the witness threshold, the `f+1` honest with late-retained auth + byzantine-delivered V would late-sign in Phase 2b, contributing `f+1` σ partials.
 4. Byzantine withholds remaining σ and NR.
-5. σ-pool: `f+1` honest late + `1` leader Phase-1 σ = `f+2 < qV = 2f+1` (for `f ≥ 1`).
+5. σ-pool: `f+1` honest late + `1` leader Phase-1 σ = `f+2`.
 6. NR-pool: `f` honest (the operators who never received V) `< qEnc = 2f+1`.
-7. Both quorums short, slot misses, NR-quorum can't unlock the next layer either.
 
-The witness threshold blocks this attack at step 3. Byzantine peers can manufacture at most `f` Phase-2a σ contributions (one per byz operator, regardless of whether the encrypted partial is verifiable at layer `k > 0` — the count is per-distinct-sender, byzantine-bounded by their `f` operators). With the `f+1` distinct-peers requirement, the `f+1` honest with late-retained auth see at most `f` Phase-2a σ partials on `V_{L_k}` — below the threshold — and fall through to NR instead of late-signing. NR-pool then reaches `(f+1) + f = 2f+1 ≥ qEnc`; the cluster falls through cleanly to the next layer. Slot succeeds at the next honest leader's layer (guaranteed by `K = f+1`).
+At `f = 1`: `f+2 = 3 = qV` exactly — late σ would actually reach σ-quorum, so the construction doesn't yield a miss. The attack only **produces a miss at `f ≥ 2`**, where `f+2 < 2f+1 = qV` and NR-pool is also below quorum (slot misses, NR-quorum can't unlock the next layer either).
+
+The witness threshold is still load-bearing at `f = 1` for **safety against the timing-fragmentation attack** the cutoff exists to prevent more generally (operators must not commit σ on a bundle whose timely acceptance can't be witnessed cluster-wide), and for keeping the late-σ path consistent across `f`. At `f ≥ 2` it's also a liveness-attack mitigation — without it, byzantine can deterministically construct slot misses via the steps above.
+
+**How the threshold blocks the attack (at any `f`).** Byzantine peers can manufacture at most `f` Phase-2a σ contributions (one per byz operator, regardless of whether the encrypted partial is verifiable at layer `k > 0` — the count is per-distinct-sender, byzantine-bounded by their `f` operators). With the `f+1` distinct-peers requirement, the `f+1` honest with late-retained auth see at most `f` Phase-2a σ partials on `V_{L_k}` — below the threshold — and fall through to NR instead of late-signing. NR-pool then reaches `(f+1) + f = 2f+1 ≥ qEnc`; the cluster falls through cleanly to the next layer. Slot succeeds at the next honest leader's layer (guaranteed by `K = f+1`).
 
 **Application-validity-divergence — known liveness limit.** When honest receivers' application verdicts on `V_{L_k}` diverge — some return `valid` (commit σ), others return `not-valid` (commit NV) — the cluster can deadlock at this layer under adversarial byzantine. The mechanism:
 
@@ -308,7 +325,7 @@ The slot misses (no V signature is produced) under any of the following:
 - **Bad synchrony (beyond aggressive marginal)**: degradation severe enough that even Phase-2a onion delivery doesn't reach all honest within `Δ_2a` — neither re-flooding nor peer-onion-recovery completes. Some honest emit NR in 2b without recovering V; σ-quorum doesn't form, NR-quorum may or may not depending on distribution. Slot misses; **no safety violation** (the algebra above doesn't depend on synchrony).
 - **More than `f` faults**: if more than `f` operators are offline or byzantine combined (beyond the byzantine bound), no quorum reaches its threshold at any layer.
 - **Last-layer failure**: if layer `K-1` doesn't reach σ-quorum, there's no successor to fall through to. NR is only emitted on tags `nr_tag_0` through `nr_tag_{K-2}`; last-layer failure is terminal.
-- **Application-validity-divergence on every layer**: see "Liveness / Application-validity-divergence" above. If honest application verdicts diverge on `V_{L_k}` at every layer `k`, every layer can deadlock and the slot misses overall.
+- **Application-validity-divergence on any non-final layer (under adversarial byzantine)**: see "Liveness / Application-validity-divergence" above. Because the chained encryption requires NR-quorum at layer `k` to unlock layer `k+1`, divergence on **any** non-terminal layer (any `k ∈ {0, …, K-2}`) under adversarial byzantine withholding can deadlock that layer's NR-quorum (which caps at `2f` non-leader honest, below `qEnc = 2f+1`), blocking fall-through to all subsequent layers — even when later layers would have been fine. The slot then misses overall. (Divergence on the terminal layer `K-1` alone is not relevant for fall-through — there's nothing to fall through to anyway — but it does prevent that layer from σ-quorumming if other layers had already failed.)
 
 ### Equivocation handling
 
@@ -402,7 +419,7 @@ slot_start
 
 Concrete numbers for each leg should come from production telemetry. Until that lands, the Phase-timeline above is a placeholder default; tighten per cluster size as data arrives.
 
-The deadline-tuning rule from caveat 5 below applies: `T_arrival − T_commit > D + δ` (i.e., the Phase-2 window `Δ_2a + Δ_2b` must exceed the propagation budget plus clock skew), where `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
+The deadline-tuning rules from caveat 5 below apply: each Phase-2 sub-window must independently exceed the propagation budget plus clock skew — `Δ_2a > D + δ` AND `Δ_2b > D + δ` (the aggregate-only bound `Δ_2a + Δ_2b > D + δ` is not sufficient — see caveat 5). `D` is the propagation P99/P999 and `δ` is the bounded clock-skew across operators.
 
 ### Head-change handling
 
@@ -430,12 +447,15 @@ For SSV's proposer duty, the host application's `valid` / `not-valid` verdict on
 
 4. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = 2f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. The keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), even though the threshold is the same.
 
-5. **Deadline coordination.** Clock skew across operators must be bounded by `δ`. Two cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
+5. **Deadline coordination.** Clock skew across operators must be bounded by `δ`. The cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
 
-   - **`T_candidate_accept = T_commit − (D + δ)`** for Phase-1 candidates. Receivers reject candidates whose first-observation time is later.
-   - **`T_arrival = T_commit + Δ_2a + Δ_2b`** for Phase-2a onion / Phase-2b late-σ / NR contributions — the cutoff for accepting Phase-2 messages into the local pools. Same `D + δ` budget against `T_arrival`.
+   - **`T_candidate_accept = T_commit − (D + δ)`** for Phase-1 candidates. Receivers reject candidates whose first-observation time is later. (Caveat: under worst-case clock skew, a re-flood from an honest acceptor at exactly this cutoff may not reach all other honest before *their* cutoffs — see "Phase 1 / Bundle propagation". The full-V variant's secondary closure handles this edge; the hash variant accepts a residual miss surface at `f ≥ 2`.)
+   - **`Δ_2a > D + δ`** for Phase-2a onions: every honest's Phase-2a onion broadcast at the start of the 2a window must arrive at every other honest by `T_commit + Δ_2a` (the start of Phase 2b), so honest can decide late σ vs NR/NV in 2b based on a complete view of who σ-committed in 2a. A weaker bound (e.g., aggregate `Δ_2a + Δ_2b > D + δ` only) is **not** sufficient: it permits the witness-threshold visibility to slip past the 2b decision point.
+   - **`Δ_2b > D + δ`** for Phase-2b late-σ / NR-NV broadcasts: every honest's Phase-2b broadcast at the start of the 2b window must arrive at every other honest by `T_arrival = T_commit + Δ_2a + Δ_2b` (the start of Phase 3 reconstruction), so the σ-pool / NR-quorum aggregation in Phase 3 has a complete view.
 
-   Both are *liveness* requirements only; safety is unaffected by skew or propagation breakdown (see "Fault tolerance / Safety").
+   The aggregate-only bound `T_arrival − T_commit > D + δ` is too weak — it bounds total propagation but not per-window. Per-window bounds are what actually drive liveness: each Phase-2 sub-phase's broadcasts must complete within that sub-phase's own window.
+
+   All bounds above are *liveness* requirements only; safety is unaffected by skew or propagation breakdown (see "Fault tolerance / Safety").
 
 6. **Tag construction and replay.** The `nr_tag_k` tags must uniquely bind `(slot, cluster, layer)` so that ciphertexts from one slot/cluster/layer cannot be replayed/reused.
 
