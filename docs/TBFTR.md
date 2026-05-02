@@ -314,3 +314,104 @@ Together they close the P0.1/P0.2 grief residual `[f+1, 2f-1]` that the leader-�
 The two specs share the cryptographic core (`qEnc = qV = 2f+1` for cryptographic safety, leader-authenticated candidates with both V-keypair and operator-identity sigs over a structured envelope, equivocation-to-NR rule, IBE primitive, two DKGs at the same threshold). What differs is K (and consequently the layered-onion depth and tag count), the Phase-2 timing structure, and the V-plaintext / late-σ machinery — all of it doing the work of closing the residual byzantine-leader grief window that doesn't exist at `f = 1`.
 
 **If you're choosing between protocols**: at `n = 4` use TBFT (simpler, cheaper, equally safe). At `n ≥ 7` use TBFTR (only protocol that closes the byzantine-leader selective-delivery grief at `f ≥ 2`).
+
+## Appendix B — Sketch: dynamic leader-ordering extension
+
+This appendix sketches a possible extension of TBFTR where the choice of which leader's value the cluster commits to is **not fixed by priority** but **emerges from the candidates the cluster actually had time to validate**. It is not part of the baseline TBFTR spec; it's a forward-compatible direction worth documenting because it falls naturally out of the same 2a/2b machinery and may be relevant if production data shows head-divergence or per-slot leader-quality variance hurting liveness.
+
+**Status: design sketch, not specified for implementation.** The safety argument carries through under the same cryptographic primitives, but several details (exact commitment-rule semantics, late-commit handling, interaction with equivocation, slashing-protection scope) need precise specification before this could be deployed.
+
+### Motivation
+
+Baseline TBFTR walks layers in **priority order**: layer 0 is tried first; only if `nr_tag_0` reaches `qEnc` does layer 1 become reachable. The fixed priority is what enables the `qEnc = qV` safety pigeonhole — each honest operator commits to either σ or NR per layer, mutually exclusively, so at most one σ-quorum can materialize across the entire layer walk.
+
+The cost of fixed priority: if `L_0`'s candidate happens to be the worst choice for *this* slot (e.g., its parent root is in a re-org-divergent zone, or its application-level validity differs across honest operators' local views), the cluster has to "burn" an NR-quorum on layer 0 before getting to a more convergent layer. That uses up the same `2f+1` honest-agreement budget that signing layer `k` directly would have used — so it's not strictly worse, but it's strictly slower (extra IBE decryption walk step) and depends on operators being able to converge on NR for the layer they're skipping.
+
+The dynamic-ordering variant generalizes "layer 0 first, fall through" to "any layer can win, decided by which layer's commit-quorum lands first" — without giving up the cryptographic safety property.
+
+### Core idea
+
+Replace per-layer σ-XOR-NR commits with **per-operator commitment to at most one layer**. Each layer gets its own IBE tag (`commit_tag_k`); each operator's σ partial at their chosen layer is encrypted under that layer's commit-tag. Aggregation finds the layer whose commit-quorum reaches `qEnc` — the same safety pigeonhole applies, just keyed on layers instead of σ-vs-NR sides:
+
+- `h_commit_k` = honest who committed to layer `k`.
+- `byz_commit_k` ≤ `f` per layer (each byz can cross-commit, but each contributes at most 1 partial per layer).
+- For two layers `k_1 ≠ k_2` to both reach commit-quorum: `h_commit_{k_1} + h_commit_{k_2} ≥ 2 · qEnc − 2f = 2(2f+1) − 2f = 2f+2`. But honest commit to ≤ 1 layer each, so `h_commit_{k_1} + h_commit_{k_2} ≤ 2f+1`. Contradiction — at most one commit-quorum reaches. ∎
+
+Each layer that *does* reach commit-quorum yields a single output. Same cryptographic safety as baseline TBFTR.
+
+### Protocol shape (delta from baseline TBFTR)
+
+**Setting (unchanged):** same K leaders, same DKGs, same `qV = qEnc = 2f+1`, same envelope binding, same `T_candidate_accept`. One additional tag family: `commit_tag_k = ("slot", N, "cluster", C, "layer", k, "commit")` for `k ∈ {0, …, K−1}` — `K` tags total instead of baseline's `K−1` `nr_tag_k`.
+
+**Phase 1 (unchanged):** every leader broadcasts `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op}(envelope))` to peers. Receivers verify, validate, check the cutoff, drop invalid bundles.
+
+**Phase 2a (modified):** each operator `i` broadcasts:
+
+- `V_{L_k}` plaintext at every layer `k` where `i` accepted and validated `V_{L_k}` (recovery channel — same as baseline TBFTR core).
+- A **single** committed layer `k*_i ∈ {0, …, K−1}`, chosen by a deterministic rule over the candidates `i` validated (e.g. "lowest-indexed layer where `V_{L_k}` validates against my local head" — recovers the baseline primary-first behavior in the common case where everyone validates `V_{L_0}`).
+- `σ_i^{IBE}(commit_tag_{k*_i})` — the commitment partial sig.
+- `E_{commit_tag_{k*_i}}( σ_i^V(V_{L_{k*_i}}) )` — `i`'s σ partial on the chosen layer's value, encrypted under that layer's commit-tag.
+
+If `i` has no valid candidate at any layer by `T_candidate_accept`, `i` skips Phase 2a (no commitment, no encrypted σ).
+
+**Phase 2b (modified):** for operators who didn't commit in 2a but recovered a candidate via peer onions during 2a — they pick a layer using the same deterministic rule, and broadcast their late commitment + encrypted σ for that layer. Operators who already committed in 2a don't re-emit. (Baseline 2b's "late σ or NR" collapses to "late commitment only"; NR is gone — there's no longer a separate NR side, just "did or didn't commit to some layer.")
+
+**Phase 3 (modified):** each operator runs:
+
+```
+for k = 0..K-1:
+    commits_k = {σ_j^{IBE}(commit_tag_k) partials}
+    if |valid commits_k| ≥ qEnc:
+        decryption_key_k = aggregate(commits_k)
+        sigs_k = decrypt and verify all E_{commit_tag_k}(σ_j^V(V_{L_k})) ciphertexts
+                 ∪ {σ_{L_k}^V(V_{L_k}) from Phase 1, if valid}
+        if |valid sigs_k on V_{L_k}| ≥ qV:
+            output (V_{L_k}, reconstruct(sigs_k)); halt
+
+halt with no output            # no layer reached commit-quorum
+```
+
+The walk is over commit-quorums, not over priority. By the safety pigeonhole, at most one `k` satisfies `|commits_k| ≥ qEnc`.
+
+### Where this wins (and where it doesn't)
+
+**Wins:**
+
+- **Direct backup commit on head divergence.** If `2f+1` honest validate `V_{L_1}` (say, against a deeper-confirmed parent) but the split on `V_{L_0}`'s parent prevents agreement at layer 0, dynamic ordering converges directly on layer 1. Baseline TBFTR would need `qEnc = 2f+1` honest to NR layer 0 first — same threshold, but the protocol burns an extra IBE decryption walk step getting there.
+- **Per-slot leader-quality variance.** If a particular slot has `L_0` producing a marginal candidate (e.g. low MEV, non-canonical relay) but `L_1` producing an objectively better one, operators following the deterministic rule can converge on `L_1` directly without the round-trip through `nr_tag_0`. (Baseline TBFTR is locked into the priority order regardless of candidate quality.)
+
+**Doesn't win:**
+
+- **Doesn't reduce the agreement threshold.** Both variants need `2f+1` honest to converge on the same layer. Dynamic ordering changes *which* layer they converge on, not whether they need to converge.
+- **Doesn't help if honest can't agree on a deterministic rule.** The rule has to be over inputs that are cluster-consistent enough — "lowest-indexed valid layer" works under partial synchrony if all honest validate the same V's; head divergence makes the inputs differ, and the variant is no better than baseline in that case (and might be worse if the rule splits operators across layers in ways the baseline wouldn't).
+- **Doesn't help against byzantine-leader grief at `f ≥ 2`.** That's already closed by TBFTR core (V plaintext + Phase-2 split) under partial synchrony. Dynamic ordering is orthogonal.
+
+### Trade-offs vs baseline
+
+| Aspect | Baseline TBFTR | Dynamic-ordering variant |
+|---|---|---|
+| Per-operator commit | σ XOR NR per layer, multi-layer | One layer per slot, exclusive |
+| Tag count | `K−1` `nr_tag_k` | `K` `commit_tag_k` |
+| σ partials per onion | At every layer with valid V (encrypted) | One (encrypted, at chosen layer) |
+| Phase 3 walk | Priority order (layer 0 first, NR-quorum unlocks next) | Find layer with commit-quorum |
+| Primary-bias optimization | Built in (priority order) | Recoverable via deterministic rule, but rule-dependent |
+| Bandwidth per onion | `K · |V|` plaintext + `K` encrypted σ + (separately) per-layer NR | `K · |V|` plaintext + 1 encrypted σ + 1 commit partial — slightly less per onion |
+| Liveness in head-divergence | Same agreement threshold; baseline burns an NR-walk step before reaching layer 1 | Same threshold; converges directly on agreed layer |
+| Slashing-protection scope | σ at every valid layer + NR per missed layer | σ at one layer only — simpler EKM accounting |
+
+### Open questions before this could be specified
+
+- **Commitment rule.** How do operators pick `k*_i`? "Lowest valid layer" recovers baseline behavior in healthy cases but provides no tiebreaker advantage; smarter rules (e.g., "most-recent-parent-root") might help in re-org scenarios but also might split operators in ways the baseline would not. Needs adversarial-attack analysis.
+- **Late-commit timing.** Can an operator who committed in 2a "switch" their commit if they later learn their chosen layer won't reach commit-quorum? Naively no (would break per-operator exclusivity), but more subtle schemes (revocable commits with deadlines) might be possible. Adds protocol-state complexity.
+- **Equivocation interaction.** Baseline's equivocation-to-NR rule converts a layer with a misbehaving leader into a clean NR-quorum. The dynamic variant has no NR side — equivocation at layer `k` would have to translate to "operators won't commit to layer `k`," not "operators commit to NR_k." Defining this precisely (and ensuring no path to two outputs) needs care.
+- **Slashing-protection.** Per-share signing log shows σ at one layer per slot under this variant — simpler than baseline. But the per-operator picking rule means EKM has to allow σ at *any* layer per slot, not a fixed one. Same envelope-bound slashing-protection check applies.
+- **Bandwidth and latency.** The variant cuts σ partials per onion (fewer encrypted layers per operator) but adds K commit-tags to track. Net savings depend on K and the relative size of σ vs commit partial sigs. Phase 2b is shorter (no NR side) but the same Δ_2b window is needed for late commits.
+- **Implementation complexity.** Adds a new tag family, a new commitment-partial-sig type, a different aggregation walk. Probably 1.5–2× the spec footprint of the baseline.
+
+### When to consider this
+
+This variant is most relevant if production data shows the baseline TBFTR's fixed priority order causing measurable misses or wasted slots — e.g., re-org-frequent periods where layer 0 routinely fails its NR-quorum step before layer 1 picks up. Without that data, the baseline's simplicity is the right default.
+
+If pursued, the natural place to prototype is at `n = 7` (smallest `f ≥ 2` cluster, where TBFTR is the only option), with the variant gated behind a config flag so the baseline stays the production path during validation.
+
+For SSV's n=4 case, the lighter mitigation noted in the design discussion — fetching `V_{L_1}` from a deeper-confirmed parent so the backup is structurally re-org-resistant — gets most of the benefit without any protocol change. That's the recommended first move; the dynamic-ordering variant is a second-line option for cluster sizes and conditions where the application-level mitigation isn't enough.
