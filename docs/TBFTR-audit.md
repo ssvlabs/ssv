@@ -1,0 +1,20 @@
+The two TBFT findings look addressed.
+
+- Finding 1 is addressed by `T_candidate_accept = T_commit - (D + delta)` and the receiver-side late-candidate drop rule in [docs/TBFT.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT.md#L24) and [docs/TBFT.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT.md#L39-L43).
+- Finding 2 is addressed in the comparison doc by qualifying the claim with “partial synchrony with the cutoff enforced” in [docs/TBFT-comparison.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT-comparison.md#L45-L49).
+- I do not see leftover ambiguity on those two points. The one minor TBFT wording cleanup still present is that [docs/TBFT.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT.md#L228) calls `T_commit` a “submission deadline”; it is really the commit/view-fix deadline.
+
+For TBFTR, I found more serious design issues:
+
+::code-comment{title="[P0] Plain late sigs can bypass lower-layer locks" body="Phase 2b broadcasts recovered late σ shares directly for every layer, while the text relies on honest aggregators not counting deeper-layer late σ until that layer is unlocked. A Byzantine aggregator can ignore that local rule. Example at n=7: layer 0 succeeds; a Byzantine layer-1 leader gives V1 to one honest operator, that operator includes V1 plaintext in Phase 2a, the other four honest operators recover V1 and broadcast plain late σ in Phase 2b, and the Byzantine leader's Phase-1 σ gives 5 public shares for V1 without any NR quorum at layer 0. That can produce two valid V signatures. Late σ for k>0 needs to be encrypted/gated under enc_tag_k, or otherwise made unusable until lower-layer NR unlocks." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=80 end=83 priority=0 confidence=0.9}
+
+::code-comment{title="[P1] Hash variant breaks the recovery proof" body="The hash variant says operators carry full V only at the layer where they are the leader. In the byzantine-leader selective-delivery case, the layer leader is Byzantine and can withhold its onion/full V, while honest recipients only carry hashes. The f honest operators who missed Phase 1 cannot recover V from hashes, so the P0.1/P0.2 liveness proof does not hold for the recommended hash variant. To preserve the proof, at least one honest Phase-2a signer that received V must carry recoverable V, which the current hash variant does not guarantee." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=76 priority=1 confidence=0.88}
+
+::code-comment{title="[P2] Candidate cutoff and Phase-2 recovery arguments conflict" body="The spec says any candidate accepted before T_candidate_accept re-floods to all honest operators before their cutoffs. If that is true, the liveness scenario where f honest operators missed Phase 1 despite f+1 honest accepting before the cutoff cannot occur. If TBFTR is intended to rely on Phase-2a recovery instead of Phase-1 re-flooding, the cutoff/re-flooding claim should be weakened or the liveness proof rewritten around the actual recovery path." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=46 priority=2 confidence=0.78}
+
+::code-comment{title="[P2] Last-layer NR is inconsistent with tag count" body="Phase 2b says operators broadcast NR for every layer they could not sign, and Phase 3 tries to unlock layer k+1 for every k in 0..K-1. But the last layer has no successor, and Appendix A says there are only K-1 tags. The protocol should define NR only for layers 0..K-2 and treat last-layer failure as terminal." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=80 end=83 priority=2 confidence=0.84}
+
+Cleanups/refinements observed while reading:
+
+- The TBFTR safety proof should explicitly cover two σ-quorums for two different values at the same layer. The quorum-intersection argument is straightforward, but the current proof only covers σ-vs-NR.
+- The effective end of Phase 1 is now `T_candidate_accept`, not `T_commit`; the timeline should account for that because it reduces usable late-fetch time.
