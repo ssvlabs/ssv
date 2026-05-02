@@ -1,9 +1,3 @@
-The two TBFT findings look addressed.
-
-- Finding 1 is addressed by `T_candidate_accept = T_commit - (D + delta)` and the receiver-side late-candidate drop rule in [docs/TBFT.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT.md#L24) and [docs/TBFT.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT.md#L39-L43).
-- Finding 2 is addressed in the comparison doc by qualifying the claim with “partial synchrony with the cutoff enforced” in [docs/TBFT-comparison.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT-comparison.md#L45-L49).
-- I do not see leftover ambiguity on those two points. The one minor TBFT wording cleanup still present is that [docs/TBFT.md](https://github.com/ssvlabs/ssv/blob/4b4213554adbed2624eed567af10138019d102bd/docs/TBFT.md#L228) calls `T_commit` a “submission deadline”; it is really the commit/view-fix deadline.
-
 For TBFTR, I found more serious design issues:
 
 ::code-comment{title="[P0] Plain late sigs can bypass lower-layer locks" body="Phase 2b broadcasts recovered late σ shares directly for every layer, while the text relies on honest aggregators not counting deeper-layer late σ until that layer is unlocked. A Byzantine aggregator can ignore that local rule. Example at n=7: layer 0 succeeds; a Byzantine layer-1 leader gives V1 to one honest operator, that operator includes V1 plaintext in Phase 2a, the other four honest operators recover V1 and broadcast plain late σ in Phase 2b, and the Byzantine leader's Phase-1 σ gives 5 public shares for V1 without any NR quorum at layer 0. That can produce two valid V signatures. Late σ for k>0 needs to be encrypted/gated under enc_tag_k, or otherwise made unusable until lower-layer NR unlocks." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=80 end=83 priority=0 confidence=0.9}
