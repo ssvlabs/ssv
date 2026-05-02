@@ -1,27 +1,27 @@
-# TBFT — Threshold BFT for n=4 clusters
+# TBFT — Threshold BFT
 
-This document describes **TBFT** for `n = 4` (`f = 1`) clusters: a single-shot agreement protocol that produces one collective threshold-signed value per "slot" against a hard deadline. TBFT achieves agreement *cryptographically* — single-RTT decision path, structural cryptographic safety, primary/backup leader fallback.
+A single-shot agreement protocol for SSV's `n = 4` (`f = 1`) clusters that produces one collective threshold-signed value per "slot" against a hard deadline. TBFT achieves agreement *cryptographically* — single-RTT decision path, structural cryptographic safety, primary/backup leader fallback.
 
-TBFT is **only meant for `n = 4`**. For larger cluster sizes (`n = 7, 10, 13`), use [TBFTR](TBFTR.md) — a natural extension of TBFT that handles the byzantine-leader selective-delivery grief residual at `f ≥ 2`. The two specs share the cryptographic core (`qEnc = qV = 2f+1`, structured leader-auth envelope, equivocation-to-NR rule, IBE primitive, two DKGs at the same threshold). What TBFT keeps minimal at n=4: `K = 2`, single tag, asymmetric per-layer fetch times, no V-plaintext in onions, no Phase-2 split. See **Appendix A** for the side-by-side.
+TBFT is the lean specialization for `n = 4`. The full multi-layer spec — applicable at any cluster size, including `n = 4` — lives in [TBFTR](TBFTR.md); TBFT drops TBFTR's V-plaintext + Phase-2-split machinery in exchange for less bandwidth and less protocol surface, accepting a smaller marginal-synchrony robustness band as the trade-off (see "Fault tolerance" and **Appendix A**). For larger cluster sizes, only TBFTR is supported.
 
-The protocol description is generic. SSV's Ethereum proposer duty is used as the running example.
+The protocol description below is specific to TBFT. SSV's Ethereum proposer duty is used as the running example.
 
 ## When to use it
 
-**Suited for:** SSV's typical small cluster (`n = 4`), single-shot duties with a fixed deadline, where missing the slot is the natural failure mode and where round-trip latency is the binding constraint. The application has a natural primary/backup separation (high-MEV block vs. safe early-fetched block).
+**Suited for:** small clusters, single-shot duties with a fixed deadline, where missing the slot is the natural failure mode and round-trip latency is the binding constraint. The application has a natural primary/backup separation (high-MEV block vs. safe early-fetched block).
 
 **Not suited for:** larger cluster sizes (use [TBFTR](TBFTR.md)), general-purpose state-machine replication, situations where guaranteed termination across rounds is required.
 
 ## Setting
 
-- A cluster of `n = 4` participants with byzantine bound `f = 1`.
+- A cluster of 4 participants with byzantine bound `f = 1`. So `2f+1 = 3` honest are guaranteed.
 - Two threshold BLS keypairs from independent DKGs run once at cluster init:
   - **V-signing keypair** at threshold `qV = 2f+1 = 3`. Used to produce the per-validator signature on `V` (e.g. an Ethereum block in the SSV proposer-duty application). Reconstructing a full `V` signature requires `qV` partial sigs.
-  - **IBE keypair** at threshold `qEnc = 2f+1 = 3`. Used (a) to sign the no-quorum tag and (b) as the decryption oracle for threshold identity-based encryption (IBE) / signature-based witness encryption (SWE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair. The two keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), but share the same threshold — see "Why it's safe".
+  - **IBE keypair** at threshold `qEnc = 2f+1 = 3`. Used (a) to sign the no-quorum tag and (b) as the decryption oracle for threshold identity-based encryption (IBE) / signature-based witness encryption (SWE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair. The two keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), but share the same threshold — see "Fault tolerance / Safety".
 - A leader-authentication signature scheme (operator-identity key) for candidate broadcasts, distinct from the two threshold keypairs. Practical choice: reuse each operator's long-term P2P/SSV identity key.
-- For each slot, two **layers** with deterministically-derived leaders: layer 0 with **primary leader** `L_0` and layer 1 with **backup leader** `L_1`, required to be distinct.
+- Two **layers** with deterministically-derived leaders: layer 0 with **primary leader** `L_0` and layer 1 with **backup leader** `L_1`, required to be distinct.
 - Two leader-fetch deadlines, `T_1 < T_0`, plus a final cluster deadline `T_commit`. (`T_commit` is a *view-fix point*: each operator commits its stance based on what it observed by `T_commit`. Reconstruction and submission happen after `T_commit`.) The asymmetric fetch times let the primary fetch a high-MEV value late (`T_0` close to `T_commit`) while the backup fetches a safe early value (`T_1` well before `T_0`).
-- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers drop any candidate whose first-observation time is later than `T_candidate_accept` — treated locally as not-received. This cutoff is what makes the gossipsub-re-flooding argument actually work: a candidate accepted by any honest operator before `T_candidate_accept` has at least `D + δ` to re-flood to every other honest operator before *their* `T_candidate_accept`, modulo clock skew. With the cutoff, the byzantine cannot fragment the cluster by timing-based selective delivery: either a candidate is published early enough that all honest accept it, or so late that none accept it (see "Liveness profile").
+- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers drop any candidate whose first-observation time is later than `T_candidate_accept` — treated locally as not-received. This cutoff is what makes the gossipsub-re-flooding argument actually work: a candidate accepted by any honest operator before `T_candidate_accept` has at least `D + δ` to re-flood to every other honest operator before *their* `T_candidate_accept`, modulo clock skew. With the cutoff, the byzantine cannot fragment the cluster by timing-based selective delivery: either a candidate is published early enough that all honest accept it, or so late that none accept it (see "Fault tolerance / Liveness").
 - A single tag `nr_tag_0 = ("slot", N, "cluster", C, "layer", 0, "no-quorum")`. (Only one tag is needed because there's only one transition — primary→backup — that requires unlocking.)
 
 ## Protocol
@@ -42,20 +42,13 @@ If `L_1` fails to broadcast, the backup path is unavailable for this slot. If `L
 
 **Bundle propagation.** Honest receivers re-flood the bundle via standard gossipsub — this is what closes selective-delivery attempts by a byzantine leader. The argument requires the **candidate acceptance cutoff** above: an honest receiver accepting a bundle at time `t ≤ T_candidate_accept` has `T_commit − t ≥ D + δ` left for re-flooding to reach every other honest operator before *their* `T_candidate_accept` (clock skew bounded by `δ`). Without the cutoff, a byzantine could release the bundle at `T_commit − ε` for `ε < D + δ`, fragmenting the cluster within the synchrony bound; with the cutoff, late releases are uniformly rejected. This is the same partial-synchrony envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)), made operational by a concrete cutoff.
 
-**Why both signatures.** Including `σ_{L_k}^V(V_{L_k})` in the Phase-1 bundle gives the cluster a *head start* of one real threshold partial on `V_{L_k}` as soon as Phase 1 succeeds anywhere. Combined with the two honest threshold partials produced in Phase 2 by operators who received the leader's bundle (or recovered it via gossipsub re-flooding), the cluster reaches `qV = 3` real partials on `V_{L_k}` exactly — closing the byzantine-leader selective-delivery grief at this cluster size under partial synchrony (see "Liveness profile").
+**Why both signatures.** Including `σ_{L_k}^V(V_{L_k})` in the Phase-1 bundle gives the cluster a *head start* of one real threshold partial on `V_{L_k}` as soon as Phase 1 succeeds anywhere. Combined with the two honest threshold partials produced in Phase 2 by operators who received the leader's bundle (or recovered it via gossipsub re-flooding), the cluster reaches `qV = 3` real partials on `V_{L_k}` exactly — closing the byzantine-leader selective-delivery grief at this cluster size under partial synchrony (see "Fault tolerance / Liveness").
 
-#### Equivocation handling
-
-If a participant observes two distinct, validly-signed candidates from the same leader at layer `k`:
-
-- Two bundles with **different** `parent_root` → legitimate refresh on head change (see "Head-change handling"). Honest receivers accept the bundle whose `parent_root` matches the current head; stale bundles fail the application-validity check and are silently dropped.
-- Two bundles with the **same** `parent_root` but different `value_root` → equivocation:
-  1. Locally treat that leader's layer as non-receipt: don't include the corresponding partial signature in the onion (Phase 2); for layer-0 equivocation, broadcast a non-receipt attestation on `nr_tag_0`; for layer-1 equivocation, omit layer 1 of the onion entirely.
-  2. The pair of signed candidates is a self-contained slashable fault proof against that leader.
+**Equivocation handling.** If a participant observes two distinct, validly-signed candidates from the same leader at layer `k` with the **same** `parent_root` (different `value_root`), that's leader equivocation: locally treat the layer as non-receipt (don't include the corresponding partial signature in the onion; broadcast a non-receipt on `nr_tag_0` for layer-0 equivocation, or omit layer 1 of the onion for layer-1 equivocation). The pair of signed candidates is self-contained slashable evidence — see "Fault tolerance / Equivocation handling" for the analysis. (Two bundles with different `parent_root` are a legitimate refresh, not equivocation — see "Head-change handling" in the Application section.)
 
 ### Phase 2 — Onion broadcast `[T_commit, T_commit + Δ_2]`
 
-Phase 2 is a **single window** at n=4 — no 2a/2b split, since the leader-σ + gossipsub re-flooding mechanism already closes the byzantine-leader grief at f=1 under partial synchrony. Each participant `i` constructs a 2-layer onion:
+Phase 2 is a **single window** — no 2a/2b split, since the leader-σ + gossipsub re-flooding mechanism already closes the byzantine-leader grief under partial synchrony at this cluster size. Each participant `i` constructs a 2-layer onion:
 
 ```
 layer 0:  σ_i^V(V_{L_0})                                # primary, plaintext
@@ -106,7 +99,7 @@ halt with no output                            # missed slot
 
 Multiple operators may reconstruct and submit independently; the downstream system de-duplicates.
 
-**Cross-signing detection (attribution-only).** Any operator whose published messages contain *both* a σ partial at a layer AND an NR attestation on the layer's `nr_tag_0` is a slashable cross-signer. Detection is straightforward — the dual partials are public — and the pair forms self-contained slashing evidence. Under `qEnc = qV`, cross-signing has no safety impact (see "Why it's safe"); the detection is purely for attribution and out-of-band punishment.
+See "Fault tolerance / Cross-signing detection" for the attribution treatment of operators that publish both σ and NR at the same layer.
 
 #### Final-certificate gossip
 
@@ -120,7 +113,7 @@ Operators broadcast the certificate in parallel with their own submission attemp
 
 A participant that hasn't received `j`'s onion at decryption time treats `j` as not having contributed at all: no positive partial signature, no non-receipt attestation. Standard threshold cryptography — only signed messages count.
 
-Liveness is bounded by the standard `3f+1` byzantine assumption plus partial synchrony within `T_commit + Δ_2` (see "Liveness profile"). If more than `f = 1` operators are offline or byzantine combined, neither quorum will reach its threshold and the slot is missed.
+Liveness is bounded by the standard `3f+1` byzantine assumption plus partial synchrony within `T_commit + Δ_2` (see "Fault tolerance / Liveness"). If more than `f = 1` operators are offline or byzantine combined, neither quorum will reach its threshold and the slot is missed.
 
 ## Preconditions on the host application
 
@@ -145,44 +138,95 @@ For SSV's Ethereum proposer duty, application-level checks include:
 
 EKM/slashing-protection must permit all of these per-slot V-share signing events without flagging duplicates — the cluster's safety property collapses them to a single output, but the per-share signing log shows multiple block sigs at the same slot. The gating point is **candidate signing** (Phase-1 leader and Phase-2 onion alike), not just submission.
 
-## Why it's safe
+## Fault tolerance
 
-**Safety claim**: at most one full `V` signature is ever produced per TBFT instance per slot — *cryptographically*, against an arbitrary network adversary, regardless of byzantine cross-signing.
+This section consolidates everything the protocol guarantees — and doesn't — under the byzantine + partial-synchrony fault model. Operational rules that handle specific faults (equivocation-to-NR, cross-signing detection, head-change refresh) are still described inline in the relevant Phase sections; the analyses of *what those rules buy* and *under what conditions* live here.
 
-**The safety pigeonhole**: σ-quorum on `V_{L_0}` and NR-quorum on `nr_tag_0` cannot both be reached.
+### Trust model
 
-Algebra (with cross-signing allowed; no exclusion rule needed):
+- **Byzantine bound `f = 1`**: up to 1 operator may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, lie about bids, etc.). 3 honest are guaranteed.
+- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `D` (propagation P99/P999) and clock skew `δ`. The cutoffs `T_candidate_accept = T_commit − (D + δ)` and `T_arrival = T_commit + Δ_2` operationalize this bound. Safety holds against arbitrary network adversaries; only liveness depends on synchrony.
 
-- σ-quorum: `h_σ + byz_σ ≥ qV = 2f+1 = 3`, where `byz_σ` is byzantine σ contribution.
-- NR-quorum: `h_NR + byz_NR ≥ qEnc = 2f+1 = 3`.
-- Honest don't sign both sides: `h_σ + h_NR ≤ 2f+1 = 3` (total honest count, each signs one side).
-- Each byzantine can sign both sides: `byz_σ + byz_NR ≤ 2f = 2` (worst case, all `f` byzantine cross-sign).
-- If both quorums reached: `h_σ + h_NR ≥ 3 + 3 − (byz_σ + byz_NR) ≥ 6 − 2 = 4`.
-- But `h_σ + h_NR ≤ 3`.
-- Contradiction: `4 ≤ 3` is impossible. ∎
+### Safety (cryptographic, unconditional)
 
-Both quorums cannot both be reached. The proof does not depend on honest operators excluding cross-signers from their aggregation — it's a property of the cluster-wide signed messages, holding against an offline-aggregating adversary that ignores any honest aggregation rule.
+**Claim:** at most one full `V` signature is ever produced per TBFT instance per slot — across either layer, on any value, across any combination of σ sources — cluster-wide, against an offline-aggregating byzantine, regardless of which honest aggregation rules are followed.
 
-**On cross-signing.** A byzantine that publishes both `σ_byz^V(V_{L_0})` and `σ_byz^{IBE}(nr_tag_0)` does no safety damage (their contribution to one of the pools is wasted by the algebra above). Cross-signing is **publicly attributable** via the dual partials and treated as slashable evidence (see "Practical caveats"); honest aggregation may filter cross-signers, but doing so is not load-bearing for safety.
+The proof rests on two pigeonhole arguments at each layer.
 
-The same argument applies symmetrically to the backup layer once it's unlocked.
+**Pigeonhole 1 — σ-vs-NR at the same layer.** σ-quorum on `V_{L_0}` and NR-quorum on `nr_tag_0` cannot both be reached:
 
-## Liveness profile
+- σ-quorum: `h_σ + byz_σ ≥ qV = 3`.
+- NR-quorum: `h_NR + byz_NR ≥ qEnc = 3`.
+- Honest sign at most one side per layer: `h_σ + h_NR ≤ 3`.
+- Byzantine can sign both sides (cross-signing): `byz_σ + byz_NR ≤ 2` (with `f = 1`, byz contributes at most 1 to each pool, so at most 2 total).
+- If both quorums reached: `h_σ + h_NR ≥ 3 + 3 − 2 = 4`. But `≤ 3`. Contradiction. ∎
 
-TBFT's liveness is **partial-synchrony-conditional within `T_commit + Δ_2`**, the same per-window envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)). If propagation between honest operators stays bounded by the propagation budget, the protocol terminates cleanly. If propagation is degraded badly enough that no σ-quorum and no NR-quorum reach their thresholds, the slot is missed. There is no "round 2" — TBFT is single-shot by design. **Safety holds in either case** (cryptographic, "Why it's safe").
+**Pigeonhole 2 — two σ-quorums on different values at the same layer.** Two distinct `V`'s cannot both reach σ-quorum at the same layer (e.g. via leader equivocation that some honest don't observe in time, or a byzantine signing both):
 
-**Byzantine-leader selective-delivery resistance under partial synchrony.** Walk the worst-case attack: byzantine `L_0` tries to selectively deliver `(V_{L_0}, σ_{L_0}^V, σ_{L_0}^{op})` to a strict subset of the 3 honest operators, intending to fragment the σ pool while keeping NR-quorum reachable. With the **candidate acceptance cutoff** (`T_candidate_accept = T_commit − (D + δ)`) honored by every honest receiver, the byzantine has only two consistent outcomes:
+- `(h_σ_V + h_σ_V') + (byz_σ_V + byz_σ_V') ≥ 2 · qV = 6`.
+- Honest sign at most one V per layer: `h_σ_V + h_σ_V' ≤ 3`.
+- Byzantine can sign both V's: `byz_σ_V + byz_σ_V' ≤ 2`.
+- Bound: `3 + 2 = 5 < 6`. Contradiction. ∎
+
+The same arguments apply symmetrically to the backup layer once it's unlocked. Neither proof depends on honest operators excluding cross-signers from their aggregation — both are properties of the cluster-wide signed messages, holding against an offline-aggregating adversary that ignores any honest aggregation rule.
+
+### Liveness (synchrony-conditional)
+
+TBFT's liveness is **partial-synchrony-conditional within `T_commit + Δ_2`**, the same per-window envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)). If propagation between honest operators stays bounded by the propagation budget, the protocol terminates cleanly. If propagation is degraded badly enough that no σ-quorum and no NR-quorum reach their thresholds, the slot is missed. There is no "round 2" — TBFT is single-shot by design. **Safety holds in either case.**
+
+**Byzantine-leader selective-delivery resistance under partial synchrony.** Worst-case attack: byzantine `L_0` tries to selectively deliver `(V_{L_0}, σ_{L_0}^V, σ_{L_0}^{op})` to a strict subset of the 3 honest, intending to fragment the σ pool while keeping NR-quorum reachable. With the **candidate acceptance cutoff** honored by every honest receiver, the byzantine has only two consistent outcomes:
 
 | Bundle release time | What every honest sees by `T_candidate_accept` | σ-side | NR-side | Outcome |
 |---|---|---|---|---|
 | Released at or before `T_commit − (D + δ)`, reaches at least one honest | All 3 honest accept (gossipsub re-flooding completes within `D + δ`) | 3 honest σ + leader's Phase-1 σ = 4 ≥ qV = 3 | 0 | Reconstruct V_{L_0} ✓ |
-| Released later than `T_commit − (D + δ)`, or never released, or fully eclipsed | All 3 honest treat as not-received (uniformly past their cutoff, or never arrived) | 0 | 3 ≥ qEnc = 3 | Fall through to V_{L_1} ✓ |
+| Released later than `T_commit − (D + δ)`, or never released, or fully eclipsed | All 3 honest treat as not-received | 0 | 3 ≥ qEnc = 3 | Fall through to V_{L_1} ✓ |
 
 **Slot succeeds in every byzantine-`L_0` attack scenario under partial synchrony.** Symmetric analysis for byzantine `L_1` with `L_0` honest: the primary path resolves cleanly; the backup is irrelevant.
 
-If the synchrony assumption is violated — i.e., real propagation exceeds the budget `D` used to set `T_candidate_accept`, so some honest accepts the bundle and others don't — the cluster fragments: the accepting honest sign σ in Phase 2, the rejecting honest emit NR. With 1 σ + leader's σ + 2 NR, σ-side = 2 < qV = 3 and NR-side = 2 < qEnc = 3 — **both quorums miss, slot misses, no safety violation**. This is the price of single-shot: there's no round 2, so a synchrony break inside the window is unrecoverable. Tightening the cutoff (smaller `D + δ`) trades miss-on-jitter rate for resilience against late byzantine releases; loosening it does the opposite.
+### Failure modes
 
-If both leaders are byzantine (impossible at f=1 — there's only one byzantine), or more than `f` operators are offline combined, the slot misses. That's the standard `3f+1` trust bound.
+The slot misses (no V signature is produced) under any of the following:
+
+- **Bad synchrony** — real propagation exceeds the budget `D` used to set `T_candidate_accept`, so some honest accepts the bundle and others don't. The cluster fragments: accepting honest sign σ, rejecting honest emit NR. With 1 σ + leader's σ + 2 NR, both σ-side (= 2 < qV) and NR-side (= 2 < qEnc) miss. **No safety violation.** Single-shot means no round 2. Tightening the cutoff trades miss-on-jitter rate for resilience against late byzantine releases.
+- **More than `f` faults** — both leaders byzantine (impossible at `f = 1`) or more than 1 operator offline/byzantine combined. Standard `3f+1` trust bound.
+- **Backup unavailable plus primary path failure** — `L_1` doesn't broadcast and `L_0`'s path also fails. Layer 1 has nothing to fall through to.
+- **Cluster-wide head divergence** — honest operators on different beacon-chain heads disagree on `parent_root` validity. Neither σ-quorum nor NR-quorum may form. See "Head divergence" below.
+
+### Equivocation handling
+
+If a participant observes two distinct, validly-signed candidates from the same leader at layer `k` with the **same** `parent_root` (different `value_root`), that's leader equivocation:
+
+1. Locally treat that leader's layer as non-receipt: don't include the corresponding partial signature in the onion (Phase 2); for layer-0 equivocation, broadcast a non-receipt attestation on `nr_tag_0`; for layer-1 equivocation, omit layer 1 of the onion entirely.
+2. The pair of signed candidates is a self-contained slashable fault proof against that leader.
+
+(Two bundles with **different** `parent_root` are a legitimate refresh on head change, not equivocation — see the head-change handling subsection in "Application".)
+
+The equivocation rule is what makes Pigeonhole 2 above tight in practice: honest operators who observe the equivocation evidence avoid signing either V at that layer, capping `h_σ_V + h_σ_V'` strictly below 3. Without the rule, honest could split their σ across the two values; with it, they emit NR instead and the equivocation evidence is gossipped for slashing.
+
+### Cross-signing detection
+
+Any operator whose published messages contain *both* a σ partial at a layer AND an NR attestation on the layer's `nr_tag_0` is a slashable cross-signer. Detection is straightforward — the dual partials are public.
+
+Under `qEnc = qV`, cross-signing has no safety impact (Pigeonhole 1 above proves it). The detection is purely for **attribution** and out-of-band punishment. Honest aggregation may filter cross-signers, but doing so is not load-bearing for safety.
+
+### Head divergence
+
+`parent_root` validity is evaluated *locally* by each operator against its own observed beacon-chain head at the moment of accepting the candidate (no later than `T_candidate_accept`). If honest operators temporarily disagree on the current head — e.g., during an in-flight re-org — they may evaluate the same candidate differently:
+
+- An operator on `H1` accepts a `parent_root = H1` candidate and signs σ.
+- An operator on `H2` rejects it as stale and emits NR.
+
+This split is a **liveness failure, not slashable equivocation**: the leader broadcast a single signed bundle, no equivocation evidence exists. The σ-pool may not reach `qV` and the NR-pool may not reach `qEnc`, in which case the slot misses with no safety violation. The protocol does not attempt to resolve head disagreement at the cluster level — that's an upstream concern (beacon-chain re-org dynamics), not a TBFT responsibility. Operators on the "right" head will continue normally; operators on the stale head will follow head-tracking back to consensus on the next slot.
+
+### Slashing evidence
+
+Three rules surface byzantine fault evidence for *attribution and punishment* (out-of-band slashing, reputation, monitoring). Under the cryptographic safety guarantees above, none of them is load-bearing for safety; they exist to make byzantine misbehavior accountable.
+
+- **Self-contradiction (σ + NR).** If operator `i`'s onion contains `σ_i^V(V_{L_0})` *and* `i` broadcasts `σ_i^{IBE}(nr_tag_0)`, the dual partials are slashable evidence (cross-signing).
+- **Leader equivocation.** Two distinct, validly-signed candidates from the same leader with the same `parent_root` but different `value_root` are a self-contained slashable fault proof.
+- **Cross-onion partial-sig equivocation.** Operator `i` appearing in two onions with `σ_i^V(V)` and `σ_i^V(V')` at the same layer for different `V` is detectable from the partial sigs alone. Slashable on the same logic.
+
+Each piece of evidence is verifiable in isolation (signed by the offending operator's own keys), so attribution doesn't require cluster-wide coordination — any observer with the published partials can produce the slashing case.
 
 ## Cryptographic primitive
 
@@ -197,20 +241,20 @@ Only **one tag** is used per slot (`nr_tag_0`), making implementation substantia
 
 ## Properties summary
 
-| Property | TBFT (n=4) |
+| Property | TBFT |
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1`, unconditional |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition |
 | Termination (output guaranteed) | **No**, single-shot; partial-synchrony-conditional |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates trigger non-receipt at that layer; pair forms slashable evidence |
-| P0.1/P0.2 grief resistance | **Closed under partial synchrony** — leader-σ-V-in-Phase-1 + gossipsub re-flooding closes every byzantine-leader attack |
+| Byzantine-leader-grief resistance | **Closed under partial synchrony** — leader-σ-V-in-Phase-1 + gossipsub re-flooding closes every byzantine-leader attack |
 | Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide |
 | Built-in leader fallback | Yes (primary → backup) |
 | Round-change recovery | No |
 
 ## Application: SSV Ethereum proposer duty
 
-For an SSV `n=4` cluster proposing an Ethereum block:
+For an SSV cluster proposing an Ethereum block:
 
 | TBFT concept | SSV mapping |
 |---|---|
@@ -258,35 +302,24 @@ The deadline-tuning rule from caveat 3 below applies: `T_commit − T_arrival > 
 
 If the head changes during a Phase-1 fetch window, the affected leader's candidate is stale (parent root no longer matches the new head). The leader detects head changes during its fetch window and refreshes its candidate by re-fetching from the new head, then re-broadcasts the bundle with the new value — superseding the stale bundle. Each refresh signs the new envelope with the new `value_root` and `parent_root`, so the per-share signing log shows multiple V-share signatures for the same slot (covered by the slashing-protection scope in "Preconditions on the host application").
 
-The structured envelope binds `parent_root`, which makes refresh and equivocation mechanically distinguishable — see "Equivocation handling".
+The structured envelope binds `parent_root`, which makes refresh mechanically distinguishable from equivocation: two bundles with **different** `parent_root` are a legitimate refresh (honest receivers accept the one matching the current head; stale ones fail application-validity check and are dropped); two bundles with the **same** `parent_root` but different `value_root` are equivocation (see "Fault tolerance / Equivocation handling").
 
-**Head validity is locally evaluated at the candidate acceptance time.** Each operator validates `parent_root` against *its own* observed head at the moment of accepting the candidate (no later than `T_candidate_accept`). If honest operators temporarily disagree on the current head — e.g., during an in-flight re-org — they may evaluate the same candidate differently:
-
-- An operator on head `H1` accepts a candidate with `parent_root = H1` and signs σ.
-- An operator on head `H2` rejects the same candidate (parent stale relative to its view) and emits NR.
-
-This split is a **liveness failure, not slashable equivocation**: the leader broadcast a single signed bundle, no equivocation evidence exists. The σ-pool may not reach `qV` and the NR-pool may not reach `qEnc`, in which case the slot misses with no safety violation. The protocol does not attempt to resolve head disagreement at the cluster level — that's an upstream concern (beacon-chain re-org dynamics), not a TBFT responsibility. Operators on the "right" head will continue normally; operators on the stale head will follow head-tracking back to consensus on the next slot.
+`parent_root` validity is evaluated locally against each operator's observed beacon-chain head at candidate-acceptance time. Honest operators on different heads (in-flight re-org) may reach different validity conclusions on the same candidate; that's a liveness concern handled at the protocol level by "Fault tolerance / Head divergence", not slashable equivocation.
 
 ## Practical caveats
 
-1. **Inconsistency-slashing — three rules.** These rules surface byzantine fault evidence for *attribution and punishment* (out-of-band slashing, reputation, monitoring). Under the cryptographic safety from `qEnc = qV` (see "Why it's safe"), they are **not load-bearing for safety**.
+1. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 3` and IBE at `qEnc = 3` — one DKG each at cluster init. Long-lived, no per-slot rotation. The keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), even though the threshold is the same.
 
-   - **Self-contradiction (σ + NR).** If operator `i`'s onion contains `σ_i^V(V_{L_0})` *and* `i` broadcasts `σ_i^{IBE}(nr_tag_0)`, that's a slashable contradiction. Detection is from the public dual partials.
-   - **Leader equivocation.** Two distinct, validly-signed candidates from the same leader with the same `parent_root` but different `value_root` are a self-contained slashable fault proof. (Two with different `parent_root` are a legitimate refresh, not equivocation.) Honest operators that observe both treat that leader's slot as non-receipt locally and may broadcast the pair as a fault claim.
-   - **Cross-onion partial-sig equivocation.** Operator `i` appearing in two onions with `σ_i^V(V)` and `σ_i^V(V')` at the same layer for different `V` is detectable from the partial sigs alone. Slashable on the same logic.
+2. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. Two cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
 
-2. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 3` and IBE at `qEnc = 3` — one DKG each at cluster init. Long-lived, no per-slot rotation. The keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), even though the threshold is the same.
+   - **`T_candidate_accept = T_commit − (D + δ)`** for Phase-1 candidates. Receivers reject candidates whose first-observation time is later.
+   - **`T_arrival = T_commit + Δ_2`** for Phase-2 onion / NR contributions — the cutoff for accepting Phase-2 messages into the local pools. Same `D + δ` budget against `T_arrival`.
 
-3. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. Two cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
+   Both are *liveness* requirements only; safety is unaffected by skew or propagation breakdown (see "Fault tolerance / Safety").
 
-   - **`T_candidate_accept = T_commit − (D + δ)`** for Phase-1 candidates. Receivers reject candidates whose first-observation time is later. This is what makes the gossipsub re-flooding argument operational (see "Phase 1 receiver checks" / "Bundle propagation").
-   - **`T_arrival = T_commit + Δ_2`** for Phase-2 onion / NR contributions — the cutoff for accepting Phase-2 messages into the local pools. Same `D + δ` budget against `T_arrival` (i.e. messages should arrive at all honest operators by `T_arrival + δ`).
+3. **Tag construction and replay.** The single `nr_tag_0` per slot must uniquely bind `(slot, cluster, layer 0)` to prevent replay across slots/layers/clusters. Structure: `("slot", N, "cluster", C, "layer", 0, "no-quorum")`.
 
-   Both are *liveness* requirements — under unbounded skew or propagation breakdown, some operators miss the deadlines and the slot fails to finalize. Safety is unaffected: the safety algebra at "Why it's safe" is a global property over cluster-wide signed messages, not over per-operator views or timing.
-
-4. **Tag construction and replay.** The single `nr_tag_0` per slot must uniquely bind `(slot, cluster, layer 0)` to prevent replay across slots/layers/clusters. Structure: `("slot", N, "cluster", C, "layer", 0, "no-quorum")`.
-
-5. **"At most one full sig" is per-instance.** "At most one full V signature per slot" is true within one TBFT instance and assumes:
+4. **"At most one full sig" is per-instance.** "At most one full V signature per slot" is true within one TBFT instance and assumes:
 
    - Single TBFT instance per slot (no parallel signing path against the same V-signing share).
    - Domain separation between TBFT and any other path that signs against the V-signing share.
@@ -294,38 +327,32 @@ This split is a **liveness failure, not slashable equivocation**: the leader bro
 
 ## Where this came from
 
-TBFT for n=4 is the result of a design exploration starting from "Proposal 1" in [ssvlabs/ssv#1829](https://github.com/ssvlabs/ssv/issues/1829) (backup + profitable block race via two QBFT instances), reformulated around TBFT-style cryptographic safety. The result is a substantially simpler protocol than Proposal 1 (no QBFT instances) at the cost of giving up byzantine fallback past the second leader.
+TBFT is the result of a design exploration starting from "Proposal 1" in [ssvlabs/ssv#1829](https://github.com/ssvlabs/ssv/issues/1829) (backup + profitable block race via two QBFT instances), reformulated around cryptographic safety. The result is a substantially simpler protocol than Proposal 1 (no QBFT instances) at the cost of giving up byzantine fallback past the second leader.
 
-Refinements applied during specification:
+For larger cluster sizes (`n ≥ 7`), see [TBFTR](TBFTR.md). TBFTR also supports `n = 4` as a configurable special case (with `K = 2`); TBFT is the leaner alternative that drops TBFTR's V-plaintext + Phase-2-split machinery — see Appendix A.
 
-- Leader-authenticated candidates with both V-keypair partial and operator-identity sig over a structured envelope. The Phase-1 `σ_{L_k}^V` plus the f+1=2 honest partials in Phase 2 sum to `qV = 3` exactly — closing P0.1/P0.2 at n=4 mechanically under partial synchrony.
-- `qEnc = qV = 2f+1` for cryptographic safety against byzantine cross-signing. The σ+NR structural-exclusion approach that an earlier draft relied on was honest-only and could be subverted by a byzantine aggregating partials offline; the unified threshold makes the safety property hold regardless.
-- Bundle propagation via gossipsub re-flooding called out explicitly. This is the mechanism that closes selective-delivery attempts at f=1 under partial synchrony.
-- 0-based layer indexing aligned with [TBFTR](TBFTR.md) (`L_0`/`L_1` instead of `L_p`/`L_b`).
-- Explicit application-validity preconditions covering Phase-1 leader signing as well as Phase-2 onion construction.
+## Appendix A — How TBFT differs from TBFTR at n=4
 
-For larger cluster sizes (`n = 7, 10, 13`), see [TBFTR](TBFTR.md).
+Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-authenticated candidates with both V-keypair and operator-identity sigs over a structured envelope, equivocation-to-NR rule, IBE primitive, two DKGs at the same threshold). The differences are in onion structure, Phase-2 timing, and the resulting fault-tolerance band — comparing both at `n = 4, K = 2` to make the trade-off concrete:
 
-## Appendix A — How TBFT differs from TBFTR
-
-| Aspect | TBFT (n=4) | [TBFTR](TBFTR.md) (n=7+) |
+| Aspect | TBFT | [TBFTR](TBFTR.md) (n=4, K=2) |
 |---|---|---|
-| Cluster size | 4 (f=1) | 7, 10, 13 (f=2, 3, 4) |
-| K (fallback depth) | 2 (primary + backup) | `max(3, f+1)` (3, 4, or 5) |
 | Phase 1 bundle | `(V, σ^V_L, σ^op_L(envelope))` | Same |
 | Equivocation-to-NR rule | Yes | Yes |
-| qV / qEnc | `qV = qEnc = 2f+1 = 3` | `qV = qEnc = 2f+1` |
-| Onion at layer k | `E_{enc_tag_k}(σ_i^V(V_{L_k}))` (encrypted partial only; no V plaintext) | `V_{L_k} ‖ E_{enc_tag_k}(σ_i^V(V_{L_k}))` (V plaintext + encrypted partial) — TBFTR core |
-| Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) — composition |
-| Late σ broadcasts | None | Phase 2b — operators who recovered V via TBFTR core sign σ then |
-| Phase-1 fetch timing | Asymmetric: `T_1 < T_0` (backup early, primary late) | Uniform: all leaders fetch in `[T_commit − Δ_1, T_commit]` |
-| Liveness against byz-leader grief | Closed under partial synchrony via leader-σ + gossipsub re-flooding | Closed under partial synchrony via Phase-2 composition |
-| Bandwidth (worst case) | ~21 KB | n=7: ~108 KB, n=10: ~253 KB, n=13: ~497 KB (hash variant) |
+| qV / qEnc | `qV = qEnc = 2f+1 = 3` | Same |
+| Onion at layer k | `E_{enc_tag_k}(σ_i^V(V_{L_k}))` (encrypted partial only; no V plaintext) | `V_{L_k} ‖ E_{enc_tag_k}(σ_i^V(V_{L_k}))` (V plaintext + encrypted partial) |
+| Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) |
+| Late σ broadcasts | None | Phase 2b — operators who recovered V via peer onions sign σ then |
+| Phase-1 fetch timing | Asymmetric: `T_1 < T_0` (backup early, primary late) | Uniform across layers (configurable per leader) |
+| Byzantine-leader-grief closure | Primary only (gossipsub re-flooding under partial synchrony) | Primary + secondary (Phase-2 composition extends closure into a marginal-synchrony band) |
+| Bandwidth (worst case) | ~21 KB | larger by V-plaintext + Phase-2b overhead (slot-dependent) |
 | Latency overhead | None beyond standard Phase 2 | +Δ_2b (~100–200 ms) |
-| Tag count | 1 (`nr_tag_0` only) | K-1 (`nr_tag_0`, …, `nr_tag_{K-2}`) |
-| Number of leader candidates per slot | 2 (primary + backup) | K (top-K priority) |
+| Tag count | 1 (`nr_tag_0` only) | Same — single tag at K=2 |
+| Number of leader candidates per slot | 2 (primary + backup) | Same — K=2 |
 
-The two specs share the cryptographic core. TBFT keeps the protocol minimal at n=4 because the byzantine-leader grief residual that TBFTR's machinery exists to close (`[f+1, 2f-1]` at `f ≥ 2`) is empty at `f = 1` — leader-σ-V-in-Phase-1 plus gossipsub re-flooding cover it under partial synchrony, with no need for V plaintext or a Phase-2 split.
+At `n ≥ 7`, only TBFTR is supported — the marginal-synchrony band widens with `f` enough that the secondary closure becomes load-bearing, and the leaner TBFT-shape protocol's single-window σ count caps at `f+2 < qV = 2f+1` once `f ≥ 2`, missing slots in that band.
+
+**If you're choosing between protocols at `n = 4`**: pick TBFT if the cluster operates well within partial-synchrony bounds and minimal protocol complexity is preferred (the secondary closure rarely earns its bandwidth/latency premium); pick TBFTR if marginal-synchrony robustness is worth that premium. Either is cryptographically safe.
 
 ## Appendix B — Dynamic leader-ordering extensions
 
@@ -405,7 +432,7 @@ By the safety pigeonhole, at most one layer reaches commit-quorum.
 
 #### Why it's safe
 
-Same algebra as the baseline "Why it's safe", with the σ-pool / NR-pool split replaced by per-layer commit pools:
+Same algebra as the baseline "Fault tolerance / Safety", with the σ-pool / NR-pool split replaced by per-layer commit pools:
 
 - Honest commit to ≤ 1 layer per slot: `h_commit_0 + h_commit_1 ≤ 2f+1 = 3`.
 - Each byz can commit to both layers (cross-commit): `byz_commit_0 + byz_commit_1 ≤ 2f = 2`.
@@ -486,7 +513,7 @@ A natural-sounding alternative to bidding is to let the cluster route based on w
 
 **The input isn't cluster-consistent.** Each operator's `parent_root` validity check resolves against *their own* beacon-node view of the canonical chain. During an in-flight re-org, two honest operators on different heads can reach opposite verdicts on the same candidate — operator A says "valid against H1," operator B says "stale relative to H2." Same input, different outputs by definition. Bid-based routing avoids this: the bid is a signed claim in the envelope, byte-identical for every honest receiver, so `argmax(bid)` gives the same answer everywhere.
 
-The split case is the head-divergence scenario from "Why it's safe" / "Liveness profile": with operators disagreeing on which candidate is valid against their current head, neither layer's commit-quorum can reach. Slot misses. (Safety still holds via the same commit-tag exclusivity machinery as B.1 — the issue is purely liveness.) Adding parent-root as a routing rule doesn't fix this; the rule's *output* fragments along exactly the same line as the underlying head disagreement.
+The split case is the head-divergence scenario from "Fault tolerance / Head divergence": with operators disagreeing on which candidate is valid against their current head, neither layer's commit-quorum can reach. Slot misses. (Safety still holds via the same commit-tag exclusivity machinery as B.1 — the issue is purely liveness.) Adding parent-root as a routing rule doesn't fix this; the rule's *output* fragments along exactly the same line as the underlying head disagreement.
 
 **At K=2 specifically, there's no useful design space.** Two layers gives parent-root match at most two distinct outcomes (`{valid, valid}`, `{valid, invalid}`, `{invalid, valid}`, `{invalid, invalid}`). The first and last collapse to baseline behavior or unanimous miss; the middle two collapse to "commit to whichever is valid, fixed-priority tiebreaker." None of those produce a routing decision the baseline doesn't already make implicitly. At K ≥ 3 (TBFTR territory) there's at least the question of "skip L_0 because parent_root mismatches, go to L_1 vs L_2 by some rule" — but that's the general case, [TBFTR.md](TBFTR.md) Appendix B handles it.
 
