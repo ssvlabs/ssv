@@ -2,7 +2,7 @@
 
 A single-shot agreement protocol for SSV's `n = 4` (`f = 1`) clusters that produces one collective threshold-signed value per "slot" against a hard deadline. TBFT achieves agreement *cryptographically* — single-RTT decision path, structural cryptographic safety, primary/backup leader fallback.
 
-TBFT is the lean specialization for `n = 4`. The full multi-layer spec — applicable at any cluster size, including `n = 4` — lives in [TBFTR](TBFTR.md); TBFT drops TBFTR's V-plaintext + Phase-2-split machinery in exchange for less bandwidth and less protocol surface, accepting a smaller marginal-synchrony robustness band as the trade-off (see "Fault tolerance" and **Appendix A**). For larger cluster sizes (7, 10, ...), only TBFTR is BFT-safe.
+TBFT is the lean specialization for `n = 4`. The full multi-layer spec — applicable at any cluster size, including `n = 4` — lives in [TBFTR](TBFTR.md); TBFT drops TBFTR's V-plaintext + Phase-2-split machinery in exchange for less bandwidth and less protocol surface, accepting a narrower marginal-synchrony coverage (TBFT covers "1 of 3 honest missing re-flood" via the leader-σ head-start; TBFTR additionally covers "2 of 3 honest missing") as the trade-off (see "Fault tolerance" and **Appendix A**). For larger cluster sizes (7, 10, ...), only TBFTR is BFT-safe.
 
 The protocol description below is specific to TBFT. SSV's Ethereum proposer duty is used as the running example.
 
@@ -183,7 +183,7 @@ The same arguments apply symmetrically to the backup layer once it's unlocked. N
 
 TBFT's liveness is **partial-synchrony-conditional within `T_commit + Δ_2`**, the same per-window envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)). If propagation between honest operators stays bounded by the propagation budget, the protocol terminates cleanly. If propagation is degraded badly enough that no σ-quorum and no NR-quorum reach their thresholds, the slot is missed. There is no "round 2" — TBFT is single-shot by design. **Safety holds in either case.**
 
-**Byzantine-leader selective-delivery resistance under partial synchrony.** Worst-case attack: byzantine `L_0` tries to selectively deliver `(V_{L_0}, σ_{L_0}^V, σ_{L_0}^{op})` to a strict subset of the 3 honest, intending to fragment the σ pool while keeping NR-quorum reachable. With the **candidate acceptance cutoff** honored by every honest receiver, the byzantine has only two consistent outcomes:
+**Byzantine-leader selective-delivery resistance under partial synchrony.** Worst-case attack: byzantine `L_0` tries to selectively deliver `(V_{L_0}, σ_{L_0}^V, σ_{L_0}^{op})` to a strict subset of the 3 honest, intending to fragment the σ pool while keeping NR-quorum reachable. With the **candidate acceptance cutoff** honored by every honest receiver, under partial synchrony (re-flooding completes within `D + δ`) the byzantine has only two consistent outcomes:
 
 | Bundle release time | What every honest sees by `T_candidate_accept` | σ-side | NR-side | Outcome |
 |---|---|---|---|---|
@@ -192,11 +192,21 @@ TBFT's liveness is **partial-synchrony-conditional within `T_commit + Δ_2`**, t
 
 **Slot succeeds in every byzantine-`L_0` attack scenario under partial synchrony.** Symmetric analysis for byzantine `L_1` with `L_0` honest: the primary path resolves cleanly; the backup is irrelevant.
 
+**Marginal-synchrony resilience.** Between the two clean outcomes lies a band where bundle release is on-time but re-flooding doesn't reach every honest within `D + δ`. TBFT's leader-σ-V head-start covers a slice of this band; the rest spills into the failure modes below:
+
+| Re-flood outcome at `T_candidate_accept` | σ-side (incl. leader's Phase-1 σ) | NR-side | Outcome |
+|---|---|---|---|
+| All 3 honest received V | 3 honest σ + 1 leader σ = 4 ≥ qV | 0 | Slot succeeds ✓ |
+| **Moderate marginal**: 1 of 3 honest missed re-flood (one slow link in the mesh) | 2 honest σ + 1 leader σ = **3 = qV** | 1 | Slot succeeds ✓ |
+| **Aggressive marginal**: 2 of 3 honest missed re-flood (gossipsub propagation between *multiple* honest pairs exceeding budget — not just one slow link) | 1 honest σ + 1 leader σ = 2 < qV | 2 < qEnc | **Slot misses** (covered by "Bad synchrony" below) |
+
+The leader's Phase-1 σ is what makes the moderate-marginal row close at `n = 4`: without it, 2-of-3-honest σ count = 2 < qV. The head-start partial pushes σ-quorum to exactly `qV = 3`. Aggressive-marginal recovery is beyond TBFT's coverage; closing it would require Phase-2a peer-onion V-recovery + Phase-2b late σ — the secondary closure documented in [TBFTR.md](TBFTR.md).
+
 ### Failure modes
 
 The slot misses (no V signature is produced) under any of the following:
 
-- **Bad synchrony** — real propagation exceeds the budget `D` used to set `T_candidate_accept`, so some honest accepts the bundle and others don't. The cluster fragments: accepting honest sign σ, rejecting honest emit NR. With 1 σ + leader's σ + 2 NR, both σ-side (= 2 < qV) and NR-side (= 2 < qEnc) miss. **No safety violation.** Single-shot means no round 2. Tightening the cutoff trades miss-on-jitter rate for resilience against late byzantine releases.
+- **Bad synchrony (aggressive marginal and beyond)** — real propagation exceeds the budget `D` so badly that ≥2 of 3 honest miss re-flood by their cutoff (the aggressive-marginal row above). The cluster fragments: 1 σ + leader's σ + 2 NR — σ-side (= 2 < qV) and NR-side (= 2 < qEnc) both fall short. **No safety violation.** Single-shot means no round 2. Tightening the cutoff trades miss-on-jitter rate for resilience against late byzantine releases.
 - **More than `f` faults** — both leaders byzantine (impossible at `f = 1`) or more than 1 operator offline/byzantine combined. Standard `3f+1` trust bound.
 - **Backup unavailable plus primary path failure** — `L_1` doesn't broadcast and `L_0`'s path also fails. Layer 1 has nothing to fall through to.
 - **Cluster-wide head divergence** — honest operators on different beacon-chain heads disagree on `parent_root` validity. Neither σ-quorum nor NR-quorum may form. See "Head divergence" below.
@@ -261,7 +271,7 @@ Only **one tag** is used per slot (`nr_tag_0`), making implementation substantia
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition |
 | Termination (output guaranteed) | **No**, single-shot; partial-synchrony-conditional |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates trigger non-receipt at that layer; pair forms slashable evidence |
-| Byzantine-leader-grief resistance | **Closed under partial synchrony** — leader-σ-V-in-Phase-1 + gossipsub re-flooding closes every byzantine-leader attack |
+| Byzantine-leader-grief resistance | **Closed under partial synchrony** via leader-σ-V-in-Phase-1 + gossipsub re-flooding; extends to *moderate marginal* (≤1 of 3 honest miss re-flood) via the head-start partial; aggressive marginal (≥2 of 3 honest miss re-flood) is beyond TBFT's coverage — see [TBFTR.md](TBFTR.md) for the secondary closure that handles it |
 | Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide |
 | Built-in leader fallback | Yes (primary → backup) |
 | Round-change recovery | No |
@@ -370,15 +380,15 @@ Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-aut
 | Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) |
 | Late σ broadcasts | None | Phase 2b — operators who recovered V via peer onions sign σ then |
 | Phase-1 fetch timing | Asymmetric: `T_1 < T_0` (backup early, primary late) | Uniform across layers (configurable per leader) |
-| Byzantine-leader-grief closure | Primary only (gossipsub re-flooding under partial synchrony) | Primary + secondary (Phase-2 composition extends closure into a marginal-synchrony band) |
+| Byzantine-leader-grief closure | Primary (gossipsub re-flooding under partial synchrony) + moderate marginal (1-of-3-honest-missing-reflood, via leader-σ head-start) | Same primary + extended marginal coverage to *up to f honest missing re-flood* (Phase-2 composition); at K=2 / n=4 this widens 1-of-3 → 2-of-3 |
 | Bandwidth (worst case) | ~21 KB | larger by V-plaintext + Phase-2b overhead (slot-dependent) |
 | Latency overhead | None beyond standard Phase 2 | +Δ_2b (~100–200 ms) |
 | Tag count | 1 (`nr_tag_0` only) | Same — single tag at K=2 |
 | Number of leader candidates per slot | 2 (primary + backup) | Same — K=2 |
 
-At `n ≥ 7`, only TBFTR is supported — the marginal-synchrony band widens with `f` enough that the secondary closure becomes load-bearing, and the leaner TBFT-shape protocol's single-window σ count caps at `f+2 < qV = 2f+1` once `f ≥ 2`, missing slots in that band.
+At `n ≥ 7`, only TBFTR is supported — the leaner TBFT-shape protocol covers only "1 honest missing re-flood" regardless of `f`, while at `f ≥ 2` the practical marginal band reaches "up to `f` honest missing"; TBFT-shape's single-window σ count caps at `f+2 < qV = 2f+1` once `f ≥ 2`, missing slots in the gap.
 
-**If you're choosing between protocols at `n = 4`**: pick TBFT if the cluster operates well within partial-synchrony bounds and minimal protocol complexity is preferred (the secondary closure rarely earns its bandwidth/latency premium); pick TBFTR if marginal-synchrony robustness is worth that premium. Either is cryptographically safe.
+**If you're choosing between protocols at `n = 4`**: pick TBFT if the cluster operates within partial synchrony plus moderate marginal (≤1 of 3 honest occasionally missing re-flood) and minimal protocol complexity is preferred (the secondary closure rarely earns its bandwidth/latency premium at the narrow 1-of-3 → 2-of-3 gap); pick TBFTR if aggressive-marginal robustness is worth that premium. Either is cryptographically safe.
 
 ## Appendix B — Dynamic leader-ordering extensions
 
