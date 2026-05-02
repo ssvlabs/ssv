@@ -326,3 +326,145 @@ For larger cluster sizes (`n = 7, 10, 13`), see [TBFTR](TBFTR.md).
 | Number of leader candidates per slot | 2 (primary + backup) | K (top-K priority) |
 
 The two specs share the cryptographic core. TBFT keeps the protocol minimal at n=4 because the byzantine-leader grief residual that TBFTR's machinery exists to close (`[f+1, 2f-1]` at `f ≥ 2`) is empty at `f = 1` — leader-σ-V-in-Phase-1 plus gossipsub re-flooding cover it under partial synchrony, with no need for V plaintext or a Phase-2 split.
+
+## Appendix B — Sketch: bid-ordered leader selection at n=4
+
+This appendix sketches a TBFT extension that replaces the fixed primary→backup priority with **dynamic ordering by leader-supplied bid**. Each leader attaches a bid value to their Phase-1 envelope; operators commit to whichever layer's bid is higher (subject to application validity). Mirrors the general dynamic-leader-ordering concept in [TBFTR.md](TBFTR.md) Appendix B, specialized for `K = 2` and SSV's proposer-duty bid concept.
+
+**Status: design sketch, not part of the baseline TBFT spec.** Captured because the deterministic rule has a natural application-level instantiation (the relay's MEV bid is already part of proposer duty), and the safety/liveness/attribution story is clean — easier to evaluate than the general K-layer case.
+
+### Motivation
+
+Baseline TBFT fixes `L_0` as the primary leader for the slot regardless of which leader actually produced a higher-value block. In healthy operation `L_0`'s late-fetched MEV-optimized block typically dominates `L_1`'s safe early block, so the fixed priority is "right" most of the time. But:
+
+- If `L_0`'s MEV fetch fails (relay timeout, network hiccup, byzantine producer), the cluster has to walk through `nr_tag_0` to reach `L_1`. With `qEnc = qV = 3`, that walk requires all 3 honest to NR `L_0` first — same agreement threshold as just committing to `L_1` directly, but a wasted step.
+- A byzantine `L_0` that produces a *valid but low-MEV* block forces the cluster to either accept the suboptimal block or reach NR-quorum (which costs honest cooperation that might be hard to coordinate). Either way the slot's value capture is degraded.
+
+Bid-ordered selection lets the cluster pick whichever layer's leader actually produced the higher-value block, making the fixed-priority bias a no-op when bids reflect reality and a graceful skip when they don't.
+
+### Core idea
+
+Each leader includes a **bid** in their Phase-1 envelope, signed by the leader-identity key (so it can't be repudiated post-hoc). Operators receive both bundles, validate both candidates, then commit to the layer whose bid is highest among the layers where the candidate validated locally. Same `qEnc = qV = 2f+1` safety pigeonhole as the general dynamic-ordering variant — at most one commit-quorum reaches.
+
+Crucially: **bids are trusted at runtime, verified post-hoc**. A byzantine leader that lies about their bid can steer the cluster onto a suboptimal block but cannot create two outputs (safety holds cryptographically) and cannot cause a slot miss on its own (if their lying-bid block passes validation, slot completes with the lying block; if it fails validation, the cluster commits to the other layer). The lie is a **liveness fault** in the value-capture sense, attributable from the signed envelope after the slot.
+
+### Protocol shape (delta from baseline TBFT)
+
+**Setting (modified):** the structured envelope in Phase 1 binds `(version, cluster_id, slot, layer k, leader_id, value_root, parent_root, bid)`. Bid is whatever numeric type the application uses for value comparison (uint256 wei, fixed-point, etc. — the protocol just needs a total ordering with a tiebreaker). Tiebreaker for equal bids: lower `leader_id` wins (deterministic).
+
+Two commit-tags replace the single `nr_tag_0`:
+
+- `commit_tag_0 = ("slot", N, "cluster", C, "layer", 0, "commit")`
+- `commit_tag_1 = ("slot", N, "cluster", C, "layer", 1, "commit")`
+
+**Phase 1 (modified):** each leader broadcasts the bundle including the bid in the envelope. Receivers verify both signatures against the envelope (now including `bid`), validate the candidate, check `T_candidate_accept`, drop on any failure. Equivocation rule unchanged — two distinct envelopes from the same leader for the same `(slot, layer)` is slashable regardless of bid values.
+
+**Phase 2 (modified):** single window, but the onion structure is uniform across layers (no plaintext layer 0):
+
+```
+For operator i, given the validated candidates in i's local view:
+  k*_i = argmax_k { bid_k : V_{L_k} validated by i }
+         (with leader_id tiebreak; undefined if no V validates)
+
+If k*_i is defined:
+  Broadcast:
+    σ_i^{IBE}(commit_tag_{k*_i})                          # commitment partial sig
+    E_{commit_tag_{k*_i}}( σ_i^V(V_{L_{k*_i}}) )           # σ partial encrypted under chosen-layer commit-tag
+
+If k*_i is undefined (no candidate validated):
+  Broadcast nothing in Phase 2. Slot misses for this operator's contribution.
+```
+
+Each operator commits to **exactly one** layer (or none). No separate NR side — "didn't commit anywhere" is the absence of a commitment, not a positive signal that needs aggregating.
+
+**Phase 3 (modified):** each operator runs:
+
+```
+for k in {0, 1}:                                          # K = 2
+    commits_k = {σ_j^{IBE}(commit_tag_k) partials received}
+    if |valid commits_k| ≥ qEnc = 3:
+        decryption_key_k = aggregate(commits_k)
+        sigs_k = {σ_{L_k}^V(V_{L_k}) from Phase 1, if valid}
+              ∪ decrypted σ partials from operators who committed to layer k
+        if |valid sigs_k| ≥ qV = 3:
+            output (V_{L_k}, reconstruct(sigs_k)); halt
+
+halt with no output                                       # no layer reached commit-quorum
+```
+
+By the safety pigeonhole, at most one layer reaches commit-quorum.
+
+### Why it's safe
+
+Same algebra as the baseline "Why it's safe", with the σ-pool / NR-pool split replaced by per-layer commit pools:
+
+- Honest commit to ≤ 1 layer per slot: `h_commit_0 + h_commit_1 ≤ 2f+1 = 3`.
+- Each byz can commit to both layers (cross-commit): `byz_commit_0 + byz_commit_1 ≤ 2f = 2`.
+- Both quorums reaching requires `h_commit_0 + h_commit_1 ≥ (2f+1) + (2f+1) − (byz_commit_0 + byz_commit_1) ≥ 4f+2 − 2f = 2f+2 = 4`. But `≤ 3`. Contradiction.
+
+Bid lies don't enter this argument — the algebra is over commit *partials* on signed tags, not over what the bid was. A byzantine claiming a fake bid still occupies one commitment slot (no extra power); their lie influences which layer the cluster converges on, not whether two converge simultaneously.
+
+### Liveness & attribution
+
+**Slot success conditions (under partial synchrony with `T_candidate_accept`):**
+
+- All 3 honest validate `V_{L_0}` and `V_{L_1}`, agree on the bid order: all commit to the same layer, that layer reaches commit-quorum + σ-quorum, slot succeeds.
+- All 3 honest validate only one of the two candidates: all commit to that one, slot succeeds at that layer.
+- 2 honest validate one candidate, 1 honest validates the other: split — neither commit-quorum reaches without byzantine help. Byz cross-commit can fill in (giving 3 on whichever side they choose), so slot can still succeed if byz cooperates; if byz refuses to cooperate, slot misses (same liveness threshold as baseline).
+- 0 honest validate any candidate: slot misses regardless of bid order.
+
+**Bid lies as liveness faults:**
+
+- Byzantine `L_0` claims `bid_0 = ∞` for an honest-looking but suboptimal `V_{L_0}`. All honest commit to layer 0 (highest bid). Slot completes with `V_{L_0}`. Cluster captured `actual_bid_0` (low) instead of `actual_bid_1` (potentially higher). **Loss = `actual_bid_1 − actual_bid_0`.** Attributable.
+- Byzantine `L_0` claims `bid_0 = ∞` for an *invalid* `V_{L_0}` (parent stale, fork mismatch, etc.). All honest reject `V_{L_0}` at the validation step, fall back to `argmax` over remaining valid candidates → all commit to layer 1, slot completes with `V_{L_1}`. Same outcome as if `L_0` had been silent. Bid lie is wasted.
+- Byzantine `L_0` lies low (claims `bid_0 = 0` for a high-MEV block). Operators commit to whichever layer has the higher claimed bid — `L_1` wins, slot completes with the lower-value block. Self-griefing for the byz; no one else loses except the cluster's value capture.
+
+In every case the slot completes (or misses for reasons unrelated to the bid lie). No double-sig; no validator-key slashing.
+
+**Post-hoc attribution.** Each Phase-1 envelope is a self-contained record `(slot, cluster, layer, leader_id, value_root, parent_root, bid, σ^op)`. Anyone — operator, watchdog, slasher — can after the slot:
+
+1. Resolve `value_root` to the actual block (e.g., from the cluster's submission cache or the beacon chain).
+2. Query the relay (or other ground truth) for the actual bid that block was offered at.
+3. Compare `bid_claimed` (in the envelope) vs `bid_actual` (from the relay).
+4. If they don't match within tolerance, the envelope + relay record is a slashable liveness-fault proof against `leader_id`.
+
+The protocol layer doesn't need to do this in real time — it's an audit performed asynchronously. Out-of-band slashing or reputation penalty follows.
+
+### Trade-offs vs baseline TBFT
+
+| Aspect | Baseline TBFT | Bid-ordered variant |
+|---|---|---|
+| Phase 1 envelope | `(version, cluster_id, slot, layer, leader_id, value_root, parent_root)` | + `bid` |
+| Phase 2 onion | layer 0 plaintext σ + layer 1 IBE-encrypted σ + (separately) NR partials | one IBE-encrypted σ at chosen layer + commitment partial sig |
+| Phase 2 tag(s) | 1 (`nr_tag_0`) | 2 (`commit_tag_0`, `commit_tag_1`) |
+| Per-operator commitment | σ XOR NR per layer, multi-layer | one layer per slot, exclusive |
+| IBE encryption per onion | 1 | 1 (for chosen layer only) — net same |
+| Phase 3 walk | priority order, NR-quorum unlocks layer 1 | parallel commit-quorum lookup across both layers |
+| Equivocation handling | Equivocation → NR for that layer | Equivocation → operator skips that layer, commits to the other |
+| Liveness when L_0 unavailable | NR-walk required (same agreement threshold, extra step) | Direct commit to L_1 (no walk step) |
+| Liveness when L_0 byz lies high | Slot completes with low-MEV block (cluster has no choice — fixed priority) | Slot completes with low-MEV block (same outcome; lie not detectable in real time), but attributable post-hoc and triggers slashing |
+| Liveness when L_0 byz lies high + V_0 invalid | NR-walk to L_1 needed | Direct commit to L_1, no walk step |
+| Bid attribution | n/a (no bid in protocol) | Self-contained envelope + relay record |
+| Application contract | Application validity only | + bid concept, signed in envelope |
+
+Bandwidth difference is small: the variant adds a bid field to the envelope (~32 bytes of bid + maybe a hash-of-bid in the value_root extension) and one more tag, but removes the separate NR-broadcast machinery for `nr_tag_0`. Net per-slot bandwidth at n=4 is roughly equal.
+
+Latency: same single-window Phase 2; same K=2 walk in Phase 3. No additional rounds.
+
+### Open questions before this could be specified
+
+- **Bid type and ordering.** Float64 has comparison-edge cases (NaN, ±0, denormals). uint256 wei is more natural for MEV but bigger. Pick a canonical type with stable total ordering and bound it (sanity ranges) at the application validation layer.
+- **Bid binding inside the envelope.** Either `bid` is a primitive field in the envelope, or it's `H(bid)` to keep envelope size bounded with the actual bid carried alongside. The latter is more cache-friendly but adds a hash check.
+- **Validity-check contract.** Application validation must reject bundles where the bid is "obviously wrong" (e.g., negative, exceeding any reasonable bound). Real-time validation can filter outright lies; subtle lies (claimed bid 1.5× actual) need post-hoc verification. Spec the boundary.
+- **Tiebreaker formalization.** With float-or-bigint bids, exact equality is rare. With ordering ties, default to lower `leader_id` wins; document so all operators apply the same tiebreaker.
+- **Post-hoc verification mechanism.** Who runs it (per-operator after each slot? a separate watcher? slasher operator?), where the evidence lives (gossiped fault-proof? on-chain registry?), and what the slashing trigger is (immediate or accumulated). Out of TBFT scope but needed for the "liveness fault attributed" promise to be real.
+- **Relationship to equivocation.** A byz that signs two distinct envelopes for the same `(slot, layer)` with different bids is *both* an equivocator (slashable on the existing rule) and a bid-liar (slashable post-hoc). The two evidence types are independent; the protocol should accept either.
+
+### When to consider this
+
+The straightforward case where this wins meaningfully is a production environment where:
+
+- `L_0` failures (relay timeouts, missed MEV fetches) are non-rare, and the wasted NR-walk step in baseline TBFT measurably hurts slot timing.
+- Or: byzantine bid-misrepresentation is observed (e.g., operators consistently overclaiming bids they don't deliver) and the slashing model wants attributable evidence for those events.
+
+Without those signals, baseline TBFT's fixed-priority ordering is simpler and equally good — the bid-ordered variant adds spec surface and deployment complexity without producing more slots. If pursued, this is the natural place to start *before* reaching for the more general dynamic-ordering scheme in [TBFTR.md](TBFTR.md) Appendix B, since at K=2 the design space is much smaller and the "deterministic rule" has a clean application-level instantiation.

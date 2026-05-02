@@ -415,3 +415,5 @@ This variant is most relevant if production data shows the baseline TBFTR's fixe
 If pursued, the natural place to prototype is at `n = 7` (smallest `f ≥ 2` cluster, where TBFTR is the only option), with the variant gated behind a config flag so the baseline stays the production path during validation.
 
 For SSV's n=4 case, the lighter mitigation noted in the design discussion — fetching `V_{L_1}` from a deeper-confirmed parent so the backup is structurally re-org-resistant — gets most of the benefit without any protocol change. That's the recommended first move; the dynamic-ordering variant is a second-line option for cluster sizes and conditions where the application-level mitigation isn't enough.
+
+A concrete K=2 instantiation of this concept — using the relay's MEV bid as the deterministic rule — is sketched in [TBFT.md](TBFT.md) Appendix B. That variant has a smaller design space (only 2 layers, one application-meaningful ordering function) and a cleaner attribution story (post-hoc relay-bid verification) than the general K-layer scheme described here.
