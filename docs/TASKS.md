@@ -447,13 +447,25 @@ The code can/should stay generic in shape (parameterized by K, n, threshold) —
 
 ### P1 — spec compliance
 
-- [ ] **T4. Unified-threshold protocol counting — naming-only refactor** ([TBFT.md](TBFT.md) Setting + Why it's safe). Lands the unified `qEnc = qV = 2f+1` design in code.
-  - Set `Config.QV() = 2f+1` and `Config.QEnc() = 2f+1` (or fold `QEnc` into `QV` since they're equal); update callers.
-  - σ-quorum check in [`tryReconstructLayer`](../protocol/v2/tbft/instance.go): `< QV()`.
-  - NR-quorum check in [`tryDeriveNextLayerKey`](../protocol/v2/tbft/instance.go): `< QEnc()`.
-  - Update doc comments in [`types.go`](../protocol/v2/tbft/types.go), [`instance.go`](../protocol/v2/tbft/instance.go) — they currently reference the old `qEnc = f+1` design.
-  - Update [`ibeThresholdForCommitteeSize`](../operator/validator/dkg_orchestrator.go) to return `2f+1` instead of `f+1`; this is what the Pedersen DKG (T5) uses for the IBE keypair.
-  - Tests: protocol-level counting at the unified threshold; safety algebra holds under cross-signing (T6 covers).
+- [x] **T4. Unified-threshold protocol counting** ([TBFT.md](TBFT.md) Setting + Why it's safe). Landed the unified `qEnc = qV = 2f+1` design in code:
+  - `Config.QEnc()` now returns `2f+1` ([protocol/v2/tbft/types.go:107](../protocol/v2/tbft/types.go)).
+  - σ-quorum check in [`tryReconstructLayer`](../protocol/v2/tbft/instance.go) and NR-quorum check in [`tryDeriveNextLayerKey`](../protocol/v2/tbft/instance.go) both use `cfg.QV()` / `cfg.QEnc()` (now equal).
+  - Doc comments in [`types.go`](../protocol/v2/tbft/types.go) and [`instance.go`](../protocol/v2/tbft/instance.go) updated to reference the unified-threshold rationale.
+  - [`ibeThresholdForCommitteeSize`](../operator/validator/dkg_orchestrator.go) returns `2f+1`.
+  - DKG threshold tests at [protocol/v2/dkg/coordinator_test.go](../protocol/v2/dkg/coordinator_test.go) and [protocol/v2/dkg/p2p/transport_test.go](../protocol/v2/dkg/p2p/transport_test.go) updated to use the new threshold.
+  - All unit tests pass.
+
+- [ ] **T18. Candidate acceptance cutoff enforcement** ([TBFT.md](TBFT.md) Setting / Phase 1 receiver checks; closes the residual liveness gap raised in audit follow-up). The protocol depends on receivers rejecting Phase-1 candidates whose first-observation time is later than `T_candidate_accept = T_commit − (D + δ)`. Without this, a byzantine leader can release the bundle just before `T_commit` so that direct-delivery recipients accept while gossipsub re-flooding doesn't reach others in time — fragmenting the σ pool *within the partial-synchrony envelope*.
+
+  Implementation:
+  - Add `Config.CandidateAcceptCutoff() time.Duration` (or expose `D + δ` directly so callers can compute the absolute time).
+  - In [`Controller.ProcessCandidate`](../protocol/v2/ssv/runner/tbft/controller.go) (or whichever entry point ingests Phase-1 envelopes), record first-observation time and reject candidates observed past the cutoff before calling `Instance.ObserveCandidate`. Late candidates: drop silently, treat as not-received locally.
+  - Apply the same cutoff to TBFTR's Phase-2a onion / Phase-2b broadcasts (they implicitly need it via `T_arrival = T_commit + Δ_2a + Δ_2b`; consolidate as one cutoff helper on `Config`).
+  - Tests:
+    - Candidate observed before `T_candidate_accept` accepted (matches existing happy-path).
+    - Candidate observed after `T_candidate_accept` dropped — operator emits NR for that layer, slot falls through.
+    - Byzantine-leader-late-release scenario: layer-0 leader releases at `T_commit − ε` for small ε; with the cutoff, all 3 honest reject uniformly; cluster falls through to V_{L_1} cleanly.
+  - Configuration: `D` and `δ` are deployment parameters tied to gossipsub propagation telemetry; default to conservative values until production data is available (see T16).
 
 - [ ] **T6. Aggregator-level fault exclusion (σ+NR + cross-onion σ+σ')** ([TBFT.md](TBFT.md) caveat 1; attribution-only after the qEnc=qV change).
 

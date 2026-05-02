@@ -27,6 +27,7 @@ The protocol description is generic. SSV's Ethereum proposer duty is used as the
 - For each slot, a **leader priority order** `(L_0, L_1, …, L_{n-1})` deterministically derived from slot data. `L_0` is the highest-priority leader. (0-based indexing throughout.)
 - A **fallback depth** `K = max(3, f+1)` per cluster: `K=3` for n=7, `K=4` for n=10, `K=5` for n=13.
 - Per-slot deadlines: `T_commit` (Phase 1 ends, Phase 2a starts), `T_commit + Δ_2a` (Phase 2a ends, Phase 2b starts), `T_commit + Δ_2a + Δ_2b` (Phase 2b ends, Phase 3 starts).
+- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers drop any Phase-1 candidate whose first-observation time is later than `T_candidate_accept` — treated locally as not-received. With the cutoff, a candidate accepted by any honest operator before `T_candidate_accept` has at least `D + δ` left to re-flood (or, for TBFTR, to land in peer Phase-2a onions before *their* cutoff), so the byzantine cannot fragment the cluster by timing-based selective delivery. (TBFTR's V-plaintext-in-onions + Phase-2 split also uses this gap; the cutoff makes the recovery channel's timing argument operational, see "Liveness profile".)
 
 ## Protocol
 
@@ -40,9 +41,9 @@ Each leader `L_k` for `k ∈ {0, …, K−1}`:
    - The operator-identity key — producing the leader-auth signature `σ_{L_k}^{op}(envelope)` over a **structured envelope** binding `(version, cluster_id, slot, layer k, leader_id, value_root, parent_root)`. The envelope rules out cross-cluster / cross-layer / cross-slot replay at the protocol level rather than relying on application validity to surface those mistakes.
 3. Gossips the bundle `(V_{L_k}, σ_{L_k}^V(V_{L_k}), σ_{L_k}^{op}(envelope))` to peers via gossipsub.
 
-Receivers verify both signatures against the leader's known pubkeys, re-derive the envelope from `(slot, layer, V_{L_k})` to confirm it matches what `σ_{L_k}^{op}` signs, validate `V_{L_k}` against application-level rules, and silently drop bundles failing any check (treated as not-received). A leader who broadcasts `(V, σ^{op})` without `σ^V` is treated as not having broadcast at all.
+Receivers verify both signatures against the leader's known pubkeys, re-derive the envelope from `(slot, layer, V_{L_k})` to confirm it matches what `σ_{L_k}^{op}` signs, validate `V_{L_k}` against application-level rules, **check the first-observation timestamp against `T_candidate_accept`** (drop and treat as not-received if later), and silently drop bundles failing any check. A leader who broadcasts `(V, σ^{op})` without `σ^V` is treated as not having broadcast at all.
 
-**Bundle propagation.** Honest receivers re-flood the bundle via standard gossipsub — this is what closes selective-delivery attempts by a byzantine leader. The "honest receiver propagates within Δ_2a" assumption is the same partial-synchrony envelope SSV's QBFT relies on per round.
+**Bundle propagation.** Honest receivers re-flood the bundle via standard gossipsub — this is what closes selective-delivery attempts by a byzantine leader. The argument requires the **candidate acceptance cutoff** above: an honest receiver accepting a bundle at time `t ≤ T_candidate_accept` has `T_commit − t ≥ D + δ` left for re-flooding to reach every other honest operator before *their* `T_candidate_accept` (clock skew bounded by `δ`). Without the cutoff, a byzantine could release the bundle at `T_commit − ε` for `ε < D + δ`, fragmenting the cluster within the synchrony bound; with the cutoff, late releases are uniformly rejected. This is the same partial-synchrony envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)), made operational by a concrete cutoff.
 
 #### Equivocation handling
 
@@ -173,7 +174,7 @@ The Phase-2 split doesn't change this — both σ sources (Phase-2a onion and Ph
 
 TBFTR's liveness is **partial-synchrony-conditional within `T_commit + Δ_2a + Δ_2b`**, the same per-window envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)). If propagation between honest operators stays bounded by the propagation budget, the protocol terminates cleanly. If propagation is degraded badly enough that no σ-quorum and no NR-quorum reach their thresholds at any layer up to `K`, the slot is missed. There is no "round 2" — TBFTR is single-shot by design. **Safety holds in either case** (cryptographic, "Why it's safe").
 
-**P0.1/P0.2 fully closed at n=7, 10, 13 under partial synchrony.** Walking the worst-case byzantine attack at any of these sizes: byzantine `L_k` delivers `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators just before `T_commit`, withholds from the remaining `f` honest, refuses to vote in Phase 2a:
+**P0.1/P0.2 fully closed at n=7, 10, 13 under partial synchrony.** Walking the worst-case byzantine attack at any of these sizes: byzantine `L_k` delivers `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators *before `T_candidate_accept`* (else those `f+1` would also reject the bundle), withholds from the remaining `f` honest, refuses to vote in Phase 2a:
 
 - **Phase 2a**: `f+1` honest broadcast σ on V in their onions (with V plaintext per TBFTR core). `f` honest didn't have V from Phase 1 — their onion's layer-k slot is null.
 - **Recovery**: the `f` missing-V honest receive V via peer onions in Phase 2a, validate against `L_k`'s leader sig + app rules.
@@ -258,6 +259,8 @@ If the head changes during the Phase-1 fetch window (between `T_commit − Δ_1`
 - Two bundles from `L_k` with **different** `parent_root` → legitimate refresh on head change. Honest receivers accept the bundle whose `parent_root` matches the current head; stale bundles fail the application-validity check and are silently dropped.
 - Two bundles from `L_k` with the **same** `parent_root` but different `value_root` → equivocation. Triggers the equivocation-to-non-receipt rule (Phase 1) and forms self-contained slashing evidence.
 
+**Head validity is locally evaluated at the candidate acceptance time.** Each operator validates `parent_root` against *its own* observed head at the moment of accepting the candidate (no later than `T_candidate_accept`). If honest operators temporarily disagree on the current head — e.g., during an in-flight re-org — they may evaluate the same candidate differently: an operator on `H1` accepts a `parent_root = H1` candidate and signs σ; an operator on `H2` rejects it as stale and emits NR. This split is a **liveness failure, not slashable equivocation**: the leader broadcast a single signed bundle, no equivocation evidence exists. The σ-pool may not reach `qV` and the NR-pool may not reach `qEnc`, in which case the slot misses with no safety violation. The protocol does not attempt to resolve head disagreement at the cluster level — that's an upstream concern (beacon-chain re-org dynamics), not a TBFTR responsibility.
+
 Implementation note: each operator must track the current head locally and validate `parent_root` of received candidates against it.
 
 ## Practical caveats
@@ -270,7 +273,12 @@ Implementation note: each operator must track the current head locally and valid
 
 4. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = 2f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. The keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), even though the threshold is the same.
 
-5. **Deadline coordination.** Clock skew across operators must be bounded by `δ`. The deadline rule is `T_commit − T_arrival > D + δ` where `T_arrival` is the cutoff for accepting Phase-2 contributions (typically `T_commit + Δ_2a + Δ_2b`) and `D` is the propagation P99/P999. Liveness requirement only — safety is unaffected by skew (the safety algebra at "Why it's safe" is over cluster-wide signed messages, not per-operator views).
+5. **Deadline coordination.** Clock skew across operators must be bounded by `δ`. Two cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
+
+   - **`T_candidate_accept = T_commit − (D + δ)`** for Phase-1 candidates. Receivers reject candidates whose first-observation time is later. This is what makes the gossipsub re-flooding + Phase-2a peer-recovery argument operational (see "Phase 1" / "Bundle propagation" / "Liveness profile").
+   - **`T_arrival = T_commit + Δ_2a + Δ_2b`** for Phase-2a onion / Phase-2b late-σ / NR contributions — the cutoff for accepting Phase-2 messages into the local pools. Same `D + δ` budget against `T_arrival`.
+
+   Both are *liveness* requirements only — safety is unaffected by skew or propagation breakdown (the safety algebra at "Why it's safe" is over cluster-wide signed messages, not per-operator views).
 
 6. **Tag construction and replay.** The `nr_tag_k` tags must uniquely bind `(slot, cluster, layer)` so that ciphertexts from one slot/cluster/layer cannot be replayed/reused.
 
