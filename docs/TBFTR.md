@@ -2,12 +2,12 @@
 
 This document describes **TBFTR** ("TBFT Roach") for `n ∈ {7, 10, 13}` clusters: a single-shot agreement protocol that produces one collective threshold-signed value per "slot" against a hard deadline, with full byzantine-leader selective-delivery resilience at all supported cluster sizes.
 
-TBFTR is a natural extension of [TBFT](TBFT.md) — same cryptographic safety story (`qEnc = qV = 2f+1`, leader-σ-V-in-Phase-1, equivocation-to-NR rule) — generalized to `K = max(3, f+1)` priority-ordered leaders and augmented with two additions that close the P0.1 byzantine-leader-grief residual that TBFT alone has at `f ≥ 2`:
+TBFTR is a natural extension of [TBFT](TBFT.md) — same cryptographic safety story (`qEnc = qV = 2f+1`, leader-σ-V-in-Phase-1, equivocation-to-NR rule) — generalized to `K = max(3, f+1)` priority-ordered leaders and augmented with two additions that extend the P0.1 byzantine-leader-grief closure into a marginal-synchrony band beyond what gossipsub re-flooding alone provides:
 
 - **V plaintext in onions** (TBFTR core): each operator's onion at layer `k` carries `V_{L_k}` plaintext alongside the encrypted partial sig, so an operator that didn't receive `V_{L_k}` during Phase 1 can recover it from any peer's onion in Phase 2.
-- **Phase 2 split** (composition): Phase 2 splits into 2a (onion broadcast, no NR yet) and 2b (late σ from operators who recovered V; NR otherwise). Together with V plaintext, this lets the `f` honest operators that missed V via selective delivery still contribute σ partials, reaching `qV` and reconstructing.
+- **Phase 2 split** (composition): Phase 2 splits into 2a (onion broadcast, no NR yet) and 2b (late σ from operators who recovered V; NR otherwise). Together with V plaintext, this lets `f` honest operators that missed V via Phase-1 propagation still contribute σ partials, reaching `qV` and reconstructing.
 
-These two additions cost extra bandwidth (~10–80 KB per slot depending on cluster size) and one extra gossip window (`Δ_2b`, ~100–200 ms). At `n = 4` the P0.1 residual doesn't exist so they're unneeded; at `n ≥ 7` they're what makes the protocol fully resilient. See **Appendix A** at the end for a side-by-side comparison with TBFT.
+Under partial synchrony, gossipsub re-flooding of the Phase-1 bundle (the same primary closure used at TBFT n=4) already handles byzantine-leader selective delivery at any `f` — see "Liveness profile". The TBFTR additions form the *secondary* closure: when actual propagation slightly exceeds the partial-synchrony budget, peer-onion V-recovery + late σ extends the band where the cluster still completes. The marginal band widens with `f`, which is why the additions earn their complexity at `n ≥ 7` and not at `n = 4`. These two additions cost extra bandwidth (~10–80 KB per slot depending on cluster size) and one extra gossip window (`Δ_2b`, ~100–200 ms). See **Appendix A** at the end for a side-by-side comparison with TBFT.
 
 The protocol description is generic. SSV's Ethereum proposer duty is used as the running example.
 
@@ -215,7 +215,7 @@ No Phase-2b late σ is needed in this regime; the recovery channel is dormant.
 - Cluster-wide σ count on V: `f+1` (Phase-2a onions) + `f` (Phase-2b late) + `1` (leader's Phase-1 σ) = `2f+2 ≥ qV = 2f+1`.
 - σ-quorum reached at the same layer the byzantine tried to grief. **Slot succeeds.**
 
-The composition closes the residual `[f+1, 2f-1]` grief window that TBFT alone has at `f ≥ 2` (where TBFT relies on partial synchrony only). TBFTR's secondary mechanism extends robustness into the band where partial synchrony breaks but Phase-2a propagation still completes.
+The composition extends robustness into the marginal-synchrony band where partial synchrony breaks but Phase-2a propagation still completes. A TBFT-shape protocol applied at `f ≥ 2` (without Phase-2 split) would miss the slot in this band, since its single-window σ count caps at `f+1` honest direct + `1` leader = `f+2`, falling short of `qV = 2f+1` once `f ≥ 2`. TBFTR closes that gap.
 
 **Failure mode (bad synchrony).** If propagation is degraded badly enough that even Phase-2a onion delivery doesn't reach all honest within `Δ_2a`, the `f` missing-V honest emit NR in 2b. Cluster-wide σ-quorum doesn't form; NR-quorum may or may not, depending on how the failure distributes. The slot may miss. **No safety violation** — the algebra at "Why it's safe" doesn't depend on synchrony.
 
@@ -327,7 +327,7 @@ TBFTR builds on [TBFT](TBFT.md) (originally "Proposal 3" in [ssvlabs/ssv#1829](h
 - **V plaintext in onions**: gives operators that missed Phase 1 a recovery channel via peers' Phase-2a onions.
 - **Phase 2 split (composition)**: defers non-receipt commitment to Phase 2b, allowing late σ broadcasts from operators who recovered V via the plaintext channel.
 
-Together they close the P0.1/P0.2 grief residual `[f+1, 2f-1]` that the leader-σ-V-in-Phase-1 mechanism in TBFT alone leaves at `f ≥ 2`. At `f = 1` (n=4) that residual is empty, so TBFTR's additions aren't needed there; use [TBFT](TBFT.md).
+Both additions form the *secondary* closure mechanism described in "Liveness profile". Under partial synchrony, the *primary* closure (gossipsub re-flooding under `T_candidate_accept`) handles the byzantine-leader grief at any `f` — including `f ≥ 2` — without help from these additions, the same way TBFT closes it at `f = 1`. The TBFTR additions extend closure into the marginal-synchrony band where re-flooding is just-barely-insufficient but Phase-2a propagation completes; that band widens with `f` (more honest, more chances for some to miss re-flooding within budget), which is why the additions earn their complexity at `n ≥ 7` and not at `n = 4`. At `f = 1` (n=4) the marginal band is small enough that the cost-benefit doesn't justify the additions; use [TBFT](TBFT.md).
 
 ## Appendix A — How TBFTR differs from TBFT
 
@@ -341,8 +341,8 @@ Together they close the P0.1/P0.2 grief residual `[f+1, 2f-1]` that the leader-�
 | Onion at layer k | `E_{enc_tag_k}(σ_i^V(V_{L_k}))` (encrypted partial only) | `V_{L_k} ‖ E_{enc_tag_k}(σ_i^V(V_{L_k}))` (V plaintext + encrypted partial) — **TBFTR core** |
 | Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) — **composition** |
 | Late σ broadcasts | None | Phase 2b — operators who recovered V via TBFTR core sign σ then |
-| Liveness against byz-leader grief | Closed under partial synchrony via gossipsub propagation of leader bundle at f=1 | Closed under partial synchrony via Phase-2 composition at all sizes |
-| Bandwidth (worst case) | ~21 KB | n=7: ~108 KB, n=10: ~253 KB, n=13: ~497 KB (hash variant) |
+| Liveness against byz-leader grief | Closed under partial synchrony via gossipsub propagation of leader bundle at f=1 | Closed under partial synchrony via gossipsub propagation (primary); Phase-2 composition extends closure into a marginal-synchrony band (secondary, full-V variant only) |
+| Bandwidth (worst case) | ~21 KB | n=7: ~108 KB, n=10: ~253 KB, n=13: ~497 KB (hash variant — disables the secondary closure path; see "Phase 2a" caveat) |
 | Latency overhead | None beyond standard Phase 2 | +Δ_2b (~100–200 ms) |
 | Tag count | 1 (`nr_tag_0` only) | K-1 (`nr_tag_0`, …, `nr_tag_{K-2}`) |
 | Number of leader candidates per slot | 2 (primary + backup) | K (top-K priority) |

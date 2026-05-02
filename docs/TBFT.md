@@ -225,7 +225,7 @@ For an SSV `n=4` cluster proposing an Ethereum block:
 | `V_{L_1}` | safe early-fetched block from a vanilla beacon-node payload, refreshed on head changes |
 | `T_1` | early backup window (e.g. `slot_start − 4s`) |
 | `T_0` | late primary window (e.g. `slot_start + 2s`) |
-| `T_commit` | submission deadline (e.g. `slot_start + 3s` to leave headroom for the relay 4s cutoff) |
+| `T_commit` | commit / view-fix deadline (e.g. `slot_start + 3s`); reconstruction and submission happen after, with headroom against the relay 4s cutoff |
 
 Phase timeline:
 
