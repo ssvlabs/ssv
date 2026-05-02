@@ -2,7 +2,7 @@
 
 A single-shot agreement protocol for SSV's `n = 4` (`f = 1`) clusters that produces one collective threshold-signed value per "slot" against a hard deadline. TBFT achieves agreement *cryptographically* — single-RTT decision path, structural cryptographic safety, primary/backup leader fallback.
 
-TBFT is the lean specialization for `n = 4`. The full multi-layer spec — applicable at any cluster size, including `n = 4` — lives in [TBFTR](TBFTR.md); TBFT drops TBFTR's V-plaintext + Phase-2-split machinery in exchange for less bandwidth and less protocol surface, accepting a smaller marginal-synchrony robustness band as the trade-off (see "Fault tolerance" and **Appendix A**). For larger cluster sizes, only TBFTR is supported.
+TBFT is the lean specialization for `n = 4`. The full multi-layer spec — applicable at any cluster size, including `n = 4` — lives in [TBFTR](TBFTR.md); TBFT drops TBFTR's V-plaintext + Phase-2-split machinery in exchange for less bandwidth and less protocol surface, accepting a smaller marginal-synchrony robustness band as the trade-off (see "Fault tolerance" and **Appendix A**). For larger cluster sizes (7, 10, ...), only TBFTR is BFT-safe.
 
 The protocol description below is specific to TBFT. SSV's Ethereum proposer duty is used as the running example.
 
