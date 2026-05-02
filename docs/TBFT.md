@@ -66,6 +66,14 @@ If `i` did not receive a valid `V_{L_1}` either, it omits layer 1 entirely.
 
 `i` gossips its onion together with any non-receipt attestation.
 
+**Per-operator commitment for layer 0 is exclusive across phases.** TBFT has only one NR tag (`nr_tag_0`) — layer 1 has no NR side, so the σ-or-NR exclusivity rule applies at layer 0 only. The commitment is *one decision per operator, spanning Phase 1 and Phase 2*:
+
+- An operator who included `σ_i^V(V_{L_0})` in their Phase-2 onion at layer 0 has σ-side committed; they may **not** also broadcast an NR partial on `nr_tag_0`.
+- The layer-0 **leader** signed `σ_{L_0}^V` in Phase 1; that is their σ-side commitment for layer 0. At Phase 2 they include σ on `V_{L_0}` in their own onion uniformly with any other σ-committed operator — Phase 3 dedup collapses Phase-1 σ + Phase-2 onion σ from the same operator to one partial. They **cannot emit NR on `nr_tag_0`** even if their head subsequently moves and `V_{L_0}` is now stale relative to their local view.
+- Layer 1 has no commitment exclusivity to enforce: an operator may include `σ_i^V(V_{L_1})` in their Phase-2 onion at layer 1 (when they have V_{L_1}) regardless of whether they signed σ_0 or NR_0 — these are independent commitments to two different values, both bounded by Pigeonhole 2 at their own layer.
+
+A byzantine operator that publishes both σ_0 and NR_0 is publicly attributable (see "Fault tolerance / Cross-signing detection" — under `qEnc = qV`, cross-signing has no safety impact regardless of honest aggregation behavior). For the layer-0 leader specifically, "cross-signing" includes any Phase-1 σ + Phase-2 NR pair on the same slot; the rule applies uniformly across phases.
+
 ### Phase 3 — Local decryption and reconstruction `[T_commit + Δ_2, finalize]`
 
 Each operator attempts reconstruction:
@@ -131,12 +139,13 @@ For SSV's Ethereum proposer duty, application-level checks include:
 - Doppelganger and slashing-protection checks: not signing for a slot already signed at.
 - Block encoding: well-formed SSZ, reasonable size.
 
-**Slashing-protection scope.** Each operator's V-signing share signs *multiple* values per slot, but the leader role has a stricter constraint:
+**Slashing-protection scope.** Each operator's V-signing share signs *multiple* values per slot, but two stricter constraints apply per (slot, layer):
 
 - **Each layer's leader signs σ_V exactly once per (slot, layer)** — on the final V they commit to, after any pre-signing refreshes during the fetch window. Refreshes update V plaintext via re-fetch but do **not** re-sign σ_V; the leader's σ_V is locked once produced. EKM enforces this single-σ-V-per-(slot, layer) constraint cryptographically: a second signing attempt at the same (slot, layer) is rejected. This is what makes Pigeonhole 2 (see "Fault tolerance / Safety") cap the leader's contribution to one V's σ-pool, not both — see "Head-change handling" in the Application section for the operational workflow.
+- **Each operator commits σ-or-NR exclusively per (slot, layer), across phases.** Honest who include σ in their Phase-2 onion at layer 0 may not subsequently broadcast NR on `nr_tag_0`; honest who broadcast NR may not subsequently include σ. The layer-0 leader's Phase-1 σ counts as their σ-side commitment — they cannot emit NR for layer 0 even if their head changes after Phase 1. EKM enforces this cross-phase exclusivity by coordinating across the operator's V-signing and IBE-signing shares (which are distinct keys, but the slashing-protection log keys on (slot, layer)): an NR partial on `nr_tag_0` is rejected if the same operator has previously signed σ on `V_{L_0}` at the same slot, and vice versa. Pigeonhole 1 below relies on this rule.
 - Every operator signs each layer's `V_{L_k}` it considers valid in its Phase-2 onion.
 
-EKM/slashing-protection must permit the operator's per-layer Phase-2 σ signings (one per layer with valid V) plus the leader's Phase-1 σ_V (exactly one per slot/layer the operator is leading), without flagging duplicates — the cluster's safety property collapses these to a single output, but the per-share signing log shows multiple block sigs at the same slot. The gating point is **candidate signing** (Phase-1 leader and Phase-2 onion alike), not just submission.
+EKM/slashing-protection must permit the operator's per-layer Phase-2 σ signings (one per layer with valid V) plus the leader's Phase-1 σ_V (exactly one per slot/layer the operator is leading), without flagging duplicates — the cluster's safety property collapses these to a single output, but the per-share signing log shows multiple block sigs at the same slot. The gating point is **candidate signing** (Phase-1 leader and Phase-2 onion alike) and **NR signing** (Phase-2 IBE partial on `nr_tag_0`), not just submission.
 
 ## Fault tolerance
 
@@ -155,9 +164,9 @@ The proof rests on two pigeonhole arguments at each layer.
 
 **Pigeonhole 1 — σ-vs-NR at the same layer.** σ-quorum on `V_{L_0}` and NR-quorum on `nr_tag_0` cannot both be reached:
 
-- σ-quorum: `h_σ + byz_σ ≥ qV = 3`.
+- σ-quorum: `h_σ + byz_σ ≥ qV = 3` (where `h_σ` counts honest σ partials at layer 0 from any phase — Phase-1 leader σ and Phase-2 onion σ — uniformly, deduplicated per operator).
 - NR-quorum: `h_NR + byz_NR ≥ qEnc = 3`.
-- Honest sign at most one side per layer: `h_σ + h_NR ≤ 3`.
+- Honest sign at most one side per layer (across phases — see "Slashing-protection scope"): `h_σ + h_NR ≤ 3`. **This includes the layer-0 leader**: their Phase-1 σ counts as their σ-side commitment, and they are protocol-bound not to subsequently emit NR at layer 0 (and EKM-prevented from doing so, even after head changes); so they contribute to either σ or NR for layer 0, never both.
 - Byzantine can sign both sides (cross-signing): `byz_σ + byz_NR ≤ 2` (with `f = 1`, byz contributes at most 1 to each pool, so at most 2 total).
 - If both quorums reached: `h_σ + h_NR ≥ 3 + 3 − 2 = 4`. But `≤ 3`. Contradiction. ∎
 
@@ -205,7 +214,12 @@ The equivocation rule is what makes Pigeonhole 2 above tight in practice: honest
 
 ### Cross-signing detection
 
-Any operator whose published messages contain *both* a σ partial at a layer AND an NR attestation on the layer's `nr_tag_0` is a slashable cross-signer. Detection is straightforward — the dual partials are public.
+Any operator whose published messages contain *both* a σ partial at a layer AND an NR attestation on the layer's `nr_tag_0` is a slashable cross-signer. The pair is detected uniformly across phases:
+
+- **σ from Phase 1 + NR from Phase 2** — applies to the layer-0 leader specifically: a `σ_{L_0}^V(V_{L_0})` from the Phase-1 bundle paired with an `σ_{L_0}^{IBE}(nr_tag_0)` from the same operator at the same slot.
+- **σ from Phase 2 onion + NR from Phase 2** — any operator who included σ in their onion *and* broadcast an NR attestation.
+
+Detection is straightforward — the dual partials are public.
 
 Under `qEnc = qV`, cross-signing has no safety impact (Pigeonhole 1 above proves it). The detection is purely for **attribution** and out-of-band punishment. Honest aggregation may filter cross-signers, but doing so is not load-bearing for safety.
 
@@ -302,7 +316,7 @@ The deadline-tuning rule from caveat 3 below applies: `T_commit − T_arrival > 
 
 If the head changes during a Phase-1 fetch window, candidate values fetched from the previous head are stale (their parent root no longer matches the new head). The leader's fetch process is a loop: fetch → validate → check head → on head-change, re-fetch → repeat. The loop runs **before σ_V signing** — internal to the leader's local fetch state. The leader signs `σ_{L_k}^V(V_{L_k})` *exactly once per slot/layer*, on the final `V_{L_k}` they commit to after the loop terminates, then broadcasts the bundle. Refreshes are pre-signing only; the per-share signing log shows exactly one V-share signature per slot/layer (the final V).
 
-**No refresh after signing.** Once the leader has broadcast `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})`, they do not produce a second `σ_V` partial for the same slot/layer. If the head changes after signing, the leader's σ_V is locked on the originally-signed V. Honest operators validate received candidates against *their* head at candidate-acceptance time:
+**No refresh after signing.** Once the leader has broadcast `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})`, they do not produce a second `σ_V` partial for the same slot/layer. If the head changes after signing, the leader's σ_V is locked on the originally-signed V. **The layer-0 leader specifically also cannot subsequently emit NR on `nr_tag_0`** — the Phase-1 σ is their σ-side commitment per the cross-phase exclusivity rule (see Phase 2's "Per-operator commitment for layer 0 is exclusive across phases"). Honest operators (other than the leader) validate received candidates against *their* head at candidate-acceptance time:
 
 - If their head matches the leader's signed V (`parent_root` matches): they accept and contribute to the σ-pool on that V.
 - If their head has moved past it: they reject the bundle (stale parent) and emit NR for the layer.
