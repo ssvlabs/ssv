@@ -79,10 +79,12 @@ For layers where `i` doesn't have a valid `V_{L_k}` (or observed `L_k` equivocat
 
 For each layer `k` where the operator hasn't yet broadcast σ in their Phase 2a onion:
 
-- If during Phase 2a the operator extracted `V_{L_k}` from a peer's onion and validated it (against `L_k`'s leader-auth signature, the leader's σ^V from Phase 1, and application-level rules): broadcast a **late** `σ_i^V(V_{L_k})` directly. (No encryption; the σ partial counts toward layer-k σ-quorum aggregation just like onion partials.)
-- Else (didn't recover V, or recovered V is invalid): broadcast a **non-receipt attestation** `σ_i^{IBE}(nr_tag_k)` from the IBE keypair.
+- If during Phase 2a the operator extracted `V_{L_k}` from a peer's onion and validated it (against `L_k`'s leader-auth signature, the leader's σ^V from Phase 1, and application-level rules): broadcast a **late** σ partial on V_{L_k}, **encrypted under `enc_tag_k` exactly as the layer-k onion σ would be** — i.e. `E_{enc_tag_k}(σ_i^V(V_{L_k}))` for `k > 0`, plaintext `σ_i^V(V_{L_k})` for `k = 0`. The late σ counts toward layer-k σ-quorum aggregation alongside onion partials and unlocks under the same condition (NR-quorum on `nr_tag_{k-1}` for `k > 0`; trivially openable at layer 0).
+- Else (didn't recover V, or recovered V is invalid): broadcast a **non-receipt attestation** `σ_i^{IBE}(nr_tag_k)` from the IBE keypair (only for layers `k ∈ {0, …, K-2}`; the last layer has no successor — see "Treatment of missing onions / late broadcasts").
 
 Each honest operator commits to **exactly one** of `{σ, NR}` per layer (whether the σ commit lands in Phase 2a's onion or Phase 2b's late-σ broadcast). A byzantine that publishes both is publicly attributable (see "Cross-signing detection" in Phase 3 and "Why it's safe" — under `qEnc = qV`, cross-signing has no safety impact regardless of honest aggregation behavior).
+
+**Why late σ at `k > 0` must be encrypted.** Late σ partials are publicly observable on the gossipsub mesh once broadcast. If they were plaintext at all layers, a byzantine aggregator could collect late σ partials from a deeper layer where the cluster ended up halting at a shallower one — combining them with the (always-plaintext) Phase-1 leader σ to reach `qV` and reconstruct a second `V` signature off-line. Encrypting late σ under the layer's `enc_tag_k` ties the partial's usability to the same NR-quorum gate that the onion partials use, so deeper-layer σ partials (whether onion or late) can only be aggregated when the lower layer has actually fallen through.
 
 ### Phase 3 — Local decryption and reconstruction `[T_commit + Δ_2a + Δ_2b, finalize]`
 
@@ -90,15 +92,24 @@ Each operator attempts reconstruction:
 
 ```
 loop k = 0..K-1:
+    # σ pool at layer k. For k > 0, both the onion-encoded σ partials and the
+    # Phase-2b late-σ partials are encrypted under enc_tag_k = nr_tag_{k-1};
+    # they only decrypt once a previous-layer NR-quorum unlocks the key. For
+    # k = 0, both sources are plaintext.
     sigs = {σ_{L_k}^V(V_{L_k}) from Phase 1, if valid}
-        ∪ {σ_j^V(V_{L_k}) from received Phase-2a onion contents at layer k}
-        ∪ {σ_j^V(V_{L_k}) from received Phase-2b late-σ broadcasts}
+        ∪ {σ_j^V(V_{L_k}) from received Phase-2a onion contents at layer k,
+           decrypted under enc_tag_k if k > 0}
+        ∪ {σ_j^V(V_{L_k}) from received Phase-2b late-σ broadcasts at layer k,
+           decrypted under enc_tag_k if k > 0}
         # deduplicated per operator: the leader's own Phase-1 σ and the same
         # leader's onion-layer-k σ are the same partial, counted once.
 
     if |valid sigs on a single V_{L_k}| ≥ qV:
         S = reconstruct full V signature on V_{L_k}
         output (V_{L_k}, S); halt
+
+    if k == K-1:
+        halt with no output                         # missed slot (no successor)
 
     nrs = {σ_j^{IBE}(nr_tag_k) partials}
           # deduplicated per operator.
@@ -108,13 +119,11 @@ loop k = 0..K-1:
         continue
     else:
         halt with no output                         # missed slot
-
-halt with no output                                 # exhausted top-K
 ```
 
 **`T_arrival`** for the deadline rule is the cutoff by which the operator must have received any Phase-2a onion or Phase-2b broadcast it intends to count — practically, it's `T_commit + Δ_2a + Δ_2b`. The deadline rule (caveat 5) bounds the gap between `T_commit` and `T_arrival` against propagation P99/P999 and clock skew.
 
-The leader's Phase-1 σ partial appears unencrypted in the σ pool at every layer. At layer `k > 0` this means one partial is visible early, before `enc_tag_k` is unlocked — but one partial alone can't reconstruct (need `qV`), and the remaining encrypted onion partials stay sealed until the lower layer's NR-quorum unlocks them. Late σ broadcasts at layer `k > 0` are similarly visible early but can't be aggregated until layer `k` is unlocked.
+The leader's Phase-1 σ partial appears unencrypted in the σ pool at every layer. At layer `k > 0` this means one partial is visible early, before `enc_tag_k` is unlocked — but one partial alone can't reconstruct (need `qV`), and the remaining onion + late σ partials are both encrypted under `enc_tag_k` and stay sealed until the lower layer's NR-quorum unlocks them.
 
 **Cross-signing detection (attribution-only).** Any operator whose published messages contain *both* a σ partial at layer `k` AND an NR attestation on `nr_tag_k` is a slashable cross-signer. Detection is straightforward — the dual partials are public — and the pair forms self-contained slashing evidence. Under `qEnc = qV`, cross-signing has no safety impact (see "Why it's safe"); the detection is purely for attribution and out-of-band punishment.
 
@@ -169,6 +178,17 @@ Both quorums cannot both be reached at any layer. The proof does not depend on h
 **On cross-signing.** A byzantine that publishes both `σ_byz^V(V_{L_k})` and `σ_byz^{IBE}(nr_tag_k)` does no safety damage (their contribution to one of the pools is wasted by the algebra above). Cross-signing is **publicly attributable** via the dual partials and treated as slashable evidence (see "Practical caveats"); honest aggregation may filter cross-signers, but doing so is not load-bearing for safety.
 
 The Phase-2 split doesn't change this — both σ sources (Phase-2a onion and Phase-2b late broadcast) count uniformly against the σ-pool, and the algebra above is over cluster-wide signed messages, not protocol phases.
+
+**Two σ-quorums on different values at the same layer.** A second pigeonhole rules out two σ-quorums forming on two different `V`'s at the same layer (e.g. via leader equivocation that some honest operators don't observe in time, or a byzantine signing both):
+
+- σ-quorum on `V`: `h_σ_V + byz_σ_V ≥ qV = 2f+1`.
+- σ-quorum on `V'`: `h_σ_V' + byz_σ_V' ≥ qV = 2f+1`.
+- Honest sign at most one value at any given layer (per the equivocation-to-NR rule, or just by application validity when there's no equivocation evidence): `h_σ_V + h_σ_V' ≤ 2f+1` (total honest).
+- Each byzantine can sign both values (cross-signing different V's at the same layer): `byz_σ_V + byz_σ_V' ≤ 2f`.
+- If both quorums reached: `(h_σ_V + h_σ_V') + (byz_σ_V + byz_σ_V') ≥ 2(2f+1) = 4f+2`.
+- Bounded above: `(2f+1) + 2f = 4f+1 < 4f+2`. Contradiction. ∎
+
+Combined with the σ-vs-NR pigeonhole above, **at most one full V signature can ever be reconstructed at any layer, on any value, across any combination of σ sources** — cluster-wide, against an offline-aggregating byzantine, regardless of which honest aggregation rules are followed.
 
 ## Liveness profile
 
