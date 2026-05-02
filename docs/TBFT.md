@@ -340,7 +340,7 @@ Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-aut
 | Phase 1 bundle | `(V, σ^V_L, σ^op_L(envelope))` | Same |
 | Equivocation-to-NR rule | Yes | Yes |
 | qV / qEnc | `qV = qEnc = 2f+1 = 3` | Same |
-| Onion at layer k | `E_{enc_tag_k}(σ_i^V(V_{L_k}))` (encrypted partial only; no V plaintext) | `V_{L_k} ‖ E_{enc_tag_k}(σ_i^V(V_{L_k}))` (V plaintext + encrypted partial) |
+| Onion at layer k | `E_{nr_tag_0}(σ_i^V(V_{L_k}))` (encrypted partial only; no V plaintext; at K=2 the chained wrapper has only one tag) | `V_{L_k} ‖ C_k(σ_i^V(V_{L_k}))` (V plaintext + chained-IBE-wrapped partial; same single-tag at K=2) |
 | Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) |
 | Late σ broadcasts | None | Phase 2b — operators who recovered V via peer onions sign σ then |
 | Phase-1 fetch timing | Asymmetric: `T_1 < T_0` (backup early, primary late) | Uniform across layers (configurable per leader) |
@@ -520,3 +520,36 @@ The split case is the head-divergence scenario from "Fault tolerance / Head dive
 **The right mitigation for head-divergence at TBFT is application-level**, not protocol-level: fetch `V_{L_1}` from a deeper-confirmed parent (a few slots back from the current head) so the backup's `parent_root` is structurally re-org-resistant. This is something the SSV runner can do without any protocol change — the asymmetric `T_1 < T_0` fetch times already accommodate fetching the backup well before the slot's most volatile period. It catches most of the same scenarios parent-root-based routing would address, with no spec growth.
 
 **Summary.** Parent-root match doesn't give a useful new routing rule at K=2, fragments under the very condition it would purport to address (head disagreement), and is best handled at the application layer by choosing a more re-org-resistant parent for the backup candidate. It's worth understanding as a *non-extension* — a direction explored and ruled out — rather than a path forward.
+
+## Appendix C — Extending TBFT to K > 2
+
+TBFT's protocol body fixes K = 2 (one primary, one backup). The same shape generalizes to K layers: K leaders, K-1 NR tags, K-layer onions, fall-through walks deeper as each prior layer's σ-quorum fails and NR-quorum advances. Captured here as a forward-compatible extension — calling out what changes vs the K=2 baseline, why the spec doesn't make it first-class, and where to look if the extension is ever pursued.
+
+**Cross-layer safety requires chained encryption.** A naive extension to K ≥ 3 — keeping each layer's σ partials encrypted under the immediately-prior NR tag (`nr_tag_{k-1}`) — has a cross-layer safety hole. Suppose `L_0` is honest and broadcasts V_0 normally, all 3 honest sign σ_0 (σ_0-quorum reaches `qV = 3`). Suppose also that `L_1` is byzantine and refuses to broadcast V_1, so all 3 honest sign NR on `nr_tag_1` (NR_1-quorum reaches `qEnc = 3`). Suppose `L_2` is honest and broadcasts V_2 normally; all 3 honest signed σ_2 in their onions, encrypted under `nr_tag_1`. A byzantine offline aggregator now has:
+
+- Public σ_0 partials → V_0 sig.
+- Public NR_1 partials → IBE decryption key for `nr_tag_1` → decrypts σ_2 partials → V_2 sig.
+
+Two distinct V signatures cluster-wide. Slashing.
+
+The bug is that Pigeonhole 1 at "Fault tolerance / Safety" is *per-layer* (σ-quorum vs NR-quorum at the same layer). It doesn't constrain σ_0-quorum vs NR_1-quorum at separate layers. With single-tag encryption, an honest who has V_0, no V_1, V_2 signs σ_0 + NR_1 + σ_2 — exactly the recipe the byzantine aggregator needs.
+
+The fix is **chained encryption**: σ partials at layer `k` are wrapped in `k` nested IBE encryptions, one per prior NR tag (`nr_tag_0` innermost, `nr_tag_{k-1}` outermost). To peel σ_k, every prior NR-quorum must aggregate. This makes σ_2 require both NR_0 *and* NR_1 — and Pigeonhole 1 at layer 0 prevents σ_0 + NR_0 from coexisting, so σ_0 reach blocks σ_2 cryptographically.
+
+Same fix is what [TBFTR.md](TBFTR.md) uses for `K ≥ 3` (see "Phase 2a / 2b" and "Fault tolerance / Safety / Pigeonhole 3" there). At K = 2 the chain has only one tag (`nr_tag_0`) so chained encryption reduces to single-tag — TBFT's current spec is already correct at K=2.
+
+**Why K > 2 isn't first-class in TBFT.**
+
+- **Byzantine fault tolerance is already saturated at K=2.** With `f = 1`, a single byzantine can hold at most one leader slot; K=2 always has at least one honest leader in {L_0, L_1}. A third leader L_2 can't dodge an extra byzantine because there isn't one. So K > 2 buys nothing in the standard byzantine model at n=4.
+- **Multi-failure non-byzantine scenarios are beyond the f-bound anyway.** K > 2 could help if both L_0 and L_1 fail for unrelated non-byzantine reasons (bad luck, network jitter, relay timeout) — but that's `f+1` failures, beyond what the protocol promises to handle. Recovering one extra slot per million via L_2 isn't a strong signal vs the spec/audit cost.
+- **Implementation complexity cost is real.** Chained encryption adds K(K-1)/2 nested IBE ops per onion (3 ops at K=3, 6 at K=4) — small absolutely, but the spec text grows: the σ-pool decryption walk now accumulates NR keys, the safety proof needs Pigeonhole 3, the practical caveats need a chained-encryption cost row. TBFT prioritizes minimal protocol surface for the n=4 case; that's what makes the current spec auditable in a single sitting.
+- **Asymmetric fetch times don't generalize cleanly.** TBFT's `T_1 < T_0` (backup fetched early, primary fetched late for max MEV) makes sense at K=2 because the two fetch points have distinct application meaning. At K=3 the structure would need `T_2 < T_1 < T_0` and a rationale for why each successive layer is "even safer than backup" — the natural progression is "MEV-late, vanilla-early, deeper-confirmed-earlier" but each step buys less than the last. Application-side cost grows faster than protocol-side benefit.
+
+**When K > 2 might be worth pursuing.**
+
+- If production data shows non-byzantine multi-failure misses are a measurable cost (typically ≤0.01% of slots per leader; rare).
+- If the spec is being unified — i.e., TBFT and TBFTR collapsed into a single K-configurable protocol. In that case K=2 at n=4 falls out as a config setting, the chained-encryption machinery is already paying its cost at TBFTR n≥7, and K=3 at n=4 becomes a small additional config dimension with no extra spec surface. This is probably the right time to lift the K=2 restriction — when the unified protocol is being built — rather than as a standalone TBFT extension.
+
+**If pursued, the canonical reference is [TBFTR.md](TBFTR.md).** Its protocol body already specifies the K-generic shape: K-layer onion with chained encryption, `K-1` NR tags (`nr_tag_0` ... `nr_tag_{K-2}`), Phase-3 walk with accumulated NR keys, Pigeonhole 3 cross-layer safety. TBFT extended to K > 2 would be a strict subset of that spec, minus the V-plaintext + Phase-2-split machinery (which is independently optional — see Appendix A).
+
+**Effect on Appendix B.1 (bid-ordered selection).** The bid-ordered variant is structurally easier to extend to K > 2 than baseline TBFT, because its per-operator single-commit invariant gives cross-layer safety for free — see [TBFTR.md](TBFTR.md) Appendix B for the K-layer bid-ordered description. The bid-ordered variant doesn't need chained encryption: each operator commits to *exactly one* layer per slot, so the σ-quorum-at-two-layers attack is ruled out by per-operator commitment exclusivity rather than cryptographic chaining. If TBFT ever adopts both K > 2 and bid-ordered selection, the bid-ordered variant should be the implementation choice — it's the cleaner spec at K ≥ 3 because it sidesteps the chained-encryption machinery entirely.

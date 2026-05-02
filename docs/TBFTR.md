@@ -54,17 +54,20 @@ Receivers verify both signatures against the leader's known pubkeys, re-derive t
 Each participant `i` constructs a `K`-layer onion. Layer `k` is structured as:
 
 ```
-layer k:  V_{L_k}  ‖  E_{enc_tag_k}( σ_i^V( V_{L_k} ) )
+layer k:  V_{L_k}  ‖  C_k( σ_i^V( V_{L_k} ) )
 ```
 
 where:
 
 - `V_{L_k}` is the leader's value, **plaintext** in the onion. (TBFTR core: gives operators that missed Phase-1 broadcast a recovery channel via peers in Phase 2a.)
 - `σ_i^V(x)` is `i`'s partial signature on `x` from the V-signing share.
-- `E_{enc_tag_k}(·)` is threshold IBE under the cluster's IBE keypair (threshold `qEnc = 2f+1`).
-- `enc_tag_0 = ⊥` (layer 0 is plaintext — the highest-priority layer is always openable).
-- `enc_tag_k = nr_tag_{k-1}` for `k ≥ 1` (layer `k`'s ciphertext is locked under the previous layer's no-quorum tag).
+- `C_k(·)` is the **chained IBE wrapper** under the cluster's IBE keypair (threshold `qEnc = 2f+1`):
+  - `C_0(x) = x` — layer 0 is plaintext (the highest-priority layer is always openable).
+  - `C_k(x) = E_{nr_tag_{k-1}}(C_{k-1}(x))` for `k ≥ 1` — nested IBE encryption, one wrapper per prior layer's no-quorum tag.
+- `E_T(·)` is threshold IBE under tag `T`; a ciphertext under `T` decrypts iff `qEnc` partial sigs on `T` from the IBE keypair exist.
 - `nr_tag_k = ("slot", N, "cluster", C, "layer", k, "no-quorum")`.
+
+Chained gating means a σ partial at layer `k > 0` carries `k` nested IBE wrappers (`nr_tag_0` innermost, `nr_tag_{k-1}` outermost). To recover the σ partial, every prior NR-quorum (on `nr_tag_0`, ..., `nr_tag_{k-1}`) must aggregate; decryption peels outermost-first. This **chain-of-NR** gate is what gives the protocol its cross-layer safety property — a deeper-layer σ partial cannot be aggregated unless every shallower layer has actually fallen through. See "Fault tolerance / Safety" for the algebra.
 
 For layers where `i` doesn't have a valid `V_{L_k}` (or observed `L_k` equivocate), the layer slot is **null** in `i`'s onion (no plaintext V, no encrypted σ).
 
@@ -76,34 +79,38 @@ For layers where `i` doesn't have a valid `V_{L_k}` (or observed `L_k` equivocat
 
 For each layer `k` where the operator hasn't yet broadcast σ in their Phase 2a onion:
 
-- If during Phase 2a the operator extracted `V_{L_k}` from a peer's onion and validated it (against `L_k`'s leader-auth signature, the leader's σ^V from Phase 1, and application-level rules): broadcast a **late** σ partial on V_{L_k}, **encrypted under `enc_tag_k` exactly as the layer-k onion σ would be** — i.e. `E_{enc_tag_k}(σ_i^V(V_{L_k}))` for `k > 0`, plaintext `σ_i^V(V_{L_k})` for `k = 0`. The late σ counts toward layer-k σ-quorum aggregation alongside onion partials and unlocks under the same condition (NR-quorum on `nr_tag_{k-1}` for `k > 0`; trivially openable at layer 0).
+- If during Phase 2a the operator extracted `V_{L_k}` from a peer's onion and validated it (against `L_k`'s leader-auth signature, the leader's σ^V from Phase 1, and application-level rules): broadcast a **late** σ partial on V_{L_k}, wrapped with the same chained IBE encryption used in the Phase-2a onion at layer `k` — i.e., `C_k(σ_i^V(V_{L_k}))`. Late σ at layer `k > 0` is gated by the same chain-of-NR condition as the onion σ: every prior NR-quorum (`nr_tag_0`, ..., `nr_tag_{k-1}`) must aggregate before it can be peeled and counted toward σ-quorum.
 - Else (didn't recover V, or recovered V is invalid): broadcast a **non-receipt attestation** `σ_i^{IBE}(nr_tag_k)` from the IBE keypair (only for layers `k ∈ {0, …, K-2}`; the last layer has no successor — see "Treatment of missing onions / late broadcasts").
 
-Each honest operator commits to **exactly one** of `{σ, NR}` per layer (whether the σ commit lands in Phase 2a's onion or Phase 2b's late-σ broadcast). A byzantine that publishes both is publicly attributable (see "Cross-signing detection" in Phase 3 and "Fault tolerance / Safety" — under `qEnc = qV`, cross-signing has no safety impact regardless of honest aggregation behavior).
+Each honest operator commits to **exactly one** of `{σ, NR}` per layer (whether the σ commit lands in Phase 2a's onion or Phase 2b's late-σ broadcast). A byzantine that publishes both is publicly attributable (see "Fault tolerance / Cross-signing detection" — under `qEnc = qV`, cross-signing has no safety impact regardless of honest aggregation behavior).
 
-**Why late σ at `k > 0` must be encrypted.** Late σ partials are publicly observable on the gossipsub mesh once broadcast. If they were plaintext at all layers, a byzantine aggregator could collect late σ partials from a deeper layer where the cluster ended up halting at a shallower one — combining them with the (always-plaintext) Phase-1 leader σ to reach `qV` and reconstruct a second `V` signature off-line. Encrypting late σ under the layer's `enc_tag_k` ties the partial's usability to the same NR-quorum gate that the onion partials use, so deeper-layer σ partials (whether onion or late) can only be aggregated when the lower layer has actually fallen through.
+**Why late σ at `k > 0` is chained-encrypted.** Late σ partials are publicly observable on the gossipsub mesh once broadcast. With chained encryption the late σ at layer `k` is wrapped under the same chain of NR tags as the Phase-2a onion partial — so deeper-layer σ partials (whether onion or late) can only be aggregated when *every* prior layer has reached NR-quorum. This is what closes the cross-layer safety attack: an offline-aggregating byzantine cannot combine σ-partials at one layer with later-layer NR-partials to bypass the per-layer pigeonhole. See "Fault tolerance / Safety / Pigeonhole 3" for the algebra.
 
 ### Phase 3 — Local decryption and reconstruction `[T_commit + Δ_2a + Δ_2b, finalize]`
 
 Each operator attempts reconstruction:
 
 ```
+nr_keys = []                                       # accumulated NR decryption keys
+                                                    # nr_keys[j] = aggregate(NR partials on nr_tag_j)
+                                                    # populated only when nr_tag_j reached qEnc
+
 loop k = 0..K-1:
     # σ pool at layer k. For k > 0, both the onion-encoded σ partials and the
-    # Phase-2b late-σ partials are encrypted under enc_tag_k = nr_tag_{k-1};
-    # they only decrypt once a previous-layer NR-quorum unlocks the key. For
-    # k = 0, both sources are plaintext.
+    # Phase-2b late-σ partials are wrapped in the chained IBE C_k = E_{nr_tag_{k-1}}(...
+    # E_{nr_tag_0}(σ)). To peel the chain we need every prior NR key — so σ at
+    # layer k can only be aggregated if all of nr_tag_0..nr_tag_{k-1} reached qEnc
+    # (i.e., len(nr_keys) == k at this point in the loop).
     sigs = {σ_{L_k}^V(V_{L_k}) from Phase 1, if valid}
-        ∪ {σ_j^V(V_{L_k}) from received Phase-2a onion contents at layer k,
-           decrypted under enc_tag_k if k > 0}
-        ∪ {σ_j^V(V_{L_k}) from received Phase-2b late-σ broadcasts at layer k,
-           decrypted under enc_tag_k if k > 0}
+        ∪ {σ_j^V(V_{L_k}) from Phase-2a onion contents at layer k,
+           obtained by peeling C_k with nr_keys (outermost-first) if k > 0}
+        ∪ {σ_j^V(V_{L_k}) from Phase-2b late-σ broadcasts at layer k,
+           peeled the same way}
         # deduplicated per operator: the leader's own Phase-1 σ and the same
         # leader's onion-layer-k σ are the same partial, counted once.
 
     if |valid sigs on a single V_{L_k}| ≥ qV:
-        S = reconstruct full V signature on V_{L_k}
-        output (V_{L_k}, S); halt
+        output (V_{L_k}, reconstruct(sigs)); halt
 
     if k == K-1:
         halt with no output                         # missed slot (no successor)
@@ -111,8 +118,7 @@ loop k = 0..K-1:
     nrs = {σ_j^{IBE}(nr_tag_k) partials}
           # deduplicated per operator.
     if |valid nrs| ≥ qEnc:
-        decryption_key = aggregate(nrs)            # threshold sig on nr_tag_k
-        unlock layer (k+1) ciphertexts             # enc_tag_{k+1} = nr_tag_k
+        nr_keys.append(aggregate(nrs))              # threshold sig on nr_tag_k
         continue
     else:
         halt with no output                         # missed slot
@@ -120,7 +126,7 @@ loop k = 0..K-1:
 
 **`T_arrival`** for the deadline rule is the cutoff by which the operator must have received any Phase-2a onion or Phase-2b broadcast it intends to count — practically, it's `T_commit + Δ_2a + Δ_2b`. The deadline rule bounds the gap between `T_commit` and `T_arrival` against propagation P99/P999 and clock skew (see "Practical caveats / Deadline coordination").
 
-The leader's Phase-1 σ partial appears unencrypted in the σ pool at every layer. At layer `k > 0` this means one partial is visible early, before `enc_tag_k` is unlocked — but one partial alone can't reconstruct (need `qV`), and the remaining onion + late σ partials are both encrypted under `enc_tag_k` and stay sealed until the lower layer's NR-quorum unlocks them.
+The leader's Phase-1 σ partial appears unencrypted in the σ pool at every layer. At layer `k > 0` this means one partial is visible early, before the chain is peeled — but one partial alone can't reconstruct (need `qV`), and the remaining onion + late σ partials are wrapped in `C_k` and stay sealed until every prior layer's NR-quorum unlocks the chain.
 
 Once a participant produces an output `(V, S)`, it submits to the downstream system. Multiple operators may submit independently; the downstream system de-duplicates. See "Fault tolerance / Cross-signing detection" for the attribution treatment of operators that publish both σ and NR at the same layer.
 
@@ -167,7 +173,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 
 **Claim:** at most one full `V` signature is ever produced per TBFTR instance per slot — across any layer, on any value, across any combination of σ sources (Phase-1 leader σ, Phase-2a onion σ, Phase-2b late σ) — cluster-wide, against an offline-aggregating byzantine, regardless of which honest aggregation rules are followed.
 
-The proof rests on two pigeonhole arguments at each layer.
+The proof rests on three pigeonhole arguments. The first two operate at a single layer; the third extends safety across layers via the chained encryption from Phase 2a / 2b.
 
 **Pigeonhole 1 — σ-vs-NR at the same layer.** σ-quorum on `V_{L_k}` and NR-quorum on `nr_tag_k` cannot both be reached:
 
@@ -185,7 +191,15 @@ The proof rests on two pigeonhole arguments at each layer.
 - Each byzantine can sign both values: `byz_σ_V + byz_σ_V' ≤ 2f`.
 - If both quorums reached: `(2f+1) + (2f+1) − 2f = 2f+2`. But `(2f+1) + 2f = 4f+1 < 4f+2`. Contradiction. ∎
 
-Neither proof depends on honest operators excluding cross-signers from their aggregation — both are properties of the cluster-wide signed messages, holding against an offline-aggregating adversary that ignores any honest aggregation rule. The Phase-2 split doesn't change this: both σ sources (Phase-2a onion and Phase-2b late broadcast) count uniformly against the σ-pool. Late σ at layer `k > 0` is encrypted under `enc_tag_k` (see Phase 2b) so it can only be aggregated when the lower-layer NR-quorum unlocks the gate — closing the alternative aggregation path that would otherwise bypass pigeonhole 1.
+**Pigeonhole 3 — σ-quorums at different layers can't both reach.** For any two layers `k_1 < k_2`, the chained encryption `C_{k_2}` on layer-`k_2` σ partials nests every prior NR tag — including `nr_tag_{k_1}`. So σ-quorum at layer `k_2` requires `nr_tag_{k_1}`-quorum to have aggregated (otherwise the chain can't peel). But Pigeonhole 1 at layer `k_1` says σ-quorum on `V_{L_{k_1}}` and `nr_tag_{k_1}`-quorum cannot both reach. Therefore:
+
+- σ-quorum at layer `k_1` reaches → `nr_tag_{k_1}`-quorum doesn't reach (Pigeonhole 1)
+- → `C_{k_2}` cannot be peeled (chained encryption requires it)
+- → σ-quorum at layer `k_2` cannot reach. ∎
+
+Cross-layer safety reduces to Pigeonhole 1 via the chain gate. **Without chained encryption** — i.e., if layer-`k` σ were merely encrypted under `nr_tag_{k-1}` (the immediately-prior NR tag only) — Pigeonhole 3 would not hold for `k_2 − k_1 ≥ 2`: a byzantine could combine σ_{k_1}-partials + NR_{k_2-1}-partials to decrypt and aggregate σ_{k_2}, since Pigeonhole 1 doesn't constrain σ_{k_1} vs `nr_tag_{k_2-1}`. Chained encryption is what makes the cross-layer safety cryptographic rather than honest-only.
+
+None of the three proofs depend on honest operators excluding cross-signers from their aggregation — all are properties of the cluster-wide signed messages, holding against an offline-aggregating adversary that ignores any honest aggregation rule. The Phase-2 split doesn't change this: both σ sources (Phase-2a onion and Phase-2b late broadcast) count uniformly against the σ-pool, and both are wrapped in the same chained encryption.
 
 ### Liveness (synchrony-conditional)
 
@@ -202,7 +216,7 @@ No Phase-2b late σ is needed in this regime; the recovery channel is dormant.
 **Secondary closure (marginal synchrony).** If actual propagation slightly exceeds the budget `D` — gossipsub re-flooding doesn't reach every honest by their cutoff, but Phase-2a onion propagation does — the recovery channel kicks in:
 
 - The `f+1` honest who received V via Phase 1 broadcast Phase-2a onions carrying V plaintext.
-- The `f` remaining honest extract V from peer onions during Phase 2a, validate, then broadcast late σ in Phase 2b (encrypted under `enc_tag_k` for `k > 0`, plaintext for `k = 0`).
+- The `f` remaining honest extract V from peer onions during Phase 2a, validate, then broadcast late σ in Phase 2b (wrapped in `C_k` — chained IBE for `k > 0`, plaintext for `k = 0`).
 - Cluster-wide σ count on V: `f+1` (Phase-2a onions) + `f` (Phase-2b late) + `1` (leader's Phase-1 σ) = `2f+2 ≥ qV`. **Slot succeeds.**
 
 The composition extends robustness into the marginal-synchrony band where partial synchrony breaks but Phase-2a propagation still completes. A leaner protocol (no Phase-2 split, no V plaintext) misses the slot in this band at `f ≥ 2`, since its single-window σ count caps at `f+1` honest direct + `1` leader = `f+2`, falling short of `qV = 2f+1` once `f ≥ 2`. The marginal band widens with `f`, which is why the additions earn their complexity at larger cluster sizes more than at `n = 4`.
@@ -337,18 +351,20 @@ Implementation note: each operator must track the current head locally and valid
 
 2. **Phase 2b latency.** The composition adds `Δ_2b` (~100–200 ms on a healthy mesh) over plain TBFT-style timing. Tight against the 4s relay cutoff at n=10/13; the timing budget needs to be tracked against production gossip-propagation P99/P999.
 
-3. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = 2f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. The keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), even though the threshold is the same.
+3. **Chained-encryption cost.** σ partials at layer `k > 0` are wrapped in `k` nested IBE encryptions (one per prior `nr_tag`). Per onion, the deepest layer carries `K-1` nested wrappers; total encryption ops summed across all layers per onion is `K(K-1)/2` (so 1 op at K=2, 3 ops at K=3, 6 ops at K=4, 10 ops at K=5). Each IBE wrapper adds a small constant ciphertext expansion (typically a few hundred bytes per wrapper for `drand/tlock`-style constructions) — at n=13 (K=5), ~500 B per partial × n operators ≈ ~6.5 KB cluster-wide additional vs a hypothetical single-tag scheme. Decryption is symmetric: peel `k` wrappers at layer `k`, using the cumulatively-aggregated NR keys (outermost first). Per-op latency is microseconds; total chain peeling is a few hundred microseconds at K=5 — negligible against the protocol's per-slot timing budget. The chained encryption is what closes the cross-layer safety attack at K ≥ 3 (see "Fault tolerance / Safety / Pigeonhole 3"); a single-tag scheme would require honest-only enforcement to be safe and is not recommended.
 
-4. **Deadline coordination.** Clock skew across operators must be bounded by `δ`. Two cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
+4. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = 2f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. The keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), even though the threshold is the same.
+
+5. **Deadline coordination.** Clock skew across operators must be bounded by `δ`. Two cutoffs derived from `D` (propagation P99/P999) and `δ` together drive the partial-synchrony assumption:
 
    - **`T_candidate_accept = T_commit − (D + δ)`** for Phase-1 candidates. Receivers reject candidates whose first-observation time is later.
    - **`T_arrival = T_commit + Δ_2a + Δ_2b`** for Phase-2a onion / Phase-2b late-σ / NR contributions — the cutoff for accepting Phase-2 messages into the local pools. Same `D + δ` budget against `T_arrival`.
 
    Both are *liveness* requirements only; safety is unaffected by skew or propagation breakdown (see "Fault tolerance / Safety").
 
-5. **Tag construction and replay.** The `nr_tag_k` tags must uniquely bind `(slot, cluster, layer)` so that ciphertexts from one slot/cluster/layer cannot be replayed/reused.
+6. **Tag construction and replay.** The `nr_tag_k` tags must uniquely bind `(slot, cluster, layer)` so that ciphertexts from one slot/cluster/layer cannot be replayed/reused.
 
-6. **"At most one full sig" is per-instance.** Holds within one TBFTR instance and assumes:
+7. **"At most one full sig" is per-instance.** Holds within one TBFTR instance and assumes:
    - Single TBFTR instance per slot (no parallel signing path against the same V-signing share).
    - Domain separation between TBFTR and any other path that signs against the V-signing share.
    - Slashing protection gates **candidate signing** (Phase-1 leader and Phase-2 onion/late σ alike), not just submission.
@@ -373,7 +389,7 @@ Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-aut
 | Phase 1 bundle | `(V, σ^V_L, σ^op_L(envelope))` | Same |
 | Equivocation-to-NR rule | Yes | Yes |
 | qV / qEnc | `qV = qEnc = 2f+1 = 3` | Same |
-| Onion at layer k | `E_{enc_tag_k}(σ_i^V(V_{L_k}))` (encrypted partial only) | `V_{L_k} ‖ E_{enc_tag_k}(σ_i^V(V_{L_k}))` (V plaintext + encrypted partial) |
+| Onion at layer k | `E_{nr_tag_0}(σ_i^V(V_{L_k}))` (encrypted partial only; at K=2 the chained wrapper has only one tag) | `V_{L_k} ‖ C_k(σ_i^V(V_{L_k}))` (V plaintext + chained-IBE-wrapped partial; `C_k` reduces to single-tag encryption at K=2 and to full chain at K ≥ 3) |
 | Phase 2 timing | Single window `[T_commit, T_commit + Δ_2]` (onion + NR together) | Split: 2a (onion only) + 2b (late σ or NR) |
 | Late σ broadcasts | None | Phase 2b — operators who recovered V via peer onions sign σ then |
 | Byzantine-leader-grief closure | Primary only (gossipsub re-flooding under partial synchrony) | Primary + secondary (Phase-2 composition extends closure into a marginal-synchrony band; full-V variant only) |
