@@ -35,7 +35,7 @@ The protocol description is generic. SSV's Ethereum proposer duty is used as the
 - For each slot, a **leader priority order** `(L_0, L_1, …, L_{n-1})` deterministically derived from slot data. `L_0` is the highest-priority leader. (0-based indexing throughout.)
 - A **fallback depth** `K = f+1` per cluster: `K=2` for n=4, `K=3` for n=7, `K=4` for n=10, `K=5` for n=13. (`K = f+1` ensures at least one honest leader exists in the top-`K` since byz can hold at most `f`.)
 - Per-slot deadlines: `T_commit` (Phase 1 ends, Phase 2a starts), `T_commit + Δ_2a` (Phase 2a ends, Phase 2b starts), `T_commit + Δ_2a + Δ_2b` (Phase 2b ends, Phase 3 starts).
-- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers drop any Phase-1 candidate whose first-observation time is later than `T_candidate_accept` — treated locally as not-received. With the cutoff, a candidate accepted by any honest operator before `T_candidate_accept` has at least `D + δ` left to re-flood (or to land in peer Phase-2a onions before *their* cutoff), so the byzantine cannot fragment the cluster by timing-based selective delivery. The cutoff makes both the gossipsub-re-flooding closure and the Phase-2a peer-recovery closure operational — see "Fault tolerance / Liveness".
+- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers treat any Phase-1 candidate whose first-observation time is later than `T_candidate_accept` as not-accepted-as-candidate (auth-only retention is permitted — see Phase 1 / Bundle propagation). The cutoff bounds late acceptance: byzantine cannot get a bundle accepted as a Phase-1 candidate after `T_candidate_accept`. It does **not** by itself guarantee that an honest re-flood started at exactly the cutoff reaches every other honest before *their* cutoffs in the worst-case clock-skew scenario — that **byzantine-leader-at-cutoff edge** is the residual surface that full-V's Phase-2a peer-onion V-recovery + Phase-2b late σ (the secondary closure) handles at `f ≥ 2`; the hash variant accepts it as a residual miss surface unless the cutoff is tightened (e.g., to `T_commit − (2D + δ)`) at the cost of squeezing the leader's fetch window. See "Fault tolerance / Liveness" for the full breakdown.
 
 ## Protocol
 
@@ -307,7 +307,7 @@ The witness threshold is still load-bearing at `f = 1` for **safety against the 
 
 **Application-validity-divergence — known liveness limit.** When honest receivers' application verdicts on `V_{L_k}` diverge — some return `valid` (commit σ), others return `not-valid` (commit NV) — the cluster can deadlock at this layer under adversarial byzantine. The mechanism:
 
-- The layer-`k` leader's Phase-1 σ commits them to σ-side. Per cross-phase exclusivity, the leader cannot emit NR/NV at layer `k`.
+- The honest layer-`k` leader's Phase-1 σ commits them to σ-side. Per cross-phase exclusivity, the leader cannot emit NR/NV at layer `k`.
 - Non-leader honest who returned `not-valid` emit NV (≤ `2f` total — the bound, since the leader is excluded from this side).
 - Adversarial byzantine withholds NR/NV (and σ).
 - σ-pool: `1` (leader) + `m` (honest who returned valid) + `0` byz = `m + 1 < qV = 2f+1` whenever `m < 2f` (i.e., whenever any honest returned `not-valid`).
@@ -387,18 +387,18 @@ For an SSV cluster proposing an Ethereum block:
 | `T_commit` | derived from the relay 4s cutoff — e.g. `T_commit ≈ slot_start + 2.7s` |
 | `T_candidate_accept` | `T_commit − (D + δ)`; the effective Phase-1 acceptance deadline (~`slot_start + 2.5s` for D + δ ≈ 200 ms) |
 | `Δ_1` | block-fetch window (~1s, accommodating worst-of-K beacon-fetch latency) |
-| `Δ_2a` | onion broadcast window (~300ms) |
-| `Δ_2b` | late-σ window (~150ms) |
+| `Δ_2a` | onion broadcast window (~250ms; must satisfy `Δ_2a > D + δ`) |
+| `Δ_2b` | late-σ window (~250ms; must satisfy `Δ_2b > D + δ`) |
 
 Phase timeline (assuming `D + δ ≈ 200 ms`; same shape across `n`):
 
 - Phase 1 fetch: `slot_start + 1.7s` to `slot_start + 2.7s` (top-K leaders fetch and broadcast bundles).
 - **Effective Phase 1 acceptance ends at `T_candidate_accept ≈ slot_start + 2.5s`**: candidates first observed by an honest receiver after this point are dropped. The primary-leader's late-fetch window is therefore effectively `T_0` to `T_candidate_accept`, ~200 ms shorter than the nominal `T_0` to `T_commit`. This is the cost of cryptographic-safe re-flooding.
-- Phase 2a: `slot_start + 2.7s` to `slot_start + 3.0s` (onions with V plaintext).
-- Phase 2b: `slot_start + 3.0s` to `slot_start + 3.15s` (late σ or NR).
-- Phase 3: `slot_start + 3.15s` onwards (reconstruct + submit + certificate gossip, headroom for relay 4s cutoff).
+- Phase 2a: `slot_start + 2.7s` to `slot_start + 2.95s` (onions with V plaintext; ~250ms window > D+δ).
+- Phase 2b: `slot_start + 2.95s` to `slot_start + 3.2s` (late σ or NR; ~250ms window > D+δ).
+- Phase 3: `slot_start + 3.2s` onwards (reconstruct + submit + certificate gossip, ~800ms headroom against relay 4s cutoff).
 
-The compressed timeline at larger cluster sizes (n=10, 13) is tighter against the relay cutoff; production telemetry should validate the budget — and in particular, telemetry should track `D + δ` so `T_candidate_accept` can be set just-tight-enough to the propagation envelope without over-shrinking the late-fetch window.
+Each Phase-2 sub-window is sized strictly above `D + δ` per the per-window deadline rule (see "Practical caveats / Deadline coordination"). The compressed timeline at larger cluster sizes (n=10, 13) is tighter against the relay cutoff; production telemetry should validate the budget — and in particular, telemetry should track `D + δ` so `T_candidate_accept` and the per-Phase-2 windows can be set just-tight-enough to the propagation envelope without over-shrinking the late-fetch window or under-sizing either Phase-2 sub-window.
 
 ### Timing budget
 
@@ -408,8 +408,8 @@ The end-to-end budget for a proposer slot must fit inside the relay submission c
 slot_start
   + pre-consensus            (RANDAO partial-sig collection, ~T_pre)
   + block fetch              (Δ_1; worst-of-K parallel fetches — see below)
-  + Phase 2a broadcast       (Δ_2a ≈ 300 ms)
-  + Phase 2b broadcast       (Δ_2b ≈ 150 ms)
+  + Phase 2a broadcast       (Δ_2a ≈ 250 ms; must satisfy Δ_2a > D + δ)
+  + Phase 2b broadcast       (Δ_2b ≈ 250 ms; must satisfy Δ_2b > D + δ)
   + Phase 3 reconstruct      (BLS aggregate, ~few ms)
   + downstream submission    (relay round-trip, ~T_submit)
 ≤ slot_start + 4s            (relay cutoff)

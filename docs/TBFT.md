@@ -216,7 +216,7 @@ The leader's Phase-1 σ is what makes the moderate-marginal row close at `n = 4`
 
 **Application-validity-divergence — known liveness limit.** When honest receivers' application verdicts on `V_{L_0}` diverge — some return `valid` (commit σ), others return `not-valid` (commit NV) — the cluster can deadlock at layer 0 under adversarial byzantine. The mechanism:
 
-- The layer-0 leader's Phase-1 σ commits them to σ-side. Per cross-phase exclusivity, the leader cannot emit NR/NV at layer 0.
+- The honest layer-0 leader's Phase-1 σ commits them to σ-side. Per cross-phase exclusivity, the leader cannot emit NR/NV at layer 0.
 - Non-leader honest who returned `not-valid` emit NV (≤ 2 total — the bound, since the leader is excluded from this side).
 - Adversarial byzantine withholds NR/NV (and σ).
 - σ-pool: 1 (leader) + `m` (honest who returned valid) + 0 byz = `m + 1 < qV = 3` whenever `m < 2` (i.e., whenever any non-leader honest returned `not-valid`).
@@ -234,7 +234,7 @@ The slot misses (no V signature is produced) under any of the following:
 - **Bad synchrony (aggressive marginal and beyond)** — real propagation exceeds the budget `D` so badly that ≥2 of 3 honest miss re-flood by their cutoff (the aggressive-marginal row above). The cluster fragments: 1 σ + leader's σ + 2 NR — σ-side (= 2 < qV) and NR-side (= 2 < qEnc) both fall short. **No safety violation.** Single-shot means no round 2. Tightening the cutoff trades miss-on-jitter rate for resilience against late byzantine releases.
 - **More than `f` faults** — both leaders byzantine (impossible at `f = 1`) or more than 1 operator offline/byzantine combined. Standard `3f+1` trust bound.
 - **Backup unavailable plus primary path failure** — `L_1` doesn't broadcast and `L_0`'s path also fails. Layer 1 has nothing to fall through to.
-- **Application-validity-divergence on layer 0 with backup also unavailable** — see "Application-validity-divergence" above; if layer 0 deadlocks and layer 1 is also unavailable (no broadcast or itself diverges), the slot misses overall.
+- **Application-validity-divergence on layer 0 (under adversarial byzantine)** — see "Application-validity-divergence" above. If honest application verdicts diverge on `V_{L_0}` and adversarial byzantine withholds, layer 0 deadlocks: σ-pool short of qV, NR-pool capped at 2f < qEnc=3, so `nr_tag_0` does **not** reach NR-quorum. Because layer 1's encrypted σ partials require `nr_tag_0`'s NR-quorum to peel, the cluster cannot fall through to layer 1 even when `L_1` broadcast a perfectly valid backup. Slot misses overall — independent of whether the backup itself is available.
 
 ### Equivocation handling
 
