@@ -46,9 +46,13 @@ Bandwidth constants for this cluster size: QBFT 1 round + post-consensus ~14 KB;
 | **7** | More than f failures (beyond byzantine bound) | miss | miss | miss |
 
 ¹ Equivocation triggers the equivocation-to-non-receipt rule cluster-wide — falls through cleanly to the backup.
+<br>
 ² QBFT recovers via round change.
+<br>
 ³ Under partial synchrony with the candidate-acceptance cutoff `T_candidate_accept = T_commit − (D + δ)` enforced, gossipsub re-flooding propagates the leader's bundle to all 3 honest before *their* cutoffs; all 3 sign σ in Phase 2, σ-quorum reaches `qV = 3` cleanly. Both TBFT and TBFTR(K=2) close this scenario via the same primary mechanism.
+<br>
 ⁴ TBFT relies on the primary closure only; if re-flooding misses the budget, the σ-pool fragments and the slot misses (no safety violation).
+<br>
 ⁵ **Full-V variant only.** TBFTR(K=2) closes this case via its secondary mechanism — Phase-2a peer-onion V-recovery + Phase-2b late σ — extending coverage from "1 honest missing re-flood" (what TBFT's leader-σ head-start covers) to "up to 2 of 3 honest missing", where Phase-2a propagation still completes within its (longer) window. The hash variant disables peer-onion V-recovery (peers carry only `hash(V)` at non-leader layers), so under hash variant TBFTR(K=2) misses 6c just like TBFT does.
 
 ### Reading the n=4 table
@@ -83,9 +87,13 @@ Both variants are cryptographically safe; they differ in marginal-synchrony live
 | **7** | More than f failures (beyond byzantine bound) | miss | miss | miss |
 
 ¹ Equivocation triggers the equivocation-to-non-receipt rule cluster-wide — falls through cleanly to the next layer.
+<br>
 ² QBFT recovers via round change — round 1 fails to reach prepare-quorum, new leader elected in round 2.
+<br>
 ³ Under partial synchrony with `T_candidate_accept` enforced, gossipsub re-flooding propagates the leader's Phase-1 bundle to all 2f+1 honest before *their* cutoffs (primary closure). σ-quorum reaches via the 2f+1 onion partials + leader's Phase-1 σ = 2f+2 ≥ qV = 5. Both variants close this case the same way; Phase-2a peer-onion recovery is dormant because re-flooding already did the work.
+<br>
 ⁴ Hash variant has only the primary closure (re-flooding). When re-flooding misses the budget, peer onions carry only `hash(V)` at non-leader layers — honest operators that didn't get V via Phase 1 cannot recover. Their σ-pool fragments and the slot misses (no safety violation; safety is cryptographic).
+<br>
 ⁵ **Full-V variant succeeds via the secondary closure.** Phase-2a peer onions carry full V plaintext, so honest operators that missed Phase-1 re-flooding recover V via peer onions and broadcast late σ in Phase 2b. σ-quorum reaches at qV = 5: f+1 onion partials + f late-σ partials + 1 leader Phase-1 σ = 2f+2. See [TBFTR.md](TBFTR.md) "Fault tolerance / Liveness" for the full breakdown.
 
 ### Reading the n=7 table
