@@ -21,7 +21,7 @@ The protocol description below is specific to TBFT. SSV's Ethereum proposer duty
 - A leader-authentication signature scheme (operator-identity key) for candidate broadcasts, distinct from the two threshold keypairs. Practical choice: reuse each operator's long-term P2P/SSV identity key.
 - Two **layers** with deterministically-derived leaders: layer 0 with **primary leader** `L_0` and layer 1 with **backup leader** `L_1`, required to be distinct.
 - Two leader-fetch deadlines, `T_1 < T_0`, plus a final cluster deadline `T_commit`. (`T_commit` is a *view-fix point*: each operator commits its stance based on what it observed by `T_commit`. Reconstruction and submission happen after `T_commit`.) The asymmetric fetch times let the primary fetch a high-MEV value late (`T_0` close to `T_commit`) while the backup fetches a safe early value (`T_1` well before `T_0`).
-- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers drop any candidate whose first-observation time is later than `T_candidate_accept` — treated locally as not-received. This cutoff is what makes the gossipsub-re-flooding argument actually work: a candidate accepted by any honest operator before `T_candidate_accept` has at least `D + δ` to re-flood to every other honest operator before *their* `T_candidate_accept`, modulo clock skew. With the cutoff, the byzantine cannot fragment the cluster by timing-based selective delivery: either a candidate is published early enough that all honest accept it, or so late that none accept it (see "Fault tolerance / Liveness").
+- A **candidate acceptance cutoff** `T_candidate_accept = T_commit − (D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Receivers drop any candidate whose first-observation time is later than `T_candidate_accept` — treated locally as not-received. The cutoff bounds late acceptance: byzantine cannot first-deliver to any honest after their `T_candidate_accept` without all of them rejecting. It does **not** by itself guarantee that a re-flood from an honest receiver at exactly the cutoff reaches every other honest before *their* cutoffs in the worst-case clock-skew scenario — under that byzantine-leader-at-cutoff edge, only `f+1` honest sign Phase-2 σ on time. **TBFT at `n = 4` still closes the slot in this edge** because `f+1 = 2` honest σ + 1 leader Phase-1 σ = `f+2 = qV = 3` exactly; the cluster reaches σ-quorum without needing all honest to accept before their cutoffs (see "Fault tolerance / Liveness" and "Phase 1 / Bundle propagation"). This is also the structural reason TBFT-shape doesn't extend to `f ≥ 2` (where `f+2 < qV`), and why TBFTR introduces secondary closure at larger cluster sizes.
 - A single tag `nr_tag_0 = ("slot", N, "cluster", C, "layer", 0, "no-quorum")`. (Only one tag is needed because there's only one transition — primary→backup — that requires unlocking.)
 
 ## Protocol
@@ -195,14 +195,15 @@ The same arguments apply symmetrically to the backup layer once it's unlocked. N
 
 TBFT's liveness is **partial-synchrony-conditional within `T_commit + Δ_2`**, the same per-window envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)). If propagation between honest operators stays bounded by the propagation budget, the protocol terminates cleanly. If propagation is degraded badly enough that no σ-quorum and no NR-quorum reach their thresholds, the slot is missed. There is no "round 2" — TBFT is single-shot by design. **Safety holds in either case.**
 
-**Byzantine-leader selective-delivery resistance under partial synchrony.** Worst-case attack: byzantine `L_0` tries to selectively deliver `(V_{L_0}, σ_{L_0}^V, σ_{L_0}^{op})` to a strict subset of the 3 honest, intending to fragment the σ pool while keeping NR-quorum reachable. With the **candidate acceptance cutoff** honored by every honest receiver, under partial synchrony (re-flooding completes within `D + δ`) the byzantine has only two consistent outcomes:
+**Byzantine-leader selective-delivery resistance under partial synchrony.** Worst-case attack: byzantine `L_0` tries to selectively deliver `(V_{L_0}, σ_{L_0}^V, σ_{L_0}^{op})` to a strict subset of the 3 honest, intending to fragment the σ pool while keeping NR-quorum reachable. With the **candidate acceptance cutoff** honored by every honest receiver, the byzantine has three consistent outcomes:
 
 | Bundle release time | What every honest sees by `T_candidate_accept` | σ-side | NR-side | Outcome |
 |---|---|---|---|---|
-| Released at or before `T_commit − (D + δ)`, reaches at least one honest | All 3 honest accept (gossipsub re-flooding completes within `D + δ`) | 3 honest σ + leader's Phase-1 σ = 4 ≥ qV = 3 | 0 | Reconstruct V_{L_0} ✓ |
-| Released later than `T_commit − (D + δ)`, or never released, or fully eclipsed | All 3 honest treat as not-received | 0 | 3 ≥ qEnc = 3 | Fall through to V_{L_1} ✓ |
+| Released with re-flood headroom (`≥ D + δ` before cutoff), reaches at least one honest | All 3 honest accept | 3 honest σ + leader's Phase-1 σ = 4 ≥ qV = 3 | 0 | Reconstruct V_{L_0} ✓ |
+| Released *at* `T_candidate_accept` edge (re-flood lands inside worst-case skew window) | f+1 = 2 honest accept on time; 1 honest's first-observation crosses their own cutoff and treats as not-received | 2 honest σ + 1 leader Phase-1 σ = **3 = qV** | 1 | Reconstruct V_{L_0} ✓ (succeeds because `f+2 = qV` at `f = 1`) |
+| Released later than `T_candidate_accept`, or never released, or fully eclipsed | All 3 honest treat as not-received | 0 | 3 ≥ qEnc = 3 | Fall through to V_{L_1} ✓ |
 
-**Slot succeeds in every byzantine-`L_0` attack scenario under partial synchrony.** Symmetric analysis for byzantine `L_1` with `L_0` honest: the primary path resolves cleanly; the backup is irrelevant.
+**Slot succeeds in every byzantine-`L_0` attack scenario under partial synchrony at `f = 1`** — the middle row's exact `f+2 = qV` equality is what closes the byzantine-leader-at-cutoff edge for TBFT specifically; without that, the same edge would miss (which is why TBFT-shape doesn't extend to `f ≥ 2` — see [TBFTR.md](TBFTR.md) "Liveness / Byzantine-at-cutoff edge"). Symmetric analysis for byzantine `L_1` with `L_0` honest: the primary path resolves cleanly; the backup is irrelevant.
 
 **Marginal-synchrony resilience.** Between the two clean outcomes lies a band where bundle release is on-time but re-flooding doesn't reach every honest within `D + δ`. TBFT's leader-σ-V head-start covers a slice of this band; the rest spills into the failure modes below:
 
@@ -307,13 +308,13 @@ For an SSV cluster proposing an Ethereum block:
 | `V_{L_0}` | MEV-optimized block fetched late from the relay |
 | `L_1` (backup leader) | a separately designated operator (e.g. round-2 leader; required ≠ `L_0`) |
 | `V_{L_1}` | safe early-fetched block from a vanilla beacon-node payload, refreshed on head changes |
-| `T_1` | early backup window (e.g. `slot_start − 4s`) |
+| `T_1` | early backup window (e.g. `slot_start + 1s`) |
 | `T_0` | late primary window (e.g. `slot_start + 2s`) |
 | `T_commit` | commit / view-fix deadline (e.g. `slot_start + 3s`); reconstruction and submission happen after, with headroom against the relay 4s cutoff |
 
 Phase timeline:
 
-- Phase 1 layer-1: ~`slot_start − 4s` (backup fetch and broadcast).
+- Phase 1 layer-1: ~`slot_start + 1s` (backup fetch and broadcast).
 - Phase 1 layer-0: ~`slot_start + 2s` to `slot_start + 3s` (primary fetch and broadcast; gossipsub re-flooding window between this and Phase 2 closes selective delivery).
 - Phase 2: `slot_start + 3s` to `slot_start + 3.5s` (onion + non-receipt broadcast).
 - Phase 3: `slot_start + 3.5s` onwards (reconstruct + submit + certificate gossip).
@@ -322,7 +323,7 @@ Cryptographic safety (`qEnc = qV`) ensures only one block can ever get a valid v
 
 ### Timing budget
 
-The end-to-end budget for a proposer slot must fit inside the relay submission cutoff (~4 s after `slot_start`). The structure:
+The end-to-end budget for a proposer slot must fit inside the relay submission cutoff (~4s after `slot_start`). The structure:
 
 ```
 slot_start

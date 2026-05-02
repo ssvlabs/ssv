@@ -26,7 +26,7 @@ import (
 //
 //   - Deadline:    slot_start + 3s   (leaves headroom for the relay 4s cutoff)
 //   - LateFetch:   slot_start + 2s   (typical TBFT; primary fetch in TBFT2)
-//   - EarlyFetch:  slot_start − 4s   (TBFT2 backup fetch only)
+//   - EarlyFetch:  slot_start + 1s   (TBFT2 backup fetch only)
 const (
 	DefaultDeadlineOffset   = 3 * time.Second
 	DefaultLateFetchOffset  = 2 * time.Second

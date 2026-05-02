@@ -368,7 +368,7 @@ Same as [TBFT](TBFT.md): threshold IBE / signature-based witness encryption (`dr
 | Validity | Yes, conditional on host-application precondition |
 | Termination | **No**, single-shot |
 | Equivocation detection | Yes |
-| Byzantine-leader-grief resistance | **Closed** under partial synchrony via gossipsub re-flooding (primary). Marginal-synchrony band closed via Phase-2 composition (secondary) up to "≤ `f` honest miss re-flood" — gated by the `f+1`-distinct-Phase-2a-σ-signers witness threshold; widening over the leaner protocol's "≤ 1 honest" bound is `f − 1` (zero at `f = 1`, +1 at `f = 2`, etc.) |
+| Byzantine-leader-grief resistance | **With re-flood headroom** (byz releases bundle ≥ `D + δ` before `T_candidate_accept`): closed under partial synchrony via gossipsub re-flooding (primary), in both full-V and hash variants. **Byzantine-leader-at-cutoff edge** (byz releases at the cutoff so re-flood lands past worst-case-skew peers): closed by full-V's secondary closure at `f ≥ 2`; hash variant has a residual partial-synchrony miss surface unless `T_candidate_accept` is moved earlier. Marginal-synchrony band closed via Phase-2 composition (secondary, full-V only) up to "≤ `f` honest miss re-flood" — gated by the `f+1`-distinct-Phase-2a-σ-signers witness threshold; widening over the leaner protocol's "≤ 1 honest" bound is `f − 1` (zero at `f = 1`, +1 at `f = 2`, etc.) |
 | Built-in leader fallback | Yes (K layers) |
 | Round-change recovery | No |
 
@@ -402,7 +402,7 @@ Each Phase-2 sub-window is sized strictly above `D + δ` per the per-window dead
 
 ### Timing budget
 
-The end-to-end budget for a proposer slot must fit inside the relay submission cutoff (~4 s after `slot_start`). The structure:
+The end-to-end budget for a proposer slot must fit inside the relay submission cutoff (~4s after `slot_start`). The structure:
 
 ```
 slot_start

@@ -2,7 +2,7 @@
 
 This document tracks the plan to replace QBFT with TBFT in SSV's proposer-duty execution path, and the progress of executing it.
 
-**Scope:** Proposer duty only. Attestation/sync-committee duties continue to use QBFT. (See [TBFT.md](TBFT.md) and [TBFT-comparison.md](TBFT-comparison.md) for the protocol design and comparison; the analysis there motivated this scope choice — TBFT's value is concentrated on proposer duty's tight 4 s relay cutoff, not on attestation's looser ~12 s window.)
+**Scope:** Proposer duty only. Attestation/sync-committee duties continue to use QBFT. (See [TBFT.md](TBFT.md) and [TBFT-comparison.md](TBFT-comparison.md) for the protocol design and comparison; the analysis there motivated this scope choice — TBFT's value is concentrated on proposer duty's tight 4s relay cutoff, not on attestation's looser ~12 s window.)
 
 **Status tracking conventions:**
 
@@ -48,12 +48,12 @@ type Config struct {
 
 Cluster-size-aware factory picks the right config:
 
-| Cluster `n` | `f` | Configuration spawned | Layer count | Notes |
-|---|---|---|---|---|
-| 4 | 1 | TBFT2 | 2 | Layer 0 (primary) at slot+1s; Layer 1 (backup) at slot−4s |
-| 7 | 2 | TBFT (K=3) | 3 | All layers at slot+1s |
-| 10 | 3 | TBFT (K=4) | 4 | All layers at slot+1s |
-| 13 | 4 | TBFT (K=5) | 5 | All layers at slot+1s |
+| Cluster `n` | `f` | Configuration spawned | Layer count | Notes                                                     |
+|---|---|---|---|-----------------------------------------------------------|
+| 4 | 1 | TBFT2 | 2 | Layer 0 (primary) at slot+1s; Layer 1 (backup) at slot+1s |
+| 7 | 2 | TBFT (K=3) | 3 | All layers at slot+1s                                     |
+| 10 | 3 | TBFT (K=4) | 4 | All layers at slot+1s                                     |
+| 13 | 4 | TBFT (K=5) | 5 | All layers at slot+1s                                     |
 
 The protocol implementation is the same; the cluster's bootstrap layer chooses the config based on `n`. This is a real implementation simplification — one codebase, two named configurations. See Phase 4 for where this factory lives.
 
@@ -77,7 +77,7 @@ Phases build on each other. Within a phase, tasks can usually be parallelized.
   - `T_commit` (deadline): default `slot_start + 3s`, configurable per cluster.
   - `Δ_1` (block-fetch window): default `1s`.
   - `Δ_2` (onion-gossip window): default `500ms`.
-  - For TBFT2 (n=4): `T_b` (early backup fetch) at `slot_start − 4s`.
+  - For TBFT2 (n=4): `T_b` (early backup fetch) at `slot_start + 1s`.
 - [x] **Backwards compatibility / mixed-cluster prevention.** Out of scope for the protocol implementation. Operator deployment ensures a cluster runs one protocol or the other, not both.
 - [x] **ssv-spec coupling.** The TBFT protocol implementation is **independent of `github.com/ssvlabs/ssv-spec` in every way**. We define our own message types, our own value-checker hooks, our own controller interface. Spec-tests are not part of this work.
 - [x] **Inconsistency-slashing.** Detect and log only; no punishment hook (SSV doesn't have an operator-slashing mechanism today).
@@ -595,4 +595,4 @@ This plan is the implementation track of the design exploration documented in:
 - [TBFT.md](TBFT.md) — the n-layer protocol design
 - [TBFT-comparison.md](TBFT-comparison.md) — failure-mode comparison vs QBFT
 
-The motivation traces back to [ssvlabs/ssv#1829](https://github.com/ssvlabs/ssv/issues/1829), specifically the MEV-driven concern that QBFT's round-change time can blow past relays' 4 s cutoff for proposer duty.
+The motivation traces back to [ssvlabs/ssv#1829](https://github.com/ssvlabs/ssv/issues/1829), specifically the MEV-driven concern that QBFT's round-change time can blow past relays' 4s cutoff for proposer duty.
