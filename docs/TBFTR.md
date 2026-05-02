@@ -73,7 +73,7 @@ For layers where `i` doesn't have a valid `V_{L_k}` (or observed `L_k` equivocat
 
 **No non-receipt attestations are broadcast yet.** `i` waits for Phase 2b to commit on the NR side.
 
-(Bandwidth optimization, the "hash variant": instead of full V plaintext at every layer, operators may carry `hash(V_{L_k})` (32 B) at each layer they signed and full `V_{L_k}` plaintext only at the layer where `i` is the leader. Any single full-V delivery is sufficient for cluster-wide recovery; everyone else verifies by hash. This is the recommended default for n=10/13 where bandwidth matters; the spec algebra is unchanged. See "Practical caveats" for the bandwidth analysis.)
+(Bandwidth optimization, the "hash variant": instead of full V plaintext at every layer, operators may carry `hash(V_{L_k})` (32 B) at each layer they signed and full `V_{L_k}` plaintext only at the layer where `i` is the leader. The spec algebra is unchanged. **Caveat — hash variant disables the secondary liveness mechanism**: see "Liveness profile" for the primary/secondary breakdown. Under the hash variant, an honest operator that didn't receive V via Phase 1 cannot recover V from a peer's onion (the peer is carrying only `hash(V)` unless it happens to be the layer's leader, and a byzantine leader will withhold its own onion). Recovery collapses to gossipsub re-flooding of the Phase-1 bundle alone — the same robustness as TBFT-shape protocols. Hash variant is only safe to deploy where bandwidth is the binding constraint AND the cluster operates well within partial-synchrony bounds; if marginal-synchrony robustness matters, use the full-V variant. See "Practical caveats" for the bandwidth analysis.)
 
 ### Phase 2b — Late σ or non-receipt commitment `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`
 
@@ -143,6 +143,8 @@ A participant that hasn't received `j`'s onion / late σ / NR at decryption time
 
 Liveness is bounded by the standard `3f+1` byzantine assumption. If more than `f` operators are offline or byzantine combined, no quorum reaches its threshold and the slot is missed.
 
+**Last-layer failure is terminal.** NR attestations are only meaningful when there's a successor layer to unlock — they exist for layers `k ∈ {0, …, K-2}` only. If the last layer (`k = K-1`) fails to reach σ-quorum, the slot misses; there's no `nr_tag_{K-1}` and no fallback. Phase 2b emits NR only on tags `nr_tag_0` through `nr_tag_{K-2}`; Phase 3 halts at `k = K-1` after the σ check, regardless of NR partial availability at that layer.
+
 ## Preconditions on the host application
 
 (Same as [TBFT](TBFT.md) "Preconditions on the host application" — application-level validity is a host responsibility; TBFTR extends the precondition to apply at *both* Phase 2a's σ commit AND Phase 2b's late σ commit, since the same operator may sign σ in either window.)
@@ -192,20 +194,32 @@ Combined with the σ-vs-NR pigeonhole above, **at most one full V signature can 
 
 ## Liveness profile
 
-TBFTR's liveness is **partial-synchrony-conditional within `T_commit + Δ_2a + Δ_2b`**, the same per-window envelope SSV's QBFT relies on per round (cf. [protocol/v2/qbft/roundtimer/timer.go:148](../protocol/v2/qbft/roundtimer/timer.go)). If propagation between honest operators stays bounded by the propagation budget, the protocol terminates cleanly. If propagation is degraded badly enough that no σ-quorum and no NR-quorum reach their thresholds at any layer up to `K`, the slot is missed. There is no "round 2" — TBFTR is single-shot by design. **Safety holds in either case** (cryptographic, "Why it's safe").
+TBFTR's liveness has **two layered mechanisms** for closing byzantine-leader selective-delivery grief at `f ≥ 2`. Under partial synchrony with `T_candidate_accept` enforced, the *primary* mechanism — gossipsub re-flooding of Phase-1 bundles — already suffices: every honest operator that received V_{L_k} via Phase 1 by `T_candidate_accept` re-floods to every other honest operator within `D + δ`, so all `2f+1` honest end up holding V_{L_k} before they construct their Phase-2a onions. The *secondary* mechanism — Phase-2a peer-onion V-plaintext + Phase-2b late σ — extends the synchrony band where the cluster still completes by giving honest operators that missed re-flooding a second chance to recover V before committing to NR. Beyond that band, the slot misses. **Safety holds in either case** (cryptographic, "Why it's safe").
 
-**P0.1/P0.2 fully closed at n=7, 10, 13 under partial synchrony.** Walking the worst-case byzantine attack at any of these sizes: byzantine `L_k` delivers `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators *before `T_candidate_accept`* (else those `f+1` would also reject the bundle), withholds from the remaining `f` honest, refuses to vote in Phase 2a:
+This is intentional belt-and-suspenders: partial synchrony alone closes the grief at `f ≥ 2`, but the marginal-synchrony band where Phase-2a recovery still works is where TBFTR's V-plaintext + Phase-2-split machinery earns its complexity.
 
-- **Phase 2a**: `f+1` honest broadcast σ on V in their onions (with V plaintext per TBFTR core). `f` honest didn't have V from Phase 1 — their onion's layer-k slot is null.
-- **Recovery**: the `f` missing-V honest receive V via peer onions in Phase 2a, validate against `L_k`'s leader sig + app rules.
-- **Phase 2b**: those `f` honest broadcast late σ. Cluster-wide σ count on V: `f+1` (Phase-2a onions) + `f` (Phase-2b late) + `1` (leader's Phase-1 σ) = `2f+2 ≥ qV = 2f+1`.
-- σ-quorum reached at the same layer the byzantine tried to grief. Reconstruct. **Slot succeeds.**
+**Primary closure under partial synchrony.** Byzantine `L_k` releases `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})` to exactly `f+1` honest operators *before `T_candidate_accept`* (else those `f+1` would reject too — see "Bundle propagation"), withholds from the remaining `f` honest, refuses to vote in Phase 2a:
 
-The byzantine has no useful counter-move under partial synchrony. The composition closes the residual `[f+1, 2f-1]` grief window that TBFT alone has at `f ≥ 2`.
+- The `f+1` honest who received V via Phase 1 re-flood the bundle via gossipsub. Within `D + δ` (the cutoff budget), the bundle reaches the remaining `f` honest before *their* `T_candidate_accept`.
+- All `2f+1` honest hold V by Phase 2a start. They include V plaintext + encrypted σ in their onions.
+- Cluster-wide σ count on V: `2f+1` honest σ + `1` leader Phase-1 σ = `2f+2 ≥ qV = 2f+1`.
+- σ-quorum reached. Reconstruct. **Slot succeeds.**
 
-Under degraded synchrony where the recovery step fails for some honest (peer 2a onions don't propagate within Δ_2a), those honest emit NR in 2b and the slot may miss — but no safety violation arises (cross-sign-aggregate offline still bounded by the algebra above).
+No Phase-2b late σ is needed in this regime; the recovery channel is dormant.
 
-If both `L_k` and other byzantine operators coordinate (e.g., one does P0.1 grief at layer 0, another does P0.1 grief at layer 1), the cluster falls through to whichever layer has an honest leader — `K = max(3, f+1) ≥ f+1` guarantees at least one honest leader in the top-`K`, and at that honest leader's layer the σ-quorum forms cleanly.
+**Secondary closure under marginal synchrony.** If actual propagation slightly exceeds the budget `D` used to set `T_candidate_accept` — gossipsub re-flooding doesn't reach every honest by their cutoff, but Phase-2a onion propagation does — the recovery channel kicks in:
+
+- The `f+1` honest who received V via Phase 1 broadcast Phase-2a onions carrying V plaintext (TBFTR core).
+- The `f` remaining honest extract V from those peer onions during Phase 2a, validate against `L_k`'s leader sig + app rules.
+- In Phase 2b, those `f` honest broadcast late σ on V (encrypted under `enc_tag_k` for `k > 0`, plaintext for `k = 0`; see Phase 2b).
+- Cluster-wide σ count on V: `f+1` (Phase-2a onions) + `f` (Phase-2b late) + `1` (leader's Phase-1 σ) = `2f+2 ≥ qV = 2f+1`.
+- σ-quorum reached at the same layer the byzantine tried to grief. **Slot succeeds.**
+
+The composition closes the residual `[f+1, 2f-1]` grief window that TBFT alone has at `f ≥ 2` (where TBFT relies on partial synchrony only). TBFTR's secondary mechanism extends robustness into the band where partial synchrony breaks but Phase-2a propagation still completes.
+
+**Failure mode (bad synchrony).** If propagation is degraded badly enough that even Phase-2a onion delivery doesn't reach all honest within `Δ_2a`, the `f` missing-V honest emit NR in 2b. Cluster-wide σ-quorum doesn't form; NR-quorum may or may not, depending on how the failure distributes. The slot may miss. **No safety violation** — the algebra at "Why it's safe" doesn't depend on synchrony.
+
+If both `L_k` and other byzantine operators coordinate (e.g., one does P0.1 grief at layer 0, another does P0.1 grief at layer 1), the cluster falls through to whichever layer has an honest leader — `K = max(3, f+1) ≥ f+1` guarantees at least one honest leader in the top-`K`, and at that honest leader's layer the closure above (primary or secondary) applies.
 
 ## Cryptographic primitive
 
@@ -236,18 +250,20 @@ For an SSV cluster of `n = 7, 10, or 13` proposing an Ethereum block:
 | Operator-identity key | existing SSV operator key |
 | Leader priority `(L_0, …, L_{n-1})` | reuse existing rotation order |
 | `T_commit` | derived from the relay 4s cutoff — e.g. `T_commit ≈ slot_start + 2.7s` |
+| `T_candidate_accept` | `T_commit − (D + δ)`; the effective Phase-1 acceptance deadline (~`slot_start + 2.5s` for D + δ ≈ 200 ms) |
 | `Δ_1` | block-fetch window (~1s, accommodating worst-of-K beacon-fetch latency) |
 | `Δ_2a` | onion broadcast window (~300ms) |
 | `Δ_2b` | late-σ window (~150ms) |
 
-Phase timeline (n=7 example):
+Phase timeline (n=7 example, assuming `D + δ ≈ 200 ms`):
 
-- Phase 1: `slot_start + 1.7s` to `slot_start + 2.7s` (top-K leaders fetch and broadcast bundles).
+- Phase 1 fetch: `slot_start + 1.7s` to `slot_start + 2.7s` (top-K leaders fetch and broadcast bundles).
+- **Effective Phase 1 acceptance ends at `T_candidate_accept ≈ slot_start + 2.5s`**: candidates first observed by an honest receiver after this point are dropped. The primary-leader's late-fetch window is therefore effectively `T_0` to `T_candidate_accept`, ~200 ms shorter than the nominal `T_0` to `T_commit`. This is the cost of cryptographic-safe re-flooding.
 - Phase 2a: `slot_start + 2.7s` to `slot_start + 3.0s` (onions with V plaintext).
 - Phase 2b: `slot_start + 3.0s` to `slot_start + 3.15s` (late σ or NR).
 - Phase 3: `slot_start + 3.15s` onwards (reconstruct + submit + certificate gossip, headroom for relay 4s cutoff).
 
-The compressed timeline at larger cluster sizes (n=10, 13) is tighter against the relay cutoff; production telemetry should validate the budget.
+The compressed timeline at larger cluster sizes (n=10, 13) is tighter against the relay cutoff; production telemetry should validate the budget — and in particular, telemetry should track `D + δ` so `T_candidate_accept` can be set just-tight-enough to the propagation envelope without over-shrinking the late-fetch window.
 
 ### Timing budget
 
@@ -285,7 +301,7 @@ Implementation note: each operator must track the current head locally and valid
 
 ## Practical caveats
 
-1. **Bandwidth: V plaintext vs hash variant.** Carrying full `V` plaintext at every onion layer scales as `K · |V| · n` per cluster, which exceeds 200 KB at n=10 and 400 KB at n=13. The hash variant (full V at the leader's own layer, 32-B hashes elsewhere) cuts onion growth from `K · |V|` to `K · 32B + |V|` — recommended default for n ≥ 10. Hash-only domain separation: hash by `(slot, cluster, layer, leader)` so hashes can't be replayed across slots/layers.
+1. **Bandwidth: V plaintext vs hash variant.** Carrying full `V` plaintext at every onion layer scales as `K · |V| · n` per cluster, which exceeds 200 KB at n=10 and 400 KB at n=13. The hash variant (full V at the leader's own layer, 32-B hashes elsewhere) cuts onion growth from `K · |V|` to `K · 32B + |V|`. **Trade-off**: hash variant disables Phase-2a peer-onion V-recovery (see "Phase 2a" caveat and "Liveness profile" → secondary mechanism), so the cluster's robustness against byzantine-leader-grief reduces to the same partial-synchrony assumption as TBFT-shape protocols at n=4. Pick hash variant only when bandwidth is the binding constraint and partial synchrony is reliable; pick full-V variant when marginal-synchrony robustness matters. Hash-only domain separation: hash by `(slot, cluster, layer, leader)` so hashes can't be replayed across slots/layers.
 
 2. **Phase 2b latency.** The composition adds `Δ_2b` (~100–200 ms on a healthy mesh) over plain TBFT-style timing. Tight against the 4s relay cutoff at n=10/13; the timing budget needs to be tracked against production gossip-propagation P99/P999.
 
