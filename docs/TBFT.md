@@ -327,13 +327,22 @@ For larger cluster sizes (`n = 7, 10, 13`), see [TBFTR](TBFTR.md).
 
 The two specs share the cryptographic core. TBFT keeps the protocol minimal at n=4 because the byzantine-leader grief residual that TBFTR's machinery exists to close (`[f+1, 2f-1]` at `f ≥ 2`) is empty at `f = 1` — leader-σ-V-in-Phase-1 plus gossipsub re-flooding cover it under partial synchrony, with no need for V plaintext or a Phase-2 split.
 
-## Appendix B — Sketch: bid-ordered leader selection at n=4
+## Appendix B — Dynamic leader-ordering extensions
 
-This appendix sketches a TBFT extension that replaces the fixed primary→backup priority with **dynamic ordering by leader-supplied bid**. Each leader attaches a bid value to their Phase-1 envelope; operators commit to whichever layer's bid is higher (subject to application validity). Mirrors the general dynamic-leader-ordering concept in [TBFTR.md](TBFTR.md) Appendix B, specialized for `K = 2` and SSV's proposer-duty bid concept.
+This appendix sketches two related extensions that replace the fixed primary→backup priority with **dynamic ordering** based on a deterministic rule over the candidates supplied. Both are design sketches, not part of the baseline TBFT spec — the baseline's fixed priority is simpler and equally good in healthy operation. The two variants differ in what the deterministic rule operates on.
+
+- **B.1** sketches **bid-ordered** selection — clean fit at n=4, well-defined semantics, attribution story.
+- **B.2** sketches **parent-root-based** "ordering" — included for contrast, mostly to call out why TBFT doesn't extend well to support it.
+
+The cryptographic safety machinery (per-layer commit-tags + IBE-encrypted σ partials + per-operator commit exclusivity) is shared between the two variants; only the deterministic rule differs. The general K-layer formulation lives in [TBFTR.md](TBFTR.md) Appendix B.
+
+### B.1 — Bid-ordered leader selection at n=4
+
+Sketches a TBFT extension where each leader attaches a bid value to their Phase-1 envelope; operators commit to whichever layer's bid is higher (subject to application validity). Specialized to `K = 2` and SSV's proposer-duty bid concept.
 
 **Status: design sketch, not part of the baseline TBFT spec.** Captured because the deterministic rule has a natural application-level instantiation (the relay's MEV bid is already part of proposer duty), and the safety/liveness/attribution story is clean — easier to evaluate than the general K-layer case.
 
-### Motivation
+#### Motivation
 
 Baseline TBFT fixes `L_0` as the primary leader for the slot regardless of which leader actually produced a higher-value block. In healthy operation `L_0`'s late-fetched MEV-optimized block typically dominates `L_1`'s safe early block, so the fixed priority is "right" most of the time. But:
 
@@ -342,13 +351,13 @@ Baseline TBFT fixes `L_0` as the primary leader for the slot regardless of which
 
 Bid-ordered selection lets the cluster pick whichever layer's leader actually produced the higher-value block, making the fixed-priority bias a no-op when bids reflect reality and a graceful skip when they don't.
 
-### Core idea
+#### Core idea
 
 Each leader includes a **bid** in their Phase-1 envelope, signed by the leader-identity key (so it can't be repudiated post-hoc). Operators receive both bundles, validate both candidates, then commit to the layer whose bid is highest among the layers where the candidate validated locally. Same `qEnc = qV = 2f+1` safety pigeonhole as the general dynamic-ordering variant — at most one commit-quorum reaches.
 
 Crucially: **bids are trusted at runtime, verified post-hoc**. A byzantine leader that lies about their bid can steer the cluster onto a suboptimal block but cannot create two outputs (safety holds cryptographically) and cannot cause a slot miss on its own (if their lying-bid block passes validation, slot completes with the lying block; if it fails validation, the cluster commits to the other layer). The lie is a **liveness fault** in the value-capture sense, attributable from the signed envelope after the slot.
 
-### Protocol shape (delta from baseline TBFT)
+#### Protocol shape (delta from baseline TBFT)
 
 **Setting (modified):** the structured envelope in Phase 1 binds `(version, cluster_id, slot, layer k, leader_id, value_root, parent_root, bid)`. Bid is whatever numeric type the application uses for value comparison (uint256 wei, fixed-point, etc. — the protocol just needs a total ordering with a tiebreaker). Tiebreaker for equal bids: lower `leader_id` wins (deterministic).
 
@@ -394,7 +403,7 @@ halt with no output                                       # no layer reached com
 
 By the safety pigeonhole, at most one layer reaches commit-quorum.
 
-### Why it's safe
+#### Why it's safe
 
 Same algebra as the baseline "Why it's safe", with the σ-pool / NR-pool split replaced by per-layer commit pools:
 
@@ -404,7 +413,7 @@ Same algebra as the baseline "Why it's safe", with the σ-pool / NR-pool split r
 
 Bid lies don't enter this argument — the algebra is over commit *partials* on signed tags, not over what the bid was. A byzantine claiming a fake bid still occupies one commitment slot (no extra power); their lie influences which layer the cluster converges on, not whether two converge simultaneously.
 
-### Liveness & attribution
+#### Liveness & attribution
 
 **Slot success conditions (under partial synchrony with `T_candidate_accept`):**
 
@@ -430,7 +439,7 @@ In every case the slot completes (or misses for reasons unrelated to the bid lie
 
 The protocol layer doesn't need to do this in real time — it's an audit performed asynchronously. Out-of-band slashing or reputation penalty follows.
 
-### Trade-offs vs baseline TBFT
+#### Trade-offs vs baseline TBFT
 
 | Aspect | Baseline TBFT | Bid-ordered variant |
 |---|---|---|
@@ -451,7 +460,7 @@ Bandwidth difference is small: the variant adds a bid field to the envelope (~32
 
 Latency: same single-window Phase 2; same K=2 walk in Phase 3. No additional rounds.
 
-### Open questions before this could be specified
+#### Open questions before this could be specified
 
 - **Bid type and ordering.** Float64 has comparison-edge cases (NaN, ±0, denormals). uint256 wei is more natural for MEV but bigger. Pick a canonical type with stable total ordering and bound it (sanity ranges) at the application validation layer.
 - **Bid binding inside the envelope.** Either `bid` is a primitive field in the envelope, or it's `H(bid)` to keep envelope size bounded with the actual bid carried alongside. The latter is more cache-friendly but adds a hash check.
@@ -460,7 +469,7 @@ Latency: same single-window Phase 2; same K=2 walk in Phase 3. No additional rou
 - **Post-hoc verification mechanism.** Who runs it (per-operator after each slot? a separate watcher? slasher operator?), where the evidence lives (gossiped fault-proof? on-chain registry?), and what the slashing trigger is (immediate or accumulated). Out of TBFT scope but needed for the "liveness fault attributed" promise to be real.
 - **Relationship to equivocation.** A byz that signs two distinct envelopes for the same `(slot, layer)` with different bids is *both* an equivocator (slashable on the existing rule) and a bid-liar (slashable post-hoc). The two evidence types are independent; the protocol should accept either.
 
-### When to consider this
+#### When to consider this
 
 The straightforward case where this wins meaningfully is a production environment where:
 
@@ -468,3 +477,19 @@ The straightforward case where this wins meaningfully is a production environmen
 - Or: byzantine bid-misrepresentation is observed (e.g., operators consistently overclaiming bids they don't deliver) and the slashing model wants attributable evidence for those events.
 
 Without those signals, baseline TBFT's fixed-priority ordering is simpler and equally good — the bid-ordered variant adds spec surface and deployment complexity without producing more slots. If pursued, this is the natural place to start *before* reaching for the more general dynamic-ordering scheme in [TBFTR.md](TBFTR.md) Appendix B, since at K=2 the design space is much smaller and the "deterministic rule" has a clean application-level instantiation.
+
+### B.2 — Why parent-root-based "ordering" doesn't extend TBFT well
+
+A natural-sounding alternative to bidding is to let the cluster route based on which leader's candidate matches the *current head* — e.g., "commit to the layer whose `parent_root` is in my canonical chain; tiebreak by layer index." Captured here mostly to call out why this isn't a productive extension at TBFT's K=2.
+
+**Parent-root is a validity *filter*, not an ordering *score*.** The check `parent_root ∈ my_local_canonical_chain` returns a boolean — a candidate is either valid against the operator's current head view or it isn't. There's no ranking comparator hiding inside it. To use parent-root as an "ordering" rule you'd combine the validity filter with some external tiebreaker (layer-index priority being the obvious one) — and once you do that you're back to "fixed priority among locally-valid layers," which is exactly what baseline TBFT already does (an operator that doesn't validate `V_{L_0}` falls through via NR_0; an operator that does validate it signs σ at layer 0). Wrapping that in a commit-tag structure adds machinery without adding routing flexibility.
+
+**The input isn't cluster-consistent.** Each operator's `parent_root` validity check resolves against *their own* beacon-node view of the canonical chain. During an in-flight re-org, two honest operators on different heads can reach opposite verdicts on the same candidate — operator A says "valid against H1," operator B says "stale relative to H2." Same input, different outputs by definition. Bid-based routing avoids this: the bid is a signed claim in the envelope, byte-identical for every honest receiver, so `argmax(bid)` gives the same answer everywhere.
+
+The split case is the head-divergence scenario from "Why it's safe" / "Liveness profile": with operators disagreeing on which candidate is valid against their current head, neither layer's commit-quorum can reach. Slot misses. (Safety still holds via the same commit-tag exclusivity machinery as B.1 — the issue is purely liveness.) Adding parent-root as a routing rule doesn't fix this; the rule's *output* fragments along exactly the same line as the underlying head disagreement.
+
+**At K=2 specifically, there's no useful design space.** Two layers gives parent-root match at most two distinct outcomes (`{valid, valid}`, `{valid, invalid}`, `{invalid, valid}`, `{invalid, invalid}`). The first and last collapse to baseline behavior or unanimous miss; the middle two collapse to "commit to whichever is valid, fixed-priority tiebreaker." None of those produce a routing decision the baseline doesn't already make implicitly. At K ≥ 3 (TBFTR territory) there's at least the question of "skip L_0 because parent_root mismatches, go to L_1 vs L_2 by some rule" — but that's the general case, [TBFTR.md](TBFTR.md) Appendix B handles it.
+
+**The right mitigation for head-divergence at TBFT is application-level**, not protocol-level: fetch `V_{L_1}` from a deeper-confirmed parent (a few slots back from the current head) so the backup's `parent_root` is structurally re-org-resistant. This is something the SSV runner can do without any protocol change — the asymmetric `T_1 < T_0` fetch times already accommodate fetching the backup well before the slot's most volatile period. It catches most of the same scenarios parent-root-based routing would address, with no spec growth.
+
+**Summary.** Parent-root match doesn't give a useful new routing rule at K=2, fragments under the very condition it would purport to address (head disagreement), and is best handled at the application layer by choosing a more re-org-resistant parent for the backup candidate. It's worth understanding as a *non-extension* — a direction explored and ruled out — rather than a path forward.

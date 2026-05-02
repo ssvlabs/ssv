@@ -315,13 +315,35 @@ The two specs share the cryptographic core (`qEnc = qV = 2f+1` for cryptographic
 
 **If you're choosing between protocols**: at `n = 4` use TBFT (simpler, cheaper, equally safe). At `n ≥ 7` use TBFTR (only protocol that closes the byzantine-leader selective-delivery grief at `f ≥ 2`).
 
-## Appendix B — Sketch: dynamic leader-ordering extension
+## Appendix B — Dynamic leader-ordering extensions
 
-This appendix sketches a possible extension of TBFTR where the choice of which leader's value the cluster commits to is **not fixed by priority** but **emerges from the candidates the cluster actually had time to validate**. It is not part of the baseline TBFTR spec; it's a forward-compatible direction worth documenting because it falls naturally out of the same 2a/2b machinery and may be relevant if production data shows head-divergence or per-slot leader-quality variance hurting liveness.
+This appendix sketches two related extensions where the choice of which leader's value the cluster commits to is **not fixed by priority** but **emerges from a deterministic rule** over the candidates the cluster actually had time to validate. Neither is part of the baseline TBFTR spec; both are forward-compatible directions documented here because they fall naturally out of the same 2a/2b machinery and may be relevant if production data shows head-divergence or per-slot leader-quality variance hurting liveness.
 
-**Status: design sketch, not specified for implementation.** The safety argument carries through under the same cryptographic primitives, but several details (exact commitment-rule semantics, late-commit handling, interaction with equivocation, slashing-protection scope) need precise specification before this could be deployed.
+- **B.1** notes how the **bid-ordered selection** sketched for TBFT in [TBFT.md](TBFT.md) Appendix B extends to K > 2 — application-driven deterministic rule, cluster-consistent inputs, attribution-friendly.
+- **B.2** is the **general dynamic-leader-ordering** sketch — protocol-shape independent of any specific deterministic rule — and includes a note on why parent-root-based "ordering" fits naturally into it but doesn't actually buy much.
 
-### Motivation
+The safety machinery (per-layer commit-tags + IBE-encrypted σ partials + per-operator commit exclusivity) is shared between the two; only the deterministic rule differs.
+
+**Status: design sketches, not specified for implementation.** The safety argument carries through under the same cryptographic primitives, but several details (exact commitment-rule semantics, late-commit handling, interaction with equivocation, slashing-protection scope) need precise specification before either could be deployed.
+
+### B.1 — Extending TBFT's bid-ordered selection to K > 2
+
+The bid-ordered variant for TBFT ([TBFT.md](TBFT.md) Appendix B) generalizes naturally to TBFTR's K-layer setting without changing the cryptographic core or the Phase-2 split. The full mechanism is described over there — what's worth noting here is how it fits within TBFTR specifically:
+
+- **Phase 1 envelope** picks up an additional `bid` field, signed alongside `value_root` and `parent_root`. Same equivocation rules; same `T_candidate_accept` cutoff.
+- **Phase 2a onion** carries V plaintext at every locally-validated layer (TBFTR core, unchanged) plus *one* encrypted σ partial at the layer the operator commits to, where the commit is `argmax_k bid_k` over locally-validated `V_{L_k}`. Tiebreaker on equal bids: lower `leader_id`. The σ partial is encrypted under the chosen layer's `commit_tag_k` (K total tags, one per layer).
+- **Phase 2b** carries late commits + encrypted σ for operators who recovered a candidate during 2a and didn't commit yet. No NR side.
+- **Phase 3** walks "find the layer with commit-quorum" across all K layers, same shape as the general variant in B.2 below.
+
+Bandwidth at K > 2 is slightly better than the baseline TBFTR onion (one encrypted σ + one commit partial per operator instead of K encrypted σ + per-layer NR), but the per-onion savings are small and the K commit-tags add some constant overhead. Latency is unchanged (same 2a/2b windows).
+
+The wins are the same as at K=2 — cluster routes to the highest-bid valid layer directly, no NR-walk steps when `L_0` is unavailable / lying high — just generalized over more layers. The attribution story (post-hoc relay-bid verification) carries over unchanged: each leader's signed envelope plus the relay-reported actual bid for the published block forms self-contained liveness-fault evidence.
+
+For SSV's proposer-duty case, the natural prototype path is **TBFT first, TBFTR second** — the K=2 design space is much smaller, the safety/liveness analysis is cleaner, and any production lessons translate directly. Deploying at K > 2 only makes sense after the K=2 variant has been validated.
+
+### B.2 — General dynamic leader-ordering
+
+#### Motivation
 
 Baseline TBFTR walks layers in **priority order**: layer 0 is tried first; only if `nr_tag_0` reaches `qEnc` does layer 1 become reachable. The fixed priority is what enables the `qEnc = qV` safety pigeonhole — each honest operator commits to either σ or NR per layer, mutually exclusively, so at most one σ-quorum can materialize across the entire layer walk.
 
@@ -329,7 +351,7 @@ The cost of fixed priority: if `L_0`'s candidate happens to be the worst choice 
 
 The dynamic-ordering variant generalizes "layer 0 first, fall through" to "any layer can win, decided by which layer's commit-quorum lands first" — without giving up the cryptographic safety property.
 
-### Core idea
+#### Core idea
 
 Replace per-layer σ-XOR-NR commits with **per-operator commitment to at most one layer**. Each layer gets its own IBE tag (`commit_tag_k`); each operator's σ partial at their chosen layer is encrypted under that layer's commit-tag. Aggregation finds the layer whose commit-quorum reaches `qEnc` — the same safety pigeonhole applies, just keyed on layers instead of σ-vs-NR sides:
 
@@ -339,7 +361,7 @@ Replace per-layer σ-XOR-NR commits with **per-operator commitment to at most on
 
 Each layer that *does* reach commit-quorum yields a single output. Same cryptographic safety as baseline TBFTR.
 
-### Protocol shape (delta from baseline TBFTR)
+#### Protocol shape (delta from baseline TBFTR)
 
 **Setting (unchanged):** same K leaders, same DKGs, same `qV = qEnc = 2f+1`, same envelope binding, same `T_candidate_accept`. One additional tag family: `commit_tag_k = ("slot", N, "cluster", C, "layer", k, "commit")` for `k ∈ {0, …, K−1}` — `K` tags total instead of baseline's `K−1` `nr_tag_k`.
 
@@ -373,7 +395,7 @@ halt with no output            # no layer reached commit-quorum
 
 The walk is over commit-quorums, not over priority. By the safety pigeonhole, at most one `k` satisfies `|commits_k| ≥ qEnc`.
 
-### Where this wins (and where it doesn't)
+#### Where this wins (and where it doesn't)
 
 **Wins:**
 
@@ -386,7 +408,7 @@ The walk is over commit-quorums, not over priority. By the safety pigeonhole, at
 - **Doesn't help if honest can't agree on a deterministic rule.** The rule has to be over inputs that are cluster-consistent enough — "lowest-indexed valid layer" works under partial synchrony if all honest validate the same V's; head divergence makes the inputs differ, and the variant is no better than baseline in that case (and might be worse if the rule splits operators across layers in ways the baseline wouldn't).
 - **Doesn't help against byzantine-leader grief at `f ≥ 2`.** That's already closed by TBFTR core (V plaintext + Phase-2 split) under partial synchrony. Dynamic ordering is orthogonal.
 
-### Trade-offs vs baseline
+#### Trade-offs vs baseline
 
 | Aspect | Baseline TBFTR | Dynamic-ordering variant |
 |---|---|---|
@@ -399,7 +421,7 @@ The walk is over commit-quorums, not over priority. By the safety pigeonhole, at
 | Liveness in head-divergence | Same agreement threshold; baseline burns an NR-walk step before reaching layer 1 | Same threshold; converges directly on agreed layer |
 | Slashing-protection scope | σ at every valid layer + NR per missed layer | σ at one layer only — simpler EKM accounting |
 
-### Open questions before this could be specified
+#### Open questions before this could be specified
 
 - **Commitment rule.** How do operators pick `k*_i`? "Lowest valid layer" recovers baseline behavior in healthy cases but provides no tiebreaker advantage; smarter rules (e.g., "most-recent-parent-root") might help in re-org scenarios but also might split operators in ways the baseline would not. Needs adversarial-attack analysis.
 - **Late-commit timing.** Can an operator who committed in 2a "switch" their commit if they later learn their chosen layer won't reach commit-quorum? Naively no (would break per-operator exclusivity), but more subtle schemes (revocable commits with deadlines) might be possible. Adds protocol-state complexity.
@@ -408,12 +430,19 @@ The walk is over commit-quorums, not over priority. By the safety pigeonhole, at
 - **Bandwidth and latency.** The variant cuts σ partials per onion (fewer encrypted layers per operator) but adds K commit-tags to track. Net savings depend on K and the relative size of σ vs commit partial sigs. Phase 2b is shorter (no NR side) but the same Δ_2b window is needed for late commits.
 - **Implementation complexity.** Adds a new tag family, a new commitment-partial-sig type, a different aggregation walk. Probably 1.5–2× the spec footprint of the baseline.
 
-### When to consider this
+#### Choosing the deterministic rule
+
+The protocol shape above is independent of *what* deterministic rule operators use to pick `k*_i`. The rule's only job is to be (a) deterministic over the inputs each operator has at commit time, (b) cluster-consistent enough that 2f+1 honest converge on the same `k*_i`, and (c) defined when at least one layer's candidate validates locally. Two candidate rules:
+
+- **Bid-based (recommended; see B.1).** `argmax_k bid_k` over locally-validated layers, with leader-id tiebreak. Bids are signed in the envelope, byte-identical for every honest receiver, so the rule's output is cluster-consistent under partial synchrony. Lies are bounded (single layer per byz, can't cross-commit beyond f) and attributable post-hoc from the signed envelope + relay record.
+- **Parent-root-based ("commit to the layer whose parent_root matches my canonical chain; tiebreak by layer-index").** Fits the protocol shape but doesn't actually buy much: parent-root is a *validity filter*, not a ranking comparator, so the "rule" collapses to "fixed priority among locally-valid layers" — essentially baseline TBFTR's behavior, just routed through commit-tags instead of NR. Worse, the rule's input (parent-root match against local head) isn't cluster-consistent — different operators' beacon-node views of the canonical chain can diverge during a re-org, and the rule's *output* fragments along the same line. Adding parent-root as a routing primitive doesn't fix head-divergence-driven misses; it just relocates them. The cleaner mitigation for head-divergence is application-level (deeper-confirmed parent for non-priority layers), see [TBFT.md](TBFT.md) Appendix B.2 for the corresponding analysis at K=2.
+
+The bid-based rule is the cleaner of the two — and is the one we'd recommend if any dynamic-ordering scheme is pursued.
+
+#### When to consider this
 
 This variant is most relevant if production data shows the baseline TBFTR's fixed priority order causing measurable misses or wasted slots — e.g., re-org-frequent periods where layer 0 routinely fails its NR-quorum step before layer 1 picks up. Without that data, the baseline's simplicity is the right default.
 
-If pursued, the natural place to prototype is at `n = 7` (smallest `f ≥ 2` cluster, where TBFTR is the only option), with the variant gated behind a config flag so the baseline stays the production path during validation.
+If pursued, the natural place to prototype is **TBFT first** (K=2, see B.1 → [TBFT.md](TBFT.md) Appendix B for the concrete instantiation), then TBFTR. The K=2 design space is much smaller, the safety/liveness analysis is cleaner, and any production lessons translate directly to the K-layer generalization here.
 
-For SSV's n=4 case, the lighter mitigation noted in the design discussion — fetching `V_{L_1}` from a deeper-confirmed parent so the backup is structurally re-org-resistant — gets most of the benefit without any protocol change. That's the recommended first move; the dynamic-ordering variant is a second-line option for cluster sizes and conditions where the application-level mitigation isn't enough.
-
-A concrete K=2 instantiation of this concept — using the relay's MEV bid as the deterministic rule — is sketched in [TBFT.md](TBFT.md) Appendix B. That variant has a smaller design space (only 2 layers, one application-meaningful ordering function) and a cleaner attribution story (post-hoc relay-bid verification) than the general K-layer scheme described here.
+For SSV's n=4 case specifically, the lighter mitigation — fetching `V_{L_1}` from a deeper-confirmed parent so the backup is structurally re-org-resistant — gets most of the benefit without any protocol change. That's the recommended first move; the dynamic-ordering variant is a second-line option for cluster sizes and conditions where the application-level mitigation isn't enough.
