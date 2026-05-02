@@ -1,14 +1,21 @@
-For TBFTR, I found more serious design issues:
+**Findings**
 
-::code-comment{title="[P0] Plain late sigs can bypass lower-layer locks" body="Phase 2b broadcasts recovered late σ shares directly for every layer, while the text relies on honest aggregators not counting deeper-layer late σ until that layer is unlocked. A Byzantine aggregator can ignore that local rule. Example at n=7: layer 0 succeeds; a Byzantine layer-1 leader gives V1 to one honest operator, that operator includes V1 plaintext in Phase 2a, the other four honest operators recover V1 and broadcast plain late σ in Phase 2b, and the Byzantine leader's Phase-1 σ gives 5 public shares for V1 without any NR quorum at layer 0. That can produce two valid V signatures. Late σ for k>0 needs to be encrypted/gated under enc_tag_k, or otherwise made unusable until lower-layer NR unlocks." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=80 end=83 priority=0 confidence=0.9}
+::code-comment{title="[P0] Deeper-layer gates are not cumulative" body="`enc_tag_k = nr_tag_{k-1}` is not safe for K >= 3. Example at n=7/K=3: layer 0 can reach a valid σ quorum, layer 1 can miss and produce an `NR_1` quorum, and then a Byzantine offline aggregator can use `NR_1` to decrypt layer-2 honest σ partials and reconstruct a second full signature. Layer k must require all prior fallthrough proofs, e.g. an AND/cumulative gate over `nr_tag_0..nr_tag_{k-1}` via nested encryption or an equivalent composite witness, and Phase 3’s proof should become a cross-layer induction." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=66 end=66 priority=0 confidence=0.94}
 
-::code-comment{title="[P1] Hash variant breaks the recovery proof" body="The hash variant says operators carry full V only at the layer where they are the leader. In the byzantine-leader selective-delivery case, the layer leader is Byzantine and can withhold its onion/full V, while honest recipients only carry hashes. The f honest operators who missed Phase 1 cannot recover V from hashes, so the P0.1/P0.2 liveness proof does not hold for the recommended hash variant. To preserve the proof, at least one honest Phase-2a signer that received V must carry recoverable V, which the current hash variant does not guarantee." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=76 priority=1 confidence=0.88}
+::code-comment{title="[P2] Hash-variant bandwidth is still mixed with full-V liveness" body="The comparison/recommendation still quotes hash-variant bandwidth while crediting TBFTR with the secondary marginal-synchrony closure. The updated TBFTR spec correctly says the hash variant disables peer-onion V recovery, so the comparison should either split rows into `full-V` vs `hash` modes or label the marginal-synchrony success claims as full-V-only with different bandwidth numbers." file="/Users/iurii/work/ssv/docs/TBFT-comparison.md" start=122 end=124 priority=2 confidence=0.84}
 
-::code-comment{title="[P2] Candidate cutoff and Phase-2 recovery arguments conflict" body="The spec says any candidate accepted before T_candidate_accept re-floods to all honest operators before their cutoffs. If that is true, the liveness scenario where f honest operators missed Phase 1 despite f+1 honest accepting before the cutoff cannot occur. If TBFTR is intended to rely on Phase-2a recovery instead of Phase-1 re-flooding, the cutoff/re-flooding claim should be weakened or the liveness proof rewritten around the actual recovery path." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=46 priority=2 confidence=0.78}
+**Previous Feedback Status**
 
-::code-comment{title="[P2] Last-layer NR is inconsistent with tag count" body="Phase 2b says operators broadcast NR for every layer they could not sign, and Phase 3 tries to unlock layer k+1 for every k in 0..K-1. But the last layer has no successor, and Appendix A says there are only K-1 tags. The protocol should define NR only for layers 0..K-2 and treat last-layer failure as terminal." file="/Users/iurii/work/ssv/docs/TBFTR.md" start=80 end=83 priority=2 confidence=0.84}
+Fully addressed: plain late σ bypass. Late σ for k > 0 is now encrypted under the same layer gate as onion σ, and Phase 3 decrypts both sources uniformly. See [docs/TBFTR.md](/Users/iurii/work/ssv/docs/TBFTR.md:79).
 
-Cleanups/refinements observed while reading:
+Fully addressed: last-layer NR inconsistency. NR is now only for `0..K-2`, and last-layer failure is terminal. See [docs/TBFTR.md](/Users/iurii/work/ssv/docs/TBFTR.md:80) and [docs/TBFTR.md](/Users/iurii/work/ssv/docs/TBFTR.md:108).
 
-- The TBFTR safety proof should explicitly cover two σ-quorums for two different values at the same layer. The quorum-intersection argument is straightforward, but the current proof only covers σ-vs-NR.
-- The effective end of Phase 1 is now `T_candidate_accept`, not `T_commit`; the timeline should account for that because it reduces usable late-fetch time.
+Mostly addressed: hash variant recovery proof. The spec now explicitly says the hash variant disables secondary liveness. What remains is the comparison/recommendation wording above.
+
+Addressed: cutoff vs Phase-2 recovery conflict. The liveness section now cleanly separates primary closure under partial synchrony from secondary closure in marginal synchrony. See [docs/TBFTR.md](/Users/iurii/work/ssv/docs/TBFTR.md:192).
+
+**Main New Issue**
+
+The adjacent-only lock is the big blocker. The old K=2 reasoning does not generalize to K=3+. For fallback-priority safety, a deeper layer must be usable only after every higher-priority layer has an NR quorum, not just after the immediately previous layer fails.
+
+No tests run; this was a docs/protocol audit only.
