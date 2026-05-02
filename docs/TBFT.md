@@ -44,7 +44,7 @@ If `L_1` fails to broadcast, the backup path is unavailable for this slot. If `L
 
 **Why both signatures.** Including `σ_{L_k}^V(V_{L_k})` in the Phase-1 bundle gives the cluster a *head start* of one real threshold partial on `V_{L_k}` as soon as Phase 1 succeeds anywhere. Combined with the two honest threshold partials produced in Phase 2 by operators who received the leader's bundle (or recovered it via gossipsub re-flooding), the cluster reaches `qV = 3` real partials on `V_{L_k}` exactly — closing the byzantine-leader selective-delivery grief at this cluster size under partial synchrony (see "Fault tolerance / Liveness").
 
-**Equivocation handling.** If a participant observes two distinct, validly-signed candidates from the same leader at layer `k` with the **same** `parent_root` (different `value_root`), that's leader equivocation: locally treat the layer as non-receipt (don't include the corresponding partial signature in the onion; broadcast a non-receipt on `nr_tag_0` for layer-0 equivocation, or omit layer 1 of the onion for layer-1 equivocation). The pair of signed candidates is self-contained slashable evidence — see "Fault tolerance / Equivocation handling" for the analysis. (Two bundles with different `parent_root` are a legitimate refresh, not equivocation — see "Head-change handling" in the Application section.)
+**Equivocation handling.** If a participant observes two distinct `σ_V` partials from the same leader at the same slot/layer (regardless of `parent_root`), that's leader equivocation: locally treat the layer as non-receipt (don't include the corresponding partial signature in the onion; broadcast a non-receipt on `nr_tag_0` for layer-0 equivocation, or omit layer 1 of the onion for layer-1 equivocation). The pair of signed bundles is self-contained slashable evidence — see "Fault tolerance / Equivocation handling" for the analysis. The leader is required to sign σ_V exactly once per slot/layer (refreshes during the fetch window are pre-signing only — see "Head-change handling" in the Application section); any second σ_V from the same leader is a protocol violation regardless of intent.
 
 ### Phase 2 — Onion broadcast `[T_commit, T_commit + Δ_2]`
 
@@ -131,12 +131,12 @@ For SSV's Ethereum proposer duty, application-level checks include:
 - Doppelganger and slashing-protection checks: not signing for a slot already signed at.
 - Block encoding: well-formed SSZ, reasonable size.
 
-**Slashing-protection scope.** Each operator's V-signing share signs *multiple* values per slot:
+**Slashing-protection scope.** Each operator's V-signing share signs *multiple* values per slot, but the leader role has a stricter constraint:
 
-- Each layer's leader signs its Phase-1 candidate value — and refreshes (head-change handling, below) re-sign with the new parent root.
+- **Each layer's leader signs σ_V exactly once per (slot, layer)** — on the final V they commit to, after any pre-signing refreshes during the fetch window. Refreshes update V plaintext via re-fetch but do **not** re-sign σ_V; the leader's σ_V is locked once produced. EKM enforces this single-σ-V-per-(slot, layer) constraint cryptographically: a second signing attempt at the same (slot, layer) is rejected. This is what makes Pigeonhole 2 (see "Fault tolerance / Safety") cap the leader's contribution to one V's σ-pool, not both — see "Head-change handling" in the Application section for the operational workflow.
 - Every operator signs each layer's `V_{L_k}` it considers valid in its Phase-2 onion.
 
-EKM/slashing-protection must permit all of these per-slot V-share signing events without flagging duplicates — the cluster's safety property collapses them to a single output, but the per-share signing log shows multiple block sigs at the same slot. The gating point is **candidate signing** (Phase-1 leader and Phase-2 onion alike), not just submission.
+EKM/slashing-protection must permit the operator's per-layer Phase-2 σ signings (one per layer with valid V) plus the leader's Phase-1 σ_V (exactly one per slot/layer the operator is leading), without flagging duplicates — the cluster's safety property collapses these to a single output, but the per-share signing log shows multiple block sigs at the same slot. The gating point is **candidate signing** (Phase-1 leader and Phase-2 onion alike), not just submission.
 
 ## Fault tolerance
 
@@ -164,8 +164,8 @@ The proof rests on two pigeonhole arguments at each layer.
 **Pigeonhole 2 — two σ-quorums on different values at the same layer.** Two distinct `V`'s cannot both reach σ-quorum at the same layer (e.g. via leader equivocation that some honest don't observe in time, or a byzantine signing both):
 
 - `(h_σ_V + h_σ_V') + (byz_σ_V + byz_σ_V') ≥ 2 · qV = 6`.
-- Honest sign at most one V per layer: `h_σ_V + h_σ_V' ≤ 3`.
-- Byzantine can sign both V's: `byz_σ_V + byz_σ_V' ≤ 2`.
+- Honest sign at most one V per layer: `h_σ_V + h_σ_V' ≤ 3`. **The leader counts as one honest if honest, one byzantine if byzantine** — they sign σ_V exactly once per (slot, layer) per the protocol's single-σ-V rule (refreshes are pre-signing only — see "Head-change handling"), so an honest leader contributes to one V's pool, never both.
+- Byzantine can sign both V's: `byz_σ_V + byz_σ_V' ≤ 2`. A byzantine leader violating the single-σ-V rule is still bounded here — they're one of the f byzantine, contributing at most one σ partial per V.
 - Bound: `3 + 2 = 5 < 6`. Contradiction. ∎
 
 The same arguments apply symmetrically to the backup layer once it's unlocked. Neither proof depends on honest operators excluding cross-signers from their aggregation — both are properties of the cluster-wide signed messages, holding against an offline-aggregating adversary that ignores any honest aggregation rule.
@@ -194,12 +194,12 @@ The slot misses (no V signature is produced) under any of the following:
 
 ### Equivocation handling
 
-If a participant observes two distinct, validly-signed candidates from the same leader at layer `k` with the **same** `parent_root` (different `value_root`), that's leader equivocation:
+If a participant observes two distinct `σ_V` partials from the same leader at the same slot/layer (regardless of `parent_root`), that's leader equivocation:
 
 1. Locally treat that leader's layer as non-receipt: don't include the corresponding partial signature in the onion (Phase 2); for layer-0 equivocation, broadcast a non-receipt attestation on `nr_tag_0`; for layer-1 equivocation, omit layer 1 of the onion entirely.
-2. The pair of signed candidates is a self-contained slashable fault proof against that leader.
+2. The pair of signed bundles is a self-contained slashable fault proof against that leader.
 
-(Two bundles with **different** `parent_root` are a legitimate refresh on head change, not equivocation — see the head-change handling subsection in "Application".)
+The leader is required to sign σ_V *exactly once per (slot, layer)*; refreshes during the fetch window are pre-signing only (see "Head-change handling" in the Application section) and don't surface multiple σ_V partials on the wire. Any second σ_V from the same leader is a protocol violation regardless of `parent_root`.
 
 The equivocation rule is what makes Pigeonhole 2 above tight in practice: honest operators who observe the equivocation evidence avoid signing either V at that layer, capping `h_σ_V + h_σ_V'` strictly below 3. Without the rule, honest could split their σ across the two values; with it, they emit NR instead and the equivocation evidence is gossipped for slashing.
 
@@ -223,7 +223,7 @@ This split is a **liveness failure, not slashable equivocation**: the leader bro
 Three rules surface byzantine fault evidence for *attribution and punishment* (out-of-band slashing, reputation, monitoring). Under the cryptographic safety guarantees above, none of them is load-bearing for safety; they exist to make byzantine misbehavior accountable.
 
 - **Self-contradiction (σ + NR).** If operator `i`'s onion contains `σ_i^V(V_{L_0})` *and* `i` broadcasts `σ_i^{IBE}(nr_tag_0)`, the dual partials are slashable evidence (cross-signing).
-- **Leader equivocation.** Two distinct, validly-signed candidates from the same leader with the same `parent_root` but different `value_root` are a self-contained slashable fault proof.
+- **Leader equivocation.** Two distinct `σ_V` partials from the same leader at the same (slot, layer) — regardless of `parent_root` — are a self-contained slashable fault proof. The leader is required to sign `σ_V` exactly once per (slot, layer); refreshes during the fetch window update V plaintext via re-fetch but happen pre-signing and don't surface multiple `σ_V` partials on the wire (see "Head-change handling" in the Application section). Any observable double-signing is therefore protocol-violating regardless of the leader's stated intent.
 - **Cross-onion partial-sig equivocation.** Operator `i` appearing in two onions with `σ_i^V(V)` and `σ_i^V(V')` at the same layer for different `V` is detectable from the partial sigs alone. Slashable on the same logic.
 
 Each piece of evidence is verifiable in isolation (signed by the offending operator's own keys), so attribution doesn't require cluster-wide coordination — any observer with the published partials can produce the slashing case.
@@ -300,11 +300,23 @@ The deadline-tuning rule from caveat 3 below applies: `T_commit − T_arrival > 
 
 ### Head-change handling
 
-If the head changes during a Phase-1 fetch window, the affected leader's candidate is stale (parent root no longer matches the new head). The leader detects head changes during its fetch window and refreshes its candidate by re-fetching from the new head, then re-broadcasts the bundle with the new value — superseding the stale bundle. Each refresh signs the new envelope with the new `value_root` and `parent_root`, so the per-share signing log shows multiple V-share signatures for the same slot (covered by the slashing-protection scope in "Preconditions on the host application").
+If the head changes during a Phase-1 fetch window, candidate values fetched from the previous head are stale (their parent root no longer matches the new head). The leader's fetch process is a loop: fetch → validate → check head → on head-change, re-fetch → repeat. The loop runs **before σ_V signing** — internal to the leader's local fetch state. The leader signs `σ_{L_k}^V(V_{L_k})` *exactly once per slot/layer*, on the final `V_{L_k}` they commit to after the loop terminates, then broadcasts the bundle. Refreshes are pre-signing only; the per-share signing log shows exactly one V-share signature per slot/layer (the final V).
 
-The structured envelope binds `parent_root`, which makes refresh mechanically distinguishable from equivocation: two bundles with **different** `parent_root` are a legitimate refresh (honest receivers accept the one matching the current head; stale ones fail application-validity check and are dropped); two bundles with the **same** `parent_root` but different `value_root` are equivocation (see "Fault tolerance / Equivocation handling").
+**No refresh after signing.** Once the leader has broadcast `(V_{L_k}, σ_{L_k}^V, σ_{L_k}^{op})`, they do not produce a second `σ_V` partial for the same slot/layer. If the head changes after signing, the leader's σ_V is locked on the originally-signed V. Honest operators validate received candidates against *their* head at candidate-acceptance time:
+
+- If their head matches the leader's signed V (`parent_root` matches): they accept and contribute to the σ-pool on that V.
+- If their head has moved past it: they reject the bundle (stale parent) and emit NR for the layer.
+
+Outcome under post-signing head-change: cluster either σ-quorums on the originally-signed V (if a majority of honest are still on the matching head) or falls through to the next layer via NR. Single output, safety preserved.
+
+The structured envelope binds `parent_root`, so the equivocation rule has clean evidence: **any two distinct `σ_V` partials from the same leader at the same slot/layer are slashable equivocation, regardless of `parent_root`** (see "Fault tolerance / Equivocation handling"). A leader following the protocol produces exactly one σ_V; multiple σ_V partials are a self-contained fault proof against the leader. `parent_root` differences in re-broadcasts do not exempt the equivocation — refreshes are pre-signing-internal and don't surface multiple σ_V partials on the wire.
 
 `parent_root` validity is evaluated locally against each operator's observed beacon-chain head at candidate-acceptance time. Honest operators on different heads (in-flight re-org) may reach different validity conclusions on the same candidate; that's a liveness concern handled at the protocol level by "Fault tolerance / Head divergence", not slashable equivocation.
+
+Implementation notes:
+
+- Each operator must track the current head locally and validate `parent_root` of received candidates against it.
+- The leader's EKM/slashing-protection enforces "exactly one σ_V per (slot, layer)" — a second signing attempt at the same (slot, layer) is rejected. This is the cryptographic enforcement of the single-σ rule on the leader side; combined with the strengthened equivocation rule it makes byzantine-leader double-signing detectable cluster-wide.
 
 ## Practical caveats
 
