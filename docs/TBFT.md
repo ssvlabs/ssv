@@ -392,7 +392,11 @@ TBFT is the result of a design exploration starting from "Proposal 1" in [ssvlab
 
 For larger cluster sizes (`n ≥ 7`), see [TBFTR](TBFTR.md). TBFTR also supports `n = 4` as a configurable special case (with `K = 2`); TBFT is the leaner alternative that drops TBFTR's V-plaintext + Phase-2-split machinery — see Appendix A.
 
-## Appendix A — How TBFT differs from TBFTR at n=4
+## Appendix A — Protocol comparisons
+
+This appendix gives high-level structural comparisons against the two protocols TBFT shares deployment context with: [TBFTR](TBFTR.md) (the K-generic generalization that also supports `n = 4` as a config) and QBFT (SSV's existing consensus protocol). For detailed scenario-by-scenario comparison with bandwidth and latency numbers across failure modes, see [TBFT-comparison.md](TBFT-comparison.md).
+
+### A.1 — Comparison with TBFTR (at n=4)
 
 Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-authenticated candidates with both V-keypair and operator-identity sigs over a structured envelope, equivocation-to-NR rule, IBE primitive, two DKGs at the same threshold). The differences are in onion structure, Phase-2 timing, and the resulting fault-tolerance band — comparing both at `n = 4, K = 2` to make the trade-off concrete:
 
@@ -414,6 +418,31 @@ Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-aut
 At `n ≥ 7`, only TBFTR is supported — the leaner TBFT-shape protocol covers only "1 honest missing re-flood" regardless of `f`, while at `f ≥ 2` the practical marginal band reaches "up to `f` honest missing"; TBFT-shape's single-window σ count caps at `f+2 < qV = 2f+1` once `f ≥ 2`, missing slots in the gap.
 
 **If you're choosing between protocols at `n = 4`**: pick TBFT for minimal protocol complexity. TBFTR-at-n=4 covers the same marginal-synchrony band (≤ 1 of 3 honest missing re-flood — the witness threshold caps secondary closure at the same bound TBFT already covers); the only thing TBFTR adds at this size is redundancy within the band (extra σ partials), which rarely earns its bandwidth/latency premium. Either is cryptographically safe.
+
+### A.2 — Comparison with QBFT (at n=4)
+
+QBFT is SSV's existing consensus protocol. The key structural difference: **QBFT separates "decide on a value" (consensus) from "sign the decided value" (post-consensus partial-sig collection)**; TBFT fuses the two by embedding partial signatures inside Phase-2 onions. Most observable trade-offs trace back to this structural difference. (Scenario-level numbers live in [TBFT-comparison.md](TBFT-comparison.md); this section is conceptual.)
+
+| Aspect | QBFT | TBFT |
+|---|---|---|
+| Protocol shape | Multi-round (PROPOSE → PREPARE → COMMIT) with per-round leader rotation; round change on timeout | Single-shot, K=2 layered leader fallback; no rounds |
+| Consensus and signing | Decoupled: consensus reaches a decided value, then a separate post-consensus phase collects 2f+1 partial sigs | Fused: Phase-2 onions carry σ partials directly, Phase 3 reconstructs |
+| RTTs to signed output (min, healthy) | 3 (consensus) + 1 (post-consensus) ≈ 4 | 2 (Phase 1 + Phase 2) |
+| Round-change recovery | Yes — view-change protocol on timeout; ~2s per round at SSV's tuning | None — single-shot; slot misses on bad synchrony |
+| Termination guarantee | Eventually-terminating across rounds (under partial synchrony) | No — single-shot, partial-synchrony-conditional within `T_commit + Δ_2` |
+| Safety | Honest-majority (`2f+1` honest) + correct quorum-certificate verification | Cryptographic via `qEnc = qV = 2f+1` — unconditional, holds against arbitrary network adversary regardless of honest aggregation rules |
+| Byzantine-leader-grief resistance | Round-change recovers (slow — ~2s per round timeout) | Closed under partial synchrony via leader-σ-V-in-Phase-1 + gossipsub re-flooding (primary closure) — flat ~250 ms |
+| Equivocation handling | Detected as conflicting prepare/commit votes; round change | Cluster-wide non-receipt via equivocation-to-NR rule; pair of bundles is self-contained slashable evidence |
+| Bandwidth (1 round, n=4) | ~14 KB | ~21 KB |
+| Bandwidth (round change at n=4) | +12 KB per round + a full additional round on top | n/a (no rounds) |
+| Latency (healthy, n=4) | ~750 ms | ~250 ms |
+| Latency (1 round failure, n=4) | ~3.0 s (round-1 timeout 2s + round-2 success ~750 ms) | ~250 ms (Phase-1 fall-through to backup leader) |
+| Slashing-protection scope | Single block sig per slot, gated at submission time | Multiple per-share sigs per slot at candidate-signing (Phase-1 leader and Phase-2 onion) gated by EKM cross-keypair coordination — see "Preconditions on the host application / Slashing-protection scope" |
+| Application contract | Decides on any value the application proposes | Single-shot with primary + backup leader fetches |
+
+**The QBFT vs TBFT trade is variance and failure-mode shape, not just average-case performance.** QBFT optimizes for the common case (cheap round 1) at the cost of expensive failure recovery. TBFT spends slightly more bandwidth on every slot in exchange for flat failure-mode behavior — including against active byzantine-leader grief, where QBFT pays ~3s but TBFT closes in ~250ms. For SSV's proposer duty with a hard 4s relay cutoff, the latency-flatness profile is what makes TBFT competitive: QBFT's ~3.0s consensus path puts the validator on the wrong side of the cutoff once pre-consensus + block-fetch (~1.5s) are added, while TBFT clears the cutoff with margin in every in-bound failure mode.
+
+A practical note on the QBFT round budget for proposer duty: with the current 2s round timeout (cf. [protocol/v2/qbft/roundtimer/timer.go](../protocol/v2/qbft/roundtimer/timer.go)) and the 4s relay cutoff, **QBFT has room for at most 2 rounds within the proposer-duty timing budget** — round 1 timeout consumes 2s, leaving the rest of the budget tight against round 2 + post-consensus + relay round-trip. Failure modes requiring 3+ QBFT rounds miss the relay cutoff regardless of consensus correctness.
 
 ## Appendix B — Dynamic leader-ordering extensions
 

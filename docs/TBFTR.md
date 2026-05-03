@@ -483,7 +483,11 @@ TBFTR builds on [TBFT](TBFT.md) (originally "Proposal 3" in [ssvlabs/ssv#1829](h
 
 Both additions form the *secondary* closure mechanism described in "Fault tolerance / Liveness". Under partial synchrony with re-flood headroom, the *primary* closure (gossipsub re-flooding under `T_candidate_accept`) handles the byzantine-leader grief at any `f` without help from these additions. The byzantine-leader-at-cutoff edge (byz times the release at the cutoff so re-flood lands inside worst-case skew) is what the secondary additions buy at `f ≥ 2` — the hash variant has a residual partial-synchrony miss surface there unless the cutoff is moved earlier. Beyond that, the TBFTR additions push the marginal coverage limit from "1 honest missing re-flood" (what the leader-σ-V head-start alone covers) to "up to `f` honest missing re-flood" — gated by the `f+1`-distinct-Phase-2a-σ-signers witness threshold. The widening between the two bounds is `f − 1`, so it's **zero at `f = 1` (n=4)** — the witness threshold caps secondary closure at the same bound the leaner protocol already covers, and the additions add only redundancy in the same band — and grows as `f − 1` for `f ≥ 2`. At `n = 4`, [TBFT](TBFT.md) is the leaner alternative that drops the additions for a smaller protocol footprint at no marginal-coverage cost.
 
-## Appendix A — How TBFTR differs from TBFT
+## Appendix A — Protocol comparisons
+
+This appendix gives high-level structural comparisons against the two protocols TBFTR shares deployment context with: [TBFT](TBFT.md) (the leaner specialization for `n = 4`) and QBFT (SSV's existing consensus protocol, applicable at any cluster size). For detailed scenario-by-scenario comparison with bandwidth and latency numbers across failure modes, see [TBFT-comparison.md](TBFT-comparison.md).
+
+### A.1 — Comparison with TBFT (at n=4)
 
 Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-authenticated candidates with both V-keypair and operator-identity sigs over a structured envelope, equivocation-to-NR rule, IBE primitive, two DKGs at the same threshold). The differences are in onion structure, Phase-2 timing, and the resulting fault-tolerance band — comparing both at the same `n = 4, K = 2` cluster size to make the trade-off concrete:
 
@@ -502,6 +506,32 @@ Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-aut
 At `n ≥ 7`, only TBFTR is supported — the secondary closure becomes load-bearing because the leaner TBFT-shape protocol covers only "1 honest missing re-flood" regardless of `f`, while at `f ≥ 2` the practical marginal band reaches "2-or-more honest missing"; the leaner protocol's single-window σ count caps at `f+2 < qV = 2f+1` once `f ≥ 2`, missing slots in that gap.
 
 **If you're choosing between protocols at `n = 4`**: pick TBFT for minimal protocol complexity. TBFTR-at-n=4 covers the **same** marginal-synchrony band (≤ 1 of 3 honest missing re-flood — the witness threshold caps secondary closure at the same bound TBFT already covers via the leader-σ head-start); the only thing TBFTR adds at this size is redundancy within the band (extra σ partials), which rarely earns its bandwidth/latency premium. Either is cryptographically safe.
+
+### A.2 — Comparison with QBFT (any n)
+
+QBFT is SSV's existing consensus protocol. The key structural difference: **QBFT separates "decide on a value" (consensus) from "sign the decided value" (post-consensus partial-sig collection)**; TBFTR fuses the two by embedding partial signatures inside Phase-2 onions and Phase-2b late-σ broadcasts. Most observable trade-offs trace back to this structural difference. (Scenario-level numbers across cluster sizes live in [TBFT-comparison.md](TBFT-comparison.md); this section is conceptual.)
+
+| Aspect | QBFT | TBFTR |
+|---|---|---|
+| Protocol shape | Multi-round (PROPOSE → PREPARE → COMMIT) with per-round leader rotation; round change on timeout | Single-shot, K=f+1 layered leader fallback + Phase-2a/2b composition; no rounds |
+| Consensus and signing | Decoupled: consensus reaches a decided value, then a separate post-consensus phase collects 2f+1 partial sigs | Fused: Phase-2a onions and Phase-2b late-σ broadcasts carry σ partials directly, Phase 3 reconstructs |
+| RTTs to signed output (min, healthy) | 3 (consensus) + 1 (post-consensus) ≈ 4 | 3 (Phase 1 + Phase 2a + Phase 2b) |
+| Round-change recovery | Yes — view-change protocol on timeout; ~2s per round at SSV's tuning | None — single-shot; slot misses on bad synchrony |
+| Termination guarantee | Eventually-terminating across rounds (under partial synchrony) | No — single-shot, partial-synchrony-conditional within `T_commit + Δ_2a + Δ_2b` |
+| Safety | Honest-majority (`2f+1` honest) + correct quorum-certificate verification | Cryptographic via `qEnc = qV = 2f+1` + chained encryption (Pigeonhole 1, 2, 3) — unconditional, holds against arbitrary network adversary regardless of honest aggregation rules |
+| Byzantine-leader-grief resistance | Round-change recovers (slow — ~2s per round timeout) | Primary closure (gossipsub re-flooding of Phase-1 bundle under `T_candidate_accept`) under partial synchrony, plus secondary closure (Phase-2a peer-onion V-recovery + Phase-2b late σ, full-V variant) extending marginal coverage at `f ≥ 2` to "≤ `f` honest missing re-flood" |
+| Equivocation handling | Detected as conflicting prepare/commit votes; round change | Cluster-wide non-receipt via equivocation-to-NR rule; pair of bundles is self-contained slashable evidence |
+| Bandwidth (1 round, by cluster size) | ~14 / ~37 / ~50 / ~85 KB (n=4 / 7 / 10 / 13) | ~21 / ~108 / ~253 / ~497 KB (hash variant); ~30 / ~325 KB / ~1 MB / ~2.5 MB (full-V variant) |
+| Bandwidth (round change) | +12 KB per round + a full additional round on top | n/a (no rounds) |
+| Latency (healthy) | ~750 ms across cluster sizes | ~500 ms across cluster sizes (Phase 1 + Phase 2a + Phase 2b windows) |
+| Latency (1 round failure) | ~3.0 s (round-1 timeout 2s + round-2 success ~750 ms) | ~500 ms (built-in K-layer fall-through completes locally in Phase 3) |
+| Slashing-protection scope | Single block sig per slot, gated at submission time | Multiple per-share sigs per slot at candidate-signing (Phase-1 leader, Phase-2a onion, Phase-2b late σ) gated by EKM cross-keypair coordination — see "Preconditions on the host application / Slashing-protection scope" |
+| Cluster-size scaling | Same shape at any `n`; `O(n²)` bandwidth per round | `O(K · n²)` (full-V) or `O(K · n)` (hash); `K = f+1` |
+| Hash vs full-V variants | n/a | Hash variant disables secondary closure — applicable when bandwidth is the binding constraint, accepts narrower marginal-synchrony band; full-V is recommended when bandwidth budget allows |
+
+**The QBFT vs TBFTR trade is structural.** QBFT is failure-recovery-oriented: it converges eventually across rounds at the cost of expensive failure recovery (~2s per round change, plus per-round bandwidth). TBFTR is single-shot with built-in redundancy: flat ~500ms behavior across all in-bound failure modes, accepting slot-miss on out-of-bound failures. For SSV's proposer duty with a hard 4s relay cutoff, TBFTR's flat-failure-mode profile is what makes it competitive at `n ≥ 7`: QBFT's `~3.0s × per-round-failure` cost compounds rapidly at larger `f` where worst-case-leader-position scenarios require multiple round changes.
+
+A practical note on the QBFT round budget for proposer duty: with the current 2s round timeout (cf. [protocol/v2/qbft/roundtimer/timer.go](../protocol/v2/qbft/roundtimer/timer.go)) and the 4s relay cutoff, **QBFT has room for at most 2 rounds within the proposer-duty timing budget** — round 1 timeout consumes 2s, leaving the rest tight against round 2 + post-consensus + relay round-trip. Failure modes requiring 3+ QBFT rounds (e.g., `f` byzantine in worst-case leader positions at `n ≥ 7`, where `f` round changes would be needed to reach an honest leader) miss the relay cutoff regardless of consensus correctness. TBFTR's K=f+1 layered fallback completes in the same ~500ms regardless of how many of the top-K leaders are byzantine, because fall-through is a Phase-3 local operation rather than a network round.
 
 ## Appendix B — Dynamic leader-ordering extensions
 

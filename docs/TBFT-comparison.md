@@ -1,165 +1,166 @@
-# QBFT vs TBFT/TBFTR — failure-mode comparison
+# QBFT vs TBFT/TBFTR — comparison for SSV proposer duty
 
-This document compares SSV's existing consensus protocol [QBFT](https://github.com/ConsenSys/qbft-formal-spec) against TBFT-family replacements under a sequence of progressively worse operating conditions, holding the application (SSV proposer duty) fixed:
+This doc compares SSV's existing consensus protocol [QBFT](https://github.com/ConsenSys/qbft-formal-spec) against the TBFT-family proposals across both common-case and failure-mode operating conditions. The application is held fixed to **SSV's Ethereum proposer duty** (4s relay submission cutoff). The scope is intentionally narrow: scenario-by-scenario observable cost, with all protocol mechanics deferred to the design docs.
 
-- For `n = 4` clusters: QBFT vs **[TBFT](TBFT.md)** (K=2, primary + backup) vs **[TBFTR](TBFTR.md)** (K=2, with V plaintext + Phase-2 split).
-- For `n ≥ 7` clusters: QBFT vs **[TBFTR](TBFTR.md)** (K=f+1, with V plaintext + Phase-2 split).
+- For `n = 4` clusters: QBFT vs **[TBFT](TBFT.md)** (K=2) vs **[TBFTR](TBFTR.md)** (K=2).
+- For `n ≥ 7` clusters: QBFT vs **[TBFTR](TBFTR.md)** at the default `K = f+1`, plus **TBFTR(K=2)** as a comparison configuration matching QBFT's effective 2-round budget.
 
-At n=4 the operator picks between TBFT (lean) and TBFTR(K=2) (fuller). Both cover the **same** marginal-synchrony band at `f = 1` — "≤ 1 of 3 honest missing re-flood" — because TBFTR's witness threshold (`f+1 = 2` distinct Phase-2a σ-signers) coincides with the leaner TBFT's coverage. TBFTR-at-n=4 adds only redundancy within that band (extra σ partials), not extension. At n ≥ 7 only TBFTR is supported; the leaner TBFT-shape protocol's marginal-synchrony coverage stays capped at "1 honest missing re-flood" regardless of `f`, while TBFTR's secondary closure extends to "up to `f` honest missing" — non-zero widening only at `f ≥ 2`.
+For protocol details — leader-authenticated candidates over a structured envelope, threshold IBE primitive, equivocation-to-NR rule, primary/secondary closure mechanics, and so on — see [TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md).
 
-The goal is to show how time-to-finish and bandwidth degrade as conditions worsen, not to compare protocols in the abstract. The interesting findings are at the failure boundaries, not the healthy case.
+## Scope and assumptions
+
+- **Application**: SSV Ethereum proposer duty. End-to-end budget: ~4 s from `slot_start` (relay submission cutoff). Pre-consensus + block-fetch consumes ~1.5 s. Numbers below measure **consensus-to-signed-output** (full BLS signature on the agreed value, ready for downstream submission), excluding pre-consensus and block-fetch — those are ~equal across protocols and would drown out protocol-level differences.
+- **QBFT round-timeout = 2 s** (current SSV setting, cf. [protocol/v2/qbft/roundtimer/timer.go](../protocol/v2/qbft/roundtimer/timer.go)). With the 4 s relay cutoff and ~1.5 s pre-consensus + fetch overhead, **QBFT has room for at most 2 rounds within the proposer-duty timing budget** — round-1 timeout (2 s) + round-2 success (~750 ms) ≈ 2.75 s consensus, fitting once added on top of pre-consensus + fetch. Failure scenarios requiring round 3 or beyond are reported as **miss**: the cluster doesn't produce a signed value before the relay cutoff, regardless of consensus correctness.
+- **Healthy gossip RTT** (one full propagation across the mesh): ~100 ms; **congested**: ~500 ms.
+- BLS verify/aggregate: ms-scale, treated as instant.
+- "Miss" = cluster fails to produce a validator signature on the proposed block before the relay cutoff. Slot lost; no safety violation in any of the TBFT-family protocols (safety is cryptographic).
+- Numbers are approximate constants; production has long tails. The *shape* of degradation matters more than absolute milliseconds.
+
+## Closure mechanisms primer
+
+TBFT/TBFTR's byzantine-leader-grief resistance is described in their respective design docs in terms of two layered closure mechanisms; this doc references them frequently.
+
+- **Primary closure** (TBFT and TBFTR, both variants, both protocols): under partial synchrony with the candidate-acceptance cutoff `T_candidate_accept = T_commit − (D + δ)` honored, gossipsub re-flooding propagates the leader's Phase-1 bundle to all `2f+1` honest before *their* cutoffs (when byz releases the bundle with at least `D + δ` of headroom). σ-quorum reaches via the leader's Phase-1 σ + 2f honest Phase-2(a) σ = 2f+1. This handles the common-case byzantine-leader grief at any `f`.
+- **Secondary closure** (TBFTR full-V variant only): when re-flooding falls short for some honest (≤ f honest miss the bundle by their Phase-2a cutoff), Phase-2a peer-onion V-recovery surfaces the value via plaintext V in onions, and Phase-2b late σ broadcasts collect σ partials from operators that recovered V late. Gated by the witness threshold (≥ `f+1` distinct Phase-2a σ-signers on the recovered V). Extends marginal-synchrony coverage from "≤ 1 honest missing re-flood" (primary alone) to "≤ `f` honest missing re-flood" (primary + secondary) — non-zero widening only at `f ≥ 2`. Hash variant of TBFTR disables secondary closure.
 
 ## Methodology
 
-For each scenario we report two numbers per protocol, both measured **from start of consensus to a validator-signed value ready for submission**:
+For each scenario, two numbers per protocol:
 
-- **Time to signed output** — wall-clock from when consensus starts to when a full BLS signature on the agreed value is reconstructed and ready for the beacon node. For QBFT this includes the mandatory post-consensus phase (each operator broadcasts a partial signature on the decided value, 2f+1 are collected, full sig reconstructed) — without it, QBFT has only a decided value, not a signature. For TBFT/TBFTR there is no separate post-consensus phase: partial signatures ride inside the Phase 2 onion (or Phase 2b late-σ broadcasts in TBFTR), and Phase 3's local decryption produces the signed output directly. Excluded from both: pre-consensus (RANDAO, applicable to proposer duty only) and block-fetch — they're ~equal across protocols and would drown out the protocol-level differences we're surfacing.
+- **Time to signed output** — wall-clock from start of consensus to a full BLS signature on the agreed value being available for downstream submission. For QBFT this includes the post-consensus partial-sig collection phase (without it, QBFT has only a decided value, not a signature). For TBFT/TBFTR the partial sigs ride inside Phase 2 (and Phase 2b for TBFTR), so Phase 3's local decryption produces the signed output directly — no separate post-consensus phase.
+- **Bandwidth** — gossipsub deliveries during the same window, summed across the cluster.
 
-- **Bandwidth** — all gossipsub deliveries during the same window: from start of consensus to signed output, summed across the cluster.
+This scope choice matters because of a structural asymmetry: **QBFT separates consensus from signing; TBFT/TBFTR fuse them.** Comparing only the consensus phase would understate QBFT's cost; the numbers below reflect total work to signed output.
 
-This scope choice matters because of a structural asymmetry: **QBFT separates "decide on a value" (consensus) from "sign the decided value" (post-consensus); TBFT/TBFTR fuse the two by embedding partial signatures inside the consensus-bearing onion.** Comparing only the consensus phase would understate QBFT's cost. The numbers below reflect total work to signed output.
+Columns in the scenario tables are ordered left-to-right from slowest (QBFT) to fastest (the partial-sigs-only theoretical floor) — rightward direction is "improvement direction".
 
-Assumptions:
+## Common case (healthy operation)
 
-- Healthy gossip "RTT" (one full propagation across the mesh): ~100 ms; congested: ~500 ms.
-- BLS verify/aggregate: ~ms-scale, treated as instant.
-- QBFT round timeout: 2 s, matching current SSV ([protocol/v2/qbft/roundtimer/timer.go:154-158](protocol/v2/qbft/roundtimer/timer.go:154)).
-- "Miss" means the cluster fails to produce a validator signature before the slot deadline — the proposer duty is missed.
-- TBFT and TBFTR share the same cryptographic core: leader-authenticated candidates over a structured envelope, leaders publish their own σ-on-V in Phase 1, unified threshold `qV = qEnc = 2f+1` (cryptographic safety), equivocation-to-non-receipt rule. TBFTR additionally carries V plaintext in onions and splits Phase 2 into 2a/2b — extending marginal-synchrony coverage from "1 honest missing re-flood" (what the leader-σ head-start covers) to "up to `f` honest missing", at the cost of bandwidth + latency. Both specs hold safety unconditionally and rely on partial synchrony within the slot window for liveness — same envelope SSV's QBFT relies on per round. See [TBFT.md](TBFT.md) and [TBFTR.md](TBFTR.md) for the specs.
+Before failure-mode analysis, the headline finding: **TBFT and TBFTR are multiple-× faster than QBFT in healthy network conditions**, due to the structural difference between QBFT's 3-RTT consensus + 1-RTT post-consensus path (4 RTTs minimum) and TBFT/TBFTR's 1–2 RTT fused-signing path. Bandwidth is a wash to slightly QBFT-favored in the healthy case — that's the cost TBFT/TBFTR pay for guaranteed flat behavior under all in-bound failure modes.
 
-## n=4 cluster (f=1) — QBFT vs TBFT vs TBFTR
+| Cluster | Scenario | QBFT | TBFTR (default K) | TBFT | Partial-sigs-only ⁰ |
+|---|---|---|---|---|---|
+| n=4 (f=1) | All honest, healthy | ~750 ms / 14 KB | ~500 ms / 30 KB | **~250 ms / 21 KB** | ~150 ms / ~1 KB |
+| n=4 (f=1) | All honest, congested ⁶ | ~2.0 s / 14 KB | ~750 ms / 30 KB | **~600 ms / 21 KB** | ~550 ms / ~1 KB |
+| n=7 (f=2) | All honest, healthy | ~750 ms / 37 KB | **~500 ms / 108 KB** | n/a | ~150 ms / ~1.5 KB |
+| n=7 (f=2) | All honest, congested ⁶ | ~2.0 s / 37 KB | **~750 ms / 108 KB** | n/a | ~550 ms / ~1.5 KB |
+| n=10 (f=3) | All honest, healthy | ~750 ms / 50 KB | **~500 ms / 253 KB** (hash) | n/a | ~150 ms / ~2 KB |
+| n=13 (f=4) | All honest, healthy | ~750 ms / 85 KB | **~500 ms / 497 KB** (hash) | n/a | ~150 ms / ~2.5 KB |
 
-At n=4 the SSV operator has a choice between the leaner [TBFT](TBFT.md) and the full [TBFTR](TBFTR.md) (configured with K=2). Both are cryptographically safe and cover the **same** marginal-synchrony band at `f = 1` ("≤ 1 of 3 honest missing re-flood"); the choice is between minimal protocol complexity (TBFT) and within-band redundancy (TBFTR-at-n=4) at the cost of bandwidth + latency. Comparing all three apples-to-apples:
+Reading the common-case table:
 
-Bandwidth constants for this cluster size: QBFT 1 round + post-consensus ~14 KB; QBFT 2 rounds ~27 KB; **TBFT (K=2) ~21 KB**; **TBFTR (K=2, full-V) ~30 KB** (full V plaintext + Phase-2b overhead). The TBFTR(K=2) numbers below assume the full-V variant — the secondary-closure scenario (6c) needs full V plaintext in onions for peer-onion V-recovery; hash variant trims a small amount of bandwidth at K=2 but disables the secondary closure (in which case 6c reduces to TBFT-shape behavior). See [TBFTR.md](TBFTR.md) "Phase 2a / hash variant caveat" for the trade-off.
+- **TBFT at n=4 is ~3× faster than QBFT** in healthy networks (~250 ms vs ~750 ms). Inside MEV's 4 s relay cutoff, that's the difference between making the relay submission and not — pre-consensus + block-fetch already eats ~1.5 s.
+- **TBFTR is ~1.5× faster than QBFT** in healthy networks across cluster sizes (~500 ms vs ~750 ms), despite a larger bandwidth footprint.
+- **Bandwidth ordering favors QBFT in the healthy case** at all cluster sizes. Both TBFT/TBFTR pay extra healthy-case bandwidth for guaranteed flat-failure behavior; the trade is paid up-front rather than amortized over failure recovery.
+- **Congested-network gap widens to multiple-×** because each QBFT RTT compounds.
+- **The partial-sigs-only baseline** (⁰) is a theoretical floor: a hypothetical protocol that bypasses consensus entirely and only collects `2f+1` partial sigs on a *pre-agreed* value. TBFT lands closest to this floor; TBFTR is +Δ_2b away; QBFT is multiple round-trips away. Defined only when an agreed value can exist without consensus — n/a in scenarios involving leader silence, equivocation, or selective delivery.
 
-| # | Scenario | QBFT | TBFT (K=2) | TBFTR (K=2) |
-|---|---|---|---|---|
-| **1** | All honest, healthy network | ~750 ms / **14 KB** | ~250 ms / 21 KB | ~500 ms / 30 KB |
-| **2** | All honest, congested network (RTT 500 ms) ⁶ | ~2.0 s / 14 KB | ~600 ms / 21 KB | ~750 ms / 30 KB |
-| **3** | Top leader silent (offline or refuses to propose) | ~3.0 s / 27 KB | **~250 ms** / 21 KB | **~500 ms** / 30 KB |
-| **4** | Top leader byzantine equivocating | ~3.0 s / 27 KB | **~250 ms** / 21 KB ¹ | **~500 ms** / 30 KB ¹ |
-| **5** | f offline incl top leader (=1 offline) | ~3.0 s / 27 KB | **~250 ms** / 21 KB | **~500 ms** / 30 KB |
-| **6a** | Byzantine in worst-case leader position, passive (no votes) | ~3.0 s / 27 KB | **~250 ms** / 21 KB | **~500 ms** / 30 KB |
-| **6b** | Byzantine layer-0 leader actively griefs (selective delivery + dark on votes) | ~3.0 s / 27 KB ² | **~250 ms** / 21 KB ³ | **~500 ms** / 30 KB ³ |
-| **6c** | Same as 6b, plus marginal breakdown (re-flood misses ≥2 of 3 honest) | ~3.0 s / 27 KB ² | miss ⁴ | miss ⁵ |
-| **7** | More than f failures (beyond byzantine bound) | miss | miss | miss |
+## Failure modes
 
-¹ Equivocation triggers the equivocation-to-non-receipt rule cluster-wide — falls through cleanly to the backup.
-<br>
-² QBFT recovers via round change.
-<br>
-³ Under partial synchrony with the candidate-acceptance cutoff `T_candidate_accept = T_commit − (D + δ)` enforced, gossipsub re-flooding propagates the leader's bundle to all 3 honest before *their* cutoffs; all 3 sign σ in Phase 2, σ-quorum reaches `qV = 3` cleanly. Both TBFT and TBFTR(K=2) close this scenario via the same primary mechanism.
-<br>
-⁴ TBFT relies on the primary closure only; if re-flooding misses the budget, the σ-pool fragments and the slot misses (no safety violation).
-<br>
-⁵ **TBFTR(K=2) also misses at n=4.** The secondary closure's witness threshold (≥ `f+1 = 2` distinct Phase-2a σ-signers on V) coincides with TBFT's "≤ 1 honest missing" bound — when ≥ 2 honest miss re-flood, only 1 honest signed Phase-2a σ < 2, the witness threshold isn't met, late σ is blocked, and the slot misses just like TBFT. The full-V variant doesn't extend the marginal band at `f = 1`; widening starts at `f ≥ 2` (n ≥ 7). See [TBFTR.md](TBFTR.md) "Liveness / Comparison with a leaner (TBFT-shape) protocol" for the per-`f` widening table.
-<br>
-⁶ The "congested RTT 500 ms" figure refers to a worst-case observed propagation in this row. For TBFT/TBFTR liveness to hold, the cluster's `Δ_2` (TBFT) or each of `Δ_2a`/`Δ_2b` (TBFTR) must individually exceed `D + δ` per the per-window deadline rule. The latencies in this row assume the cluster's pre-configured windows (Δ_2 ≈ 500 ms for TBFT; Δ_2a ≈ Δ_2b ≈ 250 ms for TBFTR) — sized for `D + δ ≈ 200 ms` — and that the 500 ms RTT is a transient spike rather than the steady-state envelope. If 500 ms is the actual `D` budget, windows would need to be re-sized (TBFT Δ_2 > 550 ms; TBFTR Δ_2a > 550 ms AND Δ_2b > 550 ms, total > 1.1 s), pushing TBFTR's Phase-2 latency to ≥ 1.1 s before reconstruction. The figures above are rough estimates assuming the spike is absorbed by jitter slack; treat them as best-case for this row.
+Two scenario tables: one per cluster size we model in detail (n=4 and n=7), plus a brief note on n=10 / n=13.
 
-### Reading the n=4 table
+### n=4 cluster (f=1) — QBFT vs TBFTR(K=2) vs TBFT
 
-- **Scenarios 3, 5, 6a, 6b all collapse to clean outcomes for both TBFT and TBFTR under partial synchrony with the cutoff enforced.** With f=1, all of "top leader silent" / "f offline including top" / "f byz passive" / "active byz-leader grief" finish quickly via fall-through to backup or via the σ-quorum reaching `qV = 3` through the leader's Phase-1 σ + 2 honest σ partials. The differentiator vs QBFT is variance: QBFT's failure path is timeout-driven (~3.0 s), TBFT/TBFTR's is flat (~250 ms for TBFT, ~500 ms for TBFTR after the per-window deadline rule's `Δ_2a + Δ_2b ≈ 500 ms`).
-- **Scenario 6c at n=4: both TBFT and TBFTR miss.** The witness threshold's `f+1 = 2` precondition forces at least 2 honest to have signed Phase-2a σ on V before late σ is allowed. When ≥ 2 of 3 honest miss re-flood, only 1 honest signs Phase-2a σ — the threshold isn't met, late σ is blocked, and TBFTR's secondary closure can't help. **TBFTR-at-n=4 doesn't earn its premium for marginal-synchrony robustness** — its coverage band coincides with TBFT's; what it adds at this size is redundancy within the band (extra σ partials when both protocols would already succeed). The premium is only justified at this size if that within-band redundancy specifically matters in production. Marginal-coverage extension (the original motivation for the secondary closure) starts at `f ≥ 2`, which is the n ≥ 7 regime — see the n=7 table below.
-- **Scenario 1 favors QBFT on bandwidth** (14 KB vs 21 KB vs 30 KB). QBFT's round-1-success path is genuinely the cheapest in bytes. TBFT/TBFTR trade extra bandwidth for cryptographic safety + flat failure-mode behavior.
-- **Scenario 2 (slow network, no failures) is the cleanest comparison of pure protocol latency.** TBFT/TBFTR finish in ~600–750 ms vs QBFT's ~2.0 s — multiple-× advantage from 1-RTT vs 3-RTT structure. Inside MEV's 4s budget this is the difference between making the relay cutoff and not.
-- **Scenario 3 (top leader silent) is the proposer-duty MEV killer for QBFT.** ~3.0 s of consensus puts the validator on the wrong side of the 4s relay cutoff once you add ~1.5 s of pre-consensus + block-fetch. TBFT/TBFTR just use the backup, well within the cutoff.
+At n=4, the SSV operator picks between TBFT (lean) and TBFTR(K=2) (fuller); both cover the **same** marginal-synchrony band at this `f` ("≤ 1 of 3 honest missing re-flood"). TBFTR-at-n=4 adds only within-band redundancy, not coverage extension — see [TBFTR.md Appendix A.1](TBFTR.md).
 
-## n=7 cluster (f=2) — QBFT vs TBFTR
+| # | Scenario | QBFT | TBFTR (K=2) | TBFT | Partial-sigs-only ⁰ |
+|---|---|---|---|---|---|
+| **1** | All honest, healthy | ~750 ms / 14 KB | ~500 ms / 30 KB | ~250 ms / 21 KB | ~150 ms / 1 KB |
+| **2** | All honest, congested ⁶ | ~2.0 s / 14 KB | ~750 ms / 30 KB | ~600 ms / 21 KB | ~550 ms / 1 KB |
+| **3** | Top leader silent (offline / refuses to propose) | ~3.0 s / 27 KB ¹ | **~500 ms** / 30 KB ³ | **~250 ms** / 21 KB ³ | n/a |
+| **4** | Top leader byzantine equivocating | ~3.0 s / 27 KB ¹ | **~500 ms** / 30 KB ²,³ | **~250 ms** / 21 KB ²,³ | n/a |
+| **5** | f offline including top leader | ~3.0 s / 27 KB ¹ | **~500 ms** / 30 KB ³ | **~250 ms** / 21 KB ³ | n/a |
+| **6a** | f byz in worst-case leader position, passive (no votes) | ~3.0 s / 27 KB ¹ | **~500 ms** / 30 KB ³ | **~250 ms** / 21 KB ³ | n/a |
+| **6b** | Byz layer-0 leader actively griefs (selective delivery + dark on votes), bundle released with re-flood headroom | ~3.0 s / 27 KB ¹ | **~500 ms** / 30 KB ³ | **~250 ms** / 21 KB ³ | n/a |
+| **6c** | Same as 6b, plus marginal breakdown (re-flood misses ≥ 2 of 3 honest) | ~3.0 s / 27 KB ¹ | **miss** ⁴ | **miss** ⁴ | n/a |
+| **7** | More than f failures (beyond byzantine bound) | miss | miss | miss | miss |
 
-This is the cluster size where TBFTR's distinct contribution starts mattering broadly. A TBFT-shape protocol's marginal-synchrony coverage caps at "1 honest missing re-flood" regardless of `f` — the leader-σ head-start adds exactly one σ partial to the σ pool. At `f = 1` (n=4), 1-of-3 honest missing covers most plausibly-degraded conditions. At `f ≥ 2`, the practical marginal band reaches "up to `f` honest missing" (multiple slow links are increasingly likely as `n` grows), and the TBFT-shape σ count caps at `f+2 < qV = 2f+1` once `f ≥ 2`, missing slots in the 2-or-more-honest-missing band. TBFTR's secondary closure pushes coverage out to the full `f`-honest-missing limit, which is what makes it the appropriate choice at `n ≥ 7`.
+**Footnotes:**
 
-Bandwidth constants: QBFT 1 round + post-consensus ~37 KB; QBFT round-change adds ~12 KB; QBFT 2 rounds ~76 KB; QBFT 3 rounds ~115 KB. TBFTR has two operational modes:
+- ⁰ **Partial-sigs-only**: theoretical baseline — protocol that collects `2f+1` partial sigs on a *pre-agreed* value with no consensus. Defined only when an agreed value can exist without consensus; n/a in scenarios involving byzantine value-fragmentation.
+- ¹ **QBFT round-2 recovery**: round-1 fails (timeout, equivocation, or invalid proposal), round-2 elects a new leader and succeeds. Round-1 timeout 2 s + round-2 ~750 ms = ~3.0 s consensus; bandwidth = ~14 KB (round 1) + ~12 KB (round-change) + ~14 KB (round 2) ≈ ~27 KB after dedup.
+- ² **Equivocation handling**: equivocation triggers the equivocation-to-NR rule cluster-wide — falls through cleanly to the backup leader. See [TBFT.md](TBFT.md) / [TBFTR.md](TBFTR.md) "Equivocation handling".
+- ³ **Primary closure**: gossipsub re-flooding under `T_candidate_accept` propagates the leader's Phase-1 bundle to all `2f+1` honest before their cutoffs; σ-quorum reaches via leader's Phase-1 σ + 2f honest Phase-2 σ = 2f+1. See "Closure mechanisms primer" above.
+- ⁴ **Aggressive marginal at n=4 is uncoverable** by either protocol: TBFT relies on primary closure alone; TBFTR's witness threshold (`f+1 = 2` distinct Phase-2a σ-signers) coincides with TBFT's "≤ 1 honest missing re-flood" bound at this size. When ≥ 2 of 3 honest miss re-flood, only 1 honest signs Phase-2a σ, witness threshold not met, late σ blocked → slot misses. **No safety violation** (safety is cryptographic).
+- ⁶ **Congested 500 ms RTT** assumes the cluster's pre-configured Phase-2 windows (Δ_2 ≈ 500 ms for TBFT; Δ_2a ≈ Δ_2b ≈ 250 ms for TBFTR) absorb the spike via jitter slack. If 500 ms is the steady-state envelope, windows would need re-sizing per [TBFT.md](TBFT.md) / [TBFTR.md](TBFTR.md) "Practical caveats / Deadline coordination".
 
-- **TBFTR (K=3, hash) ~108 KB** — practical bandwidth; primary closure only (gossipsub re-flooding under partial synchrony). Disables Phase-2a peer-onion V-recovery — hash variant carries only `hash(V)` at non-leader layers, so honest operators that miss V via Phase 1 cannot recover via peer onions.
-- **TBFTR (K=3, full-V) ~325 KB** — roughly K× bandwidth (each layer carries full V plaintext); enables the secondary closure (Phase-2a peer-onion V-recovery + Phase-2b late σ) that extends marginal-synchrony coverage from "≤ 1 of 5 honest missing re-flood" (what the leader-σ head-start covers) to "≤ 2 of 5 honest missing" (the witness-threshold-bounded secondary closure at `f = 2`).
+**Reading the n=4 failure-mode table:**
 
-Both variants are cryptographically safe; they differ in marginal-synchrony liveness vs bandwidth. Under partial synchrony with the cutoff enforced — and through the moderate-marginal band (≤ 1 of 5 honest missing re-flood) — scenarios 1–6b complete identically in both variants (primary closure + leader-σ head-start suffice). Scenario 6c — extended-marginal breakdown (2 of 5 honest missing re-flood, within `f = 2` bound) — is where the variants diverge: full-V's secondary closure handles it, hash variant misses.
+- **Scenarios 3-6b all close cleanly for TBFT and TBFTR in flat ~250-500 ms**, while QBFT pays ~3.0 s consensus per round-1 failure. Once pre-consensus + fetch (~1.5 s) is added, QBFT's ~3.0 s consensus path puts the validator on the wrong side of the 4 s relay cutoff — proposer duty effectively missed in any of these scenarios.
+- **Scenario 6c (aggressive marginal): all three protocols miss at n=4.** TBFTR's secondary closure doesn't extend coverage at `f = 1` — its witness threshold caps at the same bound TBFT covers via the leader-σ head-start. **TBFTR-at-n=4 doesn't earn its bandwidth/latency premium** for marginal-synchrony robustness; pick TBFT unless within-band redundancy specifically matters.
 
-| # | Scenario | QBFT | TBFTR (K=3, hash) | TBFTR (K=3, full-V) |
-|---|---|---|---|---|
-| **1** | All honest, healthy network | ~750 ms / **37 KB** | ~500 ms / 108 KB | ~500 ms / 325 KB |
-| **2** | All honest, congested network (RTT 500 ms) | ~2.0 s / 37 KB | ~750 ms / 108 KB | ~750 ms / 325 KB |
-| **3** | Top leader silent (offline or refuses to propose) | ~3.0 s / 76 KB | **~500 ms** / 108 KB | **~500 ms** / 325 KB |
-| **4** | Top leader byzantine equivocating | ~3.0 s / 76 KB | **~500 ms** / 108 KB ¹ | **~500 ms** / 325 KB ¹ |
-| **5** | f operators offline, including top leader | ~3.0 s / 76 KB | **~500 ms** / 108 KB | **~500 ms** / 325 KB |
-| **6a** | f byzantine in worst-case leader positions, passive (no votes) | ~5.0 s / 115 KB | **~500 ms** / 108 KB | **~500 ms** / 325 KB |
-| **6b** | Byzantine layer-0 leader actively griefs (selective delivery + dark on votes), bundle released with re-flood headroom | ~3.0 s / 76 KB ² | **~500 ms** / 108 KB ³ | **~500 ms** / 325 KB ³ |
-| **6b'** | Same as 6b, but bundle released *at* `T_candidate_accept` edge (re-flood lands inside worst-case skew window) | ~3.0 s / 76 KB ² | miss ⁶ | **~500 ms** / 325 KB ⁵ |
-| **6c** | Same as 6b, plus marginal breakdown within `f = 2` bound (Phase-1 re-flood misses 2 of 5 honest) | ~3.0 s / 76 KB ² | miss ⁴ | **~500 ms** / 325 KB ⁵ |
-| **7** | More than f failures (beyond byzantine bound) | miss | miss | miss |
+### n=7 cluster (f=2) — QBFT vs TBFTR(K=3) vs TBFTR(K=2)
 
-(TBFTR latencies are sized at `Δ_2a + Δ_2b ≈ 250 ms + 250 ms = 500 ms` per the TBFTR spec's per-window deadline rule (each sub-window must exceed `D + δ ≈ 200 ms`). If the cluster's measured `D + δ` is materially smaller, the windows can be shrunk and the latencies trimmed proportionally — see [TBFTR.md](TBFTR.md) "Practical caveats / Deadline coordination".)
+At n=7, only TBFTR is supported as a TBFT-family option. The table includes both `K = f+1 = 3` (the recommended default) and `K = 2` (a comparison configuration matching QBFT's effective 2-round budget for apples-to-apples comparison; not the recommended deployment, since `K < f+1` means byzantine can hold all top-K leader slots).
 
-¹ Equivocation triggers the equivocation-to-non-receipt rule cluster-wide — falls through cleanly to the next layer.
-<br>
-² QBFT recovers via round change — round 1 fails to reach prepare-quorum, new leader elected in round 2.
-<br>
-³ Under partial synchrony with `T_candidate_accept` enforced AND byz releasing the bundle with at least `D + δ` headroom before the cutoff, gossipsub re-flooding propagates the leader's Phase-1 bundle to all 2f+1 honest before *their* cutoffs (primary closure). σ-quorum reaches via the 2f+1 onion partials + leader's Phase-1 σ = 2f+2 ≥ qV = 5. Both variants close this case the same way; Phase-2a peer-onion recovery is dormant because re-flooding already did the work. (The "byz releases at the cutoff edge" sub-case is row 6b' below — that's where the variants diverge under partial synchrony.)
-<br>
-⁴ Hash variant has only the primary closure (re-flooding). When re-flooding misses the budget, peer onions carry only `hash(V)` at non-leader layers — honest operators that didn't get V via Phase 1 cannot recover. Their σ-pool fragments and the slot misses (no safety violation; safety is cryptographic).
-<br>
-⁵ **Full-V variant succeeds via the secondary closure.** Phase-2a peer onions carry full V plaintext, so honest operators that missed Phase-1 re-flooding recover V via peer onions and broadcast late σ in Phase 2b. σ-quorum reaches at qV = 5: f+1 onion partials + f late-σ partials + 1 leader Phase-1 σ = 2f+2. See [TBFTR.md](TBFTR.md) "Fault tolerance / Liveness" for the full breakdown.
-<br>
-⁶ **Byzantine-leader-at-cutoff edge.** Byz releases the bundle to f+1 honest at exactly their `T_candidate_accept`; the f+1 accept and re-flood, but worst-case clock skew leaves the re-flood landing past the remaining f honest's own cutoffs. Those f peers hold leader auth as late-retention but cannot sign Phase-2a σ. Hash variant: σ pool = f+1 Phase-2a + 1 leader = f+2 = 4 < qV = 5; NR pool < qEnc. **Slot misses under partial synchrony — this is a residual hole the hash variant accepts at f ≥ 2.** Full-V variant: secondary closure recovers via peer-onion V-recovery + late σ; the witness threshold is met (f+1 honest signed Phase-2a σ). See [TBFTR.md](TBFTR.md) "Phase 1 / Bundle propagation" for the clock-skew analysis.
+For TBFTR variants (hash vs full-V): rows where they diverge are noted explicitly (`(hash) / (full-V)`); rows without that annotation behave identically. See [TBFTR.md](TBFTR.md) "Phase 2a" hash-variant caveat for the trade-off.
 
-### Reading the n=7 table
+| # | Scenario | QBFT | TBFTR (K=3, default) | TBFTR (K=2) ⁷ | Partial-sigs-only ⁰ |
+|---|---|---|---|---|---|
+| **1** | All honest, healthy | ~750 ms / 37 KB | ~500 ms / 108 KB | ~500 ms / ~70 KB | ~150 ms / 1.5 KB |
+| **2** | All honest, congested ⁶ | ~2.0 s / 37 KB | ~750 ms / 108 KB | ~750 ms / ~70 KB | ~550 ms / 1.5 KB |
+| **3** | Top leader silent | ~3.0 s / 76 KB ¹ | **~500 ms** / 108 KB ³ | **~500 ms** / ~70 KB ³ | n/a |
+| **4** | Top leader byz equivocating | ~3.0 s / 76 KB ¹ | **~500 ms** / 108 KB ²,³ | **~500 ms** / ~70 KB ²,³ | n/a |
+| **5** | f operators offline, including top leader | ~3.0 s / 76 KB ¹ | **~500 ms** / 108 KB ³ | **~500 ms** / ~70 KB ³,⁸ | n/a |
+| **6a** | f byz in worst-case leader positions, passive (no votes) | **miss** ⁹ (~76 KB consumed) | **~500 ms** / 108 KB ³ | **miss** ⁸ | n/a |
+| **6b** | Byz layer-0 leader actively griefs, bundle released with re-flood headroom | ~3.0 s / 76 KB ¹ | **~500 ms** / 108 KB ³ | **~500 ms** / ~70 KB ³ | n/a |
+| **6b'** | Same as 6b, but bundle released *at* `T_candidate_accept` (re-flood lands inside worst-case skew) | ~3.0 s / 76 KB ¹ | **miss** (hash) ⁵ / **~500 ms** (full-V) ⁵ | **miss** (hash) ⁵ / **~500 ms** (full-V) ⁵ | n/a |
+| **6c** | Same as 6b, plus marginal breakdown within `f = 2` bound (Phase-1 re-flood misses 2 of 5 honest) | ~3.0 s / 76 KB ¹ | **miss** (hash) ⁵ / **~500 ms** (full-V) ⁵ | **miss** (hash) ⁵ / **~500 ms** (full-V) ⁵ | n/a |
+| **6d** | f byz leaders ALL actively griefing (layer-0 AND layer-1 byzantine and griefing — extends 6a from passive to active) | **miss** ⁹ | **~500 ms** / 108 KB ³,¹⁰ | **miss** ⁸ | n/a |
+| **7** | More than f failures (beyond byzantine bound) | miss | miss | miss | miss |
 
-- **TBFTR's flat ~500 ms across in-bound failure modes (scenarios 1–6b) in both variants** is the headline for the common case. The +Δ_2b window (~250 ms, sized strictly above `D + δ` per the per-window deadline rule) over a TBFT-shape protocol pays for the byzantine-leader grief closure under partial synchrony. QBFT pays per round change — passive failures cost ~3.0 s, the worst-case 6a costs ~5.0 s.
-- **Scenario 6a (passive byzantine in worst-leader positions) is where TBFTR's K=f+1 coverage matters most.** TBFTR guarantees ≥1 honest leader in the top-K by construction; the worst case still completes in ~500 ms when byz are passive. QBFT pays for two round changes here.
-- **Scenario 6b (active byzantine grief, with re-flood headroom) is closed at n=7 in both variants under partial synchrony**, via gossipsub re-flooding. QBFT also recovers via round change, at higher latency.
-- **Scenario 6b' (byzantine-leader-at-cutoff edge) splits the variants under partial synchrony.** When byz times the bundle release exactly at honest receivers' `T_candidate_accept` (within worst-case clock skew), re-flood lands past the remaining f honest's cutoffs and only f+1 honest sign Phase-2a σ. Hash variant misses (σ pool = f+2 < qV at f=2); full-V's secondary closure handles it (peer-onion V-recovery + late σ, witness threshold met). This sits within partial synchrony, not marginal — propagation is bounded, byz just exploits clock-skew arithmetic at the cutoff edge. The cluster's residual exposure to 6b' depends on clock-skew bounds and how often byz can time the release this precisely.
-- **Scenario 6c is the variant-differentiator.** Aggressive-marginal breakdown means propagation degrades enough that re-flooding misses ≥2 of `2f+1` honest within `D + δ` — gossipsub-wide congestion or multiple slow mesh edges, not just one slow link. Phase-2a propagation still completes within its (longer) window. The full-V variant's Phase-2a peer-onion V-recovery + Phase-2b late σ closes the gap; the hash variant has nothing in reserve and misses. **Whether 6c is worth the bandwidth premium (~3× over hash) depends on production data: how often does propagation degrade to the multi-honest-pair-slow regime?**
-- **Bandwidth: TBFTR(hash) is consistently larger** than QBFT in healthy-case (108 KB vs 37 KB) but stays flat across failures while QBFT scales toward 115 KB in worst-case 6a. TBFTR(full-V) is much larger (~325 KB) and only earns its premium when the secondary closure's coverage extension matters (i.e., 2-or-more honest missing re-flood within the `f` bound). The gap in failure scenarios narrows; the gap in healthy case stays open.
-- **Scenario 1 still favors QBFT on bandwidth.** TBFTR's V-plaintext + composition premium is real. The trade is paying for guaranteed flat performance across the failure modes (both variants) plus optional secondary-closure coverage extension (full-V only).
+**Additional footnotes (continuing from n=4 table):**
+
+- ⁵ **Hash vs full-V variant differentiator**: full-V's Phase-2a peer-onion V-recovery + Phase-2b late σ (the secondary closure) handles the byzantine-at-cutoff edge and the marginal-breakdown band within `[1, f]`-honest-missing. Hash variant carries only `hash(V)` at non-leader layers in onions, so honest operators that miss V via Phase 1 cannot recover via peer onions — primary closure is all that's available, which doesn't cover these cases at `f ≥ 2`. See [TBFTR.md](TBFTR.md) "Liveness / Byzantine-at-cutoff edge" and "Phase 2a" caveat.
+- ⁷ **K=2 at n=7 is `K < f+1`**; byz can hold both top-K leader slots in worst-case scenarios. Not the recommended TBFTR deployment at this size — included here for apples-to-apples comparison with QBFT's 2-round budget.
+- ⁸ **K=2 worst-case misses**: when both top-K leaders are byzantine or offline, no honest leader exists in the top-K → cluster has no fall-through path → slot misses. K=3 (the default) avoids this by guaranteeing ≥ 1 honest leader in the top-K (since byz can hold at most `f = 2` of 3 leader slots).
+- ⁹ **QBFT round-3+ miss under proposer-duty budget**: scenarios requiring a third round to reach an honest leader exceed the timing budget (round-1 timeout 2s + round-2 timeout 2s = 4s, leaves no time for round 3 + post-consensus + relay round-trip on top of pre-consensus + fetch). Bandwidth shown is the ~76 KB consumed across rounds 1 and 2 before the cluster gives up. See "Scope and assumptions / QBFT round-timeout".
+- ¹⁰ **TBFTR K=3 fall-through to layer-2**: with byz holding L_0 and L_1, the cluster NR-quorums layer 0 and layer 1 (via chained encryption) and reaches L_2 (honest by `K = f+1` construction). Phase 3 is local, so fall-through doesn't add network latency.
+
+**Reading the n=7 failure-mode table:**
+
+- **Scenarios 3-6b (single-byz-leader-grief) close in flat ~500 ms for TBFTR at any K**, primary closure handles them. QBFT pays ~3.0 s for round-2 recovery — a wash with the relay cutoff after pre-consensus + fetch.
+- **Scenarios 6a and 6d differentiate K choice and also break QBFT**: both byz operators are in leader positions (L_0 and L_1 byz), so QBFT needs round 3 to reach an honest leader → miss under proposer-duty budget. TBFTR(K=3) closes them via K-layer fall-through (one round-trip for everyone, Phase 3 is local); TBFTR(K=2) misses when byz holds both top-K positions.
+- **Scenarios 6b' and 6c (hash vs full-V variant differentiator)**: full-V succeeds via secondary closure; hash variant misses. QBFT survives 6c (only one byz leader; round-2 honest leader picks up) but at the usual ~3.0 s round-change cost. **Hash is the typical deployment** at n=7 for bandwidth reasons; clusters running hash accept the byz-at-cutoff and aggressive-marginal cases as residual miss surfaces. Mitigation options (tighten `T_candidate_accept`, switch to full-V, or accept the rate) live in [TBFTR.md](TBFTR.md) "Practical caveats".
+- **Scenario 6d (new): both byzantine leaders actively griefing.** This is the `f = 2` worst case and is where K=3's fall-through depth earns its bandwidth. QBFT misses (round-3+ needed). K=2 misses (no honest in top-K). K=3 closes in ~500 ms.
+- **Bandwidth**: TBFTR(K=3) is consistently larger than QBFT in healthy case (~108 KB vs ~37 KB) but stays flat across failures while QBFT scales toward ~76 KB in failure scenarios. The gap narrows with failure rate.
 
 ### n=10, n=13 — same shape, scaled K
 
-Bandwidth constants (hash variant; full-V variant scales as roughly `K × |V| × n` and is much larger):
+The scenario shape is the same as at n=7, with `K = f+1 = 4` (n=10) or `5` (n=13), proportionally widened failure surface for K=2 comparisons (more byz can hold top-K leader slots), and proportionally larger bandwidth.
 
-| Cluster | f | K | TBFTR (hash, worst case) | TBFTR (full-V, approx) | QBFT 1 round | QBFT 2 rounds | QBFT 3 rounds |
+| Cluster | f | K (default) | TBFTR (default, hash) | TBFTR (default, full-V) | QBFT (1 round) | QBFT (round 2) | QBFT (round 3+) |
 |---|---|---|---|---|---|---|---|
-| n=10 | 3 | 4 | ~253 KB | ~1 MB | ~50 KB | ~100 KB | ~150 KB |
-| n=13 | 4 | 5 | ~497 KB | ~2.5 MB | ~85 KB | ~170 KB | ~255 KB |
+| n=10 | 3 | 4 | ~253 KB | ~1 MB | ~50 KB | ~100 KB | miss ⁹ |
+| n=13 | 4 | 5 | ~497 KB | ~2.5 MB | ~85 KB | ~170 KB | miss ⁹ |
 
-The scenario-by-scenario shape is the same as n=7 — TBFTR finishes in flat ~500 ms across all in-bound failures (1–6b) under partial synchrony in **both** variants (sized by `Δ_2a + Δ_2b ≈ 500 ms` for `D + δ ≈ 200 ms`), QBFT degrades per round change. The bandwidth gap widens with n (TBFTR's `K · n²` term grows faster than QBFT's per-round constant). The variant differentiator (scenario 6c, marginal breakdown within the `f`-honest-missing bound) applies the same way at n=10/13 as at n=7: full-V variant succeeds via Phase-2a peer-onion recovery, hash variant misses.
+At n=10 / n=13:
 
-**Practical reality at n ≥ 10**: the full-V variant is too expensive to be a real default. At n=10 it's ~1 MB cluster-wide per slot; at n=13 ~2.5 MB. Hash variant is the typical deployment, which means **operating at n ≥ 10 effectively gives up the secondary closure** — the cluster's marginal-synchrony coverage reduces to "1 honest missing re-flood" (the leader-σ head-start, same as TBFT at n=4), even though the practical marginal band at f ≥ 3 reaches "up to `f` honest missing". If marginal breakdowns within `[2, f]` honest missing are observed in production, the engineering options are:
-
-- Switch to full-V variant at the cluster (accept the bandwidth cost).
-- Move `T_candidate_accept` earlier (e.g., from `T_commit − (D + δ)` to `T_commit − (2D + δ)`, adding a re-flood-headroom term) so re-flood from the latest acceptor strictly reaches all other honest before *their* cutoffs in the worst-case skew scenario — closes the byzantine-leader-at-cutoff edge in the primary closure itself, at the cost of squeezing the leader's fetch window. (Lowering the assumed `D + δ` to better match measured propagation is a *separate* tuning that gives the leader more fetch time, not more re-flood margin.)
-- Accept the marginal miss rate within `[2, f]` honest missing as a deployment cost and pay it via observability (track miss rate; investigate when it spikes).
-- Stay with TBFT-shape (no V plaintext, no Phase-2b composition) at n=13 and accept the residual marginal miss window — `[2, f] = [2, 4]` honest-missing-reflood cases that the leaner protocol can't cover. Active griefing at n=13 in the modeled scenario would cost ~3 missed slots out of every byzantine-layer-0-leader slot multiplied by the precision-attack hit rate. Whether this is acceptable depends on operator economics.
+- **QBFT's worst-case-leader-position scenarios** (6a, 6d) require `f = 3` or `f = 4` round changes to reach an honest leader → miss outright under proposer-duty budget. The `f`-byz-grief failure mode is uncovered for QBFT at these sizes.
+- **TBFTR's full-V variant becomes impractical** (~1 MB at n=10, ~2.5 MB at n=13). Hash variant is the typical deployment, which means **operating at n ≥ 10 effectively gives up the secondary closure** — scenarios 6b' and 6c miss in hash-only mode.
+- **Mitigation options for the residual hash-variant miss surface**: (1) tighten `T_candidate_accept` to `T_commit − (2D + δ)` (closes byz-at-cutoff edge in primary closure itself, at the cost of squeezing the leader's fetch window); (2) accept the rate as a deployment cost and pay it via observability; (3) switch to full-V if bandwidth budget allows. See [TBFTR.md](TBFTR.md) "Practical caveats / Deadline coordination".
 
 ## Cross-cluster takeaway
 
-- **The protocols differ in shape, not just in performance.** QBFT decides on a value first, then runs a separate post-consensus phase to sign it. TBFT/TBFTR embed partial signatures inside the consensus-bearing onion (and TBFTR adds late-σ broadcasts in Phase 2b) so that consensus and signing happen in the same broadcast window. Most numerical advantages above trace back to this structural difference.
+- **The protocols differ in shape, not just performance.** QBFT decouples consensus from signing (3 RTT consensus + 1 RTT post-consensus); TBFT/TBFTR fuse the two (1–2 RTT). Most numerical advantages above trace back to this structural difference.
+- **TBFT/TBFTR have constant-cost handling for *most* in-bound failures** at their respective cluster sizes via primary closure. Scenarios where QBFT pays a round timeout (~2 s) cost TBFT/TBFTR nothing extra over the healthy path. The exceptions are aggressive-marginal synchrony (≥ 2 honest missing re-flood at n=4; covered by full-V secondary closure at `f ≥ 2` only) and the byzantine-at-cutoff edge (covered by full-V's secondary closure; uncovered in hash variant at `f ≥ 2`).
+- **QBFT's byzantine-leader-grief recovery costs real time and bandwidth** — ~12 KB plus another full round per round change, ~2 s timeout per round. Combined with the proposer-duty round-2-max budget, **QBFT misses outright at n ≥ 7 in worst-case-leader-position scenarios** (6a, 6d) regardless of consensus correctness.
+- **Bandwidth ordering depends on conditions, not just on protocol.** QBFT is cheapest in healthy case at all cluster sizes. TBFT/TBFTR become cheaper in time and competitive in bandwidth as round changes accumulate, with the crossover happening earlier at larger cluster sizes.
+- **QBFT vs TBFT/TBFTR is a variance-vs-failure-mode-shape trade**, not just average-case performance. QBFT optimizes for cheap round 1 at the cost of expensive failure recovery. TBFT/TBFTR spend more on every slot in exchange for flat behavior under in-bound failures.
 
-- **TBFT/TBFTR have constant-cost handling for *most* in-bound failures under partial synchrony** at their respective cluster sizes. The *primary* closure is gossipsub re-flooding of the leader's Phase-1 bundle (under `T_candidate_accept`); this handles selective delivery when byz releases the bundle with at least `D + δ` of re-flood headroom before the cutoff, in both hash and full-V variants of TBFTR and in TBFT at n=4. The **byzantine-leader-at-cutoff edge** (byz times the release exactly at `T_candidate_accept` so worst-case clock skew lands the re-flood past the remaining honest's cutoffs) is **not** fully covered by primary alone: at `f = 1` the leader-σ head-start exactly closes `qV` and the slot succeeds; at `f ≥ 2` only the **full-V** variant's secondary closure (Phase-2a peer-onion V-recovery + Phase-2b late σ) recovers — the **hash variant has a residual partial-synchrony miss surface** unless `T_candidate_accept` is tightened to give re-flood a full propagation budget (e.g., `T_commit − (2D + δ)`, at the cost of squeezing the leader's fetch window). Under marginal synchrony (re-flooding misses honest beyond the cutoff edge), the leader-σ head-start covers the *moderate* band (1 honest missing re-flood) in all variants; the *secondary* closure extends coverage to "≤ `f` honest missing" — non-zero widening only at `f ≥ 2`, full-V variant only. QBFT is fundamentally different in shape: failures cost real time (~2 s per round change) and real bandwidth (~12 KB plus another full round per round change). All three protocols share the same partial-synchrony assumption for liveness; safety in TBFT/TBFTR is cryptographic and unconditional via `qEnc = qV = 2f+1`.
-
-- **TBFT (n=4) and full-V TBFTR (n≥4) close byzantine-leader selective-delivery grief at all SSV-supported cluster sizes under partial synchrony.** Hash-variant TBFTR at `n ≥ 7` has the residual byzantine-at-cutoff miss surface noted above unless the cutoff is tightened. The headline closure mechanism is gossipsub re-flooding of the leader's Phase-1 bundle (primary closure); when byz times the release at the cutoff edge, full-V's secondary closure picks it up and hash variant relies on cutoff-tightening. QBFT also handles the byzantine-leader-grief case (via round change), but with larger latency cost.
-
-- **Bandwidth ordering depends on conditions, not just on protocol.** QBFT is cheapest in the healthy case across all cluster sizes. TBFT/TBFTR become cheaper in time and competitive in bandwidth once round changes accumulate, with the crossover happening earlier at larger cluster sizes.
-
-- **The QBFT vs TBFT/TBFTR trade is variance and failure-mode shape**, not just average-case performance. QBFT optimizes for the common case (cheap round 1) at the cost of expensive failure recovery. TBFT/TBFTR spend more on every slot in exchange for flat behavior under all in-bound failure conditions, including active byzantine-leader grief. Which is "better" depends on how often the network is in a degraded state, how badly missed slots hurt, and how realistic active byz-leader grief is in practice — empirical questions that need production data to answer.
-
-| Cluster size | f | Recommended TBFT-family protocol |
+| Cluster size | f | Recommended |
 |---|---|---|
-| n=4 | 1 | **TBFT** as default (~21 KB) — primary closure via leader-σ + gossipsub re-flooding; covers up to "1 of 3 honest missing re-flood". **TBFTR(K=2)** (~30 KB full-V or smaller hash) covers the **same** marginal-synchrony band at this `f` (witness threshold caps secondary closure at the same bound); the only thing it adds at n=4 is redundancy in that band, not an extension. Pick TBFTR-at-n=4 only if that within-band redundancy specifically matters. |
-| n=7 | 2 | **TBFTR (K=3, hash)** for typical deployment (~108 KB) — primary closure + leader-σ head-start covers up to "1 of 5 honest missing re-flood". **TBFTR (K=3, full-V)** (~325 KB) if extending coverage to "up to 2 of 5 honest missing" (the secondary closure's `f`-bound at `f = 2`) justifies the bandwidth premium. |
-| n=10 | 3 | **TBFTR (K=4, hash)** practical (~253 KB) — full-V variant (~1 MB) is too expensive for typical deployment, so the cluster gives up the secondary closure. |
-| n=13 | 4 | **TBFTR (K=5, hash)** (~497 KB; bandwidth tight) — full-V variant (~2.5 MB) is impractical. Same caveat as n=10: secondary closure unavailable; cluster relies on partial-synchrony primary closure. |
+| n=4 | 1 | **TBFT** as default — primary closure covers up to "1 of 3 honest missing re-flood"; minimal complexity. **TBFTR(K=2)** offers redundancy in the same band but no extension; pick only if redundancy specifically matters. |
+| n=7 | 2 | **TBFTR (K=3, hash)** for typical deployment (~108 KB) — primary closure covers up to "1 of 5 honest missing re-flood". **TBFTR (K=3, full-V)** (~325 KB) extends coverage to "≤ 2 of 5 honest missing" if the bandwidth premium is justified. |
+| n=10 | 3 | **TBFTR (K=4, hash)** practical (~253 KB). Full-V (~1 MB) impractical for typical deployment, so the cluster gives up the secondary closure. |
+| n=13 | 4 | **TBFTR (K=5, hash)** (~497 KB; bandwidth tight). Full-V (~2.5 MB) impractical. |
 
 ## Limits of this comparison
 
-- These are consensus-to-signed-output numbers. End-to-end time has another ~1.5 s of pre-consensus + block-fetch sitting on top of every row, so the *relative* gaps matter more than the absolute milliseconds.
-
-- The 2 s QBFT round timeout is current SSV. Tightening it would shrink scenarios 3-6's QBFT times but raise the false-positive round-change rate under normal jitter (a known trade-off the team has already tuned).
-
-- Numbers are approximate constants; real production has long tails. For small n=4 clusters at low duty load these gaps may not matter; at n=10/13 with frequent slots they very much do.
-
-- Partial network partitions (where some operators have a quorum view and others don't) aren't separately modeled here. TBFT/TBFTR degrade to "missed slot by some operators" cleanly under partitions; QBFT's view-change behavior is more nuanced and would warrant its own analysis.
-
-- The "byzantine in worst-case leader positions" scenarios (6a, 6b) assume leader rotation is *not* byzantine-aware. Byzantine-aware rotation (VRF-based, distinct sub-quorums per role) would reduce the probability of hitting these worst cases without changing the per-scenario bandwidth or time numbers.
-
-- TBFTR has two operational variants — hash and full-V — and the comparison tables above split scenarios where the variants diverge (notably 6c at n=7 and the n=10/13 discussion). The hash variant cuts bandwidth from `~K × |V| × n²` to `~K × 32 B + |V|` per onion, but disables Phase-2a peer-onion V-recovery (the secondary closure mechanism). For scenarios under partial synchrony plus moderate marginal (≤1 honest missing re-flood) where the primary closure + leader-σ head-start suffice, both variants behave identically; for marginal scenarios within `[2, f]` honest missing — the band where the secondary closure adds extension over the leaner protocol — only full-V succeeds. At `f = 1` (n=4) the band is empty (witness threshold coincides with leaner coverage), so hash and full-V are equivalent in marginal coverage there. See [TBFTR.md](TBFTR.md) "Phase 2a" hash-variant caveat for the trade-off.
+- **Numbers are consensus-to-signed-output**, excluding pre-consensus (RANDAO) and block-fetch (~1.5 s combined). Relative gaps matter more than absolute milliseconds.
+- **2 s QBFT round timeout is the current SSV setting.** Tightening shrinks scenarios 3-6's QBFT times but raises the false-positive round-change rate under normal jitter (a known trade-off the team has tuned).
+- **Numbers are approximate constants**; production has long tails. For small n=4 clusters at low duty load these gaps may not matter; at n=10 / n=13 with frequent slots they very much do.
+- **Partial network partitions** (where some operators have a quorum view and others don't) aren't separately modeled. TBFT/TBFTR degrade to "missed slot by some operators" cleanly under partitions; QBFT's view-change behavior is more nuanced and would warrant its own analysis.
+- **"Byzantine in worst-case leader positions"** scenarios assume leader rotation is *not* byzantine-aware. Byzantine-aware rotation (VRF-based, distinct sub-quorums per role) would reduce the probability of hitting these worst cases without changing per-scenario bandwidth/time numbers.
+- **Hash vs full-V variants** of TBFTR differ in marginal-synchrony band coverage at `f ≥ 2`. The split is noted in tables where relevant; for the trade-off mechanics see [TBFTR.md](TBFTR.md) "Phase 2a" hash-variant caveat.
+- **Partial-sigs-only baseline** is theoretical, not a deployable protocol — it assumes the agreed value is already known to all operators, which doesn't hold in scenarios involving leader silence, equivocation, or selective delivery. Included as a floor on how fast a protocol *could possibly* go if consensus weren't needed.
