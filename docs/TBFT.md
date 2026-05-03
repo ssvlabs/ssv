@@ -399,7 +399,7 @@ Both protocols share the same cryptographic core (`qEnc = qV = 2f+1`, leader-aut
 | Phase-1 fetch timing | Asymmetric: `T_1 < T_0` (backup early, primary late) | Uniform across layers (configurable per leader) |
 | Byzantine-leader-grief closure | Primary (gossipsub re-flooding under partial synchrony) + moderate marginal (1-of-3-honest-missing-reflood, via leader-σ head-start) | Same primary + secondary-closure redundancy in the same band; coverage band coincides at K=2 / n=4 (witness threshold caps secondary closure at the same 1-of-3 bound). At larger `f` the secondary closure extends the band to `f`-honest-missing-reflood. |
 | Bandwidth (worst case) | ~21 KB | larger by V-plaintext + Phase-2b overhead (slot-dependent) |
-| Latency overhead | None beyond standard Phase 2 | +Δ_2b (~100–200 ms) |
+| Latency overhead | None beyond standard Phase 2 | +Δ_2b (~250 ms for `D + δ ≈ 200 ms`; sized strictly above `D + δ`) |
 | Tag count | 1 (`nr_tag_0` only) | Same — single tag at K=2 |
 | Number of leader candidates per slot | 2 (primary + backup) | Same — K=2 |
 
@@ -439,7 +439,7 @@ Crucially: **bids are trusted at runtime, verified post-hoc**. A byzantine leade
 
 #### Protocol shape (delta from baseline TBFT)
 
-**Setting (modified):** the structured envelope in Phase 1 binds `(version, cluster_id, slot, layer k, leader_id, value_root, bid)`. Bid is application-supplied — whatever numeric type the application uses for value comparison (uint256 wei, fixed-point, etc. — the protocol just needs a total ordering with a tiebreaker). Tiebreaker for equal bids: lower `leader_id` wins (deterministic). The protocol carries `bid` as an opaque payload bound into the envelope's signature; it doesn't interpret bid semantics. (Other host applications could plug in different ordering payloads — `bid` is the SSV instance.)
+**Setting (modified):** the structured envelope in Phase 1 binds `(version, cluster_id, slot, layer k, leader_id, value_root, bid)`. Bid is application-supplied — whatever numeric type the application uses for value comparison (uint256 wei, fixed-point, etc. — the protocol just needs a total ordering with a tiebreaker). Tiebreaker for equal bids: lower `leader_id` wins (deterministic, could be any other deterministic function instead). The protocol carries `bid` as an opaque payload bound into the envelope's signature; it doesn't interpret bid semantics. (Other host applications could plug in different ordering payloads — `bid` is the SSV instance.)
 
 Two commit-tags replace the single `nr_tag_0`:
 

@@ -36,7 +36,7 @@ Bandwidth constants for this cluster size: QBFT 1 round + post-consensus ~14 KB;
 | # | Scenario | QBFT | TBFT (K=2) | TBFTR (K=2) |
 |---|---|---|---|---|
 | **1** | All honest, healthy network | ~750 ms / **14 KB** | ~250 ms / 21 KB | ~500 ms / 30 KB |
-| **2** | All honest, congested network (RTT 500 ms) | ~2.0 s / 14 KB | ~600 ms / 21 KB | ~750 ms / 30 KB |
+| **2** | All honest, congested network (RTT 500 ms) ⁶ | ~2.0 s / 14 KB | ~600 ms / 21 KB | ~750 ms / 30 KB |
 | **3** | Top leader silent (offline or refuses to propose) | ~3.0 s / 27 KB | **~250 ms** / 21 KB | **~500 ms** / 30 KB |
 | **4** | Top leader byzantine equivocating | ~3.0 s / 27 KB | **~250 ms** / 21 KB ¹ | **~500 ms** / 30 KB ¹ |
 | **5** | f offline incl top leader (=1 offline) | ~3.0 s / 27 KB | **~250 ms** / 21 KB | **~500 ms** / 30 KB |
@@ -54,6 +54,8 @@ Bandwidth constants for this cluster size: QBFT 1 round + post-consensus ~14 KB;
 ⁴ TBFT relies on the primary closure only; if re-flooding misses the budget, the σ-pool fragments and the slot misses (no safety violation).
 <br>
 ⁵ **TBFTR(K=2) also misses at n=4.** The secondary closure's witness threshold (≥ `f+1 = 2` distinct Phase-2a σ-signers on V) coincides with TBFT's "≤ 1 honest missing" bound — when ≥ 2 honest miss re-flood, only 1 honest signed Phase-2a σ < 2, the witness threshold isn't met, late σ is blocked, and the slot misses just like TBFT. The full-V variant doesn't extend the marginal band at `f = 1`; widening starts at `f ≥ 2` (n ≥ 7). See [TBFTR.md](TBFTR.md) "Liveness / Comparison with a leaner (TBFT-shape) protocol" for the per-`f` widening table.
+<br>
+⁶ The "congested RTT 500 ms" figure refers to a worst-case observed propagation in this row. For TBFT/TBFTR liveness to hold, the cluster's `Δ_2` (TBFT) or each of `Δ_2a`/`Δ_2b` (TBFTR) must individually exceed `D + δ` per the per-window deadline rule. The latencies in this row assume the cluster's pre-configured windows (Δ_2 ≈ 500 ms for TBFT; Δ_2a ≈ Δ_2b ≈ 250 ms for TBFTR) — sized for `D + δ ≈ 200 ms` — and that the 500 ms RTT is a transient spike rather than the steady-state envelope. If 500 ms is the actual `D` budget, windows would need to be re-sized (TBFT Δ_2 > 550 ms; TBFTR Δ_2a > 550 ms AND Δ_2b > 550 ms, total > 1.1 s), pushing TBFTR's Phase-2 latency to ≥ 1.1 s before reconstruction. The figures above are rough estimates assuming the spike is absorbed by jitter slack; treat them as best-case for this row.
 
 ### Reading the n=4 table
 
