@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 )
 
@@ -42,9 +44,6 @@ func WithStatusCode(statusCode int) ResponseOption {
 
 func WithHeader(key, value string) ResponseOption {
 	return func(resp *Response) {
-		if resp.Headers == nil {
-			resp.Headers = make(http.Header)
-		}
 		resp.Headers.Set(key, value)
 	}
 }
@@ -101,8 +100,16 @@ func responseForPath(mockResponses map[string]json.RawMessage, path string) Resp
 		return NewResponse(resp)
 	}
 
+	body, err := json.Marshal(map[string]string{
+		"error": "unexpected request",
+		"path":  path,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("json.Marshal returned error: %v", err))
+	}
+
 	return NewResponse(
-		json.RawMessage(fmt.Sprintf(`{"error":"unexpected request","path":%q}`, path)),
+		body,
 		WithStatusCode(http.StatusNotFound),
 	)
 }
@@ -120,7 +127,7 @@ func writeResponse(w http.ResponseWriter, resp Response) {
 
 	statusCode := resp.StatusCode
 	if statusCode == 0 {
-		statusCode = http.StatusOK
+		panic("response status code must be set")
 	}
 
 	w.WriteHeader(statusCode)
@@ -134,10 +141,11 @@ func writeResponse(w http.ResponseWriter, resp Response) {
 func ServerResponses() map[string]json.RawMessage {
 	var responses map[string]json.RawMessage
 
-	f, err := os.Open("./mocks/mock-beacon-responses.json")
-	if err != nil {
-		f, err = os.Open("./mock-beacon-responses.json")
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("runtime.Caller returned no caller information")
 	}
+	f, err := os.Open(filepath.Join(filepath.Dir(filename), "mock-beacon-responses.json"))
 	if err != nil {
 		panic(fmt.Sprintf("os.Open returned error: %v", err))
 	}

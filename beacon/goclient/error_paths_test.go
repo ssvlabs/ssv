@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	eth2api "github.com/attestantio/go-eth2-client/api"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ func Test_specForClient_errorPaths(t *testing.T) {
 	tt := []struct {
 		name           string
 		response       mocks.Response
-		wantErr        string
+		wantStatusCode int
 		requestTimeout time.Duration
 	}{
 		{
@@ -31,7 +32,15 @@ func Test_specForClient_errorPaths(t *testing.T) {
 				mocks.WithStatusCode(http.StatusTooManyRequests),
 				mocks.WithHeader("Retry-After", "1"),
 			),
-			wantErr: "GET failed with status 429",
+			wantStatusCode: http.StatusTooManyRequests,
+		},
+		{
+			name: "service unavailable",
+			response: mocks.NewResponse(
+				json.RawMessage(`{"message":"temporarily unavailable"}`),
+				mocks.WithStatusCode(http.StatusServiceUnavailable),
+			),
+			wantStatusCode: http.StatusServiceUnavailable,
 		},
 		{
 			name: "internal server error",
@@ -39,15 +48,15 @@ func Test_specForClient_errorPaths(t *testing.T) {
 				json.RawMessage(`{"message":"boom"}`),
 				mocks.WithStatusCode(http.StatusInternalServerError),
 			),
-			wantErr: "GET failed with status 500",
+			wantStatusCode: http.StatusInternalServerError,
 		},
 		{
 			name: "timeout",
 			response: mocks.NewResponse(
 				nil,
-				mocks.WithDelay(200*time.Millisecond),
+				mocks.WithDelay(400*time.Millisecond),
 			),
-			wantErr:        "context deadline exceeded",
+			wantStatusCode: 0,
 			requestTimeout: 50 * time.Millisecond,
 		},
 	}
@@ -75,7 +84,12 @@ func Test_specForClient_errorPaths(t *testing.T) {
 			}
 
 			_, err := client.specForClient(ctx, provider)
-			require.ErrorContains(t, err, tc.wantErr)
+			if tc.wantStatusCode == 0 {
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+				return
+			}
+
+			assertAPIErrorStatusCode(t, err, tc.wantStatusCode)
 		})
 	}
 }
@@ -106,6 +120,8 @@ func newHTTPService(t *testing.T, addr string) *eth2clienthttp.Service {
 		eth2clienthttp.WithAddress(addr),
 		eth2clienthttp.WithLogLevel(zerolog.Disabled),
 		eth2clienthttp.WithTimeout(time.Second),
+		// Reduced memory usage skips eager spec/genesis fetches, which keeps the
+		// cache cold so these tests exercise the mocked HTTP responses directly.
 		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	require.NoError(t, err)
@@ -114,4 +130,12 @@ func newHTTPService(t *testing.T, addr string) *eth2clienthttp.Service {
 	require.Eventually(t, provider.IsActive, time.Second, 10*time.Millisecond)
 
 	return provider
+}
+
+func assertAPIErrorStatusCode(t *testing.T, err error, wantStatusCode int) {
+	t.Helper()
+
+	var apiErr *eth2api.Error
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, wantStatusCode, apiErr.StatusCode)
 }
