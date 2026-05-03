@@ -455,11 +455,11 @@ The variants split into two families:
 - **B.1** — **bid-ordered** layer selection. Clean fit at n=4, well-defined semantics, attribution story. Sacrifices hedging across layers; introduces bid-fragmentation regression at K=2.
 - **B.2** — **parent-root-based** "ordering". Included for contrast, mostly to call out why TBFT doesn't extend well to support it.
 
-**Top-K bidder family (B.3).** Keeps baseline's σ-or-NR machinery and NR fall-through *exactly* as specified, only changes the rule that picks which 2 candidates fill `L_0` / `L_1` — from rotation to top-2-bid.
+**Bid-prepended family (B.3).** Keeps baseline's σ-or-NR machinery and NR fall-through *exactly* as specified, *prepends* an opportunistic bid-routing layer on top — bid-determined `L_Bid` becomes layer 0, baseline's rotation-determined `L_0` / `L_1` become layers 1 and 2 of a K=3 onion. The bid layer's σ-eligibility is conditioned on a cluster-state predicate (saw all bidders' envelopes), which makes the σ-side participation cluster-consistent and routes bid-disagreement scenarios uniformly to NR-side rather than fragmenting σ-pools. Adds a layer (K=3, requires Appendix C's chained encryption) but doesn't replace baseline's K=2 fallback structure.
 
-- **B.3** — **top-2-bid leader selection**. Same safety/liveness as baseline; cost is Phase-1 bandwidth scaling linearly in n. Strictly fewer trade-offs than B.1 for the bid-routing use case.
+- **B.3** — **L_Bid-prepended TBFT**. Same safety/liveness as baseline TBFT exactly (no regression in any failure mode); bid-routing on the optimistic path with full baseline K=2 fallback structure preserved underneath. Cost: K=3 spec surface (chained encryption per Appendix C, third onion layer) + n bid envelopes in Phase 1.
 
-Under TBFT's application-agnostic framing (see "Preconditions on the host application" / "Operator commitments — σ, NR, NV"), these extensions are best read as **examples of plugging an application-supplied selection criterion into TBFT's leader-determination slot**. The criterion (B.1: bid via commit-tags; B.2: parent-root via commit-tags; B.3: bid via top-K leader replacement) is host-supplied. The general K-layer formulation for the commit-tag family lives in [TBFTR.md](TBFTR.md) Appendix B.
+Under TBFT's application-agnostic framing (see "Preconditions on the host application" / "Operator commitments — σ, NR, NV"), these extensions are best read as **examples of plugging an application-supplied selection criterion into TBFT's leader-determination slot**. The criterion (B.1: bid via commit-tags; B.2: parent-root via commit-tags; B.3: bid via L_Bid prepended layer) is host-supplied. The general K-layer formulation for the commit-tag family lives in [TBFTR.md](TBFTR.md) Appendix B.
 
 ### B.1 — Bid-ordered leader selection at n=4
 
@@ -626,205 +626,238 @@ The split case is the application-validity-divergence scenario from "Fault toler
 
 **Summary.** Parent-root match doesn't give a useful new routing rule at K=2, fragments under the very condition it would purport to address (head disagreement), and is best handled at the application layer by choosing a more re-org-resistant parent for the backup candidate. It's worth understanding as a *non-extension* — a direction explored and ruled out — rather than a path forward.
 
-### B.3 — Top-2-bid leader selection at n=4
+### B.3 — L_Bid-prepended TBFT at n=4
 
-Sketches a TBFT extension where every operator broadcasts a Phase-1 candidate envelope with a bid, and the cluster's `L_0` / `L_1` for the slot are picked as the top-2 bidders by `(bid descending, op_id ascending)`. Phases 2 and 3 are baseline TBFT K=2 unchanged. Specialized to `K = 2` and SSV's proposer-duty bid concept.
+Sketches a TBFT extension that *prepends* an opportunistic bid-routing layer (`L_Bid`) on top of baseline TBFT's K=2 fall-through structure, producing a K=3 onion. Every operator broadcasts a candidate envelope with a bid in Phase 1; operators who saw the full n-bidder envelope set σ on the bid-winner at `L_Bid`; operators who didn't see the full set NR_LBid, triggering fall-through to baseline TBFT's `L_0` / `L_1` layers (rotation-determined, unchanged). Specialized to `n = 4`, `K = 3` (one bid layer + two rotation layers), and SSV's proposer-duty bid concept.
 
-**Status: design sketch, not part of the baseline TBFT spec.** Captured because it preserves baseline TBFT's safety and liveness exactly while adding bid-aware leader selection — the simplest bid-routed variant in this appendix's design space, with strictly fewer trade-offs than B.1 (no hedging loss, no bid-fragmentation regression, no extra rounds), at the cost of Phase-1 bandwidth scaling linearly in n.
+**Status: design sketch, not part of the baseline TBFT spec.** Captured because it **preserves baseline TBFT's safety and liveness exactly** while adding bid-routing on the optimistic path — no regression in any failure mode, every slot baseline TBFT completes is also completed here (at the same layer or earlier with higher value capture). Cost is K=3 chained encryption (per Appendix C) + n bid envelopes in Phase 1; no extra rounds.
 
 #### Motivation
 
-Baseline TBFT picks `L_0` and `L_1` by rotation, ignoring per-slot variance in operator-side MEV opportunity. A non-rotation-priority operator's high-MEV block goes uncommitted that slot — the cluster commits to whatever the rotation-determined `L_0` / `L_1` produced, regardless of bid. B.1 (Appendix B.1) addresses this with a per-operator argmax over commit-tags, but pays for it with structural trade-offs: per-operator hedging across layers is given up, and the K=2 bid-fragmentation regression is introduced when `bid_1 > bid_0` and L_1 reception is partial (see B.1's trade-off table).
+Baseline TBFT picks `L_0` and `L_1` by rotation, ignoring per-slot variance in operator-side MEV opportunity. The other bid-routing variant in this appendix (B.1) addresses that, but pays structural costs: per-operator hedging across layers is given up, and a K=2 bid-fragmentation regression is introduced when `bid_1 > bid_0` and L_1 reception is partial.
 
-B.3 takes a different angle: keep baseline's K=2 σ-or-NR machinery and Phase-3 fall-through walk *exactly* as specified, only change the rule that picks which 2 candidates fill the `L_0` / `L_1` slots — from rotation to top-2-bid. Because Phase-1 envelopes are already signed and propagate within the same partial-synchrony bound the rest of the protocol assumes, the top-2-bid selection is cluster-consistent at no extra round cost.
+L_Bid-prepended TBFT takes a different angle: rather than *replacing* baseline's leader selection with bid-routing, it *prepends* an opportunistic bid-routing layer on top. When the optimistic case holds (every honest received every bid by `T_candidate_accept`), σ_LBid reaches and the cluster captures the highest-bid block. When the optimistic case fails for any reason — any envelope missing, byz withholding their bid, `V_{L_Bid}` invalid for any honest, sub-partial-synchrony fragmentation — the structure falls through cleanly to baseline TBFT's K=2 with rotation-determined `L_0` / `L_1`. Baseline's exact liveness profile is preserved in every failure mode; bid-routing is purely additive on top.
+
+The key insight is the σ-eligibility rule at `L_Bid`: an operator σ on the bid-winner *only if* (a) they received valid Phase-1 envelopes from all `n` bidders by `T_candidate_accept`, AND (b) they validated the bid-winner's `V` locally. Otherwise, they NR_LBid. This conditions σ-side participation on a **cluster-state predicate** ("saw all bids") rather than on local argmax — which makes σ-side automatically cluster-consistent (every σ-signer saw the same input set, computed the same argmax, signed on the same `V`), and routes bid-disagreement scenarios uniformly to NR-side instead of fragmenting σ-pools across multiple V's.
 
 #### Core idea
 
-Each of the n operators acts as a bidder for the slot — broadcasts their own candidate with a bid in the Phase-1 envelope. By `T_candidate_accept`, every honest operator has received the same set of Phase-1 envelopes (under partial synchrony — the same delivery model that lets baseline TBFT assume cluster-consistent receipt of `L_0`'s bundle). Each honest operator independently sorts received envelopes by `(bid descending, op_id ascending)`, takes the top-2: top-bid bidder becomes `L_0` for this slot, second-bid becomes `L_1`. Phases 2 and 3 then run as baseline TBFT K=2 with these `L_0` / `L_1` identities resolved.
+**Phase 1 is broadened from baseline:** every one of the `n = 4` operators broadcasts a candidate envelope with a bid (instead of just rotation-determined `L_0` and `L_1`).
 
-Compared to B.1: keeps σ-or-NR exclusivity (per-operator hedging across layers preserved), keeps the standard `nr_tag_0` → layer 1 fall-through, no bid-induced fragmentation regression, no commit-tag spec surface.
+**Phase 2 has K=3 layers** with TBFTR-style chained encryption (per Appendix C):
 
-Compared to baseline: spends Phase-1 bandwidth to broadcast n candidate envelopes instead of 2; replaces rotation-based `L_0` / `L_1` resolution with bid-determined.
+- Layer 0 = `L_Bid`, the cluster's bid-winner conditional on cluster-consistent receipt of all bids.
+- Layer 1 = `L_0_baseline`, baseline TBFT's rotation-determined primary leader (unchanged from baseline).
+- Layer 2 = `L_1_baseline`, baseline TBFT's rotation-determined backup leader (unchanged from baseline).
+
+**Phase 3 walks all three layers** by σ-quorum, falling through via NR-quorums in the standard TBFT way. The extra layer (`L_Bid`) is purely opportunistic — if it doesn't reach σ-quorum, the protocol falls through to the same K=2 baseline machinery that would have run if `L_Bid` didn't exist.
+
+**σ-eligibility at `L_Bid`** is conditional: σ on the bid-winner iff (a) operator received valid Phase-1 envelopes from all `n` bidders by `T_candidate_accept`, AND (b) operator validated the bid-winner's V locally. Otherwise, NR_LBid. Layers 1 and 2 follow baseline TBFT's standard σ-or-NR rules unchanged, applied to their respective rotation-determined leaders.
+
+The cluster-consistent σ-side participation at `L_Bid` means: every honest who σ at `L_Bid` saw all `n` bid envelopes (= identical input set) and validated the same bid-winner, so they all signed on the same `V`. Pigeonhole 1 + 2 hold at `L_Bid` by the same arguments as baseline. Pigeonhole 3 (from K=3 chained encryption per Appendix C) ensures cross-layer safety.
 
 #### Protocol shape (delta from baseline TBFT)
 
-**Setting (modified):** every operator is a per-slot bidder. The rotation that baseline uses to pick `L_0` / `L_1` is replaced by per-slot top-2-bid selection. The structured envelope in Phase 1 binds:
+**Setting (modified):** every operator is a per-slot bidder. The structured envelope in Phase 1 binds:
 
 - `protocol_tag = "TBFT-v1"`
-- `message_kind = "phase1-bundle-bid-topk"` (sibling of B.1's `"phase1-bundle-bid-commit"`; both share the `-bid-` infix marking the bid-routed family, with the terminating segment naming the mechanism — `topk` for top-K leader replacement here, `commit` for commit-tag routing in B.1. Domain-separates from baseline's `"phase1-bundle"` and from B.1, so operators running multiple variants on the same identity key cannot have their envelopes collide.)
+- `message_kind = "phase1-bundle-bid-prepended"` (sibling of B.1's `"phase1-bundle-bid-commit"`; both share the `-bid-` infix marking the bid-routed family, with the terminating segment naming the mechanism — `prepended` for L_Bid-prepended-on-baseline here, `commit` for commit-tag routing in B.1. Domain-separates from baseline's `"phase1-bundle"` and from B.1.)
 - `cluster_id`
 - `slot`
-- `op_id` (the bidder's identity; replaces baseline's pre-bound `(layer, leader_id)` pair, since layer is determined post-broadcast)
+- `op_id` (the bidder's identity)
 - `value_root`
 - `bid` (application-supplied numeric value, same shape as B.1)
 
-Tiebreaker for equal bids: lower `op_id` wins. Bid is application-supplied — whatever numeric type the application uses for value comparison; the protocol just needs a total ordering with a deterministic tiebreaker.
+Tiebreaker for equal bids: lower `op_id` wins. The rotation-determined `L_0_baseline` and `L_1_baseline` for the slot are computed exactly as in baseline TBFT — operators know these a priori from the rotation table.
 
-**Phase 1 (modified):** each of the n operators broadcasts a Phase-1 bundle:
+**Phase 1 (modified):** each of the `n = 4` operators broadcasts a Phase-1 bundle:
 
-- The candidate `V_op_id` (their proposed value).
+- The candidate `V_{op_id}` (their proposed value).
 - The signed envelope binding `(slot, op_id, value_root, bid)`.
-- A σ_V partial signature `σ_op_id^V(V_op_id)` on their own value (locks the bidder to a single `V` for this slot, exactly as baseline's leader-Phase-1-σ_V locks `L_0` / `L_1` to their values).
+- A σ_V partial signature `σ_{op_id}^V(V_{op_id})` on their own value (locks the bidder to a single `V` for this slot).
 
-This is structurally the same broadcast baseline does for `L_0` and `L_1`, just performed by all n operators simultaneously. By `T_candidate_accept = T_commit − (D + δ)`, every honest operator has received every honestly-broadcast envelope and committed which byzantine envelopes to count.
+By `T_candidate_accept = T_commit − (D + δ)`, every honest operator has received every honestly-broadcast envelope (gossipsub re-flooding ensures this within the partial-synchrony bound — see "Cluster-consistency under sub-partial-synchrony" in the safety analysis below).
 
-**Layer assignment (new step, locally computed by each operator at the end of Phase 1):**
+**Layer assignment (locally computed at end of Phase 1):**
 
 ```
 received_bidders = { op_id : received valid Phase-1 envelope from op_id by T_candidate_accept }
-sorted = sort_by_(bid descending, op_id ascending)(received_bidders)
 
-L_0 = sorted[0]   if len(sorted) ≥ 1 else undefined
-L_1 = sorted[1]   if len(sorted) ≥ 2 else undefined
-V_{L_0}, V_{L_1} = candidates from L_0's and L_1's envelopes respectively
+# L_Bid layer (bid-determined, conditional on saw-all-bids):
+saw_all_bids = (|received_bidders| == n)         # n = 4 for this spec
+if saw_all_bids:
+    L_Bid = argmax_{(bid descending, op_id ascending)}(received_bidders)
+    V_{L_Bid} = candidate from L_Bid's envelope
+else:
+    L_Bid = undefined                             # operator will NR_LBid
+
+# L_0_baseline / L_1_baseline layers (rotation-determined, known a priori):
+L_0_baseline = rotation_primary(slot)
+L_1_baseline = rotation_backup(slot)
+V_{L_0_baseline}, V_{L_1_baseline} = candidates from their respective envelopes
+                                     (received in Phase 1 if available)
 ```
 
-Under partial synchrony, every honest operator computes the same `(L_0, L_1)` (identical `received_bidders` set, identical deterministic sort).
+Under partial synchrony with gossipsub re-flooding, every honest operator either uniformly computes the same `L_Bid` (if all received all `n` envelopes) or uniformly computes `L_Bid = undefined` (if at least one envelope failed re-flood — but re-flood collapses byzantine selective-broadcast to a binary "broadcast or don't" choice, so `saw_all_bids` resolves to the same boolean for every honest receiver). `L_0_baseline` / `L_1_baseline` identities are rotation-determined and cluster-consistent unconditionally.
 
-Edge cases:
-- `len(received_bidders) ≥ 2`: standard 2-layer run.
-- `len(received_bidders) == 1`: protocol degenerates to single-leader run (no fall-through). Phase 2 / 3 with `L_0` only; if σ_0-quorum doesn't reach, slot misses (no `L_1` to fall through to).
-- `len(received_bidders) == 0`: no candidate to commit on; slot misses immediately.
-
-**Phase 2 (unchanged from baseline):** each operator i constructs the standard 2-layer onion using the locally resolved `L_0` / `L_1`:
+**Phase 2 (modified):** each operator i constructs a 3-layer onion with chained encryption (per Appendix C):
 
 ```
-layer 0:  σ_i^V(V_{L_0})                                # primary, plaintext
-layer 1:  E_{nr_tag_0}( σ_i^V(V_{L_1}) )                # backup, IBE-encrypted
+layer 0 (L_Bid):
+  if saw_all_bids AND V_{L_Bid} validated by i:
+    σ_i^V(V_{L_Bid})                                                  # plaintext
+  else:
+    σ_i^{IBE}(nr_tag_LBid)                                            # NR partial
+
+layer 1 (L_0_baseline):
+  if V_{L_0_baseline} validated by i:
+    E_{nr_tag_LBid}( σ_i^V(V_{L_0_baseline}) )                        # single-tag IBE
+  else:
+    σ_i^{IBE}(nr_tag_L0_baseline)                                     # NR partial
+
+layer 2 (L_1_baseline):
+  if V_{L_1_baseline} validated by i:
+    E_{nr_tag_L0_baseline}( E_{nr_tag_LBid}( σ_i^V(V_{L_1_baseline}) ) )  # chained IBE
+                                                                       # (nr_tag_LBid inner,
+                                                                       #  nr_tag_L0_baseline outer)
+  else:
+    omitted                                                            # no NR for the deepest layer
 ```
 
-If i did not validate `V_{L_0}` (NR or NV), i broadcasts `σ_i^{IBE}(nr_tag_0)` instead of layer 0. If i did not validate `V_{L_1}`, i omits layer 1.
+**σ-or-NR exclusivity per (slot, layer)** applies at every layer. At `L_Bid`, it's conditional on `saw_all_bids AND V_{L_Bid} validated`; at `L_0_baseline` and `L_1_baseline`, it's the standard baseline TBFT rule applied to the rotation-determined leader's V.
 
-Per-operator σ-or-NR exclusivity at layer 0 and slashing-protection scope are unchanged from baseline. The only variable is *which* operator the cluster has resolved as `L_0`. The layer-0 leader (whoever ends up as `L_0`) signed `σ_{L_0}^V` in Phase 1; that is their σ-side commitment for layer 0, and they cannot subsequently emit NR/NV on `nr_tag_0` — same rule as baseline, applied to the post-resolved leader identity.
+The σ_V partial dedup rule applies as in baseline: operator i's Phase-1 σ_V on `V_i` and Phase-2 onion σ_V on `V_X` are the same partial *iff* `V_i == V_X` (i.e., op_id ∈ {`L_Bid`, `L_0_baseline`, `L_1_baseline`} and the operator's own V matches that layer's target V).
 
-Note on σ_V partial dedup: operator i's Phase-1 σ_V on `V_i` and Phase-2 layer-0 σ_V on `V_{L_0}` are the same partial *iff* `i == L_0` (and similarly for `L_1`). For operators whose `op_id` is not in top-2, their Phase-2 σ on `V_{L_0}` and σ on `V_{L_1}` are distinct partials from their Phase-1 σ on `V_op_id`. Slashing-protection log keys on `(slot, value_root)`; signing up to three distinct values per slot (own `V_op_id` in Phase 1, `V_{L_0}` in Phase 2, `V_{L_1}` in Phase 2) is permitted under the same rules baseline uses to permit signing on both `V_{L_0}` and `V_{L_1}` in Phase 2.
-
-**Phase 3 (unchanged from baseline):** each operator runs the standard reconstruction walk with `L_0` / `L_1` resolved post-Phase-1:
+**Phase 3 (modified):** each operator runs the K=3 reconstruction walk:
 
 ```
-sigs = { σ_{L_0}^V(V_{L_0}) from L_0's Phase-1 envelope, if valid }
-     ∪ { σ_j^V(V_{L_0}) from received layer-0 onion contents }
-     # deduplicated per operator
+# Layer 0 — L_Bid:
+sigs_LBid = { σ_{L_Bid}^V(V_{L_Bid}) from L_Bid's Phase-1 envelope, if saw_all_bids and valid }
+          ∪ { σ_j^V(V_{L_Bid}) from received layer-0 onion contents }
+          # deduplicated per operator
 
-if |valid sigs on V_{L_0}| ≥ qV = 3:
-    output (V_{L_0}, reconstruct(sigs)); halt
+if |valid sigs_LBid on V_{L_Bid}| ≥ qV = 3:
+    output (V_{L_Bid}, reconstruct(sigs_LBid)); halt
 
-nrs = { σ_j^{IBE}(nr_tag_0) partials, deduplicated per operator }
+# Fall through to layer 1 — L_0_baseline:
+nrs_LBid = { σ_j^{IBE}(nr_tag_LBid) partials, deduplicated per operator }
+if |valid nrs_LBid| < qEnc = 3:
+    halt with no output                          # cannot unlock layer 1
 
-if |valid nrs| ≥ qEnc = 3:
-    decryption_key = aggregate(nrs)
-    backup_sigs = { σ_{L_1}^V(V_{L_1}) from L_1's Phase-1 envelope, if valid }
-                ∪ { σ_j^V(V_{L_1}) from decrypted layer 1 }
-                # deduplicated per operator
+key_LBid = aggregate(nrs_LBid)
+sigs_L0 = { σ_{L_0_baseline}^V(V_{L_0_baseline}) from Phase-1 envelope, if valid }
+        ∪ { σ_j^V(V_{L_0_baseline}) from layer-1 ciphertexts decrypted with key_LBid }
+        # deduplicated per operator
 
-    if |valid backup_sigs on V_{L_1}| ≥ qV = 3:
-        output (V_{L_1}, reconstruct(backup_sigs)); halt
+if |valid sigs_L0 on V_{L_0_baseline}| ≥ qV = 3:
+    output (V_{L_0_baseline}, reconstruct(sigs_L0)); halt
+
+# Fall through to layer 2 — L_1_baseline:
+nrs_L0 = { σ_j^{IBE}(nr_tag_L0_baseline) partials, deduplicated per operator }
+if |valid nrs_L0| < qEnc = 3:
+    halt with no output                          # cannot unlock layer 2
+
+key_L0 = aggregate(nrs_L0)
+sigs_L1 = { σ_{L_1_baseline}^V(V_{L_1_baseline}) from Phase-1 envelope, if valid }
+        ∪ { σ_j^V(V_{L_1_baseline}) from layer-2 ciphertexts decrypted with (key_LBid + key_L0) }
+        # deduplicated per operator
+
+if |valid sigs_L1 on V_{L_1_baseline}| ≥ qV = 3:
+    output (V_{L_1_baseline}, reconstruct(sigs_L1)); halt
 
 halt with no output
 ```
 
-Phase-1 σ_V partials from non-top-2 bidders are unused — their values are not the protocol's commit target this slot. They remain as part of the per-bidder envelope record for post-hoc bid-attribution evidence (see "Liveness & attribution" below).
+Phase-1 σ_V partials from bidders not in `{L_Bid, L_0_baseline, L_1_baseline}` are unused for reconstruction — their values are not the protocol's commit target this slot. They remain as part of the per-bidder envelope record for post-hoc bid-attribution evidence.
 
 #### Why it's safe
 
-Baseline TBFT's safety analysis (Pigeonhole 1 + Pigeonhole 2 from "Fault tolerance / Safety") carries through unchanged. Both pigeonhole arguments depend on:
+Safety derives from K=3 TBFT's pigeonhole structure (per Appendix C) plus the cluster-consistent σ-side participation at `L_Bid`.
 
-1. Cluster-consistent identification of `L_0` / `L_1` at the moment operators construct Phase-2 onions (so σ-pool composition is well-defined).
-2. Per-operator σ-or-NR exclusivity at layer 0.
-3. Per-(slot, layer) single-σ_V signing constraint (each layer's leader signs at most one V).
+**Pigeonhole 1 — σ-vs-NR at the same layer.** Per layer k ∈ {`L_Bid`, `L_0_baseline`}, σ-quorum and NR-quorum cannot both be reached. Baseline argument: honest sign at most one side per layer (by rule), byz can sign both, but with `f = 1` the totals don't reach `2 · qV = 6` simultaneously (honest contribute ≤ 3 across both sides, byz ≤ 2; max 5 < 6). Holds at each layer in the K=3 stack independently. (Layer 2 has no NR side — it's the deepest layer, so σ-or-NR at layer 2 reduces to σ-or-omit.)
 
-(1) holds in B.3 under partial synchrony: signed bid envelopes propagate within the standard delivery bound; the deterministic sort produces the same `(L_0, L_1)` for every honest operator. (2) and (3) are inherited unchanged from baseline.
+**Pigeonhole 2 — two σ-quorums on different V's at the same layer.** At `L_Bid`: only one V can be σ'd — the cluster's unique bid-winner among operators who saw all `n` bids. The σ-eligibility predicate (`saw_all_bids AND V_{L_Bid} valid`) ensures every σ-signer has the same input set and computes the same argmax, so the σ_LBid pool is on a single V cluster-wide. At `L_0_baseline` / `L_1_baseline`: standard baseline argument (single V per rotation-determined layer, locked by the leader's Phase-1 σ_V).
 
-The bid is a *signed* field in the envelope — equivocation on bids is detected and slashed under the same rule as equivocation on `value_root` (a bidder signing two distinct envelopes for the same `(slot, op_id)` with different bids or value_roots is slashable). Bid lies that don't equivocate (single envelope, just lying about the relay's actual MEV bid) are post-hoc attributable but don't affect protocol-level safety: a lying `L_0` still binds to a single `V_{L_0}` via the leader σ_V signature, so Pigeonhole 2 caps their contribution.
+**Pigeonhole 3 — cross-layer safety via chained encryption.** Per Appendix C, `σ_{L_0_baseline}` partials are encrypted under `nr_tag_LBid`; `σ_{L_1_baseline}` partials are encrypted under `nr_tag_LBid + nr_tag_L0_baseline` (chained). To reconstruct `V_{L_0_baseline}`, NR_LBid-quorum must reach (which by Pigeonhole 1 at `L_Bid` prevents σ_LBid-quorum from reaching). To reconstruct `V_{L_1_baseline}`, both NR_LBid- and NR_L0-quorums must reach (which prevents both prior σ-quorums). At most one σ-quorum reconstructs a V cluster-wide.
 
-**Cluster-consistency under sub-partial-synchrony.** The safety analysis above depends on cluster-consistent `(L_0, L_1)` at Phase-2 onion construction time. Under partial synchrony with gossipsub re-flooding, this holds — every honest operator's `received_bidders` set is identical (re-flooding collapses byzantine selective-broadcast to a binary "broadcast or don't" choice, so any honestly-received envelope reaches every honest within the propagation bound), and the deterministic top-2 sort yields the same `(L_0, L_1)` everywhere. Beyond partial synchrony the cluster-consistency assumption can break, but **safety is not violated** — Pigeonhole 2 holds independently per `V` regardless of what each operator computed `L_0` to be (honest contribute at most 3 σ partials total across all V's at a layer; byz at most 2; the 5 < 6 contradiction is preserved), so at most one σ-quorum still reaches cluster-wide. The *liveness* impact is material and structurally novel relative to baseline TBFT and QBFT — see "Sub-partial-synchrony degradation vs baseline" in the Liveness section below.
+**Cluster-consistency under sub-partial-synchrony.** Under partial synchrony with gossipsub re-flooding, all honest operators see the same envelope set (re-flooding collapses byzantine selective-broadcast to a binary "broadcast or don't" choice — if any honest peer received an envelope, all honest peers receive it within the propagation bound). So `saw_all_bids` resolves to the same boolean for every honest receiver, and all σ-side honest computed the same `L_Bid` (because they all saw the same complete bid set). Beyond partial synchrony, individual operators may locally compute `saw_all_bids = false` while others computed `true` — but the rule explicitly shifts those operators to NR-side at `L_Bid`. The σ-side population remains cluster-consistent regardless: every honest who is σ-side at `L_Bid` saw all `n` bids, so they all argmaxed to the same V. **No L-identity-divergence regression** — the σ-eligibility predicate (saw all bids, not local argmax) is what makes this property hold; a design that based σ-side participation on local argmax over the received subset would diverge across honest under sub-partial-synchrony, but this one doesn't.
 
 #### Liveness & attribution
 
-**Slot success conditions** (under partial synchrony with `T_candidate_accept`): identical to baseline TBFT K=2, with `L_0` / `L_1` resolved by top-2-bid rather than rotation.
+**Slot success conditions:** identical to baseline TBFT K=2's *plus* an opportunistic L_Bid layer on top.
 
-- ≥ 3 honest operators validate `V_{L_0}` → σ_0-quorum reaches → slot completes with `V_{L_0}`.
-- ≤ 2 honest validate `V_{L_0}` and ≥ 3 honest reach NR_0-quorum, with ≥ 3 honest also validating `V_{L_1}` → fall through to layer 1 → slot completes with `V_{L_1}`.
+- **Optimistic path** — All 3 honest receive all `n = 4` bids by `T_candidate_accept` AND validate `V_{L_Bid}` → σ_LBid quorum reaches → `V_{L_Bid}` wins (highest-bid block captured).
+- **Fall through to layer 1** — Any honest missed any bid envelope, OR any honest didn't validate `V_{L_Bid}` → those honest NR_LBid → if NR_LBid-quorum reaches, layer 1 unlocks. Then standard baseline TBFT: 3 honest validate `V_{L_0_baseline}` → σ_L0 reaches → `V_{L_0_baseline}` wins.
+- **Fall through to layer 2** — Honest disagree on V_{L_0_baseline} validity (NR_L0-quorum reaches) AND ≥ 3 honest validate `V_{L_1_baseline}` → fall through to L_1_baseline → `V_{L_1_baseline}` wins.
 - Otherwise: slot misses (same threshold as baseline).
 
-**Per-operator hedging across layers preserved.** An operator that validates both `V_{L_0}` and `V_{L_1}` contributes σ partials to both pools (σ_0 plaintext + σ_1 encrypted under `nr_tag_0`). Unlike B.1's no-hedge invariant, the hedge is preserved here. Baseline TBFT's full liveness profile carries unchanged — including the cases where σ_0 fails but σ_1's reach depends on σ_1 partials from operators who also signed σ_0 (the load-bearing case for hedging that B.1 gives up).
+**Liveness equivalent to baseline TBFT.** Every slot baseline TBFT K=2 completes, L_Bid-prepended TBFT also completes — at the same layer or earlier (via L_Bid). The L_Bid layer adds opportunistic completion at higher value capture; failure to complete at L_Bid trivially falls through to the same K=2 baseline structure that would have run if L_Bid didn't exist. **No baseline-relative regression in any scenario, including sub-partial-synchrony** — the σ-eligibility predicate (saw all bids AND validate bid-winner) is a strictly stricter precondition than baseline's σ-eligibility (validate the rotation-determined leader's V), so any operator who would σ at L_Bid would also σ at the corresponding rotation layer if needed.
 
-**No bid-fragmentation regression.** B.1's K=2 regression (operators with both V's argmax to `L_1` while operators with only V_0 commit to `L_0`; pools fragment) does not apply to B.3 — once `(L_0, L_1)` are resolved cluster-consistently from the bid auction, every honest operator's Phase-2 contributions go to the same σ-pool / NR-pool composition. There is no per-operator argmax inside Phase 2; argmax happens once, in the layer-assignment step, and is identical across all honest under partial synchrony.
+**Per-operator hedging across layers preserved.** Every operator that validates multiple layers' V's contributes σ partials to all those layers' pools (σ_LBid plaintext + σ_L0_baseline single-tag-encrypted + σ_L1_baseline chained-encrypted). σ partials at deeper layers wait on cumulative NR-quorums to decrypt — same hedging dynamics as baseline at each layer.
 
-**Sub-partial-synchrony degradation vs baseline.** Under partial synchrony with gossipsub re-flooding, B.3's `(L_0, L_1)` identity is cluster-consistent. The re-flood property collapses byzantine selective-broadcast attempts to a binary "broadcast or don't" choice — if any honest peer received an envelope, all honest peers receive it within the propagation bound. So every honest operator's `received_bidders` set is identical, the deterministic top-2 sort produces the same `(L_0, L_1)` everywhere, and σ-pool composition is well-defined. **B.3 ≡ baseline TBFT in this regime.**
+**Bid lies as liveness faults** (analogous to B.1's three cases, but with cleaner fall-through):
 
-Beyond partial synchrony — when actual delivery slips past `D + δ` for some receiver — B.3 introduces a failure mode neither baseline TBFT nor QBFT (SSV's existing protocol) has. A missed bid envelope shifts a receiver's locally-computed `(L_0, L_1)` *identity*; different honest may sign σ partials on different `V`s for the same layer index. The fall-through machinery doesn't rescue this: NR_0-quorum *can* still reach (the tag is `(slot, layer 0, "nr")`, value-independent), but unlocking layer 1 yields σ partials on potentially different `V_{L_1}`s, fragmenting σ_1 along the same line as σ_0. Baseline TBFT and QBFT both keep leader identity rotation-fixed and therefore independent of which envelopes were received — a missed `V_{L_0}` reduces σ_0-pool composition (everyone disagrees with σ_0 on the *same* `V`) while NR_0 → L_1 (or ROUND-CHANGE → next-round-leader, in QBFT) walks to a cluster-consistent backup target. The B.3 regression is the structural cost of letting bid envelopes affect *which* `V` operators sign on, rather than just *whether* they sign on a fixed `V`.
+- Byzantine claims `bid = ∞` for an honest-looking but suboptimal block. Their op becomes `L_Bid` candidate. If 3 honest validate `V_byz`, σ_LBid reaches and slot completes with `V_byz` (low-MEV). Cluster captures `actual_bid_byz` instead of the highest honest bid. **Loss = `max_honest_bid − actual_bid_byz`.** Attributable post-hoc.
+- Byzantine claims `bid = ∞` for an *invalid* block. They become `L_Bid` candidate; honest reject `V_{L_Bid}` at validation; all 3 honest NR_LBid; NR_LBid-quorum reaches; fall through to layer 1 (`L_0_baseline`). Slot completes at baseline primary. **Bid lie wasted, no slot miss, no value capture loss** — strictly more graceful than B.1's behavior in the same scenario (which would commit to the invalid V_byz at layer 0 and require NR-walk to L_1).
+- Byzantine bidder lies low. Self-griefing — their bid likely isn't the bid-winner; baseline runs as normal underneath the L_Bid layer.
 
-Practical impact is bounded by how reliably gossipsub re-flooding keeps actual delivery within `D + δ`. For SSV's libp2p deployment with a generously-sized `Δ_2`, brief glitches absorb into the Phase-2 window without crossing into the divergence regime; persistent slowdowns that exceed `Δ_2` cause B.3 to miss where baseline (with the same `Δ_2` budget) might still complete via fall-through to a cluster-consistent `V_{L_1}`. Two questions to resolve before adopting B.3: how often the cluster's network actually exceeds `D + δ`, and whether the value-capture upside from bid-aware leader selection justifies the marginal slot-miss rate from this regression.
+**Bid-lie + selective-broadcast DoS is bounded — byz cannot break liveness via bid manipulation alone.** If byz withholds their own bid envelope (or selectively broadcasts to fragment honest reception), all honest who don't see all `n` bids go NR-side at `L_Bid` → fall through to baseline TBFT structure → slot completes at `L_0_baseline` (or `L_1_baseline` if byz happens to also be `L_0_baseline`). The worst byz can do via bid manipulation is force fall-through to the rotation-fixed baseline, which they have no special control over — baseline TBFT's standard f=1 byz tolerance kicks in from there.
 
-**Bid lies as liveness faults** (analogous to B.1's three cases):
+The only liveness regression byz can induce is the same one baseline TBFT has: byz being one of the rotation-determined leaders and withholding their V. K=3's third layer (`L_1_baseline`) handles this — byz can be at most one of `L_0_baseline` / `L_1_baseline` per rotation, and the other recovers the slot. **Liveness floor is exactly baseline TBFT's K=2 floor.**
 
-- Byzantine bidder claims `bid = ∞` for an honest-looking but suboptimal block. Their op becomes `L_0`. Slot completes with their block (assuming validation passes for ≥ 3 honest). Cluster captures `actual_bid_byz` (low) instead of the highest honest bid. **Loss = `max_honest_bid − actual_bid_byz`.** Attributable.
-- Byzantine bidder claims `bid = ∞` for an *invalid* block. They become `L_0`; honest reject `V_{L_0}` at validation; NR_0-quorum reaches; fall through to `L_1` = next-bid bidder. Slot completes with `V_{L_1}`. Bid lie wasted.
-- Byzantine bidder lies low (claims a bid below their actual MEV). Their op probably doesn't make top-2 — self-griefing.
-
-**Bid-lie + selective-broadcast DoS.** Same shape as documented for B.1 K=n. A byzantine claiming `bid_byz = ∞` and selectively broadcasting their envelope to lure 2 of 3 honest into committing on their layer can cause slot miss by withholding their own Phase-2 commit. The attack frequency is the same as B.1 K=n (every slot, since every operator is a bidder); mitigations are the same (bid bounding at validation, post-hoc slashing). This is a regression vs baseline TBFT (which doesn't expose this surface), but it's the irreducible cost of giving any operator a routing input.
-
-**Post-hoc attribution.** Each Phase-1 envelope is a self-contained record `(slot, cluster, op_id, value_root, bid, σ^op)`. Anyone — operator, watchdog, slasher — can after the slot:
-
-1. Resolve `value_root` to the actual block (from cluster's submission cache or beacon chain).
-2. Query the relay (or other ground truth) for the actual bid the block was offered at.
-3. Compare `bid_claimed` (envelope) against `bid_actual` (relay).
-4. If mismatch exceeds tolerance: envelope + relay record is a slashable liveness-fault proof against `op_id`.
-
-Out-of-band slashing or reputation penalty follows. Unlike baseline TBFT (where only `L_0` / `L_1` sign Phase-1 envelopes), every operator signs an envelope every slot in B.3 — so the attribution surface is uniform across the cluster, every slot.
+**Post-hoc attribution.** Each Phase-1 envelope is a self-contained record `(slot, cluster, op_id, value_root, bid, σ^op)`. Every operator signs an envelope every slot; the attribution surface is uniform across the cluster. The bid-lie verification flow (resolve `value_root` to actual block, query relay for actual bid, compare) is identical to B.1's.
 
 #### Trade-offs vs baseline TBFT
 
-| Aspect | Baseline TBFT | B.3 (top-2-bid) |
+| Aspect | Baseline TBFT | B.3 (L_Bid-prepended) |
 |---|---|---|
 | Phase 1 envelope | `(protocol_tag, message_kind, cluster_id, slot, layer, leader_id, value_root)` | + `bid`, `op_id` replaces `(layer, leader_id)` |
-| Phase 1 broadcasts | 2 (rotation-determined L_0, L_1) | n (all operators broadcast) |
-| Phase 2 onion | layer 0 plaintext σ + layer 1 IBE-encrypted σ + NR partials | identical |
-| Phase 2 tag(s) | 1 (`nr_tag_0`) | identical |
-| Per-operator commitment | σ XOR NR per layer (hedging preserved) | identical |
-| IBE encryption per onion | 1 | identical |
-| Phase 3 walk | priority order, NR-quorum unlocks layer 1 | identical |
-| Equivocation handling | Equivocation → NR for that layer | Equivocation → NR for that layer (rule extends to all bidders) |
-| L_0 / L_1 selection rule | rotation-determined | top-2 by bid (op_id tiebreak) |
-| Liveness when resolved L_0 unavailable | NR-walk to L_1 | identical |
-| Liveness when resolved L_0 byz lies high | Slot completes with low-MEV block | Slot completes with low-MEV block; byz now any operator (not just rotation L_0); attributable post-hoc |
-| Liveness when honest disagree on application validity | Layer 0 deadlocks; same threshold | identical |
-| Liveness under bid-induced fragmentation (B.1's K=2 regression) | n/a — no bid logic | n/a — bid only determines L_0 / L_1 *identity*, Phase-2 routing is unchanged so no per-operator argmax to fragment |
-| Liveness under sub-partial-synchrony envelope delivery | Missed L_0 bundle → NR fall-through to fixed L_1 | Missed bid envelope can change locally-computed L_0 / L_1 identity → σ-pool fragments at both layers; mitigated by ensuring Phase-1 propagation is well within `D + δ` (envelopes are small) |
-| Bid-lie + selective-broadcast DoS surface | n/a — no bid logic | every slot per operator (vs baseline: not present) |
+| Phase 1 broadcasts | 2 (rotation L_0, L_1) | n (all operators broadcast) |
+| Layers (K) | 2 | 3 (L_Bid + baseline's L_0, L_1) |
+| Phase 2 onion structure | layer 0 plaintext σ + layer 1 IBE-encrypted (single tag) | layer 0 plaintext σ + layer 1 IBE-encrypted (single tag) + layer 2 IBE-encrypted (chained two tags) — see Appendix C |
+| Phase 2 NR tags | 1 (`nr_tag_0`) | 2 (`nr_tag_LBid`, `nr_tag_L0_baseline`) |
+| Per-operator commitment | σ XOR NR per layer (hedging preserved) | identical — σ XOR NR per layer at each of the 3 layers, with σ-eligibility at L_Bid conditioned on `saw_all_bids` |
+| Phase 3 walk | 2-layer fall-through | 3-layer fall-through (Appendix C) |
+| Equivocation handling | Equivocation → NR for that layer | Equivocation → NR for that layer (rule extends to all bidders at L_Bid) |
+| Leader selection | rotation L_0 + rotation L_1 | bid-determined L_Bid + rotation L_0_baseline + rotation L_1_baseline |
+| σ-eligibility at L_Bid | n/a | conditional: `saw_all_bids` AND V_{L_Bid} validated |
+| Liveness when byz withholds bid | n/a | fall through to baseline structure; slot completes |
+| Liveness when byz lies on invalid block | n/a | fall through to baseline; bid lie wasted |
+| Liveness when byz lies on valid block | n/a | V_byz signed (value-capture loss); attributable post-hoc |
+| Liveness when honest disagree on V validity at any layer | Layer deadlocks (same threshold) | Layer deadlocks (same threshold); fall through to next layer if NR-quorum reaches |
+| Liveness under sub-partial-synchrony | Bound to per-layer reception | Same — `saw_all_bids` collapses to a binary at each operator under partial synchrony with re-flooding; sub-partial-synchrony degrades equivalently to baseline. No L-identity-divergence regression: σ-eligibility is conditioned on the saw-all-bids predicate, not on local argmax, so σ-side stays cluster-consistent even under partial reception |
+| Liveness equivalence to baseline TBFT | n/a | **Identical in every failure mode** — every baseline-completable slot completes here, at the same layer or earlier with V_{L_Bid} |
 | Bid attribution | n/a | Self-contained envelope + relay record per bidder, every slot |
 | Application contract | Application validity only | + bid concept, signed in envelope |
 | Phase 1 bandwidth | 2 candidate broadcasts | n candidate broadcasts (≈ n × baseline Phase 1) |
-| Phase 2-3 bandwidth | baseline | identical |
-| Latency (rounds) | 1 RTT Phase 1, 1 RTT Phase 2 | identical (no extra rounds) |
+| Phase 2-3 bandwidth | baseline | + ~50% (3 layers vs 2; each operator emits one extra σ or NR partial; chained encryption at layer 2) |
+| Latency (rounds) | 2 RTTs (Phase 1, Phase 2) | 2 RTTs (no extra rounds) |
 
-The trade is concentrated in Phase 1: bandwidth scales linearly in n (n candidates instead of 2), and per-slot fetch work scales (every operator may need to fetch a candidate to be a viable bidder). Phase 2 / 3 are unchanged — same byte count, same number of rounds, same cryptography.
+The trade is concentrated in bandwidth: Phase 1 scales as `n`, Phase 2 onion grows by one chained-encryption layer. Latency profile and safety/liveness profile are unchanged relative to baseline.
 
 #### Open questions before this could be specified
 
-- **Bid type, ordering, and validation bound** — same as B.1's "Bid type and ordering" / "Validity-check contract" open questions. Pick a canonical numeric type with stable total ordering. Reject "obviously wrong" bids (negative, exceeding any reasonable bound) at the application validation layer, since outright lies feed into both attribution and the bid-lie-DoS attack surface.
-- **Bid binding inside the envelope** — same as B.1: primitive field vs `H(bid)` with bid carried alongside.
+- **Bid type, ordering, and validation bound** — same as B.1's "Bid type and ordering" / "Validity-check contract" open questions. Pick a canonical numeric type with stable total ordering. Reject "obviously wrong" bids at validation.
+- **Bid binding inside the envelope** — primitive field vs `H(bid)` carried alongside.
 - **Tiebreaker formalization** — lower `op_id` wins on bid ties. Document so all operators apply the same rule.
-- **Partial-bidder slots** — explicit specification for `0 < |received_bidders| < 2` cases (single-leader degraded run, or zero-bidder immediate miss). Whether to treat these as runtime-acceptable degradations or escalate to a configuration error. Practically rare under partial synchrony with all-honest broadcasts; possible under multi-failure or sub-partial-synchrony conditions.
-- **Bidder fetch coordination** — every operator fetches a candidate every slot in B.3 (since any could end up as `L_0` or `L_1`). For SSV's proposer-duty application, this is a relay query × n vs × 2 cost — meaningful but not prohibitive at n=4. For applications where candidate fetching is expensive (heavy block construction, off-chain searcher work), consider restricting the bidder set to a deterministic per-slot subset (rotation-defined bidders rather than all n) — reduces both fetch cost and bid-lie-DoS surface, at the cost of not all operators bidding every slot.
-- **Equivocation rule — bidder-level** — rule extends from "leader equivocation" (baseline) to "bidder equivocation" (B.3) — every operator is a bidder every slot, so the equivocation rule applies cluster-wide every slot. The evidence shape (two distinct envelopes with same `(slot, op_id)`, different bids or value_roots) is unchanged.
+- **Equivocation rule — bidder-level** — extends from "leader equivocation" (baseline) to "bidder equivocation" (B.3). Every operator is a bidder every slot, so the equivocation rule applies cluster-wide every slot. Evidence shape (two distinct envelopes with same `(slot, op_id)`, different bids or value_roots) is unchanged.
 - **Post-hoc verification mechanism** — same as B.1: who runs it, where evidence lives, what triggers slashing. Out of TBFT scope; shared with B.1.
-- **Bid hiding (anti-grinding)** — optional extension. Reuse TBFT's existing IBE primitive to tlock-encrypt bids in Phase-1 envelopes under a `(slot, "phase1-cutoff")` tag, with each bidder's envelope including a partial signature `σ_op^{IBE}((slot, "phase1-cutoff"))`. At cutoff, `qEnc` partials aggregate into a decryption key, all bids reveal simultaneously cluster-wide, and a byzantine cannot grind by observing honest bids before crafting their own. Caveat: a byzantine that withholds their own IBE partial until 3 honest broadcast theirs can still aggregate the 3 honest partials and decrypt before the cutoff, then craft their bid in the remaining window — partial mitigation, not full. Full mitigation requires an external time-released randomness beacon (drand-style). Documented here as a forward-compatible extension; not needed for the baseline B.3 spec.
-- **Slashing-protection scope** — each operator may sign σ_V on up to 3 distinct values per slot in B.3 (own `V_op_id` in Phase 1; `V_{L_0}` and `V_{L_1}` in Phase 2). EKM permits multi-V signings under the same rules baseline uses for Phase-2 multi-layer signings. Slashing-protection log keys on `(slot, value_root)`.
+- **Bidder fetch coordination** — every operator fetches a candidate every slot in B.3 (since any could end up as `L_Bid`). For SSV's proposer-duty application, this is a relay query × n vs × 2 cost — meaningful but not prohibitive at n=4. For larger clusters, consider deterministic per-slot bidder subset (rotation-determined m < n bidders per slot) — but note this re-introduces cluster-consistency-of-bidder-set as an open question.
+- **Bidder unable to produce a candidate** — if a bidder genuinely has no candidate to bid (relay query failed, mempool empty, etc.), they don't broadcast a Phase-1 envelope. Honest receivers see only `n − 1` envelopes → `saw_all_bids = false` → all honest NR_LBid → fall through to baseline. Acceptable degradation; worth specifying explicitly.
+- **Rotation-table interaction with `L_Bid`** — what if the bid-winner happens to also be `L_0_baseline` or `L_1_baseline` (same operator)? Their Phase-1 σ_V dedup-collapses across the layers their op_id fills; doesn't break anything, but worth specifying explicitly to avoid double-counting confusion.
+- **Bid hiding (anti-grinding)** — optional forward-compatible extension. Reuse TBFT's existing IBE primitive to tlock-encrypt bids in Phase-1 envelopes under a `(slot, "phase1-cutoff")` tag, with each bidder's envelope including a partial signature `σ_{op}^{IBE}((slot, "phase1-cutoff"))`. At cutoff, qEnc partials aggregate into a decryption key, all bids reveal simultaneously cluster-wide, and a byzantine cannot grind by observing honest bids before crafting their own. Doesn't add rounds. Caveat: a byzantine who withholds their own IBE partial until 3 honest broadcast can still aggregate the 3 honest partials and decrypt before the cutoff — partial mitigation. Full mitigation needs an external time-released randomness beacon (drand-style).
+- **Slashing-protection scope** — operators may sign σ_V on up to 4 distinct values per slot in B.3 (own `V_{op_id}` in Phase 1; plus `V_{L_Bid}`, `V_{L_0_baseline}`, `V_{L_1_baseline}` in Phase 2 — with dedup if op_id matches any of those layers). EKM permits multi-V signings under existing rules; slashing-protection log keys on `(slot, value_root)`.
 
 #### When to consider this
 
-The straightforward case where this wins meaningfully is a production environment where:
+The case where this wins meaningfully:
 
-- Per-slot MEV variance across operators in the cluster is non-trivial (operators using different relays, different searcher pipelines, different orderflow), and the rotation-determined `L_0` doesn't reliably capture the highest-bid block. Bid-determined `L_0` does.
-- Or: rotation-based `L_0` / `L_1` selection has a known operational weakness (e.g., correlated downtime when the rotation lands on a temporarily-misbehaving operator), where a "top-bidder among available" behavior would degrade more gracefully. B.3's top-2-bid is implicitly availability-aware (an unavailable operator doesn't broadcast, doesn't appear in `received_bidders`, isn't selected).
+- Per-slot MEV variance across operators is non-trivial (operators on different relays, different searcher pipelines, different orderflow), and rotation-determined `L_0_baseline` doesn't reliably capture the highest-bid block. Bid-determined `L_Bid` does — and it's *opportunistic*, so when bid-routing fails the slot still completes via baseline structure underneath.
+- Or: rotation-based selection has correlated downtime modes (e.g., the rotation lands on a temporarily-misbehaving operator). L_Bid-prepended TBFT degrades gracefully — bid layer provides another viable path before falling through.
 
-Without those signals, baseline TBFT's rotation is simpler — every operator runs the same rotation table, no per-slot Phase-1 bandwidth blow-up, no per-operator fetch work, no bid-lie-DoS surface every slot. Baseline TBFT also has strictly stronger liveness under sub-partial-synchrony (rotation-fixed leader identity is invariant to which envelopes were received — see "Sub-partial-synchrony degradation vs baseline" in the Liveness section); B.3 trades this property for bid-aware leader selection, and the trade is sound only to the extent that the cluster's network actually keeps delivery within `D + δ`.
+Without those signals, baseline TBFT is simpler — every operator runs the same rotation table, no per-slot Phase-1 bandwidth blow-up, no per-operator fetch work. **L_Bid-prepended TBFT is an additive optimization on top of baseline; it doesn't compromise any baseline property to add the L_Bid layer**, so the question is purely "is the value-capture upside worth the bandwidth cost?"
 
-If pursued, B.3 is the natural baseline-preserving variant to start with — strictly fewer trade-offs than B.1 (which sacrifices hedging, adds bid-fragmentation risk, and uses commit-tag spec surface for the same value-capture goal). B.3's costs vs baseline are: (a) Phase-1 bandwidth scales as n, (b) every operator fetches a candidate per slot, (c) bid-lie-DoS surface every slot per operator (vs every-other-slot-ish in B.1 K=2 when byzantine happens to be rotation L_0/L_1), (d) sub-partial-synchrony L-identity-divergence regression — a failure mode neither baseline nor QBFT has. (a)–(c) are incremental; (d) is structural and bounded by gossipsub re-flooding reliability. B.1's costs are *all* structural — the protocol gives up properties baseline has on multiple axes; B.3 gives up exactly one (the rotation-determined identity invariance).
-
-If both extra rounds and richer leader pools are acceptable, the bid-routed TBFTR K=4 variant ([TBFTR.md](TBFTR.md) Appendix B) is the next step — strictly more redundancy than B.3 (4 fall-through layers instead of 2), at the cost of TBFTR's Phase-2a/2b split.
+If pursued, this is the right shape for bid-routing in TBFT — strictly better than B.1 (which sacrifices hedging across layers and adds a fragmentation regression at K=2). The cost vs baseline is K=3 spec surface (chained encryption per Appendix C, third onion layer) and n-bid-envelope Phase-1 bandwidth — all of which are linear and tractable at n=4.
 
 ## Appendix C — Extending TBFT to K > 2
 
@@ -858,3 +891,5 @@ Same fix is what [TBFTR.md](TBFTR.md) uses for `K ≥ 3` (see "Phase 2a / 2b" an
 **If pursued, the canonical reference is [TBFTR.md](TBFTR.md).** Its protocol body already specifies the K-generic shape: K-layer onion with chained encryption, `K-1` NR tags (`nr_tag_0` ... `nr_tag_{K-2}`), Phase-3 walk with accumulated NR keys, Pigeonhole 3 cross-layer safety. TBFT extended to K > 2 would be a strict subset of that spec, minus the V-plaintext + Phase-2-split machinery (which is independently optional — see Appendix A).
 
 **Effect on Appendix B.1 (bid-ordered selection).** The bid-ordered variant is structurally easier to extend to K > 2 than baseline TBFT, because its per-operator single-commit invariant gives cross-layer safety for free — see [TBFTR.md](TBFTR.md) Appendix B for the K-layer bid-ordered description. The bid-ordered variant doesn't need chained encryption: each operator commits to *exactly one* layer per slot, so the σ-quorum-at-two-layers attack is ruled out by per-operator commitment exclusivity rather than cryptographic chaining. If TBFT ever adopts both K > 2 and bid-ordered selection, the bid-ordered variant should be the implementation choice — it's the cleaner spec at K ≥ 3 because it sidesteps the chained-encryption machinery entirely.
+
+**Effect on Appendix B.3 (L_Bid-prepended TBFT).** B.3 is the one variant in this appendix family that *requires* K=3 and the chained-encryption machinery described above. Its layer 0 is bid-determined (`L_Bid`); layers 1 and 2 are baseline TBFT's rotation-determined `L_0` and `L_1`. The cross-layer safety argument is exactly Pigeonhole 3 from this appendix: σ_{L_0_baseline} encrypted under `nr_tag_LBid`, σ_{L_1_baseline} encrypted under `nr_tag_LBid + nr_tag_L0_baseline` (chained two tags). At K=3 the chain depth is 2 — small, but non-zero spec surface. B.3 is the design point where committing to K=3 actually buys something (an opportunistic bid-routing layer atop the K=2 baseline structure, with no liveness regression) — unlike a plain K=3 baseline TBFT, which by the bullet points above doesn't buy anything in the standard byzantine model at n=4.
