@@ -267,25 +267,29 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
-	// Wire the DKG orchestrator if the local BeaconSigner exposes IBE
-	// share storage (LocalKeyManager). Remote-signer setups don't yet
-	// support TBFT-IBE (FW1 in docs/TBFT-DKG-TASKS.md); they leave the
-	// orchestrator nil and run without a TBFT proposer runner.
-	if store, ok := options.BeaconSigner.(ibeShareStore); ok {
-		dkgOrch, err := NewDKGOrchestrator(DKGOrchestratorOptions{
-			Logger:     logger.Named("dkg-orchestrator"),
-			OperatorID: options.OperatorDataStore.GetOperatorID(),
-			Domain:     options.NetworkConfig.DomainType,
-			Suite:      bls12381.NewBLS12381Suite(),
-			Network:    options.Network,
-			Signer:     options.OperatorSigner,
-			Store:      store,
-		})
-		if err != nil {
-			logger.Warn("could not build DKG orchestrator; TBFT proposer runner will be unavailable",
-				zap.Error(err))
-		} else {
-			ctrl.dkgOrchestrator = dkgOrch
+	// Wire the DKG orchestrator only when Option B is active. Under
+	// Option A (default; see ibe_option.go), the validator share doubles
+	// as the IBE source via the DST trick — no DKG runs, no orchestrator
+	// is needed. Option B additionally requires that the local
+	// BeaconSigner exposes IBE share storage (LocalKeyManager); remote-
+	// signer setups don't yet support that (FW1 in docs/TBFT-DKG-TASKS.md).
+	if IBEUseOptionB {
+		if store, ok := options.BeaconSigner.(ibeShareStore); ok {
+			dkgOrch, err := NewDKGOrchestrator(DKGOrchestratorOptions{
+				Logger:     logger.Named("dkg-orchestrator"),
+				OperatorID: options.OperatorDataStore.GetOperatorID(),
+				Domain:     options.NetworkConfig.DomainType,
+				Suite:      bls12381.NewBLS12381Suite(),
+				Network:    options.Network,
+				Signer:     options.OperatorSigner,
+				Store:      store,
+			})
+			if err != nil {
+				logger.Warn("could not build DKG orchestrator; TBFT proposer runner will be unavailable",
+					zap.Error(err))
+			} else {
+				ctrl.dkgOrchestrator = dkgOrch
+			}
 		}
 	}
 

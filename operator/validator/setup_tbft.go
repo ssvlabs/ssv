@@ -19,16 +19,24 @@ import (
 )
 
 // buildTBFTControllerForProposer constructs a TBFT Controller for the
-// proposer duty of `share`. Under Option B (see docs/TBFT-DKG-TASKS.md),
-// value-signing uses the validator share via BLSSigner; tag-signing uses
-// the cluster's IBE share via KyberSigner; the IBE encryption anchor is
-// the cluster's IBE pubkey (NOT the validator pubkey).
+// proposer duty of `share`. The IBE wiring is selected by the
+// IBEUseOptionB toggle (see ibe_option.go):
 //
-// Returns (nil, nil) if the signer does not expose either the validator
-// share bytes or the IBE share material — typical for remote-signing
-// setups (FW1 in docs/TBFT-DKG-TASKS.md). The caller treats this as
-// "TBFT not available for this validator on this node" and skips the
-// proposer runner.
+//   - Option A (default): the validator's existing herumi BLS share
+//     serves as the IBE source via the DST trick. KyberSigner consumes
+//     the validator share bytes; ClusterPubKey is the validator
+//     pubkey. No DKG runs; IBEPubKeyShares is nil (Phase E5
+//     verification is not applicable — there's no separate IBE
+//     polynomial to evaluate per operator).
+//   - Option B: the cluster's per-DKG IBE share material established
+//     by the orchestrator (Phases E1-E2). KyberSigner consumes the
+//     IBE share; ClusterPubKey is the cluster IBE pubkey;
+//     IBEPubKeyShares is computed from polyCommits for observe-time
+//     verification.
+//
+// Returns (nil, nil) if the signer does not expose the share material
+// the active mode requires (typical for remote-signing setups; FW1 in
+// docs/TBFT-DKG-TASKS.md). The caller skips the proposer runner.
 //
 // Returns a non-nil error only on Controller construction failure
 // (malformed inputs, etc.).
@@ -41,35 +49,12 @@ func buildTBFTControllerForProposer(
 	if !ok {
 		return nil, nil
 	}
-	ibeProvider, ok := options.Signer.(ekm.IBEShareBytesProvider)
-	if !ok {
-		return nil, nil
-	}
-
 	shareBytes, err := shareProvider.GetShareBytes(phase0.BLSPubKey(ssvShare.SharePubKey))
 	if err != nil {
 		return nil, nil
 	}
 
 	clusterID := ssvShare.CommitteeID()
-
-	ibeShareBytes, err := ibeProvider.GetIBEShareBytes(clusterID)
-	if err != nil {
-		// DKG hasn't established an IBE share for this cluster yet (the
-		// orchestrator's EnsureClusterIBE hook in onShareInit should
-		// have run before this point — bail out rather than building a
-		// half-wired runner).
-		return nil, nil
-	}
-	clusterIBEPubKey, err := ibeProvider.GetClusterIBEPubKey(clusterID)
-	if err != nil {
-		return nil, nil
-	}
-	polyCommits, err := ibeProvider.GetClusterIBEPolyCommits(clusterID)
-	if err != nil {
-		return nil, nil
-	}
-
 	pubKeyShares := make(map[tbftcore.OperatorID][]byte, len(ssvShare.Committee))
 	committee := make([]spectypes.OperatorID, 0, len(ssvShare.Committee))
 	for _, m := range ssvShare.Committee {
@@ -77,25 +62,53 @@ func buildTBFTControllerForProposer(
 		committee = append(committee, m.Signer)
 	}
 
-	ibePubKeyShares, err := computeIBEPubKeyShares(polyCommits, committee)
-	if err != nil {
-		return nil, fmt.Errorf("compute IBE pubkey shares: %w", err)
+	opts := tbftadapter.ControllerOptions{
+		OperatorID:   operator.OperatorID,
+		Committee:    committee,
+		ClusterID:    clusterID,
+		PubKeyShares: pubKeyShares,
+		Signer:       blsbackend.New(shareBytes),
+		IBE:          blsbackend.NewTLockIBE(),
 	}
 
-	ctrl, err := tbftadapter.NewController(tbftadapter.ControllerOptions{
-		OperatorID:      operator.OperatorID,
-		Committee:       committee,
-		ClusterID:       clusterID,
-		ClusterPubKey:   clusterIBEPubKey,
-		PubKeyShares:    pubKeyShares,
-		IBEPubKeyShares: ibePubKeyShares,
-		// Value-signing keeps using the validator share (BLSSigner /
-		// herumi DST). Tag-signing uses the cluster's IBE share
-		// (KyberSigner / drand DST) under Option B.
-		Signer:    blsbackend.New(shareBytes),
-		TagSigner: blsbackend.NewKyberSigner(ibeShareBytes),
-		IBE:       blsbackend.NewTLockIBE(),
-	})
+	if IBEUseOptionB {
+		ibeProvider, ok := options.Signer.(ekm.IBEShareBytesProvider)
+		if !ok {
+			return nil, nil
+		}
+		ibeShareBytes, err := ibeProvider.GetIBEShareBytes(clusterID)
+		if err != nil {
+			// DKG hasn't established an IBE share for this cluster yet
+			// (the orchestrator's EnsureClusterIBE hook in onShareInit
+			// should have run before this point — bail out rather than
+			// building a half-wired runner).
+			return nil, nil
+		}
+		clusterIBEPubKey, err := ibeProvider.GetClusterIBEPubKey(clusterID)
+		if err != nil {
+			return nil, nil
+		}
+		polyCommits, err := ibeProvider.GetClusterIBEPolyCommits(clusterID)
+		if err != nil {
+			return nil, nil
+		}
+		ibePubKeyShares, err := computeIBEPubKeyShares(polyCommits, committee)
+		if err != nil {
+			return nil, fmt.Errorf("compute IBE pubkey shares: %w", err)
+		}
+		opts.ClusterPubKey = clusterIBEPubKey
+		opts.TagSigner = blsbackend.NewKyberSigner(ibeShareBytes)
+		opts.IBEPubKeyShares = ibePubKeyShares
+	} else {
+		// Option A: validator share doubles as IBE share via the DST
+		// trick (docs/IBE-INTEGRATION.md). The validator pubkey is the
+		// IBE trust anchor; per-NR-partial verification is not wired
+		// up (no separate IBE polynomial to evaluate).
+		opts.ClusterPubKey = append([]byte(nil), ssvShare.ValidatorPubKey[:]...)
+		opts.TagSigner = blsbackend.NewKyberSigner(shareBytes)
+	}
+
+	ctrl, err := tbftadapter.NewController(opts)
 	if err != nil {
 		return nil, fmt.Errorf("build TBFT controller: %w", err)
 	}
@@ -110,6 +123,8 @@ func buildTBFTControllerForProposer(
 // using idx = opID - 1 places each operator's pubkey share at x = opID
 // — matching the Lagrange x-coordinates KyberSigner uses (operator
 // IDs). Aligns with protocol/v2/dkg/coordinator.go's buildNodes choice.
+//
+// Used only under Option B (see IBEUseOptionB).
 func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.OperatorID) (map[tbftcore.OperatorID][]byte, error) {
 	if len(polyCommits) == 0 {
 		return nil, fmt.Errorf("empty polyCommits")

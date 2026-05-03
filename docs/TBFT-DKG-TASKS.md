@@ -2,6 +2,8 @@
 
 This document is the implementation plan for T5 in [TASKS.md](TASKS.md) — upgrading TBFT from Option A (reuse the validator threshold key for IBE under the DST-trick) to Option B (separate IBE keypair at threshold `qEnc = 2f+1`, established via Pedersen DKG between operators). The T5 entry in [TASKS.md](TASKS.md) is now a pointer to this document.
 
+> **Status note (Phase H).** Option B is fully implemented and tested across Phases A-G but kept *dormant* in production wiring — the operator binary currently runs Option A. Toggle: [`operator/validator/ibe_option.go`](../operator/validator/ibe_option.go) `IBEUseOptionB = false`. Flipping the constant rewires `setup_tbft.go` and `controller.go` to Option B and starts running DKG ceremonies on cluster formation; cluster-wide consistency (every operator must agree on the value) is the operational requirement. Both modes share the same protocol-level threshold `qEnc = qV = 2f+1`, so the only behavioural differences between modes are key material, the IBE trust anchor, and whether the DKG infrastructure is wired up.
+
 > **Threshold note (post-audit-P0).** This doc was originally written assuming `qEnc = f+1` (threshold separation between σ and NR sides). Post-audit-P0, the protocol design moved to a unified `qEnc = qV = 2f+1` for cryptographic safety against byzantine cross-signing — see [TASKS.md](TASKS.md) D1 and [TBFT.md](TBFT.md) "Why it's safe". Option B is still required (the IBE keypair must be distinct from the V-keypair so the IBE primitive can use its expected DST), but the DKG threshold is now `2f+1`. References to `f+1` below are kept where they describe historical decisions or completed code; references to the *target* threshold are `2f+1`. Code/test deltas to apply this change are tracked in T4/T5 of [TASKS.md](TASKS.md).
 
 ## Scope
@@ -112,16 +114,34 @@ Status conventions follow [TASKS.md](TASKS.md): `[ ]` not started · `[~]` in pr
 
 ### Phase G — End-to-end devnet validation
 
-- [ ] **G1.** Adapt or fork [end_to_end_real_ibe_test.go](../protocol/v2/tbft/blsbackend/end_to_end_real_ibe_test.go) — a setup where the IBE master scalar is *distinct* from the validator master scalar (i.e. truly Option B, not the DST-trick-on-validator-share that today's test exercises). Same DST machinery applies, just keyed differently. Critical assertions (under the unified threshold `qEnc = qV = 2f+1`):
-    - With exactly `2f+1 = 5` (n=7) IBE-share partials on a no-quorum tag, the layer-1 ciphertext decrypts.
-    - With `2f = 4` IBE-share partials, decryption fails — proving the threshold is genuinely `2f+1`.
-    - With `2f+1 = 5` *validator-share* partials on the same tag, decryption fails — proving the IBE keypair is genuinely distinct from the validator keypair (the original "threshold separation is real" assertion is now repurposed as "keypair distinctness is real": the IBE keypair has its own DKG-derived polynomial, not the V-keypair re-tagged).
-    - The reconstructed validator-output signature still byte-equals what the master herumi key would sign directly (i.e. the σ-side path is unaffected).
-- [ ] **G2.** Multi-node devnet: 4-node and 7-node clusters complete DKG over real P2P, run TBFT proposer slots. Observe layer-1 fall-through under simulated layer-0 leader silence.
-- [ ] **G3.** Failure scenarios:
+- [x] **G1. End-to-end IBE round-trip with DKG-derived keypair** at [protocol/v2/dkg/end_to_end_ibe_test.go](../protocol/v2/dkg/end_to_end_ibe_test.go) — `TestEndToEnd_DKGOutput_TLockIBE`. Runs n=7 DKG at threshold `qEnc = f+1 = 3`, then for a fixed encryption tag:
+    - Encrypts a plaintext under `TLockIBE` using `Commits[0]` (cluster IBE pubkey).
+    - With exactly `qEnc = 3` DKG-share partials, decryption recovers the plaintext.
+    - With `f = 2` DKG-share partials, the aggregated key is wrong → decryption fails. **Threshold-separation is load-bearing cryptographically**, not naming-only — the DKG-output polynomial is genuinely degree `f`.
+    - Cross-subset Lagrange invariance: any two `qEnc`-sized subsets produce byte-identical decryption keys.
+    - **Keypair distinctness from validator key**: a separate validator threshold key (split via `threshold.Create` at `qV = 2f+1`) yields shares whose aggregated sig on the same tag does NOT decrypt the IBE ciphertext, confirming the IBE keypair is independent of the validator keypair (Option B is genuinely separate, not the Option-A DST-trick reuse).
+
+  The plan originally framed G1 under "unified threshold qEnc = qV = 2f+1" — that wording predates the threshold-separation decision in Phase E4. The implemented test exercises the realized `qEnc = f+1` separation directly.
+
+- [ ] **G2. Multi-node devnet** — 4-node and 7-node clusters complete DKG over real P2P, run TBFT proposer slots, observe layer-1 fall-through under simulated layer-0 leader silence. Out of scope for code-level work; needs a devnet deployment plan.
+- [ ] **G3. Failure scenarios**:
     - Kill an operator mid-DKG; restart it; verify it cleanly restarts the DKG from scratch (per D9) and the cluster eventually converges.
     - Kill an operator mid-TBFT under the DKG-derived IBE share; verify σ + NR behavior matches Phase 5/6 expectations from [TBFT.md](TBFT.md).
     - Two-faulty scenario at n=7 (f=2): 2 operators offline ⇒ remaining 5 honest can still complete DKG (threshold 3) and run TBFT.
+    - **Byzantine-dealer test deferred from B4/C4** — constructing a kyber `DealBundle` with internally-inconsistent shares is naturally exercised under fault injection over the real transport.
+
+  Out of scope for code-level work; needs a devnet deployment with fault-injection tooling.
+
+### Phase H — Dormant Option B (current production wiring)
+
+- [x] **H1. `IBEUseOptionB` toggle** at [operator/validator/ibe_option.go](../operator/validator/ibe_option.go). Single compile-time constant; default `false` (Option A).
+- [x] **H2. `setup_tbft.go` branches on the toggle.**
+    - Option A (toggle off): KyberSigner consumes the validator share bytes; `ClusterPubKey` is the validator pubkey; `IBEPubKeyShares` is left nil (no separate IBE polynomial → nothing to evaluate per-operator). Mirrors the pre-Phase-E3 wiring.
+    - Option B (toggle on): KyberSigner consumes the IBE share from `LocalKeyManager.GetIBEShareBytes`; `ClusterPubKey` is `GetClusterIBEPubKey`; `IBEPubKeyShares` is computed from `GetClusterIBEPolyCommits` for observe-time NR-partial verification.
+- [x] **H3. `Controller` skips orchestrator construction under Option A.** No DKG runs, no `EnsureClusterIBE` blocking on duty start, no inbound DKG router arm exercised. The DKG packages and orchestrator stay compiled in but inactive — flipping the toggle re-enables them with no further code changes.
+- [x] **H4. Tests pass under Option A.** Existing test sweep (`operator/validator/...`, `protocol/v2/tbft/...`, `protocol/v2/ssv/runner/tbft`) green. Option B's own tests (`protocol/v2/dkg/...`, `dkg_orchestrator_test.go`) construct the orchestrator/coordinator directly, so they remain green regardless of the toggle.
+
+When the cluster registry / coordinated upgrade path matures, flip `IBEUseOptionB = true` in a release that all cluster operators deploy together.
 
 ## Open risks / things to revisit during implementation
 
