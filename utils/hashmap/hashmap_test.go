@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -490,21 +491,34 @@ func TestIssue1682(t *testing.T) {
 
 			m := New[string, validatorStatus]()
 			var wg sync.WaitGroup
+			var attempted sync.WaitGroup
+			start := make(chan struct{})
+			releaseSubscribed := make(chan struct{})
 			for _, cmtID := range cmtIDs {
 				n := 50 + randSeed().Intn(200)
 				for j := 0; j < n; j++ {
 					wg.Add(1)
-					go func() {
+					attempted.Add(1)
+					go func(cmtID string) {
 						defer wg.Done()
-						time.Sleep(time.Duration(randSeed().Intn(2000)) * time.Millisecond)
-						_, found := m.GetOrSet(cmtID, validatorStatusSubscribing)
-						time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
+						<-start
+						var found bool
+						func() {
+							defer attempted.Done()
+							_, found = m.GetOrSet(cmtID, validatorStatusSubscribing)
+						}()
+						// `attempted` tracks the "reached GetOrSet" barrier, while `wg` still tracks full goroutine completion.
 						if !found {
+							<-releaseSubscribed
+							runtime.Gosched()
 							m.Set(cmtID, validatorStatusSubscribed)
 						}
-					}()
+					}(cmtID)
 				}
 			}
+			close(start)
+			attempted.Wait()
+			close(releaseSubscribed)
 
 			done := make(chan struct{})
 			go func() {

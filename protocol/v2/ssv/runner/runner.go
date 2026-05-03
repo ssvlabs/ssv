@@ -510,12 +510,10 @@ func (b *BaseRunner) decide(
 		return fmt.Errorf("input data invalid: %w", err)
 	}
 
-	height := specqbft.Height(slot)
-
 	newInstance, err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
-		height,
+		specqbft.Height(slot),
 		byts,
 		valueChecker,
 		b.qbftRoundTimerF,
@@ -581,7 +579,7 @@ func (b *BaseRunner) OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger,
 		return fmt.Errorf("current duty slot: %w", err)
 	}
 
-	if timeoutData.Height != specqbft.Height(currentDutySlot) {
+	if timeoutData.Slot != currentDutySlot {
 		// Validator-Runners are re-used to process duties targeting different slots (unlike Committee-Runners that
 		// are working with exactly one slot), thus for Validator-Runners timeout events can be delayed in the queue
 		// until the runner has already moved on to a new duty/slot - this is why timeout-event height(== slot)

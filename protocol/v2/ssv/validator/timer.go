@@ -22,7 +22,7 @@ import (
 // round-timeouts back into the validator's per-role message queue as event messages. The returned factory
 // closes over identifier so each DutyRunner gets a factory bound to its own msg ID.
 func (v *Validator) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv.QBFTRoundTimerF {
-	return func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+	return func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 		callback := func(round specqbft.Round) {
 			v.mtx.RLock() // read-lock for v.Queues
 			defer v.mtx.RUnlock()
@@ -37,7 +37,7 @@ func (v *Validator) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				return
 			}
 
-			msg, err := v.createTimerMessage(runnerIdentifier, height, round)
+			msg, err := v.createTimerMessage(runnerIdentifier, slot, round)
 			if err != nil {
 				logger.Error("❌ failed to create timer msg", zap.Error(err))
 				return
@@ -53,14 +53,14 @@ func (v *Validator) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				return
 			}
 		}
-		return roundtimer.New(ctx, v.NetworkConfig.Beacon, runnerIdentifier.GetRoleType(), height, callback)
+		return roundtimer.New(ctx, v.NetworkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback)
 	}
 }
 
-func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (v *Validator) createTimerMessage(identifier spectypes.MessageID, slot phase0.Slot, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
-		Height: height,
-		Round:  round,
+		Slot:  slot,
+		Round: round,
 	}
 	data, err := json.Marshal(td)
 	if err != nil {
@@ -86,7 +86,7 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 // wires round-timeouts back into the slot-keyed queue as event messages. The returned factory closes over
 // identifier so each runner gets a factory bound to the committee's msg ID.
 func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv.QBFTRoundTimerF {
-	return func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+	return func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 		callback := func(round specqbft.Round) {
 			c.mtx.RLock() // read-lock for c.Queues
 			defer c.mtx.RUnlock()
@@ -96,13 +96,13 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 			// This is also possible if the queue got pruned already (due to becoming old and irrelevant).
 			// A map miss on c.Queues returns the zero value of the queue.Queue interface (nil), so the
 			// nil-check below covers both "slot absent" and "stored value is nil" cases in one go.
-			q := c.Queues[phase0.Slot(height)]
+			q := c.Queues[slot]
 			if q == nil {
 				logger.Debug("couldn't schedule timeout event due to missing queue (likely was pruned)")
 				return
 			}
 
-			msg, err := c.createTimerMessage(runnerIdentifier, height, round)
+			msg, err := c.createTimerMessage(runnerIdentifier, slot, round)
 			if err != nil {
 				logger.Error("❌ failed to create timer msg", zap.Error(err))
 				return
@@ -117,14 +117,14 @@ func (c *Committee) newQBFTRoundTimerF(runnerIdentifier spectypes.MessageID) ssv
 				logger.Error("❗️ dropping timeout message because the queue is full", fields.RunnerRole(runnerIdentifier.GetRoleType()))
 			}
 		}
-		return roundtimer.New(ctx, c.networkConfig.Beacon, runnerIdentifier.GetRoleType(), height, callback)
+		return roundtimer.New(ctx, c.networkConfig.Beacon, runnerIdentifier.GetRoleType(), slot, callback)
 	}
 }
 
-func (c *Committee) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (c *Committee) createTimerMessage(identifier spectypes.MessageID, slot phase0.Slot, round specqbft.Round) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{
-		Height: height,
-		Round:  round,
+		Slot:  slot,
+		Round: round,
 	}
 	data, err := json.Marshal(td)
 	if err != nil {

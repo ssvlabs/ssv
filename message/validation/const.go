@@ -11,6 +11,7 @@ const (
 	lateMessageMargin = time.Second * 3
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
 	clockErrorTolerance     = time.Millisecond * 50
+	allowedRoundsInPast     = 2
 	allowedRoundsInFuture   = 1
 	LateSlotAllowance       = 2
 	rsaSignatureSize        = 256

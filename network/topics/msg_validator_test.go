@@ -2,6 +2,7 @@ package topics
 
 import (
 	"testing"
+	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/ethereum/go-ethereum/common"
@@ -30,6 +31,16 @@ import (
 
 func TestMsgValidator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	// Pin slot 0 to start right now so that by the time `mv.Validate` runs the message is
+	// still comfortably inside round 1 for the committee role. Committee round 1 is accepted
+	// as long as timeIntoSlot stays below ~(slotDuration/3 + 3*QuickTimeout) ≈ 10s — any
+	// larger offset here would eat into that budget. A zero offset maximizes it.
+	beaconCfg.GenesisTime = time.Now()
+	testNet := &networkconfig.Network{
+		Beacon: &beaconCfg,
+		SSV:    networkconfig.TestNetwork.SSV,
+	}
 
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
@@ -41,7 +52,7 @@ func TestMsgValidator(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
+	ns, err := operatorstorage.NewNodeStorage(testNet.Beacon, logger, db)
 	require.NoError(t, err)
 
 	require.NoError(t, ns.Shares().Save(nil, share))
@@ -50,7 +61,7 @@ func TestMsgValidator(t *testing.T) {
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
 	mv := validation.New(
-		networkconfig.TestNetwork,
+		testNet,
 		ns.ValidatorStore(),
 		ns,
 		dutystore.New(),
@@ -60,7 +71,7 @@ func TestMsgValidator(t *testing.T) {
 
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	slot := testNet.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
@@ -81,7 +92,7 @@ func TestMsgValidator(t *testing.T) {
 	operatorSigner := spectestingutils.NewOperatorSigner(ks, operatorID)
 
 	t.Run("valid consensus msg", func(t *testing.T) {
-		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], specqbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg(testNet.DomainType, committeeID[:], specqbft.Height(slot))
 		require.NoError(t, err)
 
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
@@ -109,7 +120,7 @@ func TestMsgValidator(t *testing.T) {
 	})
 
 	t.Run("wrong topic", func(t *testing.T) {
-		ssvMsg, err := dummySSVConsensusMsg(committeeID[:], specqbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg(testNet.DomainType, committeeID[:], specqbft.Height(slot))
 		require.NoError(t, err)
 
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
@@ -143,7 +154,7 @@ func TestMsgValidator(t *testing.T) {
 	})
 
 	t.Run("invalid validator public key", func(t *testing.T) {
-		ssvMsg, err := dummySSVConsensusMsg([]byte{1, 2, 3, 4, 5}, specqbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg(testNet.DomainType, []byte{1, 2, 3, 4, 5}, specqbft.Height(slot))
 		require.NoError(t, err)
 
 		sig, err := operatorSigner.SignSSVMessage(ssvMsg)
@@ -181,8 +192,8 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 	return pmsg
 }
 
-func dummySSVConsensusMsg(dutyExecutorID []byte, height specqbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, spectypes.RoleCommittee)
+func dummySSVConsensusMsg(domainType spectypes.DomainType, dutyExecutorID []byte, height specqbft.Height) (*spectypes.SSVMessage, error) {
+	id := spectypes.NewMsgID(domainType, dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     height,

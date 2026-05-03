@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -84,7 +85,7 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 		spectestingutils.TestingIdentifier,
 		specqbft.FirstHeight,
 		spectestingutils.NewOperatorSigner(keys, operatorID),
-		func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 			return roundTimer
 		},
 	)

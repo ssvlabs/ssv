@@ -38,7 +38,7 @@ var messagePriorityTests = []struct {
 			// 1.1. Events/ExecuteDuty
 			mockExecuteDutyMessage{Slot: 62, Role: spectypes.BNRoleProposer},
 			// 1.2. Events/Timeout
-			mockTimeoutMessage{Height: 98, Role: spectypes.RoleProposer},
+			mockTimeoutMessage{Slot: 98, Role: spectypes.RoleProposer},
 
 			// 2. Current height/slot:
 			// 2.1. Consensus
@@ -385,12 +385,12 @@ func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMes
 }
 
 type mockTimeoutMessage struct {
-	Role   spectypes.RunnerRole
-	Height specqbft.Height
+	Role spectypes.RunnerRole
+	Slot phase0.Slot
 }
 
 func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
-	td := types.TimeoutData{Height: m.Height}
+	td := types.TimeoutData{Slot: m.Slot}
 	data, err := json.Marshal(td)
 	if err != nil {
 		panic(err)
