@@ -299,7 +299,7 @@ Only **one tag** is used per slot (`nr_tag_0`), making implementation substantia
 | Byzantine-leader-grief resistance | **Closed under partial synchrony** via leader-σ-V-in-Phase-1 + gossipsub re-flooding; extends to marginal synchrony at "≤ 1 of 3 honest miss re-flood" via the head-start partial. Beyond that band (≥ 2 of 3 honest miss re-flood) is uncoverable at `n = 4` — TBFTR's secondary closure at this size also caps at the same bound (its witness threshold of `f+1 = 2` Phase-2a σ-signers coincides with the leaner protocol's coverage), so widening only occurs at `f ≥ 2`. |
 | Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide |
 | Built-in leader fallback | Yes (primary → backup) |
-| Round-change recovery | Limited to 1 round-change (leader fallback) |
+| Round-change recovery | One-shots through 1 leader fallback only (~equivalent to 1 QBFT round-change) |
 
 ## Application: SSV Ethereum proposer duty
 

@@ -378,7 +378,7 @@ Same as [TBFT](TBFT.md): threshold IBE / signature-based witness encryption (`dr
 | Equivocation detection | Yes |
 | Byzantine-leader-grief resistance | **With re-flood headroom** (byz releases bundle ≥ `D + δ` before `T_candidate_accept`): closed under partial synchrony via gossipsub re-flooding (primary), in both full-V and hash variants. **Byzantine-leader-at-cutoff edge** (byz releases at the cutoff so re-flood lands past worst-case-skew peers): closed by full-V's secondary closure at `f ≥ 2`; hash variant has a residual partial-synchrony miss surface unless `T_candidate_accept` is moved earlier. Marginal-synchrony band closed via Phase-2 composition (secondary, full-V only) up to "≤ `f` honest miss re-flood" — gated by the `f+1`-distinct-Phase-2a-σ-signers witness threshold; widening over the leaner protocol's "≤ 1 honest" bound is `f − 1` (zero at `f = 1`, +1 at `f = 2`, etc.) |
 | Built-in leader fallback | Yes (K layers) |
-| Round-change recovery | Limited to K round-changes (leader fallback) |
+| Round-change recovery | One-shots through K leader fallbacks only (~equivalent to K QBFT round-changes) |
 
 ## Application: SSV Ethereum proposer duty
 
