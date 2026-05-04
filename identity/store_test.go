@@ -446,7 +446,6 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
 			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
 		}))
-		require.NoError(t, err)
 
 		hasEncryptedKey, err := HasEncryptedNetworkKey(db)
 		require.NoError(t, err)
@@ -463,7 +462,6 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
 			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
 		}))
-		require.NoError(t, err)
 
 		storeWithoutProtector := identityStore{
 			db:     db,
@@ -484,7 +482,6 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
 			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
 		}))
-		require.NoError(t, err)
 
 		storeWithoutProtector := identityStore{
 			db:     db,
@@ -539,7 +536,6 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
 		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, signerClient.OperatorEncrypt))
-		require.NoError(t, err)
 
 		hasEncryptedKey, err := HasEncryptedNetworkKey(db)
 		require.NoError(t, err)
@@ -556,7 +552,6 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
 		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, signerClient.OperatorEncrypt))
-		require.NoError(t, err)
 
 		storeWithoutProtector := identityStore{
 			db:     db,
