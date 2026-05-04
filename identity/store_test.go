@@ -3,6 +3,7 @@ package p2p
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -65,6 +66,23 @@ func (db getOverrideDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error)
 	return db.Database.Get(prefix, key)
 }
 
+func storeEncryptedNetworkKey(
+	ctx context.Context,
+	db basedb.Database,
+	privateKey *ecdsa.PrivateKey,
+	protectFn func(context.Context, []byte) ([]byte, error),
+) error {
+	protectedValue, err := protectFn(ctx, gcrypto.FromECDSA(privateKey))
+	if err != nil {
+		return err
+	}
+
+	storedValue := make([]byte, 0, len(encryptedPrefix)+len(protectedValue))
+	storedValue = append(storedValue, encryptedPrefix...)
+	storedValue = append(storedValue, protectedValue...)
+	return db.Set(prefix, netKeyPrefix, storedValue)
+}
+
 func TestSetupPrivateKey(t *testing.T) {
 	logger := log.TestLogger(t)
 	ctx := context.Background()
@@ -105,9 +123,6 @@ func TestSetupPrivateKey(t *testing.T) {
 			p2pStorage := identityStore{
 				db:     db,
 				logger: logger,
-				protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-					return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-				},
 				unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
 					return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
 				},
@@ -116,7 +131,9 @@ func TestSetupPrivateKey(t *testing.T) {
 			if test.existKey != "" { // mock exist key
 				privKey, err := gcrypto.HexToECDSA(test.existKey)
 				require.NoError(t, err)
-				require.NoError(t, p2pStorage.saveNetworkKey(ctx, privKey))
+				require.NoError(t, storeEncryptedNetworkKey(ctx, db, privKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
+					return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+				}))
 				sk, found, err := p2pStorage.GetNetworkKey(ctx)
 				require.True(t, found)
 				require.NoError(t, err)
@@ -184,9 +201,6 @@ func TestSetupPrivateKey(t *testing.T) {
 		p2pStorage := identityStore{
 			db:     db,
 			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
 			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
 				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
 			},
@@ -214,9 +228,6 @@ func TestSetupPrivateKey(t *testing.T) {
 		p2pStorage := identityStore{
 			db:     db,
 			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
 			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
 				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
 			},
@@ -333,15 +344,14 @@ func TestSetupPrivateKey(t *testing.T) {
 		p2pStorage := identityStore{
 			db:     db,
 			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
 			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
 				return bytes.Repeat([]byte{0xff}, 32), nil
 			},
 		}
 
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+		}))
 
 		_, err = p2pStorage.SetupNetworkKey(ctx, "")
 		require.ErrorContains(t, err, "decode network key")
@@ -392,9 +402,6 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		p2pStorage := identityStore{
 			db:     db,
 			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
 			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
 				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
 			},
@@ -402,7 +409,9 @@ func TestEncryptedNetworkKey(t *testing.T) {
 
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+		}))
 
 		storedBefore, found, err := db.Get(prefix, netKeyPrefix)
 		require.NoError(t, err)
@@ -435,20 +444,11 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		p2pStorage := identityStore{
-			db:     db,
-			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
-			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
-				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
-			},
-		}
-
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+		}))
 		require.NoError(t, err)
 
 		hasEncryptedKey, err := HasEncryptedNetworkKey(db)
@@ -461,20 +461,11 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		p2pStorage := identityStore{
-			db:     db,
-			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
-			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
-				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
-			},
-		}
-
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+		}))
 		require.NoError(t, err)
 
 		storeWithoutProtector := identityStore{
@@ -491,20 +482,11 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		p2pStorage := identityStore{
-			db:     db,
-			logger: logger,
-			protectFn: func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
-			unprotectFn: func(_ context.Context, protectedValue []byte) ([]byte, error) {
-				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
-			},
-		}
-
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, func(_ context.Context, plaintext []byte) ([]byte, error) {
+			return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
+		}))
 		require.NoError(t, err)
 
 		storeWithoutProtector := identityStore{
@@ -525,13 +507,11 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		p2pStorage := identityStore{
 			db:          db,
 			logger:      logger,
-			protectFn:   signerClient.OperatorEncrypt,
 			unprotectFn: signerClient.OperatorDecrypt,
 		}
-
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, signerClient.OperatorEncrypt))
 
 		storedBefore, found, err := db.Get(prefix, netKeyPrefix)
 		require.NoError(t, err)
@@ -559,16 +539,9 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		defer db.Close()
 
 		signerClient := newTestSSVSignerClient(t)
-		p2pStorage := identityStore{
-			db:          db,
-			logger:      logger,
-			protectFn:   signerClient.OperatorEncrypt,
-			unprotectFn: signerClient.OperatorDecrypt,
-		}
-
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, signerClient.OperatorEncrypt))
 		require.NoError(t, err)
 
 		hasEncryptedKey, err := HasEncryptedNetworkKey(db)
@@ -582,16 +555,10 @@ func TestEncryptedNetworkKey(t *testing.T) {
 		defer db.Close()
 
 		signerClient := newTestSSVSignerClient(t)
-		p2pStorage := identityStore{
-			db:          db,
-			logger:      logger,
-			protectFn:   signerClient.OperatorEncrypt,
-			unprotectFn: signerClient.OperatorDecrypt,
-		}
 
 		privateKey, err := gcrypto.HexToECDSA(sk)
 		require.NoError(t, err)
-		require.NoError(t, p2pStorage.saveNetworkKey(ctx, privateKey))
+		require.NoError(t, storeEncryptedNetworkKey(ctx, db, privateKey, signerClient.OperatorEncrypt))
 		require.NoError(t, err)
 
 		storeWithoutProtector := identityStore{

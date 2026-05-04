@@ -37,7 +37,6 @@ type Store interface {
 type identityStore struct {
 	logger      *zap.Logger
 	db          basedb.Database
-	protectFn   func(ctx context.Context, plaintext []byte) ([]byte, error)
 	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error)
 }
 
@@ -45,13 +44,12 @@ type identityStore struct {
 func NewIdentityStore(
 	logger *zap.Logger,
 	db basedb.Database,
-	protectFn func(ctx context.Context, plaintext []byte) ([]byte, error),
+	_ func(ctx context.Context, plaintext []byte) ([]byte, error),
 	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error),
 ) Store {
 	es := identityStore{
 		logger:      logger.Named(log.NameP2PStorage),
 		db:          db,
-		protectFn:   protectFn,
 		unprotectFn: unprotectFn,
 	}
 	return &es
@@ -112,17 +110,6 @@ func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*
 	return privateKey, s.saveNetworkKeyPlaintext(privateKey)
 }
 
-func (s identityStore) saveNetworkKey(ctx context.Context, privateKey *ecdsa.PrivateKey) error {
-	protectedValue, err := encodeNetworkKey(ctx, privateKey, s.protectFn)
-	if err != nil {
-		return fmt.Errorf("failed to protect private key: %w", err)
-	}
-	if err := s.db.Set(prefix, netKeyPrefix, protectedValue); err != nil {
-		return fmt.Errorf("failed to save to db: %w", err)
-	}
-	return nil
-}
-
 func (s identityStore) saveNetworkKeyPlaintext(privateKey *ecdsa.PrivateKey) error {
 	if err := s.db.Set(prefix, netKeyPrefix, gcrypto.FromECDSA(privateKey)); err != nil {
 		return fmt.Errorf("failed to save to db: %w", err)
@@ -139,25 +126,6 @@ func HasEncryptedNetworkKey(db basedb.Database) (bool, error) {
 	}
 
 	return bytes.HasPrefix(obj.Value, encryptedPrefix), nil
-}
-
-func encodeNetworkKey(
-	ctx context.Context,
-	privateKey *ecdsa.PrivateKey,
-	protectFn func(ctx context.Context, plaintext []byte) ([]byte, error),
-) ([]byte, error) {
-	plaintext := gcrypto.FromECDSA(privateKey)
-	if protectFn == nil {
-		return nil, errors.New("network key protector is required")
-	}
-	protectedValue, err := protectFn(ctx, plaintext)
-	if err != nil {
-		return nil, err
-	}
-	storedValue := make([]byte, 0, len(encryptedPrefix)+len(protectedValue))
-	storedValue = append(storedValue, encryptedPrefix...)
-	storedValue = append(storedValue, protectedValue...)
-	return storedValue, nil
 }
 
 func decodeNetworkKey(
