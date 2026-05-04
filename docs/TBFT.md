@@ -725,7 +725,7 @@ This preserves baseline TBFT's `T_1 < T_0` asymmetry for the rotation layers: `L
 
 **Tightened candidate-acceptance cutoff for B.3.** Whereas baseline TBFT uses `T_candidate_accept = T_commit − (D + δ)`, B.3 (in the recommended configuration) uses the tightened version `T_candidate_accept = T_commit − (2D + δ)`. Reason: the additional `D` of headroom guarantees that gossipsub re-flood from any honest receiver completes before every other honest's local cutoff, even in the worst-case clock-skew scenario — closing the byzantine-leader-at-cutoff edge at the L_Bid layer (see "σ-side deviation surface at L_Bid" in "Liveness & attribution" below for the analysis). Without this, B.3 has a deadlock surface at L_Bid that baseline doesn't have at L_0/L_1.
 
-**Cost is paid every slot, not per-attack.** Cutoff tightening shrinks the high-MEV fetch window by `D` (~200 ms typical) on every slot, regardless of whether a byzantine attack is actually attempted. The `2D` budget is sized for worst-case 2-hop byz-at-cutoff propagation (real propagation up to `2D` for the byz-broadcast-then-re-flood path); when actual production network propagation `p_real` is well below the assumed `D`, the budget is over-provisioned by a factor of `2D / (2 · p_real)`, and that over-provisioning shows up as MEV fetch loss every slot. For clusters with telemetry showing reliably small `p_real` relative to `D`, the trade may be unfavorable.
+**Cost is paid every slot, not per-attack.** Cutoff tightening shrinks the high-MEV fetch window by `D` (~200 ms typical) on every slot, regardless of whether a byzantine attack is actually attempted. The `2D` budget is sized for worst-case 2-hop byz-at-cutoff propagation (real propagation up to `2D` for the byz-broadcast-then-re-flood path); when actual production network propagation `p_real` is well below the assumed `D`, the budget is over-provisioned by a factor of `2D / (2 · p_real)`, and that over-provisioning shows up as MEV fetch loss every slot. For clusters with telemetry showing reliably small `p_real` relative to `D`, the trade may be unfavorable; the optional **Phase 2.5 unlock** documented in "σ-side deviation surface at L_Bid" / "Optional Phase 2.5 unlock" within "Liveness & attribution" below is an alternative that pays only on actual deadlock and additionally covers L257 and validity-divergence patterns that cutoff tightening doesn't address.
 
 By `T_candidate_accept = T_commit − (2D + δ)`, every honest operator has received every honestly-broadcast envelope (gossipsub re-flooding completes with full propagation budget within the partial-synchrony bound — see "Cluster-consistency under sub-partial-synchrony" in the safety analysis below).
 
@@ -956,7 +956,93 @@ The structural reason this surface exists in B.3 but not in baseline TBFT: in ba
 
 Together, all three preconditions close H4's deadlock surface under partial synchrony. (Phase-2 broadcast deferral, the standard L257 mitigation in baseline for *equivocation* cases, is not needed in B.3 once relay-anchoring precludes bid-equivocation, and would not have addressed the selective-withhold sub-case anyway since `T_candidate_accept` precedes Phase-2 broadcast.)
 
-**Without the tightened cutoff** (cluster opts for the wider MEV fetch window over closing this surface), the H4 surface remains open: byz-at-cutoff selective-withhold + σ-deviation can deadlock the slot when X = σ-side self under adversarial byzantine. Clusters running B.3 in that configuration accept the residual H4 deadlock rate as part of their liveness profile — but the "preserves baseline TBFT's safety and liveness profile" claim does not hold there.
+**Without the tightened cutoff** (cluster opts for the wider MEV fetch window over closing this surface), the H4 surface remains open: byz-at-cutoff selective-withhold + σ-deviation can deadlock the slot when X = σ-side self under adversarial byzantine. Clusters running B.3 in that configuration accept the residual H4 deadlock rate as part of their liveness profile — unless they instead deploy the optional Phase 2.5 unlock described next, which closes the surface (and additionally closes baseline TBFT's L257 limit) at the cost of conditional latency rather than every-slot fetch-window cost.
+
+**Optional Phase 2.5 unlock (alternative to cutoff tightening; covers all f=1 n=4 partial-synchrony deadlock patterns).** A cluster opting against cutoff tightening can close all deadlock patterns within the partial-synchrony envelope — including patterns cutoff tightening alone doesn't address (notably baseline TBFT's L257 single-V-receiver-with-leader-equivocation at L_0/L_1 layers, and application-validity-divergence at every layer under strict host policy) — by adding an optional Phase 2.5 unlock round. Phase 2.5 fires only when local deadlock is detected; healthy slots pay no upfront latency or fetch-window cost. Two unlock message kinds, one per deadlock-pattern family.
+
+*KindUnlockSigma* — handles σ-pool-short-by-1 deadlocks (H4 X=σ-side-self, application-validity-divergence with single NV honest, byz selective-withhold fragmenting 1 honest).
+
+Trigger (each operator runs locally at `T_arrival` after Phase 3's reconstruction attempt fails at this layer):
+
+```
+σ_pool_on_V_X cluster-wide = qV − 1 = 2 partials on a single V_X
+AND NR_pool_excluding_cross_signers ≤ qEnc − 2 = 1 partial
+AND this operator's commitment at this layer is NR (or NV)
+AND this operator validates V_X at the host level
+```
+
+`cross_signers` = operators whose σ partial AND NR partial are both observable on the wire at this layer (publicly attributable per "Cross-signing detection" in baseline). Excluding them from the NR-pool count discounts byzantine NR cross-sign attempts; honest NR-only operators are not excluded.
+
+Action — broadcast `KindUnlockSigma { slot, layer, V_X, σ_V_partial, observed_state_proof }`. The σ_V partial is a fresh BLS partial on V_X by this operator (they hadn't signed σ_V on V_X before — they were NR-side in Phase 2). EKM permits this signing per "Slashing-protection scope (delta with Phase 2.5)" below. Receivers verify the σ_V partial against the operator's V-share key, verify `observed_state_proof` is consistent with their own observed pools and that trigger conditions are met, then add the partial to σ-pool aggregation. Phase 3 retry at `T_unlock_arrival = T_arrival + Δ_2.5`.
+
+Safety. With at most 1 honest cross-signing (the unlocker), let h_σ_V_X be the cluster-wide honest σ-pool on V_X post-unlock, h_NR be honest NR-pool count at this layer, and byz_σ + byz_NR ≤ 2 (f=1, byz contributes at most 1 partial per side per slot per layer):
+- The trigger condition `NR_pool_excluding_cross_signers ≤ 1` implies `honest_NR ≤ 1` cluster-wide (any byz NR partial that's also paired with a byz σ partial is excluded as cross-signer; the residual count is honest-only-NR).
+- Post-unlock: h_σ_V_X = 3 (2 original σ-side honest + 1 unlocker). h_NR ≤ 1 (the unlocker's original NR partial; pre-unlock NR-pool ≤ 2 partials with at most 1 byz NR cross-sign contributing to the count).
+- σ-quorum on V_X: `h_σ_V_X + byz_σ_V_X ≤ 3 + 1 = 4 ≥ qV = 3` — reaches.
+- NR-quorum on the layer's nr_tag: `h_NR + byz_NR ≤ 1 + 1 = 2 < qEnc = 3` — does not reach.
+- Pigeonhole 3: NR-quorum at this layer doesn't reach → next-layer σ-partials remain encrypted under this layer's nr_tag → at most one V signature commits cluster-wide (V_X via this layer's σ-quorum). ∎
+
+Robustness against byz strategies: byz σ-deviation (σ_V on V_Y ≠ V_X) doesn't help V_X pool, doesn't defeat unlock. Byz NR cross-sign (slashable per cross-signing detection) is detected and excluded from trigger count, doesn't defeat trigger. Byz σ on V_X (helping) makes σ-pool reach qV without unlock, trigger doesn't need to fire. Byz silent: trigger fires normally, unlock proceeds.
+
+*KindUnlockNR* — handles equivocation-induced σ-pool fragmentation (L257 leader equivocation, applicable at L_Bid, L_0_baseline, L_1_baseline).
+
+Trigger:
+
+```
+At least two distinct σ_V partials from the same operator (same op_id) on different value_roots at this layer, observable on the wire
+AND this operator's commitment at this layer is σ on V or V' (one of the equivocating values)
+AND this operator validates the equivocation evidence (both σ_V partials are valid BLS signatures from the equivocator's V-share key)
+```
+
+Action — broadcast `KindUnlockNR { slot, layer, equivocation_evidence: (σ_V_on_V_partial, σ_V_on_V'_partial), σ^IBE_on_nr_tag_partial }`. The σ^IBE NR partial is this operator switching from σ to NR upon detecting equivocation. Receivers verify both σ_V partials in equivocation_evidence are valid BLS partials from the equivocator's V-share key on different value_roots, verify the unlocking operator originally σ-committed at this layer (per their Phase-2 onion), then add the NR partial to NR-pool aggregation. Phase 3 retry at `T_unlock_arrival`.
+
+Safety. Equivocation fragments σ-side across V and V'. With f=1 byz (the equivocator) and 3 honest:
+- σ-pool on V cluster-wide: 1 honest who σ'd on V (still σ-committed via Phase-2 onion partial on V) + 1 byz σ_V on V (equivocation evidence) = 2 partials. < qV = 3. **σ-quorum on V cannot reach.**
+- σ-pool on V': 1 honest σ'd on V' + 1 byz σ_V on V' = 2. < qV. **σ-quorum on V' cannot reach.**
+- NR-pool: up to 3 honest NR (1 original NR-side + 2 unlock-switched) + 1 byz NR cross-sign = up to 4. ≥ qEnc.
+
+Pigeonhole 1 with 2 honest cross-signing (both σ-side honest switching to NR): h_σ + h_NR ≤ 3 + 2 = 5. byz_σ + byz_NR ≤ 2 (byz_σ counts the equivocator's σ_V on V plus σ_V on V'; total byz_σ across V's ≤ 2; per-V byz_σ ≤ 1). For σ-quorum on any single V: `h_σ_per_V + byz_σ_per_V ≤ 1 + 1 = 2 < qV`. **Neither σ-quorum on V nor on V' reaches at this layer.**
+
+Cross-layer safety (Pigeonhole 3): NR-quorum reaches → next-layer σ-partials decrypt and aggregate. If next-layer σ-quorum reaches on V_{next}, V_{next} commits. **At most one V signature cluster-wide** (V_{next}, not V or V'). ∎
+
+Robustness: equivocation evidence is publicly verifiable; byz cannot fake it (would require forging σ_V partials). Once byz has equivocated to cause the deadlock, evidence is on the wire — UnlockNR triggers reliably regardless of byz strategy.
+
+*Phase 2.5 timing.*
+
+```
+T_unlock_start = T_arrival + ε
+T_unlock_arrival = T_unlock_start + Δ_2.5    (Δ_2.5 ≈ D + δ for unlock partial propagation)
+Phase 3 retry at T_unlock_arrival
+```
+
+Δ_2.5 fits inside SSV's 4-second relay cutoff with margin: typical D ≈ 200ms means Δ_2.5 ≈ 250ms, healthy-path completion at ~slot_start + 3.5s, attack-path completion at ~slot_start + 3.75s. Both within the 4s cutoff.
+
+*Coverage.*
+
+| Deadlock pattern | Mitigation | Notes |
+|---|---|---|
+| H4 X=σ-side-self at L_Bid | KindUnlockSigma | Robust against byz NR cross-sign |
+| L257 leader equivocation single-V-receiver at L_0/L_1 | KindUnlockNR | Closes baseline TBFT's known liveness limit |
+| App-validity-divergence at any layer (1 honest NV) | KindUnlockSigma | Triggered after any honest's late re-validation finds V_X valid |
+| Byz selective-withhold (1 honest fragmented) | KindUnlockSigma | Shape-equivalent to H4 |
+| Byz bidder-equivocation in B.3 | KindUnlockNR | Robust even without relay-anchoring (equivocation evidence triggers it) |
+
+Patterns *not* covered (sub-partial-synchrony, fundamental f=1 n=4 limit, uncoverable by any protocol within this cluster size including QBFT round-change within the 4s budget): 2-of-3 honest fragmented from initial broadcast and byz silent; aggressive-marginal regime per "Fault tolerance / Liveness" baseline table. These are beyond the partial-synchrony envelope.
+
+*Coverage envelope is bounded by `D`.* Phase 2.5 covers all deadlock patterns where byz-at-cutoff fragments at most 1 honest cluster-wide. Under the partial-synchrony assumption (real propagation `p_real ≤ D` and clock skew `δ << D`), the byz-at-cutoff edge fragments at most 1 honest — so Phase 2.5 covers all deadlock patterns within the assumed partial-synchrony envelope. **When `p_real > D` (sub-partial-synchrony), the envelope is breached:** real propagation may directly exceed receivers' cutoffs, fragmenting 2 or more honest, and Phase 2.5's trigger (`NR_pool_excluding_cross_signers ≤ 1`) fails because honest_NR-pool can grow to 2+. In this regime, Phase 2.5 doesn't fire and the slot misses — same uncoverable region as baseline TBFT, TBFTR, and QBFT (within the 4s budget) at f=1 n=4.
+
+The `D` parameter therefore defines the cluster's *operational tolerance band*. Setting `D` conservatively (large) widens the envelope at the cost of a tighter MEV fetch window per the cutoff arithmetic `T_candidate_accept = T_commit − (D + δ)`. Setting `D` aggressively (small) gives a wider fetch window but narrows the band — real propagation events even moderately above the assumption push out into the uncoverable region. **Phase 2.5 doesn't change the fundamental band; it changes the cost shape from "pay always" (cutoff tightening) to "pay only on attack" within the band.** Whether the band is wide enough to capture real production network behavior is a `D`-tuning question, informed by per-cluster propagation telemetry — not a protocol-level design knob Phase 2.5 can address.
+
+Concretely: with `D = 200ms` (aggressive, typical SSV), Phase 2.5 covers all deadlocks where real propagation stayed within ~200ms of broadcast. Real propagation events at 300ms (= 1.5×D) fall outside the envelope and may fragment 2-of-3 honest if the timing is unfavorable; Phase 2.5 doesn't recover. With `D = 1s` (conservative), the envelope absorbs typical slow-network scenarios up to 1s, but the MEV fetch window shrinks correspondingly. **The choice of `D` is the meaningful liveness lever; Phase 2.5 makes the band byz-attack-resilient rather than byz-attack-fragile, but does not extend the band.**
+
+*Slashing-protection scope (delta with Phase 2.5 enabled).* Each operator's V-signing share may sign σ_V on up to 5 distinct values per slot (up from 4 without Phase 2.5): own `V_{op_id}` in the Phase-1 bid envelope, plus `V_{L_Bid}`, `V_{L_0_baseline}`, `V_{L_1_baseline}` in Phase-2 onion, plus a late `σ_V` in Phase 2.5 (UnlockSigma at any of the three layers, restricted to the layer's argmax winner V). The IBE-signing share may sign one extra NR partial per slot (UnlockNR at any layer with equivocation evidence). EKM permits these signings under the unlock-rule guards: a late σ_V via UnlockSigma is permitted iff the operator's existing commitment at that layer was NR/NV and the unlock trigger condition is observable; a late NR via UnlockNR is permitted iff equivocation evidence at that layer is observable. Without trigger conditions met, cross-signing remains slashable per "Cross-signing detection". The slashing-protection log keys on `(slot, layer, value_root, partial_kind)` where `partial_kind ∈ {σ_V_phase2, σ_V_phase2.5, NR_phase2, NR_phase2.5}`.
+
+*Choosing between cutoff tightening and Phase 2.5.* Both close H4 under partial synchrony; they differ on cost shape and coverage breadth:
+- **Cutoff tightening** (recommended config): closes H4 unconditionally, costs `D` of fetch window *every slot*, doesn't address L257 / equivocation patterns at L_0/L_1 (baseline limit inherited). Simple spec.
+- **Phase 2.5 unlock**: closes H4 + L257 + app-validity-divergence patterns under partial synchrony, costs no upfront fetch window, adds `Δ_2.5` latency only on actual deadlock, robust against byz NR cross-sign via cross-signer exclusion. More spec (two unlock kinds, EKM relaxation under unlock-rule guards).
+- **Both** — redundant under partial synchrony; cutoff tightening prevents most triggers from firing, Phase 2.5 covers residuals (e.g., L257 cases at L_0/L_1 that cutoff tightening doesn't address). Marginal benefit at extra spec cost.
+
+The choice is operational and depends on cluster's threat model, network telemetry (specifically `p_real / D`), and tolerance for healthy-path fetch-window cost vs sub-partial-synchrony attack-recovery latency.
 
 **Post-hoc attribution.** Each Phase-1 envelope is a self-contained record `(slot, cluster, op_id, value_root, bid, relay_attestation, σ^op)`. Every operator signs an envelope every slot; the attribution surface is uniform across the cluster. With relay-anchoring (see "Bid binding via relay attestation"), bid-lying as an attack vector reduces to "byz forges a bid value not signed by a trusted builder" — caught at envelope acceptance by the relay-attestation check, not requiring post-hoc resolution. The remaining attribution surface is envelope equivocation (two distinct `value_root`s from the same op at the same slot, each with valid relay attestation): the `(σ^op_i, σ^op_j)` pair is a self-contained slashable fault proof verifiable in isolation against the op's identity key — no separate slashing-infrastructure dependency, no comparison against an external "ground truth" needed. **B.3's bid-attribution story for SSV proposer duty is therefore self-contained at the protocol level, contingent only on the relay's BLS signature being verifiable** (which SSV's MEV-Boost flow already requires for `getPayload`); no additional slashing infrastructure beyond the cluster's existing equivocation-detection machinery is needed. For non-relay-anchored applications, the B.1 attribution flow ("resolve `value_root` to actual block, query relay for actual bid, compare") applies — out of TBFT scope, contingent on application-level slashing infrastructure that may not exist by default.
 
