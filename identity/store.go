@@ -95,14 +95,10 @@ func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*
 		}
 	}
 	if skEncoded == "" && found && privateKey != nil {
-		if !encrypted {
-			if s.hasProtectedStorage() {
-				s.logger.Info("migrating plaintext p2p network private key to encrypted storage")
-				if err := s.saveNetworkKey(ctx, privateKey); err != nil {
-					return nil, err
-				}
-			} else {
-				s.logger.Warn("using legacy plaintext p2p network private key from storage; configure a local operator key or use an ssv-signer deployment that supports remote network-key protection to encrypt it at rest")
+		if encrypted {
+			s.logger.Info("migrating encrypted p2p network private key back to plaintext storage for rollback compatibility")
+			if err := s.saveNetworkKeyPlaintext(privateKey); err != nil {
+				return nil, err
 			}
 		}
 		s.logger.Debug("using p2p network privateKey from storage")
@@ -113,12 +109,7 @@ func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	if !s.hasProtectedStorage() {
-		s.logger.Warn("persisting p2p network private key in legacy plaintext storage because no network key encryption secret is configured; configure a local operator key or use an ssv-signer deployment that supports remote network-key protection to encrypt it at rest")
-		return privateKey, s.saveNetworkKeyPlaintext(privateKey)
-	}
-
-	return privateKey, s.saveNetworkKey(ctx, privateKey)
+	return privateKey, s.saveNetworkKeyPlaintext(privateKey)
 }
 
 func (s identityStore) saveNetworkKey(ctx context.Context, privateKey *ecdsa.PrivateKey) error {
@@ -130,10 +121,6 @@ func (s identityStore) saveNetworkKey(ctx context.Context, privateKey *ecdsa.Pri
 		return fmt.Errorf("failed to save to db: %w", err)
 	}
 	return nil
-}
-
-func (s identityStore) hasProtectedStorage() bool {
-	return s.protectFn != nil && s.unprotectFn != nil
 }
 
 func (s identityStore) saveNetworkKeyPlaintext(privateKey *ecdsa.PrivateKey) error {
