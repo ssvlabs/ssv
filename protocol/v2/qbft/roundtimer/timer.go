@@ -3,7 +3,6 @@ package roundtimer
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,8 +14,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate go tool -modfile=../../../../tool.mod mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
-
 type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
@@ -27,50 +24,106 @@ const (
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
-// Timer is an interface for a round timer, calling the UponRoundTimeout when times out
-type Timer interface {
-	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
-	TimeoutForRound(height specqbft.Height, round specqbft.Round)
+// roundTimeoutForRound returns the time-into-slot at which the given round will time out
+// (i.e. transition to round+1) for the given role:
+//
+//	Round 1     ends at  headStart + 1 * quick
+//	Round 2     ends at  headStart + 2 * quick
+//	...
+//	Round T     ends at  headStart + T * quick               (T = quickThreshold)
+//	Round T+1   ends at  headStart + T * quick + 1 * slow
+//	Round T+2   ends at  headStart + T * quick + 2 * slow
+//
+// Every role has its own dedicated headStart duration.
+func roundTimeoutForRound(role spectypes.RunnerRole, slotDuration time.Duration, round specqbft.Round) time.Duration {
+	headStart := round1HeadStart(role, slotDuration)
+	if round <= QuickTimeoutThreshold {
+		return headStart + casts.DurationFromUint64(uint64(round))*QuickTimeout
+	}
+	quickPortion := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * QuickTimeout
+	slowPortion := casts.DurationFromUint64(uint64(round-QuickTimeoutThreshold)) * SlowTimeout
+	return headStart + quickPortion + slowPortion
 }
 
-type TimeoutOptions struct {
-	quickThreshold specqbft.Round
-	quick          time.Duration
-	slow           time.Duration
+// round1HeadStart returns the extra time, on top of Round 1's normal quick timeout, that
+// Round 1 is allowed to run for a given role. Committee gets 1/3 of the slot as head start
+// (time for the block to become available); aggregator and sync-committee-contribution get
+// 2/3 of the slot (time for attestations to arrive); proposer gets zero.
+//
+// Note: this is NOT the time at which Round 1 -> Round 2 transitions — that transition actually
+// happens at `slotStart + round1HeadStart + QuickTimeout`, because Round 1 still needs to run its
+// own quick timer on top of the head start.
+func round1HeadStart(role spectypes.RunnerRole, slotDuration time.Duration) time.Duration {
+	switch role {
+	case spectypes.RoleCommittee:
+		return slotDuration / 3
+	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
+		return slotDuration / 3 * 2
+	default:
+		return 0
+	}
 }
 
-// RoundTimer helps to manage current instance rounds.
+// EstimatedRoundAt returns the round that should be current for the given runner role (duty-type) at the provided
+// elapsed time since slot start (timeIntoSlot).
+// Round 1, Round 2, ... Round QuickTimeoutThreshold are considered "quick" (aka short rounds).
+// Round QuickTimeoutThreshold+1, Round QuickTimeoutThreshold+2, ... are considered "slow" (aka long rounds).
+//
+// IMPORTANT: the calculations in this func must be aligned with those in RoundTimeout, those funcs should re-use
+// the same code/algo - they currently don't since that would make one of them quite slow, instead the alignment
+// is enforced by unit-tests.
+func EstimatedRoundAt(role spectypes.RunnerRole, slotDuration, timeIntoSlot time.Duration) (specqbft.Round, error) {
+	// Compute the round directly by inverting the piecewise-linear roundTimeoutOffset formula:
+	//   Quick phase (r <= T): offset(r) = headStart + r * quick
+	//   Slow phase  (r >  T): offset(r) = headStart + T * quick + (r - T) * slow
+	elapsed := timeIntoSlot - round1HeadStart(role, slotDuration)
+	if elapsed < 0 {
+		return specqbft.FirstRound, nil
+	}
+
+	quickEnd := casts.DurationFromUint64(uint64(QuickTimeoutThreshold)) * QuickTimeout
+	if elapsed < quickEnd {
+		return specqbft.FirstRound + specqbft.Round(elapsed/QuickTimeout), nil // #nosec G115 -- elapsed is non-negative (guarded above)
+	}
+
+	slowElapsed := elapsed - quickEnd
+	return specqbft.FirstRound + QuickTimeoutThreshold + specqbft.Round(slowElapsed/SlowTimeout), nil // #nosec G115 -- slowElapsed is non-negative (elapsed >= quickEnd)
+}
+
+// RoundTimer manages round timeouts for a single duty.
+// Created per duty with the callback wired at construction.
+// Implements specqbft.Timer.
 type RoundTimer struct {
-	mtx *sync.RWMutex
-	ctx context.Context
-	// timer is the underlying time.Timer
-	timer *time.Timer
-	// result holds the result of the timer
-	done OnRoundTimeoutF
-	// round is the current round of the timer
-	round uint64
-	// timeoutOptions holds the timeoutOptions for the timer
-	timeoutOptions TimeoutOptions
-	// role is the role of the instance
-	role spectypes.RunnerRole
-	// beaconConfig is the beacon config
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	role         spectypes.RunnerRole
 	beaconConfig *networkconfig.Beacon
+
+	// callback is a func called when currently stored round times out.
+	callback OnRoundTimeoutF
+
+	mtx   *sync.RWMutex
+	slot  phase0.Slot
+	round specqbft.Round
+	timer *time.Timer
 }
 
-// New creates a new instance of RoundTimer.
-func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+// New creates a per-duty RoundTimer with the callback wired at construction.
+// callback must not be nil.
+func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes.RunnerRole, slot phase0.Slot, callback OnRoundTimeoutF) *RoundTimer {
+	ctx, cancel := context.WithCancel(ctx)
+
 	return &RoundTimer{
-		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
-		timer:        nil,
-		done:         done,
-		role:         role,
+		cancel:       cancel,
 		beaconConfig: beaconConfig,
-		timeoutOptions: TimeoutOptions{
-			quickThreshold: QuickTimeoutThreshold,
-			quick:          QuickTimeout,
-			slow:           SlowTimeout,
-		},
+		role:         role,
+		callback:     callback,
+		mtx:          &sync.RWMutex{},
+		slot:         slot,
+		round:        specqbft.NoRound, // set in TimeoutForRound
+		timer:        nil,              // set in TimeoutForRound
 	}
 }
 
@@ -95,92 +148,55 @@ func New(ctx context.Context, beaconConfig *networkconfig.Beacon, role spectypes
 // To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
 // which is calculated from the slot height. The base timeout is set based on the role,
 // and the additional timeout is added based on the round number.
-func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
-	// Initialize duration to zero
-	var baseDuration time.Duration
-
-	// Set base duration based on role
-	switch t.role {
-	case spectypes.RoleCommittee:
-		// third of the slot time
-		baseDuration = t.beaconConfig.SlotDuration / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
-		// two-third of the slot time
-		baseDuration = t.beaconConfig.SlotDuration / 3 * 2
-	default:
-		if round <= t.timeoutOptions.quickThreshold {
-			return t.timeoutOptions.quick
+func (t *RoundTimer) RoundTimeout(round specqbft.Round) time.Duration {
+	// Proposer runner round timeouts are currently relative to QBFT instance start time, not slot start time:
+	// https://github.com/ssvlabs/ssv/issues/2429
+	if t.role == spectypes.RoleProposer {
+		if round <= QuickTimeoutThreshold {
+			return QuickTimeout
 		}
-		return t.timeoutOptions.slow
+		return SlowTimeout
 	}
 
-	// Calculate additional timeout based on round
-	var additionalTimeout time.Duration
-	if round <= t.timeoutOptions.quickThreshold {
-		additionalTimeout = casts.DurationFromUint64(uint64(round)) * t.timeoutOptions.quick
-	} else {
-		quickPortion := casts.DurationFromUint64(uint64(t.timeoutOptions.quickThreshold)) * t.timeoutOptions.quick
-		slowPortion := casts.DurationFromUint64(uint64(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
-		additionalTimeout = quickPortion + slowPortion
-	}
-
-	// Combine base duration and additional timeout
-	timeoutDuration := baseDuration + additionalTimeout
-
-	// Get the start time of the duty
-	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(height))
-
-	// Calculate the time until the duty should start plus the timeout duration
-	return time.Until(dutyStartTime.Add(timeoutDuration))
+	// Slot-synchronized roles: timeout happens at slot start + roundTimeoutForRound(...).
+	dutyStartTime := t.beaconConfig.SlotStartTime(t.slot)
+	return time.Until(dutyStartTime.Add(roundTimeoutForRound(t.role, t.beaconConfig.SlotDuration, round)))
 }
 
-// OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
-	t.mtx.Lock() // write to t.done
+// TimeoutForRound implements specqbft.Timer.
+func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
+	if t.ctx.Err() != nil {
+		return
+	}
+
+	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	t.done = done
-}
-
-// Round returns a round.
-func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadUint64(&t.round)) // #nosec G115
-}
-
-// TimeoutForRound times out for a given round.
-func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
-	atomic.StoreUint64(&t.round, uint64(round))
-	timeout := t.RoundTimeout(height, round)
-
-	// preparing the underlying timer
-	timer := t.timer
-	if timer == nil {
-		timer = time.NewTimer(timeout)
-	} else {
-		timer.Stop()
-		// draining the channel of existing timer
-		select {
-		case <-timer.C:
-		default:
-		}
+	if t.timer != nil {
+		t.timer.Stop()
 	}
-	timer.Reset(timeout)
-	// spawns a new goroutine to listen to the timer
-	go t.waitForRound(round, timer.C)
+	t.round = round
+	// RoundTimeout can be negative for late-start duties — AfterFunc fires
+	// immediately but the callback blocks on RLock until we release mtx.
+	t.timer = time.AfterFunc(t.RoundTimeout(round), func() {
+		if t.ctx.Err() != nil {
+			return
+		}
+		t.mtx.RLock()
+		defer t.mtx.RUnlock()
+		// Stale-round guard: if the timer moved to a newer round, this callback is outdated.
+		if t.round != round {
+			return
+		}
+		t.callback(round)
+	})
 }
 
-func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
-	select {
-	case <-t.ctx.Done():
-	case <-timeout:
-		if t.Round() == round {
-			func() {
-				t.mtx.RLock() // read t.done
-				defer t.mtx.RUnlock()
-				if done := t.done; done != nil {
-					done(round)
-				}
-			}()
-		}
+func (t *RoundTimer) Stop() {
+	t.cancel()
+	t.mtx.Lock()
+	if t.timer != nil {
+		t.timer.Stop()
 	}
+	t.mtx.Unlock()
 }

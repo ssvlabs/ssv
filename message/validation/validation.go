@@ -122,16 +122,16 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 		return mv.validateSelf(pmsg)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return mv.handleValidationError(ctx, peerID, nil, err)
+	}
+
 	validationStart := time.Now()
 
-	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
+	decodedMessage, err := mv.handlePubsubMessage(ctx, pmsg, time.Now())
 
 	defer func() {
-		role := spectypes.RunnerRole(spectypes.RoleUnknown)
-		if decodedMessage != nil {
-			role = decodedMessage.GetID().GetRoleType()
-		}
-		recordMessageDuration(ctx, role, time.Since(validationStart))
+		recordMessageDuration(ctx, messageRole(decodedMessage), time.Since(validationStart))
 	}()
 
 	if err != nil {
@@ -143,7 +143,18 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
-func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
+func messageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {
+	if decodedMessage == nil || decodedMessage.SSVMessage == nil {
+		return spectypes.RunnerRole(spectypes.RoleUnknown)
+	}
+	return decodedMessage.SSVMessage.GetID().GetRoleType()
+}
+
+func (mv *messageValidator) handlePubsubMessage(ctx context.Context, pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	if err := mv.validatePubSubMessage(pMsg); err != nil {
 		return nil, err
 	}
@@ -153,10 +164,11 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 		return nil, err
 	}
 
-	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
+	return mv.handleSignedSSVMessage(ctx, signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
 }
 
 func (mv *messageValidator) handleSignedSSVMessage(
+	ctx context.Context,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	topic string,
 	receivedFrom peer.ID,
@@ -164,6 +176,10 @@ func (mv *messageValidator) handleSignedSSVMessage(
 ) (*queue.SSVMessage, error) {
 	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
+	}
+
+	if err := ctx.Err(); err != nil {
+		return decodedMessage, err
 	}
 
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
@@ -176,7 +192,6 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	// TODO: leverage the validatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
@@ -186,20 +201,25 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
+	// Bail out before we potentially wait on the per-message validation mutex.
+	if err := ctx.Err(); err != nil {
+		return decodedMessage, err
+	}
+
 	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err

@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -20,10 +21,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -31,11 +32,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	//temporary to override state comparisons from file not inputted one
 	overrideStateComparisonForControllerSpecTest(t, test)
 
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	contr := generateController(logger)
 
 	if test.StartHeight != nil {
-		contr.Height = *test.StartHeight
+		contr.LatestInstanceHeight = *test.StartHeight
 	}
 
 	var lastErr error
@@ -64,16 +65,18 @@ func generateController(logger *zap.Logger) *controller.Controller {
 	)
 }
 
-func testTimer(
+func testTimerState(
 	t *testing.T,
-	config *qbft.Config,
+	contr *controller.Controller,
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
-		if timer, ok := config.GetTimer().(*roundtimer.TestQBFTTimer); ok {
-			require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
-			require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
-		}
+		inst := contr.RecentInstances.FindInstance(contr.LatestInstanceHeight)
+		require.NotNilf(t, inst, "ExpectedTimerState set but no instance found at height %d", contr.LatestInstanceHeight)
+		timer, ok := inst.Timer().(*roundtimer.TestQBFTTimer)
+		require.True(t, ok)
+		require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
+		require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
 	}
 }
 
@@ -87,7 +90,14 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decidedMsg, err := contr.ProcessMsg(context.TODO(), logger, msg)
+		decidedMsg, err := contr.ProcessMsg(
+			context.TODO(),
+			logger,
+			msg,
+			func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+				return roundtimer.NewTestingTimer()
+			},
+		)
 		if err != nil {
 			lastErr = err
 		}
@@ -149,12 +159,21 @@ func runInstanceWithData(
 	runData *spectests.RunInstanceData,
 ) error {
 	var lastErr error
-	_, err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, protocoltesting.TestingValueChecker{})
+	_, err := contr.StartNewInstance(
+		context.TODO(),
+		logger,
+		height,
+		runData.InputValue,
+		protocoltesting.TestingValueChecker{},
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundtimer.NewTestingTimer()
+		},
+	)
 	if err != nil {
 		lastErr = err
 	}
 
-	testTimer(t, contr.GetConfig().(*qbft.Config), runData)
+	testTimerState(t, contr, runData)
 
 	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*qbft.Config), runData); err != nil {
 		lastErr = err
@@ -174,7 +193,7 @@ func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.
 	specDir, err := storage.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")
-	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())
+	dir := typescomparable.GetSCDir(specDir, reflect.TypeFor[*spectests.ControllerSpecTest]().String())
 	path := filepath.Join(dir, fmt.Sprintf("%s.json", test.TestName()))
 	byteValue, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)

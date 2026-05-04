@@ -2,15 +2,17 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -24,7 +26,8 @@ import (
 )
 
 const (
-	defaultDiscoveryInterval = time.Millisecond * 2
+	defaultDiscoveryInterval = 100 * time.Millisecond
+	publishENRInterval       = 500 * time.Millisecond
 	publishENRTimeout        = time.Minute
 )
 
@@ -136,7 +139,10 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 	if err != nil {
 		return nil, err
 	}
-	pk := commons.ECDSAPubFromInterface(pki)
+	pk, err := commons.ECDSAPubFromInterface(pki)
+	if err != nil {
+		return nil, fmt.Errorf("convert peer public key: %w", err)
+	}
 	id := enode.PubkeyToIDV4(pk)
 	logger = logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))
@@ -154,78 +160,164 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // Bootstrap start looking for new nodes, note that this function blocks.
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
+//
+// All peer filtering is done inside checkPeer (not as discover() filters) so that
+// every skip reason is tracked with structured metrics and windowed summary logs.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	// Log every 10th skipped peer.
-	// TODO: remove once we've merged https://github.com/ssvlabs/ssv/pull/1803
-	const logFrequency = 10
-	var skippedPeers uint64 = 0
+	const logWindowSize = 50
+
+	var (
+		skippedPeersTotalPerWindow   uint64
+		skippedByReasonPerWindow     = map[skipReason]uint64{}
+		skippedPeersUnknownPerWindow uint64
+	)
 
 	dvs.discover(
 		dvs.ctx,
 		func(e PeerEvent) {
-			logger := dvs.logger.With(
-				fields.ENR(e.Node),
-				fields.PeerID(e.AddrInfo.ID),
-			)
 			err := dvs.checkPeer(dvs.ctx, e)
 			if err != nil {
-				if skippedPeers%logFrequency == 0 {
-					logger.Debug("skipped discovered peer", zap.Error(err))
+				skippedPeersTotalPerWindow++
+				var skipErr *peerSkipError
+				if errors.As(err, &skipErr) {
+					skippedByReasonPerWindow[skipErr.reason]++
+				} else {
+					skippedPeersUnknownPerWindow++
 				}
-				skippedPeers++
+				if skippedPeersTotalPerWindow >= logWindowSize {
+					summaryFields := discoverySkipSummaryFields(skippedPeersTotalPerWindow, skippedByReasonPerWindow, skippedPeersUnknownPerWindow)
+					summaryFields = append(summaryFields,
+						zap.Int("discovered_peers_pool_size", dvs.discoveredPeersPool.SlowLen()),
+						zap.Int("trimmed_recently_size", dvs.trimmedRecently.SlowLen()),
+					)
+					dvs.logger.Debug("discovery skipped peers summary", summaryFields...)
+					skippedPeersTotalPerWindow = 0
+					skippedByReasonPerWindow = map[skipReason]uint64{}
+					skippedPeersUnknownPerWindow = 0
+				}
 				return
 			}
 			handler(e)
 		},
 		defaultDiscoveryInterval,
-		dvs.ssvNodeFilter(),
-		dvs.sharedSubnetsFilter(1),
-		dvs.alreadyDiscoveredFilter(),
-		dvs.badNodeFilter(),
-		dvs.alreadyConnectedFilter(),
-		dvs.recentlyTrimmedFilter(),
 	)
 
 	return nil
 }
 
+type peerSkipError struct {
+	reason skipReason
+	err    error
+}
+
+func (e *peerSkipError) Error() string {
+	return e.err.Error()
+}
+
+func (e *peerSkipError) Unwrap() error {
+	return e.err
+}
+
+func newPeerSkipError(reason skipReason, err error) error {
+	return &peerSkipError{reason: reason, err: err}
+}
+
+func discoverySkipSummaryFields(skippedPeers uint64, skippedByReason map[skipReason]uint64, skippedUnknown uint64) []zap.Field {
+	fieldsOut := []zap.Field{
+		zap.Uint64("skipped_peers_total", skippedPeers),
+	}
+	if skippedUnknown > 0 {
+		fieldsOut = append(fieldsOut, zap.Uint64("skipped_unknown_reason", skippedUnknown))
+	}
+
+	reasons := make([]string, 0, len(skippedByReason))
+	for reason := range skippedByReason {
+		reasons = append(reasons, string(reason))
+	}
+	sort.Strings(reasons)
+	for _, reason := range reasons {
+		fieldsOut = append(fieldsOut, zap.Uint64("skipped_"+reason, skippedByReason[skipReason(reason)]))
+	}
+
+	return fieldsOut
+}
+
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
+	pid := e.AddrInfo.ID
+	if pid == "" {
+		var err error
+		pid, err = PeerID(e.Node)
+		if err != nil {
+			recordPeerSkipped(ctx, skipReasonInvalidPeerID)
+			return newPeerSkipError(skipReasonInvalidPeerID, fmt.Errorf("could not get peer ID from node record: %w", err))
+		}
+	}
+
+	isSSV, err := readSSVNodeFlag(e.Node)
+	if err != nil {
+		recordPeerSkipped(ctx, skipReasonNotSSV)
+		return newPeerSkipError(skipReasonNotSSV, fmt.Errorf("could not read ssv entry: %w", err))
+	}
+	if !isSSV {
+		recordPeerSkipped(ctx, skipReasonNotSSV)
+		return newPeerSkipError(skipReasonNotSSV, errors.New("node is not an SSV node"))
+	}
+
 	// Get the peer's domain type, skipping if it mismatches ours.
-	// TODO: uncomment errors once there are sufficient nodes with domain type.
 	peerDiscoveriesCounter.Add(ctx, 1)
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record(), records.KeyDomainType)
 	if err != nil {
-		return errors.Wrap(err, "could not read domain type")
+		recordPeerSkipped(ctx, skipReasonInvalidDomainType)
+		return newPeerSkipError(skipReasonInvalidDomainType, fmt.Errorf("could not read domain type: %w", err))
 	}
 	if dvs.ssvConfig.DomainType != nodeDomainType {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType)
+		return newPeerSkipError(skipReasonDomainTypeMismatch, fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType))
 	}
 
 	// Get the peer's subnets, skipping if it has none.
 	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
-		return fmt.Errorf("could not read subnets: %w", err)
+		recordPeerSkipped(ctx, skipReasonInvalidSubnets)
+		return newPeerSkipError(skipReasonInvalidSubnets, fmt.Errorf("could not read subnets: %w", err))
 	}
 	if commons.ZeroSubnets == peerSubnets {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
-		return errors.New("zero subnets")
+		return newPeerSkipError(skipReasonZeroSubnets, errors.New("zero subnets"))
 	}
 
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
+	dvs.subnetsIdx.UpdatePeerSubnets(pid, peerSubnets)
+
+	if dvs.conns.IsBad(pid) {
+		recordPeerSkipped(ctx, skipReasonBadPeer)
+		return newPeerSkipError(skipReasonBadPeer, errors.New("peer is marked bad"))
+	}
+
+	if dvs.conns.Connectedness(pid) == network.Connected {
+		recordPeerSkipped(ctx, skipReasonAlreadyConnected)
+		return newPeerSkipError(skipReasonAlreadyConnected, errors.New("peer already connected"))
+	}
+
+	if dvs.trimmedRecently.Has(pid) {
+		recordPeerSkipped(ctx, skipReasonRecentlyTrimmed)
+		return newPeerSkipError(skipReasonRecentlyTrimmed, errors.New("peer was trimmed recently"))
+	}
+
+	sharedSubnets := dvs.subnets.SharedSubnets(peerSubnets)
+	if len(sharedSubnets) == 0 {
+		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
+		return newPeerSkipError(skipReasonNoSharedSubnets, fmt.Errorf("no shared subnets: own=%s peer=%s", dvs.subnets.StringHumanReadable(), peerSubnets.StringHumanReadable()))
+	}
+
+	if dvs.discoveredPeersPool.Has(pid) {
+		recordPeerSkipped(ctx, skipReasonAlreadyDiscovered)
+		return newPeerSkipError(skipReasonAlreadyDiscovered, errors.New("peer already discovered recently"))
+	}
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
 		recordPeerSkipped(ctx, skipReasonReachedLimit)
-		return errors.New("reached limit")
-	}
-	if !dvs.sharedSubnetsFilter(1)(e.Node) {
-		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
-		return errors.New("no shared subnets")
-	}
-	if !dvs.alreadyDiscoveredFilter()(e.Node) {
-		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
-		return errors.New("peer already discovered recently")
+		return newPeerSkipError(skipReasonReachedLimit, errors.New("reached limit"))
 	}
 
 	peerAcceptedCounter.Add(ctx, 1)
@@ -237,20 +329,20 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	opts := discOpts.DiscV5Opts
 	if err := opts.Validate(); err != nil {
-		return errors.Wrap(err, "invalid opts")
+		return fmt.Errorf("invalid opts: %w", err)
 	}
 
 	ipAddr, bindIP, n := opts.IPs()
 
 	udpConn, err := newUDPListener(bindIP, opts.Port, n)
 	if err != nil {
-		return errors.Wrap(err, "could not listen UDP")
+		return fmt.Errorf("could not listen UDP: %w", err)
 	}
 	dvs.conn = udpConn
 
 	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
 	if err != nil {
-		return errors.Wrap(err, "could not create local node")
+		return fmt.Errorf("could not create local node: %w", err)
 	}
 
 	// Get the protocol ID, or set to default if not provided
@@ -272,7 +364,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 
 	dv5PostForkListener, err := discover.ListenV5(udpConn, localNode, *dv5PostForkCfg)
 	if err != nil {
-		return errors.Wrap(err, "could not create discV5 listener")
+		return fmt.Errorf("could not create discV5 listener: %w", err)
 	}
 
 	dvs.logger.Debug("started discv5 post-fork listener (UDP)",
@@ -291,7 +383,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 
 	dv5PreForkListener, err := discover.ListenV5(sharedConn, localNode, *dv5PreForkCfg)
 	if err != nil {
-		return errors.Wrap(err, "could not create discV5 pre-fork listener")
+		return fmt.Errorf("could not create discV5 pre-fork listener: %w", err)
 	}
 
 	dvs.logger.Debug("started discv5 pre-fork listener (UDP)",
@@ -359,7 +451,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err 
 	}
 	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), subnets, nil)
 	if err != nil {
-		return false, errors.Wrap(err, "could not update ENR")
+		return false, fmt.Errorf("could not update ENR: %w", err)
 	}
 	if isUpdated {
 		dvs.subnets = updatedSubnets
@@ -376,7 +468,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, er
 	}
 	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), nil, subnets)
 	if err != nil {
-		return false, errors.Wrap(err, "could not update ENR")
+		return false, fmt.Errorf("could not update ENR: %w", err)
 	}
 	if isUpdated {
 		dvs.subnets = updatedSubnets
@@ -421,7 +513,12 @@ func (dvs *DiscV5Service) PublishENR() {
 	pings, errs := 0, 0
 	peerIDs := map[peer.ID]struct{}{}
 
-	// Publish ENR.
+	// Publish ENR by pinging random SSV nodes so they learn our updated record.
+	// Minimal filtering: we only require valid SSV nodes that aren't marked bad.
+	// We intentionally omit connection-state filters (alreadyConnected, recentlyTrimmed)
+	// because wider propagation is more important — pings are cheap and already-connected
+	// peers should also learn about our ENR update. Subnet filters are also omitted
+	// because ENR publication is a global broadcast, not subnet-specific.
 	dvs.discover(ctx, func(e PeerEvent) {
 		_, err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
@@ -435,7 +532,7 @@ func (dvs *DiscV5Service) PublishENR() {
 		}
 		pings++
 		peerIDs[e.AddrInfo.ID] = struct{}{}
-	}, time.Millisecond*100, dvs.ssvNodeFilter(), dvs.badNodeFilter())
+	}, publishENRInterval, dvs.ssvNodeFilter(), dvs.badNodeFilter())
 
 	// Log metrics.
 	dvs.logger.Debug("done publishing ENR",
@@ -450,11 +547,11 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 	opts := discOpts.DiscV5Opts
 	localNode, err := createLocalNode(opts.NetworkKey, opts.StoragePath, ipAddr, opts.Port, opts.TCPPort)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create local node")
+		return nil, fmt.Errorf("could not create local node: %w", err)
 	}
 	err = addAddresses(localNode, discOpts.HostAddress, discOpts.HostDNS)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not add configured addresses")
+		return nil, fmt.Errorf("could not add configured addresses: %w", err)
 	}
 	err = DecorateNode(
 		localNode,
@@ -465,7 +562,7 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not decorate local node")
+		return nil, fmt.Errorf("could not decorate local node: %w", err)
 	}
 
 	logFields := []zapcore.Field{
@@ -490,7 +587,7 @@ func newUDPListener(bindIP net.IP, port uint16, network string) (*net.UDPConn, e
 	}
 	conn, err := net.ListenUDP(network, udpAddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not listen to UDP")
+		return nil, fmt.Errorf("could not listen to UDP: %w", err)
 	}
 	return conn, nil
 }

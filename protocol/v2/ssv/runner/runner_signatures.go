@@ -2,14 +2,15 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -17,12 +18,16 @@ import (
 func signBeaconObject(
 	ctx context.Context,
 	runner Runner,
+	networkConfig *networkconfig.Network,
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
+	if networkConfig == nil {
+		return nil, fmt.Errorf("network config is nil")
+	}
+	epoch := networkConfig.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
@@ -52,7 +57,7 @@ func signAsValidator(
 		signatureDomain,
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not sign beacon object")
+		return nil, fmt.Errorf("could not sign beacon object: %w", err)
 	}
 
 	return &spectypes.PartialSignatureMessage{
@@ -69,7 +74,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 	expectedSlot phase0.Slot,
 ) error {
 	if err := psigMsgs.Validate(); err != nil {
-		return errors.Wrap(err, "PartialSignatureMessages invalid")
+		return fmt.Errorf("PartialSignatureMessages invalid: %w", err)
 	}
 
 	if psigMsgs.Slot < expectedSlot {
@@ -137,11 +142,11 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 		if n.Signer == signer {
 			pk, err := ssvtypes.DeserializeBLSPublicKey(n.SharePubKey)
 			if err != nil {
-				return errors.Wrap(err, "could not deserialized pk")
+				return fmt.Errorf("could not deserialized pk: %w", err)
 			}
 			sig := &bls.Sign{}
 			if err := sig.Deserialize(signature); err != nil {
-				return errors.Wrap(err, "could not deserialized Signature")
+				return fmt.Errorf("could not deserialized Signature: %w", err)
 			}
 
 			// verify

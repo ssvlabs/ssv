@@ -2,3 +2,7 @@ bin
 data
 docs
 e2e
+.cache
+.github
+coverage.out
+ssvsigner/e2e

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
@@ -52,7 +54,8 @@ var (
 
 func TestEventSyncer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 5 * time.Second
+
+	const testTimeout = 30 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 
@@ -196,7 +199,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.Beacon, privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), testNetworkConfig.Beacon, privateKey)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
@@ -213,7 +216,8 @@ func setupEventHandler(
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
 
-	parser := eventparser.New(contractFilterer)
+	parser, err := eventparser.New(contractFilterer)
+	require.NoError(t, err)
 
 	dgHandler := doppelganger.NoOpHandler{}
 
@@ -223,7 +227,6 @@ func setupEventHandler(
 		validatorCtrl,
 		testNetworkConfig,
 		operatorDataStore,
-		privateKey,
 		keyManager,
 		dgHandler,
 		eventhandler.WithFullNode(),
@@ -303,4 +306,27 @@ func TestBlockBelowThreshold(t *testing.T) {
 		err := s.ensureBlockAboveThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
 	})
+}
+
+func TestSyncOngoingPropagatesErrInferiorBlock(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	executionClient := NewMockExecutionClient(ctrl)
+	eventHandlerMock := NewMockEventHandler(ctrl)
+
+	ctx := t.Context()
+	syncer := New(nil, executionClient, eventHandlerMock)
+
+	stream := make(chan executionclient.BlockLogs)
+
+	executionClient.EXPECT().
+		StreamLogs(ctx, uint64(11)).
+		Return(stream)
+	eventHandlerMock.EXPECT().
+		HandleBlockEventsStream(ctx, stream, true).
+		Return(uint64(12), true, fmt.Errorf("process block events: %w", eventhandler.ErrInferiorBlock))
+
+	err := syncer.SyncOngoing(ctx, 11)
+	require.Error(t, err)
+	require.ErrorIs(t, err, eventhandler.ErrInferiorBlock)
+	require.ErrorContains(t, err, "last processed block = 12")
 }

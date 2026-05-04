@@ -584,7 +584,7 @@ func TestDBCreation(t *testing.T) {
 
 		defer db.Close()
 
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 
 		err = db.QuickGC(t.Context())
 

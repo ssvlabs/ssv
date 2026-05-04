@@ -49,7 +49,7 @@ func Bind(r *http.Request, dest any) error {
 		}
 
 		formValue := r.FormValue(formField)
-		if fieldValue.CanAddr() && fieldValue.Addr().Type().Implements(reflect.TypeOf((*Binder)(nil)).Elem()) {
+		if fieldValue.CanAddr() && fieldValue.Addr().Type().Implements(reflect.TypeFor[Binder]()) {
 			if err := fieldValue.Addr().Interface().(Binder).Bind(formValue); err != nil {
 				return err
 			}

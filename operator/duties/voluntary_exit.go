@@ -49,6 +49,8 @@ func (h *VoluntaryExitHandler) Name() string {
 	return spectypes.BNRoleVoluntaryExit.String()
 }
 
+func (h *VoluntaryExitHandler) WaitShutdown() {}
+
 func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
@@ -60,17 +62,22 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+
+			slotNumber := uint64(currentSlot)%h.beaconConfig.SlotsPerEpoch + 1
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, slotNumber)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			func() {
-				tickCtx, cancel := h.ctxWithDeadlineOnNextSlot(ctx, slot)
+				// tickCtx ensures we never take too long to process ticks (otherwise we might not be able to catch up
+				// with the latest tick for a while, if ever). Since the ticker always fires at around slot start-time,
+				// setting the deadline to currentSlot+1 gives us about ~1 full slot (12s) to process the tick.
+				tickCtx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(currentSlot+1))
 				defer cancel()
 
-				h.processExecution(tickCtx, slot)
+				h.processExecution(tickCtx, currentSlot)
 			}()
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
@@ -112,10 +119,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				fields.BlockNumber(exitDescriptor.BlockNumber),
 			)
 
-		case <-h.indicesChange:
+		case <-h.indicesChangeCh:
 			h.logger.Debug("🛠 indicesChange event")
 
-		case <-h.reorg:
+		case <-h.reorgEventsCh:
 			h.logger.Debug("🛠 reorg event")
 		}
 	}
@@ -142,7 +149,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution)
+		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution, h.dutyExecutionDeadline(slot))
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
@@ -178,4 +185,10 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 	}
 
 	return blockSlot, nil
+}
+
+func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
+	// 1 slot of time since the target slot should be sufficient for this duty-type.
+	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
+	return dutyDeadline
 }

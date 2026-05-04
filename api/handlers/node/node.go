@@ -6,43 +6,47 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/ssvlabs/ssv/api"
-	networkpeers "github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/nodeprobe"
+	"github.com/ssvlabs/ssv/hprobe"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 type Node struct {
 	listenAddresses []string
-	peersIndex      networkpeers.Index
-	topicIndex      TopicIndex
-	network         network.Network
 
-	nodeProber          *nodeprobe.Prober
-	clNodeName          string
-	elNodeName          string
-	eventSyncerNodeName string
+	network    p2pNetwork
+	peersIndex peersIndex
+	topicIndex topicIndex
+
+	healthProber             *hprobe.HealthProber
+	clComponentName          string
+	elComponentName          string
+	eventSyncerComponentName string
 }
 
 func NewNode(
 	listenAddresses []string,
-	peersIndex networkpeers.Index,
-	network network.Network,
-	topicIndex TopicIndex,
-	nodeProber *nodeprobe.Prober,
-	clNodeName string,
-	elNodeName string,
-	eventSyncerNodeName string,
+	peersIndex peersIndex,
+	network p2pNetwork,
+	topicIndex topicIndex,
+	healthProber *hprobe.HealthProber,
+	clComponentName string,
+	elComponentName string,
+	eventSyncerComponentName string,
 ) *Node {
 	return &Node{
-		listenAddresses:     listenAddresses,
-		peersIndex:          peersIndex,
-		topicIndex:          topicIndex,
-		network:             network,
-		nodeProber:          nodeProber,
-		clNodeName:          clNodeName,
-		elNodeName:          elNodeName,
-		eventSyncerNodeName: eventSyncerNodeName,
+		listenAddresses:          listenAddresses,
+		peersIndex:               peersIndex,
+		topicIndex:               topicIndex,
+		network:                  network,
+		healthProber:             healthProber,
+		clComponentName:          clComponentName,
+		elComponentName:          elComponentName,
+		eventSyncerComponentName: eventSyncerComponentName,
 	}
 }
 
@@ -111,9 +115,9 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Check the health of Ethereum nodes and EventSyncer.
-	resp.BeaconNode = healthStatus{h.nodeProber.Probe(ctx, h.clNodeName)}
-	resp.ExecutionNode = healthStatus{h.nodeProber.Probe(ctx, h.elNodeName)}
-	resp.EventSyncer = healthStatus{h.nodeProber.Probe(ctx, h.eventSyncerNodeName)}
+	resp.BeaconNode = healthStatus{h.healthProber.Probe(ctx, h.clComponentName)}
+	resp.ExecutionNode = healthStatus{h.healthProber.Probe(ctx, h.elComponentName)}
+	resp.EventSyncer = healthStatus{h.healthProber.Probe(ctx, h.eventSyncerComponentName)}
 
 	return api.Render(w, r, resp)
 }
@@ -148,4 +152,41 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
 	return resp
+}
+
+type p2pNetwork interface {
+	// LocalPeer returns the local peer associated with this network
+	LocalPeer() peer.ID
+
+	// ListenAddresses returns a list of addresses at which this network listens.
+	ListenAddresses() []ma.Multiaddr
+
+	// Peers returns the peers connected
+	Peers() []peer.ID
+
+	// Connectedness returns a state signaling connection capabilities
+	Connectedness(peer.ID) network.Connectedness
+
+	// Peerstore returns the internal peerstore
+	// This is useful to tell the dialer about a new address for a peer.
+	// Or use one of the public keys found out over the network.
+	Peerstore() peerstore.Peerstore
+
+	// ConnsToPeer returns the connections in this Network for given peer.
+	ConnsToPeer(p peer.ID) []network.Conn
+}
+
+type peersIndex interface {
+	// Self returns the current node info
+	Self() *records.NodeInfo
+
+	// NodeInfo returns the NodeInfo of the given peers, or nil if not found.
+	NodeInfo(id peer.ID) *records.NodeInfo
+
+	// GetPeerSubnets returns subnets of the given peer and whether it was found
+	GetPeerSubnets(id peer.ID) (subnets commons.Subnets, ok bool)
+}
+
+type topicIndex interface {
+	PeersByTopic() map[string][]peer.ID
 }

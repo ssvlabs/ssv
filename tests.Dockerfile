@@ -1,7 +1,7 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.24 AS preparer
+FROM golang:1.26 AS preparer
 
 RUN apt-get update && apt upgrade -y && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
@@ -11,6 +11,7 @@ RUN apt-get update && apt upgrade -y && \
 WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod .
 COPY go.sum .
+COPY ssvsigner/go.mod ssvsigner/go.sum ./ssvsigner/
 RUN go mod download
 
 COPY . .

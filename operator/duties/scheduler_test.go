@@ -4,11 +4,12 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
-	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	baseDuration            = 200 * time.Millisecond
+	baseDuration            = 400 * time.Millisecond
 	slotDuration            = 15 * baseDuration
 	timeout                 = 20 * baseDuration
 	noActionTimeout         = 2 * baseDuration
@@ -36,55 +37,86 @@ const (
 	testSlotsPerEpoch          = 12
 )
 
-type MockSlotTicker interface {
-	Next() <-chan time.Time
-	Slot() phase0.Slot
-	Subscribe() chan phase0.Slot
-}
-
-type mockSlotTicker struct {
+type MockSlotTicker struct {
 	slotChan chan phase0.Slot
 	timeChan chan time.Time
-	slot     phase0.Slot
-	mu       sync.Mutex
+
+	// done is used to coordinate the graceful termination of MockSlotTicker
+	done chan struct{}
+
+	// mu ensures concurrently safe access to slot
+	mu   sync.Mutex
+	slot phase0.Slot
 }
 
-func NewMockSlotTicker() MockSlotTicker {
-	ticker := &mockSlotTicker{
+func NewMockSlotTicker(ctx context.Context) *MockSlotTicker {
+	ticker := &MockSlotTicker{
 		slotChan: make(chan phase0.Slot),
 		timeChan: make(chan time.Time),
+		done:     make(chan struct{}),
 	}
-	ticker.start()
+	ticker.start(ctx)
 	return ticker
 }
 
-func (m *mockSlotTicker) start() {
+func (m *MockSlotTicker) start(ctx context.Context) {
 	go func() {
-		for slot := range m.slotChan {
-			m.mu.Lock()
-			m.slot = slot
-			m.mu.Unlock()
-			m.timeChan <- time.Now()
+		defer close(m.done)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case slot, ok := <-m.slotChan:
+				if !ok {
+					return
+				}
+				m.mu.Lock()
+				m.slot = slot
+				m.mu.Unlock()
+				select {
+				case m.timeChan <- time.Now():
+				case <-ctx.Done():
+					return
+				}
+			}
 		}
 	}()
 }
 
-func (m *mockSlotTicker) Next() <-chan time.Time {
+func (m *MockSlotTicker) Next() <-chan time.Time {
 	return m.timeChan
 }
 
-func (m *mockSlotTicker) Slot() phase0.Slot {
+func (m *MockSlotTicker) Slot() phase0.Slot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.slot
 }
 
-func (m *mockSlotTicker) Subscribe() chan phase0.Slot {
+func (m *MockSlotTicker) Subscribe() chan phase0.Slot {
 	return m.slotChan
+}
+
+func (m *MockSlotTicker) WaitShutdown() {
+	<-m.done
 }
 
 type mockSlotTickerService struct {
 	event.Feed
+
+	// tickers keeps track of mocked tickers so we can gracefully shut them down.
+	tickers []*MockSlotTicker
+}
+
+func (m *mockSlotTickerService) RegisterTicker(ticker *MockSlotTicker) {
+	m.tickers = append(m.tickers, ticker)
+}
+
+func (m *mockSlotTickerService) WaitShutdown() {
+	for _, ticker := range m.tickers {
+		ticker.WaitShutdown()
+	}
 }
 
 func waitForSlotN(beaconCfg *networkconfig.Beacon, slots phase0.Slot) {
@@ -99,7 +131,6 @@ func setupSchedulerAndMocks(
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
-	*pool.ContextPool,
 ) {
 	return setupSchedulerAndMocksWithParams(ctx, t, handlers, time.Now(), slotDuration)
 }
@@ -112,7 +143,6 @@ func setupSchedulerAndMocksWithStartSlot(
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
-	*pool.ContextPool,
 ) {
 	genesisTime := time.Now().Add(-slotDuration * time.Duration(startSlot))
 	return setupSchedulerAndMocksWithParams(ctx, t, handlers, genesisTime, slotDuration)
@@ -127,7 +157,6 @@ func setupSchedulerAndMocksWithParams(
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
-	*pool.ContextPool,
 ) {
 	ctrl := gomock.NewController(t)
 
@@ -155,7 +184,8 @@ func setupSchedulerAndMocksWithParams(
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
 		SlotTickerProvider: func() slotticker.SlotTicker {
-			ticker := NewMockSlotTicker()
+			ticker := NewMockSlotTicker(ctx)
+			mockSlotService.RegisterTicker(ticker)
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
@@ -163,24 +193,12 @@ func setupSchedulerAndMocksWithParams(
 
 	s := NewScheduler(logger, opts)
 	s.blockPropagateDelay = testBlockPropagateDelay
-	s.indicesChg = make(chan struct{})
-	s.handlers = handlers
+	s.indicesChgCh = make(chan struct{})
+	s.dutyHandlers = handlers
 
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 
-	// Create a pool to wait for the scheduler to finish.
-	schedulerPool := pool.New().WithErrors().WithContext(ctx)
-
-	return s, mockSlotService, schedulerPool
-}
-
-func startScheduler(ctx context.Context, t *testing.T, s *Scheduler, schedulerPool *pool.ContextPool) {
-	err := s.Start(ctx)
-	require.NoError(t, err)
-
-	schedulerPool.Go(func(ctx context.Context) error {
-		return s.Wait()
-	})
+	return s, mockSlotService
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
@@ -246,7 +264,6 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 func waitForDutiesFetch(
 	t *testing.T,
 	fetchDutiesCall chan struct{},
-	executeDutiesCall chan []*spectypes.ValidatorDuty,
 	timeout time.Duration,
 ) {
 	logger := log.TestLogger(t)
@@ -254,8 +271,6 @@ func waitForDutiesFetch(
 	select {
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")
-	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute-duties call")
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duties to be fetched")
 	}
@@ -399,100 +414,282 @@ func (sv *SafeValue[T]) Get() T {
 	return sv.v
 }
 
+func testRoot(value byte) phase0.Root {
+	var root phase0.Root
+	root[0] = value
+	return root
+}
+
+func setupSchedulerForHeadEventTest(currentSlot phase0.Slot) *Scheduler {
+	beaconCfg := *networkconfig.TestNetwork.Beacon
+	beaconCfg.SlotDuration = time.Hour
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
+	beaconCfg.GenesisTime = time.Now().Add(-(time.Duration(currentSlot) * beaconCfg.SlotDuration) - beaconCfg.SlotDuration/2)
+
+	return &Scheduler{
+		logger:              zap.NewNop(),
+		beaconConfig:        &beaconCfg,
+		blockPropagateDelay: 0,
+		reorgCh:             make(chan ReorgEvent, reorgChannelBuffer),
+		waitCond:            sync.NewCond(&sync.Mutex{}),
+	}
+}
+
+func drainReorgEvents(ch chan ReorgEvent) []ReorgEvent {
+	events := make([]ReorgEvent, 0, len(ch))
+	for {
+		select {
+		case event := <-ch:
+			events = append(events, event)
+		default:
+			return events
+		}
+	}
+}
+
 func TestScheduler_Run(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	logger := log.TestLogger(t)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		logger := log.TestLogger(t)
 
-	mockBeaconNode := NewMockBeaconNode(ctrl)
-	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
-	// create multiple mock duty handlers
-	mockDutyHandler1 := NewMockdutyHandler(ctrl)
-	mockDutyHandler2 := NewMockdutyHandler(ctrl)
+		mockBeaconNode := NewMockBeaconNode(ctrl)
+		mockValidatorProvider := NewMockValidatorProvider(ctrl)
+		mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+		// create multiple mock duty handlers
+		mockDutyHandler1 := NewMockdutyHandler(ctrl)
+		mockDutyHandler2 := NewMockdutyHandler(ctrl)
 
-	mockDutyHandler1.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
-	mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
+		mockDutyHandler1.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
+		mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
 
-	opts := &SchedulerOptions{
-		Ctx:               ctx,
-		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.Beacon,
-		ValidatorProvider: mockValidatorProvider,
-		SlotTickerProvider: func() slotticker.SlotTicker {
-			return mockTicker
-		},
-	}
+		opts := &SchedulerOptions{
+			Ctx:               ctx,
+			BeaconNode:        mockBeaconNode,
+			BeaconConfig:      networkconfig.TestNetwork.Beacon,
+			ValidatorProvider: mockValidatorProvider,
+			SlotTickerProvider: func() slotticker.SlotTicker {
+				return mockTicker
+			},
+		}
 
-	s := NewScheduler(logger, opts)
-	// add multiple mock duty handlers
-	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
+		s := NewScheduler(logger, opts)
+		// add multiple mock duty handlers
+		s.dutyHandlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
-	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
+		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
+		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
-	// setup mock duty handler expectations
-	for _, mockDutyHandler := range s.handlers {
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
-			DoAndReturn(func(ctx context.Context) {
-				<-ctx.Done()
-			}).
-			Times(1)
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
-	}
+		// setup mock duty handler expectations
+		for _, mockDutyHandler := range s.dutyHandlers {
+			mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any()).Times(1)
+			mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
+				DoAndReturn(func(ctx context.Context) {
+					<-ctx.Done()
+				}).
+				Times(1)
+			mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
+			mockDutyHandler.(*MockdutyHandler).EXPECT().WaitShutdown().Times(1)
+		}
 
-	require.NoError(t, s.Start(ctx))
+		require.NoError(t, s.Start(ctx))
 
-	// Cancel the context and test that the scheduler stops.
-	cancel()
-	require.NoError(t, s.Wait())
+		// Cancel the context and test that the scheduler stops.
+		cancel()
+		require.NoError(t, s.Wait())
+	})
 }
 
 func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
-	// This deadline needs to be large enough to not prevent tests from executing their intended flow.
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
-	defer cancel()
-	logger := log.TestLogger(t)
+		// Duty executor expects deadline to be set on the parent context (see "parent-context has no deadline set").
+		// This deadline needs to be large enough to not prevent tests from executing their intended flow.
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		logger := log.TestLogger(t)
 
-	mockBeaconNode := NewMockBeaconNode(ctrl)
-	mockValidatorProvider := NewMockValidatorProvider(ctrl)
-	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
-	// create multiple mock duty handlers
+		mockBeaconNode := NewMockBeaconNode(ctrl)
+		mockValidatorProvider := NewMockValidatorProvider(ctrl)
+		mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
+		// create multiple mock duty handlers
 
-	opts := &SchedulerOptions{
-		Ctx:               ctx,
-		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.Beacon,
-		ValidatorProvider: mockValidatorProvider,
-		SlotTickerProvider: func() slotticker.SlotTicker {
-			return mockTicker
+		opts := &SchedulerOptions{
+			Ctx:               ctx,
+			BeaconNode:        mockBeaconNode,
+			BeaconConfig:      networkconfig.TestNetwork.Beacon,
+			ValidatorProvider: mockValidatorProvider,
+			SlotTickerProvider: func() slotticker.SlotTicker {
+				return mockTicker
+			},
+			IndicesChgCh: make(chan struct{}),
+		}
+
+		s := NewScheduler(logger, opts)
+
+		// add multiple mock duty handlers
+		s.dutyHandlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
+		mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
+		mockTicker.EXPECT().Next().Return(nil).AnyTimes()
+		err := s.Start(ctx)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, s.Wait())
+		})
+
+		s.indicesChgCh <- struct{}{} // first time make fanout stuck
+		select {
+		case s.indicesChgCh <- struct{}{}: // second send should hang
+			break
+		case <-time.After(timeout):
+			t.Fatal("Channel is jammed")
+		}
+
+		// Ensure in-flight fanout work is drained before cleanup cancels the scheduler.
+		synctest.Wait()
+	})
+}
+
+func TestScheduler_HandleHeadEvent_ReorgFlags(t *testing.T) {
+	currentSlot := phase0.Slot(testSlotsPerEpoch*2 + 1)
+
+	tests := []struct {
+		name      string
+		configure func(s *Scheduler, event *eth2apiv1.HeadEvent)
+		expected  []ReorgEvent
+	}{
+		{
+			name: "no root change emits no reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch
+				s.lastBlockRoot = testRoot(0x10)
+				s.previousDutyDependentRoot = testRoot(0x20)
+				s.currentDutyDependentRoot = testRoot(0x21)
+				event.Block = testRoot(0x22)
+				event.PreviousDutyDependentRoot = s.previousDutyDependentRoot
+				event.CurrentDutyDependentRoot = s.currentDutyDependentRoot
+			},
+			expected: []ReorgEvent{},
 		},
-		IndicesChg: make(chan struct{}),
+		{
+			name: "epoch transition emits previous epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch - 1
+				s.lastBlockRoot = testRoot(0x11)
+				s.previousDutyDependentRoot = testRoot(0x01)
+				s.currentDutyDependentRoot = testRoot(0x02)
+				event.Block = testRoot(0x12)
+				event.PreviousDutyDependentRoot = testRoot(0x03)
+				event.CurrentDutyDependentRoot = s.lastBlockRoot
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  false,
+				PreviousDutyDependentRootChanged: true,
+			}},
+		},
+		{
+			name: "same epoch previous root change emits previous epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch
+				s.lastBlockRoot = testRoot(0x13)
+				s.previousDutyDependentRoot = testRoot(0x04)
+				s.currentDutyDependentRoot = testRoot(0x05)
+				event.Block = testRoot(0x14)
+				event.PreviousDutyDependentRoot = testRoot(0x06)
+				event.CurrentDutyDependentRoot = s.currentDutyDependentRoot
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  false,
+				PreviousDutyDependentRootChanged: true,
+			}},
+		},
+		{
+			name: "epoch transition emits current epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch - 1
+				s.lastBlockRoot = testRoot(0x22)
+				s.previousDutyDependentRoot = testRoot(0x23)
+				s.currentDutyDependentRoot = testRoot(0x24)
+				event.Block = testRoot(0x25)
+				event.PreviousDutyDependentRoot = s.currentDutyDependentRoot
+				event.CurrentDutyDependentRoot = testRoot(0x26)
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  true,
+				PreviousDutyDependentRootChanged: false,
+			}},
+		},
+		{
+			name: "same epoch current root change emits current epoch reorg",
+			configure: func(s *Scheduler, event *eth2apiv1.HeadEvent) {
+				currentEpoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
+				s.lastEpoch = currentEpoch
+				s.lastBlockRoot = testRoot(0x15)
+				s.previousDutyDependentRoot = testRoot(0x07)
+				s.currentDutyDependentRoot = testRoot(0x08)
+				event.Block = testRoot(0x16)
+				event.PreviousDutyDependentRoot = s.previousDutyDependentRoot
+				event.CurrentDutyDependentRoot = testRoot(0x09)
+			},
+			expected: []ReorgEvent{{
+				CurrentDutyDependentRootChanged:  true,
+				PreviousDutyDependentRootChanged: false,
+			}},
+		},
 	}
 
-	s := NewScheduler(logger, opts)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := setupSchedulerForHeadEventTest(currentSlot)
+			event := &eth2apiv1.HeadEvent{Slot: currentSlot}
 
-	// add multiple mock duty handlers
-	s.handlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
-	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
-	err := s.Start(ctx)
-	require.NoError(t, err)
+			tt.configure(s, event)
+			s.HandleHeadEvent()(t.Context(), event)
 
-	s.indicesChg <- struct{}{} // first time make fanout stuck
+			require.Equal(t, tt.expected, drainReorgEvents(s.reorgCh))
+		})
+	}
+}
+
+func TestScheduler_HandleHeadEvent_DoesNotBlockWithoutReorgConsumer(t *testing.T) {
+	currentSlot := phase0.Slot(testSlotsPerEpoch*2 + 2)
+	s := setupSchedulerForHeadEventTest(currentSlot)
+	s.lastEpoch = s.beaconConfig.EstimatedEpochAtSlot(currentSlot)
+	s.lastBlockRoot = testRoot(0x17)
+	s.previousDutyDependentRoot = testRoot(0x0a)
+	s.currentDutyDependentRoot = testRoot(0x0b)
+
+	event := &eth2apiv1.HeadEvent{
+		Slot:                      currentSlot,
+		Block:                     testRoot(0x18),
+		PreviousDutyDependentRoot: testRoot(0x0c),
+		CurrentDutyDependentRoot:  testRoot(0x0d),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		s.HandleHeadEvent()(t.Context(), event)
+		close(done)
+	}()
+
 	select {
-	case s.indicesChg <- struct{}{}: // second send should hang
-		break
-	case <-time.After(timeout):
-		t.Fatal("Channel is jammed")
+	case <-done:
+	case <-time.After(noActionTimeout):
+		t.Fatal("HandleHeadEvent blocked on reorg send")
 	}
+
+	require.Equal(t, []ReorgEvent{{
+		CurrentDutyDependentRootChanged:  true,
+		PreviousDutyDependentRootChanged: true,
+	}}, drainReorgEvents(s.reorgCh))
 }

@@ -28,6 +28,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "out"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of outbound(broadcasted) messages")))
+
+	msgIDHandlerBufferFallbackCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "msg_id_buffer_fallback"),
+			metric.WithUnit("{event}"),
+			metric.WithDescription("total number of msg_id add operations processed synchronously because the async buffer was full")))
 )
 
 func messageTopicAttribute(value string) attribute.KeyValue {

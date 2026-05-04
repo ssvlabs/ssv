@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
+	"github.com/jellydator/ttlcache/v3"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -74,11 +75,27 @@ func (gc *GoClient) DomainData(
 		return gc.voluntaryExitDomain()
 	}
 
-	start := time.Now()
-	data, err := gc.multiClient.Domain(ctx, domain, epoch)
-	recordRequest(ctx, gc.log, "Domain", gc.multiClient, http.MethodGet, true, time.Since(start), err)
+	key := domainDataCacheKey{epoch: epoch, domainType: domain}
+
+	data, err, _ := gc.domainDataReqInflight.Do(key, func() (phase0.Domain, error) {
+		if cached := gc.domainDataCache.Get(key); cached != nil {
+			return cached.Value(), nil
+		}
+
+		fetchCtx := context.WithoutCancel(ctx)
+		start := time.Now()
+		data, err := gc.multiClient.Domain(fetchCtx, domain, epoch)
+		recordRequest(fetchCtx, gc.log, "Domain", gc.multiClient, http.MethodGet, true, time.Since(start), err)
+		if err != nil {
+			return phase0.Domain{}, errMultiClient(fmt.Errorf("fetch domain: %w", err), "Domain")
+		}
+
+		gc.domainDataCache.Set(key, data, ttlcache.DefaultTTL)
+
+		return data, nil
+	})
 	if err != nil {
-		return phase0.Domain{}, errMultiClient(fmt.Errorf("fetch domain: %w", err), "Domain")
+		return phase0.Domain{}, err
 	}
 
 	return data, nil

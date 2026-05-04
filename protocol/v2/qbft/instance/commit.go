@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -15,39 +14,46 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// UponCommit returns true if a quorum of commit messages was received.
+// uponCommit records this commit message, and returns true if this commit message makes this instance decided.
 // Assumes commit message is valid!
-func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (bool, []byte, *spectypes.SignedSSVMessage, error) {
+func (i *Instance) uponCommit(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (bool, []byte, *spectypes.SignedSSVMessage, error) {
 	logger = logger.With(fields.Root(msg.QBFTMessage.Root))
 
-	logger.Debug("📬 got commit message", zap.Any("commit_signers", msg.SignedMessage.OperatorIDs))
+	// Only the first quorum transition should be treated as a new decision. Later
+	// commit messages for the same round/root still need to be recorded for
+	// bookkeeping, but must not re-trigger the decision path.
+	hadQuorumBefore, _, err := i.commitQuorumForRoundRoot(msg.QBFTMessage.Root, msg.QBFTMessage.Round)
+	if err != nil {
+		return false, nil, nil, fmt.Errorf("could not calculate pre-add commit quorum: %w", err)
+	}
 
 	addMsg, err := i.State.CommitContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
-		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
+		return false, nil, nil, fmt.Errorf("could not add commit msg to container: %w", err)
 	}
 	if !addMsg {
-		return false, nil, nil, nil // UponCommit was already called
+		return false, nil, nil, nil // uponCommit was already called for this msg
 	}
 
-	// calculate commit quorum and act upon it
+	logger.Debug("📬 got commit message", zap.Any("commit_signers", msg.SignedMessage.OperatorIDs))
+
+	if hadQuorumBefore {
+		return false, nil, nil, nil
+	}
+
+	// Process commit message.
 	quorum, commitMsgs, err := i.commitQuorumForRoundRoot(msg.QBFTMessage.Root, msg.QBFTMessage.Round)
 	if err != nil {
-		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
+		return false, nil, nil, fmt.Errorf("could not calculate commit quorum: %w", err)
 	}
-
 	if quorum {
 		fullData := i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData /* must have value there, checked on validateCommit */
-
 		agg, err := aggregateCommitMsgs(commitMsgs, fullData)
 		if err != nil {
-			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
+			return false, nil, nil, fmt.Errorf("could not aggregate commit msgs: %w", err)
 		}
-
 		logger.Debug("🎯 got commit quorum", zap.Any("agg_signers", agg.OperatorIDs))
-
 		i.metrics.EndStage(ctx, i.State.Round)
-
 		return true, fullData, agg, nil
 	}
 
@@ -71,7 +77,7 @@ func aggregateCommitMsgs(msgs []*specqbft.ProcessingMessage, fullData []byte) (*
 			ret = m.SignedMessage.DeepCopy()
 		} else {
 			if err := ret.Aggregate(m.SignedMessage); err != nil {
-				return nil, errors.Wrap(err, "could not aggregate commit msg")
+				return nil, fmt.Errorf("could not aggregate commit msg: %w", err)
 			}
 		}
 	}

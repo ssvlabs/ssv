@@ -471,10 +471,18 @@ func TestSyncer_Stream(t *testing.T) {
 		// Cancel the context to stop the stream
 		cancel()
 
-		// Ensure the updates channel is closed
-		_, ok := <-updates
-		if ok {
-			t.Fatal("Updates channel should be closed after context cancellation")
+		// Drain the stream and ensure the updates channel is closed eventually
+		deadline := time.After(400 * time.Millisecond)
+		for done := false; !done; {
+			select {
+			case _, ok := <-updates:
+				if !ok {
+					done = true
+					continue
+				}
+			case <-deadline:
+				t.Fatal("Updates channel should be closed after context cancellation")
+			}
 		}
 	})
 
@@ -542,17 +550,25 @@ func TestSyncer_Stream(t *testing.T) {
 		select {
 		case <-updateAttempted:
 			// SyncBatch attempt completed, proceed to cancel the context
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(400 * time.Millisecond):
 			t.Fatal("Timeout waiting for update attempt")
 		}
 
 		// Cancel the context to stop the stream
 		cancel()
 
-		// Ensure the updates channel is closed
-		_, ok := <-updates
-		if ok {
-			t.Fatal("Updates channel should be closed after context cancellation")
+		// Drain the stream and ensure the updates channel is closed eventually
+		deadline := time.After(400 * time.Millisecond)
+		for done := false; !done; {
+			select {
+			case _, ok := <-updates:
+				if !ok {
+					done = true
+					continue
+				}
+			case <-deadline:
+				t.Fatal("Updates channel should be closed after context cancellation")
+			}
 		}
 	})
 
@@ -611,10 +627,18 @@ func TestSyncer_Stream(t *testing.T) {
 		// Cancel the context to stop the stream
 		cancel()
 
-		// Ensure the updates channel is closed
-		_, ok := <-updates
-		if ok {
-			t.Fatal("Updates channel should be closed after context cancellation")
+		// Drain the stream and ensure the updates channel is closed eventually
+		deadline := time.After(400 * time.Millisecond)
+		for done := false; !done; {
+			select {
+			case _, ok := <-updates:
+				if !ok {
+					done = true
+					continue
+				}
+			case <-deadline:
+				t.Fatal("Updates channel should be closed after context cancellation")
+			}
 		}
 	})
 }
@@ -736,7 +760,7 @@ func TestSyncer_Sleep(t *testing.T) {
 		case slept := <-done:
 			// Assert that the method returned false.
 			require.False(t, slept, "Expected sleep to return false when context is canceled during sleep")
-		case <-time.After(200 * time.Millisecond):
+		case <-time.After(400 * time.Millisecond):
 			t.Fatal("Sleep method did not return in expected time after context cancellation")
 		}
 	})

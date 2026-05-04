@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http/httptest"
@@ -20,12 +21,12 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 	ekmcore "github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -1350,6 +1351,37 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
+func TestHandleBlockEventsStreamReturnsErrInferiorBlock(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, _, err := setupEventHandler(t, ctx, logger, networkconfig.TestNetwork, ops[0], false)
+	require.NoError(t, err)
+
+	err = eh.nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(10))
+	require.NoError(t, err)
+
+	eventsCh := make(chan executionclient.BlockLogs)
+	go func() {
+		defer close(eventsCh)
+		eventsCh <- executionclient.BlockLogs{BlockNumber: 9}
+	}()
+
+	lastProcessedBlock, progressed, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+	require.ErrorIs(t, err, ErrInferiorBlock)
+	require.Zero(t, lastProcessedBlock)
+	require.False(t, progressed)
+
+	storedLastProcessedBlock, found, err := eh.nodeStorage.GetLastProcessedBlock(nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, uint64(10), storedLastProcessedBlock.Uint64())
+}
+
 func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
@@ -1368,7 +1400,7 @@ func setupEventHandler(
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.Beacon, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), network.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1384,7 +1416,8 @@ func setupEventHandler(
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 		require.NoError(t, err)
 
-		parser := eventparser.New(contractFilterer)
+		parser, err := eventparser.New(contractFilterer)
+		require.NoError(t, err)
 
 		eh, err := New(
 			nodeStorage,
@@ -1392,7 +1425,6 @@ func setupEventHandler(
 			tExecutor,
 			network,
 			operatorDataStore,
-			operator.privateKey,
 			keyManager,
 			dgHandler,
 			WithFullNode(),
@@ -1419,7 +1451,8 @@ func setupEventHandler(
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
 
-	parser := eventparser.New(contractFilterer)
+	parser, err := eventparser.New(contractFilterer)
+	require.NoError(t, err)
 
 	eh, err := New(
 		nodeStorage,
@@ -1427,7 +1460,6 @@ func setupEventHandler(
 		validatorCtrl,
 		network,
 		operatorDataStore,
-		operator.privateKey,
 		keyManager,
 		dgHandler,
 		WithFullNode(),

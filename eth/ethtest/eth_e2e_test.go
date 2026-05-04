@@ -1,14 +1,17 @@
 package ethtest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/big"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -27,6 +30,11 @@ var (
 
 // E2E tests for ETH package
 func TestEthExecLayer(t *testing.T) {
+	const (
+		asyncWaitTimeout = 15 * time.Second
+		asyncPollTick    = 50 * time.Millisecond
+	)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -125,23 +133,14 @@ func TestEthExecLayer(t *testing.T) {
 	// Main difference between "online" events handling and syncing the historical (old) events
 	// is that here we have to check that the controller was triggered
 	t.Run("SyncOngoing happy flow", func(t *testing.T) {
+		syncCtx, syncCancel := context.WithCancel(ctx)
+		syncOngoingErrCh := make(chan error, 1)
 		go func() {
-			err = eventSyncer.SyncOngoing(ctx, lastHandledBlockNum+1)
-			require.NoError(t, err)
+			syncOngoingErrCh <- eventSyncer.SyncOngoing(syncCtx, lastHandledBlockNum+1)
 		}()
-
-		stopChan := make(chan struct{})
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-stopChan:
-					return
-				default:
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
+		defer func() {
+			syncCancel()
+			assert.NoError(t, <-syncOngoingErrCh)
 		}()
 
 		// Step 1: Add more validators
@@ -156,12 +155,17 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 5000)
+			var syncedNonce registrystorage.Nonce
+			require.Eventually(t, func() bool {
+				nextNonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+				if err != nil || nextNonce != expectedNonce || len(nodeStorage.Shares().List(nil)) != 7 {
+					return false
+				}
+				syncedNonce = nextNonce
+				return true
+			}, asyncWaitTimeout, asyncPollTick)
 
-			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
-			require.NoError(t, err)
-			require.Equal(t, expectedNonce, nonce)
+			require.Equal(t, expectedNonce, syncedNonce)
 
 			lastBlockNum, err := testEnv.sim.Client().BlockByNumber(ctx, nil)
 			require.NoError(t, err)
@@ -187,8 +191,9 @@ func TestEthExecLayer(t *testing.T) {
 			valExit.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait to make sure the state is not changed
-			time.Sleep(time.Millisecond * 500)
+			require.Never(t, func() bool {
+				return len(nodeStorage.Shares().List(nil)) != 7
+			}, 500*time.Millisecond, asyncPollTick)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
@@ -212,8 +217,9 @@ func TestEthExecLayer(t *testing.T) {
 			valRemove.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 500)
+			require.Eventually(t, func() bool {
+				return len(nodeStorage.Shares().List(nil)) == 5
+			}, asyncWaitTimeout, asyncPollTick)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 5, len(shares))
@@ -228,7 +234,13 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 4 Liquidate Cluster
 		{
-			taskExecutor.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			liquidatedDone := make(chan struct{}, 1)
+			taskExecutor.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ethcommon.Address, []uint64, []*ssvtypes.SSVShare) error {
+					liquidatedDone <- struct{}{}
+					return nil
+				},
+			).Times(1)
 
 			clusterLiquidate := NewTestClusterLiquidatedInput(common)
 			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
@@ -242,10 +254,12 @@ func TestEthExecLayer(t *testing.T) {
 			clusterLiquidate.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 300)
-
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
+			select {
+			case <-liquidatedDone:
+			case <-time.After(asyncWaitTimeout):
+				t.Fatal("timed out waiting for cluster liquidation task")
+			}
 
 			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
@@ -258,7 +272,13 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 5 Reactivate Cluster
 		{
-			taskExecutor.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			reactivatedDone := make(chan struct{}, 1)
+			taskExecutor.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ethcommon.Address, []uint64, []*ssvtypes.SSVShare) error {
+					reactivatedDone <- struct{}{}
+					return nil
+				},
+			).Times(1)
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
@@ -282,8 +302,11 @@ func TestEthExecLayer(t *testing.T) {
 			clusterReactivated.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 300)
+			select {
+			case <-reactivatedDone:
+			case <-time.After(asyncWaitTimeout):
+				t.Fatal("timed out waiting for cluster reactivation task")
+			}
 
 			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
@@ -319,14 +342,17 @@ func TestEthExecLayer(t *testing.T) {
 			setFeeRecipient.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 300)
+			var updatedFeeRecipient bellatrix.ExecutionAddress
+			require.Eventually(t, func() bool {
+				feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
+				if err != nil || !bytes.Equal(testAddrBob.Bytes(), feeRecipient[:]) {
+					return false
+				}
+				updatedFeeRecipient = feeRecipient
+				return true
+			}, asyncWaitTimeout, asyncPollTick)
 
-			feeRecipient, err := nodeStorage.GetFeeRecipient(testAddrAlice)
-			require.NoError(t, err)
-			require.Equal(t, testAddrBob.Bytes(), feeRecipient[:])
+			require.Equal(t, testAddrBob.Bytes(), updatedFeeRecipient[:])
 		}
-
-		stopChan <- struct{}{}
 	})
 }

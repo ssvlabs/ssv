@@ -2,24 +2,21 @@ package discovery
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/utils/format"
 )
 
 var (
-	regPool            = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
+	subnetRegexp       = regexp.MustCompile(`\w+:bloxstaking\.ssv\.(\d+)`)
 	errPatternMismatch = fmt.Errorf("pattern mismatch")
 	errValueOutOfRange = fmt.Errorf("value out of range")
 )
 
 // nsToSubnet converts the given topic to subnet
 func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
-	r, done := regPool.Get()
-	defer done()
-
-	found := r.FindStringSubmatch(ns)
+	found := subnetRegexp.FindStringSubmatch(ns)
 	if len(found) != 2 {
 		return 0, errPatternMismatch
 	}

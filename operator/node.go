@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 
@@ -77,30 +78,62 @@ type Node struct {
 	exporterRead *exporter2.Exporter
 }
 
+func shouldRunDutyScheduler(exporterOpts exporter.Options) bool {
+	return !exporterOpts.Enabled || exporterOpts.Mode == exporter.ModeArchive
+}
+
 // New is the constructor of Node
 func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	selfValidatorStore := opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID)
 
-	// Prepare scheduler wiring; in exporter mode we swap to AllShares provider,
-	// a prefetching beacon adapter, and a no-op executor.
-	var schedulerBeacon duties.BeaconNode = opts.BeaconNode
-	validatorProvider := any(selfValidatorStore).(duties.ValidatorProvider)
-	dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
-
-	if exporterOpts.Enabled {
-		validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
-		dutyExecutor = duties.NewNoopExecutor()
-		schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
+	var (
+		feeRecipientCtrl       fee_recipient.RecipientController
+		proposalPreparationsFn func() ([]*eth2apiv1.ProposalPreparation, error)
+	)
+	if !exporterOpts.Enabled {
+		feeRecipientController := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
+			Ctx:                opts.Context,
+			BeaconClient:       opts.BeaconNode,
+			BeaconConfig:       opts.NetworkConfig.Beacon,
+			ValidatorProvider:  selfValidatorStore,
+			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
+			SlotTickerProvider: slotTickerProvider,
+		})
+		feeRecipientCtrl = feeRecipientController
+		proposalPreparationsFn = feeRecipientController.GetProposalPreparations
 	}
 
-	feeRecipientCtrl := fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
-		Ctx:                opts.Context,
-		BeaconClient:       opts.BeaconNode,
-		BeaconConfig:       opts.NetworkConfig.Beacon,
-		ValidatorProvider:  selfValidatorStore,
-		OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
-		SlotTickerProvider: slotTickerProvider,
-	})
+	var dutyScheduler *duties.Scheduler
+	if shouldRunDutyScheduler(exporterOpts) {
+		// Prepare scheduler wiring; in exporter archive mode we swap to AllShares provider,
+		// a prefetching beacon adapter, and a no-op executor.
+		schedulerBeacon := duties.BeaconNode(opts.BeaconNode)
+		validatorProvider := duties.ValidatorProvider(selfValidatorStore)
+		dutyExecutor := duties.DutyExecutor(opts.ValidatorController)
+
+		if exporterOpts.Enabled {
+			validatorProvider = duties.NewAllSharesProvider(opts.ValidatorStore)
+			dutyExecutor = duties.NewNoopExecutor()
+			schedulerBeacon = duties.NewPrefetchingBeacon(logger, opts.BeaconNode, opts.NetworkConfig.Beacon, opts.ValidatorStore)
+		}
+
+		dutyScheduler = duties.NewScheduler(logger, &duties.SchedulerOptions{
+			Ctx:                     opts.Context,
+			BeaconNode:              schedulerBeacon,
+			ExecutionClient:         opts.ExecutionClient,
+			BeaconConfig:            opts.NetworkConfig.Beacon,
+			ValidatorProvider:       validatorProvider,
+			ValidatorController:     opts.ValidatorController,
+			DutyExecutor:            dutyExecutor,
+			IndicesChgCh:            opts.ValidatorController.IndicesChangeChan(),
+			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
+			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
+			DutyStore:               opts.DutyStore,
+			SlotTickerProvider:      slotTickerProvider,
+			P2PNetwork:              opts.P2PNetwork,
+			ExporterMode:            exporterOpts.Enabled,
+		})
+	}
 
 	node := &Node{
 		logger:           logger.Named(log.NameOperator),
@@ -113,22 +146,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		net:              opts.P2PNetwork,
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      qbftStorage,
-		dutyScheduler: duties.NewScheduler(logger, &duties.SchedulerOptions{
-			Ctx:                     opts.Context,
-			BeaconNode:              schedulerBeacon,
-			ExecutionClient:         opts.ExecutionClient,
-			BeaconConfig:            opts.NetworkConfig.Beacon,
-			ValidatorProvider:       validatorProvider,
-			ValidatorController:     opts.ValidatorController,
-			DutyExecutor:            dutyExecutor,
-			IndicesChg:              opts.ValidatorController.IndicesChangeChan(),
-			ValidatorRegistrationCh: opts.ValidatorController.ValidatorRegistrationChan(),
-			ValidatorExitCh:         opts.ValidatorController.ValidatorExitChan(),
-			DutyStore:               opts.DutyStore,
-			SlotTickerProvider:      slotTickerProvider,
-			P2PNetwork:              opts.P2PNetwork,
-			ExporterMode:            exporterOpts.Enabled,
-		}),
+		dutyScheduler:    dutyScheduler,
 		feeRecipientCtrl: feeRecipientCtrl,
 
 		ws:           opts.WS,
@@ -136,17 +154,19 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		exporterRead: opts.ExporterRead,
 	}
 
-	// Wire the beacon client to the fee recipient controller
-	// This allows the beacon client to pull proposal preparations on reconnect
-	opts.BeaconNode.SetProposalPreparationsProvider(feeRecipientCtrl.GetProposalPreparations)
+	if feeRecipientCtrl != nil {
+		// Wire the beacon client to the fee recipient controller
+		// This allows the beacon client to pull proposal preparations on reconnect.
+		opts.BeaconNode.SetProposalPreparationsProvider(proposalPreparationsFn)
 
-	// Subscribe fee recipient controller to validator controller's change notifications
-	feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
+		// Subscribe fee recipient controller to validator controller's change notifications.
+		feeRecipientCtrl.SubscribeToFeeRecipientChanges(opts.ValidatorController.FeeRecipientChangeChan())
+	}
 
 	return node
 }
 
-// Start starts to stream duties and run IBFT instances
+// Start prepares and starts the main components.
 func (n *Node) Start(ctx context.Context) error {
 	n.logger.Info("starting operator node")
 
@@ -157,16 +177,19 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Start the duty scheduler, and a background goroutine to crash the node
-	// in case there were any errors.
-	if err := n.dutyScheduler.Start(ctx); err != nil {
-		return fmt.Errorf("failed to run duty scheduler: %w", err)
+	// Start the duty scheduler in modes that use it.
+	if n.dutyScheduler != nil {
+		if err := n.dutyScheduler.Start(ctx); err != nil {
+			return fmt.Errorf("failed to run duty scheduler: %w", err)
+		}
+	} else {
+		n.logger.Info("exporter standard mode: skipping duty scheduler")
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	// IMPORTANT: We must initialize validators regardless of whether we are running exporter or
-	// a regular SSV node.
+	// Call the shared validator initialization path in both modes.
+	// Exporter returns no committee validators here but still relies on the common startup flow.
 	validatorsInitialized, err := n.validatorsCtrl.InitValidators()
 	if err != nil {
 		return fmt.Errorf("init validators: %w", err)
@@ -197,10 +220,8 @@ func (n *Node) Start(ctx context.Context) error {
 	if n.exporterOptions.Enabled {
 		// For exporter, we want to connect to all subnets.
 		startValidators = func() error {
-			err := n.net.SubscribeAll()
-			if err != nil {
-				n.logger.Error("failed to subscribe to all subnets", zap.Error(err))
-				return nil
+			if err := n.net.SubscribeAll(); err != nil {
+				return fmt.Errorf("subscribe to all subnets: %w", err)
 			}
 			return nil
 		}
@@ -214,21 +235,31 @@ func (n *Node) Start(ctx context.Context) error {
 
 	go n.reportOperators()
 
-	go n.feeRecipientCtrl.Start(ctx)
-
 	go n.validatorsCtrl.HandleMetadataUpdates(ctx)
-	go n.validatorsCtrl.ReportValidatorStatuses(ctx)
+	if n.exporterOptions.Enabled {
+		n.logger.Info("exporter mode: skipping fee recipient, validator status reporting and doppelganger services")
+	} else {
+		go n.feeRecipientCtrl.Start(ctx)
+		go n.validatorsCtrl.ReportValidatorStatuses(ctx)
 
-	go func() {
-		if err := n.validatorOptions.DoppelgangerHandler.Start(ctx); err != nil {
-			n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
-		}
-	}()
+		go func() {
+			if err := n.validatorOptions.DoppelgangerHandler.Start(ctx); err != nil {
+				n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
+			}
+		}()
+	}
 
 	n.logger.Info("operator node has been started", fields.OperatorID(n.validatorOptions.OperatorDataStore.GetOperatorID()))
 
-	if err := n.dutyScheduler.Wait(); err != nil {
-		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
+	if n.dutyScheduler != nil {
+		if err := n.dutyScheduler.Wait(); err != nil {
+			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
+		}
+	} else {
+		if !n.exporterOptions.Enabled || n.exporterOptions.Mode != exporter.ModeStandard {
+			n.logger.Fatal("duty scheduler is nil for non-exporter-standard node")
+		}
+		<-ctx.Done()
 	}
 
 	if err := n.net.Close(); err != nil {

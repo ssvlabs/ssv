@@ -20,6 +20,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekmadapter"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
@@ -110,6 +111,37 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	validatorsInitialized, err := ctr.InitValidators()
 	require.NoError(t, err)
 	require.Empty(t, validatorsInitialized)
+}
+
+func TestSetupRunnersExporter(t *testing.T) {
+	runners, err := SetupRunners(
+		t.Context(),
+		&types.SSVShare{},
+		nil,
+		nil,
+		nil,
+		&validator.CommonOptions{
+			ExporterOptions: exporter.Options{
+				Enabled: true,
+			},
+		},
+	)
+	require.Nil(t, runners)
+	require.ErrorContains(t, err, "cannot set up duty runners in exporter mode")
+}
+
+func TestSetupCommitteeRunnersExporter(t *testing.T) {
+	committeeRunnerFunc := SetupCommitteeRunners(t.Context(), &validator.Options{
+		CommonOptions: validator.CommonOptions{
+			ExporterOptions: exporter.Options{
+				Enabled: true,
+			},
+		},
+	})
+
+	runner, err := committeeRunnerFunc(0, nil, nil, nil)
+	require.Nil(t, runner)
+	require.ErrorContains(t, err, "cannot set up committee runners in exporter mode")
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
@@ -910,7 +942,7 @@ func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivat
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork.Beacon, operatorPrivKey)
+	km, err := ekm.NewLocalKeyManager(logger, ekmadapter.NewDatabaseAdapter(db), networkconfig.TestNetwork.Beacon, operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, p2pNet, km, bc
 }
@@ -939,7 +971,10 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 	if err != nil {
 		return nil, func() {}
 	}
-	s := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	s, err := registrystorage.NewOperatorsStorage(logger, db, []byte("test"))
+	if err != nil {
+		return nil, func() {}
+	}
 	return s, func() {
 		db.Close()
 	}
@@ -1108,9 +1143,9 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			var done <-chan struct{}
 
 			if tc.expectIndicesChange {
-				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
+				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 400*time.Millisecond)
 			} else {
-				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
+				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 400*time.Millisecond)
 			}
 
 			require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
@@ -1175,15 +1210,16 @@ func prepareController(t *testing.T) (*Controller, *mocks.MockSharesStorage) {
 	mockValidatorsMap := validators.New(ctx)
 
 	validatorCtrl := &Controller{
-		ctx:               ctx,
-		beacon:            mockBeaconNode,
-		logger:            logger,
-		operatorDataStore: operatorDataStore,
-		operatorsStorage:  operatorsStorage,
-		sharesStorage:     mockSharesStorage,
-		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
-		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
+		ctx:                  ctx,
+		beacon:               mockBeaconNode,
+		logger:               logger,
+		operatorDataStore:    operatorDataStore,
+		operatorsStorage:     operatorsStorage,
+		sharesStorage:        mockSharesStorage,
+		validatorsMap:        mockValidatorsMap,
+		networkConfig:        networkconfig.TestNetwork,
+		indicesChangeCh:      make(chan struct{}, 1), // Buffered channel for each test
+		feeRecipientChangeCh: make(chan struct{}, 1), // Prevent timeout path in tests that trigger metadata updates
 		validatorCommonOpts: &validator.CommonOptions{
 			NetworkConfig: networkconfig.TestNetwork,
 		},

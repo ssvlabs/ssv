@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spec "github.com/ssvlabs/ssv-spec/ssv"
 	stests "github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
@@ -22,7 +21,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -51,7 +49,7 @@ func (test *CommitteeSpecTest) FullName() string {
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
-	logger := log.TestLogger(t)
+	logger := protocoltesting.SpectestLogger(t)
 	lastErr := test.runPreTesting(logger)
 	spectests.AssertErrorCode(t, test.ExpectedErrorCode, lastErr)
 
@@ -109,7 +107,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 		case *spectypes.SignedSSVMessage:
 			msg, err := queue.DecodeSignedSSVMessage(input)
 			if err != nil {
-				return errors.Wrap(err, "failed to decode SignedSSVMessage")
+				return fmt.Errorf("failed to decode SignedSSVMessage: %w", err)
 			}
 			err = test.Committee.ProcessMessage(context.TODO(), logger, msg)
 			if err != nil {
@@ -124,7 +122,7 @@ func (test *CommitteeSpecTest) runPreTesting(logger *zap.Logger) error {
 }
 
 func (test *CommitteeSpecTest) overrideStateComparison(t *testing.T) {
-	strType := reflect.TypeOf(test).String()
+	strType := reflect.TypeFor[*CommitteeSpecTest]().String()
 	strType = strings.Replace(strType, "spectest.", "committee.", 1)
 	overrideStateComparisonCommitteeSpecTest(t, test, test.Name, strType)
 }
@@ -163,7 +161,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
 	for _, test := range tests.Tests {
 		path := filepath.Join(testsName, test.TestName())
-		strType := reflect.TypeOf(tests).String()
+		strType := reflect.TypeFor[*MultiCommitteeSpecTest]().String()
 		strType = strings.Replace(strType, "spectest.", "committee.", 1)
 		overrideStateComparisonCommitteeSpecTest(t, test, path, strType)
 	}
@@ -200,7 +198,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
 	for slot := range committee.Runners {
-		committee.Runners[slot].BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		committee.Runners[slot].NetworkConfig = networkconfig.TestNetwork
 		// Use test runner as signer source since deserialized runner has no signer
 		var signerSource runner.Runner
 		if testRunner, ok := test.Committee.Runners[slot]; ok {

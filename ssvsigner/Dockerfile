@@ -1,7 +1,7 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.24 AS preparer
+FROM golang:1.26 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
@@ -22,6 +22,7 @@ WORKDIR /go/src/github.com/ssvlabs/ssv/
 
 # Cache dependencies
 COPY go.mod go.sum ./
+COPY ssvsigner/go.mod ssvsigner/go.sum ./ssvsigner/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,mode=0755,target=/go/pkg \
     go mod download && go mod verify
@@ -31,8 +32,8 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 FROM preparer AS builder
 
-# Copy files and install app
-COPY .. .
+# Copy repository files from build context and install app
+COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
@@ -45,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 ##
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.24 AS runner
+FROM golang:1.26 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
