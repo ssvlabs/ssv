@@ -365,9 +365,6 @@ func TestSetupPrivateKey(t *testing.T) {
 		p2pStorage := NewIdentityStore(
 			logger,
 			db,
-			func(_ context.Context, plaintext []byte) ([]byte, error) {
-				return keys.EncryptPayload(networkKeyEncryptionKey, plaintext)
-			},
 			func(_ context.Context, protectedValue []byte) ([]byte, error) {
 				return keys.DecryptPayload(networkKeyEncryptionKey, protectedValue)
 			},

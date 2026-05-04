@@ -44,7 +44,6 @@ type identityStore struct {
 func NewIdentityStore(
 	logger *zap.Logger,
 	db basedb.Database,
-	_ func(ctx context.Context, plaintext []byte) ([]byte, error),
 	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error),
 ) Store {
 	es := identityStore{
