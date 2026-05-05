@@ -1119,12 +1119,12 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 }
 
 func setupP2P(ctx context.Context, logger *zap.Logger, db basedb.Database, exporterEnabled bool, operatorPrivKey keys.OperatorPrivateKey, signerClient *ssvsigner.Client) network.P2PNetwork {
-	_, unprotectFn, err := decideNetworkKeyProtectors(ctx, logger, db, exporterEnabled, operatorPrivKey, signerClient)
+	protectFn, unprotectFn, err := decideNetworkKeyProtectors(ctx, logger, db, exporterEnabled, operatorPrivKey, signerClient)
 	if err != nil {
 		logger.Fatal("failed to decide p2p network key protection", zap.Error(err))
 	}
 
-	istore := ssv_identity.NewIdentityStore(logger, db, unprotectFn)
+	istore := ssv_identity.NewIdentityStore(logger, db, protectFn, unprotectFn)
 	netPrivKey, err := istore.SetupNetworkKey(ctx, cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))

@@ -37,6 +37,7 @@ type Store interface {
 type identityStore struct {
 	logger      *zap.Logger
 	db          basedb.Database
+	protectFn   func(ctx context.Context, plaintext []byte) ([]byte, error)
 	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error)
 }
 
@@ -44,11 +45,13 @@ type identityStore struct {
 func NewIdentityStore(
 	logger *zap.Logger,
 	db basedb.Database,
+	protectFn func(ctx context.Context, plaintext []byte) ([]byte, error),
 	unprotectFn func(ctx context.Context, protectedValue []byte) ([]byte, error),
 ) Store {
 	es := identityStore{
 		logger:      logger.Named(log.NameP2PStorage),
 		db:          db,
+		protectFn:   protectFn,
 		unprotectFn: unprotectFn,
 	}
 	return &es
@@ -92,10 +95,14 @@ func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*
 		}
 	}
 	if skEncoded == "" && found && privateKey != nil {
-		if encrypted {
-			s.logger.Info("migrating encrypted p2p network private key back to plaintext storage for rollback compatibility")
-			if err := s.saveNetworkKeyPlaintext(privateKey); err != nil {
-				return nil, err
+		if !encrypted {
+			if s.hasProtectedStorage() {
+				s.logger.Info("migrating plaintext p2p network private key to encrypted storage")
+				if err := s.saveNetworkKey(ctx, privateKey); err != nil {
+					return nil, err
+				}
+			} else {
+				s.logger.Warn("using legacy plaintext p2p network private key from storage; configure a local operator key or use an ssv-signer deployment that supports remote network-key protection to encrypt it at rest")
 			}
 		}
 		s.logger.Debug("using p2p network privateKey from storage")
@@ -106,7 +113,27 @@ func (s identityStore) SetupNetworkKey(ctx context.Context, skEncoded string) (*
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	return privateKey, s.saveNetworkKeyPlaintext(privateKey)
+	if !s.hasProtectedStorage() {
+		s.logger.Warn("persisting p2p network private key in legacy plaintext storage because no network key encryption secret is configured; configure a local operator key or use an ssv-signer deployment that supports remote network-key protection to encrypt it at rest")
+		return privateKey, s.saveNetworkKeyPlaintext(privateKey)
+	}
+
+	return privateKey, s.saveNetworkKey(ctx, privateKey)
+}
+
+func (s identityStore) saveNetworkKey(ctx context.Context, privateKey *ecdsa.PrivateKey) error {
+	protectedValue, err := encodeNetworkKey(ctx, privateKey, s.protectFn)
+	if err != nil {
+		return fmt.Errorf("failed to protect private key: %w", err)
+	}
+	if err := s.db.Set(prefix, netKeyPrefix, protectedValue); err != nil {
+		return fmt.Errorf("failed to save to db: %w", err)
+	}
+	return nil
+}
+
+func (s identityStore) hasProtectedStorage() bool {
+	return s.protectFn != nil && s.unprotectFn != nil
 }
 
 func (s identityStore) saveNetworkKeyPlaintext(privateKey *ecdsa.PrivateKey) error {
@@ -125,6 +152,25 @@ func HasEncryptedNetworkKey(db basedb.Database) (bool, error) {
 	}
 
 	return bytes.HasPrefix(obj.Value, encryptedPrefix), nil
+}
+
+func encodeNetworkKey(
+	ctx context.Context,
+	privateKey *ecdsa.PrivateKey,
+	protectFn func(ctx context.Context, plaintext []byte) ([]byte, error),
+) ([]byte, error) {
+	plaintext := gcrypto.FromECDSA(privateKey)
+	if protectFn == nil {
+		return nil, errors.New("network key protector is required")
+	}
+	protectedValue, err := protectFn(ctx, plaintext)
+	if err != nil {
+		return nil, err
+	}
+	storedValue := make([]byte, 0, len(encryptedPrefix)+len(protectedValue))
+	storedValue = append(storedValue, encryptedPrefix...)
+	storedValue = append(storedValue, protectedValue...)
+	return storedValue, nil
 }
 
 func decodeNetworkKey(
