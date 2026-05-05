@@ -41,9 +41,6 @@ type Queue interface {
 
 	// Len returns the number of messages in the queue.
 	Len() int
-
-	// Cap returns the inbox channel capacity.
-	Cap() int
 }
 
 type priorityQueue struct {
@@ -75,12 +72,15 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 
 func (q *priorityQueue) Push(msg *SSVMessage) {
 	q.inbox <- msg
+	// Record the actual post-send occupancy. A speculative pre-send sample can
+	// over-report impossible states on failed TryPush paths.
 	q.observer.recordInboxSize(int64(len(q.inbox)))
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
 	select {
 	case q.inbox <- msg:
+		// This is a latest-observed occupancy sample, not a peak gauge.
 		q.observer.recordInboxSize(int64(len(q.inbox)))
 		return true
 	default:
@@ -211,10 +211,6 @@ func (q *priorityQueue) Len() int {
 		n++
 	}
 	return n
-}
-
-func (q *priorityQueue) Cap() int {
-	return cap(q.inbox)
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

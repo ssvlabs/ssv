@@ -34,7 +34,7 @@ func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMes
 	select {
 	case r.ch <- message:
 	default:
-		recordRouterMessageDrop(context.Background(), routerDropReasonBufferFull)
+		recordRouterMessageDrop(ctx, routerDropReasonBufferFull)
 		r.logger.Warn("message router buffer is full, dropping message")
 	}
 }

@@ -34,7 +34,7 @@ var (
 		),
 	)
 
-	DroppedMessagesMetric = metrics.New(
+	droppedMessagesMetric = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "messages.dropped"),
 			metric.WithUnit("{message}"),
@@ -66,7 +66,7 @@ func CommitteeMetricID(slot phase0.Slot) string {
 }
 
 func recordDroppedMessage(queueType, queueID, reason string) {
-	DroppedMessagesMetric.Add(
+	droppedMessagesMetric.Add(
 		context.Background(),
 		1,
 		metric.WithAttributes(

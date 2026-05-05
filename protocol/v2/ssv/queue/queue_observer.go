@@ -58,8 +58,5 @@ func (o metricsQueueObserver) recordInboxSize(inboxSize int64) {
 }
 
 func (o metricsQueueObserver) recordDrop(reason string) {
-	if o.queueType == "" || o.queueID == "" {
-		return
-	}
 	recordDroppedMessage(o.queueType, o.queueID, reason)
 }
