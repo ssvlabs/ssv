@@ -683,9 +683,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 
 ## Application: SSV Ethereum proposer duty
 
-For an SSV cluster proposing an Ethereum block, the recommended OBFT configuration is **`K = 3, R = 2`** — `K = 3 = f+2` at f=1 satisfies both the BFT-liveness minimum (`K ≥ f+1`) and the late-leader-resilience recommendation (`K ≥ f+2`; see §Setting and §Failure modes / Late deepest-layer leader broadcast). One recovery round absorbs partition cases and equivocation patterns where ≥1 honest is in Defer at evidence-detection time, within the 4s relay cutoff. Onion bandwidth at K=3 is ~3KB per onion (vs ~1KB at K=2) — within practical SSV bandwidth budgets.
-
-**`K = 2, R = 2` is the BFT-minimum configuration** — matches baseline TBFT's onion structure exactly, ~1KB per onion. Acceptable when the deployment can guarantee tight host-side fetch deadlines (see §Failure modes / Late deepest-layer leader broadcast for the host-side hard-deadline mitigation), but fragile to legitimate operational delay in the L_1 fetch loop. Use only when bandwidth is the binding constraint.
+For an SSV cluster proposing an Ethereum block, the recommended OBFT configuration is **`K = 3, R = 2`** — `K = 3 = f+2` at f=1 satisfies both the BFT-liveness minimum (`K ≥ f+1`) and the late-leader-resilience recommendation (`K ≥ f+2`; see §Setting and §Failure modes / Late deepest-layer leader broadcast). One recovery round absorbs partition cases and equivocation patterns where ≥1 honest is in Defer at evidence-detection time, within the 4s relay cutoff. K=4 (= n) is also viable for additional fall-through depth at slightly higher onion bandwidth.
 
 Out-of-scope cases (host-validity divergence, 1-1-1 equivocation splits) are addressed by [Assumptions and implications](#assumptions-and-implications) — host stabilizes the validity verdict at Phase-1 acceptance; equivocation 1-1-1 falls back on the reputation deterrent.
 
@@ -693,105 +691,154 @@ Out-of-scope cases (host-validity divergence, 1-1-1 equivocation splits) are add
 |---|---|
 | `n` participants | 4 |
 | `f` byzantine bound | 1 |
-| `K` layers | 2 (primary + backup) — same as baseline TBFT |
-| `R` rounds | 2 (one initial + one recovery) |
+| `K` layers | 3 (recommended; `= f+2`) or 4 (`= n`, max fall-through depth) |
+| `R` rounds | 1 (no recovery) or 2 (one recovery round) |
 | `RT` round timeout | depends on D (propagation budget) — see [Timing budget — concrete configurations](#timing-budget--concrete-configurations) |
 | Slot | Ethereum slot for which the cluster is proposer |
 | V-signing keypair | the validator's split BLS key (already exists in SSV) |
 | IBE keypair | new per-cluster key from a separate DKG at cluster init |
 | Operator-identity key | existing SSV operator key |
-| `L_0` (primary leader) | designated MEV proposer for the slot (e.g. round-1 leader from existing rotation) |
+| `L_0` (primary leader) | designated MEV proposer for the slot |
 | `V_{L_0}` | MEV-optimized block fetched late from the relay |
-| `L_1` (backup leader) | a separately designated operator (e.g. round-2 leader; required ≠ `L_0`) |
-| `V_{L_1}` | safe early-fetched block from a vanilla beacon-node payload, refreshed on head changes (per the leader's pre-signing fetch loop) |
-| `T_commit_1` | round 1 commit / view-fix deadline — anchor: `slot_start + 2s` across all configurations below; Phase 1 fetch occupies the 0–2s window with `T_{K-1} < ... < T_0 < T_commit_1` |
-| `T_round_r_end` | round `r` reconstruction deadline — concrete value depends on D; see configurations below |
+| `L_1, ..., L_{K-1}` (backup leaders) | separately designated operators, distinct from `L_0` and from each other |
+| `V_{L_k}` for k ≥ 1 | safe early-fetched blocks from vanilla beacon-node payloads, refreshed on head changes (per the leader's pre-signing fetch loop) |
+| `T_commit_1` | round 1 commit / view-fix deadline — anchor: `slot_start + 1.5s` across all configurations below; Phase 1 fetch occupies the 0–1.5s window with `T_{K-1} < ... < T_0 < T_commit_1` |
+| `T_round_r_end` | round `r` reconstruction deadline — concrete value depends on D and config; see configurations below |
 
-Cryptographic safety (`qEnc = qV` + chained encryption + EKM-enforced cross-phase/cross-round/single-σ-V exclusivity) ensures only one block can ever get a valid validator signature, regardless of round structure. R-round retry only enables more recovery scenarios; it cannot produce two outputs.
+Cryptographic safety (`qEnc = qV` + chained encryption + EKM-enforced cross-phase/cross-round/single-σ-V exclusivity) ensures only one block can ever get a valid validator signature, regardless of K, R, or round structure. R-round retry only enables more recovery scenarios; it cannot produce two outputs.
 
 ### Timing budget — concrete configurations
 
 Per-phase windows must satisfy `Δ_2`, `Δ_2.5`, `Δ_reflood ≥ D_r + δ` where `D_r` is the cluster's gossipsub propagation P99/P999 *for round `r`* and δ is the clock-skew bound (typically ~50ms). `Δ_3 ≈ 100ms` (reconstruction + local processing) is propagation-independent.
 
-The total slot budget is `4s − T_submit` where `T_submit` is the relay submission round-trip (~250ms reserved), giving a 3.75s consensus deadline. **Round 1's Phase 2 starts at `slot_start + 2s` in all three configurations below**; Phase 1 fetch occupies the 0–2s window. The remaining 1.75s must absorb all consensus phases plus any recovery rounds.
+The total slot budget is `4s − T_submit` where `T_submit` is the relay submission round-trip (~250ms reserved), giving a 3.75s consensus deadline. **Phase 1 fetch occupies the 0–1.5s window**; consensus phases run from `slot_start + 1.5s` onward. The remaining 2.25s of consensus budget must absorb all Phase 2/2.5/3 windows plus any recovery rounds, with submission headroom remaining at the end.
 
-**Late-σ-emit propagation (informational).** Per the [Phase 2 sub-phasing](#phase-2--onion-broadcast-t_commit_r-t_commit_r--Δ_2-per-round-r), `Δ_2 ≥ D + δ` is the minimum constraint and is what the configurations below use — but it only allows σ-emits at `t = 0` of Phase 2 to propagate before the NR/Defer decision at `T_commit_r + Δ_2`. A σ-emit at time `T_commit_r + t` (for `t > 0`) reaches other honest at `T_commit_r + t + D + δ`, which must satisfy `t + D + δ ≤ Δ_2` for observability — i.e., `t ≤ Δ_2 − (D + δ)`. At minimum `Δ_2 = D + δ` this allows only `t = 0`. **Late σ-emits during Phase 2 do not propagate before the same round's NR/Defer decision** — they only contribute to the next round's σ-pool. Operators who become σ-eligible during Phase 2 (e.g., late re-flood delivers V mid-window) effectively σ for round `r+1` rather than round `r`. This is part of the byzantine selective-delivery grief surface — see §Failure modes.
+Common assumptions for the configurations below: **D = 100ms (uniform across rounds), δ = 50ms, n = 4, f = 1**. These are healthy-network assumptions for the SSV cluster gossipsub mesh; high-D networks (D ≈ 500ms) shrink the available budget proportionally and don't fit even R=1 cleanly at the 1.5s start.
 
-To widen the late-σ-emit window, set `Δ_2 ≥ 2(D + δ)` at the cost of doubling Phase 2's contribution to per-round latency. At Configuration A this is small (300ms vs 250ms — fits comfortably). At Configuration B (D = 500ms), `2(D + δ) = 1100ms` for Phase 2 alone — incompatible with even R = 1's tight 400ms-headroom analysis. **The configurations below use minimum `Δ_2`; deployments choosing `Δ_2 ≥ 2(D + δ)` should re-validate the slot-budget fit, especially at higher D where the cascade through round 1 and round 2 windows can push past the 3.75s consensus deadline.**
+Per-window sizes used below:
+- `Δ_2 = 250ms` (= D + δ + 100ms buffer; minimum `D + δ = 150ms`; buffer absorbs some late-σ-emit propagation — see §Phase 2 sub-phasing for the limitation).
+- `Δ_2.5 = 150ms` (= D + δ; for L_C signaling).
+- `Δ_3 = 100ms` (propagation-independent).
+- `Δ_reflood = 150ms` (= D + δ; round 2 only).
 
-**Bursty-mesh propagation at K ≥ 3 (informational).** The `D` parameter is defined as cluster gossipsub propagation P99/P999, which captures single-message propagation under typical conditions. At K ≥ 3, Phase 3's reconstruction walk does sequential NR-quorum unlocks (L_0 → L_1 → ... → L_{K-1}), and operators emit NR partials at *multiple layers simultaneously* in Phase 2 — a burst of `O(K · n)` partials cluster-wide. Bursty mesh conditions (gossipsub topic congestion, simultaneous re-flood from multiple sources) can extend cluster-wide reception time beyond the steady-state P99 D used to size `Δ_2`. Deployments with K ≥ 3 should measure D under burst-load conditions (multiple simultaneous broadcasts per operator, cross-layer onion + NR partials in flight together), not just point-to-point single-message latency, when sizing `Δ_2`. K = 2 (proposer-duty default) avoids this — only L_0's plaintext σ partials in Phase 2; no multi-layer parallel NR fall-through.
+**Late-σ-emit propagation note.** With `Δ_2 = 250ms` and `D + δ = 150ms`, the late-σ-emit window is `Δ_2 − (D + δ) = 100ms` — σ-emits within the first 100ms of Phase 2 propagate before the NR/Defer decision; later σ-emits don't (they only contribute to the next round's σ-pool). Setting `Δ_2 ≥ 2(D + δ) = 300ms` allows full late-σ-emit propagation but tightens R=2 budgets correspondingly.
 
-#### Configuration A: D = 100ms (uniform), δ = 50ms, R = 2, K = 2
+**Bursty-mesh propagation at K ≥ 3 (informational).** Phase 3's reconstruction walk does sequential NR-quorum unlocks (L_0 → L_1 → ... → L_{K-1}); operators emit NR partials at multiple layers simultaneously in Phase 2, producing `O(K · n)` partials cluster-wide as a burst. Deployments should measure D under burst-load conditions (cross-layer onion + NR partials in flight together), not just steady-state single-message latency, when sizing `Δ_2`.
 
-Healthy network with low jitter. Comfortable fit with full R = 2 recovery.
+#### OBFT(n=4, K=3, R=1)
 
-| Window | Length | End time | Constraint |
+Three-layer onion (L_0 primary + L_1 + L_2). Single round, no partition recovery. K=3 = f+2 satisfies both the BFT-liveness minimum and the late-leader-resilience recommendation.
+
+| Window | Length | End time | Notes |
 |---|---|---|---|
-| Round 1 Phase 2 | 250ms | slot_start + 2.25s | `≥ D + δ = 150ms` ✓ |
-| Round 1 Phase 2.5 | 150ms | slot_start + 2.40s | `≥ D + δ = 150ms` ✓ |
-| Round 1 Phase 3 | 100ms | slot_start + 2.50s | propagation-independent |
-| Round 2 re-flood | 150ms | slot_start + 2.65s | `≥ D + δ = 150ms` ✓ |
-| Round 2 Phase 2' | 250ms | slot_start + 2.90s | `≥ D + δ = 150ms` ✓ |
-| Round 2 Phase 2.5' | 150ms | slot_start + 3.05s | `≥ D + δ = 150ms` ✓ |
-| Round 2 Phase 3' | 100ms | slot_start + 3.15s | propagation-independent |
-| Submission | 850ms | slot_start + 4.00s | within relay cutoff |
+| Phase 1 fetch | 1500ms | slot_start + 1.50s | All K=3 leaders' fetch windows fit within 0–1.5s |
+| Round 1 Phase 2 | 250ms | slot_start + 1.75s | `≥ D + δ = 150ms` ✓ |
+| Round 1 Phase 2.5 | 150ms | slot_start + 1.90s | L_C signaling |
+| Round 1 Phase 3 | 100ms | slot_start + 2.00s | K-layer reconstruction walk (sequential, no per-layer RTT) |
+| Submission | 2000ms | slot_start + 4.00s | comfortable submission headroom |
 
-Outcome: full R = 2 fits comfortably with ~850ms of submission headroom against the 4s relay cutoff.
+**Recovery scope.** K=3 fall-through within round 1: silent L_0 → NR-quorum at L_0 → L_1 σ-quorum if L_1 honest; silent L_0 + silent L_1 → fall-through to L_2 (all in Phase 3 reconstruction walk). **No round-2 recovery** — partition cases requiring re-flood to deliver V (aggressive-marginal scenario) slot-miss; equivocation slot-misses; late deepest-layer L_2 broadcast slot-misses.
 
-#### Configuration B: D = 500ms (uniform), δ = 50ms, R = 2, K = 2
+**Bandwidth (healthy):** ~24 KB total cluster-wide (4 onions × ~2KB at K=3 = 8KB onion traffic + Phase 1 bundles + L_C signaling + NR partials).
 
-Higher-jitter network. R = 2 does not fit; R = 1 is the workable regime.
+#### OBFT(n=4, K=4, R=1)
 
-| Window | Length | End time | Constraint |
+Four-layer onion — every cluster member is a leader at exactly one layer (K = n). Maximum K possible at n=4. Single round, no partition recovery.
+
+| Window | Length | End time | Notes |
 |---|---|---|---|
-| Round 1 Phase 2 | 700ms | slot_start + 2.70s | `≥ D + δ = 550ms` ✓ |
-| Round 1 Phase 2.5 | 550ms | slot_start + 3.25s | `≥ D + δ = 550ms` ✓ |
-| Round 1 Phase 3 | 100ms | slot_start + 3.35s | propagation-independent |
-| Round 2 re-flood | 550ms | slot_start + 3.90s | exceeds 3.75s ✗ |
-| Round 2 Phase 2' | 700ms | slot_start + 4.60s | exceeds 4s ✗ |
-| Round 2 Phase 2.5' | 550ms | slot_start + 5.15s | exceeds 4s ✗ |
-| Round 2 Phase 3' | 100ms | slot_start + 5.25s | exceeds 4s ✗ |
+| Phase 1 fetch | 1500ms | slot_start + 1.50s | All K=4 leaders' fetch windows fit within 0–1.5s |
+| Round 1 Phase 2 | 250ms | slot_start + 1.75s | Phase 2 timing doesn't depend on K |
+| Round 1 Phase 2.5 | 150ms | slot_start + 1.90s | |
+| Round 1 Phase 3 | 100ms | slot_start + 2.00s | Walk traverses up to 4 layers sequentially |
+| Submission | 2000ms | slot_start + 4.00s | same headroom as K=3 |
 
-Outcome at R = 2: round 2 doesn't fit. The consensus deadline (3.75s) is reached partway through round 2's re-flood window.
+**Recovery scope.** Same shape as K=3, R=1 but with one additional fall-through layer: silent L_0 + L_1 + L_2 → L_3 (if honest). Higher tolerance for cascading leader failures, including late deepest-layer broadcast (now L_3 instead of L_2 — and L_3 fetches earliest, so least likely to be late). Same R=1 limitations on partition recovery.
 
-R = 1 alternative: round 1 ends at slot_start + 3.35s, leaving 400ms submission headroom. Workable but no recovery on round-1 failure (any partition / equivocation in round 1 → slot misses).
+**Bandwidth (healthy):** ~27 KB (~3KB per onion at K=4 = 12KB onion traffic + rest). +3KB vs K=3.
 
-For high-D networks running OBFT proposer duty, the design choice is: accept R = 1 (no recovery) or use QBFT (which has its own ~2s round-change overhead — also doesn't fit cleanly at D = 500ms within the 4s relay cutoff for proposer duty).
+#### OBFT(n=4, K=3, R=2) — recommended
 
-#### Configuration C: D_R1 = 500ms, D_R2 = 200ms, δ = 50ms, R = 2, K = 2
+Three-layer onion + one recovery round. Combines K-layer fall-through with partition recovery via re-flood.
 
-Round 1 sized defensively for transient high-jitter conditions; round 2 tighter under the assumption that the network settles by then (e.g., transient load spike that recovers).
-
-| Window | Length | End time | Constraint |
+| Window | Length | End time | Notes |
 |---|---|---|---|
-| Round 1 Phase 2 | 700ms | slot_start + 2.70s | `≥ D_R1 + δ = 550ms` ✓ |
-| Round 1 Phase 2.5 | 550ms | slot_start + 3.25s | `≥ D_R1 + δ = 550ms` ✓ |
-| Round 1 Phase 3 | 100ms | slot_start + 3.35s | propagation-independent |
-| Round 2 re-flood | 300ms | slot_start + 3.65s | `≥ D_R2 + δ = 250ms` ✓ |
-| Round 2 Phase 2' | 350ms | slot_start + 4.00s | exceeds 3.75s ✗ |
+| Phase 1 fetch | 1500ms | slot_start + 1.50s | |
+| Round 1 Phase 2 | 250ms | slot_start + 1.75s | |
+| Round 1 Phase 2.5 | 150ms | slot_start + 1.90s | |
+| Round 1 Phase 3 | 100ms | slot_start + 2.00s | |
+| Round 2 re-flood | 150ms | slot_start + 2.15s | re-flood retained Phase-1 bundles |
+| Round 2 Phase 2 | 250ms | slot_start + 2.40s | late-σ-emit by newly-Defer-state operators |
+| Round 2 Phase 2.5 | 150ms | slot_start + 2.55s | |
+| Round 2 Phase 3 | 100ms | slot_start + 2.65s | |
+| Submission | 1350ms | slot_start + 4.00s | comfortable headroom |
 
-Outcome at R = 2: even with smaller D_R2, round 2 doesn't fit cleanly. Round 1's D_R1 dominates the early budget; round 2's tighter windows still overflow.
+**Recovery scope.** Full K=3 fall-through within round 1 + round-2 partition recovery. Aggressive-marginal scenarios (some honest had V at round-1 cutoff, some didn't) recover via round-2 re-flood completing delivery. Late deepest-layer (L_2) broadcast still a slot-miss class without host-side hard deadline (see §Failure modes).
 
-Workable variants for this D profile require structural compression of round 2:
+**Bandwidth (healthy):** ~24 KB; **+~21KB for round-2 re-flood + Phase 2'/2.5'/3'** if round 1 fails (~45 KB total in failure case).
 
-- **Skip Phase 2.5'** (treat L_C consensus as round-1-only; round 2 falls back to the round timer for round-3 transition if R were larger). Saves ~250ms.
-- **Merge re-flood and Phase 2'** into a single window. Re-flood is when retained Phase-1 bundles are re-broadcast; late σ-emit by newly-Defer-state operators happens as soon as they receive V — overlapping with re-flood is consistent with the protocol's intent. Saves ~300ms.
+#### OBFT(n=4, K=4, R=2)
 
-With both compressions: round 2 ≈ 350ms (re-flood-and-σ-emit combined) + 100ms (Phase 3') = 450ms. Round 2 ends at slot_start + 3.80s. Still 50ms past 3.75s — would need an additional ~50ms compression, e.g., trimming Δ_3 to 50ms on a high-CPU operator. Workable but tight.
+Four-layer onion + one recovery round. Maximum recovery scope within the OBFT family for n=4.
 
-The clean reading: even with D_R2 << D_R1, OBFT proposer duty at R = 2 is on the edge of the 4s relay cutoff when D_R1 ≥ 500ms.
+| Window | Length | End time | Notes |
+|---|---|---|---|
+| Phase 1 fetch | 1500ms | slot_start + 1.50s | |
+| Round 1 Phase 2 | 250ms | slot_start + 1.75s | |
+| Round 1 Phase 2.5 | 150ms | slot_start + 1.90s | |
+| Round 1 Phase 3 | 100ms | slot_start + 2.00s | |
+| Round 2 re-flood | 150ms | slot_start + 2.15s | |
+| Round 2 Phase 2 | 250ms | slot_start + 2.40s | |
+| Round 2 Phase 2.5 | 150ms | slot_start + 2.55s | |
+| Round 2 Phase 3 | 100ms | slot_start + 2.65s | |
+| Submission | 1350ms | slot_start + 4.00s | same headroom as K=3, R=2 |
 
-#### Trade-off summary
+**Recovery scope.** Maximum within OBFT — 3-layer parallel fall-through within round 1 + partition recovery via round 2. Late-leader resilience extends to L_3 (deepest layer fetches earliest, so practical late-deepest-broadcast probability is lowest).
 
-| Config | D profile | R | Fits 4s cutoff | Trade-off |
-|---|---|---|---|---|
-| A | 100ms uniform | 2 | Yes (850ms headroom) | Full recovery available |
-| B | 500ms uniform | 1 | Yes (400ms headroom) | No round-2 recovery |
-| C | 500ms → 200ms | 2 | Only with round-2 phase compression | Partial round-2 recovery; tight margins |
+**Bandwidth (healthy):** ~27 KB; **+~21KB for round-2 re-flood + Phase 2'/2.5'/3'** if round 1 fails (~50 KB total in failure case).
 
-Concrete numbers should come from production telemetry (P99 / P999 tails of gossip propagation, EKM signing latency, beacon submit latency, relay submission latency). Until that lands, the values above are illustrative defaults; tighten per cluster as data arrives.
+#### QBFT(n=4) — for comparison
 
-The deadline-tuning rule: each round's `T_round_r_end − T_commit_r ≥ Δ_2 + Δ_2.5 + Δ_3` for that round, and `Δ_2 ≥ D_r + δ`, `Δ_2.5 ≥ D_r + δ`, `Δ_reflood ≥ D_r + δ` where `D_r` is the propagation budget for round `r`.
+QBFT's existing analysis at the same start time. SSV's production round-change timeout is `RT_QBFT ≈ 2s`.
+
+| Path | Window | End time | Notes |
+|---|---|---|---|
+| **Round 1 (healthy)** | | | |
+| Phase 1 / pre-consensus | 1500ms | slot_start + 1.50s | leader fetch |
+| PROPOSE → PREPARE → COMMIT (3 RTTs) + post-consensus partial-sig (1 RTT) | ~750ms total | slot_start + 2.25s | per existing OBFT-vs-QBFT comparison row at n=4 |
+| Submission | 1750ms | slot_start + 4.00s | ~1.75s headroom |
+| **Round 1 fails → Round 2** | | | |
+| Round 1 timeout (no PROPOSE quorum) | 2000ms | slot_start + 3.50s | round-change timer fires |
+| Round 2 PROPOSE+PREPARE+COMMIT+post-consensus | ~750ms | slot_start + 4.25s | **exceeds 4s relay cutoff ✗** |
+
+**Recovery scope.** At start = 1.5s, QBFT fits **at most 1 successful round** within the 4s budget. Any round-1 failure → slot misses (round-change timeout + round-2 consensus exceeds the cutoff by ~250ms). The 2s round-change timer dominates and crowds out round 2 — independent of how fast round 2 itself would run if it had time.
+
+**Bandwidth (healthy):** ~14 KB total (lower than OBFT due to no chained encryption). **+12 KB per round + a full additional consensus round** in failure cases — but with no time for round 2 within the budget, the failure-case bandwidth is moot.
+
+#### Comparison summary
+
+| Setup | Round 1 ends | Round 2 ends | Submission headroom | Recovery within 4s budget | Bandwidth (healthy / failure) |
+|---|---|---|---|---|---|
+| OBFT(K=3, R=1) | 2.00s | n/a | 2.00s | K-layer fall-through (L_0→L_1→L_2) within round 1 | ~24 KB / n/a |
+| OBFT(K=4, R=1) | 2.00s | n/a | 2.00s | K-layer fall-through (L_0→L_1→L_2→L_3) within round 1 | ~27 KB / n/a |
+| OBFT(K=3, R=2) ★ | 2.00s | 2.65s | 1.35s | K-layer fall-through + partition recovery via round-2 re-flood | ~24 KB / ~45 KB |
+| OBFT(K=4, R=2) | 2.00s | 2.65s | 1.35s | Maximum within OBFT — 3-layer fall-through + partition recovery | ~27 KB / ~50 KB |
+| QBFT(n=4) | 2.25s | doesn't fit | 1.75s | Round-1 healthy only (round-change + round 2 exceeds cutoff) | ~14 KB / n/a (round 2 doesn't fit) |
+
+★ = recommended default.
+
+**Key observations:**
+
+- **OBFT recovers more within budget at start = 1.5s.** All four OBFT configs fit a recovery mechanism within the 2.5s consensus budget; QBFT fits only 1 round. The R=2 OBFT configs additionally fit partition recovery via round-2 re-flood; QBFT's round-change-with-fresh-V mechanism doesn't fit at all.
+- **K=4 vs K=3 trades bandwidth for recovery depth.** Same timing fit at this D (Phase 2/2.5/3 windows don't depend on K); K=4 adds one more fall-through layer at +3 KB per onion. Useful for deployments where multi-leader-failure or late-deepest-broadcast is a realistic concern; K=3 is the BFT-recommended baseline.
+- **R=2 vs R=1 trades submission headroom for partition recovery.** R=1 leaves 2.0s submission buffer; R=2 leaves 1.35s. Both well within the ~250ms relay-submission requirement. R=2 provides recovery from round-1 partition failures (re-flood across rounds delivers V to operators that missed it in round 1); R=1 doesn't.
+- **OBFT(K=3, R=2) is the recommended default** — combines BFT-recommended K with partition recovery, fits comfortably with healthy-network parameters.
+- **OBFT(K=4, R=2) is the maximum-recovery OBFT option** — useful for deployments expecting longer-tail re-orgs, late-leader broadcast risk, or cascading non-byzantine failures.
+- **QBFT's round-change timeout dominates.** SSV's 2s `RT_QBFT` is the binding constraint at the 4s relay cutoff: round 1 healthy fits comfortably, but any round-1 failure burns 2s of timeout that exceeds the budget for round 2. Compare to OBFT's R=2 which fits one full recovery round in 650ms (same budget as QBFT round-change spends on the timeout alone).
+
+**At higher D (e.g., 500ms):** all configs shrink. R=2 with `Δ_2 ≥ D + δ = 550ms` requires ~700ms per Phase 2, ~1900ms total per round — round 2 ends past the 4s cutoff. Only R=1 is workable at high D, with no recovery on round-1 failure. See §Failure modes / Sustained partition for the high-D liveness limit. QBFT also doesn't fit cleanly at high D for proposer duty (round 1 alone consumes most of the budget).
+
+The deadline-tuning rule: each round's `T_round_r_end − T_commit_r ≥ Δ_2 + Δ_2.5 + Δ_3` for that round, and `Δ_2 ≥ D_r + δ`, `Δ_2.5 ≥ D_r + δ`, `Δ_reflood ≥ D_r + δ` where `D_r` is the propagation budget for round `r`. Concrete numbers should come from production telemetry (P99 / P999 tails of gossip propagation, EKM signing latency, beacon submit latency, relay submission latency).
 
 ### Head-change handling
 
