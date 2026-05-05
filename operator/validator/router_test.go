@@ -30,9 +30,11 @@ func TestRouter(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
-		cn := router.GetMessageChan()
-		for msg := range cn {
+		for {
+			msg, ok := router.Receive(ctx)
+			if !ok {
+				return
+			}
 			require.NotNil(t, msg)
 			count++
 			if ctx.Err() != nil || count >= expectedCount {
