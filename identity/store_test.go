@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"encoding/hex"
+	"errors"
 	"testing"
 
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
@@ -17,6 +18,18 @@ var (
 	sk  = "ba03f90c6e2e6d67e4a4682621412ddbafeb6bffdc169df8f2bd31f193f001d4"
 	sk2 = "2340652c367bf8d17de1bc0454e6aa73e2eedd4a51686887d98d6b8813e5fb4a"
 )
+
+type getOverrideDB struct {
+	basedb.Database
+	getFn func(prefix []byte, key []byte) (basedb.Obj, bool, error)
+}
+
+func (db getOverrideDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+	if db.getFn != nil {
+		return db.getFn(prefix, key)
+	}
+	return db.Database.Get(prefix, key)
+}
 
 func TestSetupPrivateKey(t *testing.T) {
 	logger := log.TestLogger(t)
@@ -111,5 +124,41 @@ func TestSetupPrivateKey(t *testing.T) {
 		p2pStorage := NewIdentityStore(logger, db)
 
 		require.NotNil(t, p2pStorage)
+	})
+
+	t.Run("returns DB errors from GetNetworkKey even when key is not found", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		expectedErr := errors.New("db read failed")
+		p2pStorage := identityStore{
+			db: getOverrideDB{
+				Database: db,
+				getFn: func(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+					return basedb.Obj{}, false, expectedErr
+				},
+			},
+			logger: logger,
+		}
+
+		_, _, err = p2pStorage.GetNetworkKey()
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("returns decode error instead of panicking on corrupt stored key", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		require.NoError(t, db.Set(prefix, netKeyPrefix, []byte{0x01}))
+
+		p2pStorage := identityStore{
+			db:     db,
+			logger: logger,
+		}
+
+		_, _, err = p2pStorage.GetNetworkKey()
+		require.ErrorContains(t, err, "failed to decode private key")
 	})
 }

@@ -46,17 +46,17 @@ func NewIdentityStore(logger *zap.Logger, db basedb.Database) Store {
 
 func (s identityStore) GetNetworkKey() (*ecdsa.PrivateKey, bool, error) {
 	obj, found, err := s.db.Get(prefix, netKeyPrefix)
-	if !found {
-		return nil, false, nil
-	}
 	if err != nil {
 		return nil, found, err
 	}
+	if !found {
+		return nil, false, nil
+	}
 	pk, err := decode(obj.Value)
-	pk.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
 	if err != nil {
 		return nil, found, errors.WithMessage(err, "failed to decode private key")
 	}
+	pk.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
 	return pk, found, nil
 }
 
