@@ -103,7 +103,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		}
 	}
 
-	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()
 	})
 

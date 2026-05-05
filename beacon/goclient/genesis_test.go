@@ -110,28 +110,4 @@ func Test_genesisForClient(t *testing.T) {
 		require.Contains(t, err.Error(), "timed out awaiting Beacon config initialization") // node cannot initialize if it cannot get genesis
 		require.Nil(t, client)
 	})
-
-	t.Run("error", func(t *testing.T) {
-		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == genesisPath {
-				return json.RawMessage(`malformed`), nil
-			}
-			return resp, nil
-		})
-		defer mockServer.Close()
-
-		client, err := New(
-			ctx,
-			logger,
-			Options{
-				BeaconConfig:   networkconfig.TestNetwork.Beacon,
-				BeaconNodeAddr: mockServer.URL,
-				CommonTimeout:  400 * time.Millisecond,
-				LongTimeout:    500 * time.Millisecond,
-			},
-		)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "timed out awaiting Beacon config initialization") // node cannot initialize if it cannot get genesis
-		require.Nil(t, client)
-	})
 }

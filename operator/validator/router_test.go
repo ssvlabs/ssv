@@ -30,9 +30,11 @@ func TestRouter(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-
-		cn := router.GetMessageChan()
-		for msg := range cn {
+		for {
+			msg, ok := router.Receive(ctx)
+			if !ok {
+				return
+			}
 			require.NotNil(t, msg)
 			count++
 			if ctx.Err() != nil || count >= expectedCount {
@@ -80,7 +82,7 @@ func TestRouter_DropsWhenContextCanceled(t *testing.T) {
 
 	router.Route(ctx, msg)
 
-	require.Len(t, router.GetMessageChan(), 0)
+	require.Zero(t, router.Len())
 }
 
 func TestRouter_DropsWhenBufferFull(t *testing.T) {
@@ -103,5 +105,5 @@ func TestRouter_DropsWhenBufferFull(t *testing.T) {
 
 	router.Route(context.Background(), msg)
 
-	require.Len(t, router.GetMessageChan(), bufSize)
+	require.Equal(t, bufSize, router.Len())
 }

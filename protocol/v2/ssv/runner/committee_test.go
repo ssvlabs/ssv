@@ -148,7 +148,7 @@ func newCommitteeRunnerEnv(
 	require.NoError(t, err)
 
 	crunner := runnerI.(*CommitteeRunner)
-	crunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+	crunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()
 	})
 

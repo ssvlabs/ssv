@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -110,7 +110,7 @@ func TestQBFTMapping(t *testing.T) {
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
 				signer,
-				func(ctx context.Context, logger *zap.Logger, height specqbft.Height) ssv.QBFTRoundTimer {
+				func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
 					return roundtimer.NewTestingTimer()
 				},
 			)

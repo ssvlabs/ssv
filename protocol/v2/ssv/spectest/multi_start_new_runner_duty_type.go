@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -182,7 +182,7 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ specqbft.Height) ssv.QBFTRoundTimer {
+	test.Runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
 		return roundtimer.NewTestingTimer()
 	})
 	return test.Runner.StartNewDuty(context.TODO(), logger, test.Duty, test.Threshold)
