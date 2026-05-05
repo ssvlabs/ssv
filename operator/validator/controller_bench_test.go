@@ -43,6 +43,7 @@ func BenchmarkRouterFanout(b *testing.B) {
 			producers.Add(producerCount)
 
 			b.ReportAllocs()
+			// Use the reported *_msgs/s metrics for throughput; ns/op includes the drain wait below.
 			b.ResetTimer()
 			start := time.Now()
 

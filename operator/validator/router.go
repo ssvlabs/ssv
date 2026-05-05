@@ -36,11 +36,11 @@ func (r *messageRouter) route(ctx context.Context, message network.DecodedSSVMes
 		r.logger.Debug("context canceled, dropping message")
 		return false
 	case r.ch <- message:
-		r.recordBufferFill(ctx, false)
+		r.recordBufferFill(ctx)
 		return true
 	default:
 		routerDroppedCounter.Add(ctx, 1)
-		r.recordBufferFill(ctx, true)
+		r.recordBufferFill(ctx)
 		r.logger.Warn("message router buffer is full, dropping message")
 		return false
 	}
@@ -51,7 +51,7 @@ func (r *messageRouter) Receive(ctx context.Context) (network.DecodedSSVMessage,
 	case <-ctx.Done():
 		return nil, false
 	case msg := <-r.ch:
-		r.recordBufferFill(ctx, false)
+		r.recordBufferFill(ctx)
 		return msg, true
 	}
 }
@@ -60,8 +60,8 @@ func (r *messageRouter) Len() int {
 	return len(r.ch)
 }
 
-func (r *messageRouter) recordBufferFill(ctx context.Context, force bool) {
-	if !force && r.bufferFillSampleTick.Add(1)%bufferFillSampleRate != 0 {
+func (r *messageRouter) recordBufferFill(ctx context.Context) {
+	if r.bufferFillSampleTick.Add(1)%bufferFillSampleRate != 0 {
 		return
 	}
 	routerBufferFillGauge.Record(ctx, int64(len(r.ch)))

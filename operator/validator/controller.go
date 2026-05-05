@@ -86,7 +86,7 @@ type ControllerOptions struct {
 	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
 	// Chosen from BenchmarkRouterFanout for the current pod shape, where the
 	// 3.6 CPU cgroup quota rounds to GOMAXPROCS=4.
-	MsgRouterConcurrency int    `yaml:"MsgRouterConcurrency" env:"MSG_ROUTER_CONCURRENCY" env-default:"16" env-description:"Number of goroutines draining the network message router"`
+	MsgRouterConcurrency int    `yaml:"MsgRouterConcurrency" env:"MSG_ROUTER_CONCURRENCY" env-default:"16" env-description:"Number of goroutines draining the network message router; 16 is tuned for ~4 vCPU pods, override on larger hosts"`
 	GasLimit             uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
 }
 
@@ -515,6 +515,9 @@ func (c *Controller) InitValidators() ([]*validator.Validator, error) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *Controller) StartNetworkHandlers() {
+	if c.msgRouterConcurrency <= 0 {
+		c.logger.Fatal("msgRouterConcurrency must be > 0")
+	}
 	c.network.UseMessageRouter(c.messageRouter)
 	for i := 0; i < c.msgRouterConcurrency; i++ {
 		go c.handleRouterMessages()
