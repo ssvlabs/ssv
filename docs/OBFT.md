@@ -1061,7 +1061,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 
 This appendix specifies an opportunistic bid-routing extension to OBFT. **L_Bid** is a bid-determined top layer prepended to OBFT's K rotation-determined layers (yielding `K' = K + 1`). The extension adds a **mini-consensus phase** between Phase 1 and Phase 2 that resolves L_Bid's identity cluster-wide before σ-commitment. The mini-consensus is a single round of all-to-all verdict broadcast with quorum-based binding — verdicts are op-identity-signed claims, not threshold partials, so it adds no new cryptographic primitives and does not change OBFT's safety analysis.
 
-The extension closes three deadlock surfaces that any naive bid-routing extension would expose ([§Background — bid-layer deadlocks](#background--bid-layer-deadlocks)) and adds two adversarial-byz residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) plus the standard 2-2 validity-divergence hard algebraic limit. Healthy-path latency rises by `Δ_minicon` (~150-300ms at Config A); rotation-layer recovery scope is unchanged; safety is identical to bare OBFT.
+The extension closes three deadlock surfaces that any naive bid-routing extension would expose ([§Background — bid-layer deadlocks](#background--bid-layer-deadlocks)) and adds two adversarial-byz residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) plus the standard 2-2 validity-divergence hard algebraic limit. Healthy-path latency rises by `Δ_minicon` (~150-300ms at Config A); rotation-layer recovery scope is unchanged; safety is identical to bare OBFT. L_Bid relies on one additional assumption beyond bare OBFT's threat model — **bid-value honesty** (see [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty)).
 
 ### Background — bid-layer deadlocks
 
@@ -1074,6 +1074,18 @@ Any bid-routing extension that gates σ-eligibility on per-operator local comput
 - **C3 — Validity-divergence on the bid winner.** Some honest find the highest-bid V valid (parent-root match, fork/domain, etc.); others do not. Honest with valid view σ-commit; honest with invalid view NR. σ-pool below `qV` from one side; NR-pool below `qEnc` capped by σ-locked operators; deadlock with no fall-through.
 
 Without a cluster-wide convergence step, all three lead to slot-miss. The mini-consensus replaces "each operator computes σ-eligibility from their local bid view" with "each operator broadcasts a verdict; the cluster binds when verdict-quorum reaches" — verdicts are observable, so honest peers converge on whether quorum reached even when underlying bid sets diverge.
+
+### Additional assumption — bid-value honesty
+
+L_Bid introduces one assumption beyond bare OBFT's: **operators report their bid values truthfully**. Without this, a byzantine operator can claim arbitrary `bid_value` for their preferred `V_i` and reliably win L_Bid argmax, routing the cluster to sign a low-MEV (potentially self-dealt) block. The grief leaves no on-wire evidence and produces no slot-miss, so none of [assumption 4's](#assumed) deterrent mechanisms (slashable evidence, slot-miss visibility to stakers, behavioral patterns visible to honest peers) discipline it per-slot. Safety and liveness are unaffected (Pigeonholes hold regardless); only L_Bid's MEV-value-capture motivation breaks.
+
+The protocol does not enforce bid-value honesty cryptographically. Deployments satisfy it via one of:
+
+- **Relay/builder attestation verification** (recommended for SSV proposer duty) — `KindBid` carries a `relay_attestation` field cryptographically binding `(V, bid_value)` to a cluster-recognized relay or builder; receivers verify before admitting the bid into `bid_set_i`. Spec'd as an optional protocol extension — see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification).
+- **Institutional / permissioned operator set** — operators are vetted such that bid-value lying carries external (legal, reputational, business) consequences sufficient to discipline it. The cluster relies on those external mechanisms; in-protocol attestation is unnecessary.
+- **Post-hoc payment reconciliation** — stakers monitor cluster MEV revenue against expected relay payouts and migrate validators from clusters where claimed bid-values systematically fail to materialize. Same evidence-quality character as OBFT's behavioral-pattern fault detection (slow, false-positive-prone) but viable when in-protocol attestation isn't available.
+
+This assumption is L_Bid-specific — bare OBFT does not depend on it. Deployments choosing OBFT + L_Bid implicitly load this onto their threat model, satisfied by one of the paths above.
 
 ### When to use it
 
@@ -1096,7 +1108,7 @@ Adds to OBFT's setting:
 
 In addition to OBFT's `Phase1Bundle`, `KindOnion`, `KindNR`, `KindCertificate`:
 
-- **`KindBid`** — operator `i`'s bid envelope. Payload `(protocol_tag = "OBFT-LBid-v1", message_kind = "bid-envelope", cluster_id, slot, operator_id i, bid_value, V_i, relay_attestation)`, signed by `i`'s operator-identity key. Carries `i`'s candidate `V_i` (the block they would commit to if their bid wins L_Bid) and the bid value (relay-attested or 0 for vanilla fallback).
+- **`KindBid`** — operator `i`'s bid envelope. Payload `(protocol_tag = "OBFT-LBid-v1", message_kind = "bid-envelope", cluster_id, slot, operator_id i, bid_value, V_i, relay_attestation)`, signed by `i`'s operator-identity key. Carries `i`'s candidate `V_i` (the block they would commit to if their bid wins L_Bid) and the bid value. The `relay_attestation` field is host-defined; verification is governed by an optional protocol extension (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). When the extension is disabled, the field MAY be empty or host-supplied.
 - **`KindBidVerdict`** — operator `i`'s mini-consensus verdict. Payload `(protocol_tag = "OBFT-LBid-v1", message_kind = "minicon-verdict", cluster_id, slot, operator_id i, predicted_LBid_value_root_or_null)`, signed by `i`'s operator-identity key. `predicted_LBid_value_root` is set when `i` claims a specific V is the cluster's L_Bid winner; null when `i` claims no L_Bid (insufficient bid-set visibility, parent-root filter failure, or no consensus reachable).
 
 ### Per-layer windows and deadlines
@@ -1137,7 +1149,7 @@ The coherence rule binding a rotation leader's `KindBid` `V_i` to their Phase-1 
 
 Each operator `i`, by their verdict-broadcast deadline `T_commit + Δ_minicon − (D + δ)`:
 
-1. Computes `bid_set_i` = set of received-and-validated bid envelopes (operator-identity signature valid; relay attestation valid where `bid_value > 0`; bid format valid; parent-root within cluster-recognized set if optional filter enabled — host-supplied criteria; see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter).
+1. Computes `bid_set_i` = set of received-and-validated bid envelopes — operator-identity signature valid AND bid format valid. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bids that fail any enabled filter are excluded from `bid_set_i`.
 2. Computes `predicted_LBid_i`:
    - If `|bid_set_i| ≥ n − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax_{V in bid_set_i} bid_value`, with `op_id` tiebreak on equal bids.
    - Else: `predicted_LBid_i = null` (insufficient visibility or no consensus reachable from `i`'s view).
@@ -1275,6 +1287,31 @@ Measured from `T_commit` (mini-consensus start). At Config A (D=100ms, δ=50ms, 
 | L_Bid 2-1-byz-defect or verdict-equivocation | slot misses | Deadlock at L_Bid blocks fall-through |
 
 Best (success) ≈ 450ms; worst (success) ≈ 850ms; ~2× spread (smaller than bare OBFT's ~4× because the mini-consensus phase is mandatory). Healthy-path is +150-250ms vs bare OBFT (~600ms canonical).
+
+### Optional extension — relay/builder attestation verification
+
+The protocol-level mitigation for [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty). When enabled, the cluster cryptographically rejects bids with unattested `bid_value` claims.
+
+**Wire format.** `KindBid`'s `relay_attestation` payload field carries the relay/builder's signature over `(V, bid_value)` plus the relay/builder identity (or a key reference into a cluster-recognized identity set). When the extension is disabled, the field MAY be empty or host-supplied; the wire format is unchanged across enable/disable, so clusters can toggle the check without coordinating on schema.
+
+**Validation rule.** During mini-consensus bid-set computation, each receiver additionally checks: `relay_attestation` verifies against a cluster-recognized relay/builder identity AND binds the same `(V, bid_value)` pair carried in the `KindBid` payload. Bids that fail are excluded from `bid_set_i` and contribute nothing to argmax.
+
+**What it closes:**
+
+- **Bid-value inflation** — byzantine cannot claim higher `bid_value` than a recognized relay actually committed to.
+- **Permanent L_Bid hijack via fake-bid spam** — byzantine's bids are capped by what cluster-recognized relays actually offer them.
+
+**What it does not close:**
+
+- **Selective bid-withholding** (C1) — handled at the protocol level via verdict-quorum-short → fall-through.
+- **Bid equivocation** — covered by Rule 7.
+- **Operator selecting a low-MEV bid from a recognized relay** — within the operator's discretion; not a protocol concern.
+
+**Cost.** One signature verification per `KindBid` per receiver (small relative to overall cryptographic work) plus the bandwidth of carrying the attestation. Verification must complete within the mini-consensus window; sign-check throughput should be confirmed for the deployment's relay-set size.
+
+**When to enable.** SSV proposer duty under realistic adversarial conditions (operators may run builders or collude with builders for self-dealing). Default ON for SSV's deployment.
+
+**When safe to disable.** Deployments where bid-value honesty holds via the [institutional / permissioned operator set or post-hoc payment reconciliation paths](#additional-assumption--bid-value-honesty). Bandwidth and CPU savings are modest; the trade-off is the explicit assumption-shift documented in the additional-assumption section.
 
 ### Comparison with bare OBFT
 
