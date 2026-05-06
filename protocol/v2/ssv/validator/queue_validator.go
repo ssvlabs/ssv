@@ -62,10 +62,13 @@ func (v *Validator) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 		if pushed := q.TryPush(msg); !pushed {
 			const eventMsg = "❗ dropping message because the queue is full"
 			logger.Warn(eventMsg,
+				zap.String("drop_reason", queue.DropReasonBufferFull),
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msg.MsgID.String()))
 
-			span.AddEvent(eventMsg)
+			span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
+			span.SetStatus(codes.Error, eventMsg)
+			return
 		}
 		span.SetStatus(codes.Ok, "")
 		return

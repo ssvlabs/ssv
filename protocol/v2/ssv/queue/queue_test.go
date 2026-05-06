@@ -283,7 +283,7 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 		queueID   = "attester"
 	)
 
-	queue := New(log.TestLogger(t), 4, WithInboxSizeMetric(gauge, queueType, queueID))
+	queue := New(log.TestLogger(t), 4, WithQueueMetrics(gauge, queueType, queueID))
 	decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}, mockState)
 
 	var rm metricdata.ResourceMetrics
@@ -308,6 +308,53 @@ func TestPriorityQueue_InboxSizeMetricAttributes(t *testing.T) {
 	queueIDAttr, ok := dataPoint.Attributes.Value("ssv.queue.id")
 	require.True(t, ok)
 	require.Equal(t, queueID, queueIDAttr.AsString())
+}
+
+func TestPriorityQueue_TryPushInboxSizeMetricDoesNotExceedCapacityOnDrop(t *testing.T) {
+	reader := metric.NewManualReader()
+	provider := metric.NewMeterProvider(metric.WithReader(reader))
+	testMeter := provider.Meter("test")
+
+	gauge, err := testMeter.Int64Gauge("test_inbox_size")
+	require.NoError(t, err)
+
+	const (
+		queueType = ValidatorQueueMetricType
+		queueID   = "attester"
+	)
+
+	queue := New(log.TestLogger(t), 1, WithQueueMetrics(gauge, queueType, queueID))
+	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	require.True(t, queue.TryPush(msg))
+	require.False(t, queue.TryPush(msg))
+
+	var rm metricdata.ResourceMetrics
+	err = reader.Collect(t.Context(), &rm)
+	require.NoError(t, err)
+
+	gaugeData, ok := rm.ScopeMetrics[0].Metrics[0].Data.(metricdata.Gauge[int64])
+	require.True(t, ok)
+	require.Len(t, gaugeData.DataPoints, 1)
+	require.EqualValues(t, 1, gaugeData.DataPoints[0].Value)
+}
+
+func TestPriorityQueue_LenTracksBacklogAfterInboxDrain(t *testing.T) {
+	q := New(log.TestLogger(t), 4).(*priorityQueue)
+
+	for i := 0; i < 3; i++ {
+		decodeAndPush(t, q, mockConsensusMessage{Height: specqbft.Height(100 + i), Type: specqbft.PrepareMsgType}, mockState)
+	}
+
+	require.Equal(t, 3, q.Len())
+	require.Equal(t, 3, len(q.inbox))
+
+	q.readInbox()
+
+	require.Equal(t, 3, q.Len())
+	require.Equal(t, 0, len(q.inbox))
+	require.NotNil(t, q.head)
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {

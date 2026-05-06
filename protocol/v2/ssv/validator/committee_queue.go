@@ -64,7 +64,8 @@ func (c *Committee) EnqueueMessage(ctx context.Context, msg *queue.SSVMessage) {
 	span.AddEvent("pushing message to the queue")
 	if pushed := q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
-		logger.Warn(errMsg)
+		logger.Warn(errMsg, zap.String("drop_reason", queue.DropReasonBufferFull))
+		span.AddEvent(errMsg, trace.WithAttributes(attribute.String("drop_reason", queue.DropReasonBufferFull)))
 		span.SetStatus(codes.Error, errMsg)
 		return
 	}

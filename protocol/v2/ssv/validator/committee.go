@@ -172,7 +172,7 @@ func (c *Committee) getQueue(logger *zap.Logger, slot phase0.Slot) queue.Queue {
 		q = queue.New(
 			logger,
 			defaultValidatorQueueSize,
-			queue.WithInboxSizeMetric(
+			queue.WithQueueMetrics(
 				queue.InboxSizeMetric,
 				queue.CommitteeQueueMetricType,
 				queue.CommitteeMetricID(slot),
