@@ -1,13 +1,11 @@
 package queue
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
@@ -47,8 +45,7 @@ const (
 	ValidatorQueueMetricType = "validator"
 	CommitteeQueueMetricType = "committee"
 
-	DropReasonBufferFull      = "buffer_full"
-	DropReasonContextCanceled = "context_canceled"
+	DropReasonBufferFull = "buffer_full"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).
@@ -63,16 +60,4 @@ func ValidatorMetricID(runnerRole spectypes.RunnerRole) string {
 func CommitteeMetricID(slot phase0.Slot) string {
 	slotInEpoch := slot % 32
 	return fmt.Sprintf("%d", slotInEpoch)
-}
-
-func recordDroppedMessage(queueType, queueID, reason string) {
-	droppedMessagesMetric.Add(
-		context.Background(),
-		1,
-		metric.WithAttributes(
-			attribute.String("ssv.queue.type", queueType),
-			attribute.String("ssv.queue.id", queueID),
-			attribute.String("ssv.queue.drop_reason", reason),
-		),
-	)
 }

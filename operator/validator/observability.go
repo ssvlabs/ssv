@@ -81,9 +81,3 @@ func recordValidatorStatus(ctx context.Context, count uint32, status validatorSt
 		metric.WithAttributes(validatorStatusAttribute(status)),
 	)
 }
-
-func recordRouterMessageDrop(ctx context.Context, reason string) {
-	routerDroppedMessagesCounter.Add(ctx, 1,
-		metric.WithAttributes(attribute.String("ssv.validator.router.drop_reason", reason)),
-	)
-}

@@ -25,23 +25,34 @@ func (noopQueueObserver) recordDrop(string) {}
 type metricsQueueObserver struct {
 	inboxSizeMetric    metric.Int64Gauge
 	inboxSizeRecordOps []metric.RecordOption
-	queueType          string
-	queueID            string
+	// dropAddOpsByReason holds pre-built AddOptions per known drop reason so
+	// the hot path doesn't allocate attributes on every dropped message.
+	dropAddOpsByReason map[string][]metric.AddOption
 }
 
-// WithInboxSizeMetric configures queue-level observability for inbox size and dropped messages.
-func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType, queueID string) Option {
-	attrSet := attribute.NewSet(
+// WithQueueMetrics configures queue-level observability for inbox size and dropped messages.
+func WithQueueMetrics(inboxSizeMetric metric.Int64Gauge, queueType, queueID string) Option {
+	queueAttrSet := attribute.NewSet(
 		attribute.String("ssv.queue.type", queueType),
 		attribute.String("ssv.queue.id", queueID),
 	)
 
+	dropAddOpsByReason := make(map[string][]metric.AddOption, 1)
+	for _, reason := range []string{DropReasonBufferFull} {
+		dropAddOpsByReason[reason] = []metric.AddOption{
+			metric.WithAttributeSet(attribute.NewSet(
+				attribute.String("ssv.queue.type", queueType),
+				attribute.String("ssv.queue.id", queueID),
+				attribute.String("ssv.queue.drop_reason", reason),
+			)),
+		}
+	}
+
 	return func(q *priorityQueue) {
 		q.observer = metricsQueueObserver{
 			inboxSizeMetric:    inboxSizeMetric,
-			inboxSizeRecordOps: []metric.RecordOption{metric.WithAttributeSet(attrSet)},
-			queueType:          queueType,
-			queueID:            queueID,
+			inboxSizeRecordOps: []metric.RecordOption{metric.WithAttributeSet(queueAttrSet)},
+			dropAddOpsByReason: dropAddOpsByReason,
 		}
 	}
 }
@@ -58,5 +69,9 @@ func (o metricsQueueObserver) recordInboxSize(inboxSize int64) {
 }
 
 func (o metricsQueueObserver) recordDrop(reason string) {
-	recordDroppedMessage(o.queueType, o.queueID, reason)
+	ops, ok := o.dropAddOpsByReason[reason]
+	if !ok {
+		return
+	}
+	droppedMessagesMetric.Add(context.Background(), 1, ops...)
 }
