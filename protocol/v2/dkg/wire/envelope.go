@@ -1,4 +1,4 @@
-// Package wire provides the on-wire format for SSV's TBFT-IBE DKG ceremony
+// Package wire provides the on-wire format for SSV.s OBFT-IBE DKG ceremony
 // messages. The DKG ceremony is described in docs/TBFT-DKG-TASKS.md; this
 // package covers Phase A2 (wire format) of that plan.
 //
@@ -16,7 +16,7 @@
 // carries no signature field.
 //
 // Routing fields (ClusterID, Generation, OperatorID) live in each body kind,
-// not in the envelope, mirroring the TBFT envelope's design where routing
+// not in the envelope, mirroring the OBFT envelope's design where routing
 // keys (Height, OperatorID) live in the inner Onion / NonReceiptAttestation
 // payloads. The envelope is a one-byte discriminator + body.
 //
@@ -24,7 +24,7 @@
 // fields hex-encoded (matching ssvlabs/ssv-dkg's encoding choice in
 // pkgs/wire). The DKG ceremony is once-per-cluster-lifetime, so the
 // debuggability of JSON outweighs the bandwidth advantage of a binary
-// format. The runtime TBFT path stays binary (see protocol/v2/tbft/wire).
+// format. The runtime OBFT path stays binary (see protocol/v2/obft/wire).
 //
 // On-wire shape:
 //

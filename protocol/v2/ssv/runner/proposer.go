@@ -22,13 +22,13 @@ import (
 
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	tbftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft"
+	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// ProposerRunner runs the proposer duty using TBFT for consensus. The QBFT
-// path was removed in favor of TBFT exclusively (see docs/TBFT.md +
-// docs/IBE-INTEGRATION.md). Construction without a TBFTController is an
+// ProposerRunner runs the proposer duty using OBFT for consensus. The QBFT
+// path was removed in favor of OBFT exclusively (see docs/OBFT.md +
+// docs/IBE-INTEGRATION.md). Construction without a OBFTController is an
 // error.
 type ProposerRunner struct {
 	*BaseRunner
@@ -47,7 +47,7 @@ type ProposerRunner struct {
 	proposerDelay time.Duration
 
 	// cachedFullBlock holds the initially fetched full (non-blinded) block
-	// for this duty on this operator, if any. The TBFT SubmitOutput hook
+	// for this duty on this operator, if any. The OBFT SubmitOutput hook
 	// uses it to submit the full block + blobs (Deneb/Electra/Fulu) when
 	// the decided value matches what this operator originally fetched —
 	// otherwise it falls back to the agreed-upon blinded block.
@@ -57,27 +57,28 @@ type ProposerRunner struct {
 	// SubmitOutput time.
 	cachedBlindedBlockSSZ []byte
 
-	// TBFT machinery. Owned by the runner; constructed in NewProposerRunner
+	// OBFT machinery. Owned by the runner; constructed in NewProposerRunner
 	// from the caller-supplied Controller plus runner-bound LifecycleHooks.
-	// `tbftSlots` carries per-slot scratch state (RANDAO sig, fetched block
+	// `obftSlots` carries per-slot scratch state (RANDAO sig, fetched block
 	// version) that the lifecycle hooks need but the protocol wire types
 	// don't carry.
-	tbftCtrl  *tbftadapter.Controller
-	tbftSched *tbftadapter.Scheduler
-	tbftRL    *tbftadapter.RateLimiter
+	obftCtrl  *obftadapter.Controller
+	obftSched *obftadapter.Scheduler
+	obftRL    *obftadapter.RateLimiter
 
-	tbftMu    sync.Mutex
-	tbftSlots map[phase0.Slot]*tbftSlotState
+	obftMu    sync.Mutex
+	obftSlots map[phase0.Slot]*obftSlotState
 }
 
-// tbftSlotState holds the per-slot scratch space the TBFT lifecycle
+// obftSlotState holds the per-slot scratch space the OBFT lifecycle
 // hooks need: the RANDAO signature for block fetches, the spec version
 // observed at fetch time (so SubmitOutput can decode the agreed-upon
 // blinded block), and the cancel func for the slot's driver goroutine.
-type tbftSlotState struct {
-	randao  phase0.BLSSignature
-	cancel  context.CancelFunc
-	version spec.DataVersion // set when this operator fetches a candidate; zero otherwise
+type obftSlotState struct {
+	randao    phase0.BLSSignature
+	cancel    context.CancelFunc
+	version   spec.DataVersion // set when this operator fetches a candidate; zero otherwise
+	slotStart time.Time        // wall-clock slot-start, used to compute observedOffset for Phase-1 bundles
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -92,21 +93,21 @@ type ProposerRunnerOptions struct {
 	// higher MEV.
 	ProposerDelay time.Duration
 
-	// TBFTController is required. It owns the cluster's TBFT primitives
+	// OBFTController is required. It owns the cluster's OBFT primitives
 	// (BLSSigner for value-signing, KyberSigner for IBE-tag signing under
 	// the DST-trick approach, TLockIBE for layer encryption, plus the
 	// pubkey-shares map and committee). See docs/IBE-INTEGRATION.md and
-	// protocol/v2/ssv/runner/tbft for the adapter API. NewProposerRunner
+	// protocol/v2/ssv/runner/obft for the adapter API. NewProposerRunner
 	// returns an error when this is nil.
-	TBFTController *tbftadapter.Controller
+	OBFTController *obftadapter.Controller
 }
 
 func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
-	if opts.TBFTController == nil {
-		return nil, errors.New("TBFTController is required for ProposerRunner")
+	if opts.OBFTController == nil {
+		return nil, errors.New("OBFTController is required for ProposerRunner")
 	}
 
 	r := &ProposerRunner{
@@ -115,7 +116,7 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 			NetworkConfig:  opts.NetworkConfig,
 			Share:          opts.Share,
 			// QBFTController stays nil for the proposer — the QBFT
-			// consensus path was removed in favor of TBFT. BaseRunner
+			// consensus path was removed in favor of OBFT. BaseRunner
 			// methods that read QBFTController are nil-safe (or have
 			// been made so).
 			highestDecidedSlot: opts.HighestDecidedSlot,
@@ -132,20 +133,22 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		proposerDelay: opts.ProposerDelay,
 	}
 
-	hooks := &tbftadapter.LifecycleHooks{
-		FetchCandidate: r.tbftFetchCandidate,
-		Broadcast:      r.tbftBroadcast,
-		SubmitOutput:   r.tbftSubmitOutput,
-		OnMissedSlot:   r.tbftOnMissedSlot,
+	hooks := &obftadapter.LifecycleHooks{
+		FetchCandidate:       r.obftFetchCandidate,
+		HostValidate:         r.obftHostValidate,
+		Broadcast:            r.obftBroadcast,
+		SubmitOutput:         r.obftSubmitOutput,
+		BroadcastCertificate: r.obftBroadcastCertificate,
+		OnMissedSlot:         r.obftOnMissedSlot,
 	}
-	sched, err := tbftadapter.NewScheduler(opts.TBFTController, hooks)
+	sched, err := obftadapter.NewScheduler(opts.OBFTController, hooks)
 	if err != nil {
-		return nil, fmt.Errorf("build TBFT scheduler: %w", err)
+		return nil, fmt.Errorf("build OBFT scheduler: %w", err)
 	}
-	r.tbftCtrl = opts.TBFTController
-	r.tbftSched = sched
-	r.tbftRL = tbftadapter.NewRateLimiter()
-	r.tbftSlots = make(map[phase0.Slot]*tbftSlotState)
+	r.obftCtrl = opts.OBFTController
+	r.obftSched = sched
+	r.obftRL = obftadapter.NewRateLimiter()
+	r.obftSlots = make(map[phase0.Slot]*obftSlotState)
 
 	return r, nil
 }
@@ -213,30 +216,30 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("current validator duty: %w", err)
 	}
 
-	// Hand off to the TBFT driver. Each layer leader fetches via the
+	// Hand off to the OBFT driver. Each layer leader fetches via the
 	// FetchCandidate hook at its own FetchAt offset; SubmitOutput
 	// delivers the agreed-upon block to the beacon node. RANDAO is
 	// plumbed via per-slot state so the FetchCandidate hook can use it.
 	r.measurements.StartConsensus()
-	return r.tbftStartSlot(ctx, logger, duty.Slot, fullSig)
+	return r.obftStartSlot(ctx, logger, duty.Slot, fullSig)
 }
 
-// ProcessConsensus is unused on the proposer — TBFT carries its own
-// envelope type (SSVTBFTMsgType, see proposer_tbft.go::ProcessTBFTEnvelopeMsg).
+// ProcessConsensus is unused on the proposer — OBFT carries its own
+// envelope type (SSVOBFTMsgType, see proposer_obft.go::ProcessOBFTEnvelopeMsg).
 // QBFT consensus messages arriving at a proposer runner indicate a
 // misrouted message or a peer running an older binary; we surface them
 // as an error so the network layer logs and drops them.
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return fmt.Errorf("proposer runner: QBFT consensus messages are not handled (TBFT only)")
+	return fmt.Errorf("proposer runner: QBFT consensus messages are not handled (OBFT only)")
 }
 
-// ProcessPostConsensus is unused on the proposer — TBFT folds post-
+// ProcessPostConsensus is unused on the proposer — OBFT folds post-
 // consensus aggregation into Phase 3 of the protocol, surfaced via the
-// SubmitOutput hook (proposer_tbft.go::tbftSubmitOutput). Post-consensus
+// SubmitOutput hook (proposer_obft.go::obftSubmitOutput). Post-consensus
 // partial-signature messages arriving at a proposer runner are treated
 // the same way as stray QBFT consensus messages above.
 func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return fmt.Errorf("proposer runner: QBFT post-consensus messages are not handled (TBFT only)")
+	return fmt.Errorf("proposer runner: QBFT post-consensus messages are not handled (OBFT only)")
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
@@ -249,11 +252,11 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 }
 
 // expectedPostConsensusRootsAndDomain is part of the Runner interface
-// but unused on the proposer — TBFT doesn't run a post-consensus partial-
+// but unused on the proposer — OBFT doesn't run a post-consensus partial-
 // sig collection phase (the reconstructed block-root signature falls out
-// of Phase 3's IBE walk, see proposer_tbft.go::tbftSubmitOutput).
+// of Phase 3's IBE walk, see proposer_obft.go::obftSubmitOutput).
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, phase0.DomainType{}, fmt.Errorf("proposer runner: no post-consensus phase (TBFT only)")
+	return nil, phase0.DomainType{}, fmt.Errorf("proposer runner: no post-consensus phase (OBFT only)")
 }
 
 // executeDuty steps:
@@ -363,7 +366,7 @@ func (r *ProposerRunner) UnmarshalJSON(data []byte) error {
 	}
 
 	r.BaseRunner = aux.BaseRunner
-	// Runtime dependencies (TBFT controller, hooks, signers, ekm signer,
+	// Runtime dependencies (OBFT controller, hooks, signers, ekm signer,
 	// beacon, network, doppelganger, measurements, …) are NOT restored
 	// from JSON. Callers must rehydrate them explicitly via
 	// NewProposerRunner before using a decoded runner.

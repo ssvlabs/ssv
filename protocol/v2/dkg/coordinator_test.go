@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
-	"github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 )
 
 // inMemBus is a synthetic broadcast bus that fans out each operator's
@@ -151,7 +151,7 @@ func cidFor(seed byte) [32]byte {
 
 // TestCoordinator_HappyPath_7Of7 — the canonical happy path. Seven
 // operators, threshold 5 (= 2f+1 for f=2, the unified qEnc=qV per
-// docs/TBFT.md "Why it's safe"), all honest, all online. DKG
+// docs/OBFT.md "Why it's safe"), all honest, all online. DKG
 // completes; every operator's Commits[0] is the same point.
 func TestCoordinator_HappyPath_7Of7(t *testing.T) {
 	committee := []uint64{1, 2, 3, 4, 5, 6, 7}
@@ -309,26 +309,26 @@ func TestCoordinator_DKGOutput_KyberSignerRoundTrip(t *testing.T) {
 	require.Len(t, results, len(committee))
 
 	// Each operator's KyberSigner consumes the marshaled Share.V bytes —
-	// the same shape Phase E3's setup_tbft.go would produce from the
+	// the same shape Phase E3's setup_obft.go would produce from the
 	// IBEShareWriter persistence. Sign a fixed test tag with each
 	// operator and aggregate any threshold-sized subset.
 	tag := []byte("dkg-roundtrip-tag/v1")
 	signer := blsbackend.NewKyberSigner(nil) // verify-only base instance
 
-	partials := make(map[tbftcore.OperatorID]tbftcore.Signature, len(committee))
+	partials := make(map[obftcore.OperatorID]obftcore.Signature, len(committee))
 	for _, opID := range committee {
 		shareBytes, err := results[opID].Share.V.MarshalBinary()
 		require.NoError(t, err)
 		opSigner := blsbackend.NewKyberSigner(shareBytes)
 		sig, err := opSigner.SignPartial(tag)
 		require.NoError(t, err)
-		partials[tbftcore.OperatorID(opID)] = sig
+		partials[obftcore.OperatorID(opID)] = sig
 	}
 
 	// Take the first `threshold` partials and aggregate.
-	subset := make(map[tbftcore.OperatorID]tbftcore.Signature, threshold)
+	subset := make(map[obftcore.OperatorID]obftcore.Signature, threshold)
 	for i, opID := range committee[:threshold] {
-		subset[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+		subset[obftcore.OperatorID(opID)] = partials[obftcore.OperatorID(opID)]
 		_ = i
 	}
 	aggregate, err := signer.AggregatePartials(subset)
@@ -344,9 +344,9 @@ func TestCoordinator_DKGOutput_KyberSignerRoundTrip(t *testing.T) {
 
 	// And: a different threshold-sized subset must produce a byte-
 	// equivalent aggregate (Lagrange interpolation is subset-invariant).
-	subset2 := make(map[tbftcore.OperatorID]tbftcore.Signature, threshold)
+	subset2 := make(map[obftcore.OperatorID]obftcore.Signature, threshold)
 	for _, opID := range committee[len(committee)-threshold:] {
-		subset2[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+		subset2[obftcore.OperatorID(opID)] = partials[obftcore.OperatorID(opID)]
 	}
 	aggregate2, err := signer.AggregatePartials(subset2)
 	require.NoError(t, err)

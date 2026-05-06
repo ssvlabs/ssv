@@ -108,7 +108,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	switch ssvMessage.MsgType {
-	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType, ssvmessage.SSVTBFTMsgType, ssvmessage.SSVDKGMsgType:
+	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType, ssvmessage.SSVOBFTMsgType, ssvmessage.SSVDKGMsgType:
 		break
 	case ssvmessage.SSVEventMsgType:
 		// Rule: Event message

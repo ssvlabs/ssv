@@ -8,13 +8,13 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
-	"github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 // TestEndToEnd_DKGOutput_TLockIBE — the Phase G1 capstone. Proves that
-// the TBFT-IBE Option-B pipeline works end-to-end with a DKG-derived IBE
+// the OBFT-IBE Option-B pipeline works end-to-end with a DKG-derived IBE
 // keypair:
 //
 //  1. Run Pedersen DKG via the Coordinator at threshold qEnc = f+1.
@@ -44,7 +44,7 @@ func TestEndToEnd_DKGOutput_TLockIBE(t *testing.T) {
 	clusterIBEPubKey, err := results[committee[0]].Commits[0].MarshalBinary()
 	require.NoError(t, err)
 
-	tag := []byte("tbft-no-quorum-tag/v1")
+	tag := []byte("obft-no-quorum-tag/v1")
 	plaintext := []byte("opaque payload — could be any partial-sig bytes the protocol IBE-wraps")
 
 	ibe := blsbackend.NewTLockIBE()
@@ -54,20 +54,20 @@ func TestEndToEnd_DKGOutput_TLockIBE(t *testing.T) {
 
 	// Each operator signs the tag with KyberSigner using their DKG share.
 	signer := blsbackend.NewKyberSigner(nil)
-	partials := make(map[tbftcore.OperatorID]tbftcore.Signature, len(committee))
+	partials := make(map[obftcore.OperatorID]obftcore.Signature, len(committee))
 	for _, opID := range committee {
 		shareBytes, err := results[opID].Share.V.MarshalBinary()
 		require.NoError(t, err)
 		opSigner := blsbackend.NewKyberSigner(shareBytes)
 		sig, err := opSigner.SignPartial(tag)
 		require.NoError(t, err)
-		partials[tbftcore.OperatorID(opID)] = sig
+		partials[obftcore.OperatorID(opID)] = sig
 	}
 
 	// Threshold-separation proof: exactly qEnc partials decrypts.
-	subset := make(map[tbftcore.OperatorID]tbftcore.Signature, qEnc)
+	subset := make(map[obftcore.OperatorID]obftcore.Signature, qEnc)
 	for _, opID := range committee[:qEnc] {
-		subset[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+		subset[obftcore.OperatorID(opID)] = partials[obftcore.OperatorID(opID)]
 	}
 	decryptionKey, err := signer.AggregatePartials(subset)
 	require.NoError(t, err)
@@ -80,9 +80,9 @@ func TestEndToEnd_DKGOutput_TLockIBE(t *testing.T) {
 	// Cross-subset consistency: a different qEnc-sized subset produces
 	// the same decryption key (Lagrange invariance) and therefore
 	// decrypts the same plaintext.
-	subset2 := make(map[tbftcore.OperatorID]tbftcore.Signature, qEnc)
+	subset2 := make(map[obftcore.OperatorID]obftcore.Signature, qEnc)
 	for _, opID := range committee[len(committee)-qEnc:] {
-		subset2[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+		subset2[obftcore.OperatorID(opID)] = partials[obftcore.OperatorID(opID)]
 	}
 	decryptionKey2, err := signer.AggregatePartials(subset2)
 	require.NoError(t, err)
@@ -91,9 +91,9 @@ func TestEndToEnd_DKGOutput_TLockIBE(t *testing.T) {
 	// Below-threshold: f = qEnc-1 partials must NOT decrypt. Lagrange
 	// over fewer points produces a different scalar → different (wrong)
 	// decryption key → IBE decryption fails.
-	belowSubset := make(map[tbftcore.OperatorID]tbftcore.Signature, f)
+	belowSubset := make(map[obftcore.OperatorID]obftcore.Signature, f)
 	for _, opID := range committee[:f] {
-		belowSubset[tbftcore.OperatorID(opID)] = partials[tbftcore.OperatorID(opID)]
+		belowSubset[obftcore.OperatorID(opID)] = partials[obftcore.OperatorID(opID)]
 	}
 	wrongKey, err := signer.AggregatePartials(belowSubset)
 	require.NoError(t, err) // aggregate succeeds; the resulting key is just wrong
@@ -115,12 +115,12 @@ func TestEndToEnd_DKGOutput_TLockIBE(t *testing.T) {
 	validatorShares, err := threshold.Create(master.Serialize(), uint64(qV), uint64(len(committee)))
 	require.NoError(t, err)
 
-	validatorPartials := make(map[tbftcore.OperatorID]tbftcore.Signature, len(committee))
+	validatorPartials := make(map[obftcore.OperatorID]obftcore.Signature, len(committee))
 	for opID, sk := range validatorShares {
 		opSigner := blsbackend.NewKyberSigner(sk.Serialize())
 		sig, err := opSigner.SignPartial(tag)
 		require.NoError(t, err)
-		validatorPartials[tbftcore.OperatorID(opID)] = sig
+		validatorPartials[obftcore.OperatorID(opID)] = sig
 	}
 	validatorAggregate, err := signer.AggregatePartials(validatorPartials)
 	require.NoError(t, err)

@@ -226,8 +226,8 @@ func (mv *messageValidator) handleSignedSSVMessage(
 			return decodedMessage, err
 		}
 
-	case ssvmessage.SSVTBFTMsgType:
-		envelope, err := mv.validateTBFTMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+	case ssvmessage.SSVOBFTMsgType:
+		envelope, err := mv.validateOBFTMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = envelope
 		if err != nil {
 			return decodedMessage, err

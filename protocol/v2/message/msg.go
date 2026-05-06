@@ -11,8 +11,8 @@ const (
 	// SSVEventMsgType extends spec msg type
 	SSVEventMsgType spectypes.MsgType = 200
 
-	// SSVTBFTMsgType carries TBFT-protocol envelopes (Onion / NonReceipt /
-	// Candidate, see protocol/v2/tbft/wire) inside a SignedSSVMessage.
+	// SSVOBFTMsgType carries OBFT-protocol envelopes (Phase1Bundle / Onion /
+	// NR / Certificate, see protocol/v2/obft/wire) inside a SignedSSVMessage.
 	//
 	// PLACEHOLDER VALUE: 0xF0 (= 240). Allocate a stable ecosystem-wide
 	// value before mainnet — older SSV nodes that don't recognise this
@@ -20,15 +20,15 @@ const (
 	// libp2p-pubsub `Reject` outcome that drops the message and decrements
 	// the sender's peer score). Mixed-cluster rollouts therefore degrade
 	// gossip; rollout must be coordinated cluster-wide.
-	SSVTBFTMsgType spectypes.MsgType = 0xF0
+	SSVOBFTMsgType spectypes.MsgType = 0xF0
 
-	// SSVDKGMsgType carries TBFT-IBE DKG ceremony envelopes (Exchange /
+	// SSVDKGMsgType carries OBFT-IBE DKG ceremony envelopes (Exchange /
 	// Deal / Response / Justification, see protocol/v2/dkg/wire) inside
 	// a SignedSSVMessage. Used once-per-cluster-lifetime to establish
 	// the IBE keypair under Option B (see docs/TBFT-DKG-TASKS.md).
 	//
 	// PLACEHOLDER VALUE: 0xF1 (= 241). Same mainnet-allocation caveat as
-	// SSVTBFTMsgType.
+	// SSVOBFTMsgType.
 	SSVDKGMsgType spectypes.MsgType = 0xF1
 )
 
@@ -53,8 +53,8 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "partial_signature"
 	case SSVEventMsgType:
 		return "event"
-	case SSVTBFTMsgType:
-		return "tbft"
+	case SSVOBFTMsgType:
+		return "obft"
 	case SSVDKGMsgType:
 		return "dkg"
 	default:

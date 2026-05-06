@@ -11,14 +11,14 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	tbftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft"
+	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
-	"github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// buildTBFTControllerForProposer constructs a TBFT Controller for the
+// buildOBFTControllerForProposer constructs a OBFT Controller for the
 // proposer duty of `share`. The IBE wiring is selected by the
 // IBEUseOptionB toggle (see ibe_option.go):
 //
@@ -40,11 +40,11 @@ import (
 //
 // Returns a non-nil error only on Controller construction failure
 // (malformed inputs, etc.).
-func buildTBFTControllerForProposer(
+func buildOBFTControllerForProposer(
 	ssvShare *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
 	options *validator.CommonOptions,
-) (*tbftadapter.Controller, error) {
+) (*obftadapter.Controller, error) {
 	shareProvider, ok := options.Signer.(ekm.ShareBytesProvider)
 	if !ok {
 		return nil, nil
@@ -55,14 +55,14 @@ func buildTBFTControllerForProposer(
 	}
 
 	clusterID := ssvShare.CommitteeID()
-	pubKeyShares := make(map[tbftcore.OperatorID][]byte, len(ssvShare.Committee))
+	pubKeyShares := make(map[obftcore.OperatorID][]byte, len(ssvShare.Committee))
 	committee := make([]spectypes.OperatorID, 0, len(ssvShare.Committee))
 	for _, m := range ssvShare.Committee {
-		pubKeyShares[tbftcore.OperatorID(m.Signer)] = append([]byte(nil), m.SharePubKey...)
+		pubKeyShares[obftcore.OperatorID(m.Signer)] = append([]byte(nil), m.SharePubKey...)
 		committee = append(committee, m.Signer)
 	}
 
-	opts := tbftadapter.ControllerOptions{
+	opts := obftadapter.ControllerOptions{
 		OperatorID:   operator.OperatorID,
 		Committee:    committee,
 		ClusterID:    clusterID,
@@ -108,9 +108,9 @@ func buildTBFTControllerForProposer(
 		opts.TagSigner = blsbackend.NewKyberSigner(shareBytes)
 	}
 
-	ctrl, err := tbftadapter.NewController(opts)
+	ctrl, err := obftadapter.NewController(opts)
 	if err != nil {
-		return nil, fmt.Errorf("build TBFT controller: %w", err)
+		return nil, fmt.Errorf("build OBFT controller: %w", err)
 	}
 	return ctrl, nil
 }
@@ -125,7 +125,7 @@ func buildTBFTControllerForProposer(
 // IDs). Aligns with protocol/v2/dkg/coordinator.go's buildNodes choice.
 //
 // Used only under Option B (see IBEUseOptionB).
-func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.OperatorID) (map[tbftcore.OperatorID][]byte, error) {
+func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.OperatorID) (map[obftcore.OperatorID][]byte, error) {
 	if len(polyCommits) == 0 {
 		return nil, fmt.Errorf("empty polyCommits")
 	}
@@ -140,7 +140,7 @@ func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.Operator
 	}
 	pp := share.NewPubPoly(g1, nil, commits)
 
-	out := make(map[tbftcore.OperatorID][]byte, len(committee))
+	out := make(map[obftcore.OperatorID][]byte, len(committee))
 	for _, opID := range committee {
 		if opID == 0 {
 			return nil, fmt.Errorf("operator id 0 not supported")
@@ -151,7 +151,7 @@ func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.Operator
 		if err != nil {
 			return nil, fmt.Errorf("marshal IBE pubkey share for op %d: %w", opID, err)
 		}
-		out[tbftcore.OperatorID(opID)] = b
+		out[obftcore.OperatorID(opID)] = b
 	}
 	return out, nil
 }

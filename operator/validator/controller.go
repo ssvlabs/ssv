@@ -150,7 +150,7 @@ type Controller struct {
 	// operator participates in (TBFT Option B; see
 	// docs/TBFT-DKG-TASKS.md). nil for remote-signer setups whose
 	// BeaconSigner doesn't expose IBE share storage — those operators
-	// continue to run without a TBFT proposer runner (FW1).
+	// continue to run without a OBFT proposer runner (FW1).
 	dkgOrchestrator *DKGOrchestrator
 
 	// committeesObservers is a cache of initialized committeeObserver instances
@@ -285,7 +285,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 				Store:      store,
 			})
 			if err != nil {
-				logger.Warn("could not build DKG orchestrator; TBFT proposer runner will be unavailable",
+				logger.Warn("could not build DKG orchestrator; OBFT proposer runner will be unavailable",
 					zap.Error(err))
 			} else {
 				ctrl.dkgOrchestrator = dkgOrch
@@ -787,7 +787,7 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	}
 
 	// Ensure the cluster's IBE share is established before any runner is
-	// constructed (TBFT proposer runner depends on it). Per
+	// constructed (OBFT proposer runner depends on it). Per
 	// docs/TBFT-DKG-TASKS.md D7, this blocks duties for the share until
 	// DKG completes. Idempotent: returns immediately if a share is
 	// already persisted for this cluster. Skipped when the orchestrator
@@ -1196,15 +1196,15 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			// Proposer duty runs on TBFT exclusively (the QBFT path was
-			// removed). Build the TBFT controller from the operator's
+			// Proposer duty runs on OBFT exclusively (the QBFT path was
+			// removed). Build the OBFT controller from the operator's
 			// share + cluster pubkey shares.
-			tbftCtrl, tbftErr := buildTBFTControllerForProposer(share, operator, options)
-			if tbftErr != nil {
-				return nil, fmt.Errorf("could not build TBFT controller: %w", tbftErr)
+			obftCtrl, obftErr := buildOBFTControllerForProposer(share, operator, options)
+			if obftErr != nil {
+				return nil, fmt.Errorf("could not build OBFT controller: %w", obftErr)
 			}
-			if tbftCtrl == nil {
-				// TBFT not available for this share — typically a
+			if obftCtrl == nil {
+				// OBFT not available for this share — typically a
 				// remote-signing setup before the drand-DST EKM
 				// extension lands, or a test setup that hasn't
 				// registered the share with the local signer. The
@@ -1220,7 +1220,7 @@ func SetupRunners(
 				HighestDecidedSlot:  0,
 				Graffiti:            options.Graffiti,
 				ProposerDelay:       options.ProposerDelay,
-				TBFTController:      tbftCtrl,
+				OBFTController:      obftCtrl,
 			})
 		case spectypes.RoleAggregator:
 			aggregatorValueChecker := ssv.NewAggregatorChecker(options.NetworkConfig.Beacon, share.ValidatorPubKey, share.ValidatorIndex)

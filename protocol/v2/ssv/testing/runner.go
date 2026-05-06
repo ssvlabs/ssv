@@ -18,11 +18,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	tbftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/tbft"
+	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	tbftcore "github.com/ssvlabs/ssv/protocol/v2/tbft"
-	"github.com/ssvlabs/ssv/protocol/v2/tbft/blsbackend"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
@@ -162,10 +162,10 @@ var ConstructBaseRunner = func(
 		}
 		r = rnr
 	case spectypes.RoleProposer:
-		var tbftCtrl *tbftadapter.Controller
-		tbftCtrl, err = buildTestTBFTController(keySet, 1)
+		var obftCtrl *obftadapter.Controller
+		obftCtrl, err = buildTestOBFTController(keySet, 1)
 		if err != nil {
-			return nil, fmt.Errorf("build test TBFT controller: %w", err)
+			return nil, fmt.Errorf("build test OBFT controller: %w", err)
 		}
 		r, err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 			BaseRunnerOptions:   baseOpts,
@@ -173,7 +173,7 @@ var ConstructBaseRunner = func(
 			HighestDecidedSlot:  TestingHighestDecidedSlot,
 			Graffiti:            []byte("graffiti"),
 			ProposerDelay:       0,
-			TBFTController:      tbftCtrl,
+			OBFTController:      obftCtrl,
 		})
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
@@ -335,23 +335,23 @@ var ConstructBaseRunnerWithShareMap = func(
 		}
 		r = rnr
 	case spectypes.RoleProposer:
-		var tbftCtrl *tbftadapter.Controller
+		var obftCtrl *obftadapter.Controller
 		if keySetInstance != nil {
-			tbftCtrl, err = buildTestTBFTController(keySetInstance, 1)
+			obftCtrl, err = buildTestOBFTController(keySetInstance, 1)
 			if err != nil {
-				return nil, fmt.Errorf("build test TBFT controller: %w", err)
+				return nil, fmt.Errorf("build test OBFT controller: %w", err)
 			}
 		}
 		// When the shareMap is empty (the "RunnerConstruction_no_shares"
 		// spec test), NewProposerRunner errors first on the missing
-		// share — the nil TBFTController never gets validated.
+		// share — the nil OBFTController never gets validated.
 		r, err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
 			BaseRunnerOptions:   baseOpts,
 			DoppelgangerHandler: dgHandler,
 			HighestDecidedSlot:  TestingHighestDecidedSlot,
 			Graffiti:            []byte("graffiti"),
 			ProposerDelay:       0,
-			TBFTController:      tbftCtrl,
+			OBFTController:      obftCtrl,
 		})
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(runner.SyncCommitteeAggregatorRunnerOptions{
@@ -389,7 +389,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	return r, err
 }
 
-// buildTestTBFTController constructs a TBFT Controller for the test
+// buildTestOBFTController constructs a OBFT Controller for the test
 // proposer-runner using a spec-testing keyset. Each operator's share
 // becomes a BLSSigner / KyberSigner pair (DST-trick); IBE is TLockIBE.
 //
@@ -397,15 +397,15 @@ var ConstructBaseRunnerWithShareMap = func(
 // controller — they expect QBFT-decided behavior. The constructor is
 // here to keep the test harness compileable; the user opted to skip
 // the proposer spec-test rework when QBFT was removed.
-func buildTestTBFTController(keySet *spectestingutils.TestKeySet, operatorID spectypes.OperatorID) (*tbftadapter.Controller, error) {
+func buildTestOBFTController(keySet *spectestingutils.TestKeySet, operatorID spectypes.OperatorID) (*obftadapter.Controller, error) {
 	shareBytes := keySet.Shares[operatorID].Serialize()
-	pubKeyShares := make(map[tbftcore.OperatorID][]byte, len(keySet.Shares))
+	pubKeyShares := make(map[obftcore.OperatorID][]byte, len(keySet.Shares))
 	committee := make([]spectypes.OperatorID, 0, len(keySet.Shares))
 	for opID, sk := range keySet.Shares {
-		pubKeyShares[tbftcore.OperatorID(opID)] = sk.GetPublicKey().Serialize()
+		pubKeyShares[obftcore.OperatorID(opID)] = sk.GetPublicKey().Serialize()
 		committee = append(committee, opID)
 	}
-	return tbftadapter.NewController(tbftadapter.ControllerOptions{
+	return obftadapter.NewController(obftadapter.ControllerOptions{
 		OperatorID:    operatorID,
 		Committee:     committee,
 		ClusterID:     [32]byte{0xAA, 0xBB}, // arbitrary cluster ID for tests

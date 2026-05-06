@@ -22,7 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/tbft/wire"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -233,28 +233,28 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		default:
 			return fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
 		}
-	case message.SSVTBFTMsgType:
-		span.AddEvent("process validator message = TBFT envelope")
+	case message.SSVOBFTMsgType:
+		span.AddEvent("process validator message = OBFT envelope")
 
 		envelope, ok := msg.Body.(*wire.Envelope)
 		if !ok || envelope == nil {
-			return fmt.Errorf("could not decode TBFT envelope body, type: %T", msg.Body)
+			return fmt.Errorf("could not decode OBFT envelope body, type: %T", msg.Body)
 		}
 
-		// TBFT runs only for the proposer duty today. If the runner for
+		// OBFT runs only for the proposer duty today. If the runner for
 		// this MsgID isn't a ProposerRunner, the message was misrouted.
 		proposerRunner, ok := dutyRunner.(*runner.ProposerRunner)
 		if !ok {
-			return fmt.Errorf("TBFT envelope routed to non-proposer runner: %T", dutyRunner)
+			return fmt.Errorf("OBFT envelope routed to non-proposer runner: %T", dutyRunner)
 		}
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return fmt.Errorf("TBFT envelope must have exactly one signer")
+			return fmt.Errorf("OBFT envelope must have exactly one signer")
 		}
 		senderID := msg.SignedSSVMessage.OperatorIDs[0]
 
-		if err := proposerRunner.ProcessTBFTEnvelopeMsg(senderID, envelope); err != nil {
-			return fmt.Errorf("process TBFT envelope: %w", err)
+		if err := proposerRunner.ProcessOBFTEnvelopeMsg(ctx, senderID, envelope); err != nil {
+			return fmt.Errorf("process OBFT envelope: %w", err)
 		}
 		return nil
 	default:
