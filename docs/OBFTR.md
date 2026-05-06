@@ -1,4 +1,4 @@
-# OBFTR — Onion BFT
+# OBFTR — Onion BFT with R-Rounds
 
 A multi-round agreement protocol for SSV clusters that produces one collective threshold-signed value per "slot" against a hard deadline. OBFTR achieves agreement *cryptographically* (cluster-wide unique output via threshold cryptography over EKM-enforced per-operator commitments) over a configurable K-layer onion structure, with up to R recovery rounds providing graceful degradation under network partitions and byzantine-leader equivocation.
 
