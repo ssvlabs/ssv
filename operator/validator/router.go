@@ -23,10 +23,28 @@ func newMessageRouter(logger *zap.Logger) *messageRouter {
 // to assert on counter/gauge values without depending on global OTel state.
 func newMessageRouterWithMetrics(logger *zap.Logger, droppedCounter metric.Int64Counter, bufferFillGauge metric.Int64Gauge) *messageRouter {
 	return &messageRouter{
-		logger:          logger,
-		ch:              make(chan network.DecodedSSVMessage, bufSize),
-		droppedCounter:  droppedCounter,
-		bufferFillGauge: bufferFillGauge,
+		logger:             logger,
+		ch:                 make(chan network.DecodedSSVMessage, bufSize),
+		droppedCounter:     droppedCounter,
+		bufferFillGauge:    bufferFillGauge,
+		dropAddOpsByReason: routerDropAddOpsByReason(),
+	}
+}
+
+// routerDropAddOpsByReason builds the pre-allocated AddOptions for each known
+// drop reason so recordDrop doesn't allocate attributes on the hot path.
+func routerDropAddOpsByReason() map[string][]metric.AddOption {
+	return map[string][]metric.AddOption{
+		routerDropReasonContextCanceled: {
+			metric.WithAttributeSet(attribute.NewSet(
+				attribute.String("ssv.validator.router.drop_reason", routerDropReasonContextCanceled),
+			)),
+		},
+		routerDropReasonBufferFull: {
+			metric.WithAttributeSet(attribute.NewSet(
+				attribute.String("ssv.validator.router.drop_reason", routerDropReasonBufferFull),
+			)),
+		},
 	}
 }
 
@@ -36,6 +54,7 @@ type messageRouter struct {
 	bufferFillSampleTick atomic.Uint64
 	droppedCounter       metric.Int64Counter
 	bufferFillGauge      metric.Int64Gauge
+	dropAddOpsByReason   map[string][]metric.AddOption
 }
 
 func (r *messageRouter) Route(ctx context.Context, message network.DecodedSSVMessage) {
@@ -78,6 +97,13 @@ func (r *messageRouter) Len() int {
 }
 
 func (r *messageRouter) recordDrop(ctx context.Context, reason string) {
+	if ops, ok := r.dropAddOpsByReason[reason]; ok {
+		r.droppedCounter.Add(ctx, 1, ops...)
+		return
+	}
+	// Unregistered reason — fall back to per-call allocation so the metric
+	// still records (no silent miss). Adding a new reason should also extend
+	// routerDropAddOpsByReason to keep the hot path zero-alloc.
 	r.droppedCounter.Add(ctx, 1,
 		metric.WithAttributes(attribute.String("ssv.validator.router.drop_reason", reason)),
 	)

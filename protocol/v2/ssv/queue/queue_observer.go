@@ -25,6 +25,8 @@ func (noopQueueObserver) recordDrop(string) {}
 type metricsQueueObserver struct {
 	inboxSizeMetric    metric.Int64Gauge
 	inboxSizeRecordOps []metric.RecordOption
+	queueType          string
+	queueID            string
 	// dropAddOpsByReason holds pre-built AddOptions per known drop reason so
 	// the hot path doesn't allocate attributes on every dropped message.
 	dropAddOpsByReason map[string][]metric.AddOption
@@ -37,21 +39,22 @@ func WithQueueMetrics(inboxSizeMetric metric.Int64Gauge, queueType, queueID stri
 		attribute.String("ssv.queue.id", queueID),
 	)
 
-	dropAddOpsByReason := make(map[string][]metric.AddOption, 1)
-	for _, reason := range []string{DropReasonBufferFull} {
-		dropAddOpsByReason[reason] = []metric.AddOption{
+	dropAddOpsByReason := map[string][]metric.AddOption{
+		DropReasonBufferFull: {
 			metric.WithAttributeSet(attribute.NewSet(
 				attribute.String("ssv.queue.type", queueType),
 				attribute.String("ssv.queue.id", queueID),
-				attribute.String("ssv.queue.drop_reason", reason),
+				attribute.String("ssv.queue.drop_reason", DropReasonBufferFull),
 			)),
-		}
+		},
 	}
 
 	return func(q *priorityQueue) {
 		q.observer = metricsQueueObserver{
 			inboxSizeMetric:    inboxSizeMetric,
 			inboxSizeRecordOps: []metric.RecordOption{metric.WithAttributeSet(queueAttrSet)},
+			queueType:          queueType,
+			queueID:            queueID,
 			dropAddOpsByReason: dropAddOpsByReason,
 		}
 	}
@@ -69,9 +72,20 @@ func (o metricsQueueObserver) recordInboxSize(inboxSize int64) {
 }
 
 func (o metricsQueueObserver) recordDrop(reason string) {
-	ops, ok := o.dropAddOpsByReason[reason]
-	if !ok {
+	if ops, ok := o.dropAddOpsByReason[reason]; ok {
+		droppedMessagesMetric.Add(context.Background(), 1, ops...)
 		return
 	}
-	droppedMessagesMetric.Add(context.Background(), 1, ops...)
+	// Unregistered reason — fall back to per-call allocation so the metric
+	// still records (no silent miss). Adding a new reason should also extend
+	// the pre-built map above to keep the hot path zero-alloc.
+	droppedMessagesMetric.Add(
+		context.Background(),
+		1,
+		metric.WithAttributes(
+			attribute.String("ssv.queue.type", o.queueType),
+			attribute.String("ssv.queue.id", o.queueID),
+			attribute.String("ssv.queue.drop_reason", reason),
+		),
+	)
 }
