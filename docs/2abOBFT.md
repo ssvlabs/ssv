@@ -21,7 +21,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 ## Setting
 
-- A cluster of `n` participants with byzantine bound `f` such that `n ≥ 3f+1` (standard BFT). Running example: `n = 4, f = 1`.
+- A cluster of `n` participants with byzantine bound `f` such that `n = 3f+1` (the BFT-tight setting; matches SSV's deployment configurations `n ∈ {4, 7, 10, 13}`). Running example: `n = 4, f = 1`. The threshold formula `qV = qEnc = 2f+1` below equals `n − f` exactly at this setting; this equality is what makes the bare Pigeonhole arguments in [§Safety](#safety-cryptographic-honest-majority) hold. (At `n > 3f+1`, the convergence rule's verdict-pool tie-break + `nr_eligibility_quorum` override would need to do the safety work — see [§Phase 2b convergence rule](#phase-2b--σ-or-nr-commit-t_commit--Δ_2a-t_commit--Δ_2a--Δ_2b); current spec does not exercise this case.)
 - **Two threshold BLS keypairs** from independent DKGs run once at cluster init:
   - **V-signing keypair** at threshold `qV = 2f+1`. Used to produce the per-validator signature on `V` (e.g. an Ethereum block in the SSV proposer-duty application). Reconstructing a full `V` signature requires `qV` partial sigs. At `n = 4`, `qV = 3`.
   - **IBE keypair** at threshold `qEnc = 2f+1`. Used (a) as the threshold-signing scheme for no-quorum tags and (b) as the decryption oracle for threshold identity-based encryption (IBE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair. The two keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), but share the threshold — see [Safety](#safety). At `n = 4`, `qEnc = 3`.
@@ -58,7 +58,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 ### Assumed
 
-1. **Standard BFT trust bound.** `n ≥ 3f + 1`, up to `f` operators may be byzantine. At `n = 4`, `f = 1`. Honest operators run protocol-conformant software (correct convergence-rule enforcement, correct EKM rule enforcement, correct host application, correct gossipsub behavior). Byzantine operators may deviate arbitrarily within their f-bound.
+1. **Standard BFT trust bound at the tight setting.** `n = 3f + 1`, up to `f` operators may be byzantine. At `n = 4`, `f = 1`. SSV deploys at the BFT-tight bound (`n ∈ {4, 7, 10, 13}` for `f ∈ {1, 2, 3, 4}`); the threshold formula `qV = qEnc = 2f+1` below requires this tightness to give `2f+1 = n − f`, which is what the bare Pigeonhole arguments depend on. Honest operators run protocol-conformant software (correct convergence-rule enforcement, correct EKM rule enforcement, correct host application, correct gossipsub behavior). Byzantine operators may deviate arbitrarily within their f-bound.
 
 2. **Partial synchrony for liveness.** Messages eventually deliver within bounded propagation `D` (cluster gossipsub P99/P999) and clock skew `δ`. Safety is unconditional on timing; only liveness depends on this. **2abOBFT's effective absorption window is `Δ_2a + (D + δ)`** — the Phase-1-broadcast-to-receiver-first-observation tolerance for late bundles to still drive a Phase-2a verdict. Real propagation that exceeds this window is Class A "sustained partition" — out of scope by definition.
 
@@ -376,7 +376,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 
 ### Trust model
 
-- **Byzantine bound `f`** with cluster size `n ≥ 3f+1`: up to `f` operators may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, etc.). `2f+1` honest are guaranteed.
+- **Byzantine bound `f`** with cluster size `n = 3f+1` (the BFT-tight setting; see [§Assumed / Standard BFT trust bound at the tight setting](#assumed)): up to `f` operators may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, etc.). Exactly `2f+1` honest.
 - **Partial synchrony for liveness**: messages eventually deliver within bounded delay `D` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_commit − 2(D + δ)` (leader broadcast deadline), `T_accept_max = T_commit + Δ_2a − (D + δ)` (receiver acceptance horizon), `T_verdict_max = T_commit + Δ_2a − (D + δ)` (verdict broadcast horizon, coincident with `T_accept_max`). Phase 3's reconstruction deadline is `T_round_end = T_commit + Δ_2a + Δ_2b + Δ_3`.
 
   **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + (D + δ)`:
@@ -402,7 +402,8 @@ The pool definitions used in the arguments below:
 
 - σ-quorum on V: `h_σ + byz_σ ≥ qV = 2f+1` (where h_σ counts honest with Phase-2b σ partials on V at L_k, deduplicated per operator).
 - NR-quorum: `h_NR + byz_NR ≥ qEnc = 2f+1`.
-- Cross-side exclusivity (per "Slashing-protection scope"): `h_σ + h_NR ≤ 2f+1`. Each honest commits σ-or-NR per layer at most once at Phase 2b, EKM-enforced.
+- Cross-side exclusivity (per "Slashing-protection scope"): `h_σ + h_NR ≤ n − f = 2f+1` (equality at `n = 3f+1`). Each honest commits σ-or-NR per layer at most once at Phase 2b, EKM-enforced.
+- **Leader-counting.** Unlike OBFT/OBFTR, 2abOBFT has no Phase-1 σ_V — every operator (including the layer's leader) emits σ-or-NR uniformly at Phase-2b under the convergence rule. There is no leader-specific σ-side pre-commitment. Byzantine leaders that equivocate at Phase 1 contribute to `byz_σ_V` per V at most once each (deduplication).
 - Byzantine cross-signing: `byz_σ + byz_NR ≤ 2f` (each byz contributes at most 1 to each pool).
 - If both quorums reached: `h_σ + h_NR ≥ 4f+2 − 2f = 2f+2`. But `h_σ + h_NR ≤ 2f+1`. Contradiction. ∎
 
@@ -419,14 +420,13 @@ This is the key safety constraint: regardless of which V's honest σ-commit on u
 
 #### Pigeonhole 3 — cross-layer safety under chained encryption
 
-Two distinct V signatures (V_k and V_{k+m} for any `m ≥ 1`) cannot both be reconstructed cluster-wide.
+Two distinct V signatures (V_k and V_{k+m} for any `m ≥ 1`) cannot both be reconstructed cluster-wide. Proof by induction on `m`, applying Pigeonhole 1 at every L_j with `j ∈ [k, k+m−1]`.
 
-- For V_k sig: σ-quorum on V_k at L_k must reach.
-- For V_{k+m} sig: σ partials at L_{k+m} must decrypt, which requires NR-quorum at L_k (and at every layer between L_k and L_{k+m}, per chained encryption).
-- By Pigeonhole 1: if σ-quorum at L_k reaches, NR-quorum at L_k does not. So L_k's chained encryption layer at L_{k+1}, ..., L_{k+m} stays sealed.
-- Therefore V_{k+m} sig is unreconstructable when V_k sig is reconstructable. ∎
+- *Decryption requirement.* V_{k+m} σ partials at L_{k+m} are encrypted under `nr_tag_k ∧ nr_tag_{k+1} ∧ … ∧ nr_tag_{k+m−1}`. Decryption requires NR-quorum on every `nr_tag_j` for `j ∈ [k, k+m−1]` (chained-IBE oracle).
+- *Inductive step.* For each such `j`, Pigeonhole 1 applied at L_j gives: σ-quorum at L_j ⇒ NR-quorum at L_j does not reach. Therefore if V_k σ-quorum reaches at L_k, NR-quorum at L_k fails, the chain at L_k stays sealed, and V_{k+m}'s σ partials are inaccessible.
+- *Symmetric direction.* If V_{k+m} reconstructs, NR-quorum at L_k must have reached, so by Pigeonhole 1 σ-quorum at L_k did not reach, so V_k does not reconstruct. ∎
 
-Symmetrically: if V_{k+m} sig is reconstructable, NR-quorum reached at L_k (to allow decryption), so by Pigeonhole 1 σ-quorum at L_k did not reach, so V_k sig is unreconstructable. Applied inductively, at most one V signature reconstructs cluster-wide across all K layers.
+Applied to every pair of layers, at most one V signature reconstructs cluster-wide across all K layers.
 
 #### Verdict envelopes do not affect safety
 
