@@ -219,7 +219,7 @@ OBFT+L_Bid pays:
 
 In exchange for:
 - **Bid-routing value capture** on healthy path (highest-bid block vs rotation-determined V).
-- **C1/C2/C3 deadlock closure at L_Bid** (vs bare-TBFT-style B.3 sketch which leaves these open).
+- **C1/C2/C3 deadlock closure at L_Bid** (vs the naive bid-routing sketch which leaves these open).
 
 The trade is favorable when MEV bid-routing value-capture upside exceeds the combined cost of (a) the new failure modes' slot-loss rate and (b) the +1 RTT latency cost. For low-MEV slots or deployments with significant mesh degradation pushing scenarios toward the (0s, 1000ms) borderline, bare OBFT is the better choice.
 

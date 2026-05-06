@@ -2,7 +2,7 @@
 
 A single-round agreement protocol for SSV clusters that produces one collective threshold-signed value per slot against a hard deadline. 2abOBFT separates the cluster's σ-eligibility *observation* from its cryptographic σ-*commitment* via a two-window Phase-2 split: Phase 2a is verdict broadcast (op-identity-signed claims about local σ-eligibility, no threshold partials), and Phase 2b is the binding σ-or-NR commit driven by Phase-2a's converged cluster-view.
 
-The "2ab" in the name reflects this split — the protocol's defining feature relative to TBFT-family ancestors. Cryptographic safety is identical to single-Phase-2 protocols (chained IBE + EKM-enforced per-operator commitments + qV = qEnc = 2f+1); the split buys *liveness* — equivocation σ-locked split recovery, h_V=1 selective-delivery deadlock recovery, validity-divergence recovery within the f-bound, mesh-flakiness mitigation — at +1 RTT cost vs single-Phase-2 designs.
+The "2ab" in the name reflects this split — the protocol's defining feature relative to OBFT-family ancestors. Cryptographic safety is identical to single-Phase-2 protocols (chained IBE + EKM-enforced per-operator commitments + qV = qEnc = 2f+1); the split buys *liveness* — equivocation σ-locked split recovery, h_V=1 selective-delivery deadlock recovery, validity-divergence recovery within the f-bound, mesh-flakiness mitigation — at +1 RTT cost vs single-Phase-2 designs.
 
 2abOBFT operates with K configurable layers (`max(2, f+1) ≤ K ≤ n`), each layer with its own deterministically-derived leader, falling through within a single Phase-3 reconstruction walk (sequential local decryption, no per-layer RTT). The running example throughout is `n = 4, f = 1, K = 4` for SSV Ethereum proposer duty; algebra generalizes to higher cluster sizes.
 
@@ -14,9 +14,9 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 - High-D networks (`D` ≈ 300–500ms) where multi-round protocols don't fit a 4s relay cutoff but a single round with the Phase-2 split still does.
 
 **Not suited for:**
-- Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [TBFT](TBFT.md) or [OBFT](OBFT.md) save 100-300ms but expose the closed-here failure modes.
-- General-purpose state-machine replication where decision *agreement* across operators (not just *output*) is required. 2abOBFT (like TBFT, OBFT, OBFTR) gives a unique cluster-wide *output* via cryptographic safety; honest operators may locally observe different intermediate states without affecting the output.
-- Scenarios requiring host-validity-divergence recovery in 2-2 splits at f=1 n=4 (still Class A; the witness phase narrows the divergence window but cannot eliminate it). [QBFT](#a4--comparison-with-bare-obft-and-qbft) is the appropriate choice when validity is meaningfully unstable across the consensus window.
+- Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [OBFT](OBFT.md) saves 100-300ms but exposes the closed-here failure modes.
+- General-purpose state-machine replication where decision *agreement* across operators (not just *output*) is required. 2abOBFT (like the rest of the OBFT family) gives a unique cluster-wide *output* via cryptographic safety; honest operators may locally observe different intermediate states without affecting the output.
+- Scenarios requiring host-validity-divergence recovery in 2-2 splits at f=1 n=4 (still Class A; the witness phase narrows the divergence window but cannot eliminate it). [QBFT](#a3--comparison-with-bare-obft-and-qbft) is the appropriate choice when validity is meaningfully unstable across the consensus window.
 - Sustained partition tails beyond the absorption window (`Δ_2a + (D + δ)` ≈ 450ms at Config A recommended). Multi-round extensions are a future direction.
 
 ## Setting
@@ -62,7 +62,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 2. **Partial synchrony for liveness.** Messages eventually deliver within bounded propagation `D` (cluster gossipsub P99/P999) and clock skew `δ`. Safety is unconditional on timing; only liveness depends on this. **2abOBFT's effective absorption window is `Δ_2a + (D + δ)`** — the Phase-1-broadcast-to-receiver-first-observation tolerance for late bundles to still drive a Phase-2a verdict. Real propagation that exceeds this window is Class A "sustained partition" — out of scope by definition.
 
-3. **Host validity is best-effort unanimous at decision time.** 2abOBFT consumes the host application's `valid` / `not-valid` verdict on `V_{L_k}` at Phase-2a verdict-broadcast time and at Phase-2b sign time. Operators may transiently diverge (e.g., a head change observed by some but not others). The host's job is to make divergence rare via per-operator stabilization. **Phase-2a's window narrows the divergence window structurally** — operators re-evaluate at Phase-2a verdict-broadcast time (not at Phase-1 acceptance time as in TBFT-family) and the convergence rule routes verdict-divergent operators through NR fall-through to a deeper layer's leader. Validity-divergence is *recovered within the f-bound* in 2abOBFT (e.g., 3-of-4 verdict σV vs 1-of-4 NV at f=1 n=4 succeeds at L_0 or L_1) but still cannot cross 2-2 splits at f=1 n=4 (insufficient cluster majority on either side; slot-misses cleanly).
+3. **Host validity is best-effort unanimous at decision time.** 2abOBFT consumes the host application's `valid` / `not-valid` verdict on `V_{L_k}` at Phase-2a verdict-broadcast time and at Phase-2b sign time. Operators may transiently diverge (e.g., a head change observed by some but not others). The host's job is to make divergence rare via per-operator stabilization. **Phase-2a's window narrows the divergence window structurally** — operators re-evaluate at Phase-2a verdict-broadcast time (not at Phase-1 acceptance time as in OBFT-family) and the convergence rule routes verdict-divergent operators through NR fall-through to a deeper layer's leader. Validity-divergence is *recovered within the f-bound* in 2abOBFT (e.g., 3-of-4 verdict σV vs 1-of-4 NV at f=1 n=4 succeeds at L_0 or L_1) but still cannot cross 2-2 splits at f=1 n=4 (insufficient cluster majority on either side; slot-misses cleanly).
 
 4. **Persistent operator set with rational-byzantine deterrent.** 2abOBFT operates within a stable SSV cluster running protocol instances over many slots. The deterrent is the same one that already disciplines an offline operator under SSV's network-wide threat model: per-validator operator fees flow continuously to all cluster operators regardless of per-slot contribution (the remaining `n − f` honest carry the work at zero ops cost to the silent/byzantine), and stakers — who can observe per-cluster slot-miss rates — are expected to migrate validators away from underperforming clusters, collapsing the silent/byzantine operator's fee accrual to zero. SSV is already designed for the operator-down case ("the cluster and stakers deal with it"); the rational-byzantine claim is that a byzantine operator gains nothing an offline operator wouldn't already get, and has reputation (persistent across slots) to lose.
 
@@ -70,7 +70,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
    The on-wire byzantine-fault evidence ([§Slashing evidence](#slashing-evidence)) informs both staker migration decisions and (once the extension lands) the cluster operators' blacklist trigger. Rule 6a (verdict-vs-verdict) is decisively blacklistable on a single observed envelope-pair; Rule 6b (verdict-vs-action) is behavioral-pattern quality — boundary-conditional surface-ability, not unambiguous-from-single-message — so the deterrent's effective strength on Rule 6b depends on receiver convergence on the cluster's verdict pool. Filing a stake-slashing transaction via the SSV contract is a complementary punitive action for cryptographically-self-contained evidence, but is not the primary deterrent. See [Implications of the rational-byzantine deterrent](#implications-of-the-rational-byzantine-deterrent-assumption-4) for the full evidence-quality discussion.
 
-5. **Coordinated EKM across both keypair shares + persistent Phase-2a state.** The "EKM" referenced throughout this spec is a coordinated signing service spanning the operator's V-keypair share and IBE-keypair share, backed by a single slashing-protection log keyed on `(slot, layer, side, value_root)`. **2abOBFT's EKM is the simplest in the TBFT family**: one signing event per (slot, layer) per operator at Phase-2b — no cross-round atomicity, no Phase-1 σ_V to coordinate with later Phase-2 σ, no persistent partial-sig cache.
+5. **Coordinated EKM across both keypair shares + persistent Phase-2a state.** The "EKM" referenced throughout this spec is a coordinated signing service spanning the operator's V-keypair share and IBE-keypair share, backed by a single slashing-protection log keyed on `(slot, layer, side, value_root)`. **2abOBFT's EKM is the simplest in the OBFT family**: one signing event per (slot, layer) per operator at Phase-2b — no cross-round atomicity, no Phase-1 σ_V to coordinate with later Phase-2 σ, no persistent partial-sig cache.
 
    **However, 2abOBFT requires a separate per-slot persistent state** beyond the EKM log: each operator must durably record (a) any `KindVerdict` envelope they have broadcast at Phase-2a, and (b) the retained `(V, σ_L^op)` tuples per `(slot, layer, leader_id)`. This state is needed because Phase-2a verdicts are **not** EKM-logged (they are op-identity-signed, not threshold partials), but they bind the operator's behavior at Phase-2b: an operator restarting mid-slot whose pre-crash verdict is on the wire but whose retained-V state is lost cannot replay the verdict-broadcast decision (re-broadcasting would be self-equivocation under Rule 6a) and may be forced into an action that mismatches the on-wire verdict (Rule 6b false-positive against the honest operator).
 
@@ -88,7 +88,7 @@ An operator whose software actively misbehaves (maliciously compromised, or with
 
 ### Implications of validity-divergence partial recovery (assumption 3)
 
-2abOBFT recovers validity-divergence at f=1 n=4 within 3-of-4 majorities (recovers when honest majority agrees on validity). The 2-2 split at f=1 n=4 with all honest still slot-misses cleanly — no protocol can decide between two equally-supported sides without breaking BFT bound symmetry, and 2abOBFT's convergence rule routes such splits to NR-quorum fall-through, which at K = n with re-org affecting all layers may also miss. This is a TBFT-family inherited algebraic limit, not a 2abOBFT-specific gap. The host's stabilization workflow (re-evaluating against current head at Phase-2a verdict time, narrowing the divergence window to events landing inside the verdict-broadcast window) is the design's path to keeping 2-2 splits rare.
+2abOBFT recovers validity-divergence at f=1 n=4 within 3-of-4 majorities (recovers when honest majority agrees on validity). The 2-2 split at f=1 n=4 with all honest still slot-misses cleanly — no protocol can decide between two equally-supported sides without breaking BFT bound symmetry, and 2abOBFT's convergence rule routes such splits to NR-quorum fall-through, which at K = n with re-org affecting all layers may also miss. This is a OBFT-family inherited algebraic limit, not a 2abOBFT-specific gap. The host's stabilization workflow (re-evaluating against current head at Phase-2a verdict time, narrowing the divergence window to events landing inside the verdict-broadcast window) is the design's path to keeping 2-2 splits rare.
 
 ### Implications of equivocation recovery (assumption 4)
 
@@ -129,10 +129,10 @@ Filing a stake-slashing transaction via the SSV contract is a complementary puni
 Phase 1 has K per-layer windows (driven by the asymmetric fetch times): `[T_{K-1}, T_{K-1} + Δ_1]` for the deepest backup, then progressively `[T_{K-2}, T_{K-2} + Δ_1]`, ..., ending at `[T_0, T_0 + Δ_1]` for the primary. Each leader `L_k` for `k ∈ {0, ..., K-1}`:
 
 1. Independently produces its candidate value `V_{L_k}` and validates it against application-level rules (the leader's local fetch loop — see [§Preconditions on the host application](#preconditions-on-the-host-application)).
-2. Signs `V_{L_k}` with the **operator-identity key** — producing the leader-auth signature `σ_{L_k}^{op}(envelope)` over a structured envelope binding `(protocol_tag = "2abOBFT-v1", message_kind = "phase1-bundle", cluster_id, slot, layer k, leader_id, value_root)`. The `protocol_tag` + `message_kind` prefix domain-separates 2abOBFT Phase-1 envelopes from any other use of the operator-identity key (P2P-layer messages, baseline TBFT, OBFTR, OBFT, other 2abOBFT message kinds). The remaining fields rule out cross-cluster / cross-layer / cross-slot replay. **No threshold partial signature is produced at Phase 1** — the leader's σ-side commitment happens at Phase 2b, uniformly with all other operators.
+2. Signs `V_{L_k}` with the **operator-identity key** — producing the leader-auth signature `σ_{L_k}^{op}(envelope)` over a structured envelope binding `(protocol_tag = "2abOBFT-v1", message_kind = "phase1-bundle", cluster_id, slot, layer k, leader_id, value_root)`. The `protocol_tag` + `message_kind` prefix domain-separates 2abOBFT Phase-1 envelopes from any other use of the operator-identity key (P2P-layer messages, [OBFT](OBFT.md), [OBFTR](OBFTR.md), other 2abOBFT message kinds). The remaining fields rule out cross-cluster / cross-layer / cross-slot replay. **No threshold partial signature is produced at Phase 1** — the leader's σ-side commitment happens at Phase 2b, uniformly with all other operators.
 3. Gossips the bundle `(V_{L_k}, σ_{L_k}^{op}(envelope))` to peers via gossipsub.
 
-**Why no Phase-1 σ_V.** TBFT, OBFT, and OBFTR include `σ_{L_k}^V(V_{L_k})` in the Phase-1 bundle, giving the cluster a "head start" of one real threshold partial as soon as Phase 1 succeeds. 2abOBFT removes it because the Phase-1 σ_V locks the leader's σ-commitment irrevocably at fetch time — when host validity flips post-fetch (e.g., a re-org changes parent_root), the leader cannot retract, and the cluster is structurally blocked from converging on NR-quorum at that layer (the leader's σ_V counts as σ-side per cross-phase exclusivity, capping non-leader honest NR contributions at 2f < qEnc). The Phase-1 σ_V is the structural obstacle to validity-divergence recovery in TBFT-family designs ([docs/OBFT.md / Implications of validity-divergence not being recovered](OBFT.md#implications-of-validity-divergence-not-being-recovered-assumption-3)). 2abOBFT trades the Phase-1 head-start for late-binding flexibility — the leader's σ commitment happens at Phase 2b based on their host's verdict at that time, which the convergence rule can route through NR-quorum fall-through if validity has diverged.
+**Why no Phase-1 σ_V.** [OBFT](OBFT.md) and [OBFTR](OBFTR.md) include `σ_{L_k}^V(V_{L_k})` in the Phase-1 bundle, giving the cluster a "head start" of one real threshold partial as soon as Phase 1 succeeds. 2abOBFT removes it because the Phase-1 σ_V locks the leader's σ-commitment irrevocably at fetch time — when host validity flips post-fetch (e.g., a re-org changes parent_root), the leader cannot retract, and the cluster is structurally blocked from converging on NR-quorum at that layer (the leader's σ_V counts as σ-side per cross-phase exclusivity, capping non-leader honest NR contributions at 2f < qEnc). The Phase-1 σ_V is the structural obstacle to validity-divergence recovery in single-Phase-2 OBFT-family designs ([docs/OBFT.md / Implications of validity-divergence not being recovered](OBFT.md#implications-of-validity-divergence-not-being-recovered-assumption-3)). 2abOBFT trades the Phase-1 head-start for late-binding flexibility — the leader's σ commitment happens at Phase 2b based on their host's verdict at that time, which the convergence rule can route through NR-quorum fall-through if validity has diverged.
 
 Receivers run **two layers of validation**, in order:
 
@@ -243,7 +243,7 @@ EKM/slashing-protection is consulted at Phase-2b sign time:
 - `Sign σ on V at (slot, layer)` (V-keypair share): rejected if any prior `(slot, layer, "σ", _)` or `(slot, layer, "NR", _)` row exists. On success, log `(slot, layer, "σ", value_root(V))`.
 - `Sign NR on nr_tag_k at (slot, layer)` (IBE-keypair share): rejected if any prior `(slot, layer, "σ", _)` or `(slot, layer, "NR", _)` row exists. On success, log `(slot, layer, "NR", null)`.
 
-**Single signing event per (slot, layer) per operator.** This is the cleanest point in the TBFT family — no Phase-1 σ_V to coordinate with later Phase-2 σ, no cross-round atomicity, no persistent partial-sig cache. Standard transactional sign-and-log spans the operator's V-share and IBE-share.
+**Single signing event per (slot, layer) per operator.** This is the cleanest point in the OBFT family — no Phase-1 σ_V to coordinate with later Phase-2 σ, no cross-round atomicity, no persistent partial-sig cache. Standard transactional sign-and-log spans the operator's V-share and IBE-share.
 
 **Per-operator commitment is exclusive across phases.** An operator who emitted `σ_i^V(V)` at layer `k` on any V has σ-side committed at this layer; they may **not** subsequently broadcast NR/NV on `nr_tag_k`. They may also **not** σ on a different `V'` at the same `(slot, layer)`. EKM enforces this cryptographically via the slashing-protection log keyed on `(slot, layer)`. Across layers, commitments are **independent**.
 
@@ -366,12 +366,12 @@ The "EKM" referenced throughout this spec is a coordinated signing service spann
 - **Sign σ on V at (slot, layer)** (V-keypair share): rejected if any prior `(slot, layer, "σ", _)` or `(slot, layer, "NR", _)` row exists. On success, log `(slot, layer, "σ", value_root(V))`. The single-σ-V rule means a second signing attempt with `V' ≠ V` at the same `(slot, layer)` is rejected even though the side matches — the existing row already contains `value_root(V)`.
 - **Sign NR on `nr_tag_k` at (slot, layer)** (IBE-keypair share): rejected if any prior `(slot, layer, "σ", _)` or `(slot, layer, "NR", _)` row exists. On success, log `(slot, layer, "NR", null)`.
 
-**Simplifications relative to other TBFT-family protocols.** 2abOBFT's EKM is the simplest in the family:
+**Simplifications relative to other OBFT-family protocols.** 2abOBFT's EKM is the simplest in the family:
 
 - **No cross-round atomicity.** Single round; no rounds to span.
 - **No persistent partial-sig cache.** No re-emission across rounds.
 - **No deterministic re-signing fallback.** Single signing event per (slot, layer) per operator.
-- **No Phase-1 σ_V to coordinate with later Phase-2 σ.** TBFT, OBFT, OBFTR, TBFTR all log a Phase-1 σ_V row for the leader and require dedup-with-Phase-2-σ at Phase 3. 2abOBFT's leader signs σ once at Phase 2b like everyone else.
+- **No Phase-1 σ_V to coordinate with later Phase-2 σ.** [OBFT](OBFT.md) and [OBFTR](OBFTR.md) both log a Phase-1 σ_V row for the leader and require dedup-with-Phase-2-σ at Phase 3. 2abOBFT's leader signs σ once at Phase 2b like everyone else.
 
 **Beyond the EKM log: persistent Phase-2a state.** Per assumption 5, each operator must durably record per-slot:
 
@@ -550,7 +550,7 @@ The recommended `Δ_2a ≥ 2(D + δ)` absorbs typical mesh-jitter (one full `D +
 
 ### Liveness comparison: 2abOBFT vs bare OBFT, OBFTR, QBFT
 
-A side-by-side comparison of 2abOBFT's recovery scope against bare OBFT, OBFTR(R≥2), and QBFT — covering healthy path, byzantine-leader patterns, multi-leader silent, validity-divergence, sustained partition, and the residual surfaces unique to 2abOBFT (2-1-byz-defect, verdict-equivocation) — is in [§Appendix A.4 — Comparison with bare OBFT and QBFT](#a4--comparison-with-bare-obft-and-qbft). Apples-to-apples framing across protocols, the four-bucket recovery taxonomy (absorbable-by-waiting / OBFT-family-only / 2abOBFT-only / 2abOBFT-regressions), and per-failure-class outcomes are discussed there.
+A side-by-side comparison of 2abOBFT's recovery scope against bare OBFT, OBFTR(R≥2), and QBFT — covering healthy path, byzantine-leader patterns, multi-leader silent, validity-divergence, sustained partition, and the residual surfaces unique to 2abOBFT (2-1-byz-defect, verdict-equivocation) — is in [§Appendix A.3 — Comparison with bare OBFT and QBFT](#a3--comparison-with-bare-obft-and-qbft). Apples-to-apples framing across protocols, the four-bucket recovery taxonomy (absorbable-by-waiting / OBFT-family-only / 2abOBFT-only / 2abOBFT-regressions), and per-failure-class outcomes are discussed there.
 
 The summary takeaway: at apples-to-apples T, pure all-honest network failures recover identically across all four protocols. The structural distinctions are at the byzantine-equivocation and validity-divergence axes, where 2abOBFT closes most of bare-OBFT/OBFTR's adversarial-byz exposure (σ-locked equivocation, h_V=1, validity-divergence-majority, mesh-flakiness) at the cost of two narrower regressions (2-1-byz-defect, verdict-equivocation) — both slashable, both R-invariant.
 
@@ -625,7 +625,7 @@ The slot misses (no V signature is produced) under any of the following.
 
 ### Class B — Recovered patterns (vs single-Phase-2 protocols)
 
-These are slot-miss outcomes in TBFT, OBFT, and OBFTR(R≥2) that 2abOBFT structurally recovers:
+These are slot-miss outcomes in [OBFT](OBFT.md) and [OBFTR(R≥2)](OBFTR.md) that 2abOBFT structurally recovers:
 
 - **Equivocation 1-1-1 split**: recovered via NR-quorum fall-through (verdict-pool short on every V; all honest go NR).
 - **Equivocation 1-1-Defer-C, 1-Defer-Defer**: same recovery via NR-quorum fall-through.
@@ -661,13 +661,13 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Validity-divergence recovery | **Majority recovers** (e.g., 3-of-4 σV vs 1 NV at f=1 n=4 reaches σ-quorum at L_0). 2-2 split at f=1 n=4 still slot-misses cleanly (no majority). |
 | Byzantine-leader-grief resistance | Substantial. h_V=1 deadlock, 1-1-1 equivocation split, mesh-flakiness, late-deepest-layer-broadcast — all closed structurally. 2-1-byz-defect remains a Class B residual. |
 | Mesh-flakiness tolerance | Good — Phase-2a window absorbs typical mesh-jitter (recommended `Δ_2a ≥ 2(D + δ)` accommodates one full propagation cycle of variance). Wider outliers fall back through NR-quorum to L_1. |
-| Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide. Same as TBFT-family. |
+| Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide. Same as OBFT-family. |
 | Built-in leader fallback | Yes (K-layer fall-through within Phase 3's reconstruction walk; K configurable, K = n recommended for proposer duty) |
 | Round-change recovery | No — single-round design. Late re-flood within Phase-2a's absorption window is the only within-slot partition-recovery mechanism. |
 | Partial-synchrony absorption window | `Δ_2a + (D + δ)` (single round) — ≈ 450ms at Config A recommended. |
 | Healthy-path latency (post-`T_commit`) | ~850ms at Config A recommended (Δ_2a=Δ_2b=2(D+δ)=300ms each + Δ_3=250ms); ~550ms at minimum sizing (Δ_2a=Δ_2b=D+δ=150ms each + Δ_3=250ms) |
-| Slot budget cost vs single-Phase-2 (TBFT, OBFT) | +300ms at recommended sizing (extra Phase 2a window of 300ms vs single Phase 2); ±0ms at minimum sizing (both have Phase 2 window summing to D+δ-equivalent) |
-| EKM complexity | Lowest in the TBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
+| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +300ms at recommended sizing (extra Phase 2a window of 300ms vs single Phase 2); ±0ms at minimum sizing (both have Phase 2 window summing to D+δ-equivalent) |
+| EKM complexity | Lowest in the OBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
 
 ## Application: SSV Ethereum proposer duty
 
@@ -741,7 +741,7 @@ This per-operator workflow narrows the divergence window to events landing insid
 
 ## Practical caveats
 
-1. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = 2f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. Same as TBFT, OBFT, OBFTR.
+1. **DKG cost.** Two threshold keypairs per cluster — V-signing at `qV = 2f+1` and IBE at `qEnc = 2f+1` — one DKG each at cluster init. Long-lived, no per-slot rotation. Same as [OBFT](OBFT.md) and [OBFTR](OBFTR.md).
 
 2. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. Three distinct deadlines (do not conflate):
 
@@ -759,7 +759,7 @@ This per-operator workflow narrows the divergence window to events landing insid
 
 6. **"At most one full sig" is per-instance.** "At most one full V signature per slot" is true within one 2abOBFT instance and assumes:
    - Single 2abOBFT instance per slot (no parallel signing path against the same V-signing share).
-   - Domain separation between 2abOBFT (`protocol_tag = "2abOBFT-v1"`) and any other path that signs against the V-signing share (TBFT, OBFTR, OBFT, QBFT, etc.).
+   - Domain separation between 2abOBFT (`protocol_tag = "2abOBFT-v1"`) and any other path that signs against the V-signing share ([OBFT](OBFT.md), [OBFTR](OBFTR.md), QBFT, etc.).
    - Slashing protection gates **Phase-2b candidate signing** (V-share) and **Phase-2b no-σ signing** (IBE-share).
 
 7. **2-1 equivocation byz-defect remains a Class B regression vs single-Phase-2 protocols.** Documented in [§Liveness / Equivocation 2-1 split](#2-1-split). Reputation deterrent (assumption 4) is the practical defense.
@@ -768,25 +768,19 @@ This per-operator workflow narrows the divergence window to events landing insid
 
 ## Where this came from
 
-2abOBFT is the synthesis of two design lines in the TBFT family:
+2abOBFT extends bare [OBFT](OBFT.md) with the Phase 2a/2b observation-then-commit split: Phase-2a is a bundle re-flood + verdict broadcast window where operators announce their σ-eligibility without binding any threshold partial, and Phase-2b is the σ-or-NR commit window where each operator emits exactly one threshold partial based on the cluster-wide Phase-2a verdict pool.
 
-- **K-layer parallel fall-through with chained IBE** (from [TBFT](TBFT.md) Appendix C and [OBFT](OBFT.md) — multiple leader roles per slot, single Phase-3 reconstruction walks past silent leaders without per-layer RTT).
-- **Phase 2a/2b observation-then-commit split** (from [TBFTR](TBFTR.md) — defer σ-commitment until after a Phase-2a observation window, so operators can converge on σ-eligibility before binding).
-
-The combination is constrained by validity-divergence recovery: TBFTR-as-written keeps Phase-1 σ_V (the leader's σ partial signed at Phase 1, on the wire from then), which structurally locks the leader's σ-side commitment irrespective of subsequent verdict changes. This blocks validity-divergence recovery at the f-bound boundary (e.g., 2-σ vs 2-NV at f=1 n=4: leader is σ-locked on V_pre-reorg; non-leader honest cannot reach NR-quorum with only 2 NV-side honest contributing). 2abOBFT removes the Phase-1 σ_V — leader broadcasts only `(V, σ^op)` at Phase 1, and the leader's σ commitment happens at Phase 2b alongside everyone else's. This is the load-bearing design choice that makes validity-divergence recovery work within the f-bound.
+The load-bearing design choice is **removing the Phase-1 σ_V**. A naive Phase-2a/2b split that keeps the leader's Phase-1 σ_V (signed at fetch time, on the wire from Phase 1) structurally locks the leader's σ-side commitment irrespective of subsequent verdict changes. This blocks validity-divergence recovery at the f-bound boundary (e.g., 2-σ vs 2-NV at f=1 n=4: leader is σ-locked on V_pre-reorg; non-leader honest cannot reach NR-quorum with only 2 NV-side honest contributing). 2abOBFT removes the Phase-1 σ_V entirely — leader broadcasts only `(V, σ^op)` at Phase 1, and the leader's σ commitment happens at Phase 2b alongside everyone else's.
 
 Trade-off: 2-1 equivocation patterns where bare OBFT's Phase-1 σ_V cryptographically locks byz's σ partial on the wire — succeeding at L_0 even if byz subsequently goes silent — regress in 2abOBFT (the byz can defect from σV verdict to NR action; slashable Rule 6b but the slot misses at L_0). A second regression on the same theme: non-leader verdict-equivocation under marginal h_V — byz verdict-equivocation injects per-peer convergence divergence, leading to under-quorum splits at L_0. Across many slots the rational-byzantine deterrent absorbs both costs; per-slot, both are real regressions. See [§Liveness / Equivocation 2-1 split](#2-1-split) and [§Failure modes / Non-leader verdict-equivocation under marginal h_V](#failure-modes).
 
-The relationship across the TBFT family:
+The relationship across the OBFT family:
 
 | Protocol | R | K | Phase-2 split | Phase-1 σ_V | Role |
 |---|---|---|---|---|---|
-| baseline TBFT | 1 | 2 | no | yes | minimal viable point |
 | [OBFT](OBFT.md) | 1 | configurable | no | yes | minimum machinery for K-layer fall-through |
 | [OBFTR](OBFTR.md) | configurable (typically 2) | configurable | no | yes | OBFT + R-round retry for `(D, R · D]` partition coverage |
-| [TBFTR](TBFTR.md) | 1 | configurable | yes (Phase 2a/2b) | yes | OBFT + Phase 2a/2b for byzantine-at-cutoff edge |
 | **2abOBFT** | 1 | configurable | yes (Phase 2a/2b) | **no** | **OBFT + Phase 2a/2b + no Phase-1 σ_V for full validity-divergence recovery** |
-| 2abOBFT + R | configurable | configurable | yes | no | full recovery-scope point in the family (not yet specified) |
 
 ## Appendix A — Protocol comparisons
 
@@ -820,25 +814,7 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 
 **Migration**: cluster running OBFT can adopt 2abOBFT by (1) extending the wire format with `KindVerdict`, (2) replacing the OBFT Defer-state state machine with the convergence rule, (3) modifying the Phase-1 bundle schema to drop σ_V, (4) updating the protocol-tag to `2abOBFT-v1` for envelope domain separation. EKM coordination simplifies (one fewer signing event per (slot, layer)).
 
-### A.2 — Comparison with [TBFTR](TBFTR.md)
-
-TBFTR introduces the Phase 2a/2b split but keeps Phase-1 σ_V (Variant A in [Appendix C / Variants considered](#variants-considered)). 2abOBFT diverges by removing Phase-1 σ_V — the load-bearing change for full validity-divergence recovery.
-
-| Aspect | [TBFTR](TBFTR.md) | 2abOBFT |
-|---|---|---|
-| Phase 2 split | Yes — Phase 2a (onion + V plaintext + σ) + Phase 2b (late σ for late-comers) | Yes — Phase 2a (verdict + bundle re-flood, no σ) + Phase 2b (σ XOR NR commit) |
-| Phase-1 σ_V | Yes | **No** |
-| Phase-2a content | Onion with V plaintext + σ partial | Verdict envelope (op-identity-signed claim) + bundle re-flood |
-| Phase-2b content | Late σ for late-comers (gated by f+1 distinct Phase-2a σ-signers witness threshold) | Full σ/NR commit per convergence rule |
-| Validity-divergence recovery | No — Phase-1 σ_V locks leader on stale V | Yes — leader's σ commitment happens at Phase 2b based on current host verdict |
-| Equivocation 2-1 byz-defect resistance | Yes — Phase-1 σ_V cryptographically locks byz | No — byz can defect from verdict to action (Rule 6b evidence) |
-| Healthy-path latency | 3 RTTs (Phase 1 + Phase 2a + Phase 2b) | 3 RTTs (Phase 1 + Phase 2a + Phase 2b) |
-| Witness mechanism | f+1 distinct Phase-2a σ-signers | qV distinct Phase-2a verdict-signers (= 2f+1) |
-| Bandwidth (healthy, n=4, K=4) | Higher — full V plaintext per layer per peer in Phase-2a onions | Lower — verdict envelopes are ~200 bytes each |
-
-**TBFTR's witness threshold of f+1 is meant to guarantee ≥ 1 honest peer signed Phase-2a σ on V.** 2abOBFT's threshold of qV (= 2f+1) is stricter — guarantees ≥ f+1 honest peers verdicted σV on V. The stricter threshold is what makes 2abOBFT's σ-eligibility-quorum check the *deterministic cluster-convergence point*, not just the timeliness witness.
-
-### A.3 — Comparison with [OBFTR(R≥2)](OBFTR.md)
+### A.2 — Comparison with [OBFTR(R≥2)](OBFTR.md)
 
 OBFTR(R≥2) is the multi-round extension of OBFT with cross-round acceptance widening for wider partition absorption. Comparing 2abOBFT to OBFTR(R≥2):
 
@@ -847,9 +823,9 @@ OBFTR(R≥2) is the multi-round extension of OBFT with cross-round acceptance wi
 
 The two design directions are orthogonal — Phase 2a/2b split + R-round retry composes cleanly. Combined design ("2abOBFT + R") is the most-recovery point in the family but not yet specified.
 
-### A.4 — Comparison with bare OBFT and QBFT
+### A.3 — Comparison with bare OBFT and QBFT
 
-QBFT is SSV's existing consensus protocol; bare [OBFT](OBFT.md) is the spec-simplest TBFT-family ancestor of 2abOBFT (single Phase 2 with sub-phasing, no Phase 2a/2b split). Two structural differences matter for the comparison:
+QBFT is SSV's existing consensus protocol; bare [OBFT](OBFT.md) is the spec-simplest OBFT-family ancestor of 2abOBFT (single Phase 2 with sub-phasing, no Phase 2a/2b split). Two structural differences matter for the comparison:
 
 - **QBFT vs OBFT family**: QBFT separates "decide on a value" (consensus) from "sign the decided value" (post-consensus partial-sig collection); the OBFT family (bare OBFT, 2abOBFT, OBFTR) fuses them by embedding partial signatures inside the consensus phases.
 - **2abOBFT vs bare OBFT**: 2abOBFT splits Phase 2 into Phase 2a (op-identity-signed verdict broadcast — claim about σ-eligibility, no threshold partial bound) + Phase 2b (σ-or-NR commit with threshold partial bound). Bare OBFT binds at σ-emit time during a single Phase 2 with sub-phasing.
@@ -945,7 +921,7 @@ Multi-round 2abOBFT (Phase 2a/2b composed with R-round retry — see [§Where th
 
 This appendix specifies an opportunistic bid-routing extension to 2abOBFT. **L_Bid** is a bid-determined top layer prepended to 2abOBFT's rotation-determined K layers (yielding a `K' = K + 1` configuration). Unlike the analogous extension for [bare OBFT](OBFT.md#appendix-b--l_bid-mini-consensus-extension) or [OBFTR](OBFTR.md#appendix-b--l_bid-mini-consensus-extension), **2abOBFT does not need a separate mini-consensus phase** — the existing Phase-2a verdict broadcast already provides the cluster-wide convergence mechanism. L_Bid integrates as **another verdict-bound layer** in Phase 2a/2b alongside the rotation layers.
 
-The integration closes the C1 (selective bid-withholding), C2 (bidder equivocation), and C3 (validity-divergence majority) deadlock surfaces from the bare-TBFT-style B.3 sketch, at **no additional slot-budget cost** over bare 2abOBFT (Phase 2a was already paying the RTT). It introduces the same residual L_Bid surfaces (2-1-byz-defect, verdict-equivocation) that 2abOBFT's rotation layers already expose, now with broader trigger surface (byz is always a bidder, not just byz-leader-only).
+The integration closes the C1 (selective bid-withholding), C2 (bidder equivocation), and C3 (validity-divergence majority) deadlock surfaces of the naive bid-routing sketch (no mini-consensus, σ-eligibility predicated on each operator's locally-observed bid set), at **no additional slot-budget cost** over bare 2abOBFT (Phase 2a was already paying the RTT). It introduces the same residual L_Bid surfaces (2-1-byz-defect, verdict-equivocation) that 2abOBFT's rotation layers already expose, now with broader trigger surface (byz is always a bidder, not just byz-leader-only).
 
 ### When to use it
 
@@ -1100,9 +1076,9 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | 2abOBFT base recovery scope | **Same** (rotation layers unchanged) |
-| L_Bid liveness — C1 selective bid-withholding | n/a (bare-TBFT B.3 deadlocks) | **Closed** (verdict-quorum-short → fall-through) |
-| L_Bid liveness — C2 bidder equivocation | n/a (bare-TBFT B.3 deadlocks) | **Closed** (verdict-quorum-short → fall-through) |
-| L_Bid liveness — C3 validity-majority (3-of-4) | n/a (bare-TBFT B.3 deadlocks) | **Closed** (verdict-quorum reaches on majority) |
+| L_Bid liveness — C1 selective bid-withholding | n/a (naive sketch deadlocks) | **Closed** (verdict-quorum-short → fall-through) |
+| L_Bid liveness — C2 bidder equivocation | n/a (naive sketch deadlocks) | **Closed** (verdict-quorum-short → fall-through) |
+| L_Bid liveness — C3 validity-majority (3-of-4) | n/a (naive sketch deadlocks) | **Closed** (verdict-quorum reaches on majority) |
 | L_Bid liveness — 2-1-byz-defect | n/a | **Open**: same shape as rotation-layer Class B regression; slashable Rule 6 |
 | L_Bid liveness — verdict-equivocation | n/a | **Open**: same shape as rotation-layer Class B regression; slashable Rule 6 |
 | L_Bid liveness — 2-2 validity split | n/a | **Open**: hard algebraic limit |
@@ -1111,7 +1087,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 
 **Net trade vs bare 2abOBFT**: pays additional bandwidth (~3 KB) and extends 2abOBFT's existing Class B residuals (2-1-byz-defect, verdict-equivocation) to L_Bid with broader trigger frequency, in exchange for bid-routing value capture on the healthy path. **Latency, safety, and rotation-layer liveness are unchanged.** The trade is structurally cleaner than the OBFT and OBFTR L_Bid extensions, which add a separate mini-consensus phase costing +1 RTT — 2abOBFT's existing Phase 2a absorbs the L_Bid convergence at no additional latency cost.
 
-**Comparison with bare-TBFT-style B.3 sketch**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule (same mechanism as the rotation layers). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) match 2abOBFT's existing rotation-layer Class B regressions in algebraic shape — they don't introduce structurally new failure modes, just expose the existing modes at a higher per-slot trigger frequency.
+**Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule (same mechanism as the rotation layers). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) match 2abOBFT's existing rotation-layer Class B regressions in algebraic shape — they don't introduce structurally new failure modes, just expose the existing modes at a higher per-slot trigger frequency.
 
 **Comparison with OBFT + L_Bid mini-consensus and OBFTR + L_Bid mini-consensus**: 2abOBFT + L_Bid is the cleanest composition of the three — no separate mini-consensus phase, no additional latency, identical recovery profile to bare 2abOBFT modulo the L_Bid-specific surfaces. OBFT and OBFTR pay +Δ_minicon (~300ms) for the same C1/C2/C3 closure plus the same residuals; 2abOBFT gets it for free because Phase 2a is already in the protocol.
 
@@ -1123,7 +1099,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 
 - **Variant chosen**: "Variant C" below — no Phase-1 leader σ_V; verdict broadcasts in Phase-2a; σ/NR commit in Phase-2b. Justification follows.
 - **Scope**: SSV proposer duty at `n = 4, f = 1, K = 4` as the running example; algebra generalizes to higher `n`/`f`.
-- **Relationship to existing code**: [protocol/v2/tbft/](../protocol/v2/tbft/) implements baseline TBFT. Bare OBFT itself has not been implemented; 2abOBFT was designed to be built directly (skipping a bare-OBFT intermediate) since the Defer-state machinery bare OBFT introduces is subsumed by 2abOBFT's Phase-2a observation. If a bare-OBFT implementation were to land first, several pieces of 2abOBFT would become drop-in replacements rather than additions.
+- **Relationship to existing code**: bare OBFT has not been implemented; 2abOBFT was designed to be built directly (skipping a bare-OBFT intermediate) since the Defer-state machinery bare OBFT introduces is subsumed by 2abOBFT's Phase-2a observation. If a bare-OBFT implementation were to land first, several pieces of 2abOBFT would become drop-in replacements rather than additions.
 
 ### What changes vs bare OBFT
 
@@ -1146,14 +1122,14 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 
 ### Variants considered
 
-OBFT.md describes Phase 2a/2b loosely and points at TBFTR.md. The two specifications diverge on whether Phase-2a carries σ partials. Three coherent design points emerge:
+Three coherent design points emerge for adding a Phase 2a/2b split to OBFT, differing on whether Phase-2a carries σ partials and whether Phase-1 keeps the leader's σ_V:
 
-#### Variant A — TBFTR-as-written
+#### Variant A — Phase-1 σ_V kept, Phase-2a onion carries σ
 
-[TBFTR.md](TBFTR.md) Phase-2a onion carries `V_{L_k}` plaintext and `C_k(σ_i^V(V_{L_k}))` (σ partial wrapped in chained IBE). Operators σ-commit in Phase-2a if they have V; Phase-2b is for late-comers who recover V from a peer's onion (gated by an `f+1`-distinct-Phase-2a-σ-signers witness threshold).
+Leader signs Phase-1 σ_V (same as bare OBFT). Phase-2a onion carries `V_{L_k}` plaintext and `C_k(σ_i^V(V_{L_k}))` (σ partial wrapped in chained IBE). Operators σ-commit in Phase-2a if they have V; Phase-2b is for late-comers who recover V from a peer's onion (gated by an `f+1`-distinct-Phase-2a-σ-signers witness threshold).
 
-- **Pros**: matches a fully-specified protocol (TBFTR); narrowest spec gap to fill.
-- **Cons**: keeps Phase-1 σ_V — leader is σ-locked at Phase-1; **does not recover validity-divergence** (the leader's Phase-1 σ_V on stale V remains the structural blocker, see [docs/TBFTR.md / Application-validity-divergence](TBFTR.md#liveness-synchrony-conditional) — TBFTR explicitly documents this limit). At `f=1 n=4` the witness threshold `f+1 = 2` coincides with the leaner protocol's coverage ([docs/TBFTR.md / When to use it](TBFTR.md#when-to-use-it)) — secondary closure adds no widening, only redundancy. Equivocation σ-locked splits where honest σ-commit on different V's at Phase-2a still fail.
+- **Pros**: narrowest spec gap to fill on top of bare OBFT.
+- **Cons**: keeps Phase-1 σ_V — leader is σ-locked at Phase-1; **does not recover validity-divergence** (the leader's Phase-1 σ_V on stale V remains the structural blocker). At `f=1 n=4` the witness threshold `f+1 = 2` adds no widening over a leaner construction. Equivocation σ-locked splits where honest σ-commit on different V's at Phase-2a still fail.
 
 #### Variant B — Phase-1 σ_V kept, Phase-2a observation-only
 
@@ -1379,7 +1355,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 **E6: At layer k > 0, Phase-2b σ partials are chained-IBE-encrypted under nr_tag_0..nr_tag_{k-1}. They cannot be verified by receivers until prior NR-quorums unlock decryption.**
 
 - Same as OBFT's Phase-2 onion at deeper layers. No new attack surface, but the implementation must wrap Phase-2b σ partials in chained IBE the same way OBFT's Phase-2 onion does.
-- The current [protocol/v2/tbft/onion.go](../protocol/v2/tbft/onion.go) `BuildOnion()` does this for baseline TBFT; the Phase-2b σ-emission code path can reuse it directly.
+- The Phase-2b σ-emission code path constructs the chained-IBE onion the same way as the existing OBFT-family onion-build helper.
 
 #### Witness-threshold equivalent for Phase-2b σ emission
 
@@ -1517,13 +1493,13 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 11. **K = 4 vs K = 3 trade-off**: same as OBFT base. K=4 (= n) has maximum fall-through depth at +3 KB onion bandwidth; K=3 (= f+2) saves bandwidth but is less robust to multi-layer adversarial scenarios. Recommend K = n = 4 for SSV proposer.
 
-12. **Hash variant?** Variant C does not need TBFTR's "V plaintext in onion" since Phase-2a's bundle re-flood is the V-recovery mechanism. There is no late-σ-emit-on-V-recovered-from-peer-onion in Variant C. So the hash-vs-full-V distinction does not apply; Phase-2b onions carry σ partials only (encrypted at deeper layers), not V plaintext.
+12. **Hash variant?** Variant C does not need V-plaintext in the Phase-2 onion since Phase-2a's bundle re-flood is the V-recovery mechanism. There is no late-σ-emit-on-V-recovered-from-peer-onion in Variant C. So the hash-vs-full-V distinction does not apply; Phase-2b onions carry σ partials only (encrypted at deeper layers), not V plaintext.
 
 13. **Migration / co-existence with QBFT**: rollout via per-cluster opt-in (DKG event) or feature flag. Wire-protocol versioning via `protocol_tag` (`OBFT-2ab-v1`) prevents cross-protocol message mixing. Operationally: ship behind feature flag, enable per cluster after DKG.
 
 14. **DKG cost**: same as OBFT — one V-keypair DKG (already in SSV) + one IBE-keypair DKG (new, run once at cluster init). Per-cluster setup, not per-slot.
 
-15. **Existing TBFT package extension vs new package**: extend `protocol/v2/tbft/` adding Phase 2a/2b machinery alongside existing TBFT, OR create a new `protocol/v2/obft/` package. Recommend extending — preserves test infrastructure and IBE plumbing reuse. Distinguish via configuration (instance type) rather than separate package.
+15. **Package layout**: 2abOBFT can be implemented as its own `protocol/v2/obft/` package (or extension of an existing OBFT-family package once one lands). Either approach works; preserving test infrastructure and IBE plumbing reuse argues for extension if a parallel OBFT package already exists.
 
 16. **Verdict EKM-binding (open trade-off)**: should Phase-2a verdicts be logged in the EKM at issue time, with Phase-2b sign requests required to match? Closes the 2-1-byz-defect regression but adds complexity (verdicts become EKM-tracked events; honest revision upon equivocation needs a "verdict-void" EKM operation gated on equivocation evidence). Default recommendation: accept the regression in v1; revisit if production telemetry shows defection-grief at meaningful rates. If adopted, the EKM coordinator gains: `(slot, layer, verdict_side, value_root)` log row at Phase-2a issue + `LogPhase2bSign` checks against the verdict row + `VoidVerdict(equivocation_evidence)` for honest revision.
 
@@ -1538,7 +1514,7 @@ The implementation is broken into phases that can be staged across PRs:
 - Add `KindVerdict` envelope to [protocol/v2/tbft/wire/](../protocol/v2/tbft/wire/).
 - Update `Phase1Bundle` schema to remove `σ_V` partial; auth envelope retains `protocol_tag = "OBFT-2ab-v1"`.
 - Extend EKM schema in [ssvsigner/ekm/](../ssvsigner/ekm/) to support `(slot, layer, side, value_root)` log rows for the V-share + IBE-share coordinator. Add per-Phase-2b sign-request handlers.
-- Add domain-separation tests confirming OBFT-2ab-v1 envelopes don't validate under bare TBFT or bare OBFT envelope handlers.
+- Add domain-separation tests confirming `2abOBFT-v1` envelopes don't validate under bare OBFT or OBFTR envelope handlers.
 
 #### Phase 2 — Instance state machine
 
@@ -1557,7 +1533,7 @@ The implementation is broken into phases that can be staged across PRs:
 
 #### Phase 4 — Adapter integration
 
-- Update [protocol/v2/ssv/runner/proposer_tbft.go](../protocol/v2/ssv/runner/proposer_tbft.go) to drive the Phase 2a/2b state machine instead of bare TBFT.
+- Wire the proposer-duty runner to drive the Phase 2a/2b state machine.
 - Add Phase-2a verdict broadcast at `T_commit + Δ_2a − (D + δ)`.
 - Add Phase-2b emission at `T_commit + Δ_2a`.
 
@@ -1609,7 +1585,7 @@ The implementation is broken into phases that can be staged across PRs:
 
 ### Where this came from
 
-Variant C is the structural extrapolation of OBFT's "Phase 2a/2b" prose ([docs/OBFT.md / Where this came from](OBFT.md#where-this-came-from)) — taking seriously the "without a Phase-1 σ_L^V" hint at [docs/OBFT.md / Where this came from](OBFT.md#where-this-came-from). TBFTR's spec ([docs/TBFTR.md](TBFTR.md)) is Variant A (Phase-1 σ_V kept, Phase-2a onion carries σ); 2abOBFT diverges to recover validity-divergence at all `n`/`f`.
+Variant C is the structural extrapolation of OBFT's "Phase 2a/2b" prose ([docs/OBFT.md / Where this came from](OBFT.md#where-this-came-from)) — taking seriously the "without a Phase-1 σ_L^V" hint there. The choice to drop Phase-1 σ_V is what lets 2abOBFT recover validity-divergence at all `n`/`f`.
 
 The verdict-broadcast mechanism is the load-bearing addition: it makes cluster-wide convergence on σ-eligibility observable before any operator commits a partial, which is the structural fix for OBFT's Class A validity-divergence and Class B byzantine-grief patterns. Without verdict broadcasts, a Phase-2a window only gives more time for Phase-1 bundle propagation — equivalent to a wider `Δ_2` in OBFT base.
 
