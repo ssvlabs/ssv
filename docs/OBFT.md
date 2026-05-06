@@ -1301,3 +1301,116 @@ This variant is not in current OBFT spec but is a documented design point in som
 4. **Implementation choice should be driven by production telemetry**: if observed gossipsub propagation P99 ≈ `D + δ`, gossipsub is already optimal and explicit re-broadcast is redundant. If P99 > 1.5 × `(D + δ)` (suggesting multi-hop or pruning issues), explicit re-broadcast can compress the tail. Defensive deployments at larger n may opt in regardless.
 5. **The σ_L^V re-inclusion variant** is a more targeted defense (protects the leader's partial sig against bundle drop) at lower bandwidth cost than full bundle re-broadcast. Could be considered if production observes σ_L^V drops as a meaningful failure mode.
 
+
+## Appendix D — OBFT-replenish (layer-staged extension)
+
+This appendix sketches a candidate enhancement to OBFT — **OBFT-replenish** — that stages layer broadcasts across rounds instead of broadcasting all K layers up-front. The design preserves OBFT's chained-encryption and σ-or-NR-commit machinery but introduces new leaders per round, growing K dynamically as needed.
+
+OBFT-replenish is positioned as an **enhancement of OBFT** (not OBFTR): it keeps OBFT's per-layer mechanics and adds a multi-round structure that introduces fresh leaders per round, where OBFTR's multi-round structure re-floods the same K leaders' bundles.
+
+### Design idea
+
+Instead of OBFT's "broadcast all K leaders' bundles in Phase 1 up-front; if no consensus, slot misses", OBFT-replenish runs:
+
+- **Round 1**: 2 leaders (L_0, L_1) broadcast their Phase-1 bundles. Operators emit a 2-layer onion at Phase 2 (σ at validated layers, NR at non-validated). Phase 3 walks layers 0–1.
+- **Round 2** (if round 1 inconclusive): 2 new leaders (L_2, L_3) broadcast. Decided layers from round 1 (σ-quorum or NR-quorum reached) are pruned from active state; undecided layers (e.g., L_1 in `Defer` if some honest haven't yet σ-emitted but cluster σ-eligibility hasn't reached qV) are retained. Round-2 onion contains new layers L_2, L_3 plus retained layers' Phase-2b emissions if needed. Phase 3 walks all undecided + new layers.
+- **Round N** (continuing): each round adds 2 new leaders, prunes decided layers, retries undecided layers. Round count is bounded by remaining slot budget.
+
+K grows from 2 (round 1) to 2N (round N). The protocol terminates when σ-quorum reaches at any layer (success) or slot deadline expires (miss).
+
+The "2 layers per round" choice is a parameter; could be 1 (slowest growth, most bandwidth-frugal) or 3+ (faster but bigger Phase-1 broadcast per round). 2 is a reasonable midpoint.
+
+### Mechanics preserved from OBFT
+
+- **σ-or-NR per (operator, layer)**: independent across layers (cross-layer hedging preserved).
+- **Chained encryption**: L_k's σ partials encrypt under `nr_tag_0 ∧ ... ∧ nr_tag_{k-1}`. Chain extends naturally as new layers are added.
+- **Reconstruction walk**: at each round's Phase 3, walk layers 0 → 1 → ... → K_current, where K_current is the highest layer index introduced so far.
+- **EKM scope**: per-(slot, layer, side) slashing-protection rows; same schema as OBFT.
+- **Slashing-evidence rules**: unchanged from OBFT base.
+
+### Mechanics added (vs bare OBFT)
+
+- **Cross-round σ-or-NR exclusivity**: an operator that σ-locked at L_0 in round 1 stays σ-locked at L_0 in round 2 (cannot retract). Cross-round atomicity in EKM (similar to OBFTR's requirement).
+- **Round-transition signaling**: cluster needs to determine when round r is inconclusive and round r+1 should start. Could be timer-based (`T_round_r_end`) or quorum-driven (similar to OBFTR's `KindLCClaim`).
+- **Per-round Phase 1**: round-r leaders broadcast bundles in round-r's Phase 1, vs OBFT's single Phase 1 + OBFTR's round-1-only Phase 1.
+- **Variable-K Phase 3 walk**: handle dynamic layer count instead of K fixed.
+- **Layer-numbering extension**: deterministic rotation extends to unbounded layer indices (e.g., `L_{2N} = operator (slot + 2N) mod n`).
+
+### Comparison with bare OBFT
+
+#### Healthy-path latency
+
+- OBFT: ~3D (Phase 1 + Phase 2 + Phase 3), ~600ms at D=200ms.
+- OBFT-replenish (round-1 success at L_0 or L_1): ~3D for round 1, **identical to OBFT**.
+
+The reduced layer count in round 1 doesn't speed up consensus — the bottleneck is the Phase 1/2/3 cycle, not the number of layers. Healthy-case latency is a wash.
+
+#### Bandwidth
+
+| Case | OBFT | OBFT-replenish |
+|---|---|---|
+| Round-1 success (L_0 or L_1 σ-quorum) | K=4 bundles + n × 4-layer onion ≈ 27 KB | 2 bundles + n × 2-layer onion ≈ 14 KB |
+| Round-2 success | n/a (single-round, slot misses if R1 fails on adversarial pattern) | ~25 KB (4 bundles + 2 × n × ~3-layer onion) |
+| Round-3 success | n/a | ~36 KB (exceeds OBFT) |
+| Multi-round failure | flat 27 KB | grows linearly with R |
+
+OBFT-replenish wins bandwidth in **round-1-success scenarios** (most production slots in healthy conditions) and breaks even at round 2. Past round 2, bandwidth exceeds OBFT.
+
+#### V freshness (MEV value capture)
+
+- OBFT: all K leaders fetch within the same slot prefix at asymmetric `T_{K-1} < ... < T_1 < T_0` deadlines. L_0 has the freshest V; backups (L_1..L_{K-1}) fetch earlier.
+- OBFT-replenish: round-r leaders fetch *between rounds (r-1) and r* — strictly later than any round-1 leader's fetch.
+
+**Real upside specific to OBFT-replenish** that bare OBFT can't match at any value of K. In OBFT, all K leaders' fetches share the round-1 Phase-1 window; in replenish, later layers' fetches are deferred until round transitions, capturing late-MEV moves. For high-MEV slots, replenish's late-layer freshness can recover MEV that OBFT misses.
+
+#### Recovery scope (fall-through depth)
+
+- OBFT: K=4 layers, 3 fall-throughs available (silent L_0 → L_1 → L_2 → L_3). Fixed.
+- OBFT-replenish: K grows with rounds, fall-through depth = 2R. At R=3 rounds (typical fit in 4s slot budget), 6 layers ≈ 5 fall-throughs.
+
+OBFT-replenish has **deeper fall-through** at the cost of round-by-round retry. Useful if multi-leader-silent patterns are observed.
+
+#### Adversarial-byz failure modes
+
+- OBFT: σ-locked equivocation 1-1-1, h_V=1 selective-delivery, validity-divergence — slot-miss patterns at any layer.
+- OBFT-replenish: **identical exposure**. New layers introduced in later rounds are subject to the same byzantine patterns. If byz exercises σ-locked split at L_0 in round 1, the L_0 σ-locks block fall-through; later layers' chained encryption stays sealed under L_0/L_1's nr_tags.
+
+R-invariant (same as OBFTR). The structural fix for these patterns is Phase 2a/2b ([2abOBFT](2abOBFT.md)), independent of layer count or replenishment.
+
+#### Slot timing complexity
+
+- OBFT: single set of phase deadlines (`T_commit`, `T_round_end`); single Phase 1/2/3 cycle.
+- OBFT-replenish: per-round deadlines (`T_commit_r`, `T_round_r_end`); round-transition signaling needed.
+
+OBFT-replenish's slot scheduling is closer to OBFTR's complexity than to bare OBFT's.
+
+### When OBFT-replenish is worth the complexity over bare OBFT
+
+- **Healthy-dominated production environments** (most slots succeed at L_0 or L_1): bandwidth saving is real; freshness advantage materializes on late-MEV slots; multi-round complexity is the cost.
+- **High-MEV proposer duty with late-moving MEV**: round-r leaders' freshness advantage (vs OBFT's all-in-round-1 fetch) captures MEV that bare OBFT misses regardless of K.
+- **Clusters with intermittent operator unreliability**: deeper fall-through depth (2R vs OBFT's K=4) provides more recovery against silent-rotation operators.
+
+### When bare OBFT is preferable
+
+- **Implementation simplicity is valuable**: OBFT has one round, one set of phase deadlines, fixed K, no cross-round atomicity. Replenish needs variable K, cross-round σ-locks, round-transition coordination — closer to OBFTR territory.
+- **Failure rate is uncertain or stress-test environments**: OBFT's flat K=4 bandwidth is predictable; replenish's bandwidth grows with rounds and can exceed OBFT past round 2.
+- **Adversarial-byz-heavy deployments**: replenish doesn't add adversarial-byz coverage; extra rounds are wasted under byz patterns.
+- **Late BFT-start (e.g., BFT_start ≥ 2s, slot budget ≤ 1.25s)**: tight budget doesn't admit multi-round retries. Replenish's recovery depth is gated by round count, which is gated by budget. At late BFT-start, replenish reduces to roughly OBFT-with-K=2 with no recovery advantage.
+
+### Conclusions
+
+1. **OBFT-replenish is positioned as a multi-round enhancement of OBFT**, but its operational complexity profile (cross-round σ-locks, round-transition signaling, per-round Phase 1) is closer to OBFTR than to bare OBFT. The naming "enhancement of OBFT" is structurally fair — it keeps OBFT's chained-encryption + per-layer commitments machinery — but the protocol implementation effort is comparable to OBFTR.
+2. **The genuine OBFT-replenish-specific advantage is V freshness at later rounds**, which neither OBFT (any K) nor OBFTR (re-flood, no fresh fetches) provides. For late-MEV proposer slots, this is structurally meaningful.
+3. **Healthy-case bandwidth saving is real but conditional** — OBFT-replenish wins in round-1-success scenarios (K=2 instead of K=4 of bandwidth) and breaks even at round 2; past round 2, bandwidth exceeds OBFT. Whether favorable depends on observed round-1-success rate.
+4. **Adversarial-byz exposure is unchanged from OBFT/OBFTR**. Replenish does not provide additional protection against σ-locked equivocation, h_V=1 selective-delivery, or validity-divergence patterns. The structural fix for those is Phase 2a/2b ([2abOBFT](2abOBFT.md)), orthogonal to replenishment.
+5. **Healthy-path latency is identical to OBFT**. Reduced layer count in round 1 doesn't compress consensus time — the Phase 1/2/3 cycle is the bottleneck.
+6. **OBFT-replenish vs OBFT trade summary**:
+   - **+** Bandwidth saving on healthy slots (real if round-1-success dominates).
+   - **+** V freshness at later rounds (genuine MEV upside for late-resolving slots).
+   - **+** Deeper fall-through at the cost of multi-round retry.
+   - **−** Multi-round implementation complexity comparable to OBFTR.
+   - **−** Bandwidth grows past OBFT in multi-round failure cases.
+   - **=** Same adversarial-byz exposure as OBFT (R-invariant patterns unfixed).
+   - **=** Same healthy-path latency.
+
+Treat OBFT-replenish as a research direction worth specifying further if the late-MEV freshness motivation is significant for the target deployment. If the priority is simplicity and predictable behavior, bare OBFT (K=4 fixed) remains the cleaner choice. If the priority is adversarial-byz coverage, [2abOBFT](2abOBFT.md) is the relevant lever — independent of whether replenish is adopted.
