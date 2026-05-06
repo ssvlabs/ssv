@@ -14,16 +14,16 @@ import (
 //   2. Silent leader at L_0 — NR-quorum at L_0 → fall-through to L_1.
 //   3. Equivocation, 2-1 split where leader's σ_L^V completes a 2-honest
 //      σ-pool to qV → succeeds at L_0 on the majority V.
-//   4. Equivocation, all-Defer outcome — every honest retains both V's
-//      before σ-emit time → all force-NR at end of Phase 2 → NR-quorum at
-//      L_0 → fall-through to L_1.
-//   5. Equivocation, σ-locked split (1-1-Defer) — slot misses at L_0; no
+//   4. Equivocation, all-honest-NR outcome — every honest retains both V's
+//      before T_commit → all NR per equivocation rule → NR-quorum at L_0
+//      → fall-through to L_1.
+//   5. Equivocation, σ-locked split (1-1) — slot misses at L_0; no
 //      fall-through (σ-locked operators can't NR).
 //   6. Beyond f offline — neither σ nor NR quorum reaches; ErrNoQuorum.
 //   7. Multi-failure fall-through — multiple silent layers; eventual σ at
 //      first honest leader.
-//   8. Late re-flood within Phase 2 — Defer-partition resolves on late V
-//      delivery → late σ-emit → σ-pool reaches qV.
+//   8. Asymmetric L_0 propagation — bundle dropped on the wire → cluster
+//      falls through to L_1.
 //   9. Cross-signing detection (Rule 1).
 //  10. Validity-divergence — host returns NV; operator joins NR pool.
 
@@ -119,17 +119,14 @@ func TestObft_TwoOperatorsOffline_n4_NoQuorum(t *testing.T) {
 	}
 }
 
-// ---- Equivocation: all-Defer outcome → fall-through to L_1 ---------------
+// ---- Equivocation: all-honest-NR outcome → fall-through to L_1 -----------
 
-func TestObft_EquivocationAllDefer_n4(t *testing.T) {
+func TestObft_EquivocationAllNR_n4(t *testing.T) {
 	s := newSim(t, 4)
-	// L_0 leader (op1) equivocates: V_a to {2, 3}, V_b to {3, 4}. Each
-	// non-leader (2, 3, 4) thus sees BOTH V's (overlapping coverage):
-	//   op2 sees V_a only ❌ (misses V_b)
-	//   op3 sees V_a + V_b → Defer-equivocation
-	//   op4 sees V_b only ❌
-	// Hmm — to get all-Defer, all 3 non-leaders must see both V's. Let me
-	// deliver V_a to {2,3,4} and V_b to {2,3,4}.
+	// L_0 leader (op1) equivocates: deliver V_a to {2,3,4} and V_b to
+	// {2,3,4}. All non-leaders retain ≥ 2 distinct V's by T_commit; per
+	// the equivocation rule (no winner-picking under f=1), they NR at L_0.
+	// NR-quorum at L_0 reaches; cluster falls through to L_1.
 	vA := []byte("L_0-V_a")
 	vB := []byte("L_0-V_b")
 	s.deliverPhase1Equivocation(0, vA, vB,
@@ -144,7 +141,7 @@ func TestObft_EquivocationAllDefer_n4(t *testing.T) {
 
 	outputs := s.resolveAll(nil)
 	out := requireAllAgree(t, outputs)
-	require.Equal(t, 1, out.Layer, "all-Defer at L_0 should fall through to L_1")
+	require.Equal(t, 1, out.Layer, "all-honest-NR at L_0 should fall through to L_1")
 	require.True(t, bytes.Equal(s.candidates[1], out.Value))
 
 	// Each non-leader op should have recorded leader-equivocation evidence.
@@ -160,21 +157,18 @@ func TestObft_EquivocationAllDefer_n4(t *testing.T) {
 	}
 }
 
-// ---- Equivocation: σ-locked split (1-1-Defer) — slot misses at L_0 -------
+// ---- Equivocation: σ-locked split (1-1) — slot misses at L_0 ------------
 
 func TestObft_EquivocationSigmaLockedSplit_n4(t *testing.T) {
 	s := newSim(t, 4)
 	// L_0 leader (op1, byzantine) delivers V_a only to {op2}, V_b only to
 	// {op3}, nothing to {op4}. Op2 σ-emits on V_a (sole retained); op3
-	// σ-emits on V_b; op4 has no V → Defer-partition (no peer σ-emit observed
-	// at L_0 in the no-V fallback... wait, op4 sees op2 and op3's onions
-	// later, but op4 has no retained V at L_0, so under the L_0 fallback
-	// any auth-signed σ-claim counts as observed → op4 stays Defer).
+	// σ-emits on V_b; op4 has no V at T_commit → NR per silent-leader rule.
 	//
 	// Final pools at L_0:
 	//   σ-pool on V_a = {op2, op1's σ_L^V(V_a)} = 2 < qV=3
 	//   σ-pool on V_b = {op3, op1's σ_L^V(V_b)} = 2 < qV=3
-	//   NR-pool at L_0: op4 (force-NR at end of Phase 2). op2/op3 σ-locked.
+	//   NR-pool at L_0: op4 (silent-leader NR). op2/op3 σ-locked.
 	//                   = 1 < qEnc=3
 	// → no quorum, no fall-through; slot misses at L_0.
 	vA := []byte("L_0-V_a")
@@ -201,24 +195,12 @@ func TestObft_EquivocationSigmaLockedSplit_n4(t *testing.T) {
 
 func TestObft_AsymmetricPropagation_FallsThroughToL1_n4(t *testing.T) {
 	s := newSim(t, 4)
-	// L_0 leader (op1) delivers V_{L_0} to op2 only at observedEarly.
-	// Op3 and op4 don't receive V_{L_0} by T_commit (the bundle either
-	// never reached them or arrived past the cutoff).
-	//
-	// Per spec (no Defer state), op3 and op4 NR at L_0 (silent-leader rule);
-	// op2 σ-emits at L_0. σ-pool at L_0 = {op2 σ + op1 Phase-1 σ_V} = 2 < qV;
-	// NR-pool at L_0 = {op3, op4 + op1 silent at L_0? No — op1 already
-	// σ-locked via BuildPhase1Bundle.}
-	//
-	// Actually: σ-pool = 2 (op2 + leader σ_V), NR-pool = 2 (op3 + op4)
-	// — neither reaches qV/qEnc=3. Slot blocks at L_0 fall-through... wait,
-	// op1 is σ-locked from Phase 1 (cross-phase exclusivity), can't NR. So
-	// NR-pool short of qEnc → no fall-through.
-	//
-	// To get clean fall-through, we test a slightly different config where
-	// 0 honest received V (silent-from-everyone perspective): the leader
-	// broadcasts but bundle never reaches anyone (modeled by NOT calling
-	// ObservePhase1Bundle on receivers).
+	// L_0 leader (op1) builds and self-observes a Phase-1 bundle but the
+	// bundle never reaches any non-leader peer (modeled by NOT calling
+	// ObservePhase1Bundle on receivers). op2/op3/op4 NR at L_0 per the
+	// silent-leader rule; op1 is σ-locked from Phase 1 so cross-phase
+	// exclusivity prevents them from NR-ing. NR-pool at L_0 = 3 = qEnc;
+	// cluster falls through to L_1 (where op2 broadcasts honestly).
 	leader := s.leaderAt(0)
 	leaderInst := s.instances[leader]
 	v0 := s.candidates[0]

@@ -106,7 +106,7 @@ const (
 	ExpectSuccessHealthy ExpectClass = iota
 
 	// ExpectSuccessFallThrough: σ-quorum at some layer > 0 (silent leader
-	// or all-Defer recovery); all honest agree.
+	// or all-honest-NR recovery); all honest agree.
 	ExpectSuccessFallThrough
 
 	// ExpectMiss: no σ-quorum at any layer; slot misses cleanly. No

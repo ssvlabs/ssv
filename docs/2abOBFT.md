@@ -318,7 +318,7 @@ Three states per layer:
 | `NR` | Phase-2b NR partial emitted on `nr_tag_k` (operationally NR-silent or NR-due-to-equivocation or NV — wire-identical) |
 | `uncommitted` | Default at Phase 1 / Phase 2a — operator has not yet emitted Phase-2b. Once Phase 2b ends, every operator must be in `σ` or `NR` per the convergence rule. |
 
-There is no `Defer` state (which OBFT introduces for late-σ-emit-within-Phase-2 partition recovery). Phase-2a's window IS the deferral mechanism. By Phase-2a end, the convergence rule resolves every operator to either `σ` or `NR` at Phase-2b sign time.
+There is no `Defer` state. Phase-2a's window IS the deferral mechanism: every operator's σ/NR decision is deferred until after the Phase-2a observation phase resolves cluster-wide σ-eligibility. By Phase-2a end, the convergence rule resolves every operator to either `σ` or `NR` at Phase-2b sign time.
 
 **NR and NV are operationally interchangeable for the protocol.** Both materialize on the wire as a single message kind: a partial `σ_i^{IBE}(nr_tag_k)` from the IBE keypair on the layer's NR tag. The protocol counts NR and NV uniformly toward the same no-σ-side pool (referred to throughout as "NR-pool" or "no-σ pool" for short). The distinction is **local-only diagnostic** (an operator may log *why* it didn't sign σ — for telemetry — but the cluster-wide message and counting logic are identical).
 
@@ -628,7 +628,7 @@ The slot misses (no V signature is produced) under any of the following.
 These are slot-miss outcomes in [OBFT](OBFT.md) and [OBFTR(R≥2)](OBFTR.md) that 2abOBFT structurally recovers:
 
 - **Equivocation 1-1-1 split**: recovered via NR-quorum fall-through (verdict-pool short on every V; all honest go NR).
-- **Equivocation 1-1-Defer-C, 1-Defer-Defer**: same recovery via NR-quorum fall-through.
+- **Equivocation 1-1-NR-C, 1-NR-NR**: same recovery via NR-quorum fall-through.
 - **h_V=1 selective-delivery deadlock**: recovered (verdict-pool short → all NR → fall-through).
 - **Late deepest-layer leader broadcast**: recovered (Phase-2a re-flood absorbs late bundle).
 - **Validity-divergence majority within f-bound**: recovered (3-of-4 or wider splits at f=1 n=4 reach σ-quorum or NR-quorum cleanly).
@@ -657,9 +657,9 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
 | Termination (output guaranteed) | Conditional: terminates within `T_round_end` if real propagation between leader broadcast and any honest first-observation ≤ absorption window `Δ_2a + (D + δ)` (≈ 450ms at Config A recommended) and ≤ f operators byzantine/offline. |
 | Equivocation detection | Yes — leaders sign Phase-1 envelopes; conflicting signed candidates form self-contained slashable evidence (Rule 2) |
-| Equivocation recovery | **Structural for 1-1-1, all-Defer, h_V=1 patterns** via convergence-rule fall-through. **2-1-byz-defect regresses** vs single-Phase-2 protocols (slot misses at L_0; Rule-6 evidence). |
+| Equivocation recovery | **Structural for 1-1-1, all-equivocation-NR, h_V=1 patterns** via convergence-rule fall-through. **2-1-byz-defect regresses** vs single-Phase-2 protocols (slot misses at L_0; Rule-6 evidence). |
 | Validity-divergence recovery | **Majority recovers** (e.g., 3-of-4 σV vs 1 NV at f=1 n=4 reaches σ-quorum at L_0). 2-2 split at f=1 n=4 still slot-misses cleanly (no majority). |
-| Byzantine-leader-grief resistance | Substantial. h_V=1 deadlock, 1-1-1 equivocation split, mesh-flakiness, late-deepest-layer-broadcast — all closed structurally. 2-1-byz-defect remains a Class B residual. |
+| Byzantine-leader-grief resistance | Substantial. h_V=1 (both withhold-then-fake-σ and selective Phase-1 delivery variants), 1-1-1 equivocation split, mesh-flakiness, late-deepest-layer-broadcast — all closed structurally via Phase-2a observation. 2-1-byz-defect remains a Class B residual. |
 | Mesh-flakiness tolerance | Good — Phase-2a window absorbs typical mesh-jitter (recommended `Δ_2a ≥ 2(D + δ)` accommodates one full propagation cycle of variance). Wider outliers fall back through NR-quorum to L_1. |
 | Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide. Same as OBFT-family. |
 | Built-in leader fallback | Yes (K-layer fall-through within Phase 3's reconstruction walk; K configurable, K = n recommended for proposer duty) |
@@ -802,7 +802,7 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Equivocation 2-1, byz silent | Succeeds at L_0 (Phase-1 σ_V locked) | Falls through to L_1 (one extra layer) |
 | Equivocation 2-1, byz defects | Succeeds at L_0 (Phase-1 σ_V locked) | **Slot misses (regression)** — Rule 6b evidence |
 | Non-leader verdict-equivocation at marginal h_V | n/a (no verdicts in OBFT) | **Slot misses (regression)** — Rule 6a evidence |
-| h_V=1 selective-delivery deadlock | Closed by design (no Defer state, no no-V fallback) ✓ | Falls through to L_1 ✓ |
+| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ variant by Defer removal); selective Phase-1 delivery still slot-misses (algebraic limit at f=1, n=4) | Falls through to L_1 ✓ |
 | Validity-divergence at majority | Slot misses (Class A) | Recovered ✓ |
 | Validity-divergence at 2-2 boundary | Slot misses (Class A) | Slot misses (Class A — same algebraic limit) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) ✓ |
@@ -825,10 +825,10 @@ The two design directions are orthogonal — Phase 2a/2b split + R-round retry c
 
 ### A.3 — Comparison with bare OBFT and QBFT
 
-QBFT is SSV's existing consensus protocol; bare [OBFT](OBFT.md) is the spec-simplest OBFT-family ancestor of 2abOBFT (single Phase 2 with sub-phasing, no Phase 2a/2b split). Two structural differences matter for the comparison:
+QBFT is SSV's existing consensus protocol; bare [OBFT](OBFT.md) is the spec-simplest OBFT-family ancestor of 2abOBFT (single Phase 2 emitting a single KindCommit at T_commit, no Phase 2a/2b split). Two structural differences matter for the comparison:
 
 - **QBFT vs OBFT family**: QBFT separates "decide on a value" (consensus) from "sign the decided value" (post-consensus partial-sig collection); the OBFT family (bare OBFT, 2abOBFT, OBFTR) fuses them by embedding partial signatures inside the consensus phases.
-- **2abOBFT vs bare OBFT**: 2abOBFT splits Phase 2 into Phase 2a (op-identity-signed verdict broadcast — claim about σ-eligibility, no threshold partial bound) + Phase 2b (σ-or-NR commit with threshold partial bound). Bare OBFT binds at σ-emit time during a single Phase 2 with sub-phasing.
+- **2abOBFT vs bare OBFT**: 2abOBFT splits Phase 2 into Phase 2a (op-identity-signed verdict broadcast — claim about σ-eligibility, no threshold partial bound) + Phase 2b (σ-or-NR commit with threshold partial bound). Bare OBFT binds at T_commit during a single Phase 2.
 
 Throughout this section, "apples-to-apples T" means comparing all three protocols at equal *total slot budget*. Each protocol *uses* the budget differently — QBFT for rounds, 2abOBFT for phases, bare OBFT for a single phase — but the comparison is structurally stable when measured at equal T.
 
@@ -1112,7 +1112,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 | Convergence mechanism | Per-operator local view at `T_commit` based on retained V's | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
 | EKM coordination | Single signing event per (slot, layer) per operator (V-share + IBE-share) | Same — single signing event per (slot, layer) per operator at Phase-2b; verdict envelope is op-identity-signed (not threshold) and does not consume EKM slashing-protection |
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
-| h_V=1 selective-delivery deadlock | Closed by design (no Defer/no-V fallback) | Recovered structurally |
+| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ via Defer removal); selective Phase-1 delivery still slot-misses | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
 | Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 250ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 550ms post-T_commit (+300ms for Phase-2a window) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
@@ -1213,9 +1213,9 @@ D delivers V_a to A, V_b to B, V_c to C (each a distinct V) near end of Phase-1,
 
 **Either sub-case recovers.** OBFT base 1-1-1 split slot-misses ([docs/OBFT.md / Failure modes](OBFT.md#failure-modes)); Variant C structurally fixes it via the σ-eligibility-quorum-short rule.
 
-##### 1-1-Defer-C / 1-Defer-Defer
+##### 1-1-NR-C / 1-NR-NR
 
-These are sub-cases of byzantine selective-delivery patterns. The convergence rule resolves them the same way: any honest split that doesn't reach `σ_eligibility_quorum = qV` results in all honest going NR → NR-quorum reaches → fall-through.
+These are sub-cases of byzantine selective-delivery patterns (an honest in `NR` here is either silent-leader-NR or equivocation-NR per bare OBFT's commit rules). The convergence rule resolves them the same way: any honest split that doesn't reach `σ_eligibility_quorum = qV` results in all honest going NR → NR-quorum reaches → fall-through.
 
 ##### 2-1 split — REGRESSION vs bare OBFT
 
@@ -1240,7 +1240,7 @@ A symmetric pattern — D delivers V to {A}, V' to {B, C} — has the same shape
 | 2-1, byz cooperates | Succeeds at L_0 | Succeeds at L_0 (tie) |
 | 2-1, byz silent | Succeeds at L_0 (Phase-1 σ_V lock) | Falls through to L_1 (one extra layer's latency, still succeeds) |
 | 2-1, byz defects (verdict σV + action NR) | Succeeds at L_0 (Phase-1 σ_V lock) | **Slot misses** (NR-pool short of qEnc) |
-| All-Defer-due-to-equivocation (early byz delivery) | Recovered via L_1 fall-through | Recovered via NR-quorum fall-through |
+| All-equivocation-NR (early byz delivery) | Recovered via L_1 fall-through | Recovered via NR-quorum fall-through |
 
 **Net liveness change vs bare OBFT**: gains 1-1-1 recovery (worst-case in OBFT); loses 2-1 byz-defect (new regression). Across realistic byzantine behavior (per the rational-byzantine-deterrent assumption — a rational byz faces the same fee outcome as going offline and gains nothing by defecting with on-wire evidence), Variant C is net positive in expectation. For deployments with short-horizon byzantines that don't value cluster fee accrual, the regression is a real cost.
 

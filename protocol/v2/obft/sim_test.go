@@ -13,8 +13,8 @@ import (
 //
 // Models n operators, each owning a private *Instance. The simulator wires
 // up Phase-1 bundle delivery (selectively, to test partition / equivocation
-// scenarios), Phase-2 onion + NR exchange, and Phase-3 Resolve. Per-operator
-// host validity verdicts are configurable to exercise the NV / Defer paths.
+// scenarios), Phase-2 KindCommit exchange, and Phase-3 Resolve. Per-operator
+// host validity verdicts are configurable to exercise the NV path.
 //
 // The simulator uses StubSigner / StubIBE so tests run without real BLS
 // machinery; that's fine for protocol-level coverage (the cryptography is

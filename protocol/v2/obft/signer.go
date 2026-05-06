@@ -11,13 +11,13 @@ import (
 // Signer is the BLS-style threshold signing primitive OBFT uses to:
 //
 //   - Produce per-operator partial signatures on candidate values
-//     (these go inside an Onion's per-layer entries; for L_0 plaintext,
-//     for k > 0 wrapped in chained IBE encryption).
+//     (these go inside the per-layer onion entries of a KindCommit message;
+//     for L_0 plaintext, for k > 0 wrapped in chained IBE encryption).
 //   - Produce the layer leader's partial signature on V at Phase 1
 //     (head-start contribution to the σ-pool — the `σ_L^V` in spec terms).
 //   - Produce per-operator partial signatures on NR tags (these are the
-//     KindNR partials, aggregating to qEnc unlocks layer-k+1 chained
-//     decryption).
+//     NR partials carried alongside σ partials in KindCommit; aggregating
+//     to qEnc unlocks layer-k+1 chained decryption).
 //   - Aggregate qV / qEnc partials into a full signature, both for the
 //     reconstructed V signature and for IBE decryption-key derivation.
 //

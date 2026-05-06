@@ -258,7 +258,7 @@ func TestStress_T3_MultiSilent(t *testing.T) {
 	}
 }
 
-// ---- Table 3: equivocation σ-locked split (1-1-Defer) -----------------
+// ---- Table 3: equivocation σ-locked split (1-1) -----------------------
 
 // TestStress_T3_EquivocSigmaLockedSplit verifies that a byz L_0 leader
 // who delivers V to one honest, V' to another, nothing to the rest,
@@ -291,14 +291,14 @@ func TestStress_T3_Equivoc111(t *testing.T) {
 	assertAll(t, cfg, outs, ExpectMiss)
 }
 
-// ---- Table 3: equivocation all-Defer fall-through ---------------------
+// ---- Table 3: equivocation all-honest-NR fall-through -----------------
 
-// TestStress_T3_EquivocAllDefer verifies that when byz delivers both V's
-// to all 3 honest, they all retain ≥ 2 distinct V's, force-NR at end of
-// Phase 2, and fall through to L_1.
-func TestStress_T3_EquivocAllDefer(t *testing.T) {
+// TestStress_T3_EquivocAllNR verifies that when byz delivers both V's to
+// all 3 honest, they all retain ≥ 2 distinct V's by T_commit and NR per the
+// equivocation rule; NR-quorum at L_0 → fall-through to L_1.
+func TestStress_T3_EquivocAllNR(t *testing.T) {
 	cfg := baselineConfig(200 * time.Millisecond)
-	cfg.Byz = ByzEquivocAllDefer{Byz: 1}
+	cfg.Byz = ByzEquivocAllNR{Byz: 1}
 	outs := runMany(t, cfg, 6, simsPerCell())
 	assertAll(t, cfg, outs, ExpectSuccessFallThrough)
 	// Every honest non-leader should have observed Rule 2 evidence at L_0.
@@ -372,16 +372,16 @@ func TestStress_T3_Equivoc111_RealBLS(t *testing.T) {
 	assertAll(t, cfg, outs, ExpectMiss)
 }
 
-// TestStress_T3_EquivocAllDefer_RealBLS reproduces all-Defer fall-through
+// TestStress_T3_EquivocAllNR_RealBLS reproduces all-honest-NR fall-through
 // with real BLS. Byz floods both V's to all honest; every honest retains
-// ≥ 2 distinct V's and force-NRs at end of Phase 2; NR-quorum at L_0 →
+// ≥ 2 distinct V's and NRs per the equivocation rule; NR-quorum at L_0 →
 // in-round fall-through to L_1 with honest L_1 leader. Real BLS verifies
 // that NR-partial aggregation produces a chained-decryption key that
 // successfully unlocks L_1 entries — closing the loop on the cryptographic
 // invariant the protocol relies on.
-func TestStress_T3_EquivocAllDefer_RealBLS(t *testing.T) {
+func TestStress_T3_EquivocAllNR_RealBLS(t *testing.T) {
 	cfg, _ := realBLSSetup(t, 200*time.Millisecond)
-	cfg.Byz = ByzEquivocAllDefer{Byz: 1}
+	cfg.Byz = ByzEquivocAllNR{Byz: 1}
 	outs := runMany(t, cfg, 83, realBLSSimsPerCell)
 	assertAll(t, cfg, outs, ExpectSuccessFallThrough)
 	for i, r := range outs {
@@ -467,21 +467,20 @@ func TestStress_T3_FakeEncryptedPresence_RealBLS(t *testing.T) {
 
 // ---- Table 3: h_V=1 selective-delivery deadlock ------------------------
 
-// TestStress_T3_HV1SelectiveDelivery verifies the spec §Failure modes
-// h_V=1 deadlock: byz L_0 leader delivers their Phase-1 bundle to
-// exactly one honest operator and emits a normal Phase-2 Onion. Other
-// honest see byz's σ at L_0 via the L_0 no-V fallback rule (auth-signed
-// Onion claiming σ at L_0 → Defer-due-to-partition). At end of Phase 2
-// they force-NR.
+// TestStress_T3_HV1SelectiveDelivery verifies the h_V=1 deadlock at f=1,
+// n=4: byz L_0 leader delivers their Phase-1 bundle to exactly one honest
+// operator. The Recipient receives V and σ-emits at L_0; the other honest
+// operators have no V at T_commit and NR per the silent-leader rule.
 //
 //   - σ-pool at L_0 cluster-wide: byz's σ_L^V (visible only to Recipient)
 //     + Recipient's σ = 2 < qV=3.
-//   - NR-pool at L_0: (n - 2) honest force-NR; byz σ-locked, doesn't NR.
-//     = 2 < qEnc=3.
+//   - NR-pool at L_0: (n - 2) honest NR; byz σ-locked from Phase-1, can't NR.
+//     Recipient σ-locked, can't NR.  = 2 < qEnc=3.
 //   - Neither quorum reaches; fall-through blocked. Slot misses.
 //
-// This is BFT-comparison.md Table 3's "h_V=1 selective-delivery deadlock:
-// ✗ slot miss" for OBFT.
+// This is the algebraic limit at f=1, n=4: any byz that σ-locks via Phase-1
+// to exactly one honest leaves the cluster with σ-pool=2 and NR-pool=2,
+// regardless of Defer state semantics. The deadlock is R-invariant.
 func TestStress_T3_HV1SelectiveDelivery(t *testing.T) {
 	cfg := baselineConfig(200 * time.Millisecond)
 	cfg.Byz = ByzHV1SelectiveDelivery{Byz: 1, Recipient: 2}
@@ -515,13 +514,13 @@ func TestStress_JitterHealthy(t *testing.T) {
 	}
 }
 
-// TestStress_JitterEquivocAllDefer stress-tests the all-Defer fall-through
+// TestStress_JitterEquivocAllNR stress-tests the all-honest-NR fall-through
 // pattern with jitter — the byz delivers both V's to all honest, but order
 // of arrival depends on per-message delay. Verifies that regardless of
 // which V each honest sees first, the cluster falls through to L_1.
-func TestStress_JitterEquivocAllDefer(t *testing.T) {
+func TestStress_JitterEquivocAllNR(t *testing.T) {
 	cfg := baselineConfig(200 * time.Millisecond)
-	cfg.Byz = ByzEquivocAllDefer{Byz: 1}
+	cfg.Byz = ByzEquivocAllNR{Byz: 1}
 	cfg.Network = JitteredDelay{D: 200 * time.Millisecond, Jitter: 50 * time.Millisecond}
 	outs := runMany(t, cfg, 200, simsPerCell())
 	assertAll(t, cfg, outs, ExpectSuccessFallThrough)

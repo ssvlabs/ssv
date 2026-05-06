@@ -24,7 +24,7 @@ var domainNoQuorum = []byte("OBFT/no-quorum/v1")
 //
 // Decryption of layer `layer + 1`'s outermost-wrap chained ciphertext requires
 // aggregating qEnc partial signatures on this tag. Operators broadcast such
-// partial signatures (NR partials in KindNR) when they are NR-committed at
+// partial signatures (NR partials in KindCommit) when they are NR-committed at
 // layer `layer`.
 //
 // `layer` is in [0, K-2]; there is no NR tag for L_{K-1} since no layer

@@ -111,7 +111,7 @@ func (ByzMultiSilent) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool       
 func (ByzMultiSilent) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
 func (ByzMultiSilent) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
-// ---- ByzEquivocSigmaLockedSplit (1-1-Defer at L_0) ---------------------
+// ---- ByzEquivocSigmaLockedSplit (1-1 split at L_0) ---------------------
 
 // ByzEquivocSigmaLockedSplit: byz is leader at layer 0. They deliver V_a
 // to RecipientA only, V_b to RecipientB only, nothing to the rest.
@@ -139,14 +139,14 @@ func (ByzEquivocSigmaLockedSplit) AllowDelivery(_, _ obft.OperatorID, _ MsgKind)
 func (ByzEquivocSigmaLockedSplit) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
 func (ByzEquivocSigmaLockedSplit) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
-// ---- ByzEquivocAllDefer (delivers both V's to all 3 honest) -------------
+// ---- ByzEquivocAllNR (delivers both V's to all 3 honest) -------------
 
-// ByzEquivocAllDefer floods both V_a and V_b to every honest peer. Each
-// honest retains both → Defer-due-to-equivocation → force-NR at end of
-// Phase 2 → NR-quorum at L_0 → fall-through to L_1.
-type ByzEquivocAllDefer struct{ Byz obft.OperatorID }
+// ByzEquivocAllNR floods both V_a and V_b to every honest peer. Each
+// honest retains ≥ 2 distinct V's by T_commit → all NR per the equivocation
+// rule → NR-quorum at L_0 → fall-through to L_1.
+type ByzEquivocAllNR struct{ Byz obft.OperatorID }
 
-func (b ByzEquivocAllDefer) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []BroadcastPlan {
+func (b ByzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []BroadcastPlan {
 	if leader != b.Byz || layer != 0 {
 		return []BroadcastPlan{{V: honestV}}
 	}
@@ -156,11 +156,11 @@ func (b ByzEquivocAllDefer) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, 
 		{V: append(obft.Value{}, "byz-V-B"...), Recipients: all},
 	}
 }
-func (ByzEquivocAllDefer) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
-func (ByzEquivocAllDefer) AllowCertificateBroadcast(obft.OperatorID) bool                             { return true }
-func (ByzEquivocAllDefer) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                         { return true }
-func (ByzEquivocAllDefer) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
-func (ByzEquivocAllDefer) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
+func (ByzEquivocAllNR) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
+func (ByzEquivocAllNR) AllowCertificateBroadcast(obft.OperatorID) bool                              { return true }
+func (ByzEquivocAllNR) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                          { return true }
+func (ByzEquivocAllNR) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration  { return -1 }
+func (ByzEquivocAllNR) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit       { return o }
 
 // ---- ByzEquivoc111 (1-1-1 split: each honest gets a unique V) -----------
 

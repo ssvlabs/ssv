@@ -143,7 +143,7 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 					})
 				}
 				// At L_0, this would have been Rule 5 (handled at observe
-				// time in ObserveOnion).
+				// time in ObserveCommit).
 				continue
 			}
 			addToGroup(&groups, el.Value, opID, partial)
