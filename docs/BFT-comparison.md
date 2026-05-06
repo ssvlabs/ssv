@@ -162,13 +162,7 @@ OBFT + L_Bid (specified in [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid
 
 #### Success-mode delta — Table 1
 
-Only one scenario shows different success outcomes between bare OBFT and OBFT+L_Bid:
-
-| Scenario | Budget | Bare OBFT (3D) | OBFT+L_Bid (4D) |
-|---|---|---|---|
-| **0s, D=1000ms** | 3.75s | 3.0s ✓ | **4.0s ✗** (over budget by 250ms) |
-
-In all other (BFT_start, D) combinations, both protocols complete healthy or both miss healthy. The full-protocol comparison at this differing scenario:
+Only one scenario shows different success outcomes between bare OBFT and OBFT+L_Bid. In all other (BFT_start, D) combinations, both protocols complete healthy or both miss healthy. The full-protocol comparison at this differing scenario:
 
 | Scenario | QBFT | Bare OBFT | **OBFT+L_Bid** | OBFTR R1 | 2abOBFT |
 |---|---|---|---|---|---|
