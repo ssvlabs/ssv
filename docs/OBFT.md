@@ -220,7 +220,7 @@ where:
 
 **Phase 2 timing — hard cluster-wide deadline.** Each operator emits exactly one `KindCommit` message at `T_commit`. The Phase 2 window `[T_commit, T_commit + Δ_2]` is sized for that message to propagate to all honest peers before Phase 3 reconstruction begins. **`T_commit + Δ_2` is a hard cluster-wide deadline**: it is the moment by which every honest operator's σ/NR commitment must be on the wire and observable cluster-wide. Phase 3 cannot begin until then (the σ/NR pools are not yet stable).
 
-**Δ_2 sizing.** `Δ_2 ≥ D + δ` (propagation budget for `KindCommit` messages emitted at `T_commit` to reach all honest by start of Phase 3). At Config A (D=100ms, δ=50ms): `Δ_2 ≈ 150ms` minimum. Defensive widening to `Δ_2 = D + δ + ε_proc_safety` if per-operator processing variance is non-negligible.
+**Δ_2 sizing.** `Δ_2 ≥ D + δ` minimum (propagation budget for `KindCommit` messages emitted at `T_commit` to reach all honest by start of Phase 3). **Recommended for production: `Δ_2 = 2(D + δ)`** to absorb mesh-jitter and per-operator processing variance — one full propagation cycle of slack on top of the P99 propagation budget. At Config A (D=100ms, δ=50ms): minimum `Δ_2 = 150ms`, recommended `Δ_2 = 300ms`. Concrete tables and downstream timing throughout this document use the recommended sizing.
 
 **Δ_3 sizing — soft target with spill-over.** `Δ_3 ≥ ε_3` (BLS aggregation + IBE decryption walk + certificate construction). At Config A: `Δ_3 ≈ 100ms`. Phase 3 begins when all expected `KindCommit` messages have arrived (i.e., at `T_commit + Δ_2`); reconstruction is local-CPU work. **`T_round_end = T_commit + Δ_2 + Δ_3` is a soft per-operator target, not a hard cluster-wide deadline.** A slow operator whose local reconstruction overruns `Δ_3` can finish reconstruction inside the submission slack `[T_round_end, T_relay_cutoff]`; a faster peer's `KindCertificate` broadcast (see §Final-certificate gossip) lets any operator that hasn't completed local reconstruction submit `(V, S)` directly. The hard wall is `T_relay_cutoff − T_submit` (relay submission deadline), not `T_round_end`.
 
@@ -633,7 +633,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + EKM-enforced per-operator commitments (single-σ-V per (slot, layer), σ-XOR-NR per layer, cross-phase exclusivity), holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional. **One-liner: terminates within `T_round_end ≈ slot_start + 1.75s` at Config A (D = 100ms, δ = 50ms, K = 4, Δ_2 = D+δ = 150ms, Δ_3 = ε_3 = 100ms) under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation from leader L_k broadcast to any honest first-observation ≤ that layer's per-layer budget `B_k` (staggered: B_0 = D+δ, ..., B_3 = 10(D+δ) at K=4 — see §Setting), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Single-round protocol; per-layer staggered budgets give wider absorption at deeper layers (~1500ms at L_3) than OBFTR(R=2)'s uniform cross-round-retention window. |
+| Termination (output guaranteed) | Conditional. **One-liner: terminates within `T_round_end ≈ slot_start + 1.90s` at Config A (D = 100ms, δ = 50ms, K = 4, recommended Δ_2 = 2(D+δ) = 300ms, Δ_3 = ε_3 = 100ms) under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation from leader L_k broadcast to any honest first-observation ≤ that layer's per-layer budget `B_k` (staggered: B_0 = D+δ, ..., B_3 = 10(D+δ) at K=4 — see §Setting), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Single-round protocol; per-layer staggered budgets give wider absorption at deeper layers (~1500ms at L_3) than OBFTR(R=2)'s uniform cross-round-retention window. |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates form self-contained slashable evidence |
 | Byzantine-leader-grief resistance | **Partial under non-adversarial byzantine; substantially weaker against adversarial byz that deliberately engineers grief patterns.** Recovery via "natural" σ-quorum patterns (leader's σ_L^V completes a 2-of-3-honest pool) only fires when byz isn't actively timing deliveries. **Adversarial byzantine reliably engineers slot-miss when L_0** via σ-locked split equivocation (1-1-1, 1-1-NR, etc.). At f=1 n=4 with uniform leader rotation, an adversarial byz primary can deterministically grief ~25% of slots (whenever they're L_0). **Same exposure as OBFTR(R≥2)** — these patterns are R-invariant; round-machinery does not help. The rational-byzantine deterrent (assumption 4) is the only protocol-level defense, and it works *across slots in expectation*, not per-slot. Effective deterrent strength is deployment-specific (stake-to-grief-value ratio, governance responsiveness, slashability evidence quality — see [§Implications of the rational-byzantine deterrent](#implications-of-the-rational-byzantine-deterrent-assumption-4)). For deployments under realistic adversarial conditions, **Phase 2a/2b is the structural fix and should be considered near-term, not future** — it converts all R-invariant byz grief patterns into clean fall-through at +1 RTT cost. |
 | Mesh-flakiness tolerance (honest operator with poor gossipsub mesh visibility) | **Limited.** A mesh-flaky honest operator who fails to observe peer σ-emits within the NR-decision window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget consumer for that slot. Combined with byz σ-refusal, this creates a deadlock that the protocol cannot recover from within the slot. The recommended `Δ_2 ≥ 2(D + δ)` absorbs typical mesh-jitter (up to one full `D + δ` of additional slack on top of P99 propagation) but doesn't cover wider mesh outliers. **Same exposure as OBFTR(R≥2)** — cross-round NR-lock blocks recovery there too. QBFT's round-reset semantics handle this case better (a flaky operator's bad PREPARE doesn't lock them across rounds); OBFT-family enforces cross-phase exclusivity per slot. Phase 2a/2b mitigates by deferring commitment until mesh visibility has had a full additional propagation cycle to stabilize. |
@@ -678,8 +678,8 @@ Cryptographic safety (`qEnc = qV` + chained encryption + EKM-enforced cross-phas
 The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_submit ≈ 250ms` is reserved for relay submission. The consensus deadline is `T_round_end = slot_start + 4.0s − T_submit ≤ slot_start + 3.75s` — the slot's reconstruction must complete by then.
 
 Common parameters: **D = 100ms (cluster gossipsub P99/P999), δ = 50ms, n = 4, f = 1**. Per-window minimums:
-- `Δ_2 ≥ D + δ = 150ms` minimum (`KindCommit` propagation budget). Defensive widening to `Δ_2 = D + δ + ε_proc_safety` if per-operator processing variance is non-negligible.
-- `Δ_3 ≥ ε_3 ≈ 100ms` where `ε_3` is local processing time. Phase 3 is purely local CPU work — `KindCommit` propagation (carrying both σ and NR partials) is already absorbed by `Δ_2 ≥ D + δ`, so Δ_3 has no propagation component.
+- `Δ_2 ≥ D + δ = 150ms` minimum, **recommended `Δ_2 = 2(D + δ) = 300ms` for production** (`KindCommit` propagation budget plus one cycle of mesh-jitter / processing-variance slack). Tables below use the recommended sizing.
+- `Δ_3 ≥ ε_3 ≈ 100ms` where `ε_3` is local processing time. Phase 3 is purely local CPU work — `KindCommit` propagation (carrying both σ and NR partials) is already absorbed by `Δ_2`, so Δ_3 has no propagation component.
 
 **Per-layer broadcast deadlines `T_broadcast_max_k`** (asymmetric per layer; see §Setting). At `T_commit = slot_start + 1.5s` and D=100ms, δ=50ms:
 
@@ -700,9 +700,9 @@ K=4 = n; every cluster member leads exactly one layer. Maximum K-layer fall-thro
 |---|---|---|---|
 | Phase 1 (per-layer broadcast) | 0–1350ms | slot_start + 1.35s (latest) | Per-layer staggered: `T_broadcast_max_3 = 0ms`, `T_broadcast_max_2 = 0.9s`, `T_broadcast_max_1 = 1.2s`, `T_broadcast_max_0 = 1.35s` (see per-layer table above) |
 | Phase-1 propagation slack | 150ms (L_0's `B_0`) | slot_start + 1.50s | Smallest budget; L_0's bundle propagates to all honest within `D + δ` of `T_broadcast_max_0`. Deeper layers' bundles already arrived earlier (their `B_k > B_0`). |
-| Phase 2 | 150ms | slot_start + 1.65s | `KindCommit` propagation: `Δ_2 = D + δ` minimum. **Hard cluster-wide deadline** at `T_commit + Δ_2`. |
-| Phase 3 | 100ms | slot_start + 1.75s | `Δ_3 = ε_3 = 100ms`; purely local CPU work (BLS aggregation + IBE decryption walk + certificate construction). **Soft per-operator target** — overruns spill into submission slack via cert-broadcast. |
-| Submission | 2250ms | slot_start + 4.00s | 9× the 250ms minimum — comfortable headroom for relay/beacon-submit P99 tails plus any Phase-3 spill. |
+| Phase 2 | 300ms | slot_start + 1.80s | `KindCommit` propagation: `Δ_2 = 2(D + δ)` recommended (absorbs mesh-jitter and per-operator processing variance). **Hard cluster-wide deadline** at `T_commit + Δ_2`. |
+| Phase 3 | 100ms | slot_start + 1.90s | `Δ_3 = ε_3 = 100ms`; purely local CPU work (BLS aggregation + IBE decryption walk + certificate construction). **Soft per-operator target** — overruns spill into submission slack via cert-broadcast. |
+| Submission | 2100ms | slot_start + 4.00s | 8.4× the 250ms minimum — comfortable headroom for relay/beacon-submit P99 tails plus any Phase-3 spill. |
 
 **Recovery scope.** Within Phase 3's single reconstruction walk: silent L_0 → NR-quorum at L_0 → L_1 σ-quorum if honest; silent L_0 + L_1 → fall-through to L_2 (still honest by pigeonhole at f=1); silent L_0 + L_1 + L_2 → L_3. **All in one round** (sequential local decryption, no per-layer RTT). The asymmetric per-layer propagation budgets (`B_0 < B_1 < B_2 < B_3`) layer the propagation tolerance: real propagation up to `B_0 = 150ms` recovers at L_0; up to `B_1 = 300ms` at L_1; up to `B_2 = 600ms` at L_2; up to `B_3 = 1500ms` at L_3. Beyond `B_3` is out-of-envelope and slot-misses cleanly.
 
@@ -716,9 +716,9 @@ K=3 = f+2; satisfies BFT-min and late-leader-resilience with one fewer fall-thro
 |---|---|---|---|
 | Phase 1 (per-layer broadcast) | 0–1350ms | slot_start + 1.35s (latest) | Per-layer: `T_broadcast_max_2 = 0ms`, `T_broadcast_max_1 = 1.2s`, `T_broadcast_max_0 = 1.35s` |
 | Phase-1 propagation slack | 150ms (L_0's `B_0`) | slot_start + 1.50s | Same as K=4 |
-| Phase 2 | 150ms | slot_start + 1.65s | Same as K=4 (Phase 2 timing doesn't depend on K). **Hard cluster-wide deadline** at `T_commit + Δ_2`. |
-| Phase 3 | 100ms | slot_start + 1.75s | `Δ_3 = ε_3 = 100ms`; same as K=4. **Soft per-operator target.** |
-| Submission | 2250ms | slot_start + 4.00s | Same as K=4 — Phase 2/3 don't depend on K |
+| Phase 2 | 300ms | slot_start + 1.80s | Same as K=4 (Phase 2 timing doesn't depend on K); `Δ_2 = 2(D + δ)` recommended. **Hard cluster-wide deadline** at `T_commit + Δ_2`. |
+| Phase 3 | 100ms | slot_start + 1.90s | `Δ_3 = ε_3 = 100ms`; same as K=4. **Soft per-operator target.** |
+| Submission | 2100ms | slot_start + 4.00s | Same as K=4 — Phase 2/3 don't depend on K |
 
 **Recovery scope.** Same shape as K=4 with one fewer fall-through layer: silent L_0 + L_1 → L_2 (deepest at K=3). At K=3, L_2 has the full `B_2 = 1500ms` propagation budget but is the last-resort layer (no L_3 to fall through to); host-side hard deadline for L_2's fetch loop is recommended (see §Failure modes / Late deepest-layer leader broadcast).
 
@@ -728,17 +728,17 @@ K=3 = f+2; satisfies BFT-min and late-leader-resilience with one fewer fall-thro
 
 | Setup | Final phase ends | Submission headroom | Recovery scope at D=100ms | Bandwidth (healthy / failure) |
 |---|---|---|---|---|
-| OBFT(K=4) ★ | slot_start + 1.75s | 2.25s | K-layer fall-through (L_0→L_1→L_2→L_3) | ~27 KB / n/a (single round) |
-| OBFT(K=3) | slot_start + 1.75s | 2.25s | K-layer fall-through (L_0→L_1→L_2) | ~24 KB / n/a |
-| OBFTR(K=4, R=2) | slot_start + 2.65s | 1.35s | Same K-layer fall-through + extended envelope to `2D` via explicit round-2 re-flood | ~27 KB / ~50 KB on round-1 failure |
-| OBFTR(K=3, R=2) | slot_start + 2.65s | 1.35s | Same K-layer fall-through (one fewer layer) + extended envelope `2D` | ~24 KB / ~45 KB on round-1 failure |
+| OBFT(K=4) ★ | slot_start + 1.90s | 2.10s | K-layer fall-through (L_0→L_1→L_2→L_3) | ~27 KB / n/a (single round) |
+| OBFT(K=3) | slot_start + 1.90s | 2.10s | K-layer fall-through (L_0→L_1→L_2) | ~24 KB / n/a |
+| OBFTR(K=4, R=2) | slot_start + 3.50s | 0.50s | Same K-layer fall-through + extended envelope to `2D` via explicit round-2 re-flood | ~27 KB / ~50 KB on round-1 failure |
+| OBFTR(K=3, R=2) | slot_start + 3.50s | 0.50s | Same K-layer fall-through (one fewer layer) + extended envelope `2D` | ~24 KB / ~45 KB on round-1 failure |
 | QBFT (RT=2s, SSV production) | Round 1 only fits | 1.75s if R1 succeeds | Round-1 healthy; round-2 round-change exceeds 4s budget | ~14 KB / n/a (round 2 doesn't fit) |
 
 ★ = recommended default for OBFT.
 
 **Key observations:**
 
-- **OBFT's submission headroom is significantly larger than OBFTR(R=2)'s** (2.25s vs 1.35s at K=4; +900ms) — useful when relay/beacon-submit P99 tails are non-trivial, or when the cluster wants margin for local CPU variance on Phase-3 reconstruction or certificate gossip (the soft per-operator target spilling into submission slack).
+- **OBFT's submission headroom is significantly larger than OBFTR(R=2)'s** (2.10s vs 0.50s at K=4 with recommended sizing; +1.6s) — useful when relay/beacon-submit P99 tails are non-trivial, or when the cluster wants margin for local CPU variance on Phase-3 reconstruction or certificate gossip (the soft per-operator target spilling into submission slack). At OBFTR R=2's tight 0.50s headroom, deployments may need to reduce per-round Δ_2 to minimum (D+δ = 150ms) to widen submission slack — see [OBFTR §Application](OBFTR.md#application-ssv-ethereum-proposer-duty).
 - **OBFT's per-layer absorption windows are `B_0 = D + δ` at the primary up to `B_{K-1} = 10·(D + δ)` at the deepest backup** at Config A K=4 — bundles arriving past `T_commit` at any honest receiver are not counted, with K-layer fall-through as the only within-slot recovery. The staggered design gives the primary the freshest MEV (tightest propagation window) while deeper layers absorb propagation tails. OBFTR(R=2) extends absorption further via cross-round retention with re-flood, at the cost of an extra round of consensus and submission-headroom.
 - **OBFT is simpler operationally**: no L_C consensus, no Phase 2.5, no per-round acceptance widening, no auth-only-retention state, no cross-round σ-or-NR exclusivity, no cached σ-partial persistence requirement, no deterministic re-signing fallback, and no Defer state. The EKM coordinator is closer to a per-key extension than a novel multi-round atomicity engine.
 - **K=4 vs K=3 trades bandwidth for recovery depth.** Same timing fit at this D (Phase 2/3 don't depend on K); K=4 adds one more fall-through layer at +3 KB per onion. K=4 = n is the OBFT default — maximum fall-through with all cluster members participating as leaders.
@@ -889,8 +889,8 @@ OBFT is OBFTR with R fixed at 1 and the round-retry machinery stripped. They sha
 | Commitment states per layer | σ / NR / NV / Defer (Defer enables late-σ-emit recovery within Phase 2) | σ / NR / NV (3-state; no Defer) |
 | Wire format per operator | Separate `KindOnion` (σ-side, may emit multiple times) + `KindNR` (NR-side, end-of-window) | Single `KindCommit` at `T_commit` carrying both σ and NR partials |
 | Partial-synchrony envelope | `R · D` (e.g., `2D` at R=2) | `D` (single round) |
-| Slot budget at K=4, D=100ms | Ends at slot_start + 2.65s (consensus + reconstruction) | Ends at slot_start + 1.90s — saves ~750ms |
-| Submission headroom (4s relay cutoff) | 1.35s | 2.10s |
+| Slot budget at K=4, D=100ms | Ends at slot_start + 3.50s (consensus + reconstruction; with recommended `Δ_2 = 2(D+δ)` per round) | Ends at slot_start + 1.90s — saves ~1.6s |
+| Submission headroom (4s relay cutoff) | 0.50s (tight) | 2.10s |
 | Bandwidth (healthy, n=4, K=4) | ~27 KB | ~27 KB (same) |
 | Bandwidth (worst case at R=2 with round-1 failure) | ~50 KB | n/a (no round 2) |
 | High-D fit (D = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |

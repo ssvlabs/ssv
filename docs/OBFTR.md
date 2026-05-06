@@ -220,7 +220,7 @@ where:
 
 **Phase 2 timing per round.** Each operator emits exactly one `KindCommit_r` message at `T_commit_r`, carrying their per-layer σ partials (for σ-state layers in this round) and NR partials (for NR-state layers in this round). The Phase 2 window `[T_commit_r, T_commit_r + Δ_2]` is sized for that message to propagate to all honest peers before round r's Phase 3.
 
-**Δ_2 sizing per round.** `Δ_2 ≥ D + δ` (`KindCommit_r` propagation budget). At Config A: `Δ_2 ≈ 150ms`.
+**Δ_2 sizing per round.** `Δ_2 ≥ D + δ` minimum (`KindCommit_r` propagation budget). **Recommended for production: `Δ_2 = 2(D + δ)`** to absorb mesh-jitter and per-operator processing variance — one full propagation cycle of slack on top of P99 propagation. At Config A (D=100ms, δ=50ms): minimum `Δ_2 = 150ms`, recommended `Δ_2 = 300ms`. Concrete tables and downstream timing throughout this document use the recommended sizing.
 
 **Wire format.** Each operator emits exactly one `KindCommit_r` per (slot, operator, round) at `T_commit_r`, carrying:
 
@@ -740,11 +740,12 @@ R=1 uses the full 2.0s budget for one extended round. With per-round single-emis
 
 | Window | Length | End time | Notes |
 |---|---|---|---|
-| Phase 1 fetch | 1500ms | slot_start + 1.50s | All K leaders' fetch windows fit within 0–1.5s |
-| Round 1 Phase 2 | 150ms | slot_start + 1.65s | Δ_2 = D + δ minimum; KindCommit propagation |
-| Round 1 Phase 2.5 | 150ms | slot_start + 1.80s | L_C signaling |
-| Round 1 Phase 3 | 100ms | slot_start + 1.90s | propagation-independent |
-| Submission | 2100ms | slot_start + 4.00s | generous submission headroom |
+| Phase 1 fetch | 1200ms | slot_start + 1.20s | All K leaders' fetch windows fit within 0–1.2s; `T_broadcast_max_1 = 1.20s` |
+| Phase-1 broadcast slack | 300ms | slot_start + 1.50s | `T_commit_1 = T_broadcast_max_1 + 2(D + δ) = 1.50s` (recommended sizing) |
+| Round 1 Phase 2 | 300ms | slot_start + 1.80s | Δ_2 = 2(D + δ) recommended; KindCommit propagation |
+| Round 1 Phase 2.5 | 150ms | slot_start + 1.95s | L_C signaling |
+| Round 1 Phase 3 | 100ms | slot_start + 2.05s | propagation-independent |
+| Submission | 1950ms | slot_start + 4.00s | generous submission headroom |
 
 **Recovery scope.** K-layer fall-through within the single round (silent leaders absorbed via NR-quorum chain in Phase 3 reconstruction walk). At R=1, no within-round partition recovery — bundles arriving past `T_commit_1` at any honest receiver are not counted; the cluster relies on K-layer fall-through to a deeper backup whose bundle did propagate in time. For partition tolerance use R≥2, which retries with new leaders and lets late bundles be picked up in round 2.
 
@@ -758,15 +759,17 @@ R=2 splits the 2.0s budget into two rounds with new leaders broadcasting in roun
 
 | Window | Length | End time | Notes |
 |---|---|---|---|
-| Phase 1 fetch (round 1) | 1100ms | slot_start + 1.10s | Round 1 leaders fetch |
-| Round 1 Phase 2 | 150ms | slot_start + 1.40s | Δ_2 = D + δ; KindCommit_1 propagation. Note: T_commit_1 = 1.25s with 150ms broadcast slack at front. |
-| Round 1 Phase 2.5 | 150ms | slot_start + 1.55s | L_C signaling |
-| Round 1 Phase 3 | 100ms | slot_start + 1.65s | reconstruction |
-| Round 2 fetch / re-broadcast | 700ms | slot_start + 2.35s | round-2 leaders fetch + late round-1 bundles continue gossipsub propagation |
-| Round 2 Phase 2 | 150ms | slot_start + 2.65s | Δ_2 = D + δ; KindCommit_2 propagation |
-| Round 2 Phase 2.5 | 150ms | slot_start + 2.80s | |
-| Round 2 Phase 3 | 100ms | slot_start + 2.90s | |
-| Submission | 1100ms | slot_start + 4.00s | |
+| Phase 1 fetch (round 1) | 1100ms | slot_start + 1.10s | Round 1 leaders fetch; `T_broadcast_max_1 = 1.10s` |
+| Round 1 broadcast slack | 300ms | slot_start + 1.40s | `T_commit_1 = T_broadcast_max_1 + 2(D+δ) = 1.40s` (recommended sizing) |
+| Round 1 Phase 2 | 300ms | slot_start + 1.70s | Δ_2 = 2(D + δ) recommended; KindCommit_1 propagation |
+| Round 1 Phase 2.5 | 150ms | slot_start + 1.85s | L_C signaling |
+| Round 1 Phase 3 | 100ms | slot_start + 1.95s | reconstruction |
+| Round 2 fetch / re-broadcast | 700ms | slot_start + 2.65s | round-2 leaders fetch + late round-1 bundles continue gossipsub propagation |
+| Round 2 broadcast slack | 300ms | slot_start + 2.95s | `T_commit_2 = 2.95s` |
+| Round 2 Phase 2 | 300ms | slot_start + 3.25s | Δ_2 = 2(D + δ) recommended; KindCommit_2 propagation |
+| Round 2 Phase 2.5 | 150ms | slot_start + 3.40s | |
+| Round 2 Phase 3 | 100ms | slot_start + 3.50s | T_round_R_end |
+| Submission | 500ms | slot_start + 4.00s | tighter than R=1 — round-2 retry consumes ~1.55s of slot budget |
 
 **Recovery scope.** K-layer fall-through within each round + per-round retry. Bundles late at round-1's `T_commit_1` may be picked up in round 2 if they propagate by `T_commit_2`. Per-round commitments are independent (no cross-round σ-or-NR exclusivity), so an operator who NR-emitted in round 1 may σ-emit in round 2 if the leader's bundle finally propagates.
 
@@ -955,8 +958,8 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | EKM persistent partial-sig cache | Required (cached σ partial must survive operator restart for cross-round re-emission) | **Not required** |
 | EKM deterministic re-signing fallback | Required | **Not required** |
 | Partial-synchrony envelope | `R · D` (e.g., `2D` at R=2) | `D` (single round) |
-| Slot budget at K=4, D=100ms | Ends at slot_start + 2.65s | Ends at slot_start + 1.90s — saves ~750ms |
-| Submission headroom (4s relay cutoff) | 1.35s | 2.10s |
+| Slot budget at K=4, D=100ms | Ends at slot_start + 3.50s (with recommended `Δ_2 = 2(D+δ)` per round) | Ends at slot_start + 1.90s — saves ~1.6s |
+| Submission headroom (4s relay cutoff) | 0.50s (tight) | 2.10s |
 | Bandwidth (healthy, n=4, K=4) | ~27 KB | ~27 KB (same) |
 | Bandwidth (worst case at R=2 with round-1 failure) | ~50 KB | n/a (no round 2) |
 | High-D fit (D = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |

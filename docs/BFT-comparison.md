@@ -23,20 +23,29 @@ The comparison is structured along three axes:
 ## Protocol summary
 
 - **QBFT** (current SSV): 3-RTT consensus (PROPOSE → PREPARE → COMMIT) + 1-RTT post-consensus partial-sig collection = **4 RTTs minimum**. R-round retry on round timeout. Recovery via round-change with new leader + potentially fresh V.
-- **OBFT**: K-layer onion with chained encryption, single Phase-2 with sub-phasing (σ-emit during window, NR/Defer at end). **3 RTTs** (Phase 1 + Phase 2 + Phase 3). Recovery via in-round K-layer parallel fall-through (sequential local decryption in Phase 3, no extra RTT per layer).
-- **OBFTR** (R≥2): same K-layer onion as OBFT, plus R-round retry, cross-round σ retention, L_C cluster-consensus signaling. **3 RTTs per round**, total `3R RTTs`. Recovers partition tails up to `R · D` via re-flood across rounds.
+- **OBFT**: K-layer onion with chained encryption, single Phase 2 with one `KindCommit` emission per operator at `T_commit` carrying both σ and NR partials (no Defer state, no sub-phasing). Per-layer staggered broadcast deadlines `T_broadcast_max_k`, with deeper layers having wider propagation budgets `B_k`. **3 RTTs** (Phase 1 + Phase 2 + Phase 3). Recovery via in-round K-layer parallel fall-through (sequential local decryption in Phase 3, no extra RTT per layer).
+- **OBFTR** (R≥2): same K-layer onion as OBFT, plus R-round retry with re-flood, per-round independent commitments (no cross-round σ-or-NR exclusivity), L_C cluster-consensus signaling. **3 RTTs per round**, total `3R RTTs`. Recovers partition tails up to `R · D` via re-flood across rounds — succeeds at L_0 specifically (preserves MEV freshness) at the cost of an extra round.
 - **2abOBFT**: K-layer onion with Phase 2a (verdict broadcast) + Phase 2b (σ-or-NR commit driven by convergence rule on Phase-2a verdict pool). **4 RTTs** (Phase 1 + 2a + 2b + 3). Single-round only.
 
 ## RTTs to signed output
+
+Numbers below assume **recommended Δ sizing** per each protocol's spec (`Δ_2 = 2(D+δ)` for OBFT/OBFTR/2abOBFT Phase 2 and 2abOBFT Phase 2a/2b). RTT counts:
+
+- **OBFT**: 1×(D+δ) broadcast slack [staggered model — `B_0 = D+δ` for the primary L_0; deeper layers' broadcasts pre-arrived; see [OBFT.md §Setting](OBFT.md)] + 2×(D+δ) Phase 2 + 0 Phase 3 = **3 RTTs**.
+- **OBFTR per round**: 2×(D+δ) broadcast slack [uniform model] + 2×(D+δ) Phase 2 + 1×(D+δ) Phase 2.5 (L_C signaling) + 0 Phase 3 = **5 RTTs**. Round 2 omits fresh broadcast slack (uses re-flood ≈ 1×(D+δ)) → **4 RTTs**.
+- **2abOBFT**: 2×(D+δ) broadcast slack + 2×(D+δ) Phase 2a + 2×(D+δ) Phase 2b + 0 Phase 3 = **6 RTTs**.
+- **QBFT**: PROPOSE + PREPARE + COMMIT + post-consensus = **4 RTTs**.
 
 | Protocol | Round 1 healthy | Round 2 (recovery) | Total at R-round failure |
 |---|---|---|---|
 | QBFT | 4 RTTs | RT (2s timeout) + 4 RTTs | 8 RTTs + 2s |
 | OBFT | 3 RTTs | n/a (single-round) | n/a (slot misses if R1 fails on adversarial pattern; K-layer fall-through is in-round, free) |
-| OBFTR(R=2) | 3 RTTs | 3 RTTs | 6 RTTs |
-| 2abOBFT | 4 RTTs | n/a (single-round) | n/a (K-layer fall-through is in-round, free) |
+| OBFTR(R=2) | 5 RTTs | 4 RTTs | 9 RTTs |
+| 2abOBFT | 6 RTTs | n/a (single-round) | n/a (K-layer fall-through is in-round, free) |
 
 K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Phase 3 — no per-layer RTT cost. It recovers silent/late leaders within the same round.
+
+**Why OBFT < OBFTR per-round.** The staggered per-layer broadcast model in bare OBFT (see [OBFT.md §Setting](OBFT.md)) lets the primary L_0 broadcast at `T_commit − (D+δ)` (1 RTT slack) instead of OBFTR's uniform `T_commit_r − 2(D+δ)` (2 RTTs slack). Plus OBFT has no Phase 2.5 (L_C signaling) since it has no rounds to coordinate. Net: OBFT saves 2 RTTs vs OBFTR per round at recommended sizing.
 
 ## Effective BFT consensus budget by start time
 
@@ -50,48 +59,48 @@ K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Ph
 
 Healthy completion = leader honest, all Phase-1 bundles propagate, σ-quorum reaches at L_0 in round 1.
 
-| BFT start, D | Budget | QBFT (4D) | OBFT (3D) | OBFTR R1 (3D) | 2abOBFT (4D) |
+| BFT start, D | Budget | QBFT (4D) | OBFT (3D) | OBFTR R1 (5D) | 2abOBFT (6D) |
 |---|---|---|---|---|---|
-| **0s, D=200ms** | 3.75s | 0.8s ✓ | 0.6s ✓ | 0.6s ✓ | 0.8s ✓ |
-| **0s, D=600ms** | 3.75s | 2.4s ✓ | 1.8s ✓ | 1.8s ✓ | 2.4s ✓ |
-| **0s, D=1000ms** | 3.75s | **4.0s ✗** | 3.0s ✓ | 3.0s ✓ | **4.0s ✗** |
-| **1s, D=200ms** | 2.75s | 0.8s ✓ | 0.6s ✓ | 0.6s ✓ | 0.8s ✓ |
-| **1s, D=600ms** | 2.75s | 2.4s ✓ | 1.8s ✓ | 1.8s ✓ | 2.4s ✓ |
-| **1s, D=1000ms** | 2.75s | **4.0s ✗** | **3.0s ✗** | **3.0s ✗** | **4.0s ✗** |
-| **2.5s, D=200ms** | 1.25s | 0.8s ✓ | 0.6s ✓ | 0.6s ✓ | 0.8s ✓ |
-| **2.5s, D=600ms** | 1.25s | **2.4s ✗** | **1.8s ✗** | **1.8s ✗** | **2.4s ✗** |
-| **2.5s, D=1000ms** | 1.25s | **4.0s ✗** | **3.0s ✗** | **3.0s ✗** | **4.0s ✗** |
+| **0s, D=200ms** | 3.75s | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ |
+| **0s, D=600ms** | 3.75s | 2.4s ✓ | 1.8s ✓ | 3.0s ✓ | 3.6s ✓ tight |
+| **0s, D=1000ms** | 3.75s | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | **6.0s ✗** |
+| **1s, D=200ms** | 2.75s | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ |
+| **1s, D=600ms** | 2.75s | 2.4s ✓ | 1.8s ✓ | **3.0s ✗** | **3.6s ✗** |
+| **1s, D=1000ms** | 2.75s | **4.0s ✗** | **3.0s ✗** | **5.0s ✗** | **6.0s ✗** |
+| **2.5s, D=200ms** | 1.25s | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ tight | 1.2s ✓ very tight |
+| **2.5s, D=600ms** | 1.25s | **2.4s ✗** | **1.8s ✗** | **3.0s ✗** | **3.6s ✗** |
+| **2.5s, D=1000ms** | 1.25s | **4.0s ✗** | **3.0s ✗** | **5.0s ✗** | **6.0s ✗** |
 
 **Reading Table 1:**
 
-- **D=200ms** (production-typical for healthy mesh): all four protocols complete healthy at all BFT start times.
-- **D=600ms** (degraded mesh): all complete at 0s and 1s start; all miss at 2.5s start (budget 1.25s tighter than even OBFT's 1.8s).
-- **D=1000ms** (severely degraded): only the 3-RTT protocols (OBFT, OBFTR R1) fit at 0s start (3.0s within 3.75s budget); QBFT and 2abOBFT (4-RTT each) miss everywhere; nothing fits at 1s or 2.5s.
-- **OBFT and OBFTR R1 share identical healthy-path numbers** because OBFTR is OBFT-with-multi-round-retry — round 1 of OBFTR is structurally a single OBFT round.
-- **QBFT and 2abOBFT share identical healthy-path numbers** because both are 4-RTT (QBFT: 3 consensus + 1 post; 2abOBFT: Phase 1 + 2a + 2b + 3).
+- **D=200ms** (production-typical for healthy mesh): all four protocols complete healthy at all BFT start times. OBFT is fastest (0.6s); 2abOBFT slowest at 1.2s.
+- **D=600ms** (degraded mesh): OBFT and QBFT comfortable at 0s/1s; OBFTR R1 fits 0s but misses 1s; 2abOBFT fits 0s tightly but misses 1s. All miss at 2.5s start.
+- **D=1000ms** (severely degraded): only OBFT (3D, smallest RTT count due to staggered model) fits at 0s start. QBFT (4D), OBFTR R1 (5D), 2abOBFT (6D) all miss everywhere; nothing else fits at 1s or 2.5s.
+- **OBFT < OBFTR R1 in RTT count.** The staggered per-layer broadcast model in OBFT (see [OBFT.md §Setting](OBFT.md)) gives the primary L_0 a tighter 1×(D+δ) propagation budget. OBFTR uses uniform 2×(D+δ) broadcast slack across all leaders + Phase 2.5 (L_C signaling). Net: OBFTR R1 is 2 RTTs longer than bare OBFT at recommended sizing.
+- **OBFT < QBFT < OBFTR R1 < 2abOBFT** is the healthy-path ordering at recommended sizing. 2abOBFT pays 6 RTTs for the Phase 2a/2b split (witness-bound recovery of Class B byzantine grief patterns at the cost of 2 extra RTTs vs bare OBFT).
 
 ## Table 2 — Failure-recovery modes
 
 When round-1 / single-round fails (silent leader, partition, network jitter, but NOT adversarial-byz-locked patterns covered in Table 3), each protocol's recovery path consumes additional time:
 
-| BFT start, D | QBFT R2 (RT + 4D) | OBFT K-layer fall-through | OBFTR R1+R2 (6D) | 2abOBFT K-layer fall-through |
+| BFT start, D | QBFT R2 (RT + 4D) | OBFT K-layer fall-through | OBFTR R1+R2 (9D) | 2abOBFT K-layer fall-through |
 |---|---|---|---|---|
-| **0s, D=200ms** | 2.8s ✓ | in-round (free) | 1.2s ✓ | in-round (free) |
-| **0s, D=600ms** | **4.4s ✗** | in-round (free) | 3.6s ✓ tight | in-round (free) |
-| **0s, D=1000ms** | **6.0s ✗** | in-round (free) | **6.0s ✗** | in-round (free) |
-| **1s, D=200ms** | 2.8s **borderline** (50ms over) | in-round (free) | 1.2s ✓ | in-round (free) |
-| **1s, D=600ms** | **4.4s ✗** | in-round (free) | **3.6s ✗** | in-round (free) |
-| **1s, D=1000ms** | **6.0s ✗** | n/a (R1 missed) | **6.0s ✗** | n/a (R1 missed) |
-| **2.5s, D=200ms** | **2.8s ✗** | in-round (free) | 1.2s ✓ | in-round (free) |
-| **2.5s, D=600ms** | **4.4s ✗** | n/a | **3.6s ✗** | n/a |
-| **2.5s, D=1000ms** | **6.0s ✗** | n/a | **6.0s ✗** | n/a |
+| **0s, D=200ms** | 2.8s ✓ | in-round (free) | 1.8s ✓ | in-round (free) |
+| **0s, D=600ms** | **4.4s ✗** | in-round (free) | **5.4s ✗** | in-round (free) |
+| **0s, D=1000ms** | **6.0s ✗** | in-round (free) | **9.0s ✗** | in-round (free) |
+| **1s, D=200ms** | 2.8s **borderline** (50ms over) | in-round (free) | 1.8s ✓ | in-round (free) |
+| **1s, D=600ms** | **4.4s ✗** | in-round (free) | **5.4s ✗** | in-round (free) |
+| **1s, D=1000ms** | **6.0s ✗** | n/a (R1 missed) | **9.0s ✗** | n/a (R1 missed) |
+| **2.5s, D=200ms** | **2.8s ✗** | in-round (free) | **1.8s ✗** | in-round (free) |
+| **2.5s, D=600ms** | **4.4s ✗** | n/a | **5.4s ✗** | n/a |
+| **2.5s, D=1000ms** | **6.0s ✗** | n/a | **9.0s ✗** | n/a |
 
 "In-round (free)" means the recovery happens within the same single round — no additional time cost. K-layer fall-through is sequential local decryption in Phase 3, processing-bound (~100ms ε_3), not RTT-bound.
 
 **Reading Table 2:**
 
 - **OBFT and 2abOBFT have the cleanest network-failure recovery profile** at any start time where their healthy path fits — silent leader / partition recovery costs zero extra time via in-round K-layer fall-through. This is the structural advantage of K-layer onion with chained encryption: every honest leader in the K-layer rotation provides a fall-through opportunity within Phase 3.
-- **OBFTR's R1+R2 retry** doubles the consensus time, fitting only at the most generous (start, D) combinations. At 0s start with D=600ms, OBFTR R1+R2 just fits the 3.75s budget; 1s/600ms is a miss.
+- **OBFTR's R1+R2 retry** at recommended sizing fits only at D=200ms (1.8s vs 3.75s budget at 0s; 1.8s vs 2.75s at 1s). At D=600ms or above, R1+R2 doesn't fit any start time (5.4s+ exceeds 3.75s budget). **OBFTR R1+R2 fitness has narrowed compared to minimum-sizing analysis** — production deployments of OBFTR(R=2) need to either tighten Δ_2 toward minimum (sacrificing jitter absorption) or accept that round-2 recovery only works at low-D.
 - **QBFT's round-2 retry** costs RT (2s) + 4D, the highest recovery cost of the four protocols. Fits only at 0s start with D=200ms; 1s/200ms is borderline (50ms over); everything else misses on R2.
 - **OBFT and 2abOBFT cannot retry** (single-round). Their "recovery" is the in-round fall-through; if that doesn't reach σ-quorum (e.g., adversarial pattern locks the σ-or-NR pools — see Table 3), the slot misses.
 - The **structural QBFT-only recovery** (round-2 with fresh-V refetch) costs 4.4-6s in adversarial conditions — beyond budget at typical SSV configurations except at the most generous (0s, D=200ms) end of the envelope.
@@ -122,13 +131,13 @@ These failure modes depend on protocol *structure*, not on D or start time. They
 
 ## Cross-scenario takeaways
 
-**Healthy-path latency at production-typical D (200ms)**: OBFT and OBFTR-R1 fastest (600ms), QBFT and 2abOBFT slightly slower (800ms). All fit at any BFT start time within the 4s budget.
+**Healthy-path latency at production-typical D (200ms)**: OBFT fastest (600ms), QBFT 800ms, OBFTR-R1 1.0s, 2abOBFT 1.2s. All fit at any BFT start time within the 4s budget.
 
-**Late-fetch tolerance (BFT start = 2.5s, budget = 1.25s)**: only OBFT and OBFTR can complete healthy at D=200ms with comfortable margin (600ms in 1250ms budget); QBFT and 2abOBFT have ~450ms margin. At D ≥ 600ms, all four miss — late-fetch is incompatible with degraded mesh.
+**Late-fetch tolerance (BFT start = 2.5s, budget = 1.25s)**: only OBFT comfortably fits at D=200ms (600ms in 1250ms budget); QBFT has ~450ms margin; OBFTR R1 at 1.0s is tight; 2abOBFT at 1.2s is very tight (50ms margin). At D ≥ 600ms, all four miss — late-fetch is incompatible with degraded mesh.
 
-**Degraded-mesh tolerance (D = 1000ms)**: only the 3-RTT protocols (OBFT and OBFTR-R1) complete healthy, and only at 0s BFT start. QBFT and 2abOBFT (4-RTT each) miss even at 0s start because consensus time (4s) exceeds budget (3.75s).
+**Degraded-mesh tolerance (D = 1000ms)**: only OBFT (3D, smallest RTT count due to staggered model) fits at 0s BFT start. QBFT (4D), OBFTR R1 (5D), 2abOBFT (6D) all miss even at 0s start because consensus time meets or exceeds the 3.75s budget.
 
-**Round-2 retry usefulness**: QBFT's R2 fits budget only at (0s, 200ms) and borderline at (1s, 200ms). OBFTR's R1+R2 fits at any 0s-start scenario through D=600ms, and at 1s/200ms. Above those, retry budget is unavailable. The OBFT family's K-layer in-round fall-through is structurally cheaper than either retry mechanism — it doesn't consume additional RTTs and recovers silent leaders for free.
+**Round-2 retry usefulness**: QBFT's R2 fits budget only at (0s, 200ms) and borderline at (1s, 200ms). **OBFTR's R1+R2 (9D recommended sizing) fits only at D=200ms** — at D≥600ms it doesn't fit any start time. Above those, retry budget is unavailable. The OBFT family's K-layer in-round fall-through is structurally cheaper than either retry mechanism — it doesn't consume additional RTTs and recovers silent leaders for free.
 
 **Adversarial-byz exposure ranking** (most-recovered to least-recovered):
 
@@ -153,7 +162,7 @@ OBFT + L_Bid (specified in [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid
 
 ### Differences vs bare OBFT (summary)
 
-- **+1 RTT healthy-path latency**: OBFT+L_Bid is **4D** (Phase 1 + mini-consensus + Phase 2 + Phase 3) vs bare OBFT's 3D.
+- **+2 RTT healthy-path latency**: OBFT+L_Bid is **5D** (1×(D+δ) broadcast slack + 2×(D+δ) mini-consensus + 2×(D+δ) Phase 2 + 0 Phase 3) vs bare OBFT's 3D, at recommended Δ sizing. The mini-consensus phase contributes 2 RTTs (recommended `Δ_minicon = 2(D+δ)` matching `Δ_2`'s widening for jitter absorption — see [OBFT.md Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)).
 - **Value capture upside**: highest-bid block on the healthy path (when L_Bid σ-quorum reaches) instead of rotation-determined V.
 - **New failure modes at L_Bid**: 2-1-byz-defect and verdict-equivocation (slashable Rules 7-8 in OBFT.md Appendix B; slot-miss-without-fall-through to L_0).
 - **L_0..L_{K-1} rotation layers are unchanged**: when the mini-consensus fails (C1/C2 patterns) the cluster falls through to L_0 with the same recovery profile as bare OBFT.
@@ -162,13 +171,14 @@ OBFT + L_Bid (specified in [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid
 
 #### Success-mode delta — Table 1
 
-Only one scenario shows different success outcomes between bare OBFT and OBFT+L_Bid. In all other (BFT_start, D) combinations, both protocols complete healthy or both miss healthy. The full-protocol comparison at this differing scenario:
+Two scenarios show different success outcomes between bare OBFT and OBFT+L_Bid (at recommended Δ sizing). In all other (BFT_start, D) combinations, both protocols complete healthy or both miss healthy. The full-protocol comparison at the differing scenarios:
 
-| Scenario | QBFT | Bare OBFT | **OBFT+L_Bid** | OBFTR R1 | 2abOBFT |
-|---|---|---|---|---|---|
-| **0s, D=1000ms** | 4.0s ✗ | 3.0s ✓ | **4.0s ✗** | 3.0s ✓ | 4.0s ✗ |
+| Scenario | Budget | QBFT | Bare OBFT | **OBFT+L_Bid** | OBFTR R1 | 2abOBFT |
+|---|---|---|---|---|---|---|
+| **0s, D=1000ms** | 3.75s | 4.0s ✗ | 3.0s ✓ | **5.0s ✗** | 5.0s ✗ | 6.0s ✗ |
+| **1s, D=600ms** | 2.75s | 2.4s ✓ | 1.8s ✓ | **3.0s ✗** | 3.0s ✗ | 3.6s ✗ |
 
-OBFT+L_Bid loses bare OBFT's healthy-path advantage at this scenario — its 4-RTT structure puts it in the same bucket as QBFT and 2abOBFT, joining the protocols that miss budget under degraded mesh.
+OBFT+L_Bid loses bare OBFT's healthy-path advantage at these scenarios — its 5-RTT structure (vs bare OBFT's 3-RTT) joins the protocols that miss budget under degraded mesh or moderate BFT-start delay.
 
 #### Failure-recovery delta — Table 2
 
@@ -207,7 +217,7 @@ Bare OBFT's L_0 adversarial-byz patterns (σ-locked equivocation, h_V=1, etc.) t
 ### Net trade vs bare OBFT
 
 OBFT+L_Bid pays:
-- **+1 RTT healthy-path latency** (loses bare OBFT's advantage at the (0s, 1000ms) borderline scenario; all other scenarios are unaffected at the budget-fit level).
+- **+2 RTT healthy-path latency** (loses bare OBFT's advantage at (0s, 1000ms) and (1s, 600ms) scenarios where bare OBFT fits and OBFT+L_Bid doesn't; all other scenarios are unaffected at the budget-fit level).
 - **+adversarial-byz exposure at L_Bid** (2-1-byz-defect, verdict-equivocation; slashable but slot-miss without fall-through; higher trigger frequency than rotation-only patterns).
 - **+structural complexity** (new wire kinds `KindBid` / `KindBidVerdict`, two new slashing rules, mini-consensus protocol step).
 
@@ -215,7 +225,7 @@ In exchange for:
 - **Bid-routing value capture** on healthy path (highest-bid block vs rotation-determined V).
 - **C1/C2/C3 deadlock closure at L_Bid** (vs the naive bid-routing sketch which leaves these open).
 
-The trade is favorable when MEV bid-routing value-capture upside exceeds the combined cost of (a) the new failure modes' slot-loss rate and (b) the +1 RTT latency cost. For low-MEV slots or deployments with significant mesh degradation pushing scenarios toward the (0s, 1000ms) borderline, bare OBFT is the better choice.
+The trade is favorable when MEV bid-routing value-capture upside exceeds the combined cost of (a) the new failure modes' slot-loss rate and (b) the +2 RTT latency cost. For low-MEV slots or deployments with significant mesh degradation pushing scenarios toward the (0s, 1000ms) or (1s, 600ms) borderline, bare OBFT is the better choice.
 
 ## Limits of this comparison
 
