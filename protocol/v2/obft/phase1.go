@@ -75,17 +75,20 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 // ObservePhase1Bundle records a peer's Phase-1 bundle (or the local
 // operator's own bundle, after fetching). Per spec §Phase 1:
 //
-//   - Bundles first-observed past T_accept_max are rejected entirely
-//     (ErrLatePhase1Bundle). Past that point a downstream σ-emit could not
-//     propagate to peers before their NR-decision at end of Phase 2.
+//   - Bundles first-observed past T_commit are rejected entirely
+//     (ErrLatePhase1Bundle). The cluster relies on K-layer fall-through for
+//     partition recovery (no Defer state, no late-σ-emit window).
 //   - The σ-V partial is verified against the leader's pubkey share on V.
 //     Bundles failing cryptographic-auth are silently dropped.
 //   - Up to 2 distinct value_roots are retained per (layer, leader_id);
 //     additional auth-valid bundles for the same (layer, leader_id) are
-//     dropped silently.
+//     dropped silently. The retention bound supports leader-equivocation
+//     evidence (Rule 2).
 //   - Detecting a second distinct value_root from the same leader is
-//     equivocation — Rule 2 evidence is recorded and local state may
-//     transition to Defer-due-to-equivocation.
+//     equivocation — Rule 2 evidence is recorded. Per the equivocation
+//     rule, an operator who retained ≥ 2 distinct V's at this layer (and
+//     has not yet σ-locked on the first) commits NR at T_commit; the
+//     equivocation observation foreclose σ-emit at this layer.
 func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Duration) error {
 	if err := ValidatePhase1Bundle(b, i.cfg); err != nil {
 		return err
@@ -142,16 +145,16 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 				BundleB: copyB,
 			},
 		})
-		// Apply local-state transitions per spec §Phase 1 / Equivocation
-		// handling (cases by current commitment state):
-		//   - Already σ-emitted: stay σ-locked (cross-phase exclusivity
-		//     binds; nothing to change).
-		//   - σ-eligible-but-not-σ-emitted: transition to Defer-equivocation.
-		//   - Defer-due-to-partition: transition to Defer-equivocation.
-		//   - Otherwise (Undecided): transition to Defer-equivocation.
-		if !i.sigmaLocked[b.Layer] && !i.nrLocked[b.Layer] {
-			i.localState[b.Layer] = CommitDeferEquivocation
-		}
+		// Local-state effect of equivocation per spec §Phase 1 / Equivocation
+		// handling: at T_commit, an operator with ≥ 2 distinct V's retained
+		// emits NR (per the equivocation rule, no winner-picking under f=1
+		// byzantine). Pre-T_commit, leave the state alone — chosenVForLayer
+		// will return false (≥ 2 retained = no unique V) so BuildOwnCommit
+		// will commit NR for this layer at T_commit.
+		//
+		// If the operator already σ-locked on the first V (the byzantine
+		// delivered it before observing equivocation), they stay σ-locked
+		// per cross-phase exclusivity.
 		return nil
 	}
 
@@ -180,16 +183,14 @@ func deepCopyBundle(b *Phase1Bundle) *Phase1Bundle {
 // remainder of the slot — but the protocol itself just consumes the verdict
 // and does not interpret the host's reasoning.
 //
-// A `valid=false` verdict on the operator's chosen V at this layer transitions
-// the operator to NV (operationally identical to NR); the operator will emit
-// an NR partial at end of Phase 2.
-//
-// If `valid=true`, the operator becomes σ-eligible at this layer (subject to
-// no equivocation observed and the operator not already being NR-locked).
+// The verdict is recorded per (layer, V) and consulted by BuildOwnCommit at
+// T_commit: if the operator's uniquely retained V at this layer is recorded
+// as not-valid, they emit NV (operationally identical to NR on the wire);
+// otherwise they σ-emit on V.
 //
 // The verdict is recorded per (layer, V) since multiple V's may exist at a
-// layer under leader equivocation (though only one will be the chosen σ-target
-// under single-σ-V exclusivity).
+// layer under leader equivocation (though equivocation collapses to NR at
+// T_commit, regardless of validity verdicts on either V).
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	if layer < 0 || layer >= i.cfg.K() {
 		return fmt.Errorf("obft: layer %d out of range", layer)
@@ -211,39 +212,7 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		return nil
 	}
 	i.hostVerdict[layer][key] = valid
-
-	// If invalid and the local op had no other path to σ at this layer,
-	// transition to NV (so end-of-Phase-2 force-commit produces NR partial).
-	// We don't NR-lock here — that happens at PhaseTwoEnd / BuildOwnNR — to
-	// preserve the option of σ-emitting on a different valid V if leader
-	// equivocates and another retained V is later validated. (In practice
-	// the spec mandates Defer-due-to-equivocation in that case, but we
-	// keep the algebra clean by deferring the lock.)
-	if !valid && !i.sigmaLocked[layer] && !i.nrLocked[layer] {
-		// Only mark NV if this V was the operator's σ-eligibility candidate
-		// (i.e., a uniquely retained V at this layer).
-		if i.uniqueRetainedV(layer, value) {
-			i.localState[layer] = CommitNV
-		}
-	}
 	return nil
-}
-
-// uniqueRetainedV reports whether `value` is the sole distinct retained V
-// across all leaders at `layer`.
-func (i *Instance) uniqueRetainedV(layer int, value Value) bool {
-	leaderMap := i.bundles[layer]
-	count := 0
-	matches := false
-	for _, retained := range leaderMap {
-		for _, b := range retained {
-			count++
-			if bytes.Equal(b.Value, value) {
-				matches = true
-			}
-		}
-	}
-	return count == 1 && matches
 }
 
 // chosenVForLayer returns the operator's σ-target V at `layer` if uniquely

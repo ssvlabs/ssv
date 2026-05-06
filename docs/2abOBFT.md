@@ -791,28 +791,28 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Aspect | [OBFT](OBFT.md) | 2abOBFT |
 |---|---|---|
 | Phase-1 bundle | `(V, σ_L^V, σ_L^{op})` — leader signs threshold σ_V at Phase 1 | `(V, σ_L^{op})` — auth envelope only |
-| Phase-2 structure | Single Phase 2 with sub-phasing (σ-emit early, NR/Defer at end) | Two windows: Phase 2a (verdict broadcast) + Phase 2b (σ/NR commit) |
-| Operator commitment states | σ, NR, NV, **Defer** (4 states) | σ, NR, NV (3 states; Defer collapses) |
-| σ-commit timing | Phase 1 (leader) or Phase 2 (others) | Phase 2b (uniform across all operators) |
-| Convergence mechanism | Per-operator local view (Defer-rule observes peer σ-emit cluster-wide) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
-| Healthy-path latency (post-`T_commit`, recommended sizing) | ~550ms | ~850ms (+300ms for Phase-2 split window) |
+| Phase-2 structure | Single Phase 2 (single `KindCommit` at `T_commit`) | Two windows: Phase 2a (verdict broadcast) + Phase 2b (σ/NR commit) |
+| Operator commitment states | σ, NR, NV (3 states) | σ, NR, NV (3 states) |
+| σ-commit timing | Phase 1 (leader) or Phase 2 (others, at `T_commit`) | Phase 2b (uniform across all operators, after Phase-2a observation) |
+| Convergence mechanism | Per-operator local view (each operator commits at `T_commit` based on retained V's) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
+| Healthy-path latency (post-`T_commit`, recommended sizing) | ~250ms | ~550ms (+300ms for Phase-2a window) |
 | Marginal h_V_honest=2 + byz silent | Slot misses (σ-pool short, NR-pool short) | Falls through to L_1 ✓ |
 | Equivocation 1-1-1 split | Slot misses | Falls through to L_1 ✓ |
 | Equivocation 2-1, byz cooperates | Succeeds at L_0 | Succeeds at L_0 (tie) |
 | Equivocation 2-1, byz silent | Succeeds at L_0 (Phase-1 σ_V locked) | Falls through to L_1 (one extra layer) |
 | Equivocation 2-1, byz defects | Succeeds at L_0 (Phase-1 σ_V locked) | **Slot misses (regression)** — Rule 6b evidence |
 | Non-leader verdict-equivocation at marginal h_V | n/a (no verdicts in OBFT) | **Slot misses (regression)** — Rule 6a evidence |
-| h_V=1 selective-delivery deadlock | Slot misses (Class B) | Falls through to L_1 ✓ |
+| h_V=1 selective-delivery deadlock | Closed by design (no Defer state, no no-V fallback) ✓ | Falls through to L_1 ✓ |
 | Validity-divergence at majority | Slot misses (Class A) | Recovered ✓ |
 | Validity-divergence at 2-2 boundary | Slot misses (Class A) | Slot misses (Class A — same algebraic limit) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) ✓ |
 | Mesh-flakiness | Class B | Mitigated ✓ |
-| Submission headroom (Config A recommended) | 1.95s | 1.65s |
+| Submission headroom (Config A recommended) | ~3.4s | ~2.85s |
 | Bandwidth (healthy, n=4, K=4) | ~27 KB | ~30 KB (+3 KB for verdicts) |
 | EKM complexity | Phase-1 σ_V + Phase-2 σ + NR coordination | Phase-2b σ XOR NR only — simplest in the family |
 | Slashing-evidence rules | 5 | 7 (Rules 1-5 inherited + Rule 6a verdict-vs-verdict cryptographic + Rule 6b verdict-vs-action gossipsub-pattern-quality) |
 
-**Migration**: cluster running OBFT can adopt 2abOBFT by (1) extending the wire format with `KindVerdict`, (2) replacing the OBFT Defer-state state machine with the convergence rule, (3) modifying the Phase-1 bundle schema to drop σ_V, (4) updating the protocol-tag to `2abOBFT-v1` for envelope domain separation. EKM coordination simplifies (one fewer signing event per (slot, layer)).
+**Migration**: cluster running OBFT can adopt 2abOBFT by (1) extending the wire format with `KindVerdict`, (2) replacing the single-Phase-2 commit with the Phase-2a/Phase-2b split, (3) modifying the Phase-1 bundle schema to drop σ_V, (4) updating the protocol-tag to `2abOBFT-v1` for envelope domain separation. EKM coordination simplifies (one fewer signing event per (slot, layer)).
 
 ### A.2 — Comparison with [OBFTR(R≥2)](OBFTR.md)
 
@@ -942,7 +942,7 @@ Adds to 2abOBFT's setting:
 
 ### Wire kinds
 
-In addition to 2abOBFT's wire kinds (`Phase1Bundle`, `KindVerdict`, `KindOnion`, `KindNR`, `KindCertificate`):
+In addition to 2abOBFT's wire kinds (`Phase1Bundle`, `KindVerdict`, `KindOnion2b`, `KindNR2b`, `KindCertificate`):
 
 - **`KindBid`** (new): operator `i`'s bid envelope. Payload `(protocol_tag = "2abOBFT-LBid-v1", message_kind = "bid-envelope", cluster_id, slot, operator_id i, bid_value, V_i, relay_attestation)`, signed by `i`'s operator-identity key.
 
@@ -1065,7 +1065,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 |---|---|---|
 | Slot structure | Phase 1 → Phase 2a → Phase 2b → Phase 3 | **Same** (no new phases) |
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
-| Wire kinds | Phase1Bundle, KindVerdict, KindOnion, KindNR, KindCertificate | + KindBid (only one new wire kind — verdicts already cover per-layer in base) |
+| Wire kinds | Phase1Bundle, KindVerdict, KindOnion2b, KindNR2b, KindCertificate | + KindBid (only one new wire kind — verdicts already cover per-layer in base) |
 | Slashing-evidence rules | 6 (Rules 1-6) | 7 (+ Rule 7 bid equivocation; Rule 6 covers L_Bid verdict-equivocation naturally) |
 | Healthy-path latency | ~700-850ms | **Same** |
 | Best-case latency | ~450ms | **Same** |
@@ -1099,23 +1099,23 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 
 - **Variant chosen**: "Variant C" below — no Phase-1 leader σ_V; verdict broadcasts in Phase-2a; σ/NR commit in Phase-2b. Justification follows.
 - **Scope**: SSV proposer duty at `n = 4, f = 1, K = 4` as the running example; algebra generalizes to higher `n`/`f`.
-- **Relationship to existing code**: bare OBFT has not been implemented; 2abOBFT was designed to be built directly (skipping a bare-OBFT intermediate) since the Defer-state machinery bare OBFT introduces is subsumed by 2abOBFT's Phase-2a observation. If a bare-OBFT implementation were to land first, several pieces of 2abOBFT would become drop-in replacements rather than additions.
+- **Relationship to existing code**: bare OBFT (without Phase 2a/2b) is implemented in [protocol/v2/obft](protocol/v2/obft/). 2abOBFT extends it by adding the Phase-2a observation phase; several 2abOBFT pieces are drop-in additions on top of the existing bare-OBFT state machine.
 
 ### What changes vs bare OBFT
 
 | Component | OBFT | OBFT + Phase 2a/2b (this) |
 |---|---|---|
 | Phase-1 bundle | `(V_{L_k}, σ_{L_k}^V(V_{L_k}), σ_{L_k}^{op}(envelope))` | `(V_{L_k}, σ_{L_k}^{op}(envelope))` — **no σ^V** |
-| Phase-2 structure | Single Phase 2 with sub-phasing (σ-emit early, NR/Defer at end) | Two windows: Phase 2a (verdict broadcast, no σ partials) + Phase 2b (σ-or-NR commit) |
-| Defer state | Yes — `σ`/`NR`/`NV`/`Defer` (4 states) | No — `σ`/`NR`/`NV` (3 states); Phase-2a's window subsumes Defer |
-| σ-commit timing | Phase-1 (leader) or Phase-2 (others) | Phase-2b only (uniform across all operators) |
-| Convergence mechanism | Per-operator local view (Defer-rule observes peer σ-emit) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
+| Phase-2 structure | Single Phase 2 (single `KindCommit` at `T_commit`) | Two windows: Phase 2a (verdict broadcast, no σ partials) + Phase 2b (σ-or-NR commit) |
+| Operator commitment states | σ / NR / NV (3 states) | σ / NR / NV (3 states) |
+| σ-commit timing | Phase-1 (leader) or Phase-2 at `T_commit` (others) | Phase-2b only (uniform across all operators) |
+| Convergence mechanism | Per-operator local view at `T_commit` based on retained V's | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
 | EKM coordination | Single signing event per (slot, layer) per operator (V-share + IBE-share) | Same — single signing event per (slot, layer) per operator at Phase-2b; verdict envelope is op-identity-signed (not threshold) and does not consume EKM slashing-protection |
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
-| h_V=1 selective-delivery deadlock | None — slot-miss class | Recovered — same mechanism |
+| h_V=1 selective-delivery deadlock | Closed by design (no Defer/no-V fallback) | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
-| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 2.05s (Config A, K=4) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 2.20s (+150ms at minimum sizing) |
-| Wire kinds | `Phase1Bundle`, `KindOnion`, `KindNR`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope) |
+| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 250ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 550ms post-T_commit (+300ms for Phase-2a window) |
+| Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
 | Slashing-evidence rules | 5 rules | 5 rules + 1 (verdict-vs-action equivocation) |
 | Late-deepest-layer leader broadcast (Class A) | Mitigated by K ≥ f+2; class-A residual | Closed structurally — late bundle observed in Phase-2a is σ-emittable in Phase-2b |
 | Mesh-flakiness coordinated with byz σ-refusal (Class B) | Slot-miss surface | Mitigated — deferred commit lets brief flakiness recover |
@@ -1566,7 +1566,7 @@ The implementation is broken into phases that can be staged across PRs:
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) |
 | Mesh-flakiness coordinated with byz σ-refusal | Class B (slashable, slot-miss) | Mitigated (Phase-2a window absorbs jitter) |
 | EKM complexity | Per-(slot, layer, side) coordinator with cross-keypair atomicity | Same shape; one fewer concern (no Phase-1 σ_V to coordinate with Phase-2 σ) |
-| Wire format | Phase1Bundle, KindOnion, KindNR, KindCertificate | + KindVerdict |
+| Wire format | Phase1Bundle, KindCommit, KindCertificate | + KindVerdict, KindOnion2b, KindNR2b (Phase-2b commit splits back into σ-side / NR-side because Phase-2a observation must complete before σ commitment) |
 | Slashing-evidence rules | 5 | 6 (Rule 6: verdict-vs-action equivocation, weakly slashable) |
 | Submission headroom (Config A) | 1.95s | 1.65s |
 | Bandwidth (healthy, n=4, K=4) | ~27 KB | ~30 KB (+3 KB for verdicts) |

@@ -15,11 +15,10 @@ import (
 //  1. Start a new OBFT instance for the slot.
 //  2. For each layer where the local op is the leader: schedule a goroutine
 //     that fetches at the layer's FetchAt and broadcasts a Phase-1 bundle.
-//  3. At T_commit: BuildAndBroadcastOnion (covers σ-state operators).
-//  4. At T_commit + Δ_2: PhaseTwoEnd + BuildAndBroadcastNR (also re-emits
-//     Onion if any Defer-partition resolved at PhaseTwoEnd).
-//  5. At T_round_end: Resolve + SubmitOutput (or peer-Certificate fallback).
-//  6. EndInstance.
+//  3. At T_commit: BuildAndBroadcastCommit (single emission per spec
+//     §Phase 2; carries both σ partials and NR partials).
+//  4. At T_round_end: Resolve + SubmitOutput (or peer-Certificate fallback).
+//  5. EndInstance.
 //
 // Returns the result of ResolveAndSubmit (or the first non-recoverable
 // error encountered earlier). Phase-1 fetch errors are non-fatal: they're
@@ -60,30 +59,20 @@ func RunProposerSlot(
 		}(layer)
 	}
 
-	// Phase 2 begins at TCommit. σ-state operators emit immediately.
+	// Phase 2 begins at TCommit. Each operator emits a single KindCommit
+	// carrying their per-layer σ partials and NR partials.
 	tCommit := slotStart.Add(cfg.TCommit)
 	if !sleepUntil(ctx, tCommit) {
 		fetchWG.Wait()
 		return ctx.Err()
 	}
-	if _, err := sched.BuildAndBroadcastOnion(ctx, slot); err != nil {
+	if _, err := sched.BuildAndBroadcastCommit(ctx, slot); err != nil {
 		fetchWG.Wait()
-		return fmt.Errorf("obft runner: phase-2 onion broadcast: %w", err)
+		return fmt.Errorf("obft runner: phase-2 commit broadcast: %w", err)
 	}
 
-	// End of Phase 2 at TCommit + Delta2 — force-commit + emit NR.
-	tPhaseTwoEnd := slotStart.Add(cfg.PhaseTwoEndOffset())
-	if !sleepUntil(ctx, tPhaseTwoEnd) {
-		fetchWG.Wait()
-		return ctx.Err()
-	}
-	if _, err := sched.PhaseTwoEndAndBroadcastNR(ctx, slot); err != nil {
-		fetchWG.Wait()
-		return fmt.Errorf("obft runner: phase-2 end + NR broadcast: %w", err)
-	}
-
-	// Phase 3 — wait until T_round_end before Resolve so all NR partials
-	// have had time to propagate.
+	// Phase 3 — wait until T_round_end before Resolve so all KindCommit
+	// messages have had time to propagate.
 	tRoundEnd := slotStart.Add(cfg.RoundEndOffset())
 	if !sleepUntil(ctx, tRoundEnd) {
 		fetchWG.Wait()

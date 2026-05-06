@@ -10,11 +10,10 @@ import (
 // Wire envelope for OBFT messages.
 //
 // The envelope is a thin discriminated wrapper that lets a single byte
-// stream carry any of OBFT's four message kinds. The intended integration:
+// stream carry any of OBFT's three message kinds. The intended integration:
 //
 //	WrapPhase1Bundle(b)  → bytes
-//	WrapOnion(o)         → bytes
-//	WrapNR(nr)           → bytes
+//	WrapCommit(c)        → bytes
 //	WrapCertificate(c)   → bytes
 //
 // The SSV adapter puts those bytes into SignedSSVMessage.Data and lets
@@ -26,13 +25,13 @@ import (
 //
 //	Unwrap(data) → (kind, parsed message, error)
 //
-// where the parsed message is one of *obft.Phase1Bundle, *obft.Onion,
-// *obft.NR, *obft.Certificate matching `Kind`.
+// where the parsed message is one of *obft.Phase1Bundle, *obft.Commit,
+// *obft.Certificate matching `Kind`.
 //
 // Frame layout:
 //
 //	[1] envelope version (currently 0x01)
-//	[1] kind            (KindPhase1Bundle=0x01, KindOnion=0x02, KindNR=0x03,
+//	[1] kind            (KindPhase1Bundle=0x01, KindCommit=0x02,
 //	                     KindCertificate=0x04)
 //	[N] body bytes      (output of Encode* functions in this package)
 
@@ -46,10 +45,10 @@ const (
 	// KindPhase1Bundle indicates the body is an EncodePhase1Bundle-encoded
 	// *obft.Phase1Bundle.
 	KindPhase1Bundle MessageKind = 0x01
-	// KindOnion indicates the body is an EncodeOnion-encoded *obft.Onion.
-	KindOnion MessageKind = 0x02
-	// KindNR indicates the body is an EncodeNR-encoded *obft.NR.
-	KindNR MessageKind = 0x03
+	// KindCommit indicates the body is an EncodeCommit-encoded *obft.Commit.
+	// Carries the operator's K-layer onion (σ-side) plus their NR partials
+	// (NR-side) in a single message emitted at T_commit.
+	KindCommit MessageKind = 0x02
 	// KindCertificate indicates the body is an EncodeCertificate-encoded
 	// *obft.Certificate.
 	KindCertificate MessageKind = 0x04
@@ -60,8 +59,7 @@ const (
 type Envelope struct {
 	Kind         MessageKind
 	Phase1Bundle *obft.Phase1Bundle
-	Onion        *obft.Onion
-	NR           *obft.NR
+	Commit       *obft.Commit
 	Certificate  *obft.Certificate
 }
 
@@ -75,22 +73,13 @@ func WrapPhase1Bundle(b *obft.Phase1Bundle) ([]byte, error) {
 	return wrap(KindPhase1Bundle, body), nil
 }
 
-// WrapOnion encodes an Onion and wraps it in an OBFT wire envelope.
-func WrapOnion(o *obft.Onion) ([]byte, error) {
-	body, err := EncodeOnion(o)
+// WrapCommit encodes a Commit and wraps it in an OBFT wire envelope.
+func WrapCommit(c *obft.Commit) ([]byte, error) {
+	body, err := EncodeCommit(c)
 	if err != nil {
-		return nil, fmt.Errorf("wire: encode onion: %w", err)
+		return nil, fmt.Errorf("wire: encode commit: %w", err)
 	}
-	return wrap(KindOnion, body), nil
-}
-
-// WrapNR encodes an NR and wraps it in an OBFT wire envelope.
-func WrapNR(nr *obft.NR) ([]byte, error) {
-	body, err := EncodeNR(nr)
-	if err != nil {
-		return nil, fmt.Errorf("wire: encode NR: %w", err)
-	}
-	return wrap(KindNR, body), nil
+	return wrap(KindCommit, body), nil
 }
 
 // WrapCertificate encodes a Certificate and wraps it in an OBFT wire
@@ -122,18 +111,12 @@ func Unwrap(data []byte) (*Envelope, error) {
 			return nil, fmt.Errorf("wire: decode phase-1 bundle body: %w", err)
 		}
 		out.Phase1Bundle = b
-	case KindOnion:
-		o, err := DecodeOnion(body)
+	case KindCommit:
+		c, err := DecodeCommit(body)
 		if err != nil {
-			return nil, fmt.Errorf("wire: decode onion body: %w", err)
+			return nil, fmt.Errorf("wire: decode commit body: %w", err)
 		}
-		out.Onion = o
-	case KindNR:
-		nr, err := DecodeNR(body)
-		if err != nil {
-			return nil, fmt.Errorf("wire: decode NR body: %w", err)
-		}
-		out.NR = nr
+		out.Commit = c
 	case KindCertificate:
 		c, err := DecodeCertificate(body)
 		if err != nil {

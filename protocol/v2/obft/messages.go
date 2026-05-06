@@ -1,7 +1,7 @@
 package obft
 
-// Wire-shaped message types carried between operators in the four OBFT
-// envelope kinds (Phase1Bundle, KindOnion, KindNR, KindCertificate).
+// Wire-shaped message types carried between operators in the three OBFT
+// envelope kinds (Phase1Bundle, KindCommit, KindCertificate).
 //
 // Sender authentication is provided by the outer SignedSSVMessage envelope —
 // the OperatorID fields below are claimed-by-sender values that the outer
@@ -18,7 +18,7 @@ package obft
 // Per spec §Phase 1, the bundle gives the cluster a head-start of one real
 // threshold partial on V_{L_k} as soon as Phase 1 succeeds anywhere — the
 // leader's σ_{L_k}^V counts toward the σ-pool at L_k together with non-leader
-// Phase-2 onion contributions.
+// Phase-2 commit contributions.
 type Phase1Bundle struct {
 	// OperatorID is the layer's leader (claimed; outer-layer sig verifies).
 	OperatorID OperatorID
@@ -34,9 +34,9 @@ type Phase1Bundle struct {
 	SigmaV Signature
 }
 
-// EncryptedLayer is one layer of an Onion: a candidate value plus the σ
-// partial signature on it (encrypted under the chained NR-tag stack at
-// layers > 0; plaintext at layer 0).
+// EncryptedLayer is one layer of a Commit's σ-side onion: a candidate value
+// plus the σ partial signature on it (encrypted under the chained NR-tag stack
+// at layers > 0; plaintext at layer 0).
 //
 // Per spec §Phase 2, the chained encryption at layer k uses tags
 // nr_tag_0, ..., nr_tag_{k-1} nested with nr_tag_0 outermost. Decryption
@@ -47,36 +47,17 @@ type Phase1Bundle struct {
 // the partial signature is gated by IBE.
 //
 // An empty EncryptedLayer (zero-length Value and Ciphertext) means the
-// emitting operator did not contribute at this layer — a valid encoding
-// of "I am Defer-state, not σ-emitted at this layer" or "I am the layer's
-// leader but my Phase-1 σ is the contribution, not the onion".
+// emitting operator did not σ-emit at this layer (they emitted NR or NV at
+// this layer, or it is the layer they lead and their Phase-1 σ_V is the
+// contribution).
 type EncryptedLayer struct {
 	Value      Value
 	Ciphertext []byte
 }
 
-// Onion is the σ-side wire payload (KindOnion). Carries one operator's
-// per-layer σ partials (plaintext at L_0, chained-encrypted at deeper layers).
-//
-// Per spec §Phase 2, KindOnion may be emitted multiple times per (slot,
-// operator) as σ-eligibility transitions late (e.g., late re-flood delivers
-// V to a previously-Defer-state operator at layer k mid-Phase-2 → operator
-// emits a fresh KindOnion reflecting the new σ-eligibility). Receivers track
-// per-(operator, layer) σ-presence cumulatively across all observed Onions
-// from the same operator; the "first auth-valid emission per (operator,
-// layer)" wins for σ-pool / Defer-rule purposes, and a second emission with
-// a distinct value at the same layer is cross-onion equivocation evidence.
-type Onion struct {
-	OperatorID OperatorID
-	Height     Height
-	// Layers has length K; layer k carries this operator's contribution at
-	// layer k (or empty if the operator did not σ-emit at that layer).
-	Layers []EncryptedLayer
-}
-
 // NRPartial is one operator's partial NR signature for a specific layer,
-// appearing inside a KindNR alongside other layers the same operator
-// committed NR-side at end-of-Phase-2.
+// appearing inside a Commit alongside other layers the same operator
+// committed NR-side at T_commit.
 type NRPartial struct {
 	// Layer in [0, K-1) — there is no NR tag for the deepest layer
 	// (no further layer to advance to).
@@ -87,21 +68,27 @@ type NRPartial struct {
 	PartialSig Signature
 }
 
-// NR is the NR-side wire payload (KindNR). Carries one operator's NR
-// commitments across layers, all in one envelope.
+// Commit is the wire payload carried in a single KindCommit message at
+// T_commit. It bundles the operator's σ-side per-layer contributions (the
+// K-layer onion: plaintext at L_0, chained-encrypted at deeper layers) plus
+// their NR-side per-layer contributions (IBE partials on layers committed
+// NR-side).
 //
-// Per spec §Phase 2 / Wire format, KindNR is "Emitted at most once per
-// operator per slot" and "Carries i's NR/NV partials for layers committed
-// to NR at end-of-Phase-2 force-commit". Bundling avoids fanning out many
-// envelopes at once.
-//
-// NR (silent-leader) and NV (host-not-valid) commitments are operationally
-// identical for the protocol and both produce IBE partials on the layer's
-// nr_tag — local diagnostic only distinguishes them.
-type NR struct {
+// Per spec §Phase 2, each operator emits exactly one KindCommit per (slot,
+// operator) at T_commit, based on what they observed by then. Per-layer
+// commitment is exclusive (an entry in Layers[k] OR an entry in NRPartials
+// for layer k, never both). The Phase 2 window Δ_2 is sized to let the
+// KindCommit propagate to all honest peers before Phase 3 reconstruction
+// begins.
+type Commit struct {
 	OperatorID OperatorID
 	Height     Height
-	Partials   []NRPartial
+	// Layers has length K; layer k carries this operator's σ contribution
+	// at layer k (or empty if the operator did not σ-emit at that layer).
+	Layers []EncryptedLayer
+	// NRPartials carries this operator's IBE partials for layers committed
+	// NR-side (silent-leader rule, equivocation rule, or NV).
+	NRPartials []NRPartial
 }
 
 // Certificate is the final-certificate wire payload (KindCertificate). Per

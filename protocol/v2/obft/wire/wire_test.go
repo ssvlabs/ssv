@@ -30,53 +30,37 @@ func TestPhase1Bundle_Roundtrip(t *testing.T) {
 	require.True(t, bytes.Equal(in.SigmaV, env.Phase1Bundle.SigmaV))
 }
 
-func TestOnion_Roundtrip(t *testing.T) {
-	in := &obft.Onion{
+func TestCommit_Roundtrip(t *testing.T) {
+	in := &obft.Commit{
 		OperatorID: 3,
 		Height:     999,
 		Layers: []obft.EncryptedLayer{
 			{Value: []byte("V0"), Ciphertext: []byte("ct0")},
-			{}, // empty (no contribution)
+			{}, // empty (no σ contribution)
 			{Value: []byte("V2"), Ciphertext: []byte("ciphertext-for-layer-2")},
 			{Value: []byte("V3-deepest"), Ciphertext: []byte("CT")},
 		},
+		NRPartials: []obft.NRPartial{
+			{Layer: 1, PartialSig: []byte("nr-sig-layer-1")},
+		},
 	}
-	bytes_, err := WrapOnion(in)
+	bytes_, err := WrapCommit(in)
 	require.NoError(t, err)
 
 	env, err := Unwrap(bytes_)
 	require.NoError(t, err)
-	require.Equal(t, KindOnion, env.Kind)
-	require.Equal(t, in.OperatorID, env.Onion.OperatorID)
-	require.Equal(t, in.Height, env.Onion.Height)
-	require.Len(t, env.Onion.Layers, len(in.Layers))
+	require.Equal(t, KindCommit, env.Kind)
+	require.Equal(t, in.OperatorID, env.Commit.OperatorID)
+	require.Equal(t, in.Height, env.Commit.Height)
+	require.Len(t, env.Commit.Layers, len(in.Layers))
 	for i, expected := range in.Layers {
-		got := env.Onion.Layers[i]
+		got := env.Commit.Layers[i]
 		require.True(t, bytes.Equal(expected.Value, got.Value), "layer %d Value mismatch", i)
 		require.True(t, bytes.Equal(expected.Ciphertext, got.Ciphertext), "layer %d Ciphertext mismatch", i)
 	}
-}
-
-func TestNR_Roundtrip(t *testing.T) {
-	in := &obft.NR{
-		OperatorID: 5,
-		Height:     42,
-		Partials: []obft.NRPartial{
-			{Layer: 0, PartialSig: []byte("sig0")},
-			{Layer: 1, PartialSig: []byte("sig1-longer-than-the-first")},
-		},
-	}
-	bytes_, err := WrapNR(in)
-	require.NoError(t, err)
-
-	env, err := Unwrap(bytes_)
-	require.NoError(t, err)
-	require.Equal(t, KindNR, env.Kind)
-	require.Equal(t, in.OperatorID, env.NR.OperatorID)
-	require.Equal(t, in.Height, env.NR.Height)
-	require.Len(t, env.NR.Partials, len(in.Partials))
-	for i, expected := range in.Partials {
-		got := env.NR.Partials[i]
+	require.Len(t, env.Commit.NRPartials, len(in.NRPartials))
+	for i, expected := range in.NRPartials {
+		got := env.Commit.NRPartials[i]
 		require.Equal(t, expected.Layer, got.Layer)
 		require.True(t, bytes.Equal(expected.PartialSig, got.PartialSig))
 	}
@@ -117,8 +101,8 @@ func TestDecodePhase1Bundle_RejectsUnknownVersion(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported phase-1 bundle version")
 }
 
-func TestEncodeOnion_RejectsTooManyLayers(t *testing.T) {
-	o := &obft.Onion{Layers: make([]obft.EncryptedLayer, MaxLayers+1)}
-	_, err := EncodeOnion(o)
+func TestEncodeCommit_RejectsTooManyLayers(t *testing.T) {
+	c := &obft.Commit{Layers: make([]obft.EncryptedLayer, MaxLayers+1)}
+	_, err := EncodeCommit(c)
 	require.ErrorContains(t, err, "max")
 }

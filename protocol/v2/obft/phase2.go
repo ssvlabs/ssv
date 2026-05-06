@@ -5,118 +5,163 @@ import (
 	"fmt"
 )
 
-// BuildOwnOnion builds the local operator's KindOnion in its current state.
+// BuildOwnCommit builds the local operator's KindCommit message at T_commit.
+// Per spec §Phase 2, each operator emits exactly one KindCommit per (slot,
+// operator), based on what they observed by T_commit. The message bundles:
 //
-// Per spec §Phase 2 / Sub-phasing, this method may be called multiple times
-// during [TCommit, TCommit + Delta2] as σ-eligibility transitions late
-// (e.g., late re-flood delivers V to a previously-Defer-state operator).
-// Each call returns the current σ-side state — the caller broadcasts whatever
-// changed since their last call (gossipsub naturally dedups identical bytes).
+//   - σ partials for layers where the operator is σ-state (uniquely retained
+//     host-validated V, no equivocation observed at this layer, no prior
+//     NR-lock). σ partials at L_0 are plaintext; deeper layers are wrapped
+//     in chained encryption gated on prior layers' NR-quorum.
+//   - NR partials for layers in [0, K-1) where the operator is NR-state
+//     (no V retained at T_commit, ≥ 2 V's retained = equivocation, or host
+//     returned not-valid).
 //
-// Layers where the operator is σ-eligible (host-validated V is uniquely
-// retained, no equivocation observed, no prior NR-lock) get a non-empty
-// EncryptedLayer; other layers get the empty entry.
-//
-// EKM enforcement: σ-emission locks sigmaLocked[layer] on the chosen V.
-// Subsequent calls produce the same partial (cached) so repeat broadcasts
-// are byte-identical.
-func (i *Instance) BuildOwnOnion() (*Onion, error) {
+// EKM enforcement: σ-emission locks sigmaLocked[layer] on the chosen V;
+// NR-emission locks nrLocked[layer]. Returns ErrAlreadyCommitted if called
+// more than once.
+func (i *Instance) BuildOwnCommit() (*Commit, error) {
+	if i.committed {
+		return nil, ErrAlreadyCommitted
+	}
 	K := i.cfg.K()
 	layers := make([]EncryptedLayer, K)
+	var nrPartials []NRPartial
 
 	for k := 0; k < K; k++ {
-		// Layer's leader is special: their Phase-1 σ_V is their σ-side
-		// commitment, not their Onion entry. Skip Onion-σ-emit at the
-		// layer they lead — Phase-1 was already their cross-phase σ-side.
-		// (BuildPhase1Bundle sets sigmaLocked at the leader's layer; the
-		// chosenVForLayer path below would also cover this if the bundle
-		// has been observed locally + host-validated, but skipping is
-		// simpler and avoids double-emission of the same partial.)
+		// At layers where the local op is the designated leader: if they
+		// already σ-locked via BuildPhase1Bundle (their Phase-1 σ_V is the
+		// σ-side commitment, picked up by Resolve from i.bundles), skip
+		// emitting a redundant onion entry at this layer. If they did NOT
+		// broadcast (silent leader), fall through to NR — a silent leader
+		// must contribute their NR partial at their own layer or the NR
+		// pool falls short.
 		if i.cfg.Layers[k].Leader == i.ownOperatorID {
-			continue
-		}
-
-		// σ-eligibility check.
-		v, ok := i.chosenVForLayer(k)
-		if !ok {
-			continue
-		}
-		// Cross-phase / single-σ-V locking (idempotent on same V).
-		if err := i.transitionToSigma(k, v); err != nil {
-			// Either NR-locked or equivocation-locked — skip σ-emit at
-			// this layer.
-			continue
-		}
-
-		partial, ok := i.ownPartials[k]
-		if !ok {
-			var err error
-			partial, err = i.signer.SignPartial(v)
-			if err != nil {
-				return nil, fmt.Errorf("obft: sign σ at layer %d: %w", k, err)
+			if i.sigmaLocked[k] {
+				continue
 			}
-			i.ownPartials[k] = partial
+			// Silent leader at own layer → NR path below.
+			if k >= K-1 {
+				continue // deepest layer has no NR tag
+			}
+			if err := i.transitionToNR(k, CommitNRSilent); err != nil {
+				continue
+			}
+			tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
+			sig, err := i.tagSigner.SignPartial(tag)
+			if err != nil {
+				return nil, fmt.Errorf("obft: sign NR partial at own-leader layer %d: %w", k, err)
+			}
+			nrPartials = append(nrPartials, NRPartial{
+				Layer:      k,
+				PartialSig: sig,
+			})
+			continue
 		}
 
-		ct, err := i.chainEncryptForLayer(k, partial)
+		// σ path: uniquely retained V, host validates, not NR-locked.
+		if v, ok := i.chosenVForLayer(k); ok {
+			if err := i.transitionToSigma(k, v); err == nil {
+				partial, cached := i.ownPartials[k]
+				if !cached {
+					sig, err := i.signer.SignPartial(v)
+					if err != nil {
+						return nil, fmt.Errorf("obft: sign σ at layer %d: %w", k, err)
+					}
+					i.ownPartials[k] = sig
+					partial = sig
+				}
+				ct, err := i.chainEncryptForLayer(k, partial)
+				if err != nil {
+					return nil, fmt.Errorf("obft: encrypt layer %d: %w", k, err)
+				}
+				layers[k] = EncryptedLayer{
+					Value:      append(Value{}, v...),
+					Ciphertext: ct,
+				}
+				continue
+			}
+			// transitionToSigma failed (already NR-locked). Fall through to NR.
+		}
+
+		// NR path: layers in [0, K-1) emit an IBE partial on nr_tag_k. The
+		// deepest layer (K-1) has no NR tag — leave it as no contribution.
+		if k >= K-1 {
+			continue
+		}
+		// Determine NV vs NR-silent for local diagnostic. NV requires the
+		// operator to have a uniquely retained V whose host verdict was
+		// not-valid; otherwise it's NR-silent (no V retained, equivocation,
+		// or host hasn't been asked).
+		target := CommitNRSilent
+		if v, retained := i.chosenVAtLayer(k); retained {
+			if verdicts := i.hostVerdict[k]; verdicts != nil {
+				if valid, recorded := verdicts[valueRootKey(v)]; recorded && !valid {
+					target = CommitNV
+				}
+			}
+		}
+		if err := i.transitionToNR(k, target); err != nil {
+			// σ-locked already (shouldn't happen given the σ branch above
+			// would have continued); skip rather than corrupt EKM log.
+			continue
+		}
+		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
+		sig, err := i.tagSigner.SignPartial(tag)
 		if err != nil {
-			return nil, fmt.Errorf("obft: encrypt layer %d: %w", k, err)
+			return nil, fmt.Errorf("obft: sign NR partial at layer %d: %w", k, err)
 		}
-		layers[k] = EncryptedLayer{
-			Value:      append(Value{}, v...),
-			Ciphertext: ct,
-		}
+		nrPartials = append(nrPartials, NRPartial{
+			Layer:      k,
+			PartialSig: sig,
+		})
 	}
 
-	return &Onion{
+	i.committed = true
+	return &Commit{
 		OperatorID: i.ownOperatorID,
 		Height:     i.cfg.Height,
 		Layers:     layers,
+		NRPartials: nrPartials,
 	}, nil
 }
 
-// ObserveOnion records a peer's KindOnion. Per spec §Phase 2 / Wire format,
-// KindOnion may be emitted multiple times per (operator, slot); receivers
-// track per-(operator, layer) σ-presence cumulatively.
+// ObserveCommit records a peer's KindCommit message. Per spec §Phase 2, each
+// honest operator emits exactly one KindCommit per (slot, operator); a second
+// distinct KindCommit from the same operator is cross-onion equivocation
+// (Rule 3) — the operator double-committed.
 //
-// Per spec §Phase 1 / Validity-gate at L_0:
-//   - At L_0 with retained V: a peer's plaintext σ partial that does not
-//     verify against any retained V does NOT count as σ-emit observed.
-//     The auth-signed Onion entry is recorded as Rule 5 evidence (fake
-//     plaintext σ at L_0).
-//   - At L_0 without retained V: any auth-signed Onion claiming σ at L_0
-//     counts as σ-emit observed (encrypted-presence-equivalent fallback,
-//     to preserve Defer-due-to-partition recovery).
+// This method:
+//   - extracts σ entries (one per σ-state layer) into peerOnions, applying the
+//     L_0 fake-σ check (Rule 5) when a retained V exists at L_0;
+//   - extracts NR partials (one per NR-state layer) into peerNR;
+//   - cross-checks σ + NR at the same layer from the same operator (Rule 1).
 //
-// At deeper layers (k > 0), σ partials are encrypted; encrypted-presence
-// alone counts as σ-emit observed. Decryption (and possible Rule 4
-// detection) happens at Phase 3 reconstruction time.
-func (i *Instance) ObserveOnion(o *Onion) error {
-	if err := ValidateOnion(o, i.cfg); err != nil {
+// On a second KindCommit from the same operator: the layers are checked against
+// any already-recorded entries; distinct entries record cross-onion
+// equivocation evidence.
+func (i *Instance) ObserveCommit(c *Commit) error {
+	if err := ValidateCommit(c, i.cfg); err != nil {
 		return err
 	}
 	K := i.cfg.K()
 
+	// σ-side per layer.
 	for k := 0; k < K; k++ {
-		el := o.Layers[k]
+		el := c.Layers[k]
 		if len(el.Value) == 0 || len(el.Ciphertext) == 0 {
-			continue // operator did not contribute at this layer
+			continue // operator did not σ-emit at this layer
 		}
 
-		// Track the entry per (layer, operator). Up to 2 distinct entries
-		// retained for cross-onion equivocation evidence (Rule 3).
 		if i.peerOnions[k] == nil {
 			i.peerOnions[k] = make(map[OperatorID][]EncryptedLayer)
 		}
-		existing := i.peerOnions[k][o.OperatorID]
+		existing := i.peerOnions[k][c.OperatorID]
 
-		// Find an existing entry with the same value.
+		// Find existing entry with the same value.
 		seen := false
 		for _, e := range existing {
 			if bytes.Equal(e.Value, el.Value) {
-				// Same value already retained from this operator — drop
-				// (an honest operator emits the same partial across
-				// repeat KindOnions; the cached one is canonical).
 				seen = true
 				break
 			}
@@ -129,41 +174,38 @@ func (i *Instance) ObserveOnion(o *Onion) error {
 		// one, this is cross-onion equivocation (Rule 3).
 		if len(existing) >= 1 {
 			if len(existing) >= 2 {
-				// Cap at 2 distinct; further distinct entries are dropped.
 				continue
 			}
-			// Record evidence pairing the two distinct entries.
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceCrossOnionEquivocation,
-				OperatorID: o.OperatorID,
+				OperatorID: c.OperatorID,
 				Layer:      k,
 				CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
 					ValueA:   existing[0].Value,
 					ValueB:   el.Value,
-					PartialA: existing[0].Ciphertext, // for L_0 == σ partial; for k>0 ciphertext (decoded later)
+					PartialA: existing[0].Ciphertext,
 					PartialB: el.Ciphertext,
 				},
 			})
 		}
 
-		// Append. Defensive copies for slices retained beyond this call.
 		entryCopy := EncryptedLayer{
 			Value:      append(Value{}, el.Value...),
 			Ciphertext: append([]byte{}, el.Ciphertext...),
 		}
-		i.peerOnions[k][o.OperatorID] = append(existing, entryCopy)
+		i.peerOnions[k][c.OperatorID] = append(existing, entryCopy)
 
-		// L_0 specific: validity-gate on plaintext σ partial.
-		if k == 0 {
-			if i.peerSigmaAtL0Verifies(o.OperatorID, el) {
-				// Counts as observed; nothing extra to do — the entry is
-				// retained and Resolve will pick it up.
-			} else if i.hasRetainedVAtL0() {
-				// Receiver has retained V at L_0 but partial doesn't
-				// verify against any retained V — Rule 5 evidence.
+		// L_0 validity-gate: at L_0, σ partials are plaintext and verifiable
+		// against any retained V. A peer's plaintext σ partial that does not
+		// verify against any retained V at L_0 is a slashable byzantine fault
+		// (Rule 5 — Fake plaintext σ at L_0). The fake partial does not enter
+		// any V's σ-pool (it doesn't verify), so it has no liveness impact;
+		// detection is purely for slashing accountability.
+		if k == 0 && i.hasRetainedVAtL0() {
+			if !i.peerSigmaAtL0Verifies(c.OperatorID, el) {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceFakePlaintextSigma,
-					OperatorID: o.OperatorID,
+					OperatorID: c.OperatorID,
 					Layer:      0,
 					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
 						OnionPartial:        append(Signature{}, el.Ciphertext...),
@@ -171,29 +213,19 @@ func (i *Instance) ObserveOnion(o *Onion) error {
 						RetainedValueHashes: i.retainedL0ValueHashes(),
 					},
 				})
-				// Strip the entry from the peerOnions retention so it
-				// does not contribute to σ-pool. (Keeping it in peerOnions
-				// for cross-onion equivocation already happened above
-				// before this branch; remove just the most recently added
-				// entry to ensure it doesn't enter σ-pool.)
-				i.removeOnionEntry(k, o.OperatorID, &el)
+				i.removeOnionEntry(k, c.OperatorID, &el)
 			}
-			// If !hasRetainedVAtL0 and verify failed → no retained V means
-			// we couldn't verify against anything. Fall back to
-			// encrypted-presence rule: the entry counts as σ-emit observed
-			// (preserves Defer-partition recovery). No evidence yet —
-			// once V arrives we may re-verify and downgrade. This is
-			// best-effort; the spec's MUST-gossip rule for Rule 5 is what
-			// closes this attribution gap across the cluster.
 		}
 
-		// Cross-signing detection (Rule 1): σ at this layer + NR at this
-		// layer from same operator?
+		// Cross-signing detection (Rule 1): σ + NR at the same (operator,
+		// layer)? An honest operator commits exclusively per layer within a
+		// single KindCommit; this would only fire for a malformed/byzantine
+		// commit that emits both at the same layer.
 		if i.peerNR[k] != nil {
-			if nrSig, hasNR := i.peerNR[k][o.OperatorID]; hasNR {
+			if nrSig, hasNR := i.peerNR[k][c.OperatorID]; hasNR {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceCrossSigning,
-					OperatorID: o.OperatorID,
+					OperatorID: c.OperatorID,
 					Layer:      k,
 					CrossSigning: &CrossSigningEvidence{
 						SigmaPartial: append(Signature{}, el.Ciphertext...),
@@ -204,6 +236,46 @@ func (i *Instance) ObserveOnion(o *Onion) error {
 			}
 		}
 	}
+
+	// NR-side per layer.
+	for _, p := range c.NRPartials {
+		if i.ibePubKeyShares != nil {
+			pubShare, ok := i.ibePubKeyShares[c.OperatorID]
+			if !ok {
+				return fmt.Errorf("obft: no IBE pubkey share for operator %d", c.OperatorID)
+			}
+			tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
+			if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
+				return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
+					c.OperatorID, p.Layer)
+			}
+		}
+		if i.peerNR[p.Layer] == nil {
+			i.peerNR[p.Layer] = make(map[OperatorID]Signature)
+		}
+		// Idempotent on duplicate observation.
+		if _, exists := i.peerNR[p.Layer][c.OperatorID]; exists {
+			continue
+		}
+		i.peerNR[p.Layer][c.OperatorID] = append(Signature{}, p.PartialSig...)
+
+		// Rule 1 — cross-signing detection: did this operator already have
+		// a σ entry at this layer in this same commit (or an earlier one)?
+		if onionEntries := i.peerOnions[p.Layer][c.OperatorID]; len(onionEntries) > 0 {
+			i.recordEvidence(Evidence{
+				Rule:       EvidenceCrossSigning,
+				OperatorID: c.OperatorID,
+				Layer:      p.Layer,
+				CrossSigning: &CrossSigningEvidence{
+					SigmaPartial: append(Signature{}, onionEntries[0].Ciphertext...),
+					SigmaValue:   append(Value{}, onionEntries[0].Value...),
+					NRPartial:    append(Signature{}, p.PartialSig...),
+				},
+			})
+		}
+	}
+
+	i.peerCommitted[c.OperatorID] = true
 	return nil
 }
 
@@ -226,7 +298,6 @@ func (i *Instance) peerSigmaAtL0Verifies(op OperatorID, el EncryptedLayer) bool 
 	if !ok {
 		return false
 	}
-	// Check that el.Value matches some retained V at L_0.
 	matchesRetained := false
 	for _, retained := range leaderMap {
 		for _, b := range retained {
@@ -242,7 +313,6 @@ func (i *Instance) peerSigmaAtL0Verifies(op OperatorID, el EncryptedLayer) bool 
 	if !matchesRetained {
 		return false
 	}
-	// Verify the partial against op's V-share pubkey on el.Value.
 	return i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext)
 }
 
@@ -284,185 +354,10 @@ func (i *Instance) removeOnionEntry(layer int, op OperatorID, target *EncryptedL
 	i.peerOnions[layer][op] = out
 }
 
-// BuildOwnNR builds the local operator's KindNR at end of Phase 2. Per spec
-// §Phase 2, this is emitted at most once per (slot, operator) at TCommit +
-// Delta2.
-//
-// Carries NR partials for all layers in [0, K-1) where the operator is
-// NR-committed (NR-silent or NV) per local state. Layers where the operator
-// is σ-committed contribute no NR partial (cross-phase exclusivity).
-//
-// EKM enforcement: each NR-emit locks nrLocked[layer]. Subsequent calls
-// produce byte-identical output.
-//
-// Caller must invoke PhaseTwoEnd before BuildOwnNR so the force-commit rule
-// has applied to all Defer layers.
-func (i *Instance) BuildOwnNR() (*NR, error) {
-	if !i.phaseTwoEnded {
-		return nil, fmt.Errorf("obft: BuildOwnNR called before PhaseTwoEnd")
-	}
-	K := i.cfg.K()
-	var partials []NRPartial
-
-	for k := 0; k < K-1; k++ {
-		// NR is emitted only if the operator's local state is NR-side at
-		// this layer (and not σ-locked).
-		st := i.localState[k]
-		if st != CommitNRSilent && st != CommitNV {
-			continue
-		}
-		if err := i.transitionToNR(k, st); err != nil {
-			// σ-locked at this layer — should not happen given the state
-			// check above, but defensively skip rather than corrupt the
-			// EKM log.
-			continue
-		}
-
-		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
-		sig, err := i.tagSigner.SignPartial(tag)
-		if err != nil {
-			return nil, fmt.Errorf("obft: sign NR partial at layer %d: %w", k, err)
-		}
-		partials = append(partials, NRPartial{
-			Layer:      k,
-			PartialSig: sig,
-		})
-	}
-	return &NR{
-		OperatorID: i.ownOperatorID,
-		Height:     i.cfg.Height,
-		Partials:   partials,
-	}, nil
-}
-
-// ObserveNR records a peer's KindNR. Per spec, validates each per-layer NR
-// partial against the operator's IBE pubkey share when the share map is
-// available (Option B); under Option A no separate IBE polynomial exists,
-// and per-partial verification falls back to "store and verify-on-aggregate".
-func (i *Instance) ObserveNR(nr *NR) error {
-	if err := ValidateNR(nr, i.cfg); err != nil {
-		return err
-	}
-
-	for _, p := range nr.Partials {
-		if i.ibePubKeyShares != nil {
-			pubShare, ok := i.ibePubKeyShares[nr.OperatorID]
-			if !ok {
-				return fmt.Errorf("obft: no IBE pubkey share for operator %d", nr.OperatorID)
-			}
-			tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
-			if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
-				return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
-					nr.OperatorID, p.Layer)
-			}
-		}
-		if i.peerNR[p.Layer] == nil {
-			i.peerNR[p.Layer] = make(map[OperatorID]Signature)
-		}
-		// Idempotent on duplicate observation.
-		if _, exists := i.peerNR[p.Layer][nr.OperatorID]; exists {
-			continue
-		}
-		i.peerNR[p.Layer][nr.OperatorID] = append(Signature{}, p.PartialSig...)
-
-		// Rule 1 — cross-signing detection: did this operator already have
-		// a σ entry at this layer?
-		if onionEntries := i.peerOnions[p.Layer][nr.OperatorID]; len(onionEntries) > 0 {
-			i.recordEvidence(Evidence{
-				Rule:       EvidenceCrossSigning,
-				OperatorID: nr.OperatorID,
-				Layer:      p.Layer,
-				CrossSigning: &CrossSigningEvidence{
-					SigmaPartial: append(Signature{}, onionEntries[0].Ciphertext...),
-					SigmaValue:   append(Value{}, onionEntries[0].Value...),
-					NRPartial:    append(Signature{}, p.PartialSig...),
-				},
-			})
-		}
-	}
-	return nil
-}
-
-// PhaseTwoEnd applies the end-of-Phase-2 force-commit rule (spec §Phase 2 /
-// Operator commitments). Must be called exactly once at TCommit + Delta2,
-// before BuildOwnNR.
-//
-// For each layer in [0, K-1) where the local operator is in a Defer state:
-//
-//   - Defer-due-to-partition: if V has been received by now AND host validates
-//     AND no equivocation observed → transition to σ; else NR (silent-leader).
-//   - Defer-due-to-equivocation: NR (silent-leader rule applies).
-//   - Undecided (no peer σ-emit observed, no V received): NR (silent-leader).
-//   - NV: stays NV (will emit NR partial as NV is operationally NR).
-//
-// The deepest layer (K-1) has no NR tag; it is left at whatever state it's in
-// (σ if eligible, else effectively "no contribution").
-func (i *Instance) PhaseTwoEnd() error {
-	if i.phaseTwoEnded {
-		return nil
-	}
-	i.phaseTwoEnded = true
-
-	K := i.cfg.K()
-	for k := 0; k < K; k++ {
-		// Already σ-locked or NR-locked → no force needed.
-		if i.sigmaLocked[k] || i.nrLocked[k] {
-			continue
-		}
-
-		// Try σ-side first: if Defer-partition resolved (V retained, host
-		// validated, no equivocation), σ-emit. This may also cover plain
-		// "I just hadn't gotten to BuildOwnOnion before now" cases.
-		if v, ok := i.chosenVForLayer(k); ok {
-			if err := i.transitionToSigma(k, v); err == nil {
-				// Pre-sign the partial so a subsequent BuildOwnOnion call
-				// returns a populated entry without re-signing surprise.
-				if _, cached := i.ownPartials[k]; !cached {
-					sig, err := i.signer.SignPartial(v)
-					if err != nil {
-						return fmt.Errorf("obft: late σ-sign at layer %d: %w", k, err)
-					}
-					i.ownPartials[k] = sig
-				}
-				continue
-			}
-			// transitionToSigma failed (e.g., equivocation-locked). Fall
-			// through to NR.
-		}
-
-		// NR-side at layers with an NR tag (k < K-1).
-		if k < K-1 {
-			// Reason for NR is informational: NV if host returned
-			// not-valid for the operator's chosen V; else NR-silent.
-			target := CommitNRSilent
-			if v, retained := i.chosenVAtLayerForNVCheck(k); retained {
-				if verdicts := i.hostVerdict[k]; verdicts != nil {
-					if v2, recorded := verdicts[valueRootKey(v)]; recorded && !v2 {
-						target = CommitNV
-					}
-				}
-			}
-			// For Defer-due-to-equivocation, the spec says force-NR with
-			// NR-silent label (it's not host-validity related).
-			if i.localState[k] == CommitDeferEquivocation {
-				target = CommitNRSilent
-			}
-			if err := i.transitionToNR(k, target); err != nil {
-				return fmt.Errorf("obft: end-of-Phase-2 NR at layer %d: %w", k, err)
-			}
-		}
-		// k == K-1: no NR tag, no force-commit needed. State stays whatever
-		// it was (probably Undecided or Defer-partition); this layer just
-		// doesn't contribute to the cluster's NR-pool (there's no "next
-		// layer" to advance to).
-	}
-	return nil
-}
-
-// chosenVAtLayerForNVCheck returns the uniquely-retained V at layer (if any),
-// without consulting host validity. Used by PhaseTwoEnd to identify the
-// candidate V whose host-NV verdict triggers the CommitNV label.
-func (i *Instance) chosenVAtLayerForNVCheck(layer int) (Value, bool) {
+// chosenVAtLayer returns the uniquely-retained V at layer (if any), without
+// consulting host validity. Used by BuildOwnCommit to identify the candidate
+// V whose host-NV verdict triggers the CommitNV label vs CommitNRSilent.
+func (i *Instance) chosenVAtLayer(layer int) (Value, bool) {
 	leaderMap := i.bundles[layer]
 	if len(leaderMap) == 0 {
 		return nil, false

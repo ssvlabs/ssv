@@ -34,7 +34,7 @@ type LifecycleHooks struct {
 	HostValidate func(ctx context.Context, slot phase0.Slot, layer int, value []byte) (bool, error)
 
 	// Broadcast is invoked to gossip an OBFT wire-envelope-wrapped message
-	// (Phase1Bundle / Onion / NR / Certificate) to peer operators.
+	// (Phase1Bundle / Commit / Certificate) to peer operators.
 	//
 	// Required.
 	Broadcast func(ctx context.Context, slot phase0.Slot, data []byte) error
@@ -151,58 +151,25 @@ func (s *Scheduler) HandlePeerPhase1Bundle(ctx context.Context, b *obftcore.Phas
 	return nil
 }
 
-// BuildAndBroadcastOnion executes the Phase-2 σ-emit step. Returns the
-// Onion that was broadcast (so the caller may inspect it for tests).
+// BuildAndBroadcastCommit executes the Phase-2 σ/NR commit step. Returns
+// the Commit that was broadcast (so the caller may inspect it for tests).
 //
-// May be called multiple times during Phase 2: the first call at TCommit
-// emits initial σ-state; subsequent calls (e.g., after late re-flood
-// resolves Defer-partition for some layer) emit fresh σ partials. Gossipsub
-// dedups identical bytes naturally; receivers' Instance dedups by content.
-func (s *Scheduler) BuildAndBroadcastOnion(ctx context.Context, slot phase0.Slot) (*obftcore.Onion, error) {
-	o, err := s.controller.BuildOwnOnion(slot)
+// Per spec §Phase 2, called exactly once per slot at T_commit. The Commit
+// bundles the operator's σ-side onion (one entry per σ-state layer) and
+// NR-side partials (one per NR-state layer in [0, K-1)).
+func (s *Scheduler) BuildAndBroadcastCommit(ctx context.Context, slot phase0.Slot) (*obftcore.Commit, error) {
+	c, err := s.controller.BuildOwnCommit(slot)
 	if err != nil {
-		return nil, fmt.Errorf("obft scheduler: build own onion: %w", err)
+		return nil, fmt.Errorf("obft scheduler: build own commit: %w", err)
 	}
-	data, err := wire.WrapOnion(o)
+	data, err := wire.WrapCommit(c)
 	if err != nil {
-		return nil, fmt.Errorf("obft scheduler: wrap onion: %w", err)
+		return nil, fmt.Errorf("obft scheduler: wrap commit: %w", err)
 	}
 	if err := s.hooks.Broadcast(ctx, slot, data); err != nil {
-		return nil, fmt.Errorf("obft scheduler: broadcast onion: %w", err)
+		return nil, fmt.Errorf("obft scheduler: broadcast commit: %w", err)
 	}
-	return o, nil
-}
-
-// PhaseTwoEndAndBroadcastNR applies the end-of-Phase-2 force-commit and
-// broadcasts the local operator's KindNR. Call exactly once at TCommit +
-// Delta2.
-//
-// Returns the NR for inspection; broadcasts it as a side effect.
-//
-// Also re-broadcasts an Onion if PhaseTwoEnd transitioned any Defer-partition
-// layer to σ (cached partial entered the Onion via i.ownPartials).
-func (s *Scheduler) PhaseTwoEndAndBroadcastNR(ctx context.Context, slot phase0.Slot) (*obftcore.NR, error) {
-	if err := s.controller.PhaseTwoEnd(slot); err != nil {
-		return nil, fmt.Errorf("obft scheduler: phase-2 end: %w", err)
-	}
-	// Re-emit Onion in case PhaseTwoEnd transitioned any Defer-partition
-	// layers to σ. Late σ-emits enter the Phase-3 σ-pool even if peers'
-	// NR/Defer decision has already locked.
-	if _, err := s.BuildAndBroadcastOnion(ctx, slot); err != nil {
-		return nil, fmt.Errorf("obft scheduler: post-PhaseTwoEnd onion re-emit: %w", err)
-	}
-	nr, err := s.controller.BuildOwnNR(slot)
-	if err != nil {
-		return nil, fmt.Errorf("obft scheduler: build own NR: %w", err)
-	}
-	data, err := wire.WrapNR(nr)
-	if err != nil {
-		return nil, fmt.Errorf("obft scheduler: wrap NR: %w", err)
-	}
-	if err := s.hooks.Broadcast(ctx, slot, data); err != nil {
-		return nil, fmt.Errorf("obft scheduler: broadcast NR: %w", err)
-	}
-	return nr, nil
+	return c, nil
 }
 
 // ResolveAndSubmit runs Phase-3 Resolve. On success: hands the Output to

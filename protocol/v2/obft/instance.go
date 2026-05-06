@@ -8,10 +8,11 @@ import (
 	"time"
 )
 
-// CommitState is one operator's per-layer commitment state in the four-state
-// model from spec §Phase 1 / Operator commitments. The σ / NR / NV / Defer
-// states are local-per-layer; the discriminator that lives on-the-wire is
-// "σ-side" (Onion entry at this layer) vs "NR-side" (NR partial in KindNR).
+// CommitState is one operator's per-layer commitment state in the three-state
+// model from spec §Phase 1 / Operator commitments. The σ / NR / NV states are
+// local-per-layer; on the wire they materialize in a single KindCommit message
+// per (operator, slot) emitted at T_commit, carrying σ partials for σ-state
+// layers and NR partials for NR-state layers.
 //
 // NV (host-not-valid) is operationally identical to NR (silent-leader) —
 // both materialize as an IBE partial on the layer's nr_tag. Local state
@@ -19,33 +20,25 @@ import (
 type CommitState int
 
 const (
-	// CommitUndecided — initial state; the operator has not yet observed
-	// enough to decide σ or NR at this layer.
+	// CommitUndecided — initial state, before T_commit. The operator has
+	// not yet committed at this layer.
 	CommitUndecided CommitState = iota
 
-	// CommitSigma — σ-emitted (locked) at this layer. EKM enforces single-
-	// σ-V per (slot, layer) and σ-XOR-NR per layer; once locked, the
-	// operator may not emit NR/NV nor σ on a different V.
+	// CommitSigma — σ-emitted at T_commit on a single retained V whose host
+	// validity check passed. EKM enforces single-σ-V per (slot, layer) and
+	// σ-XOR-NR per layer; once committed, the operator may not emit NR/NV
+	// nor σ on a different V.
 	CommitSigma
 
-	// CommitNRSilent — NR (silent-leader). No peer σ-emit was observed
-	// cluster-wide by end-of-Phase-2 NR-decision time, so the leader is
-	// presumed silent.
+	// CommitNRSilent — NR at T_commit. Either no V was retained at this
+	// layer (silent-leader rule), or ≥ 2 distinct V's were retained
+	// (equivocation rule, no winner-picking under f=1 byzantine).
 	CommitNRSilent
 
-	// CommitNV — NR (non-validity). Host application returned `not-valid`
-	// for this layer's V; operationally identical to NR-silent on the wire.
+	// CommitNV — NR at T_commit, host application returned `not-valid` for
+	// the single retained V. Operationally identical to NR-silent on the
+	// wire (both emit an IBE partial on nr_tag_k).
 	CommitNV
-
-	// CommitDeferPartition — V not yet received locally, but peer σ-emit
-	// observed cluster-wide. Recoverable within the slot if late re-flood
-	// delivers V before end of Phase 2.
-	CommitDeferPartition
-
-	// CommitDeferEquivocation — ≥ 2 distinct Phase-1 bundles retained at
-	// this layer. Unrecoverable within the slot — re-flood only delivers
-	// more bundles, not fewer. Force-NRs at end of Phase 2.
-	CommitDeferEquivocation
 )
 
 func (s CommitState) String() string {
@@ -58,17 +51,13 @@ func (s CommitState) String() string {
 		return "NR-silent"
 	case CommitNV:
 		return "NV"
-	case CommitDeferPartition:
-		return "Defer-partition"
-	case CommitDeferEquivocation:
-		return "Defer-equivocation"
 	default:
 		return fmt.Sprintf("unknown(%d)", int(s))
 	}
 }
 
 // Instance is the per-slot OBFT state machine. It accumulates observations
-// across Phase 1 (Phase-1 bundles), Phase 2 (peer Onions + NRs), and Phase 3
+// across Phase 1 (Phase-1 bundles), Phase 2 (peer Commits), and Phase 3
 // (Resolve walk → final certificate gossip).
 //
 // Lifecycle (driven by the SSV adapter / Scheduler):
@@ -78,20 +67,16 @@ func (s CommitState) String() string {
 //       a. If local op is the leader: BuildPhase1Bundle(layer, V) → bundle
 //          for broadcast.
 //       b. ObservePhase1Bundle(b, observedOffset) for each bundle received
-//          from peers (or from the local op's own broadcast).
+//          from peers (or from the local op's own broadcast). Bundles
+//          first-observed past T_commit at this operator are not retained.
 //       c. ApplyHostValidity(layer, V, valid) once the host returns its
 //          per-V validity verdict.
-//  3. Phase 2 — during [TCommit, TCommit + Delta2]:
-//       a. BuildOwnOnion(now) — emit σ partials for σ-eligible layers.
-//          May be called multiple times as σ-eligibility transitions late
-//          (Defer-partition resolves on late re-flood).
-//       b. ObserveOnion(o, observedOffset) for peers' Onions.
-//       c. ObserveNR(nr, observedOffset) for peers' NRs (typically arrive
-//          near end of Phase 2 from peers that committed NR-side).
-//  4. Phase 2 end — at TCommit + Delta2:
-//       a. PhaseTwoEnd(now) — apply force-commit rule to all Defer layers.
-//       b. BuildOwnNR(now) — emit NR partials for layers committed NR-side.
-//  5. Phase 3 — at [TCommit + Delta2, TRoundEnd]:
+//  3. Phase 2 — at TCommit (single emission):
+//       a. BuildOwnCommit() — emit a single KindCommit message carrying σ
+//          partials for σ-state layers and NR partials for NR-state layers,
+//          based on what was observed by T_commit.
+//       b. ObserveCommit(c) for peers' KindCommit messages.
+//  4. Phase 3 — at [TCommit + Delta2, TRoundEnd]:
 //       a. Resolve(now) → Output (success) or ErrNoQuorum.
 //       b. On success: BuildCertificate(out) → broadcast.
 //       c. ObserveCertificate(c) for peers' certificates as a fallback
@@ -119,14 +104,22 @@ type Instance struct {
 	// One entry per (layer, V); may be absent if host hasn't been asked.
 	hostVerdict map[int]map[string]bool
 
-	// peerOnions[layer][operator_id] = list of distinct Onion entries seen
-	// from this operator at this layer. The first auth-valid entry is
-	// canonical for σ-pool / Defer-rule purposes; a second distinct entry
-	// is cross-onion equivocation evidence (Rule 3).
+	// peerOnions[layer][operator_id] = the σ-side onion entry seen from
+	// this operator at this layer (extracted from their KindCommit). A
+	// second distinct entry from the same (operator, layer) is cross-onion
+	// equivocation evidence (Rule 3); since each operator emits exactly one
+	// KindCommit per slot, the only way to observe two distinct entries is
+	// a byzantine operator broadcasting two KindCommit messages.
 	peerOnions map[int]map[OperatorID][]EncryptedLayer
 
-	// peerNR[layer][operator_id] = the operator's NR partial for this layer.
+	// peerNR[layer][operator_id] = the operator's NR partial for this layer
+	// (extracted from their KindCommit's NRPartials).
 	peerNR map[int]map[OperatorID]Signature
+
+	// peerCommitted[operator_id] is true once we've seen a KindCommit from
+	// this operator. A second distinct KindCommit from the same operator at
+	// the same slot is cross-onion equivocation evidence.
+	peerCommitted map[OperatorID]bool
 
 	// Local per-layer state.
 	localState   []CommitState
@@ -134,17 +127,13 @@ type Instance struct {
 	sigmaLockedV []Value // when sigmaLocked[k], sigmaLockedV[k] is the V signed
 	nrLocked     []bool
 
-	// Own σ partials cached per layer for repeat emission via BuildOwnOnion
-	// (multi-emit semantics — KindOnion may be emitted multiple times as
-	// σ-eligibility transitions late).
+	// Own σ partials cached per layer (one per layer where this operator
+	// is σ-state at T_commit). Single emission per slot in BuildOwnCommit.
 	ownPartials map[int]Signature
 
-	// True after PhaseTwoEnd. Past this point, σ-emit on a previously
-	// Undecided / Defer-partition layer is still permitted (the late σ-emit
-	// at end-of-Phase-2 contributes to Phase 3 σ-pool reconstruction even
-	// if it doesn't propagate to peers in time for their NR-decision), but
-	// the operator's local state is force-committed by this call.
-	phaseTwoEnded bool
+	// True after BuildOwnCommit has emitted the operator's KindCommit
+	// message. Used to enforce single-emission semantics.
+	committed bool
 
 	// receivedCertificate, if set, is a peer's final certificate that the
 	// runner may use as an alternative submission path.
@@ -208,6 +197,7 @@ func NewInstance(
 		hostVerdict:     make(map[int]map[string]bool, K),
 		peerOnions:      make(map[int]map[OperatorID][]EncryptedLayer, K),
 		peerNR:          make(map[int]map[OperatorID]Signature, K),
+		peerCommitted:   make(map[OperatorID]bool),
 		localState:      make([]CommitState, K),
 		sigmaLocked:     make([]bool, K),
 		sigmaLockedV:    make([]Value, K),
@@ -324,8 +314,7 @@ func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys
 
 // transitionToSigma applies the σ-emit EKM lock for `layer` on `value`.
 // Returns ErrSigmaLocked if already locked on a different V; ErrNRLocked if
-// the operator already NR-committed at this layer; ErrEquivocationLocked
-// if Defer-due-to-equivocation.
+// the operator already NR-committed at this layer.
 //
 // On success, sigmaLocked[layer] = true, sigmaLockedV[layer] = value, and
 // localState[layer] = CommitSigma.
@@ -339,9 +328,6 @@ func (i *Instance) transitionToSigma(layer int, value Value) error {
 			return ErrSigmaLocked
 		}
 		return nil
-	}
-	if i.localState[layer] == CommitDeferEquivocation {
-		return ErrEquivocationLocked
 	}
 	i.sigmaLocked[layer] = true
 	i.sigmaLockedV[layer] = append(Value{}, value...)
@@ -376,7 +362,11 @@ func (i *Instance) recordEvidence(e Evidence) {
 }
 
 // observedTimeOK reports whether `observedOffset` is within the receiver
-// acceptance window for Phase-1 bundles ([slot_start, T_accept_max]).
+// acceptance window for Phase-1 bundles ([slot_start, T_commit]).
+//
+// Per spec, bundles first-observed past T_commit at any honest receiver are
+// not counted by that receiver toward σ-quorum at this layer; the cluster
+// relies on K-layer fall-through for partition recovery (no Defer state).
 func (i *Instance) observedTimeOK(observedOffset time.Duration) bool {
-	return observedOffset >= 0 && observedOffset <= i.cfg.AcceptMaxOffset()
+	return observedOffset >= 0 && observedOffset <= i.cfg.PhaseTwoStartOffset()
 }

@@ -23,13 +23,10 @@ import (
 //	StartNewInstance(slot)               → RunningInstance
 //	  ObservePhase1Bundle(b, observedAt) // for own bundle and peers'
 //	  ApplyHostValidity(layer, V, valid) // host's verdict on V
-//	  ProcessOnion(o)
-//	  ProcessNR(nr)
+//	  ProcessCommit(c)                   // peer's KindCommit at T_commit
 //	  ProcessCertificate(c)              // optional alt-submission path
 //	  BuildPhase1Bundle(slot, layer, V)  // when local op is the layer's leader
-//	  BuildOwnOnion(slot)                // multi-emit during Phase 2
-//	  PhaseTwoEnd(slot)                  // at TCommit + Delta2
-//	  BuildOwnNR(slot)
+//	  BuildOwnCommit(slot)               // single emission at T_commit
 //	  Resolve(slot)                      → *Output, error
 //	  BuildCertificate(slot, out)        → *Certificate
 //	EndInstance(slot)
@@ -226,32 +223,18 @@ func (c *Controller) ApplyHostValidity(slot phase0.Slot, layer int, value []byte
 	return r.instance.ApplyHostValidity(layer, obftcore.Value(value), valid)
 }
 
-// ProcessOnion routes a peer's Onion to the right instance.
-func (c *Controller) ProcessOnion(o *obftcore.Onion) error {
-	if o == nil {
-		return errors.New("obft adapter: nil onion")
+// ProcessCommit routes a peer's Commit to the right instance.
+func (c *Controller) ProcessCommit(cm *obftcore.Commit) error {
+	if cm == nil {
+		return errors.New("obft adapter: nil commit")
 	}
-	r, err := c.lookup(phase0.Slot(o.Height))
+	r, err := c.lookup(phase0.Slot(cm.Height))
 	if err != nil {
 		return err
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
-	return r.instance.ObserveOnion(o)
-}
-
-// ProcessNR routes a peer's NR to the right instance.
-func (c *Controller) ProcessNR(nr *obftcore.NR) error {
-	if nr == nil {
-		return errors.New("obft adapter: nil NR")
-	}
-	r, err := c.lookup(phase0.Slot(nr.Height))
-	if err != nil {
-		return err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	return r.instance.ObserveNR(nr)
+	return r.instance.ObserveCommit(cm)
 }
 
 // ProcessCertificate routes a peer's Certificate to the right instance.
@@ -268,40 +251,16 @@ func (c *Controller) ProcessCertificate(cert *obftcore.Certificate) error {
 	return r.instance.ObserveCertificate(cert)
 }
 
-// BuildOwnOnion builds the local operator's Onion in its current state.
-// May be called multiple times during Phase 2 as σ-eligibility transitions.
-func (c *Controller) BuildOwnOnion(slot phase0.Slot) (*obftcore.Onion, error) {
+// BuildOwnCommit builds the local operator's KindCommit at T_commit. Single
+// emission per slot per spec §Phase 2.
+func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) {
 	r, err := c.lookup(slot)
 	if err != nil {
 		return nil, err
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
-	return r.instance.BuildOwnOnion()
-}
-
-// PhaseTwoEnd applies the end-of-Phase-2 force-commit rule. Call exactly once
-// at TCommit + Delta2.
-func (c *Controller) PhaseTwoEnd(slot phase0.Slot) error {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	return r.instance.PhaseTwoEnd()
-}
-
-// BuildOwnNR builds the local operator's KindNR (NR-side commitments at
-// end of Phase 2). Caller must invoke PhaseTwoEnd first.
-func (c *Controller) BuildOwnNR(slot phase0.Slot) (*obftcore.NR, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	return r.instance.BuildOwnNR()
+	return r.instance.BuildOwnCommit()
 }
 
 // Resolve runs the Phase-3 reconstruction walk and returns the decided

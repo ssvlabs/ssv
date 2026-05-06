@@ -19,11 +19,8 @@ import (
 //   - Phase1Bundle: ≤ 1 per (slot, layer) — only one Phase-1 bundle per
 //     leader per layer (the leader's σ_V is locked once per (slot, layer)
 //     by EKM enforcement).
-//   - Onion:        ≤ K per slot — KindOnion may be emitted multiple times
-//     per (slot, op) as σ-eligibility transitions late; cap at K (one per
-//     potential layer transition).
-//   - NR:           ≤ 1 per slot — KindNR is emitted at most once per
-//     (slot, op) at end-of-Phase-2 force-commit.
+//   - Commit:       ≤ 1 per slot — KindCommit is emitted exactly once per
+//     (slot, op) at T_commit per spec §Phase 2.
 //   - Certificate:  ≤ 1 per slot — final-certificate gossip is one-shot.
 //
 // Forget(slot) releases per-slot tracking memory; the runner calls it when
@@ -33,15 +30,13 @@ type RateLimiter struct {
 
 	// bundleSeen[(slot, op, layer)] tracks Phase-1 bundle observations.
 	bundleSeen map[layerOpKey]struct{}
-	// onionCount[(slot, op)] counts cumulative KindOnion observations.
-	onionCount map[onionKey]int
-	// nrSeen[(slot, op)] tracks KindNR observations.
-	nrSeen map[onionKey]struct{}
+	// commitSeen[(slot, op)] tracks KindCommit observations.
+	commitSeen map[opKey]struct{}
 	// certSeen[(slot, op)] tracks KindCertificate observations.
-	certSeen map[onionKey]struct{}
+	certSeen map[opKey]struct{}
 }
 
-type onionKey struct {
+type opKey struct {
 	slot phase0.Slot
 	op   spectypes.OperatorID
 }
@@ -56,9 +51,8 @@ type layerOpKey struct {
 func NewRateLimiter() *RateLimiter {
 	return &RateLimiter{
 		bundleSeen: make(map[layerOpKey]struct{}),
-		onionCount: make(map[onionKey]int),
-		nrSeen:     make(map[onionKey]struct{}),
-		certSeen:   make(map[onionKey]struct{}),
+		commitSeen: make(map[opKey]struct{}),
+		certSeen:   make(map[opKey]struct{}),
 	}
 }
 
@@ -76,30 +70,16 @@ func (r *RateLimiter) AllowPhase1Bundle(slot phase0.Slot, op spectypes.OperatorI
 	return nil
 }
 
-// AllowOnion records one KindOnion observation for (slot, op) and returns
-// nil. Returns an error if the cumulative count would exceed K.
-func (r *RateLimiter) AllowOnion(slot phase0.Slot, op spectypes.OperatorID, K int) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	k := onionKey{slot, op}
-	if r.onionCount[k] >= K {
-		return fmt.Errorf("obft adapter: rate limit: operator %d emitted %d KindOnion messages for slot %d (max %d)",
-			op, r.onionCount[k], slot, K)
-	}
-	r.onionCount[k]++
-	return nil
-}
-
-// AllowNR records the operator's KindNR for `slot` and returns nil.
+// AllowCommit records the operator's KindCommit for `slot` and returns nil.
 // Returns an error on duplicate.
-func (r *RateLimiter) AllowNR(slot phase0.Slot, op spectypes.OperatorID) error {
+func (r *RateLimiter) AllowCommit(slot phase0.Slot, op spectypes.OperatorID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	k := onionKey{slot, op}
-	if _, exists := r.nrSeen[k]; exists {
-		return fmt.Errorf("obft adapter: rate limit: operator %d already submitted a KindNR for slot %d", op, slot)
+	k := opKey{slot, op}
+	if _, exists := r.commitSeen[k]; exists {
+		return fmt.Errorf("obft adapter: rate limit: operator %d already submitted a KindCommit for slot %d", op, slot)
 	}
-	r.nrSeen[k] = struct{}{}
+	r.commitSeen[k] = struct{}{}
 	return nil
 }
 
@@ -108,7 +88,7 @@ func (r *RateLimiter) AllowNR(slot phase0.Slot, op spectypes.OperatorID) error {
 func (r *RateLimiter) AllowCertificate(slot phase0.Slot, op spectypes.OperatorID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	k := onionKey{slot, op}
+	k := opKey{slot, op}
 	if _, exists := r.certSeen[k]; exists {
 		return fmt.Errorf("obft adapter: rate limit: operator %d already submitted a KindCertificate for slot %d", op, slot)
 	}
@@ -125,14 +105,9 @@ func (r *RateLimiter) Forget(slot phase0.Slot) {
 			delete(r.bundleSeen, k)
 		}
 	}
-	for k := range r.onionCount {
+	for k := range r.commitSeen {
 		if k.slot == slot {
-			delete(r.onionCount, k)
-		}
-	}
-	for k := range r.nrSeen {
-		if k.slot == slot {
-			delete(r.nrSeen, k)
+			delete(r.commitSeen, k)
 		}
 	}
 	for k := range r.certSeen {

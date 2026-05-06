@@ -15,7 +15,7 @@ import (
 // `observedOffset` is the bundle's first-observation time relative to slot
 // start (used by Phase-1 bundle acceptance window check). Pass a zero
 // duration for kinds where the receiver acceptance window doesn't apply
-// (Onion / NR / Certificate); only Phase1Bundle uses it.
+// (Commit / Certificate); only Phase1Bundle uses it.
 //
 // Returns an error if the envelope's Kind is unknown or if the underlying
 // Process call fails (e.g. routing to a slot with no active instance).
@@ -29,10 +29,8 @@ func DispatchEnvelope(ctx context.Context, sched *Scheduler, env *wire.Envelope,
 	switch env.Kind {
 	case wire.KindPhase1Bundle:
 		return sched.HandlePeerPhase1Bundle(ctx, env.Phase1Bundle, observedOffset)
-	case wire.KindOnion:
-		return sched.Controller().ProcessOnion(env.Onion)
-	case wire.KindNR:
-		return sched.Controller().ProcessNR(env.NR)
+	case wire.KindCommit:
+		return sched.Controller().ProcessCommit(env.Commit)
 	case wire.KindCertificate:
 		return sched.Controller().ProcessCertificate(env.Certificate)
 	default:

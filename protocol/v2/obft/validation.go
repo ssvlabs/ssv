@@ -50,64 +50,47 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 	return nil
 }
 
-// ValidateOnion checks structural invariants for an incoming Onion (KindOnion
-// payload).
+// ValidateCommit checks structural invariants for an incoming Commit
+// (KindCommit payload).
 //
-// Per spec §Phase 2, Onions may be emitted multiple times per (slot, operator)
-// as σ-eligibility transitions late; this function validates a single Onion
-// instance, leaving cumulative-tracking semantics to the caller / Instance.
-func ValidateOnion(o *Onion, cfg *Config) error {
-	if o == nil {
-		return errors.New("obft: nil onion")
+// Per spec §Phase 2, KindCommit is emitted exactly once per (slot, operator)
+// at T_commit, bundling the operator's σ-side onion (one entry per layer)
+// and NR-side partials (one entry per NR-state layer in [0, K-1)).
+//
+// Per-layer commitment is exclusive within a Commit: a layer is either σ-side
+// (entry in Layers[k] populated) OR NR-side (entry in NRPartials), never both.
+// Cross-checking σ + NR for the same layer is part of cross-signing detection
+// (Rule 1), enforced by Instance.ObserveCommit.
+func ValidateCommit(c *Commit, cfg *Config) error {
+	if c == nil {
+		return errors.New("obft: nil commit")
 	}
 	if cfg == nil {
 		return errors.New("obft: nil config")
 	}
-	if o.Height != cfg.Height {
-		return fmt.Errorf("obft: onion height %d != instance height %d", o.Height, cfg.Height)
+	if c.Height != cfg.Height {
+		return fmt.Errorf("obft: commit height %d != instance height %d", c.Height, cfg.Height)
 	}
-	if len(o.Layers) != cfg.K() {
-		return fmt.Errorf("obft: onion has %d layers, expected K=%d", len(o.Layers), cfg.K())
+	if len(c.Layers) != cfg.K() {
+		return fmt.Errorf("obft: commit has %d σ layers, expected K=%d", len(c.Layers), cfg.K())
 	}
-	if !operatorInCluster(o.OperatorID, cfg) {
-		return fmt.Errorf("obft: onion sender %d not in cluster", o.OperatorID)
+	if !operatorInCluster(c.OperatorID, cfg) {
+		return fmt.Errorf("obft: commit sender %d not in cluster", c.OperatorID)
 	}
 
-	for k, el := range o.Layers {
+	for k, el := range c.Layers {
 		hasValue := len(el.Value) > 0
 		hasCipher := len(el.Ciphertext) > 0
-		// Each layer is either fully empty (no contribution at this layer)
-		// or fully populated. Half-populated entries are malformed.
+		// Each σ layer is either fully empty (no σ contribution) or fully
+		// populated. Half-populated entries are malformed.
 		if hasValue != hasCipher {
-			return fmt.Errorf("obft: onion layer %d half-populated (Value=%v, Ciphertext=%v)",
+			return fmt.Errorf("obft: commit σ layer %d half-populated (Value=%v, Ciphertext=%v)",
 				k, hasValue, hasCipher)
 		}
 	}
-	return nil
-}
 
-// ValidateNR checks structural invariants for an incoming NR (KindNR
-// payload).
-//
-// Per spec §Phase 2, KindNR is emitted at most once per (slot, operator) at
-// end-of-Phase-2 force-commit, carrying NR partials for the layers the
-// operator committed NR-side at.
-func ValidateNR(nr *NR, cfg *Config) error {
-	if nr == nil {
-		return errors.New("obft: nil NR message")
-	}
-	if cfg == nil {
-		return errors.New("obft: nil config")
-	}
-	if nr.Height != cfg.Height {
-		return fmt.Errorf("obft: NR message height %d != instance height %d",
-			nr.Height, cfg.Height)
-	}
-	if !operatorInCluster(nr.OperatorID, cfg) {
-		return fmt.Errorf("obft: NR sender %d not in cluster", nr.OperatorID)
-	}
-	seenLayers := make(map[int]bool, len(nr.Partials))
-	for _, p := range nr.Partials {
+	seenLayers := make(map[int]bool, len(c.NRPartials))
+	for _, p := range c.NRPartials {
 		// NR exists only for layers that have a successor (k in [0, K-1)).
 		// The deepest layer (K-1) has no NR tag — there is no further
 		// layer to advance to.
@@ -116,7 +99,7 @@ func ValidateNR(nr *NR, cfg *Config) error {
 				p.Layer, cfg.K()-1)
 		}
 		if seenLayers[p.Layer] {
-			return fmt.Errorf("obft: NR has duplicate layer %d", p.Layer)
+			return fmt.Errorf("obft: commit has duplicate NR layer %d", p.Layer)
 		}
 		seenLayers[p.Layer] = true
 		if len(p.PartialSig) == 0 {

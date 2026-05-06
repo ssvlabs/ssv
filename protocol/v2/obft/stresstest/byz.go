@@ -22,7 +22,7 @@ import (
 //   - Selective-delivery / equivocation patterns return one or two plans
 //     with explicit Recipients lists.
 //   - σ-side wire forgery (h_V=1's fake plaintext σ at L_0) goes through
-//     OverrideOnion at Phase-2 emission time.
+//     OverrideCommit at Phase-2 emission time.
 type ByzPattern interface {
 	// LeaderBroadcastPlan decides what bundles `leader` will broadcast at
 	// the Phase-1 fetch event. Returns empty for silent leaders. Returns
@@ -30,13 +30,10 @@ type ByzPattern interface {
 	// honest leader would have fetched; byz patterns override with V'/V''.
 	LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []BroadcastPlan
 
-	// AllowOnionBroadcast is false for operators that suppress their
+	// AllowCommitBroadcast is false for operators that suppress their
 	// Phase-2 Onion (e.g., σ-refusal byz).
-	AllowOnionBroadcast(op obft.OperatorID) bool
+	AllowCommitBroadcast(op obft.OperatorID) bool
 
-	// AllowNRBroadcast is false for operators that suppress their Phase-2
-	// NR (e.g., σ-refusal byz that also withholds NR).
-	AllowNRBroadcast(op obft.OperatorID) bool
 
 	// AllowCertificateBroadcast is false for operators that suppress
 	// their final-certificate gossip.
@@ -50,13 +47,11 @@ type ByzPattern interface {
 	// network model's; -1 means "no override; use the network model".
 	OverrideDelay(rng *mrand.Rand, from, to obft.OperatorID, kind MsgKind) time.Duration
 
-	// OverrideOnion lets a byz-emitter swap their Phase-2 Onion contents
+	// OverrideCommit lets a byz-emitter swap their Phase-2 Onion contents
 	// (e.g., insert a fake plaintext σ at L_0). Returns the Onion to
 	// actually broadcast.
-	OverrideOnion(s *sim, op obft.OperatorID, o *obft.Onion) *obft.Onion
+	OverrideCommit(s *sim, op obft.OperatorID, o *obft.Commit) *obft.Commit
 
-	// OverrideNR lets a byz-emitter swap their Phase-2 NR contents.
-	OverrideNR(s *sim, op obft.OperatorID, nr *obft.NR) *obft.NR
 }
 
 // BroadcastPlan is a leader's per-broadcast decision: which V to send,
@@ -73,13 +68,11 @@ type ByzNone struct{}
 func (ByzNone) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []BroadcastPlan {
 	return []BroadcastPlan{{V: honestV}}
 }
-func (ByzNone) AllowOnionBroadcast(obft.OperatorID) bool                                      { return true }
-func (ByzNone) AllowNRBroadcast(obft.OperatorID) bool                                         { return true }
+func (ByzNone) AllowCommitBroadcast(obft.OperatorID) bool                                      { return true }
 func (ByzNone) AllowCertificateBroadcast(obft.OperatorID) bool                                { return true }
 func (ByzNone) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                            { return true }
 func (ByzNone) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration    { return -1 }
-func (ByzNone) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion            { return o }
-func (ByzNone) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                    { return nr }
+func (ByzNone) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit            { return o }
 
 // ---- ByzSilentLeader (byz is leader at one layer, broadcasts nothing) ---
 
@@ -94,13 +87,11 @@ func (b ByzSilentLeader) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, lay
 	}
 	return []BroadcastPlan{{V: honestV}}
 }
-func (ByzSilentLeader) AllowOnionBroadcast(obft.OperatorID) bool                                   { return true }
-func (ByzSilentLeader) AllowNRBroadcast(obft.OperatorID) bool                                      { return true }
+func (ByzSilentLeader) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
 func (ByzSilentLeader) AllowCertificateBroadcast(obft.OperatorID) bool                             { return true }
 func (ByzSilentLeader) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                         { return true }
 func (ByzSilentLeader) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
-func (ByzSilentLeader) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion         { return o }
-func (ByzSilentLeader) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                 { return nr }
+func (ByzSilentLeader) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
 // ---- ByzMultiSilent (every leader except the deepest layer is silent) ---
 
@@ -114,13 +105,11 @@ func (b ByzMultiSilent) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, layer int
 	}
 	return []BroadcastPlan{{V: honestV}}
 }
-func (ByzMultiSilent) AllowOnionBroadcast(obft.OperatorID) bool                                   { return true }
-func (ByzMultiSilent) AllowNRBroadcast(obft.OperatorID) bool                                      { return true }
+func (ByzMultiSilent) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
 func (ByzMultiSilent) AllowCertificateBroadcast(obft.OperatorID) bool                             { return true }
 func (ByzMultiSilent) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                         { return true }
 func (ByzMultiSilent) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
-func (ByzMultiSilent) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion         { return o }
-func (ByzMultiSilent) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                 { return nr }
+func (ByzMultiSilent) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
 // ---- ByzEquivocSigmaLockedSplit (1-1-Defer at L_0) ---------------------
 
@@ -144,13 +133,11 @@ func (b ByzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.Oper
 		{V: vB, Recipients: []obft.OperatorID{b.Byz, b.RecipientB}},
 	}
 }
-func (ByzEquivocSigmaLockedSplit) AllowOnionBroadcast(obft.OperatorID) bool                                   { return true }
-func (ByzEquivocSigmaLockedSplit) AllowNRBroadcast(obft.OperatorID) bool                                      { return true }
+func (ByzEquivocSigmaLockedSplit) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
 func (ByzEquivocSigmaLockedSplit) AllowCertificateBroadcast(obft.OperatorID) bool                             { return true }
 func (ByzEquivocSigmaLockedSplit) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                         { return true }
 func (ByzEquivocSigmaLockedSplit) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
-func (ByzEquivocSigmaLockedSplit) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion         { return o }
-func (ByzEquivocSigmaLockedSplit) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                 { return nr }
+func (ByzEquivocSigmaLockedSplit) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
 // ---- ByzEquivocAllDefer (delivers both V's to all 3 honest) -------------
 
@@ -169,13 +156,11 @@ func (b ByzEquivocAllDefer) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, 
 		{V: append(obft.Value{}, "byz-V-B"...), Recipients: all},
 	}
 }
-func (ByzEquivocAllDefer) AllowOnionBroadcast(obft.OperatorID) bool                                   { return true }
-func (ByzEquivocAllDefer) AllowNRBroadcast(obft.OperatorID) bool                                      { return true }
+func (ByzEquivocAllDefer) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
 func (ByzEquivocAllDefer) AllowCertificateBroadcast(obft.OperatorID) bool                             { return true }
 func (ByzEquivocAllDefer) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                         { return true }
 func (ByzEquivocAllDefer) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
-func (ByzEquivocAllDefer) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion         { return o }
-func (ByzEquivocAllDefer) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                 { return nr }
+func (ByzEquivocAllDefer) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
 // ---- ByzEquivoc111 (1-1-1 split: each honest gets a unique V) -----------
 
@@ -202,13 +187,11 @@ func (b ByzEquivoc111) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer
 	}
 	return plans
 }
-func (ByzEquivoc111) AllowOnionBroadcast(obft.OperatorID) bool                                   { return true }
-func (ByzEquivoc111) AllowNRBroadcast(obft.OperatorID) bool                                      { return true }
+func (ByzEquivoc111) AllowCommitBroadcast(obft.OperatorID) bool                                   { return true }
 func (ByzEquivoc111) AllowCertificateBroadcast(obft.OperatorID) bool                             { return true }
 func (ByzEquivoc111) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                         { return true }
 func (ByzEquivoc111) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration { return -1 }
-func (ByzEquivoc111) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion         { return o }
-func (ByzEquivoc111) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                 { return nr }
+func (ByzEquivoc111) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit         { return o }
 
 // ---- ByzFakeEncryptedPresence (Rule 4 at k > 0) -------------------------
 
@@ -236,25 +219,25 @@ func (b ByzFakeEncryptedPresence) LeaderBroadcastPlan(_ *sim, leader obft.Operat
 	}
 	return []BroadcastPlan{{V: honestV}}
 }
-func (b ByzFakeEncryptedPresence) AllowOnionBroadcast(obft.OperatorID) bool                                { return true }
-func (b ByzFakeEncryptedPresence) AllowNRBroadcast(obft.OperatorID) bool                                   { return true }
+func (b ByzFakeEncryptedPresence) AllowCommitBroadcast(obft.OperatorID) bool                                { return true }
 func (b ByzFakeEncryptedPresence) AllowCertificateBroadcast(obft.OperatorID) bool                          { return true }
 func (b ByzFakeEncryptedPresence) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                      { return true }
 func (b ByzFakeEncryptedPresence) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration {
 	return -1
 }
-func (b ByzFakeEncryptedPresence) OverrideOnion(_ *sim, op obft.OperatorID, o *obft.Onion) *obft.Onion {
+func (b ByzFakeEncryptedPresence) OverrideCommit(_ *sim, op obft.OperatorID, o *obft.Commit) *obft.Commit {
 	if op != b.Byz {
 		return o
 	}
 	if b.GarbageLayer < 0 || b.GarbageLayer >= len(o.Layers) {
 		return o
 	}
-	// Deep-copy the Onion so we don't mutate state retained elsewhere.
-	cp := &obft.Onion{
+	// Deep-copy the Commit so we don't mutate state retained elsewhere.
+	cp := &obft.Commit{
 		OperatorID: o.OperatorID,
 		Height:     o.Height,
 		Layers:     make([]obft.EncryptedLayer, len(o.Layers)),
+		NRPartials: append([]obft.NRPartial{}, o.NRPartials...),
 	}
 	copy(cp.Layers, o.Layers)
 	// Substitute the GarbageLayer entry with bytes that won't match the
@@ -265,7 +248,6 @@ func (b ByzFakeEncryptedPresence) OverrideOnion(_ *sim, op obft.OperatorID, o *o
 	}
 	return cp
 }
-func (b ByzFakeEncryptedPresence) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR { return nr }
 
 // ---- ByzHV1SelectiveDelivery (h_V=1 deadlock) ----------------------------
 
@@ -304,15 +286,13 @@ func (b ByzHV1SelectiveDelivery) LeaderBroadcastPlan(_ *sim, leader obft.Operato
 		{V: honestV, Recipients: []obft.OperatorID{b.Byz, b.Recipient}},
 	}
 }
-func (ByzHV1SelectiveDelivery) AllowOnionBroadcast(obft.OperatorID) bool                                { return true }
-func (ByzHV1SelectiveDelivery) AllowNRBroadcast(obft.OperatorID) bool                                   { return true }
+func (ByzHV1SelectiveDelivery) AllowCommitBroadcast(obft.OperatorID) bool                                { return true }
 func (ByzHV1SelectiveDelivery) AllowCertificateBroadcast(obft.OperatorID) bool                          { return true }
 func (ByzHV1SelectiveDelivery) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                      { return true }
 func (ByzHV1SelectiveDelivery) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration {
 	return -1
 }
-func (ByzHV1SelectiveDelivery) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion { return o }
-func (ByzHV1SelectiveDelivery) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR         { return nr }
+func (ByzHV1SelectiveDelivery) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit { return o }
 
 // ---- ByzSigmaRefusal (byz never σ-emits; never NRs) --------------------
 
@@ -324,10 +304,8 @@ type ByzSigmaRefusal struct{ Byz obft.OperatorID }
 func (b ByzSigmaRefusal) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, _ int, honestV obft.Value) []BroadcastPlan {
 	return []BroadcastPlan{{V: honestV}} // byz happens not to be a leader; if they are, default-honest fetch
 }
-func (b ByzSigmaRefusal) AllowOnionBroadcast(op obft.OperatorID) bool                                   { return op != b.Byz }
-func (b ByzSigmaRefusal) AllowNRBroadcast(op obft.OperatorID) bool                                      { return op != b.Byz }
+func (b ByzSigmaRefusal) AllowCommitBroadcast(op obft.OperatorID) bool                                   { return op != b.Byz }
 func (ByzSigmaRefusal) AllowCertificateBroadcast(obft.OperatorID) bool                                  { return true }
 func (ByzSigmaRefusal) AllowDelivery(_, _ obft.OperatorID, _ MsgKind) bool                              { return true }
 func (ByzSigmaRefusal) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) time.Duration      { return -1 }
-func (ByzSigmaRefusal) OverrideOnion(_ *sim, _ obft.OperatorID, o *obft.Onion) *obft.Onion              { return o }
-func (ByzSigmaRefusal) OverrideNR(_ *sim, _ obft.OperatorID, nr *obft.NR) *obft.NR                      { return nr }
+func (ByzSigmaRefusal) OverrideCommit(_ *sim, _ obft.OperatorID, o *obft.Commit) *obft.Commit              { return o }

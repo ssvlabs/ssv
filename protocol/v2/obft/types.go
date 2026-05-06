@@ -74,15 +74,14 @@ type Config struct {
 	TCommit time.Duration
 
 	// Delta2 is Δ_2 — the Phase 2 window length. Per spec, Delta2 >=
-	// (D + Delta) is the BFT minimum; Delta2 >= 2*(D + Delta) is recommended
-	// (gives within-Phase-2 partition recovery via late re-flood absorption).
+	// (D + Delta) is the propagation budget for KindCommit messages emitted
+	// at T_commit to reach all honest peers before Phase 3.
 	Delta2 time.Duration
 
-	// Delta3 is Δ_3 — the Phase 3 window length. Per spec, Delta3 >=
-	// (D + Delta) + ε_3, where ε_3 covers local reconstruction processing.
-	// Sizing Delta3 as just propagation-independent local work is a bug
-	// because NR partials emitted at end-of-Phase-2 must propagate before
-	// Phase 3 can use them.
+	// Delta3 is Δ_3 — the Phase 3 window length. Per spec, Delta3 covers
+	// local reconstruction processing (BLS aggregation, IBE decryption walk,
+	// certificate construction). KindCommit propagation is already covered
+	// by Delta2.
 	Delta3 time.Duration
 
 	// D is the cluster gossipsub propagation P99/P999 budget.
@@ -125,20 +124,19 @@ func (c *Config) BroadcastMaxOffset() time.Duration {
 	return c.TCommit - 2*(c.D+c.Delta)
 }
 
-// AcceptMaxOffset returns T_accept_max relative to slot_start — the latest
-// first-observation time at which a Phase-1 bundle is accepted. Bundles
-// first-observed after this point are rejected entirely; a downstream σ-emit
-// on such a bundle would not propagate before peers' NR-decision, so
-// accepting is operationally useless.
-//
-// Per spec §Setting: T_accept_max = T_commit + Delta2 - (D + delta).
-func (c *Config) AcceptMaxOffset() time.Duration {
-	return c.TCommit + c.Delta2 - (c.D + c.Delta)
+// PhaseTwoStartOffset returns the start of Phase 2 = T_commit relative to
+// slot_start. Bundles first-observed past this point at any honest receiver
+// are not counted by that receiver toward σ-quorum; the cluster relies on
+// K-layer fall-through for partition recovery (no Defer state, no late
+// σ-emit window).
+func (c *Config) PhaseTwoStartOffset() time.Duration {
+	return c.TCommit
 }
 
-// PhaseTwoEndOffset returns the end of Phase 2 — when Defer-state operators
-// force-commit (σ if Defer-due-to-partition resolved, else NR) and emit their
-// KindNR.
+// PhaseTwoEndOffset returns the end of Phase 2 — when Phase 3 reconstruction
+// begins. Each operator emits exactly one KindCommit at T_commit; the Δ_2
+// window is sized for that message to propagate to all honest peers before
+// Phase 3.
 func (c *Config) PhaseTwoEndOffset() time.Duration {
 	return c.TCommit + c.Delta2
 }
@@ -173,8 +171,8 @@ func (c *Config) Validate() error {
 	if c.Delta2 < c.D+c.Delta {
 		return errors.New("obft: Delta2 must be >= D + Delta (BFT minimum)")
 	}
-	if c.Delta3 < c.D+c.Delta {
-		return errors.New("obft: Delta3 must be >= D + Delta (NR-partial propagation)")
+	if c.Delta3 <= 0 {
+		return errors.New("obft: Delta3 must be positive")
 	}
 	if c.BroadcastMaxOffset() < 0 {
 		return errors.New("obft: TCommit too small for broadcast deadline (need TCommit > 2*(D+Delta))")

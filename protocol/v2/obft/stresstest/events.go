@@ -151,19 +151,6 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 	}
 	valid := s.cfg.Host.Validate(e.to, e.layer, e.bundle.Value)
 	_ = inst.ApplyHostValidity(e.layer, e.bundle.Value, valid)
-
-	// During Phase 2's window, this late-arrived bundle may newly enable
-	// σ-eligibility for `to`. Re-emit their Onion to capture the new
-	// σ-state. (Outside Phase 2 window, no point — we're either still
-	// pre-Phase 2 or post-Phase 2 end.)
-	if s.now >= s.cfgObft.TCommit && s.now < s.cfgObft.PhaseTwoEndOffset() {
-		o, err := inst.BuildOwnOnion()
-		if err == nil && o != nil {
-			s.emitToAll(e.to, KindOnion, func(to obft.OperatorID) event {
-				return &evtOnionArrival{from: e.to, to: to, onion: o}
-			})
-		}
-	}
 	return nil
 }
 
@@ -175,116 +162,36 @@ func (e *evtPhaseTwoStart) describe() string { return "PhaseTwoStart" }
 
 func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 	for _, op := range s.operators {
-		if !s.cfg.Byz.AllowOnionBroadcast(op) {
+		if !s.cfg.Byz.AllowCommitBroadcast(op) {
 			continue
 		}
-		o, err := s.instances[op].BuildOwnOnion()
-		if err != nil || o == nil {
+		c, err := s.instances[op].BuildOwnCommit()
+		if err != nil || c == nil {
 			continue
 		}
-		// Apply byz-pattern overrides on the Onion contents (e.g., faked
-		// plaintext σ at L_0 for h_V=1 selective-delivery scenarios).
-		o = s.cfg.Byz.OverrideOnion(s, op, o)
-		s.emitToAll(op, KindOnion, func(to obft.OperatorID) event {
-			return &evtOnionArrival{from: op, to: to, onion: o}
+		// Apply byz-pattern overrides on the Commit contents (e.g., faked
+		// plaintext σ at L_0 for fake-σ scenarios).
+		c = s.cfg.Byz.OverrideCommit(s, op, c)
+		s.emitToAll(op, KindCommit, func(to obft.OperatorID) event {
+			return &evtCommitArrival{from: op, to: to, commit: c}
 		})
 	}
 	return nil
 }
 
-// ---- evtOnionArrival ---------------------------------------------------
+// ---- evtCommitArrival --------------------------------------------------
 
-type evtOnionArrival struct {
+type evtCommitArrival struct {
 	from, to obft.OperatorID
-	onion    *obft.Onion
+	commit   *obft.Commit
 }
 
-func (e *evtOnionArrival) describe() string {
-	return fmt.Sprintf("OnionArrival[from=%d to=%d]", e.from, e.to)
+func (e *evtCommitArrival) describe() string {
+	return fmt.Sprintf("CommitArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtOnionArrival) handle(s *sim) []scheduledEvent {
-	_ = s.instances[e.to].ObserveOnion(e.onion)
-	return nil
-}
-
-// ---- evtPhaseTwoEnd ----------------------------------------------------
-
-type evtPhaseTwoEnd struct{}
-
-func (e *evtPhaseTwoEnd) describe() string { return "PhaseTwoEnd" }
-
-func (e *evtPhaseTwoEnd) handle(s *sim) []scheduledEvent {
-	var out []scheduledEvent
-	for _, op := range s.operators {
-		inst := s.instances[op]
-		if err := inst.PhaseTwoEnd(); err != nil {
-			continue
-		}
-		// Re-emit Onion in case force-commit transitioned any layer to σ.
-		if s.cfg.Byz.AllowOnionBroadcast(op) {
-			if o, err := inst.BuildOwnOnion(); err == nil && o != nil {
-				o = s.cfg.Byz.OverrideOnion(s, op, o)
-				for _, to := range s.operators {
-					if to == op {
-						continue
-					}
-					if !s.cfg.Byz.AllowDelivery(op, to, KindOnion) {
-						continue
-					}
-					delay := s.cfg.Byz.OverrideDelay(s.rng, op, to, KindOnion)
-					if delay < 0 {
-						delay = s.cfg.Network.Delay(s.rng, op, to, KindOnion)
-					}
-					out = append(out, scheduledEvent{
-						when: s.now + delay,
-						ev:   &evtOnionArrival{from: op, to: to, onion: o},
-					})
-				}
-			}
-		}
-		// Emit NR.
-		if !s.cfg.Byz.AllowNRBroadcast(op) {
-			continue
-		}
-		nr, err := inst.BuildOwnNR()
-		if err != nil || nr == nil {
-			continue
-		}
-		nr = s.cfg.Byz.OverrideNR(s, op, nr)
-		for _, to := range s.operators {
-			if to == op {
-				continue
-			}
-			if !s.cfg.Byz.AllowDelivery(op, to, KindNR) {
-				continue
-			}
-			delay := s.cfg.Byz.OverrideDelay(s.rng, op, to, KindNR)
-			if delay < 0 {
-				delay = s.cfg.Network.Delay(s.rng, op, to, KindNR)
-			}
-			out = append(out, scheduledEvent{
-				when: s.now + delay,
-				ev:   &evtNRArrival{from: op, to: to, nr: nr},
-			})
-		}
-	}
-	return out
-}
-
-// ---- evtNRArrival ------------------------------------------------------
-
-type evtNRArrival struct {
-	from, to obft.OperatorID
-	nr       *obft.NR
-}
-
-func (e *evtNRArrival) describe() string {
-	return fmt.Sprintf("NRArrival[from=%d to=%d]", e.from, e.to)
-}
-
-func (e *evtNRArrival) handle(s *sim) []scheduledEvent {
-	_ = s.instances[e.to].ObserveNR(e.nr)
+func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
+	_ = s.instances[e.to].ObserveCommit(e.commit)
 	return nil
 }
 

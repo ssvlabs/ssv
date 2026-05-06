@@ -189,84 +189,38 @@ func (s *sim) deliverPhase1Equivocation(layer int, vA, vB Value, recipientsA, re
 	}
 }
 
-// runPhase2 has every operator build their KindOnion + KindNR (after
-// PhaseTwoEnd) and gossip them to all peers. Each operator observes every
-// peer's payload before Resolve.
+// runPhase2 has every operator build their KindCommit and gossip it to all
+// peers. Each operator observes every peer's commit before Resolve.
 //
 // `excludeFrom` is a set of operators whose Phase-2 messages should NOT be
 // broadcast (modelling offline / silent-byzantine operators).
 func (s *sim) runPhase2(excludeFrom map[OperatorID]bool) {
 	s.t.Helper()
 
-	// Phase 2: each operator emits its KindOnion immediately at TCommit
-	// (since we don't model the late-σ-emit path here unless tests do so
-	// explicitly via direct Phase-1 timing).
-	onions := make(map[OperatorID]*Onion)
+	// Phase 2: each operator emits its KindCommit at TCommit. Per spec,
+	// each operator commits exactly once per slot, carrying both σ partials
+	// and NR partials in a single message.
+	commits := make(map[OperatorID]*Commit)
 	for op, inst := range s.instances {
 		if excludeFrom[op] {
 			continue
 		}
-		o, err := inst.BuildOwnOnion()
+		c, err := inst.BuildOwnCommit()
 		require.NoError(s.t, err)
-		onions[op] = o
+		commits[op] = c
 	}
 
-	// Each operator observes every peer's onion (including their own —
-	// idempotent on duplicate observation).
+	// Each operator observes every peer's commit (idempotent on duplicate
+	// observation).
 	for receiver, inst := range s.instances {
 		if excludeFrom[receiver] {
 			continue
 		}
-		for sender, o := range onions {
+		for sender, c := range commits {
 			if sender == receiver {
 				continue
 			}
-			require.NoError(s.t, inst.ObserveOnion(o))
-		}
-	}
-
-	// End of Phase 2 → BuildOwnNR for everyone.
-	nrs := make(map[OperatorID]*NR)
-	for op, inst := range s.instances {
-		if excludeFrom[op] {
-			continue
-		}
-		require.NoError(s.t, inst.PhaseTwoEnd())
-		nr, err := inst.BuildOwnNR()
-		require.NoError(s.t, err)
-		nrs[op] = nr
-	}
-
-	// Each operator observes every peer's NR.
-	for receiver, inst := range s.instances {
-		if excludeFrom[receiver] {
-			continue
-		}
-		for sender, nr := range nrs {
-			if sender == receiver {
-				continue
-			}
-			require.NoError(s.t, inst.ObserveNR(nr))
-		}
-	}
-
-	// Late σ-emits: in case any operator transitioned to σ during
-	// PhaseTwoEnd (Defer-partition resolved), they need to broadcast a
-	// fresh KindOnion. In our deterministic simulator, the σ-emit window
-	// has already passed, but we re-broadcast for the σ-pool reconstruction
-	// to pick up the partial. Spec allows this — late σ-emits enter the
-	// Phase 3 σ-pool even if peers already locked NR.
-	for op, inst := range s.instances {
-		if excludeFrom[op] {
-			continue
-		}
-		o, err := inst.BuildOwnOnion()
-		require.NoError(s.t, err)
-		for receiver, recvInst := range s.instances {
-			if excludeFrom[receiver] || receiver == op {
-				continue
-			}
-			require.NoError(s.t, recvInst.ObserveOnion(o))
+			require.NoError(s.t, inst.ObserveCommit(c))
 		}
 	}
 }

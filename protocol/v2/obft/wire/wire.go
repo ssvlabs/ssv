@@ -20,12 +20,11 @@ import (
 // versions they understand.
 const (
 	Phase1BundleVersionV1 byte = 0x01
-	OnionVersionV1        byte = 0x01
-	NRVersionV1           byte = 0x01
+	CommitVersionV1       byte = 0x01
 	CertificateVersionV1  byte = 0x01
 )
 
-// MaxLayers caps the number of layers an Onion or NR can declare on the wire.
+// MaxLayers caps the number of layers a Commit can declare on the wire.
 // Real OBFT configs use K ≤ n ≤ 13 in SSV; anything past 32 is almost
 // certainly malformed/malicious.
 const MaxLayers = 32
@@ -131,7 +130,7 @@ func DecodePhase1Bundle(data []byte) (*obft.Phase1Bundle, error) {
 	}, nil
 }
 
-// EncodeOnion serializes an Onion (KindOnion payload).
+// EncodeCommit serializes a Commit (KindCommit payload).
 //
 // Format (version 0x01):
 //
@@ -144,47 +143,71 @@ func DecodePhase1Bundle(data []byte) (*obft.Phase1Bundle, error) {
 //	  [value bytes]
 //	  [4] ciphertext length (uint32 big-endian)
 //	  [ciphertext bytes]
-func EncodeOnion(o *obft.Onion) ([]byte, error) {
-	if o == nil {
-		return nil, errors.New("wire: nil onion")
+//	[2] number of NR partials (uint16 big-endian)
+//	for each NR partial:
+//	  [4] Layer        (uint32 big-endian)
+//	  [4] sig length   (uint32 big-endian)
+//	  [sig bytes]
+func EncodeCommit(c *obft.Commit) ([]byte, error) {
+	if c == nil {
+		return nil, errors.New("wire: nil commit")
 	}
-	if len(o.Layers) > MaxLayers {
-		return nil, fmt.Errorf("wire: onion has %d layers (max %d)", len(o.Layers), MaxLayers)
+	if len(c.Layers) > MaxLayers {
+		return nil, fmt.Errorf("wire: commit has %d σ layers (max %d)", len(c.Layers), MaxLayers)
+	}
+	if len(c.NRPartials) > MaxLayers {
+		return nil, fmt.Errorf("wire: commit has %d NR partials (max %d)", len(c.NRPartials), MaxLayers)
 	}
 
 	size := 1 + 8 + 8 + 2
-	for _, el := range o.Layers {
+	for _, el := range c.Layers {
 		size += 4 + len(el.Value) + 4 + len(el.Ciphertext)
 	}
+	size += 2
+	for _, p := range c.NRPartials {
+		size += 4 + 4 + len(p.PartialSig)
+	}
 	out := make([]byte, 0, size)
-	out = append(out, OnionVersionV1)
-	out = appendUint64(out, uint64(o.OperatorID))
-	out = appendUint64(out, uint64(o.Height))
-	out = appendUint16(out, uint16(len(o.Layers))) //nolint:gosec // MaxLayers <= uint16 max
-	for i, el := range o.Layers {
+	out = append(out, CommitVersionV1)
+	out = appendUint64(out, uint64(c.OperatorID))
+	out = appendUint64(out, uint64(c.Height))
+	out = appendUint16(out, uint16(len(c.Layers))) //nolint:gosec // MaxLayers <= uint16 max
+	for i, el := range c.Layers {
 		if len(el.Value) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: onion layer %d value too long (%d)", i, len(el.Value))
+			return nil, fmt.Errorf("wire: commit layer %d value too long (%d)", i, len(el.Value))
 		}
 		if len(el.Ciphertext) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: onion layer %d ciphertext too long (%d)", i, len(el.Ciphertext))
+			return nil, fmt.Errorf("wire: commit layer %d ciphertext too long (%d)", i, len(el.Ciphertext))
 		}
 		out = appendUint32(out, uint32(len(el.Value)))      //nolint:gosec // bounds-checked
 		out = append(out, el.Value...)                      //
 		out = appendUint32(out, uint32(len(el.Ciphertext))) //nolint:gosec // bounds-checked
 		out = append(out, el.Ciphertext...)
 	}
+	out = appendUint16(out, uint16(len(c.NRPartials))) //nolint:gosec // bounds-checked
+	for _, p := range c.NRPartials {
+		if p.Layer < 0 {
+			return nil, fmt.Errorf("wire: commit NR partial has negative layer %d", p.Layer)
+		}
+		if len(p.PartialSig) > MaxFieldSize {
+			return nil, fmt.Errorf("wire: commit NR partial sig too long (%d)", len(p.PartialSig))
+		}
+		out = appendUint32(out, uint32(p.Layer))           //nolint:gosec // bounds-checked
+		out = appendUint32(out, uint32(len(p.PartialSig))) //nolint:gosec // bounds-checked
+		out = append(out, p.PartialSig...)
+	}
 	return out, nil
 }
 
-// DecodeOnion parses bytes produced by EncodeOnion.
-func DecodeOnion(data []byte) (*obft.Onion, error) {
+// DecodeCommit parses bytes produced by EncodeCommit.
+func DecodeCommit(data []byte) (*obft.Commit, error) {
 	r := newReader(data)
 	version, err := r.byte_("version")
 	if err != nil {
 		return nil, err
 	}
-	if version != OnionVersionV1 {
-		return nil, fmt.Errorf("wire: unsupported onion version 0x%02x", version)
+	if version != CommitVersionV1 {
+		return nil, fmt.Errorf("wire: unsupported commit version 0x%02x", version)
 	}
 	opID, err := r.uint64_("operator id")
 	if err != nil {
@@ -199,7 +222,7 @@ func DecodeOnion(data []byte) (*obft.Onion, error) {
 		return nil, err
 	}
 	if int(numLayers) > MaxLayers {
-		return nil, fmt.Errorf("wire: onion declares %d layers (max %d)", numLayers, MaxLayers)
+		return nil, fmt.Errorf("wire: commit declares %d σ layers (max %d)", numLayers, MaxLayers)
 	}
 	layers := make([]obft.EncryptedLayer, numLayers)
 	for i := uint16(0); i < numLayers; i++ {
@@ -230,98 +253,27 @@ func DecodeOnion(data []byte) (*obft.Onion, error) {
 			Ciphertext: ct,
 		}
 	}
-	if r.remaining() != 0 {
-		return nil, fmt.Errorf("wire: %d trailing bytes after onion", r.remaining())
-	}
-	return &obft.Onion{
-		OperatorID: obft.OperatorID(opID),
-		Height:     obft.Height(height),
-		Layers:     layers,
-	}, nil
-}
-
-// EncodeNR serializes an NR message (KindNR payload).
-//
-// Format (version 0x01):
-//
-//	[1] version
-//	[8] OperatorID    (uint64 big-endian)
-//	[8] Height        (uint64 big-endian)
-//	[2] partial count (uint16 big-endian)
-//	for each partial:
-//	  [4] Layer        (uint32 big-endian)
-//	  [4] sig length   (uint32 big-endian)
-//	  [sig bytes]
-func EncodeNR(nr *obft.NR) ([]byte, error) {
-	if nr == nil {
-		return nil, errors.New("wire: nil NR")
-	}
-	if len(nr.Partials) > MaxLayers {
-		return nil, fmt.Errorf("wire: NR has %d partials (max %d)", len(nr.Partials), MaxLayers)
-	}
-
-	size := 1 + 8 + 8 + 2
-	for _, p := range nr.Partials {
-		size += 4 + 4 + len(p.PartialSig)
-	}
-	out := make([]byte, 0, size)
-	out = append(out, NRVersionV1)
-	out = appendUint64(out, uint64(nr.OperatorID))
-	out = appendUint64(out, uint64(nr.Height))
-	out = appendUint16(out, uint16(len(nr.Partials))) //nolint:gosec // bounds-checked
-	for _, p := range nr.Partials {
-		if p.Layer < 0 {
-			return nil, fmt.Errorf("wire: NR partial has negative layer %d", p.Layer)
-		}
-		if len(p.PartialSig) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: NR partial sig too long (%d)", len(p.PartialSig))
-		}
-		out = appendUint32(out, uint32(p.Layer))            //nolint:gosec // bounds-checked
-		out = appendUint32(out, uint32(len(p.PartialSig))) //nolint:gosec // bounds-checked
-		out = append(out, p.PartialSig...)
-	}
-	return out, nil
-}
-
-// DecodeNR parses bytes produced by EncodeNR.
-func DecodeNR(data []byte) (*obft.NR, error) {
-	r := newReader(data)
-	version, err := r.byte_("version")
+	nrCount, err := r.uint16_("NR partial count")
 	if err != nil {
 		return nil, err
 	}
-	if version != NRVersionV1 {
-		return nil, fmt.Errorf("wire: unsupported NR version 0x%02x", version)
+	if int(nrCount) > MaxLayers {
+		return nil, fmt.Errorf("wire: commit declares %d NR partials (max %d)", nrCount, MaxLayers)
 	}
-	opID, err := r.uint64_("operator id")
-	if err != nil {
-		return nil, err
-	}
-	height, err := r.uint64_("height")
-	if err != nil {
-		return nil, err
-	}
-	count, err := r.uint16_("partial count")
-	if err != nil {
-		return nil, err
-	}
-	if int(count) > MaxLayers {
-		return nil, fmt.Errorf("wire: NR declares %d partials (max %d)", count, MaxLayers)
-	}
-	partials := make([]obft.NRPartial, count)
-	for i := uint16(0); i < count; i++ {
-		layer, err := r.uint32_(fmt.Sprintf("partial %d layer", i))
+	partials := make([]obft.NRPartial, nrCount)
+	for i := uint16(0); i < nrCount; i++ {
+		layer, err := r.uint32_(fmt.Sprintf("NR partial %d layer", i))
 		if err != nil {
 			return nil, err
 		}
-		sigLen, err := r.uint32_(fmt.Sprintf("partial %d sig length", i))
+		sigLen, err := r.uint32_(fmt.Sprintf("NR partial %d sig length", i))
 		if err != nil {
 			return nil, err
 		}
 		if sigLen > MaxFieldSize {
 			return nil, fmt.Errorf("wire: NR partial %d sig too long (%d)", i, sigLen)
 		}
-		sig, err := r.bytes(int(sigLen), fmt.Sprintf("partial %d sig", i))
+		sig, err := r.bytes(int(sigLen), fmt.Sprintf("NR partial %d sig", i))
 		if err != nil {
 			return nil, err
 		}
@@ -331,12 +283,13 @@ func DecodeNR(data []byte) (*obft.NR, error) {
 		}
 	}
 	if r.remaining() != 0 {
-		return nil, fmt.Errorf("wire: %d trailing bytes after NR", r.remaining())
+		return nil, fmt.Errorf("wire: %d trailing bytes after commit", r.remaining())
 	}
-	return &obft.NR{
+	return &obft.Commit{
 		OperatorID: obft.OperatorID(opID),
 		Height:     obft.Height(height),
-		Partials:   partials,
+		Layers:     layers,
+		NRPartials: partials,
 	}, nil
 }
 
@@ -365,8 +318,8 @@ func EncodeCertificate(c *obft.Certificate) ([]byte, error) {
 	out := make([]byte, 0, size)
 	out = append(out, CertificateVersionV1)
 	out = appendUint64(out, uint64(c.Height))
-	out = appendUint32(out, uint32(len(c.Value)))      //nolint:gosec // bounds-checked
-	out = append(out, c.Value...)                      //
+	out = appendUint32(out, uint32(len(c.Value)))     //nolint:gosec // bounds-checked
+	out = append(out, c.Value...)                     //
 	out = appendUint32(out, uint32(len(c.Signature))) //nolint:gosec // bounds-checked
 	out = append(out, c.Signature...)
 	return out, nil

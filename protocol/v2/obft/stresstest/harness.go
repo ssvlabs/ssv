@@ -211,14 +211,13 @@ func (j JitteredDelay) Delay(rng *mrand.Rand, _, _ obft.OperatorID, _ MsgKind) t
 	return d
 }
 
-// MsgKind discriminates the four OBFT envelope kinds for the network /
+// MsgKind discriminates the OBFT envelope kinds for the network /
 // byz models.
 type MsgKind int
 
 const (
 	KindPhase1Bundle MsgKind = iota
-	KindOnion
-	KindNR
+	KindCommit
 	KindCertificate
 )
 
@@ -403,7 +402,6 @@ func (s *sim) start() error {
 	}
 	// Phase boundaries.
 	s.schedule(cfgObft.TCommit, &evtPhaseTwoStart{})
-	s.schedule(cfgObft.PhaseTwoEndOffset(), &evtPhaseTwoEnd{})
 	s.schedule(cfgObft.RoundEndOffset(), &evtResolve{})
 
 	return nil

@@ -7,11 +7,11 @@ import "errors"
 var ErrNoQuorum = errors.New("obft: no quorum reached at any layer")
 
 // ErrLatePhase1Bundle is returned by ObservePhase1Bundle when the bundle's
-// first-observation time is past T_accept_max. Per spec §Phase 1, such
-// bundles are rejected entirely — accepting them is operationally useless
-// since a downstream σ-emit on the bundle would not propagate before peers'
-// NR-decision at end of Phase 2.
-var ErrLatePhase1Bundle = errors.New("obft: phase-1 bundle first-observed past T_accept_max")
+// first-observation time is past T_commit. Per spec §Phase 1, bundles
+// first-observed past T_commit at any honest receiver are not counted by
+// that receiver toward σ-quorum at this layer; the cluster relies on K-layer
+// fall-through for partition recovery.
+var ErrLatePhase1Bundle = errors.New("obft: phase-1 bundle first-observed past T_commit")
 
 // ErrSigmaLocked is returned by EKM-style enforcement when an operation
 // would violate cross-phase exclusivity or the single-σ-V-per-(slot, layer)
@@ -24,8 +24,7 @@ var ErrSigmaLocked = errors.New("obft: operator is σ-locked at this layer")
 // layer k may not subsequently emit σ at the same layer.
 var ErrNRLocked = errors.New("obft: operator is NR-locked at this layer")
 
-// ErrEquivocationLocked is returned when σ-emit is requested at a layer where
-// the operator has retained ≥ 2 distinct Phase-1 bundles from the leader
-// (Defer-due-to-equivocation). Per spec §Phase 1 / Equivocation handling,
-// recovery via late re-flood is foreclosed once equivocation is observed.
-var ErrEquivocationLocked = errors.New("obft: operator is in Defer-due-to-equivocation at this layer")
+// ErrAlreadyCommitted is returned when BuildOwnCommit is called more than
+// once in a slot. Per spec §Phase 2, each operator emits exactly one
+// KindCommit per (slot, operator) at T_commit.
+var ErrAlreadyCommitted = errors.New("obft: operator already committed for this slot")

@@ -90,24 +90,15 @@ func (r *ProposerRunner) ProcessOBFTEnvelopeMsg(ctx context.Context, senderID sp
 		return fmt.Errorf("obft: nil envelope")
 	}
 
-	// Rate-limit per kind.
+	// Rate-limit per kind. KindCommit is single-emit per (slot, op) per
+	// spec §Phase 2.
 	switch env.Kind {
 	case wire.KindPhase1Bundle:
 		if err := r.obftRL.AllowPhase1Bundle(phase0.Slot(env.Phase1Bundle.Height), senderID, env.Phase1Bundle.Layer); err != nil {
 			return err
 		}
-	case wire.KindOnion:
-		// Multi-emit allowed up to K per (slot, op).
-		cfg, ok := r.obftCtrl.GetInstance(phase0.Slot(env.Onion.Height))
-		k := obftadapter.DefaultK
-		if ok && cfg != nil && cfg.Config != nil {
-			k = cfg.Config.K()
-		}
-		if err := r.obftRL.AllowOnion(phase0.Slot(env.Onion.Height), senderID, k); err != nil {
-			return err
-		}
-	case wire.KindNR:
-		if err := r.obftRL.AllowNR(phase0.Slot(env.NR.Height), senderID); err != nil {
+	case wire.KindCommit:
+		if err := r.obftRL.AllowCommit(phase0.Slot(env.Commit.Height), senderID); err != nil {
 			return err
 		}
 	case wire.KindCertificate:

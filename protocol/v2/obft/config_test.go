@@ -75,7 +75,7 @@ func TestConfig_Validate_RejectsDelta2BelowBFTMin(t *testing.T) {
 func TestConfig_DerivedOffsets(t *testing.T) {
 	cfg := validBaseConfig()
 	require.Equal(t, cfg.TCommit-2*(cfg.D+cfg.Delta), cfg.BroadcastMaxOffset())
-	require.Equal(t, cfg.TCommit+cfg.Delta2-(cfg.D+cfg.Delta), cfg.AcceptMaxOffset())
+	require.Equal(t, cfg.TCommit, cfg.PhaseTwoStartOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2, cfg.PhaseTwoEndOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2+cfg.Delta3, cfg.RoundEndOffset())
 	require.Equal(t, 4, cfg.K())

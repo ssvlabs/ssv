@@ -107,27 +107,21 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 		}
 	}
 
-	// Phase 2: everyone builds + broadcasts onions.
-	onions := make(map[obft.OperatorID]*obft.Onion, n)
+	// Phase 2: everyone builds + broadcasts a single Commit (combining σ
+	// partials and NR partials per spec §Phase 2).
+	commits := make(map[obft.OperatorID]*obft.Commit, n)
 	for _, op := range operators {
-		o, err := instances[op].BuildOwnOnion()
+		c, err := instances[op].BuildOwnCommit()
 		require.NoError(t, err)
-		onions[op] = o
+		commits[op] = c
 	}
 	for receiver, inst := range instances {
-		for sender, o := range onions {
+		for sender, c := range commits {
 			if sender == receiver {
 				continue
 			}
-			require.NoError(t, inst.ObserveOnion(o))
+			require.NoError(t, inst.ObserveCommit(c))
 		}
-	}
-
-	// End of Phase 2 + NR (no NRs since everyone σ-eligible at L_0).
-	for _, inst := range instances {
-		require.NoError(t, inst.PhaseTwoEnd())
-		_, err := inst.BuildOwnNR()
-		require.NoError(t, err)
 	}
 
 	// Phase 3: every operator should reach σ-quorum at L_0.
