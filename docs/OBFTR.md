@@ -795,7 +795,7 @@ Out-of-scope cases (host-validity divergence, 1-1-1 equivocation splits) are add
 
 Cryptographic safety (`qEnc = qV` + chained encryption + EKM-enforced cross-phase/cross-round/single-σ-V exclusivity) ensures only one block can ever get a valid validator signature, regardless of K, R, or round structure. R-round retry only enables more recovery scenarios; it cannot produce two outputs.
 
-### Timing budget — apples-to-apples comparison
+### Timing budget — concrete configurations
 
 For fair comparison across configurations, all setups share a common consensus deadline `TIME_FINAL = slot_start + 3.5s` — the last round of every setup must complete by this time. Submission headroom = `4s − 3.5s = 0.5s` (2× the 250ms minimum reserved for relay submission). Each setup uses the same total consensus budget of **2.0s** (= TIME_FINAL − 1.5s start), allocated differently across rounds based on R.
 

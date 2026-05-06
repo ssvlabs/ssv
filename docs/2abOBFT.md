@@ -292,7 +292,7 @@ A participant that hasn't received `j`'s Phase-2b onion at decryption time treat
 
 Liveness is bounded by the standard `3f+1` byzantine assumption plus partial synchrony within `T_round_end`. If more than `f` operators are offline or byzantine combined, neither σ nor NR quorums reach their thresholds and the slot is missed.
 
-## Operator commitment states
+### Operator commitment states
 
 Three states per layer:
 
@@ -305,6 +305,17 @@ Three states per layer:
 There is no `Defer` state (which OBFT introduces for late-σ-emit-within-Phase-2 partition recovery). Phase-2a's window IS the deferral mechanism. By Phase-2a end, the convergence rule resolves every operator to either `σ` or `NR` at Phase-2b sign time.
 
 **NR and NV are operationally interchangeable for the protocol.** Both materialize on the wire as a single message kind: a partial `σ_i^{IBE}(nr_tag_k)` from the IBE keypair on the layer's NR tag. The protocol counts NR and NV uniformly toward the same no-σ-side pool (referred to throughout as "NR-pool" or "no-σ pool" for short). The distinction is **local-only diagnostic** (an operator may log *why* it didn't sign σ — for telemetry — but the cluster-wide message and counting logic are identical).
+
+### Slot structure
+
+2abOBFT runs a single agreement round per slot with Phase 2 split into Phase 2a (verdict broadcast) and Phase 2b (σ-or-NR commit). The slot proceeds as follows:
+
+1. **Phase 1** `[slot_start, T_commit]`: K leaders broadcast their Phase-1 bundles per their per-layer fetch windows (`[T_{K-1}, T_{K-1} + Δ_1]`, ..., `[T_0, T_0 + Δ_1]`), with `T_0 + Δ_1 ≤ T_broadcast_max = T_commit − 2(D + δ)`. **No σ_V partial in Phase-1 bundles** (Variant C). Receivers accept bundles first-observed in `[slot_start, T_accept_max]` where `T_accept_max = T_commit + Δ_2a − (D + δ)`.
+2. **Phase 2a** `[T_commit, T_commit + Δ_2a]`: each operator broadcasts a per-layer verdict envelope (`KindVerdict`) reflecting their σ-eligibility per layer based on observed Phase-1 bundles and host validity verdicts. Bundle re-flood absorbs late-arriving Phase-1 bundles within the window. Operators emit verdicts at the latest-safe time (around `T_commit + Δ_2a − (D + δ)`) to maximize observed peer state.
+3. **Phase 2b** `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`: each operator computes per-layer convergence decisions from the observed Phase-2a verdict pool (per the convergence rule) and emits σ-or-NR partials per layer. EKM enforces single-σ-V per (slot, layer) per operator at sign time.
+4. **Phase 3** `[T_commit + Δ_2a + Δ_2b, T_round_end]`: each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses.
+
+**Slot timing**: `T_round_end = T_commit + Δ_2a + Δ_2b + Δ_3`. Phase 1 fetch occupies `[slot_start, T_commit]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 ≈ 2(D + δ) + (D + δ) + 100ms` at recommended sizing, ≈ 850ms at Config A.
 
 ## Preconditions on the host application
 
@@ -520,6 +531,12 @@ A mesh-flaky honest operator with poor gossipsub visibility can fail to observe 
 Variant C's convergence rule degrades gracefully: if mesh-flaky honest sees verdict_pool[V] = qV (cluster-wide convergence reached and propagated to them despite flakiness), they σ-emit. If not, they NR-emit per rule, joining NR-pool. Fall-through happens unless the cluster also fails to reach NR-quorum (unlikely if the mesh-flaky honest is the only flaky one).
 
 The recommended `Δ_2a ≥ 2(D + δ)` absorbs typical mesh-jitter (one full `D + δ` of additional slack on top of P99 propagation). For wider mesh outliers, deployment-level mesh-diversity remains relevant.
+
+### Liveness comparison: 2abOBFT vs bare OBFT, OBFTR, QBFT
+
+A side-by-side comparison of 2abOBFT's recovery scope against bare OBFT, OBFTR(R≥2), and QBFT — covering healthy path, byzantine-leader patterns, multi-leader silent, validity-divergence, sustained partition, and the residual surfaces unique to 2abOBFT (2-1-byz-defect, verdict-equivocation) — is in [§Appendix A.4 — Comparison with bare OBFT and QBFT](#a4--comparison-with-bare-obft-and-qbft). Apples-to-apples framing across protocols, the four-bucket recovery taxonomy (absorbable-by-waiting / OBFT-family-only / 2abOBFT-only / 2abOBFT-regressions), and per-failure-class outcomes are discussed there.
+
+The summary takeaway: at apples-to-apples T, pure all-honest network failures recover identically across all four protocols. The structural distinctions are at the byzantine-equivocation and validity-divergence axes, where 2abOBFT closes most of bare-OBFT/OBFTR's adversarial-byz exposure (σ-locked equivocation, h_V=1, validity-divergence-majority, mesh-flakiness) at the cost of two narrower regressions (2-1-byz-defect, verdict-equivocation) — both slashable, both R-invariant.
 
 ### Equivocation handling
 
