@@ -16,6 +16,7 @@ const (
 	observabilityNamespace = "ssv.p2p.messages"
 
 	pubsubObservabilityNamespace = "ssv.p2p.pubsub.messages"
+	pubsubTopicAttributeKey      = "ssv.p2p.pubsub.topic"
 )
 
 var (
@@ -47,7 +48,7 @@ var (
 )
 
 func pubsubTopicAttribute(value string) attribute.KeyValue {
-	return attribute.String("topic", value)
+	return attribute.String(pubsubTopicAttributeKey, value)
 }
 
 func messageTopicAttribute(value string) attribute.KeyValue {

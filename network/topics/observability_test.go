@@ -37,7 +37,7 @@ func TestRecordPubsubMessageReceived(t *testing.T) {
 			require.Len(t, sum.DataPoints, 1)
 			require.EqualValues(t, 2, sum.DataPoints[0].Value)
 
-			topicAttr, ok := sum.DataPoints[0].Attributes.Value("topic")
+			topicAttr, ok := sum.DataPoints[0].Attributes.Value(pubsubTopicAttributeKey)
 			require.True(t, ok)
 			require.Equal(t, topic, topicAttr.AsString())
 			return
