@@ -52,6 +52,18 @@ var (
 			observability.InstrumentName(observabilityNamespace, "errors"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
+
+	routerDroppedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "router.messages.dropped"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of messages dropped because the router buffer was full")))
+
+	routerBufferFillGauge = metrics.New(
+		meter.Int64Gauge(
+			observability.InstrumentName(observabilityNamespace, "router.buffer.fill"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("current number of buffered messages in the router channel")))
 )
 
 func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
