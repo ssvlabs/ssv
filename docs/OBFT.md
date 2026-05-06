@@ -1276,3 +1276,57 @@ Best (success) ≈ 450ms; worst (success) ≈ 850ms; ~2× spread (smaller than b
 
 **Comparison with bare-TBFT-style B.3 sketch**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule. Replaces the bare-TBFT "saw all bidders" σ-eligibility predicate (which was fragmentable under selective bid-withholding) with a verdict-quorum-based predicate that collapses fragmentation to clean NR fall-through. The remaining residuals (2-1-byz-defect, verdict-equivocation) are structurally similar to the residuals 2abOBFT pays for its convergence-rule recoveries — both are inherent to "verdict broadcast → quorum-based binding" structures and not avoidable without re-introducing the C1/C2/C3 deadlocks.
 
+## Appendix C — Message re-broadcast considerations
+
+This appendix examines whether non-leader operators should explicitly re-broadcast leader Phase-1 bundles at the application layer, beyond what libp2p's gossipsub already does at the network layer. The conclusions inform implementation choices and clarify which OBFT failure modes can vs cannot be addressed by faster propagation.
+
+### Background — gossipsub auto-forwarding
+
+OBFT relies on libp2p's gossipsub for cluster-wide message propagation. Gossipsub's standard behavior:
+
+- When a node first receives a message it hasn't seen (deduplicated by message ID, typically a content hash), it **automatically forwards the message to its mesh peers** without any application-layer code.
+- The mesh is a per-topic set of peers (typical 6-12 at production sizing). At small cluster sizes (n=4), the mesh is effectively full — every peer is in every other peer's mesh, so auto-forward reaches all peers in one hop.
+- At larger clusters (n=10, n=13), mesh sampling means the first auto-forward reaches a subset of peers; second-hop forwards spread further. Total propagation P99 = `D + δ` under partial synchrony.
+
+So when the OBFT spec talks about "gossipsub re-flood", it refers to this network-layer mechanism — not application-layer re-broadcast. The OBFT protocol itself only requires the leader to publish their Phase-1 bundle once; the cluster-wide propagation happens via gossipsub.
+
+### What explicit application-layer re-broadcast would add
+
+Adding a "re-broadcast on first observation" step at the application layer (every non-leader operator publishes the leader's bundle to gossipsub on receipt) provides:
+
+1. **Defense against gossipsub mesh sparsity / score-based pruning**. Gossipsub can prune mesh peers under score-based heuristics (slow-message detection, peer-score limits, mesh churn under load). Pruned peers might miss messages forwarded only by the source. With n−1 explicit re-broadcasts of the same bundle, drops are recovered by other operators' publishes.
+2. **Faster cluster-wide convergence at larger n**. At n=4, gossipsub auto-forward is single-hop; explicit re-broadcast is redundant. At n ≥ 7 with sparse mesh, every operator becoming a publisher can compress propagation from 2-3 hops × heartbeat to 1 hop × heartbeat. This tightens the receiver-acceptance window's effective margin.
+3. **Redundancy against partial mesh failures**. If a small subset of mesh links is degraded, multiple sources of the same bundle help it find a path. Gossipsub's gossip-fanout already provides this; explicit re-broadcast strengthens it.
+
+### What explicit re-broadcast does NOT add
+
+- **No additional defense against h_V=1 byz selective-delivery deadlock**. Gossipsub's auto-forward already neutralizes selective leader delivery — a single honest receiver's auto-forward reaches the entire cluster within `D + δ`. The h_V=1 deadlock arises from byz timing the bundle delivery near `T_accept_max` so that even auto-forward + re-broadcast can't reach all honest before their NR-decisions. The structural fix is Phase 2a/2b ([2abOBFT](2abOBFT.md)), not faster bundle propagation.
+- **No additional defense against σ-locked equivocation 1-1-1 splits**. These failures are about cross-phase exclusivity locking honest into different σ commits, not about V propagation speed. Re-broadcast doesn't change the algebra.
+- **No defense against silent leader**. If the leader doesn't broadcast at all, no non-leader has the bundle to re-broadcast. Recovery is via NR-quorum fall-through to L_1 (in-protocol).
+- **No defense against sustained partition** (real propagation > absorption window). Re-broadcast can't deliver what no honest peer has received.
+
+### Costs
+
+- **Bandwidth**: O(n) multiplier per bundle. At n=4 with K=4, leader-only broadcast is 4 publishes per slot (one per layer's leader); non-leader re-broadcast adds 12 more publishes (each non-leader publishes each leader's bundle). At Config A's ~30 KB onion bandwidth, this adds a few KB. Modest at small n; meaningful at n=13 where it becomes ~10× the bundle bandwidth.
+- **Gossipsub deduplication overhead**: each peer receives the same auth-signed bundle from multiple sources. Gossipsub deduplicates by message ID (content hash for self-validating messages), so this is mostly CPU/memory cost on each peer. Minor.
+
+### Variant — σ_L^V re-inclusion in non-leader onions
+
+A different mechanism: each non-leader includes the leader's σ_L^V (extracted from the Phase-1 bundle) in their own Phase-2 onion as a redundant copy. Benefit: protects σ_L^V against bundle-drop while keeping bandwidth modest (a single σ partial is small compared to a full bundle). Downsides: doesn't help if V itself was dropped (σ_L^V references V's hash); adds onion-construction complexity.
+
+This variant is not in current OBFT spec but is a documented design point in some TBFT-family alternatives. Could be considered for deployments where the σ_L^V is observed to be the dominant drop cause.
+
+### Recommendations by cluster size
+
+- **n = 4**: skip explicit re-broadcast. Gossipsub auto-forward is single-hop; mesh is effectively full. The bandwidth cost has no offsetting benefit.
+- **n = 7**: marginal. Mesh sampling adds 1-2 hops; explicit re-broadcast may compress P99 propagation by 50-100ms. Worth measuring; not a clear win.
+- **n ≥ 10-13**: explicit re-broadcast becomes more useful as mesh sampling adds more hops. Score-based pruning and peer-score variance also become more significant. Consider explicit re-broadcast as defensive engineering, especially in deployments with adversarial peer behavior or aggressive scoring config.
+
+### Conclusions
+
+1. **OBFT's spec relies on gossipsub auto-forwarding**, not on explicit application-layer re-broadcast by non-leaders. The cluster-wide propagation guarantee comes from gossipsub's standard mesh-forwarding behavior under partial synchrony.
+2. **Explicit non-leader re-broadcast is a latency/bandwidth trade-off, not a safety/liveness change**. The OBFT protocol's stated guarantees don't depend on whether non-leaders explicitly re-broadcast — they're property of gossipsub's propagation under partial synchrony.
+3. **Explicit re-broadcast addresses gossipsub-layer issues** (mesh sparsity, score-pruning, multi-hop latency) but does not address OBFT's adversarial-byz failure modes (h_V=1, σ-locked equivocation, validity-divergence). Those are structural; the fix is at the protocol level (Phase 2a/2b in [2abOBFT](2abOBFT.md)), not at the propagation level.
+4. **Implementation choice should be driven by production telemetry**: if observed gossipsub propagation P99 ≈ `D + δ`, gossipsub is already optimal and explicit re-broadcast is redundant. If P99 > 1.5 × `(D + δ)` (suggesting multi-hop or pruning issues), explicit re-broadcast can compress the tail. Defensive deployments at larger n may opt in regardless.
+5. **The σ_L^V re-inclusion variant** is a more targeted defense (protects the leader's partial sig against bundle drop) at lower bandwidth cost than full bundle re-broadcast. Could be considered if production observes σ_L^V drops as a meaningful failure mode.
+
