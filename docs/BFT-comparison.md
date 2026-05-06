@@ -135,7 +135,7 @@ These failure modes depend on protocol *structure*, not on D or start time. They
 1. **2abOBFT** + budget for round-2 in QBFT-style scenarios (i.e., extending 2abOBFT to multi-round, hypothetical): closes most patterns including 2-1-byz-defect.
 2. **Bare 2abOBFT**: closes 1-1-1 equivocation, h_V=1, validity-majority, mesh-flakiness via convergence rule. Misses 2-1-byz-defect and verdict-equivocation.
 3. **QBFT (with R2 budget)**: closes adversarial-byz via fresh-V refetch on round-change. Bound by RT + 4D fitting within budget.
-4. **Bare OBFT, bare OBFTR**: closes silent-leader / partition cases via K-layer fall-through. Adversarial patterns (1-1-1, h_V=1, etc.) are R-invariant slot-misses; reputation deterrent absorbs across slots.
+4. **Bare OBFT, bare OBFTR**: closes silent-leader / partition cases via K-layer fall-through. Adversarial patterns (1-1-1, h_V=1, etc.) are R-invariant slot-misses; rational-byzantine deterrent absorbs across slots (manual blacklist by surviving operators restores `Byzantine ≡ Down`; planned protocol extension).
 
 **Multi-leader-silent advantage**: OBFT family (OBFT, OBFTR, 2abOBFT) all complete at K-1 ≥ 3 silent within a single round via Phase-3 reconstruction walk. QBFT cannot — serial round-changes at RT=2s exceed the 4s budget at K-1 ≥ 3. This is a structural OBFT-family advantage at any (BFT_start, D) combination where the healthy path fits.
 
