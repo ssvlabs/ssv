@@ -539,7 +539,7 @@ Five rules surface byzantine fault evidence for *attribution and punishment*. Un
 - **Leader equivocation.** Two distinct `σ_V` partials from the same leader at the same (slot, layer) are a self-contained slashable fault proof. Any observable double-signing is protocol-violating regardless of the leader's stated intent.
 - **Cross-onion partial-sig equivocation.** Operator `i` emitting `σ_i^V(V)` and `σ_i^V(V')` for different `V` at the same layer is detectable from the partial sigs alone — single-σ-V exclusivity is EKM-enforced, so any dual-V observation is a slashable byzantine fault.
 - **Fake encrypted-presence (post-decryption garbage at k > 0).** Operator `i` broadcasting an auth-signed `KindCommit` with an encrypted partial at layer `k > 0` that, after NR-quorum unlocks decryption, decrypts to garbage (not a valid σ partial on any leader-known V at L_k, or fails to decrypt entirely) is a slashable byzantine fault. The auth envelope binds `i` to the encrypted payload at signing time; post-decryption verification surfaces the garbage. Detection is **delayed and conditional on NR-quorum reaching at all prior layers** (so the chained encryption can be unlocked); when the slot misses cleanly without any NR-quorum reaching (e.g., σ-locked split at L_0, or NR-pool short of qEnc cluster-wide), the chained encryption stays sealed and the evidence is not surface-able through this rule. **Honest detection of fake encrypted-presence is therefore conditional on the slot progressing far enough for the relevant layer's encryption to unlock.** This is a real deterrent-strength reduction for adversarial byzantine that engineers slot-miss precisely to seal evidence; mitigated only by Rule 5 (when applicable at L_0) or by post-hoc decryption coordination outside the protocol's current scope.
-- **Fake plaintext σ at L_0.** Operator `i` broadcasting an auth-signed `KindCommit` with a plaintext σ partial at L_0 that does not verify against any retained leader-broadcast V_{L_0} (where the receiver has retained at least one such V) is a slashable byzantine fault. The auth envelope binds `i` to the partial; partial-vs-V verification is a deterministic local check by any receiver with retained V. Detection is immediate (no decryption-unlocking dependency, unlike Rule 4) — the receiver can attribute the fault as soon as it observes both `i`'s auth-signed `KindCommit` and any leader-broadcast V_{L_0}. The fake partial does not contribute to σ-quorum (it doesn't verify against any retained V); it's purely a slashable accountability artifact.
+- **Fake plaintext σ at the cluster's plaintext layer.** Operator `i` broadcasting an auth-signed `KindCommit` with a plaintext σ partial at the cluster's plaintext layer (L_0 in bare OBFT; L_Bid in the L_Bid extension, on the verdict-bound `V_X`) that does not verify against any retained candidate V at that layer (where the receiver has retained at least one such V — a Phase-1 bundle V_{L_0} for L_0; a `bid_set` member V_X for L_Bid) is a slashable byzantine fault. The auth envelope binds `i` to the partial; partial-vs-V verification is a deterministic local check by any receiver with retained V. Detection is immediate (no decryption-unlocking dependency, unlike Rule 4) — the receiver can attribute the fault as soon as it observes both `i`'s auth-signed `KindCommit` and any retained candidate V at the plaintext layer. The fake partial does not contribute to σ-quorum (it doesn't verify against any retained V); it's purely a slashable accountability artifact.
 
 Each piece of evidence is verifiable in isolation (signed by the offending operator's own keys) — any observer with the published partials and the (eventually) decrypted onion contents can independently confirm the byzantine action. **Acting on the evidence (slashing transaction, cluster removal) is a human-coordinated process**, not an automated protocol step; honest operators judge whether the evidence is compelling and decide whether to act.
 
@@ -551,7 +551,7 @@ Each piece of evidence is verifiable in isolation (signed by the offending opera
 | 2. Leader equivocation | Immediate (two σ_V from same leader) | Always — public bundles | Very low |
 | 3. Cross-onion partial-sig equivocation | Immediate (two σ partials on different V) | Always — public partials | Very low |
 | 4. Fake encrypted-presence (k > 0) | Delayed (post-decryption) | **Best-effort, conditional on slot progressing past prior layers' NR-quorum** — sealed if slot misses early | Very low when surfaced |
-| 5. Fake plaintext σ at L_0 | Immediate (partial vs retained V check) | Always when retained-V receivers gossip evidence (MUST-gossip rule, rate-limited per `(slot, layer, operator_id)`) | Very low |
+| 5. Fake plaintext σ at the plaintext layer (L_0; L_Bid in the L_Bid extension) | Immediate (partial vs retained V check) | Always when retained-V receivers gossip evidence (MUST-gossip rule, rate-limited per `(slot, layer, operator_id)`) | Very low |
 
 **Rule 4 has a structural detection limit.** The chained-encryption construction makes Rule 4 evidence cryptographically inaccessible when prior layers' NR-quorum doesn't reach: decryption requires `qEnc` partials on `nr_tag_{0..k-1}`, those partials don't exist if honest σ'd at those layers, and honest cannot preemptively sign IBE partials on layers they intend to σ-side-commit to (that violates cross-phase exclusivity = cross-signing). This is a **fundamental limit of the IBE primitive as used here**, not a fixable spec gap.
 
@@ -562,7 +562,7 @@ Each piece of evidence is verifiable in isolation (signed by the offending opera
 
 Phase 2a/2b mitigates both cases by widening the set of paths that reach a quorum somewhere (so more layers' encryption unlocks more often), but does not fully close it — slots that miss for non-byz reasons (host-validity divergence, sustained partition) still leave Rule 4 evidence sealed.
 
-**Practical implication for deployments.** Rule 4 functions as a *probabilistic* deterrent rather than an unconditional one: a byzantine that fakes encrypted-presence at L_k>0 expects detection only with the probability that NR-quorum reaches at all prior layers in subsequent slots where the deterrent's coordination process can still act. Deployments relying on assumption 4 (rational-byzantine deterrent) for L_k>0 fake-presence should weight the deterrent's effective strength accordingly — Rule 4 is *best-effort, not guaranteed surface-able*. Rule 5 (Fake plaintext σ at L_0) does not have this limitation since L_0's σ is plaintext.
+**Practical implication for deployments.** Rule 4 functions as a *probabilistic* deterrent rather than an unconditional one: a byzantine that fakes encrypted-presence at L_k>0 expects detection only with the probability that NR-quorum reaches at all prior layers in subsequent slots where the deterrent's coordination process can still act. Deployments relying on assumption 4 (rational-byzantine deterrent) for L_k>0 fake-presence should weight the deterrent's effective strength accordingly — Rule 4 is *best-effort, not guaranteed surface-able*. Rule 5 (Fake plaintext σ at the cluster's plaintext layer — L_0 in bare OBFT, L_Bid in the L_Bid extension) does not have this limitation since the plaintext layer's σ is unencrypted.
 
 The five classes are all *cryptographically self-contained* (high-confidence, low false-positive risk against honest operators) once surfaced. The asymmetry above — Rule 4's slot-progress-conditional surface-ability — is a real limitation that adversarial byzantine can exploit by engineering slot-miss precisely to seal Rule-4 evidence. Behavioral-pattern grief (selective-delivery, σ-refusal coordinated with honest flakiness) leaves no on-wire cryptographic evidence at all and is correspondingly harder for humans to act on with confidence — see [Implications of the rational-byzantine deterrent / Evidence quality by fault class](#implications-of-the-rational-byzantine-deterrent-assumption-4).
 
@@ -629,7 +629,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + EKM-enforced per-operator commitments (single-σ-V per (slot, layer), σ-XOR-NR per layer, cross-phase exclusivity), holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional. **One-liner: terminates within `T_round_end ≈ slot_start + 2.05s` at Config A (D = 100ms, δ = 50ms, K = 4, recommended Δ_2 = 2(D+δ)) under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation between leader broadcast and any honest first-observation ≤ `Δ_2 + (D + δ)` ≈ 450ms, (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Single-round protocol; narrower absorption than OBFTR(R≥2)'s cross-round-retention windows (~2.5× wider at matched recommended Δ_2). |
+| Termination (output guaranteed) | Conditional. **One-liner: terminates within `T_round_end ≈ slot_start + 1.90s` at Config A (D = 100ms, δ = 50ms, K = 4, recommended Δ_2 = 2(D+δ), Δ_3 = ε_3 ≈ 100ms) under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation between leader broadcast and any honest first-observation ≤ `Δ_2 + (D + δ)` ≈ 450ms, (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Single-round protocol; narrower absorption than OBFTR(R≥2)'s cross-round-retention windows (~2.5× wider at matched recommended Δ_2). |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates form self-contained slashable evidence |
 | Byzantine-leader-grief resistance | **Partial under non-adversarial byzantine; substantially weaker against adversarial byz that deliberately engineers grief patterns.** Recovery via "natural" σ-quorum patterns (leader's σ_L^V completes a 2-of-3-honest pool) only fires when byz isn't actively timing deliveries. **Adversarial byzantine reliably engineers slot-miss when L_0** via σ-locked split equivocation (1-1-1, 1-1-NR, etc.). At f=1 n=4 with uniform leader rotation, an adversarial byz primary can deterministically grief ~25% of slots (whenever they're L_0). **Same exposure as OBFTR(R≥2)** — these patterns are R-invariant; round-machinery does not help. The rational-byzantine deterrent (assumption 4) is the only protocol-level defense, and it works *across slots in expectation*, not per-slot. Effective deterrent strength is deployment-specific (stake-to-grief-value ratio, governance responsiveness, slashability evidence quality — see [§Implications of the rational-byzantine deterrent](#implications-of-the-rational-byzantine-deterrent-assumption-4)). For deployments under realistic adversarial conditions, **Phase 2a/2b is the structural fix and should be considered near-term, not future** — it converts all R-invariant byz grief patterns into clean fall-through at +1 RTT cost. |
 | Mesh-flakiness tolerance (honest operator with poor gossipsub mesh visibility) | **Limited.** A mesh-flaky honest operator who fails to observe peer σ-emits within the NR-decision window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget consumer for that slot. Combined with byz σ-refusal, this creates a deadlock that the protocol cannot recover from within the slot. The recommended `Δ_2 ≥ 2(D + δ)` absorbs typical mesh-jitter (up to one full `D + δ` of additional slack on top of P99 propagation) but doesn't cover wider mesh outliers. **Same exposure as OBFTR(R≥2)** — cross-round NR-lock blocks recovery there too. QBFT's round-reset semantics handle this case better (a flaky operator's bad PREPARE doesn't lock them across rounds); OBFT-family enforces cross-phase exclusivity per slot. Phase 2a/2b mitigates by deferring commitment until mesh visibility has had a full additional propagation cycle to stabilize. |
@@ -674,7 +674,7 @@ The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_s
 
 Common parameters: **D = 100ms (cluster gossipsub P99/P999), δ = 50ms, n = 4, f = 1**. Per-window minimums:
 - `Δ_2 ≥ D + δ = 150ms` minimum (`KindCommit` propagation budget). Defensive widening to `Δ_2 = D + δ + ε_proc_safety` if per-operator processing variance is non-negligible.
-- `Δ_3 ≥ (D + δ) + ε_3 ≈ 250ms` where `ε_3 ≈ 100ms` is local processing time. **NR-partial propagation must complete before Phase 3 reconstruction** — sizing Δ_3 to "100ms propagation-independent" is a bug, see §Phase 3 / Δ_3 sizing.
+- `Δ_3 ≥ ε_3 ≈ 100ms` where `ε_3` is local processing time. Phase 3 is purely local CPU work — `KindCommit` propagation (carrying both σ and NR partials) is already absorbed by `Δ_2 ≥ D + δ`, so Δ_3 has no propagation component.
 
 The leader broadcast deadline is `T_broadcast_max = T_commit − 2(D + δ)`. At `T_commit = slot_start + 1.5s` and D=100ms, δ=50ms: `T_broadcast_max = 1.20s`. Leaders' fetch windows must fit within `[0, T_broadcast_max]` with each `T_k + Δ_1 ≤ T_broadcast_max`. Bundles first-observed past `T_commit` at any honest receiver are not counted by that receiver toward σ-quorum at this layer; the cluster relies on K-layer fall-through to a deeper backup whose bundle did propagate in time.
 
@@ -689,8 +689,8 @@ K=4 = n; every cluster member leads exactly one layer. Maximum K-layer fall-thro
 | Phase 1 fetch (effective) | 1200ms | slot_start + 1.20s | `T_broadcast_max = T_commit − 2(D+δ) = 1.20s`; all K=4 leaders' fetch windows fit within `[0, 1.20s]` |
 | Phase-1 propagation slack | 300ms | slot_start + 1.50s | Load-bearing protocol time: bundles broadcast at the deadline boundary propagate to all honest within `D + δ` of broadcast |
 | Phase 2 | 150ms | slot_start + 1.65s | `KindCommit` propagation: `Δ_2 = D + δ` minimum |
-| Phase 3 | 250ms | slot_start + 2.05s | Δ_3 = (D + δ) + ε_3 = 150 + 100ms; absorbs end-of-Phase-2 NR-partial propagation + local reconstruction processing |
-| Submission | 1950ms | slot_start + 4.00s | 7.8× the 250ms minimum — comfortable headroom for relay/beacon-submit P99 tails |
+| Phase 3 | 100ms | slot_start + 1.75s | Δ_3 = ε_3 = 100ms; purely local CPU work (BLS aggregation + IBE decryption walk + certificate construction). `KindCommit` propagation already absorbed by Δ_2. |
+| Submission | 2250ms | slot_start + 4.00s | 9× the 250ms minimum — comfortable headroom for relay/beacon-submit P99 tails |
 
 **Recovery scope.** Within Phase 3's single reconstruction walk: silent L_0 → NR-quorum at L_0 → L_1 σ-quorum if honest; silent L_0 + L_1 → fall-through to L_2 (still honest by pigeonhole at f=1); silent L_0 + L_1 + L_2 → L_3. **All in one round** (sequential local decryption, no per-layer RTT). Asymmetric propagation past `T_commit` at any single layer falls through to a deeper backup; real propagation > `D + δ` at all K layers is out-of-envelope and slot-misses cleanly.
 
@@ -705,8 +705,8 @@ K=3 = f+2; satisfies BFT-min and late-leader-resilience with one fewer fall-thro
 | Phase 1 fetch (effective) | 1200ms | slot_start + 1.20s | All K=3 leaders' fetch windows fit within `[0, 1.20s]` |
 | Phase-1 propagation slack | 300ms | slot_start + 1.50s | Same load-bearing propagation time as K=4 |
 | Phase 2 | 300ms | slot_start + 1.80s | Same as K=4 (Phase 2 timing doesn't depend on K) |
-| Phase 3 | 250ms | slot_start + 2.05s | Same as K=4 |
-| Submission | 1950ms | slot_start + 4.00s | Same headroom as K=4 |
+| Phase 3 | 100ms | slot_start + 1.90s | Δ_3 = ε_3 = 100ms; same as K=4 |
+| Submission | 2100ms | slot_start + 4.00s | 8.4× the 250ms minimum (slightly tighter than K=4 because K=3 table uses Δ_2 = 2(D+δ) recommended, vs K=4 table's Δ_2 = D+δ minimum) |
 
 **Recovery scope.** Same shape as K=4 with one fewer fall-through layer: silent L_0 + L_1 → L_2 (deepest at K=3). At K=3, the deepest-layer leader L_2 is more sensitive to late broadcast (no L_3 to fall through to); host-side hard deadline for L_2's fetch loop is recommended (see §Failure modes / Late deepest-layer leader broadcast).
 
@@ -716,8 +716,8 @@ K=3 = f+2; satisfies BFT-min and late-leader-resilience with one fewer fall-thro
 
 | Setup | Final phase ends | Submission headroom | Recovery scope at D=100ms | Bandwidth (healthy / failure) |
 |---|---|---|---|---|
-| OBFT(K=4) ★ | slot_start + 2.05s | 1.95s | K-layer fall-through (L_0→L_1→L_2→L_3) | ~27 KB / n/a (single round) |
-| OBFT(K=3) | slot_start + 2.05s | 1.95s | K-layer fall-through (L_0→L_1→L_2) | ~24 KB / n/a |
+| OBFT(K=4) ★ | slot_start + 1.75s | 2.25s | K-layer fall-through (L_0→L_1→L_2→L_3) | ~27 KB / n/a (single round) |
+| OBFT(K=3) | slot_start + 1.90s | 2.10s | K-layer fall-through (L_0→L_1→L_2) | ~24 KB / n/a |
 | OBFTR(K=4, R=2) | slot_start + 2.65s | 1.35s | Same K-layer fall-through + extended envelope to `2D` via explicit round-2 re-flood | ~27 KB / ~50 KB on round-1 failure |
 | OBFTR(K=3, R=2) | slot_start + 2.65s | 1.35s | Same K-layer fall-through (one fewer layer) + extended envelope `2D` | ~24 KB / ~45 KB on round-1 failure |
 | QBFT (RT=2s, SSV production) | Round 1 only fits | 1.75s if R1 succeeds | Round-1 healthy; round-2 round-change exceeds 4s budget | ~14 KB / n/a (round 2 doesn't fit) |
@@ -726,7 +726,7 @@ K=3 = f+2; satisfies BFT-min and late-leader-resilience with one fewer fall-thro
 
 **Key observations:**
 
-- **OBFT's submission headroom is significantly larger than OBFTR(R=2)'s** (1.95s vs 1.35s; +600ms) — useful when relay/beacon-submit P99 tails are non-trivial, or when the cluster wants margin for local CPU variance on Phase-3 reconstruction or certificate gossip.
+- **OBFT's submission headroom is significantly larger than OBFTR(R=2)'s** (2.25s vs 1.35s at K=4; +900ms) — useful when relay/beacon-submit P99 tails are non-trivial, or when the cluster wants margin for local CPU variance on Phase-3 reconstruction or certificate gossip.
 - **OBFT's effective absorption window is `D + δ`** ≈ 150ms at Config A — bundles arriving past `T_commit` at any honest receiver are not counted, with K-layer fall-through as the only within-slot recovery. OBFTR(R=2) extends absorption via cross-round retention; cases beyond `D + δ` at any single layer fall through to a deeper backup (OBFT) or get retained for a second round (OBFTR(R=2)).
 - **OBFT is simpler operationally**: no L_C consensus, no Phase 2.5, no per-round acceptance widening, no auth-only-retention state, no cross-round σ-or-NR exclusivity, no cached σ-partial persistence requirement, no deterministic re-signing fallback, and no Defer state. The EKM coordinator is closer to a per-key extension than a novel multi-round atomicity engine.
 - **K=4 vs K=3 trades bandwidth for recovery depth.** Same timing fit at this D (Phase 2/3 don't depend on K); K=4 adds one more fall-through layer at +3 KB per onion. K=4 = n is the OBFT default — maximum fall-through with all cluster members participating as leaders.
@@ -750,7 +750,7 @@ For SSV's proposer duty, the host application's `valid` / `not-valid` verdict on
 
 **Receiver-side validity stabilization — host best-effort toward assumption 3.** OBFT requires host validity to be unanimous at decision time (see [Assumptions](#assumed)). For SSV's proposer duty, the host narrows the divergence window via per-operator validity stabilization: each operator runs the validity check (including `parent_root`-vs-head) **once at Phase-1 acceptance** against a stable head snapshot, then locks the verdict for the remainder of the slot. Subsequent head movements within that operator do not flip the verdict.
 
-**The validity-locking window is bounded by `D + δ`.** Operators accept Phase-1 bundles in `[slot_start, T_commit]`. Each operator locks their verdict at first-observation, so the cluster-wide spread of lock-times equals `D + δ` from earliest possible first-observation (right after `T_broadcast_max`) to latest (just before `T_commit`). At Config A this is ~150ms. A re-org landing inside this window can split honest verdicts across the boundary; the rate of validity-divergence slot-misses scales with the re-org distribution within this window.
+**The validity-locking window is bounded by `D + δ`.** Operators accept Phase-1 bundles in `[slot_start, T_commit]`. Each operator locks their verdict at first-observation, so the cluster-wide spread of lock-times equals `D + δ` from earliest possible first-observation (right after `T_broadcast_max`) to latest (just before `T_commit`). At Config A this is ~150ms. A re-org landing inside this window can split honest verdicts across the boundary; the all-honest rate of validity-divergence slot-misses scales with the re-org distribution within this window. **In adversarial-byz deployments the operational rate is multiplicatively higher** — a byzantine within the f-bound exercising passive f-budget (silence or σ-on-V; neither cryptographically slashable individually) widens the deadlock zone beyond the all-honest case. See [§Failure modes / Validity-divergence deadlock](#failure-modes) for the `re-org rate × byz-passivity-rate` scaling.
 
 **This per-operator locking does NOT guarantee cluster-wide convergence.** Operators accept Phase-1 bundles at different `t` within the gossipsub propagation window (operator-local first-observation timestamps, plus clock skew δ). If a re-org happens during this acceptance window, operator A may snapshot pre-reorg (verdict = valid) while operator B snapshots post-reorg (verdict = invalid). Both locks hold; cluster views diverge. The locking ensures *per-operator* stability across the slot, narrowing the divergence window to "re-org during gossipsub-acceptance window" — typical D ≈ 100–500ms — but does not eliminate it.
 
@@ -1028,7 +1028,7 @@ Sizing:
 - **Recommended** `Δ_minicon = 2(D + δ)` for jitter absorption, mirroring `Δ_2`'s widening.
 - `Δ_2`, `Δ_3`: same as bare OBFT.
 
-At Config A (D=100ms, δ=50ms, recommended sizing): `Δ_minicon = 300ms`; total slot budget post-`T_commit` ≈ 850ms (vs bare OBFT's ~550ms); submission headroom drops from ~3.4s to ~3.15s within the 4s relay cutoff.
+At Config A (D=100ms, δ=50ms, recommended sizing: Δ_2 = 2(D+δ), Δ_3 = ε_3): `Δ_minicon = 300ms`; total slot budget post-`T_commit` ≈ 700ms (vs bare OBFT's ~400ms); submission headroom drops from ~2.10s to ~1.80s within the 4s relay cutoff (T_commit anchored at slot_start + 1.5s).
 
 ### Protocol
 
@@ -1050,7 +1050,7 @@ The coherence rule binding a rotation leader's `KindBid` `V_i` to their Phase-1 
 
 Each operator `i`, by their verdict-broadcast deadline `T_commit + Δ_minicon − (D + δ)`:
 
-1. Computes `bid_set_i` = set of received-and-validated bid envelopes — operator-identity signature valid AND bid format valid. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bids that fail any enabled filter are excluded from `bid_set_i`.
+1. Computes `bid_set_i` = set of received-and-validated bid envelopes — operator-identity signature valid AND bid format valid AND host-validity verdict = valid. Host-validity follows the same locking semantics as bare OBFT's Phase-1 bundle validation (see [§Head-change handling](#head-change-handling)): on first-observation of `V_i`, the host validates `V_i` against a stable head snapshot taken at that observation moment and **locks the verdict (valid/not-valid) for the remainder of the slot**. Subsequent host-validity checks on `V_i` (in particular, the L_Bid Phase-2 emit-time check below) are reads of this locked verdict, never re-evaluations against a moved head. Bids whose locked verdict is not-valid are excluded from `bid_set_i`. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bids that fail any enabled filter are excluded from `bid_set_i`. (Coherence note: when a rotation leader's `KindBid` `V_i` and Phase-1 bundle V are the same value per [§Coherence and cross-layer independence](#coherence-and-cross-layer-independence), a single host-validity check on first-observation of either envelope produces the locked verdict applied to both.)
 2. Computes `predicted_LBid_i`:
    - If `|bid_set_i| ≥ n − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax_{V in bid_set_i} bid_value`, with `op_id` tiebreak on equal bids.
    - Else: `predicted_LBid_i = null` (insufficient visibility or no consensus reachable from `i`'s view).
@@ -1084,7 +1084,7 @@ layer L_k (k ≥ 1):  E_{nr_tag_LBid}( E_{nr_tag_0}( ... E_{nr_tag_{k-1}}( σ_i^
 Per-layer commitment:
 
 - **L_Bid**:
-  - `verdict_quorum_V` reached on `V_X` AND operator retains `V_X` locally AND host re-validates `V_X` as valid → emit plaintext `σ_i^V(V_X)` at L_Bid.
+  - `verdict_quorum_V` reached on `V_X` AND operator retains `V_X` locally AND operator's locked host-validity verdict for `V_X` (anchored at first-observation per the Mini-consensus rule above) is valid → emit plaintext `σ_i^V(V_X)` at L_Bid.
   - Else → emit NR partial `σ_i^{IBE}(nr_tag_LBid)`.
 - **L_0, ..., L_{K-1}**: same σ-or-NR commitment logic as bare OBFT (σ-state, NR-state, NV-state — three-state model from §Phase 1's operator commitments). Each operator emits a single `KindCommit` carrying their per-layer σ partials and NR partials.
 
@@ -1134,7 +1134,7 @@ Pigeonholes 1, 2, 3 hold unchanged at K' = K + 1 layers. The additional `nr_tag_
 
 ### Slashing-evidence rules
 
-Inherits OBFT's 5 rules unchanged. Two new rules cover L_Bid-specific surfaces:
+Inherits OBFT's 5 rules unchanged. Rule 5's "plaintext layer" binds to L_Bid in this extension (since L_0 is no longer the plaintext layer here — its σ is encrypted under `nr_tag_LBid`); a fake plaintext σ at L_Bid that doesn't verify against any retained `bid_set` member is slashable on the same construction as L_0 in bare OBFT. Two new rules cover L_Bid-specific surfaces:
 
 - **Rule 7 — Bid equivocation / bid-bundle incoherence.** Two distinct `KindBid` envelopes from the same operator at the same slot, OR a `KindBid` `V_i` mismatching the same operator's Phase-1 bundle V at the same `(slot, rotation_layer)`. Self-contained slashable evidence — both envelopes signed by `i`'s operator-identity key.
 - **Rule 8 — Verdict equivocation / verdict-vs-action equivocation.** Operator `i` either broadcasts two distinct `KindBidVerdict` envelopes for the same slot, OR broadcasts `KindBidVerdict(σV(V_X))` and emits Phase-2 NR partial on `nr_tag_LBid` (or claims null verdict and emits Phase-2 σ on `V_X`). Self-contained slashable evidence — both signed messages exist on the wire.
@@ -1182,12 +1182,12 @@ Measured from `T_commit` (mini-consensus start). At Config A (D=100ms, δ=50ms, 
 | Scenario | Time | Mechanism |
 |---|---|---|
 | L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`Δ_minicon + (D+δ) ≈ 450ms` | Verdict-quorum determines `V_X`; σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
-| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 850ms` | Full Phase 2 + Phase 3 walk |
-| Mini-consensus fails (C1/C2 patterns) → fall-through to L_0 | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 850ms` | NR-quorum at L_Bid + Phase-3 walk decrypts L_0; L_0 σ-quorum |
-| Multi-layer fall-through after L_Bid | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 850ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
+| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | Full Phase 2 + Phase 3 walk |
+| Mini-consensus fails (C1/C2 patterns) → fall-through to L_0 | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | NR-quorum at L_Bid + Phase-3 walk decrypts L_0; L_0 σ-quorum |
+| Multi-layer fall-through after L_Bid | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
 | L_Bid 2-1-byz-defect or verdict-equivocation | slot misses | Deadlock at L_Bid blocks fall-through |
 
-Best (success) ≈ 450ms; worst (success) ≈ 850ms; ~2× spread (smaller than bare OBFT's ~4× because the mini-consensus phase is mandatory). Healthy-path is +150-250ms vs bare OBFT (~600ms canonical).
+Best (success) ≈ 450ms; worst (success) ≈ 700ms; ~1.6× spread (smaller than bare OBFT's wider spread because the mini-consensus phase is mandatory). Healthy-path is +50-300ms vs bare OBFT (~400ms canonical post-`T_commit` at recommended Δ_2 = 2(D+δ), Δ_3 = ε_3).
 
 ### Optional extension — relay/builder attestation verification
 
@@ -1222,12 +1222,12 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindBid`, `KindBidVerdict` |
 | Slashing-evidence rules | 5 | 7 (+ Rule 7 bid equivocation/incoherence, + Rule 8 verdict equivocation/verdict-vs-action) |
-| Healthy-path latency (post-`T_commit`) | ~600ms | ~750-850ms (+150-250ms) |
+| Healthy-path latency (post-`T_commit`) | ~400ms | ~450-700ms (+50-300ms) |
 | Best-case latency | ~150ms | ~450ms |
-| Worst-case latency (within success envelope) | ~600ms | ~850ms |
-| Time-to-completion spread | ~4× best/worst | ~2× best/worst |
+| Worst-case latency (within success envelope) | ~400ms | ~700ms |
+| Time-to-completion spread | ~2.7× best/worst | ~1.6× best/worst |
 | Bandwidth (n=4, K=4 healthy) | ~27 KB | ~32 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
-| Submission headroom (4s cutoff) | ~3.4s | ~3.15s |
+| Submission headroom (4s cutoff, T_commit at slot_start + 1.5s) | ~2.10s | ~1.80s |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | OBFT base recovery scope | **Same** (mini-consensus failure falls through cleanly; rotation layers unchanged) |
