@@ -6,100 +6,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-
-	"github.com/ssvlabs/ssv/networkconfig"
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage/mocks"
 )
 
 // G1 regression tests for validateOBFTMessage: confirm that BLS / IBE-tag
 // verification at the validation boundary rejects messages with garbage
-// cryptographic material before they reach the consensus path.
-
-// obftTestHeight returns a Height inside the validation layer's accepted
-// slot window. Use this for any envelope.Height value in tests; raw constants
-// like 200 fail the slot-window check.
-func obftTestHeight(mv *messageValidator) obftcore.Height {
-	return obftcore.Height(mv.netCfg.EstimatedCurrentSlot())
-}
-
-func obftTestSetup(t *testing.T) (
-	*messageValidator,
-	*spectestingutils.TestKeySet,
-	*ssvtypes.SSVShare,
-	spectypes.MessageID,
-	[32]byte,
-) {
-	t.Helper()
-	ks := spectestingutils.Testing4SharesSet()
-	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-	}
-
-	ctrl := gomock.NewController(t)
-	validatorStore := mocks.NewMockValidatorStore(ctrl)
-	validatorStore.EXPECT().Validator(gomock.Any()).
-		DoAndReturn(func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
-			return share, true
-		}).AnyTimes()
-	validatorStore.EXPECT().Committee(gomock.Any()).Return(nil, false).AnyTimes()
-
-	mv := &messageValidator{
-		netCfg:         networkconfig.TestNetwork,
-		validatorStore: validatorStore,
-		obftAdmissions: newOBFTAdmissionTracker(),
-	}
-	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, share.ValidatorPubKey[:], spectypes.RoleProposer)
-	clusterID := [32]byte{0xAA, 0xBB}
-	return mv, ks, share, msgID, clusterID
-}
-
-func obftCommitteeInfo(share *ssvtypes.SSVShare) CommitteeInfo {
-	ops := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, m := range share.Committee {
-		ops = append(ops, m.Signer)
-	}
-	return newCommitteeInfo(spectypes.CommitteeID{}, ops, nil)
-}
-
-// signOBFTEnvelope wraps an envelope in a SignedSSVMessage with an outer
-// signer. We bypass real RSA signing — validateOBFTMessage doesn't verify
-// the outer signature itself (that's done by the upper layer); it only
-// checks structural and BLS-inner correctness.
-func signOBFTEnvelope(t *testing.T, msgID spectypes.MessageID, body []byte, signer spectypes.OperatorID) *spectypes.SignedSSVMessage {
-	t.Helper()
-	return &spectypes.SignedSSVMessage{
-		OperatorIDs: []spectypes.OperatorID{signer},
-		Signatures:  [][]byte{make([]byte, 256)},
-		SSVMessage: &spectypes.SSVMessage{
-			MsgType: 4, // SSVOBFTMsgType (avoid import cycle)
-			MsgID:   msgID,
-			Data:    body,
-		},
-	}
-}
+// cryptographic material before they reach the consensus path. Shared
+// helpers (obftTestSetup, signOBFTEnvelope, etc.) live in
+// obft_test_helpers_test.go.
 
 // ---- Phase1Bundle ----
-
-// proposerCandidateV builds an OBFT V for the proposer-duty signing semantics:
-// `[version | SSZ-marshaled blinded BeaconBlock]`. The validation layer's
-// V-side verifier translates V into the block's proposer-domain signing root
-// before checking σ_V, so unit tests must use a real blinded block in V.
-func proposerCandidateV() []byte {
-	const version = spec.DataVersionDeneb
-	return obftadapter.EncodeCandidate(version, spectestingutils.TestingBlindedBeaconBlockBytesV(version))
-}
 
 func TestValidateOBFT_Phase1Bundle_AcceptsValidSigma(t *testing.T) {
 	mv, ks, share, msgID, clusterID := obftTestSetup(t)

@@ -77,6 +77,30 @@ benchmark:
 	@echo "Running benchmark for specified directory"
 	@go test -run=^# -bench . -benchmem -v TARGET_DIR_PATH -count 3
 
+# fuzz-validation runs each OBFT message-validation fuzz target for FUZZTIME
+# (default 60s). Override with `make fuzz-validation FUZZTIME=10m`. Each
+# fuzz target runs separately because Go's `-fuzz` flag accepts only one
+# target at a time. Discovered failing inputs are written to
+# message/validation/testdata/fuzz/<TestName>/.
+FUZZTIME ?= 60s
+FUZZ_VALIDATION_TARGETS = \
+	FuzzOBFTUnwrap \
+	FuzzOBFTPhase1BundleDecode \
+	FuzzOBFTCommitDecode \
+	FuzzOBFTCertificateDecode \
+	FuzzOBFTPhase1BundleRoundtrip \
+	FuzzOBFTCommitRoundtrip \
+	FuzzValidateOBFTMessage \
+	FuzzOBFTAdmissionsAdmit
+
+.PHONY: fuzz-validation
+fuzz-validation:
+	@echo "Running OBFT validation fuzz tests (FUZZTIME=$(FUZZTIME) per target)"
+	@for target in $(FUZZ_VALIDATION_TARGETS); do \
+		echo ">> $$target"; \
+		go test -tags blst_enabled -run='^$$' -fuzz="^$$target"'$$' -fuzztime=$(FUZZTIME) ./message/validation/ || exit 1; \
+	done
+
 .PHONY: docker-spec-test
 docker-spec-test:
 	@echo "Running spec tests in docker"
