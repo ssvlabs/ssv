@@ -723,7 +723,7 @@ Out-of-scope cases (host-validity divergence, 1-1-1 equivocation splits) are add
 | `T_commit_1` | round 1 commit / view-fix deadline — anchor: `slot_start + 1.5s` across all configurations below |
 | `T_broadcast_max_1` | round 1 leader broadcast deadline — `T_commit_1 − 2 BTT` (= 1.20s at P99=150ms, δ=50ms); per-layer fetch windows fit within `[0, T_broadcast_max_1]` with `T_{K-1} < ... < T_0 ≤ T_broadcast_max_1 − Δ_1`. Bundles broadcast at this deadline have `1 BTT` of propagation slack to all-honest first-observation by `T_commit_1 − 1 BTT`. |
 | `T_commit_r` | round `r` receiver acceptance cutoff — bundles first-observed past `T_commit_r` at any honest receiver are not counted by that receiver toward σ-quorum at round `r`, but may still be picked up in round `r+1` if they propagate by `T_commit_{r+1}` |
-| `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 250ms` of slack to land |
+| `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 100ms` of slack to land (matches OBFT.md's `header_submit_headroom`) |
 
 Cryptographic safety (`qEnc = qV` + chained encryption + EKM-enforced single-σ-V exclusivity per (slot, layer, round)) ensures only one block can ever get a valid validator signature, regardless of K, R, or round structure. R-round retry only enables more recovery scenarios; it cannot produce two outputs.
 

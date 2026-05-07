@@ -694,11 +694,11 @@ For an SSV cluster proposing an Ethereum block, the recommended 2abOBFT configur
 | `T_broadcast_max` | leader broadcast deadline — `T_commit − 2 BTT`; per-layer fetch windows fit within `[0, T_broadcast_max]` |
 | `T_accept_max` | receiver acceptance horizon — `T_commit + Δ_2a − 1 BTT`; bundles first-observed past this are auth-only-retained |
 | `T_verdict_max` | verdict broadcast horizon — coincident with `T_accept_max` |
-| `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 250ms` of slack to land |
+| `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 100ms` of slack to land (matches OBFT.md's `header_submit_headroom`) |
 
 ### Timing budget — concrete configurations
 
-The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_submit ≈ 250ms` is reserved for relay submission. The slot's reconstruction must complete by `slot_start + 4.0s − T_submit ≤ slot_start + 3.75s`.
+The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_submit ≈ 100ms` is reserved for relay submission. The slot's reconstruction must complete by `slot_start + 4.0s − T_submit ≤ slot_start + 3.90s`.
 
 Common parameters: **P99 = 150ms (cluster gossipsub P99/P999), δ = 50ms, n = 4, f = 1**.
 
@@ -711,7 +711,7 @@ Common parameters: **P99 = 150ms (cluster gossipsub P99/P999), δ = 50ms, n = 4,
 | Phase 2a | 400ms | slot_start + 2.00s | `Δ_2a = 2 BTT`; verdict broadcast horizon = `T_commit + Δ_2a − 1 BTT = 1.80s`; absorbs late bundles arriving up to 1.80s |
 | Phase 2b | 400ms | slot_start + 2.40s | `Δ_2b = 2 BTT`; σ/NR partials propagate to peers before Phase 3 |
 | Phase 3 | 300ms | slot_start + 2.70s | `Δ_3 = 1 BTT + ε_3 = 300ms`; absorbs end-of-Phase-2b NR-partial propagation + reconstruction |
-| Submission | 1300ms | slot_start + 4.00s | 5.2× the 250ms minimum — comfortable headroom |
+| Submission | 1300ms | slot_start + 4.00s | 13× the 100ms minimum — comfortable headroom |
 
 #### 2abOBFT(n=4, K=4) minimum sizing
 
@@ -722,7 +722,7 @@ Common parameters: **P99 = 150ms (cluster gossipsub P99/P999), δ = 50ms, n = 4,
 | Phase 2a | 200ms | slot_start + 1.80s | `Δ_2a = 1 BTT` (BFT-minimum); narrower late-bundle absorption |
 | Phase 2b | 200ms | slot_start + 2.00s | `Δ_2b = 1 BTT` |
 | Phase 3 | 300ms | slot_start + 2.30s | Same |
-| Submission | 1700ms | slot_start + 4.00s | 6.8× the 250ms minimum |
+| Submission | 1700ms | slot_start + 4.00s | 17× the 100ms minimum |
 
 **Recommended sizing trades 400ms of submission headroom for mesh-jitter absorption**. Production telemetry should drive the choice.
 

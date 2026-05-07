@@ -15,7 +15,7 @@ The comparison is structured along three axes:
 - **Cluster**: `n = 4`, `f = 1`, `K = 4` (the SSV proposer-duty default; algebra generalizes to higher `n` at the f-bound).
 - **Clock skew δ = 50ms**, included in `BTT` (see below).
 - **Time unit `BTT` (broadcast trip time)** = `P99 + δ` — one one-way broadcast trip under partial-synchrony assumptions. `P99` is the propagation budget at the deployment's chosen tail percentile (P99, P999, P9999, etc. — deployment knob). Operating points used in tables below: `BTT = 200ms` (P99 ≈ 150ms + δ ≈ 50ms; production-typical), `BTT = 600ms` (P99 ≈ 550ms + δ; degraded), `BTT = 1000ms` (P99 ≈ 950ms + δ; severely degraded). Tables and prose key on `BTT` end-to-end.
-- **Relay submission tail**: ~250ms reserved for relay round-trip after consensus completes. Effective BFT budget = 4s − BFT_start − 250ms.
+- **Relay submission tail**: 100ms reserved for cert broadcast + relay submit after consensus completes (matches OBFT.md's `header_submit_headroom` — see [docs/OBFT.md / Operating point](OBFT.md#timing-budget)). Effective BFT budget = 4s − BFT_start − 100ms.
 - **QBFT round timeout RT = 2s** (current SSV production setting). Held fixed across BTT; tightening would scale RT with BTT but raises false-positive round-changes under jitter (a known trade-off the team has tuned).
 - **No specific block-fetch cost**: BFT_start corresponds to the moment Phase 1 broadcast (or QBFT PROPOSE) begins. Pre-fetch and pre-consensus sit in `[slot_start, BFT_start]`.
 - **"Miss"**: cluster fails to produce a validator signature on the proposed block before the relay cutoff. Slot lost; no safety violation in any of the four protocols (safety is cryptographic / honest-majority).
@@ -57,9 +57,9 @@ K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Ph
 
 | BFT start time | Budget |
 |---|---|
-| 0s (immediate) | 3.75s |
-| 400ms (moderate) | 3.35s |
-| 2.5s (late) | 1.25s |
+| 0s (immediate) | 3.9s |
+| 400ms (moderate) | 3.5s |
+| 2.5s (late) | 1.4s |
 
 ## Table 1 — Success modes (healthy-path completion)
 
@@ -67,24 +67,24 @@ Healthy completion = leader honest, all Phase-1 bundles propagate, σ-quorum rea
 
 | BFT start, BTT | Budget | Partial-sigs (1 BTT) † | QBFT (4 BTT) | OBFT (3 BTT) | OBFTR R1 (5 BTT) | 2abOBFT (6 BTT) |
 |---|---|---|---|---|---|---|
-| **0s, BTT=200ms** | 3.75s | 0.2s ✓ | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ |
-| **0s, BTT=600ms** | 3.75s | 0.6s ✓ | 2.4s ✓ | 1.8s ✓ | 3.0s ✓ | 3.6s ✓ tight |
-| **0s, BTT=1000ms** | 3.75s | 1.0s ✓ | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | **6.0s ✗** |
-| **400ms, BTT=200ms** | 3.35s | 0.2s ✓ | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ |
-| **400ms, BTT=600ms** | 3.35s | 0.6s ✓ | 2.4s ✓ | 1.8s ✓ | 3.0s ✓ tight | **3.6s ✗** |
-| **400ms, BTT=1000ms** | 3.35s | 1.0s ✓ | **4.0s ✗** | 3.0s ✓ tight | **5.0s ✗** | **6.0s ✗** |
-| **2.5s, BTT=200ms** | 1.25s | 0.2s ✓ | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ tight | 1.2s ✓ very tight |
-| **2.5s, BTT=600ms** | 1.25s | 0.6s ✓ | **2.4s ✗** | **1.8s ✗** | **3.0s ✗** | **3.6s ✗** |
-| **2.5s, BTT=1000ms** | 1.25s | 1.0s ✓ | **4.0s ✗** | **3.0s ✗** | **5.0s ✗** | **6.0s ✗** |
+| **0s, BTT=200ms** | 3.9s | 0.2s ✓ | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ |
+| **0s, BTT=600ms** | 3.9s | 0.6s ✓ | 2.4s ✓ | 1.8s ✓ | 3.0s ✓ | 3.6s ✓ |
+| **0s, BTT=1000ms** | 3.9s | 1.0s ✓ | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | **6.0s ✗** |
+| **400ms, BTT=200ms** | 3.5s | 0.2s ✓ | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ |
+| **400ms, BTT=600ms** | 3.5s | 0.6s ✓ | 2.4s ✓ | 1.8s ✓ | 3.0s ✓ | **3.6s ✗** |
+| **400ms, BTT=1000ms** | 3.5s | 1.0s ✓ | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | **6.0s ✗** |
+| **2.5s, BTT=200ms** | 1.4s | 0.2s ✓ | 0.8s ✓ | 0.6s ✓ | 1.0s ✓ | 1.2s ✓ tight |
+| **2.5s, BTT=600ms** | 1.4s | 0.6s ✓ | **2.4s ✗** | **1.8s ✗** | **3.0s ✗** | **3.6s ✗** |
+| **2.5s, BTT=1000ms** | 1.4s | 1.0s ✓ | **4.0s ✗** | **3.0s ✗** | **5.0s ✗** | **6.0s ✗** |
 
 † **Partial-sigs only fits if V is pre-agreed.** For SSV proposer duty (V varies per operator due to MEV bundles), this isn't directly applicable — the cluster needs a BFT consensus protocol to resolve V-disagreement first. Shown here as the floor: what completion would look like if V were pre-agreed (e.g., for non-MEV duties like attestations).
 
 **Reading Table 1:**
 
 - **Partial-sigs floor (V pre-agreed)**: 1 BTT trivially fits every cell. Sets the absolute floor — BFT consensus protocols pay 2-8 BTT extra to resolve V-disagreement.
-- **BTT=200ms** (production-typical for healthy mesh): all four BFT protocols complete healthy at every BFT_start — including QBFT at 0.8s comfortably fitting the 1.25s budget at 2.5s start.
-- **BTT=600ms** (degraded mesh): QBFT (2.4s) and OBFT (1.8s) fit 0s/400ms comfortably; OBFTR R1 (3.0s) fits 400ms tightly; 2abOBFT (3.6s) fits 0s tightly but misses 400ms. All four miss at 2.5s start.
-- **BTT=1000ms** (severely degraded): only OBFT (3 BTT, smallest BTT count due to staggered model) fits at 0s and 400ms start. QBFT (4.0s) misses 0s/400ms by 250–650ms; OBFTR R1 (5.0s) and 2abOBFT (6.0s) miss everywhere.
+- **BTT=200ms** (production-typical for healthy mesh): all four BFT protocols complete healthy at every BFT_start — including QBFT at 0.8s comfortably fitting the 1.4s budget at 2.5s start.
+- **BTT=600ms** (degraded mesh): QBFT (2.4s) and OBFT (1.8s) fit 0s/400ms comfortably; OBFTR R1 (3.0s) fits 400ms with 500ms margin; 2abOBFT (3.6s) fits 0s with 300ms margin but misses 400ms by 100ms. All four miss at 2.5s start.
+- **BTT=1000ms** (severely degraded): only OBFT (3 BTT, smallest BTT count due to staggered model) fits at 0s and 400ms start. QBFT (4.0s) misses 0s/400ms by 100–500ms; OBFTR R1 (5.0s) and 2abOBFT (6.0s) miss everywhere.
 - **OBFT < OBFTR R1 in BTT count.** The staggered per-layer broadcast model in OBFT (see [OBFT.md §Setting](OBFT.md)) gives the primary L_0 a tighter 1 BTT propagation budget (relative to T_commit; equivalently 0.5 BTT relative to Ls_arrival). OBFTR uses uniform 2 BTT broadcast slack across all leaders + Phase 2.5 (L_C signaling). Net: OBFTR R1 is 2 BTT longer than bare OBFT at recommended sizing.
 - **Partial-sigs < OBFT < QBFT < OBFTR R1 < 2abOBFT** is the production-aligned healthy-path ordering. Partial-sigs is the floor (no consensus). OBFT's 3-BTT lead over QBFT is structural (staggered per-layer broadcast model + Phase-3 local CPU). OBFTR R1 and 2abOBFT pay extra BTT for cross-round retention (Phase 2.5 / L_C) and Phase 2a/2b convergence, respectively.
 
@@ -111,8 +111,8 @@ When round-1 / single-round fails (silent leader, partition, network jitter, but
 **Reading Table 2:**
 
 - **OBFT and 2abOBFT have the cleanest network-failure recovery profile** at any start time where their healthy path fits — silent leader / partition recovery costs zero extra time via in-round K-layer fall-through. This is the structural advantage of K-layer onion with chained encryption: every honest leader in the K-layer rotation provides a fall-through opportunity within Phase 3.
-- **OBFTR's R1+R2 retry** at recommended sizing fits only at BTT=200ms (1.8s vs 3.75s budget at 0s; 1.8s vs 3.35s at 400ms). At BTT=600ms or above, R1+R2 doesn't fit any start time (5.4s+ exceeds 3.75s budget). **OBFTR R1+R2 fitness is narrow under recommended sizing** — production deployments of OBFTR(R=2) need to either tighten Δ_2 toward minimum (sacrificing jitter absorption) or accept that round-2 recovery only works at low BTT.
-- **QBFT's round-2 retry** at production minimum sizing costs RT (2s) + 4 BTT = 2.8s at BTT=200ms — fits at (0s, BTT=200ms) and (400ms, BTT=200ms), missing only at 2.5s start (1.25s budget). At BTT≥600ms, R2 = 4.4s+ misses everywhere.
+- **OBFTR's R1+R2 retry** at recommended sizing fits only at BTT=200ms (1.8s vs 3.9s budget at 0s; 1.8s vs 3.5s at 400ms). At BTT=600ms or above, R1+R2 doesn't fit any start time (5.4s+ exceeds 3.9s budget). **OBFTR R1+R2 fitness is narrow under recommended sizing** — production deployments of OBFTR(R=2) need to either tighten Δ_2 toward minimum (sacrificing jitter absorption) or accept that round-2 recovery only works at low BTT.
+- **QBFT's round-2 retry** at production minimum sizing costs RT (2s) + 4 BTT = 2.8s at BTT=200ms — fits at (0s, BTT=200ms) and (400ms, BTT=200ms), missing only at 2.5s start (1.4s budget). At BTT≥600ms, R2 = 4.4s+ misses everywhere.
 - **OBFT and 2abOBFT cannot retry** (single-round). Their "recovery" is the in-round fall-through; if that doesn't reach σ-quorum (e.g., adversarial pattern locks the σ-or-NR pools — see Table 3), the slot misses.
 - The **structural QBFT-only recovery** (round-2 with fresh-V refetch) is available only at BTT=200ms with BFT_start ≤ 400ms — outside this envelope, the 2s round timeout + 4 BTT phase budget exceeds the slot's 4s cutoff. QBFT's adversarial-recovery advantage is narrow in production.
 
@@ -137,7 +137,7 @@ These failure modes depend on protocol *structure*, not on BTT or start time. Th
 
 **Reading Table 3:**
 
-- **QBFT recovers more adversarial-byz patterns** than the OBFT family in single-round comparison, but only when round-2 fits the budget. At typical SSV proposer duty (400ms start, healthy mesh): QBFT R2 fits at 2.8s vs 3.35s budget (production minimum sizing). At BTT≥600ms or BFT_start=2.5s, the apparent QBFT-recovery advantage disappears — round-2 doesn't fit.
+- **QBFT recovers more adversarial-byz patterns** than the OBFT family in single-round comparison, but only when round-2 fits the budget. At typical SSV proposer duty (400ms start, healthy mesh): QBFT R2 fits at 2.8s vs 3.5s budget (production minimum sizing). At BTT≥600ms or BFT_start=2.5s, the apparent QBFT-recovery advantage disappears — round-2 doesn't fit.
 - **OBFT family avoids QBFT's structural disadvantage** at multi-leader-silent (K-1 ≥ 3) patterns: QBFT requires K serial round-changes (each ~RT + 4 BTT), exceeding the 4s budget at any K-1 ≥ 3 even in production minimum sizing. OBFT/OBFTR/2abOBFT recover within a single round via K-layer fall-through (free in Phase 3).
 - **2abOBFT's convergence-rule recoveries** (1-1-1 equivocation, h_V=1, validity-majority, mesh-flakiness) close the patterns that bare OBFT/OBFTR leave as Class B exposures, at the cost of two narrower regressions (2-1-byz-defect, verdict-equivocation) — both slashable, both R-invariant.
 - **Bare OBFT and OBFTR succeed at 2-1-byz-defect** that 2abOBFT misses, because the leader's Phase-1 σ_V crypto-locks the σ-pool against post-σ defection. 2abOBFT removes Phase-1 σ_V (Variant C) to gain validity-divergence recovery; pays the regression as the structural cost.
@@ -205,13 +205,13 @@ The **MEV-fetch budget asymmetry is a structural OBFT-family advantage over QBFT
 
 **Partial-sigs floor (V pre-agreed)**: 1 BTT = 200ms total. Fits trivially at every (BFT_start, BTT) cell. Sets the floor: BFT-consensus protocols pay 2-8 BTT extra to resolve V-disagreement. For SSV proposer duty (V varies per operator due to MEV bundles), partial-sigs alone is not directly applicable — used here as a reference for the BFT-consensus tax.
 
-**Healthy-path latency at production-typical BTT (200ms)**: partial-sigs floor 200ms, OBFT 600ms, QBFT 800ms, OBFTR-R1 1.0s, 2abOBFT 1.2s. All five fit at every BFT_start (including the 1.25s budget at 2.5s start).
+**Healthy-path latency at production-typical BTT (200ms)**: partial-sigs floor 200ms, OBFT 600ms, QBFT 800ms, OBFTR-R1 1.0s, 2abOBFT 1.2s. All five fit at every BFT_start (including the 1.4s budget at 2.5s start).
 
-**Late-fetch tolerance (BFT start = 2.5s, budget = 1.25s)**: OBFT fits comfortably at BTT=200ms (600ms in 1250ms budget); QBFT (800ms) also fits comfortably; OBFTR R1 at 1.0s is tight; 2abOBFT at 1.2s is very tight (50ms margin). At BTT ≥ 600ms, all four miss — late-fetch is incompatible with degraded mesh.
+**Late-fetch tolerance (BFT start = 2.5s, budget = 1.4s)**: OBFT fits comfortably at BTT=200ms (600ms in 1400ms budget); QBFT (800ms) also fits comfortably; OBFTR R1 at 1.0s fits with 400ms margin; 2abOBFT at 1.2s is tight (200ms margin). At BTT ≥ 600ms, all four miss — late-fetch is incompatible with degraded mesh.
 
-**Degraded-mesh tolerance (BTT = 1000ms)**: only OBFT (3 BTT, smallest BTT count due to staggered model) fits at 0s and 400ms BFT start. QBFT (4 BTT = 4.0s) misses 0s/400ms by 250–650ms; OBFTR R1 (5 BTT) and 2abOBFT (6 BTT) miss everywhere — their consensus time exceeds the 3.35–3.75s budget.
+**Degraded-mesh tolerance (BTT = 1000ms)**: only OBFT (3 BTT, smallest BTT count due to staggered model) fits at 0s and 400ms BFT start. QBFT (4 BTT = 4.0s) misses 0s/400ms by 100–500ms; OBFTR R1 (5 BTT) and 2abOBFT (6 BTT) miss everywhere — their consensus time exceeds the 3.5–3.9s budget.
 
-**Mid-BTT tolerance (BTT = 600ms)**: bare OBFT (1.8s) fits comfortably; QBFT (2.4s) also fits 0s/400ms; OBFTR R1 (3.0s) fits tightly at 400ms; 2abOBFT (3.6s) fits at 0s tightly but misses at 400ms. All four miss at 2.5s start (1.25s budget).
+**Mid-BTT tolerance (BTT = 600ms)**: bare OBFT (1.8s) fits comfortably; QBFT (2.4s) also fits 0s/400ms; OBFTR R1 (3.0s) fits at 400ms with 500ms margin; 2abOBFT (3.6s) fits at 0s with 300ms margin but misses at 400ms by 100ms. All four miss at 2.5s start (1.4s budget).
 
 **Round-2 retry usefulness**: **OBFTR's R1+R2 (9 BTT recommended sizing) fits only at BTT=200ms** at any reasonable BFT_start; at BTT≥600ms it doesn't fit any start time. **QBFT's R2 (RT + 4 BTT = 2.8s at BTT=200ms) fits at (0s, BTT=200ms) and (400ms, BTT=200ms)** comfortably; everywhere else it misses. Above those, retry budget is unavailable. The OBFT family's K-layer in-round fall-through is structurally cheaper than either retry mechanism — it doesn't consume additional BTT and recovers silent leaders for free.
 
@@ -252,8 +252,8 @@ Two scenarios show different success outcomes between bare OBFT and OBFT+L_Bid (
 
 | Scenario | Budget | QBFT | Bare OBFT | **OBFT+L_Bid** | OBFTR R1 | 2abOBFT |
 |---|---|---|---|---|---|---|
-| **0s, BTT=1000ms** | 3.75s | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | 5.0s ✗ | 6.0s ✗ |
-| **400ms, BTT=1000ms** | 3.35s | **4.0s ✗** | 3.0s ✓ tight | **5.0s ✗** | 5.0s ✗ | 6.0s ✗ |
+| **0s, BTT=1000ms** | 3.9s | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | 5.0s ✗ | 6.0s ✗ |
+| **400ms, BTT=1000ms** | 3.5s | **4.0s ✗** | 3.0s ✓ | **5.0s ✗** | 5.0s ✗ | 6.0s ✗ |
 
 OBFT+L_Bid loses bare OBFT's healthy-path advantage at these severely degraded scenarios — its 5-BTT structure (vs bare OBFT's 3-BTT) joins the protocols that miss budget. At BTT ≤ 600ms with BFT_start ≤ 400ms, OBFT and OBFT+L_Bid fit equally.
 

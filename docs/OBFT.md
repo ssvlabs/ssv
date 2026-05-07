@@ -995,6 +995,11 @@ This assumption is L_Bid-specific — bare OBFT does not depend on it. Deploymen
 
 **Suited for**: deployments where MEV bid-routing upside is significant relative to (a) the +1 RTT slot-budget cost of the mini-consensus phase, and (b) the new adversarial-byz residual surfaces at L_Bid. For SSV proposer duty under Config A: high-MEV slots where bid-routed block value capture exceeds the slot-loss-rate cost from the new L_Bid failure modes.
 
+**BTT regime guidance** (see [§Deployment envelope by BTT](#deployment-envelope-by-btt) for full table):
+- **BTT ≤ 400ms** (production-typical mesh): L_Bid recommended sizing fits with comfortable submission slack (700ms+).
+- **BTT 500-1000ms** (degraded mesh): switch to minimum sizing (`Δ_minicon = Δ_2 = 1 BTT`); recommended sizing becomes tight or fails. Trade-off: less mesh-jitter absorption.
+- **BTT > 1100ms** (severely degraded): L_Bid does not fit at the standard `T_commit` anchor; bare OBFT (3-BTT cycle) remains the available alternative.
+
 **Not suited for**: deployments prioritizing minimum slot latency (the +1 RTT is non-trivial), or where adversarial-byz at the bid layer is a hard constraint (the new residuals are slashable but slot-miss without fall-through; see [§Liveness](#liveness)).
 
 ### Setting
@@ -1191,6 +1196,30 @@ Measured from `T_commit` (mini-consensus start). At Config A (P99=150ms, δ=50ms
 | L_Bid 2-1-byz-defect or verdict-equivocation | slot misses | Deadlock at L_Bid blocks fall-through |
 
 Best (success) ≈ 600ms; worst (success) ≈ 900ms; ~1.5× spread (smaller than bare OBFT's wider spread because the mini-consensus phase is mandatory). Healthy-path is +100-400ms vs bare OBFT (~500ms canonical post-`T_commit` at recommended Δ_2 = 2 BTT, Δ_3 = ε_3).
+
+### Deployment envelope by BTT
+
+The +1 RTT cost of `Δ_minicon` narrows L_Bid's deployment envelope vs bare OBFT meaningfully at higher BTT. The table below shows L_Bid's post-`T_commit` consumption and submission slack across BTT regimes (T_commit anchored at slot_start + 1.5s; T_relay_cutoff = 4.0s; `header_submit_headroom = 100ms`):
+
+| BTT | Recommended sizing (`Δ_minicon = Δ_2 = 2 BTT`) | Minimum sizing (`Δ_minicon = Δ_2 = 1 BTT`) |
+|---|---|---|
+| 200ms | post-`T_commit` 900ms; consensus end 2.40s; slack 1.50s ✓ | 500ms; 2.00s; 1.90s ✓ |
+| 300ms | 1300ms; 2.80s; 1.10s ✓ | 700ms; 2.20s; 1.70s ✓ |
+| 400ms | 1700ms; 3.20s; 0.70s ✓ | 900ms; 2.40s; 1.50s ✓ |
+| 500ms | 2100ms; 3.60s; 0.30s ✓ tight | 1100ms; 2.60s; 1.30s ✓ |
+| 600ms | 2500ms; 4.00s; **−0.10s ✗** | 1300ms; 2.80s; 1.10s ✓ |
+| 700ms | 2900ms; 4.40s; **−0.50s ✗** | 1500ms; 3.00s; 0.90s ✓ |
+| 800ms | 3300ms; 4.80s; **−0.90s ✗** | 1700ms; 3.20s; 0.70s ✓ |
+| 1000ms | 4100ms; 5.60s; **−1.70s ✗** | 2100ms; 3.60s; 0.30s ✓ tight |
+| 1200ms | 4900ms; 6.40s; **−2.50s ✗** | 2500ms; 4.00s; **−0.10s ✗** |
+
+(Slack = consensus deadline − consensus end, where the consensus deadline is `T_relay_cutoff − header_submit_headroom = 3.90s`. Negative slack means consensus end exceeds the deadline; the slot misses.)
+
+**Sizing fallback at higher BTT.** Recommended sizing fits comfortably up to BTT ≈ 400ms, becomes tight at BTT = 500ms (300ms slack), and fails at BTT ≥ 600ms. **Switching to minimum sizing recovers the envelope** through BTT ≈ 1000ms — at the cost of absorbing only `1 BTT` of jitter beyond P99 propagation (vs `2 BTT` at recommended). The minimum-sizing fallback is appropriate when production telemetry shows P99/P999 propagation is tight against `1 BTT` and mesh-jitter is well-characterized.
+
+**When L_Bid stops fitting at all.** At BTT ≥ 1200ms even minimum sizing fails — total post-`T_commit` exceeds the available slot budget at the same `T_commit` anchor (BTT=1100ms minimum sizing still fits with 100ms slack; BTT=1200ms minimum sizing misses by 100ms). Earlier `T_commit` (sacrificing primary leader's MEV-fetch budget) buys some additional headroom, but the slot envelope is fundamentally narrower than bare OBFT's.
+
+**Net for deployment selection.** At production-typical BTT (200-400ms), L_Bid recommended sizing fits with comfortable submission slack (700-1500ms). At degraded mesh (BTT 600-1000ms), L_Bid requires switching to minimum sizing or accepting tighter mesh-jitter tolerance. At severely degraded mesh (BTT ≥ 1200ms), L_Bid does not fit; bare OBFT (3-BTT cycle) remains the available alternative.
 
 ### Optional extension — relay/builder attestation verification
 
