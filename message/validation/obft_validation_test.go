@@ -2,6 +2,7 @@ package validation
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -57,6 +58,7 @@ func obftTestSetup(t *testing.T) (
 	mv := &messageValidator{
 		netCfg:         networkconfig.TestNetwork,
 		validatorStore: validatorStore,
+		obftAdmissions: newOBFTAdmissionTracker(),
 	}
 	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, share.ValidatorPubKey[:], spectypes.RoleProposer)
 	clusterID := [32]byte{0xAA, 0xBB}
@@ -280,4 +282,84 @@ func TestValidateOBFT_Certificate_RejectsCorruptAggregate(t *testing.T) {
 	peerID, _ := libp2ptest.RandPeerID()
 	_, err = mv.validateOBFTMessage(context.Background(), msg, obftCommitteeInfo(share), peerID, time.Now())
 	require.ErrorContains(t, err, "certificate verification")
+}
+
+// Integration: identical bytes redelivered through validateOBFTMessage are
+// rejected by the admission tracker before BLS verification fires. Saves
+// the BLS cost on gossipsub re-delivery floods.
+func TestValidateOBFT_Admissions_RejectsIdenticalRedelivery(t *testing.T) {
+	mv, ks, share, msgID, clusterID := obftTestSetup(t)
+	signer := share.Committee[0].Signer
+
+	// Build a valid Phase-1 bundle so BLS would otherwise pass — proving
+	// admission rejects PRE-BLS even for cryptographically-valid bytes.
+	innerSigner := blsbackend.New(ks.Shares[signer].Serialize())
+	vSigner, err := obftadapter.NewProposerSigner(innerSigner, mv.netCfg.Beacon)
+	require.NoError(t, err)
+	v := proposerCandidateV()
+	sigV, err := vSigner.SignPartial(v)
+	require.NoError(t, err)
+	bundle := &obftcore.Phase1Bundle{
+		ClusterID:  clusterID,
+		OperatorID: obftcore.OperatorID(signer),
+		Height:     obftTestHeight(mv),
+		Layer:      0,
+		Value:      v,
+		SigmaV:     sigV,
+	}
+	body, err := wire.WrapPhase1Bundle(bundle)
+	require.NoError(t, err)
+	msg := signOBFTEnvelope(t, msgID, body, signer)
+	peerID, _ := libp2ptest.RandPeerID()
+
+	// First delivery admitted.
+	_, err = mv.validateOBFTMessage(context.Background(), msg, obftCommitteeInfo(share), peerID, time.Now())
+	require.NoError(t, err)
+
+	// Identical re-broadcast rejected at admission, before BLS.
+	_, err = mv.validateOBFTMessage(context.Background(), msg, obftCommitteeInfo(share), peerID, time.Now())
+	require.ErrorContains(t, err, "identical content")
+}
+
+// Integration: distinct bytes from the same operator within the bucket cap
+// are admitted (so the protocol's Rule 2/3 equivocation paths can fire);
+// past the cap, further distinct bytes are rejected pre-BLS.
+func TestValidateOBFT_Admissions_BucketCapEnforced(t *testing.T) {
+	mv, _, share, msgID, clusterID := obftTestSetup(t)
+	signer := share.Committee[0].Signer
+	peerID, _ := libp2ptest.RandPeerID()
+
+	// Use Commit envelopes since they're cheap to vary by changing
+	// NRPartials bytes — no need for valid BLS sigs (validation will
+	// fail at NR-verify, but admission runs first and counts).
+	emit := func(varyByte byte) error {
+		commit := &obftcore.Commit{
+			ClusterID:  clusterID,
+			OperatorID: obftcore.OperatorID(signer),
+			Height:     obftTestHeight(mv),
+			Layers:     make([]obftcore.EncryptedLayer, 4),
+			NRPartials: []obftcore.NRPartial{{
+				Layer:      0,
+				PartialSig: []byte{varyByte, 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03, 0x04},
+			}},
+		}
+		body, err := wire.WrapCommit(commit)
+		require.NoError(t, err)
+		msg := signOBFTEnvelope(t, msgID, body, signer)
+		_, err = mv.validateOBFTMessage(context.Background(), msg, obftCommitteeInfo(share), peerID, time.Now())
+		return err
+	}
+
+	// Up to MaxDistinctPerOpSlot distinct emissions are admitted (each
+	// fails BLS-verify downstream — that's a different error than
+	// "too many distinct messages").
+	for k := 0; k < 8; k++ { // matches obftValidationMaxDistinctPerOpSlot
+		err := emit(byte(k))
+		require.NotContains(t, fmt.Sprint(err), "too many distinct messages",
+			"emission %d should NOT hit the bucket cap", k)
+	}
+
+	// 9th distinct emission rejected at admission, pre-BLS.
+	err := emit(0xFF)
+	require.ErrorContains(t, err, "too many distinct messages")
 }

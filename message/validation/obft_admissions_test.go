@@ -68,15 +68,17 @@ func TestOBFTAdmissions_BucketCap(t *testing.T) {
 		tr.Admit(id, phase0.Slot(2), spectypes.OperatorID(2), 1, []byte{0xFF}))
 }
 
-// TTL eviction: entries past maxAge auto-evict on next Admit, decrementing
-// counters in lockstep so capacity recovers.
-func TestOBFTAdmissions_TTLDecrementsCounter(t *testing.T) {
+// TTL eviction: entries past maxAge auto-evict on next Admit (per-bucket
+// eviction is unconditional, not throttled), so capacity recovers
+// immediately as entries age out.
+func TestOBFTAdmissions_TTLEvictsPerBucket(t *testing.T) {
 	tr := newOBFTAdmissionTracker()
 	tr.maxAge = 100 * time.Millisecond
 	now := time.Unix(1_700_000_000, 0)
 	tr.now = func() time.Time { return now }
 
 	id := tMsgID(1)
+	bucket := obftAdmissionBucket{msgID: id, slot: 1, op: spectypes.OperatorID(2), kind: 1}
 	for k := 0; k < obftValidationMaxDistinctPerOpSlot; k++ {
 		body := []byte{byte(k)}
 		require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, body))
@@ -84,15 +86,62 @@ func TestOBFTAdmissions_TTLDecrementsCounter(t *testing.T) {
 	// Bucket full → reject.
 	require.Error(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, []byte{0xFF}))
 
-	// Past TTL: next Admit triggers sweep, counter decrements, capacity recovers.
+	// Past TTL: next Admit's per-bucket eviction drops the aged entries
+	// before checking the cap, so the new admission succeeds.
 	now = now.Add(200 * time.Millisecond)
 	require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, []byte{0xFE}))
 
-	// Underlying maps should now contain only the fresh admission.
+	// Underlying bucket should now contain only the fresh admission.
 	tr.mu.Lock()
-	require.Len(t, tr.seen, 1)
-	require.Equal(t, 1, tr.counts[obftAdmissionBucket{
-		msgID: id, slot: 1, op: spectypes.OperatorID(2), kind: 1,
-	}])
+	require.Len(t, tr.buckets[bucket].entries, 1)
+	tr.mu.Unlock()
+}
+
+// Per-bucket eviction is NOT throttled: even within maxAge/8 of the last
+// global sweep (so the global sweep is throttled and won't evict aged
+// entries), an Admit on a bucket reclaims its own capacity by walking
+// its own short entry list. Without per-bucket eviction (the previous
+// throttled-global-sweep design), a bucket whose entries aged AFTER the
+// most recent global sweep would stay capped until the next sweep window
+// — wrongly rejecting legitimate distinct content.
+func TestOBFTAdmissions_PerBucketEvictionUnthrottled(t *testing.T) {
+	tr := newOBFTAdmissionTracker()
+	tr.maxAge = 1000 * time.Millisecond // throttle = maxAge/8 = 125ms.
+	now := time.Unix(1_700_000_000, 0)
+	tr.now = func() time.Time { return now }
+
+	idA := tMsgID(1)
+	idB := tMsgID(2) // separate bucket — used as a "global sweep refresher"
+	bucketA := func(body []byte) error {
+		return tr.Admit(idA, phase0.Slot(1), spectypes.OperatorID(2), 1, body)
+	}
+
+	// Fill bucket A at t=0 (first Admit also triggers the initial global
+	// sweep, setting lastGlobalSweep ≈ now=0).
+	for k := 0; k < obftValidationMaxDistinctPerOpSlot; k++ {
+		require.NoError(t, bucketA([]byte{byte(k)}))
+	}
+	require.Error(t, bucketA([]byte{0xFF}))
+
+	// Refresh lastGlobalSweep to t=900ms via a different bucket. Bucket A's
+	// entries are still fresh at this point (cutoff = -100ms < 0 = ts).
+	now = now.Add(900 * time.Millisecond)
+	require.NoError(t, tr.Admit(idB, phase0.Slot(1), spectypes.OperatorID(2), 1, []byte{0}))
+
+	// Advance to t=1010ms. Bucket A's entries (ts=0) are now past maxAge=1000ms
+	// (cutoff = 10ms > ts=0 → aged). lastGlobalSweep=900ms; the throttle
+	// window allows global sweep again only after 900+125=1025ms, so at
+	// 1010ms the global sweep is THROTTLED and aged entries on other
+	// buckets would persist. The per-bucket eviction inside Admit must
+	// reclaim bucket A's own capacity.
+	now = now.Add(110 * time.Millisecond)
+	require.NoError(t, bucketA([]byte{0xFE}),
+		"per-bucket eviction must reclaim capacity even when global sweep is throttled")
+
+	// Sanity: bucket A should now contain only the fresh entry.
+	tr.mu.Lock()
+	require.Len(t, tr.buckets[obftAdmissionBucket{
+		msgID: idA, slot: 1, op: spectypes.OperatorID(2), kind: 1,
+	}].entries, 1)
 	tr.mu.Unlock()
 }

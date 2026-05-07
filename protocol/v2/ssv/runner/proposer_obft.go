@@ -74,11 +74,10 @@ func (r *ProposerRunner) obftStartSlot(ctx context.Context, logger *zap.Logger, 
 			delete(r.obftSlots, slot)
 			r.obftMu.Unlock()
 			r.obftRL.Forget(slot)
-			// Drop any pre-instance envelopes still buffered for this slot.
-			// Without this, late peer broadcasts for an already-ended slot
-			// get buffered (lookup fails → BufferEnvelope) and sit there
-			// until LRU eviction at MaxPendingSlots. Bounded but pointless.
-			r.obftCtrl.ForgetPending(slot)
+			// Note: pre-instance envelope cleanup is handled atomically by
+			// Controller.EndInstance via removePendingLocked + the
+			// endedSlots fence on BufferEnvelope. No separate
+			// ForgetPending call needed.
 		} else {
 			r.obftMu.Unlock()
 		}

@@ -59,7 +59,26 @@ type Controller struct {
 	pending      map[phase0.Slot][]PendingEnvelope
 	pendingOrder *list.List                    // *list.Element holds phase0.Slot
 	pendingElem  map[phase0.Slot]*list.Element // O(1) lookup for Drain/Forget
+
+	// endedSlots is a small set of slots whose instance has been ended via
+	// EndInstance. BufferEnvelope refuses to buffer for slots in this set,
+	// closing the race where a late peer broadcast (post-EndInstance,
+	// post-ForgetPending) would otherwise re-buffer an envelope that has
+	// nowhere to drain into. Eviction is FIFO at MaxEndedSlots; slots that
+	// fall out of the ring can re-accept pending entries (which then sit
+	// until LRU eviction at MaxPendingSlots), but the ring is sized
+	// generously enough to cover the validation slot-window so that's
+	// effectively dead code.
+	endedSlots     map[phase0.Slot]struct{}
+	endedSlotOrder *list.List // *list.Element holds phase0.Slot, FIFO
 }
+
+// MaxEndedSlots caps how many recently-ended slots the controller remembers
+// for the BufferEnvelope post-teardown gate. Sized to comfortably exceed
+// the validation slot-window (obftAllowedPastSlots + obftAllowedFutureSlots
+// ≈ 6) so any envelope that could pass slot-window admission is checked
+// against the ended-set.
+const MaxEndedSlots = 64
 
 // MaxPendingPerSlot caps the number of envelopes buffered per slot before
 // the instance starts. Above this, additional envelopes are dropped.
@@ -150,17 +169,30 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		pending:         make(map[phase0.Slot][]PendingEnvelope),
 		pendingOrder:    list.New(),
 		pendingElem:     make(map[phase0.Slot]*list.Element),
+		endedSlots:      make(map[phase0.Slot]struct{}),
+		endedSlotOrder:  list.New(),
 	}, nil
 }
 
 // BufferEnvelope queues an envelope for a slot whose instance hasn't yet
 // started. Called by the dispatcher when Controller.lookup returns
-// ErrNoActiveInstance. Drops the envelope if the per-slot buffer is full;
-// evicts the oldest slot entry (FIFO insertion order) if MaxPendingSlots
-// is exceeded. O(1) amortized: list.PushBack / list.Front+Remove.
+// ErrNoActiveInstance. Drops the envelope if:
+//   - the slot was recently EndInstance'd (post-teardown re-buffering would
+//     just sit until LRU eviction since no instance can drain it);
+//   - the per-slot buffer is full;
+//   - or MaxPendingSlots is exceeded (oldest entry evicted FIFO).
+//
+// O(1) amortized: list.PushBack / list.Front+Remove.
 func (c *Controller) BufferEnvelope(slot phase0.Slot, env PendingEnvelope) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Race-fence: if the slot has been ended, refuse to re-buffer. Closes
+	// the window where a peer envelope arrives between EndInstance (which
+	// also clears pending) and the slot-window check eventually rejecting
+	// new arrivals at the validation layer.
+	if _, ended := c.endedSlots[slot]; ended {
+		return
+	}
 	if len(c.pending[slot]) >= MaxPendingPerSlot {
 		return
 	}
@@ -280,6 +312,29 @@ func (c *Controller) EndInstance(slot phase0.Slot) {
 	r.instance.Finalize()
 	r.instanceMu.Unlock()
 	delete(c.instances, slot)
+	c.removePendingLocked(slot)
+	c.markSlotEndedLocked(slot)
+}
+
+// markSlotEndedLocked records `slot` in the recently-ended ring so
+// BufferEnvelope refuses post-teardown buffering for it. FIFO eviction at
+// MaxEndedSlots; entries that fall out of the ring are unfenced (and will
+// then sit in pending until LRU eviction at MaxPendingSlots — same fate as
+// before this fence existed). Caller must hold c.mu.
+func (c *Controller) markSlotEndedLocked(slot phase0.Slot) {
+	if _, exists := c.endedSlots[slot]; exists {
+		return // idempotent: already in ring
+	}
+	if c.endedSlotOrder.Len() >= MaxEndedSlots {
+		front := c.endedSlotOrder.Front()
+		if front != nil {
+			oldest := front.Value.(phase0.Slot)
+			c.endedSlotOrder.Remove(front)
+			delete(c.endedSlots, oldest)
+		}
+	}
+	c.endedSlots[slot] = struct{}{}
+	c.endedSlotOrder.PushBack(slot)
 }
 
 // ActiveSlots returns the slots with currently-running instances, sorted.

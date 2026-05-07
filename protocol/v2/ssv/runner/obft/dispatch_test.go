@@ -207,6 +207,62 @@ func TestController_PostEndInstance_RejectsMutations(t *testing.T) {
 	require.ErrorIs(t, ctrl.ObservePhase1Bundle(bundle, 0), ErrNoActiveInstance)
 }
 
+// Regression: BufferEnvelope must refuse to buffer envelopes for slots
+// whose instance was just torn down via EndInstance. Without this fence,
+// a late peer broadcast (post-EndInstance) would re-populate the pending
+// buffer for a slot that has nowhere to drain into; the entry would sit
+// until LRU eviction at MaxPendingSlots, defeating the purpose of the
+// post-teardown cleanup.
+func TestController_PostEndInstance_RejectsBuffering(t *testing.T) {
+	ctrl := newMinimalControllerForStartTest(t)
+	const slot phase0.Slot = 100
+	_, err := ctrl.StartNewInstance(slot)
+	require.NoError(t, err)
+	ctrl.EndInstance(slot)
+
+	// Late peer broadcast lands here via DispatchEnvelope's
+	// ErrNoActiveInstance fallback. Pre-fix this would have re-buffered.
+	commit := &obftcore.Commit{Height: obftcore.Height(slot)}
+	ctrl.BufferEnvelope(slot, PendingEnvelope{Commit: commit})
+
+	require.Empty(t, ctrl.DrainPending(slot),
+		"BufferEnvelope must refuse for ended slots")
+
+	// A different (non-ended) slot still buffers normally.
+	const otherSlot phase0.Slot = 101
+	ctrl.BufferEnvelope(otherSlot, PendingEnvelope{Commit: &obftcore.Commit{Height: obftcore.Height(otherSlot)}})
+	require.Len(t, ctrl.DrainPending(otherSlot), 1)
+}
+
+// Regression: the ended-slots ring is bounded — old slots fall out of
+// the ring after MaxEndedSlots additions, allowing them to re-accept
+// pending entries. (Those entries then sit until LRU eviction at
+// MaxPendingSlots, same fate as before this fence existed.)
+func TestController_EndedSlotsRing_Bounded(t *testing.T) {
+	ctrl := newMinimalControllerForStartTest(t)
+
+	// Fill the ring with MaxEndedSlots+1 ended slots; the first one should
+	// fall out FIFO.
+	for s := phase0.Slot(0); s < phase0.Slot(MaxEndedSlots+1); s++ {
+		_, err := ctrl.StartNewInstance(s)
+		require.NoError(t, err)
+		ctrl.EndInstance(s)
+	}
+	ctrl.mu.Lock()
+	require.Equal(t, MaxEndedSlots, ctrl.endedSlotOrder.Len(),
+		"endedSlots ring must be capped at MaxEndedSlots")
+	_, slot0Still := ctrl.endedSlots[0]
+	ctrl.mu.Unlock()
+	require.False(t, slot0Still, "slot 0 must have aged out of the ring")
+
+	// slot 0 is no longer fenced — re-buffering allowed.
+	ctrl.BufferEnvelope(phase0.Slot(0), PendingEnvelope{
+		Commit: &obftcore.Commit{Height: 0},
+	})
+	require.Len(t, ctrl.DrainPending(phase0.Slot(0)), 1,
+		"slot that aged out of the ring must accept buffering again")
+}
+
 // newMinimalControllerForStartTest is like newMinimalControllerForTest but
 // includes the timing overrides StartNewInstance needs to build a Config.
 func newMinimalControllerForStartTest(t *testing.T) *Controller {
