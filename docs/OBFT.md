@@ -904,14 +904,14 @@ This assumption is L_Bid-specific — bare OBFT does not depend on it. Deploymen
 
 ### When to use it
 
-**Suited for**: deployments where MEV bid-routing upside is significant relative to (a) the +1 RTT slot-budget cost of the mini-consensus phase, and (b) the new adversarial-byz residual surfaces at L_Bid. For SSV proposer duty under Config A: high-MEV slots where bid-routed block value capture exceeds the slot-loss-rate cost from the new L_Bid failure modes.
+**Suited for**: deployments where MEV bid-routing upside justifies (a) the `Δ_minicon` MEV-fetch budget reduction, and (b) the new adversarial-byz residual surfaces at L_Bid. For SSV proposer duty under Config A: high-MEV slots where bid-routed block value capture exceeds the slot-loss-rate cost from the new L_Bid failure modes.
 
 **BTT regime guidance** (see [§Deployment envelope by BTT](#deployment-envelope-by-btt) for full table):
-- **BTT ≤ 400ms** (production-typical mesh): L_Bid recommended sizing fits with comfortable submission slack (700ms+).
-- **BTT 500-1000ms** (degraded mesh): switch to minimum sizing (`Δ_minicon = Δ_2 = 1 BTT`); recommended sizing becomes tight or fails. Trade-off: less mesh-jitter absorption.
-- **BTT > 1100ms** (severely degraded): L_Bid does not fit at the standard `T_commit` anchor; bare OBFT (3-BTT cycle) remains the available alternative.
+- **BTT ≤ 400ms** (production-typical mesh): conservative sizing (`Δ_minicon = 2 BTT`) fits with comfortable MEV-fetch budget (2000ms+).
+- **BTT 600-1000ms** (degraded mesh): conservative sizing's MEV-fetch budget shrinks aggressively or stops fitting; standard (`Δ_minicon = 1 BTT`) or aggressive (`Δ_minicon = 0.5 BTT`) sizing recovers MEV-fetch at the cost of partial-propagation residual.
+- **BTT > 1100ms** (severely degraded): only aggressive sizing fits, tightly. Bare OBFT (no `Δ_minicon`) remains the available alternative.
 
-**Not suited for**: deployments prioritizing minimum slot latency (the +1 RTT is non-trivial), or where adversarial-byz at the bid layer is a hard constraint (the new residuals slot-miss without fall-through, with mixed evidence quality — cryptographic for some trigger/action combos, behavioral for silent variants; see [§Liveness](#liveness)).
+**Not suited for**: deployments prioritizing maximum MEV-fetch budget at high BTT, or where the L_Bid residuals (adversarial-byz + sub-1-BTT partial-propagation deadlock) are a hard constraint (slot-miss without fall-through; see [§Liveness](#liveness)).
 
 ### Setting
 
@@ -919,7 +919,7 @@ Adds to OBFT's setting:
 
 - **K' = K + 1 layers**: L_Bid (top, bid-determined) + OBFT's rotation-determined L_0, L_1, ..., L_{K-1}.
 - **Bid envelopes**: every operator (not just rotation leaders) broadcasts a `KindBid` envelope at Phase 1.
-- **Mini-consensus window** `Δ_minicon`: between Phase 1 and Phase 2, for verdict broadcast and convergence on L_Bid identity.
+- **Mini-consensus window** `Δ_minicon`: a sub-phase at the tail end of Phase 1, ending at `T_commit`, for verdict broadcast and propagation. Pushes L_0..L_{K-1} broadcast deadlines earlier by `Δ_minicon` vs bare OBFT (`T_broadcast_max_k = T_commit − Δ_minicon − B_k`); `T_commit` itself stays back-end-anchored to `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is unchanged from bare OBFT.
 - **L_Bid σ-eligibility**: determined cluster-wide by mini-consensus, not by per-operator local computation.
 
 `qV = qEnc = 2f+1` and the BLS+IBE keypair structure are unchanged from bare OBFT. The mini-consensus adds no new threshold cryptography.
@@ -933,21 +933,25 @@ In addition to OBFT's `Phase1Bundle`, `KindCommit`, `KindCertificate`:
 
 ### Per-layer windows and deadlines
 
-Phase 1 inherits bare OBFT's per-layer staggered broadcast deadlines (each leader `L_k` broadcasts by `T_broadcast_max_k = Ls_arrival − B_k`; see §Setting). Bid envelopes are broadcast in parallel within Phase 1 under L_0's deadline budget (treated as a parallel L_0-tier broadcast). The mini-consensus phase is inserted between Phase 1 and Phase 2:
+Phase 1 inherits bare OBFT's per-layer staggered broadcast deadlines (each leader `L_k` broadcasts by `T_broadcast_max_k = Ls_arrival − B_k`), with `Ls_arrival` = end of Phase 1 = `T_commit − Δ_minicon` (vs `T_commit` in bare OBFT). Bid envelopes are broadcast in parallel within Phase 1 under L_0's deadline budget (treated as a parallel L_0-tier broadcast). Mini-consensus runs as a sub-phase at the tail of Phase 1, ending at `T_commit`:
 
 | Phase | Window | Activity |
 |---|---|---|
-| Phase 1 | `[slot_start, T_commit]` | Rotation leaders broadcast Phase-1 bundles per per-layer windows; all operators broadcast `KindBid` in parallel. Receivers accept bundles first-observed in `[slot_start, T_commit]` per bare OBFT. |
-| Mini-consensus | `[T_commit, T_commit + Δ_minicon]` | Bid-envelope re-flood; operators compute predicted L_Bid (argmax over received bid set) and broadcast `KindBidVerdict`. |
-| Phase 2 | `[T_commit + Δ_minicon, T_commit + Δ_minicon + Δ_2]` | σ-or-NR commit at all K' layers (L_Bid + L_0..L_{K-1}). |
-| Phase 3 | (from `T_commit + Δ_minicon + Δ_2`) | K'-layer reconstruction walk. |
+| Phase 1 | `[slot_start, T_commit − Δ_minicon]` | Rotation leaders broadcast Phase-1 bundles per per-layer windows (`T_broadcast_max_k = T_commit − Δ_minicon − B_k`); all operators broadcast `KindBid` in parallel. Receivers accept bundles first-observed in `[slot_start, T_commit]` per bare OBFT (acceptance window extends through mini-consensus to σ-emit time). |
+| Mini-consensus | `[T_commit − Δ_minicon, T_commit]` | Operators compute predicted L_Bid (argmax over `bid_set_i` first-observed by `T_commit − 1 BTT`) and broadcast `KindBidVerdict`; verdicts propagate by `T_commit`. |
+| Phase 2 | `[T_commit, T_commit + Δ_2]` | σ-or-NR commit at all K' layers (L_Bid + L_0..L_{K-1}). |
+| Phase 3 | (from `T_commit + Δ_2`) | K'-layer reconstruction walk. |
 
-Sizing:
-- `Δ_minicon ≥ 1 BTT` (verdicts must propagate within the window).
-- **Recommended** `Δ_minicon = 2 BTT` for jitter absorption, mirroring `Δ_2`'s widening.
-- `Δ_2`, `Δ_3`: same as bare OBFT.
+Sizing — `Δ_minicon` is a tunable parameter governing the verdict-propagation budget. Three named sizings:
+- **Standard** `Δ_minicon = 1 BTT`: full P99 verdict propagation under partial-synchrony assumption; partial-propagation deadlock essentially eliminated.
+- **Conservative** `Δ_minicon = 2 BTT`: P99 + 1 BTT jitter absorption, mirroring `Δ_2`'s widening.
+- **Aggressive** `Δ_minicon = 0.5 BTT`: P50 verdict propagation; partial-propagation deadlock becomes a Class A residual (see [§New residual failure modes](#new-residual-failure-modes-at-l_bid)). Suitable only when production telemetry shows mesh propagation tighter than the conservative P99 assumption.
 
-At Config A (BTT=200ms, recommended sizing: Δ_2 = 2 BTT, Δ_3 = ε_3): `Δ_minicon = 400ms`; total slot budget post-`T_commit` ≈ 900ms (vs bare OBFT's ~500ms). At §Application's max-MEV anchor (T_commit = 3.40s, `header_submit_headroom = 100ms`), adding `Δ_minicon` consumes 400ms from the MEV-fetch budget — V_X broadcast deadline shifts ~400ms earlier vs bare OBFT's V_0; primary leader's MEV-fetch budget reduces from ~3050ms (bare OBFT V_0) to ~2650ms (OBFT+L_Bid V_X) at the same submission headroom.
+`Δ_2`, `Δ_3`, and `B_k` (bundle propagation budgets) unchanged from bare OBFT.
+
+`T_commit` is back-end-anchored at `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is **the same value for bare OBFT and OBFT+L_Bid** (e.g., `3.40s` at §Application's max-MEV anchor with Config A, BTT=200ms, `Δ_2 = 2 BTT`, `Δ_3 = ε_3`, `header_submit_headroom = 100ms`, `T_relay_cutoff = 4.0s`).
+
+What L_Bid changes is the **L_0..L_{K-1} broadcast deadlines** and the **MEV-fetch budget**: `T_broadcast_max_0 = T_commit − Δ_minicon − B_0` shifts earlier by `Δ_minicon` vs bare OBFT. At Config A with conservative sizing (`Δ_minicon = 2 BTT = 400ms`), L_0 broadcast deadline shifts from `3.30s` (bare OBFT) to `2.90s` (L_Bid); primary leader's MEV-fetch budget reduces from ~3050ms (bare OBFT V_0) to ~2650ms (L_Bid V_X) at the same submission headroom. With standard sizing (`Δ_minicon = 1 BTT = 200ms`), L_0 broadcast deadline shifts to `3.10s`; MEV-fetch budget ~2850ms.
 
 ### Protocol
 
@@ -967,21 +971,21 @@ The coherence rule binding a rotation leader's `KindBid` `V_i` to their Phase-1 
 
 #### Mini-consensus — verdict broadcast
 
-Each operator `i`, by their verdict-broadcast deadline `T_commit + Δ_minicon − 1 BTT`:
+Each operator `i`, by their verdict-broadcast deadline `T_commit − 1 BTT`:
 
-1. Computes `bid_set_i` = set of received-and-validated bid envelopes first-observed before `i`'s verdict-broadcast deadline (`T_commit + Δ_minicon − 1 BTT`) — operator-identity signature valid AND bid format valid AND host-validity verdict = valid. Bids first-observed *after* this deadline do not contribute to `i`'s `bid_set_i` for verdict computation but are still retained for Rule-7 slashing-evidence purposes (a second distinct bid from the same operator remains bid-equivocation regardless of arrival time). Host-validity follows the same locking semantics as bare OBFT's Phase-1 bundle validation (see [§Head-change handling](#head-change-handling)): on first-observation of `V_i`, the host validates `V_i` against a stable head snapshot taken at that observation moment and **locks the verdict (valid/not-valid) for the remainder of the slot**. Subsequent host-validity checks on `V_i` (in particular, the L_Bid Phase-2 emit-time check below) are reads of this locked verdict, never re-evaluations against a moved head. Bids whose locked verdict is not-valid are excluded from `bid_set_i`. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bids that fail any enabled filter are excluded from `bid_set_i`. (Coherence note: when a rotation leader's `KindBid` `V_i` and Phase-1 bundle V are the same value per [§Coherence and cross-layer independence](#coherence-and-cross-layer-independence), a single host-validity check on first-observation of either envelope produces the locked verdict applied to both.)
+1. Computes `bid_set_i` = set of received-and-validated bid envelopes first-observed before `i`'s verdict-broadcast deadline (`T_commit − 1 BTT`) — operator-identity signature valid AND bid format valid AND host-validity verdict = valid. Bids first-observed *after* this deadline do not contribute to `i`'s `bid_set_i` for verdict computation but are still retained for Rule-7 slashing-evidence purposes (a second distinct bid from the same operator remains bid-equivocation regardless of arrival time). Host-validity follows the same locking semantics as bare OBFT's Phase-1 bundle validation (see [§Head-change handling](#head-change-handling)): on first-observation of `V_i`, the host validates `V_i` against a stable head snapshot taken at that observation moment and **locks the verdict (valid/not-valid) for the remainder of the slot**. Subsequent host-validity checks on `V_i` (in particular, the L_Bid Phase-2 emit-time check below) are reads of this locked verdict, never re-evaluations against a moved head. Bids whose locked verdict is not-valid are excluded from `bid_set_i`. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bids that fail any enabled filter are excluded from `bid_set_i`. (Coherence note: when a rotation leader's `KindBid` `V_i` and Phase-1 bundle V are the same value per [§Coherence and cross-layer independence](#coherence-and-cross-layer-independence), a single host-validity check on first-observation of either envelope produces the locked verdict applied to both.)
 2. Computes `predicted_LBid_i`:
    - If `|bid_set_i| ≥ n − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax_{V in bid_set_i} bid_value`, with `op_id` tiebreak on equal bids.
    - Else: `predicted_LBid_i = null` (insufficient visibility or no consensus reachable from `i`'s view).
 3. Constructs `KindBidVerdict` binding the prediction. Signs with operator-identity key; gossips.
 
-Operators broadcast verdict as late as possible within the mini-consensus window — at `T_commit + Δ_minicon − 1 BTT` — to maximize bid-envelope visibility (late re-flooded bids may change the argmax).
+Operators broadcast verdict as late as possible within the mini-consensus window — at `T_commit − 1 BTT` — to maximize bid-envelope visibility (late re-flooded bids may change the argmax).
 
 A second distinct `KindBidVerdict` from `i` for the same slot is verdict-equivocation, slashable via Rule 8. Honest receivers count `i`'s first-observed verdict toward convergence; subsequent verdicts are dropped from convergence input but recorded for slashing.
 
 #### Convergence rule for L_Bid
 
-At mini-consensus end (`T_commit + Δ_minicon`), each operator computes:
+At mini-consensus end (`T_commit`), each operator computes:
 
 - `verdict_pool[V] = | { distinct ops j : j broadcast first-observed KindBidVerdict(j, slot, hash(V)) } |`
 - `verdict_quorum_V = ∃V : verdict_pool[V] ≥ qV`
@@ -1083,7 +1087,7 @@ Identical to bare OBFT. Mini-consensus failure cleanly falls through to L_0 via 
 
 #### New residual failure modes at L_Bid
 
-Three failure modes at the bid layer, all resulting in slot-miss without fall-through (chained encryption to L_0 stays sealed when L_Bid has neither σ-quorum nor NR-quorum). The first two are **Class B** (permitted byzantine grief within the f-bound; same taxonomy as bare OBFT's [§Failure modes](#failure-modes)) — slot-miss per-slot, mixed evidence quality (cryptographic for some trigger/action combos, behavioral for silent variants — same split as bare OBFT's Class B), deterred across slots by [assumption 4](#implications-of-the-rational-byzantine-deterrent-assumption-4). The third is **Class A** (assumption 3 violation) — same hard algebraic limit as bare OBFT's L_0 validity-divergence:
+Four failure modes at the bid layer, all resulting in slot-miss without fall-through (chained encryption to L_0 stays sealed when L_Bid has neither σ-quorum nor NR-quorum). The first two are **Class B** (permitted byzantine grief within the f-bound; same taxonomy as bare OBFT's [§Failure modes](#failure-modes)) — slot-miss per-slot, mixed evidence quality (cryptographic for some trigger/action combos, behavioral for silent variants), deterred across slots by [assumption 4](#implications-of-the-rational-byzantine-deterrent-assumption-4). The last two are **Class A** (assumption violations) — partial verdict propagation under assumption 2, and 2-2 validity-divergence under assumption 3:
 
 - **[Class B] 2-1-byz-defect.** Byz engineers `verdict_quorum` on `V` that some honest don't retain at Phase 2, casts its own verdict on `V` to make the quorum, then withholds σ at Phase 2 (NR-emit or silent). Same algebraic deadlock either way; evidence varies by trigger × Phase-2 action:
 
@@ -1094,6 +1098,7 @@ Three failure modes at the bid layer, all resulting in slot-miss without fall-th
 
   At f=1, n=4: σ-pool[V] = 2 (majority); NR-pool = 1 (minority) + (1 if byz NR-emit, 0 if silent) ≤ 2 < `qEnc`. Deadlock.
 - **[Class B — cryptographically slashable] Verdict equivocation at L_Bid.** Byz issues different verdicts to different peers, fragmenting per-peer verdict-pool views. Some honest see `qV`-quorum on `V_X` (and σ-bind); others don't (and NR). σ-pool < `qV`; NR-pool < `qEnc`. Same deadlock shape. Rule 8 fires on the two-distinct-verdict-envelopes pair regardless of Phase-2 action — cryptographic.
+- **[Class A — assumption 2 violation] Partial verdict propagation at sub-1-BTT `Δ_minicon`.** When `Δ_minicon < 1 BTT` (aggressive sizing), verdict propagation operates in P50-P99 territory rather than guaranteed P99. All-honest network with mesh jitter can produce per-receiver verdict-pool divergence: some operators see `verdict_pool[V_X] ≥ qV` and σ-emit on `V_X`; others see `< qV` and NR. At f=1, n=4 with 2 σ-emitters / 2 NR-emitters: σ-pool = 2 < `qV`, NR-pool = 2 < `qEnc`, deadlock at L_Bid blocks L_0 fall-through. Same algebraic shape as 2-1-byz-defect but caused by network timing, not byz action — no slashing applies. Rate scales with the gap between actual mesh propagation P-percentile and the chosen `Δ_minicon`. Eliminated by sizing `Δ_minicon ≥ 1 BTT` (standard or conservative).
 - **[Class A — assumption 3 violation] 2-2 validity-divergence at L_Bid.** Hard algebraic limit: when honest split 2-2 on `V_X` validity (and byz aligns to extend the split), no `verdict_pool` reaches `qV` and the NR-pool may also fall short under adversarial byz alignment. The same hard limit applies symmetrically in bare OBFT at L_0 — no protocol decides 2-2 validity divergence at f=1, n=4 without breaking BFT bound symmetry. Not attributable to byz (re-orgs are real-world events); no slashing applies. (See [§Implications of validity-divergence not being recovered (assumption 3)](#implications-of-validity-divergence-not-being-recovered-assumption-3).)
 
 #### Trigger frequency
@@ -1102,46 +1107,36 @@ Byz is **always** a bidder, so they can attempt bid-equivocation, bid-withholdin
 
 ### Slot timing
 
-Measured from `T_commit` (mini-consensus start). At Config A (P99=150ms, δ=50ms, `Δ_minicon = Δ_2 = 400ms` recommended):
+Measured from `T_commit` (start of Phase 2 σ-emit; mini-consensus already complete). At Config A (P99=150ms, δ=50ms, `Δ_2 = 400ms` recommended, `Δ_3 = ε_3`):
 
 | Scenario | Time | Mechanism |
 |---|---|---|
-| L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`Δ_minicon + 1 BTT ≈ 600ms` | Verdict-quorum determines `V_X`; σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
-| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 900ms` | Full Phase 2 + Phase 3 walk |
-| Mini-consensus fails (C1/C2 patterns) → fall-through to L_0 | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 900ms` | NR-quorum at L_Bid + Phase-3 walk decrypts L_0; L_0 σ-quorum |
-| Multi-layer fall-through after L_Bid | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 900ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
-| L_Bid 2-1-byz-defect or verdict-equivocation | slot misses | Deadlock at L_Bid blocks fall-through |
+| L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`1 BTT ≈ 200ms` | σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
+| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_2 + Δ_3 ≈ 500ms` | Full Phase 2 + Phase 3 walk |
+| Mini-consensus failed at end of Phase 1 → fall-through to L_0 | ~`Δ_2 + Δ_3 ≈ 500ms` | NR-quorum at L_Bid (already determined pre-T_commit) + Phase-3 walk decrypts L_0; L_0 σ-quorum |
+| Multi-layer fall-through after L_Bid | ~`Δ_2 + Δ_3 ≈ 500ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
+| L_Bid 2-1-byz-defect, verdict-equivocation, or partial-propagation deadlock | slot misses | Deadlock at L_Bid blocks fall-through |
 
-Best (success) ≈ 600ms; worst (success) ≈ 900ms; ~1.5× spread (smaller than bare OBFT's wider spread because the mini-consensus phase is mandatory). Healthy-path is +100-400ms vs bare OBFT (~500ms canonical post-`T_commit` at recommended Δ_2 = 2 BTT, Δ_3 = ε_3).
+Post-`T_commit` timing **matches bare OBFT** since mini-consensus runs pre-`T_commit`. L_Bid's cost is paid in the pre-`T_commit` budget (`Δ_minicon` of MEV-fetch budget), not in post-`T_commit` slot consumption.
 
 ### Deployment envelope by BTT
 
-`Δ_minicon` adds one phase to the post-`T_commit` budget. Under a fixed `T_relay_cutoff`, this is a scheduling trade with two valid choices, both protocol-correct:
+`T_commit` is back-end-anchored and invariant across bare OBFT and OBFT+L_Bid. What L_Bid changes is the **L_0..L_{K-1} broadcast deadline**, which shifts earlier by `Δ_minicon` to fit mini-consensus pre-`T_commit`. The primary leader's MEV-fetch budget shrinks by `Δ_minicon` vs bare OBFT.
 
-- **Choice 1 — keep `T_commit` aligned with bare OBFT** (e.g., `slot_start + 1.5s`). Consensus end shifts later by `Δ_minicon`; submission slack shrinks. At high BTT this can drive slack negative (slot miss). Quantified in the table below.
-- **Choice 2 — move `T_commit` earlier by `Δ_minicon`**. Consensus fits the same submission slack as bare OBFT, but the primary leader's MEV-fetch window narrows by `Δ_minicon`. This is §Application's max-MEV anchor configuration (`T_commit = 3.00s` for L_Bid vs `3.40s` for bare OBFT; ~400ms MEV-fetch reduction quantified in the Sizing paragraph above).
+The table below shows L_0 broadcast deadline (= MEV-fetch budget at `slot_start = 0`) across BTT regimes (`T_relay_cutoff = 4.0s`, `submit_headroom = 100ms`, `Δ_3 = ε_3 = 100ms`, `Δ_2 = 2 BTT`, `B_0 = 0.5 BTT`). Bare OBFT row included for comparison:
 
-Neither choice changes protocol liveness; they trade submission slack for MEV-fetch headroom under a fixed slot budget. The table below shows Choice 1's envelope across BTT regimes (T_commit anchored at slot_start + 1.5s; T_relay_cutoff = 4.0s; `header_submit_headroom = 100ms`):
+| BTT | Bare OBFT | Δ_minicon=2 BTT (conservative) | Δ_minicon=1 BTT (standard) | Δ_minicon=0.5 BTT (aggressive) |
+|---|---|---|---|---|
+| 200ms | 3300ms ✓ | 2900ms ✓ | 3100ms ✓ | 3200ms ✓ |
+| 400ms | 2800ms ✓ | 2000ms ✓ | 2400ms ✓ | 2600ms ✓ |
+| 600ms | 2300ms ✓ | 1100ms ✓ | 1700ms ✓ | 2000ms ✓ |
+| 800ms | 1800ms ✓ | 200ms ✓ tight | 1000ms ✓ | 1400ms ✓ |
+| 1000ms | 1300ms ✓ | **−700ms ✗** | 300ms ✓ tight | 800ms ✓ |
+| 1200ms | 800ms ✓ | **−1600ms ✗** | **−400ms ✗** | 200ms ✓ tight |
 
-| BTT | Recommended sizing (`Δ_minicon = Δ_2 = 2 BTT`) | Minimum sizing (`Δ_minicon = Δ_2 = 1 BTT`) |
-|---|---|---|
-| 200ms | post-`T_commit` 900ms; consensus end 2.40s; slack 1.50s ✓ | 500ms; 2.00s; 1.90s ✓ |
-| 300ms | 1300ms; 2.80s; 1.10s ✓ | 700ms; 2.20s; 1.70s ✓ |
-| 400ms | 1700ms; 3.20s; 0.70s ✓ | 900ms; 2.40s; 1.50s ✓ |
-| 500ms | 2100ms; 3.60s; 0.30s ✓ tight | 1100ms; 2.60s; 1.30s ✓ |
-| 600ms | 2500ms; 4.00s; **−0.10s ✗** | 1300ms; 2.80s; 1.10s ✓ |
-| 700ms | 2900ms; 4.40s; **−0.50s ✗** | 1500ms; 3.00s; 0.90s ✓ |
-| 800ms | 3300ms; 4.80s; **−0.90s ✗** | 1700ms; 3.20s; 0.70s ✓ |
-| 1000ms | 4100ms; 5.60s; **−1.70s ✗** | 2100ms; 3.60s; 0.30s ✓ tight |
-| 1200ms | 4900ms; 6.40s; **−2.50s ✗** | 2500ms; 4.00s; **−0.10s ✗** |
+(L_Bid loss vs bare OBFT = `Δ_minicon` exactly. Negative MEV-fetch means L_0 broadcast deadline is before slot_start; the slot doesn't fit.)
 
-(Slack = consensus deadline − consensus end, where the consensus deadline is `T_relay_cutoff − header_submit_headroom = 3.90s`. Negative slack means consensus end exceeds the deadline; the slot misses.)
-
-**Sizing fallback at higher BTT.** Recommended sizing fits comfortably up to BTT ≈ 400ms, becomes tight at BTT = 500ms (300ms slack), and fails at BTT ≥ 600ms. **Switching to minimum sizing recovers the envelope** through BTT ≈ 1000ms — at the cost of absorbing only `1 BTT` of jitter beyond P99 propagation (vs `2 BTT` at recommended). The minimum-sizing fallback is appropriate when production telemetry shows P99/P999 propagation is tight against `1 BTT` and mesh-jitter is well-characterized.
-
-**When L_Bid stops fitting at all.** At BTT ≥ 1200ms even minimum sizing fails under Choice 1 (BTT=1100ms minimum sizing still fits with 100ms slack; BTT=1200ms minimum sizing misses by 100ms). Choice 2 buys additional headroom by trading MEV-fetch budget, but the slot envelope is fundamentally narrower than bare OBFT's.
-
-**Net for deployment selection.** At production-typical BTT (200-400ms), L_Bid recommended sizing fits with comfortable submission slack (700-1500ms). At degraded mesh (BTT 600-1000ms), L_Bid requires switching to minimum sizing or accepting tighter mesh-jitter tolerance. At severely degraded mesh (BTT ≥ 1200ms), L_Bid does not fit; bare OBFT (3-BTT cycle) remains the available alternative.
+**Net for deployment selection.** At production-typical BTT (200-400ms), conservative sizing fits with comfortable MEV-fetch budget (2000-2900ms). At degraded mesh (BTT 600-1000ms), conservative sizing's budget shrinks aggressively or stops fitting; standard or aggressive sizing recovers MEV-fetch but at increasing partial-propagation deadlock risk (see [§New residual failure modes](#new-residual-failure-modes-at-l_bid)). At severely degraded mesh (BTT ≥ 1200ms), only aggressive sizing fits, and tightly. The L_Bid trade is **MEV-fetch budget vs partial-propagation residual rate** — choose based on production telemetry. Bare OBFT (no `Δ_minicon`) remains available when the trade isn't favorable.
 
 ### Optional extension — relay/builder attestation verification
 
@@ -1172,16 +1167,17 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 
 | Aspect | Bare OBFT | OBFT + L_Bid mini-consensus |
 |---|---|---|
-| Slot structure | Phase 1 → Phase 2 → Phase 3 | Phase 1 → Mini-consensus → Phase 2 → Phase 3 |
+| Slot structure | Phase 1 → Phase 2 → Phase 3 | Phase 1 (with mini-consensus sub-phase at tail) → Phase 2 → Phase 3 |
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindBid`, `KindBidVerdict` |
 | Slashing-evidence rules | 5 | 7 (+ Rule 7 bid equivocation/incoherence, + Rule 8 verdict equivocation/verdict-vs-action) |
-| Healthy-path latency (post-`T_commit`, recommended sizing) | ~500ms (canonical) | ~600-900ms (+100-400ms) |
-| Best-case latency (minimum sizing, early-reconstruct path) | ~200ms (`1 BTT`) | ~600ms (`Δ_minicon + 1 BTT`) |
-| Canonical latency (recommended sizing, full Phase 2 + Phase 3) | ~500ms (`Δ_2 + Δ_3`) | ~900ms (`Δ_minicon + Δ_2 + Δ_3`) |
-| Time-to-completion spread (best → canonical) | ~2.5× | ~1.5× |
+| `T_commit` anchor | back-end: `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` | **Same** (`T_commit` invariant across protocols) |
+| Best-case latency post-`T_commit` (early reconstruct) | ~200ms (`1 BTT`) | **Same** (~200ms; mini-consensus runs pre-`T_commit`) |
+| Canonical latency post-`T_commit` (full Phase 2 + Phase 3) | ~500ms (`Δ_2 + Δ_3`) | **Same** (~500ms) |
+| Time-to-completion spread (best → canonical) | ~2.5× | **Same** |
 | Bandwidth (n=4, K=4 healthy) | ~28 KB | ~33 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
-| MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~3050ms (V_0; T_commit = 3.40s) | ~2650ms (V_X; T_commit = 3.00s — Δ_minicon shifts T_commit ~400ms earlier) |
+| L_0 broadcast deadline | `T_commit − B_0` (e.g., 3.30s at Config A max-MEV anchor) | `T_commit − Δ_minicon − B_0` (e.g., 2.90s at conservative `Δ_minicon = 2 BTT`) — shifts earlier by `Δ_minicon` |
+| MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~3050ms (V_0; T_commit = 3.40s) | ~2650ms (V_X) at conservative `Δ_minicon = 2 BTT`; ~2850ms at standard `Δ_minicon = 1 BTT`; ~2950ms at aggressive `Δ_minicon = 0.5 BTT` |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | OBFT base recovery scope | **Same** (mini-consensus failure falls through cleanly; rotation layers unchanged) |
@@ -1190,11 +1186,12 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | L_Bid liveness — C3 validity-divergence majority (3-of-4) | n/a | **Closed** (verdict-quorum reaches on majority; minority NR) |
 | L_Bid liveness — 2-1-byz-defect | n/a | **Class B**: slot-miss-without-fall-through; mixed evidence (Rule 7 under bid-equivocation, Rule 8 under NR-emit, behavioral for silent variants); assumption-4 deterred across slots |
 | L_Bid liveness — verdict-equivocation | n/a | **Class B** (slashable Rule 8; assumption-4 deterred across slots): slot-miss-without-fall-through |
+| L_Bid liveness — partial verdict propagation (sub-1-BTT `Δ_minicon`) | n/a | **Class A** (assumption 2 violation): all-honest partial-propagation deadlock at L_Bid; rate scales with mesh propagation distribution; eliminated by `Δ_minicon ≥ 1 BTT` |
 | L_Bid liveness — 2-2 validity split | shared hard algebraic limit at L_0 (BFT-theoretical, not protocol-specific) | **Class A** (assumption 3 violation): same hard limit at L_Bid; not attributable, no slashing |
 | Bid-routing value capture | n/a | Highest-bid block on healthy path |
 | Adversarial-byz trigger frequency at the bid layer | n/a | `n×` higher than bare OBFT's L_0 surfaces — byz is always a bidder, vs L_0-leader-only |
 
-**Net trade vs bare OBFT**: pays +1 RTT and additional adversarial-byz residual surface at L_Bid (slot-miss-without-fall-through; mixed evidence quality) in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' recovery scope is unchanged. Whether favorable depends on byzantine-frequency assumption and MEV-value-capture upside vs slot-loss cost from the new failure modes.
+**Net trade vs bare OBFT**: pays `Δ_minicon` of MEV-fetch budget (L_0 broadcast deadline shifts earlier; `T_commit` and post-`T_commit` consumption unchanged) and additional adversarial-byz residual surface at L_Bid (slot-miss-without-fall-through; mixed evidence quality) plus an all-honest Class A residual at sub-1-BTT `Δ_minicon`, in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' recovery scope is unchanged. Whether favorable depends on MEV-value-capture upside vs slot-loss cost (byzantine and partial-propagation residuals) at the chosen `Δ_minicon`.
 
 ## Appendix C — Message re-broadcast considerations
 

@@ -1024,7 +1024,7 @@ Adds to OBFTR's setting:
 
 - **K' = K + 1 layers**: L_Bid (top, bid-determined) + OBFTR's rotation-determined L_0, ..., L_{K-1}.
 - **Bid envelopes**: every operator broadcasts a bid envelope at slot start.
-- **Mini-consensus window** `Δ_minicon`: new phase between Phase 1 and round-1 Phase 2.
+- **Mini-consensus window** `Δ_minicon`: a sub-phase at the tail end of Phase 1, ending at `T_commit_1`, for verdict broadcast and propagation. Pushes L_0..L_{K-1} broadcast deadlines (round 1) earlier by `Δ_minicon` vs bare OBFTR; `T_commit_1` itself stays back-end-anchored and is unchanged from bare OBFTR.
 - **L_Bid σ-eligibility**: determined cluster-wide by mini-consensus, fixed for the slot (used across all R rounds).
 - **R rounds**: OBFTR's standard multi-round structure applies. Each round has Phase 1 + Phase 2 + Phase 3-and-L_C-signaling per OBFTR base. The mini-consensus phase is **slot-level, not per-round** — V_LBid is determined once at slot start.
 
@@ -1046,20 +1046,22 @@ Slot timeline:
 | Phase | Window | Activity |
 |---|---|---|
 | Phase 1 fetch | `[slot_start, T_broadcast_max]` | Operators fetch V_i; rotation leaders prepare Phase-1 bundles; all operators prepare bid envelopes |
-| Phase 1 broadcast | `[T_broadcast_max, T_commit_1]` | Rotation leaders broadcast Phase-1 bundles; all operators broadcast `KindBid`. Propagation slack `1 BTT` lets bundles reach all honest by `T_commit_1`. |
-| **Mini-consensus** | `[T_commit_1, T_commit_1 + Δ_minicon]` | Bid-envelope re-flood + `KindBidVerdict` broadcast. V_LBid resolved (or null) by end of window. **Slot-level — does not repeat per round.** |
-| Round 1 Phase 2 | `[T_commit_1 + Δ_minicon, T_commit_1 + Δ_minicon + Δ_2]` | σ-or-NR commit at all K' layers for round 1 |
-| Round 1 Phase 3 + L_C | `[T_commit_1 + Δ_minicon + Δ_2, T_commit_2]` | Round-1 reconstruction walk + L_C signaling for round transition |
+| Phase 1 broadcast | `[T_broadcast_max, T_commit_1 − Δ_minicon]` | Rotation leaders broadcast Phase-1 bundles; all operators broadcast `KindBid`. Bundles + bid envelopes propagate. |
+| **Mini-consensus** | `[T_commit_1 − Δ_minicon, T_commit_1]` | `KindBidVerdict` broadcast (verdict deadline at `T_commit_1 − 1 BTT`); verdicts propagate by `T_commit_1`. V_LBid resolved (or null) by end of window. **Slot-level — does not repeat per round.** |
+| Round 1 Phase 2 | `[T_commit_1, T_commit_1 + Δ_2]` | σ-or-NR commit at all K' layers for round 1 |
+| Round 1 Phase 3 + L_C | `[T_commit_1 + Δ_2, T_commit_2]` | Round-1 reconstruction walk + L_C signaling for round transition |
 | Round 2..R Phase 2 | per-round windows | σ-or-NR commit per round at all K' layers; cross-round σ retention applies |
 | Round 2..R Phase 3 + L_C | per-round windows | Reconstruction walk + L_C signaling |
 | Round R end | (end of last round) | Final reconstruction; slot succeeds or misses |
 
-Sizing:
-- `Δ_minicon ≥ 1 BTT` (verdicts must propagate within window).
-- **Recommended** `Δ_minicon = 2 BTT` for jitter absorption.
-- Per-round `Δ_2`, `Δ_3`: same as OBFTR base.
+Sizing — `Δ_minicon` is a tunable parameter governing the verdict-propagation budget. Three named sizings:
+- **Standard** `Δ_minicon = 1 BTT`: full P99 verdict propagation; partial-propagation deadlock essentially eliminated.
+- **Conservative** `Δ_minicon = 2 BTT`: P99 + 1 BTT jitter absorption.
+- **Aggressive** `Δ_minicon = 0.5 BTT`: P50 verdict propagation; partial-propagation deadlock becomes a Class A residual. Suitable only with telemetry-justified mesh propagation.
 
-At Config A (P99=150ms, δ=50ms, R=2, recommended sizing): mini-consensus = 400ms (slot-level, once). Each round ≈ 700-900ms. Total slot budget post-`T_commit_1` ≈ Δ_minicon + R × per-round-budget ≈ 400 + 1500 = 1900ms at R=2. Within SSV's 4s relay cutoff.
+`T_commit_1` is back-end-anchored and unchanged from bare OBFTR. L_0..L_{K-1} round-1 broadcast deadlines shift earlier by `Δ_minicon` to make room for mini-consensus pre-`T_commit_1`.
+
+At Config A (P99=150ms, δ=50ms, R=2, conservative sizing): mini-consensus = 400ms (slot-level, once, pre-`T_commit_1`). Each round ≈ 700-900ms post-`T_commit_1` (same as bare OBFTR). Total post-`T_commit_1` ≈ R × per-round-budget ≈ 1500ms at R=2.
 
 ### Protocol
 
@@ -1077,7 +1079,7 @@ Receivers retain bid envelopes per `(slot, operator_id)`; second distinct `KindB
 
 Same as OBFT's mini-consensus phase (see [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)):
 
-1. Each operator computes `bid_set_i` from received-and-validated bid envelopes by `T_commit_1 + Δ_minicon − 1 BTT`.
+1. Each operator computes `bid_set_i` from received-and-validated bid envelopes by `T_commit_1 − 1 BTT` (verdict-broadcast deadline).
 2. If `|bid_set_i| ≥ n − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax over bid_value` (op_id tiebreak).
 3. Else: `predicted_LBid_i = null`.
 4. Broadcast `KindBidVerdict` envelope at the latest-safe time within the window.
@@ -1148,34 +1150,36 @@ Same algebraic shape as OBFT + L_Bid:
 
 ### Best/worst time-to-completion
 
-Measured from `T_commit_1` (mini-consensus start). At Config A (P99=150ms, δ=50ms, R=2, recommended sizing):
+Measured from `T_commit_1` (start of round-1 Phase 2; mini-consensus already complete). At Config A (P99=150ms, δ=50ms, R=2, conservative sizing):
 
 | Scenario | Time | Mechanism |
 |---|---|---|
-| Healthy fast path: round-1 L_Bid σ-quorum reaches early | ~Δ_minicon + 1 BTT ≈ 600ms | Mini-consensus + 1 RTT in round-1 Phase 2; reconstruction at L_Bid plaintext |
-| Healthy completion at L_Bid (canonical, round 1) | ~Δ_minicon + Δ_2 + Δ_3 ≈ 1100ms | Round-1 full Phase 2 + Phase 3 |
-| Mini-consensus fails → fall-through to L_0 in round 1 | ~Δ_minicon + Δ_2 + Δ_3 ≈ 1100ms | NR-quorum at L_Bid; round-1 walk to L_0 |
-| Round-1 fails (e.g., partition at L_Bid + L_0..L_{K-1}); round-2 succeeds | ~Δ_minicon + 2 × per-round-budget ≈ 1900-2100ms | OBFTR's standard R-round retry; mini-consensus result reused |
-| Multi-leader silent within budget (K-1 = 3) at K=4 | ~Δ_minicon + per-round Phase 3 ≈ 1100-1300ms | K'-layer walk in round-1 Phase 3 (in-round; sequential local decryption) |
-| L_Bid 2-1-byz-defect or verdict-equivocation | slot misses (R-invariant) | Deadlock at L_Bid blocks fall-through; cross-round σ-locks prevent recovery |
+| Healthy fast path: round-1 L_Bid σ-quorum reaches early | ~1 BTT ≈ 200ms | 1 RTT in round-1 Phase 2; reconstruction at L_Bid plaintext |
+| Healthy completion at L_Bid (canonical, round 1) | ~Δ_2 + Δ_3 ≈ 700ms | Round-1 full Phase 2 + Phase 3 |
+| Mini-consensus failed pre-`T_commit_1` → fall-through to L_0 in round 1 | ~Δ_2 + Δ_3 ≈ 700ms | NR-quorum at L_Bid; round-1 walk to L_0 |
+| Round-1 fails (e.g., partition at L_Bid + L_0..L_{K-1}); round-2 succeeds | ~2 × per-round-budget ≈ 1500-1700ms | OBFTR's standard R-round retry; mini-consensus result reused |
+| Multi-leader silent within budget (K-1 = 3) at K=4 | ~per-round Phase 3 ≈ 700-900ms | K'-layer walk in round-1 Phase 3 (in-round; sequential local decryption) |
+| L_Bid 2-1-byz-defect, verdict-equivocation, or partial-propagation | slot misses (R-invariant) | Deadlock at L_Bid blocks fall-through; cross-round σ-locks prevent recovery |
 
-Best (success) ≈ 600ms (round-1 fast); worst (success within R=2) ≈ 2100ms; ~3.5× spread. Healthy-path is +Δ_minicon vs bare OBFTR.
+Post-`T_commit_1` timing **matches bare OBFTR** since mini-consensus runs pre-`T_commit_1`. L_Bid's cost is paid in pre-`T_commit_1` budget (`Δ_minicon` of round-1 MEV-fetch budget), not in post-`T_commit_1` slot consumption.
 
 ### Comparison with bare OBFTR
 
 | Aspect | Bare OBFTR | OBFTR + L_Bid mini-consensus |
 |---|---|---|
-| Slot structure | Phase 1 → R rounds × (Phase 2 + Phase 3 + L_C) | Phase 1 → Mini-consensus → R rounds × (Phase 2 + Phase 3 + L_C) |
+| Slot structure | Phase 1 → R rounds × (Phase 2 + Phase 3 + L_C) | Phase 1 (with mini-consensus sub-phase at tail) → R rounds × (Phase 2 + Phase 3 + L_C) |
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
 | Mini-consensus scope | n/a | Slot-level (once); V_LBid fixed across all R rounds |
 | Wire kinds | Phase1Bundle, KindCommit_r, KindLCClaim, KindCertificate | + KindBid, KindBidVerdict |
 | Slashing-evidence rules | OBFTR base | + Rule 7 bid equivocation, + Rule 8 verdict equivocation |
-| Healthy-path latency (round-1, post-T_commit_1) | ~700-900ms | ~1100-1300ms (+Δ_minicon) |
-| Best-case latency | ~200-400ms | ~600ms |
-| Worst-case latency at R=2 (success) | ~2.0s | ~2.1s |
-| Time-to-completion spread | ~4-5× best/worst | ~3.5× best/worst |
+| `T_commit_1` anchor | back-end-anchored | **Same** (`T_commit_1` invariant across protocols) |
+| Healthy-path latency (round-1, post-`T_commit_1`) | ~700-900ms | **Same** (mini-consensus runs pre-`T_commit_1`) |
+| Best-case latency post-`T_commit_1` | ~200-400ms | **Same** |
+| Worst-case latency at R=2 (success) post-`T_commit_1` | ~2.0s | **Same** |
+| Time-to-completion spread | ~4-5× best/worst | **Same** |
 | Bandwidth (n=4, K=4 healthy) | ~30-40 KB | ~35-45 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
-| Submission headroom (4s cutoff, R=2) | ~0.9s | ~0.5s |
+| L_0 round-1 broadcast deadline | `T_commit_1 − B_0` | `T_commit_1 − Δ_minicon − B_0` — shifts earlier by `Δ_minicon` |
+| MEV-fetch budget for round-1 leader | bare OBFTR baseline | reduces by `Δ_minicon` (e.g., ~400ms at conservative sizing) |
 | EKM coordination | OBFTR's cross-round atomic coordinator | Same (mini-consensus verdicts don't consume EKM) |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
@@ -1185,12 +1189,13 @@ Best (success) ≈ 600ms (round-1 fast); worst (success within R=2) ≈ 2100ms; 
 | L_Bid liveness — C3 validity-majority (3-of-4) | n/a | **Closed** (verdict-quorum reaches on majority) |
 | L_Bid liveness — 2-1-byz-defect | n/a | **Open**: R-invariant deadlock; slot-miss-without-fall-through; mixed evidence (Rule 7 under bid-equivocation, Rule 8 under NR-emit, behavioral for silent variants) |
 | L_Bid liveness — verdict-equivocation | n/a | **Open**: R-invariant deadlock; slashable Rule 8 |
+| L_Bid liveness — partial verdict propagation (sub-1-BTT `Δ_minicon`) | n/a | **Class A** (assumption 2 violation): all-honest partial-propagation deadlock at L_Bid; rate scales with mesh propagation; eliminated by `Δ_minicon ≥ 1 BTT` |
 | L_Bid liveness — 2-2 validity split | n/a | **Open**: hard algebraic limit |
 | Bid-routing value capture | n/a | Highest-bid block on healthy path |
 | Adversarial-byz trigger frequency at the bid layer | n/a | Higher than rotation-layer surfaces — byz is always a bidder |
 | Multi-round retry effectiveness at L_Bid | n/a | Same as OBFTR base for partition cases; **R-invariant for adversarial-byz patterns** (cross-round σ-locks block recovery) |
 
-**Net trade vs bare OBFTR**: pays Δ_minicon (~400ms) plus the same L_Bid-specific adversarial-byz residuals as OBFT + L_Bid (2-1-byz-defect, verdict-equivocation; R-invariant; slot-miss-without-fall-through; mixed evidence quality), in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' R-round recovery scope is unchanged (partition-tail absorption up to `R · P99` is preserved). Whether favorable depends on byzantine-frequency assumption, MEV-value-capture upside, and partition-tail observed in production.
+**Net trade vs bare OBFTR**: pays `Δ_minicon` of round-1 MEV-fetch budget (L_0 broadcast deadline shifts earlier; `T_commit_1` and post-`T_commit_1` consumption unchanged) plus the same L_Bid-specific adversarial-byz residuals as OBFT + L_Bid (2-1-byz-defect, verdict-equivocation; R-invariant; mixed evidence quality) plus an all-honest Class A residual at sub-1-BTT `Δ_minicon`, in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' R-round recovery scope is unchanged (partition-tail absorption up to `R · P99` is preserved). Whether favorable depends on byzantine-frequency assumption, MEV-value-capture upside, and partition-tail observed in production.
 
 **Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, C3 deadlocks via the cluster-wide convergence rule (C1/C2 conditionally — fold into 2-1-byz-defect when verdict-quorum forms via byz). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) are R-invariant, matching OBFTR's existing R-invariant adversarial exposures — round-machinery doesn't help with these patterns at any R, so they don't degrade OBFTR's recovery profile beyond what its own L_0 surfaces already expose.
 
