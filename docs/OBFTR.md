@@ -950,7 +950,7 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | h_V=1 selective-delivery deadlock | Slot misses | **Recovered** (Phase-2a verdict pool establishes σ-eligibility cluster-wide before Phase-2b binding) |
 | Validity-divergence (re-org during acceptance) | Out of scope (assumption 3) — slot misses cleanly | **Recovered within f-bound** (3-of-4 majorities at f=1 n=4); 2-2 splits still slot-miss |
 | Mesh-flakiness deadlock | Slot misses | **Recovered** (Phase-2a defers commitment past mesh outliers) |
-| New regression vs OBFTR | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), defects to NR at Phase-2b. Slot misses. OBFTR succeeded here via Phase-1 σ_V cryptographic lock. |
+| New regression vs OBFTR | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ contribution at Phase-2b (NR-emit or silent abstention). Slot misses. OBFTR succeeded here via Phase-1 σ_V cryptographic lock. |
 | Round structure | R rounds (configurable) | Single round |
 | Healthy-path latency per round | 2 RTTs | 3 RTTs (Phase 1 + Phase 2a + Phase 2b) |
 
@@ -1120,8 +1120,8 @@ OBFTR's existing rules unchanged. Two new L_Bid-specific rules:
 
 Mini-consensus addresses C1/C2/C3 at L_Bid (same as OBFT + L_Bid). C3 closes cleanly for the 3-of-4 majority case; C1 and C2 close cleanly only when no V reaches `verdict_quorum` and otherwise fold into 2-1-byz-defect (see below):
 
-- **C1 — Selective bid-withholding**: **Closed only when no V reaches `verdict_quorum`** — e.g., byz withholds from > f honest peers so those peers verdict NULL; verdict pool fragments below qV → all NR_LBid → fall-through to L_0. **Not closed when byz withholds from exactly the minority** (leaves them at `|bid_set| = n − f` so they still verdict on a non-`V_X` argmax) and adds its own verdict on `V_X` to push `verdict_pool[V_X]` to qV, then defects to NR. Same algebraic shape as 2-1-byz-defect (R-invariant residual, see below).
-- **C2 — Bidder equivocation**: **Closed only when no V reaches `verdict_quorum`** (verdicts split widely → fall-through). **Not closed when byz aligns its verdict with the majority-honest** to push `verdict_pool` to qV and defects to NR. Same algebraic shape as 2-1-byz-defect (see below).
+- **C1 — Selective bid-withholding**: **Closed only when no V reaches `verdict_quorum`** — e.g., byz withholds from > f honest peers so those peers verdict NULL; verdict pool fragments below qV → all NR_LBid → fall-through to L_0. **Not closed when byz withholds from exactly the minority** (leaves them at `|bid_set| = n − f` so they still verdict on a non-`V_X` argmax) and adds its own verdict on `V_X` to push `verdict_pool[V_X]` to qV, then withholds σ contribution at Phase 2 (NR-emit or silent abstention). Same algebraic shape as 2-1-byz-defect (R-invariant residual, see below).
+- **C2 — Bidder equivocation**: **Closed only when no V reaches `verdict_quorum`** (verdicts split widely → fall-through). **Not closed when byz aligns its verdict with the majority-honest** to push `verdict_pool` to qV and withholds σ contribution at Phase 2 (NR-emit or silent abstention). Same algebraic shape as 2-1-byz-defect (see below).
 - **C3 — Validity-divergence majority on V_LBid (3-of-4 at f=1 n=4)**: 3 honest verdict σV(V_X), 1 NV. `verdict_pool[V_X] = 3 = qV` → cluster σ-binds. σ-pool reaches qV. **Closed for 3-of-4 majority.** 2-2 split remains hard algebraic limit.
 
 #### Recovery scope at rotation layers L_0, ..., L_{K-1}
@@ -1132,9 +1132,15 @@ Identical to bare OBFTR. R-round retry with re-flood, per-round independent comm
 
 Same algebraic shape as OBFT + L_Bid:
 
-- **2-1-byz-defect at L_Bid** (R-invariant). Byz engineers a `verdict_quorum` on V that some honest don't retain at Phase 2 emit, casts its own verdict on V to make the quorum, then defects to NR partial. Two trigger patterns reach the same algebraic shape:
-  - **Bid-equivocation trigger**: byz sends V to majority-honest, V' to minority-honest. Slashable via Rule 7 (bid-equivocation) AND Rule 8 (verdict-vs-action equivocation).
-  - **Bid-withholding trigger**: byz sends V to majority-honest, withholds from minority-honest (who still has `|bid_set_i| = n − f` and verdicts on its non-V argmax). Slashable via Rule 8 cryptographically; bid-silence component is behavioral.
+- **2-1-byz-defect at L_Bid** (R-invariant). Byz engineers a `verdict_quorum` on V that some honest don't retain at Phase 2 emit, casts its own verdict on V to make the quorum, then withholds its σ contribution on V at Phase 2 — either by NR-emit or by silent abstention. Both Phase-2 actions reach the same algebraic deadlock; they differ in evidence quality.
+
+  **Setup triggers** (cross-cut with Phase-2 action):
+  - **Bid-equivocation trigger**: byz sends V to majority-honest, V' to minority-honest. Rule 7 fires cryptographically regardless of Phase-2 action.
+  - **Bid-withholding trigger**: byz sends V to majority-honest, withholds from minority-honest (who still has `|bid_set_i| = n − f` and verdicts on its non-V argmax). Bid-silence is behavioral; Rule 7 does not fire.
+
+  **Phase-2 byz actions** (cross-cut with setup trigger):
+  - **NR-emit**: byz emits NR partial on `nr_tag_LBid`. Rule 8 (verdict-vs-action equivocation) fires cryptographically.
+  - **Silent at L_Bid**: byz omits any L_Bid σ/NR partial from their `KindCommit_r`. Rule 8 does not fire (no Phase-2 partial to pair with the verdict); evidence is behavioral-pattern only. Rule 7 still attributes the bid-equivocation trigger; the bid-withholding × silent combination has only behavioral evidence end-to-end.
 
   σ-pool < qV; NR-pool < qEnc; deadlock at L_Bid in round 1. **R-rounds do not help** — the σ-locked operators stay locked across rounds (cross-round σ-or-NR-V exclusivity); round 2 doesn't reset the deadlock because the same V_LBid is reused (mini-consensus is slot-level, not per-round).
 - **Verdict-equivocation at L_Bid** (R-invariant): byz issues different verdicts to different peers; per-peer convergence diverges; deadlock at L_Bid in round 1. R-rounds do not help (same reason as above). Slashable Rule 8.
@@ -1180,7 +1186,7 @@ Best (success) ≈ 600ms (round-1 fast); worst (success within R=2) ≈ 2100ms; 
 | L_Bid liveness — C1 selective bid-withholding | n/a | **Closed only when verdict-quorum doesn't form** (withhold from > f honest → fall-through). Otherwise (withhold from minority + byz pushes verdict_quorum + defects) folds into 2-1-byz-defect (R-invariant). |
 | L_Bid liveness — C2 bidder equivocation | n/a | **Closed only when verdict-quorum doesn't form** (verdicts split widely → fall-through). Otherwise (byz aligns verdict with majority + defects) folds into 2-1-byz-defect (R-invariant). |
 | L_Bid liveness — C3 validity-majority (3-of-4) | n/a | **Closed** (verdict-quorum reaches on majority) |
-| L_Bid liveness — 2-1-byz-defect | n/a | **Open**: R-invariant deadlock; slot-miss-without-fall-through; slashable Rule 8 |
+| L_Bid liveness — 2-1-byz-defect | n/a | **Open**: R-invariant deadlock; slot-miss-without-fall-through. Cryptographic attribution depends on trigger × Phase-2 action (Rule 7 under bid-equivocation, Rule 8 under NR-emit; silent variants are behavioral). |
 | L_Bid liveness — verdict-equivocation | n/a | **Open**: R-invariant deadlock; slashable Rule 8 |
 | L_Bid liveness — 2-2 validity split | n/a | **Open**: hard algebraic limit |
 | Bid-routing value capture | n/a | Highest-bid block on healthy path |

@@ -270,7 +270,7 @@ These failure modes don't apply to bare OBFT (no L_Bid layer):
 | **C1 — Selective bid-withholding at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form → fall-through to L_0; otherwise (withhold from minority + byz pushes verdict_quorum + defects) folds into 2-1-byz-defect below |
 | **C2 — Bidder equivocation at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form → fall-through to L_0; otherwise (byz aligns verdict with majority + defects) folds into 2-1-byz-defect below |
 | **C3 — V_LBid validity-divergence majority (3-of-4)** | n/a | ✓ closed by convergence rule |
-| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8; deadlock at L_Bid blocks fall-through to L_0) |
+| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock at L_Bid blocks fall-through to L_0). Cryptographic attribution depends on trigger × Phase-2 action: Rule 7 under bid-equivocation, Rule 8 under NR-emit; silent variants (byz omits L_Bid contribution after pivotal verdict) are behavioral. |
 | **Verdict-equivocation at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8) |
 | **2-2 validity split at L_Bid** | n/a | **✗ algebraic limit** |
 | L_0..L_{K-1} rotation-layer failures | (per Table 3) | **Same as bare OBFT** |
