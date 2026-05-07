@@ -62,13 +62,31 @@ func buildOBFTControllerForProposer(
 		committee = append(committee, m.Signer)
 	}
 
+	// Production proposer-duty config: enable per-layer staggered absorption
+	// per spec §Setting (deeper layers tolerate wider propagation tails).
+	// At default K=4 budgets are 200/250/350/500ms — strictly increasing,
+	// deepest ≥ 2·BTT BFT-min, paired with the FetchAt schedule.
+	overrides := &obftadapter.ConfigOverrides{
+		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(obftadapter.DefaultK),
+	}
+
+	// Wrap the V-side BLS signer so OBFT partials are computed over the
+	// block's proposer-domain signing root (the OBFT-aggregated signature
+	// is then directly usable as a beacon-block proposer signature). The
+	// IBE TagSigner stays unwrapped — it signs raw nr_tag bytes, not blocks.
+	vSigner, err := obftadapter.NewProposerSigner(blsbackend.New(shareBytes), options.NetworkConfig.Beacon)
+	if err != nil {
+		return nil, fmt.Errorf("build proposer signing-root signer: %w", err)
+	}
+
 	opts := obftadapter.ControllerOptions{
 		OperatorID:   operator.OperatorID,
 		Committee:    committee,
 		ClusterID:    clusterID,
 		PubKeyShares: pubKeyShares,
-		Signer:       blsbackend.New(shareBytes),
+		Signer:       vSigner,
 		IBE:          blsbackend.NewTLockIBE(),
+		Overrides:    overrides,
 	}
 
 	if IBEUseOptionB {

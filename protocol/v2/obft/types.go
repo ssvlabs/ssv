@@ -48,13 +48,22 @@ type LayerSpec struct {
 	Leader  OperatorID
 	FetchAt time.Duration
 
-	// BroadcastBudget B_k is the per-layer absorption window: the layer's
-	// leader must broadcast their Phase-1 bundle no later than
-	// T_commit - BroadcastBudget. Per spec §Setting, B_0 < B_1 < ... <
-	// B_{K-1} — deeper layers get larger budgets (max absorption + chain-
-	// decryption headroom); the primary gets the smallest (max MEV-fetch
-	// headroom, willing to lose its slot to L_1+ if propagation slips).
-	// Spec values at BTT=200ms: B_0=0.5 BTT, B_1=1 BTT, B_2=2 BTT, B_3=5 BTT.
+	// BroadcastBudget is the layer's T_commit-anchored absorption window:
+	// the leader must broadcast their Phase-1 bundle no later than
+	// T_commit - BroadcastBudget. Per spec §Setting this corresponds to
+	// `B_k + slack` (the receiver-side absorption ceiling — bundles
+	// first-observed past T_commit are not counted, so the absorption
+	// must include the `slack` decision-deferral window). Per spec
+	// B_0 + slack < B_1 + slack < ... < B_{K-1} + slack — deeper layers
+	// get larger budgets (max absorption tolerance); the primary gets the
+	// smallest (max MEV-fetch headroom, willing to fall through to L_1+
+	// if propagation slips).
+	//
+	// Spec K=4 Config A (BTT=200ms, slack=0.5 BTT): B_k+slack values are
+	// 1, 1.5, 2.5, 5.5 BTT (= 200/300/500/1100 ms). Equivalently the
+	// leader-side budgets B_k cited in the spec are 0.5/1/2/5 BTT
+	// (Ls_arrival-anchored); this field carries the T_commit-anchored
+	// form for cleaner per-layer math.
 	//
 	// When zero across all layers, falls back to the single uniform cap
 	// 2*(D+Delta) for every layer (preserves backwards-compat with configs
@@ -192,17 +201,28 @@ func (c *Config) RoundEndOffset() time.Duration {
 // Validate checks the config for internal consistency. Bad configs are
 // programmer errors; callers run this once at instance construction.
 func (c *Config) Validate() error {
-	if len(c.Layers) < 3 {
-		return errors.New("obft: K must be >= 3 (late-leader resilience)")
-	}
-	if len(c.Layers) > len(c.Operators) {
-		return errors.New("obft: K cannot exceed cluster size")
-	}
 	if c.F < 1 {
 		return errors.New("obft: byzantine bound F must be >= 1")
 	}
 	if len(c.Operators) < 3*c.F+1 {
 		return errors.New("obft: cluster size must be at least 3F+1")
+	}
+	// Per spec §Setting: K ≥ max(2, f+1) is BFT-liveness minimum (≥ 1
+	// honest leader by pigeonhole); K ≥ f+2 is the late-leader-resilience
+	// recommendation (≥ 2 honest leaders). We enforce the stricter f+2
+	// bound and additionally floor at 3 — at f=1 the two coincide; at
+	// higher f the f+2 bound dominates and prevents BFT-liveness violations
+	// (e.g., f=3 with K=3 has all leaders potentially byzantine).
+	minK := c.F + 2
+	if minK < 3 {
+		minK = 3
+	}
+	if len(c.Layers) < minK {
+		return fmt.Errorf("obft: K=%d below late-leader-resilience minimum %d (= max(3, f+2) at f=%d)",
+			len(c.Layers), minK, c.F)
+	}
+	if len(c.Layers) > len(c.Operators) {
+		return errors.New("obft: K cannot exceed cluster size")
 	}
 	if c.D <= 0 || c.Delta <= 0 {
 		return errors.New("obft: D and Delta must be positive")
@@ -282,11 +302,13 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k))
 		}
-		// Per spec §Setting: T_{K-1} <= ... <= T_1 <= T_0. Layer index k
-		// increases as we go deeper; FetchAt must therefore not increase
-		// with k.
-		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
-			return errors.New("obft: layer fetch times must be non-increasing in k")
+		// Per spec §Setting: T_{K-1} < ... < T_1 < T_0. Layer index k
+		// increases as we go deeper; FetchAt must strictly decrease
+		// with k so backups fetch from progressively-deeper-confirmed
+		// parents (re-org resistance) and the asymmetric MEV-fetch
+		// advantage between primary and backups is preserved.
+		if k > 0 && layer.FetchAt >= c.Layers[k-1].FetchAt {
+			return errors.New("obft: layer fetch times must be strictly decreasing in k")
 		}
 	}
 	return nil

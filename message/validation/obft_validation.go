@@ -107,7 +107,7 @@ func (mv *messageValidator) validateOBFTMessage(
 		return nil, fmt.Errorf("OBFT envelope: unknown validator %x",
 			signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())
 	}
-	verifier, err := obftadapter.NewVerifierFromShare(&share.Share, nil /* IBE shares: Option A fallback */)
+	verifier, err := obftadapter.NewVerifierFromShare(&share.Share, nil /* IBE shares: Option A fallback */, mv.netCfg.Beacon)
 	if err != nil {
 		return nil, fmt.Errorf("construct OBFT verifier: %w", err)
 	}

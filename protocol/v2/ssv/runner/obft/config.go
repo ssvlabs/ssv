@@ -20,30 +20,60 @@ import (
 
 // Default protocol parameters per docs/OBFT.md §Timing budget — Config A
 // (D = 100ms, δ = 50ms) with the recommended Δ_2 = 2(D + δ) = 300ms.
-//
-// The fetch-time spread comes from the asymmetric per-layer schedule:
-// L_0 (primary) fetches latest at TCommit − 2(D+δ) − ε to capture late MEV;
-// deeper layers fetch progressively earlier so backups build on
-// deeper-confirmed parents.
 const (
-	DefaultD             = 100 * time.Millisecond
-	DefaultDelta         = 50 * time.Millisecond
-	DefaultTCommit       = 1500 * time.Millisecond
-	DefaultDelta2        = 300 * time.Millisecond
-	DefaultDelta3        = 250 * time.Millisecond
-	DefaultPrimaryFetch  = 1100 * time.Millisecond // L_0 — late MEV
-	DefaultBackupFetchK1 = 1050 * time.Millisecond // L_1
-	DefaultBackupFetchK2 = 1000 * time.Millisecond // L_2
-	DefaultBackupFetchK3 = 950 * time.Millisecond  // L_3 — earliest
+	DefaultD       = 100 * time.Millisecond
+	DefaultDelta   = 50 * time.Millisecond
+	DefaultTCommit = 1500 * time.Millisecond
+	DefaultDelta2  = 300 * time.Millisecond
+	DefaultDelta3  = 250 * time.Millisecond
 
 	// DefaultK is the recommended layer count for SSV proposer duty:
 	// K = n = 4 (every cluster member leads exactly one layer; max
 	// fall-through depth at f = 1).
 	DefaultK = 4
 
-	// MinK is the minimum K OBFT supports per spec (late-leader resilience
-	// requires K ≥ 3).
-	MinK = 3
+	// MinKFloor is the minimum K floor at f=1 (late-leader resilience: K ≥ f+2).
+	// At higher f the K-vs-f bound is computed in ConfigForCluster as
+	// max(MinKFloor, f+2); Config.Validate enforces the same bound.
+	MinKFloor = 3
+)
+
+// Per-layer defaults for the asymmetric staggered schedule (spec §Setting):
+//
+//   - fetchAt is when the leader fetches their candidate; strictly decreasing
+//     in layer index k (deeper layers fetch from deeper-confirmed parents
+//     for re-org resistance, primary fetches latest for max MEV freshness).
+//   - budget is the T_commit-anchored absorption window B_k+slack; strictly
+//     increasing in k (deeper layers tolerate wider propagation tails).
+//
+// Constraints: fetchAt[k] ≤ TCommit − budget[k] for every k (each leader has
+// at-or-positive broadcast headroom); budget[K-1] ≥ 2·(D+δ) BFT-min at the
+// production timing (D=100ms, δ=50ms → 300ms).
+//
+// For K=3 and K=4 the schedules are tabulated below. For K>4 (n=7, n=10,
+// n=13 deployments) both schedules interpolate linearly between L_0 and the
+// deepest layer's K=4 endpoints.
+var defaultLayerSchedules = map[int]struct {
+	fetchAt []time.Duration
+	budget  []time.Duration
+}{
+	3: {
+		fetchAt: []time.Duration{1100 * time.Millisecond, 1050 * time.Millisecond, 950 * time.Millisecond},
+		budget:  []time.Duration{200 * time.Millisecond, 250 * time.Millisecond, 500 * time.Millisecond},
+	},
+	4: {
+		fetchAt: []time.Duration{1100 * time.Millisecond, 1050 * time.Millisecond, 1000 * time.Millisecond, 950 * time.Millisecond},
+		budget:  []time.Duration{200 * time.Millisecond, 250 * time.Millisecond, 350 * time.Millisecond, 500 * time.Millisecond},
+	},
+}
+
+// Endpoint defaults used for K>4 linear interpolation. Match the K=4 L_0
+// and L_3 entries in defaultLayerSchedules.
+const (
+	primaryFetchDefault  = 1100 * time.Millisecond
+	deepestFetchDefault  = 950 * time.Millisecond
+	primaryBudgetDefault = 200 * time.Millisecond
+	deepestBudgetDefault = 500 * time.Millisecond
 )
 
 // ConfigOverrides allows callers to override the default protocol timings
@@ -60,6 +90,13 @@ type ConfigOverrides struct {
 	// defaults are used (1100/1050/1000/950ms for K=4). Length must
 	// match K (or zero/nil to use defaults).
 	FetchAt []time.Duration
+
+	// BroadcastBudget overrides the default per-layer absorption windows
+	// (T_commit-anchored, per spec §Setting). When nil, all layers fall
+	// back to obft.Config's single uniform cap 2*(D+Delta) — equivalent to
+	// the historical pre-staggered behavior. When set, length must match K
+	// and values must be strictly increasing in layer index.
+	BroadcastBudget []time.Duration
 }
 
 func (o *ConfigOverrides) k() int {
@@ -104,35 +141,44 @@ func (o *ConfigOverrides) delta() time.Duration {
 	return o.Delta
 }
 
-// defaultFetchSchedule returns the K-tier per-layer FetchAt schedule —
-// strictly decreasing in layer index k. K=2 isn't supported (MinK=3).
-//
-// For K=3 and K=4, hardcoded defaults are used (matching the spec's
-// recommended per-layer fetch spread). For K>4 (n=7, n=10, n=13 deployments),
-// fetches are interpolated linearly from primary (1100ms) to deepest (950ms).
-func defaultFetchSchedule(K int) []time.Duration {
-	switch K {
-	case 3:
-		return []time.Duration{
-			DefaultPrimaryFetch,
-			DefaultBackupFetchK1,
-			DefaultBackupFetchK2,
-		}
-	case 4:
-		return []time.Duration{
-			DefaultPrimaryFetch,
-			DefaultBackupFetchK1,
-			DefaultBackupFetchK2,
-			DefaultBackupFetchK3,
-		}
-	}
-	// K > 4: linear interpolation across [DefaultBackupFetchK3, DefaultPrimaryFetch].
+// interpolatedSchedule returns a length-K slice running linearly between
+// the L_0 endpoint (k=0) and the deepest endpoint (k=K-1). Direction
+// depends on the values: FetchAt is monotonically decreasing (l0 > deepest);
+// BroadcastBudget is monotonically increasing (l0 < deepest). Used as the
+// K>4 fallback for both schedules.
+func interpolatedSchedule(K int, l0, deepest time.Duration) []time.Duration {
 	out := make([]time.Duration, K)
-	step := (DefaultPrimaryFetch - DefaultBackupFetchK3) / time.Duration(K-1)
+	step := (l0 - deepest) / time.Duration(K-1)
 	for k := 0; k < K; k++ {
-		out[k] = DefaultPrimaryFetch - time.Duration(k)*step
+		out[k] = l0 - time.Duration(k)*step
 	}
 	return out
+}
+
+// defaultFetchSchedule returns the K-tier per-layer FetchAt schedule —
+// strictly decreasing in layer index k. K=2 isn't supported (MinKFloor=3).
+//
+// For K=3 and K=4, returns the tabulated defaults. For K>4 (n=7, n=10,
+// n=13 deployments), interpolates linearly from primary to deepest.
+func defaultFetchSchedule(K int) []time.Duration {
+	if s, ok := defaultLayerSchedules[K]; ok {
+		return append([]time.Duration{}, s.fetchAt...)
+	}
+	return interpolatedSchedule(K, primaryFetchDefault, deepestFetchDefault)
+}
+
+// DefaultBroadcastBudgetSchedule returns the per-layer T_commit-anchored
+// absorption windows paired with defaultFetchSchedule. Mirrors the asymmetric
+// staggered design from spec §Setting at the production timing.
+//
+// For K=3 and K=4, returns the tabulated defaults. For K>4, interpolates
+// linearly from L_0 (smallest budget, max MEV freshness) to the deepest
+// layer (largest budget, max absorption tolerance).
+func DefaultBroadcastBudgetSchedule(K int) []time.Duration {
+	if s, ok := defaultLayerSchedules[K]; ok {
+		return append([]time.Duration{}, s.budget...)
+	}
+	return interpolatedSchedule(K, primaryBudgetDefault, deepestBudgetDefault)
 }
 
 // ConfigForCluster builds an *obft.Config for the given cluster + slot.
@@ -160,8 +206,16 @@ func ConfigForCluster(
 	f := (n - 1) / 3
 
 	K := overrides.k()
-	if K < MinK {
-		return nil, fmt.Errorf("obft adapter: K=%d below minimum %d", K, MinK)
+	// Per spec §Setting: enforce late-leader-resilience minimum K ≥ f+2,
+	// floored at MinKFloor so the f=1 case stays at K ≥ 3 (which is f+2 at f=1).
+	// At f≥2 the f+2 bound dominates and prevents BFT-liveness violations.
+	minK := f + 2
+	if minK < MinKFloor {
+		minK = MinKFloor
+	}
+	if K < minK {
+		return nil, fmt.Errorf("obft adapter: K=%d below late-leader-resilience minimum %d (= max(%d, f+2) at f=%d)",
+			K, minK, MinKFloor, f)
 	}
 	if K > n {
 		return nil, fmt.Errorf("obft adapter: K=%d exceeds cluster size %d", K, n)
@@ -179,12 +233,24 @@ func ConfigForCluster(
 		return nil, fmt.Errorf("obft adapter: FetchAt has %d entries, expected K=%d", len(fetchAt), K)
 	}
 
+	var broadcastBudget []time.Duration
+	if overrides != nil && overrides.BroadcastBudget != nil {
+		if len(overrides.BroadcastBudget) != K {
+			return nil, fmt.Errorf("obft adapter: BroadcastBudget has %d entries, expected K=%d",
+				len(overrides.BroadcastBudget), K)
+		}
+		broadcastBudget = overrides.BroadcastBudget
+	}
+
 	layers := make([]obftcore.LayerSpec, K)
 	for k := 0; k < K; k++ {
 		idx := (uint64(slot) + uint64(k)) % uint64(n) //nolint:gosec // small positive ints
 		layers[k] = obftcore.LayerSpec{
 			Leader:  obftcore.OperatorID(sorted[idx]),
 			FetchAt: fetchAt[k],
+		}
+		if broadcastBudget != nil {
+			layers[k].BroadcastBudget = broadcastBudget[k]
 		}
 	}
 

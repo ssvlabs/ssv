@@ -185,7 +185,7 @@ func (r *ProposerRunner) obftFetchCandidate(ctx context.Context, slot phase0.Slo
 	}
 	r.obftMu.Unlock()
 
-	return encodeOBFTCandidate(vBlk.Version, blindedSSZ), nil
+	return obftadapter.EncodeCandidate(vBlk.Version, blindedSSZ), nil
 }
 
 // obftHostValidate is invoked by the Scheduler when a peer's Phase-1 bundle
@@ -208,14 +208,14 @@ func (r *ProposerRunner) obftFetchCandidate(ctx context.Context, slot phase0.Slo
 // carries V+sig but not the originating layer); callers should not key on
 // it.
 func (r *ProposerRunner) obftHostValidate(ctx context.Context, slot phase0.Slot, layer int, value []byte) (bool, error) {
-	version, blindedSSZ, err := decodeOBFTCandidate(value)
+	version, blindedSSZ, err := obftadapter.DecodeCandidate(value)
 	if err != nil {
 		return false, nil // malformed envelope (not error: just invalid V)
 	}
 	if version == spec.DataVersionUnknown {
 		return false, nil
 	}
-	vBlk, err := decodeBlindedProposal(version, blindedSSZ)
+	vBlk, err := obftadapter.DecodeBlindedProposal(version, blindedSSZ)
 	if err != nil {
 		return false, nil
 	}
@@ -289,7 +289,7 @@ func (r *ProposerRunner) obftSubmitOutput(ctx context.Context, slot phase0.Slot,
 	}
 	r.obftMu.Unlock()
 
-	version, blindedSSZ, err := decodeOBFTCandidate(output.Value)
+	version, blindedSSZ, err := obftadapter.DecodeCandidate(output.Value)
 	if err != nil {
 		return fmt.Errorf("obft submit: decode candidate value: %w", err)
 	}
@@ -301,7 +301,7 @@ func (r *ProposerRunner) obftSubmitOutput(ctx context.Context, slot phase0.Slot,
 		return fmt.Errorf("obft submit: cannot determine spec version for slot %d", slot)
 	}
 
-	vBlk, err := decodeBlindedProposal(version, blindedSSZ)
+	vBlk, err := obftadapter.DecodeBlindedProposal(version, blindedSSZ)
 	if err != nil {
 		return fmt.Errorf("obft submit: decode blinded proposal: %w", err)
 	}
@@ -389,32 +389,4 @@ func checkInnerSignerMatchesOuter(env *wire.Envelope, outerSigner spectypes.Oper
 		// identity binding.
 	}
 	return nil
-}
-
-// ---- Wire helpers ----
-
-func encodeOBFTCandidate(version spec.DataVersion, blindedSSZ []byte) []byte {
-	out := make([]byte, 1+len(blindedSSZ))
-	out[0] = byte(version)
-	copy(out[1:], blindedSSZ)
-	return out
-}
-
-func decodeOBFTCandidate(value []byte) (spec.DataVersion, []byte, error) {
-	if len(value) < 1 {
-		return spec.DataVersionUnknown, nil, fmt.Errorf("empty candidate value")
-	}
-	return spec.DataVersion(value[0]), value[1:], nil
-}
-
-func decodeBlindedProposal(version spec.DataVersion, blindedSSZ []byte) (*api.VersionedProposal, error) {
-	cd := &spectypes.ValidatorConsensusData{
-		Version: version,
-		DataSSZ: blindedSSZ,
-	}
-	vBlk, _, err := cd.GetBlockData()
-	if err != nil {
-		return nil, err
-	}
-	return vBlk, nil
 }

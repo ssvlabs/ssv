@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -16,6 +17,7 @@ import (
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
+	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 )
@@ -88,14 +90,26 @@ func signOBFTEnvelope(t *testing.T, msgID spectypes.MessageID, body []byte, sign
 
 // ---- Phase1Bundle ----
 
+// proposerCandidateV builds an OBFT V for the proposer-duty signing semantics:
+// `[version | SSZ-marshaled blinded BeaconBlock]`. The validation layer's
+// V-side verifier translates V into the block's proposer-domain signing root
+// before checking σ_V, so unit tests must use a real blinded block in V.
+func proposerCandidateV() []byte {
+	const version = spec.DataVersionDeneb
+	return obftadapter.EncodeCandidate(version, spectestingutils.TestingBlindedBeaconBlockBytesV(version))
+}
+
 func TestValidateOBFT_Phase1Bundle_AcceptsValidSigma(t *testing.T) {
 	mv, ks, share, msgID, clusterID := obftTestSetup(t)
 	signer := share.Committee[0].Signer
 
-	// Build a Phase1Bundle signed correctly by the operator's BLS share.
-	blsSigner := blsbackend.New(ks.Shares[signer].Serialize())
-	v := []byte("hello-V")
-	sigV, err := blsSigner.SignPartial(v)
+	// Sign over the proposer-domain signing root via NewProposerSigner —
+	// matches the production V-side signer wiring.
+	innerSigner := blsbackend.New(ks.Shares[signer].Serialize())
+	vSigner, err := obftadapter.NewProposerSigner(innerSigner, mv.netCfg.Beacon)
+	require.NoError(t, err)
+	v := proposerCandidateV()
+	sigV, err := vSigner.SignPartial(v)
 	require.NoError(t, err)
 	bundle := &obftcore.Phase1Bundle{
 		ClusterID:  clusterID,
@@ -120,12 +134,14 @@ func TestValidateOBFT_Phase1Bundle_RejectsCorruptSigmaV(t *testing.T) {
 	mv, _, share, msgID, clusterID := obftTestSetup(t)
 	signer := share.Committee[0].Signer
 
+	// V is a well-formed block (so signingRootFor succeeds); SigmaV is
+	// garbage — exercises the actual partial-sig verification failure.
 	bundle := &obftcore.Phase1Bundle{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
 		Height:     obftTestHeight(mv),
 		Layer:      0,
-		Value:      []byte("V"),
+		Value:      proposerCandidateV(),
 		SigmaV:     []byte("garbage-not-a-valid-bls-partial--padded-to-some-length-like-real-sigs"),
 	}
 	body, err := wire.WrapPhase1Bundle(bundle)
@@ -227,14 +243,15 @@ func TestValidateOBFT_Commit_RejectsCorruptWitness(t *testing.T) {
 
 	// A Commit whose Witnesses include a garbage σ_V — must be rejected
 	// at validation, before reaching the protocol layer's expensive
-	// rehydration path.
+	// rehydration path. Witness Value is a well-formed block so the
+	// rejection fires on the actual σ_V verification, not on V decoding.
 	commit := &obftcore.Commit{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
 		Height:     obftTestHeight(mv),
 		Layers:     make([]obftcore.EncryptedLayer, 4),
 		Witnesses: []obftcore.LeaderSigmaWitness{
-			{Layer: 0, Leader: obftcore.OperatorID(signer), Value: []byte("V"), SigmaV: []byte("garbage-witness-sig-padded-to-resemble-bls-length")},
+			{Layer: 0, Leader: obftcore.OperatorID(signer), Value: proposerCandidateV(), SigmaV: []byte("garbage-witness-sig-padded-to-resemble-bls-length")},
 		},
 	}
 	body, err := wire.WrapCommit(commit)

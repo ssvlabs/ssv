@@ -34,7 +34,7 @@ func TestConfig_Validate_OK(t *testing.T) {
 func TestConfig_Validate_RejectsKTooSmall(t *testing.T) {
 	cfg := validBaseConfig()
 	cfg.Layers = cfg.Layers[:2]
-	require.ErrorContains(t, cfg.Validate(), "K must be >= 3")
+	require.ErrorContains(t, cfg.Validate(), "below late-leader-resilience minimum")
 }
 
 func TestConfig_Validate_RejectsClusterSizeTooSmall(t *testing.T) {
@@ -54,9 +54,9 @@ func TestConfig_Validate_RejectsDuplicateLeader(t *testing.T) {
 
 func TestConfig_Validate_RejectsNonMonotonicFetchAt(t *testing.T) {
 	cfg := validBaseConfig()
-	// Layer 1's FetchAt > layer 0's — violates T_{K-1} <= ... <= T_0.
+	// Layer 1's FetchAt > layer 0's — violates T_{K-1} < ... < T_0.
 	cfg.Layers[1].FetchAt = cfg.Layers[0].FetchAt + 100*time.Millisecond
-	require.ErrorContains(t, cfg.Validate(), "non-increasing")
+	require.ErrorContains(t, cfg.Validate(), "strictly decreasing")
 }
 
 func TestConfig_Validate_RejectsFetchAtPastBroadcastDeadline(t *testing.T) {
