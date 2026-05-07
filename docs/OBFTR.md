@@ -950,7 +950,7 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | h_V=1 selective-delivery deadlock | Slot misses | **Recovered** (Phase-2a verdict pool establishes σ-eligibility cluster-wide before Phase-2b binding) |
 | Validity-divergence (re-org during acceptance) | Out of scope (assumption 3) — slot misses cleanly | **Recovered within f-bound** (3-of-4 majorities at f=1 n=4); 2-2 splits still slot-miss |
 | Mesh-flakiness deadlock | Slot misses | **Recovered** (Phase-2a defers commitment past mesh outliers) |
-| New regression vs OBFTR | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ contribution at Phase-2b (NR-emit or silent abstention). Slot misses. OBFTR succeeded here via Phase-1 σ_V cryptographic lock. |
+| New regression vs OBFTR | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ at Phase-2b (NR-emit or silent). Slot misses. OBFTR succeeded here via Phase-1 σ_V lock. |
 | Round structure | R rounds (configurable) | Single round |
 | Healthy-path latency per round | 2 RTTs | 3 RTTs (Phase 1 + Phase 2a + Phase 2b) |
 
@@ -1008,7 +1008,7 @@ The operational bottom line: OBFTR decisively wins on common-case latency and pa
 
 This appendix specifies an opportunistic bid-routing extension to OBFTR. **L_Bid** is a bid-determined top layer prepended to OBFTR's rotation-determined K layers (yielding a `K' = K + 1` configuration). The extension adds a **slot-level mini-consensus phase** between Phase 1 and the first round's Phase 2 that resolves L_Bid's identity cluster-wide before σ-commitment. The mini-consensus is QBFT-style in spirit (1 round of verdict broadcast + convergence on a quorum-determined value) but scoped narrowly to L_Bid identity selection — it does not bind threshold partials and has no round-change machinery; failure of the mini-consensus cleanly falls through to L_0.
 
-The mini-consensus addresses the C1 (selective bid-withholding), C2 (bidder equivocation), and C3 (validity-divergence majority) deadlock surfaces that a naive bid-routing sketch (no mini-consensus, σ-eligibility predicated on each operator's locally-observed bid set) leaves open. C3 closes cleanly for the 3-of-4 majority case; C1 and C2 close cleanly only when no V reaches `verdict_quorum` and otherwise fold into 2-1-byz-defect. It introduces two narrower residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) inherited from the convergence-rule structure.
+The mini-consensus addresses the C1 (selective bid-withholding), C2 (bidder equivocation), and C3 (validity-divergence majority) deadlock surfaces that a naive bid-routing sketch leaves open. C3 closes cleanly (3-of-4 majority); C1 and C2 close only when no V reaches `verdict_quorum`, otherwise fold into 2-1-byz-defect. Two narrower residual surfaces remain at L_Bid (2-1-byz-defect, verdict-equivocation).
 
 OBFTR's R-round retry semantics apply at L_Bid + the rotation layers in the standard way: L_Bid σ-or-NR commit happens at each round per OBFTR's per-round Phase 2, with cross-round σ-or-NR exclusivity. The mini-consensus itself runs **once per slot** (at slot start, between Phase 1 and round-1 Phase 2) — V_LBid is fixed for the slot and reused across all R rounds.
 
@@ -1016,7 +1016,7 @@ OBFTR's R-round retry semantics apply at L_Bid + the rotation layers in the stan
 
 **Suited for**: deployments where MEV bid-routing upside is significant relative to (a) the +1 RTT slot-budget cost of the mini-consensus phase and (b) the new adversarial-byz residual surfaces at L_Bid. For SSV proposer duty under Config A: high-MEV slots where bid-routed block value-capture exceeds slot-loss-rate cost from new failure modes.
 
-**Not suited for**: deployments prioritizing minimum slot latency (the +1 RTT consumes round budget that would otherwise be available for retry rounds) or where adversarial-byz at L_Bid is a hard constraint (the new residuals are slashable but slot-miss without fall-through; see [§Liveness](#liveness)).
+**Not suited for**: deployments prioritizing minimum slot latency (the +1 RTT consumes round budget) or where adversarial-byz at L_Bid is a hard constraint (the new residuals slot-miss without fall-through, with mixed evidence quality; see [§Liveness](#liveness)).
 
 ### Setting
 
@@ -1112,17 +1112,17 @@ Identical to bare OBFTR. Verdicts don't bind threshold partials. EKM enforces si
 OBFTR's existing rules unchanged. Two new L_Bid-specific rules:
 
 - **Rule 7 — Bid equivocation** (same as OBFT + L_Bid): two distinct `KindBid` envelopes from same operator at same slot. Self-contained slashable.
-- **Rule 8 — Verdict equivocation / verdict-vs-action equivocation**: two distinct `KindBidVerdict` from same operator, OR `KindBidVerdict(σV(V_X))` paired with Phase-2 NR partial on `nr_tag_LBid` at any round. Self-contained slashable. The reverse pattern — null verdict followed by Phase-2 σ on `V_X` — is **not** Rule-8 slashable: it is permitted protocol-honest behavior under the Phase-2 σ-eligibility rule when an operator's `bid_set` was incomplete at the verdict-broadcast deadline (`|bid_set_i| < n − f`) but late re-flood completes the view before Phase-2 emit and `verdict_quorum_V` is observed on `V_X`. The cluster benefits (extra σ-pool contribution); no defection occurs. Same construction as [docs/OBFT.md / Rule 8](OBFT.md#slashing-evidence-rules).
+- **Rule 8 — Verdict equivocation / verdict-vs-action equivocation**: two distinct `KindBidVerdict` from same operator, OR `KindBidVerdict(σV(V_X))` paired with Phase-2 NR partial on `nr_tag_LBid` at any round. Self-contained slashable. The reverse pattern (null verdict + Phase-2 σ on `V_X`) is **not** Rule-8 slashable — it's permitted honest late-convergence behavior. Same construction as [docs/OBFT.md / Rule 8](OBFT.md#slashing-evidence-rules).
 
 ### Liveness
 
 #### Recovery scope at L_Bid
 
-Mini-consensus addresses C1/C2/C3 at L_Bid (same as OBFT + L_Bid). C3 closes cleanly for the 3-of-4 majority case; C1 and C2 close cleanly only when no V reaches `verdict_quorum` and otherwise fold into 2-1-byz-defect (see below):
+Same as OBFT + L_Bid. C3 closes cleanly (3-of-4 majority); C1 and C2 close only when no V reaches `verdict_quorum`, otherwise fold into 2-1-byz-defect (R-invariant; see below):
 
-- **C1 — Selective bid-withholding**: **Closed only when no V reaches `verdict_quorum`** — e.g., byz withholds from > f honest peers so those peers verdict NULL; verdict pool fragments below qV → all NR_LBid → fall-through to L_0. **Not closed when byz withholds from exactly the minority** (leaves them at `|bid_set| = n − f` so they still verdict on a non-`V_X` argmax) and adds its own verdict on `V_X` to push `verdict_pool[V_X]` to qV, then withholds σ contribution at Phase 2 (NR-emit or silent abstention). Same algebraic shape as 2-1-byz-defect (R-invariant residual, see below).
-- **C2 — Bidder equivocation**: **Closed only when no V reaches `verdict_quorum`** (verdicts split widely → fall-through). **Not closed when byz aligns its verdict with the majority-honest** to push `verdict_pool` to qV and withholds σ contribution at Phase 2 (NR-emit or silent abstention). Same algebraic shape as 2-1-byz-defect (see below).
-- **C3 — Validity-divergence majority on V_LBid (3-of-4 at f=1 n=4)**: 3 honest verdict σV(V_X), 1 NV. `verdict_pool[V_X] = 3 = qV` → cluster σ-binds. σ-pool reaches qV. **Closed for 3-of-4 majority.** 2-2 split remains hard algebraic limit.
+- **C1 — Selective bid-withholding**: **Closed when no V reaches `verdict_quorum`** (byz withholds from > f honest → those peers verdict NULL → pool below qV → fall-through). **Not closed when byz withholds from exactly the minority** — minority still has `|bid_set| = n − f` and verdicts on non-`V_X` argmax; byz adds its own verdict to reach qV, then withholds σ at Phase 2 (NR-emit or silent). Folds into 2-1-byz-defect.
+- **C2 — Bidder equivocation**: **Closed when no V reaches `verdict_quorum`** (verdicts split widely → fall-through). **Not closed when byz aligns its verdict with the majority-honest** to push `verdict_pool` to qV, then withholds σ at Phase 2 (NR-emit or silent). Folds into 2-1-byz-defect.
+- **C3 — Validity-divergence majority on V_LBid (3-of-4 at f=1 n=4)**: 3 honest verdict σV(V_X), 1 NV. `verdict_pool[V_X] = 3 = qV` → cluster σ-binds. **Closed for 3-of-4 majority.** 2-2 split remains hard algebraic limit.
 
 #### Recovery scope at rotation layers L_0, ..., L_{K-1}
 
@@ -1132,22 +1132,19 @@ Identical to bare OBFTR. R-round retry with re-flood, per-round independent comm
 
 Same algebraic shape as OBFT + L_Bid:
 
-- **2-1-byz-defect at L_Bid** (R-invariant). Byz engineers a `verdict_quorum` on V that some honest don't retain at Phase 2 emit, casts its own verdict on V to make the quorum, then withholds its σ contribution on V at Phase 2 — either by NR-emit or by silent abstention. Both Phase-2 actions reach the same algebraic deadlock; they differ in evidence quality.
+- **2-1-byz-defect at L_Bid** (R-invariant). Byz engineers `verdict_quorum` on V (some honest don't retain V), casts its own verdict on V to make the quorum, then withholds σ at Phase 2 (NR-emit or silent). Same deadlock either way; evidence varies by trigger × Phase-2 action:
 
-  **Setup triggers** (cross-cut with Phase-2 action):
-  - **Bid-equivocation trigger**: byz sends V to majority-honest, V' to minority-honest. Rule 7 fires cryptographically regardless of Phase-2 action.
-  - **Bid-withholding trigger**: byz sends V to majority-honest, withholds from minority-honest (who still has `|bid_set_i| = n − f` and verdicts on its non-V argmax). Bid-silence is behavioral; Rule 7 does not fire.
+  | Trigger \ Phase 2 | NR-emit | Silent |
+  |---|---|---|
+  | **Bid-equivocation** (V to majority, V' to minority) | Rule 7 + Rule 8 (crypto) | Rule 7 only (action behavioral) |
+  | **Bid-withholding** (V to majority, withhold from minority) | Rule 8 only (bid-silence behavioral) | fully behavioral |
 
-  **Phase-2 byz actions** (cross-cut with setup trigger):
-  - **NR-emit**: byz emits NR partial on `nr_tag_LBid`. Rule 8 (verdict-vs-action equivocation) fires cryptographically.
-  - **Silent at L_Bid**: byz omits any L_Bid σ/NR partial from their `KindCommit_r`. Rule 8 does not fire (no Phase-2 partial to pair with the verdict); evidence is behavioral-pattern only. Rule 7 still attributes the bid-equivocation trigger; the bid-withholding × silent combination has only behavioral evidence end-to-end.
-
-  σ-pool < qV; NR-pool < qEnc; deadlock at L_Bid in round 1. **R-rounds do not help** — the σ-locked operators stay locked across rounds (cross-round σ-or-NR-V exclusivity); round 2 doesn't reset the deadlock because the same V_LBid is reused (mini-consensus is slot-level, not per-round).
-- **Verdict-equivocation at L_Bid** (R-invariant): byz issues different verdicts to different peers; per-peer convergence diverges; deadlock at L_Bid in round 1. R-rounds do not help (same reason as above). Slashable Rule 8.
+  σ-pool < qV; NR-pool < qEnc. **R-rounds do not help** — σ-locked operators stay locked across rounds (cross-round σ-or-NR-V exclusivity); the same V_LBid is reused since mini-consensus is slot-level, not per-round.
+- **Verdict-equivocation at L_Bid** (R-invariant): byz issues different verdicts to different peers; per-peer convergence diverges; deadlock at L_Bid. R-rounds do not help. Slashable Rule 8.
 
 **The R-invariance of these residuals matches OBFTR base's adversarial-byz exposure profile** ([§Failure modes](#failure-modes)) — multi-round retry covers partition cases (re-flood completing across rounds) but not adversarial patterns where byz engineers cross-round σ-locks.
 
-**Trigger frequency**: byz is always a bidder, so they can attempt bid-equivocation, bid-withholding, or verdict-equivocation any slot — vs OBFTR's L_0 surfaces which trigger only when byz is rotation L_0 (1/n slots).
+**Trigger frequency**: byz is always a bidder, so they can attempt bid-equivocation, bid-withholding, or verdict-equivocation any slot — vs OBFTR's L_0 surfaces which trigger only on byz-as-L_0 slots (1/n).
 
 ### Best/worst time-to-completion
 
@@ -1183,17 +1180,17 @@ Best (success) ≈ 600ms (round-1 fast); worst (success within R=2) ≈ 2100ms; 
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | OBFTR base recovery scope (R-round retry, partition tolerance up to R·D) | **Same** |
-| L_Bid liveness — C1 selective bid-withholding | n/a | **Closed only when verdict-quorum doesn't form** (withhold from > f honest → fall-through). Otherwise (withhold from minority + byz pushes verdict_quorum + defects) folds into 2-1-byz-defect (R-invariant). |
-| L_Bid liveness — C2 bidder equivocation | n/a | **Closed only when verdict-quorum doesn't form** (verdicts split widely → fall-through). Otherwise (byz aligns verdict with majority + defects) folds into 2-1-byz-defect (R-invariant). |
+| L_Bid liveness — C1 selective bid-withholding | n/a | **Closed when verdict-quorum doesn't form**; otherwise folds into 2-1-byz-defect (R-invariant) |
+| L_Bid liveness — C2 bidder equivocation | n/a | **Closed when verdict-quorum doesn't form**; otherwise folds into 2-1-byz-defect (R-invariant) |
 | L_Bid liveness — C3 validity-majority (3-of-4) | n/a | **Closed** (verdict-quorum reaches on majority) |
-| L_Bid liveness — 2-1-byz-defect | n/a | **Open**: R-invariant deadlock; slot-miss-without-fall-through. Cryptographic attribution depends on trigger × Phase-2 action (Rule 7 under bid-equivocation, Rule 8 under NR-emit; silent variants are behavioral). |
+| L_Bid liveness — 2-1-byz-defect | n/a | **Open**: R-invariant deadlock; slot-miss-without-fall-through; mixed evidence (Rule 7 under bid-equivocation, Rule 8 under NR-emit, behavioral for silent variants) |
 | L_Bid liveness — verdict-equivocation | n/a | **Open**: R-invariant deadlock; slashable Rule 8 |
 | L_Bid liveness — 2-2 validity split | n/a | **Open**: hard algebraic limit |
 | Bid-routing value capture | n/a | Highest-bid block on healthy path |
 | Adversarial-byz trigger frequency at the bid layer | n/a | Higher than rotation-layer surfaces — byz is always a bidder |
 | Multi-round retry effectiveness at L_Bid | n/a | Same as OBFTR base for partition cases; **R-invariant for adversarial-byz patterns** (cross-round σ-locks block recovery) |
 
-**Net trade vs bare OBFTR**: pays Δ_minicon (~400ms) plus the same L_Bid-specific adversarial-byz residuals as OBFT + L_Bid (2-1-byz-defect, verdict-equivocation; R-invariant; slashable but slot-miss-without-fall-through), in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' R-round recovery scope is unchanged (partition-tail absorption up to `R · P99` is preserved). Whether favorable depends on byzantine-frequency assumption, MEV-value-capture upside, and partition-tail observed in production.
+**Net trade vs bare OBFTR**: pays Δ_minicon (~400ms) plus the same L_Bid-specific adversarial-byz residuals as OBFT + L_Bid (2-1-byz-defect, verdict-equivocation; R-invariant; slot-miss-without-fall-through; mixed evidence quality), in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' R-round recovery scope is unchanged (partition-tail absorption up to `R · P99` is preserved). Whether favorable depends on byzantine-frequency assumption, MEV-value-capture upside, and partition-tail observed in production.
 
-**Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule (conditionally for C1/C2 — clean closure when verdict-quorum doesn't form, otherwise fold into 2-1-byz-defect). The R-invariance of the residual L_Bid surfaces (2-1-byz-defect, verdict-equivocation) matches OBFTR's existing R-invariant adversarial exposures — round-machinery doesn't help with these patterns at any R, so the L_Bid residuals don't degrade OBFTR's recovery profile beyond what its own L_0 surfaces already expose.
+**Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, C3 deadlocks via the cluster-wide convergence rule (C1/C2 conditionally — fold into 2-1-byz-defect when verdict-quorum forms via byz). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) are R-invariant, matching OBFTR's existing R-invariant adversarial exposures — round-machinery doesn't help with these patterns at any R, so they don't degrade OBFTR's recovery profile beyond what its own L_0 surfaces already expose.
 

@@ -822,7 +822,7 @@ A cluster could mix-and-match per duty: OBFT for proposer (where headroom matter
 | h_V=1 selective-delivery deadlock | **Partially closed**: withhold-then-fake-σ pattern closed as a side-effect of Defer removal (which was motivated by spec/wire/EKM simplification — see [§Where this came from](#where-this-came-from)); selective Phase-1 delivery to one honest still slot-misses (algebraic limit at f=1, n=4) | **Closed** via Phase-2a verdict pool |
 | Validity-divergence (re-org during acceptance) | **Out of scope** (assumption 3) — slot misses cleanly | **Recovered within f-bound** (3-of-4 majorities at f=1 n=4); 2-2 splits still slot-miss |
 | Mesh-flakiness deadlock | Slot misses (cross-phase exclusivity locks flaky NR) | **Recovered** (Phase-2a defers commitment past mesh outliers) |
-| New regression vs OBFT | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ contribution at Phase-2b (NR-emit or silent abstention). Slot misses; Rule 6b cryptographic only under NR-emit, behavioral under silent. Bare OBFT succeeded here via Phase-1 σ_V cryptographic lock. |
+| New regression vs OBFT | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ at Phase-2b (NR-emit or silent). Slot misses; Rule 6b cryptographic only under NR-emit, behavioral under silent. Bare OBFT succeeded here via Phase-1 σ_V lock. |
 | Healthy-path latency | 2 RTTs | 3 RTTs (Phase 1 + Phase 2a + Phase 2b) |
 
 **2abOBFT is OBFT's natural recovery-scope extension** at +1 RTT cost. For deployments where the Class B grief patterns matter (high-MEV proposer slots, small adversarial-byz clusters, mesh-flakiness conditions), 2abOBFT closes them in-protocol rather than relying on assumption 4 alone.
@@ -911,7 +911,7 @@ This assumption is L_Bid-specific — bare OBFT does not depend on it. Deploymen
 - **BTT 500-1000ms** (degraded mesh): switch to minimum sizing (`Δ_minicon = Δ_2 = 1 BTT`); recommended sizing becomes tight or fails. Trade-off: less mesh-jitter absorption.
 - **BTT > 1100ms** (severely degraded): L_Bid does not fit at the standard `T_commit` anchor; bare OBFT (3-BTT cycle) remains the available alternative.
 
-**Not suited for**: deployments prioritizing minimum slot latency (the +1 RTT is non-trivial), or where adversarial-byz at the bid layer is a hard constraint (the new residuals are slashable but slot-miss without fall-through; see [§Liveness](#liveness)).
+**Not suited for**: deployments prioritizing minimum slot latency (the +1 RTT is non-trivial), or where adversarial-byz at the bid layer is a hard constraint (the new residuals slot-miss without fall-through, with mixed evidence quality — cryptographic for some trigger/action combos, behavioral for silent variants; see [§Liveness](#liveness)).
 
 ### Setting
 
@@ -1056,7 +1056,7 @@ Pigeonholes 1, 2, 3 hold unchanged at K' = K + 1 layers. The additional `nr_tag_
 Inherits OBFT's 5 rules unchanged. Rule 5's "plaintext layer" binds to L_Bid in this extension (since L_0 is no longer the plaintext layer here — its σ is encrypted under `nr_tag_LBid`); a fake plaintext σ at L_Bid that doesn't verify against any retained `bid_set` member is slashable on the same construction as L_0 in bare OBFT. Two new rules cover L_Bid-specific surfaces:
 
 - **Rule 7 — Bid equivocation / bid-bundle incoherence.** Two distinct `KindBid` envelopes from the same operator at the same slot, OR a `KindBid` `V_i` mismatching the same operator's Phase-1 bundle V at the same `(slot, rotation_layer)`. Self-contained slashable evidence — both envelopes signed by `i`'s operator-identity key.
-- **Rule 8 — Verdict equivocation / verdict-vs-action equivocation.** Operator `i` either broadcasts two distinct `KindBidVerdict` envelopes for the same slot, OR broadcasts `KindBidVerdict(σV(V_X))` and emits Phase-2 NR partial on `nr_tag_LBid`. Self-contained slashable evidence — both signed messages exist on the wire. The reverse pattern — null verdict followed by Phase-2 σ on `V_X` — is **not** Rule-8 slashable: it is permitted protocol-honest behavior under the Phase-2 σ-eligibility rule when an operator's `bid_set` was incomplete at the verdict-broadcast deadline (`|bid_set_i| < n − f`) but late re-flood completes the view before Phase-2 emit and `verdict_quorum_V` is observed on `V_X`. The cluster benefits (extra σ-pool contribution); no defection occurs.
+- **Rule 8 — Verdict equivocation / verdict-vs-action equivocation.** Operator `i` either broadcasts two distinct `KindBidVerdict` envelopes for the same slot, OR broadcasts `KindBidVerdict(σV(V_X))` and emits Phase-2 NR partial on `nr_tag_LBid`. Self-contained slashable evidence — both signed messages exist on the wire. The reverse pattern (null verdict + Phase-2 σ on `V_X`) is **not** Rule-8 slashable: it's permitted honest behavior when an operator's `bid_set` was incomplete at the verdict-broadcast deadline but late re-flood completes the view before Phase-2 emit (cluster gains an extra σ-pool contribution; no defection).
 
 **Evidence quality** (paralleling [§Implications of the rational-byzantine deterrent (assumption 4)](#implications-of-the-rational-byzantine-deterrent-assumption-4) for the main spec's rules):
 
@@ -1071,10 +1071,10 @@ The same asymmetry as in bare OBFT applies: high-evidence-quality faults (clear 
 
 #### Recovery scope at L_Bid
 
-The mini-consensus addresses the three deadlock classes from [§Background — bid-layer deadlocks](#background--bid-layer-deadlocks). C3 is closed cleanly for the 3-of-4 majority case; C1 and C2 are closed only when no V reaches `verdict_quorum` and otherwise fall under [2-1-byz-defect](#new-residual-failure-modes-at-l_bid):
+The mini-consensus addresses the three deadlock classes from [§Background — bid-layer deadlocks](#background--bid-layer-deadlocks). C3 closes cleanly (3-of-4 majority); C1 and C2 close only when no V reaches `verdict_quorum`, otherwise fold into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid):
 
-- **C1 — Selective bid-withholding.** Byz withholds own `KindBid` from a subset of honest peers. **Closed only when byz withholds widely enough that no V reaches `verdict_quorum`** — e.g., withhold from > f honest peers so those peers have `|bid_set_i| < n − f` and verdict null; verdict pool fragments below `qV` on every V → `verdict_quorum` false → all NR_LBid → fall-through to L_0 via NR-quorum. **Not closed when byz withholds from exactly the minority needed to keep a byz-backed `verdict_quorum` alive** — at f=1, n=4 byz can withhold from 1 honest (that peer still has `|bid_set_i| = n − f = 3` and verdicts on its non-`V_X` argmax), then add its own verdict on `V_X` to push `verdict_pool[V_X]` to `qV`, then withhold its σ contribution at Phase 2 (NR-emit or silent abstention). The non-closed case has the same algebraic shape as [2-1-byz-defect](#new-residual-failure-modes-at-l_bid) and is classified there.
-- **C2 — Bidder equivocation.** Byz sends conflicting `KindBid` envelopes to different peers. **Closed only when no V reaches `verdict_quorum`** — when honest argmax computations diverge across enough V's that no single V reaches `qV` (even with byz's own verdict added), all honest NR_LBid → fall-through to L_0 via NR-quorum. **Not closed when byz aligns its verdict with the majority-honest first-observation** — at f=1, n=4 byz sends `V` to majority-honest, `V'` to minority-honest, then verdicts `V` to push `verdict_pool[V]` to `qV`, then withholds its σ contribution at Phase 2 (NR-emit or silent abstention). The non-closed case has the same algebraic shape as [2-1-byz-defect](#new-residual-failure-modes-at-l_bid) and is classified there.
+- **C1 — Selective bid-withholding.** Byz withholds own `KindBid` from a subset of honest peers. **Closed when no V reaches `verdict_quorum`** (byz withholds from > f honest → those peers verdict null → pool fragments below `qV` → fall-through). **Not closed when byz withholds from exactly the minority** — minority still has `|bid_set| = n − f` and verdicts on its non-`V_X` argmax; byz adds its own verdict on `V_X` to reach `qV`, then withholds σ at Phase 2 (NR-emit or silent). Folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid).
+- **C2 — Bidder equivocation.** Byz sends conflicting `KindBid` envelopes to different peers. **Closed when no V reaches `verdict_quorum`** (verdicts split widely enough that no V reaches `qV` even with byz's own verdict → fall-through). **Not closed when byz aligns its verdict with the majority-honest first-observation** to push `verdict_pool` to `qV`, then withholds σ at Phase 2 (NR-emit or silent). Folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid).
 - **C3 — Validity-divergence majority on V_LBid (3-of-4 at f=1, n=4).** 3 honest verdict `σV(V_X)`, 1 honest verdict NV/null. `verdict_pool[V_X] = 3 = qV` → cluster σ-binds on `V_X`. The dissenting honest NRs at L_Bid; the σ-pool reaches `qV` from the V_X-side honest. **Closed for 3-of-4 majority.**
 
 #### Recovery scope at rotation layers L_0, ..., L_{K-1}
@@ -1083,25 +1083,22 @@ Identical to bare OBFT. Mini-consensus failure cleanly falls through to L_0 via 
 
 #### New residual failure modes at L_Bid
 
-Three failure modes at the bid layer, all resulting in slot-miss without fall-through (chained encryption to L_0 stays sealed when L_Bid has neither σ-quorum nor NR-quorum). The first two are **Class B** (permitted byzantine grief within the f-bound; same taxonomy as bare OBFT's [§Failure modes](#failure-modes)) — slot-miss per-slot, attributable evidence on the wire (cryptographically self-contained for some trigger/action combinations, behavioral-pattern for silent variants — same evidence-quality split as bare OBFT's Class B), deterred across slots by [assumption 4](#implications-of-the-rational-byzantine-deterrent-assumption-4). The third is **Class A** (assumption 3 violation) — same hard algebraic limit as bare OBFT's L_0 validity-divergence:
+Three failure modes at the bid layer, all resulting in slot-miss without fall-through (chained encryption to L_0 stays sealed when L_Bid has neither σ-quorum nor NR-quorum). The first two are **Class B** (permitted byzantine grief within the f-bound; same taxonomy as bare OBFT's [§Failure modes](#failure-modes)) — slot-miss per-slot, mixed evidence quality (cryptographic for some trigger/action combos, behavioral for silent variants — same split as bare OBFT's Class B), deterred across slots by [assumption 4](#implications-of-the-rational-byzantine-deterrent-assumption-4). The third is **Class A** (assumption 3 violation) — same hard algebraic limit as bare OBFT's L_0 validity-divergence:
 
-- **[Class B] 2-1-byz-defect.** Byz engineers a `verdict_quorum` on `V` that some honest do not retain at Phase 2 emit, casts its own verdict on `V` to make the quorum, then withholds its σ contribution on `V` at Phase 2 — either by NR-emit or by silent abstention. Both Phase-2 actions reach the same algebraic deadlock; they differ only in evidence quality. The setup × Phase-2 action matrix:
+- **[Class B] 2-1-byz-defect.** Byz engineers `verdict_quorum` on `V` that some honest don't retain at Phase 2, casts its own verdict on `V` to make the quorum, then withholds σ at Phase 2 (NR-emit or silent). Same algebraic deadlock either way; evidence varies by trigger × Phase-2 action:
 
-  **Setup triggers** (cross-cut with Phase-2 action below):
-  - **Bid-equivocation trigger.** Byz sends `V` to majority-honest, `V'` to minority-honest. Rule 7 (bid-equivocation) fires cryptographically regardless of Phase-2 action.
-  - **Bid-withholding trigger.** Byz sends `V` to majority-honest, withholds from minority-honest (who still has `|bid_set_i| = n − f` and verdicts on its non-`V` argmax). Bid-silence component is behavioral-pattern; Rule 7 does not fire — see [§Slashing-evidence rules / Evidence quality](#slashing-evidence-rules) for the silence-grief character.
+  | Trigger \ Phase 2 | NR-emit | Silent |
+  |---|---|---|
+  | **Bid-equivocation** (V to majority, V' to minority) | Rule 7 + Rule 8 (crypto) | Rule 7 only (action behavioral) |
+  | **Bid-withholding** (V to majority, withhold from minority; minority verdicts non-V argmax) | Rule 8 only (bid-silence behavioral) | fully behavioral |
 
-  **Phase-2 byz actions** (cross-cut with setup trigger above):
-  - **NR-emit.** Byz emits NR partial on `nr_tag_LBid`. Rule 8 (verdict-vs-action equivocation) fires cryptographically — verdict envelope and NR partial together are self-contained slashable evidence.
-  - **Silent at L_Bid.** Byz omits any L_Bid σ/NR partial from their `KindCommit`. Rule 8 does not fire (no Phase-2 partial to pair with the verdict). Observable behaviorally — verdict-on-`V` envelope on the wire while no Phase-2 L_Bid contribution from byz — but evidence is gossipsub-pattern quality, same character as bare OBFT's silence-grief surfaces. Rule 7 still attributes the bid-equivocation trigger; the bid-withholding × silent combination has only behavioral evidence end-to-end.
-
-  At f=1, n=4 (either trigger, either Phase-2 action): σ-pool[V] = 2 (majority-honest who retain V and σ-emit on it); NR-pool = 1 (minority honest) + ≤ 1 (byz: 1 if NR-emit, 0 if silent) ≤ 2 < `qEnc`. Deadlock either way.
-- **[Class B — cryptographically slashable] Verdict equivocation at L_Bid.** Byz issues different verdicts to different peers, fragmenting per-peer verdict-pool views. Some honest see `qV`-quorum on `V_X` (and σ-bind); others don't (and NR). σ-pool < `qV`; NR-pool < `qEnc`. Same algebraic deadlock, same slot-miss-without-fall-through. Rule 8 fires on the two-distinct-verdict-envelopes pair regardless of Phase-2 action — cryptographic.
+  At f=1, n=4: σ-pool[V] = 2 (majority); NR-pool = 1 (minority) + (1 if byz NR-emit, 0 if silent) ≤ 2 < `qEnc`. Deadlock.
+- **[Class B — cryptographically slashable] Verdict equivocation at L_Bid.** Byz issues different verdicts to different peers, fragmenting per-peer verdict-pool views. Some honest see `qV`-quorum on `V_X` (and σ-bind); others don't (and NR). σ-pool < `qV`; NR-pool < `qEnc`. Same deadlock shape. Rule 8 fires on the two-distinct-verdict-envelopes pair regardless of Phase-2 action — cryptographic.
 - **[Class A — assumption 3 violation] 2-2 validity-divergence at L_Bid.** Hard algebraic limit: when honest split 2-2 on `V_X` validity (and byz aligns to extend the split), no `verdict_pool` reaches `qV` and the NR-pool may also fall short under adversarial byz alignment. The same hard limit applies symmetrically in bare OBFT at L_0 — no protocol decides 2-2 validity divergence at f=1, n=4 without breaking BFT bound symmetry. Not attributable to byz (re-orgs are real-world events); no slashing applies. (See [§Implications of validity-divergence not being recovered (assumption 3)](#implications-of-validity-divergence-not-being-recovered-assumption-3).)
 
 #### Trigger frequency
 
-Byz is **always** a bidder, so they can attempt bid-equivocation, bid-withholding, or verdict-equivocation in any slot. Bare OBFT's adversarial-byz L_0 surfaces (σ-locked-split equivocation, h_V=1 selective-delivery) trigger only when byz is rotation L_0 — `1/n` slots under uniform rotation. The L_Bid surfaces are correspondingly higher-frequency. Per-slot effect is the same order (slot-miss, slashable post-hoc via the cluster's coordination process); per-protocol-instance frequency is `n×` higher.
+Byz is **always** a bidder, so they can attempt bid-equivocation, bid-withholding, or verdict-equivocation in any slot. Bare OBFT's adversarial-byz L_0 surfaces (σ-locked-split equivocation, h_V=1 selective-delivery) trigger only when byz is rotation L_0 — `1/n` slots under uniform rotation. The L_Bid surfaces are correspondingly `n×` higher-frequency. Per-slot effect is the same order (slot-miss; mixed-quality evidence handled via the cluster's coordination process).
 
 ### Slot timing
 
@@ -1156,7 +1153,7 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 
 **What it does not close:**
 
-- **Selective bid-withholding** (C1) — protocol-level handling is conditional (see [§Recovery scope at L_Bid](#recovery-scope-at-l_bid)): falls through cleanly only when no V reaches `verdict_quorum`. The residual case (withhold from the minority + byz-backed verdict_quorum + Phase-2 NR-defect) folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid); attestation does not close that residual either.
+- **Selective bid-withholding** (C1) — protocol handling is conditional (see [§Recovery scope at L_Bid](#recovery-scope-at-l_bid)): falls through only when no V reaches `verdict_quorum`. The residual case folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid); attestation does not close it.
 - **Bid equivocation** — covered by Rule 7.
 - **Operator selecting a low-MEV bid from a recognized relay** — within the operator's discretion; not a protocol concern.
 
@@ -1186,13 +1183,13 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | L_Bid liveness — C1 selective bid-withholding | n/a (no bid layer) | **Closed only when verdict-quorum doesn't form** (withhold from > f honest → fall-through). Otherwise (withhold from exactly the minority + byz pushes verdict via own verdict + defects) falls under 2-1-byz-defect (Class B). |
 | L_Bid liveness — C2 bidder equivocation | n/a | **Closed only when verdict-quorum doesn't form** (verdicts split widely → fall-through). Otherwise (byz aligns its verdict with majority-honest + defects) falls under 2-1-byz-defect (Class B). |
 | L_Bid liveness — C3 validity-divergence majority (3-of-4) | n/a | **Closed** (verdict-quorum reaches on majority; minority NR) |
-| L_Bid liveness — 2-1-byz-defect (bid-equivocation or bid-withholding trigger; NR-emit or silent Phase-2 action) | n/a | **Class B**: slot-miss-without-fall-through. Cryptographic attribution depends on trigger × Phase-2 action: Rule 7 fires under bid-equivocation, Rule 8 fires only under NR-emit; bid-silence and Phase-2 silence are behavioral. Assumption-4 deterred across slots. |
+| L_Bid liveness — 2-1-byz-defect | n/a | **Class B**: slot-miss-without-fall-through; mixed evidence (Rule 7 under bid-equivocation, Rule 8 under NR-emit, behavioral for silent variants); assumption-4 deterred across slots |
 | L_Bid liveness — verdict-equivocation | n/a | **Class B** (slashable Rule 8; assumption-4 deterred across slots): slot-miss-without-fall-through |
 | L_Bid liveness — 2-2 validity split | shared hard algebraic limit at L_0 (BFT-theoretical, not protocol-specific) | **Class A** (assumption 3 violation): same hard limit at L_Bid; not attributable, no slashing |
 | Bid-routing value capture | n/a | Highest-bid block on healthy path |
 | Adversarial-byz trigger frequency at the bid layer | n/a | `n×` higher than bare OBFT's L_0 surfaces — byz is always a bidder, vs L_0-leader-only |
 
-**Net trade vs bare OBFT**: pays +1 RTT and additional adversarial-byz residual surface at L_Bid (slashable but slot-miss-without-fall-through) in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' recovery scope is unchanged. Whether favorable depends on byzantine-frequency assumption and MEV-value-capture upside vs slot-loss cost from the new failure modes.
+**Net trade vs bare OBFT**: pays +1 RTT and additional adversarial-byz residual surface at L_Bid (slot-miss-without-fall-through; mixed evidence quality) in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' recovery scope is unchanged. Whether favorable depends on byzantine-frequency assumption and MEV-value-capture upside vs slot-loss cost from the new failure modes.
 
 ## Appendix C — Message re-broadcast considerations
 
