@@ -34,7 +34,8 @@ The protocol description below targets `n = 4` (`f = 1`) as the running example,
   Concrete minimums by f: at `f = 1`, BFT-min `K = 2` but **late-leader-resilient `K = 3` recommended**; at `f = 2, n = 7`, BFT-min `K = 3` but resilient `K = 4` recommended; at `f = 3, n = 10`, resilient `K = 5`. The K choice within the recommended range is per-duty: `K = f+2` for proposer duty (smallest K with both bounds satisfied, fits 4s relay cutoff with margin); `K ≥ f+3` for duties with longer budgets (attestation, sync committee) or where additional non-byzantine multi-failure tolerance is desired.
 - **R rounds** (`R ≥ 1`, configurable) with **round timeout** `RT`. Round 1 runs the standard Phase 1 → Phase 2 → Phase 3 sequence (2-RTT healthy path). Rounds 2..R fire on timeout when prior round's reconstruction failed at all layers — they run with new leaders for new layer slots and gossipsub continues propagating any late bundles from prior rounds, which can now be σ-emitted on if received before the new round's `T_commit_r`. The R choice is per-duty: `R = 2` for proposer duty (one recovery round fits 4s budget); `R ≥ 3` for non-proposer duties.
 - Per-layer leader-fetch deadlines `T_{K-1} < T_{K-2} < ... < T_1 < T_0` (within each round), plus a per-round cluster deadline `T_commit_r` for round `r`. (`T_commit_r` is a *view-fix point* for round `r`: each operator commits its stance based on what it observed by `T_commit_r`. Reconstruction and submission happen after.) The asymmetric fetch times let primary leaders fetch high-MEV values late (`T_0` close to `T_commit_1`) while deeper layers' leaders fetch safe early values from deeper-confirmed parents (`T_{K-1}` well before `T_0`).
-- **Per-round leader broadcast deadline** `T_broadcast_max_r = T_commit_r − 2(D + δ)` where `D` is the propagation P99/P999 budget and `δ` is the cluster's clock-skew bound. Each round's leaders must finish broadcasting by `T_broadcast_max_r` so that under worst-case propagation, all honest first-observe by `T_commit_r − (D + δ)`. Per-layer fetch windows fit within this deadline: `T_k_r + Δ_1 ≤ T_broadcast_max_r`. Bundles first-observed past `T_commit_r` are not counted by that receiver toward σ-quorum at round r's layers; if reconstruction fails at round r, gossipsub may still deliver those bundles to that receiver before round r+1's `T_commit_{r+1}`, in which case round r+1 can σ-emit on them.
+- **Time unit `PC` (propagation cycle)** — `D` is the propagation P99/P999 budget; `δ` is the cluster's clock-skew bound. We define `1 PC = D + δ` — the time needed for one one-way message to propagate from a sender to all honest receivers under partial-synchrony assumptions. This unit is used throughout for time-budget formulas; the underlying `D` and `δ` are kept distinct only in §Trust model (where partial synchrony is defined) and in safety arguments (Pigeonhole proofs). Concrete sizing at Config A: `D = 100ms, δ = 50ms, 1 PC = 150ms`.
+- **Per-round leader broadcast deadline** `T_broadcast_max_r = T_commit_r − 2 PC`. Each round's leaders must finish broadcasting by `T_broadcast_max_r` so that under worst-case propagation, all honest first-observe by `T_commit_r − 1 PC`. Per-layer fetch windows fit within this deadline: `T_k_r + Δ_1 ≤ T_broadcast_max_r`. Bundles first-observed past `T_commit_r` are not counted by that receiver toward σ-quorum at round r's layers; if reconstruction fails at round r, gossipsub may still deliver those bundles to that receiver before round r+1's `T_commit_{r+1}`, in which case round r+1 can σ-emit on them.
 
   This is OBFTR's structural difference vs single-round [OBFT](OBFT.md): late delivery is not a slot-miss-causing failure mode within the protocol's R-round budget — bundles late by one round's `T_commit_r` get a fresh chance to be σ-emitted on in round r+1.
 - **K-1 NR tags**: `nr_tag_k = ("slot", N, "cluster", C, "layer", k, "no-quorum")` for `k ∈ {0, ..., K-2}`. Each tag corresponds to a layer-advance unlock — when `qEnc` partials on `nr_tag_k` aggregate, the cluster can decrypt next-layer (`L_{k+1}`) σ partials. The deepest layer (`L_{K-1}`) has no NR tag.
@@ -49,7 +50,7 @@ OBFTR's claims hold conditional on a small set of explicit assumptions about the
 
 2. **Partial synchrony for liveness.** Messages eventually deliver within bounded propagation `D` (cluster gossipsub P99/P999) and clock skew `δ`. Safety is unconditional on timing; only liveness depends on this.
 
-3. **Host validity is unanimous at decision time** (best-effort assumption). OBFTR assumes the host application's `valid` / `not-valid` verdict on `V_{L_k}` is the same across all honest operators by the time they emit Phase 2. Operators may transiently diverge (e.g., a head change observed by some but not others). The host's job is to make divergence rare via per-operator stabilization — typically by validating against a stable head snapshot taken at Phase-1 acceptance time, then locking the verdict for the remainder of the slot. **This per-operator locking does not give cluster-wide convergence; it narrows the divergence window to events that land inside the receiver acceptance window** = R-round absorption window (per-round acceptance horizons + cross-round retention through round R; ≈ 1150ms at Config A R=2 with recommended Δ_2 = 2(D+δ) per round). When divergence does occur — a re-org during the acceptance window with operators accepting on either side of it — the assumption is violated and the slot may miss; the protocol does not recover. **Note**: the per-round receiver acceptance horizon (which extends into each round's Phase 2 to absorb late re-flood) plus cross-round retention widens the validity-locking time spread proportionally with the absorption window. At OBFTR(R=2) Config A, this is substantially wider than the older "T_candidate_accept = T_commit_r − (D+δ)" framing's per-round window. The wider absorption window trades partition recovery against validity-divergence exposure. See [Application: SSV Ethereum proposer duty / Head-change handling](#head-change-handling) for the SSV-specific stabilization workflow and the residual divergence window.
+3. **Host validity is unanimous at decision time** (best-effort assumption). OBFTR assumes the host application's `valid` / `not-valid` verdict on `V_{L_k}` is the same across all honest operators by the time they emit Phase 2. Operators may transiently diverge (e.g., a head change observed by some but not others). The host's job is to make divergence rare via per-operator stabilization — typically by validating against a stable head snapshot taken at Phase-1 acceptance time, then locking the verdict for the remainder of the slot. **This per-operator locking does not give cluster-wide convergence; it narrows the divergence window to events that land inside the receiver acceptance window** = R-round absorption window (per-round acceptance horizons + cross-round retention through round R; ≈ 1150ms at Config A R=2 with recommended Δ_2 = 2 PC per round). When divergence does occur — a re-org during the acceptance window with operators accepting on either side of it — the assumption is violated and the slot may miss; the protocol does not recover. **Note**: the per-round receiver acceptance horizon (which extends into each round's Phase 2 to absorb late re-flood) plus cross-round retention widens the validity-locking time spread proportionally with the absorption window. At OBFTR(R=2) Config A, this is substantially wider than the older "T_candidate_accept = T_commit_r − 1 PC" framing's per-round window. The wider absorption window trades partition recovery against validity-divergence exposure. See [Application: SSV Ethereum proposer duty / Head-change handling](#head-change-handling) for the SSV-specific stabilization workflow and the residual divergence window.
 
    The validity check exists to prevent the cluster from agreeing on a garbage / invalid V — it is not a divergence-recovery mechanism. NV is operationally identical to NR for protocol counting; it does not trigger any in-protocol divergence-handling path.
 
@@ -164,7 +165,7 @@ Receivers run **two layers of validation**, in order:
 
 If a leader `L_k` fails to broadcast across all R rounds, that layer is unavailable; the cluster falls through to deeper layers. If all K leaders fail, the slot is missed.
 
-**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. Across rounds, gossipsub continues propagating in the background — a bundle first-observed by some honest at `T_commit_r + ε` can reach the slow honest by `T_commit_{r+1}` if `Δ_round = T_commit_{r+1} − T_commit_r ≥ ε + (D + δ)`.
+**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. Across rounds, gossipsub continues propagating in the background — a bundle first-observed by some honest at `T_commit_r + ε` can reach the slow honest by `T_commit_{r+1}` if `Δ_round = T_commit_{r+1} − T_commit_r ≥ ε + 1 PC`.
 
 **Retention bounds.** Retention state for accepted Phase-1 bundles is keyed by `(slot, layer k, leader_id)`. Per key, an operator retains at most **two distinct `(V, σ_{L_k}^V, σ_{L_k}^{op})` tuples** — the first auth-valid bundle observed, plus, if a second auth-valid bundle with a *distinct* `value_root` is later observed, that one (sufficient as leader-equivocation evidence). Further auth-valid bundles for the same `(slot, layer, leader_id)` are dropped silently. Bundles whose cryptographic-auth checks fail are dropped without retention. Retention lifetime: until the operator's local end of round `R`'s Phase 3 (i.e., until reconstruction halts or the slot is declared missed); slot state is then cleared. Memory bound: `O(K · n · R)` bundles per slot in the worst case.
 
@@ -220,7 +221,7 @@ where:
 
 **Phase 2 timing per round.** Each operator emits exactly one `KindCommit_r` message at `T_commit_r`, carrying their per-layer σ partials (for σ-state layers in this round) and NR partials (for NR-state layers in this round). The Phase 2 window `[T_commit_r, T_commit_r + Δ_2]` is sized for that message to propagate to all honest peers before round r's Phase 3.
 
-**Δ_2 sizing per round.** `Δ_2 ≥ D + δ` minimum (`KindCommit_r` propagation budget). **Recommended for production: `Δ_2 = 2(D + δ)`** to absorb mesh-jitter and per-operator processing variance — one full propagation cycle of slack on top of P99 propagation. At Config A (D=100ms, δ=50ms): minimum `Δ_2 = 150ms`, recommended `Δ_2 = 300ms`. Concrete tables and downstream timing throughout this document use the recommended sizing.
+**Δ_2 sizing per round.** `Δ_2 ≥ 1 PC` minimum (`KindCommit_r` propagation budget). **Recommended for production: `Δ_2 = 2 PC`** to absorb mesh-jitter and per-operator processing variance — one full propagation cycle of slack on top of P99 propagation. At Config A (D=100ms, δ=50ms): minimum `Δ_2 = 150ms`, recommended `Δ_2 = 300ms`. Concrete tables and downstream timing throughout this document use the recommended sizing.
 
 **Wire format.** Each operator emits exactly one `KindCommit_r` per (slot, operator, round) at `T_commit_r`, carrying:
 
@@ -356,7 +357,7 @@ OBFTR runs up to **R rounds** with timeout **RT** per round. Round `r ∈ {1, ..
 - If round `r < R` ends with no output, round `r+1` fires (with new leaders for round-r+1's layers).
 - If round `r == R` ends with no output, slot misses.
 
-**Round timing**: `RT = Δ_1 + Δ_2 + Δ_2.5 + Δ_3` for round 1 (full Phase 1 → 2 → 2.5 → 3); `RT = Δ_reflood + Δ_2 + Δ_2.5 + Δ_3` for rounds 2..R, where `Δ_reflood ≈ D + δ` is the re-flood window. The slot's total budget is `R · RT` (approximately; round 1 is longer due to fresh Phase 1).
+**Round timing**: `RT = Δ_1 + Δ_2 + Δ_2.5 + Δ_3` for round 1 (full Phase 1 → 2 → 2.5 → 3); `RT = Δ_reflood + Δ_2 + Δ_2.5 + Δ_3` for rounds 2..R, where `Δ_reflood ≈ 1 PC` is the re-flood window. The slot's total budget is `R · RT` (approximately; round 1 is longer due to fresh Phase 1).
 
 ## Preconditions on the host application
 
@@ -416,16 +417,16 @@ This section consolidates everything the protocol guarantees — and doesn't —
 ### Trust model
 
 - **Byzantine bound `f`** with cluster size `n = 3f+1` (the BFT-tight setting; see [§Assumed / Standard BFT trust bound at the tight setting](#assumed)): up to `f` operators may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, etc.). Exactly `2f+1` honest. Running example: `n = 4, f = 1` (3 honest guaranteed).
-- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `D` (propagation P99/P999) and clock skew `δ`. Two distinct per-round cutoffs operationalize this: `T_broadcast_max_r = T_commit_r − 2(D + δ)` (leader broadcast deadline, round 1 only) and `T_accept_max_r = T_commit_r + Δ_2 − (D + δ)` (per-round receiver acceptance horizon). Phase 3's reconstruction deadline is `T_round_r_end = T_commit_r + Δ_2 + Δ_2.5 + Δ_3`. Safety holds against arbitrary network adversaries; only liveness depends on synchrony.
+- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `D` (propagation P99/P999) and clock skew `δ`. Two distinct per-round cutoffs operationalize this: `T_broadcast_max_r = T_commit_r − 2 PC` (leader broadcast deadline, round 1 only) and `T_accept_max_r = T_commit_r + Δ_2 − 1 PC` (per-round receiver acceptance horizon). Phase 3's reconstruction deadline is `T_round_r_end = T_commit_r + Δ_2 + Δ_2.5 + Δ_3`. Safety holds against arbitrary network adversaries; only liveness depends on synchrony.
 
   **OBFTR's R-round absorption window** = `T_accept_max_R − T_broadcast_max_1`:
-  - Per-round absorption (single round, ignoring cross-round retention): `Δ_2 + (D + δ)`. Concrete: ~`3(D + δ)` ≈ 450ms at Config A with recommended `Δ_2 = 2(D + δ)`.
+  - Per-round absorption (single round, ignoring cross-round retention): `Δ_2 + 1 PC`. Concrete: ~`3 PC` ≈ 450ms at Config A with recommended `Δ_2 = 2 PC`.
   - Cross-round retention extends absorption by `(R − 1) · (Δ_2 + Δ_2.5 + Δ_3 + Δ_reflood)` (each additional round adds its own per-round-window worth of inter-round time before its acceptance horizon fires).
-  - At R=2 Config A with recommended Δ_2: total absorption ≈ `7(D + δ) + Δ_3` ≈ 1150ms — roughly 2.5× a single round's window.
+  - At R=2 Config A with recommended Δ_2: total absorption ≈ `7 PC + Δ_3` ≈ 1150ms — roughly 2.5× a single round's window.
 
-  Per-round Δ_2 is sized to `D + δ` (KindCommit propagation budget); the multi-round absorption advantage of OBFTR vs single-round OBFT comes from per-round retry with new leaders, not from within-round Δ_2 widening. Each round commits at `T_commit_r` based on observed bundles; late bundles from round r naturally propagate via gossipsub before round r+1's `T_commit_{r+1}`.
+  Per-round Δ_2 is sized to `1 PC` (KindCommit propagation budget); the multi-round absorption advantage of OBFTR vs single-round OBFT comes from per-round retry with new leaders, not from within-round Δ_2 widening. Each round commits at `T_commit_r` based on observed bundles; late bundles from round r naturally propagate via gossipsub before round r+1's `T_commit_{r+1}`.
 
-  The "absorption window" framing is more precise than the simpler "R · D" intuition: each round contributes both its own `Δ_2 + (D + δ)` of within-round absorption AND the inter-round time before the next round's acceptance horizon. R-round retry's recovery scope grows correspondingly faster than `R × D`.
+  The "absorption window" framing is more precise than the simpler "R · D" intuition: each round contributes both its own `Δ_2 + 1 PC` of within-round absorption AND the inter-round time before the next round's acceptance horizon. R-round retry's recovery scope grows correspondingly faster than `R × D`.
 
 ### Safety (cryptographic, honest-majority)
 
@@ -474,7 +475,7 @@ OBFTR's liveness is **partial-synchrony-conditional within `T_round_R_end`** —
 
 If propagation between honest operators stays bounded by `R · D`, the protocol terminates with a V signature on some layer (the first layer where σ-quorum reaches under cluster-wide V receipt, or the deepest layer reachable via NR fall-through with a valid backup leader). If propagation exceeds `R · D`, or more than `f` operators are byzantine/offline, the slot is missed. **Safety holds in either case.**
 
-**Best case (round 1 healthy at L_0)**: all honest receive V_{L_0} within `D + δ`; all 3 honest σ-emit + leader's Phase-1 σ = 4 ≥ qV. Slot succeeds in 2 RTTs (Phase 1 + Phase 2).
+**Best case (round 1 healthy at L_0)**: all honest receive V_{L_0} within `1 PC`; all 3 honest σ-emit + leader's Phase-1 σ = 4 ≥ qV. Slot succeeds in 2 RTTs (Phase 1 + Phase 2).
 
 **Aggressive-marginal recovery (round 2 covers 2-of-3-honest missing in round 1)**: 1 honest received V before round-1's `T_commit_1`; 2 honest didn't. The 2 missing honest NR at round 1 (silent-leader rule). Round 1 ends with σ-pool = 1 + leader = 2 < qV, NR-pool = 2 < qEnc → no quorum reaches; round 2 fires. By round-2's `T_commit_2`, gossipsub has continued propagating the bundle and the 2 missing honest now have V. They σ-emit at L_0 in round 2 (per-round commitments are independent — round-1 NR doesn't lock them out of round-2 σ). σ-pool at round 2 = 3 + leader = 4 ≥ qV. Slot succeeds in ~3 RTTs. **OBFTR recovers what bare [OBFT](OBFT.md) (single-round) misses.**
 
@@ -499,7 +500,7 @@ Not recovered — slot misses at L_0 with no fall-through (σ-locked split patte
 
 In all cases, Pigeonhole 2 ensures at most one V can reach qV cluster-wide regardless of how honest σ-emissions split — there is no two-output safety violation. The **Phase 2a/2b split** (see [2abOBFT](2abOBFT.md)) (broadcast-only Phase-2a where operators re-flood retained Phase-1 bundles without σ-emitting, then Phase-2b where σ-emits happen on the cluster's stabilized winner V) recovers all equivocation patterns at +1 RTT cost; documented as future improvement, not in current OBFTR.
 
-**Sub-partial-synchrony (real propagation > absorption window)**: if propagation between leader broadcast and any honest receiver's first-observation exceeds the cluster's R-round absorption window (per-round acceptance horizon + cross-round retention through round R — see [§Trust model](#trust-model) for the algebra; concrete value at Config A R=2 is ~`7(D+δ)` ≈ 1150ms with recommended Δ_2 per round), late honest don't σ-emit by round R and slot misses. **No safety violation.** R is a tunable knob; larger R extends tolerance at the cost of more pessimistic timing.
+**Sub-partial-synchrony (real propagation > absorption window)**: if propagation between leader broadcast and any honest receiver's first-observation exceeds the cluster's R-round absorption window (per-round acceptance horizon + cross-round retention through round R — see [§Trust model](#trust-model) for the algebra; concrete value at Config A R=2 is ~`7 PC` ≈ 1150ms with recommended Δ_2 per round), late honest don't σ-emit by round R and slot misses. **No safety violation.** R is a tunable knob; larger R extends tolerance at the cost of more pessimistic timing.
 
 **Multi-failure fall-through (K ≥ 3)**: with `K > 2` layers, the cluster can fall through past multiple silent or non-validating layers **within a single round** — Phase 3's reconstruction walk processes layers sequentially using local decryption (no per-layer RTT). E.g., at K=4 with L_0, L_1, L_2 all silent: NR-quorum reaches at L_0 in Phase 2 (silent-leader rule fires for all 3 honest cluster-wide); same at L_1 and L_2; σ-quorum at L_3 if L_3 leader honest. All happens in round 1's Phase 2 + Phase 3 windows. Recovery scope at K layers is achieved without round-change overhead — a structural difference from QBFT (which round-changes once per failed leader).
 
@@ -621,7 +622,7 @@ The slot misses under any of:
 
   **Mitigation paths (in order of recommendation):**
   - **Use K ≥ f+2** (the recommended config; see §Setting). Adds at least 2 honest leaders so a single late-broadcasting honest leader doesn't foreclose the slot — fall-through to a deeper honest leader recovers. At f=1 n=4 this means K = 3 (~1KB extra per onion vs K=2; within practical bandwidth). At f=2 n=7, K = 4. Etc. **No protocol change**, just deployment configuration; this is the cleanest fix that actually recovers the slot.
-  - **Host-side hard deadline** (defense-in-depth on top of K ≥ f+2; minor host-side discipline, no protocol change). The leader's fetch loop should abort and broadcast no bundle if it hasn't terminated by `T_broadcast_max_1 = T_commit_1 − 2(D + δ)`. Converts "late broadcast NR-locks the layer" into "silent leader" (handled cleanly via NR-quorum → fall-through). At K = f+1 (BFT-min) this *cleans up the spec-tension* but doesn't recover the slot (silent + L_0-fail still falls through to non-existent layer). At K ≥ f+2 it complements the K choice by ensuring late broadcasts always fall into the silent-leader path rather than the NR-lock pathology.
+  - **Host-side hard deadline** (defense-in-depth on top of K ≥ f+2; minor host-side discipline, no protocol change). The leader's fetch loop should abort and broadcast no bundle if it hasn't terminated by `T_broadcast_max_1 = T_commit_1 − 2 PC`. Converts "late broadcast NR-locks the layer" into "silent leader" (handled cleanly via NR-quorum → fall-through). At K = f+1 (BFT-min) this *cleans up the spec-tension* but doesn't recover the slot (silent + L_0-fail still falls through to non-existent layer). At K ≥ f+2 it complements the K choice by ensuring late broadcasts always fall into the silent-leader path rather than the NR-lock pathology.
   - **Phase 2a/2b** ([Path forward](#future-improvement--phase-2a2b-for-full-equivocation-recovery)). Structural fix that handles K = f+1 too. No Phase-1 σ_V from the leader → no early commitment by anyone → late bundle observed in Phase-2a is σ-emittable in Phase-2b. Costs +1 RTT/round (same as the other Phase 2a/2b benefits). Worth adopting if the deployment also wants the validity-divergence and Class B byzantine grief recovery that Phase 2a/2b brings.
 - **[Class A]** **Validity-divergence deadlock (network-induced; no byzantine action required in the cleanest case).** **This is an OBFT-family issue inherited by OBFTR — not introduced or worsened by OBFTR's R-round machinery.** Bare OBFT and OBFTR share the three structural causes: per-operator independent validity verdict, leader's σ_V locked in Phase 1, and cross-phase exclusivity per operator. OBFTR's R-round structure does not address it (verdicts are locked at acceptance per the host stabilization workflow, so re-flood across rounds doesn't reconcile divergence). [2abOBFT](2abOBFT.md) recovers this case in-protocol via the Phase-2a observation phase.
 
@@ -684,10 +685,10 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + EKM-enforced per-operator commitments, holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional. **One-liner: terminates within `T_round_R_end ≈ slot_start + 3.50s` at Config A R=2 (D = 100ms, δ = 50ms, K = 3, recommended Δ_2 = 2(D+δ) per round) under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation between leader broadcast and any honest first-observation ≤ R-round absorption window `~7(D + δ) + Δ_3` ≈ 1150ms (lower at narrower per-round Δ_2; see §Trust model), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Configurable R lets operators tune termination guarantee per duty's deadline budget. |
+| Termination (output guaranteed) | Conditional. **One-liner: terminates within `T_round_R_end ≈ slot_start + 3.50s` at Config A R=2 (D = 100ms, δ = 50ms, K = 3, recommended Δ_2 = 2 PC per round) under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation between leader broadcast and any honest first-observation ≤ R-round absorption window `~7 PC + Δ_3` ≈ 1150ms (lower at narrower per-round Δ_2; see §Trust model), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Configurable R lets operators tune termination guarantee per duty's deadline budget. |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates form self-contained slashable evidence |
 | Byzantine-leader-grief resistance | **Partial under non-adversarial byzantine; substantially weaker against adversarial byz that deliberately engineers grief patterns.** Closed under partial synchrony for incidental selective-delivery / late-delivery via leader-σ-V-in-Phase-1 + gossipsub re-flooding + R-round retry (extends single-round OBFT's coverage to "any honest who eventually receive V within R · D propagation budget" via per-round retry with independent commitments). Recovery via "natural" σ-quorum patterns (leader's σ_L^V completes a 2-of-3-honest pool) only fires when byz isn't actively timing deliveries. **Adversarial byzantine reliably engineers slot-miss when L_0**: σ-locked split equivocation (1-1-1, 1-1-NR-C, etc.) and h_V=1 selective-Phase-1-delivery deadlocks. At f=1 n=4 with uniform leader rotation, an adversarial byz primary can deterministically grief ~25% of slots (whenever they're L_0). **R-rounds do not help with these patterns** — they're R-invariant (more rounds give byz more timing flexibility without strengthening cluster recovery; see §Failure modes / h_V = 1). The rational-byzantine deterrent (assumption 4) is the only protocol-level defense, and it works *across slots in expectation*, not per-slot. Effective deterrent strength is deployment-specific (stake-to-grief-value ratio, governance responsiveness, slashability evidence quality — see [§Implications of the rational-byzantine deterrent](#implications-of-the-rational-byzantine-deterrent-assumption-4)). For deployments under realistic adversarial conditions, **Phase 2a/2b is the structural fix and should be considered near-term, not future** — it converts all R-invariant byz grief patterns into clean fall-through at +1 RTT cost per round. |
-| Mesh-flakiness tolerance (honest operator with poor gossipsub mesh visibility) | **Limited.** A mesh-flaky honest operator who fails to observe peer σ-emits within the NR-decision window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget consumer for that slot. Combined with byz σ-refusal, this creates a deadlock that the protocol cannot recover from within the slot. **R-rounds do not help** — cross-round NR-lock binds the early NR-emit across all R rounds. The recommended `Δ_2 ≥ 2(D + δ)` absorbs typical mesh-jitter (up to one full `D + δ` of additional slack on top of P99 propagation) but doesn't cover wider mesh outliers. QBFT's round-reset semantics handle this case better (a flaky operator's bad PREPARE doesn't lock them across rounds); OBFTR enforces cross-phase exclusivity per slot and locks across rounds via cross-round exclusivity. Phase 2a/2b mitigates by deferring commitment until mesh visibility has had a full additional propagation cycle to stabilize. |
+| Mesh-flakiness tolerance (honest operator with poor gossipsub mesh visibility) | **Limited.** A mesh-flaky honest operator who fails to observe peer σ-emits within the NR-decision window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget consumer for that slot. Combined with byz σ-refusal, this creates a deadlock that the protocol cannot recover from within the slot. **R-rounds do not help** — cross-round NR-lock binds the early NR-emit across all R rounds. The recommended `Δ_2 ≥ 2 PC` absorbs typical mesh-jitter (up to one full `1 PC` of additional slack on top of P99 propagation) but doesn't cover wider mesh outliers. QBFT's round-reset semantics handle this case better (a flaky operator's bad PREPARE doesn't lock them across rounds); OBFTR enforces cross-phase exclusivity per slot and locks across rounds via cross-round exclusivity. Phase 2a/2b mitigates by deferring commitment until mesh visibility has had a full additional propagation cycle to stabilize. |
 | Validity-divergence under strict host | **Out of scope** — see [Assumptions](#implications-of-validity-divergence-not-being-recovered-assumption-3); host stabilizes the verdict at Phase-1 acceptance |
 | Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide |
 | Built-in leader fallback | Yes (K-layer fall-through, K configurable) |
@@ -716,7 +717,7 @@ Out-of-scope cases (host-validity divergence, 1-1-1 equivocation splits) are add
 | `L_1, ..., L_{K-1}` (backup leaders) | separately designated operators, distinct from `L_0` and from each other |
 | `V_{L_k}` for k ≥ 1 | safe early-fetched blocks from vanilla beacon-node payloads, refreshed on head changes (per the leader's pre-signing fetch loop) |
 | `T_commit_1` | round 1 commit / view-fix deadline — anchor: `slot_start + 1.5s` across all configurations below |
-| `T_broadcast_max_1` | round 1 leader broadcast deadline — `T_commit_1 − 2(D + δ)` (= 1.20s at D=100ms, δ=50ms); per-layer fetch windows fit within `[0, T_broadcast_max_1]` with `T_{K-1} < ... < T_0 ≤ T_broadcast_max_1 − Δ_1`. Bundles broadcast at this deadline have `(D + δ)` of propagation slack to all-honest first-observation by `T_commit_1 − (D + δ)`. |
+| `T_broadcast_max_1` | round 1 leader broadcast deadline — `T_commit_1 − 2 PC` (= 1.20s at D=100ms, δ=50ms); per-layer fetch windows fit within `[0, T_broadcast_max_1]` with `T_{K-1} < ... < T_0 ≤ T_broadcast_max_1 − Δ_1`. Bundles broadcast at this deadline have `1 PC` of propagation slack to all-honest first-observation by `T_commit_1 − 1 PC`. |
 | `T_commit_r` | round `r` receiver acceptance cutoff — bundles first-observed past `T_commit_r` at any honest receiver are not counted by that receiver toward σ-quorum at round `r`, but may still be picked up in round `r+1` if they propagate by `T_commit_{r+1}` |
 | `T_round_r_end` | round `r` reconstruction deadline — concrete value depends on D and config; see configurations below |
 
@@ -728,9 +729,9 @@ For fair comparison across configurations, all setups share a common consensus d
 
 For the QBFT comparison, we use **`RT_QBFT = 1s`** rather than SSV's production default of 2s. With the 2s default, QBFT(R=2)'s R2 ends at slot_start + 4.25s — past the 4s relay cutoff entirely. The 1s value lets R1's healthy 750ms complete before the timeout fires while still leaving room for R2 within the budget; deployments using SSV-default 2s timeout cannot run QBFT(R=2) at this start time. The 1s timeout is more aggressive than production: legitimate slow rounds (relay slowness, beacon hiccups) above 1s would trigger false-positive round-changes.
 
-Common parameters: **D = 100ms (uniform across rounds), δ = 50ms, n = 4, f = 1**. Per-round window minimums: `Δ_2.5 ≥ D + δ = 150ms`, `Δ_3 ≈ 100ms` (propagation-independent — Δ_2.5 absorbs end-of-Phase-2 NR-partial propagation, so Δ_3 is purely local reconstruction processing), `Δ_reflood ≥ D + δ = 150ms`. `Δ_2` is sized per-config to absorb each setup's full budget. **Leader broadcast deadline** for round 1 is `T_broadcast_max_1 = T_commit_1 − 2(D + δ) = 1.20s` (300ms inside the nominal 0–1.5s Phase-1 fetch window); the 300ms slack between leader broadcast and `T_commit_1` is for propagation to all honest before round 1's σ-emit. **Receiver acceptance horizon** per round is `T_accept_max_r = T_commit_r + Δ_2 − (D + δ)` — accepts within-round late re-flood up through Phase 2's σ-emit-propagation feasibility limit.
+Common parameters: **D = 100ms (uniform across rounds), δ = 50ms, n = 4, f = 1**. Per-round window minimums: `Δ_2.5 ≥ 1 PC = 150ms`, `Δ_3 ≈ 100ms` (propagation-independent — Δ_2.5 absorbs end-of-Phase-2 NR-partial propagation, so Δ_3 is purely local reconstruction processing), `Δ_reflood ≥ 1 PC = 150ms`. `Δ_2` is sized per-config to absorb each setup's full budget. **Leader broadcast deadline** for round 1 is `T_broadcast_max_1 = T_commit_1 − 2 PC = 1.20s` (300ms inside the nominal 0–1.5s Phase-1 fetch window); the 300ms slack between leader broadcast and `T_commit_1` is for propagation to all honest before round 1's σ-emit. **Receiver acceptance horizon** per round is `T_accept_max_r = T_commit_r + Δ_2 − 1 PC` — accepts within-round late re-flood up through Phase 2's σ-emit-propagation feasibility limit.
 
-**MEV-fetch-budget note.** The `T_broadcast_max_1 = T_commit_1 − 2(D + δ) = 1.20s` deadline is **300ms tighter** than the naive "Phase 1 fetch occupies 0–T_commit = 0–1.5s" reading. The 300ms gap (1.20s → 1.50s) is propagation slack between leader broadcast and all-honest first-observation under worst-case partial-synchrony; it is not extra fetch budget. Deployments comparing OBFTR to other protocols' "1.5s fetch" framing should account for this — OBFTR's primary leader has 1.20s of effective MEV-relay-fetch time at Config A, not 1.50s. The cost is unavoidable: it is the propagation budget that makes the leader's broadcast reliably observable by all honest before `T_commit_1`.
+**MEV-fetch-budget note.** The `T_broadcast_max_1 = T_commit_1 − 2 PC = 1.20s` deadline is **300ms tighter** than the naive "Phase 1 fetch occupies 0–T_commit = 0–1.5s" reading. The 300ms gap (1.20s → 1.50s) is propagation slack between leader broadcast and all-honest first-observation under worst-case partial-synchrony; it is not extra fetch budget. Deployments comparing OBFTR to other protocols' "1.5s fetch" framing should account for this — OBFTR's primary leader has 1.20s of effective MEV-relay-fetch time at Config A, not 1.50s. The cost is unavoidable: it is the propagation budget that makes the leader's broadcast reliably observable by all honest before `T_commit_1`.
 
 **Deadline-alignment principle.** The "phantom R2 deadline" framing (used implicitly above): R=1 setups have only an R1 deadline at `TIME_FINAL`; R=2 setups have an R1 deadline (when round 1 must terminate to leave room for round 2) and an R2 deadline at `TIME_FINAL`. By aligning the *outermost* deadline across setups, the comparison shows what each can do given identical total time. R=1 gets one big round; R=2 splits its budget across two rounds with re-flood between them.
 
@@ -741,8 +742,8 @@ R=1 uses the full 2.0s budget for one extended round. With per-round single-emis
 | Window | Length | End time | Notes |
 |---|---|---|---|
 | Phase 1 fetch | 1200ms | slot_start + 1.20s | All K leaders' fetch windows fit within 0–1.2s; `T_broadcast_max_1 = 1.20s` |
-| Phase-1 broadcast slack | 300ms | slot_start + 1.50s | `T_commit_1 = T_broadcast_max_1 + 2(D + δ) = 1.50s` (recommended sizing) |
-| Round 1 Phase 2 | 300ms | slot_start + 1.80s | Δ_2 = 2(D + δ) recommended; KindCommit propagation |
+| Phase-1 broadcast slack | 300ms | slot_start + 1.50s | `T_commit_1 = T_broadcast_max_1 + 2 PC = 1.50s` (recommended sizing) |
+| Round 1 Phase 2 | 300ms | slot_start + 1.80s | Δ_2 = 2 PC recommended; KindCommit propagation |
 | Round 1 Phase 2.5 | 150ms | slot_start + 1.95s | L_C signaling |
 | Round 1 Phase 3 | 100ms | slot_start + 2.05s | propagation-independent |
 | Submission | 1950ms | slot_start + 4.00s | generous submission headroom |
@@ -760,13 +761,13 @@ R=2 splits the 2.0s budget into two rounds with new leaders broadcasting in roun
 | Window | Length | End time | Notes |
 |---|---|---|---|
 | Phase 1 fetch (round 1) | 1100ms | slot_start + 1.10s | Round 1 leaders fetch; `T_broadcast_max_1 = 1.10s` |
-| Round 1 broadcast slack | 300ms | slot_start + 1.40s | `T_commit_1 = T_broadcast_max_1 + 2(D+δ) = 1.40s` (recommended sizing) |
-| Round 1 Phase 2 | 300ms | slot_start + 1.70s | Δ_2 = 2(D + δ) recommended; KindCommit_1 propagation |
+| Round 1 broadcast slack | 300ms | slot_start + 1.40s | `T_commit_1 = T_broadcast_max_1 + 2 PC = 1.40s` (recommended sizing) |
+| Round 1 Phase 2 | 300ms | slot_start + 1.70s | Δ_2 = 2 PC recommended; KindCommit_1 propagation |
 | Round 1 Phase 2.5 | 150ms | slot_start + 1.85s | L_C signaling |
 | Round 1 Phase 3 | 100ms | slot_start + 1.95s | reconstruction |
 | Round 2 fetch / re-broadcast | 700ms | slot_start + 2.65s | round-2 leaders fetch + late round-1 bundles continue gossipsub propagation |
 | Round 2 broadcast slack | 300ms | slot_start + 2.95s | `T_commit_2 = 2.95s` |
-| Round 2 Phase 2 | 300ms | slot_start + 3.25s | Δ_2 = 2(D + δ) recommended; KindCommit_2 propagation |
+| Round 2 Phase 2 | 300ms | slot_start + 3.25s | Δ_2 = 2 PC recommended; KindCommit_2 propagation |
 | Round 2 Phase 2.5 | 150ms | slot_start + 3.40s | |
 | Round 2 Phase 3 | 100ms | slot_start + 3.50s | T_round_R_end |
 | Submission | 500ms | slot_start + 4.00s | tighter than R=1 — round-2 retry consumes ~1.55s of slot budget |
@@ -817,7 +818,7 @@ QBFT round structure: PROPOSE → PREPARE → COMMIT → post-consensus partial-
 - **QBFT(R=2) only fits with aggressive `RT_QBFT = 1s`** (vs SSV's 2s default). Recovery scope structurally covers view-divergence cases that OBFTR doesn't (validity-divergence, equivocation), via the round-change-fetches-fresh-V mechanism. Trade-off: 1s timeout is borderline-safe (legitimate slow rounds may exceed 1s, triggering false-positive round-changes).
 - **OBFTR(K=3, R=2) ★ recommended** — combines BFT-recommended K with explicit round-2 retry, fits at the apples-to-apples deadline.
 
-**At higher D (e.g., 500ms):** the comparison shifts. R=2 OBFTR's per-round windows must each grow to absorb D+δ = 550ms minimums; the 2.0s budget barely fits 2 rounds. R=1 OBFTR's extended Phase 2 still works (just absorbs proportionally less variance). QBFT's R1 healthy at 4×D≈400ms vs RT=1s still fits, but R2 timing extends past `TIME_FINAL`. **High-D networks favor R=1 OBFTR** for absorbing variance within a single extended Phase 2. See §Failure modes / Sustained partition for the high-D liveness limit.
+**At higher D (e.g., 500ms):** the comparison shifts. R=2 OBFTR's per-round windows must each grow to absorb 1 PC = 550ms minimums; the 2.0s budget barely fits 2 rounds. R=1 OBFTR's extended Phase 2 still works (just absorbs proportionally less variance). QBFT's R1 healthy at 4×D≈400ms vs RT=1s still fits, but R2 timing extends past `TIME_FINAL`. **High-D networks favor R=1 OBFTR** for absorbing variance within a single extended Phase 2. See §Failure modes / Sustained partition for the high-D liveness limit.
 
 The deadline-tuning rule: each round's `T_round_r_end − T_commit_r ≥ Δ_2 + Δ_2.5 + Δ_3` for that round, and `Δ_2 ≥ D_r + δ`, `Δ_2.5 ≥ D_r + δ`, `Δ_reflood ≥ D_r + δ` where `D_r` is the propagation budget for round `r`. Concrete numbers should come from production telemetry (P99 / P999 tails of gossip propagation, EKM signing latency, beacon submit latency, relay submission latency).
 
@@ -831,7 +832,7 @@ For SSV's proposer duty, the host application's `valid` / `not-valid` verdict on
 
 **Receiver-side validity stabilization — host best-effort toward assumption 3.** OBFTR requires host validity to be unanimous at decision time (see [Assumptions](#assumed)). For SSV's proposer duty, the host narrows the divergence window via per-operator validity stabilization: each operator runs the validity check (including `parent_root`-vs-head) **once at Phase-1 acceptance** against a stable head snapshot, then locks the verdict for the remainder of the slot. Subsequent head movements within that operator do not flip the verdict.
 
-**The validity-locking window spans the full R-round absorption window, not just `D + δ`.** Operators accept Phase-1 bundles anywhere across the R-round acceptance horizons (within-round at `[slot_start, T_accept_max_r]` + cross-round retention extending to `T_accept_max_R`). Each operator locks their verdict at first-observation, so the cluster-wide spread of lock-times equals the total absorption window. At OBFTR(R=2) Config A with recommended per-round `Δ_2 = 2(D + δ)`, this is ~1150ms — substantially wider than what a naive "narrow gossipsub-acceptance window ≈ D+δ" reading would suggest. A re-org landing anywhere inside this window can split honest verdicts across the boundary; the wider window means a proportionally higher rate of validity-divergence slot-misses for the same re-org distribution.
+**The validity-locking window spans the full R-round absorption window, not just `1 PC`.** Operators accept Phase-1 bundles anywhere across the R-round acceptance horizons (within-round at `[slot_start, T_accept_max_r]` + cross-round retention extending to `T_accept_max_R`). Each operator locks their verdict at first-observation, so the cluster-wide spread of lock-times equals the total absorption window. At OBFTR(R=2) Config A with recommended per-round `Δ_2 = 2 PC`, this is ~1150ms — substantially wider than what a naive "narrow gossipsub-acceptance window ≈ 1 PC" reading would suggest. A re-org landing anywhere inside this window can split honest verdicts across the boundary; the wider window means a proportionally higher rate of validity-divergence slot-misses for the same re-org distribution.
 
 **Δ_2 (per-round) and R sizing have competing pressures.** Wider per-round `Δ_2` and/or larger R:
 - ✓ Wider absorption window → more partition recovery in-protocol.
@@ -839,7 +840,7 @@ For SSV's proposer duty, the host application's `valid` / `not-valid` verdict on
 - ✗ Wider validity-locking window → proportionally higher validity-divergence rate for the same re-org distribution.
 - ✗ Less submission headroom and (for Δ_2) less leader fetch budget.
 
-Deployments choosing `Δ_2` and R should weight these per their re-org rate and partition-tail observations. The recommended `Δ_2 = 2(D + δ)` per round at R = 2 is a balanced default; deployments under low re-org rate but wider partition tails may go higher; deployments with high re-org rate but tight partition tails may go lower.
+Deployments choosing `Δ_2` and R should weight these per their re-org rate and partition-tail observations. The recommended `Δ_2 = 2 PC` per round at R = 2 is a balanced default; deployments under low re-org rate but wider partition tails may go higher; deployments with high re-org rate but tight partition tails may go lower.
 
 **This per-operator locking does NOT guarantee cluster-wide convergence.** Operators accept Phase-1 bundles at different `t` within the gossipsub propagation window (operator-local first-observation timestamps, plus clock skew δ). If a re-org happens during this acceptance window, operator A may snapshot pre-reorg (verdict = valid) while operator B snapshots post-reorg (verdict = invalid). Both locks hold; cluster views diverge. The locking ensures *per-operator* stability across the slot, narrowing the divergence window to "re-org during gossipsub-acceptance window" — typical D ≈ 100–500ms — but does not eliminate it.
 
@@ -860,14 +861,14 @@ Implementation notes:
 
 2. **Per-round deadline coordination.** Clock skew across operators must be bounded by `δ` and known. Per-round deadlines:
 
-   - **`T_broadcast_max_r = T_commit_r − 2(D + δ)`**: round-r leader broadcast deadline. Each layer's leader (in round r's leader set) must broadcast by this time so all honest first-observe by `T_commit_r − (D + δ)` under worst-case propagation.
+   - **`T_broadcast_max_r = T_commit_r − 2 PC`**: round-r leader broadcast deadline. Each layer's leader (in round r's leader set) must broadcast by this time so all honest first-observe by `T_commit_r − 1 PC` under worst-case propagation.
    - **`T_commit_r`**: round-r receiver acceptance cutoff. Bundles first-observed past `T_commit_r` at any honest receiver are not counted by that receiver in round r, but may still be picked up by gossipsub propagation in time for round r+1.
 
    Per-round window minimums:
 
-   - **`Δ_2 ≥ D + δ`** for each round's Phase-2 window: every honest's `KindCommit_r` emitted at `T_commit_r` must propagate to every other honest by `T_commit_r + Δ_2` (start of Phase 2.5).
-   - **`Δ_2.5 ≥ D + δ`** for each round's Phase-2.5 window: L_C claims propagate cluster-wide.
-   - **`Δ_reflood ≥ D + δ`** between rounds: round-r+1 leaders broadcast (or retained bundles re-broadcast) and propagate before `T_commit_{r+1}`.
+   - **`Δ_2 ≥ 1 PC`** for each round's Phase-2 window: every honest's `KindCommit_r` emitted at `T_commit_r` must propagate to every other honest by `T_commit_r + Δ_2` (start of Phase 2.5).
+   - **`Δ_2.5 ≥ 1 PC`** for each round's Phase-2.5 window: L_C claims propagate cluster-wide.
+   - **`Δ_reflood ≥ 1 PC`** between rounds: round-r+1 leaders broadcast (or retained bundles re-broadcast) and propagate before `T_commit_{r+1}`.
 
    All are *liveness* requirements only; safety is unaffected by skew or propagation breakdown (see "Fault tolerance / Safety").
 
@@ -897,7 +898,7 @@ Implementation notes:
    - Domain separation between OBFTR and any other path that signs against the V-signing share.
    - Slashing protection gates **candidate signing** (Phase-1 leader signing and Phase-2 onion construction across all rounds) and **no-σ signing** (Phase-2 IBE partial on `nr_tag_k` across all rounds), not just submission.
 
-7. **Equivocation is permitted, not recovered.** OBFTR does not provide an in-protocol equivocation recovery mechanism. Some patterns reach qV naturally (when 2-of-3 honest happen to σ-commit on the same V at f=1 n=4; leader's σ_L^V completes the qV-quorum). Other patterns slot-miss. Pigeonhole 2 ensures at most one V reaches qV cluster-wide regardless of split — there is no two-output safety failure. Equivocation is treated as a slashable byzantine fault; the rational-byzantine deterrent (assumption 4) makes this tolerable across many slots. The **Phase 2a/2b split** (see [2abOBFT](2abOBFT.md)) (broadcast-only Phase-2a, then σ-emit on a deterministically-chosen V in Phase-2b after Phase-2a observation completes) is the structurally correct full fix; +1 RTT per round (total ~R·(D+δ) per slot), preserves cryptographic safety AND f-tolerant liveness. Documented as future improvement, not in current OBFTR.
+7. **Equivocation is permitted, not recovered.** OBFTR does not provide an in-protocol equivocation recovery mechanism. Some patterns reach qV naturally (when 2-of-3 honest happen to σ-commit on the same V at f=1 n=4; leader's σ_L^V completes the qV-quorum). Other patterns slot-miss. Pigeonhole 2 ensures at most one V reaches qV cluster-wide regardless of split — there is no two-output safety failure. Equivocation is treated as a slashable byzantine fault; the rational-byzantine deterrent (assumption 4) makes this tolerable across many slots. The **Phase 2a/2b split** (see [2abOBFT](2abOBFT.md)) (broadcast-only Phase-2a, then σ-emit on a deterministically-chosen V in Phase-2b after Phase-2a observation completes) is the structurally correct full fix; +1 RTT per round (total ~R·1 PC per slot), preserves cryptographic safety AND f-tolerant liveness. Documented as future improvement, not in current OBFTR.
 
 ## Where this came from
 
@@ -925,7 +926,7 @@ The mechanism — deferring σ-commitment until after cluster-wide Phase-2a obse
 
 3. **Bonus: improves per-operator participation efficiency** under transient errors — operators with brief flakiness during Phase 2 don't lose their slot contribution. At f=1 n=4 this is mostly an across-many-slots efficiency gain (the per-slot σ-quorum often reaches without the flaky operator's contribution); at higher f it matters more per-slot.
 
-Costs **+1 RTT per round** — each round's Phase 2 grows by ~D+δ for the Phase-2a observation window, so total per-slot cost is ~R·(D+δ) (e.g., +2(D+δ) at R=2 for proposer duty). Preserves cryptographic safety AND f-tolerant liveness — strictly better than the qV-bump alternative which trades f-tolerance for safety.
+Costs **+1 RTT per round** — each round's Phase 2 grows by ~1 PC for the Phase-2a observation window, so total per-slot cost is ~R·1 PC (e.g., +2 PC at R=2 for proposer duty). Preserves cryptographic safety AND f-tolerant liveness — strictly better than the qV-bump alternative which trades f-tolerance for safety.
 
 **Status: near-term for any deployment under realistic adversarial conditions.** Current OBFTR (without Phase 2a/2b) trades the recovery properties above for spec simplicity and the +1-RTT-per-round savings. The trade-off is acceptable when **all three** hold:
 
@@ -933,7 +934,7 @@ Costs **+1 RTT per round** — each round's Phase 2 grows by ~D+δ for the Phase
 2. Byzantine operators value future participation enough that assumption 4 (rational-byzantine deterrent) is *quantitatively* effective, not just *qualitatively* present — stake-to-grief-value ratio is high, governance is responsive, slashability evidence quality is strong (the cryptographic-self-contained slashing rules cover most byzantine fault classes the deployment is exposed to).
 3. The cluster's coordination SLA is short enough that across-slot accountability bounds grief faster than byz can re-enter.
 
-For deployments where any of these is weak — small clusters, transient operators, weak governance, high-stake-to-grief-value MEV proposer slots, low-evidence-quality fault classes (selective-delivery, mesh-flakiness-correlated NR-refusal) — **Phase 2a/2b should be considered near-term, not future**. The +1-RTT-per-round cost (e.g., +2(D+δ) at R=2 for proposer duty, ~300ms at D=100ms) is small relative to the slot budget and substantially smaller than the cost of running adversarial-byz exposure under the bare protocol.
+For deployments where any of these is weak — small clusters, transient operators, weak governance, high-stake-to-grief-value MEV proposer slots, low-evidence-quality fault classes (selective-delivery, mesh-flakiness-correlated NR-refusal) — **Phase 2a/2b should be considered near-term, not future**. The +1-RTT-per-round cost (e.g., +2 PC at R=2 for proposer duty, ~300ms at D=100ms) is small relative to the slot budget and substantially smaller than the cost of running adversarial-byz exposure under the bare protocol.
 
 **This is a more aggressive framing than "future improvement."** Bare OBFTR(R≥2) is the spec-richest *multi-round point*; OBFTR + Phase 2a/2b is the more robust *production* point for adversarial deployments and arguably should be the recommended configuration for SSV proposer duty unless deployment conditions explicitly support assumption 4 strength.
 
@@ -958,7 +959,7 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | EKM persistent partial-sig cache | Required (cached σ partial must survive operator restart for cross-round re-emission) | **Not required** |
 | EKM deterministic re-signing fallback | Required | **Not required** |
 | Partial-synchrony envelope | `R · D` (e.g., `2D` at R=2) | `D` (single round) |
-| Slot budget at K=4, D=100ms | Ends at slot_start + 3.50s (with recommended `Δ_2 = 2(D+δ)` per round) | Ends at slot_start + 1.90s — saves ~1.6s |
+| Slot budget at K=4, D=100ms | Ends at slot_start + 3.50s (with recommended `Δ_2 = 2 PC` per round) | Ends at slot_start + 1.90s — saves ~1.6s |
 | Submission headroom (4s relay cutoff) | 0.50s (tight) | 2.10s |
 | Bandwidth (healthy, n=4, K=4) | ~27 KB | ~27 KB (same) |
 | Bandwidth (worst case at R=2 with round-1 failure) | ~50 KB | n/a (no round 2) |
@@ -1077,7 +1078,7 @@ Slot timeline:
 | Phase | Window | Activity |
 |---|---|---|
 | Phase 1 fetch | `[slot_start, T_broadcast_max]` | Operators fetch V_i; rotation leaders prepare Phase-1 bundles; all operators prepare bid envelopes |
-| Phase 1 broadcast | `[T_broadcast_max, T_commit_1]` | Rotation leaders broadcast Phase-1 bundles; all operators broadcast `KindBid`. Propagation slack `D + δ` lets bundles reach all honest by `T_commit_1`. |
+| Phase 1 broadcast | `[T_broadcast_max, T_commit_1]` | Rotation leaders broadcast Phase-1 bundles; all operators broadcast `KindBid`. Propagation slack `1 PC` lets bundles reach all honest by `T_commit_1`. |
 | **Mini-consensus** | `[T_commit_1, T_commit_1 + Δ_minicon]` | Bid-envelope re-flood + `KindBidVerdict` broadcast. V_LBid resolved (or null) by end of window. **Slot-level — does not repeat per round.** |
 | Round 1 Phase 2 | `[T_commit_1 + Δ_minicon, T_commit_1 + Δ_minicon + Δ_2]` | σ-or-NR commit at all K' layers for round 1 |
 | Round 1 Phase 3 + L_C | `[T_commit_1 + Δ_minicon + Δ_2, T_commit_2]` | Round-1 reconstruction walk + L_C signaling for round transition |
@@ -1086,8 +1087,8 @@ Slot timeline:
 | Round R end | `T_round_end` | Final reconstruction; slot succeeds or misses |
 
 Sizing:
-- `Δ_minicon ≥ D + δ` (verdicts must propagate within window).
-- **Recommended** `Δ_minicon = 2(D + δ)` for jitter absorption.
+- `Δ_minicon ≥ 1 PC` (verdicts must propagate within window).
+- **Recommended** `Δ_minicon = 2 PC` for jitter absorption.
 - Per-round `Δ_2`, `Δ_3`: same as OBFTR base.
 
 At Config A (D=100ms, δ=50ms, R=2, recommended sizing): mini-consensus = 300ms (slot-level, once). Each round ≈ 500-650ms. Total slot budget post-`T_commit_1` ≈ Δ_minicon + R × per-round-budget ≈ 300 + 1100 = 1400ms at R=2. Within SSV's 4s relay cutoff.
@@ -1108,7 +1109,7 @@ Receivers retain bid envelopes per `(slot, operator_id)`; second distinct `KindB
 
 Same as OBFT's mini-consensus phase (see [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)):
 
-1. Each operator computes `bid_set_i` from received-and-validated bid envelopes by `T_commit_1 + Δ_minicon − (D + δ)`.
+1. Each operator computes `bid_set_i` from received-and-validated bid envelopes by `T_commit_1 + Δ_minicon − 1 PC`.
 2. If `|bid_set_i| ≥ n − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax over bid_value` (op_id tiebreak).
 3. Else: `predicted_LBid_i = null`.
 4. Broadcast `KindBidVerdict` envelope at the latest-safe time within the window.
@@ -1176,7 +1177,7 @@ Measured from `T_commit_1` (mini-consensus start). At Config A (D=100ms, δ=50ms
 
 | Scenario | Time | Mechanism |
 |---|---|---|
-| Healthy fast path: round-1 L_Bid σ-quorum reaches early | ~Δ_minicon + (D+δ) ≈ 450ms | Mini-consensus + 1 RTT in round-1 Phase 2; reconstruction at L_Bid plaintext |
+| Healthy fast path: round-1 L_Bid σ-quorum reaches early | ~Δ_minicon + 1 PC ≈ 450ms | Mini-consensus + 1 RTT in round-1 Phase 2; reconstruction at L_Bid plaintext |
 | Healthy completion at L_Bid (canonical, round 1) | ~Δ_minicon + Δ_2 + Δ_3 ≈ 850ms | Round-1 full Phase 2 + Phase 3 |
 | Mini-consensus fails → fall-through to L_0 in round 1 | ~Δ_minicon + Δ_2 + Δ_3 ≈ 850ms | NR-quorum at L_Bid; round-1 walk to L_0 |
 | Round-1 fails (e.g., partition at L_Bid + L_0..L_{K-1}); round-2 succeeds | ~Δ_minicon + 2 × per-round-budget ≈ 1400-1500ms | OBFTR's standard R-round retry; mini-consensus result reused |
