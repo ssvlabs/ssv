@@ -124,7 +124,7 @@ Filing a stake-slashing transaction via the SSV contract is a complementary puni
 
 ## Protocol
 
-2abOBFT runs **a single agreement round** per slot: Phase 1 → Phase 2a → Phase 2b → Phase 3. Phase 1 is a fresh broadcast (no re-flood across rounds, since there is only one round). The slot's hard deadline (`T_round_end`) is the cluster's reconstruction cutoff; a slot that does not reach σ-quorum at any layer by `T_round_end` is missed.
+2abOBFT runs **a single agreement round** per slot: Phase 1 → Phase 2a → Phase 2b → Phase 3. Phase 1 is a fresh broadcast (no re-flood across rounds, since there is only one round). The slot's hard wall is the relay submission deadline (`T_relay_cutoff − T_submit`); a slot that does not reach σ-quorum at any layer with enough time to submit is missed.
 
 ### Phase 1 — Candidate broadcast
 
@@ -251,7 +251,7 @@ EKM/slashing-protection is consulted at Phase-2b sign time:
 
 A byzantine operator that publishes both σ and NR on the same `(slot, layer)` is publicly attributable (Rule 1; see [§Slashing evidence](#slashing-evidence)). Under `qEnc = qV`, cross-signing has no safety impact.
 
-### Phase 3 — Local decryption and reconstruction `[T_commit + Δ_2a + Δ_2b, T_round_end]`
+### Phase 3 — Local decryption and reconstruction (from `T_commit + Δ_2a + Δ_2b`)
 
 Each operator attempts a K-layer reconstruction walk. At each layer, the cluster has three possible outcomes: σ-quorum reaches on some V (output produced), or NR-quorum reaches (advance to next layer), or neither (slot misses).
 
@@ -292,7 +292,7 @@ if L_C == K and no σ-quorum reached:
 # End of reconstruction. If output produced, halt; else slot misses.
 ```
 
-`T_round_end` for the deadline rule is the cutoff by which the operator must have received all Phase-2b onions and NR partials they intend to count. Practically, `T_round_end = T_commit + Δ_2a + Δ_2b + Δ_3` where `Δ_3 ≥ 1 BTT + ε_3`.
+**Reconstruction completion target** is `T_commit + Δ_2a + Δ_2b + Δ_3` where `Δ_3 ≥ 1 BTT + ε_3`. Phase 3 has no fixed end — reconstruction runs until σ-quorum reaches or the slot's relay-submission deadline (`T_relay_cutoff − T_submit`) forces termination. Late `KindOnion2b` arrivals can be incorporated by re-running the reconstruction walk (Pigeonhole semantics still hold; safe).
 
 Multiple operators may reconstruct and submit independently; the downstream system de-duplicates.
 
@@ -306,9 +306,9 @@ Receivers SHOULD re-run host application validity on `V` before submitting downs
 
 ### Treatment of missing onions
 
-A participant that hasn't received `j`'s Phase-2b onion at decryption time treats `j` as not having contributed at that layer: no σ partial, no NR partial. Standard threshold cryptography — only signed messages count. Within 2abOBFT's absorption window (`Δ_2a + 1 BTT`), gossipsub propagation is expected to deliver all honest broadcasts to all honest receivers before `T_round_end`.
+A participant that hasn't received `j`'s Phase-2b onion at decryption time treats `j` as not having contributed at that layer: no σ partial, no NR partial. Standard threshold cryptography — only signed messages count. Within 2abOBFT's absorption window (`Δ_2a + 1 BTT`), gossipsub propagation is expected to deliver all honest broadcasts to all honest receivers before reconstruction starts.
 
-Liveness is bounded by the standard `3f+1` byzantine assumption plus partial synchrony within `T_round_end`. If more than `f` operators are offline or byzantine combined, neither σ nor NR quorums reach their thresholds and the slot is missed.
+Liveness is bounded by the standard `3f+1` byzantine assumption plus partial synchrony within the slot's relay-submission deadline. If more than `f` operators are offline or byzantine combined, neither σ nor NR quorums reach their thresholds and the slot is missed.
 
 ### Operator commitment states
 
@@ -331,9 +331,9 @@ There is no `Defer` state. Phase-2a's window IS the deferral mechanism: every op
 1. **Phase 1** `[slot_start, T_commit]`: K leaders broadcast their Phase-1 bundles per their per-layer fetch windows (`[T_{K-1}, T_{K-1} + Δ_1]`, ..., `[T_0, T_0 + Δ_1]`), with `T_0 + Δ_1 ≤ T_broadcast_max = T_commit − 2 BTT`. **No σ_V partial in Phase-1 bundles** (Variant C). Receivers accept bundles first-observed in `[slot_start, T_accept_max]` where `T_accept_max = T_commit + Δ_2a − 1 BTT`.
 2. **Phase 2a** `[T_commit, T_commit + Δ_2a]`: each operator broadcasts a per-layer verdict envelope (`KindVerdict`) reflecting their σ-eligibility per layer based on observed Phase-1 bundles and host validity verdicts. Bundle re-flood absorbs late-arriving Phase-1 bundles within the window. Operators emit verdicts at the latest-safe time (around `T_commit + Δ_2a − 1 BTT`) to maximize observed peer state.
 3. **Phase 2b** `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`: each operator computes per-layer convergence decisions from the observed Phase-2a verdict pool (per the convergence rule) and emits σ-or-NR partials per layer. EKM enforces single-σ-V per (slot, layer) per operator at sign time.
-4. **Phase 3** `[T_commit + Δ_2a + Δ_2b, T_round_end]`: each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses.
+4. **Phase 3** (from `T_commit + Δ_2a + Δ_2b`): each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses (re-running may incorporate late `KindOnion2b` arrivals).
 
-**Slot timing**: `T_round_end = T_commit + Δ_2a + Δ_2b + Δ_3`. Phase 1 fetch occupies `[slot_start, T_commit]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 ≈ 2 BTT + 1 BTT + 100ms` at recommended sizing, ≈ 850ms at Config A.
+**Slot timing**: Phase 1 fetch occupies `[slot_start, T_commit]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 ≈ 2 BTT + 1 BTT + 100ms` at recommended sizing, ≈ 850ms at Config A; consensus is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`, leaving the rest of the slot as submission slack to `T_relay_cutoff`.
 
 ## Preconditions on the host application
 
@@ -395,7 +395,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 ### Trust model
 
 - **Byzantine bound `f`** with cluster size `n = 3f+1` (the BFT-tight setting; see [§Assumed / Standard BFT trust bound at the tight setting](#assumed)): up to `f` operators may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, etc.). Exactly `2f+1` honest.
-- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_commit − 2 BTT` (leader broadcast deadline), `T_accept_max = T_commit + Δ_2a − 1 BTT` (receiver acceptance horizon), `T_verdict_max = T_commit + Δ_2a − 1 BTT` (verdict broadcast horizon, coincident with `T_accept_max`). Phase 3's reconstruction deadline is `T_round_end = T_commit + Δ_2a + Δ_2b + Δ_3`.
+- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_commit − 2 BTT` (leader broadcast deadline), `T_accept_max = T_commit + Δ_2a − 1 BTT` (receiver acceptance horizon), `T_verdict_max = T_commit + Δ_2a − 1 BTT` (verdict broadcast horizon, coincident with `T_accept_max`). Reconstruction is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`; the slot's hard wall is the relay-submission deadline `T_relay_cutoff − T_submit`.
 
   **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + 1 BTT`:
   - At `Δ_2a = 1 BTT` (BFT-minimum): `2 BTT` ≈ 300ms at Config A.
@@ -454,7 +454,7 @@ A byzantine that verdict-claims σV but Phase-2b NR-emits (or vice versa) commit
 
 ### Liveness (synchrony-conditional)
 
-2abOBFT's liveness is **partial-synchrony-conditional within `T_round_end`**. The protocol absorbs network-induced failures via the late-bundle re-flood window in Phase 2a. Equivocation σ-locked split, h_V=1 selective-delivery, and validity-divergence within the f-bound are recovered structurally via the convergence rule's σ-eligibility-quorum-short → NR-pool fall-through path.
+2abOBFT's liveness is **partial-synchrony-conditional within the slot's relay-submission deadline**. The protocol absorbs network-induced failures via the late-bundle re-flood window in Phase 2a. Equivocation σ-locked split, h_V=1 selective-delivery, and validity-divergence within the f-bound are recovered structurally via the convergence rule's σ-eligibility-quorum-short → NR-pool fall-through path.
 
 Running example: `f = 1, n = 4, K = 4`. Honest A, B, C; byzantine D.
 
@@ -657,7 +657,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + chained IBE + EKM-enforced per-operator commitments (single-σ-V per (slot, layer), σ-XOR-NR per layer), holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic. Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional: terminates within `T_round_end` if real propagation between leader broadcast and any honest first-observation ≤ absorption window `Δ_2a + 1 BTT` (≈ 450ms at Config A recommended) and ≤ f operators byzantine/offline. |
+| Termination (output guaranteed) | Conditional: consensus expected to complete by reconstruction target if real propagation between leader broadcast and any honest first-observation ≤ absorption window `Δ_2a + 1 BTT` (≈ 450ms at Config A recommended) and ≤ f operators byzantine/offline. |
 | Equivocation detection | Yes — leaders sign Phase-1 envelopes; conflicting signed candidates form self-contained slashable evidence (Rule 2) |
 | Equivocation recovery | **Structural for 1-1-1, all-equivocation-NR, h_V=1 patterns** via convergence-rule fall-through. **2-1-byz-defect regresses** vs single-Phase-2 protocols (slot misses at L_0; Rule-6 evidence). |
 | Validity-divergence recovery | **Majority recovers** (e.g., 3-of-4 σV vs 1 NV at f=1 n=4 reaches σ-quorum at L_0). 2-2 split at f=1 n=4 still slot-misses cleanly (no majority). |
@@ -693,11 +693,11 @@ For an SSV cluster proposing an Ethereum block, the recommended 2abOBFT configur
 | `T_broadcast_max` | leader broadcast deadline — `T_commit − 2 BTT`; per-layer fetch windows fit within `[0, T_broadcast_max]` |
 | `T_accept_max` | receiver acceptance horizon — `T_commit + Δ_2a − 1 BTT`; bundles first-observed past this are auth-only-retained |
 | `T_verdict_max` | verdict broadcast horizon — coincident with `T_accept_max` |
-| `T_round_end` | reconstruction deadline — `T_commit + Δ_2a + Δ_2b + Δ_3` |
+| `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 250ms` of slack to land |
 
 ### Timing budget — concrete configurations
 
-The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_submit ≈ 250ms` is reserved for relay submission. The consensus deadline is `T_round_end = slot_start + 4.0s − T_submit ≤ slot_start + 3.75s`.
+The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_submit ≈ 250ms` is reserved for relay submission. The slot's reconstruction must complete by `slot_start + 4.0s − T_submit ≤ slot_start + 3.75s`.
 
 Common parameters: **P99 = 100ms (cluster gossipsub P99/P999), δ = 50ms, n = 4, f = 1**.
 
@@ -962,7 +962,7 @@ There is **no new mini-consensus message kind** — `KindVerdict` covers L_Bid t
 | Phase 1 broadcast | `[T_broadcast_max, T_commit]` | Rotation leaders broadcast Phase-1 bundles; all operators broadcast `KindBid`. Propagation slack `1 BTT`. |
 | Phase 2a | `[T_commit, T_commit + Δ_2a]` | Bundle re-flood + bid-envelope re-flood + per-layer verdict broadcast (incl. L_Bid). |
 | Phase 2b | `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]` | σ-or-NR commit at all K' layers. |
-| Phase 3 | `[T_commit + Δ_2a + Δ_2b, T_round_end]` | K'-layer reconstruction walk. |
+| Phase 3 | (from `T_commit + Δ_2a + Δ_2b`) | K'-layer reconstruction walk. |
 
 Sizing identical to bare 2abOBFT. **No additional slot-budget cost** for the L_Bid integration — Phase 2a was already paying the RTT.
 
