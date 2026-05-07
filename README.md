@@ -24,6 +24,7 @@ that governs the network. \
 Its core strength is in its robustness and fault tolerance which leads the way for an open network of staking operators
 to run validators in a decentralized and trustless way.
 
+
 ## Information
 
 ### 🔷 General SSV information (Semi technical read)
