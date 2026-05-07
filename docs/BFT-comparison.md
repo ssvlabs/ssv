@@ -96,13 +96,13 @@ When round-1 / single-round fails (silent leader, partition, network jitter, but
 |---|---|---|---|---|---|
 | **0s, BTT=200ms** | n/a — slot misses on V-disagreement | 2.8s ✓ | in-round (free) | 1.8s ✓ | in-round (free) |
 | **0s, BTT=600ms** | n/a | **4.4s ✗** | in-round (free) | **5.4s ✗** | in-round (free) |
-| **0s, BTT=1000ms** | n/a | **6.0s ✗** | in-round (free) | **9.0s ✗** | in-round (free) |
+| **0s, BTT=1000ms** | n/a | **6.0s ✗** | in-round (free) | **9.0s ✗** | n/a (R1 missed) |
 | **400ms, BTT=200ms** | n/a | 2.8s ✓ | in-round (free) | 1.8s ✓ | in-round (free) |
-| **400ms, BTT=600ms** | n/a | **4.4s ✗** | n/a (R1 missed) | **5.4s ✗** | in-round (free) |
-| **400ms, BTT=1000ms** | n/a | **6.0s ✗** | n/a (R1 missed) | **9.0s ✗** | n/a (R1 missed) |
+| **400ms, BTT=600ms** | n/a | **4.4s ✗** | in-round (free) | **5.4s ✗** | n/a (R1 missed) |
+| **400ms, BTT=1000ms** | n/a | **6.0s ✗** | in-round (free) | **9.0s ✗** | n/a (R1 missed) |
 | **2.5s, BTT=200ms** | n/a | **2.8s ✗** | in-round (free) | **1.8s ✗** | in-round (free) |
-| **2.5s, BTT=600ms** | n/a | **4.4s ✗** | n/a | **5.4s ✗** | n/a |
-| **2.5s, BTT=1000ms** | n/a | **6.0s ✗** | n/a | **9.0s ✗** | n/a |
+| **2.5s, BTT=600ms** | n/a | **4.4s ✗** | n/a (R1 missed) | **5.4s ✗** | n/a (R1 missed) |
+| **2.5s, BTT=1000ms** | n/a | **6.0s ✗** | n/a (R1 missed) | **9.0s ✗** | n/a (R1 missed) |
 
 † **Partial-sigs has no failure-recovery mechanism**: any V-disagreement (operators sign different V's) results in cluster signature aggregation failing — no rounds, no re-flood, no fall-through. The baseline only works on the healthy V-pre-agreed path.
 
@@ -184,8 +184,8 @@ At the SSV proposer-duty operating point — `BTT = 200ms`, `Relay_cutoff = 4000
 **Reading:**
 
 - **OBFT V_0 captures 100ms more MEV-fresh fetch time than QBFT R2** (3050 vs 2950ms). All four OBFT leaders beat QBFT R1 by ≥1.4s.
-- **OBFT V_0 pays a 500ms BFT-consensus tax over the partial-sigs floor** (3050 vs 3550ms). This 500ms = 2 BTT (Phase 2 + propagation slack) is the structural cost of resolving V-disagreement in a single round at this operating point. QBFT R1's tax is 2800ms (4× larger).
-- **Only QBFT R2 reaches V_1 parity**, and only after paying the round-1 timeout gap (`RT_1 = 2000ms` of wall-clock during which QBFT cannot make progress). OBFT's K-layer fall-through is in-round (sequential local IBE decryption, no per-layer RTT), so OBFT lands the same `Relay_cutoff` budget without the round-change penalty.
+- **OBFT V_0 pays a 500ms BFT-consensus tax over the partial-sigs floor** (3050 vs 3550ms). This 500ms = 2.5 BTT decomposes as: 1 BTT V_0 leader-broadcast propagation (OBFT-only — partial-sigs has no V-broadcast step since each operator's V is independently agreed) + 1 BTT Δ_2 widening (recommended 2 BTT vs partial-sigs' 1 BTT propagation cycle) + 0.5 BTT Phase 3 ε_3 (IBE walk + cert construction beyond simple BLS aggregation). QBFT R1's tax is 2800ms (5.6× larger).
+- **Only QBFT R2 reaches V_1 parity**, and only after paying the round-1 timeout gap (`RT_1 = 2000ms` of wall-clock that QBFT must spend committed to round 1's PROPOSE before round 2 can fire its fresh-V fetch). OBFT's K-layer fall-through is in-round (sequential local IBE decryption, no per-layer RTT), so OBFT lands the same `Relay_cutoff` budget without the round-change penalty.
 - **QBFT R1 is structurally constrained** by needing PROPOSE_1 to fire early enough that consensus + post-consensus + R2 retry can fit the slot. At the operating point above, R1's MEV-fetch budget is just 750ms — 4× less than OBFT V_0 and ~5× less than the partial-sigs floor.
 - **Deeper-layer fetch budgets (V_2, V_3) trade fetch time for propagation slack**: V_2 covers 400ms tails, V_3 covers 1000ms tails. Healthy-path fetch is V_0's 3050ms; deeper fetches are recovery-only.
 

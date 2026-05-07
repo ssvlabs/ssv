@@ -738,9 +738,9 @@ QBFT under SSV's production round-timeout (`RT = 2s = 10 BTT`) at the same opera
 
 † **Partial-sigs assumes V is pre-agreed across operators** — this works for non-MEV duties (attestations, sync committee) where V is determined by beacon-spec computation, but not for proposer duty where V varies per operator. Listed as the no-consensus floor: BFT consensus protocols pay 500-2800ms over this baseline to resolve V-disagreement.
 
-**Comparison vs partial-sigs floor**: OBFT V_0 pays a **500ms BFT-consensus tax** over the partial-sigs floor (3550 − 3050ms) — this is the structural cost of resolving V-disagreement in a single round at this operating point (= 2 BTT of Phase 2 + propagation slack). QBFT R1 pays a **2800ms tax** (4× larger), structurally constrained by needing PROPOSE_1 to fire early enough that consensus + post-consensus + R2 retry can fit the slot.
+**Comparison vs partial-sigs floor**: OBFT V_0 pays a **500ms BFT-consensus tax** over the partial-sigs floor (3550 − 3050ms) — this is the structural cost of resolving V-disagreement in a single round at this operating point. The 500ms = 2.5 BTT decomposes as: **1 BTT V_0 leader-broadcast propagation** (OBFT has a single leader source V; partial-sigs assumes V is independently agreed at each operator and skips this step), **1 BTT Δ_2 widening** (OBFT's recommended Δ_2 = 2 BTT for jitter absorption vs partial-sigs' 1 BTT propagation cycle), and **0.5 BTT Phase 3 ε_3** (IBE decryption walk + certificate construction beyond simple BLS aggregation). QBFT R1 pays a **2800ms tax** (5.6× larger), structurally constrained by needing PROPOSE_1 to fire early enough that consensus + post-consensus + R2 retry can fit the slot.
 
-**Comparison OBFT vs QBFT**: OBFT's V_0 captures **100ms more** MEV-fresh fetch time than QBFT's R2 leader (3050 vs 2950ms), and **2300ms more** than QBFT's R1 leader (3050 vs 750ms). All four OBFT leaders beat QBFT R1 by ≥1.4s; only QBFT R2 reaches V_1 parity, and only after paying the round-1 timeout gap (`RT_1 − BFT_start_1 = 2000ms` of wall-clock during which QBFT cannot make progress). OBFT's K-layer fall-through is in-round (sequential local IBE decryption, no per-layer RTT), so it lands the same `Relay_cutoff` budget without the round-change penalty.
+**Comparison OBFT vs QBFT**: OBFT's V_0 captures **100ms more** MEV-fresh fetch time than QBFT's R2 leader (3050 vs 2950ms), and **2300ms more** than QBFT's R1 leader (3050 vs 750ms). All four OBFT leaders beat QBFT R1 by ≥1.4s; only QBFT R2 reaches V_1 parity, and only after paying the round-1 timeout gap (`RT_1 − BFT_start_1 = 2000ms` of wall-clock that QBFT must spend committed to round 1's PROPOSE before round 2 can fire its fresh-V fetch). OBFT's K-layer fall-through is in-round (sequential local IBE decryption, no per-layer RTT), so it lands the same `Relay_cutoff` budget without the round-change penalty.
 
 ### Head-change handling
 
@@ -1190,9 +1190,9 @@ Measured from `T_commit` (mini-consensus start). At Config A (P99=150ms, δ=50ms
 | Scenario | Time | Mechanism |
 |---|---|---|
 | L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`Δ_minicon + 1 BTT ≈ 600ms` | Verdict-quorum determines `V_X`; σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
-| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | Full Phase 2 + Phase 3 walk |
-| Mini-consensus fails (C1/C2 patterns) → fall-through to L_0 | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | NR-quorum at L_Bid + Phase-3 walk decrypts L_0; L_0 σ-quorum |
-| Multi-layer fall-through after L_Bid | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
+| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 900ms` | Full Phase 2 + Phase 3 walk |
+| Mini-consensus fails (C1/C2 patterns) → fall-through to L_0 | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 900ms` | NR-quorum at L_Bid + Phase-3 walk decrypts L_0; L_0 σ-quorum |
+| Multi-layer fall-through after L_Bid | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 900ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
 | L_Bid 2-1-byz-defect or verdict-equivocation | slot misses | Deadlock at L_Bid blocks fall-through |
 
 Best (success) ≈ 600ms; worst (success) ≈ 900ms; ~1.5× spread (smaller than bare OBFT's wider spread because the mini-consensus phase is mandatory). Healthy-path is +100-400ms vs bare OBFT (~500ms canonical post-`T_commit` at recommended Δ_2 = 2 BTT, Δ_3 = ε_3).
@@ -1257,7 +1257,7 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | Healthy-path latency (post-`T_commit`) | ~500ms | ~600-900ms (+100-400ms) |
 | Best-case latency | ~200ms | ~600ms |
 | Worst-case latency (within success envelope) | ~400ms | ~700ms |
-| Time-to-completion spread | ~2.7× best/worst | ~1.6× best/worst |
+| Time-to-completion spread | ~2.7× best/worst | ~1.5× best/worst |
 | Bandwidth (n=4, K=4 healthy) | ~28 KB | ~33 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
 | MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~3050ms (V_0; T_commit = 3.40s) | ~2650ms (V_X; T_commit = 3.00s — Δ_minicon shifts T_commit ~400ms earlier) |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |
