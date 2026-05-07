@@ -168,7 +168,7 @@ Receivers run **two layers of validation**, in order:
 
 If a leader `L_k` fails to broadcast at all (or broadcasts so late that its bundle arrives past `T_commit` at every honest receiver), that layer is unavailable; the cluster falls through to deeper layers via NR-quorum. If all K leaders fail, the slot is missed.
 
-**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. There is no protocol-level second re-flood event in OBFT (no rounds): cluster-wide reception relies on gossipsub's organic propagation completing before `T_commit`. Honest leaders broadcasting by their per-layer deadline `T_broadcast_max_k = T_commit − B_k` reach all honest within partial-synchrony assumptions for that layer's propagation budget `B_k` (see §Setting).
+**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. OBFT has no protocol-level second re-flood event for whole Phase-1 bundles (no rounds): cluster-wide reception of `(V, σ_L^V, σ_L^op)` relies on gossipsub's organic propagation completing before `T_commit`. The leader's σ_L^V partial alone is re-broadcast in Phase 2 via every operator's `KindCommit` witness section (see §Phase 2 / Wire format), providing redundancy against σ_L^V-drop but not against V-drop. Honest leaders broadcasting by their per-layer deadline `T_broadcast_max_k = T_commit − B_k` reach all honest within partial-synchrony assumptions for that layer's propagation budget `B_k` (see §Setting).
 
 **Retention bounds.** Retention state for accepted Phase-1 bundles is keyed by `(slot, layer k, leader_id)`. Per key, an operator retains at most **two distinct `(V, σ_{L_k}^V, σ_{L_k}^{op})` tuples** — the first auth-valid bundle observed, plus, if a second auth-valid bundle with a *distinct* `value_root` is later observed, that one (sufficient as leader-equivocation evidence). Further auth-valid bundles for the same `(slot, layer, leader_id)` are dropped silently. Bundles whose cryptographic-auth checks fail are dropped without retention. Retention lifetime: until the operator's local end of Phase 3 (i.e., until reconstruction halts or the slot is declared missed); slot state is then cleared. Memory bound: `O(K · n)` bundles per slot in the worst case (every leader equivocates).
 
@@ -230,8 +230,9 @@ where:
 
 - The K-layer onion of σ partials (plaintext at L_0, chained-encrypted at deeper layers) for layers where the operator is σ-state.
 - NR/NV partials `σ_i^{IBE}(nr_tag_k)` for layers where the operator is NR-state.
+- **Leader σ_L^V witness section.** For every Phase-1 bundle the operator has retained at this point (per §Phase 1's retention rules — typically one bundle per layer, two per layer in the equivocation-observed case), a plaintext copy `(layer k, value_root, σ_{L_k}^V(V_{L_k}))` extracted from the bundle. These are byte-for-byte copies of the leader's partial as `i` observed it — **not** new signings by `i` (no EKM event, no new signing obligation, no new cryptographic primitive). The section provides redundancy against Phase-1 bundle drop at peer receivers: a peer that didn't receive the leader's bundle directly can harvest σ_L^V from `i`'s witness section into the layer-`k` σ-pool (subject to the layer's chained-decryption gate when `k > 0`). Bandwidth is small (~96 bytes per σ partial × K × n; ≈ 1.5 KB cluster-wide at K=4, n=4). The mechanism does **not** address V-drop — σ_L^V verifies against `value_root(V)`, so a receiver lacking V cannot use a witnessed σ_L^V; receivers without V locally still rely on gossipsub Phase-1 re-flood for V itself. See [Appendix C](#appendix-c--message-re-broadcast-considerations) for full-bundle re-broadcast that would address V-drop additionally at higher bandwidth cost (optional defensive engineering, not core).
 
-Auth-envelope binding: `(protocol_tag = "OBFT-v1", message_kind = "commit", cluster_id, slot, operator_id i, onion_payload, nr_partials)` signed by `i`'s operator-identity key. Emitted at most once per operator per slot. Receivers reject any `KindCommit` whose envelope auth fails verification.
+Auth-envelope binding: `(protocol_tag = "OBFT-v1", message_kind = "commit", cluster_id, slot, operator_id i, onion_payload, nr_partials, sigma_L_witnesses)` signed by `i`'s operator-identity key. Emitted at most once per operator per slot. Receivers reject any `KindCommit` whose envelope auth fails verification.
 
 The K-layer onion construction (chained encryption depth `k` at layer `k`) is exactly as defined above.
 
@@ -265,10 +266,13 @@ nrs[k]  for k in [0, K)                        # NR pools, indexed by nr_tag_k (
 for k in [0, K):
     # Aggregate σ pool at layer k.
     sigs[k] = {σ_{L_k}^V(V_{L_k}) from Phase 1, if valid}
+            ∪ {σ_{L_k}^V(V_{L_k}) from peer KindCommit witness sections at layer k, if valid}
             ∪ {σ_j^V(V) from received layer-k onion contents on any value V}
               (decrypted via accumulated NR-decryption keys at layers 0..k-1, if k > 0)
-            # deduplicated per operator: leader's Phase-1 σ and onion σ from
-            # the same operator collapse to one partial.
+            # deduplicated per operator: leader's Phase-1 σ, witness-section
+            # copies of σ_L^V (which collapse to identical bytes across peer
+            # KindCommits), and onion σ from the same operator all collapse
+            # to one partial.
             # Per Pigeonhole 2, at most one V can have qV partials cluster-wide,
             # so partition sigs[k] by V and check each.
 
@@ -617,7 +621,7 @@ The slot misses under any of:
   The all-honest example captures the cleanest case; in real deployments with byz exercising f-budget, the practical slot-miss rate from validity-divergence is meaningfully higher than the all-honest example alone suggests. **The expected rate scales with `re-org rate × byz-passivity-rate`**, not re-org rate alone — i.e., a deployment with re-orgs in 1% of slots and a byzantine present and adopting passive grief in some fraction of slots compounds these probabilities into validity-divergence slot-misses. The host's stabilization workflow narrows the divergence window but does not eliminate it; byzantine passive f-budget consumption (silence or σ-on-V — neither cryptographically slashable individually) is essentially "free" within the f-bound, so byz can reliably contribute the passivity factor whenever exercising the deterrent's weak-attribution corner is favorable. See [Implications of validity-divergence not being recovered (assumption 3)](#implications-of-validity-divergence-not-being-recovered-assumption-3) for the full discussion. Phase 2a/2b (see [Path forward — Phase 2a/2b](#where-this-came-from)) eliminates this deadlock structurally via late σ-emit on cluster-stabilized verdict.
 - **[Class B — partially closed by design, partially R-invariant]** **Byzantine selective-delivery grief (h_V variants).** The "h_V=1" framing covers two attack patterns; current OBFT closes one and leaves the other.
 
-  **Closed by Defer removal — withhold-then-fake-σ.** Earlier OBFT-family designs included a Defer state with a "no-V fallback" rule (receivers without V deferred their NR-decision based on observed peer σ-claims). That rule was the structural enabler of an attack where a byzantine L_0 withheld Phase-1 from *all* honest, emitted an auth-signed fake σ-claim, then selectively delivered Phase-1 late to one honest — engineering a deadlock via Defer→force-NR pacing. The current spec removes Defer: receivers without V at `T_commit` immediately NR per the silent-leader rule, so a byzantine that withholds Phase-1 produces NR-quorum at L_0 and clean fall-through to L_1.
+  **Closed as a side-effect of Defer removal — withhold-then-fake-σ.** Earlier OBFT-family designs included a Defer state with a "no-V fallback" rule (receivers without V deferred their NR-decision based on observed peer σ-claims). That rule was the structural enabler of an attack where a byzantine L_0 withheld Phase-1 from *all* honest, emitted an auth-signed fake σ-claim, then selectively delivered Phase-1 late to one honest — engineering a deadlock via Defer→force-NR pacing. The current spec removes Defer **primarily for spec/wire/EKM simplification** (3-state vs 4-state commitment lattice, single `KindCommit` emission vs multi-emission, no auth-only-retention pre-state, no transitional EKM events — see [§Where this came from](#where-this-came-from) and [Appendix E](#appendix-e--defer-state-within-slot-partition-recovery)); closure of this attack is a structural side-effect of that removal, not its motivating reason. With Defer gone, receivers without V at `T_commit` immediately NR per the silent-leader rule, so a byzantine that withholds Phase-1 produces NR-quorum at L_0 and clean fall-through to L_1.
 
   **Still open — selective Phase-1 delivery.** A byzantine that broadcasts Phase-1 to exactly one honest (rather than withholding) σ-locks via their own Phase-1 σ_V, and the receiving honest σ-locks too. Cluster pools then sit at σ-pool = 2 (recipient + byz σ_V) and NR-pool = 2 (the two no-V honest; byz and recipient σ-locked, can't NR). Neither reaches qV/qEnc=3; the slot misses. This is an algebraic limit at f=1, n=4 and is **R-invariant** — Defer removal doesn't help, OBFTR(R≥2) doesn't help either. Equivocation evidence isn't generated (only one V was broadcast); attribution relies on behavioral patterns (selective-delivery detection across slots). The Phase 2a/2b split closes this case structurally.
 
@@ -642,7 +646,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + EKM-enforced per-operator commitments (single-σ-V per (slot, layer), σ-XOR-NR per layer, cross-phase exclusivity), holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional. **One-liner: consensus expected to complete by `slot_start + 1.90s` at Config A (P99 = 150ms, δ = 50ms, K = 4, recommended Δ_2 = 2 BTT = 400ms, Δ_3 = ε_3 = 100ms), with submission slack to `slot_start + 4.00s` for relay submit; under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation from leader L_k broadcast to any honest first-observation ≤ that layer's per-layer budget `B_k` (staggered: B_0 = 1 BTT, ..., B_3 = 10 BTT at K=4 — see §Setting), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Single-round protocol; per-layer staggered budgets give wider absorption at deeper layers (~2000ms at L_3) than OBFTR(R=2)'s uniform cross-round-retention window. |
+| Termination (output guaranteed) | Conditional. **One-liner: consensus expected to complete by `slot_start + 2.00s` at Config A (BTT = 200ms, K = 4, recommended Δ_2 = 2 BTT = 400ms, Δ_3 = ε_3 = 100ms), with submission slack to `slot_start + 4.00s` for relay submit; under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation from leader L_k broadcast to any honest first-observation ≤ that layer's per-layer budget `B_k` (staggered: B_0 = 1 BTT, ..., B_3 = 10 BTT at K=4 — see §Setting), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Single-round protocol; per-layer staggered budgets give wider absorption at deeper layers (~2000ms at L_3) than OBFTR(R=2)'s uniform cross-round-retention window. |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates form self-contained slashable evidence |
 | Byzantine-leader-grief resistance | **Partial under non-adversarial byzantine; substantially weaker against adversarial byz that deliberately engineers grief patterns.** Recovery via "natural" σ-quorum patterns (leader's σ_L^V completes a 2-of-3-honest pool) only fires when byz isn't actively timing deliveries. **Adversarial byzantine reliably engineers slot-miss when L_0** via σ-locked split equivocation (1-1-1, 1-1-NR, etc.). At f=1 n=4 with uniform leader rotation, an adversarial byz primary can deterministically grief ~25% of slots (whenever they're L_0). **Same exposure as OBFTR(R≥2)** — these patterns are R-invariant; round-machinery does not help. The rational-byzantine deterrent (assumption 4) is the only protocol-level defense, and it works *across slots in expectation*, not per-slot. Effective deterrent strength is deployment-specific (stake-to-grief-value ratio, governance responsiveness, slashability evidence quality — see [§Implications of the rational-byzantine deterrent](#implications-of-the-rational-byzantine-deterrent-assumption-4)). For deployments under realistic adversarial conditions, **Phase 2a/2b is the structural fix and should be considered near-term, not future** — it converts all R-invariant byz grief patterns into clean fall-through at +1 RTT cost. |
 | Mesh-flakiness tolerance (honest operator with poor gossipsub mesh visibility) | **Limited.** A mesh-flaky honest operator who fails to observe peer σ-emits within the NR-decision window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget consumer for that slot. Combined with byz σ-refusal, this creates a deadlock that the protocol cannot recover from within the slot. The recommended `Δ_2 ≥ 2 BTT` absorbs typical mesh-jitter (up to one full `1 BTT` of additional slack on top of P99 propagation) but doesn't cover wider mesh outliers. **Same exposure as OBFTR(R≥2)** — cross-round NR-lock blocks recovery there too. QBFT's round-reset semantics handle this case better (a flaky operator's bad PREPARE doesn't lock them across rounds); OBFT-family enforces cross-phase exclusivity per slot. Phase 2a/2b mitigates by deferring commitment until mesh visibility has had a full additional propagation cycle to stabilize. |
@@ -811,10 +815,10 @@ OBFT is the design point that asks: **what's the minimum machinery needed to get
 2. **Drop cross-round σ-or-NR exclusivity.** With R = 1, no cross-round to enforce; cross-phase exclusivity (within Phase 1 + Phase 2) is sufficient for Pigeonhole 1.
 3. **Drop cross-round σ-partial dedup, retention widening, auth-only-retention.** Bundles first-observed past `T_commit` at any honest receiver are not counted by that receiver toward σ-quorum at this layer.
 4. **Drop EKM cross-round atomicity, cached-partial persistence, deterministic re-signing fallback.** Single signing event per (slot, layer) per operator; standard transactional sign-and-log.
-5. **Drop the Defer state and Phase-2 sub-phasing.** Each operator commits exactly once at `T_commit` based on what they observed by then; σ-or-NR decisions are emitted in a single combined `KindCommit` message. No within-slot partition recovery — relies on K-layer fall-through to a deeper backup whose bundle did propagate in time. Suited for small clusters where gossipsub mesh is effectively full and asymmetric propagation is rare; for larger clusters or wider partition tails, use [OBFTR](OBFTR.md).
+5. **Drop the Defer state and Phase-2 sub-phasing — primarily for spec/wire/EKM simplification.** The Defer state requires a 4-state commitment lattice (σ, NR, NV, Defer), multi-emission wire format (separate σ-side and NR-side messages with different timings), auth-only-retention pre-state for tracking peer σ-claims in the pre-`T_commit` window, transitional EKM signing-event boundaries (Defer→σ vs initial σ-commit), and a wider Phase-2 window — see [Appendix E](#appendix-e--defer-state-within-slot-partition-recovery). Removing Defer collapses the protocol to a 3-state lattice (σ, NR, NV) with a single combined `KindCommit` message per operator; each operator commits exactly once at `T_commit` based on what they observed by then. The cost is no within-slot partition recovery — the cluster relies on K-layer fall-through to a deeper backup whose bundle did propagate in time. Suited for small clusters where gossipsub mesh is effectively full and asymmetric propagation is rare; for larger clusters or wider partition tails, use [OBFTR](OBFTR.md).
 6. **Keep K-layer fall-through, chained encryption, equivocation detect-and-slash, slashing-evidence rules.** These are R-orthogonal — same value at R = 1 as R ≥ 2.
 
-The result is a protocol that gives K-layer parallel fall-through without partition-recovery machinery, paying in narrower envelope for spec/EKM simplicity, more submission headroom, and high-P99 fit. As a structural side-effect, Defer removal closes the h_V=1 selective-delivery deadlock surface that earlier OBFT-family designs were exposed to (see §Failure modes).
+The result is a protocol that gives K-layer parallel fall-through without partition-recovery machinery, paying in narrower envelope for spec/EKM simplicity, more submission headroom, and high-P99 fit. **A structural side-effect of Defer removal — not the motivating reason for the removal — is closure of the h_V=1 withhold-then-fake-σ adversarial-byz attack** that earlier OBFT-family designs were exposed to (see §Failure modes for the attack mechanics).
 
 **Path forward — Phase 2a/2b is the OBFT-family-level structural fix (R-orthogonal).** Phase 2a/2b is specified as [2abOBFT](2abOBFT.md); it addresses an OBFT-family limitation (validity-divergence + adversarial byzantine deadlock) that bare OBFT and OBFTR both inherit. The Phase-2 split (broadcast-only Phase-2a where operators re-flood retained Phase-1 bundles without σ-emitting, then Phase-2b where σ-emits happen on a cluster-converged V after Phase-2a observation completes) is the structural fix for the limitations that bare OBFT and OBFTR document in their respective failure-mode sections. **Smaller variants (relax cross-phase exclusivity, allow NV → σ flip via aggregator filtering, separate cryptographic tags for tentative-vs-final commitment, etc.) all either break safety against an offline-aggregating byzantine or are isomorphic to Phase 2a/2b under a different name.** Phase 2a/2b's structural shape is essentially forced: synchronous consensus on validity (or σ-commitment more generally) requires explicit cluster-wide coordination, which means an observation phase before commitment.
 
@@ -875,10 +879,10 @@ OBFT is OBFTR with R fixed at 1 and the round-retry machinery stripped. They sha
 | Commitment states per layer | σ / NR / NV / Defer (Defer enables late-σ-emit recovery within Phase 2) | σ / NR / NV (3-state; no Defer) |
 | Wire format per operator | Separate `KindOnion` (σ-side, may emit multiple times) + `KindNR` (NR-side, end-of-window) | Single `KindCommit` at `T_commit` carrying both σ and NR partials |
 | Partial-synchrony envelope | `R · P99` (e.g., `2·P99` at R=2) | `P99` (single round) |
-| Slot budget at K=4, P99=150ms | Ends at slot_start + 3.50s (consensus + reconstruction; with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 1.90s — saves ~1.6s |
-| Submission headroom (4s relay cutoff) | 0.50s (tight) | 2.10s |
-| Bandwidth (healthy, n=4, K=4) | ~27 KB | ~27 KB (same) |
-| Bandwidth (worst case at R=2 with round-1 failure) | ~50 KB | n/a (no round 2) |
+| Slot budget at K=4, BTT=200ms | Ends at slot_start + 3.10s (consensus + reconstruction; with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 2.00s — saves ~1.1s |
+| Submission headroom (4s relay cutoff) | 0.90s | 2.00s |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB | ~28 KB (same; both include the σ_L^V witness section ≈ +1.5 KB) |
+| Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB | n/a (no round 2) |
 | High-D fit (P99 = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |
 
 **Recovery scope:**
@@ -903,7 +907,7 @@ A cluster could mix-and-match per duty: OBFT for proposer (where headroom matter
 | Phase 1 σ_V | Yes — leader signs σ_V at Phase 1 (cryptographic head-start) | **No** — leader broadcasts only `(V, σ^op)` at Phase 1; σ-commitment happens at Phase 2b alongside non-leaders |
 | Phase 2 split | Single Phase 2 (operators emit one `KindCommit` at `T_commit`) | 2a (verdict broadcast / σ-eligibility observation) + 2b (σ-emit on cluster-converged V) |
 | Equivocation σ-locked split (1-1-1, etc.) | **Slot misses at L_0** — slashable but no in-slot recovery | **Recovered** via convergence rule (verdict-quorum-short → NR fall-through to L_1) |
-| h_V=1 selective-delivery deadlock | **Partially closed**: withhold-then-fake-σ pattern closed by Defer removal; selective Phase-1 delivery to one honest still slot-misses (algebraic limit at f=1, n=4) | **Closed** via Phase-2a verdict pool |
+| h_V=1 selective-delivery deadlock | **Partially closed**: withhold-then-fake-σ pattern closed as a side-effect of Defer removal (which was motivated by spec/wire/EKM simplification — see [§Where this came from](#where-this-came-from)); selective Phase-1 delivery to one honest still slot-misses (algebraic limit at f=1, n=4) | **Closed** via Phase-2a verdict pool |
 | Validity-divergence (re-org during acceptance) | **Out of scope** (assumption 3) — slot misses cleanly | **Recovered within f-bound** (3-of-4 majorities at f=1 n=4); 2-2 splits still slot-miss |
 | Mesh-flakiness deadlock | Slot misses (cross-phase exclusivity locks flaky NR) | **Recovered** (Phase-2a defers commitment past mesh outliers) |
 | New regression vs OBFT | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), defects to NR at Phase-2b. Slot misses (slashable Rule 6b). Bare OBFT succeeded here via Phase-1 σ_V cryptographic lock. |
@@ -924,7 +928,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 | RTTs to signed output (min, healthy) | 3 (consensus) + 1 (post-consensus) ≈ 4 | 2 (Phase 1 + Phase 2) |
 | Termination guarantee | Eventually-terminating across rounds (under partial synchrony) | Conditional on `D ≥ real_propagation`; for larger envelope, use [OBFTR(R≥2)](OBFTR.md) |
 | Safety posture | Honest-majority (`2f+1` honest) + correct quorum-certificate verification | Honest-majority cryptographic via `qEnc = qV = 2f+1` + chained IBE + EKM-enforced per-operator commitments. Same trust posture as QBFT — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). |
-| Bandwidth (healthy n=4) | ~14 KB | ~27 KB at K=4 |
+| Bandwidth (healthy n=4) | ~14 KB | ~28 KB at K=4 (includes σ_L^V witness section ≈ +1.5 KB) |
 | Latency (healthy, n=4, BTT=200ms) | ~800 ms | ~600 ms (Phase 2 + Phase 3 with Δ_2 = 2 BTT) |
 | Latency (1 round failure, n=4) | ~3.0 s (round-1 timeout 2s + round-2 success ~750 ms) | n/a (single round; failure → slot miss) |
 | Slashing-protection scope | Single block sig per slot, gated at submission time | Multiple per-share sigs per slot at candidate-signing (Phase-1 leader, Phase-2 onion) gated by EKM cross-keypair coordination — see [EKM coordination model](#ekm-coordination-model) |
@@ -960,7 +964,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 
 This appendix specifies an opportunistic bid-routing extension to OBFT. **L_Bid** is a bid-determined top layer prepended to OBFT's K rotation-determined layers (yielding `K' = K + 1`). The extension adds a **mini-consensus phase** between Phase 1 and Phase 2 that resolves L_Bid's identity cluster-wide before σ-commitment. The mini-consensus is a single round of all-to-all verdict broadcast with quorum-based binding — verdicts are op-identity-signed claims, not threshold partials, so it adds no new cryptographic primitives and does not change OBFT's safety analysis.
 
-The extension closes three deadlock surfaces that any naive bid-routing extension would expose ([§Background — bid-layer deadlocks](#background--bid-layer-deadlocks)) and adds two adversarial-byz residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) plus the standard 2-2 validity-divergence hard algebraic limit. Healthy-path latency rises by `Δ_minicon` (~150-300ms at Config A); rotation-layer recovery scope is unchanged; safety is identical to bare OBFT. L_Bid relies on one additional assumption beyond bare OBFT's threat model — **bid-value honesty** (see [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty)).
+The extension closes three deadlock surfaces that any naive bid-routing extension would expose ([§Background — bid-layer deadlocks](#background--bid-layer-deadlocks)) and adds two adversarial-byz residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) plus the standard 2-2 validity-divergence hard algebraic limit. Healthy-path latency rises by `Δ_minicon` (~200-400ms at Config A); rotation-layer recovery scope is unchanged; safety is identical to bare OBFT. L_Bid relies on one additional assumption beyond bare OBFT's threat model — **bid-value honesty** (see [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty)).
 
 ### Background — bid-layer deadlocks
 
@@ -1179,13 +1183,13 @@ Measured from `T_commit` (mini-consensus start). At Config A (P99=150ms, δ=50ms
 
 | Scenario | Time | Mechanism |
 |---|---|---|
-| L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`Δ_minicon + 1 BTT ≈ 450ms` | Verdict-quorum determines `V_X`; σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
+| L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`Δ_minicon + 1 BTT ≈ 600ms` | Verdict-quorum determines `V_X`; σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
 | L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | Full Phase 2 + Phase 3 walk |
 | Mini-consensus fails (C1/C2 patterns) → fall-through to L_0 | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | NR-quorum at L_Bid + Phase-3 walk decrypts L_0; L_0 σ-quorum |
 | Multi-layer fall-through after L_Bid | ~`Δ_minicon + Δ_2 + Δ_3 ≈ 700ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
 | L_Bid 2-1-byz-defect or verdict-equivocation | slot misses | Deadlock at L_Bid blocks fall-through |
 
-Best (success) ≈ 450ms; worst (success) ≈ 700ms; ~1.6× spread (smaller than bare OBFT's wider spread because the mini-consensus phase is mandatory). Healthy-path is +50-300ms vs bare OBFT (~400ms canonical post-`T_commit` at recommended Δ_2 = 2 BTT, Δ_3 = ε_3).
+Best (success) ≈ 600ms; worst (success) ≈ 900ms; ~1.5× spread (smaller than bare OBFT's wider spread because the mini-consensus phase is mandatory). Healthy-path is +100-400ms vs bare OBFT (~500ms canonical post-`T_commit` at recommended Δ_2 = 2 BTT, Δ_3 = ε_3).
 
 ### Optional extension — relay/builder attestation verification
 
@@ -1220,12 +1224,12 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindBid`, `KindBidVerdict` |
 | Slashing-evidence rules | 5 | 7 (+ Rule 7 bid equivocation/incoherence, + Rule 8 verdict equivocation/verdict-vs-action) |
-| Healthy-path latency (post-`T_commit`) | ~400ms | ~450-700ms (+50-300ms) |
+| Healthy-path latency (post-`T_commit`) | ~500ms | ~600-900ms (+100-400ms) |
 | Best-case latency | ~200ms | ~600ms |
 | Worst-case latency (within success envelope) | ~400ms | ~700ms |
 | Time-to-completion spread | ~2.7× best/worst | ~1.6× best/worst |
-| Bandwidth (n=4, K=4 healthy) | ~27 KB | ~32 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
-| Submission headroom (4s cutoff, T_commit at slot_start + 1.5s) | ~2.10s | ~1.80s |
+| Bandwidth (n=4, K=4 healthy) | ~28 KB | ~33 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
+| Submission headroom (4s cutoff, T_commit at slot_start + 1.5s) | ~2.0s | ~1.6s |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | OBFT base recovery scope | **Same** (mini-consensus failure falls through cleanly; rotation layers unchanged) |
@@ -1264,7 +1268,7 @@ Adding a "re-broadcast on first observation" step at the application layer (ever
 
 ### What explicit re-broadcast does NOT add
 
-- **No additional defense against h_V=1 byz selective-delivery deadlock**. The withhold-then-fake-σ variant closes by Defer removal; the selective-Phase-1-delivery variant remains an algebraic limit at f=1, n=4. Re-broadcast can't help with the latter — byz only delivered Phase-1 to one honest, and that's already what gossipsub auto-forward delivers from. The structural fix is Phase 2a/2b.
+- **No additional defense against h_V=1 byz selective-delivery deadlock**. The withhold-then-fake-σ variant is closed as a side-effect of Defer removal (motivated by spec/wire/EKM simplification — see [§Where this came from](#where-this-came-from)); the selective-Phase-1-delivery variant remains an algebraic limit at f=1, n=4. Re-broadcast can't help with the latter — byz only delivered Phase-1 to one honest, and that's already what gossipsub auto-forward delivers from. The structural fix is Phase 2a/2b.
 - **No additional defense against σ-locked equivocation 1-1-1 splits**. These failures are about cross-phase exclusivity locking honest into different σ commits, not about V propagation speed. Re-broadcast doesn't change the algebra.
 - **No defense against silent leader**. If the leader doesn't broadcast at all, no non-leader has the bundle to re-broadcast. Recovery is via NR-quorum fall-through to L_1 (in-protocol).
 - **No defense against sustained partition** (real propagation > absorption window). Re-broadcast can't deliver what no honest peer has received.
@@ -1274,11 +1278,9 @@ Adding a "re-broadcast on first observation" step at the application layer (ever
 - **Bandwidth**: O(n) multiplier per bundle. At n=4 with K=4, leader-only broadcast is 4 publishes per slot (one per layer's leader); non-leader re-broadcast adds 12 more publishes (each non-leader publishes each leader's bundle). At Config A's ~30 KB onion bandwidth, this adds a few KB. Modest at small n; meaningful at n=13 where it becomes ~10× the bundle bandwidth.
 - **Gossipsub deduplication overhead**: each peer receives the same auth-signed bundle from multiple sources. Gossipsub deduplicates by message ID (content hash for self-validating messages), so this is mostly CPU/memory cost on each peer. Minor.
 
-### Variant — σ_L^V re-inclusion in non-leader onions
+### σ_L^V re-inclusion is part of the core protocol
 
-A different mechanism: each non-leader includes the leader's σ_L^V (extracted from the Phase-1 bundle) in their own Phase-2 onion as a redundant copy. Benefit: protects σ_L^V against bundle-drop while keeping bandwidth modest (a single σ partial is small compared to a full bundle). Downsides: doesn't help if V itself was dropped (σ_L^V references V's hash); adds onion-construction complexity.
-
-This variant is not in current OBFT spec but is a documented design point in some OBFT-family alternatives. Could be considered for deployments where the σ_L^V is observed to be the dominant drop cause.
+The σ_L^V witness re-inclusion mechanism — each operator including byte-for-byte copies of received Phase-1 σ_L^V partials in their own `KindCommit` — is part of the core protocol; see the Wire format paragraph in §Phase 2. Bandwidth is modest (~96 bytes per σ partial × K × n; ≈ 1.5 KB cluster-wide at K=4, n=4); it adds no new EKM event, no new signing obligation, and no new cryptographic primitive (operators forward bytes they already received); Pigeonholes 1, 2, 3 are unchanged. The mechanism protects σ_L^V against Phase-1 bundle drop at peer receivers but does **not** address V-drop — that requires the full-bundle re-broadcast described elsewhere in this appendix.
 
 ### Recommendations by cluster size
 
@@ -1292,7 +1294,7 @@ This variant is not in current OBFT spec but is a documented design point in som
 2. **Explicit non-leader re-broadcast is a latency/bandwidth trade-off, not a safety/liveness change**. The OBFT protocol's stated guarantees don't depend on whether non-leaders explicitly re-broadcast — they're property of gossipsub's propagation under partial synchrony.
 3. **Explicit re-broadcast addresses gossipsub-layer issues** (mesh sparsity, score-pruning, multi-hop latency) but does not address OBFT's adversarial-byz failure modes (h_V=1, σ-locked equivocation, validity-divergence). Those are structural; the fix is at the protocol level (Phase 2a/2b in [2abOBFT](2abOBFT.md)), not at the propagation level.
 4. **Implementation choice should be driven by production telemetry**: if observed gossipsub propagation P99 ≈ `1 BTT`, gossipsub is already optimal and explicit re-broadcast is redundant. If P99 > 1.5 × `1 BTT` (suggesting multi-hop or pruning issues), explicit re-broadcast can compress the tail. Defensive deployments at larger n may opt in regardless.
-5. **The σ_L^V re-inclusion variant** is a more targeted defense (protects the leader's partial sig against bundle drop) at lower bandwidth cost than full bundle re-broadcast. Could be considered if production observes σ_L^V drops as a meaningful failure mode.
+5. **The σ_L^V re-inclusion mechanism is part of the core protocol** — every `KindCommit` carries a witness section with copies of received Phase-1 σ_L^V partials (see §Phase 2 / Wire format). Full Phase-1 bundle re-broadcast (V + σ_L^V + σ_L^op) remains optional defensive engineering on top of σ_L^V witness re-inclusion; the trade-off is the bandwidth O(n) multiplier per bundle vs the protection against V-drop in addition to σ_L^V-drop.
 
 
 ## Appendix D — OBFT-replenish (layer-staged extension)
@@ -1342,10 +1344,10 @@ The reduced layer count in round 1 doesn't speed up consensus — the bottleneck
 
 | Case | OBFT | OBFT-replenish |
 |---|---|---|
-| Round-1 success (L_0 or L_1 σ-quorum) | K=4 bundles + n × 4-layer onion ≈ 27 KB | 2 bundles + n × 2-layer onion ≈ 14 KB |
-| Round-2 success | n/a (single-round, slot misses if R1 fails on adversarial pattern) | ~25 KB (4 bundles + 2 × n × ~3-layer onion) |
-| Round-3 success | n/a | ~36 KB (exceeds OBFT) |
-| Multi-round failure | flat 27 KB | grows linearly with R |
+| Round-1 success (L_0 or L_1 σ-quorum) | K=4 bundles + n × 4-layer onion + n × σ_L^V witness ≈ 28 KB | 2 bundles + n × 2-layer onion + n × σ_L^V witness ≈ 15 KB |
+| Round-2 success | n/a (single-round, slot misses if R1 fails on adversarial pattern) | ~26 KB (4 bundles + 2 × n × ~3-layer onion + 2 × n × witness) |
+| Round-3 success | n/a | ~37 KB (exceeds OBFT) |
+| Multi-round failure | flat 28 KB | grows linearly with R |
 
 OBFT-replenish wins bandwidth in **round-1-success scenarios** (most production slots in healthy conditions) and breaks even at round 2. Past round 2, bandwidth exceeds OBFT.
 
@@ -1412,7 +1414,7 @@ Treat OBFT-replenish as a research direction worth specifying further if the lat
 
 This appendix describes a candidate enhancement to OBFT — **OBFT+Defer** — that adds a 4th per-(operator, layer) commitment state ("Defer") for receivers still waiting on V at `T_commit`. Defer enables late σ-emission within a `[T_commit, T_accept_max]` absorption window, recovering aggressive-marginal partition cases where a re-flooded bundle reaches some honest after `T_commit` but before `T_accept_max`.
 
-OBFT+Defer is positioned as an **enhancement of OBFT** for partition tolerance — keeping OBFT's single-round, K-layer fall-through structure but trading spec/wire simplicity for a recovery mode that bare OBFT lacks. Defer was part of earlier OBFT-family designs and was removed from the current spec (see [§Where this came from](#where-this-came-from)). This appendix documents the trade-offs so future spec revisions can re-evaluate whether the recovery scope is worth the costs in a given deployment.
+OBFT+Defer is positioned as an **enhancement of OBFT** for partition tolerance — keeping OBFT's single-round, K-layer fall-through structure but trading spec/wire simplicity for a recovery mode that bare OBFT lacks. Defer was part of earlier OBFT-family designs and was removed from the current spec **primarily for spec/wire/EKM simplification** (see [§Where this came from](#where-this-came-from)); closure of the withhold-then-fake-σ adversarial-byz attack documented later in this appendix is a structural side-effect of that removal, not its motivating reason. This appendix documents the trade-offs so future spec revisions can re-evaluate whether the recovery scope is worth the costs in a given deployment.
 
 ### Design idea
 
@@ -1538,7 +1540,7 @@ Defer adds materially to the spec/EKM surface and to the slashing-protection sch
 
 ### Conclusions
 
-1. **Defer was removed from the current OBFT spec** in favor of a 3-state (σ, NR, NV) commitment lattice with a single `KindCommit` emission per operator per slot. The trade-off was: lose aggressive-marginal partition recovery (one specific pattern at the boundary of the `[T_commit, T_accept_max]` window) in exchange for closing the withhold-then-fake-σ adversarial-byz attack and substantial spec/wire/EKM simplification.
+1. **Defer was removed from the current OBFT spec** in favor of a 3-state (σ, NR, NV) commitment lattice with a single `KindCommit` emission per operator per slot. **The primary motivation was spec/wire/EKM simplification** (3-state vs 4-state lattice, single emission vs multi-emission, no auth-only-retention pre-state, no transitional EKM events); closure of the withhold-then-fake-σ adversarial-byz attack is a structural side-effect of the same removal, not its motivating reason. The trade-off cost is loss of aggressive-marginal partition recovery (one specific pattern at the boundary of the `[T_commit, T_accept_max]` window).
 
 2. **The MEV cost intuition is a misread.** Defer doesn't compress `T_broadcast_max_0` (the primary leader's fetch deadline) — under the binding `T_broadcast_max_0 = T_relay_cutoff − T_submit − 2 BTT − Δ_3` equation (at Δ_2 = 1 BTT, B_0 = 1 BTT), the leader fetch deadline is invariant to Defer. The `B_0` safety margin is anchored to `T_accept_max` (with Defer) or `T_commit` (without), but `T_relay_cutoff` minus that anchor is the same in both cases. What does shift is `T_commit` (W earlier with Defer, to make room for the absorption window before Phase 3 starts).
 

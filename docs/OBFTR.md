@@ -165,7 +165,7 @@ Receivers run **two layers of validation**, in order:
 
 If a leader `L_k` fails to broadcast across all R rounds, that layer is unavailable; the cluster falls through to deeper layers. If all K leaders fail, the slot is missed.
 
-**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. Across rounds, gossipsub continues propagating in the background — a bundle first-observed by some honest at `T_commit_r + ε` can reach the slow honest by `T_commit_{r+1}` if `Δ_round = T_commit_{r+1} − T_commit_r ≥ ε + 1 BTT`.
+**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. Across rounds, gossipsub continues propagating in the background — a bundle first-observed by some honest at `T_commit_r + ε` can reach the slow honest by `T_commit_{r+1}` if `Δ_round = T_commit_{r+1} − T_commit_r ≥ ε + 1 BTT`. The leader's σ_L^V partial alone is additionally re-broadcast each round in every operator's `KindCommit_r` witness section (see §Phase 2 / Wire format), providing redundancy against σ_L^V-drop but not against V-drop (V itself is not re-emitted at the application layer).
 
 **Retention bounds.** Retention state for accepted Phase-1 bundles is keyed by `(slot, layer k, leader_id)`. Per key, an operator retains at most **two distinct `(V, σ_{L_k}^V, σ_{L_k}^{op})` tuples** — the first auth-valid bundle observed, plus, if a second auth-valid bundle with a *distinct* `value_root` is later observed, that one (sufficient as leader-equivocation evidence). Further auth-valid bundles for the same `(slot, layer, leader_id)` are dropped silently. Bundles whose cryptographic-auth checks fail are dropped without retention. Retention lifetime: until the operator's local end of round `R`'s Phase 3 (i.e., until reconstruction halts or the slot is declared missed); slot state is then cleared. Memory bound: `O(K · n · R)` bundles per slot in the worst case.
 
@@ -227,8 +227,9 @@ where:
 
 - The K-layer onion of σ partials (plaintext at L_0, chained-encrypted at deeper layers) for layers where the operator is σ-state in round r.
 - NR/NV partials `σ_i^{IBE}(nr_tag_k)` for layers where the operator is NR-state in round r.
+- **Leader σ_L^V witness section.** For every Phase-1 bundle the operator has retained at this point (per §Phase 1's retention rules — typically one bundle per layer, two per layer in the equivocation-observed case; bundles accumulate across rounds via gossipsub re-flood), a plaintext copy `(layer k, value_root, σ_{L_k}^V(V_{L_k}))` extracted from the bundle. These are byte-for-byte copies of the leader's partial as `i` observed it — **not** new signings by `i` (no EKM event, no new signing obligation, no new cryptographic primitive). The section provides redundancy against Phase-1 bundle drop at peer receivers: a peer that didn't receive the leader's bundle directly can harvest σ_L^V from `i`'s witness section into the layer-`k` σ-pool (subject to the layer's chained-decryption gate when `k > 0`). Bandwidth is small (~96 bytes per σ partial × K × n; ≈ 1.5 KB cluster-wide per round at K=4, n=4). The mechanism does **not** address V-drop — σ_L^V verifies against `value_root(V)`, so a receiver lacking V cannot use a witnessed σ_L^V; receivers without V locally still rely on gossipsub Phase-1 re-flood (cross-round propagation) for V itself.
 
-Auth-envelope binding: `(protocol_tag = "OBFTR-v1", message_kind = "commit", cluster_id, slot, round r, operator_id i, onion_payload, nr_partials)` signed by `i`'s operator-identity key. Emitted at most once per operator per round.
+Auth-envelope binding: `(protocol_tag = "OBFTR-v1", message_kind = "commit", cluster_id, slot, round r, operator_id i, onion_payload, nr_partials, sigma_L_witnesses)` signed by `i`'s operator-identity key. Emitted at most once per operator per round.
 
 Each operator includes per layer based on the three-state model from Phase 1:
 
@@ -287,10 +288,13 @@ nrs[k]  for k in [0, K)                        # NR pools, indexed by nr_tag_k (
 for k in [0, K):
     # Aggregate σ pool at layer k from all rounds' broadcasts so far.
     sigs[k] = {σ_{L_k}^V(V_{L_k}) from Phase 1, if valid}
+            ∪ {σ_{L_k}^V(V_{L_k}) from peer KindCommit_r witness sections at layer k (any round so far), if valid}
             ∪ {σ_j^V(V) from received layer-k onion contents on any value V}
               (decrypted via accumulated NR-decryption keys at layers 0..k-1, if k > 0)
-            # deduplicated per operator: leader's Phase-1 σ and onion σ from
-            # the same operator collapse to one partial.
+            # deduplicated per operator: leader's Phase-1 σ, witness-section
+            # copies of σ_L^V (which collapse to identical bytes across peer
+            # KindCommit_r messages from any round), and onion σ from the same
+            # operator all collapse to one partial.
             # Per Pigeonhole 2, at most one V can have qV partials cluster-wide,
             # so partition sigs[k] by V and check each.
 
@@ -420,7 +424,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 - **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Two distinct per-round cutoffs operationalize this: `T_broadcast_max_r = T_commit_r − 2 BTT` (leader broadcast deadline, round 1 only) and `T_accept_max_r = T_commit_r + Δ_2 − 1 BTT` (per-round receiver acceptance horizon). Round `r` boundary is at `T_commit_r + Δ_2 + Δ_2.5 + Δ_3`; the slot's hard wall is the relay-submission deadline `T_relay_cutoff − T_submit`. Safety holds against arbitrary network adversaries; only liveness depends on synchrony.
 
   **OBFTR's R-round absorption window** = `T_accept_max_R − T_broadcast_max_1`:
-  - Per-round absorption (single round, ignoring cross-round retention): `Δ_2 + 1 BTT`. Concrete: ~`3 BTT` ≈ 450ms at Config A with recommended `Δ_2 = 2 BTT`.
+  - Per-round absorption (single round, ignoring cross-round retention): `Δ_2 + 1 BTT`. Concrete: ~`3 BTT` ≈ 600ms at Config A with recommended `Δ_2 = 2 BTT`.
   - Cross-round retention extends absorption by `(R − 1) · (Δ_2 + Δ_2.5 + Δ_3 + Δ_reflood)` (each additional round adds its own per-round-window worth of inter-round time before its acceptance horizon fires).
   - At R=2 Config A with recommended Δ_2: total absorption ≈ `7 BTT + Δ_3` ≈ 1500ms — roughly 2.5× a single round's window.
 
@@ -640,7 +644,7 @@ The slot misses under any of:
 
   Two variants, with different statuses after Defer removal:
 
-  **Variant A — withhold-then-fake-σ (closed by Defer removal).** Earlier OBFT-family designs included a Defer state with a "no-V fallback" rule: receivers without V deferred their NR-decision based on observed peer σ-claims. That rule was the structural enabler of an attack where a byzantine L_0 withheld Phase-1 from *all* honest, emitted an auth-signed fake σ-claim in Phase 2, then selectively delivered Phase-1 late to one honest — engineering a deadlock via Defer→force-NR pacing. The current OBFTR removes Defer: receivers without V at `T_commit_r` immediately NR per the silent-leader rule each round, so a byzantine that withholds Phase-1 produces NR-pool = 3 = qEnc → NR-quorum at L_0 → clean fall-through to L_1 in round 1.
+  **Variant A — withhold-then-fake-σ (closed as a side-effect of Defer removal).** Earlier OBFT-family designs included a Defer state with a "no-V fallback" rule: receivers without V deferred their NR-decision based on observed peer σ-claims. That rule was the structural enabler of an attack where a byzantine L_0 withheld Phase-1 from *all* honest, emitted an auth-signed fake σ-claim in Phase 2, then selectively delivered Phase-1 late to one honest — engineering a deadlock via Defer→force-NR pacing. The current OBFTR removes Defer **primarily for spec/wire/EKM simplification** (3-state vs 4-state commitment lattice, single `KindCommit_r` emission per round vs multi-emission per round, no auth-only-retention pre-state, no transitional EKM events — same motivation as in [bare OBFT](OBFT.md#where-this-came-from)); closure of this attack is a structural side-effect of that removal, not its motivating reason. With Defer gone, receivers without V at `T_commit_r` immediately NR per the silent-leader rule each round, so a byzantine that withholds Phase-1 produces NR-pool = 3 = qEnc → NR-quorum at L_0 → clean fall-through to L_1 in round 1.
 
   **Variant B — selective Phase-1 delivery (still open).** A byzantine that broadcasts Phase-1 to exactly one honest (rather than withholding) σ-locks via their own Phase-1 σ_V, and the receiving honest σ-locks too. Cluster pools then sit at σ-pool = 2 (recipient + byz σ_V) and NR-pool = 2 (the two no-V honest; byz and recipient σ-locked, can't NR). Neither reaches qV/qEnc=3; the slot misses. **This is an algebraic limit at f=1, n=4** for the h_V = 1 case (h_V = number of honest operators with V at round-R cutoff): σ-quorum needs h_V ≥ 2 (since byz's σ_V contributes 1, total = h_V + 1); NR-quorum (with byz σ-locked) needs h_V = 0 (since 3 − h_V honest NR). The intermediate h_V = 1 fails both. Generalizes at higher f: the deadlock zone is `0 < h_V < 2f`.
 
@@ -752,7 +756,7 @@ R=1 uses the full 2.0s budget for one extended round. With per-round single-emis
 
 K=3: 3 fall-through layers (L_0 → L_1 → L_2). K=4: 4 layers (+L_3). Same timing — Phase 2/2.5/3 don't depend on K — but K=4 has more fall-through depth and ~3KB extra bandwidth.
 
-**Bandwidth (healthy):** ~24 KB at K=3, ~27 KB at K=4. No round-2 overhead (single round).
+**Bandwidth (healthy):** ~25 KB at K=3, ~28 KB at K=4 (includes σ_L^V witness section ≈ +1.5 KB at K=4). No round-2 overhead (single round).
 
 #### OBFTR(n=4, K=3, R=2) and OBFTR(n=4, K=4, R=2)
 
@@ -773,7 +777,7 @@ R=2 splits the 2.0s budget into two rounds with new leaders broadcasting in roun
 
 **Recovery scope.** K-layer fall-through within each round + per-round retry. Bundles late at round-1's `T_commit_1` may be picked up in round 2 if they propagate by `T_commit_2`. Per-round commitments are independent (no cross-round σ-or-NR exclusivity), so an operator who NR-emitted in round 1 may σ-emit in round 2 if the leader's bundle finally propagates.
 
-**Bandwidth (healthy):** ~24 KB at K=3, ~27 KB at K=4. **+~24-27 KB for round-2 KindCommit_2** if round 1 fails (~50 KB total in failure case).
+**Bandwidth (healthy):** ~25 KB at K=3, ~28 KB at K=4 (includes σ_L^V witness section ≈ +1.5 KB at K=4). **+~25-28 KB for round-2 KindCommit_2** if round 1 fails (~52 KB total in failure case).
 
 #### QBFT(n=4, R=2) with `RT_QBFT = 1s`
 
@@ -801,10 +805,10 @@ QBFT round structure: PROPOSE → PREPARE → COMMIT → post-consensus partial-
 
 | Setup | Final round ends | Submission headroom | V-delivery absorption | Recovery scope | Bandwidth (healthy / failure) |
 |---|---|---|---|---|---|
-| OBFTR(K=3, R=1) | 2.30s | 1.70s | ~2.0s (continuous mesh) | 3-layer fall-through; soft partition absorption via long Phase 2 | ~24 KB / n/a |
-| OBFTR(K=4, R=1) | 2.30s | 1.70s | ~2.0s (continuous mesh) | 4-layer fall-through; soft partition absorption | ~27 KB / n/a |
-| OBFTR(K=3, R=2) ★ | 3.10s | 0.90s | ~2.0s (across rounds + explicit re-flood) | 3-layer fall-through + explicit re-flood retry; robust against mesh failures | ~24 KB / ~45 KB |
-| OBFTR(K=4, R=2) | 3.10s | 0.90s | ~2.0s (across rounds + explicit re-flood) | 4-layer fall-through + explicit re-flood retry | ~27 KB / ~50 KB |
+| OBFTR(K=3, R=1) | 2.30s | 1.70s | ~2.0s (continuous mesh) | 3-layer fall-through; soft partition absorption via long Phase 2 | ~25 KB / n/a |
+| OBFTR(K=4, R=1) | 2.30s | 1.70s | ~2.0s (continuous mesh) | 4-layer fall-through; soft partition absorption | ~28 KB / n/a |
+| OBFTR(K=3, R=2) ★ | 3.10s | 0.90s | ~2.0s (across rounds + explicit re-flood) | 3-layer fall-through + explicit re-flood retry; robust against mesh failures | ~25 KB / ~47 KB |
+| OBFTR(K=4, R=2) | 3.10s | 0.90s | ~2.0s (across rounds + explicit re-flood) | 4-layer fall-through + explicit re-flood retry | ~28 KB / ~52 KB |
 | QBFT(R=2, RT=1s) | 3.00s | 1.00s | n/a (PROPOSE-driven) | Round-change with new V — covers view-divergence (validity, equivocation) | ~14 KB / ~28 KB |
 
 ★ = recommended default.
@@ -958,10 +962,10 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | EKM persistent partial-sig cache | Required (cached σ partial must survive operator restart for cross-round re-emission) | **Not required** |
 | EKM deterministic re-signing fallback | Required | **Not required** |
 | Partial-synchrony envelope | `R · P99` (e.g., `2·P99` at R=2) | `P99` (single round) |
-| Slot budget at K=4, P99=150ms | Ends at slot_start + 3.50s (with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 1.90s — saves ~1.6s |
-| Submission headroom (4s relay cutoff) | 0.50s (tight) | 2.10s |
-| Bandwidth (healthy, n=4, K=4) | ~27 KB | ~27 KB (same) |
-| Bandwidth (worst case at R=2 with round-1 failure) | ~50 KB | n/a (no round 2) |
+| Slot budget at K=4, BTT=200ms | Ends at slot_start + 3.10s (with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 2.00s — saves ~1.1s |
+| Submission headroom (4s relay cutoff) | 0.90s | 2.00s |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB | ~28 KB (same; both include the σ_L^V witness section ≈ +1.5 KB) |
+| Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB | n/a (no round 2) |
 | High-P99 fit (P99 = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |
 
 **When to choose which:**
@@ -1000,8 +1004,8 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 | RTTs to signed output (min, healthy) | 3 (consensus) + 1 (post-consensus) ≈ 4 | 2 (Phase 1 + Phase 2) |
 | Termination guarantee | Eventually-terminating across rounds (under partial synchrony) | Conditional on `R · P99 ≥ real_propagation`; tunable via R |
 | Safety posture | Honest-majority (`2f+1` honest) + correct quorum-certificate verification | Honest-majority cryptographic via `qEnc = qV = 2f+1` + chained IBE + EKM-enforced per-operator commitments. Same trust posture as QBFT — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). |
-| Bandwidth (1 round, healthy n=4) | ~14 KB | ~22 KB |
-| Bandwidth (1 round failure n=4) | +12 KB per round + a full additional round on top | +~21 KB for round 2 re-flood (only if round 1 failed) |
+| Bandwidth (1 round, healthy n=4) | ~14 KB | ~23 KB (includes σ_L^V witness section ≈ +1.5 KB) |
+| Bandwidth (1 round failure n=4) | +12 KB per round + a full additional round on top | +~22 KB for round 2 re-flood (only if round 1 failed; includes round-2 σ_L^V witness re-emit) |
 | Latency (healthy, n=4) | ~750 ms | ~250 ms (Config A) — see [Timing budget](#timing-budget--concrete-configurations) for higher-D configurations |
 | Latency (1 round failure, n=4) | ~3.0 s (round-1 timeout 2s + round-2 success ~750 ms) | ~500 ms (Config A: round 1 fail at ~250 ms + round 2 succeed at ~250 ms) |
 | Latency (2 round failures, n=4) | Misses 4s relay cutoff | ~750 ms (Config A; round 1, 2 fail, round 3 succeed if R ≥ 3) |
@@ -1176,14 +1180,14 @@ Measured from `T_commit_1` (mini-consensus start). At Config A (P99=150ms, δ=50
 
 | Scenario | Time | Mechanism |
 |---|---|---|
-| Healthy fast path: round-1 L_Bid σ-quorum reaches early | ~Δ_minicon + 1 BTT ≈ 450ms | Mini-consensus + 1 RTT in round-1 Phase 2; reconstruction at L_Bid plaintext |
-| Healthy completion at L_Bid (canonical, round 1) | ~Δ_minicon + Δ_2 + Δ_3 ≈ 850ms | Round-1 full Phase 2 + Phase 3 |
-| Mini-consensus fails → fall-through to L_0 in round 1 | ~Δ_minicon + Δ_2 + Δ_3 ≈ 850ms | NR-quorum at L_Bid; round-1 walk to L_0 |
-| Round-1 fails (e.g., partition at L_Bid + L_0..L_{K-1}); round-2 succeeds | ~Δ_minicon + 2 × per-round-budget ≈ 1400-1500ms | OBFTR's standard R-round retry; mini-consensus result reused |
-| Multi-leader silent within budget (K-1 = 3) at K=4 | ~Δ_minicon + per-round Phase 3 ≈ 850-1000ms | K'-layer walk in round-1 Phase 3 (in-round; sequential local decryption) |
+| Healthy fast path: round-1 L_Bid σ-quorum reaches early | ~Δ_minicon + 1 BTT ≈ 600ms | Mini-consensus + 1 RTT in round-1 Phase 2; reconstruction at L_Bid plaintext |
+| Healthy completion at L_Bid (canonical, round 1) | ~Δ_minicon + Δ_2 + Δ_3 ≈ 1100ms | Round-1 full Phase 2 + Phase 3 |
+| Mini-consensus fails → fall-through to L_0 in round 1 | ~Δ_minicon + Δ_2 + Δ_3 ≈ 1100ms | NR-quorum at L_Bid; round-1 walk to L_0 |
+| Round-1 fails (e.g., partition at L_Bid + L_0..L_{K-1}); round-2 succeeds | ~Δ_minicon + 2 × per-round-budget ≈ 1900-2100ms | OBFTR's standard R-round retry; mini-consensus result reused |
+| Multi-leader silent within budget (K-1 = 3) at K=4 | ~Δ_minicon + per-round Phase 3 ≈ 1100-1300ms | K'-layer walk in round-1 Phase 3 (in-round; sequential local decryption) |
 | L_Bid 2-1-byz-defect or verdict-equivocation | slot misses (R-invariant) | Deadlock at L_Bid blocks fall-through; cross-round σ-locks prevent recovery |
 
-Best (success) ≈ 450ms (round-1 fast); worst (success within R=2) ≈ 1500ms; ~3× spread. Healthy-path is +Δ_minicon vs bare OBFTR.
+Best (success) ≈ 600ms (round-1 fast); worst (success within R=2) ≈ 2100ms; ~3.5× spread. Healthy-path is +Δ_minicon vs bare OBFTR.
 
 ### Comparison with bare OBFTR
 
@@ -1194,12 +1198,12 @@ Best (success) ≈ 450ms (round-1 fast); worst (success within R=2) ≈ 1500ms; 
 | Mini-consensus scope | n/a | Slot-level (once); V_LBid fixed across all R rounds |
 | Wire kinds | Phase1Bundle, KindCommit_r, KindLCClaim, KindCertificate | + KindBid, KindBidVerdict |
 | Slashing-evidence rules | OBFTR base | + Rule 7 bid equivocation, + Rule 8 verdict equivocation |
-| Healthy-path latency (round-1, post-T_commit_1) | ~500-650ms | ~750-850ms (+Δ_minicon) |
-| Best-case latency | ~150-300ms | ~450ms |
-| Worst-case latency at R=2 (success) | ~1.5s | ~1.5s |
-| Time-to-completion spread | ~4-5× best/worst | ~3× best/worst |
+| Healthy-path latency (round-1, post-T_commit_1) | ~700-900ms | ~1100-1300ms (+Δ_minicon) |
+| Best-case latency | ~200-400ms | ~600ms |
+| Worst-case latency at R=2 (success) | ~2.0s | ~2.1s |
+| Time-to-completion spread | ~4-5× best/worst | ~3.5× best/worst |
 | Bandwidth (n=4, K=4 healthy) | ~30-40 KB | ~35-45 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
-| Submission headroom (4s cutoff, R=2) | ~2.85s | ~2.5s |
+| Submission headroom (4s cutoff, R=2) | ~0.9s | ~0.5s |
 | EKM coordination | OBFTR's cross-round atomic coordinator | Same (mini-consensus verdicts don't consume EKM) |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |

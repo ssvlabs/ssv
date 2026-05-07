@@ -17,7 +17,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 - Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [OBFT](OBFT.md) saves 200-600ms but exposes the closed-here failure modes.
 - General-purpose state-machine replication where decision *agreement* across operators (not just *output*) is required. 2abOBFT (like the rest of the OBFT family) gives a unique cluster-wide *output* via cryptographic safety; honest operators may locally observe different intermediate states without affecting the output.
 - Scenarios requiring host-validity-divergence recovery in 2-2 splits at f=1 n=4 (still Class A; the witness phase narrows the divergence window but cannot eliminate it). [QBFT](#a3--comparison-with-bare-obft-and-qbft) is the appropriate choice when validity is meaningfully unstable across the consensus window.
-- Sustained partition tails beyond the absorption window (`Δ_2a + 1 BTT` ≈ 450ms at Config A recommended). Multi-round extensions are a future direction.
+- Sustained partition tails beyond the absorption window (`Δ_2a + 1 BTT` ≈ 600ms at Config A recommended). Multi-round extensions are a future direction.
 
 ## Setting
 
@@ -399,7 +399,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 
   **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + 1 BTT`:
   - At `Δ_2a = 1 BTT` (BFT-minimum): `2 BTT` = 400ms at Config A.
-  - At `Δ_2a = 2 BTT` (recommended): `3 BTT` ≈ 450ms at Config A.
+  - At `Δ_2a = 2 BTT` (recommended): `3 BTT` ≈ 600ms at Config A.
 
   Real propagation > absorption window is Class A "sustained partition" — out of envelope by definition.
 
@@ -611,7 +611,7 @@ Each piece of evidence is verifiable in isolation (signed by the offending opera
 
 The slot misses (no V signature is produced) under any of the following.
 
-- **[Class A]** **Sustained partition (real propagation > absorption window)** — violates assumption 2 (partial synchrony) under 2abOBFT's framing (absorption = `Δ_2a + 1 BTT`, ≈ 450ms at Config A recommended). Slot misses cleanly. No safety violation.
+- **[Class A]** **Sustained partition (real propagation > absorption window)** — violates assumption 2 (partial synchrony) under 2abOBFT's framing (absorption = `Δ_2a + 1 BTT`, ≈ 600ms at Config A recommended). Slot misses cleanly. No safety violation.
 - **[Class A]** **More than `f` faults** — violates assumption 1 (BFT trust bound). Slot misses regardless of protocol structure.
 - **[Class A]** **Validity-divergence at the 2-2 boundary at f=1 n=4** — re-org lands inside Phase-1-to-Phase-2a window and produces a 2-σ vs 2-NV honest split. Both σ-eligibility and NR-eligibility quorums short of threshold; cluster falls through to L_1 (per rule). If L_1 also exhibits the same divergence (same re-org affects both layers' parent_roots), slot misses cleanly. **In practice, backup leaders fetch from deeper-confirmed parents and rarely share L_0's re-org exposure.**
 - **[Class A]** **Backup-leader cascade failure** — every leader at every layer fails (silent OR equivocates in non-recoverable patterns at every layer). At K ≥ f+1, byzantines alone (within f-bound) cannot cause this — pigeonhole guarantees ≥ 1 honest leader. So this typically requires either >f faults (Class A) or coincident non-byzantine independent failures.
@@ -657,7 +657,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + chained IBE + EKM-enforced per-operator commitments (single-σ-V per (slot, layer), σ-XOR-NR per layer), holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic. Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional: consensus expected to complete by reconstruction target if real propagation between leader broadcast and any honest first-observation ≤ absorption window `Δ_2a + 1 BTT` (≈ 450ms at Config A recommended) and ≤ f operators byzantine/offline. |
+| Termination (output guaranteed) | Conditional: consensus expected to complete by reconstruction target if real propagation between leader broadcast and any honest first-observation ≤ absorption window `Δ_2a + 1 BTT` (≈ 600ms at Config A recommended) and ≤ f operators byzantine/offline. |
 | Equivocation detection | Yes — leaders sign Phase-1 envelopes; conflicting signed candidates form self-contained slashable evidence (Rule 2) |
 | Equivocation recovery | **Structural for 1-1-1, all-equivocation-NR, h_V=1 patterns** via convergence-rule fall-through. **2-1-byz-defect regresses** vs single-Phase-2 protocols (slot misses at L_0; Rule-6 evidence). |
 | Validity-divergence recovery | **Majority recovers** (e.g., 3-of-4 σV vs 1 NV at f=1 n=4 reaches σ-quorum at L_0). 2-2 split at f=1 n=4 still slot-misses cleanly (no majority). |
@@ -666,7 +666,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Operators reach the same decision | Not necessarily — only the *output* is unique cluster-wide. Same as OBFT-family. |
 | Built-in leader fallback | Yes (K-layer fall-through within Phase 3's reconstruction walk; K configurable, K = n recommended for proposer duty) |
 | Round-change recovery | No — single-round design. Late re-flood within Phase-2a's absorption window is the only within-slot partition-recovery mechanism. |
-| Partial-synchrony absorption window | `Δ_2a + 1 BTT` (single round) — ≈ 450ms at Config A recommended. |
+| Partial-synchrony absorption window | `Δ_2a + 1 BTT` (single round) — ≈ 600ms at Config A recommended. |
 | Healthy-path latency (post-`T_commit`) | ~1100ms at Config A recommended (Δ_2a=Δ_2b=2 BTT=400ms each + Δ_3=300ms); ~700ms at minimum sizing (Δ_2a=Δ_2b=1 BTT=200ms each + Δ_3=300ms) |
 | Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +600ms at recommended sizing (extra Phase 2a window of 400ms + Δ_3 +200ms vs single Phase 2); +400ms at minimum sizing (both have Phase 2 window summing to 1 BTT-equivalent, plus Δ_3 difference) |
 | EKM complexity | Lowest in the OBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
@@ -804,13 +804,13 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Equivocation 2-1, byz silent | Succeeds at L_0 (Phase-1 σ_V locked) | Falls through to L_1 (one extra layer) |
 | Equivocation 2-1, byz defects | Succeeds at L_0 (Phase-1 σ_V locked) | **Slot misses (regression)** — Rule 6b evidence |
 | Non-leader verdict-equivocation at marginal h_V | n/a (no verdicts in OBFT) | **Slot misses (regression)** — Rule 6a evidence |
-| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ variant by Defer removal); selective Phase-1 delivery still slot-misses (algebraic limit at f=1, n=4) | Falls through to L_1 ✓ |
+| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ variant — closed as a side-effect of Defer removal, which was motivated primarily by spec/wire/EKM simplification, not by attack closure; see [OBFT §Where this came from](OBFT.md#where-this-came-from)); selective Phase-1 delivery still slot-misses (algebraic limit at f=1, n=4) | Falls through to L_1 ✓ |
 | Validity-divergence at majority | Slot misses (Class A) | Recovered ✓ |
 | Validity-divergence at 2-2 boundary | Slot misses (Class A) | Slot misses (Class A — same algebraic limit) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) ✓ |
 | Mesh-flakiness | Class B | Mitigated ✓ |
-| Submission headroom (Config A recommended) | ~3.4s | ~2.85s |
-| Bandwidth (healthy, n=4, K=4) | ~27 KB | ~30 KB (+3 KB for verdicts) |
+| Submission headroom (Config A recommended) | ~2.0s | ~1.3s |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB (includes σ_L^V witness section ≈ +1.5 KB) | ~30 KB (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness) |
 | EKM complexity | Phase-1 σ_V + Phase-2 σ + NR coordination | Phase-2b σ XOR NR only — simplest in the family |
 | Slashing-evidence rules | 5 | 7 (Rules 1-5 inherited + Rule 6a verdict-vs-verdict cryptographic + Rule 6b verdict-vs-action gossipsub-pattern-quality) |
 
@@ -898,9 +898,9 @@ At SSV proposer-duty default budget (~4s relay cutoff with P99 = 150ms, δ = 50m
 | Aspect | bare OBFT | 2abOBFT | QBFT (RT=2s, current SSV) |
 |---|---|---|---|
 | Consensus budget | ~600ms | ~1100ms (recommended) | ~2.8s (2 rounds at RT=2s minimum sizing) |
-| Submission headroom | ~3.4s | ~2.9s | ~1.2s |
+| Submission headroom | ~2.0s | ~1.3s | ~1.2s |
 | Healthy-path latency | ~600ms | ~1100ms | ~800ms |
-| Bandwidth (n=4, K=4 healthy) | ~27 KB | ~30 KB | ~14 KB |
+| Bandwidth (n=4, K=4 healthy) | ~28 KB | ~30 KB | ~14 KB |
 | Cryptographic primitives | BLS + threshold IBE/SWE | BLS + threshold IBE/SWE | BLS threshold |
 | Production maturity | spec only | spec only | SSV runs this today |
 
@@ -1059,7 +1059,7 @@ The same Class B residuals 2abOBFT exposes at the rotation layers also apply at 
 | L_Bid 2-1-byz-defect / verdict-equivocation | slot misses | Deadlock at L_Bid; same as 2abOBFT base's Class B regression |
 | 2-2 validity split | slot misses | Hard algebraic limit |
 
-Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then reconstruct); worst (success) ≈ 850ms; ~2× spread (same as bare 2abOBFT).
+Best ≈ 600ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then reconstruct); worst (success) ≈ 1100ms; ~2× spread (same as bare 2abOBFT).
 
 ### Comparison with bare 2abOBFT
 
@@ -1070,11 +1070,11 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 | Wire kinds | Phase1Bundle, KindVerdict, KindOnion2b, KindNR2b, KindCertificate | + KindBid (only one new wire kind — verdicts already cover per-layer in base) |
 | Slashing-evidence rules | 6 (Rules 1-6) | 7 (+ Rule 7 bid equivocation; Rule 6 covers L_Bid verdict-equivocation naturally) |
 | Healthy-path latency | ~700-850ms | **Same** |
-| Best-case latency | ~450ms | **Same** |
-| Worst-case latency (success) | ~850ms | **Same** |
+| Best-case latency | ~600ms | **Same** |
+| Worst-case latency (success) | ~1100ms | **Same** |
 | Time-to-completion spread | ~2× | **Same** |
 | Bandwidth (n=4, K=4 healthy) | ~30 KB | ~33 KB (+n bid envelopes; verdict envelope grows by 1 layer-entry; +1 chained encryption layer in onion) |
-| Submission headroom (4s cutoff) | ~3.15s | ~3.15s (no significant change) |
+| Submission headroom (4s cutoff) | ~1.3s | ~1.3s (no significant change) |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | 2abOBFT base recovery scope | **Same** (rotation layers unchanged) |
@@ -1114,7 +1114,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 | Convergence mechanism | Per-operator local view at `T_commit` based on retained V's | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
 | EKM coordination | Single signing event per (slot, layer) per operator (V-share + IBE-share) | Same — single signing event per (slot, layer) per operator at Phase-2b; verdict envelope is op-identity-signed (not threshold) and does not consume EKM slashing-protection |
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
-| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ via Defer removal); selective Phase-1 delivery still slot-misses | Recovered structurally |
+| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ — closed as a side-effect of simplification-driven Defer removal, not for attack closure; see [OBFT §Where this came from](OBFT.md#where-this-came-from)); selective Phase-1 delivery still slot-misses | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
 | Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 500ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 1100ms post-T_commit (+600ms for Phase-2a window + Δ_3 difference) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
@@ -1294,7 +1294,7 @@ This is wider mesh-flakiness mitigation than bare OBFT. The Phase-2a observation
 
 Real propagation > absorption window: bundles don't reach honest in time → all honest NR-pool short → slot misses cleanly. Same as OBFT.
 
-Variant C's absorption window is `Δ_2a + 1 BTT` (the Phase-2a-end horizon) — same shape as OBFT's `Δ_2 + 1 BTT`. At recommended sizing both are ~450ms at Config A.
+Variant C's absorption window is `Δ_2a + 1 BTT` (the Phase-2a-end horizon) — same shape as OBFT's `Δ_2 + 1 BTT`. At recommended sizing both are ~600ms at Config A.
 
 #### > f operators offline/byzantine (Class A — unchanged)
 
@@ -1570,8 +1570,8 @@ The implementation is broken into phases that can be staged across PRs:
 | EKM complexity | Per-(slot, layer, side) coordinator with cross-keypair atomicity | Same shape; one fewer concern (no Phase-1 σ_V to coordinate with Phase-2 σ) |
 | Wire format | Phase1Bundle, KindCommit, KindCertificate | + KindVerdict, KindOnion2b, KindNR2b (Phase-2b commit splits back into σ-side / NR-side because Phase-2a observation must complete before σ commitment) |
 | Slashing-evidence rules | 5 | 6 (Rule 6: verdict-vs-action equivocation, weakly slashable) |
-| Submission headroom (Config A) | 1.95s | 1.65s |
-| Bandwidth (healthy, n=4, K=4) | ~27 KB | ~30 KB (+3 KB for verdicts) |
+| Submission headroom (Config A) | 2.0s | 1.3s |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB (includes σ_L^V witness section ≈ +1.5 KB) | ~30 KB (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness) |
 
 ### What 2abOBFT does NOT close
 
