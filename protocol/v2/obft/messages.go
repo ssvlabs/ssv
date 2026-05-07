@@ -1,5 +1,10 @@
 package obft
 
+import (
+	"crypto/sha256"
+	"encoding/binary"
+)
+
 // Wire-shaped message types carried between operators in the three OBFT
 // envelope kinds (Phase1Bundle, KindCommit, KindCertificate).
 //
@@ -20,6 +25,11 @@ package obft
 // leader's σ_{L_k}^V counts toward the σ-pool at L_k together with non-leader
 // Phase-2 commit contributions.
 type Phase1Bundle struct {
+	// ClusterID identifies the cluster this bundle is for. Receivers reject
+	// bundles whose ClusterID doesn't match their instance's ClusterID
+	// (defense-in-depth against cross-cluster replay; the outer SSV envelope's
+	// MsgID also binds cluster context, so this is belt-and-braces).
+	ClusterID [32]byte
 	// OperatorID is the layer's leader (claimed; outer-layer sig verifies).
 	OperatorID OperatorID
 	// Height is the consensus-instance identifier (slot, in SSV).
@@ -68,6 +78,22 @@ type NRPartial struct {
 	PartialSig Signature
 }
 
+// LeaderSigmaWitness is a plaintext copy of the (layer, value, σ_L^V)
+// triple extracted from a Phase-1 bundle the emitting operator has retained.
+// Per spec §Phase 2 / Wire format and §Appendix C, every KindCommit carries
+// witnesses for every Phase-1 bundle the operator has retained at T_commit.
+//
+// Defense-in-depth: if gossipsub drops a Phase-1 bundle on some receiver P
+// but P sees a witness in another peer's KindCommit, P can re-hydrate the
+// leader's σ-side contribution and still reach σ-quorum at that layer.
+// (Does not address V-drop — see Appendix C.)
+type LeaderSigmaWitness struct {
+	Layer  int        // layer the witnessed bundle is for; in [0, K)
+	Leader OperatorID // claimed leader (must match cfg.Layers[Layer].Leader)
+	Value  Value      // the V the leader signed
+	SigmaV Signature  // leader's V-keypair σ partial on Value
+}
+
 // Commit is the wire payload carried in a single KindCommit message at
 // T_commit. It bundles the operator's σ-side per-layer contributions (the
 // K-layer onion: plaintext at L_0, chained-encrypted at deeper layers) plus
@@ -81,6 +107,7 @@ type NRPartial struct {
 // KindCommit propagate to all honest peers before Phase 3 reconstruction
 // begins.
 type Commit struct {
+	ClusterID  [32]byte
 	OperatorID OperatorID
 	Height     Height
 	// Layers has length K; layer k carries this operator's σ contribution
@@ -89,6 +116,11 @@ type Commit struct {
 	// NRPartials carries this operator's IBE partials for layers committed
 	// NR-side (silent-leader rule, equivocation rule, or NV).
 	NRPartials []NRPartial
+	// Witnesses carries plaintext (layer, value, σ_L^V) triples for every
+	// Phase-1 bundle this operator has retained. Lets receivers who missed
+	// the original Phase-1 broadcast still rehydrate the leader's σ
+	// contribution to their local σ-pool. Per spec §Phase 2 / §Appendix C.
+	Witnesses []LeaderSigmaWitness
 }
 
 // Certificate is the final-certificate wire payload (KindCertificate). Per
@@ -97,8 +129,9 @@ type Commit struct {
 // reconstruction can submit (V, S) downstream — protecting against the
 // "lone-reconstructor's beacon path fails" failure mode.
 type Certificate struct {
-	Height Height
-	Value  Value
+	ClusterID [32]byte
+	Height    Height
+	Value     Value
 	// Signature is the full reconstructed BLS signature on Value, verifiable
 	// against the cluster's V-keypair pubkey.
 	Signature Signature
@@ -111,4 +144,39 @@ type Output struct {
 	Layer     int
 	Value     Value
 	Signature Signature
+}
+
+// commitContentHash returns a SHA-256 hash of c's content fields, used by
+// ObserveCommit to dedup identical re-broadcasts vs flag distinct second
+// emissions.
+func commitContentHash(c *Commit) [32]byte {
+	h := sha256.New()
+	h.Write(c.ClusterID[:])
+	binary.Write(h, binary.BigEndian, uint64(c.OperatorID))
+	binary.Write(h, binary.BigEndian, uint64(c.Height))
+	binary.Write(h, binary.BigEndian, uint32(len(c.Layers)))
+	for _, el := range c.Layers {
+		binary.Write(h, binary.BigEndian, uint32(len(el.Value)))
+		h.Write(el.Value)
+		binary.Write(h, binary.BigEndian, uint32(len(el.Ciphertext)))
+		h.Write(el.Ciphertext)
+	}
+	binary.Write(h, binary.BigEndian, uint32(len(c.NRPartials)))
+	for _, p := range c.NRPartials {
+		binary.Write(h, binary.BigEndian, uint32(p.Layer))
+		binary.Write(h, binary.BigEndian, uint32(len(p.PartialSig)))
+		h.Write(p.PartialSig)
+	}
+	binary.Write(h, binary.BigEndian, uint32(len(c.Witnesses)))
+	for _, w := range c.Witnesses {
+		binary.Write(h, binary.BigEndian, uint32(w.Layer))
+		binary.Write(h, binary.BigEndian, uint64(w.Leader))
+		binary.Write(h, binary.BigEndian, uint32(len(w.Value)))
+		h.Write(w.Value)
+		binary.Write(h, binary.BigEndian, uint32(len(w.SigmaV)))
+		h.Write(w.SigmaV)
+	}
+	var out [32]byte
+	copy(out[:], h.Sum(nil))
+	return out
 }

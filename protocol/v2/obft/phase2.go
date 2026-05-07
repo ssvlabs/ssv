@@ -118,11 +118,67 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 	}
 
 	i.committed = true
+
+	// Self-observe own contributions so the local Resolve pool counts them.
+	// Without this, a non-leader operator's own σ partial never enters
+	// peerOnions/peerNR, so the pool tops out at n−1 cluster-wide and only
+	// the layer leader can locally reach qV. Symmetric to the Phase-1
+	// self-observe in BuildPhase1Bundle.
+	for k, el := range layers {
+		if len(el.Value) == 0 {
+			continue
+		}
+		// Own-leader layers: σ_V is already in i.bundles via Phase-1
+		// self-observe; BuildOwnCommit emits no redundant onion at L_k
+		// when leader, so this branch is skipped by the empty-Value check
+		// above. (Belt-and-braces.)
+		if i.cfg.Layers[k].Leader == i.ownOperatorID {
+			continue
+		}
+		if i.peerOnions[k] == nil {
+			i.peerOnions[k] = make(map[OperatorID][]EncryptedLayer)
+		}
+		if len(i.peerOnions[k][i.ownOperatorID]) == 0 {
+			i.peerOnions[k][i.ownOperatorID] = []EncryptedLayer{{
+				Value:      append(Value{}, el.Value...),
+				Ciphertext: append([]byte{}, el.Ciphertext...),
+			}}
+		}
+	}
+	for _, p := range nrPartials {
+		if i.peerNR[p.Layer] == nil {
+			i.peerNR[p.Layer] = make(map[OperatorID]Signature)
+		}
+		if _, exists := i.peerNR[p.Layer][i.ownOperatorID]; !exists {
+			i.peerNR[p.Layer][i.ownOperatorID] = append(Signature{}, p.PartialSig...)
+		}
+	}
+
+	// Witnesses: include every Phase-1 bundle this operator has retained
+	// (per spec §Phase 2 / Wire format / §Appendix C). Enables receivers who
+	// missed the original Phase-1 broadcast to rehydrate the leader's σ
+	// contribution from any peer's KindCommit.
+	var witnesses []LeaderSigmaWitness
+	for layer, leaderMap := range i.bundles {
+		for leader, retained := range leaderMap {
+			for _, b := range retained {
+				witnesses = append(witnesses, LeaderSigmaWitness{
+					Layer:  layer,
+					Leader: leader,
+					Value:  append(Value{}, b.Value...),
+					SigmaV: append(Signature{}, b.SigmaV...),
+				})
+			}
+		}
+	}
+
 	return &Commit{
+		ClusterID:  i.cfg.ClusterID,
 		OperatorID: i.ownOperatorID,
 		Height:     i.cfg.Height,
 		Layers:     layers,
 		NRPartials: nrPartials,
+		Witnesses:  witnesses,
 	}, nil
 }
 
@@ -135,16 +191,38 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 //   - extracts σ entries (one per σ-state layer) into peerOnions, applying the
 //     L_0 fake-σ check (Rule 5) when a retained V exists at L_0;
 //   - extracts NR partials (one per NR-state layer) into peerNR;
-//   - cross-checks σ + NR at the same layer from the same operator (Rule 1).
-//
-// On a second KindCommit from the same operator: the layers are checked against
-// any already-recorded entries; distinct entries record cross-onion
-// equivocation evidence.
+//   - cross-checks σ + NR at the same layer from the same operator (Rule 1),
+//     including the leader's own Phase-1 σ_V at their own layer;
+//   - flags a structurally-distinct second KindCommit from the same operator
+//     as cross-onion equivocation (top-level dedup via content hash).
 func (i *Instance) ObserveCommit(c *Commit) error {
 	if err := ValidateCommit(c, i.cfg); err != nil {
 		return err
 	}
 	K := i.cfg.K()
+
+	// Top-level dedup. Identical re-broadcasts (gossipsub) are no-ops; the
+	// FIRST distinct second hash from the same operator is byzantine evidence
+	// (single-emit rule, spec §Phase 2). All distinct hashes are retained so
+	// later redeliveries of any prior variant remain no-ops.
+	curHash := commitContentHash(c)
+	seen := i.peerCommitHashes[c.OperatorID]
+	if seen == nil {
+		i.peerCommitHashes[c.OperatorID] = map[[32]byte]struct{}{curHash: {}}
+	} else {
+		if _, ok := seen[curHash]; ok {
+			return nil // identical re-broadcast
+		}
+		i.recordEvidence(Evidence{
+			Rule:       EvidenceCrossOnionEquivocation,
+			OperatorID: c.OperatorID,
+			Layer:      -1, // -1 = "spans the whole commit", not per-layer
+		})
+		seen[curHash] = struct{}{}
+		// Continue processing so any new content (idempotent per-content
+		// dedup below) is collected and per-layer Rule 1/3 checks fire on
+		// new entries.
+	}
 
 	// σ-side per layer.
 	for k := 0; k < K; k++ {
@@ -189,6 +267,29 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 			})
 		}
 
+		// Cross-σ check vs the leader's Phase-1 σ_V at this layer (Rule 3
+		// extension). A byzantine layer leader could σ-emit V_a via the
+		// Phase-1 bundle and σ_V on V_b via this Phase-2 onion — single-σ-V
+		// exclusivity violation that spans phases.
+		if c.OperatorID == i.cfg.Layers[k].Leader {
+			for _, b := range i.bundles[k][c.OperatorID] {
+				if !bytes.Equal(b.Value, el.Value) {
+					i.recordEvidence(Evidence{
+						Rule:       EvidenceCrossOnionEquivocation,
+						OperatorID: c.OperatorID,
+						Layer:      k,
+						CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
+							ValueA:   append(Value{}, b.Value...),
+							ValueB:   append(Value{}, el.Value...),
+							PartialA: append(Signature{}, b.SigmaV...),
+							PartialB: append(Signature{}, el.Ciphertext...),
+						},
+					})
+					break
+				}
+			}
+		}
+
 		entryCopy := EncryptedLayer{
 			Value:      append(Value{}, el.Value...),
 			Ciphertext: append([]byte{}, el.Ciphertext...),
@@ -218,9 +319,10 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 
 		// Cross-signing detection (Rule 1): σ + NR at the same (operator,
-		// layer)? An honest operator commits exclusively per layer within a
-		// single KindCommit; this would only fire for a malformed/byzantine
-		// commit that emits both at the same layer.
+		// layer)? Fires whether the σ side is a Phase-2 onion (this entry)
+		// or — for the layer's leader — a Phase-1 bundle σ_V already
+		// recorded; Rule 1's NR side is what the σ-side onion path collides
+		// with here.
 		if i.peerNR[k] != nil {
 			if nrSig, hasNR := i.peerNR[k][c.OperatorID]; hasNR {
 				i.recordEvidence(Evidence{
@@ -260,7 +362,9 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		i.peerNR[p.Layer][c.OperatorID] = append(Signature{}, p.PartialSig...)
 
 		// Rule 1 — cross-signing detection: did this operator already have
-		// a σ entry at this layer in this same commit (or an earlier one)?
+		// a σ entry at this layer (in an onion or, for the layer's leader,
+		// in the Phase-1 bundle)? Either case is a Rule 1 violation per
+		// spec §Slashing-evidence (cross-phase exclusivity).
 		if onionEntries := i.peerOnions[p.Layer][c.OperatorID]; len(onionEntries) > 0 {
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceCrossSigning,
@@ -272,10 +376,43 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 					NRPartial:    append(Signature{}, p.PartialSig...),
 				},
 			})
+		} else if c.OperatorID == i.cfg.Layers[p.Layer].Leader {
+			if bundles := i.bundles[p.Layer][c.OperatorID]; len(bundles) > 0 {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceCrossSigning,
+					OperatorID: c.OperatorID,
+					Layer:      p.Layer,
+					CrossSigning: &CrossSigningEvidence{
+						SigmaPartial: append(Signature{}, bundles[0].SigmaV...),
+						SigmaValue:   append(Value{}, bundles[0].Value...),
+						NRPartial:    append(Signature{}, p.PartialSig...),
+					},
+				})
+			}
 		}
 	}
 
-	i.peerCommitted[c.OperatorID] = true
+	// Witnesses: rehydrate leader-σ_V contributions from any retained
+	// Phase-1 bundle the emitter packed. Treats each witness as if it were
+	// a Phase-1 bundle observation; ObservePhase1Bundle handles σ-verification
+	// and the 2-V retention bound (firing Rule 2 evidence on a distinct
+	// second V at same (layer, leader)). observedOffset=0 bypasses the
+	// Phase-1 acceptance window — witnesses are admissible past T_commit
+	// since that's the whole point.
+	for _, w := range c.Witnesses {
+		bundle := &Phase1Bundle{
+			ClusterID:  c.ClusterID,
+			OperatorID: w.Leader,
+			Height:     c.Height,
+			Layer:      w.Layer,
+			Value:      append(Value{}, w.Value...),
+			SigmaV:     append(Signature{}, w.SigmaV...),
+		}
+		// Errors are best-effort: a malformed/unverifiable witness is
+		// dropped silently rather than failing the whole Commit.
+		_ = i.ObservePhase1Bundle(bundle, 0)
+	}
+
 	return nil
 }
 

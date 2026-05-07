@@ -11,6 +11,7 @@ import (
 
 func TestPhase1Bundle_Roundtrip(t *testing.T) {
 	in := &obft.Phase1Bundle{
+		ClusterID:  [32]byte{0xAA, 0xBB, 0xCC, 0xDD},
 		OperatorID: 7,
 		Height:     12345,
 		Layer:      2,
@@ -23,6 +24,7 @@ func TestPhase1Bundle_Roundtrip(t *testing.T) {
 	env, err := Unwrap(bytes_)
 	require.NoError(t, err)
 	require.Equal(t, KindPhase1Bundle, env.Kind)
+	require.Equal(t, in.ClusterID, env.Phase1Bundle.ClusterID)
 	require.Equal(t, in.OperatorID, env.Phase1Bundle.OperatorID)
 	require.Equal(t, in.Height, env.Phase1Bundle.Height)
 	require.Equal(t, in.Layer, env.Phase1Bundle.Layer)
@@ -32,6 +34,7 @@ func TestPhase1Bundle_Roundtrip(t *testing.T) {
 
 func TestCommit_Roundtrip(t *testing.T) {
 	in := &obft.Commit{
+		ClusterID:  [32]byte{0x11, 0x22, 0x33},
 		OperatorID: 3,
 		Height:     999,
 		Layers: []obft.EncryptedLayer{
@@ -43,6 +46,10 @@ func TestCommit_Roundtrip(t *testing.T) {
 		NRPartials: []obft.NRPartial{
 			{Layer: 1, PartialSig: []byte("nr-sig-layer-1")},
 		},
+		Witnesses: []obft.LeaderSigmaWitness{
+			{Layer: 0, Leader: 1, Value: []byte("V0"), SigmaV: []byte("sigma-from-leader-1")},
+			{Layer: 2, Leader: 3, Value: []byte("V2"), SigmaV: []byte("sigma-from-leader-3")},
+		},
 	}
 	bytes_, err := WrapCommit(in)
 	require.NoError(t, err)
@@ -50,6 +57,7 @@ func TestCommit_Roundtrip(t *testing.T) {
 	env, err := Unwrap(bytes_)
 	require.NoError(t, err)
 	require.Equal(t, KindCommit, env.Kind)
+	require.Equal(t, in.ClusterID, env.Commit.ClusterID)
 	require.Equal(t, in.OperatorID, env.Commit.OperatorID)
 	require.Equal(t, in.Height, env.Commit.Height)
 	require.Len(t, env.Commit.Layers, len(in.Layers))
@@ -64,10 +72,139 @@ func TestCommit_Roundtrip(t *testing.T) {
 		require.Equal(t, expected.Layer, got.Layer)
 		require.True(t, bytes.Equal(expected.PartialSig, got.PartialSig))
 	}
+	require.Len(t, env.Commit.Witnesses, len(in.Witnesses))
+	for i, expected := range in.Witnesses {
+		got := env.Commit.Witnesses[i]
+		require.Equal(t, expected.Layer, got.Layer)
+		require.Equal(t, expected.Leader, got.Leader)
+		require.True(t, bytes.Equal(expected.Value, got.Value), "witness %d Value mismatch", i)
+		require.True(t, bytes.Equal(expected.SigmaV, got.SigmaV), "witness %d SigmaV mismatch", i)
+	}
+}
+
+func TestCommit_Roundtrip_NoWitnesses(t *testing.T) {
+	// A commit with no witnesses still encodes/decodes (witness count = 0).
+	in := &obft.Commit{
+		OperatorID: 1,
+		Height:     1,
+		Layers:     []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+	}
+	b, err := EncodeCommit(in)
+	require.NoError(t, err)
+	out, err := DecodeCommit(b)
+	require.NoError(t, err)
+	require.Empty(t, out.Witnesses)
+}
+
+func TestEncodeCommit_RejectsTooManyWitnesses(t *testing.T) {
+	c := &obft.Commit{
+		Layers:    []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+		Witnesses: make([]obft.LeaderSigmaWitness, MaxWitnesses+1),
+	}
+	_, err := EncodeCommit(c)
+	require.ErrorContains(t, err, "max")
+}
+
+// ---- G3: wire-decode bounds checks on layer indices ----
+
+func TestDecodePhase1Bundle_RejectsLayerExceedingMaxLayers(t *testing.T) {
+	// Build a syntactically valid bundle with layer = MaxLayers+1.
+	in := &obft.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value: []byte("V"), SigmaV: []byte("s"),
+	}
+	encoded, err := EncodePhase1Bundle(in)
+	require.NoError(t, err)
+	// Patch the encoded layer field directly. Layout:
+	// [1 ver][8 tag][1 inner_kind][32 cluster][8 op][8 h][4 layer]...
+	// → layer at offset 1+8+1+32+8+8 = 58.
+	encoded[58] = 0xFF
+	encoded[59] = 0xFF
+	encoded[60] = 0xFF
+	encoded[61] = 0xFF
+	_, err = DecodePhase1Bundle(encoded)
+	require.ErrorContains(t, err, "exceeds MaxLayers")
+}
+
+// ---- Auth envelope: ProtocolTag + inner_kind binding ----
+
+func TestDecodePhase1Bundle_RejectsBadProtocolTag(t *testing.T) {
+	in := &obft.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value: []byte("V"), SigmaV: []byte("s"),
+	}
+	encoded, err := EncodePhase1Bundle(in)
+	require.NoError(t, err)
+	// ProtocolTag is at offset 1 (right after version). Corrupt the first byte.
+	encoded[1] = 'X'
+	_, err = DecodePhase1Bundle(encoded)
+	require.ErrorContains(t, err, "protocol tag mismatch")
+}
+
+func TestDecodePhase1Bundle_RejectsBadInnerKind(t *testing.T) {
+	in := &obft.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value: []byte("V"), SigmaV: []byte("s"),
+	}
+	encoded, err := EncodePhase1Bundle(in)
+	require.NoError(t, err)
+	// Inner kind is at offset 1+8 = 9. Set it to commit's kind (0x02).
+	encoded[9] = 0x02
+	_, err = DecodePhase1Bundle(encoded)
+	require.ErrorContains(t, err, "inner kind")
+}
+
+func TestDecodeCommit_RejectsBadInnerKind(t *testing.T) {
+	in := &obft.Commit{
+		OperatorID: 1, Height: 1,
+		Layers: []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+	}
+	encoded, err := EncodeCommit(in)
+	require.NoError(t, err)
+	// Inner kind at offset 9. Set to certificate's kind (0x03).
+	encoded[9] = 0x03
+	_, err = DecodeCommit(encoded)
+	require.ErrorContains(t, err, "inner kind")
+}
+
+func TestDecodeCertificate_RejectsBadProtocolTag(t *testing.T) {
+	in := &obft.Certificate{
+		Height:    1,
+		Value:     []byte("V"),
+		Signature: []byte("s"),
+	}
+	encoded, err := EncodeCertificate(in)
+	require.NoError(t, err)
+	encoded[3] = 'X'
+	_, err = DecodeCertificate(encoded)
+	require.ErrorContains(t, err, "protocol tag mismatch")
+}
+
+func TestDecodeCommit_RejectsNRPartialLayerExceedingMaxLayers(t *testing.T) {
+	// Manually craft a commit with a single NR partial whose layer is huge.
+	c := &obft.Commit{
+		OperatorID: 1, Height: 1,
+		Layers: []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+		NRPartials: []obft.NRPartial{
+			{Layer: 0, PartialSig: []byte("sig")},
+		},
+	}
+	encoded, err := EncodeCommit(c)
+	require.NoError(t, err)
+	// Layout: [1 ver][8 tag][1 inner_kind][32 cluster][8 op][8 h][2 layer count] = 60 bytes header.
+	// Then 1 layer with V="V" (4+1) + ciphertext "c" (4+1) = 10 bytes → 70.
+	// Then NR count uint16 at 70, then NR partial layer uint32 at 72.
+	encoded[72] = 0x00
+	encoded[73] = 0x00
+	encoded[74] = byte((MaxLayers + 1) >> 8)
+	encoded[75] = byte((MaxLayers + 1) & 0xFF)
+	_, err = DecodeCommit(encoded)
+	require.ErrorContains(t, err, "exceeds MaxLayers")
 }
 
 func TestCertificate_Roundtrip(t *testing.T) {
 	in := &obft.Certificate{
+		ClusterID: [32]byte{0xCA, 0xFE, 0xBA, 0xBE},
 		Height:    77,
 		Value:     []byte("decided value bytes"),
 		Signature: []byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
@@ -78,6 +215,7 @@ func TestCertificate_Roundtrip(t *testing.T) {
 	env, err := Unwrap(bytes_)
 	require.NoError(t, err)
 	require.Equal(t, KindCertificate, env.Kind)
+	require.Equal(t, in.ClusterID, env.Certificate.ClusterID)
 	require.Equal(t, in.Height, env.Certificate.Height)
 	require.True(t, bytes.Equal(in.Value, env.Certificate.Value))
 	require.True(t, bytes.Equal(in.Signature, env.Certificate.Signature))

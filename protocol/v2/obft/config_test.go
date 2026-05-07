@@ -82,3 +82,103 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 	require.Equal(t, 3, cfg.QV())
 	require.Equal(t, 3, cfg.QEnc())
 }
+
+// ---- M3: per-layer staggered broadcast deadlines (BroadcastBudget) ----
+
+// validStaggeredConfig returns a config with spec-recommended per-layer
+// BroadcastBudget values (B_0=0.5 BTT, B_1=1 BTT, B_2=2 BTT, B_3=5 BTT)
+// scaled to the test's BTT (D+δ = 150ms here).
+func validStaggeredConfig() *Config {
+	cfg := validBaseConfig()
+	btt := cfg.D + cfg.Delta // 150ms
+	// Adjust TCommit so the deepest layer's B_3 = 5*BTT fits.
+	cfg.TCommit = 5*btt + 100*time.Millisecond
+	cfg.Layers[0].BroadcastBudget = btt / 2 // B_0 = 0.5 BTT
+	cfg.Layers[1].BroadcastBudget = btt     // B_1 = 1 BTT
+	cfg.Layers[2].BroadcastBudget = 2 * btt // B_2 = 2 BTT
+	cfg.Layers[3].BroadcastBudget = 5 * btt // B_3 = 5 BTT
+	// FetchAt within each layer's per-layer cap T_commit - B_k.
+	cfg.Layers[0].FetchAt = cfg.TCommit - cfg.Layers[0].BroadcastBudget
+	cfg.Layers[1].FetchAt = cfg.TCommit - cfg.Layers[1].BroadcastBudget
+	cfg.Layers[2].FetchAt = cfg.TCommit - cfg.Layers[2].BroadcastBudget
+	cfg.Layers[3].FetchAt = cfg.TCommit - cfg.Layers[3].BroadcastBudget
+	return cfg
+}
+
+func TestConfig_BroadcastBudget_PerLayerCap_OK(t *testing.T) {
+	cfg := validStaggeredConfig()
+	require.NoError(t, cfg.Validate())
+	// Per-layer caps: deeper layers have earlier broadcast deadlines.
+	require.Greater(t, cfg.BroadcastMaxOffsetForLayer(0), cfg.BroadcastMaxOffsetForLayer(1))
+	require.Greater(t, cfg.BroadcastMaxOffsetForLayer(1), cfg.BroadcastMaxOffsetForLayer(2))
+	require.Greater(t, cfg.BroadcastMaxOffsetForLayer(2), cfg.BroadcastMaxOffsetForLayer(3))
+}
+
+func TestConfig_BroadcastBudget_PrimaryAllowedTighter(t *testing.T) {
+	// Spec: B_0 < BFT-min (2*(D+δ)) is OK at the operating point — primary
+	// trades reliability for MEV; deeper layers cover. Deepest layer must
+	// still satisfy BFT-min.
+	cfg := validStaggeredConfig()
+	bftMin := 2 * (cfg.D + cfg.Delta)
+	require.Less(t, cfg.Layers[0].BroadcastBudget, bftMin, "test setup: B_0 must be < BFT-min for this test to be meaningful")
+	require.GreaterOrEqual(t, cfg.Layers[3].BroadcastBudget, bftMin)
+	require.NoError(t, cfg.Validate())
+}
+
+func TestConfig_BroadcastBudget_RejectsNonMonotonic(t *testing.T) {
+	cfg := validStaggeredConfig()
+	// B_1 ≤ B_0 violates strict monotonicity.
+	cfg.Layers[1].BroadcastBudget = cfg.Layers[0].BroadcastBudget
+	require.ErrorContains(t, cfg.Validate(), "strictly increasing")
+}
+
+func TestConfig_BroadcastBudget_RejectsMixedSet(t *testing.T) {
+	cfg := validStaggeredConfig()
+	// Unset budget on one layer while others are set: not allowed.
+	cfg.Layers[2].BroadcastBudget = 0
+	require.ErrorContains(t, cfg.Validate(), "every layer or none")
+}
+
+func TestConfig_BroadcastBudget_RejectsDeepestBelowBFTMin(t *testing.T) {
+	cfg := validStaggeredConfig()
+	bftMin := 2 * (cfg.D + cfg.Delta)
+	// Set deepest below BFT-min — cluster has no liveness guarantee.
+	cfg.Layers[3].BroadcastBudget = bftMin - 1
+	// Bump shallower layers down to keep monotonicity intact.
+	cfg.Layers[0].BroadcastBudget = bftMin / 8
+	cfg.Layers[1].BroadcastBudget = bftMin / 4
+	cfg.Layers[2].BroadcastBudget = bftMin / 2
+	// Adjust FetchAt so per-layer caps remain feasible.
+	for k := range cfg.Layers {
+		cfg.Layers[k].FetchAt = cfg.TCommit - cfg.Layers[k].BroadcastBudget
+	}
+	require.ErrorContains(t, cfg.Validate(), "no liveness guarantee")
+}
+
+func TestConfig_BroadcastBudget_FallbackWhenAllZero(t *testing.T) {
+	// All zero → fall back to the single-cap schedule. This is the
+	// existing test fixture's behavior; still must pass.
+	cfg := validBaseConfig()
+	for _, l := range cfg.Layers {
+		require.Zero(t, l.BroadcastBudget, "test setup")
+	}
+	require.NoError(t, cfg.Validate())
+	// Per-layer cap should match the single cap when budget is unset.
+	for k := range cfg.Layers {
+		require.Equal(t, cfg.BroadcastMaxOffset(), cfg.BroadcastMaxOffsetForLayer(k))
+	}
+}
+
+func TestConfig_BroadcastBudget_RejectsFetchAtExceedingPerLayerCap(t *testing.T) {
+	cfg := validStaggeredConfig()
+	// Push L_0 fetch past its (tight) per-layer cap. (L_1's FetchAt was
+	// originally ≤ L_0's; bumping L_0 keeps it valid relative to L_1.)
+	cfg.Layers[0].FetchAt = cfg.TCommit - cfg.Layers[0].BroadcastBudget + 1
+	require.ErrorContains(t, cfg.Validate(), "exceeds broadcast deadline")
+}
+
+func TestConfig_BroadcastBudget_RejectsNegative(t *testing.T) {
+	cfg := validBaseConfig()
+	cfg.Layers[1].BroadcastBudget = -1 * time.Millisecond
+	require.ErrorContains(t, cfg.Validate(), "negative")
+}

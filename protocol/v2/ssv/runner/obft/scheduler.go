@@ -172,12 +172,26 @@ func (s *Scheduler) BuildAndBroadcastCommit(ctx context.Context, slot phase0.Slo
 	return c, nil
 }
 
-// ResolveAndSubmit runs Phase-3 Resolve. On success: hands the Output to
-// hooks.SubmitOutput, then (if BroadcastCertificate is set) broadcasts the
-// final-certificate gossip message.
+// resolvePollInterval is how often Phase-3 Resolve is retried while waiting
+// for σ-quorum to materialize. The spec describes Phase 3 as opportunistic
+// from T_commit + Δ_2 onward — re-running on late KindCommit arrivals to
+// salvage slots where partials trickled in past Δ_2. A 25ms interval is
+// well below ε_3 (~100ms local CPU at Config A) and BTT (~200ms gossipsub),
+// so polling overhead is negligible relative to the protocol's natural
+// time-scales but tight enough to land submissions promptly when σ-quorum
+// reaches.
+const resolvePollInterval = 25 * time.Millisecond
+
+// ResolveAndSubmit runs Phase-3 Resolve once (single attempt). On success:
+// hands the Output to hooks.SubmitOutput, then (if BroadcastCertificate is
+// set) broadcasts the final-certificate gossip message.
 //
 // On failure: tries falling back to a peer's Certificate (if RetainedCertificate
 // returns one); else calls hooks.OnMissedSlot.
+//
+// This is the single-shot resolution path; production runners should prefer
+// ResolveAndSubmitOpportunistically (which polls until σ-quorum reaches or
+// the context is canceled) per spec §Phase 3.
 func (s *Scheduler) ResolveAndSubmit(ctx context.Context, slot phase0.Slot) error {
 	out, err := s.controller.Resolve(slot)
 	if err != nil {
@@ -197,6 +211,105 @@ func (s *Scheduler) ResolveAndSubmit(ctx context.Context, slot phase0.Slot) erro
 		return fmt.Errorf("obft scheduler: resolve: %w", err)
 	}
 
+	return s.submitAndBroadcastCert(ctx, slot, out)
+}
+
+// ResolveAndSubmitOpportunistically polls Phase-3 Resolve until σ-quorum
+// reaches (the operator's local reconstruction succeeds), a peer's
+// Certificate arrives (alternative submission path via gossip), or ctx is
+// canceled (the slot's relay-submission deadline is reached and the slot
+// misses).
+//
+// Per spec §Phase 3 ("Re-running on late KindCommit arrivals"): late
+// KindCommit messages can push σ-pool past qV at a layer that didn't
+// reach on the initial walk, or push NR-pool past qEnc to unlock the next
+// layer's chained decryption. Pigeonhole semantics still hold (at most one
+// V reconstructs cluster-wide regardless of timing), so re-running is safe.
+//
+// This is the production reconstruction path. RoundEndOffset (= T_commit +
+// Δ_2 + Δ_3) is a SOFT per-operator target — not a hard deadline; the hard
+// wall is ctx (the relay-submission deadline).
+func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot phase0.Slot) error {
+	// Optimistic first attempt before allocating the ticker — the common
+	// healthy path is "all KindCommits arrived within Δ_2 → σ-quorum on the
+	// initial walk".
+	if out, err := s.controller.Resolve(slot); err == nil {
+		return s.submitAndBroadcastCert(ctx, slot, out)
+	} else if !errors.Is(err, obftcore.ErrNoQuorum) {
+		// Non-recoverable internal error (crypto failure, etc.).
+		if s.hooks.OnMissedSlot != nil {
+			s.hooks.OnMissedSlot(ctx, slot, err)
+		}
+		return fmt.Errorf("obft scheduler: resolve: %w", err)
+	}
+
+	// σ-quorum hasn't reached yet. Poll until either (a) Resolve succeeds,
+	// (b) a peer's Certificate arrives, or (c) ctx fires.
+	ticker := time.NewTicker(resolvePollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Submission deadline reached without σ-quorum — slot misses
+			// for this operator. Try one final cert fallback before giving
+			// up.
+			if cert, certErr := s.controller.RetainedCertificate(slot); certErr == nil && cert != nil {
+				fallbackOut := &obftcore.Output{
+					Value:     []byte(cert.Value),
+					Signature: []byte(cert.Signature),
+				}
+				// Use ctx.Err() as both the submit context and the missed-
+				// slot reason; the submission may itself fail under a
+				// canceled ctx but we still attempt it for completeness.
+				if subErr := s.hooks.SubmitOutput(ctx, slot, fallbackOut); subErr == nil {
+					return nil
+				}
+			}
+			if s.hooks.OnMissedSlot != nil {
+				s.hooks.OnMissedSlot(ctx, slot, ctx.Err())
+			}
+			return fmt.Errorf("obft scheduler: resolve: %w", ctx.Err())
+
+		case <-ticker.C:
+			// Try peer-certificate fast path before re-running local
+			// reconstruction. If a peer broadcasted (V, S), we can submit
+			// directly without finishing the local walk.
+			if cert, certErr := s.controller.RetainedCertificate(slot); certErr == nil && cert != nil {
+				fallbackOut := &obftcore.Output{
+					Value:     []byte(cert.Value),
+					Signature: []byte(cert.Signature),
+				}
+				if err := s.hooks.SubmitOutput(ctx, slot, fallbackOut); err == nil {
+					return nil
+				}
+				// Fall through to local resolve attempt; submit might have
+				// failed for a transient reason and a local resolve might
+				// still succeed.
+			}
+
+			out, err := s.controller.Resolve(slot)
+			if err == nil {
+				return s.submitAndBroadcastCert(ctx, slot, out)
+			}
+			if !errors.Is(err, obftcore.ErrNoQuorum) {
+				// Non-recoverable internal error.
+				if s.hooks.OnMissedSlot != nil {
+					s.hooks.OnMissedSlot(ctx, slot, err)
+				}
+				return fmt.Errorf("obft scheduler: resolve: %w", err)
+			}
+			// Still no quorum — wait for the next tick, late KindCommit
+			// arrival, or ctx.
+		}
+	}
+}
+
+// submitAndBroadcastCert hands a successfully-reconstructed Output to
+// hooks.SubmitOutput and (if BroadcastCertificate is set) broadcasts the
+// final-certificate gossip message. Shared between ResolveAndSubmit and
+// ResolveAndSubmitOpportunistically.
+func (s *Scheduler) submitAndBroadcastCert(ctx context.Context, slot phase0.Slot, out *obftcore.Output) error {
 	if err := s.hooks.SubmitOutput(ctx, slot, out); err != nil {
 		return fmt.Errorf("obft scheduler: submit output: %w", err)
 	}

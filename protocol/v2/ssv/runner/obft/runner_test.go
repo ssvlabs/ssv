@@ -15,6 +15,7 @@ import (
 
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -104,6 +105,94 @@ func TestRunProposerSlot_Healthy_n4_K4(t *testing.T) {
 	require.Equal(t, 0, ref.Layer, "healthy case should decide at L_0")
 }
 
+// TestRunProposerSlot_LateCommit_OpportunisticResolve verifies that the
+// runner's Phase-3 polling salvages a slot where a peer's KindCommit is
+// delayed past the soft target (RoundEndOffset = T_commit + Δ_2 + Δ_3) but
+// arrives before the slot's ctx deadline. Per spec §Phase 3 ("Re-running on
+// late KindCommit arrivals"), an operator that initially can't reach σ-quorum
+// can re-run the reconstruction walk when a late partial arrives — the
+// behavior the new ResolveAndSubmitOpportunistically implements.
+//
+// Setup: 4 operators, K=4, healthy network. Two of the four KindCommits to
+// op 1 are delayed past RoundEndOffset. With the OLD blocking-resolve at
+// RoundEndOffset, op 1 would resolve once with only 2 partials (qV=3 not
+// reached) and the slot would miss for op 1. With opportunistic polling, op
+// 1 keeps retrying and eventually resolves successfully when the late
+// commits arrive.
+func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
+	overrides := &ConfigOverrides{
+		K:       4,
+		TCommit: 200 * time.Millisecond,
+		Delta2:  60 * time.Millisecond, // 2*(D+δ); RoundEndOffset = 320ms
+		Delta3:  60 * time.Millisecond,
+		D:       20 * time.Millisecond,
+		Delta:   10 * time.Millisecond,
+		FetchAt: []time.Duration{
+			130 * time.Millisecond,
+			110 * time.Millisecond,
+			90 * time.Millisecond,
+			70 * time.Millisecond,
+		},
+	}
+
+	nodes := buildCluster(t, 4, overrides)
+	const slot = phase0.Slot(11)
+	slotStart := time.Now()
+
+	// Late-Commit-targeted bus: KindCommit messages to victim op (op 1) from
+	// senders 3 and 4 are delayed by lateCommitDelay (well past
+	// RoundEndOffset = 320ms but well within the ctx 2s timeout).
+	const lateCommitDelay = 500 * time.Millisecond
+	const victim spectypes.OperatorID = 1
+	bus := newBroadcastBusWithDelay(nodes, slotStart, func(from, to spectypes.OperatorID, kind byte) time.Duration {
+		if kind == byte(wire.KindCommit) && to == victim && (from == 3 || from == 4) {
+			return lateCommitDelay
+		}
+		return 0
+	})
+	defer bus.stop()
+	for _, n := range nodes {
+		n := n
+		n.hooks.broadcastFn = func(ctx context.Context, slot phase0.Slot, data []byte) error {
+			bus.broadcast(n.op, data)
+			return nil
+		}
+	}
+
+	// ctx deadline must be wide enough that the late commits arrive before
+	// it fires (lateCommitDelay = 500ms ≪ 2s) AND the polling has time to
+	// pick them up.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for _, n := range nodes {
+		n := n
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := RunProposerSlot(ctx, n.sched, slot, slotStart)
+			require.NoErrorf(t, err, "op %d RunProposerSlot", n.op)
+		}()
+	}
+	wg.Wait()
+
+	// All operators (including the victim of late commits) must successfully
+	// submit an Output. The victim's submission proves opportunistic Resolve
+	// picked up the late commits past RoundEndOffset.
+	var ref *obftcore.Output
+	for _, n := range nodes {
+		out := n.submittedOutput()
+		require.NotNilf(t, out, "op %d submitted no output (opportunistic Resolve failed for late-commit case)", n.op)
+		if ref == nil {
+			ref = out
+			continue
+		}
+		require.True(t, bytes.Equal(ref.Value, out.Value), "op %d value differs", n.op)
+		require.True(t, bytes.Equal(ref.Signature, out.Signature), "op %d signature differs", n.op)
+	}
+}
+
 // ---- cluster setup helpers ----------------------------------------------
 
 func buildCluster(t *testing.T, n int, overrides *ConfigOverrides) []*runnerNode {
@@ -169,9 +258,15 @@ func buildCluster(t *testing.T, n int, overrides *ConfigOverrides) []*runnerNode
 
 // ---- broadcast bus -------------------------------------------------------
 
+// delayFn returns the per-message delivery delay for a given (from → to,
+// envelope kind) tuple. Returning 0 means deliver immediately. The kind byte
+// is the wire.Kind value (KindPhase1Bundle / KindCommit / KindCertificate).
+type delayFn func(from, to spectypes.OperatorID, kind byte) time.Duration
+
 type broadcastBus struct {
 	nodes     []*runnerNode
 	slotStart time.Time
+	delay     delayFn
 	wg        sync.WaitGroup
 	once      sync.Once
 }
@@ -180,17 +275,37 @@ func newBroadcastBus(nodes []*runnerNode, slotStart time.Time) *broadcastBus {
 	return &broadcastBus{nodes: nodes, slotStart: slotStart}
 }
 
+// newBroadcastBusWithDelay returns a bus that defers delivery per the
+// supplied delayFn. Useful for late-Commit / late-Phase1Bundle scenarios
+// that exercise the runner's opportunistic Resolve poll path.
+func newBroadcastBusWithDelay(nodes []*runnerNode, slotStart time.Time, delay delayFn) *broadcastBus {
+	return &broadcastBus{nodes: nodes, slotStart: slotStart, delay: delay}
+}
+
 func (b *broadcastBus) broadcast(from spectypes.OperatorID, data []byte) {
 	observedOffset := time.Since(b.slotStart)
+	// Peek at the envelope kind so the delay rule can dispatch on it
+	// without each delivery goroutine reparsing.
+	var kind byte
+	if env, err := wire.Unwrap(data); err == nil && env != nil {
+		kind = byte(env.Kind)
+	}
 	for _, n := range b.nodes {
 		if n.op == from {
 			continue
 		}
 		n := n
 		dataCopy := append([]byte{}, data...)
+		var d time.Duration
+		if b.delay != nil {
+			d = b.delay(from, n.op, kind)
+		}
 		b.wg.Add(1)
 		go func() {
 			defer b.wg.Done()
+			if d > 0 {
+				time.Sleep(d)
+			}
 			_ = DispatchBytes(context.Background(), n.sched, dataCopy, observedOffset)
 		}()
 	}

@@ -76,8 +76,15 @@ func (s CommitState) String() string {
 //          partials for σ-state layers and NR partials for NR-state layers,
 //          based on what was observed by T_commit.
 //       b. ObserveCommit(c) for peers' KindCommit messages.
-//  4. Phase 3 — at [TCommit + Delta2, TRoundEnd]:
-//       a. Resolve(now) → Output (success) or ErrNoQuorum.
+//  4. Phase 3 — from TCommit + Delta2 onward (no hard upper bound here;
+//     the runner enforces the slot's relay-submission deadline via ctx):
+//       a. Resolve(now) → Output (success) or ErrNoQuorum. Resolve is
+//          opportunistic — re-running on late KindCommit arrivals can
+//          push σ-pool past qV at a layer that didn't reach on the
+//          initial walk, or push NR-pool past qEnc to unlock the next
+//          layer's chained decryption (Pigeonhole semantics still hold).
+//          RoundEndOffset (= TCommit + Delta2 + Delta3) is a soft per-
+//          operator target, not a hard cluster-wide deadline.
 //       b. On success: BuildCertificate(out) → broadcast.
 //       c. ObserveCertificate(c) for peers' certificates as a fallback
 //          submission path when local Resolve fails.
@@ -116,10 +123,12 @@ type Instance struct {
 	// (extracted from their KindCommit's NRPartials).
 	peerNR map[int]map[OperatorID]Signature
 
-	// peerCommitted[operator_id] is true once we've seen a KindCommit from
-	// this operator. A second distinct KindCommit from the same operator at
-	// the same slot is cross-onion equivocation evidence.
-	peerCommitted map[OperatorID]bool
+	// peerCommitHashes[operator_id] is the set of content hashes observed
+	// from this operator. Identical re-broadcasts are no-ops; the first
+	// distinct second hash is cross-onion equivocation evidence (spec §Phase 2,
+	// single-emit rule). We retain all distinct hashes so further redeliveries
+	// of either variant don't re-record evidence.
+	peerCommitHashes map[OperatorID]map[[32]byte]struct{}
 
 	// Local per-layer state.
 	localState   []CommitState
@@ -197,7 +206,7 @@ func NewInstance(
 		hostVerdict:     make(map[int]map[string]bool, K),
 		peerOnions:      make(map[int]map[OperatorID][]EncryptedLayer, K),
 		peerNR:          make(map[int]map[OperatorID]Signature, K),
-		peerCommitted:   make(map[OperatorID]bool),
+		peerCommitHashes: make(map[OperatorID]map[[32]byte]struct{}),
 		localState:      make([]CommitState, K),
 		sigmaLocked:     make([]bool, K),
 		sigmaLockedV:    make([]Value, K),

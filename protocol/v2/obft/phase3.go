@@ -216,6 +216,7 @@ func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 		return nil, fmt.Errorf("obft: empty value or signature")
 	}
 	return &Certificate{
+		ClusterID: i.cfg.ClusterID,
 		Height:    i.cfg.Height,
 		Value:     append(Value{}, out.Value...),
 		Signature: append(Signature{}, out.Signature...),

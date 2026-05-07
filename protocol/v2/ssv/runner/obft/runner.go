@@ -17,13 +17,24 @@ import (
 //     that fetches at the layer's FetchAt and broadcasts a Phase-1 bundle.
 //  3. At T_commit: BuildAndBroadcastCommit (single emission per spec
 //     §Phase 2; carries both σ partials and NR partials).
-//  4. At T_round_end: Resolve + SubmitOutput (or peer-Certificate fallback).
+//  4. From T_commit + Δ_2 onward: poll Resolve opportunistically until
+//     σ-quorum reaches (output → SubmitOutput, broadcast Certificate),
+//     a peer's Certificate arrives (Certificate → SubmitOutput), or the
+//     slot's submission deadline (ctx) is reached.
 //  5. EndInstance.
 //
-// Returns the result of ResolveAndSubmit (or the first non-recoverable
-// error encountered earlier). Phase-1 fetch errors are non-fatal: they're
-// surfaced via the Scheduler's hooks but don't abort the slot, since other
-// layers may still succeed.
+// Per spec §Phase 3: T_commit + Δ_2 + Δ_3 (= RoundEndOffset) is a SOFT
+// per-operator target, not a hard cluster-wide deadline; reconstruction
+// running past it can spill into the submission slack, and a faster peer's
+// Certificate gossip lets an operator that hasn't completed local
+// reconstruction submit (V, S) directly. Late KindCommit arrivals can
+// also be incorporated by re-running the reconstruction walk — Pigeonhole
+// semantics still hold.
+//
+// Returns the result of ResolveAndSubmitOpportunistically (or the first
+// non-recoverable error encountered earlier). Phase-1 fetch errors are
+// non-fatal: they're surfaced via the Scheduler's hooks but don't abort
+// the slot, since other layers may still succeed.
 //
 // This is the canonical reference for what `protocol/v2/ssv/runner/proposer.go`'s
 // runner methods need to do per-slot when integrating OBFT.
@@ -71,15 +82,20 @@ func RunProposerSlot(
 		return fmt.Errorf("obft runner: phase-2 commit broadcast: %w", err)
 	}
 
-	// Phase 3 — wait until T_round_end before Resolve so all KindCommit
-	// messages have had time to propagate.
-	tRoundEnd := slotStart.Add(cfg.RoundEndOffset())
-	if !sleepUntil(ctx, tRoundEnd) {
+	// Phase 3 — Resolve opportunistically from T_commit + Δ_2 onward.
+	// Per spec §Phase 3, reconstruction starts at T_commit + Δ_2 (when
+	// in-envelope KindCommits have propagated) and runs until σ-quorum
+	// reaches or the relay-submission deadline (ctx) forces termination.
+	// Late KindCommits arriving past T_commit + Δ_2 can be incorporated by
+	// re-running the walk; Pigeonhole semantics ensure at most one V can
+	// reconstruct cluster-wide regardless of timing.
+	phase3Start := slotStart.Add(cfg.PhaseTwoEndOffset())
+	if !sleepUntil(ctx, phase3Start) {
 		fetchWG.Wait()
 		return ctx.Err()
 	}
 
-	err = sched.ResolveAndSubmit(ctx, slot)
+	err = sched.ResolveAndSubmitOpportunistically(ctx, slot)
 	fetchWG.Wait()
 	return err
 }

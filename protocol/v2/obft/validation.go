@@ -30,6 +30,10 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 	if cfg == nil {
 		return errors.New("obft: nil config")
 	}
+	if b.ClusterID != cfg.ClusterID {
+		return fmt.Errorf("obft: phase-1 bundle cluster id %x != instance cluster id %x",
+			b.ClusterID, cfg.ClusterID)
+	}
 	if b.Height != cfg.Height {
 		return fmt.Errorf("obft: phase-1 bundle height %d != instance height %d", b.Height, cfg.Height)
 	}
@@ -67,6 +71,10 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 	}
 	if cfg == nil {
 		return errors.New("obft: nil config")
+	}
+	if c.ClusterID != cfg.ClusterID {
+		return fmt.Errorf("obft: commit cluster id %x != instance cluster id %x",
+			c.ClusterID, cfg.ClusterID)
 	}
 	if c.Height != cfg.Height {
 		return fmt.Errorf("obft: commit height %d != instance height %d", c.Height, cfg.Height)
@@ -106,6 +114,25 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 			return fmt.Errorf("obft: NR partial at layer %d has empty signature", p.Layer)
 		}
 	}
+
+	// Witnesses (leader-σ_L^V re-broadcast) — structural checks only;
+	// cryptographic σ verification happens in Instance.ObserveCommit.
+	for i, w := range c.Witnesses {
+		if w.Layer < 0 || w.Layer >= cfg.K() {
+			return fmt.Errorf("obft: commit witness %d layer %d out of range [0, %d)",
+				i, w.Layer, cfg.K())
+		}
+		if w.Leader != cfg.Layers[w.Layer].Leader {
+			return fmt.Errorf("obft: commit witness %d claims leader %d but layer %d's leader is %d",
+				i, w.Leader, w.Layer, cfg.Layers[w.Layer].Leader)
+		}
+		if len(w.Value) == 0 {
+			return fmt.Errorf("obft: commit witness %d has empty Value", i)
+		}
+		if len(w.SigmaV) == 0 {
+			return fmt.Errorf("obft: commit witness %d has empty SigmaV", i)
+		}
+	}
 	return nil
 }
 
@@ -117,6 +144,10 @@ func ValidateCertificate(c *Certificate, cfg *Config) error {
 	}
 	if cfg == nil {
 		return errors.New("obft: nil config")
+	}
+	if c.ClusterID != cfg.ClusterID {
+		return fmt.Errorf("obft: certificate cluster id %x != instance cluster id %x",
+			c.ClusterID, cfg.ClusterID)
 	}
 	if c.Height != cfg.Height {
 		return fmt.Errorf("obft: certificate height %d != instance height %d",

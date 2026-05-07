@@ -102,6 +102,24 @@ func newSim(t *testing.T, n int) *sim {
 	}
 }
 
+// newSimWithStaggeredBudgets builds a cluster with per-layer BroadcastBudget
+// set to spec-recommended ratios (B_0=0.5·BTT, B_1=1·BTT, B_2=2·BTT,
+// B_3=5·BTT) — exercises the M3 staggered schedule end-to-end.
+func newSimWithStaggeredBudgets(t *testing.T, n int) *sim {
+	t.Helper()
+	s := newSim(t, n)
+	btt := s.cfg.D + s.cfg.Delta // 150ms with the test fixture
+	// Bump TCommit so B_3 = 5·BTT fits.
+	s.cfg.TCommit = 5*btt + 100*time.Millisecond
+	budgets := []time.Duration{btt / 2, btt, 2 * btt, 5 * btt}
+	for k := 0; k < s.K; k++ {
+		s.cfg.Layers[k].BroadcastBudget = budgets[k]
+		s.cfg.Layers[k].FetchAt = s.cfg.TCommit - budgets[k]
+	}
+	require.NoError(t, s.cfg.Validate())
+	return s
+}
+
 // leaderAt returns the layer-k leader.
 func (s *sim) leaderAt(layer int) OperatorID {
 	return s.cfg.Layers[layer].Leader
@@ -164,6 +182,7 @@ func (s *sim) deliverPhase1Equivocation(layer int, vA, vB Value, recipientsA, re
 	sigB, err := signer.SignPartial(vB)
 	require.NoError(s.t, err)
 	bundleB := &Phase1Bundle{
+		ClusterID:  s.cfg.ClusterID,
 		OperatorID: leaderID,
 		Height:     s.cfg.Height,
 		Layer:      layer,
@@ -259,6 +278,26 @@ func requireAllAgree(t *testing.T, outputs map[OperatorID]*Output) *Output {
 		}
 		require.Equal(t, canonical.Layer, o.Layer, "op %d disagreed on layer", op)
 		require.True(t, bytes.Equal(canonical.Value, o.Value), "op %d disagreed on value", op)
+	}
+	require.NotNil(t, canonical, "no operator produced an output")
+	return canonical
+}
+
+// requireAllReconstruct asserts that every non-excluded operator independently
+// reached σ-quorum locally — stronger than requireAllAgree, which would pass
+// if only the layer leader reconstructed and the rest fell back to certificate
+// gossip. Used to catch M1-style local-pool gaps.
+func requireAllReconstruct(t *testing.T, outputs map[OperatorID]*Output) *Output {
+	t.Helper()
+	var canonical *Output
+	for op, o := range outputs {
+		require.NotNilf(t, o, "op %d failed to reconstruct locally", op)
+		if canonical == nil {
+			canonical = o
+			continue
+		}
+		require.Equalf(t, canonical.Layer, o.Layer, "op %d disagreed on layer", op)
+		require.Truef(t, bytes.Equal(canonical.Value, o.Value), "op %d disagreed on value", op)
 	}
 	require.NotNil(t, canonical, "no operator produced an output")
 	return canonical

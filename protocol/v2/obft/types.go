@@ -13,6 +13,7 @@ package obft
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -34,8 +35,9 @@ type Value []byte
 type Signature []byte
 
 // LayerSpec describes one layer of the K-layer onion structure: which
-// operator is the layer's leader and when (relative to slot start) they
-// should fetch their candidate value.
+// operator is the layer's leader, when (relative to slot start) they should
+// fetch their candidate value, and how much absorption budget the layer's
+// receivers are given.
 //
 // Per spec §Setting, fetch times are non-increasing in layer index:
 // Layers[0] is the primary L_0 (latest fetch — picks up MEV-late values),
@@ -45,6 +47,19 @@ type Signature []byte
 type LayerSpec struct {
 	Leader  OperatorID
 	FetchAt time.Duration
+
+	// BroadcastBudget B_k is the per-layer absorption window: the layer's
+	// leader must broadcast their Phase-1 bundle no later than
+	// T_commit - BroadcastBudget. Per spec §Setting, B_0 < B_1 < ... <
+	// B_{K-1} — deeper layers get larger budgets (max absorption + chain-
+	// decryption headroom); the primary gets the smallest (max MEV-fetch
+	// headroom, willing to lose its slot to L_1+ if propagation slips).
+	// Spec values at BTT=200ms: B_0=0.5 BTT, B_1=1 BTT, B_2=2 BTT, B_3=5 BTT.
+	//
+	// When zero across all layers, falls back to the single uniform cap
+	// 2*(D+Delta) for every layer (preserves backwards-compat with configs
+	// that don't opt into the staggered schedule).
+	BroadcastBudget time.Duration
 }
 
 // Config parameterizes one consensus instance. Timing fields are absolute
@@ -115,13 +130,23 @@ func (c *Config) Quorum() int {
 	return c.QV()
 }
 
-// BroadcastMaxOffset returns T_broadcast_max relative to slot_start —
-// the latest moment a leader's Phase-1 bundle can be broadcast such that
-// all honest first-observe within partial synchrony before T_commit.
-//
-// Per spec §Setting: T_broadcast_max = T_commit - 2*(D + delta).
+// BroadcastMaxOffset returns the single-cap T_broadcast_max relative to
+// slot_start: T_commit - 2*(D + delta). Used as the per-layer fallback when
+// LayerSpec.BroadcastBudget is unset; for explicit per-layer caps see
+// BroadcastMaxOffsetForLayer.
 func (c *Config) BroadcastMaxOffset() time.Duration {
 	return c.TCommit - 2*(c.D+c.Delta)
+}
+
+// BroadcastMaxOffsetForLayer returns T_commit - B_k for layer k, falling back
+// to the single cap when LayerSpec.BroadcastBudget is unset. Per spec §Setting,
+// the leader of layer k must broadcast their Phase-1 bundle by this offset.
+func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
+	b := c.Layers[k].BroadcastBudget
+	if b <= 0 {
+		return c.BroadcastMaxOffset()
+	}
+	return c.TCommit - b
 }
 
 // PhaseTwoStartOffset returns the start of Phase 2 = T_commit relative to
@@ -141,8 +166,25 @@ func (c *Config) PhaseTwoEndOffset() time.Duration {
 	return c.TCommit + c.Delta2
 }
 
-// RoundEndOffset returns T_round_end — the cutoff for Phase-3 reconstruction.
-// Per spec §Slot structure: T_round_end = T_commit + Delta2 + Delta3.
+// RoundEndOffset returns T_commit + Delta2 + Delta3 — the SOFT per-operator
+// target by which the local Phase-3 reconstruction walk is expected to
+// complete under nominal partial synchrony. Per spec §Phase 3, this is
+// NOT a hard deadline:
+//
+//   - Phase 3 starts at T_commit + Delta2 (= PhaseTwoEndOffset) and runs
+//     until σ-quorum reaches OR the slot's relay-submission deadline
+//     forces termination.
+//   - Reconstruction overrunning Delta3 can spill into the submission
+//     slack; a faster peer's KindCertificate gossip can let an operator
+//     that hasn't completed local reconstruction submit (V, S) directly.
+//   - Late KindCommit arrivals past T_commit + Delta2 can be incorporated
+//     by re-running the reconstruction walk; Pigeonhole semantics still
+//     hold (at most one V can reconstruct cluster-wide regardless of
+//     timing).
+//
+// The hard wall for the slot is the relay-submission deadline (typically
+// T_relay_cutoff − T_submit), enforced at the runner level via context
+// cancellation, not here.
 func (c *Config) RoundEndOffset() time.Duration {
 	return c.TCommit + c.Delta2 + c.Delta3
 }
@@ -186,8 +228,45 @@ func (c *Config) Validate() error {
 		members[op] = true
 	}
 
+	// Two BroadcastBudget modes: all unset (single-cap fallback) or all set
+	// (per-layer staggered schedule with strict monotonicity). Negative
+	// values are always invalid.
+	for k, l := range c.Layers {
+		if l.BroadcastBudget < 0 {
+			return fmt.Errorf("obft: layer %d BroadcastBudget %v is negative", k, l.BroadcastBudget)
+		}
+	}
+	allBudgetsSet := true
+	allBudgetsZero := true
+	for _, l := range c.Layers {
+		if l.BroadcastBudget > 0 {
+			allBudgetsZero = false
+		} else {
+			allBudgetsSet = false
+		}
+	}
+	if !allBudgetsSet && !allBudgetsZero {
+		return errors.New("obft: LayerSpec.BroadcastBudget must be set on every layer or none (no mixed configs)")
+	}
+	if allBudgetsSet {
+		// B_0 < B_1 < ... < B_{K-1}: deeper layers get strictly larger
+		// absorption / chain-decryption headroom.
+		for k := 1; k < len(c.Layers); k++ {
+			if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
+				return errors.New("obft: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")
+			}
+		}
+		// The deepest layer's budget is the cluster's worst-case liveness
+		// guarantee — must satisfy the 2*(D+δ) BFT-min bound.
+		bftMin := 2 * (c.D + c.Delta)
+		K := len(c.Layers)
+		if c.Layers[K-1].BroadcastBudget < bftMin {
+			return fmt.Errorf("obft: deepest layer L_%d BroadcastBudget %v below BFT-min %v: cluster has no liveness guarantee",
+				K-1, c.Layers[K-1].BroadcastBudget, bftMin)
+		}
+	}
+
 	seenLeaders := make(map[OperatorID]bool, len(c.Layers))
-	broadcastMax := c.BroadcastMaxOffset()
 	for k, layer := range c.Layers {
 		if !members[layer.Leader] {
 			return errors.New("obft: layer leader is not a cluster member")
@@ -199,8 +278,9 @@ func (c *Config) Validate() error {
 		if layer.FetchAt < 0 {
 			return errors.New("obft: layer FetchAt must be non-negative")
 		}
-		if layer.FetchAt > broadcastMax {
-			return errors.New("obft: layer FetchAt exceeds broadcast deadline T_broadcast_max")
+		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
+			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v",
+				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k))
 		}
 		// Per spec §Setting: T_{K-1} <= ... <= T_1 <= T_0. Layer index k
 		// increases as we go deeper; FetchAt must therefore not increase

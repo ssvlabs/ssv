@@ -52,6 +52,7 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	}
 
 	bundle := &Phase1Bundle{
+		ClusterID:  i.cfg.ClusterID,
 		OperatorID: i.ownOperatorID,
 		Height:     i.cfg.Height,
 		Layer:      layer,
@@ -169,6 +170,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 // caller-owned slices can be modified without corrupting Instance state.
 func deepCopyBundle(b *Phase1Bundle) *Phase1Bundle {
 	return &Phase1Bundle{
+		ClusterID:  b.ClusterID,
 		OperatorID: b.OperatorID,
 		Height:     b.Height,
 		Layer:      b.Layer,
