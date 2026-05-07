@@ -131,6 +131,23 @@ func (s *Scheduler) FetchAndBroadcastBundle(ctx context.Context, slot phase0.Slo
 	return nil
 }
 
+// DrainPending replays any envelopes buffered on the Controller for `slot`
+// (typically because peers broadcast before this operator's instance had
+// started). Errors from individual replays are logged via the OnMissedSlot
+// hook is NOT invoked — replay errors are best-effort, not slot-failing.
+func (s *Scheduler) DrainPending(ctx context.Context, slot phase0.Slot) {
+	for _, env := range s.controller.DrainPending(slot) {
+		switch {
+		case env.Bundle != nil:
+			_ = s.HandlePeerPhase1Bundle(ctx, env.Bundle, env.ObservedOffset)
+		case env.Commit != nil:
+			_ = s.controller.ProcessCommit(env.Commit)
+		case env.Certificate != nil:
+			_ = s.controller.ProcessCertificate(env.Certificate)
+		}
+	}
+}
+
 // HandlePeerPhase1Bundle records a peer's Phase-1 bundle and runs host
 // validity for the candidate value. Called by the dispatch layer when a
 // KindPhase1Bundle envelope arrives from the network.
@@ -196,14 +213,8 @@ func (s *Scheduler) ResolveAndSubmit(ctx context.Context, slot phase0.Slot) erro
 	out, err := s.controller.Resolve(slot)
 	if err != nil {
 		// Local reconstruction failed — try peer-certificate fallback.
-		if cert, certErr := s.controller.RetainedCertificate(slot); certErr == nil && cert != nil {
-			fallbackOut := &obftcore.Output{
-				Value:     []byte(cert.Value),
-				Signature: []byte(cert.Signature),
-			}
-			if subErr := s.hooks.SubmitOutput(ctx, slot, fallbackOut); subErr == nil {
-				return nil
-			}
+		if submitted := s.tryCertFastPath(ctx, slot); submitted {
+			return nil
 		}
 		if s.hooks.OnMissedSlot != nil {
 			s.hooks.OnMissedSlot(ctx, slot, err)
@@ -212,6 +223,32 @@ func (s *Scheduler) ResolveAndSubmit(ctx context.Context, slot phase0.Slot) erro
 	}
 
 	return s.submitAndBroadcastCert(ctx, slot, out)
+}
+
+// tryCertFastPath attempts to submit a peer-broadcast Certificate as the
+// fallback path. Per spec §Final-certificate gossip, receivers SHOULD re-run
+// host application validity on V before submitting downstream — so we call
+// HostValidate before SubmitOutput. Returns true if a cert was submitted
+// successfully; false if there's no retained cert, host rejects V, or submit
+// failed.
+func (s *Scheduler) tryCertFastPath(ctx context.Context, slot phase0.Slot) bool {
+	cert, err := s.controller.RetainedCertificate(slot)
+	if err != nil || cert == nil {
+		return false
+	}
+	// Re-run host validity on the cert's V. Layer is unknown for cert-decided
+	// outputs (the cert carries V+sig but not the originating layer); pass
+	// -1 so HostValidate hooks can short-circuit / treat as "any layer".
+	valid, vErr := s.hooks.HostValidate(ctx, slot, -1, []byte(cert.Value))
+	if vErr != nil || !valid {
+		return false
+	}
+	fallbackOut := &obftcore.Output{
+		Layer:     -1,
+		Value:     []byte(cert.Value),
+		Signature: []byte(cert.Signature),
+	}
+	return s.hooks.SubmitOutput(ctx, slot, fallbackOut) == nil
 }
 
 // ResolveAndSubmitOpportunistically polls Phase-3 Resolve until σ-quorum
@@ -254,17 +291,8 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 			// Submission deadline reached without σ-quorum — slot misses
 			// for this operator. Try one final cert fallback before giving
 			// up.
-			if cert, certErr := s.controller.RetainedCertificate(slot); certErr == nil && cert != nil {
-				fallbackOut := &obftcore.Output{
-					Value:     []byte(cert.Value),
-					Signature: []byte(cert.Signature),
-				}
-				// Use ctx.Err() as both the submit context and the missed-
-				// slot reason; the submission may itself fail under a
-				// canceled ctx but we still attempt it for completeness.
-				if subErr := s.hooks.SubmitOutput(ctx, slot, fallbackOut); subErr == nil {
-					return nil
-				}
+			if s.tryCertFastPath(ctx, slot) {
+				return nil
 			}
 			if s.hooks.OnMissedSlot != nil {
 				s.hooks.OnMissedSlot(ctx, slot, ctx.Err())
@@ -273,19 +301,9 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 
 		case <-ticker.C:
 			// Try peer-certificate fast path before re-running local
-			// reconstruction. If a peer broadcasted (V, S), we can submit
-			// directly without finishing the local walk.
-			if cert, certErr := s.controller.RetainedCertificate(slot); certErr == nil && cert != nil {
-				fallbackOut := &obftcore.Output{
-					Value:     []byte(cert.Value),
-					Signature: []byte(cert.Signature),
-				}
-				if err := s.hooks.SubmitOutput(ctx, slot, fallbackOut); err == nil {
-					return nil
-				}
-				// Fall through to local resolve attempt; submit might have
-				// failed for a transient reason and a local resolve might
-				// still succeed.
+			// reconstruction. If a peer broadcasted (V, S), submit directly.
+			if s.tryCertFastPath(ctx, slot) {
+				return nil
 			}
 
 			out, err := s.controller.Resolve(slot)

@@ -34,6 +34,23 @@ const (
 	// EvidenceCrossOnionEquivocation — Rule 3: an operator emitted σ_i^V on
 	// V and σ_i^V on V' at the same layer (across one or multiple Onions).
 	// Single-σ-V exclusivity is EKM-enforced.
+	//
+	// Evidence is recorded at two granularities:
+	//   - Per-layer (Evidence.Layer = k ≥ 0): the operator emitted distinct
+	//     σ partials on different V's at layer k. Cryptographically self-
+	//     contained at L_0; at deeper layers the partials are IBE-wrapped
+	//     and not third-party-verifiable from the evidence alone.
+	//   - Top-level (Evidence.Layer = -1): the operator emitted two
+	//     structurally-distinct KindCommit messages whose content hashes
+	//     differ. This subsumes any per-layer Rule 3 the same byzantine
+	//     act would also produce.
+	//
+	// Slashing-layer contract: when both Layer=-1 AND Layer≥0 evidence
+	// exists for the same (operator, slot), they describe the SAME
+	// byzantine fault — slashing should count once, not twice. The Layer=-1
+	// variant is the strongest available; per-layer entries provide finer-
+	// grained packaging when a third-party verifier needs to reproduce the
+	// per-V σ verification.
 	EvidenceCrossOnionEquivocation EvidenceRule = 3
 
 	// EvidenceFakeEncryptedPresence — Rule 4: at layer k > 0, an operator's

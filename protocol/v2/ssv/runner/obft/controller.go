@@ -49,6 +49,37 @@ type Controller struct {
 
 	mu        sync.Mutex
 	instances map[phase0.Slot]*RunningInstance
+
+	// pending buffers envelopes that arrived before the slot's instance
+	// started (e.g., faster peers send during the slow operator's pre-
+	// consensus). Drained by Scheduler.DrainPending after StartNewInstance.
+	// Capped per-slot to MaxPendingPerSlot to bound memory under abuse.
+	pending map[phase0.Slot][]PendingEnvelope
+}
+
+// MaxPendingPerSlot caps the number of envelopes buffered per slot before
+// the instance starts. Above this, additional envelopes are dropped.
+const MaxPendingPerSlot = 64
+
+// MaxPendingSlots caps the total number of distinct slots with non-empty
+// buffers. Bounds memory under an attacker that emits envelopes targeting
+// many distinct slot numbers. When exceeded, the oldest slot entry is
+// evicted (LRU).
+const MaxPendingSlots = 256
+
+// ErrNoActiveInstance is returned by Controller.lookup when no instance
+// exists for the requested slot. Callers (e.g. the dispatcher) use
+// errors.Is(err, ErrNoActiveInstance) to detect this case and buffer the
+// envelope for replay rather than dropping it as an error.
+var ErrNoActiveInstance = errors.New("obft adapter: no active instance for slot")
+
+// PendingEnvelope holds an envelope dispatch targeted at a slot whose
+// instance hadn't yet started. Exactly one of the body fields is non-nil.
+type PendingEnvelope struct {
+	Bundle         *obftcore.Phase1Bundle
+	Commit         *obftcore.Commit
+	Certificate    *obftcore.Certificate
+	ObservedOffset time.Duration
 }
 
 // RunningInstance bundles a started OBFT instance with the metadata the
@@ -112,7 +143,55 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		ibe:             opts.IBE,
 		overrides:       opts.Overrides,
 		instances:       make(map[phase0.Slot]*RunningInstance),
+		pending:         make(map[phase0.Slot][]PendingEnvelope),
 	}, nil
+}
+
+// BufferEnvelope queues an envelope for a slot whose instance hasn't yet
+// started. Called by the dispatcher when Controller.lookup returns
+// ErrNoActiveInstance. Drops the envelope if the per-slot buffer is full;
+// evicts the oldest slot entry (lowest slot number) if MaxPendingSlots
+// is exceeded.
+func (c *Controller) BufferEnvelope(slot phase0.Slot, env PendingEnvelope) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.pending[slot]) >= MaxPendingPerSlot {
+		return
+	}
+	if _, exists := c.pending[slot]; !exists && len(c.pending) >= MaxPendingSlots {
+		// Evict oldest (lowest) slot to bound memory under attacker creating
+		// many distinct slot numbers.
+		var oldest phase0.Slot
+		first := true
+		for s := range c.pending {
+			if first || s < oldest {
+				oldest = s
+				first = false
+			}
+		}
+		delete(c.pending, oldest)
+	}
+	c.pending[slot] = append(c.pending[slot], env)
+}
+
+// DrainPending removes and returns all buffered envelopes for `slot`. Called
+// by RunProposerSlot after StartNewInstance so messages that arrived before
+// the local instance started are replayed into the now-active instance.
+func (c *Controller) DrainPending(slot phase0.Slot) []PendingEnvelope {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	p := c.pending[slot]
+	delete(c.pending, slot)
+	return p
+}
+
+// ForgetPending evicts buffered envelopes for `slot` without dispatch. Used
+// when the slot was never started and the buffer should be cleaned up to
+// bound memory.
+func (c *Controller) ForgetPending(slot phase0.Slot) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.pending, slot)
 }
 
 // StartNewInstance initializes an OBFT instance for the given slot and
@@ -316,7 +395,7 @@ func (c *Controller) lookup(slot phase0.Slot) (*RunningInstance, error) {
 	defer c.mu.Unlock()
 	r, ok := c.instances[slot]
 	if !ok {
-		return nil, fmt.Errorf("obft adapter: no active instance for slot %d", slot)
+		return nil, fmt.Errorf("%w %d", ErrNoActiveInstance, slot)
 	}
 	return r, nil
 }

@@ -237,14 +237,14 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		existing := i.peerOnions[k][c.OperatorID]
 
 		// Find existing entry with the same value.
-		seen := false
+		alreadyHaveValue := false
 		for _, e := range existing {
 			if bytes.Equal(e.Value, el.Value) {
-				seen = true
+				alreadyHaveValue = true
 				break
 			}
 		}
-		if seen {
+		if alreadyHaveValue {
 			continue
 		}
 
@@ -271,7 +271,14 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// extension). A byzantine layer leader could σ-emit V_a via the
 		// Phase-1 bundle and σ_V on V_b via this Phase-2 onion — single-σ-V
 		// exclusivity violation that spans phases.
-		if c.OperatorID == i.cfg.Layers[k].Leader {
+		//
+		// Only fired at k=0: at deeper layers el.Ciphertext is the IBE-wrapped
+		// σ partial, not a verifiable plaintext sig, so a third-party slashing
+		// verifier cannot reproduce the check from the evidence alone (it
+		// would need this cluster's NR-quorum aggregates for layers 0..k-1).
+		// Self-contained slashable evidence (the spec's Rule 3 contract)
+		// requires plaintext partials.
+		if k == 0 && c.OperatorID == i.cfg.Layers[k].Leader {
 			for _, b := range i.bundles[k][c.OperatorID] {
 				if !bytes.Equal(b.Value, el.Value) {
 					i.recordEvidence(Evidence{
@@ -290,32 +297,35 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 			}
 		}
 
-		entryCopy := EncryptedLayer{
-			Value:      append(Value{}, el.Value...),
-			Ciphertext: append([]byte{}, el.Ciphertext...),
-		}
-		i.peerOnions[k][c.OperatorID] = append(existing, entryCopy)
-
 		// L_0 validity-gate: at L_0, σ partials are plaintext and verifiable
 		// against any retained V. A peer's plaintext σ partial that does not
 		// verify against any retained V at L_0 is a slashable byzantine fault
-		// (Rule 5 — Fake plaintext σ at L_0). The fake partial does not enter
-		// any V's σ-pool (it doesn't verify), so it has no liveness impact;
-		// detection is purely for slashing accountability.
-		if k == 0 && i.hasRetainedVAtL0() {
-			if !i.peerSigmaAtL0Verifies(c.OperatorID, el) {
-				i.recordEvidence(Evidence{
-					Rule:       EvidenceFakePlaintextSigma,
-					OperatorID: c.OperatorID,
-					Layer:      0,
-					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
-						OnionPartial:        append(Signature{}, el.Ciphertext...),
-						OnionValue:          append(Value{}, el.Value...),
-						RetainedValueHashes: i.retainedL0ValueHashes(),
-					},
-				})
-				i.removeOnionEntry(k, c.OperatorID, &el)
+		// (Rule 5 — Fake plaintext σ at L_0). The fake partial doesn't enter
+		// any V's σ-pool (no liveness impact); detection is for slashing.
+		// We run the check BEFORE appending to peerOnions so a fake entry
+		// never leaves traces in the σ-pool that a later code path could
+		// accidentally consume.
+		fakeAtL0 := false
+		if k == 0 && i.peerSigmaAtL0Verdict(c.OperatorID, el) == l0SigmaFake {
+			fakeAtL0 = true
+			i.recordEvidence(Evidence{
+				Rule:       EvidenceFakePlaintextSigma,
+				OperatorID: c.OperatorID,
+				Layer:      0,
+				FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+					OnionPartial:        append(Signature{}, el.Ciphertext...),
+					OnionValue:          append(Value{}, el.Value...),
+					RetainedValueHashes: i.retainedL0ValueHashes(),
+				},
+			})
+		}
+
+		if !fakeAtL0 {
+			entryCopy := EncryptedLayer{
+				Value:      append(Value{}, el.Value...),
+				Ciphertext: append([]byte{}, el.Ciphertext...),
 			}
+			i.peerOnions[k][c.OperatorID] = append(existing, entryCopy)
 		}
 
 		// Cross-signing detection (Rule 1): σ + NR at the same (operator,
@@ -339,18 +349,25 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 	}
 
-	// NR-side per layer.
+	// NR-side per layer. Verify each partial against the signer's IBE pub-share
+	// (under Option B) or V-pub-share (Option A: ibePubKeyShares == nil; the
+	// V-keypair doubles as the IBE keypair via DST separation handled by
+	// tagSigner). Without this, a single byzantine could submit garbage NR
+	// partials that get aggregated into a corrupted chained-decryption key
+	// at Phase 3, killing fall-through cluster-wide.
+	nrShares := i.ibePubKeyShares
+	if nrShares == nil {
+		nrShares = i.pubKeyShares
+	}
 	for _, p := range c.NRPartials {
-		if i.ibePubKeyShares != nil {
-			pubShare, ok := i.ibePubKeyShares[c.OperatorID]
-			if !ok {
-				return fmt.Errorf("obft: no IBE pubkey share for operator %d", c.OperatorID)
-			}
-			tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
-			if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
-				return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
-					c.OperatorID, p.Layer)
-			}
+		pubShare, ok := nrShares[c.OperatorID]
+		if !ok || len(pubShare) == 0 {
+			return fmt.Errorf("obft: no NR pub-key share for operator %d", c.OperatorID)
+		}
+		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
+		if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
+			return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
+				c.OperatorID, p.Layer)
 		}
 		if i.peerNR[p.Layer] == nil {
 			i.peerNR[p.Layer] = make(map[OperatorID]Signature)
@@ -416,24 +433,37 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	return nil
 }
 
-// peerSigmaAtL0Verifies reports whether peer `op`'s plaintext σ partial at
-// L_0 (entry `el`) verifies against any retained V at L_0.
+// l0SigmaVerdict is the result of checking a peer's L_0 σ entry.
+type l0SigmaVerdict int
+
+const (
+	l0SigmaInconclusive l0SigmaVerdict = iota // no retained V or no pub-share for op (config issue, not slashable)
+	l0SigmaVerified                           // matches a retained V AND verifies cryptographically
+	l0SigmaFake                               // either signs a non-retained V or fails verification on a retained V (Rule 5)
+)
+
+// peerSigmaAtL0Verdict returns whether peer `op`'s plaintext σ partial at L_0
+// is verified, fake (Rule 5), or inconclusive.
 //
-// At L_0, el.Ciphertext is the plaintext σ partial. We verify it against
-// the operator's own pubkey share (the partial is signed by their V-share),
+// At L_0, el.Ciphertext is the plaintext σ partial. We verify it against the
+// operator's own pubkey share (the partial is signed by their V-share),
 // using el.Value as the signed message.
 //
-// Note: el.Value is what `op` claims to have signed; if it matches a retained
-// V at L_0, then verifying the partial against (op's pub-share, el.Value)
-// confirms `op` actually signed that retained V.
-func (i *Instance) peerSigmaAtL0Verifies(op OperatorID, el EncryptedLayer) bool {
+// Cases:
+//   - No retained V at L_0 → inconclusive (we can't decide without a V to
+//     compare). Caller may decide to defer the check (re-run on retention).
+//   - No pub-share for op → inconclusive (config error, not slashable).
+//   - el.Value doesn't match any retained V → fake (Rule 5).
+//   - el.Value matches but partial doesn't verify → fake (Rule 5).
+//   - el.Value matches and partial verifies → verified.
+func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0SigmaVerdict {
 	leaderMap := i.bundles[0]
 	if len(leaderMap) == 0 {
-		return false
+		return l0SigmaInconclusive
 	}
 	pubShare, ok := i.pubKeyShares[op]
 	if !ok {
-		return false
+		return l0SigmaInconclusive
 	}
 	matchesRetained := false
 	for _, retained := range leaderMap {
@@ -448,9 +478,12 @@ func (i *Instance) peerSigmaAtL0Verifies(op OperatorID, el EncryptedLayer) bool 
 		}
 	}
 	if !matchesRetained {
-		return false
+		return l0SigmaFake // Rule 5: signed a V no honest retained
 	}
-	return i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext)
+	if !i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext) {
+		return l0SigmaFake // Rule 5: signed bytes don't verify on the claimed V
+	}
+	return l0SigmaVerified
 }
 
 // hasRetainedVAtL0 reports whether any Phase-1 bundle has been retained at L_0.

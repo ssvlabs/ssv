@@ -3,6 +3,7 @@ package obft
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 )
 
 // Tag construction.
@@ -30,6 +31,15 @@ var domainNoQuorum = []byte("OBFT/no-quorum/v1")
 // `layer` is in [0, K-2]; there is no NR tag for L_{K-1} since no layer
 // follows it.
 func NoQuorumTag(clusterID [32]byte, height Height, layer int) []byte {
+	// Caller MUST pass a non-negative in-range layer; out-of-range values
+	// would either wrap silently (negative → very large uint32) or break
+	// per-layer tag uniqueness. Real OBFT configs use K ≤ 32 (MaxLayers in
+	// the wire package); panic on misuse rather than silently corrupt the
+	// tag. Defense-in-depth: validators / decoders also bound layer to
+	// MaxLayers before this function is reached.
+	if layer < 0 || layer > 1<<31-1 {
+		panic(fmt.Sprintf("obft: NoQuorumTag layer %d out of range", layer))
+	}
 	h := sha256.New()
 	h.Write(domainNoQuorum)
 	h.Write(clusterID[:])
@@ -39,9 +49,7 @@ func NoQuorumTag(clusterID [32]byte, height Height, layer int) []byte {
 	h.Write(heightBytes[:])
 
 	var layerBytes [4]byte
-	// Layer is a small non-negative onion-layer index (≤ K ≤ ~13 for SSV);
-	// well within uint32 range.
-	binary.BigEndian.PutUint32(layerBytes[:], uint32(layer)) //nolint:gosec // small non-negative
+	binary.BigEndian.PutUint32(layerBytes[:], uint32(layer)) //nolint:gosec // bounds-checked above
 	h.Write(layerBytes[:])
 
 	return h.Sum(nil)

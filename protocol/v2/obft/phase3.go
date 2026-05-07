@@ -88,9 +88,10 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 	//    partial in its respective V's group. Pigeonhole 2 ensures only
 	//    one V can reach qV cluster-wide regardless of split.
 	leaderID := i.cfg.Layers[layer].Leader
+	// NewInstance ensures every layer's leader has a registered pub-share.
+	pubShare := i.pubKeyShares[leaderID]
 	for _, b := range i.bundles[layer][leaderID] {
-		pubShare := i.pubKeyShares[leaderID]
-		if pubShare != nil && i.signer.VerifyPartial(pubShare, b.Value, b.SigmaV) {
+		if i.signer.VerifyPartial(pubShare, b.Value, b.SigmaV) {
 			addToGroup(&groups, b.Value, leaderID, b.SigmaV)
 		}
 	}
@@ -238,18 +239,29 @@ func (i *Instance) ObserveCertificate(c *Certificate) error {
 		return fmt.Errorf("obft: certificate signature does not verify against cluster pubkey")
 	}
 	if i.receivedCertificate == nil {
-		copyC := *c
-		i.receivedCertificate = &copyC
+		// Deep copy: detach the cert's slice fields from the caller's bytes
+		// so retention is robust even if the caller mutates / reuses them.
+		i.receivedCertificate = &Certificate{
+			ClusterID: c.ClusterID,
+			Height:    c.Height,
+			Value:     append(Value{}, c.Value...),
+			Signature: append(Signature{}, c.Signature...),
+		}
 	}
 	return nil
 }
 
-// RetainedCertificate returns a peer-broadcast certificate previously
-// observed via ObserveCertificate, or nil if none.
+// RetainedCertificate returns a deep copy of the peer-broadcast certificate
+// previously observed via ObserveCertificate, or nil if none.
 func (i *Instance) RetainedCertificate() *Certificate {
 	if i.receivedCertificate == nil {
 		return nil
 	}
-	c := *i.receivedCertificate
-	return &c
+	src := i.receivedCertificate
+	return &Certificate{
+		ClusterID: src.ClusterID,
+		Height:    src.Height,
+		Value:     append(Value{}, src.Value...),
+		Signature: append(Signature{}, src.Signature...),
+	}
 }

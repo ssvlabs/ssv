@@ -107,6 +107,35 @@ func (v *Verifier) VerifyCommitNRPartials(c *Commit) error {
 	return nil
 }
 
+// VerifyCommitWitnesses checks every witness's σ_V against its claimed
+// leader's V-share. Defense-in-depth on top of protocol-layer rehydration:
+// if a byzantine packs garbage witnesses to force expensive BLS verification
+// on every receiver, this rejects at the validation boundary.
+//
+// Rule 2 (leader equivocation) detection is unaffected — that fires at the
+// protocol layer when a leader's bundle/witness retention reaches 2 distinct
+// V's; here we only reject witnesses whose σ_V doesn't verify, which is a
+// malformedness check, not equivocation.
+func (v *Verifier) VerifyCommitWitnesses(c *Commit) error {
+	if err := v.checkConfigured(); err != nil {
+		return err
+	}
+	if c == nil {
+		return errors.New("obft: nil commit")
+	}
+	for i, w := range c.Witnesses {
+		share, ok := v.PubKeyShares[w.Leader]
+		if !ok || len(share) == 0 {
+			return fmt.Errorf("obft: witness %d: no pub-key share for leader %d", i, w.Leader)
+		}
+		if !v.Signer.VerifyPartial(share, w.Value, w.SigmaV) {
+			return fmt.Errorf("obft: witness %d (leader %d, layer %d) σ_V does not verify",
+				i, w.Leader, w.Layer)
+		}
+	}
+	return nil
+}
+
 // VerifyCertificate checks the aggregate sig on c against ClusterPubKey.
 // One verification per certificate.
 func (v *Verifier) VerifyCertificate(c *Certificate) error {

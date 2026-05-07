@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 )
 
@@ -17,8 +19,13 @@ import (
 // duration for kinds where the receiver acceptance window doesn't apply
 // (Commit / Certificate); only Phase1Bundle uses it.
 //
+// If the targeted slot has no active instance yet (e.g. peers broadcast
+// before this operator's pre-consensus completes and StartNewInstance is
+// called), the envelope is buffered on the Controller and replayed by
+// Scheduler.DrainPending after StartNewInstance — preventing silent drops.
+//
 // Returns an error if the envelope's Kind is unknown or if the underlying
-// Process call fails (e.g. routing to a slot with no active instance).
+// Process call fails for reasons other than missing instance.
 func DispatchEnvelope(ctx context.Context, sched *Scheduler, env *wire.Envelope, observedOffset time.Duration) error {
 	if sched == nil {
 		return errors.New("obft adapter: nil Scheduler")
@@ -26,13 +33,35 @@ func DispatchEnvelope(ctx context.Context, sched *Scheduler, env *wire.Envelope,
 	if env == nil {
 		return errors.New("obft adapter: nil Envelope")
 	}
+	ctrl := sched.Controller()
 	switch env.Kind {
 	case wire.KindPhase1Bundle:
-		return sched.HandlePeerPhase1Bundle(ctx, env.Phase1Bundle, observedOffset)
+		err := sched.HandlePeerPhase1Bundle(ctx, env.Phase1Bundle, observedOffset)
+		if errors.Is(err, ErrNoActiveInstance) {
+			ctrl.BufferEnvelope(phase0.Slot(env.Phase1Bundle.Height), PendingEnvelope{
+				Bundle: env.Phase1Bundle, ObservedOffset: observedOffset,
+			})
+			return nil
+		}
+		return err
 	case wire.KindCommit:
-		return sched.Controller().ProcessCommit(env.Commit)
+		err := ctrl.ProcessCommit(env.Commit)
+		if errors.Is(err, ErrNoActiveInstance) {
+			ctrl.BufferEnvelope(phase0.Slot(env.Commit.Height), PendingEnvelope{
+				Commit: env.Commit,
+			})
+			return nil
+		}
+		return err
 	case wire.KindCertificate:
-		return sched.Controller().ProcessCertificate(env.Certificate)
+		err := ctrl.ProcessCertificate(env.Certificate)
+		if errors.Is(err, ErrNoActiveInstance) {
+			ctrl.BufferEnvelope(phase0.Slot(env.Certificate.Height), PendingEnvelope{
+				Certificate: env.Certificate,
+			})
+			return nil
+		}
+		return err
 	default:
 		return fmt.Errorf("obft adapter: unknown envelope kind 0x%02x", byte(env.Kind))
 	}

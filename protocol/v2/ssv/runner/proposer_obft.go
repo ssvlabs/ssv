@@ -90,6 +90,17 @@ func (r *ProposerRunner) ProcessOBFTEnvelopeMsg(ctx context.Context, senderID sp
 		return fmt.Errorf("obft: nil envelope")
 	}
 
+	// Defense-in-depth: enforce that the inner-message claimed signer matches
+	// the outer SSV signer. Without this, a byzantine X could broadcast a
+	// Commit{OperatorID: Y, ...} signed under X's identity; receivers would
+	// then attribute Y's evidence (Rule 3 cross-onion, Rule 1 cross-signing)
+	// against Y for behavior Y did not exhibit. The validation layer also
+	// checks this (verifyInnerSignerMatchesOuter); duplicating here so the
+	// runner is sound even if validation is bypassed in tests / future paths.
+	if err := checkInnerSignerMatchesOuter(env, senderID); err != nil {
+		return err
+	}
+
 	// Rate-limit per kind. KindCommit is single-emit per (slot, op) per
 	// spec §Phase 2.
 	switch env.Kind {
@@ -163,15 +174,43 @@ func (r *ProposerRunner) obftFetchCandidate(ctx context.Context, slot phase0.Slo
 }
 
 // obftHostValidate is invoked by the Scheduler when a peer's Phase-1 bundle
-// has been observed; the host returns the valid/not-valid verdict on the
-// bundled value. For SSV proposer duty, this is where parent_root /
-// fork-domain / slashing-protection checks would land.
+// has been observed (and on Certificate fast-path); the host returns the
+// valid/not-valid verdict on the bundled value.
 //
-// First-cut implementation: trust the bundle's value as-is (return true).
-// The application-level validity machinery is shared with the QBFT path's
-// value-checker; integration is out of scope for this initial migration
-// commit and is tracked as a follow-up.
+// Current checks (cheap, structural):
+//   - Candidate value decodes as a [version | blinded SSZ] pair
+//   - Blinded proposal decodes for the declared spec version
+//   - Decoded proposal's Slot equals the argued slot
+//
+// TODO: integrate with the proposer's value-checker for parent_root /
+// fork-domain / slashing-protection (QBFT proposer-flow has these via
+// `ProposerValueCheckF` in ssv-spec). Until then a byzantine that can
+// produce a self-consistent (but on-the-wrong-fork) blinded block can
+// still pass this gate; downstream beacon-node submission would reject it
+// but the slot is still a miss.
+//
+// `layer` may be -1 when called from the Certificate fast-path (the cert
+// carries V+sig but not the originating layer); callers should not key on
+// it.
 func (r *ProposerRunner) obftHostValidate(ctx context.Context, slot phase0.Slot, layer int, value []byte) (bool, error) {
+	version, blindedSSZ, err := decodeOBFTCandidate(value)
+	if err != nil {
+		return false, nil // malformed envelope (not error: just invalid V)
+	}
+	if version == spec.DataVersionUnknown {
+		return false, nil
+	}
+	vBlk, err := decodeBlindedProposal(version, blindedSSZ)
+	if err != nil {
+		return false, nil
+	}
+	proposalSlot, err := vBlk.Slot()
+	if err != nil {
+		return false, nil
+	}
+	if proposalSlot != slot {
+		return false, nil
+	}
 	return true, nil
 }
 
@@ -218,6 +257,10 @@ func (r *ProposerRunner) obftSubmitOutput(ctx context.Context, slot phase0.Slot,
 
 	r.obftMu.Lock()
 	state := r.obftSlots[slot]
+	var stateVersion spec.DataVersion
+	if state != nil {
+		stateVersion = state.version
+	}
 	r.obftMu.Unlock()
 
 	version, blindedSSZ, err := decodeOBFTCandidate(output.Value)
@@ -226,7 +269,7 @@ func (r *ProposerRunner) obftSubmitOutput(ctx context.Context, slot phase0.Slot,
 	}
 
 	if version == spec.DataVersionUnknown && state != nil {
-		version = state.version
+		version = stateVersion
 	}
 	if version == spec.DataVersionUnknown {
 		return fmt.Errorf("obft submit: cannot determine spec version for slot %d", slot)
@@ -278,6 +321,34 @@ func (r *ProposerRunner) obftBroadcastCertificate(ctx context.Context, slot phas
 // obftOnMissedSlot is invoked when OBFT fails to reach quorum at any layer.
 func (r *ProposerRunner) obftOnMissedSlot(ctx context.Context, slot phase0.Slot, reason error) {
 	recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+}
+
+// checkInnerSignerMatchesOuter rejects an envelope whose claimed inner
+// OperatorID doesn't match the outer SSV signer. Mirrors the validation
+// layer's verifyInnerSignerMatchesOuter (defense-in-depth at dispatch).
+func checkInnerSignerMatchesOuter(env *wire.Envelope, outerSigner spectypes.OperatorID) error {
+	switch env.Kind {
+	case wire.KindPhase1Bundle:
+		if env.Phase1Bundle == nil {
+			return fmt.Errorf("obft dispatch: nil Phase1Bundle body")
+		}
+		if obftcore.OperatorID(outerSigner) != env.Phase1Bundle.OperatorID {
+			return fmt.Errorf("obft dispatch: outer signer %d != inner OperatorID %d",
+				outerSigner, env.Phase1Bundle.OperatorID)
+		}
+	case wire.KindCommit:
+		if env.Commit == nil {
+			return fmt.Errorf("obft dispatch: nil Commit body")
+		}
+		if obftcore.OperatorID(outerSigner) != env.Commit.OperatorID {
+			return fmt.Errorf("obft dispatch: outer signer %d != inner OperatorID %d",
+				outerSigner, env.Commit.OperatorID)
+		}
+	case wire.KindCertificate:
+		// Certificate has no inner OperatorID; outer signer is the only
+		// identity binding.
+	}
+	return nil
 }
 
 // ---- Wire helpers ----

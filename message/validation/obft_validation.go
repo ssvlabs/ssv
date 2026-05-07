@@ -27,7 +27,8 @@ import (
 //   - The signer is a member of the validator's committee.
 //   - For Phase1Bundle: σ_V verifies against the claimed leader's V-share.
 //   - For Commit: each NR partial verifies against the claimed signer's
-//     IBE pub-share (or V-share under Option A).
+//     IBE pub-share (or V-share under Option A); each witness's σ_V verifies
+//     against its claimed leader's V-share.
 //   - For Certificate: the aggregate sig verifies against the cluster
 //     V-pubkey.
 //
@@ -36,8 +37,9 @@ import (
 //
 //   - Commit L_0 σ entries: Rule 5 evidence depends on retained-V matching,
 //     which requires per-instance state.
-//   - Commit Witnesses: Rule 2 evidence on distinct V's at same (layer,
-//     leader) requires per-instance retention bookkeeping.
+//   - Rule 2 evidence on distinct witness V's at same (layer, leader):
+//     requires per-instance retention bookkeeping. (We verify witness σ
+//     correctness here; equivocation detection still happens at protocol.)
 //   - Commit deeper-layer σ entries: IBE-encrypted; verification requires
 //     the chained-decryption key derived from NR-quorum during Phase 3.
 //
@@ -134,6 +136,9 @@ func verifyEnvelopeCrypto(env *wire.Envelope, verifier *obftcore.Verifier) error
 	case wire.KindCommit:
 		if err := verifier.VerifyCommitNRPartials(env.Commit); err != nil {
 			return fmt.Errorf("OBFT commit NR-partial verification: %w", err)
+		}
+		if err := verifier.VerifyCommitWitnesses(env.Commit); err != nil {
+			return fmt.Errorf("OBFT commit witness verification: %w", err)
 		}
 	case wire.KindCertificate:
 		if err := verifier.VerifyCertificate(env.Certificate); err != nil {

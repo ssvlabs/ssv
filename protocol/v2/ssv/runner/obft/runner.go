@@ -51,6 +51,13 @@ func RunProposerSlot(
 	}
 	defer ctrl.EndInstance(slot)
 
+	// Replay any envelopes that arrived before StartNewInstance — peers with
+	// shorter pre-consensus may have broadcast Phase-1 bundles or Commits
+	// before this operator's instance was ready. Without replay, those
+	// messages would be silently dropped (gossipsub doesn't re-deliver to
+	// existing subscribers).
+	sched.DrainPending(ctx, slot)
+
 	cfg := inst.Config
 
 	// Phase 1 — for each layer the local op leads, schedule a concurrent

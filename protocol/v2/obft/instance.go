@@ -188,6 +188,16 @@ func NewInstance(
 	if !operatorInCluster(ownOperatorID, cfg) {
 		return nil, fmt.Errorf("obft: own operator id %d not in cluster", ownOperatorID)
 	}
+	// Every layer's leader must have a registered pub-key share. Without
+	// this, Phase-3 reconstruction at that layer silently skips the
+	// leader's σ_V (it would fail VerifyPartial against a nil share),
+	// producing degraded liveness without a clear cause. Surface the
+	// misconfiguration upfront so it's caught in test/setup.
+	for k, ls := range cfg.Layers {
+		if share, ok := pubKeyShares[ls.Leader]; !ok || len(share) == 0 {
+			return nil, fmt.Errorf("obft: layer %d leader %d has no pub-key share", k, ls.Leader)
+		}
+	}
 	if tagSigner == nil {
 		tagSigner = signer
 	}

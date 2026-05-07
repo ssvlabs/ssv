@@ -162,7 +162,62 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// First retention for this (layer, leader). Stash a defensive deep copy
 	// so retained bundle bytes are independent of caller-owned slices.
 	i.bundles[b.Layer][b.OperatorID] = []*Phase1Bundle{deepCopyBundle(b)}
+
+	// Retroactive Rule 5 check: any L_0 onion entries we observed BEFORE any
+	// V was retained at L_0 have not yet been Rule-5-checked (the check at
+	// ObserveCommit gates on hasRetainedVAtL0). Re-evaluate them now that a V
+	// is retained — a peer's σ on a V we didn't know about earlier is still
+	// Rule 5 evidence.
+	if b.Layer == 0 {
+		i.reevaluateL0Sigmas()
+	}
 	return nil
+}
+
+// reevaluateL0Sigmas re-runs the Rule 5 check on already-observed L_0 onion
+// entries. Called when a Phase-1 bundle is first retained at L_0 to catch
+// fake-σ entries from peers whose KindCommit arrived before the L_0 bundle.
+//
+// Snapshot semantics: removeOnionEntry rewrites the underlying slice
+// in-place (`out := entries[:0]`); iterating the same slice header while
+// the backing array mutates would yield stale or shifted reads. We snapshot
+// (op, []EncryptedLayer) tuples up-front and iterate only the snapshot.
+func (i *Instance) reevaluateL0Sigmas() {
+	type opEntries struct {
+		op      OperatorID
+		entries []EncryptedLayer
+	}
+	leader := i.cfg.Layers[0].Leader
+	var snapshot []opEntries
+	for op, entries := range i.peerOnions[0] {
+		if op == leader {
+			// The layer leader's σ_V is in bundles[0][leader], not
+			// peerOnions; nothing to re-check.
+			continue
+		}
+		// Defensive copy: detach from the underlying array so subsequent
+		// removeOnionEntry mutations don't disturb our iteration.
+		entriesCopy := make([]EncryptedLayer, len(entries))
+		copy(entriesCopy, entries)
+		snapshot = append(snapshot, opEntries{op: op, entries: entriesCopy})
+	}
+	for _, oe := range snapshot {
+		for _, el := range oe.entries {
+			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaFake {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceFakePlaintextSigma,
+					OperatorID: oe.op,
+					Layer:      0,
+					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+						OnionPartial:        append(Signature{}, el.Ciphertext...),
+						OnionValue:          append(Value{}, el.Value...),
+						RetainedValueHashes: i.retainedL0ValueHashes(),
+					},
+				})
+				i.removeOnionEntry(0, oe.op, &el)
+			}
+		}
+	}
 }
 
 // deepCopyBundle returns a deep copy of b — the byte slices inside (Value,

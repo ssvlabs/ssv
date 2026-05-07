@@ -214,6 +214,31 @@ func TestValidateOBFT_Commit_RejectsCorruptNRPartial(t *testing.T) {
 // signature that verifies against the cluster pubkey — out of scope for a
 // validator-layer unit test. Cover the rejection path instead, which is
 // the security-relevant one.
+func TestValidateOBFT_Commit_RejectsCorruptWitness(t *testing.T) {
+	mv, _, share, msgID, clusterID := obftTestSetup(t)
+	signer := share.Committee[0].Signer
+
+	// A Commit whose Witnesses include a garbage σ_V — must be rejected
+	// at validation, before reaching the protocol layer's expensive
+	// rehydration path.
+	commit := &obftcore.Commit{
+		ClusterID:  clusterID,
+		OperatorID: obftcore.OperatorID(signer),
+		Height:     200,
+		Layers:     make([]obftcore.EncryptedLayer, 4),
+		Witnesses: []obftcore.LeaderSigmaWitness{
+			{Layer: 0, Leader: obftcore.OperatorID(signer), Value: []byte("V"), SigmaV: []byte("garbage-witness-sig-padded-to-resemble-bls-length")},
+		},
+	}
+	body, err := wire.WrapCommit(commit)
+	require.NoError(t, err)
+
+	msg := signOBFTEnvelope(t, msgID, body, signer)
+	peerID, _ := libp2ptest.RandPeerID()
+	_, err = mv.validateOBFTMessage(context.Background(), msg, obftCommitteeInfo(share), peerID, time.Now())
+	require.ErrorContains(t, err, "witness verification")
+}
+
 func TestValidateOBFT_Certificate_RejectsCorruptAggregate(t *testing.T) {
 	mv, _, share, msgID, clusterID := obftTestSetup(t)
 	signer := share.Committee[0].Signer

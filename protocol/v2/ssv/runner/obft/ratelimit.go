@@ -42,8 +42,9 @@ type RateLimiter struct {
 	commitSeen map[opKey]time.Time
 	certSeen   map[opKey]time.Time
 
-	maxAge time.Duration
-	now    func() time.Time
+	maxAge       time.Duration
+	now          func() time.Time
+	lastEviction time.Time // when evictExpiredLocked last ran
 }
 
 type opKey struct {
@@ -141,10 +142,17 @@ func (r *RateLimiter) Forget(slot phase0.Slot) {
 }
 
 // evictExpiredLocked removes entries older than maxAge. O(n) per call; n
-// is bounded by ~maxAge worth of slots × cluster size, ≈ a few thousand
-// at the default settings.
+// is bounded by ~maxAge worth of slots × cluster size. Throttled so we
+// don't pay the full scan cost on every Allow* call under sustained
+// message rate; lazy eviction with a (maxAge / 8) cooldown keeps
+// memory bounded while amortizing the scan.
 func (r *RateLimiter) evictExpiredLocked() {
-	cutoff := r.now().Add(-r.maxAge)
+	now := r.now()
+	if !r.lastEviction.IsZero() && now.Sub(r.lastEviction) < r.maxAge/8 {
+		return
+	}
+	r.lastEviction = now
+	cutoff := now.Add(-r.maxAge)
 	for k, t := range r.bundleSeen {
 		if t.Before(cutoff) {
 			delete(r.bundleSeen, k)

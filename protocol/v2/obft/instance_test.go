@@ -752,3 +752,125 @@ func TestObft_BroadcastBudget_HealthyEndToEnd(t *testing.T) {
 	out := requireAllReconstruct(t, s.resolveAll(nil))
 	require.Equal(t, 0, out.Layer)
 }
+
+// ---- Reviewer-identified fixes ---
+
+// TestObft_NRPartial_RejectedUnderOptionA — under Option A (ibePubKeyShares
+// nil), a corrupt NR partial must be rejected by ObserveCommit instead of
+// silently entering peerNR (which would corrupt Lagrange aggregation at
+// Phase 3 and kill fall-through cluster-wide). Defense-in-depth even though
+// the validation layer also rejects.
+func TestObft_NRPartial_RejectedUnderOptionA(t *testing.T) {
+	s := newSim(t, 4)
+	// Op2 silent at L_0 (no V retained) → would NR at L_0. Forge a Commit
+	// from op2 with a garbage NR partial.
+	c := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 2,
+		Height:     s.cfg.Height,
+		Layers:     make([]EncryptedLayer, s.K),
+		NRPartials: []NRPartial{{Layer: 0, PartialSig: []byte("garbage-NR-padded-to-look-like-bls-sig-bytes-here-here-here-here")}},
+	}
+	err := s.instances[3].ObserveCommit(c)
+	require.ErrorContains(t, err, "NR partial")
+	// Confirm peerNR did not get poisoned.
+	require.Empty(t, s.instances[3].peerNR[0])
+}
+
+// TestObft_RetroactiveRule5 — a byzantine's L_0 σ entry that arrives via
+// KindCommit BEFORE any L_0 Phase-1 bundle is retained must still trigger
+// Rule 5 evidence once a bundle does arrive. Without the retroactive check,
+// the slashing attribution is lost.
+func TestObft_RetroactiveRule5(t *testing.T) {
+	s := newSim(t, 4)
+
+	// Op2 forges a fake L_0 σ on a V the cluster never broadcast.
+	signer := NewStubSigner(s.cfg.QV(), []byte{2})
+	fakeV := []byte("never-broadcast-V")
+	fakeSig, err := signer.SignPartial(fakeV)
+	require.NoError(t, err)
+	layers := make([]EncryptedLayer, s.K)
+	layers[0] = EncryptedLayer{Value: fakeV, Ciphertext: fakeSig}
+	byzCommit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 2,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+
+	// Receiver observes the Commit BEFORE any L_0 bundle. Rule 5 check
+	// is skipped (no retained V to compare against).
+	require.NoError(t, s.instances[3].ObserveCommit(byzCommit))
+	preEv := s.instances[3].Evidence()
+	for _, e := range preEv {
+		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
+			"Rule 5 must NOT fire before retention")
+	}
+
+	// Now the L_0 leader's bundle arrives → retroactive Rule 5 fires.
+	s.deliverPhase1(0, s.candidates[0], []OperatorID{1, 2, 3, 4}, observedEarly, true)
+	postEv := s.instances[3].Evidence()
+	found := false
+	for _, e := range postEv {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected retroactive Rule 5 against op2; got %+v", postEv)
+}
+
+// TestObft_NoQuorumTag_RejectsNegativeLayer — out-of-range layer must
+// panic rather than silently corrupt the tag (replay vector). Verified by
+// recovering the panic.
+func TestObft_NoQuorumTag_RejectsNegativeLayer(t *testing.T) {
+	defer func() {
+		r := recover()
+		require.NotNil(t, r, "expected panic on negative layer")
+		require.Contains(t, r.(string), "out of range")
+	}()
+	NoQuorumTag([32]byte{1}, 1, -1)
+}
+
+// TestObft_NewInstance_RequiresLeaderPubShares — a misconfigured instance
+// (one of the layer leaders has no registered pub-key share) must be
+// rejected at construction rather than silently degrading at Phase 3.
+func TestObft_NewInstance_RequiresLeaderPubShares(t *testing.T) {
+	cfg := validBaseConfig()
+	pubShares := map[OperatorID][]byte{
+		1: {1}, 2: {2}, 3: {3},
+		// op4 (L_3 leader) intentionally missing.
+	}
+	signer := NewStubSigner(cfg.QV(), []byte{1})
+	ibe := NewStubIBE(cfg.QV())
+	_, err := NewInstance(cfg, 1, signer, signer, ibe, []byte{0xCC}, pubShares, nil)
+	require.ErrorContains(t, err, "no pub-key share")
+}
+
+// TestObft_PeerSigmaAtL0_MissingPubkeyNotSlashable — a peer with no
+// registered pub-share must NOT be flagged as Rule 5; it's a config issue,
+// not a slashable fault.
+func TestObft_PeerSigmaAtL0_MissingPubkeyNotSlashable(t *testing.T) {
+	s := newSim(t, 4)
+	// Deliver L_0 to populate retained V at L_0.
+	s.deliverPhase1(0, s.candidates[0], []OperatorID{1, 2, 3, 4}, observedEarly, true)
+
+	// Construct a Commit from a non-cluster operator (op99) — its share isn't
+	// registered. A receiver running the L_0 σ-check on it must NOT fire Rule 5.
+	signer := NewStubSigner(s.cfg.QV(), []byte{99})
+	sig, err := signer.SignPartial(s.candidates[0])
+	require.NoError(t, err)
+	layers := make([]EncryptedLayer, s.K)
+	layers[0] = EncryptedLayer{Value: s.candidates[0], Ciphertext: sig}
+	c := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 99,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+	// Bypass ValidateCommit (which would reject op99 as non-cluster) by
+	// calling the Verdict function directly.
+	verdict := s.instances[3].peerSigmaAtL0Verdict(99, layers[0])
+	require.Equal(t, l0SigmaInconclusive, verdict, "missing pub-share → inconclusive, not fake")
+	_ = c
+}
