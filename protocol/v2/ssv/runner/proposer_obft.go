@@ -74,6 +74,11 @@ func (r *ProposerRunner) obftStartSlot(ctx context.Context, logger *zap.Logger, 
 			delete(r.obftSlots, slot)
 			r.obftMu.Unlock()
 			r.obftRL.Forget(slot)
+			// Drop any pre-instance envelopes still buffered for this slot.
+			// Without this, late peer broadcasts for an already-ended slot
+			// get buffered (lookup fails → BufferEnvelope) and sit there
+			// until LRU eviction at MaxPendingSlots. Bounded but pointless.
+			r.obftCtrl.ForgetPending(slot)
 		} else {
 			r.obftMu.Unlock()
 		}
@@ -189,25 +194,42 @@ func (r *ProposerRunner) obftFetchCandidate(ctx context.Context, slot phase0.Slo
 }
 
 // obftHostValidate is invoked by the Scheduler when a peer's Phase-1 bundle
-// has been observed (and on Certificate fast-path); the host returns the
-// valid/not-valid verdict on the bundled value.
+// has been observed (and on the Certificate fast-path); the host returns
+// the valid/not-valid verdict on the bundled value. Mirrors QBFT's
+// ProposerValueCheckF — the OBFT analog for receiver-side value gating.
 //
-// Current checks (cheap, structural):
-//   - Candidate value decodes as a [version | blinded SSZ] pair
-//   - Blinded proposal decodes for the declared spec version
-//   - Decoded proposal's Slot equals the argued slot
+// Checks (in order):
 //
-// TODO: integrate with the proposer's value-checker for parent_root /
-// fork-domain / slashing-protection (QBFT proposer-flow has these via
-// `ProposerValueCheckF` in ssv-spec). Until then a byzantine that can
-// produce a self-consistent (but on-the-wrong-fork) blinded block can
-// still pass this gate; downstream beacon-node submission would reject it
-// but the slot is still a miss.
+//  1. Structural: candidate decodes as [version | blinded SSZ], blinded
+//     proposal decodes for the declared version, slot == argued slot.
+//
+//  2. Duty consistency: the block's proposer_index matches this share's
+//     ValidatorIndex. A block proposing for a different validator is not
+//     something we should agree to (it'd be the wrong duty).
+//
+//  3. Slashing protection: the slot is not already protected against by
+//     the ssv-signer's slashing DB. Agreeing to a slashable block at σ-
+//     emission time would commit us to a value we'd later refuse to sign
+//     at submit — wasting the slot's quorum.
+//
+// What this does NOT check:
+//
+//   - parent_root / fork-domain: the receiver's view of the chain head may
+//     differ from the fetcher's (especially under reorgs); validating
+//     parent_root locally would split-brain receivers across views and
+//     is the wrong layer for this check. The beacon node validates these
+//     at submission time.
+//
+//   - Block contents (transactions, attestations, etc.): trust the fetcher
+//     within the f-bound; honest fetchers are guaranteed to produce blocks
+//     their own beacon node accepted.
 //
 // `layer` may be -1 when called from the Certificate fast-path (the cert
 // carries V+sig but not the originating layer); callers should not key on
-// it.
-func (r *ProposerRunner) obftHostValidate(ctx context.Context, slot phase0.Slot, layer int, value []byte) (bool, error) {
+// it. ctx is currently unused but reserved for slashing-DB calls that may
+// become async in future.
+func (r *ProposerRunner) obftHostValidate(_ context.Context, slot phase0.Slot, _ int, value []byte) (bool, error) {
+	// Structural decode.
 	version, blindedSSZ, err := obftadapter.DecodeCandidate(value)
 	if err != nil {
 		return false, nil // malformed envelope (not error: just invalid V)
@@ -226,6 +248,28 @@ func (r *ProposerRunner) obftHostValidate(ctx context.Context, slot phase0.Slot,
 	if proposalSlot != slot {
 		return false, nil
 	}
+
+	// Duty consistency: proposer_index must match this share's validator.
+	// A peer that broadcasts a block for the wrong validator (or attempts
+	// to substitute a different validator's pre-signed block) is rejected.
+	proposerIdx, err := vBlk.ProposerIndex()
+	if err != nil {
+		return false, nil
+	}
+	if proposerIdx != r.GetShare().ValidatorIndex {
+		return false, nil
+	}
+
+	// Slashing protection: refuse to σ-emit at a slot we've already
+	// committed to or that the slashing DB has otherwise marked unsafe.
+	// Same gate as obftSubmitOutput but applied earlier — prevents the
+	// cluster from reaching σ-quorum on a value we'd later refuse to
+	// sign, which would waste the slot.
+	sharePubkey := phase0.BLSPubKey(r.GetShare().SharePubKey)
+	if err := r.signer.IsBeaconBlockSlashable(sharePubkey, slot); err != nil {
+		return false, nil
+	}
+
 	return true, nil
 }
 

@@ -250,6 +250,28 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// new entries.
 	}
 
+	// Pre-validate NR partials BEFORE σ-side / NR-side / witness mutations,
+	// for per-Commit atomicity on the inner-bundle state: a malformed NR
+	// partial bails out without leaving σ-onion entries, peerNR entries,
+	// or witness retentions behind.
+	//
+	// What survives a failed NR pre-validation: the top-level dedup
+	// mutations above (peerCommitHashes, peerFirstCommit, top-level Rule 3
+	// evidence). They must — the slashable proof (CommitEquivocation with
+	// both Commit bodies) attributes the byzantine's structurally-distinct
+	// emissions regardless of inner-bundle validity, and peerCommitHashes
+	// is what makes the second-distinct-emission detection work. Per-layer
+	// Rule 1/3/5 evidence is lost on bad-NR Commits but is redundant with
+	// the top-level CommitEquivocationEvidence — slashing tools can derive
+	// per-layer details from the full Commit bodies.
+	//
+	// In production the validation layer's Verifier.VerifyCommitNRPartials
+	// rejects malformed NR before reaching this path; this is defense-in-
+	// depth for any path that bypasses validation (tests, future plumbing).
+	if err := i.verifyCommitNRPartials(c); err != nil {
+		return err
+	}
+
 	// σ-side per layer.
 	for k := 0; k < K; k++ {
 		el := c.Layers[k]
@@ -376,29 +398,9 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 	}
 
-	// Pre-validate NR partials BEFORE entering the NR-side mutation loop.
-	// Without this, a layer-2 NR partial that fails verify after layer-0/1
-	// partials were already inserted into peerNR would leave Instance state
-	// half-applied (the prior partials would silently aggregate into the
-	// Phase-3 chained-decryption key while we returned an error).
-	//
-	// Run AFTER σ-side processing so that a Commit packing both σ-equivocation
-	// and a malformed NR partial still produces the per-layer Rule 1/3/5
-	// evidence (which carries slashable proof) — atomicity here is per-side,
-	// not per-Commit.
-	//
-	// The validation layer (message/validation) already runs the equivalent
-	// Verifier.VerifyCommitNRPartials check on inbound network messages — this
-	// is defense-in-depth for any path that bypasses validation (locally-routed
-	// messages, future plumbing, etc.).
-	if err := i.verifyCommitNRPartials(c); err != nil {
-		return err
-	}
-
-	// NR-side per layer. Verification of each partial against the signer's IBE
-	// pub-share (Option B) or V-pub-share (Option A) was already performed in
-	// verifyCommitNRPartials above; this loop is purely state mutation +
-	// Rule 1 cross-signing detection.
+	// NR-side per layer. NR partial verification was already performed by
+	// verifyCommitNRPartials before σ-side processing (per-Commit atomicity).
+	// This loop is purely state mutation + Rule 1 cross-signing detection.
 	for _, p := range c.NRPartials {
 		if i.peerNR[p.Layer] == nil {
 			i.peerNR[p.Layer] = make(map[OperatorID]Signature)

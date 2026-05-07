@@ -69,6 +69,13 @@ type messageValidator struct {
 	// states keeps track of signers(individual runners, of which every operator has multiple) per validator.
 	states *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 
+	// obftAdmissions enforces the OBFT distinct-content bucket cap at the
+	// validation boundary, BEFORE BLS verification — saving BLS cost on
+	// envelopes that would be rejected by the runner-side rate limiter
+	// downstream anyway. Lazily-allocated entries TTL out per
+	// obftAdmissionMaxAge.
+	obftAdmissions *obftAdmissionTracker
+
 	selfPID    peer.ID
 	selfAccept bool
 }
@@ -91,6 +98,7 @@ func New(
 		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
+		obftAdmissions:      newOBFTAdmissionTracker(),
 	}
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64

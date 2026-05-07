@@ -15,16 +15,18 @@ import (
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 )
 
-// allowedFutureSlots caps how far in the future an OBFT envelope's claimed
-// Height (slot) can be relative to the current estimated slot. Combined with
-// LateSlotAllowance (the past-window), this bounds the (slot, op) state
-// the runner's pre-instance buffer can accumulate from network input.
-//
-// Without this bound, a byzantine streaming envelopes at slot=0..2^64-1
-// could fill the Controller's pending-envelope buffer (capped at
-// MaxPendingSlots=256) entirely with attacker-chosen slot numbers, evicting
-// legitimate near-term entries.
-const allowedFutureSlots phase0.Slot = 4
+// OBFT-specific slot-window bounds. OBFT's protocol completes within one
+// duty slot — Phase 1 / 2 / 3 all run in-slot and the runner's Instance is
+// torn down at slot end. Past-slot messages have nowhere to land (the
+// instance is gone, EndInstance also called ForgetPending), so we tighten
+// the past-window aggressively. The future-window keeps a small budget
+// for clock skew and for messages that legitimately arrive a tick or two
+// before this operator starts the slot's instance (handled via the
+// pre-instance buffer).
+const (
+	obftAllowedFutureSlots phase0.Slot = 4
+	obftAllowedPastSlots   phase0.Slot = 2
+)
 
 // validateOBFTMessage decodes and sanity-checks an OBFT envelope carried
 // in `signedSSVMessage.Data`. After decoding, it verifies the envelope's
@@ -82,21 +84,37 @@ func (mv *messageValidator) validateOBFTMessage(
 	}
 
 	// Slot-window check. Reject envelopes whose claimed Height is outside
-	// [currentSlot - LateSlotAllowance - SlotsPerEpoch, currentSlot +
-	// allowedFutureSlots]. Without this, a byzantine could stream envelopes
-	// for arbitrary future slot numbers and fill the runner's pre-instance
-	// pending buffer with attacker-chosen entries.
+	// [currentSlot - obftAllowedPastSlots, currentSlot + obftAllowedFutureSlots].
+	// Tighter than QBFT's window because OBFT completes in-slot and past-slot
+	// messages have nowhere to land. Bounds the (slot, op) state the runner's
+	// pre-instance buffer + admission tracker accumulate from network input.
 	envSlot, err := envelopeSlot(env)
 	if err != nil {
 		return nil, fmt.Errorf("OBFT envelope: extract slot: %w", err)
 	}
 	current := mv.netCfg.EstimatedCurrentSlot()
-	maxPast := phase0.Slot(mv.netCfg.SlotsPerEpoch + LateSlotAllowance)
-	if envSlot+maxPast < current {
+	if envSlot+obftAllowedPastSlots < current {
 		return nil, fmt.Errorf("OBFT envelope: slot %d too old (current %d)", envSlot, current)
 	}
-	if envSlot > current+allowedFutureSlots {
+	if envSlot > current+obftAllowedFutureSlots {
 		return nil, fmt.Errorf("OBFT envelope: slot %d too far in future (current %d)", envSlot, current)
+	}
+
+	// Admission cap pre-BLS: reject identical re-broadcasts and bound the
+	// distinct-content per (msgID, slot, op, kind) bucket BEFORE the BLS
+	// verify cost is paid. Mirrors the runner-side rate limiter so a
+	// byzantine cannot make us pay BLS for envelopes the runner would
+	// reject downstream anyway.
+	if mv.obftAdmissions != nil {
+		if err := mv.obftAdmissions.Admit(
+			signedSSVMessage.SSVMessage.GetID(),
+			envSlot,
+			signer,
+			byte(env.Kind),
+			signedSSVMessage.SSVMessage.Data,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	// Look up the validator's share to construct a verifier. OBFT messages
