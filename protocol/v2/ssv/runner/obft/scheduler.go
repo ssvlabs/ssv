@@ -347,4 +347,3 @@ func (s *Scheduler) submitAndBroadcastCert(ctx context.Context, slot phase0.Slot
 	}
 	return nil
 }
-

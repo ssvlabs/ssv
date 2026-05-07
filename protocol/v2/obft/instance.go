@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// MaxCommitHashesPerOp caps the number of distinct KindCommit content
+// hashes retained per operator at a single instance. The first distinct
+// second hash fires Rule 3 cross-onion evidence (spec §Phase 2 single-emit
+// rule); subsequent distinct hashes still fire one evidence each up to this
+// cap, after which further distinct emissions are silently dropped to bound
+// memory under abuse — the operator is already flagged byzantine many times
+// over by then.
+const MaxCommitHashesPerOp = 8
+
 // CommitState is one operator's per-layer commitment state in the three-state
 // model from spec §Phase 1 / Operator commitments. The σ / NR / NV states are
 // local-per-layer; on the wire they materialize in a single KindCommit message
@@ -64,30 +73,30 @@ func (s CommitState) String() string {
 //
 //  1. NewInstance(cfg, ...)
 //  2. Phase 1 — for each layer:
-//       a. If local op is the leader: BuildPhase1Bundle(layer, V) → bundle
-//          for broadcast.
-//       b. ObservePhase1Bundle(b, observedOffset) for each bundle received
-//          from peers (or from the local op's own broadcast). Bundles
-//          first-observed past T_commit at this operator are not retained.
-//       c. ApplyHostValidity(layer, V, valid) once the host returns its
-//          per-V validity verdict.
+//     a. If local op is the leader: BuildPhase1Bundle(layer, V) → bundle
+//     for broadcast.
+//     b. ObservePhase1Bundle(b, observedOffset) for each bundle received
+//     from peers (or from the local op's own broadcast). Bundles
+//     first-observed past T_commit at this operator are not retained.
+//     c. ApplyHostValidity(layer, V, valid) once the host returns its
+//     per-V validity verdict.
 //  3. Phase 2 — at TCommit (single emission):
-//       a. BuildOwnCommit() — emit a single KindCommit message carrying σ
-//          partials for σ-state layers and NR partials for NR-state layers,
-//          based on what was observed by T_commit.
-//       b. ObserveCommit(c) for peers' KindCommit messages.
+//     a. BuildOwnCommit() — emit a single KindCommit message carrying σ
+//     partials for σ-state layers and NR partials for NR-state layers,
+//     based on what was observed by T_commit.
+//     b. ObserveCommit(c) for peers' KindCommit messages.
 //  4. Phase 3 — from TCommit + Delta2 onward (no hard upper bound here;
 //     the runner enforces the slot's relay-submission deadline via ctx):
-//       a. Resolve(now) → Output (success) or ErrNoQuorum. Resolve is
-//          opportunistic — re-running on late KindCommit arrivals can
-//          push σ-pool past qV at a layer that didn't reach on the
-//          initial walk, or push NR-pool past qEnc to unlock the next
-//          layer's chained decryption (Pigeonhole semantics still hold).
-//          RoundEndOffset (= TCommit + Delta2 + Delta3) is a soft per-
-//          operator target, not a hard cluster-wide deadline.
-//       b. On success: BuildCertificate(out) → broadcast.
-//       c. ObserveCertificate(c) for peers' certificates as a fallback
-//          submission path when local Resolve fails.
+//     a. Resolve(now) → Output (success) or ErrNoQuorum. Resolve is
+//     opportunistic — re-running on late KindCommit arrivals can
+//     push σ-pool past qV at a layer that didn't reach on the
+//     initial walk, or push NR-pool past qEnc to unlock the next
+//     layer's chained decryption (Pigeonhole semantics still hold).
+//     RoundEndOffset (= TCommit + Delta2 + Delta3) is a soft per-
+//     operator target, not a hard cluster-wide deadline.
+//     b. On success: BuildCertificate(out) → broadcast.
+//     c. ObserveCertificate(c) for peers' certificates as a fallback
+//     submission path when local Resolve fails.
 //
 // Instance is NOT thread-safe; callers must serialize access. The expected
 // SSV adapter runs each Instance behind its own mutex (see
@@ -204,24 +213,24 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:             cfg,
-		ownOperatorID:   ownOperatorID,
-		signer:          signer,
-		tagSigner:       tagSigner,
-		ibe:             ibe,
-		clusterPubKey:   clusterPubKey,
-		pubKeyShares:    pubKeyShares,
-		ibePubKeyShares: ibePubKeyShares,
-		bundles:         make(map[int]map[OperatorID][]*Phase1Bundle, K),
-		hostVerdict:     make(map[int]map[string]bool, K),
-		peerOnions:      make(map[int]map[OperatorID][]EncryptedLayer, K),
-		peerNR:          make(map[int]map[OperatorID]Signature, K),
+		cfg:              cfg,
+		ownOperatorID:    ownOperatorID,
+		signer:           signer,
+		tagSigner:        tagSigner,
+		ibe:              ibe,
+		clusterPubKey:    clusterPubKey,
+		pubKeyShares:     pubKeyShares,
+		ibePubKeyShares:  ibePubKeyShares,
+		bundles:          make(map[int]map[OperatorID][]*Phase1Bundle, K),
+		hostVerdict:      make(map[int]map[string]bool, K),
+		peerOnions:       make(map[int]map[OperatorID][]EncryptedLayer, K),
+		peerNR:           make(map[int]map[OperatorID]Signature, K),
 		peerCommitHashes: make(map[OperatorID]map[[32]byte]struct{}),
-		localState:      make([]CommitState, K),
-		sigmaLocked:     make([]bool, K),
-		sigmaLockedV:    make([]Value, K),
-		nrLocked:        make([]bool, K),
-		ownPartials:     make(map[int]Signature),
+		localState:       make([]CommitState, K),
+		sigmaLocked:      make([]bool, K),
+		sigmaLockedV:     make([]Value, K),
+		nrLocked:         make([]bool, K),
+		ownPartials:      make(map[int]Signature),
 	}, nil
 }
 

@@ -31,10 +31,18 @@ const DefaultMaxAge = 32 * 12 * time.Second
 //   - Certificate:  ≤ 1 per slot — final-certificate gossip is one-shot.
 //
 // Memory management: each recorded entry carries a creation timestamp and
-// is lazy-evicted by any Allow* call once older than MaxAge. Forget(slot)
-// remains as an explicit cleanup hook the runner calls on instance
-// completion; with TTL-based eviction it is no longer load-bearing for
-// memory safety.
+// is lazy-evicted by any Allow* call once older than MaxAge. Eviction is
+// throttled to (MaxAge / 8) so sustained high-rate Allow* calls don't pay
+// a full O(n) scan every time. Forget(slot) is an explicit O(n) cleanup
+// hook the runner calls on instance completion.
+//
+// At-rest behavior: if Allow* calls cease after a burst, stale entries
+// remain in the maps until either (a) the next Allow* call (which, if it
+// occurs after the throttle window MaxAge/8 has elapsed since the last
+// eviction, will purge entries older than MaxAge), or (b) Forget(slot) is
+// invoked by the runner on instance completion. Memory at rest is bounded
+// by burst-size × cluster-size — at SSV scale a few KiB in the worst case.
+// Acceptable; no background sweeper.
 type RateLimiter struct {
 	mu sync.Mutex
 

@@ -46,8 +46,8 @@ import (
 //     own per-operator shares; pass them explicitly. The V-shares are not
 //     reused for NR verification.
 type Verifier struct {
-	Signer         Signer    // V-keypair signer (verify-only)
-	TagSigner      Signer    // IBE-keypair signer (verify-only); may equal Signer under Option A
+	Signer         Signer // V-keypair signer (verify-only)
+	TagSigner      Signer // IBE-keypair signer (verify-only); may equal Signer under Option A
 	PubKeyShares   map[OperatorID][]byte
 	NRPubKeyShares map[OperatorID][]byte // optional; nil → falls back to PubKeyShares (Option A)
 	ClusterPubKey  []byte

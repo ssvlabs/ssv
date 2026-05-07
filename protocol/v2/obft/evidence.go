@@ -94,11 +94,11 @@ type Evidence struct {
 
 	// Per-rule payloads. Only one is populated.
 
-	CrossSigning             *CrossSigningEvidence
-	LeaderEquivocation       *LeaderEquivocationEvidence
-	CrossOnionEquivocation   *CrossOnionEquivocationEvidence
-	FakeEncryptedPresence    *FakeEncryptedPresenceEvidence
-	FakePlaintextSigma       *FakePlaintextSigmaEvidence
+	CrossSigning           *CrossSigningEvidence
+	LeaderEquivocation     *LeaderEquivocationEvidence
+	CrossOnionEquivocation *CrossOnionEquivocationEvidence
+	FakeEncryptedPresence  *FakeEncryptedPresenceEvidence
+	FakePlaintextSigma     *FakePlaintextSigmaEvidence
 }
 
 // CrossSigningEvidence (Rule 1) — Operator OperatorID emitted both σ at Layer

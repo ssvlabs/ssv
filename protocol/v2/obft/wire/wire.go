@@ -272,11 +272,11 @@ func EncodeCommit(c *obft.Commit) ([]byte, error) {
 		if len(w.SigmaV) > MaxFieldSize {
 			return nil, fmt.Errorf("wire: commit witness %d sigmaV too long (%d)", i, len(w.SigmaV))
 		}
-		out = appendUint32(out, uint32(w.Layer))         //nolint:gosec // bounds-checked
-		out = appendUint64(out, uint64(w.Leader))        //
-		out = appendUint32(out, uint32(len(w.Value)))    //nolint:gosec // bounds-checked
-		out = append(out, w.Value...)                    //
-		out = appendUint32(out, uint32(len(w.SigmaV)))   //nolint:gosec // bounds-checked
+		out = appendUint32(out, uint32(w.Layer))       //nolint:gosec // bounds-checked
+		out = appendUint64(out, uint64(w.Leader))      //
+		out = appendUint32(out, uint32(len(w.Value)))  //nolint:gosec // bounds-checked
+		out = append(out, w.Value...)                  //
+		out = appendUint32(out, uint32(len(w.SigmaV))) //nolint:gosec // bounds-checked
 		out = append(out, w.SigmaV...)
 	}
 	return out, nil

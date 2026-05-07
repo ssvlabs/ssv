@@ -203,8 +203,11 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 
 	// Top-level dedup. Identical re-broadcasts (gossipsub) are no-ops; the
 	// FIRST distinct second hash from the same operator is byzantine evidence
-	// (single-emit rule, spec §Phase 2). All distinct hashes are retained so
-	// later redeliveries of any prior variant remain no-ops.
+	// (single-emit rule, spec §Phase 2). All distinct hashes are retained
+	// (up to MaxCommitHashesPerOp) so later redeliveries of any prior variant
+	// remain no-ops; once the cap is reached, further distinct emissions are
+	// silently dropped — the operator is already flagged repeatedly, accepting
+	// more variants is just memory pressure.
 	curHash := commitContentHash(c)
 	seen := i.peerCommitHashes[c.OperatorID]
 	if seen == nil {
@@ -212,6 +215,12 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	} else {
 		if _, ok := seen[curHash]; ok {
 			return nil // identical re-broadcast
+		}
+		if len(seen) >= MaxCommitHashesPerOp {
+			// Operator is already flagged byzantine via prior distinct hashes;
+			// drop this emission entirely (no per-content processing) to bound
+			// memory under abuse.
+			return nil
 		}
 		i.recordEvidence(Evidence{
 			Rule:       EvidenceCrossOnionEquivocation,

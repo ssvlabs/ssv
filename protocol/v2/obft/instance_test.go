@@ -820,6 +820,48 @@ func TestObft_RetroactiveRule5(t *testing.T) {
 	require.True(t, found, "expected retroactive Rule 5 against op2; got %+v", postEv)
 }
 
+// TestObft_PeerCommitHashes_CappedPerOp — under abuse (a byzantine emitting
+// many distinct Commits), peerCommitHashes accumulation is bounded by
+// MaxCommitHashesPerOp. Beyond the cap, further distinct emissions are
+// dropped silently — the operator is already flagged byzantine many times
+// over, accepting more variants is just memory pressure.
+func TestObft_PeerCommitHashes_CappedPerOp(t *testing.T) {
+	s := newSim(t, 4)
+	signer := NewStubSigner(s.cfg.QV(), []byte{2})
+	receiver := s.instances[3]
+
+	// Emit MaxCommitHashesPerOp+5 structurally-distinct Commits from op2.
+	// Each carries one distinct NR partial layer to vary content.
+	for k := 0; k < MaxCommitHashesPerOp+5; k++ {
+		layer := k % (s.K - 1) // layers in [0, K-1) for NR
+		tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, layer)
+		nrSig, err := signer.SignPartial(tag)
+		require.NoError(t, err)
+		// Vary the partial sig to make each commit structurally distinct.
+		varied := append([]byte{byte(k)}, nrSig...)
+		c := &Commit{
+			ClusterID:  s.cfg.ClusterID,
+			OperatorID: 2,
+			Height:     s.cfg.Height,
+			Layers:     make([]EncryptedLayer, s.K),
+			NRPartials: []NRPartial{{Layer: layer, PartialSig: varied}},
+		}
+		// Errors past the cap are not surfaced (silent drop), but earlier
+		// distinct hashes will fire NR-partial verification failure (the
+		// varied sig won't verify). Skip error checks; we're testing the
+		// hash-cap not the partial verification.
+		_ = receiver.ObserveCommit(c)
+	}
+
+	// peerCommitHashes for op2 must be capped exactly at MaxCommitHashesPerOp.
+	// Loop ran MaxCommitHashesPerOp+5 distinct emissions, so we expect to
+	// have hit the cap (not just be under it — that would be a sign the cap
+	// is too aggressive).
+	hashes := receiver.peerCommitHashes[2]
+	require.Equal(t, MaxCommitHashesPerOp, len(hashes),
+		"peerCommitHashes must hit the cap exactly under sustained abuse")
+}
+
 // TestObft_NoQuorumTag_RejectsNegativeLayer — out-of-range layer must
 // panic rather than silently corrupt the tag (replay vector). Verified by
 // recovering the panic.

@@ -1,6 +1,7 @@
 package obft
 
 import (
+	"container/list"
 	"errors"
 	"fmt"
 	"sort"
@@ -53,8 +54,11 @@ type Controller struct {
 	// pending buffers envelopes that arrived before the slot's instance
 	// started (e.g., faster peers send during the slow operator's pre-
 	// consensus). Drained by Scheduler.DrainPending after StartNewInstance.
-	// Capped per-slot to MaxPendingPerSlot to bound memory under abuse.
-	pending map[phase0.Slot][]PendingEnvelope
+	// Capped per-slot to MaxPendingPerSlot and globally to MaxPendingSlots
+	// (FIFO eviction via pendingOrder) to bound memory under abuse.
+	pending      map[phase0.Slot][]PendingEnvelope
+	pendingOrder *list.List                    // *list.Element holds phase0.Slot
+	pendingElem  map[phase0.Slot]*list.Element // O(1) lookup for Drain/Forget
 }
 
 // MaxPendingPerSlot caps the number of envelopes buffered per slot before
@@ -144,32 +148,35 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		overrides:       opts.Overrides,
 		instances:       make(map[phase0.Slot]*RunningInstance),
 		pending:         make(map[phase0.Slot][]PendingEnvelope),
+		pendingOrder:    list.New(),
+		pendingElem:     make(map[phase0.Slot]*list.Element),
 	}, nil
 }
 
 // BufferEnvelope queues an envelope for a slot whose instance hasn't yet
 // started. Called by the dispatcher when Controller.lookup returns
 // ErrNoActiveInstance. Drops the envelope if the per-slot buffer is full;
-// evicts the oldest slot entry (lowest slot number) if MaxPendingSlots
-// is exceeded.
+// evicts the oldest slot entry (FIFO insertion order) if MaxPendingSlots
+// is exceeded. O(1) amortized: list.PushBack / list.Front+Remove.
 func (c *Controller) BufferEnvelope(slot phase0.Slot, env PendingEnvelope) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.pending[slot]) >= MaxPendingPerSlot {
 		return
 	}
-	if _, exists := c.pending[slot]; !exists && len(c.pending) >= MaxPendingSlots {
-		// Evict oldest (lowest) slot to bound memory under attacker creating
-		// many distinct slot numbers.
-		var oldest phase0.Slot
-		first := true
-		for s := range c.pending {
-			if first || s < oldest {
-				oldest = s
-				first = false
+	if _, exists := c.pending[slot]; !exists {
+		if len(c.pending) >= MaxPendingSlots {
+			// Evict the oldest slot (front of pendingOrder) to bound memory
+			// under an attacker creating many distinct slot numbers.
+			front := c.pendingOrder.Front()
+			if front != nil {
+				oldest := front.Value.(phase0.Slot)
+				c.pendingOrder.Remove(front)
+				delete(c.pendingElem, oldest)
+				delete(c.pending, oldest)
 			}
 		}
-		delete(c.pending, oldest)
+		c.pendingElem[slot] = c.pendingOrder.PushBack(slot)
 	}
 	c.pending[slot] = append(c.pending[slot], env)
 }
@@ -181,7 +188,7 @@ func (c *Controller) DrainPending(slot phase0.Slot) []PendingEnvelope {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	p := c.pending[slot]
-	delete(c.pending, slot)
+	c.removePendingLocked(slot)
 	return p
 }
 
@@ -191,6 +198,16 @@ func (c *Controller) DrainPending(slot phase0.Slot) []PendingEnvelope {
 func (c *Controller) ForgetPending(slot phase0.Slot) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.removePendingLocked(slot)
+}
+
+// removePendingLocked removes a slot from all three pending data structures.
+// Caller must hold c.mu.
+func (c *Controller) removePendingLocked(slot phase0.Slot) {
+	if elem, ok := c.pendingElem[slot]; ok {
+		c.pendingOrder.Remove(elem)
+		delete(c.pendingElem, slot)
+	}
 	delete(c.pending, slot)
 }
 

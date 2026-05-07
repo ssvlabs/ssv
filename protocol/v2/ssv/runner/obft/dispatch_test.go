@@ -61,6 +61,58 @@ func TestController_BufferCappedPerSlot(t *testing.T) {
 	require.Len(t, ctrl.DrainPending(slot), MaxPendingPerSlot)
 }
 
+// TestController_LRUEvictsOldestSlot — when MaxPendingSlots is exceeded,
+// the oldest slot (FIFO insertion order) is evicted, NOT the slot we're
+// inserting into. Ensures that a flood of envelopes at distinct slot
+// numbers doesn't grow memory unbounded. Also verifies the three auxiliary
+// data structures (pending, pendingElem, pendingOrder) stay in sync.
+func TestController_LRUEvictsOldestSlot(t *testing.T) {
+	ctrl := newMinimalControllerForTest(t)
+
+	checkInvariant := func(stage string) {
+		require.Equal(t, len(ctrl.pending), len(ctrl.pendingElem),
+			"%s: pending and pendingElem must have equal cardinality", stage)
+		require.Equal(t, len(ctrl.pending), ctrl.pendingOrder.Len(),
+			"%s: pending and pendingOrder must have equal cardinality", stage)
+		for s := range ctrl.pending {
+			elem, ok := ctrl.pendingElem[s]
+			require.Truef(t, ok, "%s: slot %d in pending but not pendingElem", stage, s)
+			require.Equal(t, s, elem.Value.(phase0.Slot),
+				"%s: pendingElem[%d] points to wrong slot", stage, s)
+		}
+	}
+
+	// Buffer envelopes for slots 0..MaxPendingSlots-1.
+	for s := phase0.Slot(0); s < phase0.Slot(MaxPendingSlots); s++ {
+		ctrl.BufferEnvelope(s, PendingEnvelope{
+			Commit: &obftcore.Commit{Height: obftcore.Height(s)},
+		})
+	}
+	require.Len(t, ctrl.pending, MaxPendingSlots)
+	checkInvariant("after fill")
+
+	// One more (slot MaxPendingSlots) → should evict slot 0.
+	ctrl.BufferEnvelope(phase0.Slot(MaxPendingSlots), PendingEnvelope{
+		Commit: &obftcore.Commit{Height: obftcore.Height(MaxPendingSlots)},
+	})
+	require.Len(t, ctrl.pending, MaxPendingSlots)
+	_, hasSlot0 := ctrl.pending[phase0.Slot(0)]
+	require.False(t, hasSlot0, "slot 0 (oldest) should have been evicted")
+	_, hasNewSlot := ctrl.pending[phase0.Slot(MaxPendingSlots)]
+	require.True(t, hasNewSlot, "newest slot should be present")
+	checkInvariant("after eviction")
+
+	// Drain a slot mid-list — invariant must hold.
+	ctrl.DrainPending(phase0.Slot(50))
+	require.Len(t, ctrl.pending, MaxPendingSlots-1)
+	checkInvariant("after drain")
+
+	// Forget another slot.
+	ctrl.ForgetPending(phase0.Slot(100))
+	require.Len(t, ctrl.pending, MaxPendingSlots-2)
+	checkInvariant("after forget")
+}
+
 // TestController_ForgetPending — explicit cleanup of un-drained slots.
 func TestController_ForgetPending(t *testing.T) {
 	ctrl := newMinimalControllerForTest(t)
