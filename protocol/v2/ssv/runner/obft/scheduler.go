@@ -53,6 +53,14 @@ type LifecycleHooks struct {
 	// OnMissedSlot is invoked when Resolve returns ErrNoQuorum or a related
 	// failure. Optional.
 	OnMissedSlot func(ctx context.Context, slot phase0.Slot, reason error)
+
+	// OnReplayError is invoked once per envelope whose pre-instance replay
+	// (DrainPending) produced an error. Replay errors are non-fatal — the
+	// slot proceeds — but they're useful telemetry: a large volume during a
+	// slot may indicate a peer broadcasting malformed envelopes pre-StartNewInstance,
+	// or a routing-window misconfiguration. Optional; if nil, replay errors
+	// are silently dropped (legacy behavior).
+	OnReplayError func(ctx context.Context, slot phase0.Slot, kind wire.MessageKind, err error)
 }
 
 func (h *LifecycleHooks) validate() error {
@@ -133,17 +141,28 @@ func (s *Scheduler) FetchAndBroadcastBundle(ctx context.Context, slot phase0.Slo
 
 // DrainPending replays any envelopes buffered on the Controller for `slot`
 // (typically because peers broadcast before this operator's instance had
-// started). Errors from individual replays are logged via the OnMissedSlot
-// hook is NOT invoked — replay errors are best-effort, not slot-failing.
+// started). Replay errors are non-fatal — they don't fail the slot — but
+// are surfaced via the optional OnReplayError hook for telemetry. Without
+// the hook they're silently dropped.
 func (s *Scheduler) DrainPending(ctx context.Context, slot phase0.Slot) {
 	for _, env := range s.controller.DrainPending(slot) {
+		var (
+			err  error
+			kind wire.MessageKind
+		)
 		switch {
 		case env.Bundle != nil:
-			_ = s.HandlePeerPhase1Bundle(ctx, env.Bundle, env.ObservedOffset)
+			err = s.HandlePeerPhase1Bundle(ctx, env.Bundle, env.ObservedOffset)
+			kind = wire.KindPhase1Bundle
 		case env.Commit != nil:
-			_ = s.controller.ProcessCommit(env.Commit)
+			err = s.controller.ProcessCommit(env.Commit)
+			kind = wire.KindCommit
 		case env.Certificate != nil:
-			_ = s.controller.ProcessCertificate(env.Certificate)
+			err = s.controller.ProcessCertificate(env.Certificate)
+			kind = wire.KindCertificate
+		}
+		if err != nil && s.hooks.OnReplayError != nil {
+			s.hooks.OnReplayError(ctx, slot, kind, err)
 		}
 	}
 }
@@ -327,7 +346,34 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 // hooks.SubmitOutput and (if BroadcastCertificate is set) broadcasts the
 // final-certificate gossip message. Shared between ResolveAndSubmit and
 // ResolveAndSubmitOpportunistically.
+//
+// Re-runs HostValidate on the decided V before submitting. Per spec
+// §Final-certificate gossip and §Phase 3, between observe-time (when V
+// was σ-locked) and submit-time the chain may have reorged — submitting
+// a now-stale V wastes the slot. This mirrors the cert fast-path's
+// re-validation in tryCertFastPath; without symmetry, the local
+// reconstruction path could submit on stale V while the peer-cert path
+// (correctly) wouldn't.
 func (s *Scheduler) submitAndBroadcastCert(ctx context.Context, slot phase0.Slot, out *obftcore.Output) error {
+	if out == nil {
+		return fmt.Errorf("obft scheduler: nil output")
+	}
+	valid, err := s.hooks.HostValidate(ctx, slot, out.Layer, []byte(out.Value))
+	if err != nil {
+		return fmt.Errorf("obft scheduler: host validate at submit (slot=%d): %w", slot, err)
+	}
+	if !valid {
+		// V is no longer host-valid (reorg between σ-quorum and submit).
+		// Don't submit and don't broadcast a cert for an invalid V; surface
+		// the miss to the caller so the runner records a failed submission
+		// and the slot's outer ctx tears down cleanly.
+		reason := fmt.Errorf("obft scheduler: decided V no longer host-valid (slot=%d)", slot)
+		if s.hooks.OnMissedSlot != nil {
+			s.hooks.OnMissedSlot(ctx, slot, reason)
+		}
+		return reason
+	}
+
 	if err := s.hooks.SubmitOutput(ctx, slot, out); err != nil {
 		return fmt.Errorf("obft scheduler: submit output: %w", err)
 	}

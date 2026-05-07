@@ -259,10 +259,26 @@ func (c *Controller) OperatorID() spectypes.OperatorID {
 	return c.operatorID
 }
 
-// EndInstance removes the running instance for `slot`. Idempotent.
+// EndInstance finalizes deferred evidence on the running instance, then
+// removes it from the controller's tracking map. Idempotent.
+//
+// Race-fence: a goroutine that had already captured the instance pointer
+// via lookup() but had not yet acquired r.instanceMu can still race past
+// EndInstance. Finalize sets the Instance.ended flag under r.instanceMu;
+// every Controller method re-checks that flag after acquiring r.instanceMu
+// and returns ErrNoActiveInstance if set. This pair guarantees no state
+// mutation can run after Finalize, even if the controller mutex was
+// released between lookup and method dispatch.
 func (c *Controller) EndInstance(slot phase0.Slot) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	r, ok := c.instances[slot]
+	if !ok {
+		return
+	}
+	r.instanceMu.Lock()
+	r.instance.Finalize()
+	r.instanceMu.Unlock()
 	delete(c.instances, slot)
 }
 
@@ -288,6 +304,9 @@ func (c *Controller) BuildPhase1Bundle(slot phase0.Slot, layer int, value []byte
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return nil, ErrNoActiveInstance
+	}
 	return r.instance.BuildPhase1Bundle(layer, obftcore.Value(value))
 }
 
@@ -304,6 +323,9 @@ func (c *Controller) ObservePhase1Bundle(b *obftcore.Phase1Bundle, observedOffse
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return ErrNoActiveInstance
+	}
 	return r.instance.ObservePhase1Bundle(b, observedOffset)
 }
 
@@ -316,6 +338,9 @@ func (c *Controller) ApplyHostValidity(slot phase0.Slot, layer int, value []byte
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return ErrNoActiveInstance
+	}
 	return r.instance.ApplyHostValidity(layer, obftcore.Value(value), valid)
 }
 
@@ -330,6 +355,13 @@ func (c *Controller) ProcessCommit(cm *obftcore.Commit) error {
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	// Re-check under instanceMu: a goroutine that captured `r` before
+	// EndInstance ran could otherwise mutate state on a finalized instance,
+	// silently losing late evidence (e.g., a Rule 5 candidate added AFTER
+	// finalizeL0Rule5 swept).
+	if r.instance.Ended() {
+		return ErrNoActiveInstance
+	}
 	return r.instance.ObserveCommit(cm)
 }
 
@@ -344,6 +376,9 @@ func (c *Controller) ProcessCertificate(cert *obftcore.Certificate) error {
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return ErrNoActiveInstance
+	}
 	return r.instance.ObserveCertificate(cert)
 }
 
@@ -356,6 +391,9 @@ func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) 
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return nil, ErrNoActiveInstance
+	}
 	return r.instance.BuildOwnCommit()
 }
 
@@ -369,6 +407,9 @@ func (c *Controller) Resolve(slot phase0.Slot) (*obftcore.Output, error) {
 	}
 	r.instanceMu.Lock()
 	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return nil, ErrNoActiveInstance
+	}
 	return r.instance.Resolve()
 }
 

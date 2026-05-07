@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -13,6 +14,17 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 )
+
+// allowedFutureSlots caps how far in the future an OBFT envelope's claimed
+// Height (slot) can be relative to the current estimated slot. Combined with
+// LateSlotAllowance (the past-window), this bounds the (slot, op) state
+// the runner's pre-instance buffer can accumulate from network input.
+//
+// Without this bound, a byzantine streaming envelopes at slot=0..2^64-1
+// could fill the Controller's pending-envelope buffer (capped at
+// MaxPendingSlots=256) entirely with attacker-chosen slot numbers, evicting
+// legitimate near-term entries.
+const allowedFutureSlots phase0.Slot = 4
 
 // validateOBFTMessage decodes and sanity-checks an OBFT envelope carried
 // in `signedSSVMessage.Data`. After decoding, it verifies the envelope's
@@ -67,6 +79,24 @@ func (mv *messageValidator) validateOBFTMessage(
 	}
 	if env == nil {
 		return nil, errors.New("decoded OBFT envelope is nil")
+	}
+
+	// Slot-window check. Reject envelopes whose claimed Height is outside
+	// [currentSlot - LateSlotAllowance - SlotsPerEpoch, currentSlot +
+	// allowedFutureSlots]. Without this, a byzantine could stream envelopes
+	// for arbitrary future slot numbers and fill the runner's pre-instance
+	// pending buffer with attacker-chosen entries.
+	envSlot, err := envelopeSlot(env)
+	if err != nil {
+		return nil, fmt.Errorf("OBFT envelope: extract slot: %w", err)
+	}
+	current := mv.netCfg.EstimatedCurrentSlot()
+	maxPast := phase0.Slot(mv.netCfg.SlotsPerEpoch + LateSlotAllowance)
+	if envSlot+maxPast < current {
+		return nil, fmt.Errorf("OBFT envelope: slot %d too old (current %d)", envSlot, current)
+	}
+	if envSlot > current+allowedFutureSlots {
+		return nil, fmt.Errorf("OBFT envelope: slot %d too far in future (current %d)", envSlot, current)
 	}
 
 	// Look up the validator's share to construct a verifier. OBFT messages
@@ -146,6 +176,31 @@ func verifyEnvelopeCrypto(env *wire.Envelope, verifier *obftcore.Verifier) error
 		}
 	}
 	return nil
+}
+
+// envelopeSlot returns the slot (Height) the envelope is targeting.
+// Each envelope kind carries it in a different field; centralized here
+// so the validation layer can reason about it uniformly.
+func envelopeSlot(env *wire.Envelope) (phase0.Slot, error) {
+	switch env.Kind {
+	case wire.KindPhase1Bundle:
+		if env.Phase1Bundle == nil {
+			return 0, errors.New("nil Phase1Bundle body")
+		}
+		return phase0.Slot(env.Phase1Bundle.Height), nil
+	case wire.KindCommit:
+		if env.Commit == nil {
+			return 0, errors.New("nil Commit body")
+		}
+		return phase0.Slot(env.Commit.Height), nil
+	case wire.KindCertificate:
+		if env.Certificate == nil {
+			return 0, errors.New("nil Certificate body")
+		}
+		return phase0.Slot(env.Certificate.Height), nil
+	default:
+		return 0, fmt.Errorf("unknown envelope kind 0x%02x", byte(env.Kind))
+	}
 }
 
 func committeeContains(committee []spectypes.OperatorID, op spectypes.OperatorID) bool {

@@ -97,6 +97,7 @@ type Evidence struct {
 	CrossSigning           *CrossSigningEvidence
 	LeaderEquivocation     *LeaderEquivocationEvidence
 	CrossOnionEquivocation *CrossOnionEquivocationEvidence
+	CommitEquivocation     *CommitEquivocationEvidence
 	FakeEncryptedPresence  *FakeEncryptedPresenceEvidence
 	FakePlaintextSigma     *FakePlaintextSigmaEvidence
 }
@@ -116,13 +117,25 @@ type LeaderEquivocationEvidence struct {
 	BundleB *Phase1Bundle
 }
 
-// CrossOnionEquivocationEvidence (Rule 3) — Operator OperatorID has σ partials
-// on two distinct V's at the same layer.
+// CrossOnionEquivocationEvidence (Rule 3, per-layer) — Operator OperatorID
+// has σ partials on two distinct V's at the same layer.
 type CrossOnionEquivocationEvidence struct {
 	ValueA   Value
 	ValueB   Value
 	PartialA Signature
 	PartialB Signature
+}
+
+// CommitEquivocationEvidence (Rule 3, top-level, Layer == -1) — Operator
+// OperatorID emitted two structurally-distinct KindCommit messages at the
+// same (slot). Carries the full Commit bodies so a third-party slashing
+// verifier can recompute their content hashes and confirm the structural
+// distinction. The slashing layer pairs each Commit body with the matching
+// outer SignedSSVMessage envelope (which provides the operator's signature
+// over the inner bytes) to produce on-chain-actionable proof.
+type CommitEquivocationEvidence struct {
+	CommitA *Commit
+	CommitB *Commit
 }
 
 // FakeEncryptedPresenceEvidence (Rule 4) — Operator OperatorID's Onion entry

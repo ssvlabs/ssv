@@ -1,6 +1,7 @@
 package obft
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 )
@@ -112,6 +113,15 @@ func (v *Verifier) VerifyCommitNRPartials(c *Commit) error {
 // if a byzantine packs garbage witnesses to force expensive BLS verification
 // on every receiver, this rejects at the validation boundary.
 //
+// Identical witnesses (same layer + leader + value + sigmaV bytes) are
+// deduplicated before VerifyPartial — a byzantine that pads with byte-for-
+// byte duplicates pays once. Distinct (sigmaV) entries for the same
+// (layer, leader, value) are NOT deduped; if the byzantine pads with one
+// valid sig + many garbage sigs sharing the same value, the first garbage
+// one fails verify and rejects the whole Commit. This is the gate's job —
+// the protocol layer's separate (layer, leader, value)-keyed dedup handles
+// retention semantics, not malformedness rejection.
+//
 // Rule 2 (leader equivocation) detection is unaffected — that fires at the
 // protocol layer when a leader's bundle/witness retention reaches 2 distinct
 // V's; here we only reject witnesses whose σ_V doesn't verify, which is a
@@ -123,11 +133,32 @@ func (v *Verifier) VerifyCommitWitnesses(c *Commit) error {
 	if c == nil {
 		return errors.New("obft: nil commit")
 	}
+	// Dedup only by full (layer, leader, value, sigmaV). Two witnesses with
+	// the same value but different sigmaV must each be verified — at most
+	// one can be a valid sig (leader has one share), so a garbage sigmaV
+	// will fail and reject the Commit.
+	type witnessKey struct {
+		layer  int
+		leader OperatorID
+		value  [32]byte
+		sigmaV [32]byte
+	}
+	seen := make(map[witnessKey]struct{}, len(c.Witnesses))
 	for i, w := range c.Witnesses {
 		share, ok := v.PubKeyShares[w.Leader]
 		if !ok || len(share) == 0 {
 			return fmt.Errorf("obft: witness %d: no pub-key share for leader %d", i, w.Leader)
 		}
+		k := witnessKey{
+			layer:  w.Layer,
+			leader: w.Leader,
+			value:  sha256.Sum256(w.Value),
+			sigmaV: sha256.Sum256(w.SigmaV),
+		}
+		if _, dup := seen[k]; dup {
+			continue
+		}
+		seen[k] = struct{}{}
 		if !v.Signer.VerifyPartial(share, w.Value, w.SigmaV) {
 			return fmt.Errorf("obft: witness %d (leader %d, layer %d) σ_V does not verify",
 				i, w.Leader, w.Layer)

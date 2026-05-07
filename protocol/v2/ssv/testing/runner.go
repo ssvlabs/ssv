@@ -15,14 +15,14 @@ import (
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/networkconfig"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 

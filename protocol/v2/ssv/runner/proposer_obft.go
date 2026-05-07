@@ -84,8 +84,10 @@ func (r *ProposerRunner) obftStartSlot(ctx context.Context, logger *zap.Logger, 
 
 // ProcessOBFTEnvelopeMsg is the network-side entry point for OBFT messages.
 // Called by the validator's dispatch layer after the outer SignedSSVMessage
-// has been verified.
-func (r *ProposerRunner) ProcessOBFTEnvelopeMsg(ctx context.Context, senderID spectypes.OperatorID, env *wire.Envelope) error {
+// has been verified. `rawWireBytes` is the original SSVMessage.Data — passed
+// through so the rate limiter can hash the bytes directly instead of
+// re-encoding the decoded envelope.
+func (r *ProposerRunner) ProcessOBFTEnvelopeMsg(ctx context.Context, senderID spectypes.OperatorID, env *wire.Envelope, rawWireBytes []byte) error {
 	if env == nil {
 		return fmt.Errorf("obft: nil envelope")
 	}
@@ -101,19 +103,28 @@ func (r *ProposerRunner) ProcessOBFTEnvelopeMsg(ctx context.Context, senderID sp
 		return err
 	}
 
-	// Rate-limit per kind. KindCommit is single-emit per (slot, op) per
-	// spec §Phase 2.
+	// Rate-limit by content hash. Identical bytes redelivered by gossipsub
+	// are dropped; distinct content from the same operator is admitted so
+	// the protocol's equivocation paths fire (Rule 2 on second distinct
+	// Phase-1 bundle, Rule 3 on second distinct KindCommit). A naive
+	// "≤ 1 per (slot, op)" rate limit would silently swallow the second
+	// distinct emission and prevent attribution.
+	//
+	// Hash directly over rawWireBytes — these are the authenticated wire
+	// bytes that produced env, so hashing them is equivalent to hashing
+	// re-encoded env (the wire format is deterministic) but avoids the
+	// re-encode allocation.
 	switch env.Kind {
 	case wire.KindPhase1Bundle:
-		if err := r.obftRL.AllowPhase1Bundle(phase0.Slot(env.Phase1Bundle.Height), senderID, env.Phase1Bundle.Layer); err != nil {
+		if err := r.obftRL.AllowPhase1Bundle(phase0.Slot(env.Phase1Bundle.Height), senderID, env.Phase1Bundle.Layer, rawWireBytes); err != nil {
 			return err
 		}
 	case wire.KindCommit:
-		if err := r.obftRL.AllowCommit(phase0.Slot(env.Commit.Height), senderID); err != nil {
+		if err := r.obftRL.AllowCommit(phase0.Slot(env.Commit.Height), senderID, rawWireBytes); err != nil {
 			return err
 		}
 	case wire.KindCertificate:
-		if err := r.obftRL.AllowCertificate(phase0.Slot(env.Certificate.Height), senderID); err != nil {
+		if err := r.obftRL.AllowCertificate(phase0.Slot(env.Certificate.Height), senderID, rawWireBytes); err != nil {
 			return err
 		}
 	}
@@ -162,13 +173,17 @@ func (r *ProposerRunner) obftFetchCandidate(ctx context.Context, slot phase0.Slo
 	r.obftMu.Lock()
 	if r.obftSlots[slot] == state {
 		state.version = vBlk.Version
+		// Cache the full block + its blinded fingerprint per-slot under the
+		// lock, so SubmitOutput (running on a different goroutine) reads a
+		// consistent snapshot AND so the previous slot's block can't leak
+		// into the next slot's submit (state is per-slot, evicted on duty
+		// completion).
+		if !vBlk.Blinded {
+			state.cachedFullBlock = vBlk
+			state.cachedBlindedSSZ = blindedSSZ
+		}
 	}
 	r.obftMu.Unlock()
-
-	if !vBlk.Blinded {
-		r.cachedFullBlock = vBlk
-		r.cachedBlindedBlockSSZ = blindedSSZ
-	}
 
 	return encodeOBFTCandidate(vBlk.Version, blindedSSZ), nil
 }
@@ -255,11 +270,22 @@ func (r *ProposerRunner) obftSubmitOutput(ctx context.Context, slot phase0.Slot,
 		return nil
 	}
 
+	// Snapshot the per-slot state under the lock. Holding all reads (version
+	// + cached block + cached SSZ) inside one critical section so a
+	// concurrent fetch on the same slot can't mutate them mid-read. The
+	// per-slot scoping prevents a previous slot's cached block from being
+	// seen here.
 	r.obftMu.Lock()
 	state := r.obftSlots[slot]
-	var stateVersion spec.DataVersion
+	var (
+		stateVersion     spec.DataVersion
+		cachedFullBlock  *api.VersionedProposal
+		cachedBlindedSSZ []byte
+	)
 	if state != nil {
 		stateVersion = state.version
+		cachedFullBlock = state.cachedFullBlock
+		cachedBlindedSSZ = state.cachedBlindedSSZ
 	}
 	r.obftMu.Unlock()
 
@@ -280,9 +306,9 @@ func (r *ProposerRunner) obftSubmitOutput(ctx context.Context, slot phase0.Slot,
 		return fmt.Errorf("obft submit: decode blinded proposal: %w", err)
 	}
 
-	if r.cachedFullBlock != nil && len(r.cachedBlindedBlockSSZ) > 0 &&
-		bytes.Equal(blindedSSZ, r.cachedBlindedBlockSSZ) {
-		vBlk = r.cachedFullBlock
+	if cachedFullBlock != nil && len(cachedBlindedSSZ) > 0 &&
+		bytes.Equal(blindedSSZ, cachedBlindedSSZ) {
+		vBlk = cachedFullBlock
 	}
 
 	var specSig phase0.BLSSignature
@@ -321,6 +347,20 @@ func (r *ProposerRunner) obftBroadcastCertificate(ctx context.Context, slot phas
 // obftOnMissedSlot is invoked when OBFT fails to reach quorum at any layer.
 func (r *ProposerRunner) obftOnMissedSlot(ctx context.Context, slot phase0.Slot, reason error) {
 	recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+}
+
+// obftOnReplayError surfaces non-fatal errors from DrainPending — envelopes
+// buffered before this operator's instance had started, replayed at slot
+// start. These errors don't fail the slot but are useful telemetry for
+// detecting peers broadcasting malformed envelopes pre-StartNewInstance.
+// Logged at debug to avoid noise; bumping a metric counter would be a
+// future improvement.
+func (r *ProposerRunner) obftOnReplayError(_ context.Context, slot phase0.Slot, kind wire.MessageKind, err error) {
+	zap.L().Debug("obft pending-envelope replay error",
+		fields.Slot(slot),
+		zap.Uint8("kind", uint8(kind)),
+		zap.Error(err),
+	)
 }
 
 // checkInnerSignerMatchesOuter rejects an envelope whose claimed inner

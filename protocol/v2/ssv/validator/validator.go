@@ -20,9 +20,9 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -253,7 +253,11 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 		senderID := msg.SignedSSVMessage.OperatorIDs[0]
 
-		if err := proposerRunner.ProcessOBFTEnvelopeMsg(ctx, senderID, envelope); err != nil {
+		// Pass through the original wire bytes — the rate limiter hashes
+		// them directly instead of re-encoding the decoded envelope, saving
+		// ~10–100µs allocation per inbound message.
+		rawData := msg.SignedSSVMessage.SSVMessage.Data
+		if err := proposerRunner.ProcessOBFTEnvelopeMsg(ctx, senderID, envelope, rawData); err != nil {
 			return fmt.Errorf("process OBFT envelope: %w", err)
 		}
 		return nil

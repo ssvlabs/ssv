@@ -139,6 +139,14 @@ type Instance struct {
 	// of either variant don't re-record evidence.
 	peerCommitHashes map[OperatorID]map[[32]byte]struct{}
 
+	// peerFirstCommit retains a deep copy of the FIRST KindCommit observed
+	// from each operator, so the second distinct emission can fire top-level
+	// Rule 3 evidence (CommitEquivocationEvidence) carrying both Commit
+	// bodies as slashable proof. The entry is cleared after firing —
+	// subsequent distinct emissions don't add slashable info (the operator
+	// is already attributed) and would otherwise leak memory under abuse.
+	peerFirstCommit map[OperatorID]*Commit
+
 	// Local per-layer state.
 	localState   []CommitState
 	sigmaLocked  []bool
@@ -159,6 +167,34 @@ type Instance struct {
 
 	// Evidence accumulator (slashing-evidence rules 1–5).
 	evidence []Evidence
+
+	// rule4Fired[layer][op] = true once Rule 4 (FakeEncryptedPresence) has
+	// been recorded for that (operator, layer). A byzantine peer that emits
+	// multiple distinct onion entries at a single layer (Rule 3 cross-onion
+	// equivocation) would otherwise produce a Rule 4 entry per onion entry
+	// at decrypt time. Deduplicated to one Rule 4 per (op, layer); the
+	// underlying byzantine emission is already attributed via Rule 3.
+	rule4Fired map[int]map[OperatorID]bool
+
+	// rule1Fired[layer][op] = true once Rule 1 (CrossSigning) has been
+	// recorded for that (operator, layer). Rule 1 has two fire sites — the
+	// σ-side ObserveCommit branch fires when a σ-onion entry is added and an
+	// NR partial already exists; the NR-side branch fires symmetrically.
+	// Under Rule 3 equivocation (two distinct KindCommits from the same op),
+	// the σ-side branch can fire on the second commit's σ-entry while the NR
+	// dedup makes the NR-side a no-op — the result is one Rule 1 entry per
+	// distinct σ-emission, not per (op, layer). Deduplication ensures
+	// per-(op, layer) attribution stays atomic.
+	rule1Fired map[int]map[OperatorID]bool
+
+	// ended is set by Finalize when the slot's instance is being torn down.
+	// Per-instance state-mutating methods (ObserveCommit, ObservePhase1Bundle,
+	// ApplyHostValidity, ...) check this flag after acquiring the instance
+	// mutex and refuse to mutate state on a finalized instance. Without the
+	// check, a network goroutine that captured the instance pointer before
+	// EndInstance ran could race against Finalize and add a deferred Rule 5
+	// candidate AFTER the finalize sweep — silently losing the attribution.
+	ended bool
 }
 
 // NewInstance creates a new OBFT instance bound to `ownOperatorID`.
@@ -197,14 +233,16 @@ func NewInstance(
 	if !operatorInCluster(ownOperatorID, cfg) {
 		return nil, fmt.Errorf("obft: own operator id %d not in cluster", ownOperatorID)
 	}
-	// Every layer's leader must have a registered pub-key share. Without
-	// this, Phase-3 reconstruction at that layer silently skips the
-	// leader's σ_V (it would fail VerifyPartial against a nil share),
-	// producing degraded liveness without a clear cause. Surface the
-	// misconfiguration upfront so it's caught in test/setup.
-	for k, ls := range cfg.Layers {
-		if share, ok := pubKeyShares[ls.Leader]; !ok || len(share) == 0 {
-			return nil, fmt.Errorf("obft: layer %d leader %d has no pub-key share", k, ls.Leader)
+	// Every operator in the cluster must have a registered pub-key share.
+	// Layer leaders need it for Phase-3 reconstruction; non-leader peers
+	// need it so peerSigmaAtL0Verdict / Verifier.VerifyPartial can run
+	// against their share when their σ partials arrive. A missing share
+	// would silently degrade Rule 5 detection (returning l0SigmaInconclusive)
+	// and any later VerifyPartial against nil; surface the misconfiguration
+	// upfront so it's caught in test/setup.
+	for _, op := range cfg.Operators {
+		if share, ok := pubKeyShares[op]; !ok || len(share) == 0 {
+			return nil, fmt.Errorf("obft: operator %d has no pub-key share", op)
 		}
 	}
 	if tagSigner == nil {
@@ -226,11 +264,14 @@ func NewInstance(
 		peerOnions:       make(map[int]map[OperatorID][]EncryptedLayer, K),
 		peerNR:           make(map[int]map[OperatorID]Signature, K),
 		peerCommitHashes: make(map[OperatorID]map[[32]byte]struct{}),
+		peerFirstCommit:  make(map[OperatorID]*Commit),
 		localState:       make([]CommitState, K),
 		sigmaLocked:      make([]bool, K),
 		sigmaLockedV:     make([]Value, K),
 		nrLocked:         make([]bool, K),
 		ownPartials:      make(map[int]Signature),
+		rule4Fired:       make(map[int]map[OperatorID]bool, K),
+		rule1Fired:       make(map[int]map[OperatorID]bool, K),
 	}, nil
 }
 
@@ -265,6 +306,35 @@ func (i *Instance) Evidence() []Evidence {
 	out := make([]Evidence, len(i.evidence))
 	copy(out, i.evidence)
 	return out
+}
+
+// Finalize seals deferred slashing-evidence checks that depend on no further
+// state mutations occurring on this Instance. Currently:
+//
+//   - Rule 5 (FakePlaintextSigma) deferred candidates: σ entries that verify
+//     against the operator's pubshare but sign a V we never retained. These
+//     can be rescued by a late KindCommit's witness that retains the V; once
+//     the slot is sealed, surviving candidates are confirmed Rule 5.
+//
+// After this returns, `ended` is set; subsequent mutator calls (ObserveCommit
+// etc.) refuse to apply state changes. The flag is checked after acquiring
+// the instance mutex by every caller so a network goroutine that captured the
+// instance pointer pre-finalize is fenced.
+//
+// Idempotent — safe to call repeatedly.
+func (i *Instance) Finalize() {
+	if i.ended {
+		return
+	}
+	i.finalizeL0Rule5()
+	i.ended = true
+}
+
+// Ended reports whether this Instance has been Finalize'd. Caller must hold
+// the surrounding instance mutex (the Controller's RunningInstance.instanceMu
+// in production). State-mutating methods consult this to refuse late writes.
+func (i *Instance) Ended() bool {
+	return i.ended
 }
 
 // RetainedBundles returns the bundles retained for (layer, leader). Up to 2
@@ -387,6 +457,38 @@ func (i *Instance) transitionToNR(layer int, state CommitState) error {
 // recordEvidence appends a non-nil evidence entry to the accumulator.
 func (i *Instance) recordEvidence(e Evidence) {
 	i.evidence = append(i.evidence, e)
+}
+
+// recordRule4 marks Rule 4 (FakeEncryptedPresence) as fired for (op, layer).
+// Returns true if this is the first observation (caller should record evidence)
+// and false if Rule 4 was already fired for this pair (caller should skip).
+func (i *Instance) recordRule4(op OperatorID, layer int) bool {
+	bucket := i.rule4Fired[layer]
+	if bucket == nil {
+		bucket = make(map[OperatorID]bool)
+		i.rule4Fired[layer] = bucket
+	}
+	if bucket[op] {
+		return false
+	}
+	bucket[op] = true
+	return true
+}
+
+// recordRule1 marks Rule 1 (CrossSigning) as fired for (op, layer). Same
+// pattern as recordRule4 — returns true on first observation, false if
+// already recorded.
+func (i *Instance) recordRule1(op OperatorID, layer int) bool {
+	bucket := i.rule1Fired[layer]
+	if bucket == nil {
+		bucket = make(map[OperatorID]bool)
+		i.rule1Fired[layer] = bucket
+	}
+	if bucket[op] {
+		return false
+	}
+	bucket[op] = true
+	return true
 }
 
 // observedTimeOK reports whether `observedOffset` is within the receiver

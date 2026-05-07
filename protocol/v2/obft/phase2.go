@@ -211,7 +211,10 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	curHash := commitContentHash(c)
 	seen := i.peerCommitHashes[c.OperatorID]
 	if seen == nil {
+		// First observation from this op: stash a deep copy so the second
+		// distinct emission can package both bodies into Rule 3 evidence.
 		i.peerCommitHashes[c.OperatorID] = map[[32]byte]struct{}{curHash: {}}
+		i.peerFirstCommit[c.OperatorID] = deepCopyCommit(c)
 	} else {
 		if _, ok := seen[curHash]; ok {
 			return nil // identical re-broadcast
@@ -222,11 +225,25 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 			// memory under abuse.
 			return nil
 		}
-		i.recordEvidence(Evidence{
-			Rule:       EvidenceCrossOnionEquivocation,
-			OperatorID: c.OperatorID,
-			Layer:      -1, // -1 = "spans the whole commit", not per-layer
-		})
+		// Top-level Rule 3 fires once per (op, slot): the second distinct
+		// emission carries the slashable payload. Subsequent distinct
+		// emissions don't add attribution but their σ-side / NR-side content
+		// still flows through the per-layer paths below.
+		if first := i.peerFirstCommit[c.OperatorID]; first != nil {
+			i.recordEvidence(Evidence{
+				Rule:       EvidenceCrossOnionEquivocation,
+				OperatorID: c.OperatorID,
+				Layer:      -1, // -1 = "spans the whole commit", not per-layer
+				CommitEquivocation: &CommitEquivocationEvidence{
+					CommitA: first,
+					CommitB: deepCopyCommit(c),
+				},
+			})
+			// Drop the retained first commit — Rule 3 has fired; any further
+			// distinct emissions reuse per-layer Rule 1/3/5 evidence (which
+			// is cheaper) and don't need the top-level pairing again.
+			delete(i.peerFirstCommit, c.OperatorID)
+		}
 		seen[curHash] = struct{}{}
 		// Continue processing so any new content (idempotent per-content
 		// dedup below) is collected and per-layer Rule 1/3 checks fire on
@@ -307,15 +324,15 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 
 		// L_0 validity-gate: at L_0, σ partials are plaintext and verifiable
-		// against any retained V. A peer's plaintext σ partial that does not
-		// verify against any retained V at L_0 is a slashable byzantine fault
-		// (Rule 5 — Fake plaintext σ at L_0). The fake partial doesn't enter
-		// any V's σ-pool (no liveness impact); detection is for slashing.
-		// We run the check BEFORE appending to peerOnions so a fake entry
-		// never leaves traces in the σ-pool that a later code path could
-		// accidentally consume.
+		// against the operator's pubkey share. A partial that doesn't verify
+		// is slashable (Rule 5 — Fake plaintext σ). For unambiguous fakes
+		// (cryptoFake — partial fails verify on the claimed V) fire Rule 5
+		// immediately and skip σ-pool insertion. For "unknown V" entries
+		// (verifies, but V not currently retained) defer until finalizeL0Rule5
+		// at phase end — under leader equivocation the V may be retained later
+		// and the entry would be rescued.
 		fakeAtL0 := false
-		if k == 0 && i.peerSigmaAtL0Verdict(c.OperatorID, el) == l0SigmaFake {
+		if k == 0 && i.peerSigmaAtL0Verdict(c.OperatorID, el) == l0SigmaCryptoFake {
 			fakeAtL0 = true
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceFakePlaintextSigma,
@@ -341,9 +358,10 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// layer)? Fires whether the σ side is a Phase-2 onion (this entry)
 		// or — for the layer's leader — a Phase-1 bundle σ_V already
 		// recorded; Rule 1's NR side is what the σ-side onion path collides
-		// with here.
+		// with here. Deduplicated per (op, layer) so multiple distinct
+		// σ-emissions at the same layer (Rule 3) don't multi-record Rule 1.
 		if i.peerNR[k] != nil {
-			if nrSig, hasNR := i.peerNR[k][c.OperatorID]; hasNR {
+			if nrSig, hasNR := i.peerNR[k][c.OperatorID]; hasNR && i.recordRule1(c.OperatorID, k) {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceCrossSigning,
 					OperatorID: c.OperatorID,
@@ -358,26 +376,30 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 	}
 
-	// NR-side per layer. Verify each partial against the signer's IBE pub-share
-	// (under Option B) or V-pub-share (Option A: ibePubKeyShares == nil; the
-	// V-keypair doubles as the IBE keypair via DST separation handled by
-	// tagSigner). Without this, a single byzantine could submit garbage NR
-	// partials that get aggregated into a corrupted chained-decryption key
-	// at Phase 3, killing fall-through cluster-wide.
-	nrShares := i.ibePubKeyShares
-	if nrShares == nil {
-		nrShares = i.pubKeyShares
+	// Pre-validate NR partials BEFORE entering the NR-side mutation loop.
+	// Without this, a layer-2 NR partial that fails verify after layer-0/1
+	// partials were already inserted into peerNR would leave Instance state
+	// half-applied (the prior partials would silently aggregate into the
+	// Phase-3 chained-decryption key while we returned an error).
+	//
+	// Run AFTER σ-side processing so that a Commit packing both σ-equivocation
+	// and a malformed NR partial still produces the per-layer Rule 1/3/5
+	// evidence (which carries slashable proof) — atomicity here is per-side,
+	// not per-Commit.
+	//
+	// The validation layer (message/validation) already runs the equivalent
+	// Verifier.VerifyCommitNRPartials check on inbound network messages — this
+	// is defense-in-depth for any path that bypasses validation (locally-routed
+	// messages, future plumbing, etc.).
+	if err := i.verifyCommitNRPartials(c); err != nil {
+		return err
 	}
+
+	// NR-side per layer. Verification of each partial against the signer's IBE
+	// pub-share (Option B) or V-pub-share (Option A) was already performed in
+	// verifyCommitNRPartials above; this loop is purely state mutation +
+	// Rule 1 cross-signing detection.
 	for _, p := range c.NRPartials {
-		pubShare, ok := nrShares[c.OperatorID]
-		if !ok || len(pubShare) == 0 {
-			return fmt.Errorf("obft: no NR pub-key share for operator %d", c.OperatorID)
-		}
-		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
-		if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
-			return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
-				c.OperatorID, p.Layer)
-		}
 		if i.peerNR[p.Layer] == nil {
 			i.peerNR[p.Layer] = make(map[OperatorID]Signature)
 		}
@@ -390,20 +412,23 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// Rule 1 — cross-signing detection: did this operator already have
 		// a σ entry at this layer (in an onion or, for the layer's leader,
 		// in the Phase-1 bundle)? Either case is a Rule 1 violation per
-		// spec §Slashing-evidence (cross-phase exclusivity).
+		// spec §Slashing-evidence (cross-phase exclusivity). Deduplicated
+		// per (op, layer) — symmetry with the σ-side fire site.
 		if onionEntries := i.peerOnions[p.Layer][c.OperatorID]; len(onionEntries) > 0 {
-			i.recordEvidence(Evidence{
-				Rule:       EvidenceCrossSigning,
-				OperatorID: c.OperatorID,
-				Layer:      p.Layer,
-				CrossSigning: &CrossSigningEvidence{
-					SigmaPartial: append(Signature{}, onionEntries[0].Ciphertext...),
-					SigmaValue:   append(Value{}, onionEntries[0].Value...),
-					NRPartial:    append(Signature{}, p.PartialSig...),
-				},
-			})
+			if i.recordRule1(c.OperatorID, p.Layer) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceCrossSigning,
+					OperatorID: c.OperatorID,
+					Layer:      p.Layer,
+					CrossSigning: &CrossSigningEvidence{
+						SigmaPartial: append(Signature{}, onionEntries[0].Ciphertext...),
+						SigmaValue:   append(Value{}, onionEntries[0].Value...),
+						NRPartial:    append(Signature{}, p.PartialSig...),
+					},
+				})
+			}
 		} else if c.OperatorID == i.cfg.Layers[p.Layer].Leader {
-			if bundles := i.bundles[p.Layer][c.OperatorID]; len(bundles) > 0 {
+			if bundles := i.bundles[p.Layer][c.OperatorID]; len(bundles) > 0 && i.recordRule1(c.OperatorID, p.Layer) {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceCrossSigning,
 					OperatorID: c.OperatorID,
@@ -448,51 +473,61 @@ type l0SigmaVerdict int
 const (
 	l0SigmaInconclusive l0SigmaVerdict = iota // no retained V or no pub-share for op (config issue, not slashable)
 	l0SigmaVerified                           // matches a retained V AND verifies cryptographically
-	l0SigmaFake                               // either signs a non-retained V or fails verification on a retained V (Rule 5)
+	l0SigmaCryptoFake                         // partial does not verify on the claimed V (Rule 5 fires immediately)
+	l0SigmaUnknownV                           // partial verifies but el.Value matches no currently-retained V (Rule 5 candidate, defer)
 )
 
-// peerSigmaAtL0Verdict returns whether peer `op`'s plaintext σ partial at L_0
-// is verified, fake (Rule 5), or inconclusive.
+// peerSigmaAtL0Verdict classifies a peer's plaintext L_0 σ partial.
 //
-// At L_0, el.Ciphertext is the plaintext σ partial. We verify it against the
-// operator's own pubkey share (the partial is signed by their V-share),
-// using el.Value as the signed message.
+// At L_0, el.Ciphertext is the plaintext σ partial signed by op's V-share over
+// el.Value. The verdict drives Rule 5 evidence handling.
 //
-// Cases:
-//   - No retained V at L_0 → inconclusive (we can't decide without a V to
-//     compare). Caller may decide to defer the check (re-run on retention).
-//   - No pub-share for op → inconclusive (config error, not slashable).
-//   - el.Value doesn't match any retained V → fake (Rule 5).
-//   - el.Value matches but partial doesn't verify → fake (Rule 5).
-//   - el.Value matches and partial verifies → verified.
+// Order of checks:
+//  1. No pub-share for op → inconclusive (config issue, not slashable).
+//  2. VerifyPartial(opPub, el.Value, el.Ciphertext) fails → cryptoFake. The op
+//     signed bytes that don't verify against their own share for the V they
+//     claimed; this is authenticated dishonesty regardless of whether any
+//     L_0 bundle has been retained — fire Rule 5 immediately. Critically,
+//     this check runs BEFORE the leaderMap-empty short-circuit so a byzantine
+//     who emits unverifiable bytes while the L_0 leader is silent (no bundle
+//     ever broadcast) still gets attributed.
+//  3. el.Value matches a retained V → verified.
+//  4. el.Value matches no retained V, but leaderMap is non-empty → unknownV.
+//     The op signed a V we haven't retained yet; the leader MAY equivocate
+//     later and broadcast that V, in which case the entry would be rescued.
+//     Defer Rule 5 until phase end (finalizeL0Rule5).
+//  5. el.Value matches no retained V AND leaderMap is empty → inconclusive.
+//     Without any retention we cannot distinguish "fake V" from "leader
+//     hasn't broadcast yet"; defer.
+//
+// Splitting the verdict (cryptoFake vs unknownV) eliminates a false-positive:
+// under the previous flat l0SigmaFake, an honest peer who signed leader L's
+// V_b before L's V_b reached our retention (e.g., L equivocates and we saw V_a
+// first) would be flagged Rule 5 immediately, then the entry would be removed
+// — even if L's V_b later got retained, the rescue path was destroyed.
 func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0SigmaVerdict {
-	leaderMap := i.bundles[0]
-	if len(leaderMap) == 0 {
-		return l0SigmaInconclusive
-	}
 	pubShare, ok := i.pubKeyShares[op]
 	if !ok {
 		return l0SigmaInconclusive
 	}
-	matchesRetained := false
+	if !i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext) {
+		return l0SigmaCryptoFake
+	}
+	leaderMap := i.bundles[0]
+	if len(leaderMap) == 0 {
+		// Verify passed but no V retained yet — can't decide between
+		// unknownV (V not retained yet but leader has retentions) and
+		// verified (V matches retained). Defer.
+		return l0SigmaInconclusive
+	}
 	for _, retained := range leaderMap {
 		for _, b := range retained {
 			if bytes.Equal(b.Value, el.Value) {
-				matchesRetained = true
-				break
+				return l0SigmaVerified
 			}
 		}
-		if matchesRetained {
-			break
-		}
 	}
-	if !matchesRetained {
-		return l0SigmaFake // Rule 5: signed a V no honest retained
-	}
-	if !i.signer.VerifyPartial(pubShare, el.Value, el.Ciphertext) {
-		return l0SigmaFake // Rule 5: signed bytes don't verify on the claimed V
-	}
-	return l0SigmaVerified
+	return l0SigmaUnknownV
 }
 
 // hasRetainedVAtL0 reports whether any Phase-1 bundle has been retained at L_0.
@@ -547,4 +582,31 @@ func (i *Instance) chosenVAtLayer(layer int) (Value, bool) {
 		return nil, false
 	}
 	return retained[0].Value, true
+}
+
+// verifyCommitNRPartials runs the per-partial BLS verification used by
+// ObserveCommit's pre-validation pass. Verification-only — no state mutation.
+// Mirrors Verifier.VerifyCommitNRPartials but uses the Instance's own
+// configured shares + signers, which is what gates whether a Commit is allowed
+// to mutate Instance state.
+func (i *Instance) verifyCommitNRPartials(c *Commit) error {
+	if len(c.NRPartials) == 0 {
+		return nil
+	}
+	nrShares := i.ibePubKeyShares
+	if nrShares == nil {
+		nrShares = i.pubKeyShares
+	}
+	pubShare, ok := nrShares[c.OperatorID]
+	if !ok || len(pubShare) == 0 {
+		return fmt.Errorf("obft: no NR pub-key share for operator %d", c.OperatorID)
+	}
+	for _, p := range c.NRPartials {
+		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
+		if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
+			return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
+				c.OperatorID, p.Layer)
+		}
+	}
+	return nil
 }

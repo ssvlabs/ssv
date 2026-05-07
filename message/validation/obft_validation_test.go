@@ -24,6 +24,13 @@ import (
 // verification at the validation boundary rejects messages with garbage
 // cryptographic material before they reach the consensus path.
 
+// obftTestHeight returns a Height inside the validation layer's accepted
+// slot window. Use this for any envelope.Height value in tests; raw constants
+// like 200 fail the slot-window check.
+func obftTestHeight(mv *messageValidator) obftcore.Height {
+	return obftcore.Height(mv.netCfg.EstimatedCurrentSlot())
+}
+
 func obftTestSetup(t *testing.T) (
 	*messageValidator,
 	*spectestingutils.TestKeySet,
@@ -93,7 +100,7 @@ func TestValidateOBFT_Phase1Bundle_AcceptsValidSigma(t *testing.T) {
 	bundle := &obftcore.Phase1Bundle{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
-		Height:     100,
+		Height:     obftTestHeight(mv),
 		Layer:      0,
 		Value:      v,
 		SigmaV:     sigV,
@@ -116,7 +123,7 @@ func TestValidateOBFT_Phase1Bundle_RejectsCorruptSigmaV(t *testing.T) {
 	bundle := &obftcore.Phase1Bundle{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
-		Height:     100,
+		Height:     obftTestHeight(mv),
 		Layer:      0,
 		Value:      []byte("V"),
 		SigmaV:     []byte("garbage-not-a-valid-bls-partial--padded-to-some-length-like-real-sigs"),
@@ -146,7 +153,7 @@ func TestValidateOBFT_Phase1Bundle_RejectsInnerOuterSignerMismatch(t *testing.T)
 	bundle := &obftcore.Phase1Bundle{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(innerSigner),
-		Height:     100, Layer: 0,
+		Height:     obftTestHeight(mv), Layer: 0,
 		Value: v, SigmaV: sigV,
 	}
 	body, err := wire.WrapPhase1Bundle(bundle)
@@ -166,7 +173,7 @@ func TestValidateOBFT_Commit_AcceptsValidNRPartials(t *testing.T) {
 
 	// Forge a Commit with valid NR partials. NR uses tagSigner (Kyber-DST).
 	tagSigner := blsbackend.NewKyberSigner(ks.Shares[signer].Serialize())
-	const slot = 200
+	slot := obftTestHeight(mv)
 	tag := obftcore.NoQuorumTag(clusterID, slot, 0)
 	nrSig, err := tagSigner.SignPartial(tag)
 	require.NoError(t, err)
@@ -195,7 +202,7 @@ func TestValidateOBFT_Commit_RejectsCorruptNRPartial(t *testing.T) {
 	commit := &obftcore.Commit{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
-		Height:     200,
+		Height:     obftTestHeight(mv),
 		Layers:     make([]obftcore.EncryptedLayer, 4),
 		NRPartials: []obftcore.NRPartial{{Layer: 0, PartialSig: []byte("garbage-NR-padded-to-something-resembling-bls-length-bytes-bytes")}},
 	}
@@ -224,7 +231,7 @@ func TestValidateOBFT_Commit_RejectsCorruptWitness(t *testing.T) {
 	commit := &obftcore.Commit{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
-		Height:     200,
+		Height:     obftTestHeight(mv),
 		Layers:     make([]obftcore.EncryptedLayer, 4),
 		Witnesses: []obftcore.LeaderSigmaWitness{
 			{Layer: 0, Leader: obftcore.OperatorID(signer), Value: []byte("V"), SigmaV: []byte("garbage-witness-sig-padded-to-resemble-bls-length")},
@@ -245,7 +252,7 @@ func TestValidateOBFT_Certificate_RejectsCorruptAggregate(t *testing.T) {
 
 	cert := &obftcore.Certificate{
 		ClusterID: clusterID,
-		Height:    300,
+		Height:    obftTestHeight(mv),
 		Value:     []byte("decided-V"),
 		Signature: []byte("garbage-aggregate-not-a-valid-bls-sig"),
 	}

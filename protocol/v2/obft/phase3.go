@@ -111,15 +111,22 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 				pt, err := i.chainDecryptForLayer(layer, el.Ciphertext, chainedKeys)
 				if err != nil {
 					// Decryption failure at k > 0 is Rule 4 evidence.
-					i.recordEvidence(Evidence{
-						Rule:       EvidenceFakeEncryptedPresence,
-						OperatorID: opID,
-						Layer:      layer,
-						FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
-							Ciphertext:   append([]byte{}, el.Ciphertext...),
-							DecryptError: err.Error(),
-						},
-					})
+					// Deduplicated per (op, layer): a byzantine that emits
+					// multiple distinct onion entries at the same layer is
+					// already attributed via Rule 3 (cross-onion equivocation)
+					// — re-firing Rule 4 per entry would inflate the evidence
+					// log without adding attribution.
+					if i.recordRule4(opID, layer) {
+						i.recordEvidence(Evidence{
+							Rule:       EvidenceFakeEncryptedPresence,
+							OperatorID: opID,
+							Layer:      layer,
+							FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
+								Ciphertext:   append([]byte{}, el.Ciphertext...),
+								DecryptError: err.Error(),
+							},
+						})
+					}
 					continue
 				}
 				partial = Signature(pt)
@@ -132,16 +139,19 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 			if !i.signer.VerifyPartial(pubShare, el.Value, partial) {
 				if layer > 0 {
 					// Decrypted bytes are not a valid σ partial on the
-					// claimed V — Rule 4 (post-decryption garbage).
-					i.recordEvidence(Evidence{
-						Rule:       EvidenceFakeEncryptedPresence,
-						OperatorID: opID,
-						Layer:      layer,
-						FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
-							Ciphertext:     append([]byte{}, el.Ciphertext...),
-							DecryptedBytes: append([]byte{}, partial...),
-						},
-					})
+					// claimed V — Rule 4 (post-decryption garbage). Same
+					// per-(op, layer) dedup as the decrypt-failure branch.
+					if i.recordRule4(opID, layer) {
+						i.recordEvidence(Evidence{
+							Rule:       EvidenceFakeEncryptedPresence,
+							OperatorID: opID,
+							Layer:      layer,
+							FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
+								Ciphertext:     append([]byte{}, el.Ciphertext...),
+								DecryptedBytes: append([]byte{}, partial...),
+							},
+						})
+					}
 				}
 				// At L_0, this would have been Rule 5 (handled at observe
 				// time in ObserveCommit).
@@ -151,10 +161,24 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 		}
 	}
 
-	// 3) Pick the group with the most partials; check qV.
+	// 3) Pick the group with the most partials; check qV. Tiebreak by
+	// lexicographic V — without it, two groups with equal partial counts
+	// would resolve based on map-iteration order (peerOnions[layer] is a
+	// map), producing nondeterministic Output across operators on transient
+	// pre-quorum states. Pigeonhole 2 guarantees only one V reaches qV
+	// cluster-wide given f-bound, but locally we can transiently observe
+	// two V's at equal-count below qV; deterministic tiebreak makes the
+	// "winner" identical across operators if both ever reach qV.
 	var winning *sigGroup
 	for _, g := range groups {
-		if winning == nil || len(g.partials) > len(winning.partials) {
+		if winning == nil {
+			winning = g
+			continue
+		}
+		switch {
+		case len(g.partials) > len(winning.partials):
+			winning = g
+		case len(g.partials) == len(winning.partials) && bytes.Compare(g.value, winning.value) < 0:
 			winning = g
 		}
 	}

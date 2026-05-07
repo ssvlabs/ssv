@@ -46,17 +46,6 @@ type ProposerRunner struct {
 	// higher MEV.
 	proposerDelay time.Duration
 
-	// cachedFullBlock holds the initially fetched full (non-blinded) block
-	// for this duty on this operator, if any. The OBFT SubmitOutput hook
-	// uses it to submit the full block + blobs (Deneb/Electra/Fulu) when
-	// the decided value matches what this operator originally fetched —
-	// otherwise it falls back to the agreed-upon blinded block.
-	cachedFullBlock *api.VersionedProposal
-	// cachedBlindedBlockSSZ is the SSZ-blinded fingerprint of cachedFullBlock,
-	// stored for byte-equality matching against the decided value at
-	// SubmitOutput time.
-	cachedBlindedBlockSSZ []byte
-
 	// OBFT machinery. Owned by the runner; constructed in NewProposerRunner
 	// from the caller-supplied Controller plus runner-bound LifecycleHooks.
 	// `obftSlots` carries per-slot scratch state (RANDAO sig, fetched block
@@ -73,12 +62,21 @@ type ProposerRunner struct {
 // obftSlotState holds the per-slot scratch space the OBFT lifecycle
 // hooks need: the RANDAO signature for block fetches, the spec version
 // observed at fetch time (so SubmitOutput can decode the agreed-upon
-// blinded block), and the cancel func for the slot's driver goroutine.
+// blinded block), the cached full block (for full-block submission when
+// the decided V matches what this operator fetched), and the cancel func
+// for the slot's driver goroutine.
+//
+// All fields are written by `obftFetchCandidate` and read by
+// `obftSubmitOutput`; both run on different goroutines, so all access
+// goes through `ProposerRunner.obftMu`. Per-slot scoping prevents the
+// previous slot's cached block from leaking into the next slot's submit.
 type obftSlotState struct {
-	randao    phase0.BLSSignature
-	cancel    context.CancelFunc
-	version   spec.DataVersion // set when this operator fetches a candidate; zero otherwise
-	slotStart time.Time        // wall-clock slot-start, used to compute observedOffset for Phase-1 bundles
+	randao           phase0.BLSSignature
+	cancel           context.CancelFunc
+	cachedFullBlock  *api.VersionedProposal
+	cachedBlindedSSZ []byte
+	version          spec.DataVersion // set when this operator fetches a candidate; zero otherwise
+	slotStart        time.Time        // wall-clock slot-start, used to compute observedOffset for Phase-1 bundles
 }
 
 // ProposerRunnerOptions bundles all dependencies required by NewProposerRunner.
@@ -140,6 +138,7 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 		SubmitOutput:         r.obftSubmitOutput,
 		BroadcastCertificate: r.obftBroadcastCertificate,
 		OnMissedSlot:         r.obftOnMissedSlot,
+		OnReplayError:        r.obftOnReplayError,
 	}
 	sched, err := obftadapter.NewScheduler(opts.OBFTController, hooks)
 	if err != nil {
@@ -279,10 +278,6 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
 		return nil
 	}
-
-	// reset the cached original block at the beginning of a new duty
-	r.cachedFullBlock = nil
-	r.cachedBlindedBlockSSZ = nil
 
 	// sign partial randao
 	span.AddEvent("signing beacon object")

@@ -115,3 +115,72 @@ func TestVerifier_Certificate_RejectsCorruptSig(t *testing.T) {
 	cert.Signature = []byte("garbage-aggregate-sig")
 	require.ErrorContains(t, v.VerifyCertificate(cert), "does not verify")
 }
+
+func TestVerifier_CommitWitnesses_AcceptsValid(t *testing.T) {
+	s := newSim(t, 4)
+	v := makeVerifier(t, s)
+	// Build a witness from a leader's Phase-1 bundle.
+	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
+	require.NoError(t, err)
+	c := &Commit{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Witnesses: []LeaderSigmaWitness{
+			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: b.SigmaV},
+		},
+	}
+	require.NoError(t, v.VerifyCommitWitnesses(c))
+}
+
+func TestVerifier_CommitWitnesses_RejectsCorruptSigmaV(t *testing.T) {
+	s := newSim(t, 4)
+	v := makeVerifier(t, s)
+	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
+	require.NoError(t, err)
+	c := &Commit{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Witnesses: []LeaderSigmaWitness{
+			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: []byte("garbage")},
+		},
+	}
+	require.ErrorContains(t, v.VerifyCommitWitnesses(c), "does not verify")
+}
+
+// Identical witnesses (same layer + leader + value + sigmaV bytes) dedupe to
+// a single VerifyPartial call, which is fine because the inputs are byte-
+// identical. This exercises the seen-map fast path without a count assertion.
+func TestVerifier_CommitWitnesses_DedupsIdentical(t *testing.T) {
+	s := newSim(t, 4)
+	v := makeVerifier(t, s)
+	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
+	require.NoError(t, err)
+	w := LeaderSigmaWitness{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: b.SigmaV}
+	c := &Commit{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Witnesses: []LeaderSigmaWitness{w, w, w, w}, // 4 byte-identical
+	}
+	require.NoError(t, v.VerifyCommitWitnesses(c))
+}
+
+// Regression: the gate must reject when witness #2 has the same (layer, leader,
+// value) as #1 but DIFFERENT sigmaV — at most one sigmaV can be a valid
+// share-signature for a given V (leader holds one share), so a mismatched
+// sigmaV is malformedness regardless. A buggy dedup that ignored sigmaV would
+// silently accept this Commit.
+func TestVerifier_CommitWitnesses_RejectsValueMatchSigmaVMismatch(t *testing.T) {
+	s := newSim(t, 4)
+	v := makeVerifier(t, s)
+	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
+	require.NoError(t, err)
+	c := &Commit{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Witnesses: []LeaderSigmaWitness{
+			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: b.SigmaV},
+			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: []byte("garbage-different-sig")},
+		},
+	}
+	require.ErrorContains(t, v.VerifyCommitWitnesses(c), "does not verify")
+}

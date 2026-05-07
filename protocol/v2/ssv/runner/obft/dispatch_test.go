@@ -158,6 +158,80 @@ func TestDispatch_BuffersOnNoActiveInstance(t *testing.T) {
 	require.Len(t, ctrl.pending[slot], 1)
 }
 
+// Regression: state-mutating methods on a Controller for which EndInstance
+// has run must return ErrNoActiveInstance instead of silently mutating an
+// orphaned instance. Covers two paths:
+//  1. Post-delete: instance removed from c.instances; lookup itself returns
+//     ErrNoActiveInstance. (Easy case.)
+//  2. Post-finalize, pre-delete: lookup succeeds (instance still in map) but
+//     Instance.Ended() returns true; the per-method Ended() gate refuses
+//     mutation. This is the actual race window — a goroutine that captured
+//     r via lookup before EndInstance ran would have its acquire-mutex-then-
+//     mutate sequence fenced here. Simulated by manually calling Finalize
+//     on the running instance without going through EndInstance.
+func TestController_PostEndInstance_RejectsMutations(t *testing.T) {
+	ctrl := newMinimalControllerForStartTest(t)
+	const slot phase0.Slot = 100
+	r, err := ctrl.StartNewInstance(slot)
+	require.NoError(t, err)
+
+	commit := &obftcore.Commit{
+		ClusterID:  ctrl.clusterID,
+		OperatorID: 2,
+		Height:     obftcore.Height(slot),
+		Layers:     make([]obftcore.EncryptedLayer, 4),
+	}
+	bundle := &obftcore.Phase1Bundle{
+		ClusterID:  ctrl.clusterID,
+		OperatorID: 1,
+		Height:     obftcore.Height(slot),
+		Layer:      0,
+		Value:      []byte("V"),
+		SigmaV:     []byte("sig"),
+	}
+
+	// Path 2: simulate the race window — manually finalize the instance
+	// while keeping it in c.instances. Mutating methods must hit the
+	// Ended() gate (not the lookup-misses path).
+	r.instanceMu.Lock()
+	r.instance.Finalize()
+	r.instanceMu.Unlock()
+	require.ErrorIs(t, ctrl.ProcessCommit(commit), ErrNoActiveInstance,
+		"post-Finalize ProcessCommit must hit the Ended() gate")
+	require.ErrorIs(t, ctrl.ObservePhase1Bundle(bundle, 0), ErrNoActiveInstance,
+		"post-Finalize ObservePhase1Bundle must hit the Ended() gate")
+
+	// Path 1: full EndInstance (delete from map). Lookup itself fails now.
+	ctrl.EndInstance(slot)
+	require.ErrorIs(t, ctrl.ProcessCommit(commit), ErrNoActiveInstance)
+	require.ErrorIs(t, ctrl.ObservePhase1Bundle(bundle, 0), ErrNoActiveInstance)
+}
+
+// newMinimalControllerForStartTest is like newMinimalControllerForTest but
+// includes the timing overrides StartNewInstance needs to build a Config.
+func newMinimalControllerForStartTest(t *testing.T) *Controller {
+	t.Helper()
+	const q = 3
+	signer := obftcore.NewStubSigner(q, []byte{1})
+	ibe := obftcore.NewStubIBE(q)
+	pubShares := map[obftcore.OperatorID][]byte{
+		1: {1}, 2: {2}, 3: {3}, 4: {4},
+	}
+	overrides := &ConfigOverrides{K: 4}
+	ctrl, err := NewController(ControllerOptions{
+		OperatorID:    1,
+		Committee:     []spectypes.OperatorID{1, 2, 3, 4},
+		ClusterID:     [32]byte{0xCA, 0xFE},
+		ClusterPubKey: []byte{0xCA, 0xFE},
+		PubKeyShares:  pubShares,
+		Signer:        signer,
+		IBE:           ibe,
+		Overrides:     overrides,
+	})
+	require.NoError(t, err)
+	return ctrl
+}
+
 // newMinimalControllerForTest constructs a Controller with stub crypto and
 // minimal config, sufficient for testing the buffer plumbing.
 func newMinimalControllerForTest(t *testing.T) *Controller {

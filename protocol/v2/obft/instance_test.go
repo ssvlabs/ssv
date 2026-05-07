@@ -426,14 +426,23 @@ func TestObft_Evidence_Rule3_SecondKindCommit(t *testing.T) {
 	require.NoError(t, s.instances[2].ObserveCommit(commit2))
 
 	ev := s.instances[2].Evidence()
-	found := false
-	for _, e := range ev {
-		if e.Rule == EvidenceCrossOnionEquivocation && e.OperatorID == 1 && e.Layer == -1 {
-			found = true
+	var topLevel *Evidence
+	for idx := range ev {
+		if ev[idx].Rule == EvidenceCrossOnionEquivocation && ev[idx].OperatorID == 1 && ev[idx].Layer == -1 {
+			topLevel = &ev[idx]
 			break
 		}
 	}
-	require.True(t, found, "expected Rule 3 (second-distinct-commit) against op1; got %+v", ev)
+	require.NotNil(t, topLevel, "expected Rule 3 (second-distinct-commit) against op1; got %+v", ev)
+
+	// Slashable payload: both Commit bodies must be present and structurally
+	// distinct (different content hashes).
+	require.NotNil(t, topLevel.CommitEquivocation, "top-level Rule 3 must carry CommitEquivocation payload")
+	require.NotNil(t, topLevel.CommitEquivocation.CommitA)
+	require.NotNil(t, topLevel.CommitEquivocation.CommitB)
+	hashA := commitContentHash(topLevel.CommitEquivocation.CommitA)
+	hashB := commitContentHash(topLevel.CommitEquivocation.CommitB)
+	require.NotEqual(t, hashA, hashB, "evidence payload must carry two structurally-distinct Commits")
 
 	// Identical re-broadcast of commit2 must not record additional evidence.
 	beforeCount := len(ev)
@@ -779,8 +788,11 @@ func TestObft_NRPartial_RejectedUnderOptionA(t *testing.T) {
 
 // TestObft_RetroactiveRule5 — a byzantine's L_0 σ entry that arrives via
 // KindCommit BEFORE any L_0 Phase-1 bundle is retained must still trigger
-// Rule 5 evidence once a bundle does arrive. Without the retroactive check,
-// the slashing attribution is lost.
+// Rule 5 evidence once phase end (Resolve) decides the V was never retained.
+//
+// Firing is deferred to Resolve to avoid the false-positive where a leader
+// equivocates: an honest peer's σ on the second V might land before that V
+// reached our retention. See TestObft_Rule5_NoFalsePositiveOnEquivocation.
 func TestObft_RetroactiveRule5(t *testing.T) {
 	s := newSim(t, 4)
 
@@ -798,8 +810,9 @@ func TestObft_RetroactiveRule5(t *testing.T) {
 		Layers:     layers,
 	}
 
-	// Receiver observes the Commit BEFORE any L_0 bundle. Rule 5 check
-	// is skipped (no retained V to compare against).
+	// Receiver observes the Commit BEFORE any L_0 bundle. Rule 5 is
+	// deferred (no retained V to compare against, and we don't fire on
+	// "verifies but unknown V" until phase end).
 	require.NoError(t, s.instances[3].ObserveCommit(byzCommit))
 	preEv := s.instances[3].Evidence()
 	for _, e := range preEv {
@@ -807,8 +820,18 @@ func TestObft_RetroactiveRule5(t *testing.T) {
 			"Rule 5 must NOT fire before retention")
 	}
 
-	// Now the L_0 leader's bundle arrives → retroactive Rule 5 fires.
+	// L_0 leader's bundle arrives. Rule 5 still deferred — V_b might still
+	// arrive (under leader equivocation) and rescue op2's entry.
 	s.deliverPhase1(0, s.candidates[0], []OperatorID{1, 2, 3, 4}, observedEarly, true)
+	midEv := s.instances[3].Evidence()
+	for _, e := range midEv {
+		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
+			"Rule 5 must NOT fire mid-phase; only at Resolve")
+	}
+
+	// Phase end: Finalize fires deferred Rule 5. Op2's σ on
+	// "never-broadcast-V" doesn't match retained → fire now.
+	s.instances[3].Finalize()
 	postEv := s.instances[3].Evidence()
 	found := false
 	for _, e := range postEv {
@@ -817,7 +840,115 @@ func TestObft_RetroactiveRule5(t *testing.T) {
 			break
 		}
 	}
-	require.True(t, found, "expected retroactive Rule 5 against op2; got %+v", postEv)
+	require.True(t, found, "expected Rule 5 fired at Resolve against op2; got %+v", postEv)
+}
+
+// TestObft_Rule5_NoFalsePositiveOnEquivocation — when an L_0 leader equivocates
+// (V_a then V_b), an honest peer who σ-signed V_b before V_b reached our
+// retention must NOT be flagged Rule 5. The σ partial verifies cryptographically
+// against the peer's pubshare on V_b — Rule 5 evidence is reserved for partials
+// that either don't verify on their claimed V, or that sign a V the cluster
+// never retains.
+func TestObft_Rule5_NoFalsePositiveOnEquivocation(t *testing.T) {
+	s := newSim(t, 4)
+
+	// Setup: leader (op1 by default) emits V_a; receiver (op3) retains it.
+	leaderID := s.cfg.Layers[0].Leader
+	V_a := s.candidates[0]
+	V_b := []byte("equivocating-leader-V_b")
+
+	// Honest op2 σ-signs V_b (it received V_b first under the equivocation).
+	op2Signer := NewStubSigner(s.cfg.QV(), []byte{byte(2)})
+	op2SigOnVb, err := op2Signer.SignPartial(V_b)
+	require.NoError(t, err)
+	layers := make([]EncryptedLayer, s.K)
+	layers[0] = EncryptedLayer{Value: V_b, Ciphertext: op2SigOnVb}
+	op2Commit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 2,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+
+	receiver := s.instances[3]
+
+	// Step 1: receiver retains leader's V_a first. deliverPhase1 has the
+	// leader self-observe and delivers to the rest of the recipients.
+	s.deliverPhase1(0, V_a, []OperatorID{1, 2, 3, 4}, observedEarly, true)
+	require.NotZero(t, len(receiver.bundles[0][leaderID]),
+		"setup: receiver must have V_a retained")
+
+	// Step 2: op2's commit arrives. el.Value=V_b. retained={V_a}. Under the
+	// old flat-fake verdict this would fire Rule 5 falsely; under the new
+	// split it's l0SigmaUnknownV → deferred.
+	require.NoError(t, receiver.ObserveCommit(op2Commit))
+	for _, e := range receiver.Evidence() {
+		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
+			"Rule 5 must NOT fire while V_b is still pending; got %+v", e)
+	}
+
+	// Step 3: leader (byzantine) finally broadcasts V_b — equivocation
+	// retention. Op2's entry should now be rescued (verified, not fake).
+	leaderSigner := NewStubSigner(s.cfg.QV(), []byte{byte(leaderID)})
+	leaderSigOnVb, err := leaderSigner.SignPartial(V_b)
+	require.NoError(t, err)
+	leaderBundleVb := &Phase1Bundle{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: leaderID,
+		Height:     s.cfg.Height,
+		Layer:      0,
+		Value:      V_b,
+		SigmaV:     leaderSigOnVb,
+	}
+	require.NoError(t, receiver.ObservePhase1Bundle(leaderBundleVb, observedEarly))
+
+	// Step 4: at Finalize, op2's σ on V_b matches retained V_b → verified, no Rule 5.
+	receiver.Finalize()
+	for _, e := range receiver.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 {
+			t.Fatalf("Rule 5 false-positive against honest op2: %+v", e)
+		}
+	}
+}
+
+// TestObft_Rule5_CryptoFakeSilentLeader — a byzantine's L_0 σ partial that
+// fails BLS verify against their own share is cryptoFake regardless of whether
+// the L_0 leader has been silent. Without firing here, the byzantine could
+// emit unverifiable bytes early in the slot (before any L_0 retention) and
+// never get attributed: reevaluateL0Sigmas only fires on retentions, and
+// finalizeL0Rule5 short-circuits when no V was ever retained.
+func TestObft_Rule5_CryptoFakeSilentLeader(t *testing.T) {
+	s := newSim(t, 4)
+	receiver := s.instances[3]
+
+	// Byzantine op2 emits an L_0 σ entry whose Ciphertext is garbage that
+	// won't verify against op2's pubshare on the claimed Value. No L_0
+	// bundle has been retained at this point.
+	garbageSig := []byte("garbage-not-a-valid-bls-sig-padded-to-bls-length-bytes-bytes-bytes")
+	require.NotEqual(t, l0SigmaInconclusive, // sanity: would have been the buggy verdict
+		receiver.peerSigmaAtL0Verdict(2, EncryptedLayer{Value: []byte("V_x"), Ciphertext: garbageSig}),
+		"verdict must not return inconclusive when sig fails verify, even without retentions")
+
+	layers := make([]EncryptedLayer, s.K)
+	layers[0] = EncryptedLayer{Value: []byte("V_x"), Ciphertext: garbageSig}
+	byzCommit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 2,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+	require.NoError(t, receiver.ObserveCommit(byzCommit))
+
+	// Rule 5 must fire at observe time even though no L_0 bundle has been
+	// retained — the cryptoFake check is signature-self-contained.
+	found := false
+	for _, e := range receiver.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "Rule 5 must fire on cryptoFake even when leader is silent")
 }
 
 // TestObft_PeerCommitHashes_CappedPerOp — under abuse (a byzantine emitting

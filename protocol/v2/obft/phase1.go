@@ -98,7 +98,26 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		return ErrLatePhase1Bundle
 	}
 
+	// Look up the per-leader retention slot for this layer. Bundle dedup
+	// against retained runs BEFORE VerifyPartial so that a re-delivery of
+	// an already-retained V (e.g., the same leader bundle packed as a witness
+	// in N peers' KindCommits) doesn't re-pay the BLS verify cost.
+	if i.bundles[b.Layer] == nil {
+		i.bundles[b.Layer] = make(map[OperatorID][]*Phase1Bundle)
+	}
+	retained := i.bundles[b.Layer][b.OperatorID]
+	for _, r := range retained {
+		if bytes.Equal(r.Value, b.Value) {
+			// Same value_root already retained from a previously-verified
+			// bundle — drop silently. The canonical entry is whichever
+			// arrived first and verified.
+			return nil
+		}
+	}
+
 	// Cryptographic-auth check on σ_V against the leader's pubkey share.
+	// Runs only when retention would actually take effect (new V or first
+	// observation), saving redundant verifies on witness redelivery.
 	leaderShare, ok := i.pubKeyShares[b.OperatorID]
 	if !ok {
 		// Leader's share not registered — treat as auth failure.
@@ -107,22 +126,6 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	if !i.signer.VerifyPartial(leaderShare, b.Value, b.SigmaV) {
 		return fmt.Errorf("obft: phase-1 bundle σ_V does not verify against leader %d's share",
 			b.OperatorID)
-	}
-
-	// Look up the per-leader retention slot for this layer.
-	if i.bundles[b.Layer] == nil {
-		i.bundles[b.Layer] = make(map[OperatorID][]*Phase1Bundle)
-	}
-	retained := i.bundles[b.Layer][b.OperatorID]
-
-	// Dedup against retained bundles.
-	for _, r := range retained {
-		if bytes.Equal(r.Value, b.Value) {
-			// Same value_root already retained — drop silently. (An honest
-			// leader broadcasts at most one bundle, but gossipsub may
-			// re-deliver; the existing entry is canonical.)
-			return nil
-		}
 	}
 
 	// Distinct value_root. If we already have one retained, this is
@@ -156,6 +159,15 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		// If the operator already σ-locked on the first V (the byzantine
 		// delivered it before observing equivocation), they stay σ-locked
 		// per cross-phase exclusivity.
+		//
+		// Re-run the L_0 retroactive check: the second V_b can rescue
+		// previously-deferred σ entries that signed V_b. Without this, an
+		// honest peer whose σ on V_b arrived between the V_a and V_b
+		// retentions stays in the deferred-Rule-5 pool until finalize, where
+		// it would be incorrectly slashed.
+		if b.Layer == 0 {
+			i.reevaluateL0Sigmas()
+		}
 		return nil
 	}
 
@@ -163,11 +175,11 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// so retained bundle bytes are independent of caller-owned slices.
 	i.bundles[b.Layer][b.OperatorID] = []*Phase1Bundle{deepCopyBundle(b)}
 
-	// Retroactive Rule 5 check: any L_0 onion entries we observed BEFORE any
+	// Retroactive cryptoFake check: any L_0 onion entries observed BEFORE any
 	// V was retained at L_0 have not yet been Rule-5-checked (the check at
-	// ObserveCommit gates on hasRetainedVAtL0). Re-evaluate them now that a V
-	// is retained — a peer's σ on a V we didn't know about earlier is still
-	// Rule 5 evidence.
+	// ObserveCommit gates on hasRetainedVAtL0). Re-evaluate now that a V is
+	// retained — only fires Rule 5 for cryptoFake (unambiguous); unknownV
+	// entries stay deferred until finalizeL0Rule5.
 	if b.Layer == 0 {
 		i.reevaluateL0Sigmas()
 	}
@@ -177,6 +189,11 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 // reevaluateL0Sigmas re-runs the Rule 5 check on already-observed L_0 onion
 // entries. Called when a Phase-1 bundle is first retained at L_0 to catch
 // fake-σ entries from peers whose KindCommit arrived before the L_0 bundle.
+//
+// Only fires Rule 5 for the unambiguous cryptoFake case (partial fails verify
+// on the claimed V). The "verifies, but V not currently retained" case is
+// deferred to finalizeL0Rule5 at phase end — under leader equivocation a
+// V we haven't retained yet may arrive later and rescue the entry.
 //
 // Snapshot semantics: removeOnionEntry rewrites the underlying slice
 // in-place (`out := entries[:0]`); iterating the same slice header while
@@ -203,7 +220,58 @@ func (i *Instance) reevaluateL0Sigmas() {
 	}
 	for _, oe := range snapshot {
 		for _, el := range oe.entries {
-			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaFake {
+			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaCryptoFake {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceFakePlaintextSigma,
+					OperatorID: oe.op,
+					Layer:      0,
+					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+						OnionPartial:        append(Signature{}, el.Ciphertext...),
+						OnionValue:          append(Value{}, el.Value...),
+						RetainedValueHashes: i.retainedL0ValueHashes(),
+					},
+				})
+				i.removeOnionEntry(0, oe.op, &el)
+			}
+		}
+	}
+}
+
+// finalizeL0Rule5 fires Rule 5 evidence on any L_0 σ entries whose claimed V
+// was never retained over this Instance's lifetime. Called once via
+// Instance.Finalize at slot end — must NOT run while further ObserveCommit /
+// ObservePhase1Bundle calls may arrive, because late KindCommit witnesses
+// can drive new L_0 retentions (ObservePhase1Bundle with observedOffset=0
+// bypasses the T_commit window) that would rescue otherwise-unknownV entries.
+// Calling from inside Resolve is unsafe — Resolve is polled by the runner.
+//
+// Without this final pass, an honest peer who signed a leader's V_b before
+// V_b reached our retention (under leader equivocation, after we'd already
+// retained V_a) would never be slashed when their V is genuinely fake — we'd
+// have deferred the check at observe time and never re-fired.
+func (i *Instance) finalizeL0Rule5() {
+	if !i.hasRetainedVAtL0() {
+		// No V retained at L_0 at all — every L_0 σ entry is inconclusive
+		// (no V to compare against). Nothing to slash.
+		return
+	}
+	type opEntries struct {
+		op      OperatorID
+		entries []EncryptedLayer
+	}
+	leader := i.cfg.Layers[0].Leader
+	var snapshot []opEntries
+	for op, entries := range i.peerOnions[0] {
+		if op == leader {
+			continue
+		}
+		entriesCopy := make([]EncryptedLayer, len(entries))
+		copy(entriesCopy, entries)
+		snapshot = append(snapshot, opEntries{op: op, entries: entriesCopy})
+	}
+	for _, oe := range snapshot {
+		for _, el := range oe.entries {
+			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaUnknownV {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceFakePlaintextSigma,
 					OperatorID: oe.op,
@@ -232,6 +300,48 @@ func deepCopyBundle(b *Phase1Bundle) *Phase1Bundle {
 		Value:      append(Value{}, b.Value...),
 		SigmaV:     append(Signature{}, b.SigmaV...),
 	}
+}
+
+// deepCopyCommit returns a deep copy of c — every nested slice (Layers,
+// NRPartials, Witnesses) and their byte fields are independent of the source.
+// Used when retaining a peer's first observed Commit for top-level Rule 3
+// evidence packaging (CommitEquivocationEvidence).
+func deepCopyCommit(c *Commit) *Commit {
+	out := &Commit{
+		ClusterID:  c.ClusterID,
+		OperatorID: c.OperatorID,
+		Height:     c.Height,
+	}
+	if len(c.Layers) > 0 {
+		out.Layers = make([]EncryptedLayer, len(c.Layers))
+		for i, el := range c.Layers {
+			out.Layers[i] = EncryptedLayer{
+				Value:      append(Value{}, el.Value...),
+				Ciphertext: append([]byte{}, el.Ciphertext...),
+			}
+		}
+	}
+	if len(c.NRPartials) > 0 {
+		out.NRPartials = make([]NRPartial, len(c.NRPartials))
+		for i, p := range c.NRPartials {
+			out.NRPartials[i] = NRPartial{
+				Layer:      p.Layer,
+				PartialSig: append(Signature{}, p.PartialSig...),
+			}
+		}
+	}
+	if len(c.Witnesses) > 0 {
+		out.Witnesses = make([]LeaderSigmaWitness, len(c.Witnesses))
+		for i, w := range c.Witnesses {
+			out.Witnesses[i] = LeaderSigmaWitness{
+				Layer:  w.Layer,
+				Leader: w.Leader,
+				Value:  append(Value{}, w.Value...),
+				SigmaV: append(Signature{}, w.SigmaV...),
+			}
+		}
+	}
+	return out
 }
 
 // ApplyHostValidity records the host application's valid/not-valid verdict

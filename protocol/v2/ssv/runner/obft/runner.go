@@ -49,6 +49,7 @@ func RunProposerSlot(
 	if err != nil {
 		return fmt.Errorf("obft runner: start instance: %w", err)
 	}
+	// EndInstance finalizes deferred Rule 5 evidence atomically with removal.
 	defer ctrl.EndInstance(slot)
 
 	// Replay any envelopes that arrived before StartNewInstance — peers with
