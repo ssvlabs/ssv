@@ -34,7 +34,7 @@ The comparison is structured along three axes:
 Numbers below use **production-aligned sizing**: OBFT/OBFTR/2abOBFT use recommended Δ sizing (2 BTT per per-emission propagation cycle for jitter absorption); QBFT uses minimum sizing (1 BTT per phase, as the `RT = 2s` round timeout absorbs jitter at the round level). See **Note on sizing conventions** below for rationale. Per-protocol totals:
 
 - **Partial-sigs on pre-agreed V**: 1 BTT (partial-sig propagation + threshold aggregation). No consensus rounds.
-- **OBFT**: `1 BTT` broadcast slack [staggered model — `B_0 = 1 BTT` for the primary L_0; deeper layers' broadcasts pre-arrived; see [OBFT.md §Setting](OBFT.md)] + `2 BTT` Phase 2 + 0 Phase 3 = **3 BTT**.
+- **OBFT**: `1 BTT` broadcast slack [staggered model — `B_0 = 1 BTT` for the primary L_0 relative to `T_commit` (= `0.5 BTT` relative to `Ls_arrival`); deeper layers' broadcasts pre-arrived; see [OBFT.md §Setting](OBFT.md)] + `2 BTT` Phase 2 + 0 Phase 3 = **3 BTT**. (Note: Phase 3 = 0 BTT is the apples-to-apples convention for cross-protocol comparison; the actual local-CPU cost is `ε_3 ≈ 100ms ≈ 0.5 BTT` and is accounted explicitly in [OBFT.md §Application's timing table](OBFT.md#timing-budget) as a separate row, putting "consensus complete" 0.5 BTT later than the 3-BTT count here suggests.)
 - **OBFTR per round**: `2 BTT` broadcast slack [uniform model] + `2 BTT` Phase 2 + `1 BTT` Phase 2.5 (L_C signaling) + 0 Phase 3 = **5 BTT**. Round 2 omits fresh broadcast slack (uses re-flood ≈ `1 BTT`) → **4 BTT**.
 - **2abOBFT**: `2 BTT` broadcast slack + `2 BTT` Phase 2a + `2 BTT` Phase 2b + 0 Phase 3 = **6 BTT**.
 - **QBFT**: 4 phase emissions (PROPOSE + PREPARE + COMMIT + post-consensus) at minimum sizing (1 BTT each) = **4 BTT**. SSV's production convention: round timeout `RT = 2s` absorbs per-phase jitter at the round level rather than via 2× per-phase widening.
@@ -183,7 +183,7 @@ At the SSV proposer-duty operating point — `BTT = 200ms`, `Relay_cutoff = 4000
 
 **Reading:**
 
-- **OBFT V_0 captures 300ms more MEV-fresh fetch time than QBFT R2** (3050 vs 2950ms). All four OBFT leaders beat QBFT R1 by ≥1.4s.
+- **OBFT V_0 captures 100ms more MEV-fresh fetch time than QBFT R2** (3050 vs 2950ms). All four OBFT leaders beat QBFT R1 by ≥1.4s.
 - **OBFT V_0 pays a 500ms BFT-consensus tax over the partial-sigs floor** (3050 vs 3550ms). This 500ms = 2 BTT (Phase 2 + propagation slack) is the structural cost of resolving V-disagreement in a single round at this operating point. QBFT R1's tax is 2800ms (4× larger).
 - **Only QBFT R2 reaches V_1 parity**, and only after paying the round-1 timeout gap (`RT_1 = 2000ms` of wall-clock during which QBFT cannot make progress). OBFT's K-layer fall-through is in-round (sequential local IBE decryption, no per-layer RTT), so OBFT lands the same `Relay_cutoff` budget without the round-change penalty.
 - **QBFT R1 is structurally constrained** by needing PROPOSE_1 to fire early enough that consensus + post-consensus + R2 retry can fit the slot. At the operating point above, R1's MEV-fetch budget is just 750ms — 4× less than OBFT V_0 and ~5× less than the partial-sigs floor.
