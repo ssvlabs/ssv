@@ -14,7 +14,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 - High-P99 networks (`P99` ≈ 300–500ms) where multi-round protocols don't fit a 4s relay cutoff but a single round with the Phase-2 split still does.
 
 **Not suited for:**
-- Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [OBFT](OBFT.md) saves 100-300ms but exposes the closed-here failure modes.
+- Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [OBFT](OBFT.md) saves 200-600ms but exposes the closed-here failure modes.
 - General-purpose state-machine replication where decision *agreement* across operators (not just *output*) is required. 2abOBFT (like the rest of the OBFT family) gives a unique cluster-wide *output* via cryptographic safety; honest operators may locally observe different intermediate states without affecting the output.
 - Scenarios requiring host-validity-divergence recovery in 2-2 splits at f=1 n=4 (still Class A; the witness phase narrows the divergence window but cannot eliminate it). [QBFT](#a3--comparison-with-bare-obft-and-qbft) is the appropriate choice when validity is meaningfully unstable across the consensus window.
 - Sustained partition tails beyond the absorption window (`Δ_2a + 1 BTT` ≈ 450ms at Config A recommended). Multi-round extensions are a future direction.
@@ -38,7 +38,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 - **Per-layer leader-fetch deadlines** `T_{K-1} < T_{K-2} < ... < T_1 < T_0`, plus a single cluster deadline `T_commit`. (`T_commit` is the Phase-1-broadcast cutoff; verdict broadcast and σ/NR commit happen after.) The asymmetric fetch times let primary leaders fetch high-MEV values late (`T_0` close to `T_commit`) while deeper layers' leaders fetch safe early values from deeper-confirmed parents (`T_{K-1}` well before `T_0`).
 
-- **Time unit `BTT` (broadcast trip time)** — `P99` is the propagation budget at the deployment's chosen tail percentile (the variable name `P99` is shorthand for the high-percentile propagation latency; deployments may use P99, P999, P9999 etc. as the actual percentile depending on tail tolerance). `δ` is the cluster's clock-skew bound. We define `1 BTT = P99 + δ` — the time needed for one one-way message to propagate from a sender to all honest receivers under partial-synchrony assumptions. This unit is used throughout for time-budget formulas; the underlying `P99` and `δ` are kept distinct only in §Trust model (where partial synchrony is defined) and in safety arguments (Pigeonhole proofs). Concrete sizing at Config A: `P99 = 100ms, δ = 50ms, 1 BTT = 150ms`.
+- **Time unit `BTT` (broadcast trip time)** — `P99` is the propagation budget at the deployment's chosen tail percentile (the variable name `P99` is shorthand for the high-percentile propagation latency; deployments may use P99, P999, P9999 etc. as the actual percentile depending on tail tolerance). `δ` is the cluster's clock-skew bound. We define `1 BTT = P99 + δ` — the time needed for one one-way message to propagate from a sender to all honest receivers under partial-synchrony assumptions. This unit is used throughout for time-budget formulas; the underlying `P99` and `δ` are kept distinct only in §Trust model (where partial synchrony is defined) and in safety arguments (Pigeonhole proofs). Concrete sizing at Config A: `P99 = 150ms, δ = 50ms, 1 BTT = 200ms`.
 
 - **Three distinct deadlines** (do not conflate):
 
@@ -398,7 +398,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 - **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_commit − 2 BTT` (leader broadcast deadline), `T_accept_max = T_commit + Δ_2a − 1 BTT` (receiver acceptance horizon), `T_verdict_max = T_commit + Δ_2a − 1 BTT` (verdict broadcast horizon, coincident with `T_accept_max`). Reconstruction is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`; the slot's hard wall is the relay-submission deadline `T_relay_cutoff − T_submit`.
 
   **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + 1 BTT`:
-  - At `Δ_2a = 1 BTT` (BFT-minimum): `2 BTT` ≈ 300ms at Config A.
+  - At `Δ_2a = 1 BTT` (BFT-minimum): `2 BTT` = 400ms at Config A.
   - At `Δ_2a = 2 BTT` (recommended): `3 BTT` ≈ 450ms at Config A.
 
   Real propagation > absorption window is Class A "sustained partition" — out of envelope by definition.
@@ -667,8 +667,8 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Built-in leader fallback | Yes (K-layer fall-through within Phase 3's reconstruction walk; K configurable, K = n recommended for proposer duty) |
 | Round-change recovery | No — single-round design. Late re-flood within Phase-2a's absorption window is the only within-slot partition-recovery mechanism. |
 | Partial-synchrony absorption window | `Δ_2a + 1 BTT` (single round) — ≈ 450ms at Config A recommended. |
-| Healthy-path latency (post-`T_commit`) | ~850ms at Config A recommended (Δ_2a=Δ_2b=2 BTT=300ms each + Δ_3=250ms); ~550ms at minimum sizing (Δ_2a=Δ_2b=1 BTT=150ms each + Δ_3=250ms) |
-| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +300ms at recommended sizing (extra Phase 2a window of 300ms vs single Phase 2); ±0ms at minimum sizing (both have Phase 2 window summing to 1 BTT-equivalent) |
+| Healthy-path latency (post-`T_commit`) | ~1100ms at Config A recommended (Δ_2a=Δ_2b=2 BTT=400ms each + Δ_3=300ms); ~700ms at minimum sizing (Δ_2a=Δ_2b=1 BTT=200ms each + Δ_3=300ms) |
+| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +600ms at recommended sizing (extra Phase 2a window of 400ms + Δ_3 +200ms vs single Phase 2); +400ms at minimum sizing (both have Phase 2 window summing to 1 BTT-equivalent, plus Δ_3 difference) |
 | EKM complexity | Lowest in the OBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
 
 ## Application: SSV Ethereum proposer duty
@@ -699,31 +699,31 @@ For an SSV cluster proposing an Ethereum block, the recommended 2abOBFT configur
 
 The slot's hard relay-submission deadline is `slot_start + 4.0s`; a minimum `T_submit ≈ 250ms` is reserved for relay submission. The slot's reconstruction must complete by `slot_start + 4.0s − T_submit ≤ slot_start + 3.75s`.
 
-Common parameters: **P99 = 100ms (cluster gossipsub P99/P999), δ = 50ms, n = 4, f = 1**.
+Common parameters: **P99 = 150ms (cluster gossipsub P99/P999), δ = 50ms, n = 4, f = 1**.
 
 #### 2abOBFT(n=4, K=4) recommended sizing
 
 | Window | Length | End time | Notes |
 |---|---|---|---|
 | Phase 1 fetch (effective) | 1200ms | slot_start + 1.20s | `T_broadcast_max = T_commit − 2 BTT = 1.20s` |
-| Phase-1 propagation slack | 300ms | slot_start + 1.50s = T_commit | Bundles broadcast at deadline propagate to all honest within `1 BTT` |
-| Phase 2a | 300ms | slot_start + 1.80s | `Δ_2a = 2 BTT`; verdict broadcast horizon = `T_commit + Δ_2a − 1 BTT = 1.65s`; absorbs late bundles arriving up to 1.65s |
-| Phase 2b | 300ms | slot_start + 2.10s | `Δ_2b = 2 BTT`; σ/NR partials propagate to peers before Phase 3 |
-| Phase 3 | 250ms | slot_start + 2.35s | `Δ_3 = 1 BTT + ε_3 = 250ms`; absorbs end-of-Phase-2b NR-partial propagation + reconstruction |
-| Submission | 1650ms | slot_start + 4.00s | 6.6× the 250ms minimum — comfortable headroom |
+| Phase-1 propagation slack | 400ms | slot_start + 1.60s = T_commit | Bundles broadcast at deadline propagate to all honest within `1 BTT` |
+| Phase 2a | 400ms | slot_start + 2.00s | `Δ_2a = 2 BTT`; verdict broadcast horizon = `T_commit + Δ_2a − 1 BTT = 1.80s`; absorbs late bundles arriving up to 1.80s |
+| Phase 2b | 400ms | slot_start + 2.40s | `Δ_2b = 2 BTT`; σ/NR partials propagate to peers before Phase 3 |
+| Phase 3 | 300ms | slot_start + 2.70s | `Δ_3 = 1 BTT + ε_3 = 300ms`; absorbs end-of-Phase-2b NR-partial propagation + reconstruction |
+| Submission | 1300ms | slot_start + 4.00s | 5.2× the 250ms minimum — comfortable headroom |
 
 #### 2abOBFT(n=4, K=4) minimum sizing
 
 | Window | Length | End time | Notes |
 |---|---|---|---|
 | Phase 1 fetch (effective) | 1200ms | slot_start + 1.20s | Same |
-| Phase-1 propagation slack | 300ms | slot_start + 1.50s | Same |
-| Phase 2a | 150ms | slot_start + 1.65s | `Δ_2a = 1 BTT` (BFT-minimum); narrower late-bundle absorption |
-| Phase 2b | 150ms | slot_start + 1.80s | `Δ_2b = 1 BTT` |
-| Phase 3 | 250ms | slot_start + 2.05s | Same |
-| Submission | 1950ms | slot_start + 4.00s | 7.8× the 250ms minimum |
+| Phase-1 propagation slack | 400ms | slot_start + 1.60s | Same |
+| Phase 2a | 200ms | slot_start + 1.80s | `Δ_2a = 1 BTT` (BFT-minimum); narrower late-bundle absorption |
+| Phase 2b | 200ms | slot_start + 2.00s | `Δ_2b = 1 BTT` |
+| Phase 3 | 300ms | slot_start + 2.30s | Same |
+| Submission | 1700ms | slot_start + 4.00s | 6.8× the 250ms minimum |
 
-**Recommended sizing trades 300ms of submission headroom for mesh-jitter absorption**. Production telemetry should drive the choice.
+**Recommended sizing trades 400ms of submission headroom for mesh-jitter absorption**. Production telemetry should drive the choice.
 
 ### Head-change handling
 
@@ -797,7 +797,7 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Operator commitment states | σ, NR, NV (3 states) | σ, NR, NV (3 states) |
 | σ-commit timing | Phase 1 (leader) or Phase 2 (others, at `T_commit`) | Phase 2b (uniform across all operators, after Phase-2a observation) |
 | Convergence mechanism | Per-operator local view (each operator commits at `T_commit` based on retained V's) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
-| Healthy-path latency (post-`T_commit`, recommended sizing) | ~250ms | ~550ms (+300ms for Phase-2a window) |
+| Healthy-path latency (post-`T_commit`, recommended sizing) | ~500ms | ~1100ms (+600ms for Phase-2a window + Δ_3) |
 | Marginal h_V_honest=2 + byz silent | Slot misses (σ-pool short, NR-pool short) | Falls through to L_1 ✓ |
 | Equivocation 1-1-1 split | Slot misses | Falls through to L_1 ✓ |
 | Equivocation 2-1, byz cooperates | Succeeds at L_0 | Succeeds at L_0 (tie) |
@@ -893,20 +893,20 @@ These are patterns 2abOBFT introduces or fails to recover, where bare OBFT and/o
 
 #### Production T allocation and cost dimensions
 
-At SSV proposer-duty default budget (~4s relay cutoff with P99 = 100ms, δ = 50ms), each protocol allocates the budget differently:
+At SSV proposer-duty default budget (~4s relay cutoff with P99 = 150ms, δ = 50ms), each protocol allocates the budget differently:
 
 | Aspect | bare OBFT | 2abOBFT | QBFT (RT=2s, current SSV) |
 |---|---|---|---|
-| Consensus budget | ~600ms | ~850ms (recommended) | ~3s (2 rounds at RT=2s) |
-| Submission headroom | ~3.4s | ~3.15s | ~1s |
-| Healthy-path latency | ~600ms | ~850ms | ~750ms |
+| Consensus budget | ~600ms | ~1100ms (recommended) | ~2.8s (2 rounds at RT=2s minimum sizing) |
+| Submission headroom | ~3.4s | ~2.9s | ~1.2s |
+| Healthy-path latency | ~600ms | ~1100ms | ~800ms |
 | Bandwidth (n=4, K=4 healthy) | ~27 KB | ~30 KB | ~14 KB |
 | Cryptographic primitives | BLS + threshold IBE/SWE | BLS + threshold IBE/SWE | BLS threshold |
 | Production maturity | spec only | spec only | SSV runs this today |
 
 #### Apples-to-apples vs production-T framing
 
-The production-T allocation reflects current deployment choices, which are **not** strictly apples-to-apples for failure-mode coverage — QBFT uses ~3s for consensus + ~1s for submission, while 2abOBFT uses ~850ms for consensus + ~3.15s submission headroom. Comparing failure-mode coverage at production-T can read as "QBFT recovers more failure modes than 2abOBFT" but conflates two different effects:
+The production-T allocation reflects current deployment choices, which are **not** strictly apples-to-apples for failure-mode coverage — QBFT uses ~2.8s for consensus + ~1.2s for submission, while 2abOBFT uses ~1100ms for consensus + ~2.9s submission headroom. Comparing failure-mode coverage at production-T can read as "QBFT recovers more failure modes than 2abOBFT" but conflates two different effects:
 
 - **Time-conditional recoveries**: at small T, QBFT fits only 1 round and loses most of its multi-round-conditional recoveries (mesh-flakiness with byz leader, σ-locked equivocation, h_V=1, validity-majority — Bucket-3-equivalents). 2abOBFT recovers all of these at small T via single-round convergence rule. **At T = 600ms apples-to-apples, 2abOBFT has a strictly larger deadlock-free set than QBFT.** At larger T, QBFT's round-2 access scales recovery and matches 2abOBFT on most Bucket-1 + Bucket-3 patterns.
 - **Structural recoveries**: Bucket 2 (OBFT-family-only — multi-leader silent, crypto safety primitive) and Bucket 4 (2abOBFT regressions — 2-1-byz-defect, verdict-equivocation, validity-2-2-refetch) are independent of T. They reflect protocol structure, not budget.
@@ -1091,7 +1091,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 
 **Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule (same mechanism as the rotation layers). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) match 2abOBFT's existing rotation-layer Class B regressions in algebraic shape — they don't introduce structurally new failure modes, just expose the existing modes at a higher per-slot trigger frequency.
 
-**Comparison with OBFT + L_Bid mini-consensus and OBFTR + L_Bid mini-consensus**: 2abOBFT + L_Bid is the cleanest composition of the three — no separate mini-consensus phase, no additional latency, identical recovery profile to bare 2abOBFT modulo the L_Bid-specific surfaces. OBFT and OBFTR pay +Δ_minicon (~300ms) for the same C1/C2/C3 closure plus the same residuals; 2abOBFT gets it for free because Phase 2a is already in the protocol.
+**Comparison with OBFT + L_Bid mini-consensus and OBFTR + L_Bid mini-consensus**: 2abOBFT + L_Bid is the cleanest composition of the three — no separate mini-consensus phase, no additional latency, identical recovery profile to bare 2abOBFT modulo the L_Bid-specific surfaces. OBFT and OBFTR pay +Δ_minicon (~400ms) for the same C1/C2/C3 closure plus the same residuals; 2abOBFT gets it for free because Phase 2a is already in the protocol.
 
 ## Appendix C — Design plan and discussion notes
 
@@ -1116,7 +1116,7 @@ Best ≈ 450ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
 | h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ via Defer removal); selective Phase-1 delivery still slot-misses | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
-| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 250ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 550ms post-T_commit (+300ms for Phase-2a window) |
+| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 500ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 1100ms post-T_commit (+600ms for Phase-2a window + Δ_3 difference) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
 | Slashing-evidence rules | 5 rules | 5 rules + 1 (verdict-vs-action equivocation) |
 | Late-deepest-layer leader broadcast (Class A) | Mitigated by K ≥ f+2; class-A residual | Closed structurally — late bundle observed in Phase-2a is σ-emittable in Phase-2b |
@@ -1279,7 +1279,7 @@ Bare OBFT's failure mode ([docs/OBFT.md / Failure modes](OBFT.md#failure-modes))
 In Variant C, late-arriving Phase-1 bundles are auth-only-retained until Phase-2a ends. If the bundle re-floods to all honest before `T_commit + Δ_2a − 1 BTT`, honest can verdict-claim σV on V; verdict-pool reaches qV; Phase-2b σ-emit on the late V. **Slot succeeds where bare OBFT fails.**
 
 Conditions for recovery:
-- Bundle propagates to all honest before `T_commit + Δ_2a − 1 BTT`. At Config A recommended Δ_2a = 300ms, this is 150ms past T_commit.
+- Bundle propagates to all honest before `T_commit + Δ_2a − 1 BTT`. At Config A recommended Δ_2a = 400ms, this is 200ms past T_commit.
 - Operationally: the leader's late broadcast is observed by at least one honest peer who re-floods immediately. The re-flood completes within `1 BTT` of the late observation.
 
 #### Mesh-flakiness coordinated with byz σ-refusal (Class B in OBFT)
@@ -1473,7 +1473,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 ### Open questions / decisions to make at implementation time
 
-1. **Δ_2a vs Δ_2b sizing**: minimum vs recommended? At Config A minimum (Δ_2a = Δ_2b = 1 BTT = 150ms), submission headroom = 1.95s; at recommended (2 BTT = 300ms), headroom = 1.65s. Recommend recommended for mesh-flakiness mitigation; revisit if production telemetry shows submission tail > 1.5s P99.
+1. **Δ_2a vs Δ_2b sizing**: minimum vs recommended? At Config A minimum (Δ_2a = Δ_2b = 1 BTT = 200ms), submission headroom is wider; at recommended (2 BTT = 400ms) the headroom narrows by ~400ms but mesh-jitter absorption widens. Recommend recommended for mesh-flakiness mitigation; revisit if production telemetry shows submission tail eats the headroom.
 
 2. **Verdict equivocation rate-limit**: should honest receivers gossip slashable verdict-equivocation evidence on first detection or wait for cluster confirmation? OBFT Rule 5 uses first-observed gossip with a per-(slot, layer, operator_id) cap; same rule fits here.
 
@@ -1591,7 +1591,7 @@ Variant C is the structural extrapolation of OBFT's "Phase 2a/2b" prose ([docs/O
 
 The verdict-broadcast mechanism is the load-bearing addition: it makes cluster-wide convergence on σ-eligibility observable before any operator commits a partial, which is the structural fix for OBFT's Class A validity-divergence and Class B byzantine-grief patterns. Without verdict broadcasts, a Phase-2a window only gives more time for Phase-1 bundle propagation — equivalent to a wider `Δ_2` in OBFT base.
 
-The Phase 2 split costs +1 RTT of slot budget. At Config A this is +100-300ms depending on sizing; at the recommended `Δ_2a = Δ_2b = 2 BTT`, it is +300ms. Submission headroom drops from 1.95s to 1.65s — comfortable margin.
+The Phase 2 split costs +1 RTT of slot budget. At Config A this is +200-400ms depending on sizing; at the recommended `Δ_2a = Δ_2b = 2 BTT`, it is +400ms. Submission headroom drops by ~400ms vs single-Phase-2 designs — still a comfortable margin.
 
 The trade-off vs bare OBFT: a healthy-h_V=2 case falls through to L_1 (rather than succeeding at L_0 via the Phase-1 σ_V head-start). At K = n = 4, fall-through is one local-decryption iteration in Phase 3 — no extra RTT, slot still succeeds.
 
