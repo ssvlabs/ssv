@@ -1056,17 +1056,16 @@ Pigeonholes 1, 2, 3 hold unchanged at K' = K + 1 layers. The additional `nr_tag_
 Inherits OBFT's 5 rules unchanged. Rule 5's "plaintext layer" binds to L_Bid in this extension (since L_0 is no longer the plaintext layer here — its σ is encrypted under `nr_tag_LBid`); a fake plaintext σ at L_Bid that doesn't verify against any retained `bid_set` member is slashable on the same construction as L_0 in bare OBFT. Two new rules cover L_Bid-specific surfaces:
 
 - **Rule 7 — Bid equivocation / bid-bundle incoherence.** Two distinct `KindBid` envelopes from the same operator at the same slot, OR a `KindBid` `V_i` mismatching the same operator's Phase-1 bundle V at the same `(slot, rotation_layer)`. Self-contained slashable evidence — both envelopes signed by `i`'s operator-identity key.
-- **Rule 8 — Verdict equivocation / verdict-vs-action equivocation.** Operator `i` either broadcasts two distinct `KindBidVerdict` envelopes for the same slot, OR broadcasts `KindBidVerdict(σV(V_X))` and emits Phase-2 NR partial on `nr_tag_LBid` (or claims null verdict and emits Phase-2 σ on `V_X`). Self-contained slashable evidence — both signed messages exist on the wire.
+- **Rule 8 — Verdict equivocation / verdict-vs-action equivocation.** Operator `i` either broadcasts two distinct `KindBidVerdict` envelopes for the same slot, OR broadcasts `KindBidVerdict(σV(V_X))` and emits Phase-2 NR partial on `nr_tag_LBid`. Self-contained slashable evidence — both signed messages exist on the wire. The reverse pattern — null verdict followed by Phase-2 σ on `V_X` — is **not** Rule-8 slashable: it is permitted protocol-honest behavior under the Phase-2 σ-eligibility rule when an operator's `bid_set` was incomplete at the verdict-broadcast deadline (`|bid_set_i| < n − f`) but late re-flood completes the view before Phase-2 emit and `verdict_quorum_V` is observed on `V_X`. The cluster benefits (extra σ-pool contribution); no defection occurs.
 
 **Evidence quality** (paralleling [§Implications of the rational-byzantine deterrent (assumption 4)](#implications-of-the-rational-byzantine-deterrent-assumption-4) for the main spec's rules):
 
 | Fault class | Evidence type | False-positive risk |
 |---|---|---|
-| Bid equivocation, verdict equivocation, clear verdict-vs-action equivocation (verdict claims σ on V, Phase-2 emits NR — or vice versa) | Cryptographic, self-contained — single signed message-pair conclusively demonstrates the action | Very low |
-| Verdict-vs-action at boundary-of-convergence cases (verdict claims null because `\|bid_set_i\| < n − f` at broadcast time, then late re-flood completes the bid set and operator σ-commits to the cluster's `V_X`) | Behavioral pattern — verdict timing vs late bid arrivals must be reconstructed from gossipsub history; the wire signature pair alone doesn't distinguish honest-late from byzantine-defect | Higher — hard to distinguish byzantine intent from legitimate late-bid observation |
+| Bid equivocation, verdict equivocation, verdict-vs-action equivocation (verdict claims `σV(V_X)` and Phase-2 emits NR partial on `nr_tag_LBid`) | Cryptographic, self-contained — single signed message-pair conclusively demonstrates the action | Very low |
 | Bid silence (C1 — withholding own `KindBid` without any alternate emission) | Behavioral pattern — no signed message proves the operator failed to broadcast; observable only via aggregate honest reception failure across slots | Higher — same character as silence-grief in bare OBFT |
 
-The same asymmetry as in bare OBFT applies: high-evidence-quality faults (clear equivocation) are also the ones the protocol handles cleanly within the slot (verdict-quorum reaches or doesn't, cluster falls through); low-evidence-quality faults (silence, boundary verdict-vs-action) are the load-bearing adversarial-byz attacks that engineer slot-miss-without-fall-through. The rational-byzantine deterrent's strength is correspondingly weakest where adversarial grief is most damaging — same structural property as bare OBFT, surfaced at L_Bid as well.
+The same asymmetry as in bare OBFT applies: high-evidence-quality faults (clear equivocation) are also the ones the protocol handles cleanly within the slot (verdict-quorum reaches or doesn't, cluster falls through); low-evidence-quality faults (silence, including the bid-silence component of C1's withholding-then-defect residual) are the load-bearing adversarial-byz attacks that engineer slot-miss-without-fall-through. The rational-byzantine deterrent's strength is correspondingly weakest where adversarial grief is most damaging — same structural property as bare OBFT, surfaced at L_Bid as well.
 
 ### Liveness
 
@@ -1151,7 +1150,7 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 
 **What it does not close:**
 
-- **Selective bid-withholding** (C1) — handled at the protocol level via verdict-quorum-short → fall-through.
+- **Selective bid-withholding** (C1) — protocol-level handling is conditional (see [§Recovery scope at L_Bid](#recovery-scope-at-l_bid)): falls through cleanly only when no V reaches `verdict_quorum`. The residual case (withhold from the minority + byz-backed verdict_quorum + Phase-2 NR-defect) folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid); attestation does not close that residual either.
 - **Bid equivocation** — covered by Rule 7.
 - **Operator selecting a low-MEV bid from a recognized relay** — within the operator's discretion; not a protocol concern.
 

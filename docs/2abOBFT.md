@@ -903,7 +903,7 @@ Composing Phase 2a/2b with R-round retry would close Bucket-4 partially: round-c
 
 This appendix specifies an opportunistic bid-routing extension to 2abOBFT. **L_Bid** is a bid-determined top layer prepended to 2abOBFT's rotation-determined K layers (yielding a `K' = K + 1` configuration). Unlike the analogous extension for [bare OBFT](OBFT.md#appendix-b--l_bid-mini-consensus-extension) or [OBFTR](OBFTR.md#appendix-b--l_bid-mini-consensus-extension), **2abOBFT does not need a separate mini-consensus phase** — the existing Phase-2a verdict broadcast already provides the cluster-wide convergence mechanism. L_Bid integrates as **another verdict-bound layer** in Phase 2a/2b alongside the rotation layers.
 
-The integration closes the C1 (selective bid-withholding), C2 (bidder equivocation), and C3 (validity-divergence majority) deadlock surfaces of the naive bid-routing sketch (no mini-consensus, σ-eligibility predicated on each operator's locally-observed bid set), at **no additional slot-budget cost** over bare 2abOBFT (Phase 2a was already paying the RTT). It introduces the same residual L_Bid surfaces (2-1-byz-defect, verdict-equivocation) that 2abOBFT's rotation layers already expose, now with broader trigger surface (byz is always a bidder, not just byz-leader-only).
+The integration addresses the C1 (selective bid-withholding), C2 (bidder equivocation), and C3 (validity-divergence majority) deadlock surfaces of the naive bid-routing sketch (no mini-consensus, σ-eligibility predicated on each operator's locally-observed bid set), at **no additional slot-budget cost** over bare 2abOBFT (Phase 2a was already paying the RTT). C3 closes cleanly for the 3-of-4 majority case; C1 and C2 close cleanly only when no V reaches `verdict_quorum` and otherwise fold into 2-1-byz-defect. It introduces the same residual L_Bid surfaces (2-1-byz-defect, verdict-equivocation) that 2abOBFT's rotation layers already expose, now with broader trigger surface (byz is always a bidder, not just byz-leader-only).
 
 ### When to use it
 
@@ -1004,10 +1004,10 @@ Inherits 2abOBFT's 6 rules unchanged. One additional rule for the new bid-envelo
 
 #### Recovery scope at L_Bid
 
-The Phase-2a/2b convergence rule closes C1/C2/C3 at L_Bid:
+The Phase-2a/2b convergence rule addresses C1/C2/C3 at L_Bid. C3 closes cleanly for the 3-of-4 majority case; C1 and C2 close cleanly only when no V reaches `verdict_quorum` and otherwise fold into 2-1-byz-defect (see [§Residual failure modes at L_Bid](#residual-failure-modes-at-l_bid) below):
 
-- **C1 — Selective bid-withholding**: byz withholds → some honest verdict NULL → verdict-pool fragments → no V reaches qV → all NR_LBid → fall-through to L_0. **Closed.**
-- **C2 — Bidder equivocation**: byz sends conflicting bids → diverging predicted L_Bids → verdict-pool fragments → no V reaches qV → all NR_LBid → fall-through. **Closed.**
+- **C1 — Selective bid-withholding**: **Closed only when no V reaches `verdict_quorum`** — e.g., byz withholds from > f honest peers so those peers verdict NULL; verdict pool fragments below qV → all NR_LBid → fall-through to L_0. **Not closed when byz withholds from exactly the minority** (leaves them at `|bid_set| = n − f` so they still verdict on a non-`V_X` argmax) and adds its own verdict on `V_X` to push `verdict_pool[V_X]` to qV, then defects to NR. Same algebraic shape as 2-1-byz-defect.
+- **C2 — Bidder equivocation**: **Closed only when no V reaches `verdict_quorum`** (verdicts split widely → fall-through). **Not closed when byz aligns its verdict with the majority-honest** to push `verdict_pool` to qV and defects to NR. Same algebraic shape as 2-1-byz-defect.
 - **C3 — Validity-divergence majority on V_LBid (3-of-4 at f=1 n=4)**: 3 honest verdict σV(V_X), 1 NV. `verdict_pool[V_X] = 3 = qV` → cluster σ-binds. **Closed for 3-of-4 majority.** 2-2 split remains hard algebraic limit (same as 2abOBFT base's rotation-layer 2-2 splits).
 
 #### Recovery scope at rotation layers L_0, ..., L_{K-1}
@@ -1018,13 +1018,17 @@ Identical to bare 2abOBFT. Convergence rule, NR-pool fall-through, validity-dive
 
 The same Class B residuals 2abOBFT exposes at the rotation layers also apply at L_Bid, **with broader trigger surface**:
 
-- **2-1-byz-defect at L_Bid**: byz bid-equivocates + verdict-claims σV on majority-V at Phase 2a + defects to NR partial at Phase 2b. σ-pool < qV; NR-pool < qEnc; deadlock at L_Bid; chained encryption to L_0 stays sealed; slot misses. Slashable Rule 6.
+- **2-1-byz-defect at L_Bid**: byz engineers a `verdict_quorum` on V that some honest don't retain at Phase 2b emit, casts its own verdict on V at Phase 2a, then defects to NR partial at Phase 2b. Two trigger patterns reach the same algebraic shape:
+  - **Bid-equivocation trigger**: byz sends V to majority-honest, V' to minority-honest. Slashable via Rule 7 (bid-equivocation) AND Rule 6 (verdict-vs-action equivocation).
+  - **Bid-withholding trigger**: byz sends V to majority-honest, withholds from minority-honest (who still has `|bid_set_i| = n − f` and verdicts on its non-V argmax). Slashable via Rule 6 only — bid-silence component is behavioral.
+
+  σ-pool < qV; NR-pool < qEnc; deadlock at L_Bid; chained encryption to L_0 stays sealed; slot misses.
 - **Verdict-equivocation at L_Bid**: byz issues different verdicts to different peers; per-peer convergence diverges; deadlock at L_Bid. Same shape as 2abOBFT base's Class B regression at rotation layers ([§Failure modes](#failure-modes)). Slashable Rule 6.
 - **2-2 validity split at L_Bid**: hard algebraic limit (same as 2abOBFT base).
 
 **Trigger frequency comparison**:
 - 2abOBFT rotation-layer 2-1-byz-defect: triggers when byz is a rotation leader (typically 1/n slots at uniform rotation).
-- 2abOBFT + L_Bid 2-1-byz-defect: triggers any slot where byz can bid-equivocate, which is **every slot** byz is a bidder (which is every slot under SSV's all-operators-bid model). With relay-anchoring, byz can still equivocate by querying the relay multiple times for distinct attestations.
+- 2abOBFT + L_Bid 2-1-byz-defect: triggers any slot where byz can bid-equivocate or bid-withhold, which is **every slot** byz is a bidder (which is every slot under SSV's all-operators-bid model). With relay-anchoring, byz can still equivocate by querying the relay multiple times for distinct attestations; bid-withholding does not require multiple attestations and is always available.
 - Net: L_Bid extension increases per-slot 2-1-byz-defect trigger frequency by ~n× at f=1 n=4 (every byz slot vs every byz-as-rotation-leader slot).
 
 ### Best/worst time-to-completion
@@ -1034,7 +1038,7 @@ The same Class B residuals 2abOBFT exposes at the rotation layers also apply at 
 | Scenario | Time | Mechanism |
 |---|---|---|
 | Healthy completion at L_Bid (or any layer) | ~700-850ms | Phase 2a + Phase 2b + Phase 3 |
-| L_Bid fails (C1/C2 patterns) → fall-through to L_0 | ~700-850ms | Convergence rule routes to NR-pool; in-Phase-3 walk to L_0 |
+| L_Bid mini-consensus fails to converge (verdict-quorum-short C1/C2 patterns) → fall-through to L_0 | ~700-850ms | Convergence rule routes to NR-pool; in-Phase-3 walk to L_0 |
 | Multi-leader silent K-1 ≥ 3 fall-through | ~700-850ms | K'-layer walk in Phase 3 (sequential local decryption) |
 | L_Bid 2-1-byz-defect / verdict-equivocation | slot misses | Deadlock at L_Bid; same as 2abOBFT base's Class B regression |
 | 2-2 validity split | slot misses | Hard algebraic limit |
@@ -1058,8 +1062,8 @@ Best ≈ 600ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | 2abOBFT base recovery scope | **Same** (rotation layers unchanged) |
-| L_Bid liveness — C1 selective bid-withholding | n/a (naive sketch deadlocks) | **Closed** (verdict-quorum-short → fall-through) |
-| L_Bid liveness — C2 bidder equivocation | n/a (naive sketch deadlocks) | **Closed** (verdict-quorum-short → fall-through) |
+| L_Bid liveness — C1 selective bid-withholding | n/a (naive sketch deadlocks) | **Closed only when verdict-quorum doesn't form** (withhold from > f honest → fall-through). Otherwise (withhold from minority + byz pushes verdict_quorum + defects) folds into 2-1-byz-defect. |
+| L_Bid liveness — C2 bidder equivocation | n/a (naive sketch deadlocks) | **Closed only when verdict-quorum doesn't form** (verdicts split widely → fall-through). Otherwise (byz aligns verdict with majority + defects) folds into 2-1-byz-defect. |
 | L_Bid liveness — C3 validity-majority (3-of-4) | n/a (naive sketch deadlocks) | **Closed** (verdict-quorum reaches on majority) |
 | L_Bid liveness — 2-1-byz-defect | n/a | **Open**: same shape as rotation-layer Class B regression; slashable Rule 6 |
 | L_Bid liveness — verdict-equivocation | n/a | **Open**: same shape as rotation-layer Class B regression; slashable Rule 6 |
@@ -1069,9 +1073,9 @@ Best ≈ 600ms (skip Phase 2b minimum if L_Bid σ-quorum visible early, then rec
 
 **Net trade vs bare 2abOBFT**: pays additional bandwidth (~3 KB) and extends 2abOBFT's existing Class B residuals (2-1-byz-defect, verdict-equivocation) to L_Bid with broader trigger frequency, in exchange for bid-routing value capture on the healthy path. **Latency, safety, and rotation-layer liveness are unchanged.** The trade is structurally cleaner than the OBFT and OBFTR L_Bid extensions, which add a separate mini-consensus phase costing +1 RTT — 2abOBFT's existing Phase 2a absorbs the L_Bid convergence at no additional latency cost.
 
-**Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule (same mechanism as the rotation layers). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) match 2abOBFT's existing rotation-layer Class B regressions in algebraic shape — they don't introduce structurally new failure modes, just expose the existing modes at a higher per-slot trigger frequency.
+**Comparison with the naive bid-routing sketch (no mini-consensus)**: closes C1, C2, and C3 deadlocks via the cluster-wide convergence rule (conditionally for C1/C2 — clean closure when verdict-quorum doesn't form, otherwise fold into 2-1-byz-defect; same mechanism as the rotation layers). The L_Bid residuals (2-1-byz-defect, verdict-equivocation) match 2abOBFT's existing rotation-layer Class B regressions in algebraic shape — they don't introduce structurally new failure modes, just expose the existing modes at a higher per-slot trigger frequency.
 
-**Comparison with OBFT + L_Bid mini-consensus and OBFTR + L_Bid mini-consensus**: 2abOBFT + L_Bid is the cleanest composition of the three — no separate mini-consensus phase, no additional latency, identical recovery profile to bare 2abOBFT modulo the L_Bid-specific surfaces. OBFT and OBFTR pay +Δ_minicon (~400ms) for the same C1/C2/C3 closure plus the same residuals; 2abOBFT gets it for free because Phase 2a is already in the protocol.
+**Comparison with OBFT + L_Bid mini-consensus and OBFTR + L_Bid mini-consensus**: 2abOBFT + L_Bid is the cleanest composition of the three — no separate mini-consensus phase, no additional latency, identical recovery profile to bare 2abOBFT modulo the L_Bid-specific surfaces. OBFT and OBFTR pay +Δ_minicon (~400ms) for the same C1/C2/C3 conditional closure plus the same residuals; 2abOBFT gets it for free because Phase 2a is already in the protocol.
 
 ## Design notes archive
 
