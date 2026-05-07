@@ -1116,7 +1116,12 @@ Best (success) ≈ 600ms; worst (success) ≈ 900ms; ~1.5× spread (smaller than
 
 ### Deployment envelope by BTT
 
-The +1 RTT cost of `Δ_minicon` narrows L_Bid's deployment envelope vs bare OBFT meaningfully at higher BTT. The table below shows L_Bid's post-`T_commit` consumption and submission slack across BTT regimes (T_commit anchored at slot_start + 1.5s; T_relay_cutoff = 4.0s; `header_submit_headroom = 100ms`):
+`Δ_minicon` adds one phase to the post-`T_commit` budget. Under a fixed `T_relay_cutoff`, this is a scheduling trade with two valid choices, both protocol-correct:
+
+- **Choice 1 — keep `T_commit` aligned with bare OBFT** (e.g., `slot_start + 1.5s`). Consensus end shifts later by `Δ_minicon`; submission slack shrinks. At high BTT this can drive slack negative (slot miss). Quantified in the table below.
+- **Choice 2 — move `T_commit` earlier by `Δ_minicon`**. Consensus fits the same submission slack as bare OBFT, but the primary leader's MEV-fetch window narrows by `Δ_minicon`. This is §Application's max-MEV anchor configuration (`T_commit = 3.00s` for L_Bid vs `3.40s` for bare OBFT; ~400ms MEV-fetch reduction quantified in the Sizing paragraph above).
+
+Neither choice changes protocol liveness; they trade submission slack for MEV-fetch headroom under a fixed slot budget. The table below shows Choice 1's envelope across BTT regimes (T_commit anchored at slot_start + 1.5s; T_relay_cutoff = 4.0s; `header_submit_headroom = 100ms`):
 
 | BTT | Recommended sizing (`Δ_minicon = Δ_2 = 2 BTT`) | Minimum sizing (`Δ_minicon = Δ_2 = 1 BTT`) |
 |---|---|---|
@@ -1134,7 +1139,7 @@ The +1 RTT cost of `Δ_minicon` narrows L_Bid's deployment envelope vs bare OBFT
 
 **Sizing fallback at higher BTT.** Recommended sizing fits comfortably up to BTT ≈ 400ms, becomes tight at BTT = 500ms (300ms slack), and fails at BTT ≥ 600ms. **Switching to minimum sizing recovers the envelope** through BTT ≈ 1000ms — at the cost of absorbing only `1 BTT` of jitter beyond P99 propagation (vs `2 BTT` at recommended). The minimum-sizing fallback is appropriate when production telemetry shows P99/P999 propagation is tight against `1 BTT` and mesh-jitter is well-characterized.
 
-**When L_Bid stops fitting at all.** At BTT ≥ 1200ms even minimum sizing fails — total post-`T_commit` exceeds the available slot budget at the same `T_commit` anchor (BTT=1100ms minimum sizing still fits with 100ms slack; BTT=1200ms minimum sizing misses by 100ms). Earlier `T_commit` (sacrificing primary leader's MEV-fetch budget) buys some additional headroom, but the slot envelope is fundamentally narrower than bare OBFT's.
+**When L_Bid stops fitting at all.** At BTT ≥ 1200ms even minimum sizing fails under Choice 1 (BTT=1100ms minimum sizing still fits with 100ms slack; BTT=1200ms minimum sizing misses by 100ms). Choice 2 buys additional headroom by trading MEV-fetch budget, but the slot envelope is fundamentally narrower than bare OBFT's.
 
 **Net for deployment selection.** At production-typical BTT (200-400ms), L_Bid recommended sizing fits with comfortable submission slack (700-1500ms). At degraded mesh (BTT 600-1000ms), L_Bid requires switching to minimum sizing or accepting tighter mesh-jitter tolerance. At severely degraded mesh (BTT ≥ 1200ms), L_Bid does not fit; bare OBFT (3-BTT cycle) remains the available alternative.
 
