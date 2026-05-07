@@ -2,8 +2,21 @@ package consensustest
 
 import (
 	"errors"
+	"sort"
 	"testing"
 )
+
+// expectKeys returns the sorted list of protocol names a scenario declares
+// expectations for; used for diagnostic messages when a scenario is missing
+// a coverage entry for a protocol the test is running.
+func expectKeys(m map[string]ExpectClass) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 // Result bundles an Outcome with the universal safety report and the
 // expectation match. RunScenarioOnProtocol returns one of these per
@@ -15,14 +28,15 @@ type Result struct {
 	Safety       SafetyReport
 	Expected     ExpectClass
 	Match        bool
-	Why          string  // mismatch rationale; empty on Match=true
-	Skipped      bool    // true when adapter returned ErrNotApplicable
+	Why          string // mismatch rationale; empty on Match=true
+	Skipped      bool   // true when adapter returned ErrNotApplicable
 }
 
 // RunScenarioOnProtocol applies `s` to `base`, runs `p`, computes safety
 // invariants, classifies outcome vs expectation, and returns a Result.
-// SingleV / HonestAgreement violations panic; non-safety mismatches are
-// recorded in Result.Match for the caller to assert. Does not call t.Fatal.
+// SingleV / HonestAgreement / NoOfflineDoubleV violations panic; non-safety
+// mismatches are recorded in Result.Match for the caller to assert. Does not
+// call t.Fatal.
 func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig) Result {
 	t.Helper()
 	cfg := base
@@ -30,7 +44,11 @@ func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig)
 		s.Apply(&cfg)
 	}
 
-	expect := s.Expect[p.Name()]
+	expect, declared := s.Expect[p.Name()]
+	if !declared {
+		t.Fatalf("scenario %q has no Expect entry for protocol %q (Expect map keys: %v)",
+			s.Name, p.Name(), expectKeys(s.Expect))
+	}
 	if expect == ExpectNotApplicable {
 		return Result{
 			ProtocolName: p.Name(),
@@ -70,8 +88,8 @@ func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig)
 	}
 
 	safety := ComputeSafetyReport(out)
-	if !safety.SingleV || !safety.HonestAgreement {
-		SafetyPanic(safety, s.Name, p.Name(), out)
+	if !safety.SingleV || !safety.HonestAgreement || !safety.NoOfflineDoubleV {
+		SafetyPanic(safety, s.Name, p.Name(), expect, out)
 	}
 	if !safety.Terminated {
 		// Adapters shouldn't produce this state in normal operation; warn

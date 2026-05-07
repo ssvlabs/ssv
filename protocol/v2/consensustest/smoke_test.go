@@ -37,7 +37,7 @@ func TestSmoke_HealthyQBFT(t *testing.T) {
 // TestSmoke_SilentLeaderOBFT — primary OBFT leader silent → fall-through to L_1.
 func TestSmoke_SilentLeaderOBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, PrimaryByz: 1}
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "OBFT should fall through")
@@ -47,7 +47,7 @@ func TestSmoke_SilentLeaderOBFT(t *testing.T) {
 // TestSmoke_SilentLeaderQBFT — round-1 leader silent → R2 success.
 func TestSmoke_SilentLeaderQBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, PrimaryByz: 1}
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 	out, err := qbftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "QBFT should round-change to R2")
@@ -71,7 +71,7 @@ func TestSmoke_SafetyInvariant(t *testing.T) {
 // TestSmoke_NotApplicable — QBFT should reject OBFT-specific patterns.
 func TestSmoke_NotApplicable(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	cfg.Byz = ct.ByzPattern{Kind: ct.ByzHV1SelectiveDelivery, PrimaryByz: 1}
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzHV1SelectiveDelivery, ByzOperators: []ct.OperatorID{1}}
 	_, err := qbftadapter.Protocol{}.Run(cfg)
 	require.ErrorIs(t, err, ct.ErrNotApplicable)
 }
@@ -117,7 +117,7 @@ func TestSmoke_RealBLS(t *testing.T) {
 // outcome construction would slip past a trace-only check.
 func TestSmoke_TraceDeterministic(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, PrimaryByz: 1}
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 	cfg.TraceEnabled = true
 
 	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {

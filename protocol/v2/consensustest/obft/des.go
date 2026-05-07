@@ -28,28 +28,28 @@ func runDES(cfg desConfig) (rawOutcome, error) {
 }
 
 type sim struct {
-	cfg          desConfig
-	rng          *mrand.Rand
-	now          time.Duration
-	queue        eventQueue
-	seq          int64
-	operators    []obft.OperatorID
-	cfgObft      *obft.Config
-	pubShares    map[obft.OperatorID][]byte
-	clusterPub   []byte
-	instances    map[obft.OperatorID]*obft.Instance
-	resolved     map[obft.OperatorID]*obft.Output
-	resolvedAt   map[obft.OperatorID]time.Duration
-	resolveErrs  map[obft.OperatorID]error
-	canonValues  map[int]obft.Value
-	trace        []ct.TraceEntry
+	cfg         desConfig
+	rng         *mrand.Rand
+	now         time.Duration
+	queue       eventQueue
+	seq         int64
+	operators   []obft.OperatorID
+	cfgObft     *obft.Config
+	pubShares   map[obft.OperatorID][]byte
+	clusterPub  []byte
+	instances   map[obft.OperatorID]*obft.Instance
+	resolved    map[obft.OperatorID]*obft.Output
+	resolvedAt  map[obft.OperatorID]time.Duration
+	resolveErrs map[obft.OperatorID]error
+	canonValues map[int]obft.Value
+	trace       []ct.TraceEntry
 }
 
 func newSim(cfg desConfig) (*sim, error) {
 	N := cfg.N
 	operators := make([]obft.OperatorID, N)
 	for i := 0; i < N; i++ {
-		operators[i] = obft.OperatorID(i + 1)
+		operators[i] = obft.OperatorID(cfg.Operators[i])
 	}
 
 	var pubShares map[obft.OperatorID][]byte
@@ -92,8 +92,9 @@ func (s *sim) start() error {
 	layers := make([]obft.LayerSpec, K)
 	for k := 0; k < K; k++ {
 		layers[k] = obft.LayerSpec{
-			Leader:  s.operators[k%s.cfg.N],
-			FetchAt: s.cfg.FetchAt[k],
+			Leader:          s.operators[k%s.cfg.N],
+			FetchAt:         s.cfg.FetchAt[k],
+			BroadcastBudget: s.cfg.BroadcastBudget[k],
 		}
 	}
 	cfgObft := &obft.Config{
@@ -195,8 +196,7 @@ func (s *sim) outcome() rawOutcome {
 		if err, ok := s.resolveErrs[op]; ok {
 			o.err = err.Error()
 		}
-		ev := s.instances[op].Evidence()
-		o.evidenceCount = len(ev)
+		o.evidenceByRule = evidenceByRule(s.instances[op].Evidence())
 		out.perOp[ct.OperatorID(op)] = o
 	}
 	return out
@@ -207,8 +207,10 @@ func (s *sim) honestLeaderValue(layer int) obft.Value {
 }
 
 // emitToAll schedules per-receiver arrival events for `from`'s message,
-// honoring byz-pattern delivery / delay overrides.
-func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, build func(to obft.OperatorID) event) {
+// honoring byz-pattern delivery / delay overrides. `bytes` is the wire size
+// of the message (for bandwidth accounting; pass 0 to skip). `layer` is the
+// OBFT layer for per-layer bandwidth accounting (use -1 for layer-agnostic).
+func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, layer int, bytes int64, build func(to obft.OperatorID) event) {
 	for _, to := range s.operators {
 		if to == from {
 			continue
@@ -219,6 +221,9 @@ func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, build func(to obf
 		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, kind)
 		if delay < 0 {
 			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), kind)
+		}
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), kind, layer, bytes)
 		}
 		ev := build(to)
 		s.schedule(s.now+delay, ev)

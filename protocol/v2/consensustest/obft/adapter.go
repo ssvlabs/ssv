@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	obft "github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // Protocol is the OBFT adapter. Use as `obft.Protocol{}` in tests.
@@ -26,80 +27,68 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// OBFT timing per OBFT.md §Application: T_commit = RelayCutoff − 3 BTT,
-	// Δ_2 = 2 BTT, Δ_3 ≈ 0.5 BTT. (D, δ) split is 0.75/0.25; OBFT.Config only
-	// requires D+δ = BTT and both > 0.
+	// Split BTT into D and Delta for the OBFT.Config (constraint: D+Delta = BTT,
+	// both > 0). 3:1 split mirrors production Config A (D=100ms, δ=50ms at
+	// BTT=150ms) — the exact split doesn't change the protocol's wire behavior,
+	// only how Config.Validate ranges error vs propagation budget internally.
 	d := cfg.BTT * 3 / 4
 	delta := cfg.BTT - d
 	if delta == 0 {
 		delta = time.Nanosecond
 		d = cfg.BTT - delta
 	}
-	tCommit := cfg.RelayCutoff - 3*cfg.BTT
-	delta2 := 2 * cfg.BTT
-	delta3 := cfg.BTT / 2
-	if delta3 < cfg.BTT-d-delta+time.Millisecond {
-		delta3 = cfg.BTT - d - delta + time.Millisecond
-	}
-	if delta3 <= 0 {
-		delta3 = 100 * time.Millisecond
-	}
 
-	// Anchor V_0 at T_broadcast_max = T_commit − 2·BTT (the cap obft.Config
-	// validates) and step deeper layers back by 1 BTT each to preserve the
-	// asymmetric schedule. The spec's more-aggressive V_0 = T_commit − 1·BTT
-	// schedule is not validated by obft.Config; CONSENSUS-TEST-PLAN.md
-	// "Open questions" tracks the trade-off.
-	K := 4
-	tBroadcastMax := tCommit - 2*cfg.BTT
-	fetchAt := make([]time.Duration, K)
-	for k := 0; k < K; k++ {
-		fetchAt[k] = tBroadcastMax - time.Duration(k)*cfg.BTT
-		if fetchAt[k] < 0 {
-			fetchAt[k] = 0
-		}
-	}
+	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Delta3 - cfg.Delta2
 
+	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
-		N:           cfg.N,
-		K:           K,
-		TCommit:     tCommit,
-		Delta2:      delta2,
-		Delta3:      delta3,
-		D:           d,
-		Delta:       delta,
-		FetchAt:     fetchAt,
-		Network:     cfg.Network,
-		Host:        cfg.Host,
-		Byz:         internal,
-		Seed:        cfg.Seed,
-		TraceEnabled: cfg.TraceEnabled,
-		BLSKeys:     cfg.BLSKeys,
+		N:               cfg.N,
+		K:               cfg.K,
+		Operators:       cfg.Operators,
+		TCommit:         tCommit,
+		Delta2:          cfg.Delta2,
+		Delta3:          cfg.Delta3,
+		D:               d,
+		Delta:           delta,
+		FetchAt:         cfg.FetchAt,
+		BroadcastBudget: cfg.BroadcastBudget,
+		Network:         cfg.Network,
+		Host:            cfg.Host,
+		Byz:             internal,
+		Seed:            cfg.Seed,
+		TraceEnabled:    cfg.TraceEnabled,
+		BLSKeys:         cfg.BLSKeys,
+		Aggregator:      ct.NewOfflineAggregator(cfg.N),
+		Bandwidth:       &bw,
 	}
 
 	rawOut, err := runDES(desCfg)
 	if err != nil {
 		return ct.Outcome{}, err
 	}
-	return rawOut.toCT(), nil
+	return rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth), nil
 }
 
 // desConfig is the OBFT-DES-internal configuration, built by Run.
 type desConfig struct {
-	N            int
-	K            int
-	TCommit      time.Duration
-	Delta2       time.Duration
-	Delta3       time.Duration
-	D            time.Duration
-	Delta        time.Duration
-	FetchAt      []time.Duration
-	Network      ct.NetworkModel
-	Host         ct.HostPattern
-	Byz          internalByz
-	Seed         int64
-	TraceEnabled bool
-	BLSKeys      *ct.BLSKeys
+	N               int
+	K               int
+	Operators       []ct.OperatorID
+	TCommit         time.Duration
+	Delta2          time.Duration
+	Delta3          time.Duration
+	D               time.Duration
+	Delta           time.Duration
+	FetchAt         []time.Duration
+	BroadcastBudget []time.Duration
+	Network         ct.NetworkModel
+	Host            ct.HostPattern
+	Byz             internalByz
+	Seed            int64
+	TraceEnabled    bool
+	BLSKeys         *ct.BLSKeys
+	Aggregator      *ct.OfflineAggregator
+	Bandwidth       *ct.BandwidthReport
 }
 
 // rawOutcome is the OBFT-internal outcome before translation to ct.Outcome.
@@ -113,15 +102,17 @@ type rawOutcome struct {
 }
 
 type rawOpOutcome struct {
-	decided       bool
-	layer         int
-	value         []byte
-	time          time.Duration
-	err           string
-	evidenceCount int
+	decided        bool
+	layer          int
+	value          []byte
+	time           time.Duration
+	err            string
+	evidenceByRule map[string]int
 }
 
-func (r rawOutcome) toCT() ct.Outcome {
+func (r rawOutcome) toCT(agg *ct.OfflineAggregator, bw *ct.BandwidthReport) ct.Outcome {
+	// rawOutcome.layer is initialized to -1 in outcome() when no operator
+	// decided, so DecidedRound is correct without a separate post-fixup.
 	out := ct.Outcome{
 		Decided:      r.decided,
 		DecisionTime: r.decisionTime,
@@ -130,18 +121,36 @@ func (r rawOutcome) toCT() ct.Outcome {
 		PerOp:        make(map[ct.OperatorID]ct.OperatorOutcome, len(r.perOp)),
 		Trace:        r.trace,
 	}
-	if !r.decided {
-		out.DecidedRound = -1
-	}
 	for op, oo := range r.perOp {
-		out.PerOp[op] = ct.OperatorOutcome{
-			Decided:       oo.decided,
-			Value:         append([]byte(nil), oo.value...),
-			Round:         oo.layer,
-			Time:          oo.time,
-			Err:           oo.err,
-			EvidenceCount: oo.evidenceCount,
+		var evMap map[string]int
+		if len(oo.evidenceByRule) > 0 {
+			evMap = make(map[string]int, len(oo.evidenceByRule))
+			for k, v := range oo.evidenceByRule {
+				evMap[k] = v
+			}
 		}
+		bandwidthOut := int64(0)
+		bandwidthIn := int64(0)
+		if bw != nil {
+			bandwidthOut = bw.PerOperatorOut[op]
+			bandwidthIn = bw.PerOperatorIn[op]
+		}
+		out.PerOp[op] = ct.OperatorOutcome{
+			Decided:        oo.decided,
+			Value:          append([]byte(nil), oo.value...),
+			Round:          oo.layer,
+			Time:           oo.time,
+			Err:            oo.err,
+			EvidenceByRule: evMap,
+			BandwidthOut:   bandwidthOut,
+			BandwidthIn:    bandwidthIn,
+		}
+	}
+	if agg != nil {
+		out.OfflineAgg = agg.AttemptAll()
+	}
+	if bw != nil {
+		out.Bandwidth = *bw
 	}
 	return out
 }
@@ -155,4 +164,41 @@ func hashValue(v []byte) string {
 		return fmt.Sprintf("%x", v[:6])
 	}
 	return fmt.Sprintf("%x", v)
+}
+
+// evidenceByRule maps a slice of obft.Evidence to per-rule fire counts using
+// the framework's standard "OBFT/RuleN/Description" key convention.
+func evidenceByRule(evs []obft.Evidence) map[string]int {
+	if len(evs) == 0 {
+		return nil
+	}
+	m := make(map[string]int)
+	for _, e := range evs {
+		m[ruleKey(e)]++
+	}
+	return m
+}
+
+func ruleKey(e obft.Evidence) string {
+	switch e.Rule {
+	case obft.EvidenceCrossSigning:
+		return "OBFT/Rule1/CrossSigning"
+	case obft.EvidenceLeaderEquivocation:
+		return "OBFT/Rule2/LeaderEquivocation"
+	case obft.EvidenceCrossOnionEquivocation:
+		// Layer == -1 indicates the top-level CommitEquivocation variant
+		// (full Commit bodies); per-layer Layer ≥ 0 indicates the per-V σ
+		// variant. Slashing layer treats them as the same fault but per-rule
+		// telemetry distinguishes them.
+		if e.Layer < 0 {
+			return "OBFT/Rule3/CommitEquivocation"
+		}
+		return "OBFT/Rule3/CrossOnionEquivocation"
+	case obft.EvidenceFakeEncryptedPresence:
+		return "OBFT/Rule4/FakeEncryptedPresence"
+	case obft.EvidenceFakePlaintextSigma:
+		return "OBFT/Rule5/FakePlaintextSigma"
+	default:
+		return "OBFT/Unknown"
+	}
 }

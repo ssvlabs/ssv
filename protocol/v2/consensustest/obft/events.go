@@ -66,8 +66,22 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 		if err != nil {
 			bundle = s.forgeByzBundle(leader, e.layer, p.V)
 		} else {
-			_ = s.instances[leader].ApplyHostValidity(e.layer, p.V, true)
+			// Leader's own host verdict for V at this layer — same query the
+			// receivers issue at evtPhase1Arrival. Without this, a host-invalid
+			// scenario (e.g. HostInvalidUntilLayer) would have receivers
+			// correctly NV/NR while the leader's instance recorded host-valid
+			// and σ-emitted, breaking the model's "all NR" symmetry.
+			leaderValid := s.cfg.Host.Validate(ct.OperatorID(leader), e.layer, p.V, ct.PhasePhase1Acceptance)
+			_ = s.instances[leader].ApplyHostValidity(e.layer, p.V, leaderValid)
 		}
+		// OfflineAggregator: leader's σ_L^V partial hits the wire.
+		if s.cfg.Aggregator != nil {
+			s.cfg.Aggregator.ObserveSigma(ct.OperatorID(leader), e.layer, bundle.Value)
+		}
+		bundleBytes := phase1BundleSize(bundle)
+		// Per-leader delay added on top of the per-pair network delay; used
+		// by byzLateLeaderBroadcast to push the entire emission past T_commit.
+		ownDelay := s.cfg.Byz.OverrideOwnPhase1Delay(s, leader)
 		recipients := p.Recipients
 		if recipients == nil {
 			recipients = s.operators
@@ -80,9 +94,13 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			if delay < 0 {
 				delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(leader), ct.OperatorID(to), ct.KindLeaderBroadcast)
 			}
+			if s.cfg.Bandwidth != nil {
+				s.cfg.Bandwidth.Emission(ct.OperatorID(leader), ct.OperatorID(to),
+					ct.KindLeaderBroadcast, e.layer, bundleBytes)
+			}
 			out = append(out, scheduledEvent{
-				when: s.now + delay,
-				ev:   &evtPhase1Arrival{from: leader, to: to, layer: e.layer, bundle: bundle},
+				when: s.now + delay + ownDelay,
+				ev:   &evtPhase1Arrival{from: leader, to: to, layer: e.layer, bundle: clonePhase1Bundle(bundle)},
 			})
 		}
 	}
@@ -130,7 +148,7 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 	if err := inst.ObservePhase1Bundle(e.bundle, s.observedOffset()); err != nil {
 		return nil
 	}
-	valid := s.cfg.Host.Validate(ct.OperatorID(e.to), e.layer, e.bundle.Value)
+	valid := s.cfg.Host.Validate(ct.OperatorID(e.to), e.layer, e.bundle.Value, ct.PhasePhase1Acceptance)
 	_ = inst.ApplyHostValidity(e.layer, e.bundle.Value, valid)
 	return nil
 }
@@ -151,11 +169,59 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 			continue
 		}
 		c = s.cfg.Byz.OverrideCommit(s, op, c)
-		s.emitToAll(op, ct.KindCommit, func(to obft.OperatorID) event {
-			return &evtCommitArrival{from: op, to: to, commit: c}
+		// OfflineAggregator: op's Commit hits the wire — record per-layer
+		// σ side (plaintext at L_0, encrypted-claim at L_k>0) and per-NR.
+		if s.cfg.Aggregator != nil {
+			recordCommitToAggregator(s.cfg.Aggregator, c)
+		}
+		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), func(to obft.OperatorID) event {
+			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(c)}
 		})
+		// Byz patterns may add ADDITIONAL commits (e.g. cross-onion
+		// equivocation emits two structurally-distinct Commits).
+		for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
+			extra := extra
+			if s.cfg.Aggregator != nil {
+				recordCommitToAggregator(s.cfg.Aggregator, extra)
+			}
+			s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), func(to obft.OperatorID) event {
+				return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
+			})
+		}
 	}
 	return nil
+}
+
+// recordCommitToAggregator extracts every σ / NR / encrypted-onion partial
+// from c and records it in the aggregator. Models the "byz observes every
+// Commit dispatched on the wire" assumption — credits c.OperatorID (the
+// claimed sender on the wire), NOT the actual emitter. Honest commits
+// have c.OperatorID == emitter so this is identity; byz commits with
+// forged c.OperatorID get credited to the forged identity, which is the
+// adversary-observable view by design (validates the safety machinery
+// against forged-identity attacks via byzAggregatorBypass).
+//
+// At L_0 the EncryptedLayer.Ciphertext holds the plaintext σ partial bytes
+// directly (no IBE wrapping); deeper layers carry chained-IBE ciphertext.
+// Layer index drives the classification — not Ciphertext-emptiness.
+func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obft.Commit) {
+	from := ct.OperatorID(c.OperatorID)
+	for layer, el := range c.Layers {
+		if len(el.Value) == 0 {
+			continue
+		}
+		if layer == 0 {
+			agg.ObserveSigma(from, layer, el.Value)
+		} else {
+			agg.ObserveEncryptedClaim(from, layer, el.Value)
+		}
+	}
+	for _, nr := range c.NRPartials {
+		agg.ObserveNR(from, nr.Layer)
+	}
+	for _, w := range c.Witnesses {
+		agg.ObserveSigma(ct.OperatorID(w.Leader), w.Layer, w.Value)
+	}
 }
 
 // ---- evtCommitArrival --------------------------------------------------
@@ -197,6 +263,7 @@ func (e *evtResolve) handle(s *sim) []scheduledEvent {
 		if err != nil || cert == nil {
 			continue
 		}
+		certBytes := certSize(cert)
 		for _, to := range s.operators {
 			if to == op {
 				continue
@@ -208,9 +275,13 @@ func (e *evtResolve) handle(s *sim) []scheduledEvent {
 			if delay < 0 {
 				delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(op), ct.OperatorID(to), ct.KindCertificate)
 			}
+			if s.cfg.Bandwidth != nil {
+				s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
+					ct.KindCertificate, -1, certBytes)
+			}
 			out = append(out, scheduledEvent{
 				when: s.now + delay,
-				ev:   &evtCertArrival{from: op, to: to, cert: cert},
+				ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},
 			})
 		}
 	}
@@ -242,5 +313,9 @@ func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
 		Signature: append(obft.Signature{}, e.cert.Signature...),
 	}
 	s.resolvedAt[e.to] = s.now
+	// Cert-gossip rescue supersedes a prior local-resolve failure; clear the
+	// stale error so outcome() doesn't report decided=true with a non-empty
+	// Err (otherwise confuses callers reading the per-op outcome).
+	delete(s.resolveErrs, e.to)
 	return nil
 }

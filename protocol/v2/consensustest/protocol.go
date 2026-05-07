@@ -7,8 +7,10 @@
 // abstract ByzPattern into the protocol's internal byz model.
 //
 // Universal safety invariants — SingleV (≤ 1 V reconstructed cluster-wide),
-// HonestAgreement, Terminated — are enforced on every simulation; SingleV
-// and HonestAgreement violations panic.
+// HonestAgreement, Terminated, NoOfflineDoubleV (an offline byzantine with
+// full message visibility cannot reconstruct two distinct V signatures) —
+// are enforced on every simulation; SingleV / HonestAgreement / NoOfflineDoubleV
+// violations panic.
 package consensustest
 
 import (
@@ -24,9 +26,22 @@ type OperatorID uint64
 // adapters translate fields into their internal config. Timing is anchored at
 // slot start (virtual-time 0); RelayCutoff is the hard deadline by which a
 // signed output must be produced.
+//
+// Configurable spec parameters are first-class fields; everything else is
+// derived inside adapters per OBFT.md §Setting / §Application:
+//   - T_commit         = RelayCutoff − HeaderSubmitHeadroom − Delta3 − Delta2
+//   - Ls_arrival       = T_commit − Slack
+//   - T_broadcast_max  = T_commit − BroadcastBudget[k]   (T_commit-anchored)
+//   - qV = qEnc        = 2f+1 from N
+//   - F                = (N−1)/3
 type SimConfig struct {
 	N         int          // cluster size; F = (N-1)/3 is implied
 	Operators []OperatorID // typically 1..N
+
+	// K is the OBFT layer count. Defaults via DefaultK(N) to N (every operator
+	// leads exactly one layer — SSV production convention). QBFT adapters
+	// ignore this. Must satisfy MinK(N) ≤ K ≤ N where MinK = max(3, f+2).
+	K int
 
 	SlotStart    time.Duration // virtual-time offset of slot start; usually 0
 	SlotDuration time.Duration // 12s for Ethereum
@@ -40,6 +55,29 @@ type SimConfig struct {
 	// Protocols derive their per-phase windows from this (OBFT Δ_2 = 2 BTT;
 	// QBFT round trip ≈ 1 BTT per message).
 	BTT time.Duration
+
+	// Slack is the OBFT Phase-1 view-fix slack (decision-deferral window between
+	// Ls_arrival and T_commit). Defaults to BTT/2 if zero.
+	Slack time.Duration
+
+	// Delta2 is the OBFT Phase-2 propagation budget. Defaults to 2*BTT if zero.
+	Delta2 time.Duration
+
+	// Delta3 is the OBFT Phase-3 broadcast budget (ε_3). Defaults to 100ms if zero.
+	Delta3 time.Duration
+
+	// BroadcastBudget carries the OBFT per-layer T_commit-anchored absorption
+	// windows (= B_k + Slack per spec §Setting). Strictly increasing in k.
+	// When nil, derived from BTT via DefaultBkSchedule(K, BTT).
+	BroadcastBudget []time.Duration
+
+	// FetchAt carries the OBFT per-layer leader fetch offsets. Strictly
+	// decreasing in k (deeper layers fetch from deeper-confirmed parents).
+	// When nil, derived from BTT via DefaultFetchSchedule(K, BTT, RelayCutoff).
+	FetchAt []time.Duration
+
+	// QBFTRoundTimeout is the QBFT per-round timer (RT). Defaults to 2s.
+	QBFTRoundTimeout time.Duration
 
 	Network NetworkModel
 	Host    HostPattern
@@ -57,6 +95,27 @@ type SimConfig struct {
 	// BLSKeys, when non-nil, switches the sim to real BLS for adapters that
 	// support it. Generate with GenerateBLSKeys; reuse across sims.
 	BLSKeys *BLSKeys
+}
+
+// F returns the byzantine bound implied by N (F = (N-1)/3).
+func (c *SimConfig) F() int {
+	return (c.N - 1) / 3
+}
+
+// DefaultK returns SSV's recommended K for cluster size n: K = n. Every
+// operator leads exactly one layer per slot. Mirrors production obft.DefaultK.
+func DefaultK(n int) int { return n }
+
+// MinK returns the BFT-liveness K floor for cluster size n: max(3, f+2)
+// where f = (n-1)/3. Below this floor the cluster has no late-leader
+// resilience guarantee.
+func MinK(n int) int {
+	f := (n - 1) / 3
+	k := f + 2
+	if k < 3 {
+		k = 3
+	}
+	return k
 }
 
 // Protocol is implemented by per-algorithm adapters. Adapters MUST be
@@ -81,15 +140,43 @@ type Outcome struct {
 	DecidedRound int
 	PerOp        map[OperatorID]OperatorOutcome
 	Trace        []TraceEntry // non-nil iff cfg.TraceEnabled was set
+
+	// Bandwidth aggregates per-message byte counts emitted during the sim.
+	// Populated by adapters that instrument message emission.
+	Bandwidth BandwidthReport
+
+	// OfflineAgg is the post-sim offline-aggregator's reconstruction attempt.
+	// A safety violation (NoOfflineDoubleV=false) panics in the runner.
+	OfflineAgg OfflineAggReport
 }
 
 type OperatorOutcome struct {
-	Decided       bool
-	Value         []byte
-	Round         int // round / layer
-	Time          time.Duration
-	Err           string
-	EvidenceCount int // protocol-specific count, opaque to the framework
+	Decided bool
+	Value   []byte
+	Round   int // round / layer
+	Time    time.Duration
+	Err     string
+
+	// EvidenceByRule maps protocol-specific rule names to fire counts for
+	// this operator. Rule names follow the convention "<Protocol>/<RuleName>"
+	// (e.g. "OBFT/Rule4", "OBFT/Rule5/cryptoFake", "QBFT/equivocation").
+	// A rule name absent from the map means zero fires.
+	EvidenceByRule map[string]int
+
+	// BandwidthOut / BandwidthIn are byte counts emitted / received by this
+	// operator. Adapters that don't instrument bandwidth leave both at zero.
+	BandwidthOut int64
+	BandwidthIn  int64
+}
+
+// EvidenceCount is a convenience: total fires across all rules for this op.
+// Returns zero on nil EvidenceByRule.
+func (o OperatorOutcome) EvidenceCount() int {
+	total := 0
+	for _, n := range o.EvidenceByRule {
+		total += n
+	}
+	return total
 }
 
 type TraceEntry struct {
@@ -116,6 +203,13 @@ func (c *SimConfig) Validate() error {
 	if len(c.Operators) != c.N {
 		return fmt.Errorf("consensustest: Operators length %d != N %d", len(c.Operators), c.N)
 	}
+	seenOps := make(map[OperatorID]struct{}, c.N)
+	for _, op := range c.Operators {
+		if _, dup := seenOps[op]; dup {
+			return fmt.Errorf("consensustest: duplicate operator ID %d in Operators", op)
+		}
+		seenOps[op] = struct{}{}
+	}
 	if c.BTT <= 0 {
 		return fmt.Errorf("consensustest: BTT must be > 0")
 	}
@@ -128,6 +222,89 @@ func (c *SimConfig) Validate() error {
 	if c.RelayCutoff > c.SlotDuration {
 		return fmt.Errorf("consensustest: RelayCutoff (%v) > SlotDuration (%v)", c.RelayCutoff, c.SlotDuration)
 	}
+
+	if c.K == 0 {
+		c.K = DefaultK(c.N)
+	}
+	minK := MinK(c.N)
+	if c.K < minK {
+		return fmt.Errorf("consensustest: K=%d below late-leader-resilience minimum %d (= max(3, f+2) at n=%d)",
+			c.K, minK, c.N)
+	}
+	if c.K > c.N {
+		return fmt.Errorf("consensustest: K=%d exceeds N=%d", c.K, c.N)
+	}
+
+	if c.HeaderSubmitHeadroom == 0 {
+		c.HeaderSubmitHeadroom = 100 * time.Millisecond
+	}
+	if c.Slack == 0 {
+		c.Slack = c.BTT / 2
+	}
+	if c.Delta2 == 0 {
+		c.Delta2 = 2 * c.BTT
+	}
+	if c.Delta3 == 0 {
+		c.Delta3 = 100 * time.Millisecond
+	}
+	if c.QBFTRoundTimeout == 0 {
+		c.QBFTRoundTimeout = 2 * time.Second
+	}
+
+	tCommit := c.RelayCutoff - c.HeaderSubmitHeadroom - c.Delta3 - c.Delta2
+	if tCommit <= 0 {
+		return fmt.Errorf("consensustest: derived T_commit=%v is non-positive (RelayCutoff=%v HeaderSubmit=%v Delta3=%v Delta2=%v)",
+			tCommit, c.RelayCutoff, c.HeaderSubmitHeadroom, c.Delta3, c.Delta2)
+	}
+
+	if c.BroadcastBudget == nil {
+		c.BroadcastBudget = DefaultBkSchedule(c.K, c.BTT)
+	}
+	if len(c.BroadcastBudget) != c.K {
+		return fmt.Errorf("consensustest: BroadcastBudget has %d entries, expected K=%d",
+			len(c.BroadcastBudget), c.K)
+	}
+	for k := 1; k < c.K; k++ {
+		if c.BroadcastBudget[k] <= c.BroadcastBudget[k-1] {
+			return fmt.Errorf("consensustest: BroadcastBudget must be strictly increasing in k (B_%d=%v <= B_%d=%v)",
+				k, c.BroadcastBudget[k], k-1, c.BroadcastBudget[k-1])
+		}
+	}
+
+	if c.FetchAt == nil {
+		c.FetchAt = DefaultFetchSchedule(c.K, c.BTT, tCommit)
+	}
+	if len(c.FetchAt) != c.K {
+		return fmt.Errorf("consensustest: FetchAt has %d entries, expected K=%d",
+			len(c.FetchAt), c.K)
+	}
+	for k := 1; k < c.K; k++ {
+		if c.FetchAt[k] >= c.FetchAt[k-1] {
+			return fmt.Errorf("consensustest: FetchAt must be strictly decreasing in k (T_%d=%v >= T_%d=%v)",
+				k, c.FetchAt[k], k-1, c.FetchAt[k-1])
+		}
+	}
+
+	f := c.F()
+	seenByz := make(map[OperatorID]struct{}, len(c.Byz.ByzOperators))
+	for _, op := range c.Byz.ByzOperators {
+		if _, dup := seenByz[op]; dup {
+			return fmt.Errorf("consensustest: ByzPattern.ByzOperators has duplicate operator %d", op)
+		}
+		seenByz[op] = struct{}{}
+	}
+	if len(c.Byz.ByzOperators) > f {
+		return fmt.Errorf("consensustest: ByzPattern has %d byz operators but f=%d (cluster N=%d)",
+			len(c.Byz.ByzOperators), f, c.N)
+	}
+	seenRecipients := make(map[OperatorID]struct{}, len(c.Byz.Recipients))
+	for _, op := range c.Byz.Recipients {
+		if _, dup := seenRecipients[op]; dup {
+			return fmt.Errorf("consensustest: ByzPattern.Recipients has duplicate operator %d (positional convention requires distinct recipients)", op)
+		}
+		seenRecipients[op] = struct{}{}
+	}
+
 	if c.Network == nil {
 		c.Network = ConstantDelay{D: c.BTT}
 	}
@@ -149,6 +326,7 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 	return SimConfig{
 		N:                    4,
 		Operators:            operators,
+		K:                    0, // → DefaultK(N=4) = 4 (K = N convention)
 		SlotStart:            0,
 		SlotDuration:         12 * time.Second,
 		RelayCutoff:          4 * time.Second,
@@ -159,4 +337,16 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		Byz:                  ByzPattern{Kind: ByzNone},
 		Seed:                 1,
 	}
+}
+
+// ClusterSizes are the SSV-supported cluster sizes (n = 3f+1 for f ∈ {1..4}).
+var ClusterSizes = []int{4, 7, 10, 13}
+
+// MakeOperators returns Operators 1..n.
+func MakeOperators(n int) []OperatorID {
+	ops := make([]OperatorID, n)
+	for i := range ops {
+		ops[i] = OperatorID(i + 1)
+	}
+	return ops
 }

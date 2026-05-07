@@ -101,6 +101,27 @@ fuzz-validation:
 		go test -tags blst_enabled -run='^$$' -fuzz="^$$target"'$$' -fuzztime=$(FUZZTIME) ./message/validation/ || exit 1; \
 	done
 
+# consensustest-real-bls runs the consensustest framework's real-BLS suite
+# (gated behind the `real_bls` build tag). The suite exercises the OBFT
+# adapter's threshold-IBE + real-BLS signing path end-to-end across cluster
+# sizes, scenarios, and seeds. Default `unit-test` runs stub-crypto only;
+# this target adds real-crypto coverage on demand. Budget: <10 min wall time.
+.PHONY: consensustest-real-bls
+consensustest-real-bls:
+	@echo "Running consensustest real-BLS suite"
+	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
+
+# consensustest-report runs the catalog matrix and writes HTML / CSV /
+# Markdown reports to REPORT_DIR (default ./consensustest-reports relative to
+# repo root). Override the dir with `make consensustest-report REPORT_DIR=path/to/dir`.
+# `$(abspath ...)` resolves the path before passing to `go test` so the
+# reports land where the user expects regardless of `go test`'s package CWD.
+REPORT_DIR ?= ./consensustest-reports
+.PHONY: consensustest-report
+consensustest-report:
+	@echo "Generating consensustest reports to $(abspath $(REPORT_DIR))"
+	@REPORT_DIR=$(abspath $(REPORT_DIR)) go test -tags "blst_enabled lfs" -run TestGenerateReport -v ./protocol/v2/consensustest/
+
 .PHONY: docker-spec-test
 docker-spec-test:
 	@echo "Running spec tests in docker"

@@ -1,6 +1,7 @@
 package consensustest_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -126,10 +127,7 @@ func padRight(s string, n int) string {
 }
 
 func intStr(i int) string {
-	if i < 0 {
-		return "-1"
-	}
-	return string(rune('0' + i))
+	return strconv.Itoa(i)
 }
 
 func durationOnly(d time.Duration) string {

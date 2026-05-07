@@ -1,4 +1,148 @@
-# Consensus stress-test framework — plan
+# Consensus stress-test framework
+
+## Current state
+
+The framework is **built and tested**. This document carries both a current-state guide (this section) and the original implementation plan (sections below from "Goal" onward — kept as a historical reference for design rationale).
+
+### Architecture as built
+
+```
+protocol/v2/consensustest/                       FRAMEWORK
+  protocol.go         SimConfig, Outcome, OperatorOutcome, Protocol interface
+  byz.go              ByzPattern (with ByzOperators slice, multi-byz)
+  host.go             HostPattern + Phase enum + HostFlipMidSlot, HostInvalidUntilLayer
+  network.go          NetworkModel + ConstantDelay, JitteredDelay, PerReceiverDelay, PartitionedNetwork
+  schedule.go         DefaultBkSchedule, DefaultFetchSchedule (BTT-anchored, K-aware)
+  bandwidth.go        BandwidthReport (per-kind, per-layer, per-op)
+  stubsig.go          BLS-realistic byte-size constants
+  offlineagg.go       OfflineAggregator + AttemptAll (NoOfflineDoubleV safety check)
+  safety.go           SafetyReport (SingleV, HonestAgreement, Terminated, NoOfflineDoubleV)
+  runner.go           RunScenarioOnProtocol (panics on safety violation)
+  scenario.go         Scenario, ExpectClass, Match
+  catalog.go          18 cross-protocol scenarios
+  bls.go              BLSKeys + GenerateBLSKeys (real threshold BLS)
+  matrix.go           MatrixReport
+  *_test.go           framework smoke + matrix + sweep + bandwidth + host-pattern + report tests
+
+  obft/               OBFT ADAPTER (wraps real obft.Instance)
+    adapter.go        Run, evidenceByRule, ruleKey
+    des.go            DES driver (single goroutine, virtual time)
+    events.go         evtLeaderFetch / evtPhase1Arrival / evtPhaseTwoStart / evtCommitArrival / evtResolve / evtCertArrival
+    byz.go            16 byz patterns (incl. Phase-3 evidence-targeted: CrossSigning, FakePlaintextSigma, CrossOnionEquivocation, WithholdLeader, CertWithholding, LateLeaderBroadcast, AggregatorBypass)
+    sizes.go          Wire-size accounting (phase1BundleSize, commitSize, certSize)
+    adapter_test.go   per-cluster-size healthy + per-rule evidence + multi-byz + offline-aggregator
+
+  qbft/               QBFT ADAPTER (wraps real qbft.Instance)
+    adapter.go        Run + post-deadline clip-to-MISS
+    des.go            DES driver, builds qbft.Instance per honest op
+    events.go         evtStartInstance / evtMessageArrival / evtRoundTimeout / evtByzProposal
+    byz.go            7 byz patterns (Phase-3 OBFT-specific kinds → ErrNotApplicable)
+    network.go        virtualNetwork (specqbft.Network impl, self-delivery loopback)
+    timer.go          virtualRoundTimer (specqbft.Timer impl, DES-scheduled)
+    signer.go         virtualOperatorSigner (RSA via spec testingutils key sets)
+    beacon_signer.go  noopBeaconSigner (qbft.IConfig dependency)
+    value_check.go    virtualValueChecker (round-aware via sim.inflightRound)
+    proposer.go       proposerForRound, makeProposalEnvelope (byz fabrication)
+    keys.go           keysetForN — uses Testing{4,7,10,13}SharesSet
+    adapter_test.go   per-cluster-size healthy + round-change + equivocation fall-through + determinism
+
+  reporting/          REPORT RENDERERS (HTML / CSV / Markdown)
+    reporting.go      Run / CellKey / cellSummary
+    csv.go            RenderCSV
+    markdown.go       RenderMarkdown
+    html.go           RenderHTML (Chart.js via CDN)
+    reporting_test.go end-to-end smoke
+```
+
+### Universal safety invariants (enforced per sim)
+
+`RunScenarioOnProtocol` panics on violation of any of:
+
+- **`SingleV`** — at most one distinct decided V cluster-wide (Pigeonhole 1).
+- **`HonestAgreement`** — all deciders agree on V.
+- **`NoOfflineDoubleV`** — the offline aggregator (worst-case byz with full message visibility) cannot reconstruct two distinct V signatures (Pigeonhole 2 + 3 — strictly stronger than `SingleV`).
+
+`Terminated` (every op decided or has a non-empty error) is reported as a warning, not a panic — adapter bug if it fires under healthy sim.
+
+### How to run
+
+| Target | Description | Wall time |
+|---|---|---|
+| `go test ./protocol/v2/consensustest/...` | Default suite (stub-crypto, all phases) | ~3-4 s |
+| `make consensustest-real-bls` | Real-BLS suite (build tag `real_bls`) — actual threshold-BLS + tlock IBE end-to-end at n=4,7,10,13 | ~17 s |
+| `make consensustest-report` | Generates HTML / CSV / Markdown reports of the catalog matrix to `./consensustest-reports/` | ~1 s |
+
+### Stub-BLS vs real-BLS modes
+
+- **Stub mode** (default): OBFT uses `obft.NewStubSigner` + `obft.NewStubIBE`; signatures are short bytes that pass structural validation but don't run real BLS math. Bandwidth accounting uses the BLS-realistic byte sizes from `stubsig.go` (96B sig, 48B pubkey, etc.) so wire-size totals match real-BLS mode at the byte level.
+- **Real-BLS mode** (`cfg.BLSKeys != nil`): OBFT uses `blsbackend.New` + `blsbackend.NewKyberSigner` + `blsbackend.NewTLockIBE`. Real BLS12-381 sigs, real tlock IBE encryption.
+- **QBFT** runs real RSA in both modes (the spec testing-utils' `TestKeySet` provides per-op RSA keys).
+
+### Coverage matrix — scenarios → spec claims
+
+| Scenario | Verifies |
+|---|---|
+| `Healthy` | `OBFT.md §Application` canonical operating point fits at BTT=200ms |
+| `PrimaryLeaderSilent` | OBFT in-round fall-through; QBFT R2 round-change |
+| `MultiSilent_K3` | OBFT advantage when ≥1 of K-1 leaders silent (`BFT-comparison.md` Table 3) |
+| `Equivocate_111` / `Equivocate_AllNR` / `Equivocate_SigmaLockedSplit` | Equivocation patterns from `BFT-comparison.md` Table 3 |
+| `HV1SelectiveDelivery` | OBFT-specific h_V=1 deadlock pattern |
+| `FakeEncryptedPresence` | Rule 4 detection at honest receivers |
+| `ValidityDivergence_2_2` | OBFT host-divergence at L_0; QBFT round-aware host validation (Phase 4 fix verifies the lock) |
+| `SigmaRefusal` | Single-byz silence within f-bound doesn't disrupt healthy path |
+| `WithholdLeader_Deepest` | Class A late-deepest-layer pathology resilience |
+| `CertWithholding` | Honest ops reconstruct independently of byz cert gossip |
+| `CrossSigning_Rule1` | Rule 1 evidence (σ + NR exclusivity) |
+| `FakePlaintextSigma_Rule5` | Rule 5 evidence (cryptoFake at L_0) |
+| `CrossOnionEquivocation_Rule3` | Rule 3 evidence (cross-onion equivocation, top-level + per-layer) |
+| `HostFlipMidSlot` | OBFT validate-once-and-lock; QBFT round-aware validation passes round 1 |
+| `HostInvalidUntilL1` | Both protocols fall through when L_0 / round 1 host-rejected |
+| `LateLeaderBroadcast_L0` | Class A asymmetric-propagation past T_commit; cluster falls through to next layer's wider absorption (spec §Failure modes) |
+
+### Sweep test coverage
+
+| Test | Axis varied | Purpose |
+|---|---|---|
+| `TestSweep_N` | n ∈ {4, 7, 10, 13} | Healthy at every cluster size |
+| `TestSweep_K` | K ∈ [MinK(n), n] for each n | Healthy at every valid (n, K) |
+| `TestSweep_BTT` | BTT ∈ {100, 200, 400}ms | Catalog matrix at each BTT (logs diagnostic; asserts canonical) |
+| `TestSweep_Seeds` | 5 seeds × jittered network | Safety holds under non-determinism |
+| `TestSweep_MultiByz_n7` | n=7 with 2 byz silent leaders | Fall-through past multiple silent leaders |
+
+### Real-BLS coverage (gated behind `real_bls` build tag)
+
+| Test | Coverage |
+|---|---|
+| `TestRealBLS_Healthy_AllClusterSizes` | n=4,7,10,13 healthy under real BLS |
+| `TestRealBLS_Catalog_n4` | Full catalog at n=4 — must match stub-mode outcomes |
+| `TestRealBLS_Catalog_n7` | Full catalog at n=7 — diagnostic (some n=4 expectations don't hold at n=7) |
+| `TestRealBLS_Seeds` | 10 seeds × jittered network |
+| `TestRealBLS_KSweep_n7` | K ∈ {4, 5, 6, 7} at n=7 |
+
+Spec-test key generation (`Testing{4,7,10,13}SharesSet`) is cached process-wide via `blsKeyCache`, amortizing the ~100-200ms generation cost across all tests in the suite.
+
+### Reporting
+
+`make consensustest-report` runs the catalog matrix at canonical config (`n=4`, `BTT=200ms`) and writes three files:
+
+- `consensustest.html` — interactive matrix table + Chart.js bar charts (bandwidth, decision time)
+- `consensustest.csv` — one row per (scenario, protocol) cell with outcome / decision-time / bandwidth / evidence count
+- `consensustest.md` — markdown matrix table + per-cell bandwidth, suitable for inclusion in PR descriptions
+
+Output dir is `./consensustest-reports/` by default; override via `make consensustest-report REPORT_DIR=path`.
+
+### Known gaps / follow-up work
+
+- **Byz patterns covered, with three reserved enum values**. Headline rule patterns (Rules 1-5), Class A spec coverage (`ByzLateLeaderBroadcast`), `ByzPartialEquivocation` (2-1 natural recovery, OBFT.md:443), and the negative-test `ByzAggregatorBypass` are all shipped. Three enum values (`ByzGarbageMessages`, `ByzExceedsRateLimit`, `ByzOfflineDoubleVAttempt`) are reserved but **not** translated to scenarios — each is covered at another layer:
+    - `ByzGarbageMessages` — covered by `obft.ValidateCommit` / `ValidatePhase1Bundle` direct unit tests; `ByzFakeEncryptedPresence` is the catalog representative for a specific garbage variant (forged IBE ciphertext → Rule 4).
+    - `ByzExceedsRateLimit` — covered by `obft.Instance.peerCommitHashes` cap unit tests in `instance_test.go`, with the validation-layer mirror in `message/validation/obft_admissions_test.go`.
+    - `ByzOfflineDoubleVAttempt` — `OfflineAggregator.AttemptAll` runs on **every** scenario via `recordCommitToAggregator`; `NoOfflineDoubleV` is a universal safety invariant. `ByzAggregatorBypass` is the active-attack variant (forged identities).
+- **OBFT chained-decrypt approximation in `OfflineAggregator`** — chain-unlock currently checks "any V has NR-quorum at each shallower layer" (permissive); per-V chain matching is a future refinement when adapters record (layer, V) tuples per NR-quorum.
+- **Phase parameter has two values: `PhasePhase1Acceptance` (OBFT) and `PhaseDecide` (QBFT)**. A `PhasePhase2Commit` value was considered but trimmed — OBFT's protocol doesn't re-validate at Phase 2 (the locked Phase-1 verdict wins), so there's no caller for it. Re-add when an explicit phase-distinction test materializes.
+- **Catalog at 19 scenarios**, plan called for 25-30. Headline coverage is in place; additional scenarios can be added incrementally.
+- **Real-BLS suite at ~17s wall time** vs the 10-min budget. Plenty of headroom to scale up with deeper sweeps as needed.
+
+---
 
 ## Goal
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // MatrixReport collects per-(protocol, scenario) Results and renders them
@@ -70,7 +71,7 @@ func (m *MatrixReport) Render() string {
 				mismatches = append(mismatches,
 					fmt.Sprintf("  %s/%s: %s (got %s)", sname, pname, r.Why, renderCell(r)))
 			case r.Outcome.Decided:
-				cell = fmt.Sprintf("✓ %v L%d", r.Outcome.DecisionTime.Round(10_000_000), r.Outcome.DecidedRound)
+				cell = fmt.Sprintf("✓ %v L%d", r.Outcome.DecisionTime.Round(10*time.Millisecond), r.Outcome.DecidedRound)
 			default:
 				cell = "✗ miss"
 			}

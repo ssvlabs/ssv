@@ -2,8 +2,13 @@ package qbft
 
 import (
 	"container/heap"
+	"context"
 	"fmt"
 	"time"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 )
@@ -48,213 +53,82 @@ func (q *eventQueue) Pop() any {
 
 var _ heap.Interface = (*eventQueue)(nil)
 
-// ---- evtProposeArrival: PROPOSE delivered to a receiver -----------------
+// ---- evtStartInstance: triggers Instance.Start for one honest op ---------
 
-type evtProposeArrival struct {
-	from, to ct.OperatorID
-	round    int
-	value    []byte
+type evtStartInstance struct {
+	op spectypes.OperatorID
 }
 
-func (e *evtProposeArrival) describe() string {
-	return fmt.Sprintf("ProposeArrival[from=%d to=%d round=%d v=%s]",
-		e.from, e.to, e.round, hashValue(e.value))
+func (e *evtStartInstance) describe() string {
+	return fmt.Sprintf("StartInstance[op=%d]", e.op)
 }
 
-func (e *evtProposeArrival) handle(s *sim) []scheduledEvent {
-	st := s.state[e.to]
-	// Skip if op has already moved past this round.
-	if st.round > e.round || st.decided {
+func (e *evtStartInstance) handle(s *sim) []scheduledEvent {
+	inst := s.instances[e.op]
+	if inst == nil {
 		return nil
 	}
-	st.recordProposal(e.round, e.from, e.value)
-
-	// Host validity check on the proposed V.
-	if !s.cfg.Host.Validate(e.to, e.round, e.value) {
-		// Operator considers this V invalid → do not PREPARE on it.
-		return nil
-	}
-
-	// QBFT rule: detection of equivocation (two distinct PROPOSEs from the
-	// same leader at the same round). On detection, do not PREPARE.
-	props := st.proposalsByRound[e.round]
-	if len(props) > 1 {
-		// Multiple distinct PROPOSEs observed for the same round → don't
-		// PREPARE; wait for round timeout.
-		return nil
-	}
-
-	// Honest receiver broadcasts PREPARE on the proposed V (assuming they
-	// haven't already prepared in this round — QBFT semantics: 1 PREPARE
-	// per round per op).
-	if _, already := st.preparedByRound[e.round][e.to]; already {
-		return nil
-	}
-	// Record self-prepare locally too (for quorum counting at e.to).
-	st.recordPrepare(e.round, e.to, e.value)
-
-	if !s.cfg.Byz.AllowPrepareBroadcast(e.to, e.round) {
-		return nil
-	}
-	var out []scheduledEvent
-	for _, peer := range s.operators {
-		if peer == e.to {
-			continue
-		}
-		s.scheduleDelivery(s.now, e.to, peer, ct.KindCommit,
-			&evtPrepareArrival{from: e.to, to: peer, round: e.round, value: e.value})
-	}
-	return out
-}
-
-// ---- evtPrepareArrival: PREPARE delivered to a receiver -----------------
-
-type evtPrepareArrival struct {
-	from, to ct.OperatorID
-	round    int
-	value    []byte
-}
-
-func (e *evtPrepareArrival) describe() string {
-	return fmt.Sprintf("PrepareArrival[from=%d to=%d round=%d v=%s]",
-		e.from, e.to, e.round, hashValue(e.value))
-}
-
-func (e *evtPrepareArrival) handle(s *sim) []scheduledEvent {
-	st := s.state[e.to]
-	if st.round > e.round || st.decided {
-		return nil
-	}
-	st.recordPrepare(e.round, e.from, e.value)
-
-	// Check PREPARE quorum.
-	v, ok := st.hasPrepareQuorum(e.round, s.quorum())
-	if !ok {
-		return nil
-	}
-	// Already committed in this round → don't re-broadcast COMMIT.
-	if _, alreadyCommitted := st.committedByRound[e.round][e.to]; alreadyCommitted {
-		return nil
-	}
-	st.recordCommit(e.round, e.to, v)
-
-	if !s.cfg.Byz.AllowCommitBroadcast(e.to, e.round) {
-		return nil
-	}
-	var out []scheduledEvent
-	for _, peer := range s.operators {
-		if peer == e.to {
-			continue
-		}
-		s.scheduleDelivery(s.now, e.to, peer, ct.KindCommit,
-			&evtCommitArrival{from: e.to, to: peer, round: e.round, value: v})
-	}
-	return out
-}
-
-// ---- evtCommitArrival: COMMIT delivered to a receiver -------------------
-
-type evtCommitArrival struct {
-	from, to ct.OperatorID
-	round    int
-	value    []byte
-}
-
-func (e *evtCommitArrival) describe() string {
-	return fmt.Sprintf("CommitArrival[from=%d to=%d round=%d v=%s]",
-		e.from, e.to, e.round, hashValue(e.value))
-}
-
-func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
-	st := s.state[e.to]
-	if st.decided {
-		return nil
-	}
-	st.recordCommit(e.round, e.from, e.value)
-
-	v, ok := st.hasCommitQuorum(e.round, s.quorum())
-	if !ok {
-		return nil
-	}
-
-	// +1 BTT models post-consensus partial-sig collection (qV partial sigs
-	// aggregated before the signed output is ready for relay submission).
-	st.decided = true
-	st.decidedV = append([]byte(nil), v...)
-	st.decidedRound = e.round
-	st.decidedTime = s.now + s.cfg.BTT
+	checker := newVirtualValueChecker(s, ct.OperatorID(e.op))
+	inst.Start(context.Background(), s.startValue, checker)
 	return nil
 }
 
-// ---- evtRoundChangeArrival: ROUND_CHANGE delivered ----------------------
+// ---- evtMessageArrival: SignedSSVMessage delivered to a receiver ---------
 
-type evtRoundChangeArrival struct {
+type evtMessageArrival struct {
 	from, to ct.OperatorID
-	round    int // the round being abandoned (op is moving to round+1)
+	msg      *spectypes.SignedSSVMessage
 }
 
-func (e *evtRoundChangeArrival) describe() string {
-	return fmt.Sprintf("RoundChangeArrival[from=%d to=%d round=%d]", e.from, e.to, e.round)
+func (e *evtMessageArrival) describe() string {
+	return fmt.Sprintf("MessageArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtRoundChangeArrival) handle(s *sim) []scheduledEvent {
-	st := s.state[e.to]
-	if st.decided {
+func (e *evtMessageArrival) handle(s *sim) []scheduledEvent {
+	op := spectypes.OperatorID(e.to)
+	inst := s.instances[op]
+	if inst == nil {
 		return nil
 	}
-	// Only count round-changes for the round the receiver is currently
-	// in or about to be in.
-	if e.round != st.round {
+	if !inst.CanProcessMessages() {
 		return nil
 	}
-	st.recordRC(e.round, e.from)
-
-	if !st.hasRCQuorum(e.round, s.quorum()) {
-		return nil
-	}
-	// Quorum of ROUND_CHANGEs reached. Move to round + 1.
-	newRound := e.round + 1
-	if newRound > s.cfg.MaxRounds {
-		st.timedOut = true
-		return nil
-	}
-	return advanceToRound(s, e.to, newRound)
-}
-
-// advanceToRound transitions `op` to `newRound` and arms the timer / emits
-// the leader's PROPOSE if op is the new leader.
-func advanceToRound(s *sim, op ct.OperatorID, newRound int) []scheduledEvent {
-	st := s.state[op]
-	st.round = newRound
-	s.armRoundTimer(op, newRound, s.now)
-
-	if op != s.leaderForRound(newRound) {
-		return nil
-	}
-	if !s.cfg.Byz.LeaderProposesAtRound(op, newRound) {
-		return nil
-	}
-	plans := s.cfg.Byz.ProposalPlanForRound(s, op, newRound, s.canonValue(newRound))
-	var out []scheduledEvent
-	for _, p := range plans {
-		recipients := p.Recipients
-		if recipients == nil {
-			recipients = s.operators
+	pm, err := specqbft.NewProcessingMessage(e.msg)
+	if err != nil {
+		if s.cfg.TraceEnabled {
+			s.trace = append(s.trace, ct.TraceEntry{
+				When:  s.now,
+				Event: fmt.Sprintf("MessageDecode-FAILED[from=%d to=%d err=%v]", e.from, e.to, err),
+			})
 		}
-		for _, to := range recipients {
-			s.scheduleDelivery(s.now, op, to, ct.KindLeaderBroadcast,
-				&evtProposeArrival{from: op, to: to, round: newRound, value: p.V})
-		}
+		return nil
 	}
-	return out
+	// Stash the in-flight round so virtualValueChecker.CheckValue (called
+	// inside ProcessMsg → uponProposal → isProposalJustification) can report
+	// the proposal's round to the host instead of Instance.State.Round (which
+	// hasn't been bumped yet). Cleared after ProcessMsg returns.
+	s.inflightRound[op] = pm.QBFTMessage.Round
+	decided, decidedValue, _, err := inst.ProcessMsg(context.Background(), zap.NewNop(), pm)
+	delete(s.inflightRound, op)
+	if err != nil && s.cfg.TraceEnabled {
+		s.trace = append(s.trace, ct.TraceEntry{
+			When: s.now,
+			Event: fmt.Sprintf("ProcessMsg-rejected[from=%d to=%d type=%d round=%d err=%v]",
+				e.from, e.to, pm.QBFTMessage.MsgType, pm.QBFTMessage.Round, err),
+		})
+	}
+	if decided {
+		s.recordDecided(op, pm.QBFTMessage.Round, decidedValue)
+	}
+	return nil
 }
 
-// ---- evtRoundTimeout: round timer fires ---------------------------------
+// ---- evtRoundTimeout: virtual round timer fires --------------------------
 
 type evtRoundTimeout struct {
-	op    ct.OperatorID
-	round int
-	mySeq int64 // matched against opState.roundTimerSeq; mismatch = no-op
+	op    spectypes.OperatorID
+	round specqbft.Round
+	mySeq int64
 }
 
 func (e *evtRoundTimeout) describe() string {
@@ -262,35 +136,86 @@ func (e *evtRoundTimeout) describe() string {
 }
 
 func (e *evtRoundTimeout) handle(s *sim) []scheduledEvent {
-	st := s.state[e.op]
-	// Stale timer (op moved to next round, decided, or armed a fresh timer).
-	if st.roundTimerSeq != e.mySeq || st.decided || st.round != e.round {
+	timer := s.timers[e.op]
+	if timer == nil || timer.seq != e.mySeq {
+		return nil // stale (rearmed by a newer round or stopped)
+	}
+	inst := s.instances[e.op]
+	if inst == nil || !inst.CanProcessMessages() {
 		return nil
 	}
-	// Round timed out. Broadcast ROUND_CHANGE; receivers count toward
-	// quorum and (if quorum) advance to round + 1.
-	st.recordRC(e.round, e.op)
-	if !s.cfg.Byz.AllowRoundChangeBroadcast(e.op, e.round) {
+	if dec, _ := inst.IsDecided(); dec {
 		return nil
 	}
-	var out []scheduledEvent
-	for _, peer := range s.operators {
-		if peer == e.op {
-			continue
-		}
-		s.scheduleDelivery(s.now, e.op, peer, ct.KindRoundChange,
-			&evtRoundChangeArrival{from: e.op, to: peer, round: e.round})
+	// Real Instance handles round-change construction + broadcast. After
+	// UponRoundTimeout, State.Round is bumped and a ROUND_CHANGE is on the
+	// wire. The new-round leader's PROPOSE comes via uponRoundChange at
+	// receivers (when quorum reaches) — for honest leaders the Instance
+	// emits the new PROPOSE; for byz leaders we schedule a fabricated one.
+	_ = inst.UponRoundTimeout(context.Background(), zap.NewNop())
+
+	newRound := e.round + 1
+	newLeader := proposerForRound(s.operators, newRound)
+	if s.byz.IsByz(ct.OperatorID(newLeader)) {
+		s.schedule(s.now, &evtByzProposal{leader: newLeader, round: newRound})
 	}
-	return out
+	return nil
 }
 
-// hashValue returns a hex-prefix of the value for diagnostic dumps.
-func hashValue(v []byte) string {
-	if len(v) == 0 {
-		return "<empty>"
+func (s *sim) recordDecided(op spectypes.OperatorID, round specqbft.Round, value []byte) {
+	if _, already := s.decided[op]; already {
+		return
 	}
-	if len(v) > 6 {
-		return fmt.Sprintf("%x", v[:6])
+	// +1 BTT models post-consensus partial-sig collection.
+	s.decided[op] = decidedRecord{
+		value: append([]byte(nil), value...),
+		round: round,
+		at:    s.now + s.cfg.BTT,
 	}
-	return fmt.Sprintf("%x", v)
+}
+
+// ---- evtByzProposal: byz round-leader fabricates PROPOSE ----------------
+
+type evtByzProposal struct {
+	leader spectypes.OperatorID
+	round  specqbft.Round
+}
+
+func (e *evtByzProposal) describe() string {
+	return fmt.Sprintf("ByzProposal[leader=%d round=%d]", e.leader, e.round)
+}
+
+func (e *evtByzProposal) handle(s *sim) []scheduledEvent {
+	plans := s.byz.ProposalPlanForRound(s, ct.OperatorID(e.leader), int(e.round), s.canonValueForRound(e.round))
+	leaderKey := s.keys.OperatorKeys[e.leader]
+	for _, p := range plans {
+		msg, err := makeProposalEnvelope(e.leader, leaderKey, s.identifier, specqbft.FirstHeight, e.round, p.V)
+		if err != nil {
+			continue
+		}
+		recipients := p.Recipients
+		if len(recipients) == 0 {
+			recipients = make([]ct.OperatorID, 0, len(s.operators))
+			for _, op := range s.operators {
+				recipients = append(recipients, ct.OperatorID(op))
+			}
+		}
+		for _, to := range recipients {
+			toID := spectypes.OperatorID(to)
+			if toID == e.leader {
+				continue
+			}
+			from := ct.OperatorID(e.leader)
+			delay := s.byz.OverrideDelay(s.rng, from, to, ct.KindLeaderBroadcast)
+			if delay < 0 {
+				delay = s.cfg.Network.Delay(s.rng, from, to, ct.KindLeaderBroadcast)
+			}
+			s.schedule(s.now+delay, &evtMessageArrival{
+				from: from,
+				to:   to,
+				msg:  msg.DeepCopy(),
+			})
+		}
+	}
+	return nil
 }

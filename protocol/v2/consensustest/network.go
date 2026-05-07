@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// MsgKind discriminates message kinds for the network / byz models. Not all
-// kinds apply to every protocol; adapters ignore irrelevant ones.
+// MsgKind discriminates message kinds for the network / byz / bandwidth models.
+// Not all kinds apply to every protocol; adapters ignore irrelevant ones.
 type MsgKind int
 
 const (
@@ -17,8 +17,28 @@ const (
 	KindPostConsensus                  // QBFT partial-sig collection (OBFT folds this into Phase 3)
 )
 
+// String returns a stable name suitable for telemetry / report keys.
+func (k MsgKind) String() string {
+	switch k {
+	case KindLeaderBroadcast:
+		return "LeaderBroadcast"
+	case KindCommit:
+		return "Commit"
+	case KindRoundChange:
+		return "RoundChange"
+	case KindCertificate:
+		return "Certificate"
+	case KindPostConsensus:
+		return "PostConsensus"
+	default:
+		return "Unknown"
+	}
+}
+
 // NetworkModel decides per-message propagation delay. Called once per
-// (sender, receiver, kind) at emission time.
+// (sender, receiver, kind) at emission time. Returning a delay > some large
+// constant simulates an effectively dropped message (propagation past
+// slot end).
 type NetworkModel interface {
 	Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration
 }
@@ -60,6 +80,21 @@ type PerReceiverDelay struct {
 func (p PerReceiverDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
 	if d, ok := p.Overrides[to]; ok {
 		return d
+	}
+	return p.Inner.Delay(rng, from, to, kind)
+}
+
+// PartitionedNetwork drops messages whose receiver is in Partitioned. Inner
+// supplies the delay for non-partitioned receivers. Use a sustained sim-long
+// time as the dropped delay (1h) so the message effectively never arrives.
+type PartitionedNetwork struct {
+	Inner       NetworkModel
+	Partitioned map[OperatorID]bool
+}
+
+func (p PartitionedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
+	if p.Partitioned[to] {
+		return time.Hour
 	}
 	return p.Inner.Delay(rng, from, to, kind)
 }
