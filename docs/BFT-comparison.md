@@ -239,7 +239,7 @@ OBFT + L_Bid (specified in [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid
 
 ### Differences vs bare OBFT (summary)
 
-- **+2 BTT healthy-path latency**: OBFT+L_Bid is **5 BTT** (1 BTT broadcast slack + 2 BTT mini-consensus + 2 BTT Phase 2 + 0 Phase 3) vs bare OBFT's 3 BTT, at recommended Δ sizing. The mini-consensus phase contributes 2 BTT (recommended `Δ_minicon = 2 BTT` matching `Δ_2`'s widening for jitter absorption — see [OBFT.md Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)).
+- **+2 BTT total consensus time**, all in pre-`T_commit` budget: OBFT+L_Bid is **5 BTT** (1 BTT broadcast slack + 2 BTT mini-consensus + 2 BTT Phase 2 + 0 Phase 3) vs bare OBFT's 3 BTT at conservative `Δ_minicon = 2 BTT`. `T_commit` is back-end-anchored and unchanged from bare OBFT; the 2 BTT mini-consensus runs as a sub-phase at the tail of Phase 1, so the cost falls on the L_0..L_{K-1} broadcast deadlines (MEV-fetch budget shrinks by `Δ_minicon`), not on post-`T_commit` slack — see [OBFT.md Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension).
 - **Value capture upside**: highest-bid block on the healthy path (when L_Bid σ-quorum reaches) instead of rotation-determined V.
 - **New failure modes at L_Bid**: 2-1-byz-defect (mixed evidence quality — cryptographic Rules 7/8 for some triggers/actions, behavioral for silent variants) and verdict-equivocation (cryptographic Rule 8); both slot-miss-without-fall-through to L_0.
 - **L_0..L_{K-1} rotation layers are unchanged**: when the mini-consensus fails to converge the cluster falls through to L_0 with the same recovery profile as bare OBFT. C1/C2 closure is conditional — see [Adversarial-byz failure modes](#adversarial-byz-failure-modes-specific-to-l_bid--table-3-delta) below.
@@ -294,7 +294,7 @@ Bare OBFT's L_0 adversarial-byz patterns (σ-locked equivocation, h_V=1, etc.) t
 ### Net trade vs bare OBFT
 
 OBFT+L_Bid pays:
-- **+2 BTT healthy-path latency** (loses bare OBFT's advantage at (0s, 1000ms) and (400ms, 1000ms) scenarios where bare OBFT fits and OBFT+L_Bid doesn't; all other scenarios are unaffected at the budget-fit level).
+- **+2 BTT total consensus time** (in pre-`T_commit` budget — MEV-fetch reduction; post-`T_commit` matches bare OBFT). Loses bare OBFT's advantage at (0s, 1000ms) and (400ms, 1000ms) scenarios where bare OBFT fits and OBFT+L_Bid doesn't; all other scenarios are unaffected at the budget-fit level.
 - **+adversarial-byz exposure at L_Bid** (2-1-byz-defect with mixed evidence quality, verdict-equivocation cryptographic; slot-miss without fall-through; higher trigger frequency than rotation-only patterns).
 - **+structural complexity** (new wire kinds `KindBid` / `KindBidVerdict`, two new slashing rules, mini-consensus protocol step).
 
@@ -302,7 +302,7 @@ In exchange for:
 - **Bid-routing value capture** on healthy path (highest-bid block vs rotation-determined V).
 - **C1/C2/C3 conditional closure at L_Bid** (vs the naive bid-routing sketch which leaves these open). C1/C2 close when verdict-quorum doesn't form; residuals fold into 2-1-byz-defect rather than deadlock without attribution.
 
-The trade is favorable when MEV bid-routing value-capture upside exceeds the combined cost of (a) the new failure modes' slot-loss rate and (b) the +2 BTT latency cost. For low-MEV slots or deployments with significant mesh degradation pushing scenarios toward the (0s, 1000ms) or (400ms, 1000ms) borderline, bare OBFT is the better choice.
+The trade is favorable when MEV bid-routing value-capture upside exceeds the combined cost of (a) the new failure modes' slot-loss rate and (b) the +2 BTT MEV-fetch budget reduction (pre-`T_commit`). For low-MEV slots or deployments with significant mesh degradation pushing scenarios toward the (0s, 1000ms) or (400ms, 1000ms) borderline, bare OBFT is the better choice.
 
 ## Limits of this comparison
 
