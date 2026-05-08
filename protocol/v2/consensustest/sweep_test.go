@@ -132,6 +132,245 @@ func TestSweep_BTT(t *testing.T) {
 	}
 }
 
+// TestSweep_Jitter — vary JitteredDelay jitter across the catalog at canonical
+// BTT=200ms. Verifies liveness holds across propagation jitter (one of the
+// "(byz, network, clock)" axes the spec's partial-synchrony bound covers —
+// see CONSENSUS-TEST-PLAN.md / Tier 1 stress-test additions). Safety is
+// enforced via RunScenarioOnProtocol's panic gate; per-cell outcomes are
+// logged for diagnostic visibility (decision-rate gradient as jitter widens)
+// without per-cell asserts because high-jitter shifts outcomes legitimately.
+//
+// Jitter levels:
+//   - 0ms: deterministic baseline (matches ConstantDelay; sanity-check that
+//     Healthy decides under both protocols)
+//   - 50ms: production-typical (matches TestSweep_Seeds + TestSmoke_JitteredNetwork)
+//   - 100ms: stressed (jitter half of BTT)
+//   - 200ms: pathological (jitter = BTT — propagation can drop to ~0 or 2x)
+//
+// At ≥100ms jitter some catalog cells legitimately miss (tight scenarios where
+// the late tail exceeds B_k absorption). The test asserts safety holds, not
+// that every cell decides.
+func TestSweep_Jitter(t *testing.T) {
+	jitterLevels := []time.Duration{
+		0,
+		50 * time.Millisecond,
+		100 * time.Millisecond,
+		200 * time.Millisecond,
+	}
+
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+
+	for _, jitter := range jitterLevels {
+		jitter := jitter
+		t.Run(fmt.Sprintf("jitter=%v", jitter), func(t *testing.T) {
+			t.Parallel()
+			cfg := baseSweepConfig(4, 200*time.Millisecond)
+			cfg.Network = ct.JitteredDelay{D: cfg.BTT, Jitter: jitter}
+
+			// Sanity: at jitter=0 (≡ ConstantDelay baseline), Healthy must
+			// decide for both protocols. Validates the JitteredDelay model is
+			// correctly wired and matches default-config behavior.
+			if jitter == 0 {
+				for _, p := range protocols {
+					out, err := p.Run(cfg)
+					require.NoErrorf(t, err, "jitter=%v %s Run", jitter, p.Name())
+					require.Truef(t, out.Decided,
+						"jitter=0ms %s Healthy must decide (matches ConstantDelay baseline)", p.Name())
+				}
+			}
+
+			// Diagnostic catalog matrix — RunScenarioOnProtocol panics on any
+			// safety violation, so just running every scenario provides the
+			// safety check. Decision-rate denominators count non-skipped cells
+			// (some catalog scenarios are OBFT-specific and skip on QBFT).
+			var b strings.Builder
+			fmt.Fprintf(&b, "\njitter=%v catalog matrix:\n", jitter)
+			obftTotal, qbftTotal := 0, 0
+			obftDecided, qbftDecided := 0, 0
+			for _, s := range ct.Catalog {
+				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.Protocol{}, s, cfg)
+				if !obftR.Skipped {
+					obftTotal++
+					if obftR.Outcome.Decided {
+						obftDecided++
+					}
+				}
+				if !qbftR.Skipped {
+					qbftTotal++
+					if qbftR.Outcome.Decided {
+						qbftDecided++
+					}
+				}
+				fmt.Fprintf(&b, "  %-32s OBFT=%-12s QBFT=%-12s\n",
+					s.Name, sweepCellSummary(obftR), sweepCellSummary(qbftR))
+			}
+			fmt.Fprintf(&b, "decision rate: OBFT=%d/%d QBFT=%d/%d\n",
+				obftDecided, obftTotal, qbftDecided, qbftTotal)
+			t.Log(b.String())
+		})
+	}
+}
+
+// TestSweep_Asymmetric — vary the count of honest operators that see
+// elevated propagation delay (2× BTT) via PerReceiverDelay overrides on
+// top of a ConstantDelay base. Verifies per-layer absorption-window
+// semantics under realistic mesh asymmetry — when ≤ f honest are slow,
+// OBFT's staggered design must still decide via the in-time honest
+// majority; when > f honest are slow, fall-through behavior shifts but
+// safety must hold. Tier 1 stress-test addition per CONSENSUS-TEST-PLAN.md.
+//
+// Slow-receiver counts:
+//   - 0: baseline (matches ConstantDelay)
+//   - 1: within OBFT's f-bound at n=4 (1 honest slow → 2 honest in-time +
+//     leader's σ_L^V = qV at L_0; should still decide)
+//   - 2: f+1 slow at n=4 — exits the f-bound on the slow side; OBFT must
+//     fall through to a deeper layer where the slow operators' delay no
+//     longer matters (deeper-layer broadcast was earlier)
+//
+// Per-cell outcomes are logged diagnostically; safety enforced by
+// RunScenarioOnProtocol's panic gate.
+func TestSweep_Asymmetric(t *testing.T) {
+	const btt = 200 * time.Millisecond
+	slowCounts := []int{0, 1, 2}
+
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+
+	for _, slowN := range slowCounts {
+		slowN := slowN
+		t.Run(fmt.Sprintf("slowN=%d", slowN), func(t *testing.T) {
+			t.Parallel()
+			cfg := baseSweepConfig(4, btt)
+
+			// Mark slowN honest operators (op2..opN) as slow at 2× BTT. op1
+			// is the default L_0 leader at K=N convention; keeping it fast
+			// preserves leader broadcast timing.
+			overrides := make(map[ct.OperatorID]time.Duration, slowN)
+			for i := 0; i < slowN; i++ {
+				overrides[ct.OperatorID(2+i)] = 2 * btt
+			}
+			cfg.Network = ct.PerReceiverDelay{
+				Inner:     ct.ConstantDelay{D: btt},
+				Overrides: overrides,
+			}
+
+			// Sanity: at slowN=0 (≡ ConstantDelay baseline), Healthy must
+			// decide for both protocols.
+			if slowN == 0 {
+				for _, p := range protocols {
+					out, err := p.Run(cfg)
+					require.NoErrorf(t, err, "slowN=%d %s Run", slowN, p.Name())
+					require.Truef(t, out.Decided,
+						"slowN=0 %s Healthy must decide (matches ConstantDelay baseline)", p.Name())
+				}
+			}
+
+			var b strings.Builder
+			fmt.Fprintf(&b, "\nslowN=%d (slow ops at 2× BTT) catalog matrix:\n", slowN)
+			obftTotal, qbftTotal := 0, 0
+			obftDecided, qbftDecided := 0, 0
+			for _, s := range ct.Catalog {
+				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.Protocol{}, s, cfg)
+				if !obftR.Skipped {
+					obftTotal++
+					if obftR.Outcome.Decided {
+						obftDecided++
+					}
+				}
+				if !qbftR.Skipped {
+					qbftTotal++
+					if qbftR.Outcome.Decided {
+						qbftDecided++
+					}
+				}
+				fmt.Fprintf(&b, "  %-32s OBFT=%-12s QBFT=%-12s\n",
+					s.Name, sweepCellSummary(obftR), sweepCellSummary(qbftR))
+			}
+			fmt.Fprintf(&b, "decision rate: OBFT=%d/%d QBFT=%d/%d\n",
+				obftDecided, obftTotal, qbftDecided, qbftTotal)
+			t.Log(b.String())
+		})
+	}
+}
+
+// TestSweep_Partition — vary partitioned-operator counts via
+// PartitionedNetwork. Verifies BFT-comparison.md Table 3's "Sustained
+// partition > absorption window" claim — protocol must miss cleanly with
+// no safety violation, regardless of which subset is partitioned. Tier 2
+// stress-test addition per CONSENSUS-TEST-PLAN.md (failure-mode validation).
+//
+// Partition counts:
+//   - 0: baseline (no partition; should decide)
+//   - 1: f operators isolated at n=4. Cluster has 2f+1 = 3 reachable; at
+//     K=N, leader rotation means partitioned operator might be the L_0
+//     leader (different scenarios surface differently). Safety must hold;
+//     decided varies.
+//   - 2: f+1 isolated — exits the f-bound; cluster has < 2f+1 reachable;
+//     all protocols must miss cleanly.
+func TestSweep_Partition(t *testing.T) {
+	const btt = 200 * time.Millisecond
+	partitionCounts := []int{0, 1, 2}
+
+	for _, partN := range partitionCounts {
+		partN := partN
+		t.Run(fmt.Sprintf("partN=%d", partN), func(t *testing.T) {
+			t.Parallel()
+			cfg := baseSweepConfig(4, btt)
+
+			// Partition the last partN operators (op4 first, op3 next, …) to
+			// keep op1 (default L_0) reachable.
+			partitioned := make(map[ct.OperatorID]bool, partN)
+			for i := 0; i < partN; i++ {
+				partitioned[ct.OperatorID(4-i)] = true
+			}
+			cfg.Network = ct.PartitionedNetwork{
+				Inner:       ct.ConstantDelay{D: btt},
+				Partitioned: partitioned,
+			}
+
+			var b strings.Builder
+			fmt.Fprintf(&b, "\npartN=%d (isolated ops) catalog matrix:\n", partN)
+			obftTotal, qbftTotal := 0, 0
+			obftDecided, qbftDecided := 0, 0
+			for _, s := range ct.Catalog {
+				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.Protocol{}, s, cfg)
+				if !obftR.Skipped {
+					obftTotal++
+					if obftR.Outcome.Decided {
+						obftDecided++
+					}
+				}
+				if !qbftR.Skipped {
+					qbftTotal++
+					if qbftR.Outcome.Decided {
+						qbftDecided++
+					}
+				}
+				fmt.Fprintf(&b, "  %-32s OBFT=%-12s QBFT=%-12s\n",
+					s.Name, sweepCellSummary(obftR), sweepCellSummary(qbftR))
+			}
+			fmt.Fprintf(&b, "decision rate: OBFT=%d/%d QBFT=%d/%d\n",
+				obftDecided, obftTotal, qbftDecided, qbftTotal)
+			t.Log(b.String())
+
+			// At partN=2 (> f), cluster cannot reach 2f+1 honest reachable
+			// (only 2 operators on the surviving side at n=4). Healthy must
+			// miss for both protocols — verifies clean failure, no safety
+			// invariant violation (already enforced via panic gate).
+			if partN == 2 {
+				for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
+					out, err := p.Run(cfg)
+					require.NoErrorf(t, err, "partN=%d %s Run", partN, p.Name())
+					require.Falsef(t, out.Decided,
+						"partN=2 (>f isolated) %s Healthy must miss cleanly — < 2f+1 honest reachable", p.Name())
+				}
+			}
+		})
+	}
+}
+
 // TestSweep_Seeds — same scenario, multiple seeds. Asserts safety invariants
 // hold across seeds (the framework panics on violation; the assertion is that
 // no seed produces a violation).
