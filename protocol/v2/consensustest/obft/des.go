@@ -132,7 +132,7 @@ func (s *sim) start() error {
 			signer = stub
 			tagSigner = stub
 		}
-		inst, err := obft.NewInstance(cfgObft, op, signer, tagSigner, ibe, s.clusterPub, s.pubShares, nil)
+		inst, err := obft.NewInstance(cfgObft, op, signer, tagSigner, ibe, s.clusterPub, s.pubShares, nil, nil)
 		if err != nil {
 			return fmt.Errorf("obft adapter: new instance op %d: %w", op, err)
 		}

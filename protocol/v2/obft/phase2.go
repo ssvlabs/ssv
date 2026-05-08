@@ -366,10 +366,10 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// against the operator's pubkey share. A partial that doesn't verify
 		// is slashable (Rule 5 — Fake plaintext σ). For unambiguous fakes
 		// (cryptoFake — partial fails verify on the claimed V) fire Rule 5
-		// immediately and skip σ-pool insertion. For "unknown V" entries
-		// (verifies, but V not currently retained) defer until finalizeL0Rule5
-		// at phase end — under leader equivocation the V may be retained later
-		// and the entry would be rescued.
+		// immediately and skip σ-pool insertion. The l0SigmaUnknownV case
+		// (verifies, but V not currently retained) is NOT fired as Rule 5 —
+		// see Instance.Finalize doc-comment for why (false-positive avoidance
+		// under leader-equivocation + asymmetric gossipsub propagation).
 		fakeAtL0 := false
 		if k == 0 && i.peerSigmaAtL0Verdict(c.OperatorID, el) == l0SigmaCryptoFake {
 			fakeAtL0 = true
@@ -482,7 +482,7 @@ const (
 	l0SigmaInconclusive l0SigmaVerdict = iota // no retained V or no pub-share for op (config issue, not slashable)
 	l0SigmaVerified                           // matches a retained V AND verifies cryptographically
 	l0SigmaCryptoFake                         // partial does not verify on the claimed V (Rule 5 fires immediately)
-	l0SigmaUnknownV                           // partial verifies but el.Value matches no currently-retained V (Rule 5 candidate, defer)
+	l0SigmaUnknownV                           // partial verifies but el.Value matches no currently-retained V (Rule 5 inert — see Instance.Finalize for rationale)
 )
 
 // peerSigmaAtL0Verdict classifies a peer's plaintext L_0 σ partial.
@@ -502,17 +502,21 @@ const (
 //  3. el.Value matches a retained V → verified.
 //  4. el.Value matches no retained V, but leaderMap is non-empty → unknownV.
 //     The op signed a V we haven't retained yet; the leader MAY equivocate
-//     later and broadcast that V, in which case the entry would be rescued.
-//     Defer Rule 5 until phase end (finalizeL0Rule5).
+//     later and broadcast that V, in which case reevaluation reclassifies
+//     to verified. Currently NOT fired as Rule 5 anywhere — see
+//     Instance.Finalize doc-comment for the false-positive rationale and
+//     the on-wire MUST-gossip path that is the spec-compliant attribution
+//     mechanism (not yet implemented).
 //  5. el.Value matches no retained V AND leaderMap is empty → inconclusive.
 //     Without any retention we cannot distinguish "fake V" from "leader
 //     hasn't broadcast yet"; defer.
 //
-// Splitting the verdict (cryptoFake vs unknownV) eliminates a false-positive:
-// under the previous flat l0SigmaFake, an honest peer who signed leader L's
-// V_b before L's V_b reached our retention (e.g., L equivocates and we saw V_a
-// first) would be flagged Rule 5 immediately, then the entry would be removed
-// — even if L's V_b later got retained, the rescue path was destroyed.
+// Splitting the verdict (cryptoFake vs unknownV) avoids false-positive Rule 5
+// against an honest peer who signed leader L's V_b before L's V_b reached
+// our retention (L equivocated and we saw V_a first) — both the immediate
+// fire path (ObserveCommit) and the retroactive fire path (reevaluateL0Sigmas
+// on bundle retention) only act on cryptoFake, leaving unknownV as a "we
+// can't tell from local view alone" deferral.
 func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0SigmaVerdict {
 	pubShare, ok := i.pubKeyShares[op]
 	if !ok {

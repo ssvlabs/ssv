@@ -101,8 +101,10 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// Look up the per-leader retention slot for this layer. Bundle dedup
 	// against retained V's runs before VerifyPartial as a CPU optimization
 	// on the normal hot path — gossipsub re-broadcast across mesh paths
-	// and witness rehydration in N peers' KindCommits both cause repeat
-	// observations of the same (op, V).
+	// causes repeat observations of the same (op, V) at the receiver.
+	// (Witness rehydration USED to be a second source of repeat observations
+	// when LeaderSigmaWitness carried full V, but witnesses now ship
+	// value_root only and don't trigger ObservePhase1Bundle anymore.)
 	//
 	// Spec §Phase 1 line 154 enumerates "verify both signatures + check
 	// first-observation timestamp" as the protocol-level checks; the spec
@@ -127,7 +129,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 
 	// Cryptographic-auth check on σ_V against the leader's pubkey share.
 	// Runs only when retention would actually take effect (new V or first
-	// observation), saving redundant verifies on witness redelivery.
+	// observation), saving redundant verifies on gossipsub re-broadcast.
 	leaderShare, ok := i.pubKeyShares[b.OperatorID]
 	if !ok {
 		// Leader's share not registered — treat as auth failure.
@@ -173,8 +175,8 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		// Re-run the L_0 retroactive check: the second V_b can rescue
 		// previously-deferred σ entries that signed V_b. Without this, an
 		// honest peer whose σ on V_b arrived between the V_a and V_b
-		// retentions stays in the deferred-Rule-5 pool until finalize, where
-		// it would be incorrectly slashed.
+		// retentions stays uncategorized until V_b is retained — at which
+		// point reevaluateL0Sigmas can mark it cryptoFake-clear.
 		if b.Layer == 0 {
 			i.reevaluateL0Sigmas()
 		}
@@ -188,8 +190,13 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// Retroactive cryptoFake check: any L_0 onion entries observed BEFORE any
 	// V was retained at L_0 have not yet been Rule-5-checked (the check at
 	// ObserveCommit gates on hasRetainedVAtL0). Re-evaluate now that a V is
-	// retained — only fires Rule 5 for cryptoFake (unambiguous); unknownV
-	// entries stay deferred until finalizeL0Rule5.
+	// retained — only fires Rule 5 for cryptoFake (unambiguous). Entries
+	// whose σ verifies on a V we still don't have (l0SigmaUnknownV) are
+	// not slashed — they may be honest peers reacting to leader equivocation
+	// + asymmetric gossipsub (our local view doesn't have V_b yet but they
+	// do, and signed it). On-wire Rule 5 MUST-gossip per spec §Slashing
+	// evidence is the spec's mitigation for the genuine-byzantine case;
+	// not yet implemented in this codebase.
 	if b.Layer == 0 {
 		i.reevaluateL0Sigmas()
 	}
@@ -201,9 +208,10 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 // fake-σ entries from peers whose KindCommit arrived before the L_0 bundle.
 //
 // Only fires Rule 5 for the unambiguous cryptoFake case (partial fails verify
-// on the claimed V). The "verifies, but V not currently retained" case is
-// deferred to finalizeL0Rule5 at phase end — under leader equivocation a
-// V we haven't retained yet may arrive later and rescue the entry.
+// on the claimed V). The "verifies, but V not currently retained" case
+// (l0SigmaUnknownV) is NOT fired anywhere in this codebase — see
+// Instance.Finalize doc-comment for the false-positive rationale and the
+// on-wire MUST-gossip path that would be the spec-compliant mitigation.
 //
 // Snapshot semantics: removeOnionEntry rewrites the underlying slice
 // in-place (`out := entries[:0]`); iterating the same slice header while
@@ -231,57 +239,6 @@ func (i *Instance) reevaluateL0Sigmas() {
 	for _, oe := range snapshot {
 		for _, el := range oe.entries {
 			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaCryptoFake {
-				i.recordEvidence(Evidence{
-					Rule:       EvidenceFakePlaintextSigma,
-					OperatorID: oe.op,
-					Layer:      0,
-					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
-						OnionPartial:        append(Signature{}, el.Ciphertext...),
-						OnionValue:          append(Value{}, el.Value...),
-						RetainedValueHashes: i.retainedL0ValueHashes(),
-					},
-				})
-				i.removeOnionEntry(0, oe.op, &el)
-			}
-		}
-	}
-}
-
-// finalizeL0Rule5 fires Rule 5 evidence on any L_0 σ entries whose claimed V
-// was never retained over this Instance's lifetime. Called once via
-// Instance.Finalize at slot end — must NOT run while further ObserveCommit /
-// ObservePhase1Bundle calls may arrive, because late KindCommit witnesses
-// can drive new L_0 retentions (ObservePhase1Bundle with observedOffset=0
-// bypasses the T_commit window) that would rescue otherwise-unknownV entries.
-// Calling from inside Resolve is unsafe — Resolve is polled by the runner.
-//
-// Without this final pass, an honest peer who signed a leader's V_b before
-// V_b reached our retention (under leader equivocation, after we'd already
-// retained V_a) would never be slashed when their V is genuinely fake — we'd
-// have deferred the check at observe time and never re-fired.
-func (i *Instance) finalizeL0Rule5() {
-	if !i.hasRetainedVAtL0() {
-		// No V retained at L_0 at all — every L_0 σ entry is inconclusive
-		// (no V to compare against). Nothing to slash.
-		return
-	}
-	type opEntries struct {
-		op      OperatorID
-		entries []EncryptedLayer
-	}
-	leader := i.cfg.Layers[0].Leader
-	var snapshot []opEntries
-	for op, entries := range i.peerOnions[0] {
-		if op == leader {
-			continue
-		}
-		entriesCopy := make([]EncryptedLayer, len(entries))
-		copy(entriesCopy, entries)
-		snapshot = append(snapshot, opEntries{op: op, entries: entriesCopy})
-	}
-	for _, oe := range snapshot {
-		for _, el := range oe.entries {
-			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaUnknownV {
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceFakePlaintextSigma,
 					OperatorID: oe.op,

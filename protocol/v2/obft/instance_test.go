@@ -713,7 +713,7 @@ func TestObft_ClusterID_BlocksCrossClusterReplay(t *testing.T) {
 	clusterB.cfg.ClusterID = [32]byte{0x11, 0x22, 0x33}
 	// Re-create cluster B's instances with the new ClusterID so their cfg
 	// matches; we only test the validation gate, not full reconstruction.
-	bInst, err := NewInstance(clusterB.cfg, 2, NewStubSigner(clusterB.cfg.QV(), []byte{2}), nil, NewStubIBE(clusterB.cfg.QV()), nil, clusterB.pubKeyShares, nil)
+	bInst, err := NewInstance(clusterB.cfg, 2, NewStubSigner(clusterB.cfg.QV(), []byte{2}), nil, NewStubIBE(clusterB.cfg.QV()), nil, clusterB.pubKeyShares, nil, nil)
 	require.NoError(t, err)
 
 	bundle, err := clusterA.instances[1].BuildPhase1Bundle(0, []byte("V"))
@@ -772,23 +772,33 @@ func TestObft_NRPartial_RejectedUnderOptionA(t *testing.T) {
 	require.Empty(t, s.instances[3].peerNR[0])
 }
 
-// TestObft_RetroactiveRule5 — a byzantine's L_0 σ entry that arrives via
-// KindCommit BEFORE any L_0 Phase-1 bundle is retained must still trigger
-// Rule 5 evidence once phase end (Resolve) decides the V was never retained.
+// TestObft_UnknownV_NoRule5_NotFiredAtFinalize — under the current spec-
+// compliance posture (no on-wire Rule 5 MUST-gossip implemented), a
+// byzantine that broadcasts a KindCommit with a σ partial verifying on a
+// V the cluster never retained is l0SigmaUnknownV. Rule 5 is NOT fired
+// for unknownV anywhere, including at Finalize, to avoid false-positives
+// against honest peers who signed an equivocated V their receivers didn't
+// get via gossipsub.
 //
-// Firing is deferred to Resolve to avoid the false-positive where a leader
-// equivocates: an honest peer's σ on the second V might land before that V
-// reached our retention. See TestObft_Rule5_NoFalsePositiveOnEquivocation.
-func TestObft_RetroactiveRule5(t *testing.T) {
+// See Instance.Finalize doc-comment for the rationale: the spec's
+// MUST-gossip mitigation would let cluster-wide attestations distinguish
+// "byzantine signed fake V" from "honest signed V receiver didn't get",
+// but until that's wired up we trade unknownV attribution coverage for
+// strict no-false-positives. The cryptoFake case (σ doesn't verify on
+// claimed V) still fires Rule 5 immediately — see
+// TestObft_Rule5_CryptoFakeSilentLeader.
+func TestObft_UnknownV_NoRule5_NotFiredAtFinalize(t *testing.T) {
 	s := newSim(t, 4)
 
-	// Op2 forges a fake L_0 σ on a V the cluster never broadcast.
+	// Op2 honestly signs a V the cluster never broadcast (e.g., they
+	// received it via a leader-equivocation path the receiver missed).
+	// The signature verifies cryptographically against op2's own share.
 	signer := NewStubSigner(s.cfg.QV(), []byte{2})
 	fakeV := []byte("never-broadcast-V")
-	fakeSig, err := signer.SignPartial(fakeV)
+	sigOnFakeV, err := signer.SignPartial(fakeV)
 	require.NoError(t, err)
 	layers := make([]EncryptedLayer, s.K)
-	layers[0] = EncryptedLayer{Value: fakeV, Ciphertext: fakeSig}
+	layers[0] = EncryptedLayer{Value: fakeV, Ciphertext: sigOnFakeV}
 	byzCommit := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 2,
@@ -796,37 +806,50 @@ func TestObft_RetroactiveRule5(t *testing.T) {
 		Layers:     layers,
 	}
 
-	// Receiver observes the Commit BEFORE any L_0 bundle. Rule 5 is
-	// deferred (no retained V to compare against, and we don't fire on
-	// "verifies but unknown V" until phase end).
+	// Receiver observes the Commit before any L_0 bundle: inconclusive,
+	// no Rule 5.
 	require.NoError(t, s.instances[3].ObserveCommit(byzCommit))
-	preEv := s.instances[3].Evidence()
-	for _, e := range preEv {
+	for _, e := range s.instances[3].Evidence() {
 		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
 			"Rule 5 must NOT fire before retention")
 	}
 
-	// L_0 leader's bundle arrives. Rule 5 still deferred — V_b might still
-	// arrive (under leader equivocation) and rescue op2's entry.
+	// L_0 leader's bundle arrives (V_a, not the one op2 signed).
+	// reevaluateL0Sigmas fires only on cryptoFake — op2's σ verifies on
+	// fakeV (just unknownV), so still no Rule 5.
 	s.deliverPhase1(0, s.candidates[0], []OperatorID{1, 2, 3, 4}, observedEarly, true)
-	midEv := s.instances[3].Evidence()
-	for _, e := range midEv {
+	for _, e := range s.instances[3].Evidence() {
 		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
-			"Rule 5 must NOT fire mid-phase; only at Resolve")
+			"Rule 5 must NOT fire on unknownV at retention time")
 	}
 
-	// Phase end: Finalize fires deferred Rule 5. Op2's σ on
-	// "never-broadcast-V" doesn't match retained → fire now.
+	// Finalize is now a pure ended-flag flip; no Rule 5 attribution swept.
 	s.instances[3].Finalize()
-	postEv := s.instances[3].Evidence()
-	found := false
-	for _, e := range postEv {
-		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 {
-			found = true
-			break
-		}
+	for _, e := range s.instances[3].Evidence() {
+		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
+			"Rule 5 must NOT fire on unknownV at Finalize either; got %+v", e)
 	}
-	require.True(t, found, "expected Rule 5 fired at Resolve against op2; got %+v", postEv)
+}
+
+// TestObft_Finalize_Idempotent — Finalize is safe to call repeatedly.
+// First call flips Ended() from false to true; subsequent calls are no-ops
+// (no panic, no Evidence() mutation).
+func TestObft_Finalize_Idempotent(t *testing.T) {
+	s := newSim(t, 4)
+	inst := s.instances[2]
+
+	require.False(t, inst.Ended(), "fresh Instance should not be ended")
+	preEv := append([]Evidence{}, inst.Evidence()...)
+
+	inst.Finalize()
+	require.True(t, inst.Ended(), "Finalize must set Ended()")
+	postFirstEv := inst.Evidence()
+	require.Len(t, postFirstEv, len(preEv), "Finalize must not mutate Evidence accumulator")
+
+	// Second call: still ended, still no Evidence mutation, no panic.
+	inst.Finalize()
+	require.True(t, inst.Ended(), "Ended() must remain true after second Finalize")
+	require.Len(t, inst.Evidence(), len(preEv), "second Finalize must not mutate Evidence")
 }
 
 // TestObft_Rule5_NoFalsePositiveOnEquivocation — when an L_0 leader equivocates
@@ -902,7 +925,7 @@ func TestObft_Rule5_NoFalsePositiveOnEquivocation(t *testing.T) {
 // the L_0 leader has been silent. Without firing here, the byzantine could
 // emit unverifiable bytes early in the slot (before any L_0 retention) and
 // never get attributed: reevaluateL0Sigmas only fires on retentions, and
-// finalizeL0Rule5 short-circuits when no V was ever retained.
+// the unknownV path doesn't fire Rule 5 at all (see Instance.Finalize).
 func TestObft_Rule5_CryptoFakeSilentLeader(t *testing.T) {
 	s := newSim(t, 4)
 	receiver := s.instances[3]
@@ -1002,7 +1025,7 @@ func TestObft_NewInstance_RequiresLeaderPubShares(t *testing.T) {
 	}
 	signer := NewStubSigner(cfg.QV(), []byte{1})
 	ibe := NewStubIBE(cfg.QV())
-	_, err := NewInstance(cfg, 1, signer, signer, ibe, []byte{0xCC}, pubShares, nil)
+	_, err := NewInstance(cfg, 1, signer, signer, ibe, []byte{0xCC}, pubShares, nil, nil)
 	require.ErrorContains(t, err, "no pub-key share")
 }
 
@@ -1040,29 +1063,40 @@ func TestObft_PeerSigmaAtL0_MissingPubkeyNotSlashable(t *testing.T) {
 // many redundant detections trigger.
 func TestObft_EvidenceObserver_FiresOncePerTuple(t *testing.T) {
 	s := newSim(t, 4)
+
+	// Build a sibling instance for op 2 with an observer wired in at
+	// construction. (newSim's instances are observer-less; constructing a
+	// fresh one is the cleanest way to exercise the observer path now that
+	// SetEvidenceObserver is gone — the observer is immutable post-NewInstance.)
 	var observed []Evidence
-	s.instances[2].SetEvidenceObserver(func(e Evidence) {
-		observed = append(observed, e)
-	})
+	signer := NewStubSigner(s.cfg.QV(), []byte{byte(2)})
+	ibe := NewStubIBE(s.cfg.QV())
+	inst, err := NewInstance(
+		s.cfg, OperatorID(2),
+		signer, signer, ibe,
+		[]byte{0xCC, 0xDD}, s.pubKeyShares, nil,
+		func(e Evidence) { observed = append(observed, e) },
+	)
+	require.NoError(t, err)
 
 	// Inject the same evidence twice; the observer should fire only once.
-	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 0})
-	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 0})
+	inst.recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 0})
+	inst.recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 0})
 	require.Len(t, observed, 1, "observer must fire ONCE per (rule, op, layer); got %d fires", len(observed))
 
 	// Different layer for same op+rule → distinct tuple → observer fires again.
-	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 1})
+	inst.recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 1})
 	require.Len(t, observed, 2, "different layer = distinct tuple; observer should fire again")
 
 	// Different op same rule+layer → distinct tuple → observer fires again.
-	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 4, Layer: 0})
+	inst.recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 4, Layer: 0})
 	require.Len(t, observed, 3, "different op = distinct tuple; observer should fire again")
 
 	// Different rule same op+layer → distinct tuple.
-	s.instances[2].recordEvidence(Evidence{Rule: EvidenceCrossSigning, OperatorID: 3, Layer: 0})
+	inst.recordEvidence(Evidence{Rule: EvidenceCrossSigning, OperatorID: 3, Layer: 0})
 	require.Len(t, observed, 4, "different rule = distinct tuple; observer should fire again")
 
 	// Recording does not affect Evidence() accumulator behavior — it still
 	// records every entry (observer dedup is independent of evidence storage).
-	require.Len(t, s.instances[2].Evidence(), 5, "Evidence() should retain all 5 records")
+	require.Len(t, inst.Evidence(), 5, "Evidence() should retain all 5 records")
 }

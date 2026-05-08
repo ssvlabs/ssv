@@ -275,12 +275,10 @@ func (c *Controller) StartNewInstance(slot phase0.Slot) (*RunningInstance, error
 		cfg, obftcore.OperatorID(c.operatorID),
 		c.signer, c.tagSigner, c.ibe,
 		c.clusterPubKey, c.pubKeyShares, c.ibePubKeyShares,
+		c.evidenceObserver,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("obft adapter: new instance: %w", err)
-	}
-	if c.evidenceObserver != nil {
-		inst.SetEvidenceObserver(c.evidenceObserver)
 	}
 
 	leaderAt := computeLeaderLayers(cfg, c.operatorID)
@@ -307,8 +305,8 @@ func (c *Controller) OperatorID() spectypes.OperatorID {
 	return c.operatorID
 }
 
-// EndInstance finalizes deferred evidence on the running instance, then
-// removes it from the controller's tracking map. Idempotent.
+// EndInstance seals the running instance (Finalize sets the ended flag),
+// then removes it from the controller's tracking map. Idempotent.
 //
 // Race-fence: a goroutine that had already captured the instance pointer
 // via lookup() but had not yet acquired r.instanceMu can still race past
@@ -428,8 +426,8 @@ func (c *Controller) ProcessCommit(cm *obftcore.Commit) error {
 	defer r.instanceMu.Unlock()
 	// Re-check under instanceMu: a goroutine that captured `r` before
 	// EndInstance ran could otherwise mutate state on a finalized instance,
-	// silently losing late evidence (e.g., a Rule 5 candidate added AFTER
-	// finalizeL0Rule5 swept).
+	// silently losing late evidence (e.g., a cryptoFake Rule 5 candidate
+	// observed AFTER Finalize set the ended flag).
 	if r.instance.Ended() {
 		return ErrNoActiveInstance
 	}

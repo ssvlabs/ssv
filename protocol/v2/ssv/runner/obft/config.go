@@ -64,16 +64,22 @@ const (
 //     small per-layer staggering to satisfy the strict-decreasing
 //     validation while preserving the spec's "deeper layer fetches from
 //     deeper-confirmed parent" intuition (the choice of parent is a hook
-//     concern; fetchAt only sets when polling starts).
-//   - budget is the T_commit-anchored absorption window B_k+slack; strictly
-//     increasing in k (deeper layers tolerate wider propagation tails).
+//     concern; fetchAt only sets when polling starts). FetchAt is
+//     RANDAO-anchored (absolute), not BTT-scaled.
+//   - budgetBTT100 is the T_commit-anchored absorption window B_k+slack
+//     in BTT-hundredths (so 100 = 1 BTT, 150 = 1.5 BTT, etc.); strictly
+//     increasing in k. Stored as multipliers so the schedule scales with
+//     BTT — at BTT=200ms the K=4 budgets resolve to 200/300/500/1100ms;
+//     at BTT=400ms they'd be 400/600/1000/2200ms. Per spec §Setting line
+//     45's recommended 1/1.5/2.5/5.5 BTT for K=4 — applies regardless of
+//     the deployment's BTT.
 //
 // Constraints: fetchAt[k] ≤ TCommit − budget[k] for every k (each leader's
 // poll window must fit before its T_broadcast_max — enforced by Validate);
 // budget[K-1] ≥ 2·BTT BFT-min.
 //
-// At Config A (BTT = 200ms, TCommit = 3400ms) the K=4 schedule is:
-//   - budget  = [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — spec
+// At Config A (BTT = 200ms, TCommit = 3400ms) the K=4 schedule resolves to:
+//   - budget  = [1, 1.5, 2.5, 5.5] × 200ms = [200, 300, 500, 1100]ms — spec
 //     §Setting line 45 recommended.
 //   - fetchAt = [153, 152, 151, 150]ms — all clustered at RANDAO_done, with
 //     1ms-per-layer staggering for the strict-decreasing validation
@@ -85,29 +91,37 @@ const (
 //
 // For K>4 (n=7, n=10, n=13 deployments) both schedules interpolate linearly
 // between L_0 and the deepest-layer endpoints.
+//
+// K=2 is intentionally absent: MinKFloor=3 enforces K ≥ f+2 floor at f=1,
+// so K=2 is rejected before reaching the schedule lookup.
 var defaultLayerSchedules = map[int]struct {
-	fetchAt []time.Duration
-	budget  []time.Duration
+	fetchAt      []time.Duration
+	budgetBTT100 []int // BTT-hundredths; 100 = 1.0 BTT
 }{
 	3: {
-		fetchAt: []time.Duration{152 * time.Millisecond, 151 * time.Millisecond, 150 * time.Millisecond},
-		budget:  []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
+		fetchAt:      []time.Duration{152 * time.Millisecond, 151 * time.Millisecond, 150 * time.Millisecond},
+		budgetBTT100: []int{100, 250, 550}, // 1.0, 2.5, 5.5 BTT
 	},
 	4: {
-		fetchAt: []time.Duration{153 * time.Millisecond, 152 * time.Millisecond, 151 * time.Millisecond, 150 * time.Millisecond},
-		budget:  []time.Duration{200 * time.Millisecond, 300 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
+		fetchAt:      []time.Duration{153 * time.Millisecond, 152 * time.Millisecond, 151 * time.Millisecond, 150 * time.Millisecond},
+		budgetBTT100: []int{100, 150, 250, 550}, // 1.0, 1.5, 2.5, 5.5 BTT
 	},
 }
 
 // Endpoint defaults used for K>4 linear interpolation. Match the K=4 L_0
-// and deepest entries in defaultLayerSchedules. (Per-layer FetchAt
-// staggering is symbolic for the strict-decreasing constraint;
-// iterative-fetch uses the full window regardless.)
+// and deepest entries in defaultLayerSchedules. FetchAt endpoints are
+// absolute (RANDAO-anchored); BroadcastBudget endpoints are in BTT-hundredths
+// so they scale with deployment BTT. (Per-layer FetchAt staggering is
+// symbolic for the strict-decreasing constraint; iterative-fetch uses the
+// full window regardless.)
+//
+// Drift from defaultLayerSchedules[4] is guarded by
+// TestDefaultBroadcastBudgetSchedule_EndpointConstantsMatchK4 in config_test.go.
 const (
-	primaryFetchDefault  = 153 * time.Millisecond
-	deepestFetchDefault  = 150 * time.Millisecond
-	primaryBudgetDefault = 200 * time.Millisecond
-	deepestBudgetDefault = 1100 * time.Millisecond
+	primaryFetchDefault        = 153 * time.Millisecond
+	deepestFetchDefault        = 150 * time.Millisecond
+	primaryBudgetDefaultBTT100 = 100 // 1.0 BTT
+	deepestBudgetDefaultBTT100 = 550 // 5.5 BTT
 )
 
 // ConfigOverrides allows callers to override the default protocol timings
@@ -197,16 +211,30 @@ func (o *ConfigOverrides) tCommit() time.Duration {
 	return o.relayCutoff() - o.headerSubmitHeadroom() - o.delta3() - o.delta2()
 }
 
-// interpolatedSchedule returns a length-K slice running linearly between
-// the L_0 endpoint (k=0) and the deepest endpoint (k=K-1). Direction
-// depends on the values: FetchAt is monotonically decreasing (l0 > deepest);
-// BroadcastBudget is monotonically increasing (l0 < deepest). Used as the
-// K>4 fallback for both schedules.
-func interpolatedSchedule(K int, l0, deepest time.Duration) []time.Duration {
+// interpolatedDurationSchedule returns a length-K slice of durations running
+// linearly between the L_0 endpoint (k=0) and the deepest endpoint (k=K-1).
+// Direction depends on the values: FetchAt is monotonically decreasing
+// (l0 > deepest). Used as the K>4 fallback for FetchAt.
+func interpolatedDurationSchedule(K int, l0, deepest time.Duration) []time.Duration {
 	out := make([]time.Duration, K)
 	step := (l0 - deepest) / time.Duration(K-1)
 	for k := 0; k < K; k++ {
 		out[k] = l0 - time.Duration(k)*step
+	}
+	return out
+}
+
+// interpolatedBudgetSchedule returns a length-K slice running linearly
+// between the L_0 endpoint and deepest endpoint, both in BTT-hundredths,
+// then scaled to the supplied BTT. Output is monotonically increasing
+// (l0 < deepest, so deeper layers have larger budgets). Used as the K>4
+// fallback for BroadcastBudget.
+func interpolatedBudgetSchedule(K int, l0BTT100, deepestBTT100 int, btt time.Duration) []time.Duration {
+	out := make([]time.Duration, K)
+	step := (deepestBTT100 - l0BTT100) / (K - 1)
+	for k := 0; k < K; k++ {
+		mult := l0BTT100 + k*step
+		out[k] = btt * time.Duration(mult) / 100
 	}
 	return out
 }
@@ -216,25 +244,37 @@ func interpolatedSchedule(K int, l0, deepest time.Duration) []time.Duration {
 //
 // For K=3 and K=4, returns the tabulated defaults. For K>4 (n=7, n=10,
 // n=13 deployments), interpolates linearly from primary to deepest.
+//
+// FetchAt is RANDAO-anchored (absolute, not BTT-scaled).
 func defaultFetchSchedule(K int) []time.Duration {
 	if s, ok := defaultLayerSchedules[K]; ok {
 		return append([]time.Duration{}, s.fetchAt...)
 	}
-	return interpolatedSchedule(K, primaryFetchDefault, deepestFetchDefault)
+	return interpolatedDurationSchedule(K, primaryFetchDefault, deepestFetchDefault)
 }
 
 // DefaultBroadcastBudgetSchedule returns the per-layer T_commit-anchored
-// absorption windows paired with defaultFetchSchedule. Mirrors the asymmetric
-// staggered design from spec §Setting at the production timing.
+// absorption windows paired with defaultFetchSchedule, scaled to the supplied
+// BTT. Mirrors the asymmetric staggered design from spec §Setting line 45's
+// recommended 1/1.5/2.5/5.5 BTT multipliers (at K=4) regardless of the
+// deployment's BTT.
 //
-// For K=3 and K=4, returns the tabulated defaults. For K>4, interpolates
-// linearly from L_0 (smallest budget, max MEV freshness) to the deepest
-// layer (largest budget, max absorption tolerance).
-func DefaultBroadcastBudgetSchedule(K int) []time.Duration {
+// For K=3 and K=4, returns the tabulated multipliers × btt. For K>4,
+// interpolates linearly from L_0 (1.0 BTT, smallest budget, max MEV
+// freshness) to the deepest layer (5.5 BTT, largest budget, max absorption
+// tolerance).
+//
+// Spec example values at BTT=200ms (Config A): K=4 → [200, 300, 500, 1100]ms.
+// At BTT=400ms (degraded mesh): K=4 → [400, 600, 1000, 2200]ms.
+func DefaultBroadcastBudgetSchedule(K int, btt time.Duration) []time.Duration {
 	if s, ok := defaultLayerSchedules[K]; ok {
-		return append([]time.Duration{}, s.budget...)
+		out := make([]time.Duration, K)
+		for k, m := range s.budgetBTT100 {
+			out[k] = btt * time.Duration(m) / 100
+		}
+		return out
 	}
-	return interpolatedSchedule(K, primaryBudgetDefault, deepestBudgetDefault)
+	return interpolatedBudgetSchedule(K, primaryBudgetDefaultBTT100, deepestBudgetDefaultBTT100, btt)
 }
 
 // ConfigForCluster builds an *obft.Config for the given cluster + slot.

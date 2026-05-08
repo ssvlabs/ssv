@@ -82,7 +82,7 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 	for _, op := range operators {
 		share := shares[uint64(op)].Serialize()
 		signer := blsbackend.New(share)
-		inst, err := obft.NewInstance(cfg, op, signer, signer, ibe, masterPub, pubKeyShares, nil)
+		inst, err := obft.NewInstance(cfg, op, signer, signer, ibe, masterPub, pubKeyShares, nil, nil)
 		require.NoError(t, err)
 		instances[op] = inst
 	}

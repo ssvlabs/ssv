@@ -406,7 +406,7 @@ func TestScheduler_IterativeFetch_PicksFreshest(t *testing.T) {
 
 	// Tight poll cadence so the test exercises multiple iterations within
 	// a sub-second window. Build buffer kept tiny for the test fixture.
-	leader.sched.SetFetchTiming(20*time.Millisecond, 5*time.Millisecond)
+	require.NoError(t, leader.sched.SetFetchTiming(20*time.Millisecond, 5*time.Millisecond))
 
 	// 200ms ctx deadline → with 20ms pollInterval and 5ms buildBuffer,
 	// pollEnd is at +195ms; multiple polls fit.
@@ -448,7 +448,7 @@ func TestScheduler_IterativeFetch_DegradesToSingleShot(t *testing.T) {
 	leader.hooks.mu.Unlock()
 
 	// pollInterval larger than window → single fetch, immediate return.
-	leader.sched.SetFetchTiming(500*time.Millisecond, 50*time.Millisecond)
+	require.NoError(t, leader.sched.SetFetchTiming(500*time.Millisecond, 50*time.Millisecond))
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(100*time.Millisecond))
 	defer cancel()
 	freshest, err := leader.sched.iterativeFetch(ctx, phase0.Slot(123), 0)

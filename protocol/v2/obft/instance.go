@@ -188,13 +188,16 @@ type Instance struct {
 	rule1Fired map[int]map[OperatorID]bool
 
 	// evidenceObserver fires on FIRST recording per (Rule, OperatorID, Layer)
-	// tuple. Optional; nil disables. Spec §Slashing evidence Rule 5
-	// MUST-gossip rule says receivers MUST gossip evidence on the wire so
-	// no-retained-V receivers can also attribute. This impl substitutes
-	// out-of-band logging — the observer surfaces evidence to the SSV
-	// runner, which logs it for operator review. (Ideally this should be
-	// on-wire to spread evidence cluster-wide automatically; logged-only
-	// is a deliberate scope choice — operators monitor logs out-of-band.)
+	// tuple. Set at NewInstance construction; nil disables. Immutable post-
+	// construction so there's no concurrency contract for callers to honor.
+	//
+	// Spec §Slashing evidence Rule 5 MUST-gossip rule says receivers MUST
+	// gossip evidence on the wire so no-retained-V receivers can also
+	// attribute. This impl substitutes out-of-band logging — the observer
+	// surfaces evidence to the SSV runner, which logs it for operator
+	// review. (Ideally this should be on-wire to spread evidence cluster-
+	// wide automatically; logged-only is a deliberate scope choice —
+	// operators monitor logs out-of-band.)
 	evidenceObserver EvidenceObserver
 	evidenceObserved map[evidenceObservedKey]bool
 
@@ -203,8 +206,9 @@ type Instance struct {
 	// ApplyHostValidity, ...) check this flag after acquiring the instance
 	// mutex and refuse to mutate state on a finalized instance. Without the
 	// check, a network goroutine that captured the instance pointer before
-	// EndInstance ran could race against Finalize and add a deferred Rule 5
-	// candidate AFTER the finalize sweep — silently losing the attribution.
+	// EndInstance ran could mutate state on an officially-ended slot — e.g.
+	// add a late cryptoFake Rule 5 candidate after operators have already
+	// consumed Evidence() for slashing handoff.
 	ended bool
 }
 
@@ -222,6 +226,13 @@ type Instance struct {
 // `pubKeyShares` maps each operator's ID to their V-keypair pubkey share.
 // `ibePubKeyShares` is the same for the IBE keypair; may be nil under
 // Option A.
+//
+// `evidenceObserver`, if non-nil, fires once per (Rule, OperatorID, Layer)
+// tuple on first observation. Set at construction so it's immutable post-
+// construction — no concurrency contract for callers to honor (the alternative,
+// SetEvidenceObserver post-construction, was a footgun: a writer racing with
+// observation paths could publish a stale observer that misses early evidence).
+// Pass nil to disable.
 func NewInstance(
 	cfg *Config,
 	ownOperatorID OperatorID,
@@ -231,6 +242,7 @@ func NewInstance(
 	clusterPubKey []byte,
 	pubKeyShares map[OperatorID][]byte,
 	ibePubKeyShares map[OperatorID][]byte,
+	evidenceObserver EvidenceObserver,
 ) (*Instance, error) {
 	if cfg == nil || signer == nil || ibe == nil {
 		return nil, errors.New("obft: nil config / signer / ibe")
@@ -270,6 +282,7 @@ func NewInstance(
 		clusterPubKey:    clusterPubKey,
 		pubKeyShares:     pubKeyShares,
 		ibePubKeyShares:  ibePubKeyShares,
+		evidenceObserver: evidenceObserver,
 		bundles:          make(map[int]map[OperatorID][]*Phase1Bundle, K),
 		hostVerdict:      make(map[int]map[string]bool, K),
 		peerOnions:       make(map[int]map[OperatorID][]EncryptedLayer, K),
@@ -319,25 +332,33 @@ func (i *Instance) Evidence() []Evidence {
 	return out
 }
 
-// Finalize seals deferred slashing-evidence checks that depend on no further
-// state mutations occurring on this Instance. Currently:
-//
-//   - Rule 5 (FakePlaintextSigma) deferred candidates: σ entries that verify
-//     against the operator's pubshare but sign a V we never retained. These
-//     can be rescued by a late KindCommit's witness that retains the V; once
-//     the slot is sealed, surviving candidates are confirmed Rule 5.
-//
-// After this returns, `ended` is set; subsequent mutator calls (ObserveCommit
-// etc.) refuse to apply state changes. The flag is checked after acquiring
-// the instance mutex by every caller so a network goroutine that captured the
-// instance pointer pre-finalize is fenced.
+// Finalize seals the Instance: subsequent mutator calls (ObserveCommit etc.)
+// refuse to apply state changes. The `ended` flag is checked after acquiring
+// the instance mutex by every caller so a network goroutine that captured
+// the instance pointer pre-finalize is fenced.
 //
 // Idempotent — safe to call repeatedly.
+//
+// Note on Rule 5 deferred attribution: σ entries at L_0 that verify
+// cryptographically against the operator's pubshare but sign a V the receiver
+// never retained (l0SigmaUnknownV) are NOT fired as Rule 5 evidence here.
+// Under leader equivocation + asymmetric gossipsub propagation, an honest
+// peer who signed an equivocated V the receiver didn't get would be falsely
+// attributed if we fired Rule 5 on l0SigmaUnknownV at slot end. Per spec
+// §Slashing evidence Rule 5, the spec's mitigation is on-wire MUST-gossip:
+// every retained-V receiver gossips Rule 5 evidence (rate-limited per
+// (slot, layer, operator_id)) so cluster-wide attribution converges and
+// honest receivers' "I have V" attestations distinguish "byzantine signed
+// fake V" from "honest signed V I didn't get". The on-wire gossip is not
+// yet implemented in this codebase — until it lands, we trade Rule 5
+// attribution coverage for the unknownV case (false-negative-prone) for
+// strict no-false-positives. The cryptoFake case (σ doesn't verify against
+// op's own share for the claimed V) still fires Rule 5 immediately at
+// observe time; that case is unambiguous regardless of gossipsub propagation.
 func (i *Instance) Finalize() {
 	if i.ended {
 		return
 	}
-	i.finalizeL0Rule5()
 	i.ended = true
 }
 
@@ -483,14 +504,6 @@ type evidenceObservedKey struct {
 	rule  EvidenceRule
 	op    OperatorID
 	layer int
-}
-
-// SetEvidenceObserver registers a callback fired once per (Rule, Op, Layer)
-// tuple on first observation. nil clears any prior observer. Concurrency-
-// unsafe: call from the same goroutine that owns the Instance, before any
-// observation paths run.
-func (i *Instance) SetEvidenceObserver(obs EvidenceObserver) {
-	i.evidenceObserver = obs
 }
 
 // recordEvidence appends a non-nil evidence entry to the accumulator and

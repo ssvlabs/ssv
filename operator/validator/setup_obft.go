@@ -66,10 +66,11 @@ func buildOBFTControllerForProposer(
 	// Production proposer-duty config: enable per-layer staggered absorption
 	// per spec §Setting / §Application Config A (deeper layers tolerate wider
 	// propagation tails). At default K=4 the spec-recommended T_commit-anchored
-	// schedule [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — strictly
-	// increasing, deepest ≥ 2·BTT BFT-min, paired with the FetchAt schedule.
+	// schedule [1, 1.5, 2.5, 5.5] BTT — strictly increasing, deepest ≥ 2·BTT
+	// BFT-min, paired with the FetchAt schedule. Values scale with BTT: at
+	// the production default BTT=200ms they resolve to [200, 300, 500, 1100]ms.
 	overrides := &obftadapter.ConfigOverrides{
-		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(obftadapter.DefaultK),
+		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(obftadapter.DefaultK, obftadapter.DefaultBTT),
 	}
 
 	// Wrap the V-side BLS signer so OBFT partials are computed over the

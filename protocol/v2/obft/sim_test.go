@@ -82,7 +82,7 @@ func newSim(t *testing.T, n int) *sim {
 	for _, op := range operators {
 		signer := NewStubSigner(qv, []byte{byte(op)})
 		ibe := NewStubIBE(qv)
-		inst, err := NewInstance(cfg, op, signer, signer, ibe, []byte{0xCC, 0xDD}, pubKeyShares, nil)
+		inst, err := NewInstance(cfg, op, signer, signer, ibe, []byte{0xCC, 0xDD}, pubKeyShares, nil, nil)
 		require.NoError(t, err)
 		instances[op] = inst
 	}

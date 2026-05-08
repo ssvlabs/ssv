@@ -126,11 +126,22 @@ func NewScheduler(controller *Controller, hooks *LifecycleHooks) (*Scheduler, er
 
 // SetFetchTiming overrides the iterative-fetch poll cadence and end-of-
 // window build buffer used by FetchAndBroadcastBundle. Zero values keep
-// the package defaults (200ms / 50ms). Useful for tests with shorter
+// the package defaults (200ms / 10ms). Useful for tests with shorter
 // windows or deployments with relay-specific cadence preferences.
-func (s *Scheduler) SetFetchTiming(pollInterval, buildBuffer time.Duration) {
+//
+// Negative values are rejected with an error rather than silently clamped
+// to defaults — surfacing a programmer error eagerly is preferable to
+// masking it as "the override didn't take effect".
+func (s *Scheduler) SetFetchTiming(pollInterval, buildBuffer time.Duration) error {
+	if pollInterval < 0 {
+		return fmt.Errorf("obft scheduler: pollInterval must be non-negative, got %v", pollInterval)
+	}
+	if buildBuffer < 0 {
+		return fmt.Errorf("obft scheduler: buildBuffer must be non-negative, got %v", buildBuffer)
+	}
 	s.fetchPollInterval = pollInterval
 	s.fetchBuildBuffer = buildBuffer
+	return nil
 }
 
 // Controller returns the underlying Controller.
@@ -156,7 +167,8 @@ func (s *Scheduler) Controller() *Controller {
 //
 // pollInterval defaults to 200ms (~ Config A BTT) — tunable per
 // deployment via NewScheduler. buildBuffer reserves time at the end of
-// the window for build + sign + wrap + dispatch (default 50ms).
+// the window for build + sign + wrap + dispatch (default 10ms; see the
+// const-block comment above for the safety-margin rationale).
 //
 // If the caller's ctx has no deadline, FetchAndBroadcastBundle does a
 // single-shot fetch (degenerate case; matches the legacy single-call
@@ -189,6 +201,24 @@ func (s *Scheduler) FetchAndBroadcastBundle(ctx context.Context, slot phase0.Slo
 // iterativeFetch polls hooks.FetchCandidate throughout the available window,
 // returning the freshest non-error candidate. Honors ctx cancellation and
 // the build-buffer reservation at the deadline.
+//
+// Operational load (deployment-planning note): each poll triggers one
+// FetchCandidate call, which in production resolves to a beacon-node
+// produceBlock / GetBeaconBlock call (relay-best-bid lookup). At Config A
+// defaults (BTT=200ms, TCommit=3400ms, pollInterval=200ms) the per-slot
+// per-layer-leader poll count is bounded by (T_broadcast_max[k]-FetchAt[k])
+// / pollInterval, which resolves to:
+//
+//	L_0: window ≈ 3047ms → ~15 polls
+//	L_1: window ≈ 2948ms → ~14 polls
+//	L_2: window ≈ 2749ms → ~13 polls
+//	L_3: window ≈ 2150ms → ~10 polls
+//
+// At K=N=4 each operator leads exactly one layer per slot, so the upper
+// bound is ~15 beacon-node calls per slot-leader-layer (worst case = L_0).
+// Cluster-wide, this is K times that number aggregated across operators per
+// slot. Tune via SetFetchTiming if relay/beacon-node QPS limits matter for
+// the deployment.
 func (s *Scheduler) iterativeFetch(ctx context.Context, slot phase0.Slot, layer int) ([]byte, error) {
 	pollInterval := s.fetchPollInterval
 	if pollInterval <= 0 {
