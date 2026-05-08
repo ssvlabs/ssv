@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	validatorprotocol "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/v2/networkconfig"
+	"github.com/ssvlabs/ssv/v2/operator/validators"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv/queue"
+	validatorprotocol "github.com/ssvlabs/ssv/v2/protocol/v2/ssv/validator"
 )
 
 const (
