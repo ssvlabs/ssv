@@ -1515,3 +1515,195 @@ Defer adds materially to the spec/EKM surface and to the slashing-protection sch
    - **=** Same slashing-evidence rules (1, 2, 3, 5, 6 unchanged; Rule 4 timing unchanged).
 
 Treat OBFT+Defer as a candidate enhancement worth re-evaluating if deployment conditions change — wider partial-synchrony, higher f, stronger rational-byz deterrent infrastructure, or production telemetry showing aggressive-marginal partition slot-misses at non-trivial rates. Under SSV's current n=4 healthy-mesh proposer-duty profile, bare OBFT (3-state, single-emission) is the cleaner trade.
+
+## Appendix F — OBFT + L_Bid_New (priority-inverted bid-routing)
+
+This appendix specifies **L_Bid_New** as a candidate alternative to the L_Bid mini-consensus design ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)). The two extensions share the same goal — opportunistic bid-routing across all cluster operators' relay queries — but L_Bid_New trades a different set of properties. Where L_Bid puts the bid-routing winner V_X on the outermost (plaintext) onion layer and reaches it via cluster-wide convergence on **all** bids, L_Bid_New restricts cluster-wide convergence to **deep-layer bids only** (V_early) and incorporates the primary's late bid (bid_1) at an inner onion layer, gated by chained encryption.
+
+The structural trade vs current L_Bid: L_Bid_New recovers the primary's MEV-fetch budget (~3050ms vs L_Bid's ~2650ms) and saves the +1 RTT post-`T_commit` cost (mini-consensus runs entirely within Phase 1 covering deep bids only), at the cost of exposing bid_1 to bare-OBFT-style asymmetric-delivery patterns at the bid layer (where current L_Bid uses mini-consensus to converge on bid_1's status).
+
+L_Bid_New is documented here as a candidate design point. Whether it is preferable to current L_Bid in production is deployment-dependent — see [§F.6 Comparison with current L_Bid](#f6--comparison-with-current-l_bid).
+
+### F.1 — Setting
+
+L_Bid_New extends OBFT's setting in the same way L_Bid does — bid envelopes from all operators, mini-consensus convergence on a bid winner — with three structural differences:
+
+- **K' = K + 1 layers** (same as L_Bid): an additional bid-layer prepended to OBFT's K rotation-determined layers.
+- **Mini-consensus scope = deep bids only**: the mini-consensus runs over `{V_i : operator i is L_k for k ≥ 1}` — i.e., the bids associated with the deeper-layer rotation leaders. The primary's bid (operator at L_0) is *not* in the mini-consensus bid set.
+- **Onion priority inversion**: V_early (the mini-consensus winner over deep bids) is the **outermost** plaintext layer; bid_1 (= the primary's bid = V_{L_0}) is the **inner** layer encrypted under `nr_tag_LBid`.
+
+The key intuition: under L_Bid_New, the cluster outputs `argmax(V_early, bid_1)` via the chained-encryption fall-through structure rather than via a single mini-consensus over all bids. Operators σ-emit on V_early at L_Bid when V_early ≥ bid_1 (in their local view); they NR at L_Bid otherwise (preferring fall-through to L_0 where bid_1's σ-pool aggregates). The chained encryption gates L_0 reconstruction on L_Bid NR-quorum — preserving the cluster's single-output guarantee (Pigeonhole 3).
+
+### F.2 — Wire kinds
+
+L_Bid_New uses the same wire kinds as L_Bid ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)):
+
+- **`KindBid`**: every operator's bid envelope.
+- **`KindBidVerdict`**: mini-consensus verdict, broadcast over deep bids only.
+- **`KindCommit`**: Phase-2 onion + NR-partials + σ_L^V witness section (inherits from base OBFT).
+- **`KindCertificate`**: final certificate.
+
+The mini-consensus verdict (`KindBidVerdict`) carries a verdict on V_early specifically — not on the full argmax over all bids. This is a semantic difference from L_Bid, which verdicts on V_X = argmax-over-all-bids.
+
+### F.3 — Per-layer windows and deadlines
+
+L_Bid_New's Phase 1 has two structural elements:
+
+1. **Deep-layer Phase-1 window** `[slot_start, T_commit − slack]`: deep-layer rotation leaders L_1..L_{K-1} broadcast their bundles per the staggered `T_broadcast_max_k = Ls_arrival − B_k` schedule (same as bare OBFT). Bid envelopes for deep-layer operators (and non-rotation operators) broadcast during this window.
+
+2. **Primary Phase-1 broadcast** at `T_broadcast_max_0 = Ls_arrival − B_0` (= bare OBFT primary deadline). Primary L_0 broadcasts their Phase-1 bundle including bid_1 = V_{L_0}, with σ_{L_0}^V(V_{L_0}) and op-identity auth — same as bare OBFT's primary bundle. **Δ_minicon does not shift this deadline.**
+
+The mini-consensus runs as a sub-phase at the tail of Phase 1 over deep-layer bids only. Verdict-broadcast deadline is `T_commit − 1 BTT`. Primary's bid_1 is broadcast in parallel and may or may not arrive at the verdict-broadcast deadline — *bid_1 is intentionally excluded from the mini-consensus bid_set*.
+
+| Phase | Window | Activity |
+|---|---|---|
+| Phase 1 (deep) | `[slot_start, T_commit − Δ_minicon]` | Deep-layer leaders L_1..L_{K-1} broadcast Phase-1 bundles; deep-bidders broadcast `KindBid`. |
+| Mini-consensus | `[T_commit − Δ_minicon, T_commit]` | Operators verdict on V_early = argmax over deep bids; verdicts propagate by `T_commit`. |
+| Phase 1 (primary) | `[T_broadcast_max_0, T_commit]` | Primary broadcasts Phase-1 bundle (bid_1 + σ_{L_0}^V); broadcast happens at bare-OBFT primary deadline. |
+| Phase 2 | `[T_commit, T_commit + Δ_2]` | σ-or-NR commit at K' layers (L_Bid + L_0..L_{K-1}). |
+| Phase 3 | `[T_commit + Δ_2, T_round_end]` | K'-layer reconstruction walk. |
+
+Sizing — `Δ_minicon` sized as in current L_Bid (standard 1 BTT, recommended 2 BTT, aggressive 0.5 BTT). Note: `T_commit` is the same anchor as bare OBFT (~`Relay_cutoff − 3 BTT` = 3.40s at Config A). The MEV-fetch budget for primary L_0 is `T_broadcast_max_0 − slot_start` ≈ 3050ms (= bare OBFT's primary budget).
+
+### F.4 — Protocol
+
+#### F.4.1 — Phase 1: Deep bids + primary bundle
+
+Each non-primary operator `i` broadcasts `KindBid(i, V_i, bid_value, relay_attestation, σ_i^op)` during the deep-layer Phase-1 window. The primary additionally broadcasts their Phase-1 bundle (bid_1 + σ_{L_0}^V + op-auth) at `T_broadcast_max_0` per bare OBFT.
+
+The coherence rule (rotation leader L_k's KindBid V_i = their Phase-1 bundle V) inherits from L_Bid for deep-layer leaders. The primary L_0's KindBid is implicitly the same bid as their Phase-1 bundle V_{L_0} = bid_1 (no separate KindBid for the primary; the primary's role is the rotation L_0 leader and they broadcast a single Phase-1 bundle that serves both as their bid and as the L_0 candidate).
+
+#### F.4.2 — Mini-consensus: verdict on V_early
+
+Each operator `i`, by their verdict-broadcast deadline `T_commit − 1 BTT`:
+
+1. Computes `bid_set_i_deep` = received-and-validated `KindBid` envelopes from non-primary bidders, first-observed before the verdict-broadcast deadline. **The primary's bid (bid_1) is NOT in `bid_set_i_deep`** — primary's bid is treated separately at L_0.
+2. Computes `predicted_LBid_i`: `argmax over bid_set_i_deep` if `|bid_set_i_deep| ≥ n − f`; else null.
+3. Broadcasts `KindBidVerdict` carrying their prediction.
+
+At mini-consensus end (`T_commit`):
+
+- `verdict_pool[V] = | { distinct ops j broadcasting first-observed KindBidVerdict(j, slot, hash(V)) } |`
+- `verdict_quorum_V_early ≡ ∃V : verdict_pool[V] ≥ qV`
+
+If `verdict_quorum_V_early` reaches on some V, that V is the cluster's V_early. Otherwise no V_early; cluster falls through L_Bid via NR-quorum.
+
+#### F.4.3 — Phase 2: σ-or-NR at K' = K + 1 layers
+
+Each operator constructs a K'-layer onion. **L_Bid is the outermost plaintext layer; L_0 is encrypted under `nr_tag_LBid`** (priority inversion vs current L_Bid):
+
+```
+layer L_Bid (V_early, plaintext):  σ_i^V(V_early)
+layer L_0 (bid_1, encrypted):       E_{nr_tag_LBid}( σ_i^V(bid_1) )
+layer L_k (k ≥ 1, chained):         E_{nr_tag_LBid}( E_{nr_tag_0}( ... σ_i^V(V_{L_k}) ) )
+```
+
+Honest σ-or-NR commitment per layer:
+
+- **L_Bid**:
+  - σ on V_early IF: `verdict_quorum_V_early` reached AND operator retains V_early locally AND host validity-locked verdict on V_early is valid AND **(operator does NOT have bid_1, OR bid_1 ≤ V_early)**.
+  - NR on `nr_tag_LBid` otherwise. Specifically NR if: mini-consensus failed OR operator doesn't have V_early OR (operator has bid_1 AND bid_1 > V_early).
+
+  The conjunction `(no bid_1 OR bid_1 ≤ V_early)` is the critical rule: operators σ on V_early when they're certain V_early is the cluster-preferred winner; NR otherwise. Operators without bid_1 default to σ on V_early (rather than NR-when-uncertain), since they cannot rule out V_early winning.
+
+  **Note**: An alternative rule is "NR-when-uncertain" (NR if no bid_1, regardless). The two rules differ in their failure modes — see [§F.5 Failure modes](#f5--failure-modes). The σ-when-uncertain variant is recommended; NR-when-uncertain has a complementary failure mode at a different honest-split configuration. Formal analysis of the choice is in `docs/OBFT-formal-verif.md`.
+
+- **L_0**: σ on bid_1 if received and host-valid (standard bare OBFT rule for L_0). NR otherwise.
+- **L_k for k ≥ 1**: same as bare OBFT.
+
+Cross-phase exclusivity per `(slot, layer)` and single-σ-V per operator continue to hold across all K' layers; EKM enforces.
+
+#### F.4.4 — Phase 3: K'-layer reconstruction walk
+
+```
+1. L_Bid: σ-pool[V_early] plaintext. If ≥ qV: reconstruct (V_early, S); halt.
+2. Else: NR-pool[L_Bid] check. If ≥ qEnc: aggregate decryption key; unlock L_0.
+3. L_0: σ-pool[bid_1] (decrypted). If ≥ qV: reconstruct (bid_1, S); halt.
+4. Else: NR-pool[L_0] check. If ≥ qEnc: unlock L_1; continue.
+5. Walk L_1..L_{K-1} as bare OBFT.
+```
+
+If L_Bid reaches neither σ-quorum nor NR-quorum, the chained encryption to L_0 stays sealed; no fall-through; slot misses. Same structural property as current L_Bid (chained-encryption priority enforces single-V output).
+
+### F.5 — Failure modes
+
+L_Bid_New's failure modes split into (a) modes inherited from bare OBFT at L_0 and below, and (b) modes specific to the L_Bid layer's σ-or-NR commitment under asymmetric bid_1 delivery.
+
+#### F.5.1 — Inherited from bare OBFT
+
+When L_Bid NR-quorums and falls through to L_0, L_0 behaves as bare OBFT's L_0 (with bid_1 as V_{L_0} and the primary's σ_{L_0}^V as the leader's contribution). Inherits all bare-OBFT L_0 failure modes:
+
+- **σ-locked equivocation at L_0** (Class B): byz primary equivocates bid_1; honest σ-lock on different V's; deadlock at L_0 with chained-encryption seal preventing fall-through.
+- **h_V=1 selective Phase-1 delivery at L_0** (Class B): byz primary broadcasts bid_1 to one honest only; σ-pool fragments.
+- **Asymmetric propagation of primary's bundle past `T_commit`** (Class A): violates assumption 2 for L_0; cluster falls through to L_1 if propagation symmetric there.
+
+These are bare OBFT's failure modes restated; same Class A / Class B framing.
+
+#### F.5.2 — Specific to L_Bid_New's L_Bid layer
+
+The L_Bid layer's σ-or-NR commitment depends on each honest's local view of (V_early, bid_1, V_early-vs-bid_1). Asymmetric bid_1 delivery (one honest doesn't have bid_1) creates an honest-split at L_Bid:
+
+- **Asymmetric bid_1 delivery + V_early > bid_1**: honest with bid_1 σ on V_early; honest without bid_1 σ on V_early (per the σ-when-uncertain rule). All honest σ at L_Bid → σ-quorum reaches → output V_early. **No deadlock under non-grief.** Under adversarial byz NR: σ-pool = (n−f−1) + 0 = n−f−1; NR-pool = 0 + 1 = 1. If n−f−1 ≥ qV: σ-quorum reaches anyway. If n−f−1 < qV (= 2 < 3 at f=1, n=4): deadlock. **Class B** at f=1, n=4.
+
+- **Asymmetric bid_1 delivery + bid_1 > V_early**: honest with bid_1 NR at L_Bid (prefer bid_1); honest without bid_1 σ on V_early (σ-when-uncertain). Mixed split. Under non-grief at f=1, n=4 with 2 honest having bid_1, 1 honest without: σ-pool = 1, NR-pool = 2. Neither reaches qV/qEnc=3. **In-assumption deadlock.**
+
+  - This is the Case-E counterpart under the σ-when-uncertain rule.
+  - Under the NR-when-uncertain rule, this case recovers (3 NR → fall-through to L_0 → σ-pool[bid_1] = 2 + primary's σ_{L_0}^V = 3 = qV). But NR-when-uncertain has Case-E-style deadlock when V_early > bid_1.
+
+  **The choice of σ-vs-NR-when-uncertain trades which asymmetric-delivery configuration deadlocks**. Neither rule eliminates the residual at f=1, n=4 (this is an algebraic limit per [§F.7](#f7--algebraic-floor)); the choice picks which corner case is the residual.
+
+- **Verdict-equivocation by byz on V_early**: byz emits different verdicts to different honest peers; honest local-verdict-views diverge; some honest σ at L_Bid on V_early, others NR. Same algebraic deadlock pattern. Class B.
+
+#### F.5.3 — Comparison: which asymmetric-delivery deadlocks are Class A vs Class B
+
+Asymmetric bid_1 delivery can arise from:
+
+- Network mesh failure (broken link, mesh sparsity): violates assumption 2 if propagation exceeds `B_0 + slack`. **Class A.** Slot-miss is out of the protocol's recovery scope by design.
+- Byzantine primary signing-and-broadcasting bid_1 selectively (sends to gossipsub but only to a subset of peers): if byz uses standard gossipsub, this is a network-level outcome (peers see what gossipsub delivers). If byz crafts targeted delivery, this counts as active byz grief (deviation from honest broadcast). **Class B** in the latter case.
+
+Per the threat model in `docs/OBFT-formal-verif.md`, selective delivery via standard gossipsub is treated as a network-level property (not byz grief); the protocol cannot distinguish byz-induced from network-induced asymmetry, and both are out of scope for the Class A closure property.
+
+### F.6 — Comparison with current L_Bid
+
+The two extensions are structurally distinct points in the L_Bid design space.
+
+| Aspect | Current L_Bid | L_Bid_New |
+|---|---|---|
+| Mini-consensus scope | All bids (incl. primary) | Deep bids only |
+| Onion priority | V_X = argmax-over-all-bids OUTER; rotation layers INNER | V_early = argmax-over-deep-bids OUTER; bid_1 INNER; rotation layers INNERMOST |
+| Primary MEV-fetch budget | ~2650ms (Δ_minicon shifts T_broadcast_max_0 earlier) | ~3050ms (= bare OBFT's; no Δ_minicon shift on primary) |
+| Post-`T_commit` consensus budget | ~900ms (Δ_minicon + Δ_2 + Δ_3) | ~500ms (Δ_2 + Δ_3 only; mini-consensus inside Phase 1) |
+| Submission headroom (4s cutoff) | ~3.10s | ~3.50s (= bare OBFT) |
+| Bid_1 protection from asymmetric delivery | ✓ (mini-consensus convergence on bid_1) | ✗ (bid_1 exposed to bare-OBFT-style asymmetric attacks) |
+| Adversarial-byz exposure surface at the bid layer | C1, C2, C3 mini-consensus residuals + 2-1-byz-defect + verdict-equivocation | bare-OBFT-style L_0 surface (asymmetric primary delivery) + verdict-equivocation on deep bids |
+| Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
+| **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
+| Number of onion encryption layers | K + 1 (L_Bid + K rotation) | K + 1 (L_Bid + L_0 + K−1 rotation, with L_Bid + L_0 chained) |
+
+**Net trade**: L_Bid_New shifts the bid-layer Class B exposure from "mini-consensus residuals at f=1" to "bare-OBFT-style asymmetric primary delivery at f=1". Both have Class B residuals at f=1, n=4 — the choice is which residual is more acceptable in the deployment. L_Bid_New gains primary MEV-fetch time and post-`T_commit` latency at this trade-off cost.
+
+**Whether L_Bid_New is preferable to current L_Bid is deployment-dependent**:
+
+- Deployments with strong relay-attestation enforcement and reliable primary mesh propagation: L_Bid_New favorable (recovers MEV-fetch budget; bid_1's Class B exposure is narrower in practice when primary's relay attestation is enforced and primary's mesh is reliable).
+- Deployments with adversarial primary or unreliable primary mesh: current L_Bid favorable (mini-consensus convergence on bid_1 protects against more bid_1-asymmetry patterns).
+- Deployments at higher cluster sizes (n ≥ 7): bare OBFT's per-slot Class B exposure decreases proportionally with `n`; L_Bid and L_Bid_New both stay at ~100% trigger frequency. The relative gain of L_Bid_New's MEV-fetch budget recovery is preserved at larger n.
+
+### F.7 — Algebraic floor
+
+Both L_Bid and L_Bid_New are subject to the same algebraic deadlock floor at f=1, n=4: any non-unanimous honest commitment split at any layer is exploitable by adversarial byz to engineer a 2-2 deadlock (σ-pool ≤ 2, NR-pool ≤ 2, neither reaching qV = qEnc = 3). The floor scales uniformly across n ∈ {4, 7, 10, 13}: the deadlock condition is "(h_σ < qV) AND (h_NR < qEnc)" and adversarial byz can engineer this from any non-unanimous honest split.
+
+The protocols differ in *which* adversarial scenarios produce non-unanimous splits, not in whether the algebraic floor exists. Formal verification of this floor and per-protocol-variant exposure is the subject of `docs/OBFT-formal-verif.md`.
+
+### F.8 — When to use L_Bid_New vs L_Bid
+
+**Use L_Bid_New** when:
+- Primary MEV-fetch budget is the binding constraint (high-MEV slots, late-discovery relay queries).
+- Post-`T_commit` latency budget matters (constrained submission deadlines).
+- Primary's mesh reliability is high and relay-attestation extension is enforced.
+
+**Use current L_Bid** when:
+- Bid_1's Class B exposure must be minimized (adversarial primary likely; primary mesh unreliable).
+- Submission headroom is generous; the +400ms cost of mini-consensus is acceptable.
+- Deployment prefers protocol-level convergence on every bid (rather than per-operator argmax computation on the late bid).
+
+**Either is acceptable** for production-typical mesh + institutional/permissioned operator sets where primary equivocation is unlikely. The choice is then driven by latency/MEV preferences.
