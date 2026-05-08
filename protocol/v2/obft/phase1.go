@@ -101,7 +101,16 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// Look up the per-leader retention slot for this layer. Bundle dedup
 	// against retained runs BEFORE VerifyPartial so that a re-delivery of
 	// an already-retained V (e.g., the same leader bundle packed as a witness
-	// in N peers' KindCommits) doesn't re-pay the BLS verify cost.
+	// in N peers' KindCommits, or normal gossipsub re-broadcast across mesh
+	// paths) doesn't re-pay the BLS verify cost.
+	//
+	// Spec §Phase 1 line 154 lists "verify both signatures" first in the
+	// validation order. We dedup first as a CPU optimization on the normal
+	// hot path: byte-identical (op, V) means the same σ_V (signing is
+	// deterministic) which already verified at first observation. The
+	// optimization is correctness-safe (idempotent for any verified V); it
+	// also bounds CPU cost under flood attacks where byz re-spams a single
+	// valid bundle.
 	if i.bundles[b.Layer] == nil {
 		i.bundles[b.Layer] = make(map[OperatorID][]*Phase1Bundle)
 	}

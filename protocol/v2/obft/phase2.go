@@ -298,6 +298,22 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 
 		// Distinct value at the same (layer, operator). If we already had
 		// one, this is cross-onion equivocation (Rule 3).
+		//
+		// Spec contract caveat at k > 0: el.Ciphertext is the IBE-wrapped
+		// σ partial (chained IBE encryption per spec §Phase 2). A third-
+		// party slashing verifier cannot decrypt it without this cluster's
+		// NR-quorum aggregates for layers 0..k-1 (the IBE chain-decryption
+		// keys derive from those aggregates, which are ephemeral cluster
+		// state computed during Phase 3 reconstruction). So per-layer Rule 3
+		// at k > 0 is NOT third-party self-contained — it's recorded for
+		// within-cluster attribution (the cluster has the aggregates during
+		// reconstruction and can verify locally), but on-chain slashing
+		// should rely on the top-level Layer=-1 variant (which pairs the
+		// FULL Commits and is self-contained at any layer). Same caveat as
+		// Rule 4. This is a deliberate trade-off vs the spec's "Rule 3 at
+		// any layer is slashable" framing — paying spec parity here would
+		// require slashing payloads to include the cluster's NR-quorum
+		// aggregates and an IBE chain-decrypting verifier.
 		if len(existing) >= 1 {
 			if len(existing) >= 2 {
 				continue
@@ -591,6 +607,19 @@ func (i *Instance) chosenVAtLayer(layer int) (Value, bool) {
 // Mirrors Verifier.VerifyCommitNRPartials but uses the Instance's own
 // configured shares + signers, which is what gates whether a Commit is allowed
 // to mutate Instance state.
+//
+// IBE shares fallback (Option A vs Option B): when ibePubKeyShares is nil,
+// we fall back to pubKeyShares (the V-keypair shares). This is the Option A
+// integration documented in docs/IBE-INTEGRATION.md — the validator's
+// V-keypair shares double as IBE shares with cryptographic separation
+// achieved via distinct domain-separation tags (DSTs) in the BLS primitive
+// rather than a separate IBE keypair. Spec §Setting describes the threshold
+// scheme as "two distinct keypairs" (V-keypair + IBE-keypair); Option A
+// uses one keypair with DST-trick separation, which preserves the
+// Pigeonhole 1 algebraic argument (same threshold qV = qEnc = 2f+1) while
+// avoiding a second DKG. Option B (a separate IBE-keypair from per-cluster
+// IBE-DKG) sets ibePubKeyShares to the IBE-derived shares; this code path
+// then verifies against those instead.
 func (i *Instance) verifyCommitNRPartials(c *Commit) error {
 	if len(c.NRPartials) == 0 {
 		return nil
