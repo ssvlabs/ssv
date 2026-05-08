@@ -880,17 +880,17 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 
 ## Appendix B — L_Bid mini-consensus extension
 
-This appendix specifies an opportunistic bid-routing extension to OBFT. **L_Bid** is a bid-determined top layer prepended to OBFT's K rotation-determined layers (yielding `K' = K + 1`). The extension adds a **mini-consensus phase** between Phase 1 and Phase 2 that resolves L_Bid's identity cluster-wide before σ-commitment. The mini-consensus is a single round of all-to-all verdict broadcast with quorum-based binding — verdicts are op-identity-signed claims, not threshold partials, so it adds no new cryptographic primitives and does not change OBFT's safety analysis.
+This appendix specifies an opportunistic bid-routing extension to OBFT. **L_Bid** is a bid-determined top layer prepended to OBFT's K rotation-determined layers (yielding `K' = K + 1`). The extension adds a **mini-consensus sub-phase between `T_0_arrival` and `T_commit`** that resolves L_Bid's identity cluster-wide before σ-commitment. `T_0_arrival` is the deterministic point by which an honest L_0 Phase-1 bundle broadcast at `T_0_broadcast_max` is expected to have reached all honest operators under the L_0 propagation budget. The mini-consensus is a single round of all-to-all verdict broadcast with quorum-based binding — verdicts are op-identity-signed claims, not threshold partials, so it adds no new cryptographic primitives and does not change OBFT's safety analysis.
 
-The extension closes three deadlock surfaces that any naive bid-routing extension would expose ([§Background — bid-layer deadlocks](#background--bid-layer-deadlocks)) and adds two adversarial-byz residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) plus the standard 2-2 validity-divergence hard algebraic limit. Healthy-path latency rises by `Δ_minicon` (~200-400ms at Config A); rotation-layer recovery scope is unchanged; safety is identical to bare OBFT. L_Bid relies on one additional assumption beyond bare OBFT's threat model — **bid-value honesty** (see [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty)).
+The extension closes three deadlock surfaces that any naive bid-routing extension would expose ([§Background — bid-layer deadlocks](#background--bid-layer-deadlocks)) and adds two adversarial-byz residual surfaces at L_Bid (2-1-byz-defect, verdict-equivocation) plus the standard 2-2 validity-divergence hard algebraic limit. Post-`T_commit` latency matches bare OBFT; the cost is paid before `T_commit` by moving `T_0_broadcast_max` earlier by `Δ_minicon` (~200-400ms at Config A). Rotation-layer recovery scope is unchanged; safety is identical to bare OBFT. L_Bid relies on one additional assumption beyond bare OBFT's threat model — **bid-value honesty** (see [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty)).
 
 ### Background — bid-layer deadlocks
 
-Any bid-routing extension that gates σ-eligibility on per-operator local computation over a bid set ("did I see enough bids? what's the highest?") has three deadlock surfaces under f-byz adversarial behavior. The mini-consensus exists to close them.
+Any bid-routing extension that gates σ-eligibility on per-operator local computation over a bid set ("did I see enough eligible Phase-1 bundles? what's the highest bid?") has three deadlock surfaces under f-byz adversarial behavior. The mini-consensus exists to close them.
 
-- **C1 — Selective bid-withholding.** A byzantine bidder withholds their `KindBid` from a subset of honest peers. Honest with incomplete bid sets cannot compute σ-eligibility correctly (their argmax may differ from cluster truth); honest with complete sets can. Honest σ-emit decisions fragment; the σ-pool fragments below `qV`; no V reaches quorum.
+- **C1 — Selective candidate withholding.** A byzantine rotation leader selectively withholds its L_Bid-eligible Phase-1 bundle (including bid metadata) from a subset of honest peers. Honest with incomplete bid sets cannot compute σ-eligibility correctly (their argmax may differ from cluster truth); honest with complete sets can. Honest σ-emit decisions fragment; the σ-pool fragments below `qV`; no V reaches quorum.
 
-- **C2 — Bidder equivocation.** A byzantine bidder sends different `KindBid` envelopes (V vs V', possibly with different `bid_value`) to different peers. Each honest peer's argmax may yield a different winner; honest σ-commit on different V's; σ-pool fragments per V below `qV`.
+- **C2 — Candidate / bid equivocation.** A byzantine rotation leader sends different signed Phase-1 bundle views to different peers (V vs V', or the same V with different signed bid metadata). Each honest peer's argmax may yield a different winner; honest σ-commit on different V's; σ-pool fragments per V below `qV`.
 
 - **C3 — Validity-divergence on the bid winner.** Some honest find the highest-bid V valid (parent-root match, fork/domain, etc.); others do not. Honest with valid view σ-commit; honest with invalid view NR. σ-pool below `qV` from one side; NR-pool below `qEnc` capped by σ-locked operators; deadlock with no fall-through.
 
@@ -898,11 +898,11 @@ Without a cluster-wide convergence step, all three lead to slot-miss. The mini-c
 
 ### Additional assumption — bid-value honesty
 
-L_Bid introduces one assumption beyond bare OBFT's: **operators report their bid values truthfully**. Without this, a byzantine operator can claim arbitrary `bid_value` for their preferred `V_i` and reliably win L_Bid argmax, routing the cluster to sign a low-MEV (potentially self-dealt) block. The grief leaves no on-wire evidence and produces no slot-miss, so none of [assumption 4's](#assumed) deterrent mechanisms (slashable evidence, slot-miss visibility to stakers, behavioral patterns visible to honest peers) discipline it per-slot. Safety and liveness are unaffected (Pigeonholes hold regardless); only L_Bid's MEV-value-capture motivation breaks.
+L_Bid introduces one assumption beyond bare OBFT's: **eligible rotation leaders report their bid values truthfully**. Without this, a byzantine leader can claim arbitrary `bid_value` for its Phase-1 candidate and reliably win L_Bid argmax, routing the cluster to sign a low-MEV (potentially self-dealt) block. The grief leaves no on-wire evidence and produces no slot-miss, so none of [assumption 4's](#assumed) deterrent mechanisms (slashable evidence, slot-miss visibility to stakers, behavioral patterns visible to honest peers) discipline it per-slot. Safety and liveness are unaffected (Pigeonholes hold regardless); only L_Bid's MEV-value-capture motivation breaks.
 
 The protocol does not enforce bid-value honesty cryptographically. Deployments satisfy it via one of:
 
-- **Relay/builder attestation verification** (recommended for SSV proposer duty) — `KindBid` carries a `relay_attestation` field cryptographically binding `(V, bid_value)` to a cluster-recognized relay or builder; receivers verify before admitting the bid into `bid_set_i`. Spec'd as an optional protocol extension — see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification).
+- **Relay/builder attestation verification** (recommended for SSV proposer duty) — the Phase-1 bundle's bid section carries a `relay_attestation` field cryptographically binding `(V, bid_value)` to a cluster-recognized relay or builder; receivers verify before admitting the bundle into `bid_set_i`. Spec'd as an optional protocol extension — see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification).
 - **Institutional / permissioned operator set** — operators are vetted such that bid-value lying carries external (legal, reputational, business) consequences sufficient to discipline it. The cluster relies on those external mechanisms; in-protocol attestation is unnecessary.
 - **Post-hoc payment reconciliation** — stakers monitor cluster MEV revenue against expected relay payouts and migrate validators from clusters where claimed bid-values systematically fail to materialize. Same evidence-quality character as OBFT's behavioral-pattern fault detection (slow, false-positive-prone) but viable when in-protocol attestation isn't available.
 
@@ -910,23 +910,39 @@ This assumption is L_Bid-specific — bare OBFT does not depend on it. Deploymen
 
 ### When to use it
 
-**Suited for**: deployments where MEV bid-routing upside justifies (a) the `Δ_minicon` MEV-fetch budget reduction, and (b) the new adversarial-byz residual surfaces at L_Bid. For SSV proposer duty under Config A: high-MEV slots where bid-routed block value capture exceeds the slot-loss-rate cost from the new L_Bid failure modes.
+**Suited for**: deployments where MEV bid-routing upside among eligible rotation-layer candidates justifies (a) the `Δ_minicon` MEV-fetch budget reduction, and (b) the new adversarial-byz residual surfaces at L_Bid. For SSV proposer duty under Config A: high-MEV slots where bid-routed block value capture exceeds the slot-loss-rate cost from the new L_Bid failure modes.
 
 **BTT regime guidance** (see [§Deployment envelope by BTT](#deployment-envelope-by-btt) for full table):
 - **BTT ≤ 400ms** (production-typical mesh): conservative sizing (`Δ_minicon = 2 BTT`) fits with comfortable MEV-fetch budget (2000ms+).
-- **BTT 600-1000ms** (degraded mesh): conservative sizing's MEV-fetch budget shrinks aggressively or stops fitting; standard (`Δ_minicon = 1 BTT`) or aggressive (`Δ_minicon = 0.5 BTT`) sizing recovers MEV-fetch at the cost of partial-propagation residual.
+- **BTT 600-1000ms** (degraded mesh): conservative sizing's MEV-fetch budget shrinks aggressively or stops fitting; standard (`Δ_minicon = 1 BTT`, `Δ_verdict = 1 BTT`) or aggressive (`Δ_minicon = 0.5 BTT`, `Δ_verdict = 0.5 BTT`) sizing recovers MEV-fetch at the cost of partial-propagation residual.
 - **BTT > 1100ms** (severely degraded): only aggressive sizing fits, tightly. Bare OBFT (no `Δ_minicon`) remains the available alternative.
 
-**Not suited for**: deployments prioritizing maximum MEV-fetch budget at high BTT, or where the L_Bid residuals (adversarial-byz + sub-1-BTT partial-propagation deadlock) are a hard constraint (slot-miss without fall-through; see [§Liveness](#liveness)).
+**Not suited for**: deployments prioritizing maximum MEV-fetch budget at high BTT, or where the L_Bid residuals (adversarial-byz + sub-1-BTT `Δ_verdict` partial-propagation deadlock) are a hard constraint (slot-miss without fall-through; see [§Liveness](#liveness)).
+
+### Timing notation for L_Bid variants
+
+This appendix and Appendix F use three arrival anchors with distinct meanings:
+
+| Symbol | Meaning |
+|---|---|
+| `Ls_arrival` | Bare OBFT stable-arrival anchor: `T_commit − slack`. Used by bare OBFT's staggered Phase-1 schedule. |
+| `T_0_arrival` | Current L_Bid mini-consensus start: the point by which an honest L_0 Phase-1 bundle broadcast at `T_0_broadcast_max` is expected to have reached all honest operators. Current L_Bid sets `Δ_minicon = T_commit − T_0_arrival` and shifts all eligible rotation-layer deadlines to this anchor. |
+| `T_deep_arrival` | L_Bid_New mini-consensus start: the point by which honest deep-layer Phase-1 bundles (`L_1..L_{K-1}`) broadcast at their L_Bid_New deadlines are expected to have reached all honest operators. L_Bid_New sets `Δ_minicon = T_commit − T_deep_arrival` and shifts only deep-layer deadlines to this anchor. |
+| `T_broadcast_max_0^bare` | Bare OBFT primary broadcast deadline, i.e. the unshifted L_0 deadline derived from `Ls_arrival`. L_Bid_New preserves this deadline for bid_1. |
+| `Δ_minicon` | Total mini-consensus interval, from the relevant arrival anchor (`T_0_arrival` or `T_deep_arrival`) to `T_commit`. |
+| `Δ_verdict` | Sub-interval reserved for `KindBidVerdict` propagation: `T_verdict = T_commit − Δ_verdict`. |
+| `Δ_select` | In-window bid-set settling budget before verdict broadcast: `Δ_minicon − Δ_verdict`. |
 
 ### Setting
 
 Adds to OBFT's setting:
 
 - **K' = K + 1 layers**: L_Bid (top, bid-determined) + OBFT's rotation-determined L_0, L_1, ..., L_{K-1}.
-- **Bid envelopes**: every operator (not just rotation leaders) broadcasts a `KindBid` envelope at Phase 1.
-- **Mini-consensus window** `Δ_minicon`: a sub-phase at the tail end of Phase 1, ending at `T_commit`, for verdict broadcast and propagation. Pushes L_0..L_{K-1} broadcast deadlines earlier by `Δ_minicon` vs bare OBFT (`T_broadcast_max_k = T_commit − Δ_minicon − B_k`); `T_commit` itself stays back-end-anchored to `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is unchanged from bare OBFT.
+- **Bid data lives inside Phase-1 bundles**: there is no standalone `KindBid` wire message. Each rotation leader's Phase-1 bundle carries bid metadata for that same `V_{L_k}`. Only rotation-layer candidates are eligible for L_Bid; with `K = n` this still means every operator has one bid candidate, while with `K < n` L_Bid ranks only the selected `K` rotation leaders.
+- **Mini-consensus window** `Δ_minicon`: `Δ_minicon = T_commit − T_0_arrival`. Mini-consensus starts at `T_0_arrival`, ends at `T_commit`, and all L_Bid timing derives from that interval. `T_0_broadcast_max = T_0_arrival − B_0`, and generally `T_broadcast_max_k = T_0_arrival − B_k`; equivalently, L_0..L_{K-1} broadcast deadlines shift earlier by `Δ_minicon` vs bare OBFT. `T_commit` itself stays back-end-anchored to `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is unchanged from bare OBFT.
+- **Verdict propagation budget** `Δ_verdict`: `0 < Δ_verdict ≤ Δ_minicon`, with `T_verdict = T_commit − Δ_verdict`. Operators compute and broadcast `KindBidVerdict` at `T_verdict`; those verdicts propagate until `T_commit`. The remaining `Δ_select = Δ_minicon − Δ_verdict` is the in-window bid-set settling budget after `T_0_arrival` and before verdict broadcast.
 - **L_Bid σ-eligibility**: determined cluster-wide by mini-consensus, not by per-operator local computation.
+- **Bid visibility threshold**: `qBid = K − f` L_Bid-eligible Phase-1 bundles. At `K = n`, `qBid = n − f = qV`; for `K < n`, L_Bid intentionally ranks a smaller candidate universe.
 
 `qV = qEnc = 2f+1` and the BLS+IBE keypair structure are unchanged from bare OBFT. The mini-consensus adds no new threshold cryptography.
 
@@ -934,58 +950,58 @@ Adds to OBFT's setting:
 
 In addition to OBFT's `Phase1Bundle`, `KindCommit`, `KindCertificate`:
 
-- **`KindBid`** — operator `i`'s bid envelope. Payload `(protocol_tag = "OBFT-LBid-v1", message_kind = "bid-envelope", cluster_id, slot, operator_id i, bid_value, V_i, relay_attestation)`, signed by `i`'s operator-identity key. Carries `i`'s candidate `V_i` (the block they would commit to if their bid wins L_Bid) and the bid value. The `relay_attestation` field is host-defined; verification is governed by an optional protocol extension (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). When the extension is disabled, the field MAY be empty or host-supplied.
+- **`Phase1Bundle` bid section** — L_Bid extends the existing Phase-1 bundle envelope with `(bid_value, relay_attestation)`, signed by the leader's operator-identity key as part of the structured Phase-1 envelope. The bid section is not a separate message: it refers to exactly the same `V_{L_k}` carried by the bundle and signed by `σ_{L_k}^V(V_{L_k})`. The `relay_attestation` field is host-defined; verification is governed by an optional protocol extension (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). When the extension is disabled, the field MAY be empty or host-supplied.
 - **`KindBidVerdict`** — operator `i`'s mini-consensus verdict. Payload `(protocol_tag = "OBFT-LBid-v1", message_kind = "minicon-verdict", cluster_id, slot, operator_id i, predicted_LBid_value_root_or_null)`, signed by `i`'s operator-identity key. `predicted_LBid_value_root` is set when `i` claims a specific V is the cluster's L_Bid winner; null when `i` claims no L_Bid (insufficient bid-set visibility, parent-root filter failure, or no consensus reachable).
 
 ### Per-layer windows and deadlines
 
-Phase 1 inherits bare OBFT's per-layer staggered broadcast deadlines (each leader `L_k` broadcasts by `T_broadcast_max_k = Ls_arrival − B_k`), with `Ls_arrival` = end of Phase 1 = `T_commit − Δ_minicon` (vs `T_commit` in bare OBFT). Bid envelopes are broadcast in parallel within Phase 1 under L_0's deadline budget (treated as a parallel L_0-tier broadcast). Mini-consensus runs as a sub-phase at the tail of Phase 1, ending at `T_commit`:
+Phase 1 inherits bare OBFT's per-layer staggered broadcast deadlines, but the arrival anchor for the L_Bid extension is `T_0_arrival`, not `T_commit`. The latest L_0 bundle broadcast deadline is `T_0_broadcast_max = T_0_arrival − B_0`; deeper leaders broadcast by `T_broadcast_max_k = T_0_arrival − B_k`. Mini-consensus starts at `T_0_arrival` and ends at `T_commit`:
 
 | Phase | Window | Activity |
 |---|---|---|
-| Phase 1 | `[slot_start, T_commit − Δ_minicon]` | Rotation leaders broadcast Phase-1 bundles per per-layer windows (`T_broadcast_max_k = T_commit − Δ_minicon − B_k`); all operators broadcast `KindBid` in parallel. Receivers accept bundles first-observed in `[slot_start, T_commit]` per bare OBFT (acceptance window extends through mini-consensus to σ-emit time). |
-| Mini-consensus | `[T_commit − Δ_minicon, T_commit]` | Operators compute predicted L_Bid (argmax over `bid_set_i` first-observed by `T_commit − 1 BTT`) and broadcast `KindBidVerdict`; verdicts propagate by `T_commit`. |
+| Phase 1 candidate broadcast | `[slot_start, T_0_arrival]` | Rotation leaders broadcast Phase-1 bundles per per-layer windows (`T_broadcast_max_k = T_0_arrival − B_k`). Each bundle carries its own bid metadata. Receivers continue accepting bundles first-observed in `[slot_start, T_commit]` per bare OBFT, but L_Bid verdict computation uses only bundles first-observed by `T_verdict`. |
+| Mini-consensus | `[T_0_arrival, T_commit]` | Operators compute predicted L_Bid (argmax over `bid_set_i` first-observed by `T_verdict = T_commit − Δ_verdict`) and broadcast `KindBidVerdict`; verdicts propagate by `T_commit`. |
 | Phase 2 | `[T_commit, T_commit + Δ_2]` | σ-or-NR commit at all K' layers (L_Bid + L_0..L_{K-1}). |
 | Phase 3 | (from `T_commit + Δ_2`) | K'-layer reconstruction walk. |
 
-Sizing — `Δ_minicon` is a tunable parameter governing the verdict-propagation budget. Three named sizings:
-- **Standard** `Δ_minicon = 1 BTT`: full P99 verdict propagation under partial-synchrony assumption; partial-propagation deadlock essentially eliminated.
-- **Conservative** `Δ_minicon = 2 BTT`: P99 + 1 BTT jitter absorption, mirroring `Δ_2`'s widening.
-- **Aggressive** `Δ_minicon = 0.5 BTT`: P50 verdict propagation; partial-propagation deadlock becomes a Class A residual (see [§New residual failure modes](#new-residual-failure-modes-at-l_bid)). Suitable only when production telemetry shows mesh propagation tighter than the conservative P99 assumption.
+Sizing — `Δ_minicon` is the total mini-consensus interval, and `Δ_verdict` is the portion reserved for verdict propagation. Three named sizings:
+- **Standard** `Δ_minicon = 1 BTT`, `Δ_verdict = 1 BTT`: full P99 verdict propagation under partial-synchrony assumption; no extra in-window bid-set settling after `T_0_arrival`.
+- **Conservative** `Δ_minicon = 2 BTT`, `Δ_verdict = 1 BTT`: one BTT for post-`T_0_arrival` bid-set settling plus one BTT for verdict propagation.
+- **Aggressive** `Δ_minicon = 0.5 BTT`, `Δ_verdict = 0.5 BTT`: sub-P99 verdict propagation; partial-propagation deadlock becomes a Class A residual (see [§New residual failure modes](#new-residual-failure-modes-at-l_bid)). Suitable only when production telemetry shows mesh propagation tighter than the standard P99 assumption.
 
 `Δ_2`, `Δ_3`, and `B_k` (bundle propagation budgets) unchanged from bare OBFT.
 
 `T_commit` is back-end-anchored at `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is **the same value for bare OBFT and OBFT+L_Bid** (e.g., `3.40s` at §Application's max-MEV anchor with Config A, BTT=200ms, `Δ_2 = 2 BTT`, `Δ_3 = ε_3`, `header_submit_headroom = 100ms`, `T_relay_cutoff = 4.0s`).
 
-What L_Bid changes is the **L_0..L_{K-1} broadcast deadlines** and the **MEV-fetch budget**: `T_broadcast_max_0 = T_commit − Δ_minicon − B_0` shifts earlier by `Δ_minicon` vs bare OBFT. At Config A with conservative sizing (`Δ_minicon = 2 BTT = 400ms`), L_0 broadcast deadline shifts from `3.30s` (bare OBFT) to `2.90s` (L_Bid); primary leader's MEV-fetch budget reduces from ~3050ms (bare OBFT V_0) to ~2650ms (L_Bid V_X) at the same submission headroom. With standard sizing (`Δ_minicon = 1 BTT = 200ms`), L_0 broadcast deadline shifts to `3.10s`; MEV-fetch budget ~2850ms.
+What L_Bid changes is the **L_0..L_{K-1} broadcast deadlines** and the **MEV-fetch budget**: `T_0_broadcast_max = T_0_arrival − B_0 = T_commit − Δ_minicon − B_0` shifts earlier by `Δ_minicon` vs bare OBFT. At Config A with conservative sizing (`Δ_minicon = 2 BTT = 400ms`), L_0 broadcast deadline shifts from `3.30s` (bare OBFT) to `2.90s` (L_Bid); primary leader's MEV-fetch budget reduces from ~3050ms (bare OBFT V_0) to ~2650ms (L_Bid V_X) at the same submission headroom. With standard sizing (`Δ_minicon = 1 BTT = 200ms`), L_0 broadcast deadline shifts to `3.10s`; MEV-fetch budget ~2850ms.
 
 ### Protocol
 
-#### Phase 1 — Bid envelopes + rotation-leader broadcast
+#### Phase 1 — Rotation-leader broadcast with bid metadata
 
-Each operator `i` (regardless of rotation role):
+Each rotation leader `L_k` for `k ∈ {0, ..., K-1}`:
 
-1. Fetches a candidate `V_i` from the host (e.g., MEV-Boost relay or vanilla beacon-node-built block) with `bid_value` (relay-attested or 0).
-2. Constructs `KindBid` binding `(operator_id, bid_value, V_i, relay_attestation)`.
-3. Signs with operator-identity key; gossips via gossipsub.
+1. Fetches a candidate `V_{L_k}` from the host (e.g., MEV-Boost relay or vanilla beacon-node-built block) with `bid_value` (relay-attested or 0).
+2. Constructs its normal `Phase1Bundle`, extended with bid metadata `(bid_value, relay_attestation)` for that same `V_{L_k}`.
+3. Signs the Phase-1 envelope with its operator-identity key and gossips the bundle via gossipsub. The V-keypair partial `σ_{L_k}^V(V_{L_k})` remains exactly the same Phase-1 leader contribution as in bare OBFT.
 
-In parallel, each rotation leader L_k for `k ∈ {0, ..., K-1}` broadcasts their Phase-1 bundle as in bare OBFT.
+Non-rotation operators do not publish independent bids in this design. The bid universe is the set of L_Bid-eligible Phase-1 bundles.
 
-Bid retention is keyed by `(slot, operator_id)`. A second distinct `KindBid` from the same operator is bid-equivocation, slashable via Rule 7. Honest operators count `i`'s **first-observed** bid for argmax computation; subsequent bids are dropped from convergence input but recorded for slashing.
+Bid retention is the existing Phase-1 bundle retention keyed by `(slot, layer k, leader_id)`. For L_Bid argmax computation, honest operators count the **first-observed** valid bid metadata for each retained eligible bundle. Subsequent signed bundles from the same `(slot, layer, leader)` with either a distinct V or distinct bid metadata are dropped from convergence input but retained as slashing evidence (base leader-equivocation for distinct V; Rule 7 for bid-metadata equivocation on the same V).
 
-The coherence rule binding a rotation leader's `KindBid` `V_i` to their Phase-1 bundle V is detailed in [§Coherence and cross-layer independence](#coherence-and-cross-layer-independence).
+Because the bid data is carried inside the Phase-1 bundle, bid/bundle coherence is structural: the bid is for the bundle's own `V_{L_k}`.
 
 #### Mini-consensus — verdict broadcast
 
-Each operator `i`, by their verdict-broadcast deadline `T_commit − 1 BTT`:
+Each operator `i`, by `T_verdict = T_commit − Δ_verdict`:
 
-1. Computes `bid_set_i` = set of received-and-validated bid envelopes first-observed before `i`'s verdict-broadcast deadline (`T_commit − 1 BTT`) — operator-identity signature valid AND bid format valid AND host-validity verdict = valid. Bids first-observed *after* this deadline do not contribute to `i`'s `bid_set_i` for verdict computation but are still retained for Rule-7 slashing-evidence purposes (a second distinct bid from the same operator remains bid-equivocation regardless of arrival time). Host-validity follows the same locking semantics as bare OBFT's Phase-1 bundle validation (see [§Head-change handling](#head-change-handling)): on first-observation of `V_i`, the host validates `V_i` against a stable head snapshot taken at that observation moment and **locks the verdict (valid/not-valid) for the remainder of the slot**. Subsequent host-validity checks on `V_i` (in particular, the L_Bid Phase-2 emit-time check below) are reads of this locked verdict, never re-evaluations against a moved head. Bids whose locked verdict is not-valid are excluded from `bid_set_i`. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bids that fail any enabled filter are excluded from `bid_set_i`. (Coherence note: when a rotation leader's `KindBid` `V_i` and Phase-1 bundle V are the same value per [§Coherence and cross-layer independence](#coherence-and-cross-layer-independence), a single host-validity check on first-observation of either envelope produces the locked verdict applied to both.)
+1. Computes `bid_set_i` = set of received-and-validated L_Bid-eligible Phase-1 bundles first-observed before `T_verdict` — Phase-1 cryptographic checks pass, bid metadata is well-formed, and host-validity verdict = valid. Bundles first-observed *after* `T_verdict` do not contribute to `i`'s `bid_set_i` for verdict computation, but are still retained for Phase-1 processing and slashing-evidence purposes. Host-validity follows the same locking semantics as bare OBFT's Phase-1 bundle validation (see [§Head-change handling](#head-change-handling)): on first-observation of `V_{L_k}`, the host validates `V_{L_k}` against a stable head snapshot taken at that observation moment and **locks the verdict (valid/not-valid) for the remainder of the slot**. Subsequent host-validity checks on `V_{L_k}` (in particular, the L_Bid Phase-2 emit-time check below) are reads of this locked verdict, never re-evaluations against a moved head. Bundles whose locked verdict is not-valid are excluded from `bid_set_i`. Optional host-supplied filters MAY further restrict the set: parent-root within cluster-recognized set (see [Application: SSV Ethereum proposer duty](#application-ssv-ethereum-proposer-duty) for the SSV-specific filter); relay/builder attestation verification (see [§Optional extension — relay/builder attestation verification](#optional-extension--relaybuilder-attestation-verification)). Bundles that fail any enabled filter are excluded from `bid_set_i`.
 2. Computes `predicted_LBid_i`:
-   - If `|bid_set_i| ≥ n − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax_{V in bid_set_i} bid_value`, with `op_id` tiebreak on equal bids.
+   - If `|bid_set_i| ≥ qBid = K − f` AND optional parent-root filter passes: `predicted_LBid_i = argmax_{V in bid_set_i} bid_value`, with `(layer, leader_id)` tiebreak on equal bids.
    - Else: `predicted_LBid_i = null` (insufficient visibility or no consensus reachable from `i`'s view).
 3. Constructs `KindBidVerdict` binding the prediction. Signs with operator-identity key; gossips.
 
-Operators broadcast verdict as late as possible within the mini-consensus window — at `T_commit − 1 BTT` — to maximize bid-envelope visibility (late re-flooded bids may change the argmax).
+Operators broadcast verdict as late as possible while preserving the configured verdict propagation budget: at `T_verdict = T_commit − Δ_verdict`. Larger `Δ_minicon − Δ_verdict` gives more time for post-`T_0_arrival` bundle visibility before verdicting; smaller values preserve MEV-fetch budget but rely more heavily on mesh propagation being tight.
 
 A second distinct `KindBidVerdict` from `i` for the same slot is verdict-equivocation, slashable via Rule 8. Honest receivers count `i`'s first-observed verdict toward convergence; subsequent verdicts are dropped from convergence input but recorded for slashing.
 
@@ -1031,16 +1047,17 @@ If L_Bid reaches neither σ-quorum nor NR-quorum, the chained encryption to L_0 
 
 ### Coherence and cross-layer independence
 
-L_Bid extends OBFT's per-layer commitment model with one cross-layer constraint and preserves cross-layer independence elsewhere.
+L_Bid preserves OBFT's per-layer commitment model and removes the old bid/bundle coherence problem by construction.
 
-**Coherence — rotation-leader bid/bundle binding.** A rotation leader L_k commits to a single V per slot:
+**Coherence — bid data is part of the bundle.** A rotation leader L_k commits to a single V per slot:
 
-- Their Phase-1 bundle V (which they σ-sign at L_k as `σ_{L_k}^V`) and their bid envelope `V_i` are the same value. EKM enforces single-σ-V per `(slot, layer)`, so signing two distinct V's at the same `(slot, L_k)` is rejected; the coherence rule operates one level higher: the V the leader commits to in their bid is the V they bring to their rotation layer.
-- A `KindBid` `V_i ≠ Phase-1 bundle V` at the same `(slot, leader)` is operator equivocation, slashable via Rule 7.
+- The bid metadata is carried inside the Phase-1 bundle whose V is signed as `σ_{L_k}^V(V_{L_k})`; there is no separate bid message that can point at a different V.
+- EKM enforces single-σ-V per `(slot, layer)`, so signing two distinct V's at the same `(slot, L_k)` is rejected for honest leaders and slashable for byzantine leaders under the base leader-equivocation rule.
+- Distinct signed bid metadata for the same `(slot, layer, leader, V)` is L_Bid-specific bid-metadata equivocation, covered by Rule 7 below.
 
-**Independence — non-rotation operators and cross-layer commitments:**
+**Independence — cross-layer commitments:**
 
-- Non-rotation operators (those not L_k for any k) have only a bid envelope `V_i`; no rotation-layer Phase-1 bundle. The coherence constraint does not apply.
+- Non-rotation operators have no independent L_Bid candidate in this design. They still participate in mini-consensus by validating retained eligible Phase-1 bundles and broadcasting `KindBidVerdict`.
 - An operator's σ-or-NR commitment at one layer does not constrain another layer. A rotation leader L_k whose bid loses L_Bid still σ-emits at L_k on their (matching) bundle V if rotation-layer σ-eligibility holds; the L_Bid outcome and the L_k σ-decision are independent at the operator level.
 - L_Bid σ-quorum on `V_X` reconstructs `(V_X, S)`; rotation-layer signatures are not used in that case. Conversely, L_Bid NR-quorum unlocks rotation-layer decryption; whichever rotation layer reaches σ-quorum supplies the output.
 
@@ -1057,25 +1074,25 @@ The alternative (L_Bid as a non-gating layer with rotation layers reachable inde
 
 Identical to bare OBFT.
 
-The mini-consensus does not bind threshold partials. `KindBid` and `KindBidVerdict` envelopes contribute zero to either σ-pool or NR-pool — they only influence which Phase-2 emission an operator chooses. EKM enforces single-σ-V per `(slot, layer)` per operator at Phase-2 sign time exactly as in bare OBFT.
+The mini-consensus does not bind threshold partials. Phase-1 bundle bid metadata and `KindBidVerdict` envelopes contribute zero to either σ-pool or NR-pool — they only influence which Phase-2 emission an operator chooses. EKM enforces single-σ-V per `(slot, layer)` per operator at Phase-2 sign time exactly as in bare OBFT.
 
 Pigeonholes 1, 2, 3 hold unchanged at K' = K + 1 layers. The additional `nr_tag_LBid` gate is structurally a deeper chained `nr_tag` and falls under Pigeonhole 3's inductive argument. Byzantine verdict misbehavior is slashable (Rule 8) but cannot violate cryptographic safety.
 
 ### Slashing-evidence rules
 
-Inherits OBFT's 5 rules unchanged. Rule 5's "plaintext layer" binds to L_Bid in this extension (since L_0 is no longer the plaintext layer here — its σ is encrypted under `nr_tag_LBid`); a fake plaintext σ at L_Bid that doesn't verify against any retained `bid_set` member is slashable on the same construction as L_0 in bare OBFT. Two new rules cover L_Bid-specific surfaces:
+Inherits OBFT's 5 rules unchanged. Rule 5's "plaintext layer" binds to L_Bid in this extension (since L_0 is no longer the plaintext layer here — its σ is encrypted under `nr_tag_LBid`); a fake plaintext σ at L_Bid that doesn't verify against any retained eligible Phase-1 bundle in `bid_set` is slashable on the same construction as L_0 in bare OBFT. Two new rules cover L_Bid-specific surfaces:
 
-- **Rule 7 — Bid equivocation / bid-bundle incoherence.** Two distinct `KindBid` envelopes from the same operator at the same slot, OR a `KindBid` `V_i` mismatching the same operator's Phase-1 bundle V at the same `(slot, rotation_layer)`. Self-contained slashable evidence — both envelopes signed by `i`'s operator-identity key.
+- **Rule 7 — Bid-metadata equivocation.** Two distinct signed Phase-1 bundle envelopes from the same `(slot, layer, leader)` that carry the same V but different bid metadata (`bid_value` and/or `relay_attestation`). Self-contained slashable evidence — both envelopes are signed by the leader's operator-identity key. If the two bundles carry different V's, the base leader-equivocation rule already applies.
 - **Rule 8 — Verdict equivocation / verdict-vs-action equivocation.** Operator `i` either broadcasts two distinct `KindBidVerdict` envelopes for the same slot, OR broadcasts `KindBidVerdict(σV(V_X))` and emits Phase-2 NR partial on `nr_tag_LBid`. Self-contained slashable evidence — both signed messages exist on the wire. The reverse pattern (null verdict + Phase-2 σ on `V_X`) is **not** Rule-8 slashable: it's permitted honest behavior when an operator's `bid_set` was incomplete at the verdict-broadcast deadline but late re-flood completes the view before Phase-2 emit (cluster gains an extra σ-pool contribution; no defection).
 
 **Evidence quality** (paralleling [§Implications of the rational-byzantine deterrent (assumption 4)](#implications-of-the-rational-byzantine-deterrent-assumption-4) for the main spec's rules):
 
 | Fault class | Evidence type | False-positive risk |
 |---|---|---|
-| Bid equivocation, verdict equivocation, verdict-vs-action equivocation (verdict claims `σV(V_X)` and Phase-2 emits NR partial on `nr_tag_LBid`) | Cryptographic, self-contained — single signed message-pair conclusively demonstrates the action | Very low |
-| Bid silence (C1 — withholding own `KindBid` without any alternate emission) | Behavioral pattern — no signed message proves the operator failed to broadcast; observable only via aggregate honest reception failure across slots | Higher — same character as silence-grief in bare OBFT |
+| Phase-1 bundle equivocation, bid-metadata equivocation, verdict equivocation, verdict-vs-action equivocation (verdict claims `σV(V_X)` and Phase-2 emits NR partial on `nr_tag_LBid`) | Cryptographic, self-contained — single signed message-pair conclusively demonstrates the action | Very low |
+| Candidate silence (C1 — withholding own L_Bid-eligible Phase-1 bundle without any alternate emission) | Behavioral pattern — no signed message proves the leader failed to broadcast; observable only via aggregate honest reception failure across slots | Higher — same character as silence-grief in bare OBFT |
 
-The same asymmetry as in bare OBFT applies: high-evidence-quality faults (clear equivocation) are also the ones the protocol handles cleanly within the slot (verdict-quorum reaches or doesn't, cluster falls through); low-evidence-quality faults (silence, including the bid-silence component of C1's withholding-then-defect residual) are the load-bearing adversarial-byz attacks that engineer slot-miss-without-fall-through. The rational-byzantine deterrent's strength is correspondingly weakest where adversarial grief is most damaging — same structural property as bare OBFT, surfaced at L_Bid as well.
+The same asymmetry as in bare OBFT applies: high-evidence-quality faults (clear equivocation) are also the ones the protocol handles cleanly within the slot (verdict-quorum reaches or doesn't, cluster falls through); low-evidence-quality faults (silence, including the candidate-silence component of C1's withholding-then-defect residual) are the load-bearing adversarial-byz attacks that engineer slot-miss-without-fall-through. The rational-byzantine deterrent's strength is correspondingly weakest where adversarial grief is most damaging — same structural property as bare OBFT, surfaced at L_Bid as well.
 
 ### Liveness
 
@@ -1083,8 +1100,8 @@ The same asymmetry as in bare OBFT applies: high-evidence-quality faults (clear 
 
 The mini-consensus addresses the three deadlock classes from [§Background — bid-layer deadlocks](#background--bid-layer-deadlocks). C3 closes cleanly (3-of-4 majority); C1 and C2 close only when no V reaches `verdict_quorum`, otherwise fold into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid):
 
-- **C1 — Selective bid-withholding.** Byz withholds own `KindBid` from a subset of honest peers. **Closed when no V reaches `verdict_quorum`** (byz withholds from > f honest → those peers verdict null → pool fragments below `qV` → fall-through). **Not closed when byz withholds from exactly the minority** — minority still has `|bid_set| = n − f` and verdicts on its non-`V_X` argmax; byz adds its own verdict on `V_X` to reach `qV`, then withholds σ at Phase 2 (NR-emit or silent). Folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid).
-- **C2 — Bidder equivocation.** Byz sends conflicting `KindBid` envelopes to different peers. **Closed when no V reaches `verdict_quorum`** (verdicts split widely enough that no V reaches `qV` even with byz's own verdict → fall-through). **Not closed when byz aligns its verdict with the majority-honest first-observation** to push `verdict_pool` to `qV`, then withholds σ at Phase 2 (NR-emit or silent). Folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid).
+- **C1 — Selective candidate withholding.** Byz withholds its L_Bid-eligible Phase-1 bundle from a subset of honest peers. **Closed when no V reaches `verdict_quorum`** (byz withholds widely enough that affected peers verdict null or on non-byz candidates → pool fragments below `qV` → fall-through). **Not closed when byz withholds from exactly the minority** — at `K = n = 4`, minority still has `|bid_set| = qBid = 3` and verdicts on its non-`V_X` argmax; byz adds its own verdict on `V_X` to reach `qV`, then withholds σ at Phase 2 (NR-emit or silent). Folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid).
+- **C2 — Candidate / bid equivocation.** Byz sends conflicting signed Phase-1 bundle views to different peers. **Closed when no V reaches `verdict_quorum`** (verdicts split widely enough that no V reaches `qV` even with byz's own verdict → fall-through). **Not closed when byz aligns its verdict with the majority-honest first-observation** to push `verdict_pool` to `qV`, then withholds σ at Phase 2 (NR-emit or silent). Folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid).
 - **C3 — Validity-divergence majority on V_LBid (3-of-4 at f=1, n=4).** 3 honest verdict `σV(V_X)`, 1 honest verdict NV/null. `verdict_pool[V_X] = 3 = qV` → cluster σ-binds on `V_X`. The dissenting honest NRs at L_Bid; the σ-pool reaches `qV` from the V_X-side honest. **Closed for 3-of-4 majority.**
 
 #### Recovery scope at rotation layers L_0, ..., L_{K-1}
@@ -1099,17 +1116,17 @@ Four failure modes at the bid layer, all resulting in slot-miss without fall-thr
 
   | Trigger \ Phase 2 | NR-emit | Silent |
   |---|---|---|
-  | **Bid-equivocation** (V to majority, V' to minority) | Rule 7 + Rule 8 (crypto) | Rule 7 only (action behavioral) |
-  | **Bid-withholding** (V to majority, withhold from minority; minority verdicts non-V argmax) | Rule 8 only (bid-silence behavioral) | fully behavioral |
+  | **Candidate/bid equivocation** (V to majority, V' or different bid metadata to minority) | base leader-equivocation or Rule 7 + Rule 8 (crypto) | base leader-equivocation or Rule 7 only (action behavioral) |
+  | **Candidate withholding** (V to majority, withhold from minority; minority verdicts non-V argmax) | Rule 8 only (candidate-silence behavioral) | fully behavioral |
 
   At f=1, n=4: σ-pool[V] = 2 (majority); NR-pool = 1 (minority) + (1 if byz NR-emit, 0 if silent) ≤ 2 < `qEnc`. Deadlock.
 - **[Class B — cryptographically slashable] Verdict equivocation at L_Bid.** Byz issues different verdicts to different peers, fragmenting per-peer verdict-pool views. Some honest see `qV`-quorum on `V_X` (and σ-bind); others don't (and NR). σ-pool < `qV`; NR-pool < `qEnc`. Same deadlock shape. Rule 8 fires on the two-distinct-verdict-envelopes pair regardless of Phase-2 action — cryptographic.
-- **[Class A — assumption 2 violation] Partial verdict propagation at sub-1-BTT `Δ_minicon`.** When `Δ_minicon < 1 BTT` (aggressive sizing), verdict propagation operates in P50-P99 territory rather than guaranteed P99. All-honest network with mesh jitter can produce per-receiver verdict-pool divergence: some operators see `verdict_pool[V_X] ≥ qV` and σ-emit on `V_X`; others see `< qV` and NR. At f=1, n=4 with 2 σ-emitters / 2 NR-emitters: σ-pool = 2 < `qV`, NR-pool = 2 < `qEnc`, deadlock at L_Bid blocks L_0 fall-through. Same algebraic shape as 2-1-byz-defect but caused by network timing, not byz action — no slashing applies. Rate scales with the gap between actual mesh propagation P-percentile and the chosen `Δ_minicon`. Eliminated by sizing `Δ_minicon ≥ 1 BTT` (standard or conservative).
+- **[Class A — assumption 2 violation] Partial verdict propagation at sub-1-BTT `Δ_verdict`.** When `Δ_verdict < 1 BTT` (aggressive sizing), verdict propagation operates in P50-P99 territory rather than guaranteed P99. All-honest network with mesh jitter can produce per-receiver verdict-pool divergence: some operators see `verdict_pool[V_X] ≥ qV` and σ-emit on `V_X`; others see `< qV` and NR. At f=1, n=4 with 2 σ-emitters / 2 NR-emitters: σ-pool = 2 < `qV`, NR-pool = 2 < `qEnc`, deadlock at L_Bid blocks L_0 fall-through. Same algebraic shape as 2-1-byz-defect but caused by network timing, not byz action — no slashing applies. Rate scales with the gap between actual mesh propagation P-percentile and the chosen `Δ_verdict`. Eliminated by sizing `Δ_verdict ≥ 1 BTT` (standard or conservative).
 - **[Class A — assumption 3 violation] 2-2 validity-divergence at L_Bid.** Hard algebraic limit: when honest split 2-2 on `V_X` validity (and byz aligns to extend the split), no `verdict_pool` reaches `qV` and the NR-pool may also fall short under adversarial byz alignment. The same hard limit applies symmetrically in bare OBFT at L_0 — no protocol decides 2-2 validity divergence at f=1, n=4 without breaking BFT bound symmetry. Not attributable to byz (re-orgs are real-world events); no slashing applies. (See [§Implications of validity-divergence not being recovered (assumption 3)](#implications-of-validity-divergence-not-being-recovered-assumption-3).)
 
 #### Trigger frequency
 
-Byz is **always** a bidder, so they can attempt bid-equivocation, bid-withholding, or verdict-equivocation in any slot. Bare OBFT's adversarial-byz L_0 surfaces (σ-locked-split equivocation, h_V=1 selective-delivery) trigger only when byz is rotation L_0 — `1/n` slots under uniform rotation. The L_Bid surfaces are correspondingly `n×` higher-frequency. Per-slot effect is the same order (slot-miss; mixed-quality evidence handled via the cluster's coordination process).
+Candidate-withholding and candidate/bid-equivocation triggers require the byz to be one of the slot's K rotation leaders. Under uniform leader selection that is roughly `K/n` slots (and every slot when `K = n`). Verdict-equivocation remains available to any byz operator every slot because every operator broadcasts a `KindBidVerdict`. Compared with bare OBFT's L_0-only adversarial-byz surface (`1/n` slots under uniform rotation), L_Bid raises trigger frequency when `K > 1`, but no longer assumes a standalone all-operators-bid model.
 
 ### Slot timing
 
@@ -1142,28 +1159,28 @@ The table below shows L_0 broadcast deadline (= MEV-fetch budget at `slot_start 
 
 (L_Bid loss vs bare OBFT = `Δ_minicon` exactly. Negative MEV-fetch means L_0 broadcast deadline is before slot_start; the slot doesn't fit.)
 
-**Net for deployment selection.** At production-typical BTT (200-400ms), conservative sizing fits with comfortable MEV-fetch budget (2000-2900ms). At degraded mesh (BTT 600-1000ms), conservative sizing's budget shrinks aggressively or stops fitting; standard or aggressive sizing recovers MEV-fetch but at increasing partial-propagation deadlock risk (see [§New residual failure modes](#new-residual-failure-modes-at-l_bid)). At severely degraded mesh (BTT ≥ 1200ms), only aggressive sizing fits, and tightly. The L_Bid trade is **MEV-fetch budget vs partial-propagation residual rate** — choose based on production telemetry. Bare OBFT (no `Δ_minicon`) remains available when the trade isn't favorable.
+**Net for deployment selection.** At production-typical BTT (200-400ms), conservative sizing fits with comfortable MEV-fetch budget (2000-2900ms). At degraded mesh (BTT 600-1000ms), conservative sizing's budget shrinks aggressively or stops fitting; standard or aggressive sizing recovers MEV-fetch but at increasing partial-propagation deadlock risk when `Δ_verdict` drops below 1 BTT (see [§New residual failure modes](#new-residual-failure-modes-at-l_bid)). At severely degraded mesh (BTT ≥ 1200ms), only aggressive sizing fits, and tightly. The L_Bid trade has two knobs: `Δ_minicon` controls MEV-fetch budget, while `Δ_verdict` controls verdict-propagation safety. Choose both from production telemetry. Bare OBFT (no `Δ_minicon`) remains available when the trade isn't favorable.
 
 ### Optional extension — relay/builder attestation verification
 
 The protocol-level mitigation for [§Additional assumption — bid-value honesty](#additional-assumption--bid-value-honesty). When enabled, the cluster cryptographically rejects bids with unattested `bid_value` claims.
 
-**Wire format.** `KindBid`'s `relay_attestation` payload field carries the relay/builder's signature over `(V, bid_value)` plus the relay/builder identity (or a key reference into a cluster-recognized identity set). When the extension is disabled, the field MAY be empty or host-supplied; the wire format is unchanged across enable/disable, so clusters can toggle the check without coordinating on schema.
+**Wire format.** The Phase-1 bundle's bid section carries the relay/builder's signature over `(V, bid_value)` plus the relay/builder identity (or a key reference into a cluster-recognized identity set). When the extension is disabled, the field MAY be empty or host-supplied; the wire format is unchanged across enable/disable, so clusters can toggle the check without coordinating on schema.
 
-**Validation rule.** During mini-consensus bid-set computation, each receiver additionally checks: `relay_attestation` verifies against a cluster-recognized relay/builder identity AND binds the same `(V, bid_value)` pair carried in the `KindBid` payload. Bids that fail are excluded from `bid_set_i` and contribute nothing to argmax.
+**Validation rule.** During mini-consensus bid-set computation, each receiver additionally checks: `relay_attestation` verifies against a cluster-recognized relay/builder identity AND binds the same `(V, bid_value)` pair carried in the Phase-1 bundle's bid section. Bundles that fail are excluded from `bid_set_i` and contribute nothing to argmax.
 
 **What it closes:**
 
 - **Bid-value inflation** — byzantine cannot claim higher `bid_value` than a recognized relay actually committed to.
-- **Permanent L_Bid hijack via fake-bid spam** — byzantine's bids are capped by what cluster-recognized relays actually offer them.
+- **Permanent L_Bid hijack via fake-bid spam** — byzantine leaders' bids are capped by what cluster-recognized relays actually offer them.
 
 **What it does not close:**
 
-- **Selective bid-withholding** (C1) — protocol handling is conditional (see [§Recovery scope at L_Bid](#recovery-scope-at-l_bid)): falls through only when no V reaches `verdict_quorum`. The residual case folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid); attestation does not close it.
-- **Bid equivocation** — covered by Rule 7.
-- **Operator selecting a low-MEV bid from a recognized relay** — within the operator's discretion; not a protocol concern.
+- **Selective candidate withholding** (C1) — protocol handling is conditional (see [§Recovery scope at L_Bid](#recovery-scope-at-l_bid)): falls through only when no V reaches `verdict_quorum`. The residual case folds into [2-1-byz-defect](#new-residual-failure-modes-at-l_bid); attestation does not close it.
+- **Candidate / bid equivocation** — distinct V equivocation is covered by the base leader-equivocation rule; same-V bid-metadata equivocation is covered by Rule 7.
+- **Leader selecting a low-MEV bid from a recognized relay** — within the leader's discretion; not a protocol concern.
 
-**Cost.** One signature verification per `KindBid` per receiver (small relative to overall cryptographic work) plus the bandwidth of carrying the attestation. Verification must complete within the mini-consensus window; sign-check throughput should be confirmed for the deployment's relay-set size.
+**Cost.** One signature verification per L_Bid-eligible Phase-1 bundle per receiver (small relative to overall cryptographic work) plus the bandwidth of carrying the attestation. Verification must complete before `T_verdict`; sign-check throughput should be confirmed for the deployment's relay-set size.
 
 **When to enable.** SSV proposer duty under realistic adversarial conditions (operators may run builders or collude with builders for self-dealing). Default ON for SSV's deployment.
 
@@ -1175,29 +1192,29 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 |---|---|---|
 | Slot structure | Phase 1 → Phase 2 → Phase 3 | Phase 1 (with mini-consensus sub-phase at tail) → Phase 2 → Phase 3 |
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
-| Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindBid`, `KindBidVerdict` |
-| Slashing-evidence rules | 5 | 7 (+ Rule 7 bid equivocation/incoherence, + Rule 8 verdict equivocation/verdict-vs-action) |
+| Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | `Phase1Bundle` gains bid metadata; + `KindBidVerdict` |
+| Slashing-evidence rules | 5 | 7 (+ Rule 7 bid-metadata equivocation, + Rule 8 verdict equivocation/verdict-vs-action) |
 | `T_commit` anchor | back-end: `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` | **Same** (`T_commit` invariant across bare OBFT and OBFT+L_Bid; cross-family T_commit anchors differ — see [BFT-comparison.md](BFT-comparison.md#scope-and-assumptions)) |
 | Best-case latency post-`T_commit` (early reconstruct) | ~200ms (`1 BTT`) | **Same** (~200ms; mini-consensus runs pre-`T_commit`) |
 | Canonical latency post-`T_commit` (full Phase 2 + Phase 3) | ~500ms (`Δ_2 + Δ_3`) | **Same** (~500ms) |
 | Time-to-completion spread (best → canonical) | ~2.5× | **Same** |
-| Bandwidth (n=4, K=4 healthy) | ~28 KB | ~33 KB (+n bid envelopes, +n verdicts, +1 chained encryption layer) |
-| L_0 broadcast deadline | `T_commit − B_0` (e.g., 3.30s at Config A max-MEV anchor) | `T_commit − Δ_minicon − B_0` (e.g., 2.90s at conservative `Δ_minicon = 2 BTT`) — shifts earlier by `Δ_minicon` |
+| Bandwidth (n=4, K=4 healthy) | ~28 KB | Base bandwidth + K bid-metadata sections + n verdicts + 1 chained encryption layer (no standalone bid envelopes) |
+| L_0 broadcast deadline | `T_commit − B_0` (e.g., 3.30s at Config A max-MEV anchor) | `T_0_broadcast_max = T_0_arrival − B_0 = T_commit − Δ_minicon − B_0` (e.g., 2.90s at conservative `Δ_minicon = 2 BTT`) |
 | MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~3050ms (V_0; T_commit = 3.40s) | ~2650ms (V_X) at conservative `Δ_minicon = 2 BTT`; ~2850ms at standard `Δ_minicon = 1 BTT`; ~2950ms at aggressive `Δ_minicon = 0.5 BTT` |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | OBFT base recovery scope | **Same** (mini-consensus failure falls through cleanly; rotation layers unchanged) |
-| L_Bid liveness — C1 selective bid-withholding | n/a (no bid layer) | **Closed only when verdict-quorum doesn't form** (withhold from > f honest → fall-through). Otherwise (withhold from exactly the minority + byz pushes verdict via own verdict + defects) falls under 2-1-byz-defect (Class B). |
-| L_Bid liveness — C2 bidder equivocation | n/a | **Closed only when verdict-quorum doesn't form** (verdicts split widely → fall-through). Otherwise (byz aligns its verdict with majority-honest + defects) falls under 2-1-byz-defect (Class B). |
+| L_Bid liveness — C1 selective candidate withholding | n/a (no bid layer) | **Closed only when verdict-quorum doesn't form** (withhold from > f honest → fall-through). Otherwise (withhold from exactly the minority + byz pushes verdict via own verdict + defects) falls under 2-1-byz-defect (Class B). |
+| L_Bid liveness — C2 candidate / bid equivocation | n/a | **Closed only when verdict-quorum doesn't form** (verdicts split widely → fall-through). Otherwise (byz aligns its verdict with majority-honest + defects) falls under 2-1-byz-defect (Class B). |
 | L_Bid liveness — C3 validity-divergence majority (3-of-4) | n/a | **Closed** (verdict-quorum reaches on majority; minority NR) |
-| L_Bid liveness — 2-1-byz-defect | n/a | **Class B**: slot-miss-without-fall-through; mixed evidence (Rule 7 under bid-equivocation, Rule 8 under NR-emit, behavioral for silent variants); assumption-4 deterred across slots |
+| L_Bid liveness — 2-1-byz-defect | n/a | **Class B**: slot-miss-without-fall-through; mixed evidence (base leader-equivocation or Rule 7 under candidate/bid equivocation, Rule 8 under NR-emit, behavioral for silent variants); assumption-4 deterred across slots |
 | L_Bid liveness — verdict-equivocation | n/a | **Class B** (slashable Rule 8; assumption-4 deterred across slots): slot-miss-without-fall-through |
-| L_Bid liveness — partial verdict propagation (sub-1-BTT `Δ_minicon`) | n/a | **Class A** (assumption 2 violation): all-honest partial-propagation deadlock at L_Bid; rate scales with mesh propagation distribution; eliminated by `Δ_minicon ≥ 1 BTT` |
+| L_Bid liveness — partial verdict propagation (sub-1-BTT `Δ_verdict`) | n/a | **Class A** (assumption 2 violation): all-honest partial-propagation deadlock at L_Bid; rate scales with mesh propagation distribution; eliminated by `Δ_verdict ≥ 1 BTT` |
 | L_Bid liveness — 2-2 validity split | shared hard algebraic limit at L_0 (BFT-theoretical, not protocol-specific) | **Class A** (assumption 3 violation): same hard limit at L_Bid; not attributable, no slashing |
-| Bid-routing value capture | n/a | Highest-bid block on healthy path |
-| Adversarial-byz trigger frequency at the bid layer | n/a | `n×` higher than bare OBFT's L_0 surfaces — byz is always a bidder, vs L_0-leader-only |
+| Bid-routing value capture | n/a | Highest-bid eligible rotation-layer block on healthy path |
+| Adversarial-byz trigger frequency at the bid layer | n/a | Candidate withholding/equivocation when byz is among K rotation leaders (`K/n` under uniform selection, every slot at `K=n`); verdict-equivocation every slot |
 
-**Net trade vs bare OBFT**: pays `Δ_minicon` of MEV-fetch budget (L_0 broadcast deadline shifts earlier; `T_commit` and post-`T_commit` consumption unchanged) and additional adversarial-byz residual surface at L_Bid (slot-miss-without-fall-through; mixed evidence quality) plus an all-honest Class A residual at sub-1-BTT `Δ_minicon`, in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' recovery scope is unchanged. Whether favorable depends on MEV-value-capture upside vs slot-loss cost (byzantine and partial-propagation residuals) at the chosen `Δ_minicon`.
+**Net trade vs bare OBFT**: pays `Δ_minicon` of MEV-fetch budget (L_0 broadcast deadline shifts earlier; `T_commit` and post-`T_commit` consumption unchanged) and additional adversarial-byz residual surface at L_Bid (slot-miss-without-fall-through; mixed evidence quality) plus an all-honest Class A residual at sub-1-BTT `Δ_verdict`, in exchange for bid-routing value capture on the healthy path. The L_0/.../L_{K-1} layers' recovery scope is unchanged. Whether favorable depends on MEV-value-capture upside vs slot-loss cost (byzantine and partial-propagation residuals) at the chosen `Δ_minicon` / `Δ_verdict`.
 
 ## Appendix C — Message re-broadcast considerations
 
@@ -1518,67 +1535,75 @@ Treat OBFT+Defer as a candidate enhancement worth re-evaluating if deployment co
 
 ## Appendix F — OBFT + L_Bid_New (priority-inverted bid-routing)
 
-This appendix specifies **L_Bid_New** as a candidate alternative to the L_Bid mini-consensus design ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)). The two extensions share the same goal — opportunistic bid-routing across all cluster operators' relay queries — but L_Bid_New trades a different set of properties. Where L_Bid puts the bid-routing winner V_X on the outermost (plaintext) onion layer and reaches it via cluster-wide convergence on **all** bids, L_Bid_New restricts cluster-wide convergence to **deep-layer bids only** (V_early) and incorporates the primary's late bid (bid_1) at an inner onion layer, gated by chained encryption.
+This appendix specifies **L_Bid_New** as a candidate alternative to the L_Bid mini-consensus design ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)). The two extensions share the same goal — opportunistic bid-routing across eligible rotation-layer Phase-1 candidates — but L_Bid_New trades a different set of properties. Where L_Bid puts the bid-routing winner V_X on the outermost (plaintext) onion layer and reaches it via cluster-wide convergence on **all K rotation-layer bids**, L_Bid_New restricts cluster-wide convergence to **deep-layer bids only** (V_early) and incorporates the primary's late bid (bid_1) at an inner onion layer, gated by chained encryption.
 
-The structural trade vs current L_Bid: L_Bid_New recovers the primary's MEV-fetch budget (~3050ms vs L_Bid's ~2650ms) and saves the +1 RTT post-`T_commit` cost (mini-consensus runs entirely within Phase 1 covering deep bids only), at the cost of exposing bid_1 to bare-OBFT-style asymmetric-delivery patterns at the bid layer (where current L_Bid uses mini-consensus to converge on bid_1's status).
+The structural trade vs current L_Bid: L_Bid_New recovers the primary's MEV-fetch budget (~3050ms vs L_Bid's ~2650ms) by excluding bid_1 from mini-consensus, at the cost of exposing bid_1 to bare-OBFT-style asymmetric-delivery patterns at the bid layer (where current L_Bid uses mini-consensus to converge on bid_1's status). Post-`T_commit` latency is the same order as current L_Bid because both variants run mini-consensus before `T_commit`. The timing distinction is pre-`T_commit`: current L_Bid starts mini-consensus at `T_0_arrival` and shifts every eligible rotation-layer deadline earlier; L_Bid_New starts mini-consensus at `T_deep_arrival` and shifts only deep-layer deadlines earlier.
 
 L_Bid_New is documented here as a candidate design point. Whether it is preferable to current L_Bid in production is deployment-dependent — see [§F.6 Comparison with current L_Bid](#f6--comparison-with-current-l_bid).
 
 ### F.1 — Setting
 
-L_Bid_New extends OBFT's setting in the same way L_Bid does — bid envelopes from all operators, mini-consensus convergence on a bid winner — with three structural differences:
+L_Bid_New extends OBFT's setting in the same way L_Bid does — bid metadata inside Phase-1 bundles, mini-consensus convergence on a bid winner — with these structural differences:
 
 - **K' = K + 1 layers** (same as L_Bid): an additional bid-layer prepended to OBFT's K rotation-determined layers.
-- **Mini-consensus scope = deep bids only**: the mini-consensus runs over `{V_i : operator i is L_k for k ≥ 1}` — i.e., the bids associated with the deeper-layer rotation leaders. The primary's bid (operator at L_0) is *not* in the mini-consensus bid set.
+- **Mini-consensus window = deep-arrival to commit**: `Δ_minicon = T_commit − T_deep_arrival`. Mini-consensus starts at `T_deep_arrival`, ends at `T_commit`, and all L_Bid_New mini-consensus timing derives from that interval. `T_deep_arrival` is the deterministic point by which honest deep-layer Phase-1 bundles (`L_1..L_{K-1}`) broadcast at their L_Bid_New deadlines are expected to have reached all honest operators under their propagation budgets. Deep leaders use `T_broadcast_max_k = T_deep_arrival − B_k` for `k ≥ 1`; the primary `L_0` uses the bare OBFT broadcast deadline and is not shifted by `Δ_minicon`.
+- **Mini-consensus scope = deep bids only**: the mini-consensus runs over `{V_i : operator i is L_k for k ≥ 1}` — i.e., the bids associated with the deeper-layer rotation leaders. The primary's bid (operator at L_0) is *not* in the mini-consensus bid set. The deep visibility threshold is `qBid_deep`, normally `(K − 1) − f` when the deep candidate set has enough layers to tolerate f byz omissions; deployments with smaller deep candidate sets must configure this threshold explicitly.
+- **Verdict propagation budget** `Δ_verdict`: `0 < Δ_verdict ≤ Δ_minicon`, with `T_verdict = T_commit − Δ_verdict`. Operators compute and broadcast `KindBidVerdict` at `T_verdict`; those verdicts propagate until `T_commit`. The remaining `Δ_select = Δ_minicon − Δ_verdict` is the in-window deep-bid settling budget after `T_deep_arrival` and before verdict broadcast.
 - **Onion priority inversion**: V_early (the mini-consensus winner over deep bids) is the **outermost** plaintext layer; bid_1 (= the primary's bid = V_{L_0}) is the **inner** layer encrypted under `nr_tag_LBid`.
 
-The key intuition: under L_Bid_New, the cluster outputs `argmax(V_early, bid_1)` via the chained-encryption fall-through structure rather than via a single mini-consensus over all bids. Operators σ-emit on V_early at L_Bid when V_early ≥ bid_1 (in their local view); they NR at L_Bid otherwise (preferring fall-through to L_0 where bid_1's σ-pool aggregates). The chained encryption gates L_0 reconstruction on L_Bid NR-quorum — preserving the cluster's single-output guarantee (Pigeonhole 3).
+The key intuition: under L_Bid_New, the cluster outputs `argmax(V_early, bid_1)` via the chained-encryption fall-through structure rather than via a single mini-consensus over all K rotation-layer bids. Operators σ-emit on V_early at L_Bid when V_early ≥ bid_1 (in their local view); they NR at L_Bid otherwise (preferring fall-through to L_0 where bid_1's σ-pool aggregates). The chained encryption gates L_0 reconstruction on L_Bid NR-quorum — preserving the cluster's single-output guarantee (Pigeonhole 3).
 
 ### F.2 — Wire kinds
 
-L_Bid_New uses the same wire kinds as L_Bid ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)):
+L_Bid_New uses the same wire framing as L_Bid ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)):
 
-- **`KindBid`**: every operator's bid envelope.
-- **`KindBidVerdict`**: mini-consensus verdict, broadcast over deep bids only.
+- **`Phase1Bundle` bid section**: bid metadata carried by each eligible rotation leader's Phase-1 bundle. There is no standalone `KindBid` message.
+- **`KindBidVerdict`**: mini-consensus verdict, broadcast over deep-layer Phase-1 bundle bids only.
 - **`KindCommit`**: Phase-2 onion + NR-partials + σ_L^V witness section (inherits from base OBFT).
 - **`KindCertificate`**: final certificate.
 
-The mini-consensus verdict (`KindBidVerdict`) carries a verdict on V_early specifically — not on the full argmax over all bids. This is a semantic difference from L_Bid, which verdicts on V_X = argmax-over-all-bids.
+The mini-consensus verdict (`KindBidVerdict`) carries a verdict on V_early specifically — not on the full argmax over all K rotation-layer bids. This is a semantic difference from L_Bid, which verdicts on V_X = argmax over the full eligible rotation-layer bid set.
 
 ### F.3 — Per-layer windows and deadlines
 
-L_Bid_New's Phase 1 has two structural elements:
+L_Bid_New's Phase 1 has two structural elements with different timing anchors:
 
-1. **Deep-layer Phase-1 window** `[slot_start, T_commit − slack]`: deep-layer rotation leaders L_1..L_{K-1} broadcast their bundles per the staggered `T_broadcast_max_k = Ls_arrival − B_k` schedule (same as bare OBFT). Bid envelopes for deep-layer operators (and non-rotation operators) broadcast during this window.
+1. **Deep-layer candidate broadcast**: deep-layer rotation leaders `L_1..L_{K-1}` broadcast their Phase-1 bundles with bid metadata by `T_broadcast_max_k = T_deep_arrival − B_k`. `T_deep_arrival = T_commit − Δ_minicon` is the start of the mini-consensus window, so the deep candidates that can influence V_early are expected to have reached all honest receivers before mini-consensus begins.
 
-2. **Primary Phase-1 broadcast** at `T_broadcast_max_0 = Ls_arrival − B_0` (= bare OBFT primary deadline). Primary L_0 broadcasts their Phase-1 bundle including bid_1 = V_{L_0}, with σ_{L_0}^V(V_{L_0}) and op-identity auth — same as bare OBFT's primary bundle. **Δ_minicon does not shift this deadline.**
+2. **Primary Phase-1 broadcast**: primary `L_0` uses the bare OBFT primary deadline (`T_broadcast_max_0` unchanged). The primary bundle carries `bid_1 = V_{L_0}`, `σ_{L_0}^V(V_{L_0})`, and op-identity auth exactly as in bare OBFT. **`Δ_minicon` does not shift the primary deadline.**
 
-The mini-consensus runs as a sub-phase at the tail of Phase 1 over deep-layer bids only. Verdict-broadcast deadline is `T_commit − 1 BTT`. Primary's bid_1 is broadcast in parallel and may or may not arrive at the verdict-broadcast deadline — *bid_1 is intentionally excluded from the mini-consensus bid_set*.
+The mini-consensus runs over deep-layer bids only during `[T_deep_arrival, T_commit]`. Operators compute and broadcast verdicts at `T_verdict = T_commit − Δ_verdict`, leaving `Δ_verdict` for verdict propagation. Primary's bid_1 is broadcast in parallel and may arrive before or after `T_verdict`; it is intentionally excluded from `bid_set_i_deep` and is evaluated locally at Phase 2.
 
 | Phase | Window | Activity |
 |---|---|---|
-| Phase 1 (deep) | `[slot_start, T_commit − Δ_minicon]` | Deep-layer leaders L_1..L_{K-1} broadcast Phase-1 bundles; deep-bidders broadcast `KindBid`. |
-| Mini-consensus | `[T_commit − Δ_minicon, T_commit]` | Operators verdict on V_early = argmax over deep bids; verdicts propagate by `T_commit`. |
-| Phase 1 (primary) | `[T_broadcast_max_0, T_commit]` | Primary broadcasts Phase-1 bundle (bid_1 + σ_{L_0}^V); broadcast happens at bare-OBFT primary deadline. |
+| Phase 1 (deep candidates) | `[slot_start, T_deep_arrival]` | Deep-layer leaders `L_1..L_{K-1}` broadcast Phase-1 bundles with bid metadata by `T_broadcast_max_k = T_deep_arrival − B_k`. |
+| Mini-consensus (deep bids) | `[T_deep_arrival, T_commit]` | Operators compute V_early = argmax over `bid_set_i_deep` first-observed by `T_verdict = T_commit − Δ_verdict` and broadcast `KindBidVerdict`; verdicts propagate by `T_commit`. |
+| Phase 1 (primary) | `[T_broadcast_max_0^bare, T_commit]` | Primary broadcasts Phase-1 bundle (bid_1 + `σ_{L_0}^V`); broadcast happens at the bare-OBFT primary deadline and overlaps the deep mini-consensus. |
 | Phase 2 | `[T_commit, T_commit + Δ_2]` | σ-or-NR commit at K' layers (L_Bid + L_0..L_{K-1}). |
 | Phase 3 | `[T_commit + Δ_2, T_round_end]` | K'-layer reconstruction walk. |
 
-Sizing — `Δ_minicon` sized as in current L_Bid (standard 1 BTT, recommended 2 BTT, aggressive 0.5 BTT). Note: `T_commit` is the same anchor as bare OBFT (~`Relay_cutoff − 3 BTT` = 3.40s at Config A). The MEV-fetch budget for primary L_0 is `T_broadcast_max_0 − slot_start` ≈ 3050ms (= bare OBFT's primary budget).
+Sizing — `Δ_minicon` is the total deep mini-consensus interval and `Δ_verdict` is the portion reserved for verdict propagation, same meaning as in current L_Bid but applied only to deep bids:
+
+- **Standard** `Δ_minicon = 1 BTT`, `Δ_verdict = 1 BTT`: full P99 verdict propagation under partial-synchrony assumption; no extra in-window deep-bid settling after `T_deep_arrival`.
+- **Conservative** `Δ_minicon = 2 BTT`, `Δ_verdict = 1 BTT`: one BTT for post-`T_deep_arrival` deep-bid settling plus one BTT for verdict propagation.
+- **Aggressive** `Δ_minicon = 0.5 BTT`, `Δ_verdict = 0.5 BTT`: sub-P99 verdict propagation; partial-propagation deadlock becomes a Class A residual, same as current L_Bid's aggressive sizing.
+
+`T_commit` is the same back-end anchor as bare OBFT (~`Relay_cutoff − 3 BTT` = 3.40s at Config A). L_Bid_New pays the `Δ_minicon` pre-`T_commit` cost only on deep-layer candidate deadlines; the primary L_0 MEV-fetch budget remains `T_broadcast_max_0^bare − slot_start` ≈ 3050ms (= bare OBFT's primary budget). Post-`T_commit` timing matches current L_Bid and bare OBFT.
 
 ### F.4 — Protocol
 
 #### F.4.1 — Phase 1: Deep bids + primary bundle
 
-Each non-primary operator `i` broadcasts `KindBid(i, V_i, bid_value, relay_attestation, σ_i^op)` during the deep-layer Phase-1 window. The primary additionally broadcasts their Phase-1 bundle (bid_1 + σ_{L_0}^V + op-auth) at `T_broadcast_max_0` per bare OBFT.
+Each deep-layer rotation leader broadcasts its Phase-1 bundle with bid metadata by `T_broadcast_max_k = T_deep_arrival − B_k` for `k ≥ 1`. The primary additionally broadcasts its Phase-1 bundle (bid_1 + `σ_{L_0}^V` + op-auth) at `T_broadcast_max_0^bare` per bare OBFT.
 
-The coherence rule (rotation leader L_k's KindBid V_i = their Phase-1 bundle V) inherits from L_Bid for deep-layer leaders. The primary L_0's KindBid is implicitly the same bid as their Phase-1 bundle V_{L_0} = bid_1 (no separate KindBid for the primary; the primary's role is the rotation L_0 leader and they broadcast a single Phase-1 bundle that serves both as their bid and as the L_0 candidate).
+As in L_Bid, bid/bundle coherence is structural: each bid is the bid metadata carried by the same Phase-1 bundle whose V is signed by the layer leader. Deep bundles serve as mini-consensus candidates; the primary's bundle serves as bid_1 and as the L_0 candidate, but not as a mini-consensus input.
 
 #### F.4.2 — Mini-consensus: verdict on V_early
 
-Each operator `i`, by their verdict-broadcast deadline `T_commit − 1 BTT`:
+Each operator `i`, by `T_verdict = T_commit − Δ_verdict`:
 
-1. Computes `bid_set_i_deep` = received-and-validated `KindBid` envelopes from non-primary bidders, first-observed before the verdict-broadcast deadline. **The primary's bid (bid_1) is NOT in `bid_set_i_deep`** — primary's bid is treated separately at L_0.
-2. Computes `predicted_LBid_i`: `argmax over bid_set_i_deep` if `|bid_set_i_deep| ≥ n − f`; else null.
+1. Computes `bid_set_i_deep` = received-and-validated deep-layer Phase-1 bundles with bid metadata, first-observed before `T_verdict`. Deep bundles first-observed after `T_verdict` remain retained for ordinary rotation-layer processing and slashing evidence, but do not affect this verdict. **The primary's bid (bid_1) is NOT in `bid_set_i_deep`** — primary's bid is treated separately at L_0.
+2. Computes `predicted_LBid_i`: `argmax over bid_set_i_deep` if `|bid_set_i_deep| ≥ qBid_deep`; else null, where `qBid_deep` is the configured visibility threshold for the deep candidate set.
 3. Broadcasts `KindBidVerdict` carrying their prediction.
 
 At mini-consensus end (`T_commit`):
@@ -1627,7 +1652,7 @@ If L_Bid reaches neither σ-quorum nor NR-quorum, the chained encryption to L_0 
 
 ### F.5 — Failure modes
 
-L_Bid_New's failure modes split into (a) modes inherited from bare OBFT at L_0 and below, and (b) modes specific to the L_Bid layer's σ-or-NR commitment under asymmetric bid_1 delivery.
+L_Bid_New's failure modes split into (a) modes inherited from bare OBFT at L_0 and below, and (b) modes specific to the L_Bid layer's σ-or-NR commitment under asymmetric bid_1 delivery or deep mini-consensus divergence.
 
 #### F.5.1 — Inherited from bare OBFT
 
@@ -1641,7 +1666,7 @@ These are bare OBFT's failure modes restated; same Class A / Class B framing.
 
 #### F.5.2 — Specific to L_Bid_New's L_Bid layer
 
-The L_Bid layer's σ-or-NR commitment depends on each honest's local view of (V_early, bid_1, V_early-vs-bid_1). Asymmetric bid_1 delivery (one honest doesn't have bid_1) creates an honest-split at L_Bid:
+The L_Bid layer's σ-or-NR commitment depends on each honest's local view of (V_early, bid_1, V_early-vs-bid_1), and on whether honest operators converge on the same V_early verdict set by `T_commit`. Asymmetric bid_1 delivery (one honest doesn't have bid_1) creates an honest-split at L_Bid:
 
 - **Asymmetric bid_1 delivery + V_early > bid_1**: honest with bid_1 σ on V_early; honest without bid_1 σ on V_early (per the σ-when-uncertain rule). All honest σ at L_Bid → σ-quorum reaches → output V_early. **No deadlock under non-grief.** Under adversarial byz NR: σ-pool = (n−f−1) + 0 = n−f−1; NR-pool = 0 + 1 = 1. If n−f−1 ≥ qV: σ-quorum reaches anyway. If n−f−1 < qV (= 2 < 3 at f=1, n=4): deadlock. **Class B** at f=1, n=4.
 
@@ -1653,6 +1678,10 @@ The L_Bid layer's σ-or-NR commitment depends on each honest's local view of (V_
   **The choice of σ-vs-NR-when-uncertain trades which asymmetric-delivery configuration deadlocks**. Neither rule eliminates the residual at f=1, n=4 (this is an algebraic limit per [§F.7](#f7--algebraic-floor)); the choice picks which corner case is the residual.
 
 - **Verdict-equivocation by byz on V_early**: byz emits different verdicts to different honest peers; honest local-verdict-views diverge; some honest σ at L_Bid on V_early, others NR. Same algebraic deadlock pattern. Class B.
+
+- **Selective deep-candidate withholding / equivocation**: same mini-consensus residual shape as current L_Bid, but scoped to `L_1..L_{K-1}` only. If no V_early reaches verdict quorum, L_Bid NR-quorums and falls through to L_0 cleanly. If byz helps form a verdict quorum and then NR-defects or stays silent in Phase 2, L_Bid can deadlock before L_0 unlocks. Evidence quality mirrors current L_Bid: cryptographic when the trigger/action includes signed equivocation or signed NR-after-verdict, behavioral for silence variants.
+
+- **Partial verdict propagation under aggressive `Δ_verdict`**: if `Δ_verdict` is sized below the deployment's honest-message propagation bound, honest operators may not receive the same `KindBidVerdict` set by `T_commit`. This is the same Class A residual as current L_Bid's sub-1-BTT verdict-propagation mode, now over deep-bid verdicts only.
 
 #### F.5.3 — Comparison: which asymmetric-delivery deadlocks are Class A vs Class B
 
@@ -1669,24 +1698,31 @@ The two extensions are structurally distinct points in the L_Bid design space.
 
 | Aspect | Current L_Bid | L_Bid_New |
 |---|---|---|
-| Mini-consensus scope | All bids (incl. primary) | Deep bids only |
-| Onion priority | V_X = argmax-over-all-bids OUTER; rotation layers INNER | V_early = argmax-over-deep-bids OUTER; bid_1 INNER; rotation layers INNERMOST |
+| Mini-consensus interval | `[T_0_arrival, T_commit]`, where `Δ_minicon = T_commit − T_0_arrival` | `[T_deep_arrival, T_commit]`, where `Δ_minicon = T_commit − T_deep_arrival` |
+| Candidate broadcast deadlines affected by `Δ_minicon` | All eligible rotation-layer leaders `L_0..L_{K-1}` use `T_broadcast_max_k = T_0_arrival − B_k` | Only deep leaders `L_1..L_{K-1}` use `T_broadcast_max_k = T_deep_arrival − B_k`; primary `L_0` uses bare OBFT deadline |
+| Verdict deadline | `T_verdict = T_commit − Δ_verdict`; verdict over full eligible bid set | `T_verdict = T_commit − Δ_verdict`; verdict over deep bid set only |
+| Mini-consensus scope | All K rotation-layer bids (incl. primary) | Deep rotation-layer bids only; primary bid_1 is evaluated locally at Phase 2 |
+| Healthy-path bid routing | V_X = argmax over eligible rotation-layer bids | argmax(V_early, bid_1) via σ/NR choice at L_Bid then chained fall-through |
+| Onion priority | V_X = argmax-over-eligible-rotation-bids OUTER; rotation layers INNER | V_early = argmax-over-deep-bids OUTER; bid_1 INNER; rotation layers INNERMOST |
 | Primary MEV-fetch budget | ~2650ms (Δ_minicon shifts T_broadcast_max_0 earlier) | ~3050ms (= bare OBFT's; no Δ_minicon shift on primary) |
-| Post-`T_commit` consensus budget | ~900ms (Δ_minicon + Δ_2 + Δ_3) | ~500ms (Δ_2 + Δ_3 only; mini-consensus inside Phase 1) |
-| Submission headroom (4s cutoff) | ~3.10s | ~3.50s (= bare OBFT) |
+| Deep-layer MEV-fetch budget | Deep deadlines shift earlier by `Δ_minicon` | Same deep-deadline cost as current L_Bid for `L_1..L_{K-1}` |
+| Post-`T_commit` consensus budget | ~500ms (Δ_2 + Δ_3; mini-consensus is pre-`T_commit`) | ~500ms (Δ_2 + Δ_3) |
+| Submission headroom (4s cutoff) | Same post-`T_commit` headroom as bare OBFT; lower MEV-fetch budget | Same post-`T_commit` headroom as bare OBFT; primary MEV-fetch budget preserved |
 | Bid_1 protection from asymmetric delivery | ✓ (mini-consensus convergence on bid_1) | ✗ (bid_1 exposed to bare-OBFT-style asymmetric attacks) |
-| Adversarial-byz exposure surface at the bid layer | C1, C2, C3 mini-consensus residuals + 2-1-byz-defect + verdict-equivocation | bare-OBFT-style L_0 surface (asymmetric primary delivery) + verdict-equivocation on deep bids |
+| Deep-bid protection from asymmetric delivery | Mini-consensus convergence applies | Mini-consensus convergence applies to deep bids only |
+| Adversarial-byz exposure surface at the bid layer | C1/C2 conditional closure, 2-1-byz-defect, verdict-equivocation, sub-1-BTT `Δ_verdict` residual | bare-OBFT-style L_0 exposure for bid_1 + deep mini-consensus residuals + verdict-equivocation on deep bids |
+| Trigger frequency | Candidate withholding/equivocation when byz is among K rotation leaders (`K/n` under uniform selection, every slot at `K=n`); verdict-equivocation every slot | Primary bid_1 exposure when byz is L_0 (`1/n`); deep candidate withholding/equivocation when byz is among `K−1` deep leaders; verdict-equivocation every slot |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Number of onion encryption layers | K + 1 (L_Bid + K rotation) | K + 1 (L_Bid + L_0 + K−1 rotation, with L_Bid + L_0 chained) |
 
-**Net trade**: L_Bid_New shifts the bid-layer Class B exposure from "mini-consensus residuals at f=1" to "bare-OBFT-style asymmetric primary delivery at f=1". Both have Class B residuals at f=1, n=4 — the choice is which residual is more acceptable in the deployment. L_Bid_New gains primary MEV-fetch time and post-`T_commit` latency at this trade-off cost.
+**Net trade**: L_Bid_New shifts the bid-layer Class B exposure from "mini-consensus residuals at f=1" to "bare-OBFT-style asymmetric primary delivery at f=1". Both have Class B residuals at f=1, n=4 — the choice is which residual is more acceptable in the deployment. L_Bid_New gains primary MEV-fetch time, not post-`T_commit` latency, at this trade-off cost.
 
 **Whether L_Bid_New is preferable to current L_Bid is deployment-dependent**:
 
 - Deployments with strong relay-attestation enforcement and reliable primary mesh propagation: L_Bid_New favorable (recovers MEV-fetch budget; bid_1's Class B exposure is narrower in practice when primary's relay attestation is enforced and primary's mesh is reliable).
 - Deployments with adversarial primary or unreliable primary mesh: current L_Bid favorable (mini-consensus convergence on bid_1 protects against more bid_1-asymmetry patterns).
-- Deployments at higher cluster sizes (n ≥ 7): bare OBFT's per-slot Class B exposure decreases proportionally with `n`; L_Bid and L_Bid_New both stay at ~100% trigger frequency. The relative gain of L_Bid_New's MEV-fetch budget recovery is preserved at larger n.
+- Deployments at higher cluster sizes (n ≥ 7): bare OBFT's L_0-only Class B exposure decreases proportionally with `n`; current L_Bid's candidate-withholding/equivocation exposure scales with the selected K leaders (`K/n` under uniform selection, every slot at `K=n`), while verdict-equivocation remains every slot. The relative gain of L_Bid_New's MEV-fetch budget recovery is preserved at larger n.
 
 ### F.7 — Algebraic floor
 
@@ -1698,12 +1734,11 @@ The protocols differ in *which* adversarial scenarios produce non-unanimous spli
 
 **Use L_Bid_New** when:
 - Primary MEV-fetch budget is the binding constraint (high-MEV slots, late-discovery relay queries).
-- Post-`T_commit` latency budget matters (constrained submission deadlines).
 - Primary's mesh reliability is high and relay-attestation extension is enforced.
 
 **Use current L_Bid** when:
 - Bid_1's Class B exposure must be minimized (adversarial primary likely; primary mesh unreliable).
-- Submission headroom is generous; the +400ms cost of mini-consensus is acceptable.
-- Deployment prefers protocol-level convergence on every bid (rather than per-operator argmax computation on the late bid).
+- MEV-fetch headroom is generous; the `Δ_minicon` cost before `T_commit` is acceptable.
+- Deployment prefers protocol-level convergence on every eligible rotation-layer bid (rather than per-operator argmax computation on the late bid).
 
-**Either is acceptable** for production-typical mesh + institutional/permissioned operator sets where primary equivocation is unlikely. The choice is then driven by latency/MEV preferences.
+**Either is acceptable** for production-typical mesh + institutional/permissioned operator sets where primary equivocation is unlikely. The choice is then driven by primary MEV-fetch budget vs which residual surface the deployment prefers; it is not a post-`T_commit` latency choice, because both variants run mini-consensus before `T_commit`.

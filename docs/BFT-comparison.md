@@ -236,12 +236,12 @@ The **MEV-fetch budget asymmetry is a structural OBFT-family advantage over QBFT
 
 ## OBFT + L_Bid mini-consensus extension
 
-OBFT + L_Bid (specified in [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)) is an opportunistic bid-routing extension to bare OBFT. It prepends a bid-determined L_Bid layer above OBFT's K rotation-determined layers (yielding `K' = K + 1`) and adds a mini-consensus phase between Phase 1 and Phase 2 that resolves L_Bid identity cluster-wide before σ-commitment. This section identifies scenarios where OBFT+L_Bid's behavior differs from bare OBFT and from the other three protocols. **Most scenarios are identical between bare OBFT and OBFT+L_Bid**; the differences are surfaced below.
+OBFT + L_Bid (specified in [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)) is an opportunistic bid-routing extension to bare OBFT. It prepends a bid-determined L_Bid layer above OBFT's K rotation-determined layers (yielding `K' = K + 1`) and adds a mini-consensus sub-phase between `T_0_arrival` and `T_commit` that resolves L_Bid identity cluster-wide before σ-commitment. This section identifies scenarios where OBFT+L_Bid's behavior differs from bare OBFT and from the other three protocols. **Most scenarios are identical between bare OBFT and OBFT+L_Bid**; the differences are surfaced below.
 
 ### Differences vs bare OBFT (summary)
 
 - **+2 BTT total consensus time**, all in pre-`T_commit` budget: OBFT+L_Bid is **5 BTT** (1 BTT broadcast slack + 2 BTT mini-consensus + 2 BTT Phase 2 + 0 Phase 3) vs bare OBFT's 3 BTT at conservative `Δ_minicon = 2 BTT`. `T_commit` is back-end-anchored and unchanged from bare OBFT; the 2 BTT mini-consensus runs as a sub-phase at the tail of Phase 1, so the cost falls on the L_0..L_{K-1} broadcast deadlines (MEV-fetch budget shrinks by `Δ_minicon`), not on post-`T_commit` slack — see [OBFT.md Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension).
-- **Value capture upside**: highest-bid block on the healthy path (when L_Bid σ-quorum reaches) instead of rotation-determined V.
+- **Value capture upside**: highest-bid eligible rotation-layer block on the healthy path (when L_Bid σ-quorum reaches) instead of fixed rotation-priority V.
 - **New failure modes at L_Bid**: 2-1-byz-defect (mixed evidence quality — cryptographic Rules 7/8 for some triggers/actions, behavioral for silent variants) and verdict-equivocation (cryptographic Rule 8); both slot-miss-without-fall-through to L_0.
 - **L_0..L_{K-1} rotation layers are unchanged**: when the mini-consensus fails to converge the cluster falls through to L_0 with the same recovery profile as bare OBFT. C1/C2 closure is conditional — see [Adversarial-byz failure modes](#adversarial-byz-failure-modes-specific-to-l_bid--table-3-delta) below.
 
@@ -268,10 +268,10 @@ These failure modes don't apply to bare OBFT (no L_Bid layer):
 
 | Failure mode | Bare OBFT | OBFT+L_Bid |
 |---|---|---|
-| **C1 — Selective bid-withholding at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
-| **C2 — Bidder equivocation at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
+| **C1 — Selective candidate withholding at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
+| **C2 — Candidate / bid equivocation at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
 | **C3 — V_LBid validity-divergence majority (3-of-4)** | n/a | ✓ closed by convergence rule |
-| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock blocks L_0 fall-through); mixed evidence — Rule 7 under bid-equivocation, Rule 8 under NR-emit (Rule 6b in 2abOBFT's numbering), behavioral for silent variants |
+| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock blocks L_0 fall-through); mixed evidence — base leader-equivocation or Rule 7 under candidate/bid equivocation, Rule 8 under NR-emit (Rule 6b in 2abOBFT's numbering), behavioral for silent variants |
 | **Verdict-equivocation at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8 in OBFT/OBFTR; covered by Rule 6 in 2abOBFT's numbering) |
 | **2-2 validity split at L_Bid** | n/a | **✗ algebraic limit** |
 | L_0..L_{K-1} rotation-layer failures | (per Table 3) | **Same as bare OBFT** |
@@ -290,17 +290,17 @@ The L_Bid-specific failure modes are structurally identical across the three pro
 
 ### Adversarial-byz trigger frequency
 
-Bare OBFT's L_0 adversarial-byz patterns (σ-locked equivocation, h_V=1, etc.) trigger only when byz is the rotation L_0 leader — typically 1/n slots at uniform rotation (25% of byz-controlled slots at f=1 n=4). OBFT+L_Bid's L_Bid surfaces (2-1-byz-defect, verdict-equivocation) can trigger any slot where byz is a bidder, which is **every slot** under SSV's all-operators-bid model (assuming the relay's signing cadence permits multi-query equivocation). The L_Bid extension increases adversarial-byz trigger frequency at the bid layer roughly n× compared to bare OBFT's rotation-only L_0 surfaces.
+Bare OBFT's L_0 adversarial-byz patterns (σ-locked equivocation, h_V=1, etc.) trigger only when byz is the rotation L_0 leader — typically 1/n slots at uniform rotation (25% of byz-controlled slots at f=1 n=4). OBFT+L_Bid candidate-withholding/equivocation surfaces trigger when byz is among the K rotation leaders (`K/n` under uniform selection, every slot at `K=n`); verdict-equivocation remains available to any byz operator every slot because every operator broadcasts a verdict. The L_Bid extension therefore increases adversarial-byz trigger frequency relative to bare OBFT's L_0-only surface when `K > 1`, but it no longer assumes standalone all-operator bid envelopes.
 
 ### Net trade vs bare OBFT
 
 OBFT+L_Bid pays:
 - **+2 BTT total consensus time** (in pre-`T_commit` budget — MEV-fetch reduction; post-`T_commit` matches bare OBFT). Loses bare OBFT's advantage at (0s, 1000ms) and (400ms, 1000ms) scenarios where bare OBFT fits and OBFT+L_Bid doesn't; all other scenarios are unaffected at the budget-fit level.
 - **+adversarial-byz exposure at L_Bid** (2-1-byz-defect with mixed evidence quality, verdict-equivocation cryptographic; slot-miss without fall-through; higher trigger frequency than rotation-only patterns).
-- **+structural complexity** (new wire kinds `KindBid` / `KindBidVerdict`, two new slashing rules, mini-consensus protocol step).
+- **+structural complexity** (`Phase1Bundle` bid metadata, new `KindBidVerdict`, two new slashing rules, mini-consensus protocol step).
 
 In exchange for:
-- **Bid-routing value capture** on healthy path (highest-bid block vs rotation-determined V).
+- **Bid-routing value capture** on healthy path (highest-bid eligible rotation-layer block vs fixed rotation-priority V).
 - **C1/C2/C3 conditional closure at L_Bid** (vs the naive bid-routing sketch which leaves these open). C1/C2 close when verdict-quorum doesn't form; residuals fold into 2-1-byz-defect rather than deadlock without attribution.
 
 The trade is favorable when MEV bid-routing value-capture upside exceeds the combined cost of (a) the new failure modes' slot-loss rate and (b) the +2 BTT MEV-fetch budget reduction (pre-`T_commit`). For low-MEV slots or deployments with significant mesh degradation pushing scenarios toward the (0s, 1000ms) or (400ms, 1000ms) borderline, bare OBFT is the better choice.
