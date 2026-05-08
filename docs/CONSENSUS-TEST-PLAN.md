@@ -144,6 +144,58 @@ Output dir is `./consensustest-reports/` by default; override via `make consensu
 - **Catalog at 21 scenarios**, plan called for 25-30. Headline coverage is in place; additional scenarios can be added incrementally. Larger-cluster sweep (n=7/10/13) runs the full catalog with safety enforcement and asserts per-cell expectation matches — every scenario's Apply scales with cfg.N / cfg.F() so outcome classes are stable across all SSV cluster sizes.
 - **Real-BLS suite at ~17s wall time** vs the 10-min budget. Plenty of headroom to scale up with deeper sweeps as needed.
 
+### Proposed stress-test additions (planned, not yet executed)
+
+Existing coverage is comprehensive on the named active-byz catalog (21 scenarios), cluster-size scaling (n ∈ {4, 7, 10, 13}), BTT operating points, and doc-table arithmetic (`TestSweep_DocTable`). Universal safety invariants panic on every run, so the existing surface is well-tested for safety. The gaps below split along the protocol's two correctness pillars: **liveness must hold flawlessly under conditions the protocol claims to tolerate**; **safety must hold under active byz grief**.
+
+#### Tier 1 — Liveness under conditions the protocol claims to tolerate (MUST)
+
+The protocol's liveness assumption is that, given ≤ f byzantine and network within partial-synchrony bound `(P99, δ)`, consensus completes by the relay cutoff. These tests verify the claim by stressing the `(byz, network, clock)` axes the spec says we should tolerate.
+
+| Test | Axis | Verifies |
+|---|---|---|
+| `TestSweep_Jitter` | `JitteredDelay` jitter ∈ {0, 50, 100, 200ms} × catalog at BTT=200ms | Liveness holds across propagation jitter inside one P99 BTT-budget cycle. Logs decision-rate gradient. |
+| `TestSweep_Asymmetric` | `PerReceiverDelay`: 1-2 honest at 2× BTT, others at BTT | Per-layer absorption-window semantics under realistic mesh asymmetry — OBFT staggered design must fall through cleanly. |
+| `TestSweep_ClockSkew` | per-operator clock offset ∈ ±[0, δ] = ±50ms across catalog | Spec assumption: cluster δ-bound holds. **Pre-requisite**: new `ClockSkew map[OperatorID]time.Duration` field on SimConfig + adapter wiring (per-op virtual-clock offset honored by timer firings + message-arrival timestamps; deterministic per config). |
+| `TestSweep_PassiveByz_UnderStress` | catalog scenarios where byz behavior is structurally indistinguishable from honest network/operator failure (SigmaRefusal, SilentLeader, MultiSilent, WithholdLeader_Deepest, LateLeaderBroadcast within absorption budget) × {jitter, asymmetric, clock-skew} | The "byzantine-equivalent-to-honest-failure" coverage — protocol must work flawlessly because we can't distinguish silent-byz from offline-honest in production. |
+
+#### Tier 2 — Failure mode validation (must MISS cleanly)
+
+These probe the "graceful failure" boundary: out-of-envelope conditions where the protocol must miss without violating safety invariants.
+
+| Test | Axis | Verifies |
+|---|---|---|
+| `TestSweep_Partition` | `PartitionedNetwork` isolating f operators across catalog | BFT-comparison.md Table 3 "Sustained partition > absorption window" — must miss cleanly, no safety violation. |
+| `TestSweep_LivenessEdge` | Paired runs at partial-synchrony boundary: BTT chosen so consensus completes ~100ms before relay cutoff (just-fit) and ~100ms over (just-miss) | Cliff-edge transition is clean — fit decides, miss violates no invariants. |
+| `TestSweep_OutOfEnvelope` | BTT > deepest-layer absorption (`B_{K-1} × BTT > 4000ms`) | All protocols miss at out-of-envelope BTT; no safety violation. (Existing `TestSweep_BTT` at BTT=400ms logs misses but doesn't assert clean-miss; this test makes the assertion explicit.) |
+
+#### Tier 3 — Active-byz grief (safety-focused, planned for later)
+
+Active byz that *intentionally* deviates from protocol to widen the slot-miss surface or attempt safety violations. Existing catalog covers headline patterns; these are combinations and statistical exploration.
+
+| Test | Description |
+|---|---|
+| `TestSweep_AdversarialTiming` | `ByzLateLeaderBroadcast` × `JitteredDelay` sized to just-exceed `B_k` at one honest receiver — exercises the spec's adversarial-byz analysis edge case. |
+| `TestSweep_PartitionByz` | Partition aligned with byz subset (f isolated + f byz on the surviving side). Combined network × adversarial inside the f-bound; safety must hold. |
+| `TestSweep_LargeSeeds_Catalog` | 50-100 seeds × full catalog under jittered network. Gated behind `-tags=long`. Probabilistic safety validation. |
+| `TestSoak_MultiSlot` | Sequential 50-200 slots, mixed byz/honest leaders per slot. Verifies retention-state cleanup (`O(K · n)` bound), no resource leaks, rational-byzantine deterrent across slots. **Pre-requisite**: multi-slot framework. |
+
+#### Out-of-scope (explicit non-additions)
+
+- **L_Bid extension** — until implementation lands. Spec'd in OBFT.md Appendix B; catalog scenarios deferred.
+- **Coverage-guided fuzzing of consensus state** — `message/validation/obft_admissions` already covers the validation layer with coverage-guided fuzz; consensus-layer state-space fuzzing is high-cost vs. value-add given existing safety panics.
+
+#### Recommended execution order
+
+1. **`TestSweep_Jitter`** — single test function, exercises existing primitive (`JitteredDelay`), biggest surface gain per LOC.
+2. **`TestSweep_Asymmetric`** + **`TestSweep_Partition`** — same primitive class as (1); builds out network-stress dimension.
+3. **`TestSweep_ClockSkew`** — required ("MUST"); needs SimConfig + adapter wiring for per-op virtual clock; prep work but conceptually clean.
+4. **`TestSweep_PassiveByz_UnderStress`** — combines (1)/(2)/(3) with the "byz-equivalent-to-honest-failure" catalog subset.
+5. **`TestSweep_LivenessEdge`** + **`TestSweep_OutOfEnvelope`** — pinpoint cliff-edge.
+6. Tier 3 items deferred until Tier 1 + 2 ship and we see what they surface.
+
+Each Tier-1/2 addition is a single test function (~30-50 LOC) in `sweep_test.go`. The framework primitives all exist (network, host, byz); clock-skew is the only one that needs new infra — a per-op `time.Duration` offset honored by the OBFT/QBFT virtual-time clocks.
+
 ---
 
 ## Goal
