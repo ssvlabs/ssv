@@ -12,7 +12,7 @@ The comparison is structured along three axes:
 
 ## Scope and assumptions
 
-- **Cluster**: `n = 4`, `f = 1`, `K = 4` (the SSV proposer-duty default; algebra generalizes to higher `n` at the f-bound).
+- **Cluster**: `n = 4`, `f = 1`, `K = 4` across protocols for like-for-like comparison (OBFTR's own preferred default is K=3 since R-round retry substitutes for one layer of K-fall-through — see [OBFTR.md §Application](OBFTR.md#application-ssv-ethereum-proposer-duty); algebra generalizes to higher `n` at the f-bound).
 - **Clock skew δ = 50ms**, included in `BTT` (see below).
 - **Time unit `BTT` (broadcast trip time)** = `P99 + δ` — one one-way broadcast trip under partial-synchrony assumptions. `P99` is the propagation budget at the deployment's chosen tail percentile (P99, P999, P9999, etc. — deployment knob). Operating points used in tables below: `BTT = 200ms` (P99 ≈ 150ms + δ ≈ 50ms; production-typical), `BTT = 600ms` (P99 ≈ 550ms + δ; degraded), `BTT = 1000ms` (P99 ≈ 950ms + δ; severely degraded). Tables and prose key on `BTT` end-to-end.
 - **Relay submission tail**: 100ms reserved for cert broadcast + relay submit after consensus completes (matches OBFT.md's `header_submit_headroom` — see [docs/OBFT.md / Operating point](OBFT.md#timing-budget)). Effective BFT budget = 4s − BFT_start − 100ms.
@@ -270,8 +270,8 @@ These failure modes don't apply to bare OBFT (no L_Bid layer):
 | **C1 — Selective bid-withholding at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
 | **C2 — Bidder equivocation at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
 | **C3 — V_LBid validity-divergence majority (3-of-4)** | n/a | ✓ closed by convergence rule |
-| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock blocks L_0 fall-through); mixed evidence (Rule 7 under bid-equivocation, Rule 8 under NR-emit, behavioral for silent variants) |
-| **Verdict-equivocation at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8) |
+| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock blocks L_0 fall-through); mixed evidence — Rule 7 under bid-equivocation, Rule 8 under NR-emit (Rule 6b in 2abOBFT's numbering), behavioral for silent variants |
+| **Verdict-equivocation at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8 in OBFT/OBFTR; covered by Rule 6 in 2abOBFT's numbering) |
 | **2-2 validity split at L_Bid** | n/a | **✗ algebraic limit** |
 | L_0..L_{K-1} rotation-layer failures | (per Table 3) | **Same as bare OBFT** |
 

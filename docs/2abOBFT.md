@@ -9,7 +9,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 ## When to use it
 
 **Suited for:**
-- SSV proposer duty under healthy-network partial synchrony (`P99` ≈ 100ms cluster gossipsub P99/P999) where the +1 RTT vs single-Phase-2 designs fits the slot budget.
+- SSV proposer duty under healthy-network partial synchrony (`P99` ≈ 150ms cluster gossipsub P99/P999) where the +1 RTT vs single-Phase-2 designs fits the slot budget.
 - Deployments operating under realistic adversarial conditions: small clusters, transient operators, weak governance, high-stake-to-grief-value ratios. The witness phase closes the σ-locked split equivocation, h_V=1 selective-delivery, and within-window validity-divergence patterns that single-Phase-2 designs leave as Class B / Class A failures.
 - High-P99 networks (`P99` ≈ 300–500ms) where multi-round protocols don't fit a 4s relay cutoff but a single round with the Phase-2 split still does.
 
@@ -313,7 +313,7 @@ There is no `Defer` state. Phase-2a's window IS the deferral mechanism: every op
 3. **Phase 2b** `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`: each operator computes per-layer convergence decisions from the observed Phase-2a verdict pool (per the convergence rule) and emits σ-or-NR partials per layer. EKM enforces single-σ-V per (slot, layer) per operator at sign time.
 4. **Phase 3** (from `T_commit + Δ_2a + Δ_2b`): each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses (re-running may incorporate late `KindOnion2b` arrivals).
 
-**Slot timing**: Phase 1 fetch occupies `[slot_start, T_commit]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 ≈ 2 BTT + 1 BTT + 100ms` at recommended sizing, ≈ 850ms at Config A; consensus is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`, leaving the rest of the slot as submission slack to `T_relay_cutoff`.
+**Slot timing**: Phase 1 fetch occupies `[slot_start, T_commit]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 = 2 BTT + 2 BTT + 300ms ≈ 1100ms` at recommended Config A sizing (≈ 700ms at minimum sizing); consensus is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`, leaving the rest of the slot as submission slack to `T_relay_cutoff`.
 
 ## Preconditions on the host application
 
