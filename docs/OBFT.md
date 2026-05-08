@@ -857,7 +857,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 
 **Cost-side trade-off summary:**
 
-- **Latency.** OBFT wins on healthy-path (~600ms vs ~800ms). On round-1 failure, QBFT can still recover via round-change (at ~2.8s total), while OBFT single-round failures are slot-misses; OBFTR(R=2) covers round-1-failure cases at ~1.8s within the same envelope. OBFT's recovery scope is narrower than QBFT's but available much faster within scope.
+- **Latency.** OBFT wins on healthy-path (~600ms vs ~1600ms QBFT-SSV at recommended sizing). On round-1 failure, QBFT can still recover via round-change (at ~3.6s total), while OBFT single-round failures are slot-misses; OBFTR(R=2) covers round-1-failure cases at ~2.4s within the same envelope. OBFT's recovery scope is narrower than QBFT's but available much faster within scope.
 - **Bandwidth.** QBFT lower healthy-path; OBFT higher due to onion encryption. On round failure, QBFT's round-change has its own bandwidth cost (~12KB extra round + a full additional consensus round); OBFT doesn't recover, so no failure-case bandwidth.
 - **Cryptography.** QBFT only needs BLS threshold signatures. OBFT additionally needs threshold IBE / SWE (drand/tlock-style; audited, deployed since 2023). The IBE primitive is more novel; for risk-averse deployments, this is a real consideration.
 - **Spec surface.** OBFT is meaningfully smaller spec than [OBFTR(R≥2)](OBFTR.md) (no rounds, no L_C consensus, no Phase 2.5, simpler EKM). Comparable in size to QBFT once you account for QBFT's view-change protocol and prepared-certificate verification.
@@ -872,9 +872,9 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 
 **Where OBFT wins:**
 
-- **Healthy-path latency.** ~600ms vs ~800ms.
+- **Healthy-path latency.** ~600ms vs ~1600ms QBFT-SSV at recommended sizing.
 - **Multi-leader-failure recovery.** OBFT's K-layer parallel fall-through resolves K-1 silent layers within Phase 3's reconstruction walk (sequential local decryption, no per-layer RTT). For K=4 with 3 silent leaders, OBFT recovers in ~600ms; QBFT round-changes 3 times serially, exceeding the 4s budget.
-- **All-honest-NR equivocation recovery.** When byz delivers V's early enough for re-flood to spread conflicts before T_commit, all 3 honest retain ≥ 2 V's and emit NR per the equivocation rule; NR-quorum at L_0 → fall-through to L_1. Same recovery as QBFT but in single round (~600ms vs ~2.8s).
+- **All-honest-NR equivocation recovery.** When byz delivers V's early enough for re-flood to spread conflicts before T_commit, all 3 honest retain ≥ 2 V's and emit NR per the equivocation rule; NR-quorum at L_0 → fall-through to L_1. Same recovery as QBFT but in single round (~600ms vs ~3.6s).
 - **Spec/EKM simplicity vs OBFTR(R≥2).** No cross-round atomicity, no L_C consensus, no per-round widening — see [§A.1](#a1--comparison-with-obftr-r--2).
 
 **The operational bottom line:** QBFT covers more failure modes (its round-change-with-fresh-V handles validity-divergence and 1-1-1 equivocation that OBFT-family doesn't). OBFT wins on common-case latency and multi-leader-failure recovery. For SSV proposer duty under a 4s relay cutoff, the choice depends on observed re-org rate (favors QBFT), cluster's tolerance for the 1-1-1 equivocation case via the rational-byzantine deterrent (favors OBFT-family), and deployment complexity tolerance (favors OBFT over OBFTR(R≥2) in the family).
