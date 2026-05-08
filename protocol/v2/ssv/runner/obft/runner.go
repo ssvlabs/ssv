@@ -72,9 +72,20 @@ func RunProposerSlot(
 			if !sleepUntil(ctx, fetchAt) {
 				return
 			}
+			// Spec §Failure modes / Late deepest-layer leader broadcast:
+			// host-side hard deadline at T_broadcast_max_k = T_commit −
+			// (B_k + slack) = T_commit − BroadcastBudget[k]. Past this
+			// point, receivers will reject the bundle as "first observed
+			// past T_commit". Aborting the fetch instead converts the
+			// pathology into the cleanly-handled "silent leader" mode
+			// (NR-quorum → fall-through). Defense-in-depth on top of the
+			// K ≥ f+2 minimum that already provides the recovery layer.
+			broadcastMax := slotStart.Add(cfg.TCommit - cfg.Layers[layer].BroadcastBudget)
+			fetchCtx, cancel := context.WithDeadline(ctx, broadcastMax)
+			defer cancel()
 			// Fetch errors are NOT fatal — other layers may still succeed,
 			// and operators that didn't fetch fall through via NR-quorum.
-			_ = sched.FetchAndBroadcastBundle(ctx, slot, layer)
+			_ = sched.FetchAndBroadcastBundle(fetchCtx, slot, layer)
 		}(layer)
 	}
 
