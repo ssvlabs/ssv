@@ -554,9 +554,10 @@ This section is updated as TLC runs are performed.
 
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
-| SAFETY | n=4, f=1 | _to be run_ | — | — |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold. |
+| SAFETY | n=4, f=1, K=4, \|Values\|=4 | _to be run_ | — | Larger config — verifies safety with full layer count |
 | SAFETY | n=7, f=2 | _to be run_ | — | — |
-| LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | — |
+| LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | Liveness module pending |
 | LIVENESS_NON_GRIEF | n=7, f=2 | _to be run_ | — | — |
 
 ### 7.2 — OBFT + L_Bid
