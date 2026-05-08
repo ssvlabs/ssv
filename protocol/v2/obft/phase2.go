@@ -298,23 +298,23 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 
 		// Distinct value at the same (layer, operator). If we already had
-		// one, this is cross-onion equivocation (Rule 3).
+		// one, this is cross-onion equivocation (Rule 3 per spec §Slashing
+		// evidence) — the operator violated single-σ-V exclusivity.
 		//
-		// Spec contract caveat at k > 0: el.Ciphertext is the IBE-wrapped
-		// σ partial (chained IBE encryption per spec §Phase 2). A third-
-		// party slashing verifier cannot decrypt it without this cluster's
-		// NR-quorum aggregates for layers 0..k-1 (the IBE chain-decryption
-		// keys derive from those aggregates, which are ephemeral cluster
-		// state computed during Phase 3 reconstruction). So per-layer Rule 3
-		// at k > 0 is NOT third-party self-contained — it's recorded for
-		// within-cluster attribution (the cluster has the aggregates during
-		// reconstruction and can verify locally), but on-chain slashing
-		// should rely on the top-level Layer=-1 variant (which pairs the
-		// FULL Commits and is self-contained at any layer). Same caveat as
-		// Rule 4. This is a deliberate trade-off vs the spec's "Rule 3 at
-		// any layer is slashable" framing — paying spec parity here would
-		// require slashing payloads to include the cluster's NR-quorum
-		// aggregates and an IBE chain-decrypting verifier.
+		// Action contract at k > 0: el.Ciphertext is the IBE-wrapped σ
+		// partial (chained IBE encryption per spec §Phase 2). The evidence
+		// is recorded for within-cluster attribution (the cluster has the
+		// NR-quorum aggregates during Phase 3 reconstruction and can verify
+		// the partials locally). It is NOT third-party self-contained:
+		// on-chain slashing would need this cluster's NR-quorum aggregates
+		// (transient Phase-3 state) plus an IBE chain-decrypting verifier
+		// to reproduce the dual-V check.
+		//
+		// We deliberately don't pay that infra cost because the top-level
+		// Rule 3 variant (Layer=-1, recorded elsewhere — pairs the FULL
+		// Commits) is already self-contained at any layer and covers the
+		// same byzantine fault. Per-layer at k > 0 is the cluster's
+		// finer-grained record; on-chain slashing relies on Layer=-1.
 		if len(existing) >= 1 {
 			if len(existing) >= 2 {
 				continue
