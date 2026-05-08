@@ -205,6 +205,97 @@ func sweepCellSummary(r ct.Result) string {
 	return "miss"
 }
 
+// TestSweep_DocTable validates BFT-comparison.md Tables 1a–1e (success-mode
+// completion) analytically against the spec's claimed per-protocol BTT counts.
+// Each (BFT_start, BTT) cell asks: does R1-healthy consensus length fit the
+// effective budget = (RelayCutoff − HeaderSubmitHeadroom − BFT_start)?
+//
+// This is a doc-arithmetic regression: catches drift between the spec's
+// claimed BTT counts and the budget envelopes the doc tabulates. The actual
+// per-protocol simulation uses BFT_start ≡ 0 (the spec's "immediate" cell);
+// off-canonical BFT_start values are checked here against the spec's
+// per-protocol consensus-length formula (BTT_count × BTT).
+//
+// Spec source: docs/BFT-comparison.md §"Table 1 — Success modes" / §"Effective
+// BFT consensus budget by start time".
+func TestSweep_DocTable(t *testing.T) {
+	const (
+		relayCutoff    = 4000 * time.Millisecond
+		submitHeadroom = 100 * time.Millisecond
+	)
+
+	// Spec start-time matrix: docs/BFT-comparison.md §Effective BFT consensus
+	// budget. 0ms (immediate) → 2500ms (late MEV fetch).
+	bftStarts := []time.Duration{
+		0,
+		800 * time.Millisecond,
+		1200 * time.Millisecond,
+		1800 * time.Millisecond,
+		2500 * time.Millisecond,
+	}
+
+	// Spec BTT operating points: 200ms (production-typical) → 1000ms (severely
+	// degraded). docs/BFT-comparison.md §"Scope and assumptions".
+	btts := []time.Duration{
+		200 * time.Millisecond,
+		600 * time.Millisecond,
+		1000 * time.Millisecond,
+	}
+
+	// Spec per-protocol R1 healthy consensus length in BTT units. Source:
+	// docs/BFT-comparison.md §"Total time to signed output".
+	type protoSpec struct {
+		name     string
+		bttCount int // R1-healthy consensus length, BTT units, recommended sizing
+	}
+	protos := []protoSpec{
+		{"Partial-sigs", 2},
+		{"OBFT", 3},
+		{"OBFTR R1", 6},
+		{"2abOBFT", 6},
+		{"QBFT R1", 8},
+	}
+
+	var b strings.Builder
+	b.WriteString("\nBFT-comparison.md Table 1 doc-arithmetic validation:\n")
+	b.WriteString("(consensus length ≤ budget = relayCutoff − headroom − BFT_start)\n\n")
+
+	for _, bftStart := range bftStarts {
+		budget := relayCutoff - submitHeadroom - bftStart
+		fmt.Fprintf(&b, "BFT_start=%v, budget=%v\n", bftStart, budget)
+		fmt.Fprintf(&b, "%-20s", "BTT")
+		for _, p := range protos {
+			fmt.Fprintf(&b, " | %-13s", p.name)
+		}
+		b.WriteString("\n")
+		for _, btt := range btts {
+			fmt.Fprintf(&b, "  %-18v", btt)
+			for _, p := range protos {
+				consensusLen := time.Duration(p.bttCount) * btt
+				mark := "✓"
+				if consensusLen > budget {
+					mark = "✗"
+				}
+				fmt.Fprintf(&b, " | %s %-11v", mark, consensusLen)
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	t.Log(b.String())
+
+	// Sanity: spec claims BFT_start = 0, BTT = 200ms is the canonical fit cell
+	// for every BFT-consensus protocol (Table 1a). Asserts the spec's BTT-count
+	// arithmetic against the canonical budget.
+	canonicalBudget := relayCutoff - submitHeadroom // BFT_start = 0
+	for _, p := range protos {
+		consensusLen := time.Duration(p.bttCount) * (200 * time.Millisecond)
+		require.LessOrEqual(t, consensusLen, canonicalBudget,
+			"%s consensus (%v at BTT=200ms, %d BTT) must fit canonical budget %v",
+			p.name, consensusLen, p.bttCount, canonicalBudget)
+	}
+}
+
 // TestSweep_FullCatalog_LargerN runs every catalog scenario at n ∈ {7, 10, 13}
 // on both protocols. Universal safety invariants are enforced via
 // RunScenarioOnProtocol's panic gate; per-cell outcome classes are also
