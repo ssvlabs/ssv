@@ -121,17 +121,14 @@ When round-1 / single-round fails (silent leader, partition, network jitter, but
 
 "In-round (free)" means the recovery happens within the same single round — no additional time cost. K-layer fall-through is sequential local decryption in Phase 3, processing-bound (~100ms ε_3), not BTT-bound.
 
-**QBFT-optimal R3** (third round if R1 + R2 both fail) = `2 × RT + 8 BTT = 20 BTT`. At BFT_start = 0, BTT = 200ms: 4.0s — exceeds the 3.9s budget by 100ms. R3 doesn't fit any (BFT_start, BTT) cell at recommended sizing. QBFT-optimal effectively bounded to 2 rounds within slot.
-
 **Reading Table 2:**
 
 - **OBFT and 2abOBFT have the cleanest network-failure recovery profile** at any start time where their healthy path fits — silent leader / partition recovery costs zero extra time via in-round K-layer fall-through. This is the structural advantage of K-layer onion with chained encryption: every honest leader in the K-layer rotation provides a fall-through opportunity within Phase 3.
-- **OBFTR's R1+R2 retry** (12 BTT at recommended sizing) fits only at BTT=200ms with BFT_start ≤ 400ms (2.4s ≤ 3.5s budget). At BTT≥600ms or BFT_start=2.5s, R1+R2 doesn't fit. Production deployments of OBFTR(R=2) need either tighter Δ_2 (sacrificing jitter absorption) or acceptance that round-2 recovery is narrow.
-- **QBFT-SSV R2** (RT=2s + 8 BTT = 18 BTT at recommended sizing) fits only at (0s, BTT=200ms) — 3.6s vs 3.9s budget, 300ms margin. At all other cells R2 misses budget. **QBFT-SSV's round-2 retry is essentially unavailable at recommended sizing** beyond the (0s, 200ms) corner.
-- **QBFT-optimal R2** (RT=6 BTT + 8 BTT = 14 BTT) fits at (0s, 200ms) and (400ms, 200ms). Tighter RT recovers some budget vs QBFT-SSV but still fails at BTT ≥ 600ms or BFT_start = 2.5s.
-- **QBFT-optimal R3** doesn't fit any cell at recommended sizing — even at the most permissive (0s, 200ms) cell it overshoots by 100ms. Multi-round retry beyond R2 isn't viable for QBFT under symmetric sizing.
+- **OBFTR's R1+R2 retry** (12 BTT) fits only at BTT=200ms with BFT_start ≤ 400ms (2.4s ≤ 3.5s budget). At BTT≥600ms or BFT_start=2.5s, R1+R2 doesn't fit. Production deployments need either tighter Δ_2 (sacrificing jitter absorption) or acceptance that round-2 recovery is narrow.
+- **QBFT-SSV R2** (RT=2s + 8 BTT = 18 BTT) fits only at (0s, BTT=200ms) — 3.6s vs 3.9s budget, 300ms margin. **Round-2 retry is essentially unavailable** beyond the (0s, 200ms) corner.
+- **QBFT-optimal R2** (RT=6 BTT + 8 BTT = 14 BTT) fits at (0s, 200ms) and (400ms, 200ms). Tighter RT recovers some budget vs QBFT-SSV but still fails at BTT ≥ 600ms or BFT_start = 2.5s. **R3** (= `2×RT + 8 BTT = 20 BTT = 4.0s` at BTT=200ms) overshoots even (0s, 200ms) by 100ms — multi-round retry beyond R2 isn't viable under symmetric sizing.
 - **OBFT and 2abOBFT cannot retry** (single-round). Their "recovery" is the in-round fall-through; if that doesn't reach σ-quorum (e.g., adversarial pattern locks the σ-or-NR pools — see Table 3), the slot misses.
-- **Structural retry advantage** (round-2 with fresh-V refetch) belongs to QBFT-optimal: available at (0s/400ms, 200ms). Outside this envelope retry doesn't fit. The OBFT family's K-layer in-round fall-through is structurally cheaper than retry — it doesn't consume additional BTT and recovers silent leaders for free.
+- **Structural retry advantage** (round-2 with fresh-V refetch) belongs to QBFT-optimal: available at (0s/400ms, 200ms). Outside this envelope retry doesn't fit. The OBFT family's K-layer in-round fall-through is structurally cheaper — it doesn't consume additional BTT and recovers silent leaders for free.
 
 ## Table 3 — Adversarial-byz failure mode recoverability (scenario-independent)
 

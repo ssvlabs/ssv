@@ -880,7 +880,7 @@ All counts at recommended sizing (2 BTT per emission cycle — see [docs/BFT-com
 | Aspect | bare OBFT | 2abOBFT | QBFT-SSV (RT=2s, current SSV) |
 |---|---|---|---|
 | Consensus budget | ~600ms | ~1200ms | ~3.6s (2 rounds: RT + R2 = 2s + 1.6s) |
-| Submission headroom | ~2.0s | ~1.3s | ~0.4s |
+| Submission headroom | ~2.0s | ~1.2s | ~0.4s |
 | Healthy-path latency | ~600ms | ~1200ms | ~1600ms |
 | Bandwidth (n=4, K=4 healthy) | ~28 KB | ~30 KB | ~14 KB |
 | Cryptographic primitives | BLS + threshold IBE/SWE | BLS + threshold IBE/SWE | BLS threshold |
@@ -888,7 +888,7 @@ All counts at recommended sizing (2 BTT per emission cycle — see [docs/BFT-com
 
 #### Apples-to-apples vs production-T framing
 
-The production-T allocation reflects current deployment choices, which are **not** strictly apples-to-apples for failure-mode coverage — QBFT uses ~3.6s for 2-round consensus + ~0.4s for submission, while 2abOBFT uses ~1200ms for consensus + ~2.7s submission headroom. Comparing failure-mode coverage at production-T can read as "QBFT recovers more failure modes than 2abOBFT" but conflates two different effects:
+The production-T allocation reflects current deployment choices, which are **not** strictly apples-to-apples for failure-mode coverage — QBFT uses ~3.6s for 2-round consensus + ~0.4s for submission, while 2abOBFT uses ~1200ms for consensus + ~2.8s submission headroom. Comparing failure-mode coverage at production-T can read as "QBFT recovers more failure modes than 2abOBFT" but conflates two different effects:
 
 - **Time-conditional recoveries**: at small T, QBFT fits only 1 round and loses most of its multi-round-conditional recoveries (mesh-flakiness with byz leader, σ-locked equivocation, h_V=1, validity-majority — Bucket-3-equivalents). 2abOBFT recovers all of these at small T via single-round convergence rule. **At T = 1200ms apples-to-apples (2abOBFT's healthy budget), 2abOBFT has a strictly larger deadlock-free set than QBFT.** At larger T, QBFT's round-2 access scales recovery and matches 2abOBFT on most Bucket-1 + Bucket-3 patterns — but only when the slot budget admits R2 (e.g., (0s, BTT=200ms) cell at recommended sizing for QBFT-SSV).
 - **Structural recoveries**: Bucket 2 (OBFT-family-only — multi-leader silent, crypto safety primitive) and Bucket 4 (2abOBFT regressions — 2-1-byz-defect, verdict-equivocation, validity-2-2-refetch) are independent of T. They reflect protocol structure, not budget.
