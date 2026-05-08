@@ -22,31 +22,30 @@ func (i *Instance) uponRoundChange(
 	logger *zap.Logger,
 	msg *specqbft.ProcessingMessage,
 ) error {
-	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.RoundChangeContainer.MessagesForRound(msg.QBFTMessage.Round))
-	// Currently, even if we have a quorum of round change messages, we update the container
-	addedMsg, err := i.State.RoundChangeContainer.AddFirstMsgForSignerAndRound(msg)
-	if err != nil {
-		return fmt.Errorf("could not add round change msg to container: %w", err)
-	}
-	if !addedMsg {
-		return nil // message was already added from signer
-	}
-
-	if hasQuorumBefore {
-		return nil // already changed round
-	}
-
 	prevRound := i.State.Round
-
 	logger = logger.With(
 		zap.Uint64("qbft_instance_round", uint64(prevRound)),
 		zap.Uint64("qbft_instance_height", uint64(i.State.Height)),
 	)
 
+	hadQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.RoundChangeContainer.MessagesForRound(msg.QBFTMessage.Round))
+
+	addedMsg, err := i.State.RoundChangeContainer.AddFirstMsgForSignerAndRound(msg)
+	if err != nil {
+		return fmt.Errorf("could not add round change msg to container: %w", err)
+	}
+	if !addedMsg {
+		return nil // uponRoundChange was already called for this msg
+	}
+
 	logger.Debug("🔄 got round change",
 		fields.Root(msg.QBFTMessage.Root),
 		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs),
 	)
+
+	if hadQuorumBefore {
+		return nil // already changed round
+	}
 
 	justifiedRoundChangeMsg, valueToPropose, err := i.hasReceivedProposalJustificationForLeadingRound(msg)
 	if err != nil {
@@ -116,10 +115,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
-	// timer is nil for skeleton (decided) and decoded instances
-	if i.timer != nil {
-		i.timer.TimeoutForRound(i.State.Round)
-	}
+	i.roundTimer.TimeoutForRound(newRound)
 
 	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {

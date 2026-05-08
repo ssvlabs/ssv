@@ -26,8 +26,8 @@ func TestMKey_Format(t *testing.T) {
 	msgIDHex := hex.EncodeToString(msgID[:])
 
 	timeoutDataBytes, err := json.Marshal(&ssvtypes.TimeoutData{
-		Height: specqbft.Height(12345),
-		Round:  specqbft.Round(7),
+		Slot:  12345,
+		Round: specqbft.Round(7),
 	})
 	require.NoError(t, err)
 

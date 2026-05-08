@@ -2,9 +2,11 @@ package instance
 
 import (
 	"bytes"
+	"context"
 	"crypto/rsa"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -14,15 +16,16 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	qbftconfig "github.com/ssvlabs/ssv/v2/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/v2/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/v2/protocol/v2/ssv"
 )
 
 type instanceTestEnv struct {
-	t       *testing.T
-	keys    *spectestingutils.TestKeySet
-	config  *qbftconfig.Config
-	inst    *Instance
-	network *spectestingutils.TestingNetwork
-	timer   *roundtimer.TestQBFTTimer
+	t          *testing.T
+	keys       *spectestingutils.TestKeySet
+	config     *qbftconfig.Config
+	inst       *Instance
+	network    *spectestingutils.TestingNetwork
+	roundTimer *roundtimer.TestQBFTTimer
 }
 
 type recordingNetwork struct {
@@ -73,33 +76,32 @@ func newInstanceTestEnv(t *testing.T, operatorID spectypes.OperatorID) *instance
 		CutOffRound: spectestingutils.TestingCutOffRound,
 	}
 
-	testTimer := roundtimer.NewTestingTimer()
-
+	roundTimer := roundtimer.NewTestingTimer()
 	inst := NewInstance(
+		t.Context(),
 		zap.NewNop(),
 		config,
 		committeeMember,
 		spectestingutils.TestingIdentifier,
 		specqbft.FirstHeight,
 		spectestingutils.NewOperatorSigner(keys, operatorID),
-		testTimer,
+		func(ctx context.Context, logger *zap.Logger, slot phase0.Slot) ssv.QBFTRoundTimer {
+			return roundTimer
+		},
 	)
 	inst.StartValue = []byte("start-value")
 	inst.ValueChecker = testValueChecker{}
-
-	timer, ok := testTimer.(*roundtimer.TestQBFTTimer)
-	require.True(t, ok)
 
 	network, ok := config.GetNetwork().(*spectestingutils.TestingNetwork)
 	require.True(t, ok)
 
 	return &instanceTestEnv{
-		t:       t,
-		keys:    keys,
-		config:  config,
-		inst:    inst,
-		network: network,
-		timer:   timer,
+		t:          t,
+		keys:       keys,
+		config:     config,
+		inst:       inst,
+		network:    network,
+		roundTimer: roundTimer,
 	}
 }
 

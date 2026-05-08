@@ -12,7 +12,7 @@ import (
 )
 
 func TestInstances_FindInstance(t *testing.T) {
-	i := InstanceContainer{
+	i := Instances{
 		&instance.Instance{State: &specqbft.State{Height: 1}},
 		&instance.Instance{State: &specqbft.State{Height: 2}},
 		&instance.Instance{State: &specqbft.State{Height: 3}},
@@ -32,7 +32,7 @@ func TestInstances_FindInstance(t *testing.T) {
 func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to full", func(t *testing.T) {
 		i := append(
-			make(InstanceContainer, 0, 5),
+			make(Instances, 0, 5),
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
@@ -45,7 +45,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	})
 
 	t.Run("add to empty", func(t *testing.T) {
-		i := make(InstanceContainer, 0, 5)
+		i := make(Instances, 0, 5)
 		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 1}})
 
 		require.EqualValues(t, 1, i[0].State.Height)
@@ -54,7 +54,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 
 	t.Run("add to semi full", func(t *testing.T) {
 		i := append(
-			make(InstanceContainer, 0, 5),
+			make(Instances, 0, 5),
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
@@ -66,7 +66,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 
 	t.Run("add to full with lower height", func(t *testing.T) {
 		i := append(
-			make(InstanceContainer, 0, 5),
+			make(Instances, 0, 5),
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
@@ -80,7 +80,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 
 	t.Run("add to full with higher height", func(t *testing.T) {
 		i := append(
-			make(InstanceContainer, 0, 5),
+			make(Instances, 0, 5),
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
@@ -94,7 +94,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 
 	t.Run("add to semi-full with higher height", func(t *testing.T) {
 		i := append(
-			make(InstanceContainer, 0, 5),
+			make(Instances, 0, 5),
 			&instance.Instance{State: &specqbft.State{Height: 9}},
 			&instance.Instance{State: &specqbft.State{Height: 7}},
 			&instance.Instance{State: &specqbft.State{Height: 5}},
@@ -110,17 +110,17 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	})
 
 	t.Run("randoms", func(t *testing.T) {
-		minCap := InstanceContainerDefaultCapacity/2 + 1
-		maxCap := InstanceContainerDefaultCapacity * 2
-		for _, capacity := range []int{minCap, InstanceContainerDefaultCapacity, maxCap} {
+		minCap := InstancesDefaultCapacity/2 + 1
+		maxCap := InstancesDefaultCapacity * 2
+		for _, capacity := range []int{minCap, InstancesDefaultCapacity, maxCap} {
 			// mirror is a slice of heights we've inserted so far.
-			// We use it to compare with the InstanceContainer.
+			// We use it to compare with the Instances container.
 			mirror := make([]specqbft.Height, 0, capacity)
 
-			i := make(InstanceContainer, 0, capacity)
+			i := make(Instances, 0, capacity)
 			numberOfRandomHeights := 100
 			for _, height := range rand.Perm(numberOfRandomHeights) {
-				// Add height to InstanceContainer.
+				// Add height to Instances container.
 				i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: specqbft.Height(height)}})
 
 				// Add height to mirror.
@@ -136,7 +136,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 				requireHeights(t, i, mirror[:addedSoFarCap]...)
 			}
 
-			// Finally, a sanity check. We expect the InstanceContainer to contain exactly
+			// Finally, a sanity check. We expect the Instances container to contain exactly
 			// the numbers from numberOfRandomHeights-1 to numberOfRandomHeights-capacity.
 			expectedHeights := make([]specqbft.Height, 0, capacity)
 			minHeight := 0

@@ -16,23 +16,22 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) error {
-	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.PrepareContainer.MessagesForRound(i.State.Round))
+	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
+	logger = logger.With(fields.Root(proposedRoot))
+
+	hadQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.PrepareContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := i.State.PrepareContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return fmt.Errorf("could not add prepare msg to container: %w", err)
 	}
 	if !addedMsg {
-		return nil // uponPrepare was already called
+		return nil // uponPrepare was already called for this msg
 	}
-
-	proposedRoot := i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root
-
-	logger = logger.With(fields.Root(proposedRoot))
 
 	logger.Debug("📬 got prepare message", zap.Any("prepare_signers", msg.SignedMessage.OperatorIDs))
 
-	if hasQuorumBefore {
+	if hadQuorumBefore {
 		return nil // already moved to commit stage
 	}
 

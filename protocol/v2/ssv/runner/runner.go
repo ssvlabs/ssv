@@ -43,7 +43,7 @@ type Getters interface {
 }
 
 type Setters interface {
-	SetTimeoutFunc(TimeoutF)
+	SetQBFTRoundTimerF(ssv.QBFTRoundTimerF)
 }
 
 type Runner interface {
@@ -61,8 +61,8 @@ type Runner interface {
 	ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error
-	// OnTimeoutQBFT processes timeout event that can arrive during QBFT consensus phase
-	OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error
+	// OnQBFTRoundTimeout processes timeout event that can arrive during QBFT consensus phase
+	OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error
 
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
@@ -108,8 +108,7 @@ type BaseRunner struct {
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
-	TimeoutF    TimeoutF           `json:"-"`
-	timerCancel context.CancelFunc `json:"-"`
+	qbftRoundTimerF ssv.QBFTRoundTimerF `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot phase0.Slot
@@ -164,7 +163,7 @@ func (b *BaseRunner) GetRole() spectypes.RunnerRole {
 
 func (b *BaseRunner) GetLastHeight() specqbft.Height {
 	if ctrl := b.QBFTController; ctrl != nil {
-		return ctrl.Height
+		return ctrl.LatestInstanceHeight
 	}
 	return specqbft.Height(0)
 }
@@ -183,8 +182,8 @@ func (b *BaseRunner) GetStateRoot() ([32]byte, error) {
 	return b.State.GetRoot()
 }
 
-func (b *BaseRunner) SetTimeoutFunc(fn TimeoutF) {
-	b.TimeoutF = fn
+func (b *BaseRunner) SetQBFTRoundTimerF(factory ssv.QBFTRoundTimerF) {
+	b.qbftRoundTimerF = factory
 }
 
 func (b *BaseRunner) Encode() ([]byte, error) {
@@ -193,8 +192,8 @@ func (b *BaseRunner) Encode() ([]byte, error) {
 
 // Decode unmarshals persisted runner state into the receiver.
 //
-// Note: decoded runners are intentionally partial; runtime dependencies (e.g. `NetworkConfig`, `TimeoutF`, and
-// runner-specific value checkers) must be rehydrated by the caller after decode.
+// Note: decoded runners are intentionally partial; runtime dependencies (e.g. `NetworkConfig`, the QBFT round-timeout
+// func, and runner-specific value checkers) must be rehydrated by the caller after decode.
 func (b *BaseRunner) Decode(data []byte) error {
 	if b == nil {
 		return fmt.Errorf("nil BaseRunner")
@@ -342,7 +341,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 		return true, nil, spectypes.NewError(spectypes.SkipConsensusMessageAsConsensusHasFinishedErrorCode, "not processing consensus message since consensus has already finished")
 	}
 
-	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg)
+	decidedMsg, err := b.QBFTController.ProcessMsg(ctx, logger, msg, b.qbftRoundTimerF)
 	if controller.IsRetryable(err) {
 		return false, nil, NewRetryableError(err)
 	}
@@ -511,16 +510,13 @@ func (b *BaseRunner) decide(
 		return fmt.Errorf("input data invalid: %w", err)
 	}
 
-	height := specqbft.Height(slot)
-	timer := b.createTimer(ctx, logger, height)
-
 	newInstance, err := b.QBFTController.StartNewInstance(
 		ctx,
 		logger,
-		height,
-		timer,
+		specqbft.Height(slot),
 		byts,
 		valueChecker,
+		b.qbftRoundTimerF,
 	)
 	if err != nil {
 		return fmt.Errorf("could not start new QBFT instance: %w", err)
@@ -546,20 +542,16 @@ func (b *BaseRunner) hasDutyFinished() bool {
 	return b.hasDutyAssigned() && b.State.Finished
 }
 
-func (b *BaseRunner) finishDuty() {
-	if b.timerCancel != nil {
-		b.timerCancel()
-		b.timerCancel = nil
-	}
-
+func (b *BaseRunner) markDutyFinished() {
+	// NOTE: b.State cannot be nil at this point, by construction.
 	b.State.Finished = true
 }
 
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
-	if b.QBFTController.Height >= specqbft.Height(duty.DutySlot()) && b.QBFTController.Height != 0 {
+	if b.QBFTController.LatestInstanceHeight >= specqbft.Height(duty.DutySlot()) && b.QBFTController.LatestInstanceHeight != 0 {
 		return spectypes.NewError(
 			spectypes.DutyAlreadyPassedErrorCode,
-			fmt.Sprintf("duty for slot %d already passed. Current height is %d", duty.DutySlot(), b.QBFTController.Height),
+			fmt.Sprintf("duty for slot %d already passed. Current height is %d", duty.DutySlot(), b.QBFTController.LatestInstanceHeight),
 		)
 	}
 	return nil
@@ -576,7 +568,7 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	return nil
 }
 
-func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
+func (b *BaseRunner) OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *ssvtypes.TimeoutData) error {
 	if !b.hasDutyRunning() {
 		// Duties terminate eventually, timeout-event issuer is unaware of that - that's why we can end up here.
 		return nil
@@ -587,7 +579,7 @@ func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, time
 		return fmt.Errorf("current duty slot: %w", err)
 	}
 
-	if timeoutData.Height != specqbft.Height(currentDutySlot) {
+	if timeoutData.Slot != currentDutySlot {
 		// Validator-Runners are re-used to process duties targeting different slots (unlike Committee-Runners that
 		// are working with exactly one slot), thus for Validator-Runners timeout events can be delayed in the queue
 		// until the runner has already moved on to a new duty/slot - this is why timeout-event height(== slot)
@@ -596,5 +588,5 @@ func (b *BaseRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, time
 		return nil
 	}
 
-	return b.QBFTController.OnTimeout(ctx, logger, timeoutData)
+	return b.QBFTController.OnQBFTRoundTimeout(ctx, logger, timeoutData)
 }

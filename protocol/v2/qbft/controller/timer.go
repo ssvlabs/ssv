@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 
@@ -12,17 +12,17 @@ import (
 	"github.com/ssvlabs/ssv/v2/protocol/v2/types"
 )
 
-// OnTimeout is trigger upon timeout for the given height
-func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, timeoutData *types.TimeoutData) error {
+// OnQBFTRoundTimeout is trigger upon timeout for the given height
+func (c *Controller) OnQBFTRoundTimeout(ctx context.Context, logger *zap.Logger, timeoutData *types.TimeoutData) error {
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "on_timeout"))
 	defer span.End()
 
 	span.SetAttributes(
 		observability.DutyRoundAttribute(timeoutData.Round),
-		observability.BeaconSlotAttribute(phase0.Slot(timeoutData.Height)),
+		observability.BeaconSlotAttribute(timeoutData.Slot),
 	)
 
-	instance := c.StoredInstances.FindInstance(timeoutData.Height)
+	instance := c.RecentInstances.FindInstance(specqbft.Height(timeoutData.Slot))
 	if instance == nil {
 		return traces.Errorf(span, "instance is nil")
 	}

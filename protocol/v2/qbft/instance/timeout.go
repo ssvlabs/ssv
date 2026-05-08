@@ -41,10 +41,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer func() {
 		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
-		// timer is nil for skeleton (decided) and decoded instances
-		if i.timer != nil {
-			i.timer.TimeoutForRound(newRound)
-		}
+		i.roundTimer.TimeoutForRound(newRound)
 	}()
 
 	roundChange, err := i.CreateRoundChange(newRound)

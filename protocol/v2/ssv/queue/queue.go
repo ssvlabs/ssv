@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/v2/observability/log"
@@ -51,31 +49,18 @@ type priorityQueue struct {
 	head     *item
 	inbox    chan *SSVMessage
 	lastRead time.Time
-
-	inboxSizeMetric    metric.Int64Gauge
-	inboxSizeRecordOps []metric.RecordOption
+	observer queueObserver
 }
 
 type Option func(*priorityQueue)
-
-func WithInboxSizeMetric(inboxSizeMetric metric.Int64Gauge, queueType string, queueId string) Option {
-	attrSet := attribute.NewSet(
-		attribute.String("ssv.queue.type", queueType),
-		attribute.String("ssv.queue.id", queueId),
-	)
-
-	return func(q *priorityQueue) {
-		q.inboxSizeMetric = inboxSizeMetric
-		q.inboxSizeRecordOps = []metric.RecordOption{metric.WithAttributeSet(attrSet)}
-	}
-}
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
 func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 	q := &priorityQueue{
-		logger: logger.Named(log.NameSSVMessageQueue),
-		inbox:  make(chan *SSVMessage, capacity),
+		logger:   logger.Named(log.NameSSVMessageQueue),
+		inbox:    make(chan *SSVMessage, capacity),
+		observer: noopQueueObserver{},
 	}
 
 	for _, opt := range opts {
@@ -86,21 +71,20 @@ func New(logger *zap.Logger, capacity int, opts ...Option) Queue {
 }
 
 func (q *priorityQueue) Push(msg *SSVMessage) {
-	q.recordInboxSize(int64(len(q.inbox)) + 1)
-
-	q.warnIfInboxIsTooBig()
-
 	q.inbox <- msg
+	// Record the actual post-send occupancy. A speculative pre-send sample can
+	// over-report impossible states on failed TryPush paths.
+	q.observer.recordInboxSize(int64(len(q.inbox)))
 }
 
 func (q *priorityQueue) TryPush(msg *SSVMessage) bool {
-	q.recordInboxSize(int64(len(q.inbox)) + 1)
-
 	select {
 	case q.inbox <- msg:
-		q.warnIfInboxIsTooBig()
+		// This is a latest-observed occupancy sample, not a peak gauge.
+		q.observer.recordInboxSize(int64(len(q.inbox)))
 		return true
 	default:
+		q.observer.recordDrop(DropReasonBufferFull)
 		return false
 	}
 }
@@ -227,25 +211,6 @@ func (q *priorityQueue) Len() int {
 		n++
 	}
 	return n
-}
-
-func (q *priorityQueue) recordInboxSize(inboxSize int64) {
-	if q.inboxSizeMetric == nil {
-		return
-	}
-	q.inboxSizeMetric.Record(
-		context.Background(),
-		inboxSize,
-		q.inboxSizeRecordOps...,
-	)
-}
-
-// warnIfInboxIsTooBig logs a warning that we'd ideally never want to hit, if we do - we'd want to do
-// something about it.
-func (q *priorityQueue) warnIfInboxIsTooBig() {
-	if len(q.inbox) > cap(q.inbox)/2 {
-		q.logger.Warn("queue is half-full")
-	}
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

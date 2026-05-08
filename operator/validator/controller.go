@@ -52,10 +52,6 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
-const (
-	networkRouterConcurrency = 2048
-)
-
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                        context.Context
@@ -86,9 +82,12 @@ type ControllerOptions struct {
 	ProposerDelay                  time.Duration
 
 	// worker flags
-	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
-	QueueBufferSize int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
-	GasLimit        uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
+	// Chosen from BenchmarkRouterFanout for the current pod shape, where the
+	// 3.6 CPU cgroup quota rounds to GOMAXPROCS=4.
+	MsgRouterConcurrency int    `yaml:"MsgRouterConcurrency" env:"MSG_ROUTER_CONCURRENCY" env-default:"16" env-description:"Number of goroutines draining the network message router; 16 is tuned for ~4 vCPU pods, override on larger hosts"`
+	GasLimit             uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
 }
 
 type SharesStorage interface {
@@ -141,6 +140,7 @@ type Controller struct {
 	operatorsIDs         *sync.Map
 	network              P2PNetwork
 	messageRouter        *messageRouter
+	msgRouterConcurrency int
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
@@ -175,7 +175,6 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		WorkersCount: options.WorkersCount,
 		Buffer:       options.QueueBufferSize,
 	}
-
 	validatorCommonOpts := validator.NewCommonOptions(
 		options.NetworkConfig,
 		options.Network,
@@ -220,6 +219,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		operatorsIDs: operatorsIDs,
 
 		messageRouter:        newMessageRouter(logger),
+		msgRouterConcurrency: options.MsgRouterConcurrency,
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
@@ -299,44 +299,40 @@ func (c *Controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 }
 
 func (c *Controller) handleRouterMessages() {
-	ctx, cancel := context.WithCancel(c.ctx)
-	defer cancel()
-	ch := c.messageRouter.GetMessageChan()
 	for {
-		select {
-		case <-ctx.Done():
+		msg, ok := c.messageRouter.Receive(c.ctx)
+		if !ok {
 			c.logger.Debug("router message handler stopped")
 			return
+		}
 
-		case msg := <-ch:
-			switch m := msg.(type) {
-			case *queue.SSVMessage:
-				if m.MsgType == message.SSVEventMsgType {
+		switch m := msg.(type) {
+		case *queue.SSVMessage:
+			if m.MsgType == message.SSVEventMsgType {
+				continue
+			}
+
+			// TODO: only try copying clusterid if validator failed
+			dutyExecutorID := m.GetID().GetDutyExecutorID()
+			var cid spectypes.CommitteeID
+			copy(cid[:], dutyExecutorID[16:])
+
+			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
+				v.EnqueueMessage(c.ctx, m)
+			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
+				vc.EnqueueMessage(c.ctx, m)
+			} else if c.validatorCommonOpts.ExporterOptions.Enabled {
+				if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 					continue
 				}
-
-				// TODO: only try copying clusterid if validator failed
-				dutyExecutorID := m.GetID().GetDutyExecutorID()
-				var cid spectypes.CommitteeID
-				copy(cid[:], dutyExecutorID[16:])
-
-				if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
-					v.EnqueueMessage(ctx, m)
-				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
-					vc.EnqueueMessage(ctx, m)
-				} else if c.validatorCommonOpts.ExporterOptions.Enabled {
-					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
-						continue
-					}
-					if !c.messageWorker.TryEnqueue(m) {
-						c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-					}
+				if !c.messageWorker.TryEnqueue(m) {
+					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
-
-			default:
-				// This should be impossible because the channel is typed.
-				c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 			}
+
+		default:
+			// This should be impossible because the channel is typed.
+			c.logger.Fatal("unknown message type from router", zap.Any("message", m))
 		}
 	}
 }
@@ -519,8 +515,11 @@ func (c *Controller) InitValidators() ([]*validator.Validator, error) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *Controller) StartNetworkHandlers() {
+	if c.msgRouterConcurrency <= 0 {
+		c.logger.Fatal("msgRouterConcurrency must be > 0")
+	}
 	c.network.UseMessageRouter(c.messageRouter)
-	for i := 0; i < networkRouterConcurrency; i++ {
+	for i := 0; i < c.msgRouterConcurrency; i++ {
 		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
