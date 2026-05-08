@@ -166,7 +166,7 @@ These probe the "graceful failure" boundary: out-of-envelope conditions where th
 | Test | Axis | Verifies |
 |---|---|---|
 | `TestSweep_Partition` | `PartitionedNetwork` isolating f operators across catalog | BFT-comparison.md Table 3 "Sustained partition > absorption window" — must miss cleanly, no safety violation. |
-| `TestSweep_LivenessEdge` | Paired runs at partial-synchrony boundary: BTT chosen so consensus completes ~100ms before relay cutoff (just-fit) and ~100ms over (just-miss) | Cliff-edge transition is clean — fit decides, miss violates no invariants. |
+| ~~`TestSweep_LivenessEdge`~~ | ~~Paired runs at partial-synchrony boundary~~ | **Dropped.** The simulator's qbft.Instance emits without per-emission scheduling slack, so the simulator's R1 actual completion is ~4·BTT instead of the doc's recommended-sizing 8·BTT. The cliff the simulator can probe (BTT≈666ms, where 3·BTT collides with `RT=2s` and partitions quorum across rounds) sits far above any production-relevant BTT, and doesn't match the doc's deadline-driven cliff (≈487ms with 8·BTT R1). Clean-miss invariants are already covered on more meaningful axes by `TestSweep_Partition`, `TestSweep_Asymmetric` and the `MultiSilent_K3` catalog cell. |
 | `TestSweep_OutOfEnvelope` | BTT > deepest-layer absorption (`B_{K-1} × BTT > 4000ms`) | All protocols miss at out-of-envelope BTT; no safety violation. (Existing `TestSweep_BTT` at BTT=400ms logs misses but doesn't assert clean-miss; this test makes the assertion explicit.) |
 
 #### Tier 3 — Active-byz grief (safety-focused, planned for later)
@@ -191,7 +191,7 @@ Active byz that *intentionally* deviates from protocol to widen the slot-miss su
 2. **`TestSweep_Asymmetric`** + **`TestSweep_Partition`** — same primitive class as (1); builds out network-stress dimension.
 3. **`TestSweep_ClockSkew`** — required ("MUST"); needs SimConfig + adapter wiring for per-op virtual clock; prep work but conceptually clean.
 4. **`TestSweep_PassiveByz_UnderStress`** — combines (1)/(2)/(3) with the "byz-equivalent-to-honest-failure" catalog subset.
-5. **`TestSweep_LivenessEdge`** + **`TestSweep_OutOfEnvelope`** — pinpoint cliff-edge.
+5. ~~**`TestSweep_LivenessEdge`**~~ (dropped — see Tier 2 table) + **`TestSweep_OutOfEnvelope`** — pinpoint cliff-edge.
 6. Tier 3 items deferred until Tier 1 + 2 ship and we see what they surface.
 
 Each Tier-1/2 addition is a single test function (~30-50 LOC) in `sweep_test.go`. The framework primitives all exist (network, host, byz); clock-skew is the only one that needs new infra — a per-op `time.Duration` offset honored by the OBFT/QBFT virtual-time clocks.
