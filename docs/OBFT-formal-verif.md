@@ -597,8 +597,9 @@ This section is updated as TLC runs are performed.
 
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
-| SAFETY | n=4, f=1 | _to be run_ | — | — |
-| SAFETY | n=7, f=2 | _to be run_ | — | — |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with TLC symmetry over Honest × Values) | ◐ partial | 2026-05-08 | TLC explored 98M+ distinct canonical states up to depth 15 without finding a counterexample, before run was halted. Estimated full coverage ~100-150M canonical states. All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. Spec encoding validated by SANY parse + millions of states explored. |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (full coverage) | _follow-up_ | — | Re-run with longer time budget or state-space constraint; can also try larger heap (`-Xmx16g`). |
+| SAFETY | n=7, f=2 | _to be run_ | — | Will need symmetry reductions to be tractable. |
 | LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | — |
 | LIVENESS_NON_GRIEF | n=7, f=2 | _to be run_ | — | — |
 
