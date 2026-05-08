@@ -30,7 +30,6 @@ type OperatorID uint64
 // Configurable spec parameters are first-class fields; everything else is
 // derived inside adapters per OBFT.md §Setting / §Application:
 //   - T_commit         = RelayCutoff − HeaderSubmitHeadroom − Delta3 − Delta2
-//   - Ls_arrival       = T_commit − Slack
 //   - T_broadcast_max  = T_commit − BroadcastBudget[k]   (T_commit-anchored)
 //   - qV = qEnc        = 2f+1 from N
 //   - F                = (N−1)/3
@@ -56,19 +55,15 @@ type SimConfig struct {
 	// QBFT round trip ≈ 1 BTT per message).
 	BTT time.Duration
 
-	// Slack is the OBFT Phase-1 view-fix slack (decision-deferral window between
-	// Ls_arrival and T_commit). Defaults to BTT/2 if zero.
-	Slack time.Duration
-
 	// Delta2 is the OBFT Phase-2 propagation budget. Defaults to 2*BTT if zero.
 	Delta2 time.Duration
 
 	// Delta3 is the OBFT Phase-3 broadcast budget (ε_3). Defaults to 100ms if zero.
 	Delta3 time.Duration
 
-	// BroadcastBudget carries the OBFT per-layer T_commit-anchored absorption
-	// windows (= B_k + Slack per spec §Setting). Strictly increasing in k.
-	// When nil, derived from BTT via DefaultBkSchedule(K, BTT).
+	// BroadcastBudget carries the OBFT per-layer T_commit-anchored propagation
+	// budget B_k (per spec §Setting). Strictly increasing in k. When nil,
+	// derived from BTT via DefaultBkSchedule(K, BTT).
 	BroadcastBudget []time.Duration
 
 	// FetchAt carries the OBFT per-layer leader fetch offsets. Strictly
@@ -237,9 +232,6 @@ func (c *SimConfig) Validate() error {
 
 	if c.HeaderSubmitHeadroom == 0 {
 		c.HeaderSubmitHeadroom = 100 * time.Millisecond
-	}
-	if c.Slack == 0 {
-		c.Slack = c.BTT / 2
 	}
 	if c.Delta2 == 0 {
 		c.Delta2 = 2 * c.BTT

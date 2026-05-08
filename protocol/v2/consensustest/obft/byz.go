@@ -597,7 +597,7 @@ func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op obft.OperatorID,
 // (only byz's own Phase-1 σ_V counts; honest reject the bundle as past-
 // T_commit), NR-quorum at L_0 unlocks L_1 → L_1 honest leader's bundle
 // propagates on time → decide at L_1. Tests the spec's headline
-// "fall-through to deeper backup whose `B_{k+1} + slack` is wider" claim.
+// "fall-through to deeper backup whose `B_{k+1}` is wider" claim.
 type byzLateLeaderBroadcast struct {
 	honestDefaults
 	ByzSet byzSet
@@ -610,8 +610,8 @@ func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _
 // OverrideOwnPhase1Delay returns a BTT-scaled delay (6×BTT) so the byz
 // leader's bundle arrives past T_commit at every honest receiver regardless
 // of operating point. The factor 6 covers the deepest K=4 absorption window
-// (`B_3 + slack = 5.5 BTT`); for L_0 (`B_0 + slack = 1 BTT`) this is 6×
-// over. Hardcoded delay would silently fail at BTT > 200ms.
+// (`B_3 = 5.5 BTT`); for L_0 (`B_0 = 1 BTT`) this is 6× over. Hardcoded
+// delay would silently fail at BTT > 200ms.
 func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader obft.OperatorID) time.Duration {
 	if !b.ByzSet.Contains(leader) {
 		return 0

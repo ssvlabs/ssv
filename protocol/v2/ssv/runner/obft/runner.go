@@ -74,11 +74,11 @@ func RunProposerSlot(
 				return
 			}
 			// Spec §Failure modes / Late deepest-layer leader broadcast:
-			// host-side hard deadline at T_broadcast_max_k = T_commit −
-			// (B_k + slack) = T_commit − BroadcastBudget[k]. Past this
-			// point, receivers reject the bundle as "first observed past
-			// T_commit". Aborting the fetch instead converts the pathology
-			// into the cleanly-handled "silent leader" mode (NR-quorum →
+			// host-side hard deadline at T_broadcast_max_k = T_commit − B_k
+			// = T_commit − BroadcastBudget[k]. Past this point, receivers
+			// reject the bundle as "first observed past T_commit".
+			// Aborting the fetch instead converts the pathology into the
+			// cleanly-handled "silent leader" mode (NR-quorum →
 			// fall-through). Defense-in-depth on top of the K ≥ f+2
 			// minimum that already provides the recovery layer.
 			//

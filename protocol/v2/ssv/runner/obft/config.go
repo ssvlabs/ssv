@@ -66,7 +66,7 @@ const (
 //     deeper-confirmed parent" intuition (the choice of parent is a hook
 //     concern; fetchAt only sets when polling starts). FetchAt is
 //     RANDAO-anchored (absolute), not BTT-scaled.
-//   - budgetBTT100 is the T_commit-anchored absorption window B_k+slack
+//   - budgetBTT100 is the T_commit-anchored per-layer propagation budget B_k
 //     in BTT-hundredths (so 100 = 1 BTT, 150 = 1.5 BTT, etc.); strictly
 //     increasing in k. Stored as multipliers so the schedule scales with
 //     BTT — at BTT=200ms the K=4 budgets resolve to 200/300/500/1100ms;
