@@ -58,6 +58,9 @@ verify-lbid:
 verify-lbidnew:
 	@./scripts/tlc-run.sh LBidNew_Safety
 
+verify-bareliveness:
+	@./scripts/tlc-run.sh BareOBFT_Liveness
+
 verify-all: verify-bare verify-lbid verify-lbidnew
 
 clean:

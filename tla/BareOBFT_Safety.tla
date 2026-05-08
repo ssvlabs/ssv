@@ -152,12 +152,81 @@ ByzNR(op, k) ==
     /\ UNCHANGED sigma_partials
 
 (***************************************************************************)
+(* Honest NR-flip — Phase-2.5 deadlock recovery (NEW, user proposal).      *)
+(*                                                                         *)
+(* When honest σ-er observes ≥ f+1 NR partials at layer k AND no V's σ    *)
+(* pool reaches qV at this layer (= deadlock detected), they emit an       *)
+(* additional NR partial — a Phase-2.5 KindNRFlip cross-signing under      *)
+(* valid trigger evidence.  EKM amendment: NR-after-σ is allowed iff       *)
+(* trigger evidence is valid.                                              *)
+(*                                                                         *)
+(* Trigger condition includes `AllHonestCommittedAt(k)` to model that      *)
+(* Phase-2.5 fires AFTER all honest have settled their primary Phase-2     *)
+(* commitments — i.e., σ pool composition is final from the honest side    *)
+(* by the time NR-flip evaluates.  Without this, the spec's free action    *)
+(* interleaving would allow late HonestSigma to push σ past qV after NR-   *)
+(* flips already pushed NR past qEnc, which can't happen in the actual     *)
+(* protocol where T_commit is a hard cluster-wide deadline.                *)
+(*                                                                         *)
+(* Effect: adds NR partial.  σ pool unchanged.                             *)
+(*                                                                         *)
+(* Safety basis: at deadlock, σ pool[V] for any V is bounded by `k_V + f`  *)
+(* where k_V ≤ |Honest| who σ'd on V (= retained the leader's bundle).     *)
+(* Under deadlock σ pool[V] < qV → k_V + b_σ_V < 2f+1 → k_V ≤ 2f - b_σ_V.  *)
+(* Honest XOR (σ-after-NR still blocked) means k_V doesn't grow post-flip. *)
+(* Byz σ contribution bounded by f.  So σ pool[V] ≤ 2f < qV stays after    *)
+(* the flip.  Thus σ-quorum doesn't reach at the deadlock layer — even     *)
+(* though NR-quorum does — preserving Pigeonhole 1.                        *)
+(***************************************************************************)
+
+\* All honest have committed at layer k (= each has σ or NR there).
+\* Under this, no further HonestSigma or HonestNR can fire at k.
+AllHonestCommittedAt(k) ==
+    \A op \in Honest : HasSigma(op, k) \/ HasNR(op, k)
+
+\* Honest σ contribution to V at layer k.  Bounded by single-σ-V (at most one V
+\* per honest).  After all honest committed, this is FINAL (no more honest σ
+\* via HonestSigma since cross-phase exclusivity is preserved for σ-side).
+HonestSigmaOnVAt(k, v) ==
+    {op \in Honest : <<op, k, v>> \in sigma_partials}
+
+\* NR-flip trigger: deadlock detected at layer k AND σ-quorum on any V is
+\* algebraically unreachable even if all remaining byz contribute σ on it.
+\*
+\* Why "algebraically unreachable" rather than just `σ-pool < qV`: in the real
+\* protocol, byz's σ partials are final at T_commit (one KindCommit per byz),
+\* so honest at trigger time observes a stable pool.  The algebraic spec
+\* doesn't enforce this temporal ordering — ByzSigma can fire after honest
+\* NR-flips have already grown NR pool past qEnc.  To preserve P1 in this
+\* over-approximated model, the trigger must guarantee σ-quorum is impossible
+\* even if all f byz add σ on V later: `|h_σ_V| + f < qV ⟺ |h_σ_V| ≤ f`.
+\*
+\* In the protocol, this strengthening is naturally satisfied at deadlock —
+\* selective Phase-1 delivery to k ≤ f honest → h_σ_V = k ≤ f → bound holds.
+\* The spec encoding makes it explicit so verification is sound under loose
+\* byz timing.
+NRFlipTriggered(k) ==
+    /\ AllHonestCommittedAt(k)                      \* honest σ/NR commits final
+    /\ Cardinality(NRPool(k)) >= F + 1              \* ≥ f+1 NR partials observed
+    /\ \A v \in Values :                            \* ∀V: σ-quorum unreachable
+        Cardinality(HonestSigmaOnVAt(k, v)) <= F
+
+HonestNRFlip(op, k) ==
+    /\ op \in Honest
+    /\ HasSigma(op, k)                    \* honest already σ'd at k
+    /\ ~ HasNR(op, k)                     \* not yet NR'd at k (single flip per layer)
+    /\ NRFlipTriggered(k)                 \* deadlock detected
+    /\ nr_partials' = nr_partials \cup {<<op, k>>}
+    /\ UNCHANGED sigma_partials
+
+(***************************************************************************)
 (* Next-state relation                                                     *)
 (***************************************************************************)
 
 Next ==
     \/ \E op \in Honest, k \in Layers, v \in Values: HonestSigma(op, k, v)
     \/ \E op \in Honest, k \in Layers: HonestNR(op, k)
+    \/ \E op \in Honest, k \in Layers: HonestNRFlip(op, k)
     \/ \E op \in Byzantine, k \in Layers, v \in Values: ByzSigma(op, k, v)
     \/ \E op \in Byzantine, k \in Layers: ByzNR(op, k)
 

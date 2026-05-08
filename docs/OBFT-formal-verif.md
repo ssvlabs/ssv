@@ -110,15 +110,15 @@ We distinguish two byzantine behavior classes:
 **Active byzantine grief** (signing-time deviations from honest behavior):
 
 1. **Equivocation**: signing distinct messages at the same `(slot, layer)` — leader equivocation, bid equivocation, verdict equivocation, cross-onion partial-sig equivocation.
-2. **Cross-phase exclusivity violation**: σ-side AND NR-side commitment at the same `(slot, layer)`.
+2. **Cross-phase exclusivity violation**: σ-side AND NR-side commitment at the same `(slot, layer)`, **without valid Phase-2.5 NR-flip trigger evidence**. (Cross-signing under valid trigger evidence is the protocol-allowed Phase-2.5 NR-flip — see [OBFT.md §Phase 2.5](OBFT.md#phase-25--nr-flip-recovery-on-observed-deadlock) — and is non-grief.)
 3. **Fake / garbage signatures**: plaintext σ on V not retained by any honest (Rule 5 in OBFT.md); encrypted partials that decrypt to garbage (Rule 4).
-4. **EKM bypass**: signing actions an honest EKM would block — multiple distinct V's at same layer; σ-NR cross-signing within the protocol; etc.
+4. **EKM bypass**: signing actions an honest EKM would block — multiple distinct V's at same layer; σ-NR cross-signing within the protocol *outside the Phase-2.5 trigger-validated path*; etc.
 5. **Bid-value lying** (when relay-attestation extension is active): a Phase-1 bundle's bid metadata `bid_value` not matching the relay's attestation.
 
 **Non-grief byzantine behavior** (observable as "operator absent" or "operator following protocol"):
 
 - Silent / offline (no signing, no broadcast).
-- Following the honest state machine's transition rules exactly (= behaving honestly even though byzantine).
+- Following the honest state machine's transition rules exactly (= behaving honestly even though byzantine), **including emitting Phase-2.5 NR-flips with valid trigger evidence at deadlocked layers** (§Phase 2.5).
 - Choosing to broadcast or not broadcast honestly-formed messages (= honest behavior + selective broadcast that propagates as gossipsub determines).
 
 Note that **selective delivery** is *not* in either category — it's a network property. The byzantine adversary cannot directly control which honest peers receive which messages from gossipsub broadcasts; that's network non-determinism per [§2.1](#21--network-model).
@@ -271,6 +271,39 @@ ACTION reconstruct(operator i):
         ELSE:
             Halt (deadlock; slot misses for this operator).
 ```
+
+**Phase 2.5 — Honest NR-flip on observed deadlock** (added by [OBFT.md §Phase 2.5](OBFT.md#phase-25--nr-flip-recovery-on-observed-deadlock)):
+
+Phase 2.5 is a Phase-3 sub-mechanism, not a separate phase with its own time budget. The action below fires during Phase-3 reconstruction at the σ-er detecting deadlock; the emitter immediately includes their own NR-flip in their local pool aggregation and reconstructs locally without waiting for propagation.
+
+```
+ACTION emit_nrflip(operator i, layer k):
+    PRECONDITION: current_time ≥ T_commit + Δ_2 (= Phase 3 has started) AND
+                  i has σ-side committed at (slot, k) (= sigma_emitted[k] = Some(V)) AND
+                  no NR-flip already emitted for (slot, k) AND
+                  |nr_pool[k]| ≥ f+1 (= ≥ f+1 NR partials observed at this layer) AND
+                  ∀V ∈ retained_V_at_k:
+                      |honest_σ_pool[k][V]| + f < qV
+                  (= σ-quorum on any retained V at k is algebraically unreachable
+                     even if all f byz contribute σ on V)
+
+    1. Construct trigger_evidence: byte-for-byte copies of f+1 distinct, auth-verified
+       NR partials at (slot, k) from distinct operators that i observed in peer
+       KindCommits.
+    2. Sign σ_i^IBE(nr_tag_k) via EKM at (slot, k, "NR-flip", null, trigger_evidence).
+       EKM rule: NR-after-σ allowed iff trigger_evidence is valid.
+    3. Locally include σ_i^IBE(nr_tag_k) in i's own nr_pool[k] for aggregation
+       (this is the load-bearing step — the emitter doesn't wait for propagation).
+    4. Broadcast KindNRFlip(slot, k, σ_i^IBE(nr_tag_k), trigger_evidence) to gossipsub
+       for redundancy (other operators may receive in time and also reconstruct;
+       if not, KindCertificate gossip from i provides the fallback).
+
+    Slashing-protection log records both the prior σ partial and the new NR-flip
+    under (slot, k); receivers verifying see the trigger evidence and treat the
+    co-emission as protocol-allowed (not Rule-1 cross-signing).
+```
+
+The action is *honest-only* under non-grief — byzantine cannot emit a valid NR-flip without legitimate trigger evidence (any forged evidence fails receiver verification). The emitter's local reconstruction completes within `Δ_3`'s CPU budget; cluster-level slot success is propagation-independent (lone-reconstructor + KindCertificate fallback).
 
 ### 3.3 — OBFT + L_Bid extensions to the honest state machine
 
@@ -509,6 +542,15 @@ For each variant V:
 
 Expected result (per the OBFT spec's Class A list): TLC verifies for all three variants — no Class A leakage. If counterexample found: surfaces a NEW Class A failure mode.
 
+**Verification result for bare OBFT at n=4, f=1, K=2** (see §7.1):
+
+1. Initial run **without** the Phase-2.5 NR-flip mechanism: TLC found a Class A counterexample reproducing the documented `h_V=1` selective-Phase-1-delivery limit (Appendix C of OBFT.md). The trace: byz leader at L_0 partial-broadcasts to exactly one honest; resulting σ-pool=2 < qV; nr-pool=2 < qEnc; chain doesn't unlock; output never set.
+2. Re-run **with** the Phase-2.5 NR-flip mechanism: TLC verified Class A closure across the full reachable state space (13,581 distinct states, depth 11). The σ-locked recipient honestly emits `KindNRFlip` with valid trigger evidence; nr-pool reaches qEnc; chain unlocks; deeper-layer σ-quorum reaches naturally; output set for every honest operator.
+
+These two results together demonstrate that **the Phase-2.5 NR-flip mechanism is necessary and sufficient for Class A closure** at this configuration under non-grief + within-budget partial-synchrony — adding the mechanism upgrades bare OBFT from "Class A leak documented as algebraic limit" to "Class A closure mechanically verified." See [§7.1 verification table](#71--bare-obft) for full statistics.
+
+**Scope of the n=4 verification result.** The verified configuration is `n=4, f=1, K=2`. At this size, the *only* deadlock case is `k=1` (= 1 honest σ-er, 2 honest NR-ers), and the lone-reconstructor path always suffices — the σ-er's local NR-pool of 2 NR partials + own NR-flip = qEnc, so they unlock the chain locally without waiting for NR-flip propagation to peers. **At larger cluster sizes (n ≥ 7), `k ≥ 2` deadlock cases exist**, and the lone-reconstructor argument no longer applies in those cases: the σ-er's local NR-pool of `2f+1 − k` honest NR partials + own NR-flip can be `< qEnc` for `k ≥ 2`, so the σ-er must additionally receive other σ-ers' NR-flips (or any byz NR-flips emitted under non-grief) before unlocking. Cluster slot success still holds at n ≥ 7 (the σ-ers eventually receive each other's NR-flips and reconstruct), but with up to +1 BTT propagation latency in the worst case — which may or may not fit within `Δ_2`'s recommended sizing depending on deployment. This is a deployment-time timing concern at n ≥ 7, not a correctness gap; the protocol mechanics (action space, EKM rules, Pigeonhole invariants) are unchanged across cluster sizes. See [OBFT.md §Phase 2.5 Caveat at n ≥ 7](OBFT.md#phase-25--nr-flip-recovery-on-observed-deadlock) for the full discussion.
+
 ### 5.3 — Mesh asymmetry modeling
 
 The network non-determinism in §2.1 must be carefully bounded for the verification to be meaningful:
@@ -522,23 +564,29 @@ The TLA+ model exposes a parameter `mesh_asymmetry ∈ {within_budget, beyond_bu
 
 ## 6 — TLA+ encoding sketch
 
-This section sketches the structure of the TLA+ models. Actual `.tla` files live in `tla/` directory (to be created when implementation begins).
+This section sketches the structure of the TLA+ models. Actual `.tla` files live in `tla/` directory (see [`tla/README.md`](../tla/README.md) for run instructions).
 
 ### 6.1 — File structure
 
 ```
 tla/
-├── Common.tla          -- shared types, constants, network model
-├── HonestStateMachine.tla -- honest operator behavior (per §3)
-├── GriefActions.tla    -- grief action set (per §3.5)
-├── BareOBFT.tla        -- bare OBFT-specific extensions
-├── LBid.tla            -- L_Bid extension
-├── LBidNew.tla         -- L_Bid_New extension
-├── Safety.tla          -- SAFETY invariants (Pigeonhole 1, 2, 3)
-├── Liveness.tla        -- LIVENESS_NON_GRIEF invariant
-└── configs/
-    ├── n4_f1.cfg       -- TLC config for n=4, f=1
-    └── n7_f2.cfg       -- TLC config for n=7, f=2
+├── BareOBFT_Safety.tla       -- bare OBFT SAFETY (Pigeonholes 1, 2, 3) incl.
+│                                Phase-2.5 HonestNRFlip with strengthened trigger
+├── BareOBFT_Safety.cfg
+├── BareOBFT_Liveness.tla     -- bare OBFT LIVENESS_NON_GRIEF (Class A closure)
+│                                incl. Phase-2.5 NR-flip mechanism
+├── BareOBFT_Liveness.cfg
+├── LBid_Safety.tla           -- OBFT + L_Bid SAFETY (Pigeonholes + verdict
+│                                pigeonhole), inherits NR-flip from bare OBFT
+├── LBid_Safety.cfg
+├── LBidNew_Safety.tla        -- OBFT + L_Bid_New SAFETY, same invariants
+│                                encoded for L_Bid_New's structural differences
+├── LBidNew_Safety.cfg
+├── Makefile                  -- declarative verify-* targets
+├── scripts/
+│   └── tlc-run.sh            -- runner script (captures log + summary file)
+├── README.md                 -- methodology + run instructions
+└── runs/                     -- per-run logs and summaries (gitignored)
 ```
 
 ### 6.2 — Key TLA+ idioms
@@ -589,10 +637,12 @@ This section is updated as TLC runs are performed.
 |---|---|---|---|---|
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold. |
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint capping pool sizes at quorum thresholds) | ✓ verified | 2026-05-08 | Re-run with the cap-at-quorum state constraint as a safety sanity check before applying the constraint to L_Bid / L_Bid_New. TLC explored 250,000 distinct states (1.91M total) in 7s; same outcome (no counterexamples), confirming the constraint preserves SAFETY coverage. |
-| SAFETY | n=4, f=1, K=4, \|Values\|=4 | _to be run_ | — | Larger config — verifies safety with full layer count |
-| SAFETY | n=7, f=2 | _to be run_ | — | — |
-| LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | Liveness module pending |
-| LIVENESS_NON_GRIEF | n=7, f=2 | _to be run_ | — | — |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint + **Phase-2.5 NR-flip action** + strengthened deadlock trigger) | ✓ verified | 2026-05-09 | Adds the `HonestNRFlip(op, k)` action with the deadlock trigger `AllHonestCommittedAt(k) ∧ \|NRPool(k)\| ≥ f+1 ∧ ∀v: \|HonestSigmaOnVAt(k, v)\| ≤ f`. TLC explored 327,184 distinct states (2.51M total) in 8s; all three Pigeonholes + SAFETY hold. The strengthened trigger (algebraic-σ-quorum-unreachability) is necessary for soundness in the algebraic spec under loose byz-action ordering. **Confirms the Phase-2.5 NR-flip mechanism preserves Pigeonhole 1 cryptographically: σ-pool at deadlock layer is bounded by 2f < qV regardless of byz behavior.** |
+| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (no NR-flip — bare OBFT pre-Phase-2.5) | ✗ counterexample | 2026-05-08 | TLC found Class A deadlock matching `h_V=1` selective-Phase-1-delivery: byz delivers V_0 to op2 only; σ-pool=2 < qV; nr-pool=2 < qEnc; chain doesn't unlock; output never set. Reproduces the documented Appendix C algebraic limit. 5,492 distinct states explored, depth 7, 6s runtime. |
+| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**with Phase-2.5 NR-flip mechanism**) | ✓ verified | 2026-05-09 | TLC verified Class A closure: every honest operator eventually has `output_set[i] = TRUE` under all reachable byz behavior (silent / honest-mimicking / partial broadcast / late delivery). 13,581 distinct states (full coverage, no symmetry — TLC warns symmetry under liveness checking is unsound), depth 11, 6s runtime. **Closes the deadlock found pre-Phase-2.5.** |
+| SAFETY | n=4, f=1, K=4, \|Values\|=4 (with NR-flip) | _to be run_ | — | Larger config — verifies safety with full layer count |
+| SAFETY | n=7, f=2 (with NR-flip) | _to be run_ | — | — |
+| LIVENESS_NON_GRIEF | n=7, f=2 (with NR-flip) | _to be run_ | — | — |
 
 ### 7.2 — OBFT + L_Bid
 
