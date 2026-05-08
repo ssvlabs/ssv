@@ -85,3 +85,24 @@ func TestBandwidth_QBFT_RoundChange_AddsRoundChangeBytes(t *testing.T) {
 	require.Greater(t, out.Bandwidth.PerKindBytes["RoundChange"], int64(0),
 		"R2 path must dispatch ROUND_CHANGE messages: %s", out.Bandwidth.SummaryLine())
 }
+
+// TestBandwidth_QBFT_ByzProposalCounted verifies byz-fabricated PROPOSEs are
+// charged to bandwidth. Equivocate111 fabricates 1 PROPOSE per non-leader
+// honest at round 1; the byz leader contributes only via the byz dispatch
+// path (no Instance, no virtualNetwork.Broadcast), so without this accounting
+// the round-1 byz PROPOSE bytes would silently disappear from the report.
+func TestBandwidth_QBFT_ByzProposalCounted(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzEquivocate111, ByzOperators: []ct.OperatorID{1}}
+
+	out, err := qbftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+
+	// Honest leader at R2 (op2) emits one PROPOSE via virtualNetwork.Broadcast;
+	// byz leader at R1 (op1) fabricates 3 distinct PROPOSEs (one per honest)
+	// via evtByzProposal. Op1 should appear in PerOperatorOut even though it
+	// has no Instance — that's only true if byz PROPOSE bytes are charged.
+	require.Greater(t, out.Bandwidth.PerOperatorOut[1], int64(0),
+		"byz leader op1 should have non-zero out-bytes from R1 PROPOSE fabrication: %s",
+		out.Bandwidth.SummaryLine())
+}

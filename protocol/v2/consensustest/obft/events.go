@@ -94,7 +94,7 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			if delay < 0 {
 				delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(leader), ct.OperatorID(to), ct.KindLeaderBroadcast)
 			}
-			if s.cfg.Bandwidth != nil {
+			if s.cfg.Bandwidth != nil && bundleBytes > 0 {
 				s.cfg.Bandwidth.Emission(ct.OperatorID(leader), ct.OperatorID(to),
 					ct.KindLeaderBroadcast, e.layer, bundleBytes)
 			}
@@ -275,7 +275,7 @@ func (e *evtResolve) handle(s *sim) []scheduledEvent {
 			if delay < 0 {
 				delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(op), ct.OperatorID(to), ct.KindCertificate)
 			}
-			if s.cfg.Bandwidth != nil {
+			if s.cfg.Bandwidth != nil && certBytes > 0 {
 				s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
 					ct.KindCertificate, -1, certBytes)
 			}

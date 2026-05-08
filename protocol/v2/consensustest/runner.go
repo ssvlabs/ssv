@@ -61,18 +61,15 @@ func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig)
 
 	out, err := p.Run(cfg)
 	if errors.Is(err, ErrNotApplicable) {
-		// Reconcile adapter and scenario: if both say not-applicable, match.
-		ok := expect == ExpectNotApplicable
-		why := ""
-		if !ok {
-			why = "adapter returned ErrNotApplicable but scenario expected " + expect.String()
-		}
+		// The matching ExpectNotApplicable case already returned above, so
+		// reaching here means the scenario expected an outcome but the
+		// adapter declined to translate it — record a mismatch.
 		return Result{
 			ProtocolName: p.Name(),
 			ScenarioName: s.Name,
 			Expected:     expect,
-			Match:        ok,
-			Why:          why,
+			Match:        false,
+			Why:          "adapter returned ErrNotApplicable but scenario expected " + expect.String(),
 			Skipped:      true,
 		}
 	}

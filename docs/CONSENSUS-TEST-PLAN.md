@@ -19,8 +19,8 @@ protocol/v2/consensustest/                       FRAMEWORK
   safety.go           SafetyReport (SingleV, HonestAgreement, Terminated, NoOfflineDoubleV)
   runner.go           RunScenarioOnProtocol (panics on safety violation)
   scenario.go         Scenario, ExpectClass, Match
-  catalog.go          18 cross-protocol scenarios
-  bls.go              BLSKeys + GenerateBLSKeys (real threshold BLS)
+  catalog.go          21 cross-protocol scenarios
+  bls.go              GenerateBLSKeys (real threshold BLS); BLSKeys struct lives in protocol.go
   matrix.go           MatrixReport
   *_test.go           framework smoke + matrix + sweep + bandwidth + host-pattern + report tests
 

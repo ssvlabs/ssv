@@ -35,22 +35,23 @@ func runDES(cfg desConfig) (rawOutcome, error) {
 }
 
 type sim struct {
-	cfg           desConfig
-	rng           *mrand.Rand
-	now           time.Duration
-	queue         eventQueue
-	seq           int64
-	operators     []spectypes.OperatorID
-	keys          *spectestingutils.TestKeySet
-	committee     *spectypes.CommitteeMember
-	identifier    []byte
-	startValue    []byte
-	instances     map[spectypes.OperatorID]*qbftinstance.Instance
-	timers        map[spectypes.OperatorID]*virtualRoundTimer
-	decided       map[spectypes.OperatorID]decidedRecord
-	inflightRound map[spectypes.OperatorID]specqbft.Round
-	byz           internalByz
-	trace         []ct.TraceEntry
+	cfg                  desConfig
+	rng                  *mrand.Rand
+	now                  time.Duration
+	queue                eventQueue
+	seq                  int64
+	operators            []spectypes.OperatorID
+	keys                 *spectestingutils.TestKeySet
+	committee            *spectypes.CommitteeMember
+	identifier           []byte
+	startValue           []byte
+	instances            map[spectypes.OperatorID]*qbftinstance.Instance
+	timers               map[spectypes.OperatorID]*virtualRoundTimer
+	decided              map[spectypes.OperatorID]decidedRecord
+	inflightRound        map[spectypes.OperatorID]specqbft.Round
+	byzProposalScheduled map[specqbft.Round]bool // dedup: one byz PROPOSE per round
+	byz                  internalByz
+	trace                []ct.TraceEntry
 }
 
 type decidedRecord struct {
@@ -84,12 +85,13 @@ func newSim(cfg desConfig) (*sim, error) {
 		// trace output. Both values are functionally equivalent (any V that
 		// passes the value-checker), but their distinct strings make
 		// "honest-leader vs byz-leader at round 1" debuggable from trace alone.
-		startValue:    []byte("qbft-canon-V"),
-		instances:     make(map[spectypes.OperatorID]*qbftinstance.Instance, cfg.N),
-		timers:        make(map[spectypes.OperatorID]*virtualRoundTimer, cfg.N),
-		decided:       make(map[spectypes.OperatorID]decidedRecord, cfg.N),
-		inflightRound: make(map[spectypes.OperatorID]specqbft.Round, cfg.N),
-		byz:           cfg.Byz,
+		startValue:           []byte("qbft-canon-V"),
+		instances:            make(map[spectypes.OperatorID]*qbftinstance.Instance, cfg.N),
+		timers:               make(map[spectypes.OperatorID]*virtualRoundTimer, cfg.N),
+		decided:              make(map[spectypes.OperatorID]decidedRecord, cfg.N),
+		inflightRound:        make(map[spectypes.OperatorID]specqbft.Round, cfg.N),
+		byzProposalScheduled: make(map[specqbft.Round]bool),
+		byz:                  cfg.Byz,
 	}, nil
 }
 
@@ -116,12 +118,27 @@ func (s *sim) start() error {
 		s.schedule(s.cfg.BFTStart, &evtStartInstance{op: op})
 	}
 	// Byz round-1 proposer is dispatched separately — the byz pattern's
-	// ProposalPlanForRound returns the messages to fabricate.
+	// ProposalPlanForRound returns the messages to fabricate. Goes through
+	// scheduleByzProposal so the per-round dedup map records it.
 	leader := proposerForRound(s.operators, specqbft.FirstRound)
 	if s.byz.IsByz(ct.OperatorID(leader)) {
-		s.schedule(s.cfg.BFTStart, &evtByzProposal{leader: leader, round: specqbft.FirstRound})
+		s.scheduleByzProposal(s.cfg.BFTStart, leader, specqbft.FirstRound)
 	}
 	return nil
+}
+
+// scheduleByzProposal enqueues exactly one evtByzProposal per (round) — even
+// when called from each honest op's evtRoundTimeout (N times for N honest ops
+// timing out at the same simulated instant), only the first call schedules
+// the dispatch. Without this gate the same byz PROPOSE would fan out N times
+// per round-change, inflating bandwidth and trace noise (protocol behavior is
+// unchanged because spec-level dedup absorbs the duplicates).
+func (s *sim) scheduleByzProposal(when time.Duration, leader spectypes.OperatorID, round specqbft.Round) {
+	if s.byzProposalScheduled[round] {
+		return
+	}
+	s.byzProposalScheduled[round] = true
+	s.schedule(when, &evtByzProposal{leader: leader, round: round})
 }
 
 func (s *sim) buildInstance(op spectypes.OperatorID) (*qbftinstance.Instance, error) {

@@ -157,7 +157,7 @@ func (e *evtRoundTimeout) handle(s *sim) []scheduledEvent {
 	newRound := e.round + 1
 	newLeader := proposerForRound(s.operators, newRound)
 	if s.byz.IsByz(ct.OperatorID(newLeader)) {
-		s.schedule(s.now, &evtByzProposal{leader: newLeader, round: newRound})
+		s.scheduleByzProposal(s.now, newLeader, newRound)
 	}
 	return nil
 }
@@ -188,11 +188,17 @@ func (e *evtByzProposal) describe() string {
 func (e *evtByzProposal) handle(s *sim) []scheduledEvent {
 	plans := s.byz.ProposalPlanForRound(s, ct.OperatorID(e.leader), int(e.round), s.canonValueForRound(e.round))
 	leaderKey := s.keys.OperatorKeys[e.leader]
+	from := ct.OperatorID(e.leader)
+	frameworkRound := frameworkRoundFor(int(e.round))
 	for _, p := range plans {
 		msg, err := makeProposalEnvelope(e.leader, leaderKey, s.identifier, specqbft.FirstHeight, e.round, p.V)
 		if err != nil {
 			continue
 		}
+		// Wire-byte size charged to bandwidth per-recipient — same accounting
+		// path as virtualNetwork.Broadcast for honest PROPOSEs, so byz-side
+		// fabricated messages aren't a hidden gap in the bandwidth report.
+		msgBytes := messageWireBytes(msg)
 		recipients := p.Recipients
 		if len(recipients) == 0 {
 			recipients = make([]ct.OperatorID, 0, len(s.operators))
@@ -205,10 +211,12 @@ func (e *evtByzProposal) handle(s *sim) []scheduledEvent {
 			if toID == e.leader {
 				continue
 			}
-			from := ct.OperatorID(e.leader)
 			delay := s.byz.OverrideDelay(s.rng, from, to, ct.KindLeaderBroadcast)
 			if delay < 0 {
 				delay = s.cfg.Network.Delay(s.rng, from, to, ct.KindLeaderBroadcast)
+			}
+			if s.cfg.Bandwidth != nil && msgBytes > 0 {
+				s.cfg.Bandwidth.Emission(from, to, ct.KindLeaderBroadcast, frameworkRound, msgBytes)
 			}
 			s.schedule(s.now+delay, &evtMessageArrival{
 				from: from,

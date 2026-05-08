@@ -26,23 +26,8 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 	if n.sim.byz.SuppressBroadcast(from, kind, round) {
 		return nil
 	}
-	// Wire size accounting: encode the inner SSVMessage and add per-signer
-	// (signature + operator-ID) plus FullData. If encode fails (programming
-	// error), still account for the independently-knowable sigs/IDs/FullData
-	// — a malformed message still occupies wire bytes in practice.
-	var msgBytes int64
-	if encoded, err := msg.SSVMessage.Encode(); err == nil {
-		msgBytes = int64(len(encoded))
-	}
-	for i := range msg.Signatures {
-		msgBytes += int64(len(msg.Signatures[i])) + 8
-	}
-	msgBytes += int64(len(msg.FullData))
-	// Framework round = QBFT round - 1 (0-indexed), or -1 if undecodable.
-	frameworkRound := round - 1
-	if round <= 0 {
-		frameworkRound = -1
-	}
+	msgBytes := messageWireBytes(msg)
+	frameworkRound := frameworkRoundFor(round)
 	for _, to := range n.sim.operators {
 		toCT := ct.OperatorID(to)
 		// Self-delivery (zero delay) so the broadcaster's own container
@@ -74,6 +59,32 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 		})
 	}
 	return nil
+}
+
+// messageWireBytes returns the wire-byte count for one SignedSSVMessage:
+// encoded inner SSVMessage + per-signer (signature + operator-ID) + FullData.
+// Returns 0 when encoding fails (programmer error); callers gate on `> 0`
+// before charging bandwidth so a malformed message simply contributes nothing.
+func messageWireBytes(msg *spectypes.SignedSSVMessage) int64 {
+	var n int64
+	if encoded, err := msg.SSVMessage.Encode(); err == nil {
+		n = int64(len(encoded))
+	}
+	for i := range msg.Signatures {
+		n += int64(len(msg.Signatures[i])) + 8
+	}
+	n += int64(len(msg.FullData))
+	return n
+}
+
+// frameworkRoundFor maps a QBFT round (1-indexed) to the framework's
+// 0-indexed convention used by Bandwidth.PerLayerBytes; round ≤ 0 (undecodable)
+// becomes -1 (layer-agnostic).
+func frameworkRoundFor(qbftRound int) int {
+	if qbftRound <= 0 {
+		return -1
+	}
+	return qbftRound - 1
 }
 
 // decodeKindAndRound decodes the inner QBFT message once and extracts both
