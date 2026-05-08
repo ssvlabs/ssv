@@ -66,7 +66,7 @@ type LayerSpec struct {
 	// form for cleaner per-layer math.
 	//
 	// When zero across all layers, falls back to the single uniform cap
-	// 2*(D+Delta) for every layer (preserves backwards-compat with configs
+	// 2*BTT for every layer (preserves backwards-compat with configs
 	// that don't opt into the staggered schedule).
 	BroadcastBudget time.Duration
 }

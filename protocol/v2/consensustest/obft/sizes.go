@@ -17,7 +17,7 @@ import (
 //	Commit:        ClusterID(32) + OperatorID(8) + Height(8) +
 //	               K layers × (Value(|V|) + Ciphertext(BLS sig + IBE overhead at L_k>0)) +
 //	               NRPartials × (Layer(4) + PartialSig(BLS sig)) +
-//	               Witnesses × (Layer(4) + Leader(8) + Value(|V|) + SigmaV(BLS sig))
+//	               Witnesses × (Layer(4) + Leader(8) + ValueRoot(32) + SigmaV(BLS sig))
 //	Certificate:   ClusterID(32) + Height(8) + Value(|V|) + Signature(BLS sig)
 //
 // Excludes outer SignedSSVMessage envelope overhead (wrapper not modeled

@@ -114,7 +114,7 @@ func TestConfig_BroadcastBudget_PerLayerCap_OK(t *testing.T) {
 }
 
 func TestConfig_BroadcastBudget_PrimaryAllowedTighter(t *testing.T) {
-	// Spec: B_0 < BFT-min (2*(D+δ)) is OK at the operating point — primary
+	// Spec: B_0 < BFT-min (2*BTT) is OK at the operating point — primary
 	// trades reliability for MEV; deeper layers cover. Deepest layer must
 	// still satisfy BFT-min.
 	cfg := validStaggeredConfig()

@@ -462,32 +462,15 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 	}
 
-	// Witnesses: per spec §Phase 2 wire format, witnesses ship value_root
-	// (32 bytes) + σ_V (no full V). Receivers cross-reference by value_root
-	// against any retained Phase-1 bundles for the same (layer, leader):
-	//
-	//   - Match found: σ_V is for a known V; the original bundle was already
-	//     observed and verified at Phase 1, so σ_V is already in the σ-pool.
-	//     Nothing to do.
-	//   - No match: receiver lacks V (V-drop) or has not yet observed any
-	//     bundle for this (layer, leader). Per spec, the witness is unusable
-	//     — σ_V verifies against V (via the Signer's signing target) and the
-	//     receiver needs V to advance to σ-quorum reconstruction. V-drop
-	//     recovery flows through KindCertificate gossip instead.
-	//
-	// Rule 2 (leader equivocation) detection still works at Phase 1 from any
-	// distinct second V observed there; witnesses don't independently introduce
-	// V's into retention.
-	for _, w := range c.Witnesses {
-		retained := i.bundles[w.Layer][w.Leader]
-		for _, b := range retained {
-			if ValueRoot(b.Value) == w.ValueRoot {
-				// Already counted via Phase 1 path; no-op.
-				break
-			}
-		}
-		// No match → V-drop, witness unusable per spec. Skip.
-	}
+	// Witnesses: per spec §Phase 2 wire format, witnesses ship value_root +
+	// σ_V (no full V). Receivers with retained V already had σ_V in the
+	// σ-pool from Phase 1 receipt; receivers without V (V-drop) can't use
+	// the witnessed σ_V because verification needs V (via the Signer's
+	// signing target). So Phase 2 witness observation is a no-op for the
+	// σ-pool — V-drop recovery flows through KindCertificate gossip per
+	// spec §Final-certificate gossip. (Future extensions — Rule 5
+	// MUST-gossip, Appendix-style ship-full-V variant — would add
+	// processing here. Currently no per-witness work happens.)
 
 	return nil
 }
