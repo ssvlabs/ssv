@@ -371,6 +371,138 @@ func TestSweep_Partition(t *testing.T) {
 	}
 }
 
+// TestSweep_ClockSkew — vary per-operator clock skew via ClockSkewedNetwork
+// across the catalog. Verifies the spec's δ-bound claim: consensus tolerates
+// per-pair clock differences ≤ δ. Tier 1 stress-test addition per
+// CONSENSUS-TEST-PLAN.md (clock skew is a MUST per the protocol's partial-
+// synchrony assumption).
+//
+// The model captures clock skew at the network layer rather than DES timer
+// firings: only the *relative* skew between sender and receiver shifts
+// effective message timing in the protocol's perceived frame, and the
+// relative-skew model is what the spec's δ-bound semantics describe.
+//
+// Network base delay is `BTT/2 = 100ms`, representing typical-mesh
+// propagation (≈ P99). The `BTT` parameter in spec terms decomposes as
+// `P99 + δ` — so using base = P99 leaves 2δ = 100ms of slack for pair-wise
+// clock skew before the absorption window B_0 = 1 BTT = 200ms is exceeded.
+// (The default `ConstantDelay{D: BTT}` saturates B_0; any layered skew on
+// top of it is out-of-spec by construction. Clock-skew testing requires
+// disaggregating P99 from δ.)
+//
+// Skew distributions (where δ = 50ms):
+//   - zero: baseline (matches default ConstantDelay)
+//   - within-bound (pair-wise ≤ δ): per-op skew ∈ {-δ/2, -δ/4, +δ/4, +δ/2};
+//     pair-wise max = δ. Within spec — protocol must decide flawlessly.
+//   - at-bound (pair-wise = 2δ): per-op skew ∈ {-δ, -δ, +δ, +δ};
+//     pair-wise max = 2δ. At the spec edge (B_0 = P99 + 2δ exactly fits).
+//     Protocol must decide.
+//   - out-of-bound (pair-wise > 2δ): per-op skew ∈ {-2δ, -δ, +δ, +2δ};
+//     pair-wise max = 4δ. Above spec — protocol may legitimately miss but
+//     safety must hold.
+//
+// Per-cell outcomes are logged diagnostically; safety enforced by
+// RunScenarioOnProtocol's panic gate.
+func TestSweep_ClockSkew(t *testing.T) {
+	const btt = 200 * time.Millisecond
+	const delta = 50 * time.Millisecond // spec δ at Config A
+	const baseDelay = btt / 2           // typical-mesh propagation; leaves 2δ for skew
+
+	skewPatterns := []struct {
+		name        string
+		skew        map[ct.OperatorID]time.Duration
+		mustDecide  bool // assert Healthy decides for both protocols
+	}{
+		{
+			name: "zero",
+			skew: map[ct.OperatorID]time.Duration{},
+			mustDecide: true,
+		},
+		{
+			name: "within-bound-pairwise-delta",
+			skew: map[ct.OperatorID]time.Duration{
+				1: -delta / 2,
+				2: -delta / 4,
+				3: +delta / 4,
+				4: +delta / 2,
+			},
+			mustDecide: true,
+		},
+		{
+			name: "at-bound-pairwise-2delta",
+			skew: map[ct.OperatorID]time.Duration{
+				1: -delta,
+				2: -delta,
+				3: +delta,
+				4: +delta,
+			},
+			mustDecide: true,
+		},
+		{
+			name: "out-of-bound-pairwise-4delta",
+			skew: map[ct.OperatorID]time.Duration{
+				1: -2 * delta,
+				2: -delta,
+				3: +delta,
+				4: +2 * delta,
+			},
+			mustDecide: false, // out-of-spec; safety holds, decision may miss
+		},
+	}
+
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+
+	for _, pat := range skewPatterns {
+		pat := pat
+		t.Run(pat.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := baseSweepConfig(4, btt)
+			cfg.Network = ct.ClockSkewedNetwork{
+				Inner: ct.ConstantDelay{D: baseDelay},
+				Skew:  pat.skew,
+			}
+
+			// Within spec's δ-bound, Healthy must decide for both protocols.
+			// At zero/within/at-bound skew, total pair-wise delay
+			// (baseDelay + 2δ skew) ≤ B_0 = 1 BTT, so absorption holds.
+			if pat.mustDecide {
+				for _, p := range protocols {
+					out, err := p.Run(cfg)
+					require.NoErrorf(t, err, "%s %s Run", pat.name, p.Name())
+					require.Truef(t, out.Decided,
+						"%s %s Healthy must decide (within spec's δ-bound)", pat.name, p.Name())
+				}
+			}
+
+			var b strings.Builder
+			fmt.Fprintf(&b, "\nclock-skew %s catalog matrix:\n", pat.name)
+			obftTotal, qbftTotal := 0, 0
+			obftDecided, qbftDecided := 0, 0
+			for _, s := range ct.Catalog {
+				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.Protocol{}, s, cfg)
+				if !obftR.Skipped {
+					obftTotal++
+					if obftR.Outcome.Decided {
+						obftDecided++
+					}
+				}
+				if !qbftR.Skipped {
+					qbftTotal++
+					if qbftR.Outcome.Decided {
+						qbftDecided++
+					}
+				}
+				fmt.Fprintf(&b, "  %-32s OBFT=%-12s QBFT=%-12s\n",
+					s.Name, sweepCellSummary(obftR), sweepCellSummary(qbftR))
+			}
+			fmt.Fprintf(&b, "decision rate: OBFT=%d/%d QBFT=%d/%d\n",
+				obftDecided, obftTotal, qbftDecided, qbftTotal)
+			t.Log(b.String())
+		})
+	}
+}
+
 // TestSweep_Seeds — same scenario, multiple seeds. Asserts safety invariants
 // hold across seeds (the framework panics on violation; the assertion is that
 // no seed produces a violation).

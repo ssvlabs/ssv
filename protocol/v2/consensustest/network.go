@@ -98,3 +98,36 @@ func (p PartitionedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind Msg
 	}
 	return p.Inner.Delay(rng, from, to, kind)
 }
+
+// ClockSkewedNetwork models per-operator clock skew at the network layer:
+// each op has a virtual-clock offset Skew[op] (positive = clock ahead,
+// negative = behind). The effective propagation delay from op_s to op_r is
+// `Inner.Delay + Skew[op_r] - Skew[op_s]` — i.e., only the *relative* skew
+// between sender and receiver shifts when the message effectively appears
+// in receiver's frame. This matches the spec's δ-bound semantics: per-pair
+// clock differences ≤ δ; same skew on both sides cancels.
+//
+// Equivalent abstraction (without modeling DES timer firings per-op): if op_s
+// has clock δ_s ahead, it fires its T_commit timer at global_time =
+// T_commit_local − δ_s, so its message arrives sooner in global time; if op_r
+// has clock δ_r ahead, its T_commit threshold is reached sooner in global,
+// so an arrival at global_time t is interpreted as op_r-local = t + δ_r.
+// The relative offset δ_r − δ_s is what the protocol perceives.
+//
+// Convention: skew typically drawn within ±δ (the spec's per-cluster bound,
+// 50ms at Config A) to verify the protocol tolerates the partial-synchrony
+// δ-bound. Out-of-bound skew (|δ_s − δ_r| > 2·δ) exceeds the spec's tolerated
+// range and the protocol may legitimately miss.
+type ClockSkewedNetwork struct {
+	Inner NetworkModel
+	Skew  map[OperatorID]time.Duration // per-op clock offset; missing op → 0
+}
+
+func (c ClockSkewedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
+	base := c.Inner.Delay(rng, from, to, kind)
+	delay := base + c.Skew[to] - c.Skew[from]
+	if delay < time.Nanosecond {
+		delay = time.Nanosecond
+	}
+	return delay
+}
