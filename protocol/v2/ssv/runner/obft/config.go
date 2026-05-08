@@ -101,13 +101,24 @@ const (
 )
 
 // ConfigOverrides allows callers to override the default protocol timings
-// and layer count. Zero values fall back to package defaults.
+// and layer count. Zero values fall back to package defaults — and where
+// the spec defines a derivation (e.g. T_commit = RelayCutoff − headroom −
+// Δ_3 − Δ_2; Δ_2 = 2·BTT), zero-valued fields derive from the supplied
+// BTT / RelayCutoff / HeaderSubmitHeadroom rather than from the package
+// defaults. Per spec §Application: callers can configure (BTT,
+// HeaderSubmitHeadroom, RelayCutoff) and the post-T_commit timing falls
+// out automatically.
 type ConfigOverrides struct {
-	K       int
+	K                    int
+	BTT                  time.Duration // P99 + δ; spec §Setting unit propagation+skew budget
+	RelayCutoff          time.Duration // application hard deadline (e.g. 4s for proposer duty)
+	HeaderSubmitHeadroom time.Duration // reserved for cert broadcast + relay submit (absolute)
+
+	// TCommit, Delta2, Delta3 — when zero, derive from the above per spec.
+	// Set explicitly only to deviate from the spec derivation.
 	TCommit time.Duration
 	Delta2  time.Duration
 	Delta3  time.Duration
-	BTT     time.Duration // P99 + δ; spec §Setting unit propagation+skew budget
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
 	// defaults are used (Config A K=4: 3000/2900/2700/2100ms). Length
@@ -129,20 +140,28 @@ func (o *ConfigOverrides) k() int {
 	return o.K
 }
 
-func (o *ConfigOverrides) tCommit() time.Duration {
-	if o == nil || o.TCommit == 0 {
-		return DefaultTCommit
+func (o *ConfigOverrides) btt() time.Duration {
+	if o == nil || o.BTT == 0 {
+		return DefaultBTT
 	}
-	return o.TCommit
+	return o.BTT
 }
 
-func (o *ConfigOverrides) delta2() time.Duration {
-	if o == nil || o.Delta2 == 0 {
-		return DefaultDelta2
+func (o *ConfigOverrides) relayCutoff() time.Duration {
+	if o == nil || o.RelayCutoff == 0 {
+		return DefaultRelayCutoff
 	}
-	return o.Delta2
+	return o.RelayCutoff
 }
 
+func (o *ConfigOverrides) headerSubmitHeadroom() time.Duration {
+	if o == nil || o.HeaderSubmitHeadroom == 0 {
+		return DefaultHeaderSubmitHeadroom
+	}
+	return o.HeaderSubmitHeadroom
+}
+
+// delta3 derives from absolute ε_3 (doesn't scale with BTT per spec).
 func (o *ConfigOverrides) delta3() time.Duration {
 	if o == nil || o.Delta3 == 0 {
 		return DefaultDelta3
@@ -150,11 +169,22 @@ func (o *ConfigOverrides) delta3() time.Duration {
 	return o.Delta3
 }
 
-func (o *ConfigOverrides) btt() time.Duration {
-	if o == nil || o.BTT == 0 {
-		return DefaultBTT
+// delta2 derives as 2 BTT per spec §Phase 2 recommendation (KindCommit
+// propagation + jitter cushion). Override only to deviate.
+func (o *ConfigOverrides) delta2() time.Duration {
+	if o != nil && o.Delta2 != 0 {
+		return o.Delta2
 	}
-	return o.BTT
+	return 2 * o.btt()
+}
+
+// tCommit derives as RelayCutoff − HeaderSubmitHeadroom − Δ_3 − Δ_2 per
+// spec §Application / Timing budget.
+func (o *ConfigOverrides) tCommit() time.Duration {
+	if o != nil && o.TCommit != 0 {
+		return o.TCommit
+	}
+	return o.relayCutoff() - o.headerSubmitHeadroom() - o.delta3() - o.delta2()
 }
 
 // interpolatedSchedule returns a length-K slice running linearly between
