@@ -88,7 +88,22 @@ func (h *LifecycleHooks) validate() error {
 type Scheduler struct {
 	controller *Controller
 	hooks      *LifecycleHooks
+
+	// Iterative-fetch tuning (FetchAndBroadcastBundle). Zero means use
+	// package defaults; deployments may override via SetFetchTiming.
+	fetchPollInterval time.Duration
+	fetchBuildBuffer  time.Duration
 }
+
+// Iterative-fetch defaults per spec §Application / Timing budget.
+// pollInterval ≈ 1 BTT keeps relay polling load bounded while ensuring
+// fresh MEV bids are picked up at sub-second cadence; buildBuffer reserves
+// time at the end of the window for BuildPhase1Bundle + sign + wrap +
+// dispatch to fit before T_broadcast_max.
+const (
+	defaultFetchPollInterval = 200 * time.Millisecond
+	defaultFetchBuildBuffer  = 50 * time.Millisecond
+)
 
 // NewScheduler constructs a Scheduler.
 func NewScheduler(controller *Controller, hooks *LifecycleHooks) (*Scheduler, error) {
@@ -101,31 +116,55 @@ func NewScheduler(controller *Controller, hooks *LifecycleHooks) (*Scheduler, er
 	return &Scheduler{controller: controller, hooks: hooks}, nil
 }
 
+// SetFetchTiming overrides the iterative-fetch poll cadence and end-of-
+// window build buffer used by FetchAndBroadcastBundle. Zero values keep
+// the package defaults (200ms / 50ms). Useful for tests with shorter
+// windows or deployments with relay-specific cadence preferences.
+func (s *Scheduler) SetFetchTiming(pollInterval, buildBuffer time.Duration) {
+	s.fetchPollInterval = pollInterval
+	s.fetchBuildBuffer = buildBuffer
+}
+
 // Controller returns the underlying Controller.
 func (s *Scheduler) Controller() *Controller {
 	return s.controller
 }
 
 // FetchAndBroadcastBundle executes Phase 1 for one layer where the local
-// operator is the designated leader:
+// operator is the designated leader. Implements the spec's iterative-fetch
+// model (§Application / Timing budget): poll hooks.FetchCandidate
+// throughout the window [now, ctx.deadline−buildBuffer], keep the freshest
+// candidate, then build and broadcast at the end.
 //
-//  1. Call hooks.FetchCandidate to obtain the candidate value.
-//  2. Build the Phase-1 bundle (locks σ-V on the value via EKM-style
-//     enforcement; self-observes into the σ-pool).
-//  3. Apply host validity verdict at the leader's own instance (host
-//     validated the value at fetch time).
+// Steps:
+//  1. Iteratively poll hooks.FetchCandidate at pollInterval until close to
+//     the broadcast deadline. Each poll returns the freshest available
+//     candidate (production hook calls beacon GetBeaconBlock, which
+//     returns the relay's current best bid).
+//  2. Build the Phase-1 bundle from the freshest candidate (locks σ-V via
+//     EKM-style enforcement; self-observes into the σ-pool).
+//  3. Apply host validity verdict at the leader's own instance.
 //  4. Broadcast the bundle via hooks.Broadcast.
+//
+// pollInterval defaults to 200ms (~ Config A BTT) — tunable per
+// deployment via NewScheduler. buildBuffer reserves time at the end of
+// the window for build + sign + wrap + dispatch (default 50ms).
+//
+// If the caller's ctx has no deadline, FetchAndBroadcastBundle does a
+// single-shot fetch (degenerate case; matches the legacy single-call
+// behavior). With a deadline, the freshest candidate observed across
+// polls is the one used; an empty window collapses to a single fetch.
 func (s *Scheduler) FetchAndBroadcastBundle(ctx context.Context, slot phase0.Slot, layer int) error {
-	value, err := s.hooks.FetchCandidate(ctx, slot, layer)
+	freshest, err := s.iterativeFetch(ctx, slot, layer)
 	if err != nil {
-		return fmt.Errorf("obft scheduler: fetch candidate (slot=%d layer=%d): %w", slot, layer, err)
+		return err
 	}
 
-	bundle, err := s.controller.BuildPhase1Bundle(slot, layer, value)
+	bundle, err := s.controller.BuildPhase1Bundle(slot, layer, freshest)
 	if err != nil {
 		return fmt.Errorf("obft scheduler: build phase-1 bundle: %w", err)
 	}
-	if err := s.controller.ApplyHostValidity(slot, layer, value, true); err != nil {
+	if err := s.controller.ApplyHostValidity(slot, layer, freshest, true); err != nil {
 		return fmt.Errorf("obft scheduler: apply host validity (own bundle): %w", err)
 	}
 
@@ -137,6 +176,66 @@ func (s *Scheduler) FetchAndBroadcastBundle(ctx context.Context, slot phase0.Slo
 		return fmt.Errorf("obft scheduler: broadcast phase-1 bundle: %w", err)
 	}
 	return nil
+}
+
+// iterativeFetch polls hooks.FetchCandidate throughout the available window,
+// returning the freshest non-error candidate. Honors ctx cancellation and
+// the build-buffer reservation at the deadline.
+func (s *Scheduler) iterativeFetch(ctx context.Context, slot phase0.Slot, layer int) ([]byte, error) {
+	pollInterval := s.fetchPollInterval
+	if pollInterval <= 0 {
+		pollInterval = defaultFetchPollInterval
+	}
+	buildBuffer := s.fetchBuildBuffer
+	if buildBuffer <= 0 {
+		buildBuffer = defaultFetchBuildBuffer
+	}
+
+	deadline, hasDeadline := ctx.Deadline()
+	var pollEnd time.Time
+	if hasDeadline {
+		pollEnd = deadline.Add(-buildBuffer)
+	}
+
+	var freshest []byte
+	var lastErr error
+	for {
+		cand, err := s.hooks.FetchCandidate(ctx, slot, layer)
+		if err == nil && cand != nil {
+			freshest = cand
+			lastErr = nil
+		} else if err != nil {
+			lastErr = err
+		}
+
+		// Stop if no deadline (single-shot mode) or if next poll would land
+		// past pollEnd.
+		if !hasDeadline {
+			break
+		}
+		nextPoll := time.Now().Add(pollInterval)
+		if !nextPoll.Before(pollEnd) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			// Caller cancelled (or deadline hit) — broadcast whatever we have.
+			if freshest != nil {
+				return freshest, nil
+			}
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+			// continue polling
+		}
+	}
+
+	if freshest != nil {
+		return freshest, nil
+	}
+	if lastErr != nil {
+		return nil, fmt.Errorf("obft scheduler: iterative fetch (slot=%d layer=%d): all polls failed: %w", slot, layer, lastErr)
+	}
+	return nil, fmt.Errorf("obft scheduler: iterative fetch (slot=%d layer=%d): no candidate after polling", slot, layer)
 }
 
 // DrainPending replays any envelopes buffered on the Controller for `slot`

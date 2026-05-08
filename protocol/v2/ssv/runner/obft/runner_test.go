@@ -377,3 +377,86 @@ func (h *runnerHooks) LifecycleHooks() *LifecycleHooks {
 		},
 	}
 }
+
+// TestScheduler_IterativeFetch_PicksFreshest verifies the spec §Application
+// iterative-fetch model: the Scheduler polls FetchCandidate throughout the
+// available window and uses the last (freshest) successful result.
+func TestScheduler_IterativeFetch_PicksFreshest(t *testing.T) {
+	nodes := buildCluster(t, 4, &ConfigOverrides{
+		K:       4,
+		TCommit: 200 * time.Millisecond,
+		Delta2:  60 * time.Millisecond,
+		Delta3:  60 * time.Millisecond,
+		BTT:     30 * time.Millisecond,
+		FetchAt: []time.Duration{130 * time.Millisecond, 110 * time.Millisecond, 90 * time.Millisecond, 70 * time.Millisecond},
+	})
+	leader := nodes[0]
+
+	// Configure leader's hook to return a different value on each call.
+	var callCount int
+	leader.hooks.mu.Lock()
+	leader.hooks.fetchFn = func(_ context.Context, _ phase0.Slot, _ int) ([]byte, error) {
+		leader.hooks.mu.Lock()
+		callCount++
+		v := []byte(fmt.Sprintf("v-%d", callCount))
+		leader.hooks.mu.Unlock()
+		return v, nil
+	}
+	leader.hooks.mu.Unlock()
+
+	// Tight poll cadence so the test exercises multiple iterations within
+	// a sub-second window. Build buffer kept tiny for the test fixture.
+	leader.sched.SetFetchTiming(20*time.Millisecond, 5*time.Millisecond)
+
+	// 200ms ctx deadline → with 20ms pollInterval and 5ms buildBuffer,
+	// pollEnd is at +195ms; multiple polls fit.
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(200*time.Millisecond))
+	defer cancel()
+	freshest, err := leader.sched.iterativeFetch(ctx, phase0.Slot(123), 0)
+	require.NoError(t, err)
+
+	leader.hooks.mu.Lock()
+	finalCallCount := callCount
+	leader.hooks.mu.Unlock()
+	require.Greater(t, finalCallCount, 1, "expected multiple polls within window; got %d", finalCallCount)
+	require.Equal(t, fmt.Sprintf("v-%d", finalCallCount), string(freshest),
+		"freshest value should be the LAST poll's result")
+}
+
+// TestScheduler_IterativeFetch_DegradesToSingleShot verifies that with a
+// short window (deadline already past pollEnd), iterativeFetch does a
+// single fetch+return rather than spinning.
+func TestScheduler_IterativeFetch_DegradesToSingleShot(t *testing.T) {
+	nodes := buildCluster(t, 4, &ConfigOverrides{
+		K:       4,
+		TCommit: 200 * time.Millisecond,
+		Delta2:  60 * time.Millisecond,
+		Delta3:  60 * time.Millisecond,
+		BTT:     30 * time.Millisecond,
+		FetchAt: []time.Duration{130 * time.Millisecond, 110 * time.Millisecond, 90 * time.Millisecond, 70 * time.Millisecond},
+	})
+	leader := nodes[0]
+
+	var callCount int
+	leader.hooks.mu.Lock()
+	leader.hooks.fetchFn = func(_ context.Context, _ phase0.Slot, _ int) ([]byte, error) {
+		leader.hooks.mu.Lock()
+		callCount++
+		leader.hooks.mu.Unlock()
+		return []byte("v"), nil
+	}
+	leader.hooks.mu.Unlock()
+
+	// pollInterval larger than window → single fetch, immediate return.
+	leader.sched.SetFetchTiming(500*time.Millisecond, 50*time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(100*time.Millisecond))
+	defer cancel()
+	freshest, err := leader.sched.iterativeFetch(ctx, phase0.Slot(123), 0)
+	require.NoError(t, err)
+	require.Equal(t, "v", string(freshest))
+
+	leader.hooks.mu.Lock()
+	finalCallCount := callCount
+	leader.hooks.mu.Unlock()
+	require.Equal(t, 1, finalCallCount, "expected exactly 1 poll in single-shot degeneration; got %d", finalCallCount)
+}
