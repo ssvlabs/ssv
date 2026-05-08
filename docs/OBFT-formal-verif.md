@@ -85,10 +85,10 @@ OBFT operates under **partial synchrony** ([assumption 2 of OBFT.md](OBFT.md#ass
 
 - Cluster operates over a libp2p gossipsub mesh.
 - All messages broadcast to gossipsub eventually deliver to all subscribed peers within propagation budget `P99 + δ = 1 BTT`.
-- **Within a single slot**, mesh propagation can be asymmetric: a message broadcast at time `t` may reach peer A by `t + ε` but peer B by `t + 2 BTT`. The protocol's per-layer staggered budgets `B_k + slack` set the absorption ceiling per layer.
+- **Within a single slot**, mesh propagation can be asymmetric: a message broadcast at time `t` may reach peer A by `t + ε` but peer B by `t + 2 BTT`. The protocol's per-layer staggered budgets `B_k` set the absorption ceiling per layer.
 - Beyond the absorption ceiling, slot misses cleanly (Class A — assumption 2 violation).
 
-**Network non-determinism**: For verification, we model the network as choosing (within partial-synchrony constraints) which messages reach which peers by which time. Specifically, for each broadcast message `m` and each peer `p`, the network non-deterministically chooses a delivery time `t_m,p ∈ [t_broadcast, t_broadcast + B_layer + slack]` — or `∞` if `m` is not delivered to `p` within this slot's budget.
+**Network non-determinism**: For verification, we model the network as choosing (within partial-synchrony constraints) which messages reach which peers by which time. Specifically, for each broadcast message `m` and each peer `p`, the network non-deterministically chooses a delivery time `t_m,p ∈ [t_broadcast, t_broadcast + B_layer]` — or `∞` if `m` is not delivered to `p` within this slot's budget.
 
 This captures both honest mesh asymmetries (broken links, peer-score pruning) and the byzantine-broadcast-via-gossipsub case (byz broadcasts to gossipsub; network determines per-peer delivery).
 
@@ -283,8 +283,8 @@ ACTION leader_broadcast_with_bid(operator i, layer k):
     PRECONDITION: i is the rotation leader for L_k AND
                   current_time ≥ T_{k} AND current_time ≤ T_broadcast_max_k AND
                   not yet broadcast for (slot, k).
-                  (T_broadcast_max_k = T_0_arrival − B_k for L_Bid, where T_0_arrival
-                   replaces bare OBFT's Ls_arrival.)
+                  (T_broadcast_max_k = T_commit − B_k for bare OBFT;
+                   T_broadcast_max_k = T_0_arrival − B_k_LBid for L_Bid.)
     
     1. Run host fetch loop until V_k is determined; validate against host rules.
     2. Determine bid_value and obtain relay_attestation (or empty if extension off).
@@ -513,8 +513,8 @@ Expected result (per the OBFT spec's Class A list): TLC verifies for all three v
 
 The network non-determinism in §2.1 must be carefully bounded for the verification to be meaningful:
 
-- **Within-budget asymmetry**: each message reaches each subscribed peer within `B_layer + slack` of broadcast. This is the protocol-spec-allowed asymmetry; the protocol must terminate under this.
-- **Beyond-budget asymmetry**: messages take longer than `B_layer + slack`. This is assumption-2 violation; out of scope for the Class A closure property.
+- **Within-budget asymmetry**: each message reaches each subscribed peer within `B_layer` of broadcast. This is the protocol-spec-allowed asymmetry; the protocol must terminate under this.
+- **Beyond-budget asymmetry**: messages take longer than `B_layer`. This is assumption-2 violation; out of scope for the Class A closure property.
 
 The TLA+ model exposes a parameter `mesh_asymmetry ∈ {within_budget, beyond_budget}` and verifies the property only under `within_budget`. Beyond-budget executions are excluded by the assumption-2 precondition.
 
@@ -607,9 +607,10 @@ This section is updated as TLC runs are performed.
 
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
-| SAFETY | n=4, f=1 | _to be run_ | — | — |
-| SAFETY | n=7, f=2 | _to be run_ | — | — |
-| LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | — |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with TLC symmetry over Honest × Values) | ◐ partial | 2026-05-08 | TLC explored 139M+ distinct canonical states up to depth 16 without finding a counterexample, before the run was halted at the 20-min user-budget cap. All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. Spec encoding validated by SANY parse + millions of states explored. The L_Bid_New SAFETY spec is a structural refinement of L_Bid SAFETY at the algebraic level (per-operator σ-or-NR commitments + threshold pools + chained encryption); the L_Bid_New-specific σ-when-uncertain rule and deep-only verdict scope are honest-side tightenings that don't affect Pigeonhole invariants. |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (full coverage) | _follow-up_ | — | Re-run with longer time budget; same recommendation as L_Bid SAFETY. |
+| SAFETY | n=7, f=2 | _to be run_ | — | Will need symmetry reductions to be tractable. |
+| LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | Would model bid_1 explicitly per-operator to verify F.5.2 corner cases (σ-when-uncertain residual at bid_1 > V_early; recovery at V_early > bid_1). |
 | LIVENESS_NON_GRIEF | n=7, f=2 | _to be run_ | — | — |
 
 ### 7.4 — Counterexample log

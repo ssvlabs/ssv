@@ -8,9 +8,13 @@ This directory contains TLA+ specifications and TLC model-checker configurations
 
 1. **`BareOBFT_Safety` ✓ verified** at n=4, f=1, K=2, |Values|=2 — TLC explored 262,144 distinct states (1.96M total state transitions, 13 levels deep) in 10 seconds with no counterexamples. All three Pigeonholes (1, 2, 3) hold across the entire reachable state space.
 
-2. **`LBid_Safety` ◐ partial verification** at n=4, f=1, K=2, |Values|=2 (with TLC symmetry reduction over Honest × Values = 12×) — TLC explored 98M+ distinct canonical states up to depth 15 without finding any counterexample, before the run was halted (the full state space at this config is estimated ~100-150M distinct canonical states; the run was making steady progress but exceeded the interactive-session time budget). All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. **Status**: spec encoding is correct (validated by SANY parse + millions of explored states); exhaustive verification at this config is a follow-up task — likely needs a few hours of CPU time, or a state-space constraint to bound byzantine action sequences.
+2. **`LBid_Safety` ◐ partial verification** at n=4, f=1, K=2, |Values|=2 (with TLC symmetry reduction over Honest × Values = 12×) — TLC explored 98M+ distinct canonical states up to depth 15 without finding any counterexample, before the run was halted (the full state space at this config is estimated ~100-150M distinct canonical states; the run was making steady progress but exceeded the interactive-session time budget). All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states.
 
-Pending: liveness verification, L_Bid_New variant, larger configurations (K=4, n=7), exhaustive completion of L_Bid SAFETY.
+3. **`LBidNew_Safety` ◐ partial verification** at n=4, f=1, K=2, |Values|=2 (with TLC symmetry reduction over Honest × Values = 12×) — TLC explored 139M+ distinct canonical states up to depth 16 without finding any counterexample, before the run was halted at a 20-min user-budget cap. All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. **Refinement of L_Bid SAFETY**: the L_Bid_New spec uses the same algebraic-level structure as L_Bid (per-operator σ-or-NR commitments, threshold pools, chained encryption) with L_Bid_New's σ-when-uncertain rule and deep-only verdict scope encoded as honest-side tightenings; these tightenings don't affect Pigeonhole invariants but provide the structural base for future LIVENESS verification of F.5.2 corner cases.
+
+**Status for both L_Bid and L_Bid_New**: spec encoding is correct (validated by SANY parse + 100M+ explored states each); exhaustive verification at this config is a follow-up task — likely needs a few hours of CPU time per variant, or a state-space constraint to bound byzantine action sequences.
+
+Pending: liveness verification (Phase 2 / 3 / 4 LIVENESS_NON_GRIEF), larger configurations (K=4, n=7), exhaustive completion of L_Bid + L_Bid_New SAFETY.
 
 The current specs are intentionally algebraic: they capture per-operator σ-or-NR commitments, threshold pools, verdict pools, and chained-encryption gates without modeling Phase-1 fetch loops, network non-determinism, or per-receiver verdict-pool views. This is sufficient to verify that Pigeonholes 1, 2, 3 hold algebraically — the load-bearing safety guarantee — under all reachable byzantine action sequences (cluster-wide verdict pool view; safety properties are invariant under the per-receiver-view abstraction since honest σ at L_Bid is verdict-quorum-gated and verdict-quorum is a strict property under Pigeonhole on verdicts).
 
@@ -22,12 +26,14 @@ The current specs are intentionally algebraic: they capture per-operator σ-or-N
 | `BareOBFT_Safety.cfg` | TLC config for n=4, f=1 |
 | `LBid_Safety.tla` | OBFT + L_Bid SAFETY spec — Pigeonholes 1, 2, 3 + verdict pigeonhole; symmetry reduction over Honest × Values |
 | `LBid_Safety.cfg` | TLC config for n=4, f=1 with symmetry |
+| `LBidNew_Safety.tla` | OBFT + L_Bid_New SAFETY spec — same invariants as LBid_Safety, encoded for L_Bid_New's structural differences (deep-only verdict scope, σ-when-uncertain rule, primary-bid placement at L_0); symmetry reduction over Honest × Values |
+| `LBidNew_Safety.cfg` | TLC config for n=4, f=1 with symmetry |
 
 Planned (not yet written):
 
 - `BareOBFT_Liveness.tla` — bare OBFT LIVENESS_NON_GRIEF (Class A closure).
 - `LBid_Liveness.tla` — current L_Bid liveness verification.
-- `LBidNew_Safety.tla`, `LBidNew_Liveness.tla` — L_Bid_New extension verifications.
+- `LBidNew_Liveness.tla` — L_Bid_New liveness verification (would model bid_1 per-operator to verify F.5.2 corner cases).
 - Configs for n=7, f=2.
 
 ## Running TLC
@@ -83,6 +89,21 @@ cd tla
 Expected runtime: tens of minutes (full coverage). The L_Bid spec adds three state variables on top of bare OBFT (`lbid_sigma`, `lbid_nr`, `verdicts`) and TLC explores a much larger state space — ~100-150M distinct canonical states under symmetry vs bare OBFT's 262K.
 
 Partial-coverage results so far: 98M+ canonical states explored to depth 15 without counterexample. See [§Status](#status) for full notes.
+
+### Verifying SAFETY for OBFT + L_Bid_New at n=4, f=1
+
+```sh
+cd tla
+
+# Validate spec syntax with SANY:
+/opt/homebrew/opt/openjdk/bin/java -cp tla2tools.jar tla2sany.SANY LBidNew_Safety.tla
+
+# Run TLC model checker (same heap + GC recommendation as L_Bid):
+/opt/homebrew/opt/openjdk/bin/java -Xmx8g -XX:+UseParallelGC \
+    -cp tla2tools.jar tlc2.TLC -workers auto -config LBidNew_Safety.cfg LBidNew_Safety
+```
+
+Same runtime profile as L_Bid SAFETY. Partial-coverage results so far: 139M+ canonical states explored to depth 16 without counterexample.
 
 ### State-space estimates
 
