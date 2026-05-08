@@ -795,8 +795,8 @@ OBFT is OBFTR with R fixed at 1 and the round-retry machinery stripped. They sha
 | MEV-fetch budget for primary leader (K=4, BTT=200ms, `header_submit_headroom = 100ms`) | ~1.45s (T_commit_1 = 2.00s constrained by R1+R2 fit within 4s slot) | **~3.05s** (T_commit = 3.40s; single-round, no retry budget needed) — **+1.6s more MEV-fresh fetch** |
 | Submission headroom (`header_submit_headroom`) | 100ms | 100ms |
 | Consensus complete | slot_start + 3.90s | slot_start + 3.90s (same anchor; OBFT redirects the saved BTT-budget into the MEV-fetch window) |
-| Bandwidth (healthy, n=4, K=4) | ~28 KB | ~28 KB (same; both include the σ_L^V witness section ≈ +2.3 KB at 145 bytes/witness × 16 witnesses) |
-| Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB | n/a (no round 2) |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB across 2 emissions per round (`KindCommit_r` + `KindLCClaim_r`) | ~28 KB across 1 emission (`KindCommit`) — both include the σ_L^V witness section ≈ +2.3 KB at 145 bytes/witness × 16 witnesses |
+| Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB across 4 emissions (2 rounds × 2 emissions) | n/a (no round 2) |
 | High-D fit (P99 = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |
 
 **Recovery scope:**
@@ -842,7 +842,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 | RTTs to signed output (min, healthy) | 3 (consensus) + 1 (post-consensus) ≈ 4 | 2 (Phase 1 + Phase 2) |
 | Termination guarantee | Eventually-terminating across rounds (under partial synchrony) | Conditional on `D ≥ real_propagation`; for larger envelope, use [OBFTR(R≥2)](OBFTR.md) |
 | Safety posture | Honest-majority (`2f+1` honest) + correct quorum-certificate verification | Honest-majority cryptographic via `qEnc = qV = 2f+1` + chained IBE + EKM-enforced per-operator commitments. Same trust posture as QBFT — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). |
-| Bandwidth (healthy n=4) | ~14 KB | ~28 KB at K=4 (includes σ_L^V witness section ≈ +2.3 KB at 145 bytes/witness × 16 witnesses) |
+| Bandwidth (healthy n=4) | ~14 KB across 4 emissions per round (PROPOSE + PREPARE + COMMIT + post-cons.) | ~28 KB across 1 emission at K=4 (`KindCommit`; includes σ_L^V witness section ≈ +2.3 KB at 145 bytes/witness × 16 witnesses) |
 | Latency (healthy, n=4, BTT=200ms) | ~800 ms | ~600 ms (Phase 2 + Phase 3 with Δ_2 = 2 BTT) |
 | Latency (1 round failure, n=4) | ~3.0 s (round-1 timeout 2s + round-2 success ~750 ms) | n/a (single round; failure → slot miss) |
 | Slashing-protection scope | Single block sig per slot, gated at submission time | Multiple per-share sigs per slot at candidate-signing (Phase-1 leader, Phase-2 onion) gated by EKM cross-keypair coordination — see [EKM coordination model](#ekm-coordination-model) |
@@ -1242,7 +1242,7 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | Best-case latency post-`T_commit` (early reconstruct) | ~200ms (`1 BTT`) | **Same** (~200ms; mini-consensus runs pre-`T_commit`) |
 | Canonical latency post-`T_commit` (full Phase 2 + Phase 3) | ~500ms (`Δ_2 + Δ_3`) | **Same** (~500ms) |
 | Time-to-completion spread (best → canonical) | ~2.5× | **Same** |
-| Bandwidth (n=4, K=4 healthy) | ~28 KB | Base bandwidth + K bid-metadata sections + n verdicts + 1 chained encryption layer (no standalone bid envelopes) |
+| Bandwidth (n=4, K=4 healthy) | ~28 KB across 1 emission | Base bandwidth + K bid-metadata sections + n verdicts + 1 chained encryption layer (no standalone bid envelopes) — 2 emissions (`KindCommit` + `KindBidVerdict`) |
 | L_0 broadcast deadline | `T_broadcast_max_0 = T_commit − B_0` (e.g., 3200ms at Config A max-MEV anchor with `B_0 = 1 BTT`) | `T_0_broadcast_max = T_0_arrival − B_0_LBid = T_commit − Δ_minicon − B_0_LBid` (with tighter `B_0_LBid = 0.5 BTT` — see [§L_Bid broadcast-deadline tightening](#l_bid-broadcast-deadline-tightening); e.g., 2900ms at conservative `Δ_minicon = 2 BTT`) |
 | MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~3050ms (V_0; T_commit = 3.40s) | ~2750ms (V_X) at conservative `Δ_minicon = 2 BTT`; ~2850ms at standard `Δ_minicon = 1.5 BTT`; ~3050ms at aggressive `Δ_minicon = 0.5 BTT` (= bare OBFT V_0; convergence buffer repurposed as `Δ_verdict`) |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |

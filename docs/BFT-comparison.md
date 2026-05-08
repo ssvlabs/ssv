@@ -78,21 +78,33 @@ K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Ph
 
 Healthy completion = leader honest, all Phase-1 bundles propagate, σ-quorum reaches at L_0 in round 1. All counts at recommended sizing (2 BTT per emission); QBFT-SSV and QBFT-optimal share the same R1 healthy-path timing.
 
-| BFT start, BTT | Budget | Partial-sigs (2 BTT) † | OBFT (3 BTT) | OBFTR R1 (6 BTT) | 2abOBFT (6 BTT) | QBFT R1 (8 BTT) |
-|---|---|---|---|---|---|---|
-| **0s, BTT=200ms** | 3.9s | 0.4s ✓ | 0.6s ✓ | 1.2s ✓ | 1.2s ✓ | 1.6s ✓ |
-| **0s, BTT=600ms** | 3.9s | 1.2s ✓ | 1.8s ✓ | 3.6s ✓ | 3.6s ✓ | **4.8s ✗** |
-| **0s, BTT=1000ms** | 3.9s | 2.0s ✓ | 3.0s ✓ | **6.0s ✗** | **6.0s ✗** | **8.0s ✗** |
-| **400ms, BTT=200ms** | 3.5s | 0.4s ✓ | 0.6s ✓ | 1.2s ✓ | 1.2s ✓ | 1.6s ✓ |
-| **400ms, BTT=600ms** | 3.5s | 1.2s ✓ | 1.8s ✓ | **3.6s ✗** | **3.6s ✗** | **4.8s ✗** |
-| **400ms, BTT=1000ms** | 3.5s | 2.0s ✓ | 3.0s ✓ | **6.0s ✗** | **6.0s ✗** | **8.0s ✗** |
-| **2.5s, BTT=200ms** | 1.4s | 0.4s ✓ | 0.6s ✓ | 1.2s ✓ tight | 1.2s ✓ tight | **1.6s ✗** |
-| **2.5s, BTT=600ms** | 1.4s | 1.2s ✓ tight | **1.8s ✗** | **3.6s ✗** | **3.6s ✗** | **4.8s ✗** |
-| **2.5s, BTT=1000ms** | 1.4s | **2.0s ✗** | **3.0s ✗** | **6.0s ✗** | **6.0s ✗** | **8.0s ✗** |
+### Table 1a — BFT start = 0s (immediate), budget = 3.9s
+
+| BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
+|---|---|---|---|---|---|
+| 200ms | 0.4s ✓ | 0.6s ✓ | 1.2s ✓ | 1.2s ✓ | 1.6s ✓ |
+| 600ms | 1.2s ✓ | 1.8s ✓ | 3.6s ✓ | 3.6s ✓ | **4.8s ✗** |
+| 1000ms | 2.0s ✓ | 3.0s ✓ | **6.0s ✗** | **6.0s ✗** | **8.0s ✗** |
+
+### Table 1b — BFT start = 400ms (moderate), budget = 3.5s
+
+| BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
+|---|---|---|---|---|---|
+| 200ms | 0.4s ✓ | 0.6s ✓ | 1.2s ✓ | 1.2s ✓ | 1.6s ✓ |
+| 600ms | 1.2s ✓ | 1.8s ✓ | **3.6s ✗** | **3.6s ✗** | **4.8s ✗** |
+| 1000ms | 2.0s ✓ | 3.0s ✓ | **6.0s ✗** | **6.0s ✗** | **8.0s ✗** |
+
+### Table 1c — BFT start = 2.5s (late MEV fetch), budget = 1.4s
+
+| BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
+|---|---|---|---|---|---|
+| 200ms | 0.4s ✓ | 0.6s ✓ | 1.2s ✓ tight | 1.2s ✓ tight | **1.6s ✗** |
+| 600ms | 1.2s ✓ tight | **1.8s ✗** | **3.6s ✗** | **3.6s ✗** | **4.8s ✗** |
+| 1000ms | **2.0s ✗** | **3.0s ✗** | **6.0s ✗** | **6.0s ✗** | **8.0s ✗** |
 
 † **Partial-sigs only fits if V is pre-agreed.** For SSV proposer duty (V varies per operator due to MEV bundles), this isn't directly applicable — the cluster needs a BFT consensus protocol to resolve V-disagreement first. Shown here as the floor: what completion would look like if V were pre-agreed (e.g., for non-MEV duties like attestations).
 
-**Reading Table 1:**
+**Reading Tables 1a–1c:**
 
 - **Partial-sigs floor (V pre-agreed)**: 2 BTT fits trivially at every BFT_start except (2.5s, 1000ms). Sets the absolute floor — BFT consensus protocols pay 1-6 BTT extra to resolve V-disagreement.
 - **BTT=200ms** (production-typical healthy mesh): OBFT, OBFTR R1, and 2abOBFT all fit every BFT_start. QBFT R1 (1.6s) fits BFT_start ≤ 400ms; misses at BFT_start = 2.5s by 200ms.
@@ -105,23 +117,35 @@ Healthy completion = leader honest, all Phase-1 bundles propagate, σ-quorum rea
 
 When round-1 / single-round fails (silent leader, partition, network jitter, but NOT adversarial-byz-locked patterns covered in Table 3), each protocol's recovery path consumes additional time. All counts at recommended sizing (2 BTT per emission).
 
-| BFT start, BTT | Partial-sigs (no recovery) † | OBFT K-layer fall-through | OBFTR R1+R2 (12 BTT) | 2abOBFT K-layer fall-through | QBFT-SSV R2 (RT + 8 BTT = 18 BTT) | QBFT-optimal R2 (RT + 8 BTT = 14 BTT) |
+### Table 2a — BFT start = 0s, budget = 3.9s
+
+| BTT | Partial-sigs (no recovery) † | OBFT (K-layer fall-through) | OBFTR R1+R2 (re-flood retry) | 2abOBFT (K-layer fall-through) | QBFT-SSV R2 (round-change + fresh V) | QBFT-optimal R2 (round-change + fresh V) |
 |---|---|---|---|---|---|---|
-| **0s, BTT=200ms** | n/a | in-round (free) | 2.4s ✓ | in-round (free) | 3.6s ✓ | 2.8s ✓ |
-| **0s, BTT=600ms** | n/a | in-round (free) | **7.2s ✗** | in-round (free) | **10.8s ✗** | **8.4s ✗** |
-| **0s, BTT=1000ms** | n/a | in-round (free) | **12.0s ✗** | n/a (R1 missed) | **18.0s ✗** | **14.0s ✗** |
-| **400ms, BTT=200ms** | n/a | in-round (free) | 2.4s ✓ | in-round (free) | **3.6s ✗** | 2.8s ✓ |
-| **400ms, BTT=600ms** | n/a | in-round (free) | **7.2s ✗** | n/a (R1 missed) | **10.8s ✗** | **8.4s ✗** |
-| **400ms, BTT=1000ms** | n/a | in-round (free) | **12.0s ✗** | n/a (R1 missed) | **18.0s ✗** | **14.0s ✗** |
-| **2.5s, BTT=200ms** | n/a | in-round (free) | **2.4s ✗** | in-round (free) | **3.6s ✗** | **2.8s ✗** |
-| **2.5s, BTT=600ms** | n/a | n/a (R1 missed) | **7.2s ✗** | n/a (R1 missed) | **10.8s ✗** | **8.4s ✗** |
-| **2.5s, BTT=1000ms** | n/a | n/a (R1 missed) | **12.0s ✗** | n/a (R1 missed) | **18.0s ✗** | **14.0s ✗** |
+| 200ms | n/a | in-round (free) | 2.4s ✓ | in-round (free) | 3.6s ✓ | 2.8s ✓ |
+| 600ms | n/a | in-round (free) | **7.2s ✗** | in-round (free) | **10.8s ✗** | **8.4s ✗** |
+| 1000ms | n/a | in-round (free) | **12.0s ✗** | n/a (R1 missed) | **18.0s ✗** | **14.0s ✗** |
+
+### Table 2b — BFT start = 400ms, budget = 3.5s
+
+| BTT | Partial-sigs (no recovery) † | OBFT (K-layer fall-through) | OBFTR R1+R2 (re-flood retry) | 2abOBFT (K-layer fall-through) | QBFT-SSV R2 (round-change + fresh V) | QBFT-optimal R2 (round-change + fresh V) |
+|---|---|---|---|---|---|---|
+| 200ms | n/a | in-round (free) | 2.4s ✓ | in-round (free) | **3.6s ✗** | 2.8s ✓ |
+| 600ms | n/a | in-round (free) | **7.2s ✗** | n/a (R1 missed) | **10.8s ✗** | **8.4s ✗** |
+| 1000ms | n/a | in-round (free) | **12.0s ✗** | n/a (R1 missed) | **18.0s ✗** | **14.0s ✗** |
+
+### Table 2c — BFT start = 2.5s, budget = 1.4s
+
+| BTT | Partial-sigs (no recovery) † | OBFT (K-layer fall-through) | OBFTR R1+R2 (re-flood retry) | 2abOBFT (K-layer fall-through) | QBFT-SSV R2 (round-change + fresh V) | QBFT-optimal R2 (round-change + fresh V) |
+|---|---|---|---|---|---|---|
+| 200ms | n/a | in-round (free) | **2.4s ✗** | in-round (free) | **3.6s ✗** | **2.8s ✗** |
+| 600ms | n/a | n/a (R1 missed) | **7.2s ✗** | n/a (R1 missed) | **10.8s ✗** | **8.4s ✗** |
+| 1000ms | n/a | n/a (R1 missed) | **12.0s ✗** | n/a (R1 missed) | **18.0s ✗** | **14.0s ✗** |
 
 † **Partial-sigs has no failure-recovery mechanism**: any V-disagreement (operators sign different V's) results in cluster signature aggregation failing — no rounds, no re-flood, no fall-through. The baseline only works on the healthy V-pre-agreed path.
 
 "In-round (free)" means the recovery happens within the same single round — no additional time cost. K-layer fall-through is sequential local decryption in Phase 3, processing-bound (~100ms ε_3), not BTT-bound.
 
-**Reading Table 2:**
+**Reading Tables 2a–2c:**
 
 - **OBFT and 2abOBFT have the cleanest network-failure recovery profile** at any start time where their healthy path fits — silent leader / partition recovery costs zero extra time via in-round K-layer fall-through. This is the structural advantage of K-layer onion with chained encryption: every honest leader in the K-layer rotation provides a fall-through opportunity within Phase 3.
 - **OBFTR's R1+R2 retry** (12 BTT) fits only at BTT=200ms with BFT_start ≤ 400ms (2.4s ≤ 3.5s budget). At BTT≥600ms or BFT_start=2.5s, R1+R2 doesn't fit. Production deployments need either tighter Δ_2 (sacrificing jitter absorption) or acceptance that round-2 recovery is narrow.
@@ -336,7 +360,7 @@ The trade is favorable when MEV bid-routing value-capture upside exceeds the com
 - **Numbers are BTT-count approximations** (3 BTT, 4 BTT, etc.). Production has long tails; ε_3 (~100ms local processing) is treated as small relative to BTT in tabulation. Real implementations may add 50-200ms of constant overhead per round.
 - **QBFT round timeout RT = 2s** is held fixed; tightening RT shrinks recovery time but raises false-positive round-changes under jitter.
 - **K = n = 4** assumed. At larger n with the same f-bound, K-layer fall-through depth scales (more redundancy at the OBFT family). QBFT's recovery cost scales linearly with K serial round-changes.
-- **Bandwidth**: not tabulated here. Order of magnitude: QBFT ~14 KB healthy; OBFT ~28 KB; OBFTR ~30-40 KB; 2abOBFT ~30 KB; all 4 +3-5 KB if L_Bid mini-consensus extension is used (see [each doc's Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)). OBFT and OBFTR include the σ_L^V witness section (~1.5 KB at K=4 n=4); 2abOBFT does not (no Phase-1 σ_L^V).
+- **Bandwidth**: not tabulated here. Order of magnitude (cluster-wide healthy path) — QBFT ~14 KB across 4 emissions per round; OBFT ~28 KB across 1 emission; OBFTR ~28-30 KB across 2 emissions per round (R=2 worst case ~52 KB across 4 emissions); 2abOBFT ~30 KB across 2 emissions. All four +3-5 KB if L_Bid mini-consensus extension is used (see [each doc's Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)). OBFT and OBFTR include the σ_L^V witness section (~1.5 KB at K=4 n=4); 2abOBFT does not (no Phase-1 σ_L^V). Few-large emissions (OBFT) are gentler on the gossipsub mesh than many-small (QBFT) at SSV's KB-range message sizes — per-message overhead (signature verify, dedup, peer-score, mesh forwarding) dominates over per-byte cost.
 - **Pre-consensus / block-fetch overhead** is excluded — sits in `[slot_start, BFT_start]` and is ~equal across protocols.
 - **Partial network partitions** (some operators have a quorum view, others don't) aren't separately modeled. All four protocols degrade to slot-miss for the partitioned operators; cluster-wide outcome depends on which side has 2f+1 honest.
 - **Adversarial-byz trigger frequency** is not modeled. Practical impact depends on byz-leader rotation distribution and bid-equivocation surface for L_Bid extensions (see [docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension) for L_Bid-specific exposure analysis).
