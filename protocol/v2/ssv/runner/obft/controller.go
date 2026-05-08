@@ -48,6 +48,10 @@ type Controller struct {
 	ibe       obftcore.ThresholdIBE
 	overrides *ConfigOverrides
 
+	// evidenceObserver is registered on every Instance the Controller
+	// creates. Optional; nil disables. Set via ControllerOptions.
+	evidenceObserver obftcore.EvidenceObserver
+
 	mu        sync.Mutex
 	instances map[phase0.Slot]*RunningInstance
 
@@ -134,6 +138,14 @@ type ControllerOptions struct {
 	IBE       obftcore.ThresholdIBE
 
 	Overrides *ConfigOverrides
+
+	// EvidenceObserver, if non-nil, is registered on every per-slot
+	// Instance the Controller creates. Spec §Slashing evidence Rule 5
+	// MUST-gossip says receivers MUST gossip evidence on the wire so
+	// no-retained-V receivers can also attribute. Logged-only is the
+	// impl's substitute (operators monitor logs out-of-band); ideally
+	// this would be on-wire to spread evidence cluster-wide automatically.
+	EvidenceObserver obftcore.EvidenceObserver
 }
 
 // NewController constructs a Controller from the given options.
@@ -155,22 +167,23 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 	copy(committee, opts.Committee)
 
 	return &Controller{
-		operatorID:      opts.OperatorID,
-		committee:       committee,
-		clusterID:       opts.ClusterID,
-		clusterPubKey:   opts.ClusterPubKey,
-		pubKeyShares:    opts.PubKeyShares,
-		ibePubKeyShares: opts.IBEPubKeyShares,
-		signer:          opts.Signer,
-		tagSigner:       opts.TagSigner,
-		ibe:             opts.IBE,
-		overrides:       opts.Overrides,
-		instances:       make(map[phase0.Slot]*RunningInstance),
-		pending:         make(map[phase0.Slot][]PendingEnvelope),
-		pendingOrder:    list.New(),
-		pendingElem:     make(map[phase0.Slot]*list.Element),
-		endedSlots:      make(map[phase0.Slot]struct{}),
-		endedSlotOrder:  list.New(),
+		operatorID:       opts.OperatorID,
+		committee:        committee,
+		clusterID:        opts.ClusterID,
+		clusterPubKey:    opts.ClusterPubKey,
+		pubKeyShares:     opts.PubKeyShares,
+		ibePubKeyShares:  opts.IBEPubKeyShares,
+		signer:           opts.Signer,
+		tagSigner:        opts.TagSigner,
+		ibe:              opts.IBE,
+		overrides:        opts.Overrides,
+		evidenceObserver: opts.EvidenceObserver,
+		instances:        make(map[phase0.Slot]*RunningInstance),
+		pending:          make(map[phase0.Slot][]PendingEnvelope),
+		pendingOrder:     list.New(),
+		pendingElem:      make(map[phase0.Slot]*list.Element),
+		endedSlots:       make(map[phase0.Slot]struct{}),
+		endedSlotOrder:   list.New(),
 	}, nil
 }
 
@@ -265,6 +278,9 @@ func (c *Controller) StartNewInstance(slot phase0.Slot) (*RunningInstance, error
 	)
 	if err != nil {
 		return nil, fmt.Errorf("obft adapter: new instance: %w", err)
+	}
+	if c.evidenceObserver != nil {
+		inst.SetEvidenceObserver(c.evidenceObserver)
 	}
 
 	leaderAt := computeLeaderLayers(cfg, c.operatorID)

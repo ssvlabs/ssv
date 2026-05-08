@@ -1033,3 +1033,36 @@ func TestObft_PeerSigmaAtL0_MissingPubkeyNotSlashable(t *testing.T) {
 	require.Equal(t, l0SigmaInconclusive, verdict, "missing pub-share → inconclusive, not fake")
 	_ = c
 }
+
+// TestObft_EvidenceObserver_FiresOncePerTuple verifies the spec-substitute
+// for Rule 5 MUST-gossip: an EvidenceObserver fires once per
+// (Rule, OperatorID, Layer) tuple on first observation, regardless of how
+// many redundant detections trigger.
+func TestObft_EvidenceObserver_FiresOncePerTuple(t *testing.T) {
+	s := newSim(t, 4)
+	var observed []Evidence
+	s.instances[2].SetEvidenceObserver(func(e Evidence) {
+		observed = append(observed, e)
+	})
+
+	// Inject the same evidence twice; the observer should fire only once.
+	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 0})
+	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 0})
+	require.Len(t, observed, 1, "observer must fire ONCE per (rule, op, layer); got %d fires", len(observed))
+
+	// Different layer for same op+rule → distinct tuple → observer fires again.
+	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 3, Layer: 1})
+	require.Len(t, observed, 2, "different layer = distinct tuple; observer should fire again")
+
+	// Different op same rule+layer → distinct tuple → observer fires again.
+	s.instances[2].recordEvidence(Evidence{Rule: EvidenceFakePlaintextSigma, OperatorID: 4, Layer: 0})
+	require.Len(t, observed, 3, "different op = distinct tuple; observer should fire again")
+
+	// Different rule same op+layer → distinct tuple.
+	s.instances[2].recordEvidence(Evidence{Rule: EvidenceCrossSigning, OperatorID: 3, Layer: 0})
+	require.Len(t, observed, 4, "different rule = distinct tuple; observer should fire again")
+
+	// Recording does not affect Evidence() accumulator behavior — it still
+	// records every entry (observer dedup is independent of evidence storage).
+	require.Len(t, s.instances[2].Evidence(), 5, "Evidence() should retain all 5 records")
+}

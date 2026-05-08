@@ -187,6 +187,17 @@ type Instance struct {
 	// per-(op, layer) attribution stays atomic.
 	rule1Fired map[int]map[OperatorID]bool
 
+	// evidenceObserver fires on FIRST recording per (Rule, OperatorID, Layer)
+	// tuple. Optional; nil disables. Spec §Slashing evidence Rule 5
+	// MUST-gossip rule says receivers MUST gossip evidence on the wire so
+	// no-retained-V receivers can also attribute. This impl substitutes
+	// out-of-band logging — the observer surfaces evidence to the SSV
+	// runner, which logs it for operator review. (Ideally this should be
+	// on-wire to spread evidence cluster-wide automatically; logged-only
+	// is a deliberate scope choice — operators monitor logs out-of-band.)
+	evidenceObserver   EvidenceObserver
+	evidenceObserved   map[evidenceObservedKey]bool
+
 	// ended is set by Finalize when the slot's instance is being torn down.
 	// Per-instance state-mutating methods (ObserveCommit, ObservePhase1Bundle,
 	// ApplyHostValidity, ...) check this flag after acquiring the instance
@@ -454,9 +465,55 @@ func (i *Instance) transitionToNR(layer int, state CommitState) error {
 	return nil
 }
 
-// recordEvidence appends a non-nil evidence entry to the accumulator.
+// EvidenceObserver is invoked the FIRST time an Evidence with a given
+// (Rule, OperatorID, Layer) tuple is recorded by an Instance. Subsequent
+// records for the same tuple do NOT re-fire (e.g., a Rule 3 equivocation
+// fires once per (operator, layer) regardless of how many redundant
+// emissions trigger detection). Implementations should be non-blocking;
+// the callback runs synchronously inside the protocol layer's recording
+// path.
+//
+// Per spec §Slashing evidence Rule 5, the spec mandates MUST-gossip on
+// the wire so no-retained-V receivers can also attribute. This impl
+// substitutes out-of-band logging via this observer — see the
+// evidenceObserver field comment on Instance.
+type EvidenceObserver func(Evidence)
+
+type evidenceObservedKey struct {
+	rule  EvidenceRule
+	op    OperatorID
+	layer int
+}
+
+// SetEvidenceObserver registers a callback fired once per (Rule, Op, Layer)
+// tuple on first observation. nil clears any prior observer. Concurrency-
+// unsafe: call from the same goroutine that owns the Instance, before any
+// observation paths run.
+func (i *Instance) SetEvidenceObserver(obs EvidenceObserver) {
+	i.evidenceObserver = obs
+}
+
+// recordEvidence appends a non-nil evidence entry to the accumulator and
+// fires the (rate-limited) EvidenceObserver on first observation.
 func (i *Instance) recordEvidence(e Evidence) {
 	i.evidence = append(i.evidence, e)
+
+	// First-observation observer fire. Per-(Rule, Op, Layer) dedup ensures
+	// the observer (typically a logger) sees one entry per distinct
+	// attributable fault — repeated detections of the same fault (e.g.,
+	// Rule 3 redundant emissions) do not re-fire.
+	if i.evidenceObserver == nil {
+		return
+	}
+	if i.evidenceObserved == nil {
+		i.evidenceObserved = make(map[evidenceObservedKey]bool)
+	}
+	key := evidenceObservedKey{rule: e.Rule, op: e.OperatorID, layer: e.Layer}
+	if i.evidenceObserved[key] {
+		return
+	}
+	i.evidenceObserved[key] = true
+	i.evidenceObserver(e)
 }
 
 // recordRule4 marks Rule 4 (FakeEncryptedPresence) as fired for (op, layer).

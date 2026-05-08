@@ -8,13 +8,14 @@ import (
 	bls12381 "github.com/drand/kyber-bls12381"
 	"github.com/drand/kyber/share"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
+	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -81,13 +82,14 @@ func buildOBFTControllerForProposer(
 	}
 
 	opts := obftadapter.ControllerOptions{
-		OperatorID:   operator.OperatorID,
-		Committee:    committee,
-		ClusterID:    clusterID,
-		PubKeyShares: pubKeyShares,
-		Signer:       vSigner,
-		IBE:          blsbackend.NewTLockIBE(),
-		Overrides:    overrides,
+		OperatorID:       operator.OperatorID,
+		Committee:        committee,
+		ClusterID:        clusterID,
+		PubKeyShares:     pubKeyShares,
+		Signer:           vSigner,
+		IBE:              blsbackend.NewTLockIBE(),
+		Overrides:        overrides,
+		EvidenceObserver: makeOBFTEvidenceObserver(operator.OperatorID, clusterID),
 	}
 
 	if IBEUseOptionB {
@@ -173,4 +175,33 @@ func computeIBEPubKeyShares(polyCommits [][]byte, committee []spectypes.Operator
 		out[obftcore.OperatorID(opID)] = b
 	}
 	return out, nil
+}
+
+// makeOBFTEvidenceObserver returns an EvidenceObserver that logs each
+// FIRST observation per (Rule, OperatorID, Layer) tuple at WARN level.
+// Operators monitor logs out-of-band to act on attribution.
+//
+// Per spec §Slashing evidence Rule 5, the spec mandates MUST-gossip on
+// the wire so no-retained-V receivers can also attribute the byzantine.
+// This impl substitutes out-of-band logging — the observer surfaces
+// evidence here, where the operator's log aggregator catches it.
+// IDEALLY this should be on-wire (a new envelope kind broadcast cluster-
+// wide) so attribution propagates automatically and doesn't depend on
+// each operator running their own log review; logged-only is the
+// current scope choice (see commit message for #4).
+//
+// Uses zap.L() (the global logger) — matching the pattern at
+// proposer_obft.go pending-envelope replay error logging. The observer
+// is wired once per Controller (i.e., once per validator's proposer
+// duty) and reused for every per-slot Instance.
+func makeOBFTEvidenceObserver(opID spectypes.OperatorID, clusterID [32]byte) obftcore.EvidenceObserver {
+	return func(e obftcore.Evidence) {
+		zap.L().Warn("OBFT evidence observed (rule MUST-gossip per spec §Slashing-evidence; logged-only impl)",
+			zap.String("rule", e.Rule.String()),
+			zap.Uint64("local_operator_id", uint64(opID)),
+			zap.String("cluster_id", fmt.Sprintf("%x", clusterID)),
+			zap.Uint64("byz_operator_id", uint64(e.OperatorID)),
+			zap.Int("layer", e.Layer),
+		)
+	}
 }
