@@ -20,11 +20,15 @@ type ByzPattern struct {
 	ByzOperators []OperatorID
 
 	// Recipients carries operator IDs for selective-delivery patterns.
-	//   - ByzEquivocateSigmaLockedSplit: index 0 → V_a, index 1 → V_b;
-	//     missing indices fall back to default IDs (2, 3).
-	//   - ByzPartialEquivocation: indices 0,1 → V_a (2 recipients), index 2 →
-	//     V_b (1 recipient); missing indices fall back to defaults (2, 3, 4).
-	//   - ByzHV1SelectiveDelivery: index 0 → the single recipient that gets V.
+	// Conventions (length scales with f at the catalog scenario's apply time):
+	//   - ByzEquivocateSigmaLockedSplit: first half → V_a recipients, second
+	//     half → V_b recipients (size 2f total). Default at f=1 / n=4: {op2}
+	//     → V_a, {op3} → V_b.
+	//   - ByzPartialEquivocation: indices 0,1 → V_a (always 2 recipients;
+	//     n=4-specific by design), index 2 → V_b (1 recipient). Defaults
+	//     (2, 3, 4).
+	//   - ByzHV1SelectiveDelivery: full list of f honest that receive V (size
+	//     f). Default at f=1 / n=4: {op2}.
 	Recipients []OperatorID
 
 	K     int // for ByzMultiSilent: how many top leaders are silent

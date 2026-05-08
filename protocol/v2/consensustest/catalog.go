@@ -9,6 +9,25 @@ package consensustest
 // OBFT-specific patterns (n/a for QBFT).
 //
 // Add new scenarios at the end to keep order stable for matrix-rendering.
+//
+// Cluster-size scope: the matrix runs at n=4 (the canonical operating
+// point per OBFT.md §Application). The larger-n sweep (TestSweep_FullCatalog_LargerN
+// in sweep_test.go) runs every scenario at n ∈ {7, 10, 13} too, enforcing
+// universal safety invariants but logging per-cell match informationally.
+// Three scenarios encode an n=4-specific quorum split in their name and
+// produce different outcome classes at n>4 by design:
+//   - ValidityDivergence_2_2: at n=4 the 2 NV are exactly enough to deny
+//     σ-quorum (MISS); at n>4 they're a minority and σ-quorum reaches
+//     (FASTEST). Generalizing would require renaming away from "2_2".
+//   - ValidityDivergence_1_3: at n=4 the 3 NV exactly meet qEnc (FALL_THROUGH);
+//     at n>4 they're below qEnc (MISS). Same rename caveat.
+//   - PartialEquivocation_2_1: at n=4 the 2 V_a recipients + leader's
+//     σ_L^V = qV (FASTEST); at n>4 they're below qV (MISS). Same rename caveat.
+//
+// Other scenarios that previously shifted at n>4 (HV1SelectiveDelivery,
+// Equivocate_SigmaLockedSplit, WithholdLeader_Deepest) have been generalized
+// in their Apply to scale with f / cfg.N, so the n=4 mechanism preserves
+// at any cluster size.
 var Catalog = []Scenario{
 	scenarioHealthy,
 	scenarioSilentLeaderL0,
@@ -19,6 +38,8 @@ var Catalog = []Scenario{
 	scenarioHV1SelectiveDelivery,
 	scenarioFakeEncryptedPresence,
 	scenarioValidityDivergence2_2,
+	scenarioValidityDivergence3_1,
+	scenarioValidityDivergence1_3,
 	scenarioSigmaRefusal,
 	scenarioWithholdLeaderDeepest,
 	scenarioCertWithholding,
@@ -78,8 +99,15 @@ var scenarioMultiSilent = Scenario{
 	Note: "Top 3 of 4 leaders silent; only the deepest is honest. Structural OBFT-family advantage at any (BFT_start, D) where the healthy path fits — multi-leader-silent fall-through is in-round, vs QBFT's serial round-change exceeding budget.",
 }
 
-// ---- Leader equivocates 1-1-1 ------------------------------------------
+// ---- Leader equivocates 1-1-1 (all-distinct at f=1) -------------------
 
+// Historical name "1-1-1" reflects the f=1 / n=4 case (V_1 → A, V_2 → B,
+// V_3 → C). The byzEquivoc111 pattern actually emits N-1 distinct V's at
+// any cluster size — one per honest receiver. The σ-locked-split slot-miss
+// outcome holds at all n: each honest σ-locks on their own distinct V
+// before observing equivocation; σ-pool on each V_i = 1 + leader's σ_L^V =
+// 2 < qV = 2f+1; no fall-through (cross-phase exclusivity locks σ-locked
+// honest out of NR).
 var scenarioEquivocate111 = Scenario{
 	Name: "Equivocate_111",
 	Apply: func(cfg *SimConfig) {
@@ -91,7 +119,7 @@ var scenarioEquivocate111 = Scenario{
 		// QBFT: PREPARE pool fragments; R1 timeout → R2 with fresh V → success.
 		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "BFT-comparison.md Table 3: QBFT recovers via R2 fresh-V; OBFT misses (R-invariant).",
+	Note: "BFT-comparison.md Table 3: QBFT recovers via R2 fresh-V; OBFT misses (R-invariant). Pattern emits N-1 distinct V's at any cluster size; the '1-1-1' name reflects f=1.",
 }
 
 // ---- Leader equivocates all-NR (floods both V's to all honest) --------
@@ -116,43 +144,71 @@ var scenarioEquivocateAllNR = Scenario{
 	Note: "Both recover at fall-through cost; OBFT in-round (cheap, equivocation-NR-driven), QBFT pays RT (expensive, PREPARE-pool-fragmentation-driven).",
 }
 
-// ---- σ-locked split (1-1) ---------------------------------------------
+// ---- σ-locked split (f-f) ---------------------------------------------
 
+// Generalized form: byz delivers V_a to f honest, V_b to f honest, ∅ to the
+// remaining N-1-2f honest. At any n: σ-pool on each V = f + leader's σ_L^V =
+// f+1 < qV (since qV = 2f+1); NR-pool from silent rest = N-1-2f = f at
+// N=3f+1, < qEnc → MISS at L_0 with no fall-through. Historical name "1-1"
+// reflects f=1 / n=4; generalized to "f-f" preserves the σ-locked-split
+// slot-miss class at all SSV cluster sizes.
 var scenarioEquivocateSigmaLockedSplit = Scenario{
 	Name: "Equivocate_SigmaLockedSplit",
 	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// First f recipients receive V_a, next f receive V_b. op2..op{f+1}
+		// for V_a, op{f+2}..op{2f+1} for V_b.
+		recipients := make([]OperatorID, 0, 2*f)
+		for i := 0; i < 2*f; i++ {
+			recipients = append(recipients, OperatorID(i+2))
+		}
 		cfg.Byz = ByzPattern{
 			Kind:         ByzEquivocateSigmaLockedSplit,
 			ByzOperators: []OperatorID{1},
-			Recipients:   []OperatorID{2, 3}, // index 0 → V_a, index 1 → V_b
+			Recipients:   recipients,
 		}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: σ-pool on each V at 2 < qV=3; NR-pool can't reach (σ-locked
-		// honest can't NR); slot misses.
+		// OBFT: σ-pool on each V = f+1 < qV=2f+1; NR-pool from silent rest = f
+		// < qEnc=2f+1; slot misses.
 		"OBFT": ExpectMiss,
 		// QBFT: PREPARE pool splits; R1 timeout → R2 fresh V → success.
 		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "OBFT-family R-invariant slot-miss; QBFT R2 recovers.",
+	Note: "OBFT-family R-invariant slot-miss at any cluster size (generalized 1-1 → f-f); QBFT R2 recovers.",
 }
 
-// ---- h_V=1 selective delivery (OBFT-specific) -------------------------
+// ---- h_V=f selective delivery (OBFT-specific) -------------------------
 
+// Generalized form of h_V=1: byz delivers V to exactly f honest. At any n:
+//   - σ-pool = f honest σ + leader's σ_L^V = f+1 < qV (since qV = 2f+1)
+//   - NR-pool = (N-1-f) silent honest = (N-1-f); cross-checking N=3f+1:
+//     N-1-f = 3f+1-1-f = 2f < qEnc (since qEnc = 2f+1)
+//
+// → MISS at L_0 with no fall-through, at any cluster size.
+//
+// Historical name "HV1Selective" reflects the f=1 / n=4 case; the pattern
+// is named for behavior class, not recipient count.
 var scenarioHV1SelectiveDelivery = Scenario{
 	Name: "HV1SelectiveDelivery",
 	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		recipients := make([]OperatorID, 0, f)
+		// Pick op2..op{f+1} as the f honest that receive V (op1 is byz leader).
+		for i := 0; i < f; i++ {
+			recipients = append(recipients, OperatorID(i+2))
+		}
 		cfg.Byz = ByzPattern{
 			Kind:         ByzHV1SelectiveDelivery,
 			ByzOperators: []OperatorID{1},
-			Recipients:   []OperatorID{2}, // exactly one honest receives V
+			Recipients:   recipients,
 		}
 	},
 	Expect: map[string]ExpectClass{
 		"OBFT": ExpectMiss,
 		"QBFT": ExpectNotApplicable,
 	},
-	Note: "OBFT-specific deadlock pattern. QBFT's round-change recovers structurally; pattern doesn't translate.",
+	Note: "OBFT-specific deadlock pattern (h_V=f at any cluster size). σ-pool=f+1 < qV; NR-pool=2f < qEnc → MISS at L_0 with no fall-through. QBFT's round-change recovers structurally; pattern doesn't translate.",
 }
 
 // ---- Fake encrypted presence (OBFT-specific Rule 4) -------------------
@@ -199,6 +255,52 @@ var scenarioValidityDivergence2_2 = Scenario{
 	Note: "BFT-comparison.md Table 3 'Validity-divergence 2-2 split: ✗ algebraic limit' for both OBFT-family; QBFT depends on whether round-change refetches at moved head.",
 }
 
+// ---- Validity divergence (3-1: minority NV, σ-pool reaches anyway) ---
+
+var scenarioValidityDivergence3_1 = Scenario{
+	Name: "ValidityDivergence_3_1",
+	Apply: func(cfg *SimConfig) {
+		cfg.Host = HostInvalidForOperators{
+			Layer:     0,
+			Operators: map[OperatorID]bool{4: true},
+		}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool at L_0 = 3 valid honest σ + leader's σ_L^V = 4 ≥ qV=3.
+		// One dissenting NV (op4) doesn't break the slot; σ-quorum still reaches.
+		// Validates "minority NV doesn't break the slot" — distinct from 2-2 (miss)
+		// and 1-3 (fall-through).
+		"OBFT": ExpectSuccessFastest,
+		// QBFT: 3 ops PREPARE on V (op4 doesn't, host says invalid) → quorum
+		// reached → COMMIT-quorum → R1 succeeds.
+		"QBFT": ExpectSuccessFastest,
+	},
+	Note: "Minority NV at L_0 (1 of 4 honest dissents). σ-quorum still reaches at L_0 because 3 valid honest + leader's σ_L^V = 4 ≥ qV. Complement to ValidityDivergence_2_2 (miss) and 1_3 (fall-through).",
+}
+
+// ---- Validity divergence (1-3: majority NV, fall-through via NR) ----
+
+var scenarioValidityDivergence1_3 = Scenario{
+	Name: "ValidityDivergence_1_3",
+	Apply: func(cfg *SimConfig) {
+		cfg.Host = HostInvalidForOperators{
+			Layer:     0,
+			Operators: map[OperatorID]bool{2: true, 3: true, 4: true},
+		}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool at L_0 = 1 valid honest σ + leader's σ_L^V = 2 < qV=3.
+		// NR-pool at L_0 from 3 NV honest = 3 ≥ qEnc=3. NR-quorum unlocks L_1
+		// where host says valid → σ-emit at L_1 → decides at L_1 (fall-through).
+		// Validates the host-invalidity NR-quorum fall-through path.
+		"OBFT": ExpectSuccessFallThrough,
+		// QBFT: R1 PREPARE pool on the proposed V = 1 valid + leader = below quorum
+		// → R1 timeout → R2 fresh V at moved head → succeeds.
+		"QBFT": ExpectSuccessFallThrough,
+	},
+	Note: "Majority NV at L_0 (3 of 4 honest dissent). NR-quorum reaches at L_0 → fall-through to L_1 in Phase 3 walk. Complement to ValidityDivergence_2_2 (miss) and 3_1 (success at L_0).",
+}
+
 // ---- σ-refusal (byz never contributes) --------------------------------
 
 var scenarioSigmaRefusal = Scenario{
@@ -222,14 +324,17 @@ var scenarioSigmaRefusal = Scenario{
 var scenarioWithholdLeaderDeepest = Scenario{
 	Name: "WithholdLeader_Deepest",
 	Apply: func(cfg *SimConfig) {
-		// Default rotation: L_0=op1, L_1=op2, L_2=op3, L_3=op4. byz=op4 silences L_3.
-		cfg.Byz = ByzPattern{Kind: ByzWithholdLeader, ByzOperators: []OperatorID{4}}
+		// Default rotation: op[k % N] leads layer k. At K=N convention, op{N}
+		// leads the deepest layer L_{N-1}. Pick byz=op{N} so the pattern's
+		// "silence at the deepest layer they lead" check fires at any cluster
+		// size (n=4 → byz=op4 leads L_3; n=7 → byz=op7 leads L_6; etc.).
+		cfg.Byz = ByzPattern{Kind: ByzWithholdLeader, ByzOperators: []OperatorID{OperatorID(cfg.N)}}
 	},
 	Expect: map[string]ExpectClass{
 		"OBFT": ExpectSuccessFastest, // L_0 still healthy; deepest never reached
 		"QBFT": ExpectNotApplicable,  // OBFT-specific (layer concept)
 	},
-	Note: "Class A spec test: deepest-layer leader silenced. At K=N=4, L_0 healthy → cluster decides without needing L_3.",
+	Note: "Class A spec test: deepest-layer leader silenced. L_0 is healthy at any n → cluster decides at L_0 without needing L_{N-1}.",
 }
 
 // ---- Cert withholding (Phase 3) ---------------------------------------

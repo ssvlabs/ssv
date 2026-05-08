@@ -68,3 +68,46 @@ func TestHost_InvalidUntilLayer_QBFT_DecidesAtR2(t *testing.T) {
 	require.True(t, out.Decided, "QBFT should decide at R2 fresh-V; got !Decided")
 	require.Equal(t, 1, out.DecidedRound, "should decide at R2 (= 1-indexed → 1)")
 }
+
+// TestHost_ValidityDivergence_3_1_DecidesAtL0 — minority NV (1 of 4) at L_0.
+// σ-pool = 3 valid honest σ + leader's σ_L^V = 4 ≥ qV=3 → slot succeeds at L_0.
+// Validates that one dissenter doesn't break the slot under OBFT's σ-quorum
+// machinery. Distinct from the 2-2 split (miss) and 1-3 split (fall-through).
+func TestHost_ValidityDivergence_3_1_DecidesAtL0(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Host = ct.HostInvalidForOperators{
+		Layer:     0,
+		Operators: map[ct.OperatorID]bool{4: true},
+	}
+
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "OBFT 3-1 split should σ-quorum at L_0 with majority valid")
+	require.Equal(t, 0, out.DecidedRound, "should decide at L_0 fastest path")
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+}
+
+// TestHost_ValidityDivergence_1_3_DecidesAtL1 — majority NV (3 of 4) at L_0.
+// σ-pool at L_0 = 1 valid + leader's σ_L^V = 2 < qV=3. NR-pool = 3 NV honest =
+// 3 ≥ qEnc=3 → NR-quorum unlocks L_1 → slot succeeds at L_1 (host valid there).
+// Validates the host-invalidity fall-through path through NR-quorum.
+func TestHost_ValidityDivergence_1_3_DecidesAtL1(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Host = ct.HostInvalidForOperators{
+		Layer:     0,
+		Operators: map[ct.OperatorID]bool{2: true, 3: true, 4: true},
+	}
+
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "OBFT 1-3 split should fall through via NR-quorum to L_1")
+	require.GreaterOrEqual(t, out.DecidedRound, 1,
+		"should NOT decide at L_0 (σ-pool < qV); got L_%d", out.DecidedRound)
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+}

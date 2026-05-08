@@ -49,10 +49,21 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 	case ct.ByzEquivocateAllNR:
 		return byzEquivocAll{ByzSet: bs}, nil
 	case ct.ByzEquivocateSigmaLockedSplit:
+		// Recipients positional convention: first half → V_a, second half →
+		// V_b (mirroring the OBFT adapter). Default at f=1 / n=4: {2}/{3}.
+		var recipientsA, recipientsB []ct.OperatorID
+		if len(p.Recipients) >= 2 {
+			half := len(p.Recipients) / 2
+			recipientsA = append([]ct.OperatorID(nil), p.Recipients[:half]...)
+			recipientsB = append([]ct.OperatorID(nil), p.Recipients[half:]...)
+		} else {
+			recipientsA = []ct.OperatorID{2}
+			recipientsB = []ct.OperatorID{3}
+		}
 		return byzEquivocSplit{
-			ByzSet:     bs,
-			RecipientA: p.PickRecipient(0, 2),
-			RecipientB: p.PickRecipient(1, 3),
+			ByzSet:      bs,
+			RecipientsA: recipientsA,
+			RecipientsB: recipientsB,
 		}, nil
 	case ct.ByzHV1SelectiveDelivery, ct.ByzFakeEncryptedPresence:
 		return nil, ct.ErrNotApplicable
@@ -225,13 +236,18 @@ func (b byzEquivocAll) ProposalPlanForRound(s *sim, leader ct.OperatorID, round 
 	}
 }
 
-// ---- byzEquivocSplit (1-1 σ-locked split) -----------------------------
+// ---- byzEquivocSplit (f-f σ-locked split) -----------------------------
 
+// QBFT analog of OBFT's f-f σ-locked split equivocation. Byz leader
+// PROPOSEs V_a to RecipientsA, V_b to RecipientsB, ∅ to the rest.
+// PREPARE pool on each V = |Recipients_X| (the byz leader runs no real
+// Instance, no self-PREPARE), both < quorum=2f+1 → R1 timeout → R2
+// honest fresh-V → succeeds.
 type byzEquivocSplit struct {
 	honestDefaults
-	ByzSet     byzSet
-	RecipientA ct.OperatorID
-	RecipientB ct.OperatorID
+	ByzSet      byzSet
+	RecipientsA []ct.OperatorID
+	RecipientsB []ct.OperatorID
 }
 
 func (b byzEquivocSplit) IsByz(op ct.OperatorID) bool { return b.ByzSet.Contains(op) }
@@ -240,8 +256,8 @@ func (b byzEquivocSplit) ProposalPlanForRound(_ *sim, leader ct.OperatorID, roun
 		return []proposalPlan{{V: honestV}}
 	}
 	return []proposalPlan{
-		{V: []byte("byz-V-A"), Recipients: []ct.OperatorID{b.RecipientA}},
-		{V: []byte("byz-V-B"), Recipients: []ct.OperatorID{b.RecipientB}},
+		{V: []byte("byz-V-A"), Recipients: append([]ct.OperatorID(nil), b.RecipientsA...)},
+		{V: []byte("byz-V-B"), Recipients: append([]ct.OperatorID(nil), b.RecipientsB...)},
 	}
 }
 

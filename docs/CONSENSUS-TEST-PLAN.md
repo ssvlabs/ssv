@@ -139,7 +139,7 @@ Output dir is `./consensustest-reports/` by default; override via `make consensu
     - `ByzOfflineDoubleVAttempt` — `OfflineAggregator.AttemptAll` runs on **every** scenario via `recordCommitToAggregator`; `NoOfflineDoubleV` is a universal safety invariant. `ByzAggregatorBypass` is the active-attack variant (forged identities).
 - **OBFT chained-decrypt approximation in `OfflineAggregator`** — chain-unlock currently checks "any V has NR-quorum at each shallower layer" (permissive); per-V chain matching is a future refinement when adapters record (layer, V) tuples per NR-quorum.
 - **Phase parameter has two values: `PhasePhase1Acceptance` (OBFT) and `PhaseDecide` (QBFT)**. A `PhasePhase2Commit` value was considered but trimmed — OBFT's protocol doesn't re-validate at Phase 2 (the locked Phase-1 verdict wins), so there's no caller for it. Re-add when an explicit phase-distinction test materializes.
-- **Catalog at 19 scenarios**, plan called for 25-30. Headline coverage is in place; additional scenarios can be added incrementally.
+- **Catalog at 21 scenarios**, plan called for 25-30. Headline coverage is in place; additional scenarios can be added incrementally. Larger-cluster sweep (n=7/10/13) runs the full catalog with safety enforcement; per-cell expectation matching is informational at n>4 because qV / qEnc thresholds shift.
 - **Real-BLS suite at ~17s wall time** vs the 10-min budget. Plenty of headroom to scale up with deeper sweeps as needed.
 
 ---

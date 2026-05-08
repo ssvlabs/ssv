@@ -80,15 +80,42 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 	case ct.ByzEquivocateAllNR:
 		return byzEquivocAllNR{ByzSet: bs}, nil
 	case ct.ByzEquivocateSigmaLockedSplit:
+		// Recipients positional convention: first half → V_a, second half →
+		// V_b. Catalog scenario sets size 2f (f recipients per side) so the
+		// σ-locked-split class holds at any cluster size. Default at f=1 / n=4:
+		// {op2}→V_a, {op3}→V_b.
+		var recipientsA, recipientsB []obft.OperatorID
+		if len(p.Recipients) >= 2 {
+			half := len(p.Recipients) / 2
+			for _, r := range p.Recipients[:half] {
+				recipientsA = append(recipientsA, obft.OperatorID(r))
+			}
+			for _, r := range p.Recipients[half:] {
+				recipientsB = append(recipientsB, obft.OperatorID(r))
+			}
+		} else {
+			recipientsA = []obft.OperatorID{2}
+			recipientsB = []obft.OperatorID{3}
+		}
 		return byzEquivocSigmaLockedSplit{
-			ByzSet:     bs,
-			RecipientA: obft.OperatorID(p.PickRecipient(0, 2)),
-			RecipientB: obft.OperatorID(p.PickRecipient(1, 3)),
+			ByzSet:      bs,
+			RecipientsA: recipientsA,
+			RecipientsB: recipientsB,
 		}, nil
 	case ct.ByzHV1SelectiveDelivery:
+		// Recipients carries the full list of honest ops that receive V.
+		// Default (no Recipients set): single recipient op2 (f=1 / n=4).
+		recipients := []obft.OperatorID{}
+		if len(p.Recipients) > 0 {
+			for _, r := range p.Recipients {
+				recipients = append(recipients, obft.OperatorID(r))
+			}
+		} else {
+			recipients = append(recipients, obft.OperatorID(2))
+		}
 		return byzHV1Selective{
-			ByzSet:    bs,
-			Recipient: obft.OperatorID(p.PickRecipient(0, 2)),
+			ByzSet:     bs,
+			Recipients: recipients,
 		}, nil
 	case ct.ByzFakeEncryptedPresence:
 		garbageLayer := 1
@@ -245,13 +272,18 @@ func (b byzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, lay
 
 // ---- byzEquivocSigmaLockedSplit ----------------------------------------
 
-// Each byz that is a layer-0 leader emits V_a to RecipientA, V_b to
-// RecipientB, ∅ to the rest.
+// σ-locked split equivocation: each byz that is a layer-0 leader emits V_a
+// to RecipientsA, V_b to RecipientsB, ∅ to the rest. At f=1 / n=4 this is
+// the canonical "1-1-NR" split (V_a → 1 op, V_b → 1 op, 1 op silent → NR).
+// Generalized: |RecipientsA| = |RecipientsB| = f keeps the σ-locked-split
+// slot-miss class at any cluster size — σ-pool on each V = f + leader's
+// σ_L^V = f+1 < qV; NR-pool from the remaining N-1-2f silent honest = N-1-2f
+// = 3f+1-1-2f = f < qEnc → MISS at L_0 with no fall-through.
 type byzEquivocSigmaLockedSplit struct {
 	honestDefaults
-	ByzSet     byzSet
-	RecipientA obft.OperatorID
-	RecipientB obft.OperatorID
+	ByzSet      byzSet
+	RecipientsA []obft.OperatorID
+	RecipientsB []obft.OperatorID
 }
 
 func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
@@ -261,8 +293,8 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.Oper
 	vA := append(obft.Value{}, "byz-V-A"...)
 	vB := append(obft.Value{}, "byz-V-B"...)
 	return []broadcastPlan{
-		{V: vA, Recipients: []obft.OperatorID{b.RecipientA}},
-		{V: vB, Recipients: []obft.OperatorID{b.RecipientB}},
+		{V: vA, Recipients: append([]obft.OperatorID(nil), b.RecipientsA...)},
+		{V: vB, Recipients: append([]obft.OperatorID(nil), b.RecipientsB...)},
 	}
 }
 
@@ -317,11 +349,15 @@ func (b byzPartialEquivocation) LeaderBroadcastPlan(_ *sim, leader obft.Operator
 
 // ---- byzHV1Selective ---------------------------------------------------
 
-// Each byz that is a layer-0 leader sends V to exactly Recipient.
+// h_V=f selective delivery: each byz that is a layer-0 leader sends V to
+// exactly Recipients (sized to f at the catalog scenario's apply time so
+// the pattern's "σ-pool < qV AND NR-pool < qEnc" outcome holds at any n).
+// "HV1" reflects the f=1 / n=4 historical name; the generalized pattern
+// delivers V to exactly f honest at any cluster size.
 type byzHV1Selective struct {
 	honestDefaults
-	ByzSet    byzSet
-	Recipient obft.OperatorID
+	ByzSet     byzSet
+	Recipients []obft.OperatorID
 }
 
 func (b byzHV1Selective) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
@@ -329,7 +365,7 @@ func (b byzHV1Selective) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, lay
 		return []broadcastPlan{{V: honestV}}
 	}
 	return []broadcastPlan{
-		{V: honestV, Recipients: []obft.OperatorID{b.Recipient}},
+		{V: honestV, Recipients: append([]obft.OperatorID(nil), b.Recipients...)},
 	}
 }
 
