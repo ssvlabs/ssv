@@ -1171,7 +1171,7 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindBid`, `KindBidVerdict` |
 | Slashing-evidence rules | 5 | 7 (+ Rule 7 bid equivocation/incoherence, + Rule 8 verdict equivocation/verdict-vs-action) |
-| `T_commit` anchor | back-end: `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` | **Same** (`T_commit` invariant across protocols) |
+| `T_commit` anchor | back-end: `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` | **Same** (`T_commit` invariant across bare OBFT and OBFT+L_Bid; cross-family T_commit anchors differ — see [BFT-comparison.md](BFT-comparison.md#scope-and-assumptions)) |
 | Best-case latency post-`T_commit` (early reconstruct) | ~200ms (`1 BTT`) | **Same** (~200ms; mini-consensus runs pre-`T_commit`) |
 | Canonical latency post-`T_commit` (full Phase 2 + Phase 3) | ~500ms (`Δ_2 + Δ_3`) | **Same** (~500ms) |
 | Time-to-completion spread (best → canonical) | ~2.5× | **Same** |

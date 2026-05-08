@@ -1172,7 +1172,7 @@ Post-`T_commit_1` timing **matches bare OBFTR** since mini-consensus runs pre-`T
 | Mini-consensus scope | n/a | Slot-level (once); V_LBid fixed across all R rounds |
 | Wire kinds | Phase1Bundle, KindCommit_r, KindLCClaim, KindCertificate | + KindBid, KindBidVerdict |
 | Slashing-evidence rules | OBFTR base | + Rule 7 bid equivocation, + Rule 8 verdict equivocation |
-| `T_commit_1` anchor | back-end-anchored | **Same** (`T_commit_1` invariant across protocols) |
+| `T_commit_1` anchor | back-end-anchored | **Same** (`T_commit_1` invariant across bare OBFTR and OBFTR+L_Bid; cross-family T_commit anchors differ — see [BFT-comparison.md](BFT-comparison.md#scope-and-assumptions)) |
 | Healthy-path latency (round-1, post-`T_commit_1`) | ~700-900ms | **Same** (mini-consensus runs pre-`T_commit_1`) |
 | Best-case latency post-`T_commit_1` | ~200-400ms | **Same** |
 | Worst-case latency at R=2 (success) post-`T_commit_1` | ~2.0s | **Same** |
