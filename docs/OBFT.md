@@ -1582,7 +1582,7 @@ Defer adds materially to the spec/EKM surface and to the slashing-protection sch
 
 Treat OBFT+Defer as a candidate enhancement worth re-evaluating if deployment conditions change — wider partial-synchrony, higher f, stronger rational-byz deterrent infrastructure, or production telemetry showing aggressive-marginal partition slot-misses at non-trivial rates. Under SSV's current n=4 healthy-mesh proposer-duty profile, bare OBFT (3-state, single-emission) is the cleaner trade.
 
-## Appendix F — OBFT + L_Bid_New (priority-inverted bid-routing)
+## Appendix F — OBFT + L_Bid_New (deep-bid mini-consensus)
 
 This appendix specifies **L_Bid_New** as a candidate alternative to the L_Bid mini-consensus design ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)). The two extensions share the same goal — opportunistic bid-routing across eligible rotation-layer Phase-1 candidates — but L_Bid_New trades a different set of properties. Where L_Bid puts the bid-routing winner V_X on the outermost (plaintext) onion layer and reaches it via cluster-wide convergence on **all K rotation-layer bids**, L_Bid_New restricts cluster-wide convergence to **deep-layer bids only** (V_early) and incorporates the primary's late bid (bid_1) at an inner onion layer, gated by chained encryption.
 
@@ -1750,7 +1750,7 @@ The two extensions are structurally distinct points in the L_Bid design space.
 | Verdict deadline | `T_verdict = T_commit − Δ_verdict`; verdict over full eligible bid set | `T_verdict = T_commit − Δ_verdict`; verdict over deep bid set only |
 | Mini-consensus scope | All K rotation-layer bids (incl. primary) | Deep rotation-layer bids only; primary bid_1 is evaluated locally at Phase 2 |
 | Healthy-path bid routing | V_X = argmax over eligible rotation-layer bids | argmax(V_early, bid_1) via σ/NR choice at L_Bid then chained fall-through |
-| Onion priority | V_X = argmax-over-eligible-rotation-bids OUTER; rotation layers INNER | V_early = argmax-over-deep-bids OUTER; bid_1 INNER; rotation layers INNERMOST |
+| Onion priority | L_Bid plaintext OUTER (V_X); L_0..L_{K-1} chained INNER | L_Bid plaintext OUTER (V_early); L_0..L_{K-1} chained INNER (L_0 carries bid_1) |
 | Primary MEV-fetch budget | ~2750ms at conservative `Δ_minicon = 2 BTT`; ~2850ms at standard `Δ_minicon = 1.5 BTT`; ~3050ms at aggressive (= bare OBFT V_0; `slack` repurposed as `Δ_verdict`) | ~3050ms (= bare OBFT V_0; no `Δ_minicon` shift on primary at any sizing) |
 | Deep-layer MEV-fetch budget | Deep deadlines shift earlier by `max(0, Δ_minicon − slack)` | Same deep-deadline cost as current L_Bid for `L_1..L_{K-1}` |
 | Post-`T_commit` consensus budget | ~500ms (Δ_2 + Δ_3; mini-consensus is pre-`T_commit`) | ~500ms (Δ_2 + Δ_3) |

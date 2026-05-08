@@ -343,7 +343,7 @@ ACTION emit_kindcommit (extended for L_Bid):
 
 ### 3.4 — OBFT + L_Bid_New extensions
 
-L_Bid_New differs from L_Bid in three places (per [Appendix F of OBFT.md](OBFT.md#appendix-f--obft--l_bid_new-priority-inverted-bid-routing)):
+L_Bid_New differs from L_Bid in three places (per [Appendix F of OBFT.md](OBFT.md#appendix-f--obft--l_bid_new-deep-bid-mini-consensus)):
 
 **Per-layer broadcast deadlines split by `T_deep_arrival` vs primary's bare-OBFT deadline:**
 
@@ -647,4 +647,4 @@ Items deferred from this verification effort:
 References:
 - [docs/OBFT.md](OBFT.md) — main protocol specification.
 - [docs/OBFT.md Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension) — current L_Bid design.
-- [docs/OBFT.md Appendix F](OBFT.md#appendix-f--obft--l_bid_new-priority-inverted-bid-routing) — L_Bid_New design.
+- [docs/OBFT.md Appendix F](OBFT.md#appendix-f--obft--l_bid_new-deep-bid-mini-consensus) — L_Bid_New design.
