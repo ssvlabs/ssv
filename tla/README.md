@@ -54,6 +54,30 @@ curl -sSL -o tla/tla2tools.jar https://github.com/tlaplus/tlaplus/releases/lates
 
 `tla/tla2tools.jar` is gitignored — each contributor downloads their own copy.
 
+### Quickstart via Makefile (recommended for unattended runs)
+
+For overnight / multi-hour runs that produce a shareable result file, use the `tla/Makefile` targets:
+
+```sh
+# From the project root:
+make tla-verify-bare       # BareOBFT_Safety (fast, ~seconds)
+make tla-verify-lbid       # LBid_Safety (no timeout — overnight-friendly)
+make tla-verify-lbidnew    # LBidNew_Safety (no timeout — overnight-friendly)
+make tla-verify-all        # all three sequentially
+make tla-clean             # remove TLC checkpoints and run logs
+
+# Or, from inside tla/, drop the `tla-` prefix: `make verify-lbid` etc.
+```
+
+Each run produces two files under `tla/runs/`:
+
+- `<spec>-<timestamp>.log` — full TLC stdout/stderr.
+- `<spec>-<timestamp>.summary` — parsed digest with outcome, duration, configuration, final progress line, and the last 25 lines of the log. **Share the `.summary` file** to update verification-status documentation.
+
+`Ctrl-C` (or `SIGTERM`) during a run still produces a partial-coverage summary, labelled `INTERRUPTED`. The summary's `## Outcome` section is one of: `COMPLETED` (full coverage, no counterexample), `COUNTEREXAMPLE`, `OUT OF MEMORY`, `INTERRUPTED`, or `ABNORMAL EXIT`.
+
+Defaults: `HEAP=24g`, `WORKERS=auto`, `JAVA=/opt/homebrew/opt/openjdk/bin/java`, `TLA_TOOLS=tla2tools.jar`. Override on the command line, e.g. `make tla-verify-lbid HEAP=16g`.
+
 ### Verifying SAFETY for bare OBFT at n=4, f=1
 
 ```sh

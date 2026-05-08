@@ -53,6 +53,7 @@ consensustest-reports/
 tla/tla2tools.jar
 tla/*.toolbox/
 tla/states/
+tla/runs/
 tla/MC.tla
 tla/MC.cfg
 tla/*.old

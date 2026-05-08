@@ -150,6 +150,12 @@ spec-alignment-diff:
 	cd ./scripts/differ && go install .
 	cd ./scripts/spec-alignment && ./differ.sh
 
+# TLA+ formal-verification targets — delegate to tla/Makefile.
+# See tla/README.md for prerequisites and tla/Makefile for full usage.
+.PHONY: tla-verify-bare tla-verify-lbid tla-verify-lbidnew tla-verify-all tla-clean
+tla-verify-bare tla-verify-lbid tla-verify-lbidnew tla-verify-all tla-clean:
+	$(MAKE) -C tla $(@:tla-%=%)
+
 .PHONY: start-node
 start-node:
 	@echo "Build binary: ${BUILD_PATH}"
