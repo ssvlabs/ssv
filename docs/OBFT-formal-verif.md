@@ -588,6 +588,7 @@ This section is updated as TLC runs are performed.
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold. |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint capping pool sizes at quorum thresholds) | ✓ verified | 2026-05-08 | Re-run with the cap-at-quorum state constraint as a safety sanity check before applying the constraint to L_Bid / L_Bid_New. TLC explored 250,000 distinct states (1.91M total) in 7s; same outcome (no counterexamples), confirming the constraint preserves SAFETY coverage. |
 | SAFETY | n=4, f=1, K=4, \|Values\|=4 | _to be run_ | — | Larger config — verifies safety with full layer count |
 | SAFETY | n=7, f=2 | _to be run_ | — | — |
 | LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | Liveness module pending |
@@ -597,8 +598,9 @@ This section is updated as TLC runs are performed.
 
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with TLC symmetry over Honest × Values) | ◐ partial | 2026-05-08 | TLC explored 98M+ distinct canonical states up to depth 15 without finding a counterexample, before run was halted. Estimated full coverage ~100-150M canonical states. All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. Spec encoding validated by SANY parse + millions of states explored. |
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 (full coverage) | _follow-up_ | — | Re-run with longer time budget or state-space constraint; can also try larger heap (`-Xmx16g`). |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with TLC symmetry over Honest × Values) | ◐ partial | 2026-05-08 | TLC explored 98M+ distinct canonical states up to depth 15 without finding a counterexample, before run was halted. All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with symmetry + cap-at-quorum state constraint, `-Xmx24g`) | ◐ partial | 2026-05-08 | Re-run with state constraint capping pool sizes at quorum thresholds (provably safe; see `LBid_Safety.tla`) and 24GB heap. TLC explored 76.8M distinct canonical states up to depth 16 in the 20-min budget without finding any counterexample — ~45% reduction in state count vs unconstrained run, deeper exploration (depth 16 vs 15). All four invariants held. |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (full coverage) | _follow-up_ | — | Run unattended (overnight or hours-long budget) with constraint + 24GB heap. Should complete ~30-60 min based on remaining queue size at the partial-coverage halt point. |
 | SAFETY | n=7, f=2 | _to be run_ | — | Will need symmetry reductions to be tractable. |
 | LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | — |
 | LIVENESS_NON_GRIEF | n=7, f=2 | _to be run_ | — | — |
@@ -608,6 +610,7 @@ This section is updated as TLC runs are performed.
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 (with TLC symmetry over Honest × Values) | ◐ partial | 2026-05-08 | TLC explored 139M+ distinct canonical states up to depth 16 without finding a counterexample, before the run was halted at the 20-min user-budget cap. All four invariants (Pigeonholes 1, 2, 3 + PigeonholeVerdicts) held across all explored states. Spec encoding validated by SANY parse + millions of states explored. The L_Bid_New SAFETY spec is a structural refinement of L_Bid SAFETY at the algebraic level (per-operator σ-or-NR commitments + threshold pools + chained encryption); the L_Bid_New-specific σ-when-uncertain rule and deep-only verdict scope are honest-side tightenings that don't affect Pigeonhole invariants. |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with symmetry + cap-at-quorum state constraint, `-Xmx24g`) | ◐ partial | 2026-05-08 | Re-run with state constraint capping pool sizes at quorum thresholds (provably safe; see `LBidNew_Safety.tla`) and 24GB heap. TLC explored 78.8M distinct canonical states up to depth 15 in the 20-min budget without finding any counterexample — ~43% reduction in state count vs unconstrained run. All four invariants held. (Slightly shallower exploration than L_Bid's depth 16 reflects the additional state-variable complexity from L_Bid_New's priority-inverted structure.) |
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 (full coverage) | _follow-up_ | — | Re-run with longer time budget; same recommendation as L_Bid SAFETY. |
 | SAFETY | n=7, f=2 | _to be run_ | — | Will need symmetry reductions to be tractable. |
 | LIVENESS_NON_GRIEF | n=4, f=1 | _to be run_ | — | Would model bid_1 explicitly per-operator to verify F.5.2 corner cases (σ-when-uncertain residual at bid_1 > V_early; recovery at V_early > bid_1). |

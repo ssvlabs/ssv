@@ -308,6 +308,31 @@ PigeonholeVerdicts ==
 SAFETY == Pigeonhole1 /\ Pigeonhole2 /\ Pigeonhole3 /\ PigeonholeVerdicts
 
 (***************************************************************************)
+(* State constraint — bound state space for TLC by capping each pool at    *)
+(* its quorum threshold.                                                   *)
+(*                                                                         *)
+(* Provably safe for SAFETY at f=1, n=4: Pigeonholes 1, 2, 3 +             *)
+(* PigeonholeVerdicts are all "pool size ≥ threshold" predicates, so       *)
+(* they're already detectable when a pool first reaches threshold.         *)
+(* States past threshold add no new information; pool sizes only grow      *)
+(* (actions never remove tuples), so any pruned state has a predecessor    *)
+(* at the threshold boundary that's explored normally.  TLC checks         *)
+(* INVARIANTs on every visited state including those pruned by             *)
+(* CONSTRAINT — the constraint only blocks successor expansion.            *)
+(***************************************************************************)
+
+StateConstraint ==
+    /\ \A k \in RotationLayers, v \in Values:
+        Cardinality(SigmaPool(k, v)) <= QV
+    /\ \A v \in Values:
+        Cardinality(LBidSigmaPool(v)) <= QV
+    /\ \A v \in Values:
+        Cardinality(VerdictPool(v)) <= QV
+    /\ \A k \in RotationLayers:
+        Cardinality(NRPool(k)) <= QEnc
+    /\ Cardinality(LBidNRPool) <= QEnc
+
+(***************************************************************************)
 (* Symmetry reduction                                                      *)
 (*                                                                         *)
 (* Honest operators are role-symmetric: any permutation of Honest yields  *)
