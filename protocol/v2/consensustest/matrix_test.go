@@ -11,6 +11,29 @@ import (
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
 )
 
+// TestCatalog_NoUnsafeByzKinds guards against accidentally adding a negative-
+// test byz kind (one that deliberately produces a NoOfflineDoubleV violation)
+// to the catalog. RunScenarioOnProtocol panics on safety violations, so a
+// catalog scenario using these kinds would crash every matrix-style test.
+// Better to fail fast and pointed here than to debug a SafetyPanic stack.
+func TestCatalog_NoUnsafeByzKinds(t *testing.T) {
+	base := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	unsafeKinds := map[ct.ByzKind]string{
+		ct.ByzAggregatorBypass: "deliberately produces NoOfflineDoubleV via forged-identity Layers[0]",
+		ct.ByzWitnessForgery:   "deliberately produces NoOfflineDoubleV via forged Witnesses[]",
+	}
+	for _, s := range ct.Catalog {
+		cfg := base
+		if s.Apply != nil {
+			s.Apply(&cfg)
+		}
+		if reason, unsafe := unsafeKinds[cfg.Byz.Kind]; unsafe {
+			t.Fatalf("scenario %q uses byz kind %v which %s — these MUST stay out of Catalog (matrix tests would crash on SafetyPanic). Remove from Catalog and exercise via a standalone test instead.",
+				s.Name, cfg.Byz.Kind, reason)
+		}
+	}
+}
+
 // TestComparison_Matrix runs every scenario × protocol combination and
 // asserts the outcome matches the scenario's declared per-protocol
 // expectation. Universal safety invariants (no two V signatures, honest

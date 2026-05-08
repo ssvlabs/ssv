@@ -32,6 +32,11 @@ func (HostAllValid) Validate(_ OperatorID, _ int, _ []byte, _ Phase) bool { retu
 
 // HostInvalidForOperators returns false at the configured Layer for any
 // op in Operators; useful for validity-divergence scenarios. Phase-agnostic.
+//
+// Operators is a lookup-only map (read via Operators[op] in Validate); not
+// iterated, so map nondeterminism is not a concern. If you extend this type
+// to iterate Operators, sort the keys or switch to a slice — Go map
+// iteration order is randomized and would break sim determinism.
 type HostInvalidForOperators struct {
 	Layer     int
 	Operators map[OperatorID]bool

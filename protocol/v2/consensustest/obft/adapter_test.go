@@ -320,6 +320,35 @@ func TestAdapter_PartialEquivocation_NaturalRecovery(t *testing.T) {
 		out.DecidedRound, string(out.DecidedValue))
 }
 
+// TestAdapter_ByzWitnessForgery_TriggersSafetyDetection is the sibling
+// negative test to ByzAggregatorBypass: it exercises recordCommitToAggregator's
+// Witnesses[] path. Byz emits an extra commit whose Witnesses[] credit ≥ qV
+// honest leaders with σ partials on a V_prime at L_1; combined with honest
+// σ-quorum on the canonical V at L_0, the OfflineAggregator must report
+// NoOfflineDoubleV=false.
+//
+// Without this test, a regression to the Witnesses crediting at
+// obft/events.go's recordCommitToAggregator (the only call site of
+// ObserveSigma keyed on w.Leader) would slip past every other test.
+//
+// Calls Run() directly (not RunScenarioOnProtocol) because the safety check
+// in RunScenarioOnProtocol panics on NoOfflineDoubleV violations; this test
+// inspects ComputeSafetyReport's verdict explicitly.
+func TestAdapter_ByzWitnessForgery_TriggersSafetyDetection(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzWitnessForgery, ByzOperators: []ct.OperatorID{2}}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+
+	rep := ct.ComputeSafetyReport(out)
+	require.False(t, rep.NoOfflineDoubleV,
+		"witness forgery MUST trigger NoOfflineDoubleV (Witnesses path); got: %s", rep)
+	require.GreaterOrEqual(t, len(out.OfflineAgg.Reconstructions), 2,
+		"aggregator should reconstruct ≥ 2 distinct V signatures (canonical V at L_0 + V_prime at L_1 via Witnesses); got: %s",
+		out.OfflineAgg)
+	t.Logf("WitnessForgery: %s", out.OfflineAgg)
+}
+
 func clusterName(n int) string {
 	switch n {
 	case 4:

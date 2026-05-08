@@ -163,6 +163,8 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 			RecipientsA: recipientsA,
 			RecipientsB: recipientsB,
 		}, nil
+	case ct.ByzWitnessForgery:
+		return byzWitnessForgery{ByzSet: bs}, nil
 	case ct.ByzGarbageMessages, ct.ByzExceedsRateLimit, ct.ByzOfflineDoubleVAttempt:
 		// Reserved enum values — covered at other layers, not via the
 		// scenario catalog. See ByzKind enum comments in
@@ -663,9 +665,85 @@ func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op obft.OperatorID, c *ob
 			Value:      append(obft.Value{}, primeV...),
 			Ciphertext: forgeSigmaPartialBytes(other, 0, primeV),
 		}
+		// Strip deeper layers, NRPartials, and Witnesses so the forged commit
+		// only carries the L_0-on-V_prime entry it's meant to test. Otherwise
+		// the byz's original deeper-layer claims tag along under the forged
+		// identity and inflate aggregator state with synthetic claims on the
+		// canonical V (harmless for NoOfflineDoubleV — same V dedups by hash —
+		// but obscures what the test is actually exercising).
+		for k := 1; k < len(cp.Layers); k++ {
+			cp.Layers[k] = obft.EncryptedLayer{}
+		}
+		cp.NRPartials = nil
+		cp.Witnesses = nil
 		forged = append(forged, cp)
 	}
 	return forged
+}
+
+// ---- byzWitnessForgery (negative test for safety machinery, Witnesses path) ----
+
+// Byz emits an extra commit whose Witnesses[] field credits ≥ qV honest
+// leaders with σ partials on V_prime at a deeper layer. Combined with honest
+// σ-quorum on the canonical V at L_0, the OfflineAggregator reconstructs both
+// (canonical V via Layers[0], V_prime via Witnesses) → NoOfflineDoubleV
+// violation → SafetyPanic.
+//
+// This is the sibling negative test to byzAggregatorBypass: bypass exercises
+// the recordCommitToAggregator Layers[] path, witness-forgery exercises the
+// Witnesses[] path. Without this test, the Witnesses crediting at
+// obft/events.go's recordCommitToAggregator could silently regress (it's the
+// only call site of ObserveSigma that uses w.Leader rather than c.OperatorID).
+//
+// Should NOT be added to the catalog (matrix tests would crash on safety
+// panic); use only in standalone tests with the expected behavior asserted.
+type byzWitnessForgery struct {
+	honestDefaults
+	ByzSet byzSet
+}
+
+func (b byzWitnessForgery) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+	return []broadcastPlan{{V: honestV}}
+}
+
+func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft.Commit) []*obft.Commit {
+	if !b.ByzSet.Contains(op) {
+		return nil
+	}
+	if s.cfg.K < 2 {
+		return nil // need at least L_1 to forge witnesses at a deeper layer
+	}
+	primeV := []byte("byz-witness-V-prime")
+	targetLayer := 1 // forge witnesses at L_1; any layer < K works
+
+	cp := cloneCommit(c)
+	// Strip Layers[]/NRPartials so this commit *only* exercises the
+	// Witnesses path. Otherwise the byz's original Layers entries would also
+	// hit the aggregator and the test wouldn't isolate Witness crediting.
+	for k := range cp.Layers {
+		cp.Layers[k] = obft.EncryptedLayer{}
+	}
+	cp.NRPartials = nil
+	cp.Witnesses = nil
+
+	// Build forged Witnesses crediting ≥ qV distinct honest leaders with
+	// σ on V_prime at targetLayer. Witnesses ship ValueRoot (sha256(V)) on
+	// the wire, not full V — the aggregator's ObserveSigmaByValueRoot path
+	// keys on that hash directly.
+	primeRoot := obft.ValueRoot(primeV)
+	qV := s.cfgObft.QV()
+	for _, other := range s.operators {
+		if len(cp.Witnesses) >= qV {
+			break
+		}
+		cp.Witnesses = append(cp.Witnesses, obft.LeaderSigmaWitness{
+			Layer:     targetLayer,
+			Leader:    other,
+			ValueRoot: primeRoot,
+			SigmaV:    forgeSigmaPartialBytes(other, targetLayer, primeV),
+		})
+	}
+	return []*obft.Commit{cp}
 }
 
 // ---- helpers -----------------------------------------------------------

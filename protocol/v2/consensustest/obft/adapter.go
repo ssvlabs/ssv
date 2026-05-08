@@ -142,8 +142,10 @@ func (r rawOutcome) toCT(agg *ct.OfflineAggregator, bw *ct.BandwidthReport) ct.O
 	return out
 }
 
-// hashValue returns a hex-prefix of v for diagnostic dumps.
-func hashValue(v []byte) string {
+// valuePrefix returns a hex-prefix of v for diagnostic dumps. Distinct from
+// the consensustest package's hashValue (which returns [32]byte for use as
+// map keys); these serve different purposes and shouldn't share a name.
+func valuePrefix(v []byte) string {
 	if len(v) == 0 {
 		return "<empty>"
 	}

@@ -198,7 +198,13 @@ func (e *evtByzProposal) handle(s *sim) []scheduledEvent {
 		// Wire-byte size charged to bandwidth per-recipient — same accounting
 		// path as virtualNetwork.Broadcast for honest PROPOSEs, so byz-side
 		// fabricated messages aren't a hidden gap in the bandwidth report.
-		msgBytes := messageWireBytes(msg)
+		msgBytes, encErr := messageWireBytes(msg)
+		if encErr != nil && s.cfg.TraceEnabled {
+			s.trace = append(s.trace, ct.TraceEntry{
+				When:  s.now,
+				Event: fmt.Sprintf("ByzProposalEncode-FAILED[leader=%d round=%d err=%v]", e.leader, e.round, encErr),
+			})
+		}
 		recipients := p.Recipients
 		if len(recipients) == 0 {
 			recipients = make([]ct.OperatorID, 0, len(s.operators))

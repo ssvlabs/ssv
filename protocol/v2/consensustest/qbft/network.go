@@ -1,6 +1,8 @@
 package qbft
 
 import (
+	"fmt"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -26,7 +28,13 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 	if n.sim.byz.SuppressBroadcast(from, kind, round) {
 		return nil
 	}
-	msgBytes := messageWireBytes(msg)
+	msgBytes, encErr := messageWireBytes(msg)
+	if encErr != nil && n.sim.cfg.TraceEnabled {
+		n.sim.trace = append(n.sim.trace, ct.TraceEntry{
+			When:  n.sim.now,
+			Event: fmt.Sprintf("MessageEncode-FAILED[from=%d kind=%s err=%v]", from, kind, encErr),
+		})
+	}
 	frameworkRound := frameworkRoundFor(round)
 	for _, to := range n.sim.operators {
 		toCT := ct.OperatorID(to)
@@ -63,18 +71,22 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 
 // messageWireBytes returns the wire-byte count for one SignedSSVMessage:
 // encoded inner SSVMessage + per-signer (signature + operator-ID) + FullData.
-// Returns 0 when encoding fails (programmer error); callers gate on `> 0`
-// before charging bandwidth so a malformed message simply contributes nothing.
-func messageWireBytes(msg *spectypes.SignedSSVMessage) int64 {
+// Encode failure is reported via the second return so callers can record a
+// trace entry; the byte count omits only the inner-encoded portion in that
+// case (signatures and FullData are still included). Treat any non-nil err
+// as a programmer error — Encode failing on a well-formed adapter-built
+// message indicates structural corruption upstream.
+func messageWireBytes(msg *spectypes.SignedSSVMessage) (int64, error) {
 	var n int64
-	if encoded, err := msg.SSVMessage.Encode(); err == nil {
+	encoded, err := msg.SSVMessage.Encode()
+	if err == nil {
 		n = int64(len(encoded))
 	}
 	for i := range msg.Signatures {
 		n += int64(len(msg.Signatures[i])) + 8
 	}
 	n += int64(len(msg.FullData))
-	return n
+	return n, err
 }
 
 // frameworkRoundFor maps a QBFT round (1-indexed) to the framework's

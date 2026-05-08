@@ -98,6 +98,8 @@ const (
 	ByzGarbageMessages       // RESERVED: covered by obft.ValidateCommit/ValidatePhase1Bundle direct unit tests; ByzFakeEncryptedPresence exercises a specific garbage variant (forged IBE ciphertext → Rule 4)
 	ByzExceedsRateLimit      // RESERVED: covered by obft.Instance peerCommitHashes cap (MaxCommitHashesPerOp=8) directly in instance_test.go; validation-layer mirror in message/validation/obft_admissions_test.go
 	ByzOfflineDoubleVAttempt // RESERVED: the OfflineAggregator runs on EVERY scenario via recordCommitToAggregator + AttemptAll; NoOfflineDoubleV is a universal safety invariant. ByzAggregatorBypass is the active-attack variant (forged identities)
+
+	ByzWitnessForgery // (negative) byz forges Witnesses[] entries crediting honest leaders with σ on V_prime at deeper layers; sibling to ByzAggregatorBypass exercising the recordCommitToAggregator Witnesses path. do NOT add to Catalog
 )
 
 // String returns a stable human-readable name for telemetry.
@@ -143,6 +145,8 @@ func (k ByzKind) String() string {
 		return "ExceedsRateLimit"
 	case ByzOfflineDoubleVAttempt:
 		return "OfflineDoubleVAttempt"
+	case ByzWitnessForgery:
+		return "WitnessForgery"
 	default:
 		return "Unknown"
 	}

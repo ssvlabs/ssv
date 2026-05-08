@@ -140,7 +140,7 @@ type evtPhase1Arrival struct {
 
 func (e *evtPhase1Arrival) describe() string {
 	return fmt.Sprintf("Phase1Arrival[from=%d to=%d layer=%d v=%s]",
-		e.from, e.to, e.layer, hashValue(e.bundle.Value))
+		e.from, e.to, e.layer, valuePrefix(e.bundle.Value))
 }
 
 func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {

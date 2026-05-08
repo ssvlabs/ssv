@@ -142,6 +142,13 @@ func (a *OfflineAggregator) ObserveNR(op OperatorID, layer int) {
 //     EncryptedClaims AND NR-quorum on every shallower layer (chain unlock)
 //     yields a reconstruction.
 //
+// Reconstructions are deduplicated by ValueHash cluster-wide: the same V is
+// recorded at most once, at the shallowest layer it was reconstructable
+// from. This is correct for the NoOfflineDoubleV count (which asks "how many
+// distinct V signatures?") but means the slice doesn't enumerate every
+// (layer, V) pair an aggregator could compute — a V reconstructable at both
+// L_0 (σ-quorum) and L_1 (chained-decrypt) appears only at L_0.
+//
 // Chain-unlock is approximated as "every shallow layer has SOME NR-quorum"
 // rather than per-V chain matching; this is permissive (over-counts
 // reconstructions) so false positives risk only spurious safety panics, not
