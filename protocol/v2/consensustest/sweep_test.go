@@ -503,6 +503,139 @@ func TestSweep_ClockSkew(t *testing.T) {
 	}
 }
 
+// TestSweep_PassiveByz_UnderStress — passive-byz catalog scenarios under
+// within-bound clock skew. Tier 1 stress-test addition per
+// CONSENSUS-TEST-PLAN.md ("byz indistinguishable from honest = liveness
+// MUST hold"). Asserts that each passive-byz scenario matches its
+// catalog expectation under the spec's δ-bound clock-skew stress.
+//
+// Passive-byz scenarios are those where the byz operator's behavior is
+// structurally indistinguishable from honest network/operator failure:
+//   - Healthy (baseline; no byz)
+//   - PrimaryLeaderSilent (byz silent at L_0 — looks like offline op1)
+//   - MultiSilent_K3 (top K silent — looks like multi-failure)
+//   - SigmaRefusal (byz never σ-emits — looks like CPU-stuck honest)
+//   - WithholdLeader_Deepest (silent at deepest layer — looks like
+//     late/offline deepest leader)
+//   - LateLeaderBroadcast_L0 (broadcast past T_broadcast_max within
+//     B_k — looks like slow-but-honest leader)
+//
+// Spec assumption: cluster cannot distinguish passive byz from honest
+// failure in production; protocol must work flawlessly within the
+// partial-synchrony bound. This test exercises the clock-skew axis of
+// that bound (the jitter and asymmetric axes are exercised separately
+// in TestSweep_Jitter and TestSweep_Asymmetric — each axis is held
+// individually rather than combined, because combined-axis stress can
+// exceed the partial-synchrony bound in worst-case tails even when each
+// axis individually is within-spec, and tests should distinguish
+// "spec-compliant stress" from "out-of-spec corner").
+//
+// Network: ClockSkewedNetwork(ConstantDelay{D: BTT/2}, within-bound skew
+// per-pair ≤ δ). Worst-case delay = BTT/2 + 2δ = 100 + 100 = 200ms = B_0.
+// Per-cell catalog expectations must match — this is the protocol's MUST
+// guarantee under δ-bound clock skew.
+func TestSweep_PassiveByz_UnderStress(t *testing.T) {
+	const btt = 200 * time.Millisecond
+	const delta = 50 * time.Millisecond
+
+	passiveByzNames := map[string]bool{
+		"Healthy":                true,
+		"PrimaryLeaderSilent":    true,
+		"MultiSilent_K3":         true,
+		"SigmaRefusal":           true,
+		"WithholdLeader_Deepest": true,
+		"LateLeaderBroadcast_L0": true,
+	}
+
+	skew := map[ct.OperatorID]time.Duration{
+		1: -delta / 2,
+		2: -delta / 4,
+		3: +delta / 4,
+		4: +delta / 2,
+	}
+	cfg := baseSweepConfig(4, btt)
+	cfg.Network = ct.ClockSkewedNetwork{
+		Inner: ct.ConstantDelay{D: btt / 2},
+		Skew:  skew,
+	}
+
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+
+	var b strings.Builder
+	b.WriteString("\npassive-byz-under-clock-skew (within-bound, pair-wise ≤ δ):\n")
+	for _, s := range ct.Catalog {
+		if !passiveByzNames[s.Name] {
+			continue
+		}
+		for _, p := range protocols {
+			r := ct.RunScenarioOnProtocol(t, p, s, cfg)
+			if r.Skipped {
+				fmt.Fprintf(&b, "  %-32s %-5s: n/a (not applicable)\n", s.Name, p.Name())
+				continue
+			}
+			// Spec MUST: passive byz under δ-bound clock skew must not
+			// break liveness — the catalog scenario's expected outcome class
+			// must hold.
+			require.Truef(t, r.Match,
+				"passive byz %s under within-bound clock skew %s must match catalog expectation: %s",
+				s.Name, p.Name(), r.Why)
+			fmt.Fprintf(&b, "  %-32s %-5s: %s\n", s.Name, p.Name(), sweepCellSummary(r))
+		}
+	}
+	t.Log(b.String())
+}
+
+// TestSweep_LivenessEdge — paired just-fit / just-miss runs at the QBFT
+// liveness cliff. Verifies the protocol falls off the cliff cleanly: decides
+// when consensus completes within budget, misses (no safety violation) when
+// it spills over. Tier 2 stress-test addition per CONSENSUS-TEST-PLAN.md.
+//
+// QBFT's empirical cliff at default Config A (RelayCutoff=4s, RT=2s,
+// HeaderSubmit=100ms, BFTStart clamped to 0 at high BTT) sits at
+// BTT≈666ms — i.e., 3·BTT ≈ RT. Past this point, R0's PREPARE/COMMIT
+// round-trips can no longer complete before the R1 round timer fires and the
+// quorum partitions across rounds. Empirical scan: decides through BTT=665ms
+// (decision time 4·BTT = 2660ms), misses from BTT=670ms onward.
+//   - just-fit: BTT=600ms — R0 finishes at 2.4s, 260ms under the cliff.
+//   - just-miss: BTT=700ms — past the cliff, no decision in any round.
+//
+// OBFT has no analogous runtime cliff: it decides at T_commit (back-anchored)
+// whenever the schedule validates. At BTT ≥ 800ms (default config) OBFT's
+// FetchAt schedule degenerates (T_2 = T_3 = 0 after non-negative clipping),
+// making SimConfig.Validate fail. Since this test runs only QBFT, we override
+// BroadcastBudget and FetchAt with arbitrary strictly-monotonic values so
+// Validate passes; QBFT ignores both fields.
+func TestSweep_LivenessEdge(t *testing.T) {
+	// Dummy schedules that satisfy Validate's strict-monotonic constraints
+	// without depending on BTT. QBFT does not consult these fields.
+	dummyBudget := []time.Duration{1 * time.Millisecond, 2 * time.Millisecond, 3 * time.Millisecond, 4 * time.Millisecond}
+	dummyFetch := []time.Duration{4 * time.Millisecond, 3 * time.Millisecond, 2 * time.Millisecond, 1 * time.Millisecond}
+
+	cases := []struct {
+		name        string
+		btt         time.Duration
+		qbftDecides bool
+	}{
+		{"QBFT-just-fit-BTT=600ms", 600 * time.Millisecond, true},
+		{"QBFT-just-miss-BTT=700ms", 700 * time.Millisecond, false},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := baseSweepConfig(4, c.btt)
+			cfg.BroadcastBudget = dummyBudget
+			cfg.FetchAt = dummyFetch
+			out, err := qbftadapter.Protocol{}.Run(cfg)
+			require.NoErrorf(t, err, "QBFT Run at BTT=%v must not error (cliff is decision, not Validate)", c.btt)
+			require.Equalf(t, c.qbftDecides, out.Decided,
+				"QBFT at BTT=%v Healthy: expected decided=%v (cliff at BTT≈666ms via 3·BTT vs RT=2s; safety invariants enforced via panic gate)",
+				c.btt, c.qbftDecides)
+		})
+	}
+}
+
 // TestSweep_Seeds — same scenario, multiple seeds. Asserts safety invariants
 // hold across seeds (the framework panics on violation; the assertion is that
 // no seed produces a violation).
