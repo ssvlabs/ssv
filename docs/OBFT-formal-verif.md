@@ -113,7 +113,7 @@ We distinguish two byzantine behavior classes:
 2. **Cross-phase exclusivity violation**: σ-side AND NR-side commitment at the same `(slot, layer)`.
 3. **Fake / garbage signatures**: plaintext σ on V not retained by any honest (Rule 5 in OBFT.md); encrypted partials that decrypt to garbage (Rule 4).
 4. **EKM bypass**: signing actions an honest EKM would block — multiple distinct V's at same layer; σ-NR cross-signing within the protocol; etc.
-5. **Bid-value lying** (when relay-attestation extension is active): KindBid `bid_value` not matching the relay's attestation.
+5. **Bid-value lying** (when relay-attestation extension is active): a Phase-1 bundle's bid metadata `bid_value` not matching the relay's attestation.
 
 **Non-grief byzantine behavior** (observable as "operator absent" or "operator following protocol"):
 
@@ -174,8 +174,9 @@ slot ∈ ℕ
 local_view: map(slot → SlotState)
 
 SlotState ::= {
-    received_bundles: map(layer → V) -- Phase-1 bundles retained
-    received_bids: set(KindBid)        -- bid envelopes retained
+    received_bundles: map(layer → Phase1Bundle) -- Phase-1 bundles retained
+                                                  -- (each bundle carries V_{L_k} + bid metadata
+                                                  -- in L_Bid variants — no separate KindBid)
     received_verdicts: map(operator → KindBidVerdict) -- only for L_Bid variants
     ekm_log: set((slot, layer, side, value_root)) -- slashing-protection log
     sigma_emitted: map(layer → option(V)) -- σ commitments per layer
@@ -273,39 +274,46 @@ ACTION reconstruct(operator i):
 
 ### 3.3 — OBFT + L_Bid extensions to the honest state machine
 
-L_Bid adds bid envelopes and the mini-consensus phase. Per [Appendix B of OBFT.md](OBFT.md#appendix-b--l_bid-mini-consensus-extension):
+L_Bid extends bare OBFT's Phase-1 bundle with bid metadata and adds the mini-consensus sub-phase. Per [Appendix B of OBFT.md](OBFT.md#appendix-b--l_bid-mini-consensus-extension), bid data lives inside Phase-1 bundles — there is no standalone `KindBid` wire kind. Only rotation leaders bid (one bid per layer leader); non-rotation operators participate in mini-consensus by validating retained eligible bundles and broadcasting verdicts.
 
-**Phase 1 — Bid broadcast (in addition to rotation-leader broadcast):**
+**Phase 1 — Honest leader L_k broadcasts Phase-1 bundle with bid metadata:**
 
 ```
-ACTION emit_kindbid(operator i):
-    PRECONDITION: each operator emits exactly one KindBid per slot AND
-                  current_time within bid-broadcast window.
+ACTION leader_broadcast_with_bid(operator i, layer k):
+    PRECONDITION: i is the rotation leader for L_k AND
+                  current_time ≥ T_{k} AND current_time ≤ T_broadcast_max_k AND
+                  not yet broadcast for (slot, k).
+                  (T_broadcast_max_k = T_0_arrival − B_k for L_Bid, where T_0_arrival
+                   replaces bare OBFT's Ls_arrival.)
     
-    1. Fetch V_i from host (e.g., MEV-Boost relay) with bid_value, relay_attestation.
-    2. Construct KindBid binding (i, V_i, bid_value, relay_attestation).
-    3. Sign envelope via operator-identity key.
-    4. Broadcast.
-    
-    For rotation leaders L_k: enforce coherence — V_i in KindBid = V_k in Phase-1 bundle.
+    1. Run host fetch loop until V_k is determined; validate against host rules.
+    2. Determine bid_value and obtain relay_attestation (or empty if extension off).
+    3. Sign σ_i^V(V_k) via EKM at (slot, k, "σ", value_root(V_k)).
+    4. Sign Phase-1 envelope via operator-identity key, including the bid metadata
+       (bid_value, relay_attestation) for the same V_k.
+    5. Broadcast (V_k, σ_i^V, σ_i^op, bid_value, relay_attestation) — a single
+       Phase-1 bundle that is both the L_k candidate and the L_Bid bid.
 ```
 
 **Mini-consensus — verdict broadcast:**
 
 ```
 ACTION emit_kindbidverdict(operator i):
-    PRECONDITION: current_time = verdict_broadcast_deadline AND
+    PRECONDITION: current_time = T_verdict = T_commit − Δ_verdict AND
                   not yet emitted verdict for slot.
     
-    1. Compute bid_set_i := KindBids first-observed before deadline that pass:
-       - operator-identity signature valid,
-       - bid format valid,
-       - host validity-locked verdict on V_j is valid,
+    1. Compute bid_set_i := L_Bid-eligible Phase-1 bundles first-observed before
+       T_verdict that pass:
+       - bundle cryptographic checks (σ^V partial verifies, op-identity envelope verifies),
+       - bid metadata is well-formed (bid_value, relay_attestation),
+       - host validity-locked verdict on V is valid,
        - optional filters (parent-root, relay-attestation extension if active).
     
     2. Compute predicted_LBid_i:
-       IF |bid_set_i| ≥ n − f AND optional filters pass:
-           predicted_LBid_i := argmax_{V in bid_set_i} bid_value (op_id tiebreak)
+       IF |bid_set_i| ≥ qBid (= K − f for K = n; configured otherwise) AND
+          optional filters pass:
+           predicted_LBid_i := argmax_{V in bid_set_i} bid_value
+                               (with (layer, leader_id) tiebreak)
        ELSE:
            predicted_LBid_i := null
     
@@ -322,7 +330,8 @@ ACTION emit_kindcommit (extended for L_Bid):
     
     For L_Bid:
         IF verdict_pool[V_X] ≥ qV (computed locally) AND
-           operator retains V_X locally AND
+           operator retains V_X locally (= retained the Phase-1 bundle whose
+                                          metadata bid V_X) AND
            operator's locked validity verdict for V_X is valid:
             Include σ_i^V(V_X) plaintext at L_Bid.
         ELSE:
@@ -336,13 +345,30 @@ ACTION emit_kindcommit (extended for L_Bid):
 
 L_Bid_New differs from L_Bid in three places (per [Appendix F of OBFT.md](OBFT.md#appendix-f--obft--l_bid_new-priority-inverted-bid-routing)):
 
+**Per-layer broadcast deadlines split by `T_deep_arrival` vs primary's bare-OBFT deadline:**
+
+```
+ACTION leader_broadcast_with_bid (L_Bid_New, layer k):
+    For deep layers k ≥ 1: T_broadcast_max_k = T_deep_arrival − B_k.
+                            (T_deep_arrival = T_commit − Δ_minicon.)
+    For primary k = 0:      T_broadcast_max_0 = T_broadcast_max_0^bare
+                            (= bare OBFT's primary deadline; no Δ_minicon shift).
+    
+    Otherwise identical to L_Bid's leader_broadcast_with_bid: Phase-1 bundle
+    carries bid metadata for the same V_k; σ_{L_k}^V signed via EKM; envelope
+    signed via op-identity key.
+```
+
 **Mini-consensus runs over deep bids only:**
 
 ```
 ACTION emit_kindbidverdict (L_Bid_New):
-    Same as L_Bid but bid_set_i_deep := bid_set_i \ {primary's bid (= L_0's KindBid)}.
+    Same as L_Bid but bid_set_i_deep := L_Bid-eligible Phase-1 bundles for
+    layers L_1..L_{K-1} only — primary's bundle (bid_1 = V_{L_0}) is intentionally
+    excluded.
     
-    predicted_LBid_i computed over bid_set_i_deep only.
+    predicted_LBid_i computed over bid_set_i_deep with visibility threshold
+    qBid_deep (= (K − 1) − f for K = n; configured otherwise).
 ```
 
 **Phase 2 — Priority-inverted onion:**
@@ -372,10 +398,17 @@ A byzantine operator MAY perform any of the actions in §3.2–§3.4 (= behave h
 ```
 GRIEF_LeaderEquivocate(i, k): emit two distinct Phase-1 bundles at (slot, k) with
                               different value_root, both signed with σ_i^V.
+                              In L_Bid variants, this also covers bundle-level
+                              equivocation that produces distinct V's at the same
+                              (slot, layer, leader).
 
-GRIEF_BidEquivocate(i): emit two distinct KindBids at slot with different V_i.
+GRIEF_BidMetadataEquivocate(i, k): emit two distinct Phase-1 bundles at (slot, k)
+                                    that carry the SAME V_k but different bid metadata
+                                    (bid_value and/or relay_attestation). L_Bid-specific
+                                    Rule 7 grief; not applicable to bare OBFT.
 
-GRIEF_VerdictEquivocate(i): emit two distinct KindBidVerdicts at slot.
+GRIEF_VerdictEquivocate(i): emit two distinct KindBidVerdicts at slot. Applicable
+                            only to L_Bid variants.
 
 GRIEF_CrossSign(i, k): emit σ_i^V at L_k AND σ_i^IBE(nr_tag_k) at same (slot, k).
 
@@ -385,8 +418,8 @@ GRIEF_FakePartial(i, k, V_garbage): emit σ_i^V on a V not retained by any hones
 GRIEF_FakeEncryptedPresence(i, k): emit encrypted onion entry at L_k that decrypts
                                     to garbage when chained encryption unlocked.
 
-GRIEF_BidValueLie(i): emit KindBid with bid_value not matching relay attestation
-                      (if attestation extension active).
+GRIEF_BidValueLie(i, k): emit Phase-1 bundle whose bid metadata bid_value does not
+                         match the relay's attestation (if attestation extension active).
 
 GRIEF_EKMBypass(i, action): perform any signing action an honest EKM would reject.
 ```
