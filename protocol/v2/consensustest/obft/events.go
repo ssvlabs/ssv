@@ -220,7 +220,7 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obft.Commit) {
 		agg.ObserveNR(from, nr.Layer)
 	}
 	for _, w := range c.Witnesses {
-		agg.ObserveSigma(ct.OperatorID(w.Leader), w.Layer, w.Value)
+		agg.ObserveSigmaByValueRoot(ct.OperatorID(w.Leader), w.Layer, w.ValueRoot)
 	}
 }
 

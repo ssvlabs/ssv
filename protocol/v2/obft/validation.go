@@ -126,8 +126,8 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 			return fmt.Errorf("obft: commit witness %d claims leader %d but layer %d's leader is %d",
 				i, w.Leader, w.Layer, cfg.Layers[w.Layer].Leader)
 		}
-		if len(w.Value) == 0 {
-			return fmt.Errorf("obft: commit witness %d has empty Value", i)
+		if w.ValueRoot == ([32]byte{}) {
+			return fmt.Errorf("obft: commit witness %d has zero ValueRoot", i)
 		}
 		if len(w.SigmaV) == 0 {
 			return fmt.Errorf("obft: commit witness %d has empty SigmaV", i)

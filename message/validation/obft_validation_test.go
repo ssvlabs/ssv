@@ -161,21 +161,24 @@ func TestValidateOBFT_Commit_RejectsCorruptNRPartial(t *testing.T) {
 // signature that verifies against the cluster pubkey — out of scope for a
 // validator-layer unit test. Cover the rejection path instead, which is
 // the security-relevant one.
-func TestValidateOBFT_Commit_RejectsCorruptWitness(t *testing.T) {
+//
+// Per spec §Phase 2 wire format, witnesses ship value_root + σ_V (no full
+// V); standalone Verifier is structural-only (it can't reproduce σ_V
+// verification without V). So garbage σ_V is NOT rejected here — it's
+// dropped at the protocol layer when value_root doesn't match any retained
+// V. This test now covers the structural rejection: an unknown leader.
+func TestValidateOBFT_Commit_RejectsStructurallyInvalidWitness(t *testing.T) {
 	mv, _, share, msgID, clusterID := obftTestSetup(t)
 	signer := share.Committee[0].Signer
 
-	// A Commit whose Witnesses include a garbage σ_V — must be rejected
-	// at validation, before reaching the protocol layer's expensive
-	// rehydration path. Witness Value is a well-formed block so the
-	// rejection fires on the actual σ_V verification, not on V decoding.
 	commit := &obftcore.Commit{
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(signer),
 		Height:     obftTestHeight(mv),
 		Layers:     make([]obftcore.EncryptedLayer, 4),
 		Witnesses: []obftcore.LeaderSigmaWitness{
-			{Layer: 0, Leader: obftcore.OperatorID(signer), Value: proposerCandidateV(), SigmaV: []byte("garbage-witness-sig-padded-to-resemble-bls-length")},
+			// Leader 999 is not in the cluster — structural rejection.
+			{Layer: 0, Leader: 999, ValueRoot: obftcore.ValueRoot(proposerCandidateV()), SigmaV: []byte("witness-sig-padded-to-resemble-bls-length-12345")},
 		},
 	}
 	body, err := wire.WrapCommit(commit)
@@ -184,7 +187,7 @@ func TestValidateOBFT_Commit_RejectsCorruptWitness(t *testing.T) {
 	msg := signOBFTEnvelope(t, msgID, body, signer)
 	peerID, _ := libp2ptest.RandPeerID()
 	_, err = mv.validateOBFTMessage(context.Background(), msg, obftCommitteeInfo(share), peerID, time.Now())
-	require.ErrorContains(t, err, "witness verification")
+	require.Error(t, err, "Commit with structurally invalid witness should be rejected")
 }
 
 func TestValidateOBFT_Certificate_RejectsCorruptAggregate(t *testing.T) {

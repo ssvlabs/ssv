@@ -51,8 +51,9 @@ func commitSize(c *obft.Commit) int64 {
 	for range c.NRPartials {
 		size += layerBytes + ct.StubSignatureSize
 	}
-	for _, w := range c.Witnesses {
-		size += layerBytes + operatorIDBytes + int64(len(w.Value)) + ct.StubSignatureSize
+	for range c.Witnesses {
+		// Layer + Leader + ValueRoot (32 fixed) + SigmaV.
+		size += layerBytes + operatorIDBytes + 32 + ct.StubSignatureSize
 	}
 	return size
 }

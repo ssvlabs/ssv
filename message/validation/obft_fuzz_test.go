@@ -303,7 +303,7 @@ func FuzzOBFTCommitRoundtrip(f *testing.F) {
 			},
 			Witnesses: []obftcore.LeaderSigmaWitness{
 				{Layer: int(wLayer), Leader: obftcore.OperatorID(wLeader),
-					Value: obftcore.Value(wValue), SigmaV: obftcore.Signature(wSigV)},
+					ValueRoot: obftcore.ValueRoot(wValue), SigmaV: obftcore.Signature(wSigV)},
 			},
 		}
 		encoded, err := wire.EncodeCommit(in)

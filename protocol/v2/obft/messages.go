@@ -84,14 +84,48 @@ type NRPartial struct {
 // witnesses for every Phase-1 bundle the operator has retained at T_commit.
 //
 // Defense-in-depth: if gossipsub drops a Phase-1 bundle on some receiver P
-// but P sees a witness in another peer's KindCommit, P can re-hydrate the
-// leader's σ-side contribution and still reach σ-quorum at that layer.
-// (Does not address V-drop — see Appendix C.)
+// but P sees a witness in another peer's KindCommit referring to the same V,
+// the witness identifies that V via ValueRoot. Receivers cross-reference
+// ValueRoot against any V they've retained from Phase-1 receipt; if they
+// have V, σ_V was already verified at Phase 1 (the witness adds nothing
+// new). If they lack V (V-drop), the witness is unusable — σ_V verifies
+// against V (via the Signer's signing target), and a receiver with only
+// ValueRoot cannot reproduce the verification.
+//
+// V-drop recovery flows through KindCertificate gossip per spec
+// §Final-certificate gossip — a faster peer who reconstructed (V, S)
+// gossips it, and the V-drop receiver consumes the cert directly.
+//
+// ValueRoot is sha256(V) — a wire identifier, NOT the σ_V signing target.
+// (σ_V is signed via the Signer interface, which for production proposer-
+// duty translates V → beacon proposer-domain signing root before signing.
+// The two hashes serve different purposes: signing target = beacon-block
+// signing root for downstream compatibility; wire identifier = sha256(V)
+// for compact cross-referencing.)
+//
+// Wire savings: ~10× per witness vs shipping full V (32 bytes vs ~1 KB at
+// blinded-block size).
+//
+// Future Appendix-style "ship full V" extension would be additive (a
+// separate optional field), preserving wire compatibility with this lean
+// form. Current Verifier.VerifyCommitWitnesses is structural-only — full
+// σ_V verification happens at the protocol layer (Instance) where retained
+// V's are available for cross-reference.
 type LeaderSigmaWitness struct {
-	Layer  int        // layer the witnessed bundle is for; in [0, K)
-	Leader OperatorID // claimed leader (must match cfg.Layers[Layer].Leader)
-	Value  Value      // the V the leader signed
-	SigmaV Signature  // leader's V-keypair σ partial on Value
+	Layer     int        // layer the witnessed bundle is for; in [0, K)
+	Leader    OperatorID // claimed leader (must match cfg.Layers[Layer].Leader)
+	ValueRoot [32]byte   // sha256(V) — wire identifier of the V the leader signed
+	SigmaV    Signature  // leader's V-keypair σ partial on V (verified against retained V at Instance layer)
+}
+
+// ValueRoot returns the 32-byte identifier (sha256) used to refer to a
+// Phase-1 V on the wire (in LeaderSigmaWitness) without retransmitting
+// the full bytes. Cluster-wide stable: every honest operator computes
+// the same value_root for the same V.
+//
+// Distinct from the σ_V signing target — see LeaderSigmaWitness comment.
+func ValueRoot(v Value) [32]byte {
+	return sha256.Sum256(v)
 }
 
 // Commit is the wire payload carried in a single KindCommit message at
@@ -171,8 +205,7 @@ func commitContentHash(c *Commit) [32]byte {
 	for _, w := range c.Witnesses {
 		binary.Write(h, binary.BigEndian, uint32(w.Layer))
 		binary.Write(h, binary.BigEndian, uint64(w.Leader))
-		binary.Write(h, binary.BigEndian, uint32(len(w.Value)))
-		h.Write(w.Value)
+		h.Write(w.ValueRoot[:])
 		binary.Write(h, binary.BigEndian, uint32(len(w.SigmaV)))
 		h.Write(w.SigmaV)
 	}

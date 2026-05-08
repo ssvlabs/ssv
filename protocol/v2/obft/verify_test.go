@@ -126,61 +126,33 @@ func TestVerifier_CommitWitnesses_AcceptsValid(t *testing.T) {
 		ClusterID: s.cfg.ClusterID,
 		Height:    s.cfg.Height,
 		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: b.SigmaV},
+			{Layer: 0, Leader: b.OperatorID, ValueRoot: ValueRoot(b.Value), SigmaV: b.SigmaV},
 		},
 	}
 	require.NoError(t, v.VerifyCommitWitnesses(c))
 }
 
-func TestVerifier_CommitWitnesses_RejectsCorruptSigmaV(t *testing.T) {
+// Per spec §Phase 2 wire format: witnesses ship value_root + σ_V (no full V).
+// The standalone Verifier cannot reproduce σ_V verification (V is required and
+// not on the wire). VerifyCommitWitnesses is structural-only — full σ_V
+// verification happens at the protocol layer (Instance.ObserveCommit) where
+// retained V's are available for value_root → V cross-reference.
+//
+// This test pins down the structural-only contract: a witness with garbage
+// SigmaV PASSES validation; the protocol layer detects the mismatch (no
+// retained V matches its value_root, or the retained V's σ_V was already
+// verified at Phase 1 and the witness is informational).
+func TestVerifier_CommitWitnesses_StructuralOnly(t *testing.T) {
 	s := newSim(t, 4)
 	v := makeVerifier(t, s)
-	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
-	require.NoError(t, err)
 	c := &Commit{
 		ClusterID: s.cfg.ClusterID,
 		Height:    s.cfg.Height,
 		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: []byte("garbage")},
+			// Garbage SigmaV — VerifyCommitWitnesses is structural-only.
+			{Layer: 0, Leader: 1, ValueRoot: ValueRoot([]byte("V")), SigmaV: []byte("garbage")},
 		},
 	}
-	require.ErrorContains(t, v.VerifyCommitWitnesses(c), "does not verify")
-}
-
-// Identical witnesses (same layer + leader + value + sigmaV bytes) dedupe to
-// a single VerifyPartial call, which is fine because the inputs are byte-
-// identical. This exercises the seen-map fast path without a count assertion.
-func TestVerifier_CommitWitnesses_DedupsIdentical(t *testing.T) {
-	s := newSim(t, 4)
-	v := makeVerifier(t, s)
-	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
-	require.NoError(t, err)
-	w := LeaderSigmaWitness{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: b.SigmaV}
-	c := &Commit{
-		ClusterID: s.cfg.ClusterID,
-		Height:    s.cfg.Height,
-		Witnesses: []LeaderSigmaWitness{w, w, w, w}, // 4 byte-identical
-	}
-	require.NoError(t, v.VerifyCommitWitnesses(c))
-}
-
-// Regression: the gate must reject when witness #2 has the same (layer, leader,
-// value) as #1 but DIFFERENT sigmaV — at most one sigmaV can be a valid
-// share-signature for a given V (leader holds one share), so a mismatched
-// sigmaV is malformedness regardless. A buggy dedup that ignored sigmaV would
-// silently accept this Commit.
-func TestVerifier_CommitWitnesses_RejectsValueMatchSigmaVMismatch(t *testing.T) {
-	s := newSim(t, 4)
-	v := makeVerifier(t, s)
-	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
-	require.NoError(t, err)
-	c := &Commit{
-		ClusterID: s.cfg.ClusterID,
-		Height:    s.cfg.Height,
-		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: b.SigmaV},
-			{Layer: 0, Leader: b.OperatorID, Value: b.Value, SigmaV: []byte("garbage-different-sig")},
-		},
-	}
-	require.ErrorContains(t, v.VerifyCommitWitnesses(c), "does not verify")
+	require.NoError(t, v.VerifyCommitWitnesses(c),
+		"structural-only verification should accept; protocol layer handles σ_V mismatch")
 }

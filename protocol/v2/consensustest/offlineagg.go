@@ -93,7 +93,19 @@ func hashValue(v []byte) [32]byte {
 // value V. (For L_0 σ partials on the wire, or for any σ partial that
 // becomes accessible after chain-decrypt.)
 func (a *OfflineAggregator) ObserveSigma(op OperatorID, layer int, v []byte) {
-	k := SigmaKey{Layer: layer, ValueHash: hashValue(v)}
+	a.observeSigmaHash(op, layer, hashValue(v))
+}
+
+// ObserveSigmaByValueRoot is like ObserveSigma but takes a pre-computed
+// 32-byte value_root (sha256(V)) instead of V — used when the caller has
+// the value_root identifier without the full V (e.g., processing a
+// LeaderSigmaWitness from a Commit).
+func (a *OfflineAggregator) ObserveSigmaByValueRoot(op OperatorID, layer int, valueRoot [32]byte) {
+	a.observeSigmaHash(op, layer, valueRoot)
+}
+
+func (a *OfflineAggregator) observeSigmaHash(op OperatorID, layer int, hash [32]byte) {
+	k := SigmaKey{Layer: layer, ValueHash: hash}
 	if a.SigmaPartials[k] == nil {
 		a.SigmaPartials[k] = make(map[OperatorID]struct{})
 	}

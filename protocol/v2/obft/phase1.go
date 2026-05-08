@@ -343,10 +343,10 @@ func deepCopyCommit(c *Commit) *Commit {
 		out.Witnesses = make([]LeaderSigmaWitness, len(c.Witnesses))
 		for i, w := range c.Witnesses {
 			out.Witnesses[i] = LeaderSigmaWitness{
-				Layer:  w.Layer,
-				Leader: w.Leader,
-				Value:  append(Value{}, w.Value...),
-				SigmaV: append(Signature{}, w.SigmaV...),
+				Layer:     w.Layer,
+				Leader:    w.Leader,
+				ValueRoot: w.ValueRoot,
+				SigmaV:    append(Signature{}, w.SigmaV...),
 			}
 		}
 	}

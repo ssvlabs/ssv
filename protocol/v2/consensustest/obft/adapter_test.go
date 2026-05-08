@@ -284,13 +284,20 @@ func TestAdapter_ByzAggregatorBypass_TriggersSafetyDetection(t *testing.T) {
 // TestAdapter_PartialEquivocation_NaturalRecovery verifies the OBFT.md:443
 // natural-recovery path: byz leader equivocates 2-1 (V_a → 2 honest, V_b → 1
 // honest); σ-pool on V_a = 2 honest σ + leader's σ_L^V(V_a) = 3 = qV at f=1,
-// n=4. Slot SUCCEEDS at L_0 with V_a despite equivocation. The leader's
-// Witnesses rehydration in Phase 2 propagates σ_L^V(V_a) to the V_b recipient
-// too, so all honest can resolve on V_a. Rule 2 evidence still fires —
-// success at L_0 doesn't suppress slashing (the V_a/V_b dual leader bundle
-// is self-contained equivocation evidence). Distinct from
-// EquivocateSigmaLockedSplit (1-1-NR slot-miss at OBFT.md:452) which has
-// only ≤ 2 partials on each V and therefore reaches no qV.
+// n=4. Slot SUCCEEDS at L_0 with V_a despite equivocation.
+//
+// Per spec §Phase 2 wire format, Witnesses ship value_root + σ_V (no full V).
+// The V_b recipient (op4) cannot use the witnessed σ_L^V(V_a) — it would need
+// the V_a bytes which it didn't receive — so op4's σ-pool view at L_0 has
+// only V_b partials and op4 falls through. Op2/op3 reach σ-quorum on V_a at
+// L_0 and decide; op4 catches up via KindCertificate gossip.
+//
+// Rule 2 evidence does NOT fire in this scenario: each receiver only sees
+// one V via Phase 1, and witnesses don't carry V (only value_root + σ_V).
+// This is the deliberate spec trade-off — dropping full V from witnesses
+// loses cross-receiver Rule 2 attribution in natural-recovery scenarios.
+// Distinct from EquivocateSigmaLockedSplit (1-1-NR slot-miss at OBFT.md:452)
+// which has only ≤ 2 partials on each V and therefore reaches no qV.
 func TestAdapter_PartialEquivocation_NaturalRecovery(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{
@@ -309,15 +316,8 @@ func TestAdapter_PartialEquivocation_NaturalRecovery(t *testing.T) {
 	require.True(t, rep.SingleV, "Pigeonhole 2: at most one V per layer cluster-wide; SingleV: %s", rep)
 	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
 
-	totalRule2 := 0
-	for _, oo := range out.PerOp {
-		totalRule2 += oo.EvidenceByRule["OBFT/Rule2/LeaderEquivocation"]
-	}
-	require.GreaterOrEqual(t, totalRule2, 1,
-		"Rule 2 evidence should still fire on success (V_a/V_b are dual-V leader bundles); got: %v",
-		operatorEvidence(out.PerOp))
-	t.Logf("PartialEquivocation 2-1: decided at L_%d with V=%q; Rule 2 fires across cluster: %d",
-		out.DecidedRound, string(out.DecidedValue), totalRule2)
+	t.Logf("PartialEquivocation 2-1: decided at L_%d with V=%q",
+		out.DecidedRound, string(out.DecidedValue))
 }
 
 func clusterName(n int) string {

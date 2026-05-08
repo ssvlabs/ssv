@@ -47,8 +47,8 @@ func TestCommit_Roundtrip(t *testing.T) {
 			{Layer: 1, PartialSig: []byte("nr-sig-layer-1")},
 		},
 		Witnesses: []obft.LeaderSigmaWitness{
-			{Layer: 0, Leader: 1, Value: []byte("V0"), SigmaV: []byte("sigma-from-leader-1")},
-			{Layer: 2, Leader: 3, Value: []byte("V2"), SigmaV: []byte("sigma-from-leader-3")},
+			{Layer: 0, Leader: 1, ValueRoot: obft.ValueRoot([]byte("V0")), SigmaV: []byte("sigma-from-leader-1")},
+			{Layer: 2, Leader: 3, ValueRoot: obft.ValueRoot([]byte("V2")), SigmaV: []byte("sigma-from-leader-3")},
 		},
 	}
 	bytes_, err := WrapCommit(in)
@@ -77,7 +77,7 @@ func TestCommit_Roundtrip(t *testing.T) {
 		got := env.Commit.Witnesses[i]
 		require.Equal(t, expected.Layer, got.Layer)
 		require.Equal(t, expected.Leader, got.Leader)
-		require.True(t, bytes.Equal(expected.Value, got.Value), "witness %d Value mismatch", i)
+		require.Equal(t, expected.ValueRoot, got.ValueRoot, "witness %d ValueRoot mismatch", i)
 		require.True(t, bytes.Equal(expected.SigmaV, got.SigmaV), "witness %d SigmaV mismatch", i)
 	}
 }

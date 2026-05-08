@@ -227,7 +227,8 @@ func EncodeCommit(c *obft.Commit) ([]byte, error) {
 	}
 	size += 2
 	for _, w := range c.Witnesses {
-		size += 4 + 8 + 4 + len(w.Value) + 4 + len(w.SigmaV)
+		// Layer (4) + Leader (8) + ValueRoot (32) + SigmaV length (4) + SigmaV.
+		size += 4 + 8 + 32 + 4 + len(w.SigmaV)
 	}
 	out := make([]byte, 0, size)
 	out = append(out, CommitVersionV1)
@@ -266,16 +267,12 @@ func EncodeCommit(c *obft.Commit) ([]byte, error) {
 		if w.Layer < 0 {
 			return nil, fmt.Errorf("wire: commit witness %d has negative layer %d", i, w.Layer)
 		}
-		if len(w.Value) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: commit witness %d value too long (%d)", i, len(w.Value))
-		}
 		if len(w.SigmaV) > MaxFieldSize {
 			return nil, fmt.Errorf("wire: commit witness %d sigmaV too long (%d)", i, len(w.SigmaV))
 		}
 		out = appendUint32(out, uint32(w.Layer))       //nolint:gosec // bounds-checked
 		out = appendUint64(out, uint64(w.Leader))      //
-		out = appendUint32(out, uint32(len(w.Value)))  //nolint:gosec // bounds-checked
-		out = append(out, w.Value...)                  //
+		out = append(out, w.ValueRoot[:]...)           // fixed 32 bytes
 		out = appendUint32(out, uint32(len(w.SigmaV))) //nolint:gosec // bounds-checked
 		out = append(out, w.SigmaV...)
 	}
@@ -398,14 +395,7 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		valueLen, err := r.uint32_(fmt.Sprintf("witness %d value length", i))
-		if err != nil {
-			return nil, err
-		}
-		if valueLen > MaxFieldSize {
-			return nil, fmt.Errorf("wire: witness %d value too long (%d)", i, valueLen)
-		}
-		value, err := r.bytes(int(valueLen), fmt.Sprintf("witness %d value", i))
+		valueRootBytes, err := r.bytes(32, fmt.Sprintf("witness %d valueRoot", i))
 		if err != nil {
 			return nil, err
 		}
@@ -420,11 +410,13 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
+		var valueRoot [32]byte
+		copy(valueRoot[:], valueRootBytes)
 		witnesses[i] = obft.LeaderSigmaWitness{
-			Layer:  int(layer),
-			Leader: obft.OperatorID(leader),
-			Value:  obft.Value(value),
-			SigmaV: obft.Signature(sig),
+			Layer:     int(layer),
+			Leader:    obft.OperatorID(leader),
+			ValueRoot: valueRoot,
+			SigmaV:    obft.Signature(sig),
 		}
 	}
 	if r.remaining() != 0 {

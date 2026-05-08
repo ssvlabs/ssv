@@ -162,7 +162,7 @@ func validCommitBytes() []byte {
 			{Layer: 1, PartialSig: bytes.Repeat([]byte{0x02}, 96)},
 		},
 		Witnesses: []obftcore.LeaderSigmaWitness{
-			{Layer: 0, Leader: 1, Value: []byte("V0"), SigmaV: bytes.Repeat([]byte{0x03}, 96)},
+			{Layer: 0, Leader: 1, ValueRoot: obftcore.ValueRoot([]byte("V0")), SigmaV: bytes.Repeat([]byte{0x03}, 96)},
 		},
 	})
 	if err != nil {
@@ -278,9 +278,7 @@ func assertCommitInvariants(t testing.TB, c *obftcore.Commit) {
 		if w.Layer < 0 || w.Layer >= wire.MaxLayers {
 			t.Fatalf("Commit.Witnesses[%d].Layer %d out of range", i, w.Layer)
 		}
-		if len(w.Value) > wire.MaxFieldSize {
-			t.Fatalf("Commit.Witnesses[%d].Value len %d > MaxFieldSize", i, len(w.Value))
-		}
+		// ValueRoot is fixed 32 bytes — no MaxFieldSize check needed.
 		if len(w.SigmaV) > wire.MaxFieldSize {
 			t.Fatalf("Commit.Witnesses[%d].SigmaV len %d > MaxFieldSize", i, len(w.SigmaV))
 		}
@@ -331,7 +329,7 @@ func commitsEqual(a, b *obftcore.Commit) bool {
 	for i := range a.Witnesses {
 		if a.Witnesses[i].Layer != b.Witnesses[i].Layer ||
 			a.Witnesses[i].Leader != b.Witnesses[i].Leader ||
-			!bytes.Equal(a.Witnesses[i].Value, b.Witnesses[i].Value) ||
+			a.Witnesses[i].ValueRoot != b.Witnesses[i].ValueRoot ||
 			!bytes.Equal(a.Witnesses[i].SigmaV, b.Witnesses[i].SigmaV) {
 			return false
 		}

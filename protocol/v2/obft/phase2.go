@@ -155,18 +155,19 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 	}
 
 	// Witnesses: include every Phase-1 bundle this operator has retained
-	// (per spec §Phase 2 / Wire format / §Appendix C). Enables receivers who
-	// missed the original Phase-1 broadcast to rehydrate the leader's σ
-	// contribution from any peer's KindCommit.
+	// (per spec §Phase 2 / Wire format). Each witness ships value_root +
+	// σ_V (~128 bytes); receivers cross-reference value_root against
+	// retained V's. V-drop receivers (no V retained for this layer/leader)
+	// recover via KindCertificate gossip per spec §Final-certificate gossip.
 	var witnesses []LeaderSigmaWitness
 	for layer, leaderMap := range i.bundles {
 		for leader, retained := range leaderMap {
 			for _, b := range retained {
 				witnesses = append(witnesses, LeaderSigmaWitness{
-					Layer:  layer,
-					Leader: leader,
-					Value:  append(Value{}, b.Value...),
-					SigmaV: append(Signature{}, b.SigmaV...),
+					Layer:     layer,
+					Leader:    leader,
+					ValueRoot: ValueRoot(b.Value),
+					SigmaV:    append(Signature{}, b.SigmaV...),
 				})
 			}
 		}
@@ -461,25 +462,31 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 	}
 
-	// Witnesses: rehydrate leader-σ_V contributions from any retained
-	// Phase-1 bundle the emitter packed. Treats each witness as if it were
-	// a Phase-1 bundle observation; ObservePhase1Bundle handles σ-verification
-	// and the 2-V retention bound (firing Rule 2 evidence on a distinct
-	// second V at same (layer, leader)). observedOffset=0 bypasses the
-	// Phase-1 acceptance window — witnesses are admissible past T_commit
-	// since that's the whole point.
+	// Witnesses: per spec §Phase 2 wire format, witnesses ship value_root
+	// (32 bytes) + σ_V (no full V). Receivers cross-reference by value_root
+	// against any retained Phase-1 bundles for the same (layer, leader):
+	//
+	//   - Match found: σ_V is for a known V; the original bundle was already
+	//     observed and verified at Phase 1, so σ_V is already in the σ-pool.
+	//     Nothing to do.
+	//   - No match: receiver lacks V (V-drop) or has not yet observed any
+	//     bundle for this (layer, leader). Per spec, the witness is unusable
+	//     — σ_V verifies against V (via the Signer's signing target) and the
+	//     receiver needs V to advance to σ-quorum reconstruction. V-drop
+	//     recovery flows through KindCertificate gossip instead.
+	//
+	// Rule 2 (leader equivocation) detection still works at Phase 1 from any
+	// distinct second V observed there; witnesses don't independently introduce
+	// V's into retention.
 	for _, w := range c.Witnesses {
-		bundle := &Phase1Bundle{
-			ClusterID:  c.ClusterID,
-			OperatorID: w.Leader,
-			Height:     c.Height,
-			Layer:      w.Layer,
-			Value:      append(Value{}, w.Value...),
-			SigmaV:     append(Signature{}, w.SigmaV...),
+		retained := i.bundles[w.Layer][w.Leader]
+		for _, b := range retained {
+			if ValueRoot(b.Value) == w.ValueRoot {
+				// Already counted via Phase 1 path; no-op.
+				break
+			}
 		}
-		// Errors are best-effort: a malformed/unverifiable witness is
-		// dropped silently rather than failing the whole Commit.
-		_ = i.ObservePhase1Bundle(bundle, 0)
+		// No match → V-drop, witness unusable per spec. Skip.
 	}
 
 	return nil

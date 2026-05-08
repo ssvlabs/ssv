@@ -471,8 +471,9 @@ func TestObft_Witness_BuildOwnCommit_PacksRetainedBundles(t *testing.T) {
 		expectedLeader := s.leaderAt(layer)
 		expectedV := s.candidates[layer]
 		found := false
+		expectedRoot := ValueRoot(expectedV)
 		for _, w := range c.Witnesses {
-			if w.Layer == layer && w.Leader == expectedLeader && bytes.Equal(w.Value, expectedV) {
+			if w.Layer == layer && w.Leader == expectedLeader && w.ValueRoot == expectedRoot {
 				require.NotEmpty(t, w.SigmaV, "witness at L_%d has empty SigmaV", layer)
 				found = true
 				break
@@ -482,21 +483,26 @@ func TestObft_Witness_BuildOwnCommit_PacksRetainedBundles(t *testing.T) {
 	}
 }
 
-// TestObft_Witness_RehydratesMissedPhase1 — a single receiver who missed the
-// L_0 Phase-1 broadcast (gossipsub drop) still rehydrates the leader's σ_V
-// from a peer's KindCommit witness and reconstructs locally at L_0.
+// TestObft_Witness_DoesNotRehydrateMissedPhase1 — a receiver who missed the
+// L_0 Phase-1 broadcast does NOT recover via witness rehydration.
 //
-// Setup: op4 misses the L_0 bundle; op1/op2/op3 receive it. In Phase 2
-// op1/op2/op3 σ at L_0; op4 NRs at L_0 (no retained V locally). Without M2,
-// op4's L_0 σ-pool tops out at 2 (op2's σ + op3's σ) — qV=3 unreachable.
-// With M2, op2/op3's KindCommits carry witnesses for op1's bundle, which
-// rehydrate op4's bundles map; op4 then has 3 partials in the L_0 σ-pool
-// and reconstructs locally.
-func TestObft_Witness_RehydratesMissedPhase1(t *testing.T) {
+// Per spec §Phase 2 wire format (post-refactor), witnesses ship value_root +
+// σ_V (no full V). A V-drop receiver gets value_root + σ_V from peer
+// witnesses but lacks V — σ_V verification requires V (via the Signer's
+// signing target), so the witnessed σ_V cannot be added to the local σ-pool.
+// V-drop recovery flows through KindCertificate gossip per spec
+// §Final-certificate gossip — a faster peer who reconstructed (V, S)
+// gossips it, and the V-drop receiver consumes the cert directly.
+//
+// Setup mirrors the old rehydration test: op4 misses the L_0 bundle;
+// op1/op2/op3 receive it. After Phase 2, op4's local σ-pool at L_0 tops
+// out at 2 (op2 + op3) — qV=3 unreachable. op4 cannot reconstruct
+// locally. Cert-gossip path (out of scope for this unit test) is the
+// recovery mechanism.
+func TestObft_Witness_DoesNotRehydrateMissedPhase1(t *testing.T) {
 	s := newSim(t, 4)
 
-	// Partition L_0: only op1, op2, op3 receive the bundle. op4 (= L_3 leader,
-	// non-leader at L_0) misses.
+	// Partition L_0: only op1, op2, op3 receive the bundle. op4 misses.
 	s.deliverPhase1(0, s.candidates[0], []OperatorID{1, 2, 3}, observedEarly, true)
 	for k := 1; k < s.K; k++ {
 		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
@@ -505,54 +511,25 @@ func TestObft_Witness_RehydratesMissedPhase1(t *testing.T) {
 	// Pre-Phase-2 sanity: op4 has no L_0 bundle.
 	require.Empty(t, s.instances[4].bundles[0][1], "op4 should not yet have L_0 bundle from op1")
 
-	// Phase 2: every op builds and broadcasts their KindCommit. op2 and op3
-	// retained op1's L_0 bundle and pack it as a witness.
+	// Phase 2: every op builds and broadcasts their KindCommit. op2/op3 pack
+	// witnesses for op1's L_0 bundle (carrying value_root + σ_V, not V).
 	s.runPhase2(nil)
 
-	// op4 rehydrated op1's L_0 bundle from at least one peer's witness.
-	rehydrated := s.instances[4].bundles[0][1]
-	require.NotEmpty(t, rehydrated, "op4 should have rehydrated op1's L_0 bundle from witness")
-	require.True(t, bytes.Equal(rehydrated[0].Value, s.candidates[0]))
+	// Spec model: witness carries value_root + σ_V (no full V). op4 cannot
+	// rehydrate the bundle — its bundles[0][1] stays empty. (Old impl
+	// would have populated this from the witness; new impl explicitly skips
+	// the no-match case in ObserveCommit's witness loop.)
+	require.Empty(t, s.instances[4].bundles[0][1],
+		"op4 must NOT rehydrate from witness without V — V-drop recovery is via cert gossip")
 
-	// op4 successfully reconstructs at L_0 locally. Pool: op1 σ (rehydrated)
-	// + op2 σ + op3 σ = 3 = qV. (op4 itself NR'd at L_0, so contributes no σ.)
-	out, err := s.instances[4].Resolve()
-	require.NoError(t, err)
-	require.Equal(t, 0, out.Layer)
-	require.True(t, bytes.Equal(out.Value, s.candidates[0]))
-}
-
-// TestObft_Witness_BadSigmaDropped — a witness whose σ doesn't verify is
-// silently dropped (doesn't poison the bundles map; doesn't error out the
-// whole ObserveCommit).
-func TestObft_Witness_BadSigmaDropped(t *testing.T) {
-	s := newSim(t, 4)
-	all := s.allOperators()
-	for k := 0; k < s.K; k++ {
-		s.deliverPhase1(k, s.candidates[k], all, observedEarly, true)
-	}
-
-	// op2 builds a commit, then we corrupt one witness's SigmaV.
-	c, err := s.instances[2].BuildOwnCommit()
-	require.NoError(t, err)
-	require.NotEmpty(t, c.Witnesses)
-
-	// Find the L_0 witness and corrupt it.
-	for i := range c.Witnesses {
-		if c.Witnesses[i].Layer == 0 {
-			c.Witnesses[i].SigmaV = []byte("garbage-sig-not-the-real-one")
-			break
-		}
-	}
-
-	// op3 observes the corrupted commit. The bad witness must be dropped
-	// without affecting the rest of the commit's processing.
-	preCount := len(s.instances[3].bundles[0][1])
-	require.NoError(t, s.instances[3].ObserveCommit(c))
-	postCount := len(s.instances[3].bundles[0][1])
-	// op3 had already directly observed op1's L_0 bundle (via deliverPhase1
-	// to all); the corrupted witness shouldn't add a duplicate or override.
-	require.Equal(t, preCount, postCount, "corrupted witness must not enter bundles")
+	// op4's local L_0 σ-pool: op2's σ + op3's σ = 2 < qV=3. No σ_L^V (op4 has
+	// no V to verify the witnessed leader σ). op4's local Resolve cannot
+	// reach σ-quorum at L_0 OR fall through (op4 NR'd L_0 only because it
+	// missed the bundle; op2/op3 σ'd, so NR-quorum=1 < qEnc=3). Expect a
+	// Resolve error or no decision — V-drop recovery is via cert gossip
+	// (out of scope for this unit test).
+	_, err := s.instances[4].Resolve()
+	require.Error(t, err, "op4 cannot reach σ-quorum or NR-quorum at L_0; cert gossip is the recovery path")
 }
 
 // TestObft_Witness_RejectsBadLeaderClaim — ValidateCommit rejects a witness
@@ -565,16 +542,30 @@ func TestObft_Witness_RejectsBadLeaderClaim(t *testing.T) {
 		Height:     s.cfg.Height,
 		Layers:     make([]EncryptedLayer, s.K),
 		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: 2 /* wrong: L_0 leader is op1 */, Value: []byte("V"), SigmaV: []byte("sig")},
+			{Layer: 0, Leader: 2 /* wrong: L_0 leader is op1 */, ValueRoot: ValueRoot([]byte("V")), SigmaV: []byte("sig")},
 		},
 	}
 	err := ValidateCommit(c, s.cfg)
 	require.ErrorContains(t, err, "leader")
 }
 
-// TestObft_Witness_TriggersRule2OnDistinctV — observing two witnesses with
-// distinct V's at same (layer, leader) triggers Rule 2 evidence.
-func TestObft_Witness_TriggersRule2OnDistinctV(t *testing.T) {
+// TestObft_Witness_DoesNotTriggerRule2 — observing two witnesses with
+// distinct value_roots at same (layer, leader) does NOT trigger Rule 2
+// evidence at the receiver.
+//
+// Per spec §Phase 2 wire format, witnesses ship value_root + σ_V (no full
+// V). Rule 2 evidence requires the BUNDLE pair (V_a/σ_V_a, V_b/σ_V_b) —
+// witnesses don't carry V, so they cannot independently introduce V's into
+// retention. Cluster-wide Rule 2 attribution requires either: (a) at least
+// one honest receiver to have observed both V's via Phase-1 bundles
+// directly (gossipsub re-flood scenario), or (b) the future
+// MUST-gossip-Rule-5-style evidence-broadcast extension (see
+// docs/OBFT.md §Slashing evidence Rule 5).
+//
+// The trade-off is documented: dropping full V from witnesses saves ~10×
+// bandwidth at the cost of losing cross-receiver Rule 2 attribution in
+// natural-recovery scenarios where each receiver only sees one V.
+func TestObft_Witness_DoesNotTriggerRule2(t *testing.T) {
 	s := newSim(t, 4)
 	signer := NewStubSigner(s.cfg.QV(), []byte{1})
 	vA := []byte("V-a")
@@ -585,21 +576,20 @@ func TestObft_Witness_TriggersRule2OnDistinctV(t *testing.T) {
 	require.NoError(t, err)
 
 	// Two commits from different ops, each carrying a witness for op1 at
-	// L_0 with a distinct V — modeling op1 having equivocated their Phase-1
-	// bundle, with each peer retaining a different V.
+	// L_0 with a distinct value_root.
 	c2 := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 2,
 		Height:     s.cfg.Height,
 		Layers:     make([]EncryptedLayer, s.K),
-		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, Value: vA, SigmaV: sigA}},
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, ValueRoot: ValueRoot(vA), SigmaV: sigA}},
 	}
 	c3 := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 3,
 		Height:     s.cfg.Height,
 		Layers:     make([]EncryptedLayer, s.K),
-		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, Value: vB, SigmaV: sigB}},
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, ValueRoot: ValueRoot(vB), SigmaV: sigB}},
 	}
 
 	receiver := s.instances[4]
@@ -607,14 +597,10 @@ func TestObft_Witness_TriggersRule2OnDistinctV(t *testing.T) {
 	require.NoError(t, receiver.ObserveCommit(c3))
 
 	ev := receiver.Evidence()
-	found := false
 	for _, e := range ev {
-		if e.Rule == EvidenceLeaderEquivocation && e.OperatorID == 1 && e.Layer == 0 {
-			found = true
-			break
-		}
+		require.NotEqualf(t, EvidenceLeaderEquivocation, e.Rule,
+			"witnesses must not trigger Rule 2 (receiver lacks V to make slashable evidence); got %+v", ev)
 	}
-	require.True(t, found, "expected Rule 2 evidence from witnesses with distinct V's; got %+v", ev)
 }
 
 // ---- G2: ClusterID binding in inner messages ---

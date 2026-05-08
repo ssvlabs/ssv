@@ -715,10 +715,10 @@ func cloneCommit(c *obft.Commit) *obft.Commit {
 	}
 	for i, w := range c.Witnesses {
 		cp.Witnesses[i] = obft.LeaderSigmaWitness{
-			Layer:  w.Layer,
-			Leader: w.Leader,
-			Value:  append(obft.Value(nil), w.Value...),
-			SigmaV: append(obft.Signature(nil), w.SigmaV...),
+			Layer:     w.Layer,
+			Leader:    w.Leader,
+			ValueRoot: w.ValueRoot,
+			SigmaV:    append(obft.Signature(nil), w.SigmaV...),
 		}
 	}
 	return cp
