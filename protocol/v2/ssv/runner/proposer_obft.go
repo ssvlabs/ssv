@@ -223,6 +223,20 @@ func (r *ProposerRunner) obftFetchCandidate(ctx context.Context, slot phase0.Slo
 //     within the f-bound; honest fetchers are guaranteed to produce blocks
 //     their own beacon node accepted.
 //
+// This matches QBFT's ProposerValueCheckF (ssv-spec/ssv/value_check.go:80)
+// — both protocols check structural validity + duty/identity match +
+// slashing protection, and both rely on relay/beacon-node rejection at
+// submit time for parent_root and block-content validation. Spec
+// §Head-change handling recommends host-side parent_root validation
+// against a stable head snapshot at Phase-1 acceptance, but doing that
+// strictly enough to catch byzantine-fork blocks would also reject many
+// honest re-orgs where one operator's head moved relative to the
+// fetcher's — splitting honest verdicts and triggering the assumption-3
+// validity-divergence path more than the slot-miss-on-bad-fork path it
+// would prevent. SSV's strategic choice (shared with QBFT) is the looser
+// gate; spec text in §Head-change handling could be clarified to
+// acknowledge this as an acceptable implementation choice.
+//
 // `layer` may be -1 when called from the Certificate fast-path (the cert
 // carries V+sig but not the originating layer); callers should not key on
 // it. ctx is currently unused but reserved for slashing-DB calls that may
