@@ -100,9 +100,17 @@ type Scheduler struct {
 // fresh MEV bids are picked up at sub-second cadence; buildBuffer reserves
 // time at the end of the window for BuildPhase1Bundle + sign + wrap +
 // dispatch to fit before T_broadcast_max.
+//
+// buildBuffer = 10ms covers BLS partial sign (~1ms with herumi), wire
+// encode (sub-ms), and async network dispatch (sub-ms) with ~5× headroom.
+// Spec's MEV-fetch target = T_broadcast_max − RANDAO_done; impl achieves
+// pollEnd − RANDAO_done = T_broadcast_max − 10ms − RANDAO_done — within
+// 10ms of spec. Conservative-vs-recovery trade: shrinking further (e.g.
+// to 1ms) risks missing T_broadcast_max under signer/network jitter and
+// silencing the leader; 10ms is the chosen safety margin.
 const (
 	defaultFetchPollInterval = 200 * time.Millisecond
-	defaultFetchBuildBuffer  = 50 * time.Millisecond
+	defaultFetchBuildBuffer  = 10 * time.Millisecond
 )
 
 // NewScheduler constructs a Scheduler.

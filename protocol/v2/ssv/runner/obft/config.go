@@ -75,12 +75,13 @@ const (
 // At Config A (BTT = 200ms, TCommit = 3400ms) the K=4 schedule is:
 //   - budget  = [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — spec
 //     §Setting line 45 recommended.
-//   - fetchAt = [180, 170, 160, 150]ms — all clustered at RANDAO_done, with
-//     1ms-per-layer staggering for the validation constraint.
-//   - V_0 MEV-fetch budget at iterative-fetch ≈ T_broadcast_max[0] −
-//     fetchAt[0] − buildBuffer = 3200 − 180 − 50 = 2970ms (vs spec's 3050ms
-//     target — ~80ms shy due to fetchAt staggering and buildBuffer; both
-//     small).
+//   - fetchAt = [153, 152, 151, 150]ms — all clustered at RANDAO_done, with
+//     1ms-per-layer staggering for the strict-decreasing validation
+//     constraint (the staggering is symbolic; iterative-fetch uses the full
+//     window per layer regardless of fetchAt order).
+//   - V_0 MEV-fetch budget at iterative-fetch = T_broadcast_max[0] −
+//     fetchAt[0] − buildBuffer = 3200 − 153 − 10 = 3037ms (vs spec's 3050ms
+//     target — within 13ms).
 //
 // For K>4 (n=7, n=10, n=13 deployments) both schedules interpolate linearly
 // between L_0 and the deepest-layer endpoints.
@@ -89,19 +90,21 @@ var defaultLayerSchedules = map[int]struct {
 	budget  []time.Duration
 }{
 	3: {
-		fetchAt: []time.Duration{170 * time.Millisecond, 160 * time.Millisecond, 150 * time.Millisecond},
+		fetchAt: []time.Duration{152 * time.Millisecond, 151 * time.Millisecond, 150 * time.Millisecond},
 		budget:  []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
 	},
 	4: {
-		fetchAt: []time.Duration{180 * time.Millisecond, 170 * time.Millisecond, 160 * time.Millisecond, 150 * time.Millisecond},
+		fetchAt: []time.Duration{153 * time.Millisecond, 152 * time.Millisecond, 151 * time.Millisecond, 150 * time.Millisecond},
 		budget:  []time.Duration{200 * time.Millisecond, 300 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
 	},
 }
 
 // Endpoint defaults used for K>4 linear interpolation. Match the K=4 L_0
-// and deepest entries in defaultLayerSchedules.
+// and deepest entries in defaultLayerSchedules. (Per-layer FetchAt
+// staggering is symbolic for the strict-decreasing constraint;
+// iterative-fetch uses the full window regardless.)
 const (
-	primaryFetchDefault  = 180 * time.Millisecond
+	primaryFetchDefault  = 153 * time.Millisecond
 	deepestFetchDefault  = 150 * time.Millisecond
 	primaryBudgetDefault = 200 * time.Millisecond
 	deepestBudgetDefault = 1100 * time.Millisecond

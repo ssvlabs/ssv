@@ -195,8 +195,8 @@ type Instance struct {
 	// runner, which logs it for operator review. (Ideally this should be
 	// on-wire to spread evidence cluster-wide automatically; logged-only
 	// is a deliberate scope choice — operators monitor logs out-of-band.)
-	evidenceObserver   EvidenceObserver
-	evidenceObserved   map[evidenceObservedKey]bool
+	evidenceObserver EvidenceObserver
+	evidenceObserved map[evidenceObservedKey]bool
 
 	// ended is set by Finalize when the slot's instance is being torn down.
 	// Per-instance state-mutating methods (ObserveCommit, ObservePhase1Bundle,
