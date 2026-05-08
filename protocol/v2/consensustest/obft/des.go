@@ -106,8 +106,7 @@ func (s *sim) start() error {
 		TCommit:   s.cfg.TCommit,
 		Delta2:    s.cfg.Delta2,
 		Delta3:    s.cfg.Delta3,
-		D:         s.cfg.D,
-		Delta:     s.cfg.Delta,
+		BTT:       s.cfg.BTT,
 	}
 	if err := cfgObft.Validate(); err != nil {
 		return fmt.Errorf("obft adapter: invalid OBFT config: %w", err)

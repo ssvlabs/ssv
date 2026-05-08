@@ -73,8 +73,7 @@ func newSim(t *testing.T, n int) *sim {
 		TCommit:   1500 * time.Millisecond,
 		Delta2:    300 * time.Millisecond,
 		Delta3:    250 * time.Millisecond,
-		D:         100 * time.Millisecond,
-		Delta:     50 * time.Millisecond,
+		BTT:       150 * time.Millisecond, // P99=100 + δ=50, matching old D+Delta fixture
 	}
 	require.NoError(t, cfg.Validate())
 
@@ -108,7 +107,7 @@ func newSim(t *testing.T, n int) *sim {
 func newSimWithStaggeredBudgets(t *testing.T, n int) *sim {
 	t.Helper()
 	s := newSim(t, n)
-	btt := s.cfg.D + s.cfg.Delta // 150ms with the test fixture
+	btt := s.cfg.BTT // 150ms with the test fixture
 	// Bump TCommit so B_3 = 5·BTT fits.
 	s.cfg.TCommit = 5*btt + 100*time.Millisecond
 	budgets := []time.Duration{btt / 2, btt, 2 * btt, 5 * btt}

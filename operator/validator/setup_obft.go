@@ -63,9 +63,10 @@ func buildOBFTControllerForProposer(
 	}
 
 	// Production proposer-duty config: enable per-layer staggered absorption
-	// per spec §Setting (deeper layers tolerate wider propagation tails).
-	// At default K=4 budgets are 200/250/350/500ms — strictly increasing,
-	// deepest ≥ 2·BTT BFT-min, paired with the FetchAt schedule.
+	// per spec §Setting / §Application Config A (deeper layers tolerate wider
+	// propagation tails). At default K=4 the spec-recommended T_commit-anchored
+	// schedule [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — strictly
+	// increasing, deepest ≥ 2·BTT BFT-min, paired with the FetchAt schedule.
 	overrides := &obftadapter.ConfigOverrides{
 		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(obftadapter.DefaultK),
 	}

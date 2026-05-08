@@ -614,8 +614,7 @@ func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader obft.Opera
 	if !b.ByzSet.Contains(leader) {
 		return 0
 	}
-	btt := s.cfg.D + s.cfg.Delta
-	return 6 * btt
+	return 6 * s.cfg.BTT
 }
 
 // ---- byzAggregatorBypass (negative test for safety machinery) ----------

@@ -22,8 +22,7 @@ func validBaseConfig() *Config {
 		TCommit: 1500 * time.Millisecond,
 		Delta2:  300 * time.Millisecond,
 		Delta3:  250 * time.Millisecond,
-		D:       100 * time.Millisecond,
-		Delta:   50 * time.Millisecond,
+		BTT:     150 * time.Millisecond, // P99=100 + δ=50 fixture
 	}
 }
 
@@ -61,20 +60,20 @@ func TestConfig_Validate_RejectsNonMonotonicFetchAt(t *testing.T) {
 
 func TestConfig_Validate_RejectsFetchAtPastBroadcastDeadline(t *testing.T) {
 	cfg := validBaseConfig()
-	// T_broadcast_max = TCommit - 2*(D+δ) = 1500 - 300 = 1200ms.
+	// T_broadcast_max = TCommit - 2*BTT = 1500 - 300 = 1200ms.
 	cfg.Layers[0].FetchAt = 1300 * time.Millisecond
 	require.ErrorContains(t, cfg.Validate(), "broadcast deadline")
 }
 
 func TestConfig_Validate_RejectsDelta2BelowBFTMin(t *testing.T) {
 	cfg := validBaseConfig()
-	cfg.Delta2 = cfg.D + cfg.Delta - 1
+	cfg.Delta2 = cfg.BTT - 1
 	require.ErrorContains(t, cfg.Validate(), "Delta2")
 }
 
 func TestConfig_DerivedOffsets(t *testing.T) {
 	cfg := validBaseConfig()
-	require.Equal(t, cfg.TCommit-2*(cfg.D+cfg.Delta), cfg.BroadcastMaxOffset())
+	require.Equal(t, cfg.TCommit-2*cfg.BTT, cfg.BroadcastMaxOffset())
 	require.Equal(t, cfg.TCommit, cfg.PhaseTwoStartOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2, cfg.PhaseTwoEndOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2+cfg.Delta3, cfg.RoundEndOffset())
@@ -90,7 +89,7 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 // scaled to the test's BTT (D+δ = 150ms here).
 func validStaggeredConfig() *Config {
 	cfg := validBaseConfig()
-	btt := cfg.D + cfg.Delta // 150ms
+	btt := cfg.BTT // 150ms
 	// Adjust TCommit so the deepest layer's B_3 = 5*BTT fits.
 	cfg.TCommit = 5*btt + 100*time.Millisecond
 	cfg.Layers[0].BroadcastBudget = btt / 2 // B_0 = 0.5 BTT
@@ -119,7 +118,7 @@ func TestConfig_BroadcastBudget_PrimaryAllowedTighter(t *testing.T) {
 	// trades reliability for MEV; deeper layers cover. Deepest layer must
 	// still satisfy BFT-min.
 	cfg := validStaggeredConfig()
-	bftMin := 2 * (cfg.D + cfg.Delta)
+	bftMin := 2 * cfg.BTT
 	require.Less(t, cfg.Layers[0].BroadcastBudget, bftMin, "test setup: B_0 must be < BFT-min for this test to be meaningful")
 	require.GreaterOrEqual(t, cfg.Layers[3].BroadcastBudget, bftMin)
 	require.NoError(t, cfg.Validate())
@@ -141,7 +140,7 @@ func TestConfig_BroadcastBudget_RejectsMixedSet(t *testing.T) {
 
 func TestConfig_BroadcastBudget_RejectsDeepestBelowBFTMin(t *testing.T) {
 	cfg := validStaggeredConfig()
-	bftMin := 2 * (cfg.D + cfg.Delta)
+	bftMin := 2 * cfg.BTT
 	// Set deepest below BFT-min — cluster has no liveness guarantee.
 	cfg.Layers[3].BroadcastBudget = bftMin - 1
 	// Bump shallower layers down to keep monotonicity intact.

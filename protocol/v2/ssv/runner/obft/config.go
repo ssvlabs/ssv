@@ -18,14 +18,29 @@ import (
 	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
-// Default protocol parameters per docs/OBFT.md §Timing budget — Config A
-// (D = 100ms, δ = 50ms) with the recommended Δ_2 = 2(D + δ) = 300ms.
+// Default protocol parameters per docs/OBFT.md §Timing budget — Config A.
+//
+// Spec Config A operating point (BTT = 200ms, RelayCutoff = 4000ms,
+// HeaderSubmitHeadroom = 100ms):
+//   - Δ_2 = 2 BTT = 400ms (recommended; KindCommit propagation + jitter)
+//   - Δ_3 = ε_3 ≈ 100ms (absolute; doesn't scale with BTT)
+//   - T_commit = RelayCutoff − HeaderSubmitHeadroom − Δ_3 − Δ_2 = 3400ms
+//
+// Adjusting BTT (deployment's P99+δ) re-derives the post-T_commit budget
+// while keeping Δ_3 and HeaderSubmitHeadroom absolute. Override these via
+// ConfigOverrides for non-default deployments.
 const (
-	DefaultD       = 100 * time.Millisecond
-	DefaultDelta   = 50 * time.Millisecond
-	DefaultTCommit = 1500 * time.Millisecond
-	DefaultDelta2  = 300 * time.Millisecond
-	DefaultDelta3  = 250 * time.Millisecond
+	DefaultBTT                  = 200 * time.Millisecond
+	DefaultHeaderSubmitHeadroom = 100 * time.Millisecond
+	DefaultDelta3               = 100 * time.Millisecond // ε_3, absolute
+
+	// Δ_2 = 2 BTT recommended; defaultDelta2 derives from DefaultBTT.
+	DefaultDelta2 = 2 * DefaultBTT
+
+	// T_commit = RelayCutoff − HeaderSubmitHeadroom − Δ_3 − Δ_2.
+	// At Config A: 4000 − 100 − 100 − 400 = 3400ms.
+	DefaultRelayCutoff = 4000 * time.Millisecond
+	DefaultTCommit     = DefaultRelayCutoff - DefaultHeaderSubmitHeadroom - DefaultDelta3 - DefaultDelta2
 
 	// DefaultK is the recommended layer count for SSV proposer duty:
 	// K = n = 4 (every cluster member leads exactly one layer; max
@@ -38,42 +53,51 @@ const (
 	MinKFloor = 3
 )
 
-// Per-layer defaults for the asymmetric staggered schedule (spec §Setting):
+// Per-layer defaults for the asymmetric staggered schedule (spec §Setting,
+// §Application / Timing budget at Config A):
 //
-//   - fetchAt is when the leader fetches their candidate; strictly decreasing
-//     in layer index k (deeper layers fetch from deeper-confirmed parents
-//     for re-org resistance, primary fetches latest for max MEV freshness).
+//   - fetchAt is when the leader's fetch goroutine wakes; strictly decreasing
+//     in layer index k (deeper layers fetch earlier from deeper-confirmed
+//     parents for re-org resistance, primary fetches latest for max MEV
+//     freshness).
 //   - budget is the T_commit-anchored absorption window B_k+slack; strictly
 //     increasing in k (deeper layers tolerate wider propagation tails).
 //
-// Constraints: fetchAt[k] ≤ TCommit − budget[k] for every k (each leader has
-// at-or-positive broadcast headroom); budget[K-1] ≥ 2·(D+δ) BFT-min at the
-// production timing (D=100ms, δ=50ms → 300ms).
+// Constraints: fetchAt[k] ≤ TCommit − budget[k] − 1 BTT for every k (each
+// leader has at least 1 BTT of fetch+broadcast headroom; #8 fetch deadline
+// caps the fetch itself); budget[K-1] ≥ 2·BTT BFT-min.
 //
-// For K=3 and K=4 the schedules are tabulated below. For K>4 (n=7, n=10,
-// n=13 deployments) both schedules interpolate linearly between L_0 and the
-// deepest layer's K=4 endpoints.
+// At Config A (BTT = 200ms, TCommit = 3400ms) the K=4 schedule is:
+//   - budget   = [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — spec
+//     §Setting line 45 recommended.
+//   - fetchAt  = TCommit − budget − 1 BTT = [3000, 2900, 2700, 2100]ms.
+//   - V_0 MEV-fetch budget = fetchAt[0] − RANDAO_done ≈ 2850ms (vs spec's
+//     iterative-fetch model which can reach 3050ms; ~200ms gap is the cost
+//     of the impl's single-fetch model).
+//
+// For K>4 (n=7, n=10, n=13 deployments) both schedules interpolate linearly
+// between L_0 and the deepest-layer endpoints.
 var defaultLayerSchedules = map[int]struct {
 	fetchAt []time.Duration
 	budget  []time.Duration
 }{
 	3: {
-		fetchAt: []time.Duration{1100 * time.Millisecond, 1050 * time.Millisecond, 950 * time.Millisecond},
-		budget:  []time.Duration{200 * time.Millisecond, 250 * time.Millisecond, 500 * time.Millisecond},
+		fetchAt: []time.Duration{3000 * time.Millisecond, 2700 * time.Millisecond, 2100 * time.Millisecond},
+		budget:  []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
 	},
 	4: {
-		fetchAt: []time.Duration{1100 * time.Millisecond, 1050 * time.Millisecond, 1000 * time.Millisecond, 950 * time.Millisecond},
-		budget:  []time.Duration{200 * time.Millisecond, 250 * time.Millisecond, 350 * time.Millisecond, 500 * time.Millisecond},
+		fetchAt: []time.Duration{3000 * time.Millisecond, 2900 * time.Millisecond, 2700 * time.Millisecond, 2100 * time.Millisecond},
+		budget:  []time.Duration{200 * time.Millisecond, 300 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
 	},
 }
 
 // Endpoint defaults used for K>4 linear interpolation. Match the K=4 L_0
-// and L_3 entries in defaultLayerSchedules.
+// and deepest entries in defaultLayerSchedules.
 const (
-	primaryFetchDefault  = 1100 * time.Millisecond
-	deepestFetchDefault  = 950 * time.Millisecond
+	primaryFetchDefault  = 3000 * time.Millisecond
+	deepestFetchDefault  = 2100 * time.Millisecond
 	primaryBudgetDefault = 200 * time.Millisecond
-	deepestBudgetDefault = 500 * time.Millisecond
+	deepestBudgetDefault = 1100 * time.Millisecond
 )
 
 // ConfigOverrides allows callers to override the default protocol timings
@@ -83,17 +107,16 @@ type ConfigOverrides struct {
 	TCommit time.Duration
 	Delta2  time.Duration
 	Delta3  time.Duration
-	D       time.Duration
-	Delta   time.Duration
+	BTT     time.Duration // P99 + δ; spec §Setting unit propagation+skew budget
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
-	// defaults are used (1100/1050/1000/950ms for K=4). Length must
-	// match K (or zero/nil to use defaults).
+	// defaults are used (Config A K=4: 3000/2900/2700/2100ms). Length
+	// must match K (or zero/nil to use defaults).
 	FetchAt []time.Duration
 
 	// BroadcastBudget overrides the default per-layer absorption windows
 	// (T_commit-anchored, per spec §Setting). When nil, all layers fall
-	// back to obft.Config's single uniform cap 2*(D+Delta) — equivalent to
+	// back to obft.Config's single uniform cap 2*BTT — equivalent to
 	// the historical pre-staggered behavior. When set, length must match K
 	// and values must be strictly increasing in layer index.
 	BroadcastBudget []time.Duration
@@ -127,18 +150,11 @@ func (o *ConfigOverrides) delta3() time.Duration {
 	return o.Delta3
 }
 
-func (o *ConfigOverrides) d() time.Duration {
-	if o == nil || o.D == 0 {
-		return DefaultD
+func (o *ConfigOverrides) btt() time.Duration {
+	if o == nil || o.BTT == 0 {
+		return DefaultBTT
 	}
-	return o.D
-}
-
-func (o *ConfigOverrides) delta() time.Duration {
-	if o == nil || o.Delta == 0 {
-		return DefaultDelta
-	}
-	return o.Delta
+	return o.BTT
 }
 
 // interpolatedSchedule returns a length-K slice running linearly between
@@ -268,8 +284,7 @@ func ConfigForCluster(
 		TCommit:   overrides.tCommit(),
 		Delta2:    overrides.delta2(),
 		Delta3:    overrides.delta3(),
-		D:         overrides.d(),
-		Delta:     overrides.delta(),
+		BTT:       overrides.btt(),
 	}
 	return cfg, nil
 }

@@ -27,17 +27,6 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// Split BTT into D and Delta for the OBFT.Config (constraint: D+Delta = BTT,
-	// both > 0). 3:1 split mirrors production Config A (D=100ms, δ=50ms at
-	// BTT=150ms) — the exact split doesn't change the protocol's wire behavior,
-	// only how Config.Validate ranges error vs propagation budget internally.
-	d := cfg.BTT * 3 / 4
-	delta := cfg.BTT - d
-	if delta == 0 {
-		delta = time.Nanosecond
-		d = cfg.BTT - delta
-	}
-
 	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Delta3 - cfg.Delta2
 
 	bw := ct.NewBandwidthReport()
@@ -48,8 +37,7 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		TCommit:         tCommit,
 		Delta2:          cfg.Delta2,
 		Delta3:          cfg.Delta3,
-		D:               d,
-		Delta:           delta,
+		BTT:             cfg.BTT,
 		FetchAt:         cfg.FetchAt,
 		BroadcastBudget: cfg.BroadcastBudget,
 		Network:         cfg.Network,
@@ -77,8 +65,7 @@ type desConfig struct {
 	TCommit         time.Duration
 	Delta2          time.Duration
 	Delta3          time.Duration
-	D               time.Duration
-	Delta           time.Duration
+	BTT             time.Duration
 	FetchAt         []time.Duration
 	BroadcastBudget []time.Duration
 	Network         ct.NetworkModel

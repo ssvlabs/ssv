@@ -97,22 +97,27 @@ type Config struct {
 	// stance based on what it observed by this offset.
 	TCommit time.Duration
 
-	// Delta2 is Δ_2 — the Phase 2 window length. Per spec, Delta2 >=
-	// (D + Delta) is the propagation budget for KindCommit messages emitted
-	// at T_commit to reach all honest peers before Phase 3.
+	// Delta2 is Δ_2 — the Phase 2 window length. Per spec §Phase 2, Delta2 ≥
+	// 1 BTT is the propagation budget for KindCommit messages emitted at
+	// T_commit to reach all honest peers before Phase 3. Recommended for
+	// production: Delta2 = 2 BTT (one full propagation cycle of slack on top
+	// of the P99 budget).
 	Delta2 time.Duration
 
 	// Delta3 is Δ_3 — the Phase 3 window length. Per spec, Delta3 covers
 	// local reconstruction processing (BLS aggregation, IBE decryption walk,
 	// certificate construction). KindCommit propagation is already covered
-	// by Delta2.
+	// by Delta2. Absolute (does not scale with BTT); ε_3 ≈ 100ms for
+	// single-layer reconstruction at K=4.
 	Delta3 time.Duration
 
-	// D is the cluster gossipsub propagation P99/P999 budget.
-	D time.Duration
-
-	// Delta is δ — the clock skew bound across operators.
-	Delta time.Duration
+	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
+	// §Setting: BTT = P99 + δ, where P99 is the cluster gossipsub propagation
+	// at the deployment's chosen tail percentile and δ is the clock-skew
+	// bound. Used as the unit for time-budget formulas (e.g. Delta2 = 2 BTT
+	// recommended; B_k staggered as multiples of BTT). Concrete sizing at
+	// Config A: P99 = 150ms, δ = 50ms, BTT = 200ms.
+	BTT time.Duration
 }
 
 // K returns the number of layers (= len(Layers)).
@@ -140,11 +145,11 @@ func (c *Config) Quorum() int {
 }
 
 // BroadcastMaxOffset returns the single-cap T_broadcast_max relative to
-// slot_start: T_commit - 2*(D + delta). Used as the per-layer fallback when
+// slot_start: T_commit - 2*BTT. Used as the per-layer fallback when
 // LayerSpec.BroadcastBudget is unset; for explicit per-layer caps see
 // BroadcastMaxOffsetForLayer.
 func (c *Config) BroadcastMaxOffset() time.Duration {
-	return c.TCommit - 2*(c.D+c.Delta)
+	return c.TCommit - 2*c.BTT
 }
 
 // BroadcastMaxOffsetForLayer returns T_commit - B_k for layer k, falling back
@@ -224,20 +229,20 @@ func (c *Config) Validate() error {
 	if len(c.Layers) > len(c.Operators) {
 		return errors.New("obft: K cannot exceed cluster size")
 	}
-	if c.D <= 0 || c.Delta <= 0 {
-		return errors.New("obft: D and Delta must be positive")
+	if c.BTT <= 0 {
+		return errors.New("obft: BTT must be positive")
 	}
 	if c.TCommit <= 0 {
 		return errors.New("obft: TCommit must be positive")
 	}
-	if c.Delta2 < c.D+c.Delta {
-		return errors.New("obft: Delta2 must be >= D + Delta (BFT minimum)")
+	if c.Delta2 < c.BTT {
+		return errors.New("obft: Delta2 must be >= 1 BTT (BFT minimum per spec §Phase 2)")
 	}
 	if c.Delta3 <= 0 {
 		return errors.New("obft: Delta3 must be positive")
 	}
 	if c.BroadcastMaxOffset() < 0 {
-		return errors.New("obft: TCommit too small for broadcast deadline (need TCommit > 2*(D+Delta))")
+		return errors.New("obft: TCommit too small for broadcast deadline (need TCommit > 2*BTT)")
 	}
 
 	members := make(map[OperatorID]bool, len(c.Operators))
@@ -285,8 +290,8 @@ func (c *Config) Validate() error {
 			}
 		}
 		// The deepest layer's budget is the cluster's worst-case liveness
-		// guarantee — must satisfy the 2*(D+δ) BFT-min bound.
-		bftMin := 2 * (c.D + c.Delta)
+		// guarantee — must satisfy the 2*BTT BFT-min bound.
+		bftMin := 2 * c.BTT
 		K := len(c.Layers)
 		if c.Layers[K-1].BroadcastBudget < bftMin {
 			return fmt.Errorf("obft: deepest layer L_%d BroadcastBudget %v below BFT-min %v: cluster has no liveness guarantee",

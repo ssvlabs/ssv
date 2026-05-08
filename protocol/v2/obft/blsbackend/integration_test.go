@@ -63,8 +63,7 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 		TCommit:   1500 * time.Millisecond,
 		Delta2:    300 * time.Millisecond,
 		Delta3:    250 * time.Millisecond,
-		D:         100 * time.Millisecond,
-		Delta:     50 * time.Millisecond,
+		BTT:       150 * time.Millisecond, // P99=100 + δ=50 fixture
 	}
 	require.NoError(t, cfg.Validate())
 

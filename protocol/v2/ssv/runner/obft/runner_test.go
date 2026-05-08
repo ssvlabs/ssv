@@ -46,11 +46,10 @@ func TestRunProposerSlot_Healthy_n4_K4(t *testing.T) {
 	overrides := &ConfigOverrides{
 		K:       4,
 		TCommit: 200 * time.Millisecond,
-		Delta2:  60 * time.Millisecond, // 2*(D+δ)
+		Delta2:  60 * time.Millisecond, // 2*BTT
 		Delta3:  60 * time.Millisecond,
-		D:       20 * time.Millisecond,
-		Delta:   10 * time.Millisecond,
-		// T_broadcast_max = TCommit - 2*(D+δ) = 200 - 60 = 140ms; all
+		BTT:     30 * time.Millisecond,
+		// T_broadcast_max = TCommit - 2*BTT = 200 - 60 = 140ms; all
 		// FetchAt entries must be ≤ 140 and non-increasing in k.
 		FetchAt: []time.Duration{
 			130 * time.Millisecond,
@@ -123,10 +122,9 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 	overrides := &ConfigOverrides{
 		K:       4,
 		TCommit: 200 * time.Millisecond,
-		Delta2:  60 * time.Millisecond, // 2*(D+δ); RoundEndOffset = 320ms
+		Delta2:  60 * time.Millisecond, // 2*BTT; RoundEndOffset = 320ms
 		Delta3:  60 * time.Millisecond,
-		D:       20 * time.Millisecond,
-		Delta:   10 * time.Millisecond,
+		BTT:     30 * time.Millisecond,
 		FetchAt: []time.Duration{
 			130 * time.Millisecond,
 			110 * time.Millisecond,
