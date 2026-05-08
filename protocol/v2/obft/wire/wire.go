@@ -197,11 +197,10 @@ const MaxWitnesses = MaxLayers * 2
 //	  [sig bytes]
 //	[2] number of witnesses (uint16 big-endian)
 //	for each witness:
-//	  [4] Layer            (uint32 big-endian)
-//	  [8] Leader OperatorID (uint64 big-endian)
-//	  [4] Value length      (uint32 big-endian)
-//	  [Value bytes]
-//	  [4] SigmaV length     (uint32 big-endian)
+//	  [4]  Layer            (uint32 big-endian)
+//	  [8]  Leader OperatorID (uint64 big-endian)
+//	  [32] ValueRoot        (sha256(V), fixed-length)
+//	  [4]  SigmaV length    (uint32 big-endian)
 //	  [SigmaV bytes]
 func EncodeCommit(c *obft.Commit) ([]byte, error) {
 	if c == nil {

@@ -28,9 +28,15 @@ type LifecycleHooks struct {
 	// been observed, to obtain the host application's valid/not-valid
 	// verdict on the bundled candidate value. Returns (valid bool, err).
 	//
-	// Required. Implementors should run a stable head snapshot validation
-	// (parent_root match, fork/domain, etc.) and lock the verdict for the
-	// remainder of the slot.
+	// Required. The verdict MUST be locked for the remainder of the slot —
+	// the protocol's assumption 3 (host validity unanimous at decision
+	// time) depends on per-operator stabilization. Per docs/OBFT.md
+	// §Head-change handling, implementors choose between (a) strict
+	// per-receiver checks (e.g., parent_root vs stable head snapshot) and
+	// (b) the looser approach taken by SSV's proposer-duty path
+	// (structural + duty/identity + slashing protection only, with
+	// parent_root rejection deferred to the relay/beacon-node submit
+	// boundary). The spec acknowledges either choice as valid.
 	HostValidate func(ctx context.Context, slot phase0.Slot, layer int, value []byte) (bool, error)
 
 	// Broadcast is invoked to gossip an OBFT wire-envelope-wrapped message
