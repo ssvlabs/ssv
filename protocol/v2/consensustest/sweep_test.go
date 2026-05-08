@@ -207,27 +207,14 @@ func sweepCellSummary(r ct.Result) string {
 
 // TestSweep_FullCatalog_LargerN runs every catalog scenario at n ∈ {7, 10, 13}
 // on both protocols. Universal safety invariants are enforced via
-// RunScenarioOnProtocol's panic gate. Per-scenario outcome-class expectations
-// are logged as a diagnostic table but NOT asserted at n>4 — many scenarios
-// have algebraic outcomes that depend on f-quorum sizes vs hardcoded recipient
-// counts, so n>4 outcomes can legitimately differ from the n=4 baseline.
+// RunScenarioOnProtocol's panic gate; per-cell outcome classes are also
+// asserted to match the catalog's declared expectations.
 //
-// Three named-split scenarios produce different outcome classes at n>4 by
-// design (the name encodes a specific n=4 quorum split; generalizing
-// would require renaming):
-//   - ValidityDivergence_2_2: at n=4 σ-pool=2 < qV → MISS; at n>4 the 2 NV
-//     are minority and σ-pool reaches qV → FASTEST.
-//   - ValidityDivergence_1_3: at n=4 NR-pool=3 = qEnc → FALL_THROUGH; at n>4
-//     NR-pool=3 < qEnc → MISS.
-//   - PartialEquivocation_2_1: at n=4 σ-pool on V_a=3 = qV → FASTEST; at n>4
-//     the 2 V_a recipients + leader σ_L^V < qV → MISS.
-//
-// All other scenarios produce identical outcome classes at all SSV cluster
-// sizes (n ∈ {4, 7, 10, 13}); their Apply scales with f or cfg.N.
-//
-// Strict assertion: Healthy must decide at fastest path on both protocols at
-// every n (sanity check; framework would have a deeper bug if this didn't
-// hold universally).
+// Every catalog scenario produces the same outcome class at all SSV cluster
+// sizes by design — Apply functions scale with cfg.N / cfg.F() so the
+// f-quorum mechanics are preserved. A per-cell mismatch at n>4 indicates
+// either a generalization regression (Apply hardcoded an n=4 value) or a
+// new scenario that needs n-aware Apply.
 func TestSweep_FullCatalog_LargerN(t *testing.T) {
 	btt := 200 * time.Millisecond
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
@@ -243,8 +230,8 @@ func TestSweep_FullCatalog_LargerN(t *testing.T) {
 
 			var b strings.Builder
 			fmt.Fprintf(&b, "\nn=%d full-catalog sweep:\n", n)
-			b.WriteString("Scenario                     | OBFT          | QBFT          \n")
-			b.WriteString("-----------------------------+---------------+---------------\n")
+			b.WriteString("Scenario                            | OBFT          | QBFT          \n")
+			b.WriteString("------------------------------------+---------------+---------------\n")
 
 			for _, s := range ct.Catalog {
 				cells := []string{}
@@ -252,14 +239,11 @@ func TestSweep_FullCatalog_LargerN(t *testing.T) {
 					r := ct.RunScenarioOnProtocol(t, p, s, base)
 					cells = append(cells, sweepCellSummary(r))
 
-					// Strict: Healthy must always succeed at fastest path.
-					if s.Name == "Healthy" {
-						require.Truef(t, r.Match,
-							"n=%d %s Healthy must match (universal property): %s",
-							n, p.Name(), r.Why)
-					}
+					require.Truef(t, r.Match || r.Skipped,
+						"n=%d scenario %q on %s mismatched n=4 expectation: %s",
+						n, s.Name, p.Name(), r.Why)
 				}
-				fmt.Fprintf(&b, "%-28s | %-13s | %-13s\n", s.Name, cells[0], cells[1])
+				fmt.Fprintf(&b, "%-35s | %-13s | %-13s\n", s.Name, cells[0], cells[1])
 			}
 			t.Log(b.String())
 		})

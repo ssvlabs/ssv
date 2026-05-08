@@ -108,7 +108,9 @@ func renderCell(r ct.Result) string {
 }
 
 func formatRow(name string, cells []string, note string) string {
-	out := padRight(name, 28) + " |"
+	// 35 cols accommodate the longest current scenario name
+	// (PartialEquivocation_NaturalRecovery = 34).
+	out := padRight(name, 35) + " |"
 	for _, c := range cells {
 		out += " " + padRight(c, 13) + " |"
 	}

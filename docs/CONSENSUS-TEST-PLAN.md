@@ -88,7 +88,9 @@ protocol/v2/consensustest/                       FRAMEWORK
 | `Equivocate_111` / `Equivocate_AllNR` / `Equivocate_SigmaLockedSplit` | Equivocation patterns from `BFT-comparison.md` Table 3 |
 | `HV1SelectiveDelivery` | OBFT-specific h_V=1 deadlock pattern |
 | `FakeEncryptedPresence` | Rule 4 detection at honest receivers |
-| `ValidityDivergence_2_2` | OBFT host-divergence at L_0; QBFT round-aware host validation (Phase 4 fix verifies the lock) |
+| `ValidityDivergence_AlgebraicLimit` | OBFT host-divergence at L_0 (#NV = N-2f); QBFT round-aware host validation (Phase 4 fix verifies the lock) |
+| `ValidityDivergence_3_1` | Minority NV: σ-quorum still reaches at L_0 |
+| `ValidityDivergence_NRFallThrough` | Majority NV (#NV = 2f+1 = qEnc): NR-quorum unlocks fall-through to L_1 |
 | `SigmaRefusal` | Single-byz silence within f-bound doesn't disrupt healthy path |
 | `WithholdLeader_Deepest` | Class A late-deepest-layer pathology resilience |
 | `CertWithholding` | Honest ops reconstruct independently of byz cert gossip |
@@ -139,7 +141,7 @@ Output dir is `./consensustest-reports/` by default; override via `make consensu
     - `ByzOfflineDoubleVAttempt` — `OfflineAggregator.AttemptAll` runs on **every** scenario via `recordCommitToAggregator`; `NoOfflineDoubleV` is a universal safety invariant. `ByzAggregatorBypass` is the active-attack variant (forged identities).
 - **OBFT chained-decrypt approximation in `OfflineAggregator`** — chain-unlock currently checks "any V has NR-quorum at each shallower layer" (permissive); per-V chain matching is a future refinement when adapters record (layer, V) tuples per NR-quorum.
 - **Phase parameter has two values: `PhasePhase1Acceptance` (OBFT) and `PhaseDecide` (QBFT)**. A `PhasePhase2Commit` value was considered but trimmed — OBFT's protocol doesn't re-validate at Phase 2 (the locked Phase-1 verdict wins), so there's no caller for it. Re-add when an explicit phase-distinction test materializes.
-- **Catalog at 21 scenarios**, plan called for 25-30. Headline coverage is in place; additional scenarios can be added incrementally. Larger-cluster sweep (n=7/10/13) runs the full catalog with safety enforcement; per-cell expectation matching is informational at n>4 because qV / qEnc thresholds shift.
+- **Catalog at 21 scenarios**, plan called for 25-30. Headline coverage is in place; additional scenarios can be added incrementally. Larger-cluster sweep (n=7/10/13) runs the full catalog with safety enforcement and asserts per-cell expectation matches — every scenario's Apply scales with cfg.N / cfg.F() so outcome classes are stable across all SSV cluster sizes.
 - **Real-BLS suite at ~17s wall time** vs the 10-min budget. Plenty of headroom to scale up with deeper sweeps as needed.
 
 ---
@@ -386,7 +388,7 @@ Concrete scenarios with declared per-protocol expectations:
 | `LeaderEquivocates_SigmaLockedSplit` | `ExpectMiss` | `ExpectSuccessFallThrough` (R2) |
 | `HV1SelectiveDelivery` | `ExpectMiss` | `ExpectNotApplicable` |
 | `FakeEncryptedPresence` | `ExpectSuccessFallThrough` + Rule 4 evidence | `ExpectNotApplicable` |
-| `ValidityDivergence_2_2` | `ExpectMiss` | `ExpectSuccessOrMiss` (depends on whether re-org happens between R1 and R2) |
+| `ValidityDivergence_AlgebraicLimit` (#NV = N-2f) | `ExpectMiss` | `ExpectSuccessOrMiss` (depends on whether re-org happens between R1 and R2) |
 | `Partition_Above_B0` (partition delay > V_0's budget) | `ExpectSuccessFallThrough` (V_1 absorbs) | `ExpectSuccessFallThrough` (R2) |
 | `Partition_Above_B3` (delay > V_3 budget) | `ExpectMiss` | `ExpectMiss` |
 
@@ -424,7 +426,7 @@ MultiLeaderSilent_K3            | ✓ 1.4s (V_3)  | ✗ miss        | OBFT in-ro
 LeaderEquivocates_111           | ✗ miss        | ✓ 3.7s (R2)   | QBFT R2 fresh V
 HV1SelectiveDelivery            | ✗ miss        | n/a           |
 FakeEncryptedPresence           | ✓ + Rule 4    | n/a           |
-ValidityDivergence_2_2          | ✗ miss        | ✓ or ✗        |
+ValidityDivergence_AlgebraicLimit | ✗ miss        | ✓ or ✗        |
 Partition_Above_B3              | ✗ miss        | ✗ miss        | both out of envelope
 ```
 

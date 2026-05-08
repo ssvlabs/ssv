@@ -144,11 +144,24 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 	case ct.ByzAggregatorBypass:
 		return byzAggregatorBypass{ByzSet: bs}, nil
 	case ct.ByzPartialEquivocation:
+		// Recipients positional convention: all-but-last → V_a (size 2f),
+		// last → V_b (size 1). Catalog scenario sets size 2f+1 so σ-pool on
+		// V_a reaches qV at any cluster size.
+		var recipientsA, recipientsB []obft.OperatorID
+		if len(p.Recipients) >= 2 {
+			for _, r := range p.Recipients[:len(p.Recipients)-1] {
+				recipientsA = append(recipientsA, obft.OperatorID(r))
+			}
+			recipientsB = append(recipientsB, obft.OperatorID(p.Recipients[len(p.Recipients)-1]))
+		} else {
+			// Default at f=1 / n=4: {op2, op3} → V_a, {op4} → V_b.
+			recipientsA = []obft.OperatorID{2, 3}
+			recipientsB = []obft.OperatorID{4}
+		}
 		return byzPartialEquivocation{
-			ByzSet:     bs,
-			RecipientA: obft.OperatorID(p.PickRecipient(0, 2)),
-			RecipientB: obft.OperatorID(p.PickRecipient(1, 3)),
-			RecipientC: obft.OperatorID(p.PickRecipient(2, 4)),
+			ByzSet:      bs,
+			RecipientsA: recipientsA,
+			RecipientsB: recipientsB,
 		}, nil
 	case ct.ByzGarbageMessages, ct.ByzExceedsRateLimit, ct.ByzOfflineDoubleVAttempt:
 		// Reserved enum values — covered at other layers, not via the
@@ -300,25 +313,25 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.Oper
 
 // ---- byzPartialEquivocation -------------------------------------------
 
-// 2-1 natural-recovery equivocation. The byz leader at L_0 emits V_a to
-// {RecipientA, RecipientB} (2 honest) and V_b to {RecipientC} (1 honest).
-// The leader's instance σ-locks on V_a (first plan succeeds via
-// BuildPhase1Bundle); σ_L^V(V_b) is forged by forgeByzBundle and emitted on
-// V_b's bundle to RecipientC. The leader's own Commit broadcast (Witnesses
-// rehydration per spec §Phase 2) propagates σ_L^V(V_a) cluster-wide,
-// including to RecipientC.
+// Natural-recovery equivocation: byz leader at L_0 emits V_a to RecipientsA
+// (size 2f) and V_b to RecipientsB (size 1; one V_b recipient is sufficient
+// to make this a real equivocation). The leader's instance σ-locks on V_a
+// (first plan succeeds via BuildPhase1Bundle); σ_L^V(V_b) is forged by
+// forgeByzBundle and emitted on V_b's bundle to its recipient. The leader's
+// own Commit broadcast (Witnesses rehydration per spec §Phase 2) propagates
+// σ_L^V(V_a) cluster-wide, including to V_b's recipient.
 //
-// Outcome at f=1, n=4: σ-pool on V_a = RecipientA + RecipientB +
-// leader's σ_L^V(V_a) = 3 = qV → quorum reaches. σ-pool on V_b =
-// RecipientC + leader's σ_L^V(V_b) = 2 < qV. Pigeonhole 2 holds: at most
-// one V reaches qV cluster-wide. Slot SUCCEEDS at L_0 with V_a even though
-// the leader equivocated (byz fumbled the timing — line 443 of OBFT.md).
+// Outcome at any cluster size: σ-pool on V_a = 2f recipients + leader's
+// σ_L^V(V_a) = 2f+1 = qV → quorum reaches. σ-pool on V_b = 1 recipient +
+// leader's σ_L^V(V_b) = 2 < qV (for f ≥ 1). Pigeonhole 2 holds: at most one
+// V reaches qV cluster-wide. Slot SUCCEEDS at L_0 with V_a even though the
+// leader equivocated (byz fumbled the timing — OBFT.md:443).
 //
 // Equivocation evidence (the V_a/V_b pair signed by the leader's key) is
 // still gossipable as Rule 2 evidence — success at L_0 doesn't suppress
 // slashing. This validates the "byz fumbles equivocation" recovery path
 // distinct from the σ-locked split slot-miss covered by
-// byzEquivocSigmaLockedSplit (line 452).
+// byzEquivocSigmaLockedSplit (OBFT.md:452).
 //
 // Silent no-op fallback: the pattern fires only when a byz operator is the
 // L_0 layer leader. If the catalog scenario's byz placement is changed
@@ -329,10 +342,9 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.Oper
 // active.
 type byzPartialEquivocation struct {
 	honestDefaults
-	ByzSet     byzSet
-	RecipientA obft.OperatorID // gets V_a
-	RecipientB obft.OperatorID // gets V_a
-	RecipientC obft.OperatorID // gets V_b
+	ByzSet      byzSet
+	RecipientsA []obft.OperatorID // get V_a (size 2f)
+	RecipientsB []obft.OperatorID // get V_b (size 1)
 }
 
 func (b byzPartialEquivocation) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
@@ -342,8 +354,8 @@ func (b byzPartialEquivocation) LeaderBroadcastPlan(_ *sim, leader obft.Operator
 	vA := append(obft.Value{}, "byz-V-A"...)
 	vB := append(obft.Value{}, "byz-V-B"...)
 	return []broadcastPlan{
-		{V: vA, Recipients: []obft.OperatorID{b.RecipientA, b.RecipientB}},
-		{V: vB, Recipients: []obft.OperatorID{b.RecipientC}},
+		{V: vA, Recipients: append([]obft.OperatorID(nil), b.RecipientsA...)},
+		{V: vB, Recipients: append([]obft.OperatorID(nil), b.RecipientsB...)},
 	}
 }
 

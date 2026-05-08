@@ -24,9 +24,9 @@ type ByzPattern struct {
 	//   - ByzEquivocateSigmaLockedSplit: first half → V_a recipients, second
 	//     half → V_b recipients (size 2f total). Default at f=1 / n=4: {op2}
 	//     → V_a, {op3} → V_b.
-	//   - ByzPartialEquivocation: indices 0,1 → V_a (always 2 recipients;
-	//     n=4-specific by design), index 2 → V_b (1 recipient). Defaults
-	//     (2, 3, 4).
+	//   - ByzPartialEquivocation: all-but-last → V_a recipients (size 2f),
+	//     last → V_b recipient (size 1). Total 2f+1. Default at f=1 / n=4:
+	//     {op2, op3} → V_a, {op4} → V_b.
 	//   - ByzHV1SelectiveDelivery: full list of f honest that receive V (size
 	//     f). Default at f=1 / n=4: {op2}.
 	Recipients []OperatorID
@@ -88,7 +88,7 @@ const (
 	ByzLateLeaderBroadcast    // leader broadcasts past T_broadcast_max_k (asymmetric absorption test)
 	ByzWithholdLeader         // byz silent at the deepest layer specifically
 	ByzAggregatorBypass       // (negative) byz forges identities to trigger NoOfflineDoubleV; do NOT add to Catalog (matrix tests would crash on safety panic)
-	ByzPartialEquivocation    // 2-1 natural-recovery: byz delivers V to 2 honest, V' to 1 honest; σ-pool reaches qV on V (OBFT.md:443)
+	ByzPartialEquivocation    // natural-recovery equivocation: byz delivers V to 2f honest, V' to 1 honest; σ-pool reaches qV on V (OBFT.md:443)
 	ByzCertWithholding        // byz reconstructs cert but doesn't gossip
 
 	// The next three enum values are RESERVED for symmetry with the deferred-

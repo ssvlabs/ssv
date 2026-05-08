@@ -11,23 +11,18 @@ package consensustest
 // Add new scenarios at the end to keep order stable for matrix-rendering.
 //
 // Cluster-size scope: the matrix runs at n=4 (the canonical operating
-// point per OBFT.md §Application). The larger-n sweep (TestSweep_FullCatalog_LargerN
-// in sweep_test.go) runs every scenario at n ∈ {7, 10, 13} too, enforcing
-// universal safety invariants but logging per-cell match informationally.
-// Three scenarios encode an n=4-specific quorum split in their name and
-// produce different outcome classes at n>4 by design:
-//   - ValidityDivergence_2_2: at n=4 the 2 NV are exactly enough to deny
-//     σ-quorum (MISS); at n>4 they're a minority and σ-quorum reaches
-//     (FASTEST). Generalizing would require renaming away from "2_2".
-//   - ValidityDivergence_1_3: at n=4 the 3 NV exactly meet qEnc (FALL_THROUGH);
-//     at n>4 they're below qEnc (MISS). Same rename caveat.
-//   - PartialEquivocation_2_1: at n=4 the 2 V_a recipients + leader's
-//     σ_L^V = qV (FASTEST); at n>4 they're below qV (MISS). Same rename caveat.
+// point per OBFT.md §Application). The larger-n sweep
+// (TestSweep_FullCatalog_LargerN in sweep_test.go) runs every scenario at
+// n ∈ {7, 10, 13} too, enforcing universal safety invariants and asserting
+// per-cell expectation matches. Every catalog scenario produces the same
+// outcome class at all SSV cluster sizes — Apply functions scale with
+// cfg.N / cfg.F() so f-quorum mechanics are preserved.
 //
-// Other scenarios that previously shifted at n>4 (HV1SelectiveDelivery,
-// Equivocate_SigmaLockedSplit, WithholdLeader_Deepest) have been generalized
-// in their Apply to scale with f / cfg.N, so the n=4 mechanism preserves
-// at any cluster size.
+// Generalization key: scenarios named with a number suffix (e.g. "_3_1",
+// "_AlgebraicLimit", "_NRFallThrough", "_NaturalRecovery") describe the
+// f=1 / n=4 instance of a behavior class. The Apply scales the count of
+// affected operators (NV count, recipient count) with cfg.F() so the
+// behavior class holds at any n.
 var Catalog = []Scenario{
 	scenarioHealthy,
 	scenarioSilentLeaderL0,
@@ -37,9 +32,9 @@ var Catalog = []Scenario{
 	scenarioEquivocateSigmaLockedSplit,
 	scenarioHV1SelectiveDelivery,
 	scenarioFakeEncryptedPresence,
-	scenarioValidityDivergence2_2,
+	scenarioValidityDivergenceAlgebraicLimit,
 	scenarioValidityDivergence3_1,
-	scenarioValidityDivergence1_3,
+	scenarioValidityDivergenceNRFallThrough,
 	scenarioSigmaRefusal,
 	scenarioWithholdLeaderDeepest,
 	scenarioCertWithholding,
@@ -49,7 +44,7 @@ var Catalog = []Scenario{
 	scenarioHostFlipMidSlot,
 	scenarioHostInvalidUntilL1,
 	scenarioLateLeaderBroadcast,
-	scenarioPartialEquivocation2_1,
+	scenarioPartialEquivocationNaturalRecovery,
 }
 
 // ---- Healthy ------------------------------------------------------------
@@ -233,26 +228,43 @@ var scenarioFakeEncryptedPresence = Scenario{
 	Note: "OBFT-specific (no chained encryption in QBFT). Verifies Rule 4 detection path under real-BLS or stub-IBE.",
 }
 
-// ---- Validity divergence (2-2 split at L_0) ---------------------------
+// ---- Validity divergence (algebraic-limit miss at L_0) ----------------
 
-var scenarioValidityDivergence2_2 = Scenario{
-	Name: "ValidityDivergence_2_2",
+// Algebraic-limit miss: the smallest #NV that breaks σ-quorum without
+// reaching NR-quorum. At any n with N=3f+1: #NV = N-2f = f+1.
+//   - σ-pool at L_0 = (N-#NV-1) honest σ + leader's σ_L^V = N-#NV = 2f
+//     < qV = 2f+1.
+//   - NR-pool at L_0 = #NV = f+1 < qEnc = 2f+1 (when f ≥ 1).
+//
+// Slot misses with no fall-through. At f=1, n=4 this is the canonical
+// "2-2 split" (2 NV / 2 valid). Spec referent: BFT-comparison.md Table 3
+// row "Validity-divergence 2-2 split — ✗ algebraic limit".
+var scenarioValidityDivergenceAlgebraicLimit = Scenario{
+	Name: "ValidityDivergence_AlgebraicLimit",
 	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		nvCount := cfg.N - 2*f // = f+1 at N=3f+1
+		// Pick the LAST nvCount ops to be NV (op{N-nvCount+1}..op{N}). At
+		// n=4 f=1 this is op3, op4 (the canonical "2-2" choice).
+		nvOps := make(map[OperatorID]bool, nvCount)
+		for i := 0; i < nvCount; i++ {
+			nvOps[OperatorID(cfg.N-i)] = true
+		}
 		cfg.Host = HostInvalidForOperators{
 			Layer:     0,
-			Operators: map[OperatorID]bool{3: true, 4: true},
+			Operators: nvOps,
 		}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: σ-pool=2 (leader+1) < qV; NR-pool=2 (NV) < qEnc; chained
-		// decryption blocked → slot misses (algebraic limit per Table 3).
+		// OBFT: σ-pool=2f < qV=2f+1; NR-pool=f+1 < qEnc=2f+1; chained
+		// decryption blocked → slot misses (algebraic limit).
 		"OBFT": ExpectMiss,
 		// QBFT: depends on round-2 fresh V landing on a stable head;
 		// outcome depends on the host's behavior across rounds. Acceptable
 		// as success or miss.
 		"QBFT": ExpectSuccessOrMiss,
 	},
-	Note: "BFT-comparison.md Table 3 'Validity-divergence 2-2 split: ✗ algebraic limit' for both OBFT-family; QBFT depends on whether round-change refetches at moved head.",
+	Note: "BFT-comparison.md Table 3 'Validity-divergence 2-2 split: ✗ algebraic limit'. Generalized to N-2f NV ops at any n; at f=1, n=4 this is the canonical 2-2 split (op3, op4 NV).",
 }
 
 // ---- Validity divergence (3-1: minority NV, σ-pool reaches anyway) ---
@@ -278,27 +290,41 @@ var scenarioValidityDivergence3_1 = Scenario{
 	Note: "Minority NV at L_0 (1 of 4 honest dissents). σ-quorum still reaches at L_0 because 3 valid honest + leader's σ_L^V = 4 ≥ qV. Complement to ValidityDivergence_2_2 (miss) and 1_3 (fall-through).",
 }
 
-// ---- Validity divergence (1-3: majority NV, fall-through via NR) ----
+// ---- Validity divergence (NR-quorum fall-through at L_0) -------------
 
-var scenarioValidityDivergence1_3 = Scenario{
-	Name: "ValidityDivergence_1_3",
+// NR-quorum fall-through: smallest #NV that makes NR-pool reach qEnc, so
+// chained decryption unlocks L_1 (whose host says valid → σ-emit → decide).
+// At any n with N=3f+1: #NV = 2f+1 = qEnc.
+//   - σ-pool at L_0 = (N-#NV) = f < qV = 2f+1 (when f ≥ 1).
+//   - NR-pool at L_0 = #NV = 2f+1 = qEnc → NR-quorum.
+//
+// Fall-through to L_1; at L_1 host says valid → σ-quorum → decide at L_1.
+// At f=1, n=4 this is the canonical "1-3 split" (op1 valid + op2,3,4 NV).
+var scenarioValidityDivergenceNRFallThrough = Scenario{
+	Name: "ValidityDivergence_NRFallThrough",
 	Apply: func(cfg *SimConfig) {
+		nvCount := 2*cfg.F() + 1 // = qEnc
+		// Pick the LAST nvCount ops as NV (op{N-nvCount+1}..op{N}). At n=4
+		// f=1 this is op2, op3, op4 (the canonical "1-3" choice with op1
+		// valid as leader).
+		nvOps := make(map[OperatorID]bool, nvCount)
+		for i := 0; i < nvCount; i++ {
+			nvOps[OperatorID(cfg.N-i)] = true
+		}
 		cfg.Host = HostInvalidForOperators{
 			Layer:     0,
-			Operators: map[OperatorID]bool{2: true, 3: true, 4: true},
+			Operators: nvOps,
 		}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: σ-pool at L_0 = 1 valid honest σ + leader's σ_L^V = 2 < qV=3.
-		// NR-pool at L_0 from 3 NV honest = 3 ≥ qEnc=3. NR-quorum unlocks L_1
-		// where host says valid → σ-emit at L_1 → decides at L_1 (fall-through).
-		// Validates the host-invalidity NR-quorum fall-through path.
+		// OBFT: σ-pool=f < qV=2f+1; NR-pool=2f+1 = qEnc → NR-quorum unlocks L_1
+		// where host says valid → σ-emit at L_1 → decides at L_1.
 		"OBFT": ExpectSuccessFallThrough,
-		// QBFT: R1 PREPARE pool on the proposed V = 1 valid + leader = below quorum
-		// → R1 timeout → R2 fresh V at moved head → succeeds.
+		// QBFT: R1 PREPARE pool insufficient (#valid honest = f, < quorum=2f+1)
+		// → R1 timeout → R2 fresh V → succeeds.
 		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "Majority NV at L_0 (3 of 4 honest dissent). NR-quorum reaches at L_0 → fall-through to L_1 in Phase 3 walk. Complement to ValidityDivergence_2_2 (miss) and 3_1 (success at L_0).",
+	Note: "NR-quorum fall-through pattern (#NV = 2f+1 = qEnc). Generalized from the f=1, n=4 '1-3 split' (op2..op4 NV); scales to N-2f-1 valid + 2f+1 NV at any n. Complement to ValidityDivergence_AlgebraicLimit (miss) and ValidityDivergence_3_1 (success at L_0).",
 }
 
 // ---- σ-refusal (byz never contributes) --------------------------------
@@ -452,32 +478,42 @@ var scenarioHostInvalidUntilL1 = Scenario{
 	Note: "Host invalid at layer 0 / round 1 only. Both protocols recover via fall-through to deeper layer / next round. Exercises round-aware host validation in QBFT.",
 }
 
-// ---- 2-1 partial equivocation (natural recovery; OBFT.md:443) ---------
+// ---- partial equivocation (natural recovery; OBFT.md:443) -------------
 
-// Natural-recovery analysis is calibrated for f=1, n=4 specifically: σ-pool
-// on V_a = 2 honest + leader's σ_L^V = 3 = qV. At larger n (qV = 2f+1 grows
-// faster than the 2 fixed V_a recipients), this pattern degrades to a
-// 2-1-silent-rest split that misses qV at L_0 — falling through via NR
-// instead. Scenario currently runs only at the matrix's default n=4 base.
-var scenarioPartialEquivocation2_1 = Scenario{
-	Name: "PartialEquivocation_2_1",
+// Generalized from the f=1, n=4 "2-1 split". Byz delivers V_a to 2f honest
+// and V_b to 1 honest; σ-pool on V_a = 2f recipients + leader's σ_L^V(V_a)
+// = 2f+1 = qV → quorum reaches at L_0. Pigeonhole 2 limits cluster-wide to
+// one V reaching qV: σ-pool on V_b = 1 + leader's σ_L^V(V_b) = 2 < qV (for
+// f ≥ 1). Slot succeeds at L_0 with V_a; equivocation still slashable.
+var scenarioPartialEquivocationNaturalRecovery = Scenario{
+	Name: "PartialEquivocation_NaturalRecovery",
 	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// 2f recipients for V_a (op2..op{2f+1}), 1 recipient for V_b
+		// (op{2f+2}). Total 2f+1 honest receive bundles; remaining
+		// N-2f-2 honest receive nothing. At n=4 f=1 this is op2,op3 → V_a,
+		// op4 → V_b (the canonical "2-1 split").
+		recipients := make([]OperatorID, 0, 2*f+1)
+		for i := 0; i < 2*f; i++ {
+			recipients = append(recipients, OperatorID(i+2)) // V_a recipients
+		}
+		recipients = append(recipients, OperatorID(2*f+2)) // V_b recipient
 		cfg.Byz = ByzPattern{
 			Kind:         ByzPartialEquivocation,
 			ByzOperators: []OperatorID{1},
-			Recipients:   []OperatorID{2, 3, 4}, // V_a → op2, op3; V_b → op4
+			Recipients:   recipients,
 		}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: σ-pool on V_a = op2 + op3 + leader's σ_L^V(V_a) = 3 = qV at f=1, n=4.
-		// Pigeonhole 2 holds: only V_a reaches qV cluster-wide. Slot succeeds at L_0
-		// with V_a even though leader equivocated. Equivocation evidence still
-		// gossipable — success doesn't suppress slashing.
+		// OBFT: σ-pool on V_a = 2f recipients + leader's σ_L^V(V_a) = 2f+1 = qV.
+		// Pigeonhole 2 holds: only V_a reaches qV cluster-wide. Slot succeeds
+		// at L_0 with V_a even though leader equivocated. Equivocation evidence
+		// still gossipable — success doesn't suppress slashing.
 		"OBFT": ExpectSuccessFastest,
-		// QBFT: PREPARE-pool on V_a = 2 honest (byz leader runs no real Instance,
-		// no PREPARE from leader); pool on V_b = 1. Both < quorum → R1 timeout →
-		// R2 honest leader proposes fresh V → succeeds.
+		// QBFT: PREPARE-pool on V_a = 2f honest (byz leader runs no real
+		// Instance, no PREPARE from leader); pool on V_b = 1. Both < quorum →
+		// R1 timeout → R2 honest leader proposes fresh V → succeeds.
 		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md §Liveness equivocation case-analysis line 443; row 'Byzantine leader equivocates, 2-1 split' in OBFT.md liveness-comparison table line 477. Distinct from EquivocateSigmaLockedSplit (1-1-NR slot-miss at OBFT.md:452).",
+	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452).",
 }

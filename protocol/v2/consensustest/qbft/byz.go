@@ -70,11 +70,20 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 	case ct.ByzSigmaRefusal:
 		return byzSigmaRefusal{ByzSet: bs}, nil
 	case ct.ByzPartialEquivocation:
+		// Recipients positional convention: all-but-last → V_a, last → V_b
+		// (mirroring the OBFT adapter). Default at f=1 / n=4: {2,3} / {4}.
+		var recipientsA, recipientsB []ct.OperatorID
+		if len(p.Recipients) >= 2 {
+			recipientsA = append([]ct.OperatorID(nil), p.Recipients[:len(p.Recipients)-1]...)
+			recipientsB = []ct.OperatorID{p.Recipients[len(p.Recipients)-1]}
+		} else {
+			recipientsA = []ct.OperatorID{2, 3}
+			recipientsB = []ct.OperatorID{4}
+		}
 		return byzPartialEquivocation{
-			ByzSet:     bs,
-			RecipientA: p.PickRecipient(0, 2),
-			RecipientB: p.PickRecipient(1, 3),
-			RecipientC: p.PickRecipient(2, 4),
+			ByzSet:      bs,
+			RecipientsA: recipientsA,
+			RecipientsB: recipientsB,
 		}, nil
 	case ct.ByzCrossSigning, ct.ByzCrossOnionEquivocation, ct.ByzFakePlaintextSigma,
 		ct.ByzLateLeaderBroadcast, ct.ByzWithholdLeader, ct.ByzAggregatorBypass,
@@ -261,21 +270,20 @@ func (b byzEquivocSplit) ProposalPlanForRound(_ *sim, leader ct.OperatorID, roun
 	}
 }
 
-// ---- byzPartialEquivocation (2-1 PROPOSE split) -----------------------
+// ---- byzPartialEquivocation (2f-1 PROPOSE split) ----------------------
 
-// QBFT analog of OBFT's PartialEquivocation. Byz leader sends PROPOSE(V_a)
-// to {RecipientA, RecipientB} and PROPOSE(V_b) to {RecipientC}. PREPARE
-// pool on V_a = 2 honest (the byz leader runs no real Instance, so no
-// PREPARE from leader); pool on V_b = 1. Both < quorum (3 at n=4) → R1
+// QBFT analog of OBFT's natural-recovery equivocation. Byz leader sends
+// PROPOSE(V_a) to RecipientsA (size 2f) and PROPOSE(V_b) to RecipientsB
+// (size 1). PREPARE pool on V_a = 2f honest (the byz leader runs no real
+// Instance, no self-PREPARE); pool on V_b = 1. Both < quorum (2f+1) → R1
 // timeout → R2 with honest leader proposes fresh V → succeeds. Mirrors
 // OBFT.md:477 BFT-comparison row "Byzantine leader equivocates, 2-1 split":
 // QBFT recovers via fresh-V at R2, OBFT succeeds at L_0 via natural σ-quorum.
 type byzPartialEquivocation struct {
 	honestDefaults
-	ByzSet     byzSet
-	RecipientA ct.OperatorID
-	RecipientB ct.OperatorID
-	RecipientC ct.OperatorID
+	ByzSet      byzSet
+	RecipientsA []ct.OperatorID
+	RecipientsB []ct.OperatorID
 }
 
 func (b byzPartialEquivocation) IsByz(op ct.OperatorID) bool { return b.ByzSet.Contains(op) }
@@ -284,8 +292,8 @@ func (b byzPartialEquivocation) ProposalPlanForRound(_ *sim, leader ct.OperatorI
 		return []proposalPlan{{V: honestV}}
 	}
 	return []proposalPlan{
-		{V: []byte("byz-V-A"), Recipients: []ct.OperatorID{b.RecipientA, b.RecipientB}},
-		{V: []byte("byz-V-B"), Recipients: []ct.OperatorID{b.RecipientC}},
+		{V: []byte("byz-V-A"), Recipients: append([]ct.OperatorID(nil), b.RecipientsA...)},
+		{V: []byte("byz-V-B"), Recipients: append([]ct.OperatorID(nil), b.RecipientsB...)},
 	}
 }
 
