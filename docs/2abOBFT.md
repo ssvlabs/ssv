@@ -875,13 +875,13 @@ These are patterns 2abOBFT introduces or fails to recover, where bare OBFT and/o
 
 At SSV proposer-duty default budget (~4s relay cutoff with P99 = 150ms, δ = 50ms), each protocol allocates the budget differently:
 
-All counts at recommended sizing (2 BTT per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)).
+All counts at recommended sizing (2 BTT per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)). Numbers use the cross-protocol convention (Phase 3 = 0); the spec's deployment-time accounting at [§Per-layer windows](#per-layer-windows-and-deadlines) lists `Δ_3 = 300ms` separately, putting actual consensus-complete ~300ms later than the BTT count suggests.
 
 | Aspect | bare OBFT | 2abOBFT | QBFT-SSV (RT=2s, current SSV) |
 |---|---|---|---|
-| Consensus budget | ~600ms | ~1200ms | ~3.6s (2 rounds: RT + R2 = 2s + 1.6s) |
+| Consensus budget (incl. retry) | ~600ms | ~1200ms | ~3.6s (R1 + RT + R2 fits) |
 | Submission headroom | ~2.0s | ~1.2s | ~0.4s |
-| Healthy-path latency | ~600ms | ~1200ms | ~1600ms |
+| Healthy-path R1 latency | ~600ms | ~1200ms | ~1600ms |
 | Bandwidth (n=4, K=4 healthy) | ~28 KB | ~30 KB | ~14 KB |
 | Cryptographic primitives | BLS + threshold IBE/SWE | BLS + threshold IBE/SWE | BLS threshold |
 | Production maturity | spec only | spec only | SSV runs this today |
