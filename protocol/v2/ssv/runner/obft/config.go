@@ -56,24 +56,31 @@ const (
 // Per-layer defaults for the asymmetric staggered schedule (spec §Setting,
 // §Application / Timing budget at Config A):
 //
-//   - fetchAt is when the leader's fetch goroutine wakes; strictly decreasing
-//     in layer index k (deeper layers fetch earlier from deeper-confirmed
-//     parents for re-org resistance, primary fetches latest for max MEV
-//     freshness).
+//   - fetchAt is when the leader's fetch goroutine wakes and starts the
+//     iterative-fetch poll loop (Scheduler.FetchAndBroadcastBundle). Spec
+//     §Application: leaders poll relay throughout [RANDAO_done,
+//     T_broadcast_max[k]] and broadcast the freshest at deadline. Default
+//     fetchAt values are clustered just past RANDAO_done (~150ms) with
+//     small per-layer staggering to satisfy the strict-decreasing
+//     validation while preserving the spec's "deeper layer fetches from
+//     deeper-confirmed parent" intuition (the choice of parent is a hook
+//     concern; fetchAt only sets when polling starts).
 //   - budget is the T_commit-anchored absorption window B_k+slack; strictly
 //     increasing in k (deeper layers tolerate wider propagation tails).
 //
-// Constraints: fetchAt[k] ≤ TCommit − budget[k] − 1 BTT for every k (each
-// leader has at least 1 BTT of fetch+broadcast headroom; #8 fetch deadline
-// caps the fetch itself); budget[K-1] ≥ 2·BTT BFT-min.
+// Constraints: fetchAt[k] ≤ TCommit − budget[k] for every k (each leader's
+// poll window must fit before its T_broadcast_max — enforced by Validate);
+// budget[K-1] ≥ 2·BTT BFT-min.
 //
 // At Config A (BTT = 200ms, TCommit = 3400ms) the K=4 schedule is:
-//   - budget   = [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — spec
+//   - budget  = [1, 1.5, 2.5, 5.5] BTT = [200, 300, 500, 1100]ms — spec
 //     §Setting line 45 recommended.
-//   - fetchAt  = TCommit − budget − 1 BTT = [3000, 2900, 2700, 2100]ms.
-//   - V_0 MEV-fetch budget = fetchAt[0] − RANDAO_done ≈ 2850ms (vs spec's
-//     iterative-fetch model which can reach 3050ms; ~200ms gap is the cost
-//     of the impl's single-fetch model).
+//   - fetchAt = [180, 170, 160, 150]ms — all clustered at RANDAO_done, with
+//     1ms-per-layer staggering for the validation constraint.
+//   - V_0 MEV-fetch budget at iterative-fetch ≈ T_broadcast_max[0] −
+//     fetchAt[0] − buildBuffer = 3200 − 180 − 50 = 2970ms (vs spec's 3050ms
+//     target — ~80ms shy due to fetchAt staggering and buildBuffer; both
+//     small).
 //
 // For K>4 (n=7, n=10, n=13 deployments) both schedules interpolate linearly
 // between L_0 and the deepest-layer endpoints.
@@ -82,11 +89,11 @@ var defaultLayerSchedules = map[int]struct {
 	budget  []time.Duration
 }{
 	3: {
-		fetchAt: []time.Duration{3000 * time.Millisecond, 2700 * time.Millisecond, 2100 * time.Millisecond},
+		fetchAt: []time.Duration{170 * time.Millisecond, 160 * time.Millisecond, 150 * time.Millisecond},
 		budget:  []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
 	},
 	4: {
-		fetchAt: []time.Duration{3000 * time.Millisecond, 2900 * time.Millisecond, 2700 * time.Millisecond, 2100 * time.Millisecond},
+		fetchAt: []time.Duration{180 * time.Millisecond, 170 * time.Millisecond, 160 * time.Millisecond, 150 * time.Millisecond},
 		budget:  []time.Duration{200 * time.Millisecond, 300 * time.Millisecond, 500 * time.Millisecond, 1100 * time.Millisecond},
 	},
 }
@@ -94,8 +101,8 @@ var defaultLayerSchedules = map[int]struct {
 // Endpoint defaults used for K>4 linear interpolation. Match the K=4 L_0
 // and deepest entries in defaultLayerSchedules.
 const (
-	primaryFetchDefault  = 3000 * time.Millisecond
-	deepestFetchDefault  = 2100 * time.Millisecond
+	primaryFetchDefault  = 180 * time.Millisecond
+	deepestFetchDefault  = 150 * time.Millisecond
 	primaryBudgetDefault = 200 * time.Millisecond
 	deepestBudgetDefault = 1100 * time.Millisecond
 )
