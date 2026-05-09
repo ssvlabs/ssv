@@ -1,12 +1,16 @@
 --------------------------- MODULE BareOBFT_Liveness ---------------------------
 (***************************************************************************)
-(* Liveness verification for bare OBFT — `LIVENESS_NON_GRIEF` (Class A     *)
-(* closure).                                                               *)
+(* Liveness verification for bare OBFT — σ-flip variant.                   *)
+(*                                                                         *)
+(* Tests whether the σ-flip + leader-NR-doesn't-count + full-V-in-onion    *)
+(* design closes Class A deadlock (`LIVENESS_NON_GRIEF`).  Companion to    *)
+(* the BareOBFT_Safety σ-flip variant.                                     *)
 (*                                                                         *)
 (* Verifies: under (a) BFT trust bound (≤ f byz of n=3f+1), (b) within-    *)
-(* budget partial-synchrony, (c) honest EKM, AND (d) no GRIEF byzantine    *)
-(* actions, the protocol terminates with `output[i] = TRUE` for every      *)
-(* honest operator i (= no Class A deadlock).                              *)
+(* budget partial-synchrony, (c) honest EKM (with σ-flip exemption per     *)
+(* trigger), AND (d) no GRIEF byzantine actions, the protocol terminates   *)
+(* with `output[i] = TRUE` for every honest operator i (= no Class A       *)
+(* deadlock).                                                              *)
 (*                                                                         *)
 (* See `docs/OBFT-formal-verif.md` §5 for the property statement and §2.3  *)
 (* for the GRIEF / non-grief classification.                               *)
@@ -125,36 +129,40 @@ VARIABLES
     byz_commit,          \* [Byzantine -> [Layers -> {"sigma", "nr", "none"}]]:
                          \* byz operator's commitment per layer
     kindcommit_emitted,  \* [Operators -> BOOLEAN]: has operator emitted KindCommit
-    nr_flipped,          \* [Honest -> [Layers -> BOOLEAN]]: has honest σ-er
-                         \* emitted an NR-flip (KindNRFlip message) at this layer
+    sigma_flipped,       \* [Honest -> [Layers -> BOOLEAN]]: has honest NR-er
+                         \* emitted a σ-flip (KindSigmaFlip message) at this layer
                          \* — Phase-2.5 cross-signing under valid trigger evidence
     output_set           \* [Operators -> BOOLEAN]: has operator's reconstruction succeeded
 
 vars == <<leader_of, phase1_decided, delivered_to, byz_commit,
-          kindcommit_emitted, nr_flipped, output_set>>
+          kindcommit_emitted, sigma_flipped, output_set>>
 
 (***************************************************************************)
 (* Helper definitions                                                      *)
 (***************************************************************************)
 
-\* Honest σ pool at layer k = honest operators in delivered_to[k] (= retained V_k).
-\* Honest NR pool at layer k = honest operators NOT in delivered_to[k] (= didn't
-\* retain), PLUS honest σ-ers who NR-flipped at k (Phase-2.5 cross-sign under
-\* valid trigger evidence — added by HonestNRFlip action below).
-HonestSigmaAt(k) == delivered_to[k] \cap Honest
-HonestNRAt(k) ==
-    (Honest \ delivered_to[k]) \cup
-    {i \in (Honest \cap delivered_to[k]) : nr_flipped[i][k]}
+\* Honest σ pool at layer k = honest who retained V_k (= delivered_to[k] ∩ Honest)
+\* PLUS honest non-retainers who σ-flipped at k (Phase-2.5 cross-sign under valid
+\* trigger evidence — added by HonestSigmaFlip action below).
+\* Honest NR pool at layer k = honest non-retainers (= Honest \ delivered_to[k]).
+\* σ-flip does NOT remove the σ-flipper from the NR pool: their original
+\* KindCommit emission already published the NR partial; σ-flip just adds an
+\* extra σ partial (KindSigmaFlip) on top.
+HonestSigmaAt(k) ==
+    (delivered_to[k] \cap Honest) \cup
+    {i \in (Honest \ delivered_to[k]) : sigma_flipped[i][k]}
+HonestNRAt(k) == Honest \ delivered_to[k]
 
 \* Byz contribution at layer k: based on byz_commit[i][k] choice.
 ByzSigmaAt(k) == {i \in Byzantine : byz_commit[i][k] = "sigma"}
 ByzNRAt(k) == {i \in Byzantine : byz_commit[i][k] = "nr"}
 
-\* Aggregate σ pool at layer k = honest who retained ∪ byz who chose σ
+\* Aggregate σ pool at layer k = honest σ-ers (retainers ∪ σ-flippers) ∪ byz σ
 SigmaPool(k) == HonestSigmaAt(k) \cup ByzSigmaAt(k)
 
-\* Aggregate NR pool at layer k = honest who didn't retain ∪ byz who chose NR
-NRPool(k) == HonestNRAt(k) \cup ByzNRAt(k)
+\* Aggregate NR pool at layer k = honest non-retainers ∪ byz NR-ers,
+\* with leader-NR-doesn't-count rule applied (= leader_of[k]'s NR is excluded).
+NRPool(k) == (HonestNRAt(k) \cup ByzNRAt(k)) \ {leader_of[k]}
 
 \* σ-quorum reached at layer k iff |SigmaPool(k)| ≥ qV
 \* (Pool grows monotonically as KindCommits emit; this is the "final" pool
@@ -230,7 +238,7 @@ Init ==
     /\ \A b \in Byzantine, k \in Layers:
         leader_of[k] = b => byz_commit[b][k] \in {"sigma", "none"}
     /\ kindcommit_emitted = [i \in Operators |-> FALSE]
-    /\ nr_flipped = [i \in Honest |-> [k \in Layers |-> FALSE]]
+    /\ sigma_flipped = [i \in Honest |-> [k \in Layers |-> FALSE]]
     /\ output_set = [i \in Operators |-> FALSE]
 
 (***************************************************************************)
@@ -243,7 +251,7 @@ HonestLeaderBroadcast(k) ==
     /\ ~ phase1_decided[k]
     /\ phase1_decided' = [phase1_decided EXCEPT ![k] = TRUE]
     /\ delivered_to' = [delivered_to EXCEPT ![k] = Operators]
-    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, nr_flipped,
+    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, sigma_flipped,
                    output_set>>
 
 (***************************************************************************)
@@ -265,7 +273,7 @@ ByzLeaderBroadcast(k, S) ==
     /\ byz_commit[ldr][k] = "none" => S = {}
     /\ phase1_decided' = [phase1_decided EXCEPT ![k] = TRUE]
     /\ delivered_to' = [delivered_to EXCEPT ![k] = S]
-    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, nr_flipped,
+    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, sigma_flipped,
                    output_set>>
 
 (***************************************************************************)
@@ -281,7 +289,7 @@ HonestEmitKindCommit(i) ==
     /\ ~ kindcommit_emitted[i]
     /\ kindcommit_emitted' = [kindcommit_emitted EXCEPT ![i] = TRUE]
     /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   nr_flipped, output_set>>
+                   sigma_flipped, output_set>>
 
 (***************************************************************************)
 (* Byzantine KindCommit emission.  Same precondition as honest.  byz_commit *)
@@ -295,7 +303,7 @@ ByzEmitKindCommit(b) ==
     /\ ~ kindcommit_emitted[b]
     /\ kindcommit_emitted' = [kindcommit_emitted EXCEPT ![b] = TRUE]
     /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   nr_flipped, output_set>>
+                   sigma_flipped, output_set>>
 
 (***************************************************************************)
 (* Honest reconstruction.  Precondition: i has emitted, and either all     *)
@@ -309,7 +317,10 @@ ByzEmitKindCommit(b) ==
 (***************************************************************************)
 
 \* σ pool at layer k restricted to operators whose σ partial is available.
-\* Honest σ at k requires honest emitted KindCommit (their σ is in their onion).
+\* Honest retainer σ at k: requires emitted KindCommit (their σ is in their onion).
+\* Honest σ-flipper at k: their σ partial is in their separate KindSigmaFlip
+\* message (gate: sigma_flipped[i][k] — which the action precondition links to
+\* kindcommit_emitted, ensuring KindCommit was emitted first).
 \* Byz σ at k available via either:
 \*   (a) byz emitted their own KindCommit (σ in onion at k>0; plaintext at k=0); OR
 \*   (b) byz is the layer-k leader AND their σ_L^V from Phase-1 was retained by
@@ -317,21 +328,23 @@ ByzEmitKindCommit(b) ==
 \*       per §Phase-2 wire format.  This makes σ_L^V available to all peers
 \*       independent of whether byz emitted KindCommit themselves.
 SigmaPoolEmitted(k) ==
-    {i \in HonestSigmaAt(k) : kindcommit_emitted[i]} \cup
+    {i \in (Honest \cap delivered_to[k]) : kindcommit_emitted[i]} \cup
+    {i \in (Honest \ delivered_to[k]) : sigma_flipped[i][k]} \cup
     {b \in ByzSigmaAt(k) :
         \/ kindcommit_emitted[b]
         \/ /\ leader_of[k] = b
            /\ \E i \in (Honest \cap delivered_to[k]) : kindcommit_emitted[i]}
 
 \* NR pool at layer k restricted to operators who have emitted.
-\* Honest NR-ers contribute via their KindCommit (gate: kindcommit_emitted[i]).
-\* Honest σ-ers who NR-flipped contribute via the separate KindNRFlip emission
-\* (gate: nr_flipped[i][k] — implicitly requires they had emitted KindCommit
-\* first as a precondition of the flip).
+\* Honest non-retainers contribute via their KindCommit (gate: kindcommit_emitted[i]).
+\* σ-flippers stay in NR pool (their KindCommit's NR partial isn't withdrawn by
+\* the σ-flip — see HonestSigmaFlip below).
+\* Byz NR-ers contribute via their KindCommit (gate: kindcommit_emitted[b]).
+\* Leader-NR-doesn't-count rule applied: layer leader excluded from quorum count.
 NRPoolEmitted(k) ==
-    {i \in (Honest \ delivered_to[k]) : kindcommit_emitted[i]} \cup
-    {i \in (Honest \cap delivered_to[k]) : nr_flipped[i][k]} \cup
-    {b \in ByzNRAt(k) : kindcommit_emitted[b]}
+    ({i \in (Honest \ delivered_to[k]) : kindcommit_emitted[i]} \cup
+     {b \in ByzNRAt(k) : kindcommit_emitted[b]})
+    \ {leader_of[k]}
 
 SigmaQuorumReachedEmitted(k) == Cardinality(SigmaPoolEmitted(k)) >= QV
 NRQuorumReachedEmitted(k) == Cardinality(NRPoolEmitted(k)) >= QEnc
@@ -344,24 +357,28 @@ LayerReconstructableEmitted(k) ==
     /\ ChainUnlockedEmitted(k)
 
 (***************************************************************************)
-(* Honest NR-flip — Phase-2.5 deadlock recovery (NEW).                     *)
+(* Honest σ-flip — Phase-2.5 deadlock recovery (σ-flip variant).           *)
 (*                                                                         *)
-(* When honest σ-er observes ≥ f+1 NR partials at layer k AND σ pool there *)
-(* is below qV (= deadlock at layer k), they emit an additional NR partial *)
-(* — a KindNRFlip message with trigger evidence (the f+1 NR partials they  *)
-(* observed).  This is a Phase-2.5 cross-signing under valid trigger; the  *)
-(* protocol's amended EKM allows it without slashing.                      *)
+(* When honest who already NR'd at layer k (= didn't retain V_k) observes   *)
+(* deadlock evidence (≥ f+1 NR partials at k excluding leader's NR, AND    *)
+(* σ pool below qV), AND knows V (V-available via full-V-in-onion          *)
+(* plumbing — modeled as σ-pool-emitted ≠ ∅), they emit an additional σ    *)
+(* partial — a KindSigmaFlip message under valid trigger evidence.  The   *)
+(* amended EKM allows σ-after-NR iff trigger evidence is valid.            *)
 (*                                                                         *)
 (* Effect on pools:                                                        *)
-(*   - σ pool unchanged (their σ partial still in KindCommit).             *)
-(*   - NR pool grows by 1 (the NR-flip partial).                           *)
+(*   - σ pool grows by 1 (the σ-flip partial).                              *)
+(*   - NR pool unchanged (KindCommit's NR partial isn't withdrawn).         *)
 (*                                                                         *)
-(* Safety basis: σ pool at the deadlock layer was bounded by 2f < qV       *)
-(* before the flip (cryptographic — honest EKM blocks σ-after-NR for non-  *)
-(* retainers; honest who retained are at most f-bounded by the deadlock    *)
-(* condition).  NR-flip doesn't add to σ pool, so σ pool stays sub-qV      *)
-(* after the flip too.  The deadlock layer doesn't reconstruct; the chain  *)
-(* unlocks to a deeper layer where σ-quorum reaches naturally.             *)
+(* Liveness rationale: in user's trace, byz_leader broadcasts σ_L^V to a   *)
+(* strict subset of honest (1 retainer, 2 non-retainers).  Without σ-flip,  *)
+(* σ-pool[V] = 2 < qV=3, deadlocked.  With σ-flip + full-V-in-onion, the   *)
+(* 2 non-retainers learn V (via cluster's σ-witness section) and emit σ on *)
+(* V → σ-pool[V] reaches qV.  Layer reconstructs.                          *)
+(*                                                                         *)
+(* Companion safety verification (BareOBFT_Safety) tests whether this      *)
+(* mechanism preserves Pigeonhole 1 (σ-flippers contribute to BOTH pools,  *)
+(* breaking the original honest-XOR ≤ 1 algebraic bound).                  *)
 (***************************************************************************)
 
 \* === Operator-observable conditions only ================================
@@ -369,19 +386,24 @@ LayerReconstructableEmitted(k) ==
 \* This trigger uses only state observable to operators in the real protocol —
 \* the count of distinct operators with σ partial / NR partial at layer k.
 \* No oracle knowledge of who's honest vs byzantine.  Matches the trigger
-\* in BareOBFT_Safety.tla (where TLC catches a P1 violation under this same
-\* trigger model — see docs/OBFT-formal-verif.md §7.1 / §7.4).
-NRFlipTriggered(k) ==
-    /\ Cardinality(NRPoolEmitted(k)) >= F + 1          \* ≥ f+1 NR partials observed
+\* in BareOBFT_Safety.tla.
+DeadlockObserved(k) ==
+    /\ Cardinality(NRPoolEmitted(k)) >= F + 1          \* ≥ f+1 NR partials (excl leader)
     /\ Cardinality(SigmaPoolEmitted(k)) < QV           \* σ-quorum not yet reached
 
-HonestNRFlip(i, k) ==
+\* V-availability (option A): V is observable iff some operator has emitted a σ
+\* partial at this layer (via KindCommit or KindSigmaFlip), modeling the full-V-
+\* in-onion plumbing — V propagates cluster-wide through the σ-witness section.
+VAvailable(k) == SigmaPoolEmitted(k) # {}
+
+HonestSigmaFlip(i, k) ==
     /\ i \in Honest
     /\ kindcommit_emitted[i]              \* must have emitted KindCommit first
-    /\ i \in delivered_to[k]              \* i is a σ-er at layer k (had V_k)
-    /\ ~ nr_flipped[i][k]                 \* not yet NR-flipped at this layer
-    /\ NRFlipTriggered(k)                 \* deadlock detected (strict trigger)
-    /\ nr_flipped' = [nr_flipped EXCEPT ![i][k] = TRUE]
+    /\ i \notin delivered_to[k]           \* i is an NR-er at layer k (didn't retain V_k)
+    /\ ~ sigma_flipped[i][k]              \* not yet σ-flipped at this layer
+    /\ DeadlockObserved(k)                \* deadlock detected (strict trigger)
+    /\ VAvailable(k)                      \* V learned via full-V-in-onion plumbing
+    /\ sigma_flipped' = [sigma_flipped EXCEPT ![i][k] = TRUE]
     /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
                    kindcommit_emitted, output_set>>
 
@@ -392,7 +414,7 @@ HonestReconstruct(i) ==
     /\ \E k \in Layers : LayerReconstructableEmitted(k)
     /\ output_set' = [output_set EXCEPT ![i] = TRUE]
     /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   kindcommit_emitted, nr_flipped>>
+                   kindcommit_emitted, sigma_flipped>>
 
 (***************************************************************************)
 (* Next-state relation                                                     *)
@@ -403,7 +425,7 @@ Next ==
     \/ \E k \in Layers, S \in SUBSET Operators : ByzLeaderBroadcast(k, S)
     \/ \E i \in Honest : HonestEmitKindCommit(i)
     \/ \E b \in Byzantine : ByzEmitKindCommit(b)
-    \/ \E i \in Honest, k \in Layers : HonestNRFlip(i, k)
+    \/ \E i \in Honest, k \in Layers : HonestSigmaFlip(i, k)
     \/ \E i \in Honest : HonestReconstruct(i)
 
 (***************************************************************************)
@@ -427,7 +449,7 @@ Fairness ==
     /\ \A k \in Layers :
         WF_vars(\E S \in SUBSET Operators : ByzLeaderBroadcast(k, S))
     /\ \A i \in Honest : WF_vars(HonestEmitKindCommit(i))
-    /\ \A i \in Honest, k \in Layers : WF_vars(HonestNRFlip(i, k))
+    /\ \A i \in Honest, k \in Layers : WF_vars(HonestSigmaFlip(i, k))
     /\ \A i \in Honest : WF_vars(HonestReconstruct(i))
     \* Note: NO fairness on ByzEmitKindCommit — byz may stay silent at
     \* Phase 2 indefinitely (= valid non-grief behavior).  Honest reconstruct
@@ -458,7 +480,7 @@ TypeOK ==
     /\ delivered_to \in [Layers -> SUBSET Operators]
     /\ byz_commit \in [Byzantine -> [Layers -> {"sigma", "nr", "none"}]]
     /\ kindcommit_emitted \in [Operators -> BOOLEAN]
-    /\ nr_flipped \in [Honest -> [Layers -> BOOLEAN]]
+    /\ sigma_flipped \in [Honest -> [Layers -> BOOLEAN]]
     /\ output_set \in [Operators -> BOOLEAN]
 
 (***************************************************************************)
