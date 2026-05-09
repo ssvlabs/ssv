@@ -364,16 +364,23 @@ LayerReconstructableEmitted(k) ==
 (* unlocks to a deeper layer where σ-quorum reaches naturally.             *)
 (***************************************************************************)
 
+\* === Operator-observable conditions only ================================
+\*
+\* This trigger uses only state observable to operators in the real protocol —
+\* the count of distinct operators with σ partial / NR partial at layer k.
+\* No oracle knowledge of who's honest vs byzantine.  Matches the trigger
+\* in BareOBFT_Safety.tla (where TLC catches a P1 violation under this same
+\* trigger model — see docs/OBFT-formal-verif.md §7.1 / §7.4).
 NRFlipTriggered(k) ==
-    /\ Cardinality(NRPoolEmitted(k)) >= F + 1
-    /\ Cardinality(SigmaPoolEmitted(k)) < QV
+    /\ Cardinality(NRPoolEmitted(k)) >= F + 1          \* ≥ f+1 NR partials observed
+    /\ Cardinality(SigmaPoolEmitted(k)) < QV           \* σ-quorum not yet reached
 
 HonestNRFlip(i, k) ==
     /\ i \in Honest
     /\ kindcommit_emitted[i]              \* must have emitted KindCommit first
     /\ i \in delivered_to[k]              \* i is a σ-er at layer k (had V_k)
     /\ ~ nr_flipped[i][k]                 \* not yet NR-flipped at this layer
-    /\ NRFlipTriggered(k)                 \* trigger: ≥f+1 NRs ∧ σ-pool < qV
+    /\ NRFlipTriggered(k)                 \* deadlock detected (strict trigger)
     /\ nr_flipped' = [nr_flipped EXCEPT ![i][k] = TRUE]
     /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
                    kindcommit_emitted, output_set>>

@@ -179,37 +179,43 @@ ByzNR(op, k) ==
 (* though NR-quorum does — preserving Pigeonhole 1.                        *)
 (***************************************************************************)
 
-\* All honest have committed at layer k (= each has σ or NR there).
-\* Under this, no further HonestSigma or HonestNR can fire at k.
-AllHonestCommittedAt(k) ==
-    \A op \in Honest : HasSigma(op, k) \/ HasNR(op, k)
-
-\* Honest σ contribution to V at layer k.  Bounded by single-σ-V (at most one V
-\* per honest).  After all honest committed, this is FINAL (no more honest σ
-\* via HonestSigma since cross-phase exclusivity is preserved for σ-side).
-HonestSigmaOnVAt(k, v) ==
-    {op \in Honest : <<op, k, v>> \in sigma_partials}
-
-\* NR-flip trigger: deadlock detected at layer k AND σ-quorum on any V is
-\* algebraically unreachable even if all remaining byz contribute σ on it.
+\* === Operator-observable conditions only ================================
 \*
-\* Why "algebraically unreachable" rather than just `σ-pool < qV`: in the real
-\* protocol, byz's σ partials are final at T_commit (one KindCommit per byz),
-\* so honest at trigger time observes a stable pool.  The algebraic spec
-\* doesn't enforce this temporal ordering — ByzSigma can fire after honest
-\* NR-flips have already grown NR pool past qEnc.  To preserve P1 in this
-\* over-approximated model, the trigger must guarantee σ-quorum is impossible
-\* even if all f byz add σ on V later: `|h_σ_V| + f < qV ⟺ |h_σ_V| ≤ f`.
+\* CRITICAL VERIFICATION HYGIENE NOTE.  Earlier versions of this trigger used
+\* `HonestSigmaOnVAt` (= honest-only σ count, computed from the Honest set)
+\* and `AllHonestCommittedAt` (= honest-set commit check).  Both rely on
+\* knowledge of the byz/honest partition that operators do NOT have at
+\* runtime: every σ partial has the same form, and operators cannot
+\* cryptographically distinguish honest from byzantine signers.
 \*
-\* In the protocol, this strengthening is naturally satisfied at deadlock —
-\* selective Phase-1 delivery to k ≤ f honest → h_σ_V = k ≤ f → bound holds.
-\* The spec encoding makes it explicit so verification is sound under loose
-\* byz timing.
+\* Verifying with oracle-trigger conditions confirmed safety of an idealized
+\* protocol that's not directly implementable; doc review then surfaced a
+\* real attack pattern (byz cross-signing with σ withholding) that the
+\* oracle-trigger spec missed.  This was a CONCRETE METHODOLOGY BUG: TLC
+\* verified safety against a trigger that the real protocol can't enforce.
+\*
+\* Lesson: TLA+ specs of distributed protocols should restrict each role's
+\* local view to what's observable to that role.  Operator triggers should
+\* use only observable σ-pool / NR-pool sizes (no Honest-set filter), and
+\* "phase end" predicates should use observable timing (= all operators
+\* committed, or explicit phase variable) — not honest-set membership.
+\*
+\* This rewrite uses only operator-observable conditions.  Under TLC, this
+\* trigger model produces a safety counterexample reproducing the doc-review
+\* attack (byz cross-signs at non-leader layer, withholds σ; honest σ-er
+\* flips on observed deadlock; byz publishes withheld σ post-flip; both
+\* σ-quorum and NR-quorum reach → P1 violated → cluster double-signs).
+\* See docs/OBFT-formal-verif.md §7.4 for the trace.
+
+\* NR-flip trigger using observable conditions only.  Liberal form: σ-quorum
+\* not yet reached on any V (= what an honest operator verifies locally).
+\* "Liberal" because no honest/byz distinction in σ-pool counting — this is
+\* what's observable at the wire level, regardless of the safety proof's
+\* desired condition.
 NRFlipTriggered(k) ==
-    /\ AllHonestCommittedAt(k)                      \* honest σ/NR commits final
-    /\ Cardinality(NRPool(k)) >= F + 1              \* ≥ f+1 NR partials observed
-    /\ \A v \in Values :                            \* ∀V: σ-quorum unreachable
-        Cardinality(HonestSigmaOnVAt(k, v)) <= F
+    /\ Cardinality(NRPool(k)) >= F + 1               \* ≥ f+1 NR partials observed
+    /\ \A v \in Values :                             \* ∀V: σ-quorum not yet reached
+        Cardinality(SigmaPool(k, v)) < QV
 
 HonestNRFlip(op, k) ==
     /\ op \in Honest

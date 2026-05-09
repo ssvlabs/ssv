@@ -152,8 +152,8 @@ spec-alignment-diff:
 
 # TLA+ formal-verification targets — delegate to tla/Makefile.
 # See tla/README.md for prerequisites and tla/Makefile for full usage.
-.PHONY: tla-verify-bare tla-verify-lbid tla-verify-lbidnew tla-verify-all tla-clean
-tla-verify-bare tla-verify-lbid tla-verify-lbidnew tla-verify-all tla-clean:
+.PHONY: tla-verify-bare tla-verify-bareliveness tla-verify-lbid tla-verify-lbidnew tla-verify-all tla-clean
+tla-verify-bare tla-verify-bareliveness tla-verify-lbid tla-verify-lbidnew tla-verify-all tla-clean:
 	$(MAKE) -C tla $(@:tla-%=%)
 
 .PHONY: start-node

@@ -1,12 +1,13 @@
-# TLA+ formal-verification runner for OBFT SAFETY specs.
+# TLA+ formal-verification runner for OBFT SAFETY + LIVENESS specs.
 #
 # Usage:
-#   make verify-bare      run BareOBFT_Safety (fast, completes in seconds)
-#   make verify-lbid      run LBid_Safety (no timeout; overnight-friendly)
-#   make verify-lbidnew   run LBidNew_Safety (no timeout; overnight-friendly)
-#   make verify-all       run all three sequentially
-#   make clean            remove TLC checkpoints and run logs
-#   make help             this message
+#   make verify-bare           run BareOBFT_Safety (fast, completes in seconds)
+#   make verify-bareliveness   run BareOBFT_Liveness (fast, ~seconds)
+#   make verify-lbid           run LBid_Safety (no timeout; overnight-friendly)
+#   make verify-lbidnew        run LBidNew_Safety (no timeout; overnight-friendly)
+#   make verify-all            run all sequentially
+#   make clean                 remove TLC checkpoints and run logs
+#   make help                  this message
 #
 # Each verify-* target produces (under runs/):
 #   <spec>-<timestamp>.log       full TLC stdout/stderr
@@ -29,15 +30,16 @@ RUNS_DIR  := runs
 
 export HEAP WORKERS JAVA TLA_TOOLS RUNS_DIR
 
-.PHONY: help verify-bare verify-lbid verify-lbidnew verify-all clean
+.PHONY: help verify-bare verify-bareliveness verify-lbid verify-lbidnew verify-all clean
 
 help:
 	@echo "TLA+ formal-verification targets:"
-	@echo "  make verify-bare      BareOBFT_Safety  (fast, ~seconds)"
-	@echo "  make verify-lbid      LBid_Safety      (no timeout, overnight-friendly)"
-	@echo "  make verify-lbidnew   LBidNew_Safety   (no timeout, overnight-friendly)"
-	@echo "  make verify-all       all three sequentially"
-	@echo "  make clean            remove TLC checkpoints and run logs"
+	@echo "  make verify-bare           BareOBFT_Safety    (fast, ~seconds)"
+	@echo "  make verify-bareliveness   BareOBFT_Liveness  (fast, ~seconds)"
+	@echo "  make verify-lbid           LBid_Safety        (no timeout, overnight-friendly)"
+	@echo "  make verify-lbidnew        LBidNew_Safety     (no timeout, overnight-friendly)"
+	@echo "  make verify-all            all four sequentially"
+	@echo "  make clean                 remove TLC checkpoints and run logs"
 	@echo
 	@echo "Each run produces:"
 	@echo "  $(RUNS_DIR)/<spec>-<timestamp>.log       full TLC stdout/stderr"
@@ -61,7 +63,7 @@ verify-lbidnew:
 verify-bareliveness:
 	@./scripts/tlc-run.sh BareOBFT_Liveness
 
-verify-all: verify-bare verify-lbid verify-lbidnew
+verify-all: verify-bare verify-bareliveness verify-lbid verify-lbidnew
 
 clean:
 	rm -rf states/* $(RUNS_DIR)

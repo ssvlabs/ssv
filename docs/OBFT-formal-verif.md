@@ -635,11 +635,12 @@ This section is updated as TLC runs are performed.
 
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold. |
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint capping pool sizes at quorum thresholds) | ✓ verified | 2026-05-08 | Re-run with the cap-at-quorum state constraint as a safety sanity check before applying the constraint to L_Bid / L_Bid_New. TLC explored 250,000 distinct states (1.91M total) in 7s; same outcome (no counterexamples), confirming the constraint preserves SAFETY coverage. |
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint + **Phase-2.5 NR-flip action** + strengthened deadlock trigger) | ✓ verified | 2026-05-09 | Adds the `HonestNRFlip(op, k)` action with the deadlock trigger `AllHonestCommittedAt(k) ∧ \|NRPool(k)\| ≥ f+1 ∧ ∀v: \|HonestSigmaOnVAt(k, v)\| ≤ f`. TLC explored 327,184 distinct states (2.51M total) in 8s; all three Pigeonholes + SAFETY hold. The strengthened trigger (algebraic-σ-quorum-unreachability) is necessary for soundness in the algebraic spec under loose byz-action ordering. **Confirms the Phase-2.5 NR-flip mechanism preserves Pigeonhole 1 cryptographically: σ-pool at deadlock layer is bounded by 2f < qV regardless of byz behavior.** |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold for bare OBFT (no Phase-2.5). |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint capping pool sizes at quorum thresholds) | ✓ verified | 2026-05-08 | Re-run with the cap-at-quorum state constraint as a safety sanity check before applying the constraint to L_Bid / L_Bid_New. TLC explored 250,000 distinct states (1.91M total) in 7s; same outcome (no counterexamples). |
+| SAFETY | n=4, f=1, K=2 (with **Phase-2.5 NR-flip + ORACLE trigger** `\|HonestSigmaOnVAt(k,v)\| ≤ f`) | ⚠ **superseded** — verified result is METHODOLOGICALLY UNSOUND | 2026-05-09 | TLC explored 327,184 distinct states; no counterexamples found. **However**: the trigger condition `HonestSigmaOnVAt(k, v)` filters σ partials by the `Honest` model parameter, which is oracle knowledge unavailable to operators in the real protocol. Verifying under this oracle condition confirms safety of an idealized protocol that the implementation cannot enforce. **This result should NOT be cited as evidence that Phase-2.5 is implementable safely.** See the entry below for the corrected verification using only operator-observable conditions. |
+| SAFETY | n=4, f=1, K=2 (with **Phase-2.5 NR-flip + OBSERVABLE trigger** `Cardinality(SigmaPool(k, v)) < qV`) | ✗ **COUNTEREXAMPLE** — Phase-2.5 unsafe under observable trigger | 2026-05-09 | TLC explored 25,577 distinct states; found Pigeonhole-1 violation at depth 8. Trace: 2 honest σ on V (op1, op3); 1 honest NR (op2); byz publishes NR but withholds σ; trigger fires (NR≥f+1=2 ✓, σ-pool<qV=3 ✓); honest op1 NR-flips → NR-pool=3=qEnc; byz publishes withheld σ → σ-pool=3=qV. Both quorums reach at L_0 → P1 violated → cluster's validator double-signs → stake slashable. See [§7.4 counterexample log](#74--counterexample-log) for the full trace. **Confirms the doc-review finding that Phase-2.5's observable trigger cannot prevent grief-byz cross-signing-with-σ-withholding.** |
 | LIVENESS_NON_GRIEF | n=4, f=1, K=2 (no NR-flip — bare OBFT pre-Phase-2.5) | ✗ counterexample | 2026-05-08 | TLC found Class A deadlock matching `h_V=1` selective-Phase-1-delivery: byz delivers V_0 to op2 only; σ-pool=2 < qV; nr-pool=2 < qEnc; chain doesn't unlock; output never set. Reproduces the documented Appendix C algebraic limit. 5,492 distinct states explored, depth 7, 6s runtime. |
-| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**with Phase-2.5 NR-flip mechanism**) | ✓ verified | 2026-05-09 | TLC verified Class A closure: every honest operator eventually has `output_set[i] = TRUE` under all reachable byz behavior (silent / honest-mimicking / partial broadcast / late delivery). 13,581 distinct states (full coverage, no symmetry — TLC warns symmetry under liveness checking is unsound), depth 11, 6s runtime. **Closes the deadlock found pre-Phase-2.5.** |
+| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**with Phase-2.5 NR-flip + OBSERVABLE trigger**) | ✓ verified | 2026-05-09 | TLC verified Class A closure under non-grief byz behavior: every honest operator eventually has `output_set[i] = TRUE`. 13,581 distinct states (full coverage, no symmetry), depth 11, 6s runtime. **Caveat**: liveness checking restricts byz to non-grief actions per `LIVENESS_NON_GRIEF` definition; under grief (cross-signing with σ withholding), the SAFETY spec's counterexample applies even though liveness here is "verified" — the two specs check different properties under different adversary models. The liveness result alone does not establish that Phase-2.5 is implementable safely. |
 | SAFETY | n=4, f=1, K=4, \|Values\|=4 (with NR-flip) | _to be run_ | — | Larger config — verifies safety with full layer count |
 | SAFETY | n=7, f=2 (with NR-flip) | _to be run_ | — | — |
 | LIVENESS_NON_GRIEF | n=7, f=2 (with NR-flip) | _to be run_ | — | — |
@@ -668,7 +669,40 @@ This section is updated as TLC runs are performed.
 
 ### 7.4 — Counterexample log
 
-(empty until any counterexample is found)
+#### CE-1: Phase-2.5 NR-flip + observable trigger — Pigeonhole-1 violation under byz σ-withholding cross-sign (2026-05-09)
+
+**Spec**: `tla/BareOBFT_Safety.tla` at `n=4, f=1, K=2, |Values|=2` with state constraint, Phase-2.5 `HonestNRFlip` action, observable trigger `Cardinality(SigmaPool(k, v)) < QV ∧ Cardinality(NRPool(k)) ≥ F+1`.
+
+**Outcome**: SAFETY (Pigeonhole 1 conjunct) violated. Counterexample found at depth 8; 25,577 distinct states explored before the violation surfaced.
+
+**Trace** (Operators = {op1, op2, op3, op4}, Byzantine = {op4}, Layer = 0, V = v1):
+
+```
+State 1: Init                        sigma_partials={}              nr_partials={}
+State 2: HonestSigma(op1, 0, v1)     sigma_partials={(op1,0,v1)}    nr_partials={}
+State 3: HonestSigma(op3, 0, v1)     sigma_partials += (op3,0,v1)   nr_partials={}
+State 4: HonestNR(op2, 0)            sigma_partials unchanged        nr_partials={(op2,0)}
+State 5: ByzNR(op4, 0)               sigma_partials unchanged        nr_partials += (op4,0)
+                                     ─── trigger conditions met:
+                                         |NRPool(0)| = 2 ≥ F+1 = 2 ✓
+                                         |SigmaPool(0, v1)| = 2 < QV = 3 ✓
+State 6: HonestNRFlip(op1, 0)        sigma_partials unchanged        nr_partials += (op1,0)
+                                     ─── NR-quorum reached:
+                                         |NRPool(0)| = 3 = qEnc ✓
+State 7: ByzSigma(op4, 0, v1)        sigma_partials += (op4,0,v1)   nr_partials unchanged
+                                     ─── σ-quorum on v1 reached:
+                                         |SigmaPool(0, v1)| = 3 = qV ✓
+                                     ─── BOTH QUORUMS REACH AT LAYER 0
+                                     ─── PIGEONHOLE 1 VIOLATED
+```
+
+**Real-protocol interpretation**: at honest L_0 leader with asymmetric propagation (1 honest's V_0 delivery slips past `T_commit`), 2 honest σ on V_0 (op1, op3) and 1 honest NR (op2). Byzantine op4 is non-leader at L_0; it cross-signs by publishing NR (visible in op4's KindCommit) while WITHHOLDING its σ partial on V_0 (= signs σ but doesn't include it in KindCommit's onion). At trigger time, every honest operator observes `σ-pool[V_0] = 2 < qV`, `NR-pool = 2 ≥ f+1`, satisfying the observable Phase-2.5 trigger. Honest σ-er op1 NR-flips. After NR-quorum reaches, op4 publishes the previously-withheld σ partial (e.g., as a "late KindCommit re-emission" or via offline aggregation). σ-pool[V_0] now reaches qV concurrent with NR-quorum. Both quorums at L_0 → cluster's BLS validator signature reconstructs on V_0 AND chain unlocks to L_1 where another reconstruction happens → cluster validator emits TWO distinct signatures at the same slot → **slashable double-sign on the validator's BLS pubkey**.
+
+**Root cause**: the Phase-2.5 trigger's observable form (`SigmaPool(k, v) < qV`) does not bound future σ-pool growth. Specifically, byz can withhold σ partials at trigger time and publish them post-flip, growing σ-pool past qV after NR-pool has already reached qEnc via the flip. Operators cannot cryptographically detect "byz withholding σ" — every published partial has the same form, and the absence of a partial is indistinguishable from byz silence. This is a fundamental gap in Phase-2.5's design at OBFT's "single Phase-2 with cross-phase exclusivity" structural point, not a fixable spec encoding issue.
+
+**Methodology lesson**: an earlier version of this spec used `Cardinality(HonestSigmaOnVAt(k, v)) ≤ F` in the trigger — `HonestSigmaOnVAt` filters σ-pool members by the `Honest` set, which is a model parameter accessible to TLC but represents oracle knowledge unavailable to real-world operators. Verifying with the oracle trigger confirmed safety of an idealized protocol that the implementation cannot enforce. The corrected spec uses only operator-observable conditions; CE-1 is what TLC finds under the corrected model. **TLA+ specs of distributed protocols should restrict each role's action preconditions to what's locally observable to that role; using model-parameter sets like `Honest` in role-local triggers is a methodology bug that produces unsound verification results.**
+
+**Resolution status**: open. See OBFT.md §Phase 2.5 + §Pigeonhole 1 caveat for the doc-level acknowledgment. Decision pending on (a) drop Phase-2.5 entirely (revert to bare OBFT with documented `h_V=1` algebraic limit), (b) accept Phase-2.5 only under non-grief and document the slashing risk under grief, or (c) restructure to 2abOBFT-style Phase-2a/2b observation that closes this gap principally.
 
 ---
 

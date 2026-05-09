@@ -244,6 +244,8 @@ A byzantine operator that publishes both σ and NR on the same `(slot, layer)` *
 
 ### Phase 2.5 — NR-flip recovery on observed deadlock
 
+> ⚠️ **Open safety issue — Phase-2.5 not yet recommended for production deployment.** Formal verification with an operator-observable trigger surfaces a Pigeonhole-1 violation under grief byz that cross-signs (publishes NR, withholds σ): the σ-er's flip pushes NR-pool past qEnc; byz then publishes the withheld σ and σ-pool reaches qV concurrent with NR-quorum; cluster's BLS validator emits two distinct signatures at the same slot — a stake-slashable double-sign. See [docs/OBFT-formal-verif.md §7.4 CE-1](OBFT-formal-verif.md) for the TLC counterexample trace and [§Pigeonhole 1 verifiability caveat](#fault-tolerance) for the algebraic discussion. The mechanism described in this section closes the `h_V=1` selective-Phase-1-delivery deadlock under non-grief byz, but the grief exposure (cluster double-sign) is operationally worse than the slot-miss it closes (which is bounded by the rational-byz deterrent under assumption 4). **Resolution is open** — options include dropping Phase-2.5 entirely (revert to bare OBFT with documented `h_V=1` algebraic limit), accepting the mechanism only in deployments where grief byz is bounded by other means, or restructuring to 2abOBFT-style Phase-2a/2b observation. The mechanism specification below is preserved for design-discussion reference.
+
 Phase 2.5 is a **Phase-3 sub-mechanism**, not a separate phase with its own budget. NR-flip emission and local reconstruction happen during Phase 3 reconstruction at the σ-er detecting deadlock; **at n=4, f=1, the lone-reconstructor path always suffices and cluster slot success doesn't depend on NR-flip propagation, so no extension to `Δ_2` is needed**. (For `n ≥ 7` deployments, σ-er-to-σ-er NR-flip propagation may be needed in `k ≥ 2` deadlock cases — see "Caveat at n ≥ 7" below.) This section specifies the mechanism; see [§Phase 3](#phase-3--local-decryption-and-reconstruction-from-t_commit--%CE%94_2) for how it integrates into the reconstruction walk.
 
 **Motivation.** At `T_commit + Δ_2` (start of Phase 3), each operator inspects per-layer pools to determine reconstruction strategy. In the typical case (σ-quorum reaches at some layer), reconstruction proceeds normally. In the **selective-Phase-1-delivery** case — byzantine layer-leader broadcasts to a subset of honest operators — neither σ-quorum nor NR-quorum may reach at that layer (`h_V=1`-style algebraic limit; see [Appendix C](#appendix-c--message-re-broadcast-considerations) and [§Liveness](#liveness-synchrony-conditional)). Without the recovery mechanism described here, the slot would miss without fall-through, since chain unlock to deeper layers requires NR-quorum at the failing layer.
@@ -279,7 +281,13 @@ Where `trigger_evidence` is byte-for-byte copies of `f+1` distinct, auth-verifie
 
 **No symmetric σ-flip.** This mechanism is **asymmetric by design**: NR-after-σ is allowed under trigger; σ-after-NR is **never** allowed under any condition. The asymmetry is what preserves Pigeonhole 1 cryptographically: σ-pool at the deadlock layer is bounded by `|honest σ-ers| + f ≤ 2f < qV` (under the trigger condition's second clause), so σ-quorum on any V cannot be reached at the deadlock layer regardless of how many NR-flips happen. NR-flip grows nr-pool past qEnc, unlocking the chain to a deeper layer where σ-quorum reaches naturally — producing exactly **one** cluster-wide V signature at the deeper layer, never at the deadlock layer. A symmetric σ-after-NR mechanism would have allowed σ-pool to grow past qV concurrent with nr-pool past qEnc, breaking Pigeonhole 1.
 
-**Per-layer scope.** NR-flip is evaluated independently per layer. An operator may NR-flip at multiple layers in the same slot if multiple layers are deadlocked (e.g., byzantine leaders at L_0 and L_1 with f ≥ 2). Each NR-flip carries its own per-layer trigger evidence.
+**Per-layer scope.** NR-flip is evaluated independently per layer, but **deadlock detection at deeper layers requires chain unlock at preceding layers** (chained-IBE encryption gates `L_{k > 0}`'s σ-pool until NR-quorum at all `L_0..L_{k-1}` is reached). An operator may NR-flip at multiple layers in the same slot if multiple layers are deadlocked (e.g., byzantine leaders at L_0 and L_1 with f ≥ 2), but the flips are sequenced by the chain-unlock order:
+
+1. Detect deadlock at `L_0` (= the only layer whose σ-pool is plaintext-inspectable). If predicate holds, emit `KindNRFlip` at `L_0`, locally aggregate own NR-flip + observed NR partials → reach NR-quorum at `L_0` → derive `nr_tag_0` decryption key.
+2. Decrypt L_1's σ-pool onion contents using `nr_tag_0`'s key. Now inspectable. Re-evaluate deadlock predicate at `L_1` against the newly-observable pool. If `L_1` is deadlocked too, emit `KindNRFlip` at `L_1`, locally aggregate → reach NR-quorum at `L_1` → derive `nr_tag_1` decryption key. Continue.
+3. Walk continues until σ-quorum reaches at some layer (output V; halt) or all layers exhausted (slot misses).
+
+**Verification scope.** The TLA+ liveness verification at `BareOBFT_Liveness.cfg` is at K=2, which has at most one deadlock layer (L_0). Multi-layer NR-flip cascades at K ≥ 3 are not yet directly verified; the per-layer mechanism is identical, and the chain-unlock ordering is naturally enforced by the existing Phase-3 reconstruction walk (see §Phase 3 pseudocode), but a K=3 verification config would tighten the formal guarantee for cascading deadlocks.
 
 **Reception and aggregation.** Receivers verify each `KindNRFlip` by:
 1. Verifying the IBE partial signature against the emitter's IBE-keypair share.
@@ -453,7 +461,9 @@ The pool definitions used in the arguments below:
 - **σ-pool on V at L_k**: `{σ_i^V(V) partials at L_k}`, deduplicated per operator. Includes the leader's Phase-1 σ_V when valid. Once a partial is emitted, it stays on the wire — no "revocation" semantics.
 - **NR-pool at L_k**: `{σ_i^{IBE}(nr_tag_k) partials}`, deduplicated per operator.
 
-**Pigeonhole 1 — σ-vs-NR at the same layer.** σ-quorum on `V` (any V) at `L_k` and NR-quorum on `nr_tag_k` cannot both reach.
+**Pigeonhole 1 — σ-vs-NR at the same layer.** σ-quorum on `V` (any V) at `L_k` and NR-quorum on `nr_tag_k` cannot both reach. Two cases — (A) no NR-flips fired at L_k, (B) at least one NR-flip fired at L_k — both are handled below.
+
+**Case A: no Phase-2.5 NR-flip at L_k** (the standard bare-OBFT case).
 
 - σ-quorum on V: `h_σ + byz_σ ≥ qV = 2f+1` (where h_σ counts honest with σ partials on V at L_k from any phase, deduplicated per operator).
 - NR-quorum: `h_NR + byz_NR ≥ qEnc = 2f+1`.
@@ -461,6 +471,17 @@ The pool definitions used in the arguments below:
 - **Leader-counting.** If the layer's leader is honest, their Phase-1 σ_V partial counts toward `h_σ` for the V they signed; cross-phase exclusivity then forbids them from emitting NR/NV on `nr_tag_k`. If the leader is byzantine and equivocates, each per-V partial they publish counts toward `byz_σ_V` for that V (capped at 1 per byz per V by deduplication).
 - Byzantine cross-signing: `byz_σ + byz_NR ≤ 2f` (each byz contributes at most 1 to each pool).
 - If both quorums reached: `h_σ + h_NR ≥ 4f+2 − 2f = 2f+2`. But `h_σ + h_NR ≤ 2f+1`. Contradiction. ∎
+
+**Case B: ≥ 1 Phase-2.5 NR-flip fired at L_k** (the deadlock-recovery case).
+
+- The Phase-2.5 trigger condition (per [§Phase 2.5](#phase-25--nr-flip-recovery-on-observed-deadlock)) requires that, at the time of any honest's NR-flip emission, **`|honest_σ_pool[k][V]| + f < qV` for every retained V**, equivalently `|honest_σ_pool[k][V]| ≤ f`.
+- Bound on σ-pool[V] at L_k post any Phase-2.5 activity: `σ-pool[V] ≤ |honest_σ_pool[k][V]| + byz_σ_V ≤ f + f = 2f < qV = 2f+1`. (Honest σ-after-NR is strictly forbidden — only NR-after-σ via the trigger-validated path is allowed — so `|honest_σ_pool[k][V]|` does NOT grow after the trigger fires; byz contribution to a single V is capped at f by single-σ-V cross-onion-equivocation slashing per Rule 3.)
+- Therefore **σ-quorum on any V at L_k cannot reach** in Case B. P1 holds vacuously (no σ-quorum reaches; whether NR-quorum reaches is moot for this invariant).
+- This is the load-bearing safety argument for Phase-2.5: σ-pool sub-qV is preserved cryptographically by the trigger condition + EKM-enforced σ-after-NR forbiddance. ∎
+
+**Trigger-evidence verifiability caveat.** The Case-B argument assumes `|honest_σ_pool[k][V]| ≤ f` actually holds when the trigger fires. The on-wire `trigger_evidence` proves f+1 NR partials but does NOT prove the σ-pool composition; each honest operator's local check uses their observed σ-pool, which they cannot cryptographically distinguish into honest-vs-byzantine portions. Under non-grief (byz follows protocol — publishes σ partials they signed, doesn't withhold), observed σ-pool = honest σ contribution + byz σ contribution, and the Case-B argument holds. **Under grief byz that signs σ but withholds it for offline aggregation, the Case-B argument fails: the operator's observable trigger fires when `observed σ-pool < qV` even though `actual |honest_σ_pool|` may exceed f, and byz can later publish the withheld σ to grow σ-pool past qV concurrent with the NR-quorum reached via the flip.**
+
+This isn't a hypothetical: TLA+ verification with an *operator-observable trigger* (the implementable form) finds a Pigeonhole-1 counterexample at `n=4, f=1, K=2` reproducing exactly this attack — see [docs/OBFT-formal-verif.md §7.4 CE-1](OBFT-formal-verif.md). The earlier "verified" result for Phase-2.5 SAFETY used an oracle trigger (`HonestSigmaOnVAt(k, v) ≤ F`) that filtered by the `Honest` model parameter, oracle knowledge unavailable to real operators; that result was methodologically unsound and is superseded by CE-1. **Under grief byz with cross-signing-and-σ-withholding, Phase-2.5 NR-flip can cause cluster double-sign on the validator's BLS pubkey, which is a stake-slashable event.** This is an open issue at the time of writing — see [§Failure modes / Class B](#failure-modes) for the practical risk discussion and [§Phase 2.5 Caveat](#phase-25--nr-flip-recovery-on-observed-deadlock) for the deployment-time guidance.
 
 **Pigeonhole 2 — two σ-quorums on different values at the same layer.** Two distinct `V`'s cannot both reach σ-quorum at the same layer (e.g., via leader equivocation that some honest σ-commit on early before observing evidence):
 

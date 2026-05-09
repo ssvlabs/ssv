@@ -22,8 +22,10 @@ The current specs are intentionally algebraic: they capture per-operator σ-or-N
 
 | File | Purpose |
 |---|---|
-| `BareOBFT_Safety.tla` | Bare OBFT SAFETY spec — Pigeonholes 1, 2, 3 |
+| `BareOBFT_Safety.tla` | Bare OBFT SAFETY spec — Pigeonholes 1, 2, 3 + Phase-2.5 NR-flip action |
 | `BareOBFT_Safety.cfg` | TLC config for n=4, f=1 |
+| `BareOBFT_Liveness.tla` | Bare OBFT LIVENESS_NON_GRIEF (Class A closure) — incl. Phase-2.5 NR-flip mechanism for h_V=1 selective-delivery recovery |
+| `BareOBFT_Liveness.cfg` | TLC config for n=4, f=1, K=2 |
 | `LBid_Safety.tla` | OBFT + L_Bid SAFETY spec — Pigeonholes 1, 2, 3 + verdict pigeonhole; symmetry reduction over Honest × Values |
 | `LBid_Safety.cfg` | TLC config for n=4, f=1 with symmetry |
 | `LBidNew_Safety.tla` | OBFT + L_Bid_New SAFETY spec — same invariants as LBid_Safety, encoded for L_Bid_New's structural differences (deep-only verdict scope, σ-when-uncertain rule, primary-bid placement at L_0); symmetry reduction over Honest × Values |
@@ -31,7 +33,6 @@ The current specs are intentionally algebraic: they capture per-operator σ-or-N
 
 Planned (not yet written):
 
-- `BareOBFT_Liveness.tla` — bare OBFT LIVENESS_NON_GRIEF (Class A closure).
 - `LBid_Liveness.tla` — current L_Bid liveness verification.
 - `LBidNew_Liveness.tla` — L_Bid_New liveness verification (would model bid_1 per-operator to verify F.5.2 corner cases).
 - Configs for n=7, f=2.
