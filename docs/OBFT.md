@@ -546,9 +546,7 @@ The arguments above apply symmetrically to all K layers. **None of the proofs de
 
 ### Liveness (synchrony-conditional)
 
-> ### ⚠️ Liveness scope is narrow — read this before relying on liveness in deployment
->
-> **In its current form, OBFT's liveness is conditional on two requirements per slot:**
+> ### ⚠️ In its current form, OBFT's liveness is conditional on two requirements per slot:
 >
 > **(a) [Assumption 2](#assumed) (within-budget partial-synchrony) holds for that slot.** Honest `KindCommit` messages emitted at `T_commit` reach a 2f+1 quorum of operators by `T_commit + Δ_2` (recommended `Δ_2 = 2 BTT`). This is the same partial-synchrony assumption QBFT operates under for its `PREPARE` / `COMMIT` phases.
 >
