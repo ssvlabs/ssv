@@ -423,3 +423,67 @@ func stableSort(a []string) {
 		}
 	}
 }
+
+// RenderSweepIndex writes an HTML index page listing entries grouped by
+// sweep name. Used by batch driver tests to provide a navigable
+// top-level page when many per-(sweep, point) reports are generated.
+//
+// Entries are grouped by SweepName in the order they appear in the
+// input; within each sweep, in the order entries were appended.
+func RenderSweepIndex(title, description string, entries []SweepIndexEntry, path string) error {
+	var sb strings.Builder
+	sb.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n")
+	sb.WriteString("<meta charset=\"utf-8\">\n")
+	fmt.Fprintf(&sb, "<title>%s</title>\n", html.EscapeString(title))
+	sb.WriteString(htmlStyles())
+	sb.WriteString("</head>\n<body>\n")
+
+	fmt.Fprintf(&sb, "<h1>%s</h1>\n", html.EscapeString(title))
+	if description != "" {
+		fmt.Fprintf(&sb, "<p class=\"desc\">%s</p>\n", html.EscapeString(description))
+	}
+
+	// Group entries by SweepName preserving insertion order.
+	type group struct {
+		name        string
+		description string
+		axisLabel   string
+		rows        []SweepIndexEntry
+	}
+	var groups []*group
+	byName := make(map[string]*group)
+	for _, e := range entries {
+		g, ok := byName[e.SweepName]
+		if !ok {
+			g = &group{name: e.SweepName, description: e.SweepDescription, axisLabel: e.AxisLabel}
+			byName[e.SweepName] = g
+			groups = append(groups, g)
+		}
+		g.rows = append(g.rows, e)
+	}
+
+	for _, g := range groups {
+		fmt.Fprintf(&sb, "<h2>%s</h2>\n", html.EscapeString(g.name))
+		if g.description != "" {
+			fmt.Fprintf(&sb, "<p class=\"desc\">%s</p>\n", html.EscapeString(g.description))
+		}
+		if g.axisLabel != "" {
+			fmt.Fprintf(&sb, "<p class=\"meta\">Axis: %s</p>\n", html.EscapeString(g.axisLabel))
+		}
+		sb.WriteString("<table>\n<thead><tr><th>Point</th><th>HTML</th><th>CSV</th><th>Markdown</th></tr></thead>\n<tbody>\n")
+		for _, e := range g.rows {
+			fmt.Fprintf(&sb, "<tr><td class=\"scen\">%s</td>", html.EscapeString(e.PointLabel))
+			fmt.Fprintf(&sb, "<td><a href=\"%s\">HTML</a></td>", html.EscapeString(e.HTMLPath))
+			fmt.Fprintf(&sb, "<td><a href=\"%s\">CSV</a></td>", html.EscapeString(e.CSVPath))
+			fmt.Fprintf(&sb, "<td><a href=\"%s\">Markdown</a></td>", html.EscapeString(e.MarkdownPath))
+			sb.WriteString("</tr>\n")
+		}
+		sb.WriteString("</tbody></table>\n")
+	}
+
+	sb.WriteString("</body>\n</html>\n")
+	if err := os.WriteFile(path, []byte(sb.String()), 0o644); err != nil {
+		return fmt.Errorf("reporting: write sweep index %s: %w", path, err)
+	}
+	return nil
+}

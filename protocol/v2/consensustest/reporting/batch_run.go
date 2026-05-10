@@ -112,3 +112,15 @@ func (b *BatchRun) CellAt(scenario, protocol string) (ct.BatchCell, bool) {
 func Applicable(c ct.BatchCell) bool {
 	return c.Iterations > 0
 }
+
+// SweepIndexEntry is one row of the top-level index page — a link to a
+// per-(sweep, point) report.
+type SweepIndexEntry struct {
+	SweepName        string
+	SweepDescription string
+	AxisLabel        string
+	PointLabel       string
+	HTMLPath         string // relative or absolute, used verbatim in <a href>
+	CSVPath          string
+	MarkdownPath     string
+}

@@ -161,8 +161,18 @@ func runCell(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol
 				// empty cell with Iterations=0 to signal "n/a" downstream.
 				return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
 			}
-			t.Fatalf("RunBatch: %s/%s iter=%d Run error: %v",
-				protocol.Name(), scenario.Name, iter, err)
+			// Other Run errors — typically config validation (e.g. at
+			// BTT=600ms, OBFT's deepest layer's broadcast deadline goes
+			// negative). Log once per cell at iter=0 and surface as an
+			// Iterations=0 cell so renderers show "n/a" rather than the
+			// whole batch aborting. The user gets all OTHER cells'
+			// comparison data even when one operating point is out of
+			// envelope for one protocol.
+			if iter == 0 {
+				t.Logf("RunBatch: %s/%s out of envelope: %v (cell marked n/a)",
+					protocol.Name(), scenario.Name, err)
+			}
+			return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
 		}
 
 		// Universal safety invariants — panic on violation, matching the

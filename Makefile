@@ -122,6 +122,24 @@ consensustest-report:
 	@echo "Generating consensustest reports to $(abspath $(REPORT_DIR))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) go test -tags "blst_enabled lfs" -run TestGenerateReport -v ./protocol/v2/consensustest/
 
+# consensustest-batch-report runs the multi-sim batch-comparison framework
+# (5 curated sweeps × OBFT/QBFT × BATCH_ITERATIONS iterations) and writes
+# per-(sweep, point) HTML / CSV / Markdown reports plus a top-level
+# index.html to BATCH_REPORT_DIR (default ./consensustest-batch-reports).
+#
+# Iteration count: override via BATCH_ITERATIONS (default 100). 100 gives
+# stable P99 stats for success-rate ≥ 50% scenarios; bump to 1000 for
+# rare-event scenarios at proportionally longer wallclock (~12-15 min).
+#
+# See docs/CONSENSUSTEST-BATCH-PLAN.md for the framework design.
+BATCH_REPORT_DIR ?= ./consensustest-batch-reports
+BATCH_ITERATIONS ?= 100
+.PHONY: consensustest-batch-report
+consensustest-batch-report:
+	@echo "Generating consensustest batch reports to $(abspath $(BATCH_REPORT_DIR)) (BATCH_ITERATIONS=$(BATCH_ITERATIONS))"
+	@BATCH_REPORT_DIR=$(abspath $(BATCH_REPORT_DIR)) BATCH_ITERATIONS=$(BATCH_ITERATIONS) \
+		go test -tags "blst_enabled lfs" -timeout 30m -run TestGenerateBatchReport -v ./protocol/v2/consensustest/
+
 .PHONY: docker-spec-test
 docker-spec-test:
 	@echo "Running spec tests in docker"
