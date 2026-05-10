@@ -409,13 +409,13 @@ func TestSweep_ClockSkew(t *testing.T) {
 	const baseDelay = btt / 2           // typical-mesh propagation; leaves 2δ for skew
 
 	skewPatterns := []struct {
-		name        string
-		skew        map[ct.OperatorID]time.Duration
-		mustDecide  bool // assert Healthy decides for both protocols
+		name       string
+		skew       map[ct.OperatorID]time.Duration
+		mustDecide bool // assert Healthy decides for both protocols
 	}{
 		{
-			name: "zero",
-			skew: map[ct.OperatorID]time.Duration{},
+			name:       "zero",
+			skew:       map[ct.OperatorID]time.Duration{},
 			mustDecide: true,
 		},
 		{
