@@ -1,54 +1,95 @@
 ---------------------------- MODULE BareOBFT_Safety ----------------------------
 (***************************************************************************)
-(* Safety verification for bare OBFT — σ-flip variant.                     *)
+(* Safety verification for bare OBFT with Phase-2.5 σ-flip / NR-flip,      *)
+(* per-operator-view model.                                                *)
 (*                                                                         *)
-(* Tests the σ-flip + leader-NR-doesn't-count + full-V-in-onion design as  *)
-(* an alternative to the previous NR-flip mechanism.  Specifically:        *)
+(* User's design:                                                          *)
+(*   - σ-flip (any non-leader honest who NR'd):                            *)
+(*       trigger: snap_NR_nl < f+1 AND snap_S_post ≥ A + 2f                *)
+(*       effect:  add σ partial on V (additive, prior NR stays).           *)
 (*                                                                         *)
-(*   - σ-flip: an honest operator who already NR'd at layer k may emit an  *)
-(*     additional σ partial on V if (a) ≥ f+1 NR partials observed at k    *)
-(*     (excluding leader-k's NR), (b) σ-quorum not yet reached on any V at *)
-(*     k, and (c) V is V-available (= some operator already has σ on V,    *)
-(*     so V propagates cluster-wide via the full-V-in-onion plumbing).     *)
+(*   - NR-flip (LEADER ONLY, when honest):                                 *)
+(*       trigger: snap_S_nl < f AND snap_NR_nl ≥ A + 2f                    *)
+(*       effect:  add NR partial (additive, prior σ_L^V stays).            *)
+(*       restriction: leader-only prevents non-leader-NR-flip safety       *)
+(*       attack surface (CE-1..12 in earlier iterations).                  *)
 (*                                                                         *)
-(*   - leader-NR-doesn't-count: the layer-k leader's NR is excluded from   *)
-(*     the cluster-wide NR-pool used for fallthrough quorum and σ-flip     *)
-(*     trigger evidence.  Cryptographically implementable since leader_of  *)
-(*     is publicly known per OBFT's deterministic rotation.                *)
+(* Where (all evaluated from the actor's own snapshot):                    *)
+(*   NR_nl  = non-leader NRs (incl own for σ-flipper as actor)             *)
+(*   S_nl   = non-leader σ partials                                        *)
+(*   S_post = non-leader σ post-flip = pre-flip S_nl + 1                   *)
+(*   A      = silent ops (no partial in actor's snapshot)                  *)
 (*                                                                         *)
-(*   - full-V-in-onion: V is propagated cluster-wide once any σ partial on *)
-(*     V exists at the layer (modeled here as VAvailable predicate).       *)
+(* === Per-operator-view model =========================================== *)
 (*                                                                         *)
-(* Verifies the three Pigeonhole invariants from `docs/OBFT.md`:           *)
+(* This spec models per-operator local views of σ/NR partials, not a       *)
+(* single global pool.  Each operator has their own sigma_view[op] and     *)
+(* nr_view[op] tracking what THEY have observed.                           *)
 (*                                                                         *)
-(*   - Pigeonhole 1: at any layer L_k, σ-quorum on any V and NR-quorum     *)
-(*     (excluding leader-k's NR) cannot both reach.                        *)
-(*   - Pigeonhole 2: at any layer L_k, at most one V can reach σ-quorum.   *)
-(*   - Pigeonhole 3: across all K layers under chained encryption, at      *)
-(*     most one V signature reconstructs cluster-wide.                     *)
+(* Honest emissions (within-budget partial-synchrony, Assumption 2):       *)
+(* delivered to ALL operators' views.  Honest views thus agree on honest  *)
+(* contributions cluster-wide.                                             *)
 (*                                                                         *)
-(* The spec models per-operator σ-or-NR commitments per layer with         *)
-(* honest XOR enforcement (σ-after-NR is allowed only via the σ-flip       *)
-(* action under valid trigger evidence) and unrestricted byzantine action. *)
-(* The next-state relation lets honest add new commitments respecting XOR  *)
-(* (or σ-flip's amended-EKM rule) and lets byzantine add any commitments   *)
-(* freely; TLC explores all reachable states and checks the invariants.    *)
+(* Byzantine emissions: byz chooses any subset S ⊆ Operators per emission *)
+(* (selective delivery, full grief).  byz's own view always contains its   *)
+(* own signed messages (byz knows what they signed).  Honest views may    *)
+(* disagree on byz contributions.                                          *)
 (*                                                                         *)
-(* leader_of is a state variable initialized non-deterministically as any  *)
-(* injective function [Layers -> Operators] (= distinct leader per layer,  *)
-(* matching OBFT's deterministic rotation), so TLC explores all leader-    *)
-(* assignment patterns including byz-at-any-position.                      *)
+(* Snapshot semantics: each honest operator independently snapshots their  *)
+(* own view at FinalizePhase2.  σ-flip / NR-flip trigger evaluation uses   *)
+(* the actor's own snapshot.  Different operators may evaluate triggers    *)
+(* differently (per-operator snap divergence on byz contributions).        *)
 (*                                                                         *)
-(* Out of scope: phase progression, network non-determinism, fetch loops,  *)
-(* mini-consensus.  These are not relevant for the algebraic safety        *)
-(* property — Pigeonholes are properties of the cluster-wide signed-      *)
-(* message set under EKM enforcement, independent of timing or network.    *)
+(* Cluster-wide pool semantics (for safety invariants): the cluster pool   *)
+(* on (k, v) = { op : op signed σ on (k, v) } = { op : <<op, k, v>> ∈      *)
+(* sigma_view[op] } (signer's own view always contains their signature).   *)
+(* This represents the worst-case offline-aggregator's set: byz can        *)
+(* aggregate any signed partial regardless of which honest saw it.         *)
+(*                                                                         *)
+(* === Safety basis ====================================================== *)
+(*                                                                         *)
+(* The σ-flip and NR-flip triggers are mutex per (k) under within-budget   *)
+(* honest propagation (Assumption 2), via algebraic-cardinality argument:  *)
+(*   - σ-flip from honest non-leader X requires snap_NR_nl_X ≤ f.  X sees  *)
+(*     all honest non-leader NRs (within-budget) ⇒ nr_h ≤ f ⇒ s_h ≥ f.    *)
+(*   - NR-flip from honest leader requires snap_S_nl_leader < f.  Leader  *)
+(*     sees all honest non-leader σs (within-budget) ⇒ s_h < f.            *)
+(*   - At n=3f+1, honest non-leaders = 2f, so s_h + nr_h = 2f.  Both       *)
+(*     constraints (s_h ≥ f AND s_h < f) cannot hold.  Mutex.              *)
+(*                                                                         *)
+(* Under σ-flip path: NR-pool ≤ snap_NR + byz_NR_total ≤ (nr_h + 1) + f ≤  *)
+(* (f + 1) + f = 2f+1 = qEnc, but the +1 from leader's NR only applies if  *)
+(* leader byz-NR'd in snap.  At f=1, NR-pool ≤ 2 < 3 = qEnc.               *)
+(*                                                                         *)
+(* Under NR-flip path: σ-pool[V_L] ≤ s_h + leader_σ_L^V + byz_σ_V ≤ (f-1) *)
+(* + 1 + f = 2f < 2f+1 = qV.                                                *)
+(*                                                                         *)
+(* === Verifies the three Pigeonhole invariants from docs/OBFT.md ========*)
+(*   - Pigeonhole 1: σ-quorum and NR-quorum don't both reach at any layer. *)
+(*   - Pigeonhole 2: at most one V σ-quorums per layer.                    *)
+(*   - Pigeonhole 3: at most one V reconstructs cluster-wide across K      *)
+(*     layers under chained encryption.                                    *)
+(*                                                                         *)
+(* Honest behavior:                                                        *)
+(*   - HonestSigma / HonestNR fire pre-FinalizePhase2 (= per-op flag).     *)
+(*   - Honest leader doesn't NR pre-snap (leader's job is σ_L^V).          *)
+(*   - Honest non-leader can σ or NR freely (= retention non-determinism). *)
+(*                                                                         *)
+(* Byzantine behavior — unrestricted (FULL GRIEF):                         *)
+(*   - ByzSigma, ByzNR fire any time (pre or post finalize) with any       *)
+(*     delivery subset S ⊆ Operators.                                      *)
+(*   - Byz can equivocate, cross-sign, late-publish, or selectively-      *)
+(*     deliver.                                                            *)
+(*                                                                         *)
+(* leader_of is non-deterministically chosen as any injective function     *)
+(* [Layers -> Operators], so TLC explores all leader-assignment patterns   *)
+(* including byz-at-any-position.                                          *)
 (*                                                                         *)
 (* See `docs/OBFT-formal-verif.md` §4 for the verification approach and    *)
 (* `tla/README.md` for run instructions.                                   *)
 (***************************************************************************)
 
-EXTENDS Naturals, FiniteSets
+EXTENDS Naturals, FiniteSets, TLC
 
 CONSTANTS
     Operators,    \* set of operator IDs (e.g., {1, 2, 3, 4})
@@ -70,29 +111,47 @@ ASSUME
     /\ Operators # {}
     /\ Byzantine \subseteq Operators
     /\ N = 3 * F + 1                    \* BFT-tight setting
-    /\ K \in 2..N                       \* 2 ≤ K ≤ n
+    /\ K \in 1..N                       \* 1 ≤ K ≤ n.  K=1 is the minimal
+                                        \* per-layer safety case (P1 mutex);
+                                        \* P3's inductive argument doesn't
+                                        \* require K ≥ 2 to verify since the
+                                        \* induction is algebraic on top of P1.
     /\ Cardinality(Values) >= K         \* enough distinct values for layer leaders
 
 (***************************************************************************)
 (* State variables                                                         *)
 (*                                                                         *)
-(* sigma_partials: set of (operator, layer, value) tuples.  Each tuple     *)
-(* represents that `operator` has signed σ on `value` at `layer`.         *)
+(* sigma_view: [Operators -> SUBSET (Operators × Layers × Values)].        *)
+(* Per-operator local view of σ partials observed.  An operator's own σ    *)
+(* signatures are always in their own view (signer's invariant).           *)
 (*                                                                         *)
-(* nr_partials: set of (operator, layer) tuples.  Each tuple represents    *)
-(* that `operator` has signed NR on nr_tag_{layer}.                        *)
+(* nr_view: [Operators -> SUBSET (Operators × Layers)].  Per-operator      *)
+(* local view of NR partials observed.  Same signer's invariant.           *)
 (*                                                                         *)
-(* leader_of: function [Layers -> Operators].  Initialized non-            *)
-(* deterministically as any injective assignment (= distinct leader per    *)
-(* layer, matching OBFT's deterministic rotation); constant after Init.    *)
-(* TLC explores all valid leader assignments including byz-at-any-position *)
-(* — directly relevant to the σ-flip design since leader-NR-doesn't-count  *)
-(* depends on leader_of[k].                                                *)
+(* leader_of: function [Layers -> Operators], distinct leader per layer.   *)
+(* Constant after Init; TLC explores all valid assignments.                *)
+(*                                                                         *)
+(* has_flipped: per-operator-per-layer flag tracking single-flip-per-layer.*)
+(*                                                                         *)
+(* snap_sigma_view, snap_nr_view: per-operator snapshots taken at          *)
+(* FinalizePhase2 (simultaneously across all honest).                      *)
+(*                                                                         *)
+(* phase2_finalized: per-operator flag indicating snapshot taken.  Set     *)
+(* TRUE for all honest simultaneously by FinalizePhase2.                   *)
 (***************************************************************************)
 
-VARIABLES sigma_partials, nr_partials, leader_of
+VARIABLES
+    sigma_view,            \* [Operators -> SUBSET (Operators \X Layers \X Values)]
+    nr_view,               \* [Operators -> SUBSET (Operators \X Layers)]
+    leader_of,
+    has_flipped,
+    snap_sigma_view,       \* [Operators -> SUBSET (Operators \X Layers \X Values)]
+    snap_nr_view,          \* [Operators -> SUBSET (Operators \X Layers)]
+    phase2_finalized       \* BOOLEAN — global, since FinalizePhase2 is a
+                           \* single simultaneous-cluster transition
 
-vars == <<sigma_partials, nr_partials, leader_of>>
+vars == <<sigma_view, nr_view, leader_of, has_flipped,
+          snap_sigma_view, snap_nr_view, phase2_finalized>>
 
 \* All injective leader assignments [Layers -> Operators].
 InitLeaderAssignments ==
@@ -103,180 +162,308 @@ InitLeaderAssignments ==
 (* Helper definitions                                                      *)
 (***************************************************************************)
 
-\* Has operator op committed σ at layer k (on any V)?
-HasSigma(op, k) == \E v \in Values: <<op, k, v>> \in sigma_partials
+\* Has operator op signed σ at layer k (any V)?  Signer's own view check.
+HasSignedSigma(op, k) == \E v \in Values : <<op, k, v>> \in sigma_view[op]
 
-\* Has operator op committed NR at layer k?
-HasNR(op, k) == <<op, k>> \in nr_partials
+\* Has operator op signed NR at layer k?  Signer's own view check.
+HasSignedNR(op, k) == <<op, k>> \in nr_view[op]
 
-\* σ pool at layer k for value v: operators who signed σ on v at k
-SigmaPool(k, v) == {op \in Operators : <<op, k, v>> \in sigma_partials}
+\* === Cluster-wide pool (= signed-message-set) =============================
+\* op is in cluster σ-pool on (k, v) iff op signed σ on (k, v), checked via
+\* op's own view (signer's invariant: signer's view always contains their
+\* own signatures).  Equivalent to "exists any view that contains the tuple"
+\* under the invariant, but using own view is cleaner.
+ClusterSigmaPool(k, v) ==
+    {op \in Operators : <<op, k, v>> \in sigma_view[op]}
 
-\* === Leader-NR-doesn't-count rule ========================================
-\* The layer-k leader's NR partial is excluded from the cluster-wide NR-pool
-\* used for fallthrough quorum and σ-flip trigger evidence.  Cryptographic-
-\* ally implementable because leader_of[k] is publicly known per OBFT's
-\* deterministic rotation: every operator (and every observer) verifies
-\* "this NR is from the layer-k leader" and discards it from quorum count.
-\*
-\* Rationale: if the layer-k leader could contribute to the layer-k NR-pool,
-\* a byzantine leader could selectively broadcast σ_L^V to a subset of
-\* honest peers (causing some honest to retain → σ, others to NR), then
-\* itself NR'd at k to push NR-pool past qEnc and force fallthrough
-\* (= deadlock-engineered grief).  Excluding leader's NR closes that path.
-NRPool(k) == {op \in Operators : <<op, k>> \in nr_partials /\ op # leader_of[k]}
+ClusterNRPool(k) ==
+    {op \in Operators : <<op, k>> \in nr_view[op]}
 
-\* σ-quorum reached on V at layer k iff |SigmaPool(k, v)| ≥ qV
-SigmaQuorumReached(k, v) == Cardinality(SigmaPool(k, v)) >= QV
+\* σ-quorum on V at layer k iff cluster pool ≥ qV
+ClusterSigmaQuorumReached(k, v) ==
+    Cardinality(ClusterSigmaPool(k, v)) >= QV
 
-\* NR-quorum reached at layer k iff |NRPool(k)| ≥ qEnc
-NRQuorumReached(k) == Cardinality(NRPool(k)) >= QEnc
+\* NR-quorum at layer k iff cluster NR-pool ≥ qEnc
+ClusterNRQuorumReached(k) ==
+    Cardinality(ClusterNRPool(k)) >= QEnc
 
-\* Chained-encryption unlock: layer k accessible iff NR-quorum at all layers 0..k-1
-\* (For k=0, no preceding layers — always unlocked.)
-ChainUnlocked(k) == \A j \in 0..(k - 1): NRQuorumReached(j)
+\* Chained-encryption unlock: layer k accessible iff NR-quorum at all
+\* layers 0..k-1 (k=0 trivially unlocked).
+ChainUnlocked(k) == \A j \in 0..(k - 1) : ClusterNRQuorumReached(j)
 
-\* V at layer k is reconstructable cluster-wide iff σ-quorum reached AND chain unlocked
+\* V at layer k is reconstructable cluster-wide iff σ-quorum AND chain unlocked.
 Reconstructable(k, v) ==
-    /\ SigmaQuorumReached(k, v)
+    /\ ClusterSigmaQuorumReached(k, v)
     /\ ChainUnlocked(k)
 
 (***************************************************************************)
-(* Initial state: no commitments yet                                       *)
+(* Snapshot helpers (per-viewer)                                           *)
+(*                                                                         *)
+(* All evaluated from the perspective of `viewer` (the operator computing  *)
+(* the trigger condition).  Each honest operator independently checks      *)
+(* their own snapshot to decide whether to flip.                           *)
+(***************************************************************************)
+
+SnapHasSigma(viewer, op, k) ==
+    \E v \in Values : <<op, k, v>> \in snap_sigma_view[viewer]
+
+SnapHasNR(viewer, op, k) ==
+    <<op, k>> \in snap_nr_view[viewer]
+
+SnapHasEmitted(viewer, op, k) ==
+    SnapHasSigma(viewer, op, k) \/ SnapHasNR(viewer, op, k)
+
+\* Silent-from-viewer's-view: ops not yet observed to have committed.
+SnapSilentAt(viewer, k) ==
+    {op \in Operators : ~ SnapHasEmitted(viewer, op, k)}
+
+\* NR-pool from viewer's snap.
+SnapNRPool(viewer, k) ==
+    {op \in Operators : SnapHasNR(viewer, op, k)}
+
+\* Non-leader NR pool from viewer's snap.
+SnapNRPoolNonLeader(viewer, k) ==
+    SnapNRPool(viewer, k) \ {leader_of[k]}
+
+\* Non-leader σ-pool from viewer's snap (σ on any V counted).
+SnapSigmaPoolNonLeader(viewer, k) ==
+    {op \in Operators : SnapHasSigma(viewer, op, k) /\ op # leader_of[k]}
+
+(***************************************************************************)
+(* Flip triggers                                                           *)
+(*                                                                         *)
+(* Both triggers evaluate against viewer's own snapshot.  Different        *)
+(* viewers may compute different snap_S_nl etc. due to byz selective       *)
+(* delivery, but honest views agree on honest contributions (within-       *)
+(* budget propagation, Assumption 2).                                      *)
+(***************************************************************************)
+
+\* σ-flip trigger: NR_nl < f+1 AND S_post ≥ A + 2f, all from viewer's snap.
+SigmaFlipTriggered(viewer, k) ==
+    LET nr_count == Cardinality(SnapNRPoolNonLeader(viewer, k))
+        s_post   == Cardinality(SnapSigmaPoolNonLeader(viewer, k)) + 1
+        a_count  == Cardinality(SnapSilentAt(viewer, k))
+    IN
+       /\ nr_count < F + 1
+       /\ s_post >= a_count + 2 * F
+
+\* NR-flip trigger: S_nl < f AND NR_nl ≥ A + 2f.
+NRFlipTriggered(viewer, k) ==
+    LET s_nl    == Cardinality(SnapSigmaPoolNonLeader(viewer, k))
+        nr_nl   == Cardinality(SnapNRPoolNonLeader(viewer, k))
+        a_count == Cardinality(SnapSilentAt(viewer, k))
+    IN
+       /\ s_nl < F
+       /\ nr_nl >= a_count + 2 * F
+
+\* V-availability from viewer's snap: viewer needs to have observed V to
+\* know what to sign on for σ-flip.  Under within-budget + leader-bundle
+\* re-flood in KindCommit (per OBFT.md §Phase 2 Wire format), this holds
+\* for V_L of every retained layer.  Byz V's might or might not be visible.
+VAvailable(viewer, k, v) ==
+    \E op \in Operators : <<op, k, v>> \in snap_sigma_view[viewer]
+
+(***************************************************************************)
+(* Initial state                                                           *)
 (***************************************************************************)
 
 Init ==
-    /\ sigma_partials = {}
-    /\ nr_partials = {}
+    /\ sigma_view = [op \in Operators |-> {}]
+    /\ nr_view = [op \in Operators |-> {}]
     /\ leader_of \in InitLeaderAssignments
+    /\ has_flipped = [op \in Operators |-> [k \in Layers |-> FALSE]]
+    /\ snap_sigma_view = [op \in Operators |-> {}]
+    /\ snap_nr_view = [op \in Operators |-> {}]
+    /\ phase2_finalized = FALSE
 
 (***************************************************************************)
-(* Honest actions — XOR enforcement                                        *)
+(* Honest actions                                                          *)
 (*                                                                         *)
-(* An honest operator may add a σ partial at layer k iff they have not     *)
-(* yet committed at k (neither σ nor NR).  Similarly for NR.  This         *)
-(* models EKM cross-phase exclusivity for honest operators.                *)
-(*                                                                         *)
-(* Single-σ-V exclusivity: an honest operator who signs σ on V at k may   *)
-(* not subsequently sign σ on V' ≠ V at k.  Enforced by ¬HasSigma in the *)
-(* precondition.                                                           *)
+(* Honest emissions broadcast to ALL operators' views (within-budget       *)
+(* delivery per Assumption 2).  This is what makes honest contributions    *)
+(* cluster-consistent across honest snaps at FinalizePhase2.               *)
 (***************************************************************************)
 
+\* Honest σ at layer k on V.  XOR per (op, k); single-σ-V per (op, k);
+\* pre-finalize on op only.
 HonestSigma(op, k, v) ==
+    /\ ~ phase2_finalized
     /\ op \in Honest
-    /\ ~ HasSigma(op, k)              \* not yet σ at k (single-σ-V)
-    /\ ~ HasNR(op, k)                 \* not yet NR at k (cross-phase exclusivity)
-    /\ sigma_partials' = sigma_partials \cup {<<op, k, v>>}
-    /\ UNCHANGED <<nr_partials, leader_of>>
+    /\ ~ HasSignedSigma(op, k)              \* not yet σ at k (single-σ-V)
+    /\ ~ HasSignedNR(op, k)                 \* not yet NR at k (XOR)
+    /\ sigma_view' = [op2 \in Operators |->
+                          sigma_view[op2] \cup {<<op, k, v>>}]
+    /\ UNCHANGED <<nr_view, leader_of, has_flipped,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
 
+\* Honest NR at layer k.  Honest leader doesn't NR pre-snap (leader's job
+\* is σ_L^V; NR-flip is the leader's only NR path post-snap).
 HonestNR(op, k) ==
+    /\ ~ phase2_finalized
     /\ op \in Honest
-    /\ ~ HasSigma(op, k)              \* not yet σ at k
-    /\ ~ HasNR(op, k)                 \* not yet NR at k
-    /\ nr_partials' = nr_partials \cup {<<op, k>>}
-    /\ UNCHANGED <<sigma_partials, leader_of>>
+    /\ op # leader_of[k]                    \* honest leader doesn't NR
+    /\ ~ HasSignedSigma(op, k)
+    /\ ~ HasSignedNR(op, k)
+    /\ nr_view' = [op2 \in Operators |->
+                       nr_view[op2] \cup {<<op, k>>}]
+    /\ UNCHANGED <<sigma_view, leader_of, has_flipped,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
 
 (***************************************************************************)
-(* Byzantine actions — unrestricted (controls own EKM)                     *)
+(* FinalizePhase2 — all honest snapshot simultaneously                     *)
 (*                                                                         *)
-(* Byzantine operators may add any σ or NR partial at any time, including  *)
-(* violating XOR (cross-signing σ + NR at same layer) and single-σ-V      *)
-(* (signing σ on multiple distinct V's at same layer).  Both produce      *)
-(* slashable evidence per Rules 1, 2, 3 of OBFT.md but we don't model      *)
-(* slashing here — only check whether safety holds against this adversary. *)
+(* All honest operators take their snapshots at the same global moment    *)
+(* (= cluster-wide T_commit + Δ_2).  Each captures THEIR OWN view at that  *)
+(* moment.  Under within-budget propagation, all honest views agree on    *)
+(* honest contributions.  Views may disagree on byz contributions          *)
+(* (selectively delivered).                                                *)
+(*                                                                         *)
+(* Single-shot: phase2_finalized is a global boolean.  Once FinalizePhase2 *)
+(* fires, no honest can emit pre-snap (HonestSigma / HonestNR have         *)
+(* `~ phase2_finalized`); honest can flip post-snap (HonestSigmaFlip /     *)
+(* HonestNRFlip have `phase2_finalized`).                                  *)
+(*                                                                         *)
+(* Why global (not per-operator).  Cluster-wide T_commit + Δ_2 is a single *)
+(* design moment; all honest snapshot together.  This is what implements   *)
+(* the no-flip-cascade design intent: an honest flip emitted post-finalize *)
+(* doesn't land in any other honest's snap (all snaps were taken before).  *)
+(* Per-operator finalize would let op_A finalize-and-flip while op_B is    *)
+(* still pre-finalize, polluting op_B's snap with A's flip — exactly the   *)
+(* cascade the protocol forbids.                                           *)
+(*                                                                         *)
+(* Byz operators don't snapshot — they have no flips to fire.  Byz         *)
+(* emissions can fire any time, before or after FinalizePhase2.            *)
 (***************************************************************************)
 
-ByzSigma(op, k, v) ==
+FinalizePhase2 ==
+    /\ ~ phase2_finalized
+    /\ snap_sigma_view' = [op \in Operators |->
+                              IF op \in Honest THEN sigma_view[op]
+                              ELSE snap_sigma_view[op]]
+    /\ snap_nr_view' = [op \in Operators |->
+                           IF op \in Honest THEN nr_view[op]
+                           ELSE snap_nr_view[op]]
+    /\ phase2_finalized' = TRUE
+    /\ UNCHANGED <<sigma_view, nr_view, leader_of, has_flipped>>
+
+(***************************************************************************)
+(* Byzantine actions — split pre/post snapshot                             *)
+(*                                                                         *)
+(* PRE-SNAP (`~ phase2_finalized`): byz signs any σ/NR partial and selects *)
+(* any subset S ⊆ Operators for delivery.  This is the load-bearing case  *)
+(* for safety analysis — selective delivery to honest snaps (visible to    *)
+(* some honest, withheld from others) is what byz uses to attempt to       *)
+(* engineer per-operator snap divergence.                                  *)
+(*                                                                         *)
+(* POST-SNAP (`phase2_finalized`): byz signs but no S choice — modeled as  *)
+(* "byz keeps own copy only".  Rationale: post-snap emissions cannot       *)
+(* affect any snap (snaps are frozen) or VAvailable (uses snap).  They     *)
+(* only contribute to the cluster pool (= worst-case offline aggregator's  *)
+(* set).  Whether byz delivers post-snap to all-or-none-of-honest does     *)
+(* not affect any safety-relevant decision; the cluster-pool count is the *)
+(* same.  This eliminates the post-snap byz S-branching factor (a major   *)
+(* state-space reducer).                                                   *)
+(*                                                                         *)
+(* In both cases, byz's own view always contains their own signatures      *)
+(* (op ∈ S enforced for pre-snap; trivially true for post-snap S = {byz}). *)
+(***************************************************************************)
+
+\* Pre-snap byz σ — selective delivery via S.
+ByzSigmaPreSnap(op, k, v, S) ==
+    /\ ~ phase2_finalized
     /\ op \in Byzantine
-    /\ <<op, k, v>> \notin sigma_partials   \* not already signed (idempotent)
-    /\ sigma_partials' = sigma_partials \cup {<<op, k, v>>}
-    /\ UNCHANGED <<nr_partials, leader_of>>
+    /\ S \subseteq Operators
+    /\ op \in S                              \* byz always knows their own sig
+    /\ <<op, k, v>> \notin sigma_view[op]    \* not already signed (idempotent)
+    /\ sigma_view' = [op2 \in Operators |->
+                          IF op2 \in S THEN sigma_view[op2] \cup {<<op, k, v>>}
+                          ELSE sigma_view[op2]]
+    /\ UNCHANGED <<nr_view, leader_of, has_flipped,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
 
-ByzNR(op, k) ==
+\* Post-snap byz σ — own copy only (S = {op}).  Cluster-pool effect
+\* identical to broadcast; eliminates the post-snap S-branching.
+ByzSigmaPostSnap(op, k, v) ==
+    /\ phase2_finalized
     /\ op \in Byzantine
-    /\ <<op, k>> \notin nr_partials         \* not already signed
-    /\ nr_partials' = nr_partials \cup {<<op, k>>}
-    /\ UNCHANGED <<sigma_partials, leader_of>>
+    /\ <<op, k, v>> \notin sigma_view[op]
+    /\ sigma_view' = [sigma_view EXCEPT ![op] = sigma_view[op] \cup {<<op, k, v>>}]
+    /\ UNCHANGED <<nr_view, leader_of, has_flipped,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
+
+\* Pre-snap byz NR — selective delivery via S.
+ByzNRPreSnap(op, k, S) ==
+    /\ ~ phase2_finalized
+    /\ op \in Byzantine
+    /\ S \subseteq Operators
+    /\ op \in S
+    /\ <<op, k>> \notin nr_view[op]
+    /\ nr_view' = [op2 \in Operators |->
+                       IF op2 \in S THEN nr_view[op2] \cup {<<op, k>>}
+                       ELSE nr_view[op2]]
+    /\ UNCHANGED <<sigma_view, leader_of, has_flipped,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
+
+\* Post-snap byz NR — own copy only.
+ByzNRPostSnap(op, k) ==
+    /\ phase2_finalized
+    /\ op \in Byzantine
+    /\ <<op, k>> \notin nr_view[op]
+    /\ nr_view' = [nr_view EXCEPT ![op] = nr_view[op] \cup {<<op, k>>}]
+    /\ UNCHANGED <<sigma_view, leader_of, has_flipped,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
 
 (***************************************************************************)
-(* Honest σ-flip — Phase-2.5 deadlock recovery (σ-flip variant).           *)
+(* Phase-2.5 deadlock recovery: σ-flip (non-leader) and NR-flip (leader).  *)
+(* Both ADDITIVE — signed messages cannot be withdrawn cryptographically;  *)
+(* the prior σ or NR partial stays in the cluster signed-message set.      *)
 (*                                                                         *)
-(* When honest who already NR'd at layer k observes deadlock evidence:     *)
-(*   (a) ≥ f+1 NR partials at k (excluding leader's NR via leader-NR-      *)
-(*       doesn't-count rule),                                              *)
-(*   (b) σ-quorum not yet reached on any V at this layer,                  *)
-(*   (c) V is V-available (= some operator already has σ on V at k,        *)
-(*       propagated cluster-wide via the full-V-in-onion plumbing),        *)
-(* they emit an additional σ partial on V.  This is a Phase-2.5            *)
-(* KindSigmaFlip cross-signing under valid trigger evidence.  EKM          *)
-(* amendment: σ-after-NR is allowed iff trigger evidence is valid.         *)
+(* σ-flip: an honest non-leader NR-er at layer k emits a KindSigmaFlip     *)
+(*   adding a σ partial.  Their original NR partial stays.  Post-flip, op  *)
+(*   has BOTH σ and NR partials (cross-signed via amended-EKM trigger).    *)
 (*                                                                         *)
-(* Effect: adds σ partial.  NR partial unchanged (= the σ-flipper still    *)
-(* contributes its NR via its KindCommit emission, AND now also            *)
-(* contributes its σ via KindSigmaFlip — i.e., it appears in both pools    *)
-(* simultaneously).                                                        *)
+(* NR-flip: ONLY the LEADER (if honest) at layer k emits a KindNRFlip      *)
+(*   adding an NR partial.  Their original σ_L^V partial stays.  Post-     *)
+(*   flip, leader has BOTH σ and NR partials.  Restricted to leader to    *)
+(*   prevent a non-leader-NR-flip safety attack surface.                   *)
 (*                                                                         *)
-(* Design intent: in the user's concrete trace, byz_leader broadcasts σ_L^V*)
-(* to a strict subset of honest (1 retainer, 2 non-retainers).  Without σ- *)
-(* flip, σ-pool[V] = leader + 1 retainer = 2 < qV=3, deadlocked.  With σ-  *)
-(* flip + full-V-in-onion, the 2 non-retainers learn V (via cluster's σ-   *)
-(* witness section) and emit σ on V → σ-pool[V] reaches qV.  Leader-NR-    *)
-(* doesn't-count rule is what prevents byz_leader from gaming the          *)
-(* fallthrough quorum: byz can't push NR-pool past qEnc by adding its own  *)
-(* leader NR.                                                              *)
-(*                                                                         *)
-(* Open safety question this verification addresses: σ-flip lets honest    *)
-(* contribute to BOTH σ-pool[V] AND NR-pool simultaneously, breaking the   *)
-(* original Pigeonhole-1 algebraic bound (which assumed honest XOR ≤ 1).   *)
-(* The leader-NR-doesn't-count rule reduces the NR side by ≤1, but         *)
-(* honest σ-flippers' double-counting adds up to f+1 (or more).  TLC will  *)
-(* find a concrete counterexample if the bound breaks.                     *)
+(* Triggers evaluated against ACTOR'S OWN snapshot — different actors may  *)
+(* see different snaps under byz selective delivery.  The algebraic mutex  *)
+(* (s_h ≥ f from σ-flip ⇒ s_h < f from NR-flip impossible at n=3f+1)      *)
+(* holds because honest views agree on honest contributions under within-  *)
+(* budget propagation.                                                     *)
 (***************************************************************************)
 
-\* === Operator-observable conditions only ================================
-\*
-\* This trigger uses only state observable to operators in the real protocol —
-\* the count of distinct operators with σ partial / NR partial at layer k.
-\* No oracle knowledge of who's honest vs byzantine.
-\*
-\* User's exact trigger (per chat clarification):
-\*   F = number of OTHER operators (excl self, excl leader) who NR'd.
-\*   Trigger: F ∈ [f+1, 2f].
-\*     Lower bound f+1: ensures > byz could have produced (= ≥ 1 honest NR
-\*       evidence), since byz contributes ≤ f to NR-pool.
-\*     Upper bound 2f:  keeps the σ-flip window pre-fallthrough; NR-pool incl
-\*       self ≤ 2f+1 = qEnc.
-\*   σ-pool < qV (σ-quorum not yet reached on any V).
-\*   |Silent| ≤ f: silent ops consume the f-byz budget; until we have ≥ n-f
-\*     explicit emissions, we wait (= can't be sure deadlock is real).
-
-\* An op has emitted iff they have a σ or NR partial at this layer.
-HasEmitted(op, k) == HasSigma(op, k) \/ HasNR(op, k)
-
-\* Silent ops at layer k = operators we haven't received any signed partial from.
-SilentAt(k) == {op \in Operators : ~ HasEmitted(op, k)}
-
-DeadlockObservedFor(op, k) ==
-    LET NRedOthers == NRPool(k) \ {op}     \* NRs excl self (NRPool already excl leader)
-    IN /\ Cardinality(NRedOthers) >= F + 1
-       /\ Cardinality(NRedOthers) <= 2 * F
-       /\ \A v \in Values : Cardinality(SigmaPool(k, v)) < QV
-       /\ Cardinality(SilentAt(k)) <= F
-
-\* V-availability: some operator already has σ on V at this layer.  Models
-\* the full-V-in-onion plumbing — once any σ partial on V exists in the
-\* cluster's signed-message set, V is propagated cluster-wide via the
-\* onion broadcast, allowing non-retainers to emit σ on V via the σ-flip.
-VAvailable(k, v) == \E op \in Operators : <<op, k, v>> \in sigma_partials
-
+\* Honest σ-flip — additive, broadcast to all (within-budget).
 HonestSigmaFlip(op, k, v) ==
+    /\ phase2_finalized                 \* op has snapped
     /\ op \in Honest
-    /\ HasNR(op, k)                       \* honest already NR'd at k
-    /\ ~ HasSigma(op, k)                  \* not yet σ'd at k (single flip per layer)
-    /\ DeadlockObservedFor(op, k)         \* user's exact trigger (F ∈ [f+1, 2f] excl self, silent ≤ f)
-    /\ VAvailable(k, v)                   \* V learned via full-V-in-onion plumbing
-    /\ sigma_partials' = sigma_partials \cup {<<op, k, v>>}
-    /\ UNCHANGED <<nr_partials, leader_of>>
+    /\ op # leader_of[k]                    \* leader can't σ-flip
+    /\ SnapHasNR(op, op, k)                 \* op was NR-er in own snap
+    /\ ~ SnapHasSigma(op, op, k)            \* op had no σ in own snap
+    /\ ~ has_flipped[op][k]                 \* single-flip-per-layer
+    /\ SigmaFlipTriggered(op, k)            \* trigger via op's own snap
+    /\ VAvailable(op, k, v)                 \* V was visible in op's snap
+    /\ sigma_view' = [op2 \in Operators |->
+                          sigma_view[op2] \cup {<<op, k, v>>}]
+    /\ has_flipped' = [has_flipped EXCEPT ![op][k] = TRUE]
+    /\ UNCHANGED <<nr_view, leader_of,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
+
+\* Honest NR-flip — LEADER ONLY, additive, broadcast to all.
+HonestNRFlip(op, k) ==
+    /\ phase2_finalized
+    /\ op \in Honest
+    /\ op = leader_of[k]                    \* ONLY leader can NR-flip
+    /\ SnapHasSigma(op, op, k)              \* leader was σ-er (signed σ_L^V)
+    /\ ~ SnapHasNR(op, op, k)               \* leader hadn't NR'd
+    /\ ~ has_flipped[op][k]
+    /\ NRFlipTriggered(op, k)
+    /\ nr_view' = [op2 \in Operators |->
+                       nr_view[op2] \cup {<<op, k>>}]
+    /\ has_flipped' = [has_flipped EXCEPT ![op][k] = TRUE]
+    /\ UNCHANGED <<sigma_view, leader_of,
+                   snap_sigma_view, snap_nr_view, phase2_finalized>>
 
 (***************************************************************************)
 (* Next-state relation                                                     *)
@@ -285,9 +472,17 @@ HonestSigmaFlip(op, k, v) ==
 Next ==
     \/ \E op \in Honest, k \in Layers, v \in Values: HonestSigma(op, k, v)
     \/ \E op \in Honest, k \in Layers: HonestNR(op, k)
+    \/ FinalizePhase2
     \/ \E op \in Honest, k \in Layers, v \in Values: HonestSigmaFlip(op, k, v)
-    \/ \E op \in Byzantine, k \in Layers, v \in Values: ByzSigma(op, k, v)
-    \/ \E op \in Byzantine, k \in Layers: ByzNR(op, k)
+    \/ \E op \in Honest, k \in Layers: HonestNRFlip(op, k)
+    \/ \E op \in Byzantine, k \in Layers, v \in Values, S \in SUBSET Operators:
+            ByzSigmaPreSnap(op, k, v, S)
+    \/ \E op \in Byzantine, k \in Layers, S \in SUBSET Operators:
+            ByzNRPreSnap(op, k, S)
+    \/ \E op \in Byzantine, k \in Layers, v \in Values:
+            ByzSigmaPostSnap(op, k, v)
+    \/ \E op \in Byzantine, k \in Layers:
+            ByzNRPostSnap(op, k)
 
 Spec == Init /\ [][Next]_vars
 
@@ -296,63 +491,57 @@ Spec == Init /\ [][Next]_vars
 (***************************************************************************)
 
 TypeOK ==
-    /\ sigma_partials \subseteq (Operators \X Layers \X Values)
-    /\ nr_partials \subseteq (Operators \X Layers)
+    /\ sigma_view \in [Operators -> SUBSET (Operators \X Layers \X Values)]
+    /\ nr_view \in [Operators -> SUBSET (Operators \X Layers)]
     /\ leader_of \in [Layers -> Operators]
     /\ \A k1, k2 \in Layers : k1 # k2 => leader_of[k1] # leader_of[k2]
+    /\ has_flipped \in [Operators -> [Layers -> BOOLEAN]]
+    /\ snap_sigma_view \in [Operators -> SUBSET (Operators \X Layers \X Values)]
+    /\ snap_nr_view \in [Operators -> SUBSET (Operators \X Layers)]
+    /\ phase2_finalized \in BOOLEAN
 
 (***************************************************************************)
 (* SAFETY invariants — Pigeonholes 1, 2, 3                                 *)
 (***************************************************************************)
 
-\* Pigeonhole 1: σ-quorum on any V at L_k AND NR-quorum (excluding leader's
-\* NR per leader-NR-doesn't-count) at L_k cannot both reach.
+\* Pigeonhole 1: σ-quorum on any V at L_k AND NR-quorum at L_k cannot
+\* both reach.
 \*
-\* Algebraic basis with σ-flip + leader-NR-doesn't-count:
-\*   Honest σ-flippers contribute 1 to σ-pool[V] AND 1 to NR-pool simul-
-\*   taneously (= violate the original honest-XOR ≤ 1 bound).  Worst case,
-\*   all 2f+1 honest are σ-flippers → σ-pool gets 2f+1 from honest, NR-pool
-\*   gets 2f+1 from honest.  Plus byz contribute ≤ f to each pool.
-\*   Plus leader-NR-doesn't-count subtracts up to 1 from NR-pool.
-\*
-\*   For both quorums to reach (≥ 2f+1 each, total 4f+2):
-\*     σ ≥ 2f+1: honest_σ + byz_σ ≥ 2f+1
-\*     NR ≥ 2f+1: (honest_NR - leader_correction) + byz_NR ≥ 2f+1
-\*   Max joint: (2f+1 + f) + (2f+1 - 1 + f) = 6f+1.
-\*   Need 4f+2 minimum to violate, i.e., the sum must hit ≥ 4f+2.
-\*   With the σ-flip + leader-NR-exclusion design, the bound 6f+1 ≥ 4f+2
-\*   for all f ≥ 0.  So the algebraic lower bound DOES NOT prevent both
-\*   quorums from reaching — Pigeonhole 1 is no longer guaranteed.
-\*
-\* This invariant therefore tests an OPEN safety hypothesis: does the σ-flip
-\* design close the deadlock recovery (which it does, per the user's trace)
-\* WHILE preserving Pigeonhole 1 in all reachable states (which the algebra
-\* doesn't guarantee)?  TLC will give a definitive answer.
+\* Algebraic basis (per docs/OBFT.md §Safety / Pigeonhole 1):
+\*   - Case A (no flip fired at k): bare-OBFT cross-phase exclusivity gives
+\*     h_σ + h_NR ≤ 2f+1, byz cap ≤ 2f, joint max ≤ 4f+1 < 2·qV.
+\*   - Case B (σ-flip fired by some honest non-leader X): σ-flip trigger
+\*     ⇒ snap_NR_nl_X ≤ f.  Within-budget ⇒ X's view of honest NRs = honest
+\*     NR count nr_h.  So nr_h ≤ f.  Honest non-leaders = 2f at n=3f+1, so
+\*     s_h ≥ f.  NR-flip trigger needs snap_S_nl_leader < f, but leader sees
+\*     all honest non-leader σs (within-budget) ⇒ snap_S_nl_leader ≥ s_h ≥ f.
+\*     Mutex.  NR-pool ≤ honest_NR_in_snap + byz_NR_total ≤ nr_h + f ≤ 2f
+\*     < qEnc.
+\*   - Case C (NR-flip fired by honest leader): symmetric.  σ-pool[V_L]
+\*     ≤ s_h + leader_σ + byz_σ_V ≤ (f-1) + 1 + f = 2f < qV.
 Pigeonhole1 ==
     \A k \in Layers:
-        ~ ( (\E v \in Values: SigmaQuorumReached(k, v)) /\ NRQuorumReached(k) )
+        ~ ( (\E v \in Values : ClusterSigmaQuorumReached(k, v))
+            /\ ClusterNRQuorumReached(k) )
 
-\* Pigeonhole 2: at most one V σ-quorums at any layer
+\* Pigeonhole 2: at most one V σ-quorums at any layer.
 \*
-\* Algebraic basis:
-\*   Honest contribute h_σ_V + h_σ_V' ≤ 2f+1 (single-σ-V).
-\*   Byz contribute byz_σ_V + byz_σ_V' ≤ 2f.
-\*   For both to reach 2f+1:
-\*     ≥ 4f+2 total partials. Honest ≤ 2f+1, byz ≤ 2f, total ≤ 4f+1.
-\*   Contradiction. ∎
+\* Algebraic basis: honest contribute h_σ_V + h_σ_V' ≤ 2f+1 (single-σ-V
+\* exclusivity); byz contribute byz_σ_V + byz_σ_V' ≤ 2f.  Total ≤ 4f+1 <
+\* 2·qV = 4f+2.  Holds under both flip mechanisms (σ-flip's σ goes onto a
+\* single V the flipper observed, doesn't split honest contribution across
+\* V's; single-σ-V still EKM-enforced).
 Pigeonhole2 ==
     \A k \in Layers:
-        Cardinality({v \in Values : SigmaQuorumReached(k, v)}) <= 1
+        Cardinality({v \in Values : ClusterSigmaQuorumReached(k, v)}) <= 1
 
-\* Pigeonhole 3: across all K layers, at most one V reconstructs cluster-wide
+\* Pigeonhole 3: across all K layers, at most one V reconstructs cluster-
+\* wide.
 \*
-\* Cross-layer safety under chained encryption: V_j at layer j and V_k at layer k
-\* (j ≠ k) cannot both reconstruct, because reconstructing V_k requires NR-quorum
-\* at all prior layers (chained encryption gates), but Pigeonhole 1 forbids
-\* σ-quorum at j AND NR-quorum at j to coexist.
-\*
-\* The proof in OBFT.md proceeds by induction on the layer gap m.  Here we
-\* express it directly: at most one (k, v) pair satisfies Reconstructable.
+\* Cross-layer safety under chained encryption: V_j at L_j and V_k at L_k
+\* (j ≠ k) cannot both reconstruct, because reconstructing V_k requires
+\* NR-quorum at all prior layers (chained encryption gates), but Pigeonhole
+\* 1 forbids σ-quorum at j AND NR-quorum at j to coexist.
 Pigeonhole3 ==
     Cardinality({<<k, v>> \in Layers \X Values : Reconstructable(k, v)}) <= 1
 
@@ -363,11 +552,10 @@ SAFETY == Pigeonhole1 /\ Pigeonhole2 /\ Pigeonhole3
 (* State constraint — bound state space for TLC by capping each pool at    *)
 (* its quorum threshold.                                                   *)
 (*                                                                         *)
-(* Provably safe for the SAFETY property at f=1, n=4: Pigeonhole 1, 2, 3   *)
-(* are all stated as "pool size ≥ threshold" predicates, so they're        *)
-(* already detectable when a pool first reaches the threshold.  States     *)
-(* with pool size > threshold add no new information for SAFETY            *)
-(* evaluation.                                                             *)
+(* Provably safe for the SAFETY property: Pigeonhole 1, 2, 3 are stated as *)
+(* "pool size ≥ threshold" predicates, so they're already detectable when  *)
+(* a pool first reaches the threshold.  States with pool size > threshold  *)
+(* add no new information for SAFETY evaluation.                           *)
 (*                                                                         *)
 (* Furthermore, pool sizes only grow (actions never remove tuples), so any *)
 (* state pruned by this constraint has predecessors at the threshold       *)
@@ -376,15 +564,24 @@ SAFETY == Pigeonhole1 /\ Pigeonhole2 /\ Pigeonhole3
 (* CONSTRAINT only determines whether to expand successors.  Combined,     *)
 (* this means zero risk of missing a counterexample for the four checked   *)
 (* invariants.                                                             *)
-(*                                                                         *)
-(* Same constraint applies to LBid_Safety and LBidNew_Safety with their    *)
-(* additional pools (lbid_sigma, lbid_nr, verdicts).                       *)
 (***************************************************************************)
 
 StateConstraint ==
     /\ \A k \in Layers, v \in Values:
-        Cardinality(SigmaPool(k, v)) <= QV
+        Cardinality(ClusterSigmaPool(k, v)) <= QV
     /\ \A k \in Layers:
-        Cardinality(NRPool(k)) <= QEnc
+        Cardinality(ClusterNRPool(k)) <= QEnc
+
+(***************************************************************************)
+(* Symmetry — TLC explores one canonical state per equivalence class       *)
+(* under permutations of Honest operators.  Byzantine operators are NOT    *)
+(* permuted (they're distinguished by Byzantine designation).              *)
+(*                                                                         *)
+(* Values are NOT permuted because Pigeonhole 2's "two distinct V's reach  *)
+(* qV" check needs to count per-(layer, V) σ commitments.  Permutation     *)
+(* over values would conflate distinct-V configurations.                   *)
+(***************************************************************************)
+
+Symmetry == Permutations(Honest)
 
 ================================================================================
