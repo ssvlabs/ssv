@@ -1,6 +1,7 @@
 package consensustest
 
 import (
+	"math"
 	mrand "math/rand"
 	"time"
 )
@@ -130,4 +131,41 @@ func (c ClockSkewedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind Msg
 		delay = time.Nanosecond
 	}
 	return delay
+}
+
+// LogNormalDelay draws delays from a log-normal distribution — a more
+// production-realistic model than JitteredDelay's uniform jitter. Real
+// gossipsub propagation has a heavy right tail (P99/P50 ratio of ~3-10x
+// in mainnet conditions); log-normal is the standard fit for that shape.
+//
+// Parameters:
+//   - Median: the 50th-percentile delay, exp(μ) of the underlying normal.
+//   - Sigma:  log-space stddev (dimensionless). Larger Sigma → fatter tail.
+//     Calibration: Sigma=0.3 produces P99/P50 ≈ 2.1×; Sigma=0.5 ≈ 3.6×;
+//     Sigma=0.7 ≈ 5.2×. SSV mainnet gossipsub observations would let
+//     deployments dial this; the framework defaults are illustrative.
+//
+// CALIBRATE: Median should match observed SSV mainnet propagation P50 per
+// message kind (proposer-duty leader broadcast P50 ≈ 100ms based on community
+// telemetry; not size-aware in this model — see SizedDelay note in plan).
+// Sigma should be fit from the observed P99/P50 ratio in the same telemetry.
+//
+// Stateless; safe to share across sims. Determinism preserved via the
+// passed-in seeded *math/rand.Rand.
+type LogNormalDelay struct {
+	Median time.Duration
+	Sigma  float64
+}
+
+func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Duration {
+	if l.Median <= 0 {
+		return time.Nanosecond
+	}
+	mu := math.Log(float64(l.Median))
+	z := rng.NormFloat64()
+	d := time.Duration(math.Exp(mu + l.Sigma*z))
+	if d < time.Nanosecond {
+		d = time.Nanosecond
+	}
+	return d
 }
