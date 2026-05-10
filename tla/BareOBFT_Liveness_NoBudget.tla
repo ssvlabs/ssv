@@ -1,7 +1,7 @@
 --------------------- MODULE BareOBFT_Liveness_NoBudget ----------------------
 (***************************************************************************)
-(* Liveness exploration for bare OBFT under RELAXED network assumptions —  *)
-(* sibling of BareOBFT_Liveness.tla.                                        *)
+(* Liveness exploration for bare OBFT (v1) under RELAXED network           *)
+(* assumptions — sibling of BareOBFT_Liveness.tla.                          *)
 (*                                                                         *)
 (* === What this spec is for =============================================*)
 (*                                                                         *)
@@ -57,48 +57,8 @@
 (* exhaustively enumerate all.  To find multiple distinct patterns, run  *)
 (* repeatedly with different state-constraint cuts or modified configs.  *)
 (*                                                                         *)
-(* See `docs/OBFT-formal-verif.md` §5.2 for the documented Class A scope *)
+(* See `docs/OBFT-formal-verif.md` §5.4 for the documented Class A scope *)
 (* and §7.1 for the verified within-budget result this spec extends.     *)
-(*                                                                         *)
-(* === TLC findings (2026-05-10, n=4, f=1, K=2) =========================*)
-(*                                                                         *)
-(* TLC found a counterexample at depth 6 in 9 seconds (138,682 states     *)
-(* generated, 69,462 distinct, 10,820 left on queue when first violation  *)
-(* surfaced).  Trace classification: documented `h_V=1 selective Phase-1  *)
-(* delivery` Class A pattern with the **byz-silent sub-case** that the    *)
-(* OBFT.md §Liveness narrative didn't fully describe.                      *)
-(*                                                                         *)
-(*   Trace summary:                                                        *)
-(*   - leader_of = (L_0 → op1, L_1 → op2);  Byzantine = {op4}              *)
-(*   - HonestLeaderBroadcast(L_0, S = {op1, op2})                          *)
-(*       → propagation tail: op3, op4 didn't retain V_0                    *)
-(*   - HonestLeaderBroadcast(L_1, S = {op2})                               *)
-(*       → propagation tail: op1, op3, op4 didn't retain V_1               *)
-(*   - All 3 honest emit KindCommit; byz op4 stays silent (non-grief OK).  *)
-(*   - State stutters: no flip enabled; output_set = ⟨all FALSE⟩.         *)
-(*                                                                         *)
-(*   Why σ-flip blocked at L_0 (lone NR-er op3):                           *)
-(*       nr_nl  = |{op3}| = 1     →  1 < f+1 = 2  ✓  (first cond passes)  *)
-(*       s_post = |{op2}| + 1 = 2                                          *)
-(*       a_count = |{op4 silent}| = 1                                      *)
-(*                                  →  2 ≥ 1 + 2 = 3 ✗  (second cond fails)*)
-(*                                                                         *)
-(*   This blocks on σ-flip's *second* trigger condition (s_post ≥ A + 2f),*)
-(*   distinct from OBFT.md §Liveness's discussion of h_V=1 (which focuses *)
-(*   on the *first* condition `snap_NR_nl < f+1` blocked by 2 honest      *)
-(*   NR-ers).  Both sub-cases have the same outcome (slot misses); the    *)
-(*   blocking mechanism within Phase-2.5 differs by byz behavior.         *)
-(*                                                                         *)
-(* Result interpretation: this is the documented Class A scope (h_V=1     *)
-(* not closed by Phase-2.5).  The byz-silent sub-case complements the    *)
-(* classical sub-case OBFT.md describes; both are part of the same        *)
-(* "Phase-2.5 doesn't close h_V=1" claim.  No spec change is needed; the  *)
-(* OBFT.md narrative for h_V=1 should be updated to acknowledge both     *)
-(* sub-cases.                                                              *)
-(*                                                                         *)
-(* Future work: re-run at K=3, K=4 with state-constraint pruning;        *)
-(* iteratively block this pattern to surface other distinct Class A      *)
-(* traces (multi-layer compound failures, etc.).                          *)
 (***************************************************************************)
 
 EXTENDS Naturals, FiniteSets, TLC
@@ -136,33 +96,23 @@ VARIABLES
     byz_commit,          \* [Byzantine -> [Layers -> {"sigma", "nr", "none"}]]:
                          \* byz operator's commitment per layer
     kindcommit_emitted,  \* [Operators -> BOOLEAN]: has operator emitted KindCommit
-    flipped_to,          \* [Honest -> [Layers -> {"none", "sigma", "nr"}]]:
-                         \* "none" = no flip; "sigma" = σ-flipped (NR → σ);
-                         \* "nr" = NR-flipped (σ → NR).  Single flip per layer.
     output_set           \* [Operators -> BOOLEAN]: has operator's reconstruction succeeded
 
 vars == <<leader_of, phase1_decided, delivered_to, byz_commit,
-          kindcommit_emitted, flipped_to, output_set>>
+          kindcommit_emitted, output_set>>
 
 (***************************************************************************)
 (* Helper definitions — IDENTICAL to BareOBFT_Liveness.tla.                *)
 (***************************************************************************)
 
-HonestSigmaAt(k) ==
-    (delivered_to[k] \cap Honest) \cup
-    {op \in Honest : op \notin delivered_to[k] /\ flipped_to[op][k] = "sigma"}
-
-HonestNRAt(k) ==
-    {op \in Honest :
-        \/ op \notin delivered_to[k]
-        \/ (op = leader_of[k] /\ flipped_to[op][k] = "nr")}
+HonestSigmaAt(k) == delivered_to[k] \cap Honest
+HonestNRAt(k) == {op \in Honest : op \notin delivered_to[k]}
 
 ByzSigmaAt(k) == {i \in Byzantine : byz_commit[i][k] = "sigma"}
 ByzNRAt(k) == {i \in Byzantine : byz_commit[i][k] = "nr"}
 
 SigmaPool(k) == HonestSigmaAt(k) \cup ByzSigmaAt(k)
 NRPool(k) == HonestNRAt(k) \cup ByzNRAt(k)
-NRPoolNonLeader(k) == NRPool(k) \ {leader_of[k]}
 
 SigmaQuorumReached(k) == Cardinality(SigmaPool(k)) >= QV
 NRQuorumReached(k) == Cardinality(NRPool(k)) >= QEnc
@@ -173,14 +123,6 @@ LayerReconstructable(k) ==
     /\ ChainUnlocked(k)
 
 AllPhase1Decided == \A k \in Layers : phase1_decided[k]
-
-ByzWillEmit(b) == \E k \in Layers : byz_commit[b][k] # "none"
-
-AllKindCommitsSettled ==
-    /\ \A i \in Honest : kindcommit_emitted[i]
-    /\ \A b \in Byzantine :
-        \/ kindcommit_emitted[b]
-        \/ ~ ByzWillEmit(b)
 
 (***************************************************************************)
 (* Initial state — IDENTICAL to BareOBFT_Liveness.tla.                     *)
@@ -201,7 +143,6 @@ Init ==
     /\ \A b \in Byzantine, k \in Layers:
         leader_of[k] = b => byz_commit[b][k] \in {"sigma", "none"}
     /\ kindcommit_emitted = [i \in Operators |-> FALSE]
-    /\ flipped_to = [i \in Honest |-> [k \in Layers |-> "none"]]
     /\ output_set = [i \in Operators |-> FALSE]
 
 (***************************************************************************)
@@ -216,11 +157,6 @@ Init ==
 (*   - within-budget delivery (S = Operators)                              *)
 (*   - propagation tail (leader ∈ S ⊊ Operators)                           *)
 (*   - effective silence (S = {leader})                                    *)
-(*                                                                         *)
-(* The original BareOBFT_Liveness's "honest leader delivers to all"       *)
-(* axiom is recovered when TLC happens to choose S = Operators for every  *)
-(* layer; but TLC also explores all the other S choices, surfacing the    *)
-(* spec's documented Class A scope.                                       *)
 (***************************************************************************)
 
 HonestLeaderBroadcast(k, S) ==
@@ -231,8 +167,7 @@ HonestLeaderBroadcast(k, S) ==
     /\ ldr \in S                          \* signer's-own-view: leader retains
     /\ phase1_decided' = [phase1_decided EXCEPT ![k] = TRUE]
     /\ delivered_to' = [delivered_to EXCEPT ![k] = S]
-    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, flipped_to,
-                   output_set>>
+    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, output_set>>
 
 (***************************************************************************)
 (* Byzantine leader broadcast — IDENTICAL to BareOBFT_Liveness.tla.        *)
@@ -249,8 +184,7 @@ ByzLeaderBroadcast(k, S) ==
           /\ S = {}
     /\ phase1_decided' = [phase1_decided EXCEPT ![k] = TRUE]
     /\ delivered_to' = [delivered_to EXCEPT ![k] = S]
-    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, flipped_to,
-                   output_set>>
+    /\ UNCHANGED <<leader_of, byz_commit, kindcommit_emitted, output_set>>
 
 (***************************************************************************)
 (* KindCommit emission — IDENTICAL to BareOBFT_Liveness.tla.               *)
@@ -261,28 +195,21 @@ HonestEmitKindCommit(i) ==
     /\ AllPhase1Decided
     /\ ~ kindcommit_emitted[i]
     /\ kindcommit_emitted' = [kindcommit_emitted EXCEPT ![i] = TRUE]
-    /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   flipped_to, output_set>>
+    /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit, output_set>>
 
 ByzEmitKindCommit(b) ==
     /\ b \in Byzantine
     /\ AllPhase1Decided
     /\ ~ kindcommit_emitted[b]
     /\ kindcommit_emitted' = [kindcommit_emitted EXCEPT ![b] = TRUE]
-    /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   flipped_to, output_set>>
+    /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit, output_set>>
 
 (***************************************************************************)
-(* Phase-2.5 σ-flip / NR-flip — IDENTICAL to BareOBFT_Liveness.tla.        *)
-(* These triggers will (correctly) NOT fire in many of the relaxed-       *)
-(* delivery cases — that's the spec's documented behavior.                 *)
+(* Reconstruction — IDENTICAL to BareOBFT_Liveness.tla.                    *)
 (***************************************************************************)
 
 SigmaPoolEmitted(k) ==
     {op \in (Honest \cap delivered_to[k]) : kindcommit_emitted[op]}
-    \cup
-    {op \in (Honest \ delivered_to[k]) :
-        flipped_to[op][k] = "sigma" /\ kindcommit_emitted[op]}
     \cup
     {b \in ByzSigmaAt(k) :
         \/ kindcommit_emitted[b]
@@ -291,9 +218,6 @@ SigmaPoolEmitted(k) ==
 
 NRPoolEmitted(k) ==
     {op \in (Honest \ delivered_to[k]) : kindcommit_emitted[op]}
-    \cup
-    {op \in (Honest \cap delivered_to[k]) :
-        flipped_to[op][k] = "nr" /\ kindcommit_emitted[op]}
     \cup
     {b \in ByzNRAt(k) : kindcommit_emitted[b]}
 
@@ -307,52 +231,6 @@ LayerReconstructableEmitted(k) ==
     /\ SigmaQuorumReachedEmitted(k)
     /\ ChainUnlockedEmitted(k)
 
-SilentEmitted == {op \in Operators : ~ kindcommit_emitted[op]}
-
-SigmaPoolNonLeaderEmitted(k) == SigmaPoolEmitted(k) \ {leader_of[k]}
-
-SigmaFlipTriggered(k) ==
-    LET nr_nl   == Cardinality(NRPoolEmitted(k) \ {leader_of[k]})
-        s_post  == Cardinality(SigmaPoolNonLeaderEmitted(k)) + 1
-        a_count == Cardinality(SilentEmitted)
-    IN
-       /\ nr_nl < F + 1
-       /\ s_post >= a_count + 2 * F
-
-NRFlipTriggered(k) ==
-    LET s_nl    == Cardinality(SigmaPoolNonLeaderEmitted(k))
-        nr_nl   == Cardinality(NRPoolEmitted(k) \ {leader_of[k]})
-        a_count == Cardinality(SilentEmitted)
-    IN
-       /\ s_nl < F
-       /\ nr_nl >= a_count + 2 * F
-
-VAvailable(k) == SigmaPoolEmitted(k) # {}
-
-HonestSigmaFlip(i, k) ==
-    /\ AllKindCommitsSettled
-    /\ i \in Honest
-    /\ i # leader_of[k]
-    /\ kindcommit_emitted[i]
-    /\ i \notin delivered_to[k]
-    /\ flipped_to[i][k] = "none"
-    /\ SigmaFlipTriggered(k)
-    /\ VAvailable(k)
-    /\ flipped_to' = [flipped_to EXCEPT ![i][k] = "sigma"]
-    /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   kindcommit_emitted, output_set>>
-
-HonestNRFlip(i, k) ==
-    /\ AllKindCommitsSettled
-    /\ i \in Honest
-    /\ i = leader_of[k]
-    /\ kindcommit_emitted[i]
-    /\ flipped_to[i][k] = "none"
-    /\ NRFlipTriggered(k)
-    /\ flipped_to' = [flipped_to EXCEPT ![i][k] = "nr"]
-    /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   kindcommit_emitted, output_set>>
-
 HonestReconstruct(i) ==
     /\ i \in Honest
     /\ kindcommit_emitted[i]
@@ -360,7 +238,7 @@ HonestReconstruct(i) ==
     /\ \E k \in Layers : LayerReconstructableEmitted(k)
     /\ output_set' = [output_set EXCEPT ![i] = TRUE]
     /\ UNCHANGED <<leader_of, phase1_decided, delivered_to, byz_commit,
-                   kindcommit_emitted, flipped_to>>
+                   kindcommit_emitted>>
 
 (***************************************************************************)
 (* Next-state relation — UPDATED: HonestLeaderBroadcast now takes S param. *)
@@ -371,15 +249,10 @@ Next ==
     \/ \E k \in Layers, S \in SUBSET Operators : ByzLeaderBroadcast(k, S)
     \/ \E i \in Honest : HonestEmitKindCommit(i)
     \/ \E b \in Byzantine : ByzEmitKindCommit(b)
-    \/ \E i \in Honest, k \in Layers : HonestSigmaFlip(i, k)
-    \/ \E i \in Honest, k \in Layers : HonestNRFlip(i, k)
     \/ \E i \in Honest : HonestReconstruct(i)
 
 (***************************************************************************)
 (* Fairness — UPDATED for parameterized HonestLeaderBroadcast.             *)
-(*                                                                         *)
-(* Weak fairness: leader will eventually broadcast (with SOME delivery     *)
-(* outcome).  TLC explores each S choice as a separate exploration branch. *)
 (***************************************************************************)
 
 Fairness ==
@@ -388,10 +261,7 @@ Fairness ==
     /\ \A k \in Layers :
         WF_vars(\E S \in SUBSET Operators : ByzLeaderBroadcast(k, S))
     /\ \A i \in Honest : WF_vars(HonestEmitKindCommit(i))
-    /\ \A i \in Honest, k \in Layers : WF_vars(HonestSigmaFlip(i, k))
-    /\ \A i \in Honest, k \in Layers : WF_vars(HonestNRFlip(i, k))
     /\ \A i \in Honest : WF_vars(HonestReconstruct(i))
-    \* No fairness on ByzEmitKindCommit — byz may stay silent at Phase 2.
 
 Spec == Init /\ [][Next]_vars /\ Fairness
 
@@ -415,16 +285,11 @@ TypeOK ==
     /\ delivered_to \in [Layers -> SUBSET Operators]
     /\ byz_commit \in [Byzantine -> [Layers -> {"sigma", "nr", "none"}]]
     /\ kindcommit_emitted \in [Operators -> BOOLEAN]
-    /\ flipped_to \in [Honest -> [Layers -> {"none", "sigma", "nr"}]]
     /\ output_set \in [Operators -> BOOLEAN]
 
 (***************************************************************************)
 (* Symmetry — TLC explores one canonical state per equivalence class      *)
 (* under permutations of Honest operators.                                 *)
-(*                                                                         *)
-(* CAVEAT: TLC docs warn symmetry under liveness checking can miss        *)
-(* violations.  For initial exploration we keep symmetry off (cfg-side     *)
-(* choice); enable cautiously after the encoding is validated.            *)
 (***************************************************************************)
 
 Symmetry == Permutations(Honest)

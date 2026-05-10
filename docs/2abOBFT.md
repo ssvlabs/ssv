@@ -784,13 +784,13 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Equivocation 2-1, byz silent | Succeeds at L_0 (Phase-1 σ_V locked) | Falls through to L_1 (one extra layer) |
 | Equivocation 2-1, byz defects | Succeeds at L_0 (Phase-1 σ_V locked) | **Slot misses (regression)** — Rule 6b evidence under NR-emit; behavioral under silent abstention |
 | Non-leader verdict-equivocation at marginal h_V | n/a (no verdicts in OBFT) | **Slot misses (regression)** — Rule 6a evidence |
-| h_V=1 selective-delivery deadlock | Class B grief, not recovered in-protocol (the new Phase-2.5 σ-flip / NR-flip preserves safety but doesn't close h_V=1 at f=1, n=4 — both the σ-flip's `snap_NR_nl < f+1` trigger and the leader-only NR-flip restriction block recovery in this shape); deterred via Assumption 4 across slots | Falls through to L_1 ✓ |
+| h_V=1 selective-delivery deadlock | Class B grief, not recovered in-protocol (algebraic deadlock at f=1, n=4: σ-pool=2 < qV; NR-pool=2 < qEnc); deterred via Assumption 4 across slots | Falls through to L_1 ✓ |
 | Validity-divergence at majority | Slot misses (Class A) | Recovered ✓ |
 | Validity-divergence at 2-2 boundary | Slot misses (Class A) | Slot misses (Class A — same algebraic limit) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) ✓ |
 | Mesh-flakiness | Class B | Mitigated ✓ |
 | Submission headroom (Config A recommended) | ~2.0s | ~1.3s |
-| Bandwidth (healthy, n=4, K=4) | Small `V` (attestations ~100 B): ~28 KB (includes `bundle_witnesses` re-flood ≈ +1.5 KB at K=4 n=4); blinded-block `V` (proposer): per-op ~88 KB typical / ~228 KB worst case — see [OBFT.md §Application](OBFT.md#application-ssv-ethereum-proposer-duty) | Small `V`: ~30 KB (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness); blinded-block `V`: 2abOBFT does not re-flood full bundles — comparable to OBFT only at the verdict overhead, not the witness section |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB across 1 emission (includes the σ_L^V witness section ≈ +2.3 KB at K=4 n=4) | ~30 KB across 2 emissions (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness) |
 | EKM complexity | Phase-1 σ_V + Phase-2 σ + NR coordination | Phase-2b σ XOR NR only — simplest in the family |
 | Slashing-evidence rules | 5 | 7 (Rules 1-5 inherited + Rule 6a verdict-vs-verdict cryptographic + Rule 6b verdict-vs-action gossipsub-pattern-quality) |
 

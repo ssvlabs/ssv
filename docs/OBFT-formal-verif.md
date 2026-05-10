@@ -110,18 +110,15 @@ We distinguish two byzantine behavior classes:
 **Active byzantine grief** (signing-time deviations from honest behavior):
 
 1. **Equivocation**: signing distinct messages at the same `(slot, layer)` — leader equivocation, bid equivocation, verdict equivocation, cross-onion partial-sig equivocation.
-2. **Cross-phase exclusivity violation**: σ-side AND NR-side commitment at the same `(slot, layer)`, **without valid Phase-2.5 σ-flip or NR-flip trigger evidence**. The protocol allows two Phase-2.5 cross-signing exceptions, both EKM-gated to valid trigger evidence on a snapshot:
-    - **σ-flip** (any honest non-leader who NR'd at layer `k`, additive — adds σ on retained `V` while prior NR partial stays); see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips).
-    - **NR-flip** (honest leader at layer `k` only, additive — adds NR on `nr_tag_k` while prior `σ_L^V` partial stays); see same section.
-   Cross-signing under valid trigger evidence is non-grief; cross-signing without it (or under forged evidence) is grief.
+2. **Cross-phase exclusivity violation**: σ-side AND NR-side commitment at the same `(slot, layer)`. Bare OBFT enforces strict cross-phase exclusivity per (slot, layer) per operator — any cross-sign is grief and slashable (see [OBFT.md §Slashing evidence Rule 1](OBFT.md#slashing-evidence)).
 3. **Fake / garbage signatures**: plaintext σ on V not retained by any honest (Rule 5 in OBFT.md); encrypted partials that decrypt to garbage (Rule 4).
-4. **EKM bypass**: signing actions an honest EKM would block — multiple distinct V's at same layer; σ-NR cross-signing within the protocol *outside the Phase-2.5 trigger-validated path*; multiple flips per layer (single-flip-per-layer is EKM-enforced); etc.
+4. **EKM bypass**: signing actions an honest EKM would block — multiple distinct V's at same layer; σ-NR cross-signing within the protocol; etc.
 5. **Bid-value lying** (when relay-attestation extension is active): a Phase-1 bundle's bid metadata `bid_value` not matching the relay's attestation.
 
 **Non-grief byzantine behavior** (observable as "operator absent" or "operator following protocol"):
 
 - Silent / offline (no signing, no broadcast).
-- Following the honest state machine's transition rules exactly (= behaving honestly even though byzantine), **including emitting Phase-2.5 σ-flips or (leader-only) NR-flips with valid trigger evidence at qualifying layers** (§Phase 2.5).
+- Following the honest state machine's transition rules exactly (= behaving honestly even though byzantine).
 - Choosing to broadcast or not broadcast honestly-formed messages (= honest behavior + selective broadcast that propagates as gossipsub determines).
 
 Note that **selective delivery** is *not* in either category — it's a network property. The byzantine adversary cannot directly control which honest peers receive which messages from gossipsub broadcasts; that's network non-determinism per [§2.1](#21--network-model).
@@ -239,15 +236,12 @@ ACTION emit_kindcommit(operator i):
             EKM rejects if any prior (slot, k, _, _) entry exists.
             Include in NR-partials section.
     
-    Include bundle_witnesses section: byte-for-byte copies of the retained
-    Phase-1 bundle (V_{L_k}, σ_{L_k}^V, σ_{L_k}^op, layer envelope) for each
-    layer k at which i has a retained bundle and i ≠ L_k. Mandatory
-    leader-bundle re-flood at Phase-2 boundary; replaces the older σ_L^V-
-    only witness section. See [OBFT.md §Phase 2](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2)
-    and [Appendix C](OBFT.md#appendix-c--leader-bundle-re-flood) for the
-    wire format and rationale. Retention budget: ≤ 1 retained bundle per
-    (slot, layer, leader_id); second distinct V triggers immediate NR
-    collapse without retention.
+    Include sigma_L_witnesses section: a list of (layer_k, value_root_k,
+    σ_{L_k}^V) tuples for each layer k where i retained the Phase-1 σ_L^V
+    partial. Per-witness ≈ 145 bytes; cluster-wide bandwidth at K=4, n=4
+    ≈ 2.3 KB. See [OBFT.md §Phase 2 / Wire format](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2).
+    No new EKM event, no new signing obligation (operators forward bytes
+    they already received from Phase 1).
     
     Sign envelope auth via operator-identity key.
     Broadcast KindCommit to gossipsub.
@@ -262,16 +256,13 @@ ACTION reconstruct(operator i):
     For k from 0 to K-1:
         sigs[k] := union of (
             σ_L^V from retained Phase-1 bundle at k (if any),
-            σ_L^V extracted from peer KindCommit `bundle_witnesses` sections at k,
-            σ_i^V(V) from KindSigmaFlip emissions at k (Phase-2.5 σ-flip),
+            σ_L^V extracted from peer KindCommit sigma_L_witnesses sections at k,
             decrypted σ partials from peer KindCommit onion contents at k 
               (decryptable via accumulated NR-quorum keys at layers 0..k-1)
         ), deduplicated per operator.
         
         nrs[k] := union of (
-            σ_j^IBE(nr_tag_k) partials from peer KindCommit NR-partials sections,
-            σ_j^IBE(nr_tag_k) from KindNRFlip emissions at k (Phase-2.5 NR-flip,
-              honest leader only)
+            σ_j^IBE(nr_tag_k) partials from peer KindCommit NR-partials sections
         ), deduplicated per operator.
         
         IF ∃V: |{partials on V in sigs[k]}| ≥ qV:
@@ -286,103 +277,6 @@ ACTION reconstruct(operator i):
         ELSE:
             Halt (deadlock; slot misses for this operator).
 ```
-
-**Phase 2.5 — Honest σ-flip / NR-flip on snapshot trigger** (per [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)):
-
-Phase 2.5 specifies two flip rules — **σ-flip** (any non-leader honest who NR'd) and **NR-flip** (honest leader only) — that allow a single per-(operator, layer) cross-sign emission post-snapshot when narrow trigger conditions are met. Both flips are **additive**: the original σ or NR partial stays in the cluster signed-message-set; the flip adds a partial on the other side.
-
-Phase 2.5 is a Phase-3 sub-mechanism, not a separate phase with its own time budget. Both actions below fire during Phase-3 reconstruction at operators whose snapshot satisfies the corresponding trigger; the emitter immediately includes their own flip partial in their local pool aggregation and reconstructs locally without waiting for propagation.
-
-**Snapshot semantics.** At `T_commit + Δ_2` (FinalizePhase2), each honest operator simultaneously snapshots their own `sigma_view` and `nr_view`. The snapshot is the basis for the flip-trigger evaluation: each honest viewer evaluates the trigger against their own snapshot, so different viewers may reach different conclusions under byz selective delivery (selective delivery on byz contributions only; honest contributions are propagation-uniform under Assumption 2). Pre-snapshot honest emissions (`HonestSigma`, `HonestNR`) are blocked once `phase2_finalized = TRUE`; only flips can fire post-snapshot.
-
-**Snapshot helpers** (all evaluated against `viewer`'s own snapshot, viewer ∈ Honest):
-
-```
-SnapHasSigma(viewer, op, k)   ::= ∃v: (op, k, v) ∈ snap_sigma_view[viewer]
-SnapHasNR(viewer, op, k)      ::= (op, k) ∈ snap_nr_view[viewer]
-SnapNRPoolNonLeader(viewer, k) ::= { op : SnapHasNR(viewer, op, k) ∧ op ≠ leader_of[k] }
-SnapSigmaPoolNonLeader(viewer, k) ::= { op : SnapHasSigma(viewer, op, k) ∧ op ≠ leader_of[k] }
-SnapSilentAt(viewer, k)       ::= { op : ¬SnapHasSigma(viewer, op, k) ∧ ¬SnapHasNR(viewer, op, k) }
-VAvailable(viewer, k, V)      ::= ∃op: (op, k, V) ∈ snap_sigma_view[viewer]
-```
-
-**σ-flip** (honest non-leader at layer `k` who NR'd):
-
-```
-ACTION emit_sigma_flip(operator i, layer k, value V):
-    PRECONDITION: phase2_finalized = TRUE AND
-                  i ∈ Honest AND i ≠ leader_of[k] AND
-                  SnapHasNR(i, i, k) AND ¬ SnapHasSigma(i, i, k) AND
-                  ¬ has_flipped[i][k] (single-flip-per-layer, EKM-enforced) AND
-                  SigmaFlipTriggered(i, k) AND
-                  VAvailable(i, k, V)
-
-    where:
-        SigmaFlipTriggered(viewer, k) ::=
-            LET nr_count = |SnapNRPoolNonLeader(viewer, k)|
-                s_post   = |SnapSigmaPoolNonLeader(viewer, k)| + 1
-                a_count  = |SnapSilentAt(viewer, k)|
-            IN nr_count < f + 1 ∧ s_post ≥ a_count + 2f
-
-    1. Construct trigger_evidence: serializable form of the snap counts
-       (snap_NR_nl = nr_count, snap_S_post = s_post, snap_silent = a_count).
-       The full snap composition is logged locally for slashing protection;
-       wire-format evidence is the count summary plus the receiver-verifiable
-       claim that the snap satisfied the trigger (see OBFT.md §Phase 2.5
-       Wire format).
-    2. Sign σ_i^V(V) via EKM at (slot, k, "σ-flip", value_root(V), trigger_evidence).
-       EKM rule: σ-after-NR allowed iff this is the single flip for (slot, k)
-       AND trigger_evidence is internally consistent.
-    3. Locally include σ_i^V(V) in i's own σ-pool[k] for aggregation.
-    4. Broadcast KindSigmaFlip(slot, k, σ_i^V(V), trigger_evidence) to gossipsub
-       for redundancy.
-
-    Slashing-protection log records both the prior NR partial and the new σ-flip
-    under (slot, k, side="σ-flip"); the prior NR partial stays in the
-    cluster signed-message-set (additive).
-```
-
-**NR-flip** (honest leader at layer `k` only):
-
-```
-ACTION emit_nr_flip(operator i, layer k):
-    PRECONDITION: phase2_finalized = TRUE AND
-                  i ∈ Honest AND i = leader_of[k] AND
-                  SnapHasSigma(i, i, k) AND ¬ SnapHasNR(i, i, k) AND
-                  ¬ has_flipped[i][k] (single-flip-per-layer, EKM-enforced) AND
-                  NRFlipTriggered(i, k)
-
-    where:
-        NRFlipTriggered(viewer, k) ::=
-            LET s_nl    = |SnapSigmaPoolNonLeader(viewer, k)|
-                nr_nl   = |SnapNRPoolNonLeader(viewer, k)|
-                a_count = |SnapSilentAt(viewer, k)|
-            IN s_nl < f ∧ nr_nl ≥ a_count + 2f
-
-    1. Construct trigger_evidence: serializable form of the snap counts
-       (snap_S_nl = s_nl, snap_NR_nl = nr_nl, snap_silent = a_count).
-    2. Sign σ_i^IBE(nr_tag_k) via EKM at (slot, k, "NR-flip", null, trigger_evidence).
-       EKM rule: NR-after-σ allowed iff this is the single flip for (slot, k)
-       AND trigger_evidence is internally consistent AND i = leader_of[k].
-    3. Locally include σ_i^IBE(nr_tag_k) in i's own nr_pool[k] for aggregation.
-    4. Broadcast KindNRFlip(slot, k, σ_i^IBE(nr_tag_k), trigger_evidence) to gossipsub.
-
-    Slashing-protection log records both the prior σ_L^V partial and the new
-    NR-flip under (slot, k, side="NR-flip"). Non-leader honest operators
-    cannot NR-flip; their σ-after-NR path is the σ-flip rule above. Non-leader
-    NR-flip is grief / Rule-1 cross-signing.
-```
-
-**Algebraic mutex of the two flip triggers** (key safety property):
-
-At `n = 3f+1`, each layer has 1 leader and `2f` honest non-leaders. Let `s_h` = honest non-leader σ count and `nr_h` = honest non-leader NR count at layer `k`. Single-σ-or-NR-per-(op, k) at Phase-2 honest emission gives `s_h + nr_h = 2f` (each honest non-leader commits exactly once pre-finalize).
-
-- σ-flip from any honest non-leader requires `snap_NR_nl < f+1`. Under within-budget propagation (Assumption 2), the viewer sees all honest NRs, so `nr_h ≤ f`, hence `s_h ≥ f`.
-- NR-flip from honest leader requires `snap_S_nl < f`. Leader sees all honest non-leader σs (within-budget), so `s_h < f`.
-
-These two constraints (`s_h ≥ f ∧ s_h < f`) cannot both hold; when the layer's leader is honest, the two flips are mutex per layer per slot. When the layer's leader is byzantine, NR-flip is impossible by precondition (it requires `op = leader_of[k] AND op ∈ Honest`), so only σ-flip can fire and Pigeonhole 1 holds via the `nr_h ≤ f ⇒ NR-pool ≤ 2f < qEnc` bound. This is the foundation of Pigeonhole 1 verification (see [§4](#4--section-a-safety-property)).
-
-Both actions are *honest-only* in the verification model under non-grief — byzantine cannot emit a flip without satisfying the trigger from a viewer's snapshot, and EKM enforces single-flip-per-layer. A byzantine that publishes flips with forged evidence is detected by receivers reconstructing the snap composition. Slashing-implicating data (the prior σ or NR signature alongside the flip) lives in the operator's local EKM log, not on the wire.
 
 ### 3.3 — OBFT + L_Bid extensions to the honest state machine
 
@@ -522,19 +416,10 @@ GRIEF_BidMetadataEquivocate(i, k): emit two distinct Phase-1 bundles at (slot, k
 GRIEF_VerdictEquivocate(i): emit two distinct KindBidVerdicts at slot. Applicable
                             only to L_Bid variants.
 
-GRIEF_CrossSign(i, k): emit σ_i^V at L_k AND σ_i^IBE(nr_tag_k) at same (slot, k)
-                       WITHOUT a valid Phase-2.5 σ-flip or NR-flip trigger evidence
-                       on the snapshot. (Cross-signing under valid trigger is the
-                       protocol-allowed Phase-2.5 path; cross-signing without it,
-                       or under forged evidence, is grief and slashable.)
-
-GRIEF_NonLeaderNRFlip(i, k): emit KindNRFlip at (slot, k) where i ≠ leader_of[k].
-                              NR-flip is honest-leader-only by design; non-leader
-                              NR-flip is grief.
-
-GRIEF_MultiFlip(i, k): emit more than one flip at (slot, k) (= second flip on top
-                       of an existing σ-flip or NR-flip for the same layer). EKM
-                       enforces single-flip-per-layer.
+GRIEF_CrossSign(i, k): emit σ_i^V at L_k AND σ_i^IBE(nr_tag_k) at same (slot, k).
+                       Bare OBFT enforces strict cross-phase exclusivity per
+                       (slot, layer) per operator; any cross-sign is grief and
+                       slashable (Rule 1).
 
 GRIEF_FakePartial(i, k, V_garbage): emit σ_i^V on a V not retained by any honest
                                      (at the cluster's plaintext layer).
@@ -571,36 +456,29 @@ Equivalently, per Pigeonholes 1, 2, 3 in OBFT.md:
 
 For each variant V ∈ {bare OBFT, OBFT+L_Bid, OBFT+L_Bid_New}:
 
-1. Encode the protocol state machine **with per-operator views** (each operator has their own `sigma_view`, `nr_view`, `snap_sigma_view`, `snap_nr_view`) including byzantine action space (honest + grief).
-2. Encode byzantine selective delivery: byz pre-snapshot emissions take an arbitrary delivery subset `S ⊆ Operators`, modelling full grief (any subset of honest may or may not see a given byz partial). Honest emissions deliver to all under within-budget propagation (Assumption 2).
-3. Encode the cluster pool as `{ op : op signed σ on (k, v) }` (signer's own view always contains their own signatures), representing the worst-case offline aggregator's set.
-4. Define `SAFETY` as the conjunction of three Pigeonhole invariants:
+1. Encode the protocol state machine including byzantine action space (honest actions + grief actions per §3.5).
+2. Encode the cluster pool as `{ op : op signed σ on (k, v) }`, representing the worst-case offline aggregator's set (a byzantine that retains all observed partials cluster-wide).
+3. Define `SAFETY` as the conjunction of three Pigeonhole invariants:
    ```
    Pigeonhole1 ≡ ∀ k:
-     ¬ ( (∃v: |ClusterSigmaPool(k, v)| ≥ qV)
-         ∧ |ClusterNRPool(k)| ≥ qEnc )
+     ¬ ( (∃v: |SigmaPool(k, v)| ≥ qV)
+         ∧ |NRPool(k)| ≥ qEnc )
    Pigeonhole2 ≡ ∀ k:
-     |{v : |ClusterSigmaPool(k, v)| ≥ qV}| ≤ 1
+     |{v : |SigmaPool(k, v)| ≥ qV}| ≤ 1
    Pigeonhole3 ≡
      |{(k, v) : Reconstructable(k, v)}| ≤ 1
    SAFETY ≡ Pigeonhole1 ∧ Pigeonhole2 ∧ Pigeonhole3
    ```
    where `Reconstructable(k, v)` requires σ-quorum on `v` at `k` AND NR-quorum at every layer `0..k-1` (chained-encryption gating).
-5. Run TLC with `INVARIANT SAFETY` at `n=4, f=1` (base case) and partial-coverage at higher K and `n=7, f=2`.
+4. Run TLC with `INVARIANT SAFETY` at `n=4, f=1` (base case) and partial-coverage at higher K and `n=7, f=2`.
 
-**Why per-operator views are load-bearing.** The Phase-2.5 σ-flip / NR-flip triggers evaluate against the actor's own snapshot. Different operators may compute different snap counts under byz selective delivery, so a global-pool model would over-restrict the adversary (byz can't actually withhold from a global pool). Per-operator views surface the full byz grief surface — selective delivery as a state-space dimension — and let TLC explore whether any combination of (snap-divergent triggers + post-snap byz emissions) violates Pigeonhole 1 at the cluster pool. The TLA+ encoding (state variables, snap helpers, byz pre/post-snap action split) is in `tla/BareOBFT_Safety.tla`.
+**Pigeonhole 1 union-bound argument.** Bare OBFT enforces strict cross-phase exclusivity per (slot, layer) per honest operator (single σ-or-NR commitment, EKM-gated). At `n = 3f+1`, the cluster has at most `2f+1` honest contributors and at most `f` byzantine. For any layer `k`:
 
-**Pigeonhole 1 verified algebraically — three cases.** The mutex of σ-flip and NR-flip triggers (proved at the snapshot level, see [§3.2](#32--bare-obft-honest-state-machine)) lets us decompose Pigeonhole 1 into three exhaustive cases at any fixed layer `k`:
+- If σ-quorum on some `v` reaches qV = 2f+1, then ≥ f+1 honest signed σ on `v` at `k` (since byz cap ≤ f). Those f+1 honest cannot also contribute NR at `k` by cross-phase exclusivity. NR-pool at `k` ≤ (remaining honest) + (byz cap) = `(2f+1 - (f+1)) + f = 2f < qEnc`.
 
-- **Case A** — no flip fires at `k`: bare-OBFT cross-phase exclusivity gives `h_σ + h_NR ≤ 2f+1` (each honest commits exactly once); byz cap ≤ 2f; joint max ≤ 4f+1 < 2·qV. Neither σ-quorum nor NR-quorum can co-exist with the other at the cluster pool.
-- **Case B** — σ-flip fires by some honest non-leader `X`: trigger ⇒ `snap_NR_nl_X ≤ f`. Within-budget propagation ⇒ `nr_h ≤ f`, so `s_h ≥ f`. NR-flip would need `s_h < f`; algebraic mutex precludes both. NR-pool ≤ `nr_h + f ≤ 2f < qEnc`.
-- **Case C** — NR-flip fires by honest leader (symmetric to B): σ-pool[V_L] ≤ `s_h + leader_σ + byz_σ_V ≤ (f-1) + 1 + f = 2f < qV`.
+So σ-quorum and NR-quorum cannot co-exist at the same layer. Pigeonhole 2 (single-V σ-quorum per layer) holds by single-σ-V EKM exclusivity plus byz cap (`≤ 4f+1 < 2·qV`). Pigeonhole 3 (cross-layer single-output) follows by chained-encryption induction over Pigeonhole 1 at each layer.
 
-Pigeonhole 1 holds in all three cases. Pigeonhole 2 (single-V σ-quorum per layer) holds by single-σ-V EKM exclusivity plus byz cap (`≤ 4f+1 < 2·qV`). Pigeonhole 3 (cross-layer single-output) follows by chained-encryption induction over Pigeonhole 1 at each layer.
-
-**Why K=1 base case suffices.** Pigeonhole 1 is a per-layer invariant; the algebraic argument above is independent of `K`. Pigeonhole 3 reduces to Pigeonhole 1 at every layer + chained-encryption inductive step (algebraic, not state-space). So the load-bearing TLC verification is at K=1: TLC enumerates all reachable (per-op-view × byz-S × honest-flip) configurations at one layer and confirms no Pigeonhole 1 violation. Higher-K runs are partial-coverage validations of the encoding, not new safety evidence; the spec body's Pigeonhole 3 inductive proof carries the cross-layer case.
-
-Expected result: TLC verifies SAFETY for bare OBFT at K=1 (full coverage) and partial-coverage at higher K with no counterexample. If counterexample found: spec body's algebraic argument has a flaw (critical bug).
+Expected result: TLC verifies SAFETY for bare OBFT at K=2 (full coverage at small `|Values|`) and partial-coverage at higher K and `n=7, f=2` with no counterexample. If counterexample found: spec body's algebraic argument has a flaw (critical bug).
 
 ### 4.3 — Cryptographic-primitive abstraction
 
@@ -611,7 +489,7 @@ Similarly for IBE/SWE chained encryption: layer L_{k+1}'s σ partials are "decry
 This abstraction is justified because:
 - BLS threshold and IBE/SWE primitives are independently audited (drand/tlock).
 - The OBFT spec's Pigeonhole proofs are at the partial-counting level, not at cryptographic-primitive level.
-- TLC verifies the partial-counting algebra under per-operator views with byz selective delivery, which is what determines safety.
+- TLC verifies the partial-counting algebra under cluster-pool aggregation against unrestricted byzantine action (honest + grief), which is what determines safety.
 
 ---
 
@@ -637,39 +515,39 @@ This is the **Class A closure**: every deadlock must be either (a) attributable 
 
 For each variant V:
 
-1. Encode the protocol state machine WITHOUT grief actions in the byzantine action space — byzantine operators are restricted to either following the honest state machine or being silent/offline. Byzantine leaders may broadcast late (effective subset delivery, modeled as `delivered_to ⊆ Operators`), which is non-grief mesh-asymmetric behavior absorbed by within-budget propagation.
-2. Encode the Phase-2.5 σ-flip / NR-flip actions per [§3.2](#32--bare-obft-honest-state-machine), with snapshot-based triggers and single-flip-per-layer EKM gating.
-3. Encode network non-determinism (mesh asymmetry within partial-synchrony bound).
-4. Define `LIVENESS_NON_GRIEF` as a TLA+ temporal formula:
+1. Encode the protocol state machine WITHOUT grief actions in the byzantine action space — byzantine operators are restricted to either following the honest state machine or being silent/offline. Honest leaders broadcast their bundle to all under within-budget propagation (Assumption 2).
+2. Encode network non-determinism (mesh asymmetry within partial-synchrony bound).
+3. Define `LIVENESS_NON_GRIEF` as a TLA+ temporal formula:
    ```
    LIVENESS_NON_GRIEF ≡
      □(assumptions_hold ∧ no_grief) ⇒ ◇ ∀ i ∈ Honest: output_set[i] = TRUE
    ```
-5. Run TLC with the temporal property at `n=4, f=1, K=4` and (where tractable) `n=7, f=2`.
+4. Run TLC with the temporal property at `n=4, f=1, K=4` and (where tractable) `n=7, f=2`.
 
 Expected result (per the OBFT spec's Class A list, [OBFT.md §Liveness](OBFT.md#liveness-synchrony-conditional)): TLC verifies for all three variants — no Class A leakage that the spec body fails to characterize. If a counterexample surfaces, treat it as a Class A failure mode that needs to be either documented (assumption refinement) or fixed (protocol change).
 
 **Verification result for bare OBFT at n=4, f=1, K=4** (see §7.1): TLC verified `LIVENESS_NON_GRIEF` across the reachable state space (64,152 distinct states, depth 12, ~10s runtime). Under non-grief byz behavior + within-budget partial-synchrony, every honest operator reaches `output_set[i] = TRUE`.
 
-**What the new Phase-2.5 design (σ-flip + leader-only NR-flip + snapshots + per-operator views + leader-bundle re-flood) DOES recover under non-grief:**
+**What the verified property covers** (= what bare OBFT recovers under non-grief + within-budget partial-synchrony):
 
-- Late honest-leader bundles arriving at `Δ_1 + δ` with `δ < Δ_2 − Δ_1`: re-flooded via `bundle_witnesses` in the first peer's `KindCommit` so the bundle is cluster-wide visible by `T_commit + Δ_2`; the snapshots of operators that didn't retain the original include `V_L` and `σ_L^V` at trigger time.
-- Symmetric "1 honest σ-er, 2f+1 honest NR-ers" recoveries via σ-flip: any honest non-leader who NR'd at this layer can σ-flip from their snapshot if `snap_NR_nl < f+1` AND `snap_S_post ≥ A + 2f`. (R1 / R3 narrow cases per OBFT.md §Where this came from.)
-- Symmetric "honest leader observes deadlock" recovery via NR-flip: honest leader who σ'd may add NR partial if `snap_S_nl < f` AND `snap_NR_nl ≥ A + 2f` (R2 narrow case).
+- Healthy slots at any layer where the leader's bundle reaches all honest by `T_commit` (σ-quorum reaches at that layer).
+- Silent leader at any layer (NR-quorum reaches → fall-through to next layer in the Phase-3 walk).
+- Honest leader's late bundle that nonetheless reaches all honest before `T_commit` (within-budget propagation tail, absorbed by per-layer budget `B_k`).
 
-**What the new design does NOT recover** (intentional regression vs earlier design iterations, accepted as the cost of safety preservation against CE-1..12 grief vectors):
+**What's out of scope of this property** (excluded by precondition; surfaced under SAFETY's grief-byz model or §5.4's relaxed-Assumption-2 model):
 
-- **`h_V = 1` selective-Phase-1 delivery** (= byz leader delivers `V_L` to exactly one honest non-leader; remaining `2f` honest NR; the lone σ-er observes 2f honest NRs). Each honest NR-er sees `snap_NR_nl = 2f` from their snapshot — the σ-flip trigger requires `< f+1`, so it's blocked. NR-flip is honest-leader-only at this layer (here the leader is byzantine), so no fall-through. Slot misses; **classified as Class B grief** (byzantine selective delivery) **deterred via Assumption 4** rational-byzantine cost across slots, not closed by the protocol mechanics.
+- **`h_V = 1` selective-Phase-1 delivery** (byz leader unicasts `V_L` to exactly one honest non-leader). At `n=4, f=1` this gives σ-pool = 1 honest + leader's σ_L^V = 2 < qV; NR-pool = 2 < qEnc — algebraic deadlock. **Excluded as Class B grief** (byz selective broadcast is grief category 1); deterred via Assumption 4 across slots.
+- **Equivocation σ-locked split patterns** (1-1-1, 1-1-NR): some honest σ-lock on different V's before observing equivocation; neither σ-quorum nor NR-quorum reaches; no fall-through. **Excluded as Class B grief** (byz equivocation is grief category 1); equivocation is cryptographically slashable (Rule 2).
+- **Validity-divergence beyond the host's stabilization window**: **excluded as Class A** (Assumption 3 violation).
 
-The protocol's design philosophy here is: safety is absolute (no double-sign on the cluster validator); liveness recovery is added only where it does not open new grief surfaces. The h_V=1 selective-delivery shape was demonstrably one such surface (CE-1..12 in earlier verification iterations); accepting it as Class B with multi-slot deterrent is the safety-conservative trade. See [OBFT.md §Failure modes / h_V=1](OBFT.md#failure-modes) for the full discussion.
+See [OBFT.md §Failure modes](OBFT.md#failure-modes) for the full taxonomy and [§5.4](#54--beyond-liveness_non_grief-class-a-failure-mode-exploration) for a TLA exploration that surfaces a related Class A pattern by relaxing Assumption 2 (honest leader's bundle reaches a strict subset of honest — same algebraic shape as the byz-grief h_V=1 above, but caused by network tail rather than byz selective delivery).
 
 **Scope of the n=4 verification result.** The verified configuration is `n=4, f=1, K=4`. The verification space includes:
 - All injective leader-assignment patterns (byz at any rotation position),
 - Honest σ / NR / silent choices per layer,
-- Snapshot-based flip triggers (σ-flip and NR-flip) with single-flip-per-layer EKM,
-- Byzantine non-grief actions (silent / honest-mimicking / partial-broadcast / σ-or-NR-or-silent commitment).
+- Byzantine non-grief actions (silent / honest-mimicking / σ-or-NR-or-silent commitment).
 
-At this configuration, every honest operator reaches an output under non-grief. The verification does not extend to grief actions (which is the SAFETY spec's domain) and does not extend to beyond-budget partial-synchrony (assumption 2 violation, out of scope). Cluster slot success at `n ≥ 7` extends by structural symmetry: at `n=3f+1`, the algebraic mutex argument (§4.2 Cases A/B/C) holds independent of `n`, and the flip mechanics scale with the same `s_h + nr_h = 2f` invariant at every honest non-leader count.
+At this configuration, every honest operator reaches an output under non-grief + within-budget propagation. The verification does not extend to grief actions (which is the SAFETY spec's domain) and does not extend to beyond-budget partial-synchrony (assumption 2 violation, out of scope). Cluster slot success at `n ≥ 7` extends by structural symmetry: the union-bound argument for σ-vs-NR mutex (§4.2) is independent of `n`, and the protocol's per-layer fall-through mechanics scale uniformly across honest non-leader counts.
 
 ### 5.3 — Mesh asymmetry modeling
 
@@ -702,20 +580,18 @@ cd tla && ./scripts/tlc-run.sh BareOBFT_Liveness_NoBudget
 
 **Expected outcome**: TLC finds counterexamples (= traces leading to deadlock). Each counterexample classifies as one of the documented Class A patterns from [OBFT.md §Failure modes](OBFT.md#failure-modes). A counterexample that does *not* match a documented pattern is a spec-coverage gap to investigate.
 
-**Findings at n=4, f=1, K=2** (2026-05-10): TLC found a counterexample at depth 6 in 9 seconds (138,682 states generated; 69,462 distinct states explored before the violation surfaced). The trace is a documented `h_V=1 selective Phase-1 delivery` Class A pattern, but surfaces a sub-case the OBFT.md §Liveness narrative didn't fully describe.
+**Findings at n=4, f=1, K=2** (2026-05-10): TLC found a counterexample at depth 6 in 7 seconds (~183K states generated; 86,166 distinct states explored before the violation surfaced). The trace is a documented partial-propagation deadlock from the broader `h_V=1` family (per [OBFT.md §Liveness fat warning (b)](OBFT.md#liveness-synchrony-conditional)): an honest leader's bundle reaches a strict subset of honest peers, leaving σ-pool < qV and NR-pool < qEnc with no fall-through. Cause is honest-network propagation tail (Assumption 2 violation), not byz selective delivery.
 
-**Trace** (Operators = {op1, op2, op3, op4}, Byzantine = {op4}):
+**Trace** (Operators = {op1, op2, op3, op4}, Byzantine = {op4}, exact specifics may vary slightly across TLC runs but the algebraic shape is invariant):
 
 ```
 State 1 (Init):  leader_of = (L_0 → op1, L_1 → op2)
                  byz_commit = (op4 → "sigma" at L_0, "sigma" at L_1)
-State 2: HonestLeaderBroadcast(L_1, S = {op2})
-                 → propagation tail: op1, op3, op4 didn't retain V_1
-State 3: HonestLeaderBroadcast(L_0, S = {op1, op2})
-                 → propagation tail: op3, op4 didn't retain V_0
-State 4: HonestEmitKindCommit(op2)
-State 5: HonestEmitKindCommit(op3)
-State 6: HonestEmitKindCommit(op1)
+State 2: HonestLeaderBroadcast — L_0's bundle delivered to {op1 (leader), op3}
+                 → propagation tail: op2, op4 didn't retain V_0
+State 3: HonestLeaderBroadcast — L_1's bundle delivered to {op2 (leader), op3, op4}
+                 → propagation tail: op1 didn't retain V_1
+State 4-6: HonestEmitKindCommit — op1, op2, op3 emit KindCommit
 State 7: STUTTER. No action enabled. output_set = ⟨all FALSE⟩.
                  Byz op4 chose σ-commit at Init but never emitted KindCommit
                  (silent — non-grief option allowed).
@@ -723,35 +599,17 @@ State 7: STUTTER. No action enabled. output_set = ⟨all FALSE⟩.
 
 Final pool composition at L_0 (the load-bearing layer):
 
-- `SigmaPoolEmitted(0) = {op1, op2}` (size 2 < qV=3)
-- `NRPoolEmitted(0) = {op3}` (size 1 < qEnc=3)
-- `SilentEmitted = {op4}` (size 1)
+- `SigmaPoolEmitted(0) = {op1, op3}` (size 2 < qV=3 — the 2 honest who retained, both emitted)
+- `NRPoolEmitted(0) = {op2}` (size 1 < qEnc=3 — the only honest non-retainer who emitted)
+- `SilentEmitted = {op4}` (size 1 — byz chose σ but never emitted)
 
-σ-flip from op3 (the only non-leader NR-er) is blocked by σ-flip's **second** trigger condition:
+Neither σ-quorum nor NR-quorum reaches at L_0; chained encryption stays sealed; the cluster cannot fall through to L_1. Slot misses cleanly with no double-sign (Pigeonhole 1 holds — the deadlock is a liveness loss, not a safety loss).
 
-```
-nr_nl   = |{op3}| = 1                  →  1 < f+1 = 2   ✓ (first cond passes)
-s_post  = |SigmaPoolNonLeaderEmitted(0)| + 1 = |{op2}| + 1 = 2
-a_count = |SilentEmitted| = 1
-                                       →  2 ≥ 1 + 2 = 3 ✗ (second cond fails)
-```
-
-NR-flip from op1 (leader, σ-er) is blocked by `s_nl < f` (= `1 < 1` is FALSE).
-
-**Sub-cases of `h_V=1` deadlock by byz behavior** (both deadlock; both are part of the documented Class A scope):
-
-| Sub-case | byz action | σ-flip blocking condition |
-|---|---|---|
-| **Classical** | byz emits NR (mimicking honest who didn't retain) | `nr_nl = 2` — first condition fails |
-| **byz-silent** ★ | byz silent (no `KindCommit` emitted) | `s_post = 2 < a_count + 2f = 3` — second condition fails |
-
-★ The case TLC surfaced.
-
-OBFT.md §Liveness's discussion of `h_V=1` focuses on the classical sub-case (the first trigger condition blocked by 2 honest NR-ers). The byz-silent sub-case (where byz consumes f-budget silently rather than emitting NR) blocks on a different condition with the same outcome. **No spec change is needed** — both sub-cases are within the documented "Phase-2.5 doesn't close `h_V=1`" claim — but OBFT.md's narrative should be updated to acknowledge both sub-cases ([§Liveness](OBFT.md#liveness-synchrony-conditional)'s fat-warning callout adds this).
+This trace is one instance of the broader partial-propagation deadlock family the OBFT.md §Liveness fat-warning callout describes (the layer's leader bundle reaches a strict subset of honest, leaving each side of the σ-vs-NR split below its quorum threshold — receivers ∈ (n−qEnc, qV) at f=1, n=4 means exactly 2 receivers). The byz-silent variant surfaced here is one of several blocking shapes — close cousins include the classical `h_V=1` (byz leader unicasts to 1 honest, leader's σ_L^V completes σ-pool to 2; remaining 2 honest NR but byz can NR or stay silent), and the byz-NR-mimicking variant (byz emits NR to look like a non-retainer). All deadlock by the same algebra.
 
 **What this exploration validates**:
 
-- The "Phase-2.5 does NOT close `h_V=1`" claim is verified mechanically across multiple sub-cases distinguished by byz behavior.
+- The "bare OBFT does not close partial-propagation deadlocks in-protocol" claim is verified mechanically — the TLA model under relaxed Assumption 2 surfaces exactly the algebraic deadlock the spec body describes.
 - The Class A scope as documented in OBFT.md is the right boundary — TLC at K=2 found exactly that pattern, no surprises.
 
 **What this exploration does NOT exhaustively validate** (future work):
@@ -761,7 +619,7 @@ OBFT.md §Liveness's discussion of `h_V=1` focuses on the classical sub-case (th
 - **Sustained partition (real propagation > slot budget for ALL layers)**. The current spec's relaxed delivery covers per-layer propagation tails but not multi-layer total partitions; this would correspond to all `delivered_to[k] = {leader_of[k]}` consistently across all layers — a degenerate case the spec already documents as Class A.
 - **Iterative pattern enumeration**. TLC halts at the first counterexample. To enumerate all distinct Class A patterns, we would iteratively block found patterns (state constraint or property modification) and re-run.
 
-**State-space caveat**. Relaxed delivery adds 2^n choices per honest leader broadcast. At n=4, K=2 the model explored 69K distinct states before the first violation; full coverage at higher K may need state-constraint pruning analogous to the SAFETY spec's `StateConstraint`. K=4 is conjectured tractable with state pruning but not yet run.
+**State-space caveat**. Relaxed delivery adds 2^n choices per honest leader broadcast. At n=4, K=2 the model explored 86K distinct states before the first violation; full coverage at higher K may need state-constraint pruning analogous to the SAFETY spec's `StateConstraint`. K=4 is conjectured tractable with state pruning but not yet run.
 
 ---
 
@@ -774,18 +632,19 @@ This section sketches the structure of the TLA+ models. Actual `.tla` files live
 ```
 tla/
 ├── BareOBFT_Safety.tla       -- bare OBFT SAFETY (Pigeonholes 1, 2, 3) under
-│                                per-operator views with byz selective delivery,
-│                                Phase-2.5 σ-flip + leader-only NR-flip,
-│                                snapshot semantics at FinalizePhase2.
-├── BareOBFT_Safety.cfg       -- K=1 base case for the algebraic-cardinality
-│                                mutex (Pigeonhole 1). Higher-K extends by
-│                                chained-encryption induction.
+│                                cluster-pool aggregation with full byz grief.
+├── BareOBFT_Safety.cfg       -- K=2, |Values|=2 base case.
 ├── BareOBFT_Liveness.tla     -- bare OBFT LIVENESS_NON_GRIEF (Class A closure)
 │                                under non-grief byz + within-budget partial-
-│                                synchrony, Phase-2.5 σ-flip + NR-flip mechanism.
+│                                synchrony.
 ├── BareOBFT_Liveness.cfg     -- K=4 (full layer count for 4-op cluster).
+├── BareOBFT_Liveness_NoBudget.tla -- sibling of BareOBFT_Liveness.tla with
+│                                relaxed Assumption 2 (honest leader broadcast
+│                                may deliver to any subset). Used for Class A
+│                                failure-mode exploration (§5.4).
+├── BareOBFT_Liveness_NoBudget.cfg -- K=2.
 ├── LBid_Safety.tla           -- OBFT + L_Bid SAFETY (Pigeonholes + verdict
-│                                pigeonhole). Inherits Phase-2.5 from bare OBFT.
+│                                pigeonhole).
 ├── LBid_Safety.cfg
 ├── LBidNew_Safety.tla        -- OBFT + L_Bid_New SAFETY, same invariants
 │                                encoded for L_Bid_New's structural differences.
@@ -799,21 +658,17 @@ tla/
 
 ### 6.2 — Key TLA+ idioms
 
-**Per-operator views.** Each operator has their own `sigma_view[op]` and `nr_view[op]` capturing what THEY observed. Honest emissions deliver to all operators' views (within-budget propagation, Assumption 2). Byzantine emissions take an arbitrary subset `S ⊆ Operators` (selective delivery). The cluster pool is `{op : op signed σ on (k, v)}` evaluated via signers' own views (signer's invariant: an operator's own signatures are always in their own view).
+**Cluster pool.** Safety verification tracks the cluster signed-message-set as `sigma_partials` and `nr_partials` — each entry is a per-(operator, layer, value) or per-(operator, layer) tuple representing one published partial. The cluster pool at layer `k` for value `v` is `{op : (op, k, v) ∈ sigma_partials}`. This represents the worst-case offline aggregator's view (a byz that retains every observed partial cluster-wide).
 
-**Snapshot semantics.** A global `phase2_finalized` flag transitions FALSE → TRUE at `FinalizePhase2` (single-shot, simultaneous across all honest). Each honest's `snap_sigma_view[op]` and `snap_nr_view[op]` is set to their `sigma_view[op]` / `nr_view[op]` at that moment. Pre-snap honest actions (`HonestSigma`, `HonestNR`) are gated by `~ phase2_finalized`; post-snap honest actions (`HonestSigmaFlip`, `HonestNRFlip`) are gated by `phase2_finalized`. This implements the design's no-flip-cascade property.
+**Byzantine action space.** Byzantine operators may perform any honest action (= mimicking honest behavior), be silent, or perform any of the GRIEF_* actions per §3.5 — equivocation, cross-signing, fake partials, EKM bypass. The model encodes both the protocol-faithful and the grief actions; SAFETY must hold under the union of both spaces.
 
-**Byzantine action split.** Byzantine operators have separate pre-snap and post-snap action variants:
-- `ByzSigmaPreSnap(op, k, v, S)` / `ByzNRPreSnap(op, k, S)`: arbitrary `S ⊆ Operators` selective delivery.
-- `ByzSigmaPostSnap(op, k, v)` / `ByzNRPostSnap(op, k)`: implicit `S = {op}` (own view only). Justification: post-snap byz emissions cannot affect any frozen snapshot or `VAvailable` predicate; they only contribute to the cluster pool, which is determined by signer's-own-view; whether byz also delivers to honest views post-snap is irrelevant to the cluster pool count. This eliminates the post-snap byz S-branching factor (a major state-space reducer).
-
-**Adversarial choice**: `\E S ∈ SUBSET Operators: ByzSigmaPreSnap(op, k, v, S)` — TLC explores all selective-delivery choices.
+**Honest emission.** Honest operators sign at most once per (slot, layer) per side, EKM-gated (cross-phase exclusivity per layer; single-σ-V per layer). Honest emissions append to the cluster pool deterministically.
 
 **Byzantine partition**: `Byzantine ⊆ Operators` (constant), `Cardinality(Byzantine) = F = (Cardinality(Operators) - 1) / 3`.
 
 **Symmetry reductions**: `SYMMETRY Permutations(Honest)` reduces the canonical state count by `|Honest|!` (= 6× at n=4, f=1). Byzantine operators are NOT permuted (they're distinguished by Byzantine designation). Values are NOT permuted (Pigeonhole 2's "two distinct V's reach qV" check needs to count per-(layer, V) σ commitments). Symmetry is enabled for SAFETY but disabled for LIVENESS (TLC warns symmetry under liveness checking can miss violations).
 
-**State-space cap**: `StateConstraint` bounds each pool at its quorum threshold (`Cardinality(ClusterSigmaPool(k, v)) ≤ qV` and `Cardinality(ClusterNRPool(k)) ≤ qEnc`). Provably safe for SAFETY because the Pigeonhole invariants are stated as "pool size ≥ threshold" predicates, so they're already detectable when a pool first reaches the threshold; states with pool size > threshold add no new safety information.
+**State-space cap**: `StateConstraint` bounds each pool at its quorum threshold (`Cardinality(SigmaPool(k, v)) ≤ qV` and `Cardinality(NRPool(k)) ≤ qEnc`). Provably safe for SAFETY because the Pigeonhole invariants are stated as "pool size ≥ threshold" predicates, so they're already detectable when a pool first reaches the threshold; states with pool size > threshold add no new safety information.
 
 ### 6.3 — TLC configuration
 
@@ -827,9 +682,9 @@ For each `(n, f, K)` triple, TLC config specifies:
 - `CHECK_DEADLOCK FALSE` (specs naturally terminate; the property of interest is the invariant).
 
 Verified state-space sizes (per [§7.1](#71--bare-obft)):
-- bare OBFT Safety, `n=4, f=1, K=1`: 56,014 distinct states, depth 9, ~6s.
-- bare OBFT Safety, `n=4, f=1, K=2`: 32.49M+ distinct states (full coverage in one variant; partial at higher byz S-branching).
+- bare OBFT Safety, `n=4, f=1, K=2, |Values|=2`: 262,144 distinct states, ~10s.
 - bare OBFT Liveness, `n=4, f=1, K=4`: 64,152 distinct states, depth 12, ~10s.
+- bare OBFT Liveness (relaxed Assumption 2), `n=4, f=1, K=2`: 86,166 distinct states, counterexample at depth 6, ~7s.
 - L_Bid SAFETY at `n=4, f=1, K=2`: 76.8M distinct states (partial at 20-min budget). L_Bid_New SAFETY: 78.8M distinct states (partial). Algebraic argument from bare OBFT extends.
 - `n=7, f=2`: not yet run; tractability conjectured via cap-at-quorum + symmetry, runtime estimated as hours rather than minutes.
 
@@ -854,18 +709,12 @@ This section is updated as TLC runs are performed.
 
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold for bare OBFT (no Phase-2.5). |
+| SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold for bare OBFT. |
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint capping pool sizes at quorum thresholds) | ✓ verified | 2026-05-08 | Re-run with the cap-at-quorum state constraint as a safety sanity check before applying the constraint to L_Bid / L_Bid_New. TLC explored 250,000 distinct states (1.91M total) in 7s; same outcome (no counterexamples). |
-| SAFETY | n=4, f=1, K=2 (with **Phase-2.5 NR-flip + ORACLE trigger** `\|HonestSigmaOnVAt(k,v)\| ≤ f`) | ⚠ **superseded** — verified result is METHODOLOGICALLY UNSOUND | 2026-05-09 | TLC explored 327,184 distinct states; no counterexamples found. **However**: the trigger condition `HonestSigmaOnVAt(k, v)` filters σ partials by the `Honest` model parameter, which is oracle knowledge unavailable to operators in the real protocol. Verifying under this oracle condition confirms safety of an idealized protocol that the implementation cannot enforce. **This result should NOT be cited as evidence that Phase-2.5 is implementable safely.** See the entry below for the corrected verification using only operator-observable conditions. |
-| SAFETY | n=4, f=1, K=2 (with **Phase-2.5 NR-flip + OBSERVABLE trigger** `Cardinality(SigmaPool(k, v)) < qV`) | ✗ **COUNTEREXAMPLE** — Phase-2.5 unsafe under observable trigger | 2026-05-09 | TLC explored 25,577 distinct states; found Pigeonhole-1 violation at depth 8. Trace: 2 honest σ on V (op1, op3); 1 honest NR (op2); byz publishes NR but withholds σ; trigger fires (NR≥f+1=2 ✓, σ-pool<qV=3 ✓); honest op1 NR-flips → NR-pool=3=qEnc; byz publishes withheld σ → σ-pool=3=qV. Both quorums reach at L_0 → P1 violated → cluster's validator double-signs → stake slashable. See [§7.4 counterexample log](#74--counterexample-log) for the full trace. **Confirms the doc-review finding that Phase-2.5's observable trigger cannot prevent grief-byz cross-signing-with-σ-withholding.** |
-| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (no NR-flip — bare OBFT pre-Phase-2.5) | ✗ counterexample | 2026-05-08 | TLC found Class A deadlock matching `h_V=1` selective-Phase-1-delivery: byz delivers V_0 to op2 only; σ-pool=2 < qV; nr-pool=2 < qEnc; chain doesn't unlock; output never set. Reproduces the documented `h_V=1` algebraic limit (under the spec at the time of the run; in the current spec this shape is documented in [OBFT.md §Failure modes](OBFT.md#failure-modes) as Class B grief deterred via Assumption 4). 5,492 distinct states explored, depth 7, 6s runtime. |
-| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**with Phase-2.5 NR-flip + OBSERVABLE trigger**) | ✓ verified | 2026-05-09 | TLC verified Class A closure under non-grief byz behavior: every honest operator eventually has `output_set[i] = TRUE`. 13,581 distinct states (full coverage, no symmetry), depth 11, 6s runtime. **Caveat**: liveness checking restricts byz to non-grief actions per `LIVENESS_NON_GRIEF` definition; under grief (cross-signing with σ withholding), the SAFETY spec's counterexample applies even though liveness here is "verified" — the two specs check different properties under different adversary models. The liveness result alone does not establish that Phase-2.5 is implementable safely. |
-| SAFETY | n=4, f=1, K=1, \|Values\|=2 (**Phase-2.5 σ-flip + leader-only NR-flip + per-operator views + snapshot semantics**, full grief byz selective delivery, symmetry over Honest, cap-at-quorum state constraint) | ✓ verified | 2026-05-10 | TLC verified all three Pigeonhole invariants (P1, P2, P3) at the algebraic base case (K=1). 179,020 states generated, **56,014 distinct states found**, depth 9, ~6s runtime. **Significance**: K=1 is the load-bearing case for Pigeonhole 1's σ-flip-vs-NR-flip mutex (algebraic-cardinality argument over `s_h + nr_h = 2f`); higher-K extension follows by chained-encryption induction over P1 at every layer. Validates the per-op-view + selective-delivery design against CE-1's grief vector (byz σ-withholding) — the algebraic mutex precludes any combination of (snap-divergent triggers + post-snap byz emissions) violating P1 at the cluster pool. See `tla/BareOBFT_Safety.tla` and CE-1 resolution note in §7.4. |
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 (same configuration, partial coverage) | ◐ partial | 2026-05-10 | Re-run at K=2 to validate the encoding extends cleanly. TLC completed full coverage in one configuration variant (95.98M states generated, 32.49M distinct, depth 16, ~3min) and partial coverage in another (389M states, 79.98M distinct in 11min before SIGTERM). Both reached deep state-space exploration with no Pigeonhole violation. K=1 above remains the load-bearing safety result; K=2 corroborates the encoding under the chained-encryption inductive step. |
-| LIVENESS_NON_GRIEF | n=4, f=1, K=4 (**with Phase-2.5 σ-flip + leader-only NR-flip**) | ✓ verified | 2026-05-10 | TLC verified Class A closure under non-grief byz + within-budget partial-synchrony: every honest operator eventually reaches `output_set[i] = TRUE`. 139,482 states generated, **64,152 distinct states found**, depth 12, ~10s runtime. **Scope**: closes R1/R2/R3 narrow recovery cases (per OBFT.md §Where this came from) — late honest-leader bundle absorbed via `bundle_witnesses` re-flood; symmetric (1 honest σ-er, 2f+1 honest NR-ers) recovery via σ-flip; honest-leader-deadlock recovery via NR-flip. **Does NOT recover**: `h_V = 1` selective Phase-1 delivery (byz leader delivers V_L to exactly 1 honest non-leader; remaining 2f honest NR; σ-flip trigger blocked because `snap_NR_nl = 2f ≥ f+1`); classified as Class B grief deterred via Assumption 4, not closed by the protocol. See [§5.2](#52--verification-approach) for full scope. |
-| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**relaxed Assumption 2** — honest leader broadcast may deliver to any subset; sibling spec `BareOBFT_Liveness_NoBudget.tla`) | ✗ counterexample (expected) | 2026-05-10 | TLC found Class A deadlock at depth 6 in 9s (138,682 states generated, **69,462 distinct states found** before first violation). Trace replays documented `h_V=1` pattern with the **byz-silent sub-case**: honest L_0 leader's bundle propagation tail (delivered to {op1, op2} only) + byz silent → σ-flip blocked by σ-flip's *second* trigger condition `snap_S_post < A + 2f` (1 honest NR-er, 1 silent byz: `s_post=2 < 3=a_count+2f`). Distinct from OBFT.md §Liveness's classical-h_V=1 narrative (which focuses on the *first* trigger condition `nr_nl < f+1` blocked by 2 honest NR-ers); same outcome (slot misses), different blocking mechanism within Phase-2.5. **Validates the "Phase-2.5 does NOT close h_V=1" claim mechanically** across both sub-cases by byz behavior. See [§5.4](#54--beyond-liveness_non_grief-class-a-failure-mode-exploration) for the methodology and full trace classification. |
-| SAFETY | n=7, f=2 (with σ-flip + NR-flip) | _to be run_ | — | State-space cap at quorum + symmetry over Honest expected to make this tractable; would extend the K=1 base-case coverage to a larger cluster. |
-| LIVENESS_NON_GRIEF | n=7, f=2 (with σ-flip + NR-flip) | _to be run_ | — | Same scope as n=4 K=4 above, scaled. |
+| LIVENESS_NON_GRIEF | n=4, f=1, K=4 | ✓ verified | 2026-05-10 | TLC verified Class A closure under non-grief byz + within-budget partial-synchrony: every honest operator eventually reaches `output_set[i] = TRUE`. 139,482 states generated, **64,152 distinct states found**, depth 12, ~10s runtime. **Scope**: under within-budget propagation and non-grief byz, every layer either reaches σ-quorum or NR-quorum, so the Phase-3 walk completes with output. **Does NOT recover** (out of property scope, surfaced as documented Class A/B in OBFT.md §Failure modes): `h_V = 1` selective Phase-1 delivery, equivocation σ-locked split patterns, validity-divergence beyond stabilization. See [§5.2](#52--verification-approach) for full scope. |
+| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**relaxed Assumption 2** — honest leader broadcast may deliver to any subset; sibling spec `BareOBFT_Liveness_NoBudget.tla`) | ✗ counterexample (expected) | 2026-05-10 | TLC found Class A deadlock at depth 6 in 7s (~183K states generated, **86,166 distinct states found** before first violation). Trace replays a documented partial-propagation deadlock from the `h_V=1` family ([OBFT.md §Liveness](OBFT.md#liveness-synchrony-conditional) (b)): honest L_0 leader's bundle delivered to a strict subset of honest; remaining honest NR-emit; σ-pool < qV, NR-pool < qEnc; algebraic deadlock. **Validates the "bare OBFT does not close partial-propagation deadlocks in-protocol" claim mechanically** by surfacing the algebraic deadlock when Assumption 2 is relaxed. See [§5.4](#54--beyond-liveness_non_grief-class-a-failure-mode-exploration) for the methodology and trace classification. |
+| SAFETY | n=7, f=2 | _to be run_ | — | State-space cap at quorum + symmetry over Honest expected to make this tractable; would extend the n=4 base-case coverage to a larger cluster. |
+| LIVENESS_NON_GRIEF | n=7, f=2 | _to be run_ | — | Same scope as n=4 K=4 above, scaled. |
 
 ### 7.2 — OBFT + L_Bid
 
@@ -924,16 +773,11 @@ State 7: ByzSigma(op4, 0, v1)        sigma_partials += (op4,0,v1)   nr_partials 
 
 **Methodology lesson**: an earlier version of this spec used `Cardinality(HonestSigmaOnVAt(k, v)) ≤ F` in the trigger — `HonestSigmaOnVAt` filters σ-pool members by the `Honest` set, which is a model parameter accessible to TLC but represents oracle knowledge unavailable to real-world operators. Verifying with the oracle trigger confirmed safety of an idealized protocol that the implementation cannot enforce. The corrected spec uses only operator-observable conditions; CE-1 is what TLC finds under the corrected model. **TLA+ specs of distributed protocols should restrict each role's action preconditions to what's locally observable to that role; using model-parameter sets like `Honest` in role-local triggers is a methodology bug that produces unsound verification results.**
 
-**Resolution status**: ✅ **RESOLVED** (2026-05-10) by redesign — the verified Phase-2.5 design (σ-flip + leader-only NR-flip + snapshot semantics + per-operator views + leader-bundle re-flood) is verified safe at K=1; see [§7.1 Bare OBFT verification table](#71--bare-obft).
+**Resolution status**: ✅ **RESOLVED** (2026-05-10) by spec rollback — the Phase-2.5 σ-flip / NR-flip mechanism (with all variants explored: oracle trigger, observable trigger, snapshot-based with per-operator views) was removed entirely from bare OBFT after a cost-benefit review concluded that the safety-preserving symmetric design's narrow recovery scope (3 specific Class B patterns at f=1, n=4) did not justify the spec/EKM/wire-format complexity, and that the `h_V=1` selective-delivery deadlock — the original motivation for Phase-2.5 — remains unclosed regardless. Bare OBFT now treats the patterns Phase-2.5 attempted to address (`h_V=1`, equivocation σ-locked splits, validity-divergence) as Class B grief deterred via Assumption 4, with [2abOBFT](2abOBFT.md) as the natural recovery-scope extension at +1 RTT cost when in-protocol closure is required.
 
-**How the redesign closes CE-1.** Two design changes:
+**Why the rollback closes CE-1.** With Phase-2.5 removed, the trigger that fired in CE-1 (`SigmaPool < qV ∧ NRPool ≥ f+1` enabling NR-flip from honest σ-er) no longer exists in the protocol. Honest operators commit exactly once at `T_commit` on the 3-state (σ, NR, NV) lattice with strict cross-phase exclusivity per layer; there is no post-snapshot cross-sign emission of any kind. The Pigeonhole-1 union-bound argument (§4.2) returns to the simple form: σ-quorum on `v` at `k` requires ≥ f+1 honest σ-on-`v`; those honest are cross-phase-exclusive at `k` so cannot also contribute NR; remaining honest + byz cap ≤ 2f < qEnc.
 
-1. **Snapshot semantics.** Flip triggers evaluate against the actor's own snapshot taken at `T_commit + Δ_2`, not the live pool. Post-snap byz emissions cannot change any frozen snapshot composition or the trigger evaluation.
-2. **Algebraic mutex.** σ-flip requires `snap_NR_nl < f+1`; NR-flip requires `snap_S_nl < f`. Within-budget propagation gives `s_h + nr_h = 2f` honest non-leaders at `n=3f+1` with leader honest, so both constraints `s_h ≥ f ∧ s_h < f` cannot hold — the two flips can't simultaneously fire at the same layer (when leader is byz, NR-flip is impossible by precondition).
-
-CE-1's specific configuration replays under the new design (leader_of[0] = op1 honest; op1, op3 σ on v1; op2 NR; op4 byz NR) with both flip triggers blocked: op2 sees `snap_NR_nl = 2`, blocking σ-flip; op1 honest leader sees `snap_S_nl = 1`, blocking NR-flip. σ-pool[v1] can still grow to qV via byz late-σ but NR-pool stays at 2 < qEnc — Pigeonhole 1 holds. This configuration is in the verified K=1 state space (§7.1, 56,014 distinct states); TLC explored it without finding a violation.
-
-**Cost of resolution.** The `h_V = 1` selective-Phase-1 delivery shape is no longer protocol-closed under the new design — earlier Phase-2.5 iterations attempted symmetric closure (CE-1 was the unsafety witness for those iterations), but the verified design accepts h_V=1 as Class B grief deterred via Assumption 4 rather than closed in-protocol (see [§5.2](#52--verification-approach) and [OBFT.md §Failure modes](OBFT.md#failure-modes)). R1/R2/R3 narrow recovery scope is verified at `n=4, f=1, K=4` for non-grief liveness.
+**Cost of rollback.** The narrow Class B recovery patterns Phase-2.5 closed (R1/R2/R3 in earlier iterations) are no longer in scope; bare OBFT relies on K-layer fall-through under non-grief byz and on Assumption 4 for grief patterns. See [OBFT.md §Failure modes](OBFT.md#failure-modes) for the full taxonomy.
 
 ---
 
@@ -961,15 +805,10 @@ Items deferred from this verification effort:
 - **L_k**: rotation layer k (0 ≤ k < K).
 - **L_Bid**: bid-routing layer in L_Bid extension.
 - **σ-pool, NR-pool**: aggregated threshold partials per layer (cluster signed-message-set).
-- **σ-flip**: Phase-2.5 additive σ-after-NR commitment by an honest non-leader who NR'd, gated by `SigmaFlipTriggered` on the actor's snapshot.
-- **NR-flip**: Phase-2.5 additive NR-after-σ commitment by the **honest leader only**, gated by `NRFlipTriggered` on the actor's snapshot. Non-leader NR-flip is grief.
-- **Snapshot semantics**: each honest operator freezes their `sigma_view` / `nr_view` simultaneously at `T_commit + Δ_2` (FinalizePhase2). Phase-2.5 flip triggers evaluate against the actor's frozen snapshot, not against the live pool.
-- **Per-operator views**: the verification model gives each operator their own `sigma_view[op]`, `nr_view[op]` (and snapshots) capturing what THEY observed. Honest contributions agree across honest views (within-budget propagation); byz contributions can selectively diverge per byz-emission's `S ⊆ Operators` choice.
-- **`bundle_witnesses`**: mandatory leader-bundle re-flood section in `KindCommit`; carries byte-for-byte copies of retained Phase-1 bundles for layers where the operator is not the leader. Replaces the older σ_L^V-only witness section.
-- **EKM**: Eth-Key-Manager-equivalent; the slashing-protection-aware signing service. Enforces single-σ-V-per-(op, k), single-flip-per-layer, and trigger-evidence consistency on flip emissions.
+- **`sigma_L_witnesses`**: optional witness section in `KindCommit` carrying retained Phase-1 σ_L^V partials paired with `value_root` for cross-reference; protects σ_L^V against bundle drop at peer receivers who DID receive V (see [OBFT.md §Phase 2 / Wire format](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2)).
+- **EKM**: Eth-Key-Manager-equivalent; the slashing-protection-aware signing service. Enforces single-σ-V-per-(op, k) and cross-phase exclusivity per layer.
 - **GRIEF_***: byzantine actions that deviate from honest behavior (§3.5).
-- **CE-N**: counterexample N in the verification log (§7.4). CE-1 is resolved by the verified Phase-2.5 design.
-- **GRIEF_***: byzantine actions that deviate from honest behavior (§3.5).
+- **CE-N**: counterexample N in the verification log (§7.4). CE-1 is resolved by spec rollback (Phase-2.5 removed entirely from bare OBFT).
 
 References:
 - [docs/OBFT.md](OBFT.md) — main protocol specification.

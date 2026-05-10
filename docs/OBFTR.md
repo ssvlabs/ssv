@@ -14,7 +14,7 @@ OBFTR is the multi-round generalization of [OBFT](OBFT.md): it adds R-round retr
 
 **Suited for:** any SSV duty (proposer, attestation, sync committee, DKG) where the 2-RTT healthy-path latency is desired plus tolerance for network partitions. The configurable R and RT let operators tune recovery aggression per duty's deadline budget. Particularly suited for proposer duty (4s relay cutoff) where the round-2 overhead is ~250ms vs QBFT's ~2s round-change.
 
-**Not suited for:** scenarios requiring host-validity-divergence recovery within a slot — OBFTR assumes host validity is unanimous at decision time (see [Assumptions](#assumptions-and-implications)). QBFT is the appropriate choice when validity is unstable across the consensus window. Bare OBFTR (at any R) also does not defend against an adversarial byzantine that deliberately engineers σ-locked split equivocation or h_V=1 selective-delivery deadlocks — these patterns are R-invariant in OBFTR (per-round retry doesn't reconcile honest σ-locks made under selective Phase-1 delivery), and **bare [OBFT](OBFT.md) does not close them either** (its new Phase-2.5 σ-flip / NR-flip recovers narrow R1/R2/R3 cases but blocks at h_V=1 selective Phase-1 delivery — see [OBFT.md §Failure modes](OBFT.md#failure-modes)). For both protocols, the rational-byzantine deterrent (assumption 4) handles these patterns across many slots; per-slot they cause clean slot-miss with weakly-slashable behavioral evidence. [2abOBFT](2abOBFT.md) is the appropriate choice when in-protocol h_V=1 closure is required.
+**Not suited for:** scenarios requiring host-validity-divergence recovery within a slot — OBFTR assumes host validity is unanimous at decision time (see [Assumptions](#assumptions-and-implications)). QBFT is the appropriate choice when validity is unstable across the consensus window. Bare OBFTR (at any R) also does not defend against an adversarial byzantine that deliberately engineers σ-locked split equivocation or h_V=1 selective-delivery deadlocks — these patterns are R-invariant in OBFTR (per-round retry doesn't reconcile honest σ-locks made under selective Phase-1 delivery), and **bare [OBFT](OBFT.md) does not close them either** (see [OBFT.md §Failure modes](OBFT.md#failure-modes)). For both protocols, the rational-byzantine deterrent (assumption 4) handles these patterns across many slots; per-slot they cause clean slot-miss with weakly-slashable behavioral evidence. [2abOBFT](2abOBFT.md) is the appropriate choice when in-protocol h_V=1 closure is required.
 
 **Also not suited for:** general-purpose state-machine replication where decision *agreement* across operators (not just *output*) is required. OBFTR gives a unique cluster-wide *output* via cryptographic safety; honest operators may locally observe different intermediate states without affecting the output.
 
@@ -225,7 +225,7 @@ where:
 
 - The K-layer onion of σ partials (plaintext at L_0, chained-encrypted at deeper layers) for layers where the operator is σ-state in round r.
 - NR/NV partials `σ_i^{IBE}(nr_tag_k)` for layers where the operator is NR-state in round r.
-- **Leader σ_L^V witness section.** For every Phase-1 bundle the operator has retained at this point (per §Phase 1's retention rules — typically one bundle per layer, two per layer in the equivocation-observed case; bundles accumulate across rounds via gossipsub re-flood), a plaintext copy `(layer k, value_root, σ_{L_k}^V(V_{L_k}))` extracted from the bundle. These are byte-for-byte copies of the leader's partial as `i` observed it — **not** new signings by `i` (no EKM event, no new signing obligation, no new cryptographic primitive). The section provides redundancy against Phase-1 bundle drop at peer receivers: a peer that didn't receive the leader's bundle directly can harvest σ_L^V from `i`'s witness section into the layer-`k` σ-pool (subject to the layer's chained-decryption gate when `k > 0`). Bandwidth is small (~96 bytes per σ partial × K × n; ≈ 1.5 KB cluster-wide per round at K=4, n=4). The mechanism does **not** address V-drop — σ_L^V verifies against `value_root(V)`, so a receiver lacking V cannot use a witnessed σ_L^V; receivers without V locally still rely on gossipsub Phase-1 re-flood (cross-round propagation) for V itself.
+- **Leader σ_L^V witness section.** For every Phase-1 bundle the operator has retained at this point (per §Phase 1's retention rules — typically one bundle per layer, two per layer in the equivocation-observed case; bundles accumulate across rounds via gossipsub re-flood), a plaintext copy `(layer k, value_root, σ_{L_k}^V(V_{L_k}))` extracted from the bundle. These are byte-for-byte copies of the leader's partial as `i` observed it — **not** new signings by `i` (no EKM event, no new signing obligation, no new cryptographic primitive). The section provides redundancy against Phase-1 bundle drop at peer receivers: a peer that didn't receive the leader's bundle directly can harvest σ_L^V from `i`'s witness section into the layer-`k` σ-pool (subject to the layer's chained-decryption gate when `k > 0`). Bandwidth is small (per witness ≈ 145 bytes = Layer + Leader + ValueRoot + σ partial + length-prefix overhead; cluster-wide at K=4, n=4 ≈ 16 witnesses × 145 ≈ 2.3 KB per round). The mechanism does **not** address V-drop — σ_L^V verifies against `value_root(V)`, so a receiver lacking V cannot use a witnessed σ_L^V; receivers without V locally still rely on gossipsub Phase-1 re-flood (cross-round propagation) for V itself.
 
 Auth-envelope binding: `(protocol_tag = "OBFTR-v1", message_kind = "commit", cluster_id, slot, round r, operator_id i, onion_payload, nr_partials, sigma_L_witnesses)` signed by `i`'s operator-identity key. Emitted at most once per operator per round.
 
@@ -242,16 +242,7 @@ A byzantine operator that publishes both σ and NR on the same `(slot, layer, ro
 
 ### Phase 2.5 — L_C round-coordination signaling `[T_commit_r + Δ_2, T_commit_r + Δ_2 + Δ_2.5]` (per round r)
 
-OBFTR's Phase 2.5 specifies **L_C round-coordination signaling** — the cluster-consensus mechanism for the frontier layer `L_C` and round transitions. It is **structurally distinct from bare [OBFT](OBFT.md)'s Phase 2.5**, which specifies **σ-flip / NR-flip recovery flips** for narrow R1/R2/R3 single-round byzantine-grief patterns (see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)). Despite sharing the "Phase 2.5" timing slot (between Phase 2 finalize and Phase 3 reconstruction), the two mechanisms address orthogonal problems:
-
-| | OBFT Phase 2.5 | OBFTR Phase 2.5 |
-|---|---|---|
-| Purpose | σ-or-NR flip recovery | Multi-round coordination |
-| Scope | Single round (snap-gated single-flip-per-layer) | Cross-round frontier consensus |
-| Wire kinds | `KindSigmaFlip`, `KindNRFlip` | `KindLCClaim` |
-| Recovery target | R1/R2/R3 narrow byz-grief patterns at f=1, n=4 | Round transitions, slow-operator absorption |
-
-The two could be combined in a future "OBFTR + σ-flip / NR-flip" variant — see [Future work / Porting OBFT's Phase-2.5 flips](#future-work) for the design sketch.
+OBFTR's Phase 2.5 specifies **L_C round-coordination signaling** — the cluster-consensus mechanism for the frontier layer `L_C` and round transitions. Bare [OBFT](OBFT.md) has no Phase 2.5 (single-round, no rounds to coordinate between).
 
 L_C round-coordination is OBFTR's structural addition to bare OBFT's R=1 baseline. It runs in parallel with the latter half of Phase 2 (overlapping window — each operator runs the L_C-consensus logic continuously as they observe peer broadcasts). One new wire message kind is emitted here.
 
@@ -761,7 +752,7 @@ R=1 uses the full 2.0s budget for one extended round. With per-round single-emis
 
 K=3: 3 fall-through layers (L_0 → L_1 → L_2). K=4: 4 layers (+L_3). Same timing — Phase 2/2.5/3 don't depend on K — but K=4 has more fall-through depth and ~3KB extra bandwidth.
 
-**Bandwidth (healthy):** ~25 KB at K=3, ~28 KB at K=4 (includes σ_L^V witness section ≈ +1.5 KB at K=4). No round-2 overhead (single round).
+**Bandwidth (healthy):** ~25 KB at K=3, ~28 KB at K=4 (includes σ_L^V witness section ≈ +2.3 KB at K=4). No round-2 overhead (single round).
 
 #### OBFTR(n=4, K=3, R=2) and OBFTR(n=4, K=4, R=2)
 
@@ -782,7 +773,7 @@ R=2 splits the 2.0s budget into two rounds with new leaders broadcasting in roun
 
 **Recovery scope.** K-layer fall-through within each round + per-round retry. Bundles late at round-1's `T_commit_1` may be picked up in round 2 if they propagate by `T_commit_2`. Per-round commitments are independent (no cross-round σ-or-NR exclusivity), so an operator who NR-emitted in round 1 may σ-emit in round 2 if the leader's bundle finally propagates.
 
-**Bandwidth (healthy):** ~25 KB at K=3, ~28 KB at K=4 (includes σ_L^V witness section ≈ +1.5 KB at K=4). **+~25-28 KB for round-2 KindCommit_2** if round 1 fails (~52 KB total in failure case).
+**Bandwidth (healthy):** ~25 KB at K=3, ~28 KB at K=4 (includes σ_L^V witness section ≈ +2.3 KB at K=4). **+~25-28 KB for round-2 KindCommit_2** if round 1 fails (~52 KB total in failure case).
 
 #### QBFT(n=4, R=2) at recommended sizing
 
@@ -918,31 +909,19 @@ The R-round retry covers network-partition tails up to `~R · P99` propagation t
 
 The result is a protocol that **strictly improves on bare [OBFT](OBFT.md) (single-round)** for partition cases (R-round retry with re-flood; per-round commitments independent) at the same 2-RTT healthy-path latency. It does **not match QBFT's full recovery scope** — Class A failure modes (assumption violations) and Class B byzantine grief patterns are out of scope, handled by assumptions 3 (host validity stabilization) and 4 (rational-byzantine deterrent) respectively. The R (round count) parameter is the partial-synchrony tolerance knob; K (layer count) is the multi-failure-fall-through depth knob.
 
-## Future work
-
-### Porting OBFT's Phase-2.5 σ-flip / NR-flip flips to OBFTR
-
-[OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips) specifies a snapshot-gated σ-flip / NR-flip mechanism that recovers narrow R1/R2/R3 byzantine-grief / late-honest-leader-bundle scenarios within a single round. OBFTR currently does not import this mechanism — its Phase 2.5 specifies the orthogonal L_C-consensus frontier-coordination logic instead. Combining the two would broaden OBFTR's per-round Class B recovery in the same R1/R2/R3 fashion as bare OBFT, while keeping OBFTR's R-round partition-tolerance baseline.
-
-**Sketch of the design.** Each round's `T_commit_r + Δ_2` would become a per-round FinalizePhase2 snapshot point. The σ-flip / NR-flip triggers (`SigmaFlipTriggered`, `NRFlipTriggered` per OBFT.md) would evaluate against the round-r snapshot, with per-round single-flip-per-(layer, round) EKM gating. Wire format adds `KindSigmaFlip_r` / `KindNRFlip_r` analogous to `KindLCClaim`'s round indexing. Cross-round atomicity needs the same care as round-r commitments — flips emitted in round r are independent of flips at the same layer in round r+1 (which would re-evaluate against a fresh round-r+1 snapshot). The `bundle_witnesses` mandatory leader-bundle re-flood would also apply per round (already largely covered by OBFTR's Phase-1 retention + cross-round gossipsub re-flood, with the `bundle_witnesses` section adding the in-Phase-2 re-flood).
-
-**Scope of the recovery extension.** The same R1/R2/R3 narrow scenarios that OBFT's Phase-2.5 closes would close in OBFTR per-round. The h_V=1 selective-Phase-1 delivery shape would remain unrecovered in OBFTR (same algebraic limit as bare OBFT) — though OBFTR's R-round retry already buys some additional partition tolerance against late-honest-leader-bundle cases that OBFT doesn't have, so the σ-flip / NR-flip mechanism would primarily extend OBFTR's per-round reach, not its multi-round reach.
-
-**Not specified in this iteration** — left as a coherent follow-up if production telemetry shows that OBFTR's narrow Class B exposure is operationally meaningful.
-
 ## Appendix A — Protocol comparisons
 
 This appendix gives high-level structural comparisons against the protocols OBFTR relates to: [OBFT](OBFT.md) (the single-round simplification), [2abOBFT](2abOBFT.md) (the Phase-2-split successor that recovers equivocation and validity-divergence in-protocol), and QBFT (SSV's existing consensus protocol).
 
 ### A.1 — Comparison with [OBFT](OBFT.md)
 
-OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Phase 1 / Phase 2 / Phase 3 structure, K-layer fall-through, chained encryption, the four commitment states, and the slashing-evidence rules.
+OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Phase 1 / Phase 2 / Phase 3 structure, K-layer fall-through, chained encryption, the three commitment states (σ, NR, NV), and the five slashing-evidence rules.
 
 | Aspect | OBFTR (R = 2) | [OBFT](OBFT.md) |
 |---|---|---|
 | Round structure | Up to R rounds with re-flood retry; round transitions on timer or L_C-quorum promotion | Single round, no retry |
 | L_C cluster-consensus signaling | `KindLCClaim` in Phase 2.5 | **Removed** (no rounds to transition between) |
-| Phase 2.5 | L_C round-coordination signaling (`KindLCClaim`) | σ-flip / NR-flip recovery flips (snap-gated, single-round; see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)) — **distinct mechanism** from OBFTR's round-coordination Phase 2.5 |
+| Phase 2.5 | L_C round-coordination signaling (`KindLCClaim`) | **Removed** entirely (single-round, no rounds to coordinate between) |
 | Per-round acceptance widening | `T_candidate_accept_r` widens across rounds; auth-only-retention for next round | **Removed** — single receiver acceptance window aligned with σ-emit-propagation feasibility |
 | Cross-round σ-or-NR exclusivity | EKM enforces across rounds + cross-phase | **Cross-phase only** — no rounds to span |
 | EKM cross-share atomicity | Required across rounds for re-emission semantics | Per single signing event only |
@@ -951,7 +930,7 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | Partial-synchrony envelope | `R · P99` (e.g., `2·P99` at R=2) | `P99` (single round) |
 | Slot budget at K=4, BTT=200ms | Ends at slot_start + 3.10s (with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 2.00s at earliest T_commit; OBFT typically anchors T_commit later (3.40s at Config A) to redirect the saved budget into MEV-fetch — consensus then ends at slot_start + 3.90s. See [OBFT.md §Timing budget](OBFT.md#timing-budget). Saves ~1.1s of consensus runway either way. |
 | Submission headroom (4s relay cutoff) | 0.90s | 2.00s |
-| Bandwidth (healthy, n=4, K=4) | ~28 KB (small `V`; includes σ_L^V witness section ≈ +1.5 KB per round) | Small `V`: ~28 KB (includes mandatory `bundle_witnesses` re-flood ≈ +1.5 KB at K=4 n=4); blinded-block `V` (proposer): per-op ~88 KB typical / ~228 KB worst case (see [OBFT.md §Application](OBFT.md#application-ssv-ethereum-proposer-duty)). OBFTR's `sigma_L_witnesses` carries σ_L^V partials only (not full V), so OBFTR's blinded-block bandwidth scales differently from OBFT's. |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB across 2 emissions per round (includes σ_L^V witness section ≈ +2.3 KB per round) | ~28 KB across 1 emission (includes σ_L^V witness section ≈ +2.3 KB at K=4 n=4) |
 | Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB | n/a (no round 2) |
 | High-P99 fit (P99 = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |
 
@@ -991,7 +970,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 | RTTs to signed output (min, healthy) | 3 (consensus) + 1 (post-consensus) ≈ 4 | 2 (Phase 1 + Phase 2) |
 | Termination guarantee | Eventually-terminating across rounds (under partial synchrony) | Conditional on `R · P99 ≥ real_propagation`; tunable via R |
 | Safety posture | Honest-majority (`2f+1` honest) + correct quorum-certificate verification | Honest-majority cryptographic via `qEnc = qV = 2f+1` + chained IBE + EKM-enforced per-operator commitments. Same trust posture as QBFT — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). |
-| Bandwidth (1 round, healthy n=4) | ~14 KB | ~23 KB (includes σ_L^V witness section ≈ +1.5 KB) |
+| Bandwidth (1 round, healthy n=4) | ~14 KB | ~23 KB (includes σ_L^V witness section ≈ +2.3 KB) |
 | Bandwidth (1 round failure n=4) | +12 KB per round + a full additional round on top | +~22 KB for round 2 re-flood (only if round 1 failed; includes round-2 σ_L^V witness re-emit) |
 | Latency (healthy, n=4) | ~750 ms | ~250 ms (Config A) — see [Timing budget](#timing-budget--concrete-configurations) for higher-D configurations |
 | Latency (1 round failure, n=4) | ~3.0 s (round-1 timeout 2s + round-2 success ~750 ms) | ~500 ms (Config A: round 1 fail at ~250 ms + round 2 succeed at ~250 ms) |
