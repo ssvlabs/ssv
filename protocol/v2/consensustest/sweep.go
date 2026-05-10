@@ -1,6 +1,7 @@
 package consensustest
 
 import (
+	"strconv"
 	"testing"
 	"time"
 )
@@ -105,7 +106,7 @@ func clusterScalingSweep(scenarios []Scenario, protocols []Protocol, iterations 
 			BTT:          200 * time.Millisecond,
 		}
 		pts = append(pts, SweepPoint{
-			Label: "n=" + itoa(n),
+			Label: "n=" + strconv.Itoa(n),
 			Config: BatchConfig{
 				Iterations: iterations,
 				Base:       base,
@@ -160,7 +161,7 @@ func heavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int) 
 		// 3.20× / 5.09× at the four sample points.
 		base.Network = LogNormalDelay{Median: base.BTT / 2, Sigma: sigma}
 		pts = append(pts, SweepPoint{
-			Label: "Sigma=" + ftoa(sigma),
+			Label: "Sigma=" + strconv.FormatFloat(sigma, 'f', 2, 64),
 			Config: BatchConfig{
 				Iterations: iterations,
 				Base:       base,
@@ -196,7 +197,17 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 						inner.Apply(cfg)
 					}
 					if rate > 0 {
-						cfg.Network = NewLossyNetwork(ConstantDelay{D: cfg.BTT}, rate, 5)
+						// Compose: wrap whatever Network the inner scenario
+						// configured (e.g. PerReceiverDelay for MeshFlakiness)
+						// so loss adds ON TOP of the inner model. cfg.Network
+						// may be nil if the inner scenario didn't set it; use
+						// ConstantDelay{D: BTT} as the equivalent of Validate's
+						// default.
+						base := cfg.Network
+						if base == nil {
+							base = ConstantDelay{D: cfg.BTT}
+						}
+						cfg.Network = NewLossyNetwork(base, rate, 5)
 					}
 				},
 				Expect: s.Expect,
@@ -204,7 +215,7 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 			}
 		}
 		pts = append(pts, SweepPoint{
-			Label: "loss=" + ftoa(rate),
+			Label: "loss=" + strconv.FormatFloat(rate, 'f', 2, 64),
 			Config: BatchConfig{
 				Iterations: iterations,
 				Base:       DefaultProposerDutyConfig(200 * time.Millisecond),
@@ -219,44 +230,4 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 		AxisLabel:   "Loss rate",
 		Points:      pts,
 	}
-}
-
-// itoa / ftoa: minimal stdlib-free numeric→string helpers for sweep
-// labels. (sweep.go can't import strconv without it appearing as an
-// import cycle if any sweep tooling later imports back into
-// consensustest — defensive against future restructuring.)
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	out := ""
-	for n > 0 {
-		out = string(rune('0'+n%10)) + out
-		n /= 10
-	}
-	if neg {
-		out = "-" + out
-	}
-	return out
-}
-
-func ftoa(f float64) string {
-	// Two-decimal fixed format — sufficient for sigma / rate values
-	// we use in default sweeps.
-	cents := int(f*100 + 0.5)
-	if cents < 0 {
-		return "-" + ftoa(-f)
-	}
-	whole := cents / 100
-	frac := cents % 100
-	return itoa(whole) + "." + leadZero(frac/10) + leadZero(frac%10)
-}
-
-func leadZero(d int) string {
-	return string(rune('0' + d))
 }

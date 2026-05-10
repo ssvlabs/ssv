@@ -213,7 +213,14 @@ type LossyNetwork struct {
 // NewLossyNetwork constructs a LossyNetwork with fresh Markov state.
 // Use one per sim to preserve per-sim determinism (state across sims
 // would cross-contaminate otherwise).
+//
+// burstFactor < 1 is normalized to 1 (geometric memoryless loss); this
+// is the constructor-time normalization so callers inspecting the
+// struct post-construction see the effective value, not the raw input.
 func NewLossyNetwork(inner NetworkModel, lossRate float64, burstFactor int) *LossyNetwork {
+	if burstFactor < 1 {
+		burstFactor = 1
+	}
 	return &LossyNetwork{
 		Inner:       inner,
 		LossRate:    lossRate,
@@ -238,10 +245,6 @@ func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind)
 		l.mu.Unlock()
 		return DroppedDelay
 	}
-	if l.BurstFactor < 1 {
-		l.BurstFactor = 1 // protect against misconfiguration; geometric (memoryless) loss
-	}
-
 	// Initial state: weighted by steady-state P(bad) = LossRate.
 	if !l.inited {
 		if rng.Float64() < l.LossRate {
@@ -319,7 +322,14 @@ type linkKey struct {
 
 // NewCorrelatedLinkDelay constructs a CorrelatedLinkDelay with fresh
 // per-pair state. Use one per sim to preserve determinism.
+//
+// burstMessages < 1 is normalized to 1 (geometric memoryless flakiness)
+// at construction time so the struct's published field matches the
+// effective value.
 func NewCorrelatedLinkDelay(inner NetworkModel, badLinkProb, badLinkMultiplier float64, burstMessages int) *CorrelatedLinkDelay {
+	if burstMessages < 1 {
+		burstMessages = 1
+	}
 	return &CorrelatedLinkDelay{
 		Inner:             inner,
 		BadLinkProb:       badLinkProb,
@@ -337,9 +347,6 @@ func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind M
 	if c.linkBad == nil {
 		c.linkBad = make(map[linkKey]bool)
 		c.linkSeen = make(map[linkKey]bool)
-	}
-	if c.BurstMessages < 1 {
-		c.BurstMessages = 1
 	}
 
 	// Lazy per-pair init at first observation: weighted by steady-state
