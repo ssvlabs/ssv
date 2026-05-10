@@ -240,11 +240,20 @@ EKM enforces these exclusivities cryptographically (slashing-protection log keye
 
 A byzantine operator that publishes both σ and NR on the same `(slot, layer, round)` is publicly attributable (see "Fault tolerance / Cross-signing detection" — under `qEnc = qV`, cross-signing has no safety impact regardless of honest aggregation behavior). For each layer's leader specifically, "cross-signing" includes any Phase-1 σ + same-round NR pair on the same slot.
 
-### Phase 2.5 — L_C consensus `[T_commit_r + Δ_2, T_commit_r + Δ_2 + Δ_2.5]` (per round r)
+### Phase 2.5 — L_C round-coordination signaling `[T_commit_r + Δ_2, T_commit_r + Δ_2 + Δ_2.5]` (per round r)
 
-OBFTR's Phase 2.5 is **distinct from bare [OBFT](OBFT.md)'s Phase 2.5** (which specifies σ-flip / NR-flip flips for narrow R1/R2/R3 recovery scenarios — see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)). OBFTR's Phase 2.5 instead specifies **L_C consensus** — frontier-layer signaling across rounds. The two mechanisms are orthogonal: OBFT's σ-flip / NR-flip is a single-round σ-or-NR flip mechanism gated by snapshot triggers; OBFTR's L_C consensus is a multi-round frontier coordination mechanism. They could be combined in a future "OBFTR + σ-flip / NR-flip" variant — see [Future work / Porting OBFT's Phase-2.5 flips](#future-work) for the design sketch.
+OBFTR's Phase 2.5 specifies **L_C round-coordination signaling** — the cluster-consensus mechanism for the frontier layer `L_C` and round transitions. It is **structurally distinct from bare [OBFT](OBFT.md)'s Phase 2.5**, which specifies **σ-flip / NR-flip recovery flips** for narrow R1/R2/R3 single-round byzantine-grief patterns (see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)). Despite sharing the "Phase 2.5" timing slot (between Phase 2 finalize and Phase 3 reconstruction), the two mechanisms address orthogonal problems:
 
-Phase 2.5 is OBFTR's structural addition to bare OBFT's R=1 baseline. It runs in parallel with the latter half of Phase 2 (overlapping window — each operator runs Phase 2.5 logic continuously as they observe peer broadcasts). One new wire message kind is emitted here.
+| | OBFT Phase 2.5 | OBFTR Phase 2.5 |
+|---|---|---|
+| Purpose | σ-or-NR flip recovery | Multi-round coordination |
+| Scope | Single round (snap-gated single-flip-per-layer) | Cross-round frontier consensus |
+| Wire kinds | `KindSigmaFlip`, `KindNRFlip` | `KindLCClaim` |
+| Recovery target | R1/R2/R3 narrow byz-grief patterns at f=1, n=4 | Round transitions, slow-operator absorption |
+
+The two could be combined in a future "OBFTR + σ-flip / NR-flip" variant — see [Future work / Porting OBFT's Phase-2.5 flips](#future-work) for the design sketch.
+
+L_C round-coordination is OBFTR's structural addition to bare OBFT's R=1 baseline. It runs in parallel with the latter half of Phase 2 (overlapping window — each operator runs the L_C-consensus logic continuously as they observe peer broadcasts). One new wire message kind is emitted here.
 
 #### L_C consensus — `KindLCClaim`
 
@@ -933,7 +942,7 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 |---|---|---|
 | Round structure | Up to R rounds with re-flood retry; round transitions on timer or L_C-quorum promotion | Single round, no retry |
 | L_C cluster-consensus signaling | `KindLCClaim` in Phase 2.5 | **Removed** (no rounds to transition between) |
-| Phase 2.5 | L_C cluster-consensus signaling (`KindLCClaim`) for round-transition coordination | σ-flip / NR-flip flips (snap-gated) for narrow R1/R2/R3 recovery — **distinct mechanism** from OBFTR's L_C-consensus Phase 2.5 (see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)) |
+| Phase 2.5 | L_C round-coordination signaling (`KindLCClaim`) | σ-flip / NR-flip recovery flips (snap-gated, single-round; see [OBFT.md §Phase 2.5](OBFT.md#phase-25--σ-flip--nr-flip-flips)) — **distinct mechanism** from OBFTR's round-coordination Phase 2.5 |
 | Per-round acceptance widening | `T_candidate_accept_r` widens across rounds; auth-only-retention for next round | **Removed** — single receiver acceptance window aligned with σ-emit-propagation feasibility |
 | Cross-round σ-or-NR exclusivity | EKM enforces across rounds + cross-phase | **Cross-phase only** — no rounds to span |
 | EKM cross-share atomicity | Required across rounds for re-emission semantics | Per single signing event only |

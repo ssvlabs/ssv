@@ -707,7 +707,6 @@ tla/
 ├── LBidNew_Safety.tla        -- OBFT + L_Bid_New SAFETY, same invariants
 │                                encoded for L_Bid_New's structural differences.
 ├── LBidNew_Safety.cfg
-├── PLAN-OBFT-spec-rewrite.md -- spec-rewrite plan tracking (transient).
 ├── Makefile                  -- declarative verify-* targets.
 ├── scripts/
 │   └── tlc-run.sh            -- runner script (captures log + summary file).
@@ -841,26 +840,16 @@ State 7: ByzSigma(op4, 0, v1)        sigma_partials += (op4,0,v1)   nr_partials 
 
 **Methodology lesson**: an earlier version of this spec used `Cardinality(HonestSigmaOnVAt(k, v)) ≤ F` in the trigger — `HonestSigmaOnVAt` filters σ-pool members by the `Honest` set, which is a model parameter accessible to TLC but represents oracle knowledge unavailable to real-world operators. Verifying with the oracle trigger confirmed safety of an idealized protocol that the implementation cannot enforce. The corrected spec uses only operator-observable conditions; CE-1 is what TLC finds under the corrected model. **TLA+ specs of distributed protocols should restrict each role's action preconditions to what's locally observable to that role; using model-parameter sets like `Honest` in role-local triggers is a methodology bug that produces unsound verification results.**
 
-**Resolution status**: ✅ **RESOLVED** (2026-05-10) by redesign. The current Phase-2.5 design — σ-flip (any honest non-leader who NR'd) + NR-flip (honest leader only) + snapshot semantics + per-operator views + leader-bundle re-flood (`bundle_witnesses`) — is verified safe at K=1 (full coverage, 56,014 distinct states) and corroborated at higher K with no counterexample; see [§7.1 Bare OBFT verification table](#71--bare-obft).
+**Resolution status**: ✅ **RESOLVED** (2026-05-10) by redesign — the verified Phase-2.5 design (σ-flip + leader-only NR-flip + snapshot semantics + per-operator views + leader-bundle re-flood) is verified safe at K=1; see [§7.1 Bare OBFT verification table](#71--bare-obft).
 
-**How the redesign closes CE-1.** Two design changes neutralize CE-1's safety violation:
+**How the redesign closes CE-1.** Two design changes:
 
-1. **Snapshot semantics for trigger evaluation.** Both flip triggers (`SigmaFlipTriggered`, `NRFlipTriggered`) evaluate against the actor's own **frozen snapshot** taken at `T_commit + Δ_2`. Post-snap byz emissions cannot affect any honest viewer's snap composition; they only contribute to the cluster signed-message-set. CE-1's trick — byz publishing σ *after* the trigger fires — no longer changes the trigger's evaluation.
+1. **Snapshot semantics.** Flip triggers evaluate against the actor's own snapshot taken at `T_commit + Δ_2`, not the live pool. Post-snap byz emissions cannot change any frozen snapshot composition or the trigger evaluation.
+2. **Algebraic mutex.** σ-flip requires `snap_NR_nl < f+1`; NR-flip requires `snap_S_nl < f`. Within-budget propagation gives `s_h + nr_h = 2f` honest non-leaders at `n=3f+1` with leader honest, so both constraints `s_h ≥ f ∧ s_h < f` cannot hold — the two flips can't simultaneously fire at the same layer (when leader is byz, NR-flip is impossible by precondition).
 
-2. **Algebraic mutex of the two flip rules.** σ-flip requires `snap_NR_nl < f+1`; NR-flip requires `snap_S_nl < f`. Within-budget honest propagation (Assumption 2) means each honest viewer sees all honest contributions, so `nr_h ≤ f` (from σ-flip trigger) and `s_h < f` (from NR-flip trigger) would both need to hold. At `n=3f+1`, honest non-leaders = `2f`, so `s_h + nr_h = 2f`. Both constraints together give `s_h ≥ f ∧ s_h < f`, which is impossible. **The two flips cannot simultaneously fire at the same layer in any honest viewer's snapshot.**
+CE-1's specific configuration replays under the new design (leader_of[0] = op1 honest; op1, op3 σ on v1; op2 NR; op4 byz NR) with both flip triggers blocked: op2 sees `snap_NR_nl = 2`, blocking σ-flip; op1 honest leader sees `snap_S_nl = 1`, blocking NR-flip. σ-pool[v1] can still grow to qV via byz late-σ but NR-pool stays at 2 < qEnc — Pigeonhole 1 holds. This configuration is in the verified K=1 state space (§7.1, 56,014 distinct states); TLC explored it without finding a violation.
 
-**Replaying CE-1 under the new design.** CE-1's configuration: at layer 0 (K=1), with `Operators = {op1, op2, op3, op4}`, `Byzantine = {op4}`, and (for concreteness) `leader_of[0] = op1`:
-
-- Pre-snap: op1 σ on v1 (Phase-1 σ_L^V), op3 σ on v1, op2 NR, op4 (byz) NR delivered to all.
-- FinalizePhase2 fires; snapshots taken. Each honest's snap reflects the same cluster state for honest contributions (within-budget propagation): `snap_S_nl = 1` (op3); `snap_NR_nl = 2` (op2, op4); `a_count = 0`.
-- σ-flip from op2 (the only NR-er; honest leader can't σ-flip): trigger requires `snap_NR_nl < f+1 = 2`; **op2 sees `snap_NR_nl = 2`, trigger BLOCKED**.
-- NR-flip from op1 (honest leader who σ'd): trigger requires `snap_S_nl < f = 1`; op1 sees `snap_S_nl = 1`, **trigger BLOCKED**.
-
-Neither flip fires. Final cluster state: σ-pool[v1] grows to `{op1, op3} ∪ optional_byz_late_σ` (max 3 = qV, only if byz publishes σ post-snap); NR-pool stays at `{op2, op4}` (size 2 < qEnc). **Pigeonhole 1 holds** — at most one of σ-quorum / NR-quorum reaches at L_0 even with byz late-publishing σ. CE-1's specific Pigeonhole-1 violation pattern (trigger fires + flip lands on the OPPOSITE side + byz late-σ pushes σ-pool to qV) is structurally precluded.
-
-This trace is part of the verified state space at K=1 (see §7.1, 56,014 distinct states); TLC explored it without finding a Pigeonhole violation.
-
-**Cost of resolution.** As documented in [§5.2](#52--verification-approach) and [OBFT.md §Failure modes](OBFT.md#failure-modes), the **`h_V = 1` selective-Phase-1 delivery** shape is no longer protocol-closed under the new design. Earlier Phase-2.5 iterations (which CE-1 surfaced as unsafe under grief) attempted to close `h_V = 1` symmetrically; the verified design accepts it as Class B grief deterred via Assumption 4 (rational-byzantine cost across slots) rather than by protocol mechanics. The remaining recovery scope (R1 / R2 / R3 narrow cases per OBFT.md §Where this came from) is verified at `n=4, f=1, K=4` for non-grief liveness.
+**Cost of resolution.** The `h_V = 1` selective-Phase-1 delivery shape is no longer protocol-closed under the new design — earlier Phase-2.5 iterations attempted symmetric closure (CE-1 was the unsafety witness for those iterations), but the verified design accepts h_V=1 as Class B grief deterred via Assumption 4 rather than closed in-protocol (see [§5.2](#52--verification-approach) and [OBFT.md §Failure modes](OBFT.md#failure-modes)). R1/R2/R3 narrow recovery scope is verified at `n=4, f=1, K=4` for non-grief liveness.
 
 ---
 
