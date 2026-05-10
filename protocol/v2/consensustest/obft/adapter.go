@@ -27,7 +27,7 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Delta3 - cfg.Delta2
+	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Phase3JitterBuffer - cfg.Epsilon3 - cfg.Delta2
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
@@ -36,7 +36,7 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Operators:       cfg.Operators,
 		TCommit:         tCommit,
 		Delta2:          cfg.Delta2,
-		Delta3:          cfg.Delta3,
+		Epsilon3:        cfg.Epsilon3,
 		BTT:             cfg.BTT,
 		FetchAt:         cfg.FetchAt,
 		BroadcastBudget: cfg.BroadcastBudget,
@@ -64,7 +64,7 @@ type desConfig struct {
 	Operators       []ct.OperatorID
 	TCommit         time.Duration
 	Delta2          time.Duration
-	Delta3          time.Duration
+	Epsilon3        time.Duration // forwarded to obft.Config.Delta3 (= ε_3 per spec)
 	BTT             time.Duration
 	FetchAt         []time.Duration
 	BroadcastBudget []time.Duration

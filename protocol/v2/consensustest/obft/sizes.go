@@ -28,6 +28,14 @@ const (
 	operatorIDBytes = 8
 	heightBytes     = 8
 	layerBytes      = 4
+
+	// witnessFramingOverhead accounts for length-prefix / framing bytes per
+	// LeaderSigmaWitness on the wire — per OBFT.md §Phase 2 / wire format
+	// "per witness ≈ 4 + 8 + 32 + 96 + length-prefix overhead ≈ 145 bytes".
+	// Layer + Leader + ValueRoot + SigmaV = 140 B raw; framing brings it to
+	// ~145 B. Keep this as a named constant so bandwidth bands match the
+	// spec's quoted cluster-wide witness cost (~2.3 KB at K=4, n=4).
+	witnessFramingOverhead = 5
 )
 
 func phase1BundleSize(b *obft.Phase1Bundle) int64 {
@@ -52,8 +60,9 @@ func commitSize(c *obft.Commit) int64 {
 		size += layerBytes + ct.StubSignatureSize
 	}
 	for range c.Witnesses {
-		// Layer + Leader + ValueRoot (32 fixed) + SigmaV.
-		size += layerBytes + operatorIDBytes + 32 + ct.StubSignatureSize
+		// Layer + Leader + ValueRoot (32 fixed) + SigmaV + framing overhead
+		// = 4 + 8 + 32 + 96 + 5 ≈ 145 B per OBFT.md §Phase 2 wire-format quote.
+		size += layerBytes + operatorIDBytes + 32 + ct.StubSignatureSize + witnessFramingOverhead
 	}
 	return size
 }

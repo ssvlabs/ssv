@@ -111,6 +111,65 @@ func TestAdapter_OfflineAggregator_HealthyOneRecon(t *testing.T) {
 		out.OfflineAgg)
 }
 
+// TestAdapter_MaxMEVFetch_HealthyAtBoundary exercises the OBFT.md §Timing
+// budget max-MEV operating point: every leader broadcasts EXACTLY at
+// T_broadcast_max_k (LeaderBroadcastOffset = 0 for every layer). Per spec
+// §Setting, `B_0 = 1 BTT` decomposes as "0.5 BTT typical-mesh propagation +
+// 0.5 BTT convergence buffer" — so the test uses `ConstantDelay{D: BTT/2}`
+// (matching P99 ≈ 150ms typical propagation in the spec's Config A) leaving
+// the half-BTT convergence buffer intact. Bundle arrives at
+// T_broadcast_max_0 + 0.5 BTT = T_commit − 0.5 BTT, comfortably inside the
+// acceptance window. Cluster decides at L_0.
+//
+// Validates: (a) LeaderBroadcastOffset plumbs through DefaultFetchSchedule,
+// (b) the spec's B_k = "typical propagation + convergence buffer" decomposition
+// at max-MEV fetch holds in simulation.
+func TestAdapter_MaxMEVFetch_HealthyAtBoundary(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.WithMaxMEVFetch()
+	cfg.Network = ct.ConstantDelay{D: cfg.BTT / 2} // typical-mesh propagation per spec B_k decomposition
+
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "max-MEV op-point should decide at L_0 (typical propagation + convergence buffer)")
+	require.Equal(t, 0, out.DecidedRound, "max-MEV op-point must decide at L_0 fastest path")
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+	t.Logf("MaxMEVFetch op-point: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
+}
+
+// TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed exercises
+// the spec's pathology: max-MEV fetch (zero broadcast offset) PLUS full-BTT
+// propagation (= 1 BTT, no convergence buffer left within B_0). Per spec
+// §Setting, this is the boundary where event-ordering between the L_0 arrival
+// and the operator's T_commit view can flip the outcome from σ to NR. With
+// the test sim's deterministic event ordering (evtPhaseTwoStart at seq N
+// fires before evtPhase1Arrival at seq N+M when both land at T_commit), the
+// operator commits NR at L_0 → fall-through to L_1.
+//
+// Validates: (a) the spec's "convergence buffer in B_k" warning is observable
+// — at the exact boundary, max-MEV fetch is NOT guaranteed at L_0 under
+// full-BTT propagation, (b) the K-layer fall-through correctly handles the
+// boundary miss.
+func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.WithMaxMEVFetch()
+	// Network = ConstantDelay{D: BTT} from DefaultProposerDutyConfig — consumes
+	// the full B_0 budget with zero margin.
+
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "should still decide via K-layer fall-through")
+	require.GreaterOrEqual(t, out.DecidedRound, 1,
+		"max-MEV + full-BTT propagation: L_0 should NOT decide (convergence buffer consumed)")
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	t.Logf("MaxMEVFetch + full-BTT propagation: fell through to L_%d at %v", out.DecidedRound, out.DecisionTime)
+}
+
 // TestAdapter_ByzWithholdLeader verifies the deepest-layer leader silenced
 // pattern: at K = n = 4 with byz=op4 (the L_3 leader), the cluster decides
 // at L_2 (op3) without needing the deepest layer.

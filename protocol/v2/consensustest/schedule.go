@@ -51,22 +51,34 @@ func DefaultBkSchedule(K int, btt time.Duration) []time.Duration {
 
 // DefaultFetchSchedule returns the per-layer leader fetch-offset schedule for
 // K layers, anchored at tCommit and BTT. Each layer's FetchAt sits a small
-// buffer (0.25 BTT) ahead of the layer's T_broadcast_max so each leader has
-// non-negative headroom to fetch+sign before its broadcast deadline. Strictly
-// decreasing in k (deeper layers fetch from progressively earlier).
+// buffer (default 0.25 BTT) ahead of the layer's T_broadcast_max so each
+// leader has non-negative headroom to fetch+sign before its broadcast
+// deadline. Strictly decreasing in k (deeper layers fetch progressively
+// earlier).
+//
+// perLayerOffset overrides the default 0.25 BTT buffer per-layer: missing key
+// → default; explicit zero → leader broadcasts exactly at T_broadcast_max_k
+// (the spec's max-MEV operating point per OBFT.md §Timing budget). Pass nil
+// for the default everywhere.
 //
 // Bk is sourced from DefaultBkSchedule(K, btt) so the schedules stay
 // consistent.
-func DefaultFetchSchedule(K int, btt, tCommit time.Duration) []time.Duration {
+func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[int]time.Duration) []time.Duration {
 	if K < 3 {
 		return nil
 	}
 	bk := DefaultBkSchedule(K, btt)
-	fetchBuffer := btt / 4
+	defaultBuffer := btt / 4
 
 	out := make([]time.Duration, K)
 	for k := 0; k < K; k++ {
-		out[k] = tCommit - bk[k] - fetchBuffer
+		buf := defaultBuffer
+		if perLayerOffset != nil {
+			if v, ok := perLayerOffset[k]; ok {
+				buf = v
+			}
+		}
+		out[k] = tCommit - bk[k] - buf
 		if out[k] < 0 {
 			out[k] = 0
 		}

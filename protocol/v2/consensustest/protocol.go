@@ -29,7 +29,7 @@ type OperatorID uint64
 //
 // Configurable spec parameters are first-class fields; everything else is
 // derived inside adapters per OBFT.md §Setting / §Application:
-//   - T_commit         = RelayCutoff − HeaderSubmitHeadroom − Delta3 − Delta2
+//   - T_commit         = RelayCutoff − HeaderSubmitHeadroom − Phase3JitterBuffer − Epsilon3 − Delta2
 //   - T_broadcast_max  = T_commit − BroadcastBudget[k]   (T_commit-anchored)
 //   - qV = qEnc        = 2f+1 from N
 //   - F                = (N−1)/3
@@ -58,8 +58,20 @@ type SimConfig struct {
 	// Delta2 is the OBFT Phase-2 propagation budget. Defaults to 2*BTT if zero.
 	Delta2 time.Duration
 
-	// Delta3 is the OBFT Phase-3 broadcast budget (ε_3). Defaults to 100ms if zero.
-	Delta3 time.Duration
+	// Epsilon3 is the OBFT Phase-3 local-CPU budget (BLS aggregation + IBE
+	// decryption walk + certificate construction). Per OBFT.md §Phase 3 /
+	// §Timing budget: `Δ_3 ≈ ε_3 ≈ 50ms` at Config A. Absolute (does not scale
+	// with BTT). Defaults to 50ms if zero. Passed verbatim to obft.Config.Delta3
+	// (the production single-instance ε_3 field).
+	Epsilon3 time.Duration
+
+	// Phase3JitterBuffer is the residual jitter buffer between Phase-3
+	// completion and cert/submit. Per OBFT.md §Timing budget: "the 600ms after
+	// T_commit decomposes as Δ_2 (400ms) + Δ_3 (50ms) + header_submit_headroom
+	// (100ms) + ~50ms residual jitter buffer". Defaults to 50ms. Used only in
+	// the T_commit anchor derivation; production obft.Config does not consume
+	// this directly.
+	Phase3JitterBuffer time.Duration
 
 	// BroadcastBudget carries the OBFT per-layer T_commit-anchored propagation
 	// budget B_k (per spec §Setting). Strictly increasing in k. When nil,
@@ -68,8 +80,19 @@ type SimConfig struct {
 
 	// FetchAt carries the OBFT per-layer leader fetch offsets. Strictly
 	// decreasing in k (deeper layers fetch from deeper-confirmed parents).
-	// When nil, derived from BTT via DefaultFetchSchedule(K, BTT, RelayCutoff).
+	// When nil, derived from BTT via DefaultFetchSchedule(K, BTT, T_commit,
+	// LeaderBroadcastOffset).
 	FetchAt []time.Duration
+
+	// LeaderBroadcastOffset overrides the per-layer fetch buffer (BTT/4 default)
+	// used when FetchAt is derived from defaults. Map key is the layer index;
+	// missing key falls back to the default buffer. A zero offset places the
+	// leader's broadcast exactly at T_broadcast_max_k — the spec's max-MEV
+	// operating point per OBFT.md §Timing budget. Use WithMaxMEVFetch() for the
+	// every-leader-at-the-boundary convenience setup.
+	//
+	// Ignored when FetchAt is set explicitly.
+	LeaderBroadcastOffset map[int]time.Duration
 
 	// QBFTRoundTimeout is the QBFT per-round timer (RT). Defaults to 2s.
 	QBFTRoundTimeout time.Duration
@@ -236,17 +259,20 @@ func (c *SimConfig) Validate() error {
 	if c.Delta2 == 0 {
 		c.Delta2 = 2 * c.BTT
 	}
-	if c.Delta3 == 0 {
-		c.Delta3 = 100 * time.Millisecond
+	if c.Epsilon3 == 0 {
+		c.Epsilon3 = 50 * time.Millisecond
+	}
+	if c.Phase3JitterBuffer == 0 {
+		c.Phase3JitterBuffer = 50 * time.Millisecond
 	}
 	if c.QBFTRoundTimeout == 0 {
 		c.QBFTRoundTimeout = 2 * time.Second
 	}
 
-	tCommit := c.RelayCutoff - c.HeaderSubmitHeadroom - c.Delta3 - c.Delta2
+	tCommit := c.RelayCutoff - c.HeaderSubmitHeadroom - c.Phase3JitterBuffer - c.Epsilon3 - c.Delta2
 	if tCommit <= 0 {
-		return fmt.Errorf("consensustest: derived T_commit=%v is non-positive (RelayCutoff=%v HeaderSubmit=%v Delta3=%v Delta2=%v)",
-			tCommit, c.RelayCutoff, c.HeaderSubmitHeadroom, c.Delta3, c.Delta2)
+		return fmt.Errorf("consensustest: derived T_commit=%v is non-positive (RelayCutoff=%v HeaderSubmit=%v Phase3JitterBuffer=%v Epsilon3=%v Delta2=%v)",
+			tCommit, c.RelayCutoff, c.HeaderSubmitHeadroom, c.Phase3JitterBuffer, c.Epsilon3, c.Delta2)
 	}
 
 	if c.BroadcastBudget == nil {
@@ -264,7 +290,7 @@ func (c *SimConfig) Validate() error {
 	}
 
 	if c.FetchAt == nil {
-		c.FetchAt = DefaultFetchSchedule(c.K, c.BTT, tCommit)
+		c.FetchAt = DefaultFetchSchedule(c.K, c.BTT, tCommit, c.LeaderBroadcastOffset)
 	}
 	if len(c.FetchAt) != c.K {
 		return fmt.Errorf("consensustest: FetchAt has %d entries, expected K=%d",
@@ -328,6 +354,26 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		Host:                 HostAllValid{},
 		Byz:                  ByzPattern{Kind: ByzNone},
 		Seed:                 1,
+	}
+}
+
+// WithMaxMEVFetch sets per-layer LeaderBroadcastOffset to zero for every layer
+// in [0, K), placing each leader's broadcast exactly at T_broadcast_max_k.
+// This is the spec's max-MEV boundary operating point (OBFT.md §Timing
+// budget) — the freshest possible fetch window per layer at the cost of zero
+// propagation safety margin within that layer's budget. Call after K is set
+// (or defaults are applied via Validate).
+//
+// Ignored if c.FetchAt is set explicitly (FetchAt takes precedence over
+// derived schedules).
+func (c *SimConfig) WithMaxMEVFetch() {
+	k := c.K
+	if k == 0 {
+		k = DefaultK(c.N)
+	}
+	c.LeaderBroadcastOffset = make(map[int]time.Duration, k)
+	for i := 0; i < k; i++ {
+		c.LeaderBroadcastOffset[i] = 0
 	}
 }
 
