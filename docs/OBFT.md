@@ -141,7 +141,7 @@ OBFT runs **a single agreement round** per slot: Phase 1 → Phase 2 → Phase 3
 
 ### Phase 1 — Candidate broadcast
 
-Phase 1 has K per-layer windows (driven by the asymmetric fetch times): `[T_{K-1}, T_{K-1} + Δ_1]` for the deepest backup, then progressively `[T_{K-2}, T_{K-2} + Δ_1]`, ..., ending at `[T_0, T_0 + Δ_1]` for the primary. Each leader `L_k` for `k ∈ {0, ..., K-1}`:
+Phase 1 has K per-layer fetch windows ending at staggered broadcast deadlines `T_broadcast_max_k = T_commit − B_k` (with `B_k` increasing monotonically from primary to deepest backup — see §Setting). Each leader's window starts whenever the host application is ready to begin its fetch loop (typically slot start) and must terminate by `T_broadcast_max_k`. Concretely at K=4 Config A: deepest leader `L_3` broadcasts by `T_commit − 5.5 BTT = 2300ms`, `L_2` by `2900ms`, `L_1` by `3100ms`, primary `L_0` by `3200ms`. Each leader `L_k` for `k ∈ {0, ..., K-1}`:
 
 1. Independently produces its candidate value `V_{L_k}` and validates it against application-level rules (the leader's local fetch loop — see "Preconditions on the host application").
 2. Signs `V_{L_k}` with **two** keys:
@@ -156,7 +156,7 @@ Receivers run **two layers of validation**, in order:
 
 If a leader `L_k` fails to broadcast at all (or broadcasts so late that its bundle arrives past `T_commit` at every honest receiver), that layer is unavailable; the cluster falls through to deeper layers via NR-quorum. If all K leaders fail, the slot is missed.
 
-**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. OBFT has no protocol-level second re-flood event for whole Phase-1 bundles (no rounds): cluster-wide reception of `(V, σ_L^V, σ_L^op)` relies on gossipsub's organic propagation completing before `T_commit`. The leader's σ_L^V partial alone is re-broadcast in Phase 2 via every operator's `KindCommit` witness section (see §Phase 2 / Wire format), providing redundancy against σ_L^V-drop but not against V-drop. Honest leaders broadcasting by their per-layer deadline `T_broadcast_max_k = T_commit − B_k` reach all honest within partial-synchrony assumptions for that layer's propagation budget `B_k` (see §Setting).
+**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. OBFT has no protocol-level second re-flood event for the **whole** Phase-1 bundle `(V, σ_L^V, σ_L^op)` (no rounds): cluster-wide reception of V relies on gossipsub's organic propagation completing before `T_commit`. **A protocol-level re-broadcast does exist for the leader's σ_L^V partial alone**: every operator's Phase-2 `KindCommit` carries a witness section with byte-for-byte copies of retained σ_L^V partials paired with `value_root` cross-references (see §Phase 2 / Wire format). This protects σ_L^V against bundle drop at peer receivers who DID receive V, but does not address V-drop. Honest leaders broadcasting by their per-layer deadline `T_broadcast_max_k = T_commit − B_k` reach all honest within partial-synchrony assumptions for that layer's propagation budget `B_k` (see §Setting).
 
 **Retention bounds.** Retention state for accepted Phase-1 bundles is keyed by `(slot, layer k, leader_id)`. Per key, an operator retains at most **two distinct `(V, σ_{L_k}^V, σ_{L_k}^{op})` tuples** — the first auth-valid bundle observed, plus, if a second auth-valid bundle with a *distinct* `value_root` is later observed, that one (sufficient as leader-equivocation evidence). Further auth-valid bundles for the same `(slot, layer, leader_id)` are dropped silently. Bundles whose cryptographic-auth checks fail are dropped without retention. Retention lifetime: until the operator's local end of Phase 3 (i.e., until reconstruction halts or the slot is declared missed); slot state is then cleared. Memory bound: `O(K · n)` bundles per slot in the worst case (every leader equivocates).
 
@@ -257,10 +257,14 @@ for k in [0, K):
             ∪ {σ_{L_k}^V(V_{L_k}) from peer KindCommit witness sections at layer k, if valid}
             ∪ {σ_j^V(V) from received layer-k onion contents on any value V}
               (decrypted via accumulated NR-decryption keys at layers 0..k-1, if k > 0)
-            # deduplicated per operator: leader's Phase-1 σ, witness-section
-            # copies of σ_L^V (which collapse to identical bytes across peer
-            # KindCommits), and onion σ from the same operator all collapse
-            # to one partial.
+            # deduplicated per operator: leader's Phase-1 σ_L^V and witness-
+            # section copies of σ_L^V from peer KindCommits collapse to one
+            # partial (identical bytes across peers); under cross-phase
+            # exclusivity an honest leader does NOT also include an onion σ at
+            # their own layer, so the only way the same operator's σ appears
+            # twice (once as leader's σ_L^V and once in their own onion) is
+            # byzantine cross-signing — slashable per Rule 1, deduplicated
+            # here for aggregation purposes.
             # Per Pigeonhole 2, at most one V can have qV partials cluster-wide,
             # so partition sigs[k] by V and check each.
 
@@ -416,10 +420,10 @@ The pool definitions used in the arguments below:
 
 This is the key safety constraint underlying OBFT's "permit equivocation, slot-miss on view-divergence" framing: regardless of which V's honest σ-commit on under equivocation, at most one V can reach qV cluster-wide. There is no two-output safety failure even when honest operators split across V's; the cluster either reaches qV on a single V (some patterns recover naturally) or no V reaches qV (slot misses).
 
-**Pigeonhole 3 — cross-layer safety under chained encryption.** Two distinct V signatures (V_k and V_{k+m} for any `m ≥ 1`) cannot both be reconstructed cluster-wide. Proof by induction on `m`, applying Pigeonhole 1 at every L_j with `j ∈ [k, k+m−1]`.
+**Pigeonhole 3 — cross-layer safety under chained encryption.** Two distinct V signatures (V_k and V_{k+m} for any `m ≥ 1`) cannot both be reconstructed cluster-wide. Pigeonhole 1 applied at L_k alone seals the chain:
 
-- *Decryption requirement.* V_{k+m} σ partials at L_{k+m} are encrypted under `nr_tag_k ∧ nr_tag_{k+1} ∧ … ∧ nr_tag_{k+m−1}`. Decryption requires NR-quorum on every `nr_tag_j` for `j ∈ [k, k+m−1]` (chained-IBE oracle).
-- *Inductive step.* For each such `j`, Pigeonhole 1 applied at L_j gives: σ-quorum at L_j ⇒ NR-quorum at L_j does not reach. Therefore if V_k σ-quorum reaches at L_k, NR-quorum at L_k fails, the chain at L_k stays sealed, and V_{k+m}'s σ partials are inaccessible. The induction proceeds at every `j` from `k` to `k+m−1`.
+- *Decryption requirement.* V_{k+m} σ partials at L_{k+m} are encrypted under `nr_tag_k ∧ nr_tag_{k+1} ∧ … ∧ nr_tag_{k+m−1}`. Decryption requires NR-quorum on every `nr_tag_j` for `j ∈ [k, k+m−1]`; missing any single one (in particular `nr_tag_k`) keeps the chain sealed.
+- *Argument.* If V_k σ-quorum reaches at L_k, then by Pigeonhole 1 at L_k, NR-quorum at L_k does not reach. Decryption of L_{k+m}'s σ partials therefore fails (any prior unreached NR-quorum suffices), so V_{k+m} cannot reconstruct.
 - *Symmetric direction.* If V_{k+m} reconstructs, NR-quorum at L_k must have reached (chained-decryption requirement), so by Pigeonhole 1 σ-quorum at L_k did not reach, so V_k does not reconstruct. ∎
 
 Applied to every pair of layers, at most one V signature reconstructs cluster-wide across all K layers.
@@ -469,7 +473,7 @@ Recovered via NR-quorum at L_0 → fall-through to L_1 (when all honest retain �
 Not recovered — slot misses at L_0 with no fall-through (σ-locked split patterns; slashable):
 
 - **D delivers V to {A}, V' to {B}, both to C (or neither).** A σ-locks on V; B σ-locks on V'; C either retains both (NR per equivocation rule) or has nothing (NR per silent-leader rule). σ-pool on V = A + leader = 2 < qV. σ-pool on V' = B + leader = 2 < qV. NR-pool = 1 (C) < qEnc → no fall-through. Slot misses.
-- **D delivers distinct V_1 to A, V_2 to B, V_3 to C (1-1-1 split).** Each honest σ-commits on their V_i on receipt before observing equivocation. All 3 honest σ-locked on different V's. σ-pool on each V_i = 1 honest + leader's σ_L^V = 2 < qV. NR-pool = 0 (all σ-locked, cross-phase exclusivity). Slot misses.
+- **D delivers distinct V_1 to A, V_2 to B, V_3 to C (1-1-1 split).** Each honest σ-commits on their V_i on receipt before observing equivocation. All 3 honest σ-locked on different V's. **If byz triple-signs σ_L on all three V's** (worst case for slot-miss): σ-pool on each V_i = 1 honest + 1 byz σ_L^V = 2 < qV. NR-pool = 0 (all σ-locked, cross-phase exclusivity). Slot misses; equivocation evidence on all three (V_1, V_2), (V_2, V_3), (V_1, V_3) pairs is slashable. **If byz signs σ_L on only one V_i** (say V_1): σ-pool on V_1 = 2 (= recipient A + byz σ_L), σ-pool on V_2 = σ-pool on V_3 = 1 (just the recipient), all still < qV; same NR-pool = 0; same slot-miss outcome. Triple-signing maximizes the slashing surface but the slot-miss is invariant to byz σ_L choices once honest split 1-1-1.
 
 **Byzantine timing controls which class fires — and an *adversarial* byzantine reliably picks the slot-miss class.** Delivering V's early in Phase 1 leaves time for gossipsub re-flood to spread conflicts → all-honest-NR outcome → slot succeeds at L_1. Delivering near end-of-Phase-1 leaves insufficient re-flood time → σ-locked split outcome → slot misses at L_0. **In expectation against an adversarial byz primary, these patterns slot-miss reliably.** The rational-byzantine deterrent (assumption 4) is what makes this tolerable across many slots — but the *evidence quality* for these patterns is the *behavioral* class (not the cryptographically-self-contained class), so single-observation slashing is not credible (see [§Implications of the rational-byzantine deterrent / Evidence quality by fault class](#implications-of-the-rational-byzantine-deterrent-assumption-4)). Practical effect: byz can grief many slots before the pattern accumulates enough confidence for honest operators to act.
 
@@ -481,7 +485,9 @@ In all cases, Pigeonhole 2 ensures at most one V can reach qV cluster-wide regar
 
 - *Safety unaffected.* Pigeonholes 1, 2, 3 are properties of the cluster-wide signed-message set, not of arrival times.
 - *Liveness — adversary delays V to ≤ 1 honest past `T_commit`.* The other 2 honest σ-emit on time; σ-pool = 2 + leader = 3 = qV. **Quorum reaches without the delayed operator.**
-- *Liveness — adversary delays V to ≥ 2 honest past `T_commit`.* σ-pool < qV at this layer; cluster falls through to a deeper backup whose bundle did propagate in time. If the deepest layer's `B_{K-1}` budget is also exceeded (or for the h_V=1 shape where 2 honest are delayed and NR-pool fails to reach qEnc — see fat warning at top of this section), slot misses cleanly. Class A or B depending on cause; deterred via Assumption 4 across slots.
+- *Liveness — adversary delays V to ≥ 2 honest past `T_commit`.* σ-pool < qV at this layer. **Two sub-cases by NR-pool composition** (per the §Liveness fat warning (b)):
+  - **NR-quorum reaches** (delayed honest treat the layer as silent and NR — typical when byz is silent or NR-emits, and the σ-recipient is the leader): chain unlocks at this layer; cluster falls through to a deeper backup whose bundle did propagate in time. ✓ if some deeper layer succeeds; ✗ slot-miss if all K layers exceed their `B_k`.
+  - **NR-quorum fails** (the `h_V=1` shape: 1 honest receives V, 2 honest delayed; the recipient is σ-locked and can't NR; NR-pool = 2 < qEnc): chain stays sealed at this layer with no fall-through. ✗ slot-miss cleanly; deterred via Assumption 4 (Class A under network-tail cause; Class B if byz engineered it via selective Phase-1 delivery).
 
 ### Liveness comparison: OBFT vs OBFTR(R=2) vs QBFT
 
@@ -814,7 +820,7 @@ OBFT is OBFTR with R fixed at 1 and the round-retry machinery stripped. They sha
 | MEV-fetch budget for primary leader (K=4, BTT=200ms, `header_submit_headroom = 100ms`) | ~1.45s (T_commit_1 = 2.00s constrained by R1+R2 fit within 4s slot) | **~3.05s** (T_commit = 3.40s; single-round, no retry budget needed) — **+1.6s more MEV-fresh fetch** |
 | Submission headroom (`header_submit_headroom`) | 100ms | 100ms |
 | Consensus complete | slot_start + 3.90s | slot_start + 3.90s (same anchor; OBFT redirects the saved BTT-budget into the MEV-fetch window) |
-| Bandwidth (healthy, n=4, K=4) | ~28 KB across 2 emissions per round (`KindCommit_r` + `KindLCClaim_r`) | ~28 KB across 1 emission (`KindCommit`) — both include the σ_L^V witness section ≈ +2.3 KB at 145 bytes/witness × 16 witnesses |
+| Bandwidth (healthy, n=4, K=4) | ~28 KB across 2 emissions per round (`KindCommit_r` + `KindLCClaim_r`) — `KindLCClaim` is small (~64 B per emission × n = ~256 B total per round; just the operator's `L_C` view + auth signature, no σ partials) so it's negligible vs `KindCommit_r`'s ~7 KB/operator | ~28 KB across 1 emission (`KindCommit`) — both include the σ_L^V witness section ≈ +2.3 KB at 145 bytes/witness × 16 witnesses |
 | Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB across 4 emissions (2 rounds × 2 emissions) | n/a (no round 2) |
 | High-D fit (P99 = 500ms) | Does not fit 4s relay cutoff | Fits with ~1.3s submission headroom |
 
@@ -1471,7 +1477,7 @@ Phase 3 reconstruction starts at `T_accept_max + 1 BTT` (after late emissions pr
 
 - **K-layer chained encryption**: identical. Defer affects per-operator commitment timing, not the cryptographic structure.
 - **Pigeonholes 1, 2, 3**: hold under Defer because Defer-state operators emit nothing (no σ, no NR), so they don't contribute to either pool until they transition.
-- **Slashing-evidence rules 1, 2, 3, 5, 6**: unchanged. Rule 4 (fake encrypted-presence) timing unchanged.
+- **Slashing-evidence rules 1, 2, 3, 5**: unchanged. Rule 4 (fake encrypted-presence) timing unchanged.
 - **Reconstruction walk**: same per-layer σ-or-NR resolution; just runs after a wider Phase-2 window.
 
 ### Mechanics added (vs bare OBFT)
