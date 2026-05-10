@@ -3,6 +3,7 @@ package consensustest
 import (
 	"math"
 	mrand "math/rand"
+	"sync"
 	"time"
 )
 
@@ -168,4 +169,106 @@ func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.
 		d = time.Nanosecond
 	}
 	return d
+}
+
+// LossyNetwork models bursty stochastic packet loss via a two-state Markov
+// chain on top of an Inner network model. Captures the real-world pattern
+// where loss isn't independent-Bernoulli per message but clusters in bursts
+// during mesh churn / peer-score punishments / brief congestion spikes.
+//
+// State machine (per LossyNetwork instance, network-wide):
+//   - good state: probability `a = LossRate / (BurstFactor · (1-LossRate))`
+//     of transitioning to bad per call.
+//   - bad state:  probability `1/BurstFactor` of recovering to good per call;
+//     while bad, every message is dropped (returns the sentinel 1·time.Hour
+//     delay matching PartitionedNetwork's drop convention).
+//
+// Steady-state P(bad) = LossRate; mean dwell time in bad = BurstFactor
+// messages. BurstFactor=1 recovers memoryless Bernoulli; BurstFactor=10
+// produces ~10-message bursts of consecutive drops.
+//
+// CALIBRATE: LossRate from observed SSV mainnet message-loss telemetry
+// (likely 0.1-1% under healthy conditions, spikes during peer-score events).
+// BurstFactor from observed dwell-time in lossy periods (~5-20 messages
+// based on typical gossipsub mesh-churn windows).
+//
+// Stateful: holds a single network-wide (good/bad) state with a mutex.
+// CONSTRUCT FRESH PER SIM via NewLossyNetwork — sharing one instance
+// across multiple parallel sims would cross-contaminate state and break
+// determinism. For batch usage, instantiate inside Scenario.Apply.
+//
+// For per-PAIR sustained flakiness (a specific link is bad while others
+// are fine), use CorrelatedLinkDelay instead. The two are composable
+// (wrap CorrelatedLinkDelay inside LossyNetwork or vice versa).
+type LossyNetwork struct {
+	Inner       NetworkModel
+	LossRate    float64
+	BurstFactor int
+
+	mu     sync.Mutex
+	state  byte // 0=good, 1=bad
+	inited bool
+}
+
+// NewLossyNetwork constructs a LossyNetwork with fresh Markov state.
+// Use one per sim to preserve per-sim determinism (state across sims
+// would cross-contaminate otherwise).
+func NewLossyNetwork(inner NetworkModel, lossRate float64, burstFactor int) *LossyNetwork {
+	return &LossyNetwork{
+		Inner:       inner,
+		LossRate:    lossRate,
+		BurstFactor: burstFactor,
+	}
+}
+
+// DroppedDelay is the sentinel duration used by LossyNetwork (and
+// PartitionedNetwork) to signal a dropped message. Receivers won't observe
+// it within the slot's relay-submission deadline; downstream Resolve treats
+// it as never-arrived.
+const DroppedDelay = time.Hour
+
+func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
+	l.mu.Lock()
+	// Fast-path edge cases first (avoid wasting RNG draws).
+	if l.LossRate <= 0 {
+		l.mu.Unlock()
+		return l.Inner.Delay(rng, from, to, kind)
+	}
+	if l.LossRate >= 1 {
+		l.mu.Unlock()
+		return DroppedDelay
+	}
+	if l.BurstFactor < 1 {
+		l.BurstFactor = 1 // protect against misconfiguration; geometric (memoryless) loss
+	}
+
+	// Initial state: weighted by steady-state P(bad) = LossRate.
+	if !l.inited {
+		if rng.Float64() < l.LossRate {
+			l.state = 1
+		}
+		l.inited = true
+	}
+
+	// Markov step.
+	if l.state == 0 {
+		// good → bad with prob a = LossRate / (BurstFactor · (1 - LossRate))
+		a := l.LossRate / (float64(l.BurstFactor) * (1 - l.LossRate))
+		if rng.Float64() < a {
+			l.state = 1
+		}
+	} else {
+		// bad → good with prob 1/BurstFactor.
+		if rng.Float64() < 1.0/float64(l.BurstFactor) {
+			l.state = 0
+		}
+	}
+
+	bad := l.state == 1
+	l.mu.Unlock()
+
+	if bad {
+		return DroppedDelay
+	}
+	return l.Inner.Delay(rng, from, to, kind)
 }
