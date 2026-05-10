@@ -666,9 +666,9 @@ tla/
 
 **Byzantine partition**: `Byzantine ⊆ Operators` (constant), `Cardinality(Byzantine) = F = (Cardinality(Operators) - 1) / 3`.
 
-**Symmetry reductions**: `SYMMETRY Permutations(Honest)` reduces the canonical state count by `|Honest|!` (= 6× at n=4, f=1). Byzantine operators are NOT permuted (they're distinguished by Byzantine designation). Values are NOT permuted (Pigeonhole 2's "two distinct V's reach qV" check needs to count per-(layer, V) σ commitments). Symmetry is enabled for SAFETY but disabled for LIVENESS (TLC warns symmetry under liveness checking can miss violations).
+**Symmetry reductions** (deferred). Future work: `SYMMETRY Permutations(Honest)` reduces the canonical state count by `|Honest|!` (= 6× at n=4, f=1). Byzantine operators would NOT be permuted (they're distinguished by Byzantine designation). Values would NOT be permuted (Pigeonhole 2's "two distinct V's reach qV" check needs to count per-(layer, V) σ commitments). Symmetry would only be enabled for SAFETY (TLC warns symmetry under liveness checking can miss violations). Currently the v1 baseline runs without symmetry — the K=2, |Values|=2 base case at 262,144 distinct states is small enough that symmetry isn't needed for tractability; it would matter for n=7 / higher-K runs.
 
-**State-space cap**: `StateConstraint` bounds each pool at its quorum threshold (`Cardinality(SigmaPool(k, v)) ≤ qV` and `Cardinality(NRPool(k)) ≤ qEnc`). Provably safe for SAFETY because the Pigeonhole invariants are stated as "pool size ≥ threshold" predicates, so they're already detectable when a pool first reaches the threshold; states with pool size > threshold add no new safety information.
+**State-space cap** (deferred). Future work: `StateConstraint` would bound each pool at its quorum threshold (`Cardinality(SigmaPool(k, v)) ≤ qV` and `Cardinality(NRPool(k)) ≤ qEnc`). Provably safe for SAFETY because the Pigeonhole invariants are stated as "pool size ≥ threshold" predicates, so they're already detectable when a pool first reaches the threshold; states with pool size > threshold add no new safety information. The v1 baseline runs unconstrained; would matter for higher-K / larger cluster runs.
 
 ### 6.3 — TLC configuration
 
@@ -677,9 +677,8 @@ For each `(n, f, K)` triple, TLC config specifies:
 - `INVARIANT`: `TypeOK ∧ SAFETY` (Safety specs).
 - `PROPERTY`: `LIVENESS_NON_GRIEF` (Liveness specs).
 - `SPECIFICATION`: `Spec = Init ∧ □[Next]_vars`.
-- `SYMMETRY`: `Permutations(Honest)` (Safety only).
-- `CONSTRAINT`: `StateConstraint` (Safety only).
 - `CHECK_DEADLOCK FALSE` (specs naturally terminate; the property of interest is the invariant).
+- **Deferred for v1 baseline**: `SYMMETRY Permutations(Honest)` and `CONSTRAINT StateConstraint` (Safety only) — both unnecessary at the small `n=4, K=2, |Values|=2` config (262K states) but planned for n=7 / higher-K scaling. See §6.2.
 
 Verified state-space sizes (per [§7.1](#71--bare-obft)):
 - bare OBFT Safety, `n=4, f=1, K=2, |Values|=2`: 262,144 distinct states, ~10s.
@@ -710,7 +709,6 @@ This section is updated as TLC runs are performed.
 | Property | Config | Status | Date | Notes |
 |---|---|---|---|---|
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 | ✓ verified | 2026-05-08 | TLC explored 262,144 distinct states (1.96M total) in 10s; no counterexamples. All three Pigeonholes hold for bare OBFT. |
-| SAFETY | n=4, f=1, K=2, \|Values\|=2 (with state constraint capping pool sizes at quorum thresholds) | ✓ verified | 2026-05-08 | Re-run with the cap-at-quorum state constraint as a safety sanity check before applying the constraint to L_Bid / L_Bid_New. TLC explored 250,000 distinct states (1.91M total) in 7s; same outcome (no counterexamples). |
 | LIVENESS_NON_GRIEF | n=4, f=1, K=4 | ✓ verified | 2026-05-10 | TLC verified Class A closure under non-grief byz + within-budget partial-synchrony: every honest operator eventually reaches `output_set[i] = TRUE`. 139,482 states generated, **64,152 distinct states found**, depth 12, ~10s runtime. **Scope**: under within-budget propagation and non-grief byz, every layer either reaches σ-quorum or NR-quorum, so the Phase-3 walk completes with output. **Does NOT recover** (out of property scope, surfaced as documented Class A/B in OBFT.md §Failure modes): `h_V = 1` selective Phase-1 delivery, equivocation σ-locked split patterns, validity-divergence beyond stabilization. See [§5.2](#52--verification-approach) for full scope. |
 | LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**relaxed Assumption 2** — honest leader broadcast may deliver to any subset; sibling spec `BareOBFT_Liveness_NoBudget.tla`) | ✗ counterexample (expected) | 2026-05-10 | TLC found Class A deadlock at depth 6 in 7s (~183K states generated, **86,166 distinct states found** before first violation). Trace replays a documented partial-propagation deadlock from the `h_V=1` family ([OBFT.md §Liveness](OBFT.md#liveness-synchrony-conditional) (b)): honest L_0 leader's bundle delivered to a strict subset of honest; remaining honest NR-emit; σ-pool < qV, NR-pool < qEnc; algebraic deadlock. **Validates the "bare OBFT does not close partial-propagation deadlocks in-protocol" claim mechanically** by surfacing the algebraic deadlock when Assumption 2 is relaxed. See [§5.4](#54--beyond-liveness_non_grief-class-a-failure-mode-exploration) for the methodology and trace classification. |
 | SAFETY | n=7, f=2 | _to be run_ | — | State-space cap at quorum + symmetry over Honest expected to make this tractable; would extend the n=4 base-case coverage to a larger cluster. |
@@ -742,7 +740,7 @@ This section is updated as TLC runs are performed.
 
 #### CE-1: Phase-2.5 NR-flip + observable trigger — Pigeonhole-1 violation under byz σ-withholding cross-sign (2026-05-09)
 
-**Spec**: `tla/BareOBFT_Safety.tla` at `n=4, f=1, K=2, |Values|=2` with state constraint, Phase-2.5 `HonestNRFlip` action, observable trigger `Cardinality(SigmaPool(k, v)) < QV ∧ Cardinality(NRPool(k)) ≥ F+1`.
+**Spec (historical, pre-rollback shape)**: at the time CE-1 was found, `tla/BareOBFT_Safety.tla` was a Phase-2.5 variant at `n=4, f=1, K=2, |Values|=2` with state constraint, `HonestNRFlip` action, observable trigger `Cardinality(SigmaPool(k, v)) < QV ∧ Cardinality(NRPool(k)) ≥ F+1`. Phase-2.5 was removed in the spec rollback (see commit log on `obft` branch); the current file at this path is the v1 baseline (no flip actions, no state constraint) — see [§7.1](#71--bare-obft) for the current SAFETY result.
 
 **Outcome**: SAFETY (Pigeonhole 1 conjunct) violated. Counterexample found at depth 8; 25,577 distinct states explored before the violation surfaced.
 
@@ -805,7 +803,7 @@ Items deferred from this verification effort:
 - **L_k**: rotation layer k (0 ≤ k < K).
 - **L_Bid**: bid-routing layer in L_Bid extension.
 - **σ-pool, NR-pool**: aggregated threshold partials per layer (cluster signed-message-set).
-- **`sigma_L_witnesses`**: optional witness section in `KindCommit` carrying retained Phase-1 σ_L^V partials paired with `value_root` for cross-reference; protects σ_L^V against bundle drop at peer receivers who DID receive V (see [OBFT.md §Phase 2 / Wire format](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2)).
+- **`sigma_L_witnesses`**: optional witness section in `KindCommit` carrying retained Phase-1 σ_L^V partials paired with `value_root` for cross-reference; protects σ_L^V against bundle drop at peer receivers who DID receive V (see [OBFT.md §Phase 2](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2)).
 - **EKM**: Eth-Key-Manager-equivalent; the slashing-protection-aware signing service. Enforces single-σ-V-per-(op, k) and cross-phase exclusivity per layer.
 - **GRIEF_***: byzantine actions that deviate from honest behavior (§3.5).
 - **CE-N**: counterexample N in the verification log (§7.4). CE-1 is resolved by spec rollback (Phase-2.5 removed entirely from bare OBFT).

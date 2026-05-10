@@ -177,18 +177,12 @@ TypeOK ==
 
 \* Pigeonhole 1: σ-quorum on any V at L_k AND NR-quorum at L_k cannot both reach
 \*
-\* Algebraic basis (from OBFT.md):
-\*   Honest contribute h_σ + h_NR ≤ n - f = 2f+1 (XOR-bounded).
-\*   Byzantine contribute byz_σ + byz_NR ≤ 2f (≤ f to each pool, allowing dual).
-\*   For both quorums to reach simultaneously:
-\*     (h_σ + byz_σ) ≥ 2f+1 AND (h_NR + byz_NR) ≥ 2f+1
-\*   Sum: ≥ 4f+2 partials. But honest contribute ≤ 2f+1 + byz ≤ 2f, total ≤ 4f+1.
-\*   Contradiction. ∎
-\*
-\* Note: this property may NOT hold under fully-unrestricted byzantine action
-\* (where byz contributes 1 to BOTH σ and NR pools), in which case the bound
-\* is 2f+1 + 2f = 4f+1 < 4f+2 — so still holds. Actually, with byz cross-signing
-\* (counted once per pool per byz), the inequality still works.
+\* Algebraic basis (from OBFT.md): honest commit σ-or-NR per layer (XOR-bounded
+\* by EKM); honest contribute h_σ + h_NR ≤ n - f = 2f+1.  Byzantine cross-signers
+\* contribute at most 1 to each pool per operator (deduplicated), so
+\* byz_σ + byz_NR ≤ 2f.  Both quorums reaching simultaneously would require
+\* (h_σ + byz_σ) + (h_NR + byz_NR) ≥ 4f+2; but the maximum is 2f+1 + 2f = 4f+1.
+\* Contradiction. ∎
 Pigeonhole1 ==
     \A k \in Layers:
         ~ ( (\E v \in Values: SigmaQuorumReached(k, v)) /\ NRQuorumReached(k) )
