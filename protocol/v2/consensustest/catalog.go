@@ -1,5 +1,7 @@
 package consensustest
 
+import "time"
+
 // Catalog is the canonical list of cross-protocol scenarios. Each Scenario
 // declares a SimConfig modifier and per-protocol expectations sourced from
 // docs/BFT-comparison.md and docs/OBFT.md §Application.
@@ -48,6 +50,7 @@ var Catalog = []Scenario{
 	scenarioHostInvalidUntilL1,
 	scenarioLateLeaderBroadcast,
 	scenarioPartialEquivocationNaturalRecovery,
+	scenarioMeshFlakiness,
 }
 
 // ---- Healthy ------------------------------------------------------------
@@ -632,4 +635,70 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		"QBFT": ExpectSuccessFallThrough,
 	},
 	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452).",
+}
+
+// ---- Mesh-flakiness deadlock (OBFT.md §Properties summary) -------------
+
+// Spec quote (§Properties / "Mesh-flakiness tolerance"): "A mesh-flaky
+// honest operator who fails to observe peer σ-emits within the NR-decision
+// window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget
+// consumer for that slot. Combined with byz σ-refusal, this creates a
+// deadlock that the protocol cannot recover from within the slot."
+//
+// Setup at f=1 n=4 (generalized via cfg.F()):
+//   - op1: honest L_0 leader.
+//   - op2..op{f+1}: mesh-flaky honest — 2·BTT inbound delay on all
+//     messages via PerReceiverDelay. Phase-1 bundles for L_0 and L_1
+//     arrive past T_commit at these ops (FetchAt[k] + 2·BTT > T_commit
+//     for k ≤ 1 at the default schedule), so they retain no V and emit
+//     NR at L_0. (L_2 and L_3 bundles arrive in time at flaky ops, but
+//     L_0/L_1 NR's are enough to short NR-pool below qEnc.)
+//   - op{N-f+1}..op{N}: byz σ-refusal (never emits commit / NR).
+//
+// Cluster σ at L_0:
+//   - op1's Phase-1 σ_L^V = 1 partial.
+//   - Honest non-leader non-flaky: σ via commit. Count = N-1-2f.
+//   - Total σ = N-2f = f+1 < qV=2f+1 (when f ≥ 1).
+//
+// Cluster NR at L_0:
+//   - Flaky ops emit NR = f partials.
+//   - Byz silent: 0 contribution.
+//   - Total NR = f < qEnc=2f+1.
+//
+// Both quorums short → MISS at L_0 with no fall-through (chain stays
+// sealed). The flaky honest's incorrect NR is byz-equivalent f-budget
+// consumption per spec's mesh-flakiness analysis.
+var scenarioMeshFlakiness = Scenario{
+	Name: "MeshFlakiness",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// f mesh-flaky ops at op2..op{f+1}: 2·BTT inbound delay.
+		flakyOverrides := make(map[OperatorID]time.Duration, f)
+		for i := 0; i < f; i++ {
+			flakyOverrides[OperatorID(i+2)] = 2 * cfg.BTT
+		}
+		cfg.Network = PerReceiverDelay{
+			Inner:     ConstantDelay{D: cfg.BTT},
+			Overrides: flakyOverrides,
+		}
+		// f byz σ-refusal at op{N-f+1}..op{N}.
+		byzOps := make([]OperatorID, f)
+		for i := 0; i < f; i++ {
+			byzOps[i] = OperatorID(cfg.N - f + 1 + i)
+		}
+		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool=f+1<qV=2f+1; NR-pool=f<qEnc=2f+1; both short → miss.
+		"OBFT": ExpectMiss,
+		// QBFT: flaky receivers see PROPOSE/PREPAREs with delay but non-flaky
+		// non-byz honest count (N-1-2f) PREPARE among themselves on time;
+		// quorum (qV=2f+1) reaches at R1 once flaky ops' delayed PREPAREs
+		// arrive. Decides at R1 across all SSV cluster sizes — the
+		// QBFT-vs-OBFT-family asymmetry the spec calls out under mesh
+		// flakiness (PREPARE-pool quorum-by-arrival vs OBFT's hard T_commit
+		// cutoff with no late retention).
+		"QBFT": ExpectSuccessFastest,
+	},
+	Note: "OBFT.md §Properties / Mesh-flakiness tolerance: flaky honest NR-emits incorrectly + byz σ-refusal → OBFT both quorums short → no fall-through (miss). QBFT recovers at R1 (PREPARE-pool reaches qV once delayed flaky PREPAREs arrive — no hard cutoff). Validates the spec's 'mesh-flaky honest = f-budget consumer' claim and the QBFT-vs-OBFT asymmetry.",
 }
