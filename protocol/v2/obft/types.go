@@ -107,8 +107,12 @@ type Config struct {
 	// Delta3 is Δ_3 — the Phase 3 window length. Per spec, Delta3 covers
 	// local reconstruction processing (BLS aggregation, IBE decryption walk,
 	// certificate construction). KindCommit propagation is already covered
-	// by Delta2. Absolute (does not scale with BTT); ε_3 ≈ 100ms for
-	// single-layer reconstruction at K=4.
+	// by Delta2. Absolute (does not scale with BTT); per OBFT.md §Phase 3 /
+	// §Timing budget, ε_3 ≈ 50ms at Config A for single-layer
+	// reconstruction (σ-quorum at L_0). Under multi-layer fall-through,
+	// the IBE-decryption walk runs sequentially through each NR-quorum-
+	// unlocked layer, so end-to-end Phase 3 cost grows roughly linearly
+	// with the number of fall-throughs (~ε_3 × K at K layers walked).
 	Delta3 time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
