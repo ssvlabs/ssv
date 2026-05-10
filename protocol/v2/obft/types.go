@@ -48,22 +48,22 @@ type LayerSpec struct {
 	Leader  OperatorID
 	FetchAt time.Duration
 
-	// BroadcastBudget is the layer's T_commit-anchored absorption window:
-	// the leader must broadcast their Phase-1 bundle no later than
-	// T_commit - BroadcastBudget. Per spec §Setting this corresponds to
-	// `B_k + slack` (the receiver-side absorption ceiling — bundles
-	// first-observed past T_commit are not counted, so the absorption
-	// must include the `slack` decision-deferral window). Per spec
-	// B_0 + slack < B_1 + slack < ... < B_{K-1} + slack — deeper layers
-	// get larger budgets (max absorption tolerance); the primary gets the
+	// BroadcastBudget is the layer's T_commit-anchored absorption window
+	// `B_k` per OBFT.md §Setting: the leader must broadcast their Phase-1
+	// bundle no later than `T_commit − B_k = T_broadcast_max_k`, so the
+	// bundle's first-observation at any honest receiver lands by
+	// `T_commit` under partial-synchrony assumptions for that layer's
+	// propagation budget. Per spec `B_0 < B_1 < ... < B_{K-1}` — deeper
+	// layers get larger budgets (wider absorption); the primary gets the
 	// smallest (max MEV-fetch headroom, willing to fall through to L_1+
 	// if propagation slips).
 	//
-	// Spec K=4 Config A (BTT=200ms, slack=0.5 BTT): B_k+slack values are
-	// 1, 1.5, 2.5, 5.5 BTT (= 200/300/500/1100 ms). Equivalently the
-	// leader-side budgets B_k cited in the spec are 0.5/1/2/5 BTT
-	// (Ls_arrival-anchored); this field carries the T_commit-anchored
-	// form for cleaner per-layer math.
+	// Spec K=4 Config A (BTT=200ms): B_k values are 1, 1.5, 2.5, 5.5 BTT
+	// (= 200/300/500/1100 ms). Internally each B_k decomposes as typical-
+	// mesh propagation + convergence buffer (spec §Setting quotes B_0 = 1
+	// BTT as ≈0.5 BTT propagation + 0.5 BTT convergence); the
+	// decomposition is informative-only — this field is the single
+	// T_commit-anchored value, NOT the propagation half alone.
 	//
 	// When zero across all layers, falls back to the single uniform cap
 	// 2*BTT for every layer (preserves backwards-compat with configs

@@ -106,9 +106,10 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// when LeaderSigmaWitness carried full V, but witnesses now ship
 	// value_root only and don't trigger ObservePhase1Bundle anymore.)
 	//
-	// Spec §Phase 1 line 154 enumerates "verify both signatures + check
-	// first-observation timestamp" as the protocol-level checks; the spec
-	// is silent on the ordering of dedup vs verify within those checks.
+	// Spec §Phase 1 / "Protocol-level checks" enumerates "verify both
+	// signatures + check first-observation timestamp" as the receiver-side
+	// checks; the spec is silent on the ordering of dedup vs verify within
+	// those checks.
 	// Dedup-first is semantically equivalent because a byte-identical (op, V)
 	// re-observation must carry the same σ_V (deterministic signing) which
 	// already verified at first observation. Every distinct V is still

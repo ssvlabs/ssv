@@ -18,13 +18,15 @@ import (
 // cryptographic backend so the IBE primitive can use its expected DST), but
 // shares the same threshold qEnc = qV = 2f+1.
 //
-// OBFT wraps σ partials at layer k > 0 in K-1 levels of IBE encryption:
+// OBFT wraps σ partials at layer k > 0 in k levels of IBE encryption (chain
+// depth grows with the layer index — per spec §Phase 2, L_0 is plaintext,
+// L_1 has 1 level, ..., L_{K-1} has K-1 levels at the deepest):
 //
 //	layer k:  E_{nr_tag_0}( ... E_{nr_tag_{k-1}}( σ_i^V(V_{L_k}) ) ... )
 //
 // The ThresholdIBE interface is for a single layer of IBE; chained encryption
-// is implemented in the obft package as a wrapper around K-1 calls (see
-// chainEncryptForLayer / chainDecryptForLayer in instance.go).
+// is implemented in the obft package as a per-layer-k wrapper around k calls
+// (see chainEncryptForLayer / chainDecryptForLayer in instance.go).
 //
 // Implementations:
 //   - StubIBE (this file) — placeholder for protocol-level tests.

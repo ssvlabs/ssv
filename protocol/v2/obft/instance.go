@@ -86,10 +86,11 @@ func (s CommitState) String() string {
 //     based on what was observed by T_commit.
 //     b. ObserveCommit(c) for peers' KindCommit messages.
 //  4. Phase 3 — from TCommit + Delta2 onward (no hard upper bound here;
-//     the runner enforces the slot's relay-submission deadline via ctx):
-//     a. Resolve(now) → Output (success) or ErrNoQuorum. Resolve is
-//     opportunistic — re-running on late KindCommit arrivals can
-//     push σ-pool past qV at a layer that didn't reach on the
+//     the runner enforces the slot's relay-submission deadline out-of-band
+//     via its scheduling layer):
+//     a. Resolve() → Output (success) or ErrNoQuorum. Resolve is
+//     stateless / idempotent — re-running on late KindCommit arrivals
+//     can push σ-pool past qV at a layer that didn't reach on the
 //     initial walk, or push NR-pool past qEnc to unlock the next
 //     layer's chained decryption (Pigeonhole semantics still hold).
 //     RoundEndOffset (= TCommit + Delta2 + Delta3) is a soft per-
