@@ -100,6 +100,8 @@ const (
 	ByzOfflineDoubleVAttempt // RESERVED: the OfflineAggregator runs on EVERY scenario via recordCommitToAggregator + AttemptAll; NoOfflineDoubleV is a universal safety invariant. ByzAggregatorBypass is the active-attack variant (forged identities)
 
 	ByzWitnessForgery // (negative) byz forges Witnesses[] entries crediting honest leaders with σ on V_prime at deeper layers; sibling to ByzAggregatorBypass exercising the recordCommitToAggregator Witnesses path. do NOT add to Catalog
+
+	ByzDelayedCommit // byz operator emits Phase-2 KindCommit on time per protocol state but with extra dispatch delay so arrival lands past RoundEndOffset. Pairs with SimConfig.EnableLateCommitRerun to exercise OBFT.md §Phase 3 "Re-running on late KindCommit arrivals" recovery path. Per-op behavior is otherwise honest (Phase-1 broadcasts on time, host-validates V normally).
 )
 
 // String returns a stable human-readable name for telemetry.
@@ -147,6 +149,8 @@ func (k ByzKind) String() string {
 		return "OfflineDoubleVAttempt"
 	case ByzWitnessForgery:
 		return "WitnessForgery"
+	case ByzDelayedCommit:
+		return "DelayedCommit"
 	default:
 		return "Unknown"
 	}

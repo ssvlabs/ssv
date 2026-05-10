@@ -172,6 +172,8 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 		}, nil
 	case ct.ByzWitnessForgery:
 		return byzWitnessForgery{ByzSet: bs}, nil
+	case ct.ByzDelayedCommit:
+		return byzDelayedCommit{ByzSet: bs}, nil
 	case ct.ByzGarbageMessages, ct.ByzExceedsRateLimit, ct.ByzOfflineDoubleVAttempt:
 		// Reserved enum values — covered at other layers, not via the
 		// scenario catalog. See ByzKind enum comments in
@@ -754,6 +756,35 @@ func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft
 		})
 	}
 	return []*obft.Commit{cp}
+}
+
+// ---- byzDelayedCommit (late KindCommit dispatch, exercises §Phase 3 re-resolve) ----
+
+// Byz operators behave honestly except for delaying their own Phase-2
+// KindCommit emission. Returned delay is 1.5 × BTT, sized to put arrival
+// past RoundEndOffset (T_commit + 2·BTT + ε_3 at recommended sizing) by
+// half a BTT — well into the spec's "late arrival" regime that requires
+// SimConfig.EnableLateCommitRerun to recover. At BTT=200ms: arrival lands
+// at T_commit + 1 BTT + 1.5 BTT = T_commit + 2.5 BTT ≈ 3900ms, ~50ms past
+// RoundEndOffset=3850ms.
+//
+// Pairs with the spec §Phase 3 "Re-running on late KindCommit arrivals"
+// recovery: a slot whose σ-pool was short of qV at the initial Resolve can
+// salvage when the delayed σ partial arrives and triggers evtResolveRerun.
+type byzDelayedCommit struct {
+	honestDefaults
+	ByzSet byzSet
+}
+
+func (b byzDelayedCommit) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+	return []broadcastPlan{{V: honestV}}
+}
+
+func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op obft.OperatorID) time.Duration {
+	if !b.ByzSet.Contains(op) {
+		return 0
+	}
+	return 3 * s.cfg.BTT / 2 // 1.5 × BTT — ~0.5 BTT past RoundEndOffset
 }
 
 // ---- helpers -----------------------------------------------------------

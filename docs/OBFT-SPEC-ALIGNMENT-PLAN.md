@@ -55,10 +55,10 @@ Land first so phase 2 scenarios can use the new knobs.
 **Why.** Spec §Phase 3 / "Re-running on late KindCommit arrivals" explicitly carves out this recovery path. Framework currently schedules one `evtResolve` at `RoundEndOffset`; later commit arrivals don't trigger a re-resolve.
 
 **Action.**
-- Add `internalByz.OverrideCommitDispatchDelay(op) time.Duration` method (default 0). Used to delay an operator's KindCommit emission beyond `T_commit + Δ_2`.
-- In `evtPhaseTwoStart`, honor the override for per-op commit dispatch time.
-- Add `evtResolveRerun` event scheduled after each `evtCommitArrival` whose `when` is past `RoundEndOffset` AND not every operator has resolved. Production `obft.Instance.Resolve()` is idempotent given new partials.
-- Gate behind `SimConfig.EnableLateCommitRerun bool` (default off in commit landing 1.3; default on after 2.3 lands).
+- Add `internalByz.OverrideOwnCommitDispatchDelay(s, op) time.Duration` method (default 0), symmetric to the existing `OverrideOwnPhase1Delay`. Used to delay an operator's KindCommit emission beyond `T_commit + Δ_2`.
+- In `evtPhaseTwoStart`, honor the override for per-op commit dispatch time via `emitToAll`'s new `extraDelay` param.
+- Add `evtResolveRerun{op}` event scheduled after each `evtCommitArrival` whose `when` is past `RoundEndOffset` AND the receiver hasn't decided. Production `obft.Instance.Resolve()` is stateless / idempotent given new observed partials.
+- Gate behind `SimConfig.EnableLateCommitRerun bool` (default off; 2.3's scenario enables it explicitly).
 
 **Accept.** Existing scenarios unchanged with flag off. Standalone test in 2.3 exercises the new path with flag on.
 

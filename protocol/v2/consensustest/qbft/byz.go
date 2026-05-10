@@ -87,9 +87,10 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 		}, nil
 	case ct.ByzCrossSigning, ct.ByzCrossOnionEquivocation, ct.ByzFakePlaintextSigma,
 		ct.ByzLateLeaderBroadcast, ct.ByzWithholdLeader, ct.ByzAggregatorBypass,
-		ct.ByzWitnessForgery, ct.ByzCertWithholding:
+		ct.ByzWitnessForgery, ct.ByzCertWithholding, ct.ByzDelayedCommit:
 		// OBFT-only patterns; QBFT has no analog (no chained-onion encryption,
-		// no per-layer leader-σ, no cluster-wide cert gossip, no Witnesses[]).
+		// no per-layer leader-σ, no cluster-wide cert gossip, no Witnesses[],
+		// no single-Phase-2 KindCommit emission to delay).
 		return nil, ct.ErrNotApplicable
 	case ct.ByzGarbageMessages, ct.ByzExceedsRateLimit, ct.ByzOfflineDoubleVAttempt:
 		// Reserved enum values — covered at other layers, not via the

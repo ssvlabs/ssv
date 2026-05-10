@@ -423,6 +423,152 @@ func TestAdapter_PartialEquivocation_NaturalRecovery(t *testing.T) {
 		out.DecidedRound, string(out.DecidedValue))
 }
 
+// TestAdapter_LateCommitArrival_ReResolve exercises the spec §Phase 3
+// "Re-running on late KindCommit arrivals" recovery path via the NR-quorum
+// late-unlock variant ("a late NR partial pushes NR-pool past qEnc at a
+// layer that previously had NR-pool short of qEnc → derive the layer-k
+// decryption key, unlock chained decryption for layer k+1's σ partials,
+// advance the walk past k"). Validates the 1.3 framework
+// (EnableLateCommitRerun + evtResolveRerun) salvages a slot that would
+// otherwise miss for lack of NR-quorum to unlock chained decryption.
+//
+// Setup at f=1, n=4, default leader rotation (op_k leads L_{k-1}):
+//   - All 3 non-leader hosts are NV at L_0 (op2, op3, op4); ops still
+//     σ-emit at L_1+ (host-NV is layer-0-scoped).
+//   - op4 is BYZ "delayed commit": its KindCommit at Phase 2 carries an
+//     on-protocol NR partial at L_0 plus σ at L_1+, but is dispatched
+//     with OverrideOwnCommitDispatchDelay = 1.5·BTT → arrives ~50ms past
+//     RoundEndOffset.
+//
+// Cluster state:
+//   - σ at L_0 (cluster-wide): op1's Phase-1 σ_L^V only = 1 < qV=3.
+//   - NR at L_0 (cluster-wide): {op2, op3, op4}; with op4 delayed,
+//     receivers see only {op2, op3} = 2 < qEnc=3 by RoundEndOffset.
+//   - Chain at L_0 stays sealed → L_1 onion entries (where every op
+//     σ-emits on V_1) are undecodable.
+//
+// Initial Resolve fails at L_0 (σ < qV, NR < qEnc). After op4's late
+// commit arrives: NR-pool = {op2, op3, op4} = 3 = qEnc → chain key
+// for L_0 derived → L_1 onion entries decoded → σ-pool at L_1 reaches
+// qV → decide at L_1 via fall-through.
+//
+// Note: op4 (byz) self-observes its own NR partial in BuildOwnCommit, so
+// op4's local state has NR-quorum at RoundEndOffset (own + op2 + op3 = 3).
+// op4 decides locally at L_1 in initial Resolve. Other receivers depend on
+// either (a) the rerun path after op4's late commit, or (b) cert gossip
+// from op4. With EnableLateCommitRerun on, the rerun fires first; cert
+// gossip from op4 still arrives but op2/op3/op1 are already decided.
+func TestAdapter_LateCommitArrival_ReResolve(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.EnableLateCommitRerun = true
+	cfg.Host = ct.HostInvalidForOperators{
+		Layer:     0,
+		Operators: map[ct.OperatorID]bool{2: true, 3: true, 4: true},
+	}
+	cfg.Byz = ct.ByzPattern{
+		Kind:         ct.ByzDelayedCommit,
+		ByzOperators: []ct.OperatorID{4},
+	}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "late-NR re-resolve must salvage the slot")
+	// Outcome.DecidedRound is the EARLIEST cluster-wide decision time +
+	// layer; that's op4's local decide at L_1 (RoundEndOffset). Receivers
+	// rescued via rerun/cert decide later at the same L_1. Both fine — we
+	// care that the cluster decides, which validates the recovery path.
+	require.Equal(t, 1, out.DecidedRound,
+		"cluster should fall through to L_1 via NR-quorum (incl. late op4 NR)")
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+
+	// With rerun enabled, non-byz receivers decide via the rerun path when
+	// op4's late commit arrives (~T_commit + BTT + 1.5·BTT = 3900ms at
+	// BTT=200). Cert-gossip path (RelayCutoff-adjacent) would not finish in
+	// time, but rerun is strictly earlier.
+	const rerunPathBudget = 4000 * time.Millisecond // RelayCutoff
+	for _, op := range []ct.OperatorID{1, 2, 3} {
+		oo, ok := out.PerOp[op]
+		require.True(t, ok, "op%d missing from PerOp", op)
+		require.True(t, oo.Decided, "op%d should decide", op)
+		require.LessOrEqual(t, oo.Time, rerunPathBudget,
+			"op%d must decide by RelayCutoff via rerun path; got %v", op, oo.Time)
+	}
+	t.Logf("Late-NR re-resolve: cluster decided at %v on L_%d; per-op times: op1=%v op2=%v op3=%v op4=%v",
+		out.DecisionTime, out.DecidedRound,
+		out.PerOp[1].Time, out.PerOp[2].Time, out.PerOp[3].Time, out.PerOp[4].Time)
+}
+
+// TestAdapter_LateCommitArrival_NoReResolve_FallsBackToCertGossip is the
+// timing counterpart to TestAdapter_LateCommitArrival_ReResolve: same byz
+// pattern + host setup, but EnableLateCommitRerun=false. The cluster still
+// decides — but via a STRICTLY LATER path (cert gossip from op4's local
+// decide) instead of the rerun path that fires when op4's late commit
+// arrives at receivers.
+//
+// Timing differential (the load-bearing assertion of this test):
+//   - With rerun: receivers decide at op4's late-commit arrival time
+//     (~T_commit + BTT + 1.5·BTT = 3900ms at BTT=200).
+//   - Without rerun: receivers decide at op4's cert arrival time
+//     (op4's local Resolve at RoundEndOffset = 3850ms; +BTT cert
+//     propagation → 4050ms).
+//
+// The ~150ms differential proves the rerun path is actually load-bearing
+// in the positive test, not a coincidence with cert gossip. A regression
+// that fires rerun unconditionally (ignoring the flag) would surface as
+// receivers deciding at 3900ms in this test — the assertion below would
+// fail.
+//
+// Why outcome.Decided is still true here: op4 (byz) self-observes its own
+// NR partial in BuildOwnCommit, so op4's local view has NR-quorum
+// (own + op2 + op3 = qEnc=3) at RoundEndOffset → op4 decides at L_1 →
+// broadcasts cert → receivers rescue from cert. Suppressing this would
+// require extending ByzDelayedCommit to also block cert broadcast (e.g.
+// AllowCertificateBroadcast=false), which is plausible future work but
+// not needed for the timing-differential assertion this test makes.
+func TestAdapter_LateCommitArrival_NoReResolve_FallsBackToCertGossip(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	// cfg.EnableLateCommitRerun stays false (default).
+	cfg.Host = ct.HostInvalidForOperators{
+		Layer:     0,
+		Operators: map[ct.OperatorID]bool{2: true, 3: true, 4: true},
+	}
+	cfg.Byz = ct.ByzPattern{
+		Kind:         ct.ByzDelayedCommit,
+		ByzOperators: []ct.OperatorID{4},
+	}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	// Cluster decides via cert-gossip rescue from op4 even without rerun.
+	require.True(t, out.Decided, "cert-gossip rescue from op4's local L_1 decide")
+	require.Equal(t, 1, out.DecidedRound, "decide at L_1 via fall-through (op4's local Resolve succeeds)")
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+
+	// Without rerun, non-byz receivers can't decide locally (NR-pool=2<qEnc
+	// at their view → chain sealed). They rescue via op4's cert, which is
+	// dispatched at op4's local resolve time (RoundEndOffset=3850ms) and
+	// arrives at receivers at 3850 + BTT = 4050ms — strictly LATER than
+	// the rerun path's 3900ms decide. This timing differential is the
+	// in-suite proof that the rerun path is actually load-bearing in the
+	// positive test, not a coincidence.
+	const rerunPathArrival = 3950 * time.Millisecond
+	for _, op := range []ct.OperatorID{1, 2, 3} {
+		oo, ok := out.PerOp[op]
+		require.True(t, ok, "op%d missing from PerOp", op)
+		require.True(t, oo.Decided, "op%d should decide via cert-gossip", op)
+		require.Greaterf(t, oo.Time, rerunPathArrival,
+			"op%d must decide LATER than the rerun path's ~3900ms (via cert at ~4050ms); got %v",
+			op, oo.Time)
+	}
+	t.Logf("Late-commit no-rerun: cluster decided at %v on L_%d; per-op times: op1=%v op2=%v op3=%v op4=%v",
+		out.DecisionTime, out.DecidedRound,
+		out.PerOp[1].Time, out.PerOp[2].Time, out.PerOp[3].Time, out.PerOp[4].Time)
+}
+
 // TestAdapter_ByzWitnessForgery_TriggersSafetyDetection is the sibling
 // negative test to ByzAggregatorBypass: it exercises recordCommitToAggregator's
 // Witnesses[] path. Byz emits an extra commit whose Witnesses[] credit ≥ qV
