@@ -35,6 +35,9 @@ var Catalog = []Scenario{
 	scenarioValidityDivergenceAlgebraicLimit,
 	scenarioValidityDivergence3_1,
 	scenarioValidityDivergenceNRFallThrough,
+	scenarioValidityDivergence_PassiveByz_Silent_1NV,
+	scenarioValidityDivergence_PassiveByz_Silent_2NV,
+	scenarioValidityDivergence_PassiveByz_SigmaOnV_2NV,
 	scenarioSigmaRefusal,
 	scenarioWithholdLeaderDeepest,
 	scenarioCertWithholding,
@@ -325,6 +328,119 @@ var scenarioValidityDivergenceNRFallThrough = Scenario{
 		"QBFT": ExpectSuccessFallThrough,
 	},
 	Note: "NR-quorum fall-through pattern (#NV = 2f+1 = qEnc). Generalized from the f=1, n=4 '1-3 split' (op2..op4 NV); scales to N-2f-1 valid + 2f+1 NV at any n. Complement to ValidityDivergence_AlgebraicLimit (miss) and ValidityDivergence_3_1 (success at L_0).",
+}
+
+// ---- Validity divergence widened by passive byz (OBFT.md:602-606) -----
+
+// Spec §Failure modes / Validity-divergence deadlock enumerates three
+// configurations where a byzantine within the f-bound exercises f-budget
+// passively (silent or σ-on-V — neither cryptographically slashable) to
+// widen the deadlock zone beyond the all-honest case. The three scenarios
+// below cover each shape. Generalized via cfg.F() so the σ-pool and
+// NR-pool quorum-short outcomes hold at all SSV cluster sizes.
+
+// Case #1 from OBFT.md:604: "1 non-leader σ + 1 non-leader NV + byz silent".
+// Generalized: (2f-1) non-leader σ + 1 NV + f byz silent.
+//   - σ-pool = leader + (2f-1) = 2f < qV = 2f+1.
+//   - NR-pool = 1 < qEnc = 2f+1 (when f ≥ 1).
+//
+// At f=1, n=4: op2 σ-emits; op3 NV (host invalid); op4 byz silent.
+// σ-pool = op1 + op2 = 2 < 3; NR-pool = op3 = 1 < 3 → MISS.
+var scenarioValidityDivergence_PassiveByz_Silent_1NV = Scenario{
+	Name: "ValidityDivergence_PassiveByz_Silent_1NV",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// 1 NV non-leader at op{N-f}; f byz silent at op{N-f+1}..op{N}.
+		nvOps := map[OperatorID]bool{OperatorID(cfg.N - f): true}
+		byzOps := make([]OperatorID, f)
+		for i := 0; i < f; i++ {
+			byzOps[i] = OperatorID(cfg.N - f + 1 + i)
+		}
+		cfg.Host = HostInvalidForOperators{Layer: 0, Operators: nvOps}
+		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool=2f<qV=2f+1; NR-pool=1<qEnc=2f+1; both quorums short; slot misses.
+		"OBFT": ExpectMiss,
+		// QBFT: R1 PREPARE-quorum unreachable (op-NV+byz-silent); R2 fresh-V
+		// host-validates at layer 1 → succeeds.
+		"QBFT": ExpectSuccessFallThrough,
+	},
+	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #1. Passive byz widens deadlock zone — single NV honest is enough to miss when paired with f byz silent. Cryptographically unattributable (passive silence + host re-org are both legitimate behaviors).",
+}
+
+// Case #2 from OBFT.md:605: "0 non-leader σ + 2 non-leader NV + byz silent".
+// Generalized: 0 non-leader σ + 2f NV + f byz silent.
+//   - σ-pool = leader = 1 < qV = 2f+1 (when f ≥ 1).
+//   - NR-pool = 2f < qEnc = 2f+1.
+//
+// At f=1, n=4: op2, op3 NV; op4 byz silent.
+// σ-pool = op1 = 1 < 3; NR-pool = op2 + op3 = 2 < 3 → MISS.
+var scenarioValidityDivergence_PassiveByz_Silent_2NV = Scenario{
+	Name: "ValidityDivergence_PassiveByz_Silent_2NV",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// 2f NV non-leaders at op2..op{2f+1}; f byz silent at op{2f+2}..op{N}.
+		nvOps := make(map[OperatorID]bool, 2*f)
+		for i := 0; i < 2*f; i++ {
+			nvOps[OperatorID(i+2)] = true
+		}
+		byzOps := make([]OperatorID, f)
+		for i := 0; i < f; i++ {
+			byzOps[i] = OperatorID(2*f + 2 + i)
+		}
+		cfg.Host = HostInvalidForOperators{Layer: 0, Operators: nvOps}
+		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool=1<qV; NR-pool=2f<qEnc; both quorums short; slot misses.
+		"OBFT": ExpectMiss,
+		// QBFT: R1 PREPARE-quorum unreachable; R2 fresh-V at layer 1 host-validates → succeeds.
+		"QBFT": ExpectSuccessFallThrough,
+	},
+	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #2. Worst-case all-NV non-leaders plus f byz silent — σ-pool collapses to leader-only, NR-pool capped below qEnc by byz silence.",
+}
+
+// Case #3 from OBFT.md:606: "0 non-leader σ + 2 non-leader NV + byz σ-on-V".
+// Generalized: 0 honest σ-non-leader + 2f NV + f byz σ-on-V (byz contributes
+// σ on V like an honest non-leader, but counts toward f-budget so its
+// presence is "free grief" — same outcome as if byz were silent at the
+// algebraic limit but exercises a different shape on-wire).
+//   - σ-pool = leader + f byz σ-on-V = 1 + f < qV = 2f+1 (when f ≥ 1).
+//   - NR-pool = 2f < qEnc = 2f+1.
+//
+// At f=1, n=4: op2, op3 NV; op4 byz σ-on-V (acts honestly message-wise).
+// σ-pool = op1 + op4 = 2 < 3; NR-pool = op2 + op3 = 2 < 3 → MISS.
+//
+// Distinguishes from ValidityDivergence_AlgebraicLimit (no byz labeling) by
+// explicitly marking op{2f+2}..op{N} as f-budget-consuming byz operators,
+// per the spec's accounting framework. Algebraically equivalent miss
+// outcome; on-wire indistinguishable from a healthy non-leader at the byz.
+var scenarioValidityDivergence_PassiveByz_SigmaOnV_2NV = Scenario{
+	Name: "ValidityDivergence_PassiveByz_SigmaOnV_2NV",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// 2f NV non-leaders at op2..op{2f+1}; f byz σ-on-V at op{2f+2}..op{N}
+		// (no behavioral override — byz acts as honest message-wise).
+		nvOps := make(map[OperatorID]bool, 2*f)
+		for i := 0; i < 2*f; i++ {
+			nvOps[OperatorID(i+2)] = true
+		}
+		byzOps := make([]OperatorID, f)
+		for i := 0; i < f; i++ {
+			byzOps[i] = OperatorID(2*f + 2 + i)
+		}
+		cfg.Host = HostInvalidForOperators{Layer: 0, Operators: nvOps}
+		cfg.Byz = ByzPattern{Kind: ByzNone, ByzOperators: byzOps}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool=1+f<qV=2f+1 (for f≥1); NR-pool=2f<qEnc=2f+1; miss.
+		"OBFT": ExpectMiss,
+		// QBFT: R1 PREPARE pool = leader + f byz = 1+f < quorum=2f+1; R1 timeout;
+		// R2 fresh-V at layer 1 host-validates → succeeds.
+		"QBFT": ExpectSuccessFallThrough,
+	},
+	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #3. Byz emits σ on V (cryptographically unattributable — passive σ contribution is honest-equivalent message-wise) but consumes f-budget, so σ-pool still misses qV. The spec's spec-3 algebraic miss configuration.",
 }
 
 // ---- σ-refusal (byz never contributes) --------------------------------
