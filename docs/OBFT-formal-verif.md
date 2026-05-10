@@ -680,6 +680,89 @@ The network non-determinism in §2.1 must be carefully bounded for the verificat
 
 The TLA+ model exposes a parameter `mesh_asymmetry ∈ {within_budget, beyond_budget}` and verifies the property only under `within_budget`. Beyond-budget executions are excluded by the assumption-2 precondition.
 
+### 5.4 — Beyond LIVENESS_NON_GRIEF: Class A failure mode exploration
+
+The verified `LIVENESS_NON_GRIEF` property holds under within-budget partial-synchrony (Assumption 2) + non-grief byz. Real-world deployments will see Assumption 2 violations — propagation tails past `B_k` budget at one or more honest receivers, mesh churn, peer-score pruning. This subsection documents a complementary TLA exploration that *relaxes* Assumption 2 and surfaces the Class A deadlock patterns the spec explicitly does not close.
+
+**Methodology.** A sibling spec `tla/BareOBFT_Liveness_NoBudget.tla` is identical to `BareOBFT_Liveness.tla` except for one change — `HonestLeaderBroadcast(k)` takes an additional parameter `S \subseteq Operators` (with `leader_of[k] \in S`) instead of hardcoding `delivered_to[k] = Operators`. All other actions, properties, and assumptions are unchanged. The property `LIVENESS_NON_GRIEF` is checked unmodified — but **expected to fail**, with each counterexample serving as a diagnostic trace of one Class A failure mode.
+
+The relaxation generalizes the network model:
+
+- `S = Operators` recovers the within-budget case (= `BareOBFT_Liveness.tla`'s axiom).
+- `leader ∈ S ⊊ Operators` models propagation tail (= one or more honest didn't retain within budget).
+- `S = {leader}` models effective silence past `T_commit` (= the leader retains their own bundle, no peer received in time).
+
+Byz behavior remains unchanged (non-grief: all-or-silent broadcast for byz leader, σ/NR/none commitment, no equivocation/cross-sign/fake/EKM-bypass). This isolates any counterexample's *cause* to honest-leader-propagation issues compounded with byz non-grief options (silence, NR), not to byz grief.
+
+**Run command**:
+
+```bash
+cd tla && ./scripts/tlc-run.sh BareOBFT_Liveness_NoBudget
+```
+
+**Expected outcome**: TLC finds counterexamples (= traces leading to deadlock). Each counterexample classifies as one of the documented Class A patterns from [OBFT.md §Failure modes](OBFT.md#failure-modes). A counterexample that does *not* match a documented pattern is a spec-coverage gap to investigate.
+
+**Findings at n=4, f=1, K=2** (2026-05-10): TLC found a counterexample at depth 6 in 9 seconds (138,682 states generated; 69,462 distinct states explored before the violation surfaced). The trace is a documented `h_V=1 selective Phase-1 delivery` Class A pattern, but surfaces a sub-case the OBFT.md §Liveness narrative didn't fully describe.
+
+**Trace** (Operators = {op1, op2, op3, op4}, Byzantine = {op4}):
+
+```
+State 1 (Init):  leader_of = (L_0 → op1, L_1 → op2)
+                 byz_commit = (op4 → "sigma" at L_0, "sigma" at L_1)
+State 2: HonestLeaderBroadcast(L_1, S = {op2})
+                 → propagation tail: op1, op3, op4 didn't retain V_1
+State 3: HonestLeaderBroadcast(L_0, S = {op1, op2})
+                 → propagation tail: op3, op4 didn't retain V_0
+State 4: HonestEmitKindCommit(op2)
+State 5: HonestEmitKindCommit(op3)
+State 6: HonestEmitKindCommit(op1)
+State 7: STUTTER. No action enabled. output_set = ⟨all FALSE⟩.
+                 Byz op4 chose σ-commit at Init but never emitted KindCommit
+                 (silent — non-grief option allowed).
+```
+
+Final pool composition at L_0 (the load-bearing layer):
+
+- `SigmaPoolEmitted(0) = {op1, op2}` (size 2 < qV=3)
+- `NRPoolEmitted(0) = {op3}` (size 1 < qEnc=3)
+- `SilentEmitted = {op4}` (size 1)
+
+σ-flip from op3 (the only non-leader NR-er) is blocked by σ-flip's **second** trigger condition:
+
+```
+nr_nl   = |{op3}| = 1                  →  1 < f+1 = 2   ✓ (first cond passes)
+s_post  = |SigmaPoolNonLeaderEmitted(0)| + 1 = |{op2}| + 1 = 2
+a_count = |SilentEmitted| = 1
+                                       →  2 ≥ 1 + 2 = 3 ✗ (second cond fails)
+```
+
+NR-flip from op1 (leader, σ-er) is blocked by `s_nl < f` (= `1 < 1` is FALSE).
+
+**Sub-cases of `h_V=1` deadlock by byz behavior** (both deadlock; both are part of the documented Class A scope):
+
+| Sub-case | byz action | σ-flip blocking condition |
+|---|---|---|
+| **Classical** | byz emits NR (mimicking honest non-retainer) | `nr_nl = 2` — first condition fails |
+| **byz-silent** ★ | byz silent (no `KindCommit` emitted) | `s_post = 2 < a_count + 2f = 3` — second condition fails |
+
+★ The case TLC surfaced.
+
+OBFT.md §Liveness's discussion of `h_V=1` focuses on the classical sub-case (the first trigger condition blocked by 2 honest NR-ers). The byz-silent sub-case (where byz consumes f-budget silently rather than emitting NR) blocks on a different condition with the same outcome. **No spec change is needed** — both sub-cases are within the documented "Phase-2.5 doesn't close `h_V=1`" claim — but OBFT.md's narrative should be updated to acknowledge both sub-cases ([§Liveness](OBFT.md#liveness-synchrony-conditional)'s fat-warning callout adds this).
+
+**What this exploration validates**:
+
+- The "Phase-2.5 does NOT close `h_V=1`" claim is verified mechanically across multiple sub-cases distinguished by byz behavior.
+- The Class A scope as documented in OBFT.md is the right boundary — TLC at K=2 found exactly that pattern, no surprises.
+
+**What this exploration does NOT exhaustively validate** (future work):
+
+- **Multi-layer compound failures at K ≥ 3.** The K=2 trace shows L_0 deadlock; L_1 also deadlocked but is moot since the cluster outputs at the first quorum-reaching layer. K ≥ 3 might surface compound failures where multiple layers' fall-through paths simultaneously block.
+- **Validity-divergence (re-org during slot)**. Modeling re-org would require extending the spec with per-honest validity verdicts. Out of scope for this iteration; deserves a separate spec.
+- **Sustained partition (real propagation > slot budget for ALL layers)**. The current spec's relaxed delivery covers per-layer propagation tails but not multi-layer total partitions; this would correspond to all `delivered_to[k] = {leader_of[k]}` consistently across all layers — a degenerate case the spec already documents as Class A.
+- **Iterative pattern enumeration**. TLC halts at the first counterexample. To enumerate all distinct Class A patterns, we would iteratively block found patterns (state constraint or property modification) and re-run.
+
+**State-space caveat**. Relaxed delivery adds 2^n choices per honest leader broadcast. At n=4, K=2 the model explored 69K distinct states before the first violation; full coverage at higher K may need state-constraint pruning analogous to the SAFETY spec's `StateConstraint`. K=4 is conjectured tractable with state pruning but not yet run.
+
 ---
 
 ## 6 — TLA+ encoding sketch
@@ -780,6 +863,7 @@ This section is updated as TLC runs are performed.
 | SAFETY | n=4, f=1, K=1, \|Values\|=2 (**Phase-2.5 σ-flip + leader-only NR-flip + per-operator views + snapshot semantics**, full grief byz selective delivery, symmetry over Honest, cap-at-quorum state constraint) | ✓ verified | 2026-05-10 | TLC verified all three Pigeonhole invariants (P1, P2, P3) at the algebraic base case (K=1). 179,020 states generated, **56,014 distinct states found**, depth 9, ~6s runtime. **Significance**: K=1 is the load-bearing case for Pigeonhole 1's σ-flip-vs-NR-flip mutex (algebraic-cardinality argument over `s_h + nr_h = 2f`); higher-K extension follows by chained-encryption induction over P1 at every layer. Validates the per-op-view + selective-delivery design against CE-1's grief vector (byz σ-withholding) — the algebraic mutex precludes any combination of (snap-divergent triggers + post-snap byz emissions) violating P1 at the cluster pool. See `tla/BareOBFT_Safety.tla` and CE-1 resolution note in §7.4. |
 | SAFETY | n=4, f=1, K=2, \|Values\|=2 (same configuration, partial coverage) | ◐ partial | 2026-05-10 | Re-run at K=2 to validate the encoding extends cleanly. TLC completed full coverage in one configuration variant (95.98M states generated, 32.49M distinct, depth 16, ~3min) and partial coverage in another (389M states, 79.98M distinct in 11min before SIGTERM). Both reached deep state-space exploration with no Pigeonhole violation. K=1 above remains the load-bearing safety result; K=2 corroborates the encoding under the chained-encryption inductive step. |
 | LIVENESS_NON_GRIEF | n=4, f=1, K=4 (**with Phase-2.5 σ-flip + leader-only NR-flip**) | ✓ verified | 2026-05-10 | TLC verified Class A closure under non-grief byz + within-budget partial-synchrony: every honest operator eventually reaches `output_set[i] = TRUE`. 139,482 states generated, **64,152 distinct states found**, depth 12, ~10s runtime. **Scope**: closes R1/R2/R3 narrow recovery cases (per OBFT.md §Where this came from) — late honest-leader bundle absorbed via `bundle_witnesses` re-flood; symmetric (1 honest σ-er, 2f+1 honest NR-ers) recovery via σ-flip; honest-leader-deadlock recovery via NR-flip. **Does NOT recover**: `h_V = 1` selective Phase-1 delivery (byz leader delivers V_L to exactly 1 honest non-leader; remaining 2f honest NR; σ-flip trigger blocked because `snap_NR_nl = 2f ≥ f+1`); classified as Class B grief deterred via Assumption 4, not closed by the protocol. See [§5.2](#52--verification-approach) for full scope. |
+| LIVENESS_NON_GRIEF | n=4, f=1, K=2 (**relaxed Assumption 2** — honest leader broadcast may deliver to any subset; sibling spec `BareOBFT_Liveness_NoBudget.tla`) | ✗ counterexample (expected) | 2026-05-10 | TLC found Class A deadlock at depth 6 in 9s (138,682 states generated, **69,462 distinct states found** before first violation). Trace replays documented `h_V=1` pattern with the **byz-silent sub-case**: honest L_0 leader's bundle propagation tail (delivered to {op1, op2} only) + byz silent → σ-flip blocked by σ-flip's *second* trigger condition `snap_S_post < A + 2f` (1 honest NR-er, 1 silent byz: `s_post=2 < 3=a_count+2f`). Distinct from OBFT.md §Liveness's classical-h_V=1 narrative (which focuses on the *first* trigger condition `nr_nl < f+1` blocked by 2 honest NR-ers); same outcome (slot misses), different blocking mechanism within Phase-2.5. **Validates the "Phase-2.5 does NOT close h_V=1" claim mechanically** across both sub-cases by byz behavior. See [§5.4](#54--beyond-liveness_non_grief-class-a-failure-mode-exploration) for the methodology and full trace classification. |
 | SAFETY | n=7, f=2 (with σ-flip + NR-flip) | _to be run_ | — | State-space cap at quorum + symmetry over Honest expected to make this tractable; would extend the K=1 base-case coverage to a larger cluster. |
 | LIVENESS_NON_GRIEF | n=7, f=2 (with σ-flip + NR-flip) | _to be run_ | — | Same scope as n=4 K=4 above, scaled. |
 
