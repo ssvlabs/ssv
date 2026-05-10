@@ -666,9 +666,9 @@ tla/
 
 **Byzantine partition**: `Byzantine ⊆ Operators` (constant), `Cardinality(Byzantine) = F = (Cardinality(Operators) - 1) / 3`.
 
-**Symmetry reductions** (deferred). Future work: `SYMMETRY Permutations(Honest)` reduces the canonical state count by `|Honest|!` (= 6× at n=4, f=1). Byzantine operators would NOT be permuted (they're distinguished by Byzantine designation). Values would NOT be permuted (Pigeonhole 2's "two distinct V's reach qV" check needs to count per-(layer, V) σ commitments). Symmetry would only be enabled for SAFETY (TLC warns symmetry under liveness checking can miss violations). Currently the v1 baseline runs without symmetry — the K=2, |Values|=2 base case at 262,144 distinct states is small enough that symmetry isn't needed for tractability; it would matter for n=7 / higher-K runs.
+**Symmetry reductions**: `SYMMETRY Permutations(Honest)` reduces the canonical state count by `|Honest|!` (= 6× at n=4, f=1). Byzantine operators are NOT permuted (they're distinguished by Byzantine designation). Values are NOT permuted (Pigeonhole 2's "two distinct V's reach qV" check needs to count per-(layer, V) σ commitments). Symmetry is enabled for L_Bid / L_BidNew SAFETY (where the larger state space makes it necessary for tractability) and disabled for LIVENESS (TLC warns symmetry under liveness checking can miss violations). `BareOBFT_Safety` runs unconstrained at the K=2, |Values|=2 base case — 262,144 distinct states is small enough that symmetry isn't needed.
 
-**State-space cap** (deferred). Future work: `StateConstraint` would bound each pool at its quorum threshold (`Cardinality(SigmaPool(k, v)) ≤ qV` and `Cardinality(NRPool(k)) ≤ qEnc`). Provably safe for SAFETY because the Pigeonhole invariants are stated as "pool size ≥ threshold" predicates, so they're already detectable when a pool first reaches the threshold; states with pool size > threshold add no new safety information. The v1 baseline runs unconstrained; would matter for higher-K / larger cluster runs.
+**State-space cap**: `StateConstraint` bounds each pool at its quorum threshold (`Cardinality(SigmaPool(k, v)) ≤ qV` and `Cardinality(NRPool(k)) ≤ qEnc`). Provably safe for SAFETY because the Pigeonhole invariants are stated as "pool size ≥ threshold" predicates, so they're already detectable when a pool first reaches the threshold; states with pool size > threshold add no new safety information. Applied to L_Bid / L_BidNew SAFETY configs (where the unconstrained state space exceeds practical TLC budget); `BareOBFT_Safety` runs unconstrained at its base case.
 
 ### 6.3 — TLC configuration
 
@@ -677,8 +677,8 @@ For each `(n, f, K)` triple, TLC config specifies:
 - `INVARIANT`: `TypeOK ∧ SAFETY` (Safety specs).
 - `PROPERTY`: `LIVENESS_NON_GRIEF` (Liveness specs).
 - `SPECIFICATION`: `Spec = Init ∧ □[Next]_vars`.
+- `SYMMETRY Symmetry` and `CONSTRAINT StateConstraint`: applied to L_Bid / L_BidNew Safety configs (where state-space dominates); `BareOBFT_Safety.cfg` runs without these — the K=2, |Values|=2 base case at 262K distinct states is tractable unconstrained. See §6.2.
 - `CHECK_DEADLOCK FALSE` (specs naturally terminate; the property of interest is the invariant).
-- **Deferred for v1 baseline**: `SYMMETRY Permutations(Honest)` and `CONSTRAINT StateConstraint` (Safety only) — both unnecessary at the small `n=4, K=2, |Values|=2` config (262K states) but planned for n=7 / higher-K scaling. See §6.2.
 
 Verified state-space sizes (per [§7.1](#71--bare-obft)):
 - bare OBFT Safety, `n=4, f=1, K=2, |Values|=2`: 262,144 distinct states, ~10s.
