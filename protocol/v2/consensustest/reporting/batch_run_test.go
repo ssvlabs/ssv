@@ -113,6 +113,81 @@ func TestRenderBatchHTML_SmokeContent(t *testing.T) {
 	require.Contains(t, body, "</html>", "HTML closes")
 }
 
+// TestRenderBatchCSV_SmokeContent — small batch → BatchRun → RenderCSV.
+// Verifies header columns + per-cell rows + n/a handling.
+func TestRenderBatchCSV_SmokeContent(t *testing.T) {
+	scenarios := []ct.Scenario{}
+	for _, s := range ct.Catalog {
+		if s.Name == "Healthy" || s.Name == "Equivocate_111" || s.Name == "HV1SelectiveDelivery" {
+			scenarios = append(scenarios, s)
+		}
+	}
+	require.Len(t, scenarios, 3)
+
+	report := ct.RunBatch(t, ct.BatchConfig{
+		Iterations: 5,
+		SeedStart:  1,
+		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
+		Scenarios:  scenarios,
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}},
+	})
+	br := reporting.NewBatchRun("CSV smoke", "", report)
+
+	path := t.TempDir() + "/batch.csv"
+	require.NoError(t, reporting.RenderBatchCSV(br, path))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	body := string(data)
+
+	require.Contains(t, body, "Scenario,Protocol,Iterations,SuccessRate", "header")
+	require.Contains(t, body, "DecisionTime_P50_ms,DecisionTime_P90_ms,DecisionTime_P99_ms", "percentile cols")
+	require.Contains(t, body, "Bandwidth_P50_B,Bandwidth_P99_B,Bandwidth_Mean_B", "bandwidth cols")
+	require.Contains(t, body, "Healthy,OBFT,5,1.0000", "Healthy/OBFT 100%% success row")
+	require.Contains(t, body, "Equivocate_111,OBFT,5,0.0000", "Equivocate_111/OBFT 0%% success")
+	// HV1SelectiveDelivery is n/a for QBFT — must emit a row with empty
+	// distribution columns rather than skipping.
+	require.Contains(t, body, "HV1SelectiveDelivery,QBFT,0,", "QBFT n/a cell still in CSV")
+}
+
+// TestRenderBatchMarkdown_SmokeContent — small batch → BatchRun →
+// RenderMarkdown. Verifies three summary tables present.
+func TestRenderBatchMarkdown_SmokeContent(t *testing.T) {
+	scenarios := []ct.Scenario{}
+	for _, s := range ct.Catalog {
+		if s.Name == "Healthy" || s.Name == "PrimaryLeaderSilent" {
+			scenarios = append(scenarios, s)
+		}
+	}
+	require.Len(t, scenarios, 2)
+
+	report := ct.RunBatch(t, ct.BatchConfig{
+		Iterations: 3,
+		SeedStart:  1,
+		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
+		Scenarios:  scenarios,
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}},
+	})
+	br := reporting.NewBatchRun("MD smoke", "Two-scenario markdown smoke", report)
+
+	path := t.TempDir() + "/batch.md"
+	require.NoError(t, reporting.RenderBatchMarkdown(br, path))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	body := string(data)
+
+	require.Contains(t, body, "# MD smoke", "title")
+	require.Contains(t, body, "Two-scenario markdown smoke", "description")
+	require.Contains(t, body, "**Iterations:** 3 per cell", "iteration header")
+	require.Contains(t, body, "## Success rate", "success-rate table")
+	require.Contains(t, body, "## Decision-time P99", "P99 table")
+	require.Contains(t, body, "## Bandwidth median", "bandwidth table")
+	require.Contains(t, body, "| Scenario | OBFT | QBFT |", "matrix header")
+	require.Contains(t, body, "| Healthy |", "Healthy row")
+	require.Contains(t, body, "100% |", "100%% success cell")
+}
+
 // TestNewBatchRun_NotApplicableCell — a cell with Iterations=0 (scenario
 // not applicable to protocol) is preserved in BatchRun and surfaces
 // Applicable(cell)=false.
