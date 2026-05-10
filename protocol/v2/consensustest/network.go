@@ -272,3 +272,107 @@ func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind)
 	}
 	return l.Inner.Delay(rng, from, to, kind)
 }
+
+// CorrelatedLinkDelay models per-pair sustained flakiness — the
+// real-world pattern where one specific link between two operators
+// stays slow for a window of messages (the sender's NIC is hot, the
+// receiver's CPU is loaded, the path between them is congested, etc.)
+// while OTHER links in the cluster behave normally. Distinct from
+// LossyNetwork's network-wide bursts.
+//
+// State machine (per-pair Markov chain over good/bad):
+//   - good: probability a = BadLinkProb / (BurstMessages · (1-BadLinkProb))
+//     of transitioning to bad per call on this link.
+//   - bad:  probability 1/BurstMessages of recovering per call; while
+//     bad, the link's delay is Inner.Delay × BadLinkMultiplier (not
+//     dropped — sustained-slow, not unreachable).
+//
+// Steady-state P(bad) per pair = BadLinkProb. Pairs are independent
+// (each pair's Markov chain is independent of every other pair's).
+// BadLinkMultiplier=1 reduces to Inner; =3 means bad links deliver in
+// 3x the baseline propagation time.
+//
+// CALIBRATE: BadLinkProb from observed fraction of operator pairs that
+// exhibit sustained-slow delivery in SSV mainnet (typical ~5-20% of
+// pairs based on peer-score telemetry). BadLinkMultiplier from the
+// P50-of-bad-pairs / P50-of-good-pairs ratio. BurstMessages from the
+// observed dwell time in bad-pair status (~10-50 messages per typical
+// mesh-churn window).
+//
+// Stateful: per-pair state map with a mutex. CONSTRUCT FRESH PER SIM
+// via NewCorrelatedLinkDelay — sharing across sims would cross-
+// contaminate per-pair state.
+type CorrelatedLinkDelay struct {
+	Inner             NetworkModel
+	BadLinkProb       float64
+	BadLinkMultiplier float64
+	BurstMessages     int
+
+	mu       sync.Mutex
+	linkBad  map[linkKey]bool
+	linkSeen map[linkKey]bool
+}
+
+type linkKey struct {
+	from, to OperatorID
+}
+
+// NewCorrelatedLinkDelay constructs a CorrelatedLinkDelay with fresh
+// per-pair state. Use one per sim to preserve determinism.
+func NewCorrelatedLinkDelay(inner NetworkModel, badLinkProb, badLinkMultiplier float64, burstMessages int) *CorrelatedLinkDelay {
+	return &CorrelatedLinkDelay{
+		Inner:             inner,
+		BadLinkProb:       badLinkProb,
+		BadLinkMultiplier: badLinkMultiplier,
+		BurstMessages:     burstMessages,
+		linkBad:           make(map[linkKey]bool),
+		linkSeen:          make(map[linkKey]bool),
+	}
+}
+
+func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
+	pair := linkKey{from: from, to: to}
+
+	c.mu.Lock()
+	if c.linkBad == nil {
+		c.linkBad = make(map[linkKey]bool)
+		c.linkSeen = make(map[linkKey]bool)
+	}
+	if c.BurstMessages < 1 {
+		c.BurstMessages = 1
+	}
+
+	// Lazy per-pair init at first observation: weighted by steady-state
+	// P(bad) = BadLinkProb.
+	if !c.linkSeen[pair] {
+		if rng.Float64() < c.BadLinkProb {
+			c.linkBad[pair] = true
+		}
+		c.linkSeen[pair] = true
+	}
+
+	// Per-pair Markov step.
+	if !c.linkBad[pair] {
+		// good → bad with prob a.
+		a := c.BadLinkProb / (float64(c.BurstMessages) * (1 - c.BadLinkProb))
+		if c.BadLinkProb >= 1 {
+			a = 1
+		}
+		if rng.Float64() < a {
+			c.linkBad[pair] = true
+		}
+	} else {
+		// bad → good with prob 1/BurstMessages.
+		if rng.Float64() < 1.0/float64(c.BurstMessages) {
+			c.linkBad[pair] = false
+		}
+	}
+	bad := c.linkBad[pair]
+	c.mu.Unlock()
+
+	base := c.Inner.Delay(rng, from, to, kind)
+	if bad {
+		return time.Duration(float64(base) * c.BadLinkMultiplier)
+	}
+	return base
+}

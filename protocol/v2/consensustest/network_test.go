@@ -220,6 +220,94 @@ func TestLossyNetwork_Deterministic(t *testing.T) {
 	require.Equal(t, a, b, "same seed must produce identical loss sequence")
 }
 
+// TestCorrelatedLinkDelay_PerPairFraction — at BadLinkProb=p across
+// many pairs and many calls, the per-pair time-fraction-in-bad-state
+// should average to p. Test sums bad-state observations across all
+// pairs and verifies the fraction matches.
+func TestCorrelatedLinkDelay_PerPairFraction(t *testing.T) {
+	const (
+		badProb       = 0.20
+		badMul        = 3.0
+		burstMessages = 10
+		pairs         = 12 // n=4 cluster has 12 directed pairs (4*3)
+		callsPerPair  = 1000
+		seed          = int64(7)
+		base          = 200 * time.Millisecond
+	)
+
+	model := ct.NewCorrelatedLinkDelay(ct.ConstantDelay{D: base}, badProb, badMul, burstMessages)
+	rng := mrand.New(mrand.NewSource(seed))
+
+	badCount := 0
+	totalCount := 0
+	for call := 0; call < callsPerPair; call++ {
+		for from := ct.OperatorID(1); from <= 4; from++ {
+			for to := ct.OperatorID(1); to <= 4; to++ {
+				if from == to {
+					continue
+				}
+				d := model.Delay(rng, from, to, ct.KindCommit)
+				if d > base { // bad-state inflates delay above base
+					badCount++
+				}
+				totalCount++
+			}
+		}
+	}
+	_ = pairs
+	observedFrac := float64(badCount) / float64(totalCount)
+	// Tolerance: per-pair Markov autocorrelation reduces effective N by
+	// ~BurstMessages per pair; pooling across 12 pairs and 1000 calls
+	// = effective ~1200 samples. Binomial 99% CI at p=0.2 is ±0.030.
+	require.InDeltaf(t, badProb, observedFrac, 0.04,
+		"observed bad-state fraction %.4f vs target %.4f (calls=%d pairs=%d)",
+		observedFrac, badProb, callsPerPair, 12)
+}
+
+// TestCorrelatedLinkDelay_MultiplierApplied — when a link is bad, the
+// observed delay matches base × BadLinkMultiplier. When good, matches
+// base. (Sanity test on the per-call branch logic.)
+func TestCorrelatedLinkDelay_MultiplierApplied(t *testing.T) {
+	const base = 100 * time.Millisecond
+	model := ct.NewCorrelatedLinkDelay(ct.ConstantDelay{D: base}, 0.5, 4.0, 20)
+	rng := mrand.New(mrand.NewSource(11))
+
+	good, bad := 0, 0
+	totalGood, totalBad := time.Duration(0), time.Duration(0)
+	for i := 0; i < 1000; i++ {
+		d := model.Delay(rng, 1, 2, ct.KindCommit)
+		switch d {
+		case base:
+			good++
+			totalGood += d
+		case 4 * base: // multiplier=4 → bad delay = 400ms
+			bad++
+			totalBad += d
+		default:
+			t.Fatalf("unexpected delay %v (base=%v, expected base or 4·base)", d, base)
+		}
+	}
+	require.Greater(t, good, 0, "expected at least some good-link draws")
+	require.Greater(t, bad, 0, "expected at least some bad-link draws (BadLinkProb=0.5)")
+}
+
+// TestCorrelatedLinkDelay_Deterministic — same seed + fresh model
+// produces identical delay sequence.
+func TestCorrelatedLinkDelay_Deterministic(t *testing.T) {
+	draws := func(seed int64) []time.Duration {
+		model := ct.NewCorrelatedLinkDelay(ct.ConstantDelay{D: 100 * time.Millisecond}, 0.3, 3.0, 10)
+		rng := mrand.New(mrand.NewSource(seed))
+		out := make([]time.Duration, 500)
+		for i := range out {
+			out[i] = model.Delay(rng, ct.OperatorID(i%4+1), ct.OperatorID((i+1)%4+1), ct.KindCommit)
+		}
+		return out
+	}
+	a := draws(55)
+	b := draws(55)
+	require.Equal(t, a, b, "same seed must produce identical delay sequence")
+}
+
 // formatFloat — fixed-2-decimal float format for subtest names. Uses
 // strconv with explicit precision for stable, deterministic strings.
 func formatFloat(f float64) string {
