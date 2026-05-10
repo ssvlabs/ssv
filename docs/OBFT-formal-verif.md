@@ -653,7 +653,7 @@ Expected result (per the OBFT spec's Class A list, [OBFT.md §Liveness](OBFT.md#
 
 **What the new Phase-2.5 design (σ-flip + leader-only NR-flip + snapshots + per-operator views + leader-bundle re-flood) DOES recover under non-grief:**
 
-- Late honest-leader bundles arriving at `Δ_1 + δ` with `δ < Δ_2 − Δ_1`: re-flooded via `bundle_witnesses` in the first peer's `KindCommit` so the bundle is cluster-wide visible by `T_commit + Δ_2`; non-retainers' snapshots include `V_L` and `σ_L^V` at trigger time.
+- Late honest-leader bundles arriving at `Δ_1 + δ` with `δ < Δ_2 − Δ_1`: re-flooded via `bundle_witnesses` in the first peer's `KindCommit` so the bundle is cluster-wide visible by `T_commit + Δ_2`; the snapshots of operators that didn't retain the original include `V_L` and `σ_L^V` at trigger time.
 - Symmetric "1 honest σ-er, 2f+1 honest NR-ers" recoveries via σ-flip: any honest non-leader who NR'd at this layer can σ-flip from their snapshot if `snap_NR_nl < f+1` AND `snap_S_post ≥ A + 2f`. (R1 / R3 narrow cases per OBFT.md §Where this came from.)
 - Symmetric "honest leader observes deadlock" recovery via NR-flip: honest leader who σ'd may add NR partial if `snap_S_nl < f` AND `snap_NR_nl ≥ A + 2f` (R2 narrow case).
 
@@ -742,7 +742,7 @@ NR-flip from op1 (leader, σ-er) is blocked by `s_nl < f` (= `1 < 1` is FALSE).
 
 | Sub-case | byz action | σ-flip blocking condition |
 |---|---|---|
-| **Classical** | byz emits NR (mimicking honest non-retainer) | `nr_nl = 2` — first condition fails |
+| **Classical** | byz emits NR (mimicking honest who didn't retain) | `nr_nl = 2` — first condition fails |
 | **byz-silent** ★ | byz silent (no `KindCommit` emitted) | `s_post = 2 < a_count + 2f = 3` — second condition fails |
 
 ★ The case TLC surfaced.
