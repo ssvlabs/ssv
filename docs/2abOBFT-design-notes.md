@@ -19,7 +19,7 @@
 | Convergence mechanism | Per-operator local view at `T_commit` based on retained V's | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
 | EKM coordination | Single signing event per (slot, layer) per operator (V-share + IBE-share) | Same — single signing event per (slot, layer) per operator at Phase-2b; verdict envelope is op-identity-signed (not threshold) and does not consume EKM slashing-protection |
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
-| h_V=1 selective-delivery deadlock | Partially closed (withhold-then-fake-σ — closed as a side-effect of simplification-driven Defer removal, not for attack closure; see [OBFT §Where this came from](OBFT.md#where-this-came-from)); selective Phase-1 delivery still slot-misses | Recovered structurally |
+| h_V=1 selective-delivery deadlock | Class B grief, not recovered in-protocol — the new Phase-2.5 σ-flip / NR-flip preserves safety but doesn't close h_V=1 at f=1, n=4 (σ-flip's `snap_NR_nl < f+1` trigger blocked when 2 honest NR; leader-only NR-flip does not apply when leader is byz). Deterred via Assumption 4 across slots. | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
 | Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 500ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 1100ms post-T_commit (+600ms for Phase-2a window + Δ_3 difference) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
@@ -49,7 +49,7 @@ Leader signs Phase-1 σ_V (same as OBFT base). Phase-2a is bundle re-flood + ver
 
 Leader broadcasts only `(V_{L_k}, σ_{L_k}^{op}(envelope))` — no σ^V partial in Phase-1. Phase-2a is bundle re-flood + verdict broadcast. Phase-2b: every operator (including the leader) σ-or-NR-emits based on Phase-2a verdict observations.
 
-- **Pros**: leader is not locked at Phase-1; their verdict is re-evaluated at Phase-2b time. Validity-divergence recovers at all `n`/`f` because the leader can join the NR-pool when their verdict flips. Equivocation σ-locked split, h_V=1 selective-delivery, late-deepest-layer-leader-broadcast — all recover structurally. Mesh-flakiness mitigates because Phase-2a's window absorbs brief observability outages.
+- **Pros**: leader is not locked at Phase-1; their verdict is re-evaluated at Phase-2b time. Validity-divergence recovers at all `n`/`f` because the leader can join the NR-pool when their verdict flips. Equivocation σ-locked split, h_V=1 selective-delivery, late-deepest-layer-leader-broadcast — all recover structurally via the convergence rule (broader than OBFT's narrow Phase-2.5 σ-flip / NR-flip R1/R2/R3 recovery scope; in particular OBFT does NOT close h_V=1 in the new design — see [OBFT.md §Failure modes](OBFT.md#failure-modes)). Mesh-flakiness mitigates because Phase-2a's window absorbs brief observability outages.
 - **Cons**: marginal-receive cases (`h_V` = 2 at f=1 n=4) lose the Phase-1-σ_V head-start. They no longer σ-quorum at L_0 directly; instead they fall through to L_1. At K = n = 4 this costs one local-decryption iteration in Phase 3 — **no extra RTT** since Phase 3 walks layers via local decryption, not RTT-per-layer. Slot still succeeds.
 
 **Why Variant C was chosen.** Recovering the Class A validity-divergence deadlock requires that the leader not be pre-locked at Phase 1 — without a Phase-1 σ_L^V, Phase-2b's σ-emit can land on the post-observation stabilized V regardless of the leader's at-fetch verdict. Variants A and B keep Phase-1 σ_V and consequently fail to recover validity-divergence at the boundary; only Variant C does. The marginal-`h_V` cost is acceptable because L_0 → L_1 fall-through is cheap (no extra RTT), and the recovery scope is genuinely wider.
@@ -154,7 +154,7 @@ A symmetric pattern — D delivers V to {A}, V' to {B, C} — has the same shape
 
 ### h_V = 1 selective-delivery (Class B in OBFT)
 
-Already covered above under "Marginal-receive cases / h_V = 1". Recovers.
+Already covered above under "Marginal-receive cases / h_V = 1". Variant C recovers structurally via the convergence rule. **Bare OBFT does NOT close this case in the new Phase-2.5 design** — σ-flip's trigger requires `snap_NR_nl < f+1`, but at h_V=1 each honest non-leader sees `snap_NR_nl = 2f` from their snapshot (under within-budget propagation, all honest NRs are visible cluster-wide), blocking σ-flip. Leader-only NR-flip cannot apply when the leader is byzantine (the typical h_V=1 trigger). Bare OBFT classifies h_V=1 selective Phase-1 delivery as Class B grief deterred via Assumption 4 rather than protocol-closed; see [OBFT.md §Failure modes](OBFT.md#failure-modes) and [OBFT-formal-verif.md §5.2](OBFT-formal-verif.md#52--verification-approach).
 
 ### Validity-divergence (Class A in OBFT)
 
@@ -471,14 +471,14 @@ The implementation is broken into phases that can be staged across PRs:
 | Equivocation 2-1 split, byz σ-cooperates | Succeeds at L_0 (Phase-1 σ_V locked + Phase-2 σ) | Succeeds at L_0 (tie) |
 | Equivocation 2-1 split, byz silent | Succeeds at L_0 (Phase-1 σ_V on the wire alone is enough) | Falls through to L_1 (one extra layer's latency, still succeeds) |
 | Equivocation 2-1 split, byz defects (verdict σV + action NR) | Succeeds at L_0 (Phase-1 σ_V cryptographically locked; can't defect) | **Slot misses (regression)** — Rule-6 evidence on the wire |
-| h_V=1 selective-delivery deadlock | Class B (slashable, slot-miss) | Recovered (verdict-quorum-short → fall-through) |
+| h_V=1 selective-delivery deadlock | Class B grief (slot-miss); not recovered in-protocol — the new Phase-2.5 σ-flip / NR-flip preserves safety but does not close h_V=1 at f=1, n=4. Deterred via Assumption 4 across slots. | Recovered (verdict-quorum-short → fall-through) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) |
 | Mesh-flakiness coordinated with byz σ-refusal | Class B (slashable, slot-miss) | Mitigated (Phase-2a window absorbs jitter) |
 | EKM complexity | Per-(slot, layer, side) coordinator with cross-keypair atomicity | Same shape; one fewer concern (no Phase-1 σ_V to coordinate with Phase-2 σ) |
 | Wire format | Phase1Bundle, KindCommit, KindCertificate | + KindVerdict, KindOnion2b, KindNR2b (Phase-2b commit splits back into σ-side / NR-side because Phase-2a observation must complete before σ commitment) |
 | Slashing-evidence rules | 5 | 6 (Rule 6: verdict-vs-action equivocation, weakly slashable) |
 | Submission headroom (Config A) | 2.0s | 1.3s |
-| Bandwidth (healthy, n=4, K=4) | ~28 KB (includes σ_L^V witness section ≈ +1.5 KB) | ~30 KB (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness) |
+| Bandwidth (healthy, n=4, K=4) | Small `V` (attestations ~100 B): ~28 KB (includes `bundle_witnesses` re-flood ≈ +1.5 KB at K=4 n=4); blinded-block `V` (proposer): per-op ~88 KB typical / ~228 KB worst case — see [OBFT.md §Application](OBFT.md#application-ssv-ethereum-proposer-duty) | Small `V`: ~30 KB (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness); blinded-block `V`: 2abOBFT does not re-flood full bundles |
 
 ## What 2abOBFT does NOT close
 
