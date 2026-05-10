@@ -13,9 +13,16 @@ import (
 
 // TestBandwidth_Healthy_OBFT verifies the OBFT adapter populates
 // Outcome.Bandwidth with non-zero per-kind / per-operator counts on a
-// healthy slot. Asserts loose upper bounds (~ ≤ 30 KB total at n=4) so the
-// test stays robust to message-format evolution while catching gross
-// regressions.
+// healthy slot. Asserts per-kind cluster-wide bands (loose ±25% around
+// observed values at BTT=200, K=4, n=4) so single-component regressions
+// surface here — a 50% growth in any kind would fail the test, while
+// format-evolution churn under 25% stays green.
+//
+// Spec referent: OBFT.md §Properties summary quotes ~28 KB cluster-wide
+// at K=4 n=4. The sim's stub-BLS / stub-IBE numbers are lower (no SSV
+// outer auth envelope, simpler IBE overhead) — we band against the sim's
+// own expected sizes computed in obft/sizes.go, not the spec's
+// production-envelope quote.
 func TestBandwidth_Healthy_OBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := obftadapter.Protocol{}.Run(cfg)
@@ -34,7 +41,45 @@ func TestBandwidth_Healthy_OBFT(t *testing.T) {
 	require.Greater(t, out.Bandwidth.PerKindBytes["Certificate"], int64(0),
 		"healthy OBFT should dispatch cert gossip after reconstruction")
 
+	// Per-kind bands (cluster-wide, sim observed at BTT=200 K=4 n=4 stub
+	// crypto; loose ±25% so message-format evolution stays green within a
+	// quarter without false positives, but single-component 50% bloats
+	// fail). The bands check the bandwidth shape, not just totals — a
+	// regression that doubles witness size would shift Commit out of band.
+	type bandCheck struct {
+		kind string
+		min  int64
+		max  int64
+	}
+	bands := []bandCheck{
+		// LeaderBroadcast: K=4 leaders × (N-1)=3 recipients × ~163 B body
+		// ≈ 1956 B. Stub Phase-1 bundle = ClusterID(32) + OpID(8) + Height(8)
+		// + Layer(4) + V(~15) + SigmaV(96) = 163 B.
+		{"LeaderBroadcast", 1500, 2500},
+		// Commit: N=4 ops × (N-1)=3 recipients × ~1040 B body ≈ 12500 B.
+		// Per-commit body: base(48) + K=4 onion entries + K=4 witnesses
+		// (145 B each = 580 B). Onion: L_0 plaintext (~111 B) + 3×IBE-wrapped
+		// layers (~159 B each) ≈ 588 B. Total body ~1216 B; cluster ~14.6 KB.
+		// Observed sim ~12.5 KB (some commits omit own-leader-layer onion
+		// entries; see phase2.go own-leader skip).
+		{"Commit", 10000, 15000},
+		// Certificate: N=4 ops × (N-1)=3 recipients × ~151 B cert body
+		// ≈ 1812 B. Stub cert = ClusterID(32) + Height(8) + V(~15) + Sig(96).
+		{"Certificate", 1400, 2400},
+	}
+	for _, b := range bands {
+		got := out.Bandwidth.PerKindBytes[b.kind]
+		require.GreaterOrEqualf(t, got, b.min,
+			"%s bandwidth %d B below expected min %d B (regression?); summary: %s",
+			b.kind, got, b.min, out.Bandwidth.SummaryLine())
+		require.LessOrEqualf(t, got, b.max,
+			"%s bandwidth %d B above expected max %d B (regression?); summary: %s",
+			b.kind, got, b.max, out.Bandwidth.SummaryLine())
+	}
+
 	// Per-operator: every op both sends and receives in healthy round.
+	// Per-op average outgoing should be ~total/N = ~4 KB at n=4 (every op
+	// emits LeaderBroadcast + Commit + Cert at K=N convention).
 	for op, oo := range out.PerOp {
 		require.Greaterf(t, oo.BandwidthOut, int64(0),
 			"op=%d should send bytes in healthy round", op)
