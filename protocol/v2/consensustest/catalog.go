@@ -265,10 +265,14 @@ var scenarioValidityDivergenceAlgebraicLimit = Scenario{
 		// OBFT: σ-pool=2f < qV=2f+1; NR-pool=f+1 < qEnc=2f+1; chained
 		// decryption blocked → slot misses (algebraic limit).
 		"OBFT": ExpectMiss,
-		// QBFT: depends on round-2 fresh V landing on a stable head;
-		// outcome depends on the host's behavior across rounds. Acceptable
-		// as success or miss.
-		"QBFT": ExpectSuccessOrMiss,
+		// QBFT: R1 PREPARE pool insufficient (host-NV non-leaders don't
+		// PREPARE); R1 timeout; R2 leader proposes fresh V which validates
+		// at layer 1 (host-NV is layer-0-scoped); decides at R2. Deterministic
+		// at canonical ConstantDelay across seeds (verified at 10 seeds during
+		// task 4.2). Jittered networks shift the timing tail and ~30% of
+		// seeds miss the relay deadline — those runs surface via sweep tests
+		// that don't assert per-cell Match.
+		"QBFT": ExpectSuccessFallThrough,
 	},
 	Note: "BFT-comparison.md Table 3 'Validity-divergence 2-2 split: ✗ algebraic limit'. Generalized to N-2f NV ops at any n; at f=1, n=4 this is the canonical 2-2 split (op3, op4 NV).",
 }
