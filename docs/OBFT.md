@@ -556,7 +556,7 @@ The arguments above apply symmetrically to all K layers. **None of the proofs de
 >
 > **Practical causes of (b) failing:**
 > - Late leader broadcast (local fetch overran, slow disk, slow MEV-relay query)
-> - Phase-1 mesh propagation tail past `B_k` (peer-score pruning, mesh churn, network spike)
+> - Phase-1 mesh propagation tail past `B_k` (peer-score pruning, mesh churn, network spike), use sufficient [B_k <-> T_commit] buffer (eg. 2 BTT) to reduce the probability of these events
 > - Clock skew beyond `δ` (operators read `T_commit` differently → effectively further propagation tail at peers on a different clock)
 >
 > Deployments with mesh-flakiness or honest leaders prone to processing tails should expect proportionally higher slot-miss rates from (b) failing.
