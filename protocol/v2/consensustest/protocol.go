@@ -136,6 +136,16 @@ func DefaultK(n int) int { return n }
 // MinK returns the BFT-liveness K floor for cluster size n: max(3, f+2)
 // where f = (n-1)/3. Below this floor the cluster has no late-leader
 // resilience guarantee.
+//
+// Policy note: OBFT.md §Setting / "Two distinct K bounds" identifies
+// K ≥ f+1 as the BFT-liveness minimum but K ≥ f+2 as the late-leader-
+// resilience recommended minimum (so a single late-broadcasting honest
+// leader doesn't foreclose the slot via the deepest-layer NR-lock
+// pathology). The framework enforces the recommended floor (f+2),
+// excluding the K=f+1 boundary pathology from the test matrix by
+// construction. Deployments running below this floor (not recommended
+// per spec) would surface §Failure modes / "Late deepest-layer leader
+// broadcast" as a Class A miss vector.
 func MinK(n int) int {
 	f := (n - 1) / 3
 	k := f + 2
