@@ -426,7 +426,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
   **OBFTR's R-round absorption window** = `T_accept_max_R − T_broadcast_max_1`:
   - Per-round absorption (single round, ignoring cross-round retention): `Δ_2 + 1 BTT`. Concrete: ~`3 BTT` ≈ 600ms at Config A with recommended `Δ_2 = 2 BTT`.
   - Cross-round retention extends absorption by `(R − 1) · (Δ_2 + Δ_2.5 + Δ_3 + Δ_reflood)` (each additional round adds its own per-round-window worth of inter-round time before its acceptance horizon fires).
-  - At R=2 Config A with recommended Δ_2: total absorption ≈ `7 BTT + Δ_3` ≈ 1500ms — roughly 2.5× a single round's window.
+  - At R=2 Config A with recommended Δ_2: total absorption ≈ `7 BTT + Δ_3` ≈ 1450ms — roughly 2.5× a single round's window.
 
   Per-round Δ_2 is sized to `1 BTT` (KindCommit propagation budget); the multi-round absorption advantage of OBFTR vs single-round OBFT comes from per-round retry with new leaders, not from within-round Δ_2 widening. Each round commits at `T_commit_r` based on observed bundles; late bundles from round r naturally propagate via gossipsub before round r+1's `T_commit_{r+1}`.
 
@@ -685,7 +685,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 |---|---|
 | Safety (no contradictory outputs) | Yes — cryptographic via `qEnc = qV = 2f+1` + EKM-enforced per-operator commitments, holds against offline-aggregating byzantine within the f-bound. Honest-majority cryptographic, not 100% cryptographic — see [Implications of safety being honest-majority cryptographic](#implications-of-safety-being-honest-majority-cryptographic-not-100-cryptographic). Same trust posture as QBFT. |
 | Validity (output ∈ proposed values, application-valid) | Yes, conditional on host-application precondition (assumption 3) |
-| Termination (output guaranteed) | Conditional. **One-liner: consensus expected to complete by `slot_start + 3.10s` at Config A R=2 (BTT = 200ms, K = 3, recommended Δ_2 = 2 BTT per round), with submission slack to `slot_start + 4.00s` for relay submit; under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation between leader broadcast and any honest first-observation ≤ R-round absorption window `~7 BTT + Δ_3` ≈ 1500ms (lower at narrower per-round Δ_2; see §Trust model), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Configurable R lets operators tune termination guarantee per duty's deadline budget. |
+| Termination (output guaranteed) | Conditional. **One-liner: consensus expected to complete by `slot_start + 3.00s` at Config A R=2 (BTT = 200ms, K = 3, recommended Δ_2 = 2 BTT per round), with submission slack to `slot_start + 4.00s` for relay submit; under conditions: (a) ≤ f operators byzantine/offline, (b) real propagation between leader broadcast and any honest first-observation ≤ R-round absorption window `~7 BTT + Δ_3` ≈ 1450ms (lower at narrower per-round Δ_2; see §Trust model), (c) host validity unanimous at decision time (assumption 3), (d) `K ≥ 3` (late-leader resilience).** Configurable R lets operators tune termination guarantee per duty's deadline budget. |
 | Equivocation detection | Yes — leaders sign candidates over a structured envelope; conflicting signed candidates form self-contained slashable evidence |
 | Byzantine-leader-grief resistance | **Partial under non-adversarial byzantine; substantially weaker against adversarial byz that deliberately engineers grief patterns.** Closed under partial synchrony for incidental selective-delivery / late-delivery via leader-σ-V-in-Phase-1 + gossipsub re-flooding + R-round retry. Recovery via "natural" σ-quorum patterns (leader's σ_L^V completes a 2-of-3-honest pool) only fires when byz isn't actively timing deliveries. **Adversarial byzantine reliably engineers slot-miss when L_0**: σ-locked split equivocation (1-1-1, 1-1-NR-C, etc.) and h_V=1 selective-Phase-1-delivery deadlocks. At f=1 n=4 with uniform leader rotation, an adversarial byz primary can deterministically grief ~25% of slots (whenever they're L_0). **R-rounds do not help with these patterns** — they're R-invariant (more rounds give byz more timing flexibility without strengthening cluster recovery; see §Failure modes / h_V = 1). The rational-byzantine deterrent (assumption 4) is the only protocol-level defense, and it works *across slots in expectation*, not per-slot. |
 | Mesh-flakiness tolerance (honest operator with poor gossipsub mesh visibility) | **Limited.** A mesh-flaky honest operator who fails to observe peer σ-emits within the NR-decision window can NR-emit incorrectly, becoming a byzantine-equivalent f-budget consumer for that slot. Combined with byz σ-refusal, this creates a deadlock that the protocol cannot recover from within the slot. **R-rounds do not help** — cross-round NR-lock binds the early NR-emit across all R rounds. The recommended `Δ_2 ≥ 2 BTT` absorbs typical mesh-jitter (up to one full `1 BTT` of additional slack on top of P99 propagation) but doesn't cover wider mesh outliers. QBFT's round-reset semantics handle this case better (a flaky operator's bad PREPARE doesn't lock them across rounds); OBFTR enforces cross-phase exclusivity per slot and locks across rounds via cross-round exclusivity. |
@@ -729,7 +729,7 @@ For fair comparison across configurations, all setups target completion within t
 
 For the QBFT comparison at recommended sizing (2 BTT per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)), QBFT R1 healthy = 8 BTT = 1.6s. Under SSV's production RT = 2s, R1+R2 = 2s + 1.6s = 3.6s — fits at BFT_start ≤ 0.4s but not at the BFT_start = 1.2s anchor used in this section. Even QBFT-optimal (RT = 6 BTT = 1.2s) gives R1+R2 = 2.8s, which overshoots the 2.7s budget at this anchor by 100ms. **QBFT(R=2) does not fit at this anchor under recommended sizing**; the scenario below shows the timing as if it did, for structural comparison.
 
-Common parameters: **P99 = 150ms (uniform across rounds), δ = 50ms, n = 4, f = 1**, **`BTT = 200ms`**. Per-round window minimums: `Δ_2.5 ≥ 1 BTT = 200ms`, `Δ_3 ≈ 100ms` (propagation-independent — Δ_2.5 absorbs end-of-Phase-2 NR-partial propagation, so Δ_3 is purely local reconstruction processing), `Δ_reflood ≥ 1 BTT = 200ms`. `Δ_2` is sized per-config to absorb each setup's full budget. **Leader broadcast deadline** for round 1 is `T_broadcast_max_1 = T_commit_1 − 2 BTT`; the 2 BTT slack between leader broadcast and `T_commit_1` is for propagation to all honest before round 1's σ-emit. **Receiver acceptance horizon** per round is `T_accept_max_r = T_commit_r + Δ_2 − 1 BTT` — accepts within-round late re-flood up through Phase 2's σ-emit-propagation feasibility limit.
+Common parameters: **P99 = 150ms (uniform across rounds), δ = 50ms, n = 4, f = 1**, **`BTT = 200ms`**. Per-round window minimums: `Δ_2.5 ≥ 1 BTT = 200ms`, `Δ_3 ≈ 50ms` (propagation-independent — Δ_2.5 absorbs end-of-Phase-2 NR-partial propagation, so Δ_3 is purely local reconstruction processing), `Δ_reflood ≥ 1 BTT = 200ms`. `Δ_2` is sized per-config to absorb each setup's full budget. **Leader broadcast deadline** for round 1 is `T_broadcast_max_1 = T_commit_1 − 2 BTT`; the 2 BTT slack between leader broadcast and `T_commit_1` is for propagation to all honest before round 1's σ-emit. **Receiver acceptance horizon** per round is `T_accept_max_r = T_commit_r + Δ_2 − 1 BTT` — accepts within-round late re-flood up through Phase 2's σ-emit-propagation feasibility limit.
 
 **MEV-fetch-budget note.** The `T_broadcast_max_1 = T_commit_1 − 2 BTT` deadline is **400ms tighter** than the naive "Phase 1 fetch occupies 0–T_commit" reading. The 400ms gap is propagation slack between leader broadcast and all-honest first-observation under worst-case partial-synchrony; it is not extra fetch budget. Deployments comparing OBFTR to other protocols' "fetch ends at T_commit" framing should account for this. The cost is unavoidable: it is the propagation budget that makes the leader's broadcast reliably observable by all honest before `T_commit_1`.
 
@@ -745,8 +745,8 @@ R=1 uses the full 2.0s budget for one extended round. With per-round single-emis
 | Phase-1 broadcast slack | 400ms | slot_start + 1.60s | `T_commit_1 = T_broadcast_max_1 + 2 BTT = 1.60s` (recommended sizing) |
 | Round 1 Phase 2 | 400ms | slot_start + 2.00s | Δ_2 = 2 BTT recommended; KindCommit propagation |
 | Round 1 Phase 2.5 | 200ms | slot_start + 2.20s | L_C signaling |
-| Round 1 Phase 3 | 100ms | slot_start + 2.30s | propagation-independent |
-| Submission | 1700ms | slot_start + 4.00s | generous submission headroom |
+| Round 1 Phase 3 | 50ms | slot_start + 2.25s | propagation-independent |
+| Submission | 1750ms | slot_start + 4.00s | generous submission headroom |
 
 **Recovery scope.** K-layer fall-through within the single round (silent leaders absorbed via NR-quorum chain in Phase 3 reconstruction walk). At R=1, no within-round partition recovery — bundles arriving past `T_commit_1` at any honest receiver are not counted; the cluster relies on K-layer fall-through to a deeper backup whose bundle did propagate in time. For partition tolerance use R≥2, which retries with new leaders and lets late bundles be picked up in round 2.
 
@@ -764,12 +764,12 @@ R=2 splits the 2.0s budget into two rounds with new leaders broadcasting in roun
 | Round 1 broadcast slack | 400ms | slot_start + 1.50s | `T_commit_1 = T_broadcast_max_1 + 2 BTT = 1.50s` (recommended sizing) |
 | Round 1 Phase 2 | 400ms | slot_start + 1.90s | Δ_2 = 2 BTT recommended; KindCommit_1 propagation |
 | Round 1 Phase 2.5 | 200ms | slot_start + 2.10s | L_C signaling |
-| Round 1 Phase 3 | 100ms | slot_start + 2.20s | reconstruction |
-| Round 2 re-flood | 200ms | slot_start + 2.40s | `T_commit_2 = 2.40s`; re-flood retained R1 bundles via gossipsub (1 BTT — no fresh fetch in R2) |
-| Round 2 Phase 2 | 400ms | slot_start + 2.80s | Δ_2 = 2 BTT recommended; KindCommit_2 propagation |
-| Round 2 Phase 2.5 | 200ms | slot_start + 3.00s | L_C signaling |
-| Round 2 Phase 3 | 100ms | slot_start + 3.10s | end of round R; consensus expected complete |
-| Submission | 900ms | slot_start + 4.00s | tighter than R=1 — round-2 retry consumes ~900ms of slot budget |
+| Round 1 Phase 3 | 50ms | slot_start + 2.15s | reconstruction |
+| Round 2 re-flood | 200ms | slot_start + 2.35s | `T_commit_2 = 2.35s`; re-flood retained R1 bundles via gossipsub (1 BTT — no fresh fetch in R2) |
+| Round 2 Phase 2 | 400ms | slot_start + 2.75s | Δ_2 = 2 BTT recommended; KindCommit_2 propagation |
+| Round 2 Phase 2.5 | 200ms | slot_start + 2.95s | L_C signaling |
+| Round 2 Phase 3 | 50ms | slot_start + 3.00s | end of round R; consensus expected complete |
+| Submission | 1000ms | slot_start + 4.00s | tighter than R=1 — round-2 retry consumes ~1000ms of slot budget |
 
 **Recovery scope.** K-layer fall-through within each round + per-round retry. Bundles late at round-1's `T_commit_1` may be picked up in round 2 if they propagate by `T_commit_2`. Per-round commitments are independent (no cross-round σ-or-NR exclusivity), so an operator who NR-emitted in round 1 may σ-emit in round 2 if the leader's bundle finally propagates.
 
@@ -800,10 +800,10 @@ QBFT round structure: PROPOSE → PREPARE → COMMIT → post-consensus partial-
 
 | Setup | Final round ends | Submission headroom | V-delivery absorption | Recovery scope | Bandwidth (healthy / failure) |
 |---|---|---|---|---|---|
-| OBFTR(K=3, R=1) | 2.30s | 1.70s | ~2.0s (continuous mesh) | 3-layer fall-through; soft partition absorption via long Phase 2 | ~25 KB / n/a |
-| OBFTR(K=4, R=1) | 2.30s | 1.70s | ~2.0s (continuous mesh) | 4-layer fall-through; soft partition absorption | ~28 KB / n/a |
-| OBFTR(K=3, R=2) ★ | 3.10s | 0.90s | ~2.0s (across rounds + explicit re-flood) | 3-layer fall-through + explicit re-flood retry; robust against mesh failures | ~25 KB / ~47 KB |
-| OBFTR(K=4, R=2) | 3.10s | 0.90s | ~2.0s (across rounds + explicit re-flood) | 4-layer fall-through + explicit re-flood retry | ~28 KB / ~52 KB |
+| OBFTR(K=3, R=1) | 2.25s | 1.75s | ~2.0s (continuous mesh) | 3-layer fall-through; soft partition absorption via long Phase 2 | ~25 KB / n/a |
+| OBFTR(K=4, R=1) | 2.25s | 1.75s | ~2.0s (continuous mesh) | 4-layer fall-through; soft partition absorption | ~28 KB / n/a |
+| OBFTR(K=3, R=2) ★ | 3.00s | 1.00s | ~2.0s (across rounds + explicit re-flood) | 3-layer fall-through + explicit re-flood retry; robust against mesh failures | ~25 KB / ~47 KB |
+| OBFTR(K=4, R=2) | 3.00s | 1.00s | ~2.0s (across rounds + explicit re-flood) | 4-layer fall-through + explicit re-flood retry | ~28 KB / ~52 KB |
 | QBFT(R=2) at recommended sizing | R2 doesn't fit at start = 1.2s | n/a | n/a (PROPOSE-driven) | Round-change with new V — covers view-divergence (validity, equivocation) when budget admits | ~14 KB / ~28 KB |
 
 ★ = recommended default.
@@ -928,7 +928,7 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 | EKM persistent partial-sig cache | Required (cached σ partial must survive operator restart for cross-round re-emission) | **Not required** |
 | EKM deterministic re-signing fallback | Required | **Not required** |
 | Partial-synchrony envelope | `R · P99` (e.g., `2·P99` at R=2) | `P99` (single round) |
-| Slot budget at K=4, BTT=200ms | Ends at slot_start + 3.10s (with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 2.00s at earliest T_commit; OBFT typically anchors T_commit later (3.40s at Config A) to redirect the saved budget into MEV-fetch — consensus then ends at slot_start + 3.90s. See [OBFT.md §Timing budget](OBFT.md#timing-budget). Saves ~1.1s of consensus runway either way. |
+| Slot budget at K=4, BTT=200ms | Ends at slot_start + 3.00s (with recommended `Δ_2 = 2 BTT` per round) | Ends at slot_start + 2.00s at earliest T_commit; OBFT typically anchors T_commit later (3.40s at Config A) to redirect the saved budget into MEV-fetch — consensus then ends at slot_start + 3.85s. See [OBFT.md §Timing budget](OBFT.md#timing-budget). Saves ~1.1s of consensus runway either way. |
 | Submission headroom (4s relay cutoff) | 0.90s | 2.00s |
 | Bandwidth (healthy, n=4, K=4) | ~28 KB across 2 emissions per round (includes σ_L^V witness section ≈ +2.3 KB per round) | ~28 KB across 1 emission (includes σ_L^V witness section ≈ +2.3 KB at K=4 n=4) |
 | Bandwidth (worst case at R=2 with round-1 failure) | ~52 KB | n/a (no round 2) |

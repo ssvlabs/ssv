@@ -16,7 +16,7 @@ The comparison is structured along three axes:
 - **Clock skew δ = 50ms**, included in `BTT` (see below).
 - **Time unit `BTT` (broadcast trip time)** = `P99 + δ` — one one-way broadcast trip under partial-synchrony assumptions. `P99` is the propagation budget at the deployment's chosen tail percentile (P99, P999, P9999, etc. — deployment knob). Operating points used in tables below: `BTT = 200ms` (P99 ≈ 150ms + δ ≈ 50ms; production-typical), `BTT = 600ms` (P99 ≈ 550ms + δ; degraded), `BTT = 1000ms` (P99 ≈ 950ms + δ; severely degraded). Tables and prose key on `BTT` end-to-end.
 - **Relay submission tail**: 100ms reserved for cert broadcast + relay submit after consensus completes (matches OBFT.md's `header_submit_headroom` — see [docs/OBFT.md / Operating point](OBFT.md#timing-budget)). Effective BFT budget = 4000ms − BFT_start − 100ms.
-- **Per-protocol T_commit anchors differ.** Each protocol back-derives `T_commit` from `T_relay_cutoff = 4000ms` minus its own post-T_commit budget, so the anchors are not comparable: OBFT ≈ 3400ms (post-T_commit ≈ Δ_2 + Δ_3 ≈ 500ms — max-MEV anchor), 2abOBFT ≈ 1600ms (Phase 2a + 2b + Phase 3 ≈ 1100ms), OBFTR(R=2) round-1 `T_commit_1` ≈ 1500ms (R-round budget ≈ 1600ms). Comparisons in this doc anchor to `T_relay_cutoff`, not to `T_commit`. Within each protocol's L_Bid extension, `T_commit` stays invariant (bare-vs-+L_Bid only); the "invariant" claim is per-protocol, not cross-family.
+- **Per-protocol T_commit anchors differ.** Each protocol back-derives `T_commit` from `T_relay_cutoff = 4000ms` minus its own post-T_commit budget, so the anchors are not comparable: OBFT ≈ 3400ms (post-T_commit ≈ Δ_2 + Δ_3 ≈ 450ms — max-MEV anchor), 2abOBFT ≈ 1600ms (Phase 2a + 2b + Phase 3 ≈ 1050ms), OBFTR(R=2) round-1 `T_commit_1` ≈ 1500ms (R-round budget ≈ 1600ms). Comparisons in this doc anchor to `T_relay_cutoff`, not to `T_commit`. Within each protocol's L_Bid extension, `T_commit` stays invariant (bare-vs-+L_Bid only); the "invariant" claim is per-protocol, not cross-family.
 - **QBFT round timeout RT = 2000ms** (current SSV production setting). Held fixed across BTT; tightening would scale RT with BTT but raises false-positive round-changes under jitter (a known trade-off the team has tuned).
 - **No specific block-fetch cost**: BFT_start corresponds to the moment Phase 1 broadcast (or QBFT PROPOSE) begins. Pre-fetch and pre-consensus sit in `[slot_start, BFT_start]`.
 - **"Miss"**: cluster fails to produce a validator signature on the proposed block before the relay cutoff. Slot lost; no safety violation in any of the four protocols (safety is cryptographic / honest-majority).
@@ -62,7 +62,7 @@ K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Ph
 
 **Why QBFT 8 BTT > OBFT 3 BTT.** QBFT has 4 emission cycles per round (PROPOSE + PREPARE + COMMIT + post-consensus) vs OBFT's 1 emission cycle (Phase 2) plus broadcast slack. At 2 BTT per emission, QBFT's structural cost is 4 × 2 = 8 BTT; OBFT's is 1 × 2 + 1 broadcast = 3 BTT. The difference is fundamental to the protocol shape (3-phase cluster-wide consensus vs onion with chained encryption), not sizing.
 
-**Phase 3 in OBFT family.** Counted as 0 BTT in this comparison — Phase 3 is sequential local IBE decryption + cert construction, processing-bound (`ε_3 ≈ 100ms ≈ 0.5 BTT` at Config A), not propagation-bound. Cross-protocol totals here use the "0 BTT for processing-only steps" convention; deployment-time accounting (in [OBFT.md §Application's timing table](OBFT.md#timing-budget)) lists `ε_3` as a separate ~100ms row putting "consensus complete" 0.5 BTT later than the BTT count suggests.
+**Phase 3 in OBFT family.** Counted as 0 BTT in this comparison — Phase 3 is sequential local IBE decryption + cert construction, processing-bound (`ε_3 ≈ 50ms ≈ 0.25 BTT` at Config A), not propagation-bound. Cross-protocol totals here use the "0 BTT for processing-only steps" convention; deployment-time accounting (in [OBFT.md §Application's timing table](OBFT.md#timing-budget)) lists `ε_3` as a separate ~50ms row putting "consensus complete" 0.25 BTT later than the BTT count suggests.
 
 **QBFT post-consensus is propagation-bound, not local.** Each operator broadcasts their partial-sig and the cluster threshold-aggregates — that's a real emission cycle at 2 BTT under recommended sizing. Counted as 2 BTT in the totals above. Note this is structurally different from OBFT-family Phase 3 (local-CPU only), which is why QBFT pays this 2 BTT and OBFT family doesn't.
 
@@ -177,7 +177,7 @@ When round-1 / single-round fails (silent leader, partition, network jitter, but
 
 † **Partial-sigs has no failure-recovery mechanism**: any V-disagreement (operators sign different V's) results in cluster signature aggregation failing — no rounds, no re-flood, no fall-through. The baseline only works on the healthy V-pre-agreed path.
 
-"In-round (free)" means the recovery happens within the same single round — no additional time cost. K-layer fall-through is sequential local decryption in Phase 3, processing-bound (~100ms ε_3), not BTT-bound.
+"In-round (free)" means the recovery happens within the same single round — no additional time cost. K-layer fall-through is sequential local decryption in Phase 3, processing-bound (~50ms ε_3 single-layer; ~200ms ε_3 × K at K=4 with K−1 silent layers), not BTT-bound.
 
 **Reading Tables 2a–2e:**
 
@@ -394,7 +394,7 @@ The trade is favorable when MEV bid-routing value-capture upside exceeds the com
 
 ## Limits of this comparison
 
-- **Numbers are BTT-count approximations** (3 BTT, 4 BTT, etc.). Production has long tails; ε_3 (~100ms local processing) is treated as small relative to BTT in tabulation. Real implementations may add 50-200ms of constant overhead per round.
+- **Numbers are BTT-count approximations** (3 BTT, 4 BTT, etc.). Production has long tails; ε_3 (~50ms local processing per layer) is treated as small relative to BTT in tabulation. Real implementations may add 50-200ms of constant overhead per round.
 - **QBFT round timeout RT = 2000ms** is held fixed; tightening RT shrinks recovery time but raises false-positive round-changes under jitter.
 - **K = n = 4** assumed. At larger n with the same f-bound, K-layer fall-through depth scales (more redundancy at the OBFT family). QBFT's recovery cost scales linearly with K serial round-changes.
 - **Bandwidth (small `V`, e.g. attestations ~100 B; cluster-wide healthy path)**: QBFT ~14 KB across 4 emissions per round; OBFT ~28 KB across 1 emission (includes the `sigma_L_witnesses` section ≈ +2.3 KB at K=4 n=4); OBFTR ~28-30 KB across 2 emissions per round (R=2 worst case ~52 KB across 4 emissions); 2abOBFT ~30 KB across 2 emissions (no σ_L^V witness; 2abOBFT has no Phase-1 σ_L^V). All four +3-5 KB if L_Bid mini-consensus extension is used (see [each doc's Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)).
