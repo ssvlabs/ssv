@@ -1,10 +1,13 @@
 package consensustest_test
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
@@ -30,6 +33,66 @@ func TestCatalog_NoUnsafeByzKinds(t *testing.T) {
 		if reason, unsafe := unsafeKinds[cfg.Byz.Kind]; unsafe {
 			t.Fatalf("scenario %q uses byz kind %v which %s — these MUST stay out of Catalog (matrix tests would crash on SafetyPanic). Remove from Catalog and exercise via a standalone test instead.",
 				s.Name, cfg.Byz.Kind, reason)
+		}
+	}
+}
+
+// TestCatalog_AllScenariosGeneralized verifies every catalog scenario's
+// Apply function scales correctly across SSV cluster sizes. Catches the
+// "Apply hardcoded operator 4 in a function meant to scale with cfg.F()"
+// class of regression at scenario-add time, before it surfaces as a
+// TestSweep_FullCatalog_LargerN mismatch at n>4.
+//
+// Per cluster size n ∈ ClusterSizes, runs Apply on a fresh base config
+// and verifies:
+//   - Apply doesn't panic.
+//   - Resulting Byz.ByzOperators is within the f-bound (len ≤ F).
+//   - Every operator ID in ByzOperators / Recipients is in [1, N].
+//
+// Does NOT run the protocol — purely a structural check on the
+// post-Apply SimConfig. Cheap (no DES execution); runs in <50ms total.
+func TestCatalog_AllScenariosGeneralized(t *testing.T) {
+	for _, n := range ct.ClusterSizes {
+		n := n
+		for _, s := range ct.Catalog {
+			s := s
+			t.Run(fmt.Sprintf("n=%d/%s", n, s.Name), func(t *testing.T) {
+				base := ct.SimConfig{
+					N:                    n,
+					Operators:            ct.MakeOperators(n),
+					SlotDuration:         12 * time.Second,
+					RelayCutoff:          4 * time.Second,
+					HeaderSubmitHeadroom: 100 * time.Millisecond,
+					BTT:                  200 * time.Millisecond,
+					Host:                 ct.HostAllValid{},
+					Byz:                  ct.ByzPattern{Kind: ct.ByzNone},
+					Seed:                 1,
+				}
+				// Apply may panic on a malformed scenario; let the test framework
+				// surface it as a test failure (subtest fails, others continue).
+				if s.Apply != nil {
+					s.Apply(&base)
+				}
+
+				f := base.F()
+				require.LessOrEqualf(t, len(base.Byz.ByzOperators), f,
+					"n=%d %q: ByzOperators length %d exceeds f=%d (Apply not scaling with cfg.F()?)",
+					n, s.Name, len(base.Byz.ByzOperators), f)
+				for _, op := range base.Byz.ByzOperators {
+					require.GreaterOrEqualf(t, int(op), 1,
+						"n=%d %q: ByzOperators contains op=%d < 1", n, s.Name, op)
+					require.LessOrEqualf(t, int(op), n,
+						"n=%d %q: ByzOperators contains op=%d > N=%d (hardcoded n=4 value?)",
+						n, s.Name, op, n)
+				}
+				for _, op := range base.Byz.Recipients {
+					require.GreaterOrEqualf(t, int(op), 1,
+						"n=%d %q: Recipients contains op=%d < 1", n, s.Name, op)
+					require.LessOrEqualf(t, int(op), n,
+						"n=%d %q: Recipients contains op=%d > N=%d (hardcoded n=4 value?)",
+						n, s.Name, op, n)
+				}
+			})
 		}
 	}
 }
