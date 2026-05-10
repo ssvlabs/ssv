@@ -548,48 +548,20 @@ The arguments above apply symmetrically to all K layers. **None of the proofs de
 
 > ### ⚠️ Liveness scope is narrow — read this before relying on liveness in deployment
 >
-> OBFT's verified liveness is conditional on **(a) [Assumption 2](#assumed) (within-budget partial-synchrony) holding for that slot AND (b) byzantine operator either silent / offline ("dormant" — protocol treats it identically to a down honest) or in one of the three narrow grief patterns Phase-2.5 covers (R1/R2/R3 enumerated at the end of this section)**. This subsection focuses on what happens when (a) breaks — specifically, the deadlock patterns that arise under purely-honest operation or with a dormant byzantine, where active byzantine behavior is *not* required to deadlock. **Even in this benign adversary scope, the protocol can deadlock with no in-protocol recovery if Assumption 2 breaks for a slot.**
+> **In its current form, OBFT's liveness is conditional on two requirements per slot:**
 >
-> #### What "within-budget partial-synchrony" actually requires
+> **(a) [Assumption 2](#assumed) (within-budget partial-synchrony) holds for that slot.** Honest `KindCommit` messages emitted at `T_commit` reach a 2f+1 quorum of operators by `T_commit + Δ_2` (recommended `Δ_2 = 2 BTT`). This is the same partial-synchrony assumption QBFT operates under for its `PREPARE` / `COMMIT` phases.
 >
-> Assumption 2 is not a single constraint. It is a conjunction of operational requirements; for a given slot to terminate, **all of the following must hold** at the SSV proposer-duty operating point (Config A: `1 BTT = P99 + δ = 150ms + 50ms = 200ms`, K=4):
+> **(b) At each layer `L_k`, the leader's Phase-1 bundle must EITHER reach a 2f+1 quorum of operators by `T_commit` (so σ-quorum forms — output V at this layer), OR fail to reach by a wide-enough margin that the remaining ≥ qEnc operators can NR-quorum (chain falls through to `L_{k+1}`).** Partial propagation in between — `n − qEnc < receivers < qV` (= exactly 2 receivers at f=1, n=4) — **deadlocks the layer with no in-protocol recovery**: σ-pool < qV, NR-pool < qEnc, and Phase-2.5 σ-flip / NR-flip cannot bridge the gap (their snapshot-gated triggers are conservative enough to remain safe under active byzantine grief, and that conservatism also blocks recovery in honest-only deadlocks). Chain encryption stays sealed at `L_k` → deeper layers' partials remain undecryptable → no cluster-wide fall-through.
 >
-> 1. **Per-layer leader broadcast timing — staggered, not uniform.** Each rotation leader `L_k` must publish their Phase-1 bundle by `T_broadcast_max_k = T_commit − B_k`:
+> **Caveat at f=1, n=4 with a dormant byzantine** (= byz silent / offline; the protocol counts dormant byz as silent, equivalent to a down honest): **the "fail to reach by a wide-enough margin" branch in (b) is unavailable**. Only 2 of 4 ops are honest non-leaders; even if both NR, NR-pool = 2 < qEnc = 3 because byz silence consumes the silent budget without contributing. **At this configuration, every layer succeeds only when its leader's Phase-1 bundle fully propagates to both honest non-leaders by `T_commit`. Any partial or zero propagation at any layer collapses the whole slot** — multi-layer K-fall-through doesn't help because NR-quorum can't form at the failing layer to unlock chain encryption.
 >
->     | Layer | `B_k` | Latest broadcast time | Why staggered |
->     |---|---|---|---|
->     | L_0 (primary) | 1 BTT (200ms) | `T_commit − 200ms` | Latest broadcast → freshest MEV |
->     | L_1 | 1.5 BTT (300ms) | `T_commit − 300ms` | Wider tail for backup |
->     | L_2 | 2.5 BTT (500ms) | `T_commit − 500ms` | Wider still |
->     | L_3 (deepest) | 5.5 BTT (1100ms) | `T_commit − 1100ms` | Last-resort buffer |
+> **Practical causes of (b) failing:**
+> - Late leader broadcast (local fetch overran, slow disk, slow MEV-relay query)
+> - Phase-1 mesh propagation tail past `B_k` (peer-score pruning, mesh churn, network spike)
+> - Clock skew beyond `δ` (operators read `T_commit` differently → effectively further propagation tail at peers on a different clock)
 >
->     If a leader broadcasts late (local fetch overran, slow disk, slow MEV-relay query, etc.), their bundle propagates past `T_commit` at some honest receivers → those receivers treat the leader as silent at this layer and emit NR. *(Note: the heuristic "broadcast 2 BTT prior to `T_commit`" is incorrect — only L_0 has a 1 BTT margin; deeper backups have progressively wider margins, with L_3 needing **5.5 BTT** of pre-commit broadcast lead.)*
->
-> 2. **Phase-1 gossipsub propagation tail ≤ `B_k`.** Even an on-time leader broadcast must actually propagate cluster-wide within the layer's `B_k` budget. A leader who broadcasts on time but whose bundle hits a mesh propagation tail (peer-score pruning, mesh churn, network spike, slow honest receiver) has the same effect as a late broadcast — some honest don't retain by `T_commit`.
->
-> 3. **Phase-2 `KindCommit` propagation budget.** Every honest's `KindCommit` emitted at `T_commit` reaches all honest peers by `T_commit + Δ_2` (recommended `Δ_2 = 2 BTT = 400ms` — adds ~1 BTT of jitter cushion on top of P99). If propagation exceeds `Δ_2`, some honest see incomplete σ/NR pools at Phase-3 reconstruction start.
->
-> 4. **Clock skew bounded by `δ`.** All honest operators must agree on `T_commit` within ±`δ` (50ms at Config A); otherwise their Phase-1 / Phase-2 windows drift apart and effectively appear as further propagation tail to peers on a different clock.
->
-> When any of (1)–(4) breaks for a slot, Assumption 2 is violated *for that slot* and the protocol can fall into one of the deadlock patterns below.
->
-> #### Patterns that DEADLOCK under honest failures or dormant byz
->
-> Each pattern below is reachable under purely-honest operation with up to f=1 silent/offline operator (treating dormant byz as equivalent to a down honest — the protocol's view counts both as silent). **No active byzantine behavior is required for any of these.** Each is mechanically verified to deadlock via TLA+/TLC exploration; see [docs/OBFT-formal-verif.md §5.4](OBFT-formal-verif.md#54--beyond-liveness_non_grief-class-a-failure-mode-exploration).
->
-> - **`h_V=1` shape from honest leader propagation tail.** Honest leader's Phase-1 bundle reaches only the leader and 1 honest non-leader by `T_commit`; the remaining honest non-leaders don't receive V in time → emit NR. Both σ-pool and NR-pool fall short of `qV = qEnc = 3` at f=1, n=4. The shape arises in two equivalent variants:
->     - **All 4 honest, propagation tail to 2 of 3 honest non-leaders**: σ-pool = 2 (leader + the 1 honest non-leader who received V), NR-pool = 2 (the 2 honest non-leaders who didn't).
->     - **3 honest + 1 dormant byz silent, propagation tail to 1 of 2 honest non-leaders**: σ-pool = 2 (leader + the 1 honest non-leader who received V), NR-pool = 1 (the 1 honest non-leader who didn't), silent = 1 (dormant byz).
->
->     Phase-2.5 σ-flip / NR-flip cannot fire to recover either variant — the snapshot-gated triggers are designed tight enough to remain safe under any byzantine behavior, and that conservatism blocks recovery in honest-only deadlocks as well (see [§Phase 2.5](#phase-25--σ-flip--nr-flip-flips) for the trigger predicates and [§Where this came from](#where-this-came-from) for the safety-vs-liveness trade rationale). **Slot misses; no fall-through.**
->
-> - **Multi-layer compound propagation tails.** Bundles at multiple layers simultaneously hit propagation tails past their `B_k` budgets (e.g., L_0 leader's local fetch overran AND L_1's mesh propagation hit a tail). K-layer fall-through has no clean layer to land on — deeper-layer reconstruction is gated on prior-layer NR-quorum, which may not reach if affected receivers missed multiple layers' bundles.
->
-> - **Sustained partition exceeding the deepest-layer budget.** Real propagation exceeds `B_{K-1}` (= 5.5 BTT = 1100ms at K=4 Config A) at every layer for at least one honest receiver. The K-layer fall-through has no layer to land on cluster-wide.
->
-> #### Practical implication
->
-> Phase-2.5 σ-flip / NR-flip covers only three narrow byzantine-grief sub-cases (R1/R2/R3 enumerated at the end of this section); it does **not** close the honest-failure / dormant-byz patterns above. The deterrent of last resort under these patterns is [Assumption 4](#assumed) — rational operator behavior across slots, planned blacklist, staker migration. **Deployments with frequent re-org rates, mesh-flakiness, or honest leaders prone to local processing tails should expect proportionally higher slot-miss rates from these patterns.** Under valid assumptions and a healthy network the protocol terminates cleanly; under propagation tails or honest unavailability a non-trivial fraction of slots can miss.
+> Deployments with mesh-flakiness or honest leaders prone to processing tails should expect proportionally higher slot-miss rates from (b) failing.
 
 OBFT's liveness is **partial-synchrony-conditional within the slot's relay-submission deadline** — the protocol's slot budget. Bundles arriving past `T_commit` at any honest receiver are not counted toward σ-quorum at that layer; the cluster relies on K-layer fall-through to a deeper backup whose bundle did propagate in time. View-divergence (equivocation, validity-divergence) is NOT recovered by the protocol; some splits succeed naturally as a side-effect of leader-σ-V counting toward whichever V reaches qV first, others slot-miss. Equivocation cases are slashable (leader pays the stake-based penalty); validity-divergence is not attributable.
 
