@@ -97,6 +97,50 @@ func TestAdapter_PerRuleEvidence(t *testing.T) {
 	t.Logf("Rule 4 fires across cluster: %d", totalRule4)
 }
 
+// TestAdapter_FakeEncryptedPresence_StaysSealed_WhenL0Decides exercises the
+// OBFT.md §Slashing evidence / Rule 4 surface-ability limit: "evidence stays
+// sealed when NR-quorum doesn't reach at all prior layers". Counterpart to
+// TestAdapter_PerRuleEvidence (which exercises the positive detection path
+// with byz=op1=L_0-leader silent → NR-quorum at L_0 → chain unlocks).
+//
+// Setup: byz=op2 (leads L_1 by default rotation, NOT L_0). Byz fakes
+// encrypted-presence at L_2 via OverrideCommit. Since byz isn't the L_0
+// leader, the healthy op1 broadcasts L_0's bundle and σ-quorum reaches at
+// L_0. Production Instance.Resolve halts at the first σ-quorum (L_0) — chain
+// decryption at L_1, L_2 never runs, so the garbage at L_2 is never observed
+// as garbage. Rule 4 must NOT fire.
+//
+// This validates the spec's "Rule 4 is best-effort, conditional on slot
+// progressing past prior layers' NR-quorum" claim as an in-suite property.
+func TestAdapter_FakeEncryptedPresence_StaysSealed_WhenL0Decides(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	// byz=op2 leads L_1 (op[k % N] rotation at K=N=4). Garbage at L_2 is two
+	// layers deep — chain unlock requires NR-quorum at BOTH L_0 and L_1.
+	cfg.Byz = ct.ByzPattern{
+		Kind:         ct.ByzFakeEncryptedPresence,
+		ByzOperators: []ct.OperatorID{2},
+		Layer:        2,
+	}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "L_0 leader honest → cluster must decide at L_0")
+	require.Equal(t, 0, out.DecidedRound,
+		"healthy L_0 path must hold (byz isn't L_0 leader); got L_%d", out.DecidedRound)
+
+	totalRule4 := 0
+	for _, oo := range out.PerOp {
+		totalRule4 += oo.EvidenceByRule["OBFT/Rule4/FakeEncryptedPresence"]
+	}
+	require.Equal(t, 0, totalRule4,
+		"Rule 4 must NOT fire when chain stays sealed (cluster decides at L_0 → no NR-quorum → no chain decryption at L_2 → garbage never observed). got evidence: %v",
+		operatorEvidence(out.PerOp))
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+	t.Logf("Rule 4 sealed: 0 fires (decided L_%d, chain at L_2 never unlocked)", out.DecidedRound)
+}
+
 // TestAdapter_OfflineAggregator_HealthyOneRecon verifies the aggregator
 // records exactly one reconstruction on a healthy slot (the decided V) —
 // Pigeonhole 2's load-bearing safety claim under all-honest.
