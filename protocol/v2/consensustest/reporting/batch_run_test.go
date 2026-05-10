@@ -1,6 +1,7 @@
 package reporting_test
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -51,6 +52,65 @@ func TestNewBatchRun_ConvertsReport(t *testing.T) {
 			require.True(t, reporting.Applicable(cell), "all cells in this test should be applicable")
 		}
 	}
+}
+
+// TestRenderBatchHTML_SmokeContent — small batch → BatchRun → RenderHTML.
+// Verifies the rendered HTML contains all four charts and the summary
+// matrix populated with expected content for hand-inspection.
+func TestRenderBatchHTML_SmokeContent(t *testing.T) {
+	scenarios := []ct.Scenario{}
+	for _, s := range ct.Catalog {
+		if s.Name == "Healthy" || s.Name == "PrimaryLeaderSilent" || s.Name == "Equivocate_111" {
+			scenarios = append(scenarios, s)
+		}
+	}
+	require.Len(t, scenarios, 3)
+
+	report := ct.RunBatch(t, ct.BatchConfig{
+		Iterations: 5,
+		SeedStart:  1,
+		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
+		Scenarios:  scenarios,
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}},
+	})
+	br := reporting.NewBatchRun("Batch smoke", "Three-scenario × two-protocol smoke", report)
+
+	path := t.TempDir() + "/batch.html"
+	require.NoError(t, reporting.RenderBatchHTML(br, path))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	body := string(data)
+
+	// Header.
+	require.Contains(t, body, "<title>Batch smoke</title>", "HTML title")
+	require.Contains(t, body, "Three-scenario × two-protocol smoke", "HTML description")
+	require.Contains(t, body, "Iterations: 5", "HTML iteration count")
+
+	// Summary matrix.
+	require.Contains(t, body, "<h2>Summary matrix</h2>", "summary matrix section")
+	require.Contains(t, body, ">Healthy<", "Healthy row in matrix")
+	require.Contains(t, body, ">Equivocate_111<", "Equivocate_111 row")
+	require.Contains(t, body, "P99 ", "P99 latency cells")
+
+	// Charts.
+	require.Contains(t, body, `<canvas id="successChart"`, "success chart")
+	require.Contains(t, body, `<canvas id="latencyChart"`, "latency chart")
+	require.Contains(t, body, `<canvas id="bandwidthChart"`, "bandwidth chart")
+	require.Contains(t, body, `<canvas id="tradeoffChart"`, "tradeoff scatter")
+
+	// Chart.js init scripts.
+	require.Contains(t, body, "type: 'bar'", "bar chart config")
+	require.Contains(t, body, "type: 'scatter'", "scatter chart config")
+	require.Contains(t, body, "stacked: true", "bandwidth chart is stacked")
+
+	// Legend labels.
+	require.Contains(t, body, "OBFT P50", "OBFT P50 series")
+	require.Contains(t, body, "OBFT P99", "OBFT P99 series")
+	require.Contains(t, body, "QBFT P50", "QBFT P50 series")
+
+	// Footer.
+	require.Contains(t, body, "</html>", "HTML closes")
 }
 
 // TestNewBatchRun_NotApplicableCell — a cell with Iterations=0 (scenario
