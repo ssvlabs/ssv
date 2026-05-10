@@ -174,7 +174,11 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 		if s.cfg.Aggregator != nil {
 			recordCommitToAggregator(s.cfg.Aggregator, c)
 		}
-		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), func(to obft.OperatorID) event {
+		// Byz patterns may delay their own KindCommit dispatch to land past
+		// RoundEndOffset, exercising the spec §Phase 3 late-arrival re-resolve
+		// path (gated by cfg.EnableLateCommitRerun).
+		extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, op)
+		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), extraDelay, func(to obft.OperatorID) event {
 			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(c)}
 		})
 		// Byz patterns may add ADDITIONAL commits (e.g. cross-onion
@@ -184,7 +188,7 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 			if s.cfg.Aggregator != nil {
 				recordCommitToAggregator(s.cfg.Aggregator, extra)
 			}
-			s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), func(to obft.OperatorID) event {
+			s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), extraDelay, func(to obft.OperatorID) event {
 				return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
 			})
 		}
@@ -237,7 +241,22 @@ func (e *evtCommitArrival) describe() string {
 
 func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
 	_ = s.instances[e.to].ObserveCommit(e.commit)
-	return nil
+
+	// Spec §Phase 3 / "Re-running on late KindCommit arrivals": if this commit
+	// landed past RoundEndOffset, the receiver may re-run Resolve to
+	// incorporate the new partial. Skip if the receiver already decided.
+	if !s.cfg.EnableLateCommitRerun {
+		return nil
+	}
+	if s.now <= s.cfgObft.RoundEndOffset() {
+		return nil
+	}
+	if _, already := s.resolved[e.to]; already {
+		return nil
+	}
+	// Schedule the re-resolve immediately at the current sim time so the new
+	// state is incorporated before any further events fire at this timestamp.
+	return []scheduledEvent{{when: s.now, ev: &evtResolveRerun{op: e.to}}}
 }
 
 // ---- evtResolve --------------------------------------------------------
@@ -249,41 +268,90 @@ func (e *evtResolve) describe() string { return "Resolve" }
 func (e *evtResolve) handle(s *sim) []scheduledEvent {
 	var out []scheduledEvent
 	for _, op := range s.operators {
-		res, err := s.instances[op].Resolve()
-		if err != nil {
+		out = append(out, resolveOpAndBroadcastCert(s, op)...)
+	}
+	return out
+}
+
+// ---- evtResolveRerun ---------------------------------------------------
+
+// evtResolveRerun re-runs Phase-3 resolve for a single operator that
+// received a late KindCommit (after RoundEndOffset). Mirrors evtResolve's
+// per-op flow: Resolve → record result → broadcast cert if successful.
+//
+// Spec §Phase 3: production obft.Instance.Resolve() is stateless / idempotent,
+// so re-invocation with additional observed partials is safe (Pigeonholes 1+2
+// guarantee at most one V reaches qV cluster-wide regardless of timing).
+type evtResolveRerun struct {
+	op obft.OperatorID
+}
+
+func (e *evtResolveRerun) describe() string {
+	return fmt.Sprintf("ResolveRerun[op=%d]", e.op)
+}
+
+func (e *evtResolveRerun) handle(s *sim) []scheduledEvent {
+	// Op may have decided between rerun scheduling and rerun firing — e.g.,
+	// a cert from a peer's earlier successful reconstruction arrived in
+	// between. Skip the rerun in that case so resolvedAt[op] reflects the
+	// earlier (cert-gossip) decision time, not the later rerun time.
+	if _, decided := s.resolved[e.op]; decided {
+		return nil
+	}
+	return resolveOpAndBroadcastCert(s, e.op)
+}
+
+// resolveOpAndBroadcastCert runs Resolve for `op`, records the outcome in
+// the sim's resolved/resolveErrs maps, and (on success) schedules cert
+// broadcast to peers. Shared by evtResolve (initial pass at RoundEndOffset)
+// and evtResolveRerun (late-commit re-attempt).
+//
+// On success, clears any prior resolveErrs entry so the late-recovered op
+// reports decided=true with no Err in the outcome.
+func resolveOpAndBroadcastCert(s *sim, op obft.OperatorID) []scheduledEvent {
+	res, err := s.instances[op].Resolve()
+	if err != nil {
+		// Record error only if op hasn't decided yet (e.g. via prior cert
+		// gossip). Don't overwrite an existing success with a transient error
+		// from a re-resolve.
+		if _, decided := s.resolved[op]; !decided {
 			s.resolveErrs[op] = err
+		}
+		return nil
+	}
+	s.resolved[op] = res
+	s.resolvedAt[op] = s.now
+	// Late-resolve success supersedes any prior error.
+	delete(s.resolveErrs, op)
+
+	if !s.cfg.Byz.AllowCertificateBroadcast(op) {
+		return nil
+	}
+	cert, err := s.instances[op].BuildCertificate(res)
+	if err != nil || cert == nil {
+		return nil
+	}
+	certBytes := certSize(cert)
+	var out []scheduledEvent
+	for _, to := range s.operators {
+		if to == op {
 			continue
 		}
-		s.resolved[op] = res
-		s.resolvedAt[op] = s.now
-		if !s.cfg.Byz.AllowCertificateBroadcast(op) {
+		if !s.cfg.Byz.AllowDelivery(op, to, ct.KindCertificate) {
 			continue
 		}
-		cert, err := s.instances[op].BuildCertificate(res)
-		if err != nil || cert == nil {
-			continue
+		delay := s.cfg.Byz.OverrideDelay(s.rng, op, to, ct.KindCertificate)
+		if delay < 0 {
+			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(op), ct.OperatorID(to), ct.KindCertificate)
 		}
-		certBytes := certSize(cert)
-		for _, to := range s.operators {
-			if to == op {
-				continue
-			}
-			if !s.cfg.Byz.AllowDelivery(op, to, ct.KindCertificate) {
-				continue
-			}
-			delay := s.cfg.Byz.OverrideDelay(s.rng, op, to, ct.KindCertificate)
-			if delay < 0 {
-				delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(op), ct.OperatorID(to), ct.KindCertificate)
-			}
-			if s.cfg.Bandwidth != nil && certBytes > 0 {
-				s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
-					ct.KindCertificate, -1, certBytes)
-			}
-			out = append(out, scheduledEvent{
-				when: s.now + delay,
-				ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},
-			})
+		if s.cfg.Bandwidth != nil && certBytes > 0 {
+			s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
+				ct.KindCertificate, -1, certBytes)
 		}
+		out = append(out, scheduledEvent{
+			when: s.now + delay,
+			ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},
+		})
 	}
 	return out
 }

@@ -31,23 +31,24 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
-		N:               cfg.N,
-		K:               cfg.K,
-		Operators:       cfg.Operators,
-		TCommit:         tCommit,
-		Delta2:          cfg.Delta2,
-		Epsilon3:        cfg.Epsilon3,
-		BTT:             cfg.BTT,
-		FetchAt:         cfg.FetchAt,
-		BroadcastBudget: cfg.BroadcastBudget,
-		Network:         cfg.Network,
-		Host:            cfg.Host,
-		Byz:             internal,
-		Seed:            cfg.Seed,
-		TraceEnabled:    cfg.TraceEnabled,
-		BLSKeys:         cfg.BLSKeys,
-		Aggregator:      ct.NewOfflineAggregator(cfg.N),
-		Bandwidth:       &bw,
+		N:                     cfg.N,
+		K:                     cfg.K,
+		Operators:             cfg.Operators,
+		TCommit:               tCommit,
+		Delta2:                cfg.Delta2,
+		Epsilon3:              cfg.Epsilon3,
+		BTT:                   cfg.BTT,
+		FetchAt:               cfg.FetchAt,
+		BroadcastBudget:       cfg.BroadcastBudget,
+		Network:               cfg.Network,
+		Host:                  cfg.Host,
+		Byz:                   internal,
+		Seed:                  cfg.Seed,
+		TraceEnabled:          cfg.TraceEnabled,
+		BLSKeys:               cfg.BLSKeys,
+		Aggregator:            ct.NewOfflineAggregator(cfg.N),
+		Bandwidth:             &bw,
+		EnableLateCommitRerun: cfg.EnableLateCommitRerun,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -59,23 +60,24 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 
 // desConfig is the OBFT-DES-internal configuration, built by Run.
 type desConfig struct {
-	N               int
-	K               int
-	Operators       []ct.OperatorID
-	TCommit         time.Duration
-	Delta2          time.Duration
-	Epsilon3        time.Duration // forwarded to obft.Config.Delta3 (= ε_3 per spec)
-	BTT             time.Duration
-	FetchAt         []time.Duration
-	BroadcastBudget []time.Duration
-	Network         ct.NetworkModel
-	Host            ct.HostPattern
-	Byz             internalByz
-	Seed            int64
-	TraceEnabled    bool
-	BLSKeys         *ct.BLSKeys
-	Aggregator      *ct.OfflineAggregator
-	Bandwidth       *ct.BandwidthReport
+	N                     int
+	K                     int
+	Operators             []ct.OperatorID
+	TCommit               time.Duration
+	Delta2                time.Duration
+	Epsilon3              time.Duration // forwarded to obft.Config.Delta3 (= ε_3 per spec)
+	BTT                   time.Duration
+	FetchAt               []time.Duration
+	BroadcastBudget       []time.Duration
+	Network               ct.NetworkModel
+	Host                  ct.HostPattern
+	Byz                   internalByz
+	Seed                  int64
+	TraceEnabled          bool
+	BLSKeys               *ct.BLSKeys
+	Aggregator            *ct.OfflineAggregator
+	Bandwidth             *ct.BandwidthReport
+	EnableLateCommitRerun bool // mirrors SimConfig.EnableLateCommitRerun
 }
 
 // rawOutcome is the OBFT-internal outcome before translation to ct.Outcome.

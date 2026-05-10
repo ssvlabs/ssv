@@ -113,6 +113,15 @@ type SimConfig struct {
 	// BLSKeys, when non-nil, switches the sim to real BLS for adapters that
 	// support it. Generate with GenerateBLSKeys; reuse across sims.
 	BLSKeys *BLSKeys
+
+	// EnableLateCommitRerun enables the spec §Phase 3 "Re-running on late
+	// KindCommit arrivals" recovery path: when a KindCommit arrives at a
+	// receiver past `T_commit + Δ_2 + ε_3` (= obft.Config.RoundEndOffset),
+	// the receiver re-runs Resolve() with the new partial incorporated. May
+	// salvage slots where a late σ or NR partial pushes the relevant pool
+	// past quorum. Default off — existing scenarios assume a single resolve
+	// pass at RoundEndOffset.
+	EnableLateCommitRerun bool
 }
 
 // F returns the byzantine bound implied by N (F = (N-1)/3).

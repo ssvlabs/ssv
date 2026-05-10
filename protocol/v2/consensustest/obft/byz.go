@@ -21,6 +21,12 @@ import (
 // OverrideOwnPhase1Delay returns extra delay (added to the network model's
 // delay) for the leader's own Phase-1 broadcast emission. Used by
 // LateLeaderBroadcast to push the bundle past T_commit at all receivers.
+//
+// OverrideOwnCommitDispatchDelay returns extra delay (added to the network
+// model's per-pair delay) for `op`'s Phase-2 KindCommit emission. Used by
+// late-commit byz patterns to push the commit past T_commit + Δ_2 + ε_3 at
+// receivers, exercising the spec §Phase 3 "Re-running on late KindCommit
+// arrivals" recovery path (gated by SimConfig.EnableLateCommitRerun).
 type internalByz interface {
 	LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan
 	AllowCommitBroadcast(op obft.OperatorID) bool
@@ -30,6 +36,7 @@ type internalByz interface {
 	OverrideCommit(s *sim, op obft.OperatorID, c *obft.Commit) *obft.Commit
 	BuildExtraCommits(s *sim, op obft.OperatorID, c *obft.Commit) []*obft.Commit
 	OverrideOwnPhase1Delay(s *sim, leader obft.OperatorID) time.Duration
+	OverrideOwnCommitDispatchDelay(s *sim, op obft.OperatorID) time.Duration
 }
 
 type broadcastPlan struct {
@@ -194,6 +201,9 @@ func (honestDefaults) BuildExtraCommits(_ *sim, _ obft.OperatorID, _ *obft.Commi
 	return nil
 }
 func (honestDefaults) OverrideOwnPhase1Delay(_ *sim, _ obft.OperatorID) time.Duration {
+	return 0
+}
+func (honestDefaults) OverrideOwnCommitDispatchDelay(_ *sim, _ obft.OperatorID) time.Duration {
 	return 0
 }
 

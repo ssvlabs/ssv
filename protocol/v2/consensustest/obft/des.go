@@ -209,7 +209,11 @@ func (s *sim) honestLeaderValue(layer int) obft.Value {
 // honoring byz-pattern delivery / delay overrides. `bytes` is the wire size
 // of the message (for bandwidth accounting; pass 0 to skip). `layer` is the
 // OBFT layer for per-layer bandwidth accounting (use -1 for layer-agnostic).
-func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, layer int, bytes int64, build func(to obft.OperatorID) event) {
+// `extraDelay` is added on top of the per-pair network delay — used by byz
+// patterns to push a specific operator's own-emission past a protocol
+// deadline (e.g. OverrideOwnCommitDispatchDelay for late KindCommit
+// scenarios).
+func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to obft.OperatorID) event) {
 	for _, to := range s.operators {
 		if to == from {
 			continue
@@ -225,7 +229,7 @@ func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, layer int, bytes 
 			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), kind, layer, bytes)
 		}
 		ev := build(to)
-		s.schedule(s.now+delay, ev)
+		s.schedule(s.now+delay+extraDelay, ev)
 	}
 }
 
