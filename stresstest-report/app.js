@@ -388,7 +388,10 @@ function topMissReason(cell) {
 
 function renderSummaryMatrix(point, scenarios, protocols) {
   const table = h('table', { class: 'matrix' });
-  const headerRow = h('tr', {}, h('th', {}, 'Scenario'));
+  // Empty leftmost header: the row's scenario name is self-labelling and
+  // the column needs no caption. The OBFT / QBFT headers still anchor
+  // their data columns.
+  const headerRow = h('tr', {}, h('th', {}));
   protocols.forEach((p) => headerRow.appendChild(h('th', {}, p)));
   table.appendChild(h('thead', {}, headerRow));
 
@@ -462,19 +465,46 @@ function buildLatencyChart(canvas, point, protocols, scenario) {
   });
 }
 
+// SLOT_END_MS is the canonical relay cutoff (the spec's 4s proposer-duty
+// deadline). Used as the synthetic bar height for "no decision" runs:
+// a protocol that ran iterations but never decided consumed the full
+// slot budget, so a full-height grey bar communicates that visually
+// instead of silently dropping the dataset.
+const SLOT_END_MS = 4000;
+const NO_DECISION_COLOR = 'rgba(148, 163, 184, 0.55)';
+const NO_DECISION_BORDER = 'rgba(100, 116, 139, 0.85)';
+
 function latencyChartData(point, protocols, scenario) {
   return {
     labels: ['P50', 'P90', 'P99'],
     datasets: protocols.map((p) => {
       const cell = findCell(point, scenario.name, p);
-      const data = cell && cell.decisionTime
-        ? [cell.decisionTime.p50, cell.decisionTime.p90, cell.decisionTime.p99]
-        : [null, null, null];
+      if (cell && cell.decisionTime) {
+        return {
+          label: p,
+          backgroundColor: protocolColor(p),
+          borderColor: protocolColor(p),
+          data: [cell.decisionTime.p50, cell.decisionTime.p90, cell.decisionTime.p99],
+        };
+      }
+      // Ran iterations but never decided → render a grey bar at the
+      // slot-end deadline so the failure is visually present (instead
+      // of an unexplained gap where the protocol's bars would be).
+      if (cell && cell.iterations > 0) {
+        return {
+          label: `${p} (no decision)`,
+          backgroundColor: NO_DECISION_COLOR,
+          borderColor: NO_DECISION_BORDER,
+          borderWidth: 1,
+          data: [SLOT_END_MS, SLOT_END_MS, SLOT_END_MS],
+        };
+      }
+      // Scenario is n/a for this protocol (no iterations ran).
       return {
         label: p,
         backgroundColor: protocolColor(p),
         borderColor: protocolColor(p),
-        data,
+        data: [null, null, null],
       };
     }),
   };
@@ -516,7 +546,9 @@ function renderGroupTrend(section, sweep, scenarios, protocols, packID) {
 
 function renderTrendMatrix(sweep, scenarios, protocols) {
   const table = h('table', { class: 'matrix trend' });
-  const headerRow = h('tr', {}, h('th', {}, 'Scenario'));
+  // Empty leftmost header (scenario name is self-labelling) — matches
+  // the detail-matrix convention.
+  const headerRow = h('tr', {}, h('th', {}));
   sweep.points.forEach((pt) => headerRow.appendChild(h('th', {}, pt.label)));
   table.appendChild(h('thead', {}, headerRow));
 

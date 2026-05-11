@@ -310,17 +310,13 @@ details.group-pack summary .group-count {
   padding: 0.8em 1em 1em;
 }
 
-/* Two-column layout for detail packs on wide screens: matrix left, chart right. */
-.group-body.detail {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.85fr) 1.4fr;
-  gap: 1.5em;
-  align-items: start;
-}
-@media (max-width: 1100px) {
-  .group-body.detail { grid-template-columns: 1fr; }
-}
-/* Trend packs stack: the matrix is too wide for a sidebar layout. */
+/* Detail packs stack: matrix on top, chart below. The matrix is wide
+ * enough (≥ 2 protocol columns + a multi-line scenario column) that a
+ * side-by-side grid systematically squeezed one side or the other,
+ * so we keep the layout uniform across viewport widths. */
+.group-body.detail { display: block; }
+.group-body.detail table.matrix { margin-bottom: 1em; }
+/* Trend packs stack too (matrix is too wide for a sidebar). */
 .group-body.trend { display: block; }
 
 /* ---- Matrix table ---- */
@@ -349,7 +345,11 @@ table.matrix th {
 table.matrix td.scen {
   color: #1f2937;
   display: flex;
-  align-items: center;
+  /* Top-align so the scenario name lines up with the first data line in
+   * its row, even when an adjacent cell has a multi-line miss-reason
+   * underneath. align-items: center used to leave short scenario names
+   * floating mid-row between two-line data cells. */
+  align-items: flex-start;
   gap: 0.4em;
 }
 table.matrix td.scen .scen-title { flex: 1; }
