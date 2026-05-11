@@ -124,7 +124,7 @@ consensustest-with-real-bls:
 #
 # Iteration count: override via ITERATIONS (default 1000). 1000 gives
 # stable P99 stats for success-rate ≥ 50% scenarios; bump to 10000 for
-# rare-event scenarios at proportionally longer wallclock (~20 min).
+# rare-event scenarios at proportionally longer wallclock (~60-120 min).
 #
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
@@ -138,7 +138,7 @@ ITERATIONS ?= 1000
 stresstest:
 	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS) \
-		go test -tags "blst_enabled lfs" -timeout 30m -run TestStress -v ./protocol/v2/consensustest/
+		go test -tags "blst_enabled lfs" -timeout=0 -run TestStress -v ./protocol/v2/consensustest/
 
 .PHONY: docker-spec-test
 docker-spec-test:
