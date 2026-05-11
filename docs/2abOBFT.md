@@ -37,15 +37,15 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 - **Single agreement round per slot.** R is fixed at 1: one Phase 1 → Phase 2a → Phase 2b → Phase 3 sequence per slot, no retry, no re-flood across rounds. The slot's reconstruction deadline is the only deadline. Operators who do not reach σ-emit-eligibility by Phase-2a end commit NR at Phase 2b per the convergence rule (see [§Phase 2b](#phase-2b)). For deployments needing the wider partial-synchrony absorption of multi-round retry, see [OBFTR(R≥2)](OBFTR.md) (which currently runs without the Phase-2 split, but the split composes orthogonally with R-round retry — that's a future direction, not specified here).
 
-- **Per-layer leader-fetch deadlines** `T_{K-1} < T_{K-2} < ... < T_1 < T_0`, plus a single cluster deadline `T_commit`. (`T_commit` is the Phase-1-broadcast cutoff; verdict broadcast and σ/NR commit happen after.) The asymmetric fetch times let primary leaders fetch high-MEV values late (`T_0` close to `T_commit`) while deeper layers' leaders fetch safe early values from deeper-confirmed parents (`T_{K-1}` well before `T_0`).
+- **Per-layer leader-fetch deadlines** `T_{K-1} < T_{K-2} < ... < T_1 < T_0`, plus a single cluster deadline `T_verdict_start` (= start of Phase 2a; the Phase-1 broadcast cutoff). The asymmetric fetch times let primary leaders fetch high-MEV values late (`T_0` close to `T_verdict_start`) while deeper layers' leaders fetch safe early values from deeper-confirmed parents (`T_{K-1}` well before `T_0`). `T_commit` (σ-or-NR commit) is later, at `T_verdict_start + Δ_2a`.
 
 - **Time unit `BTT` (broadcast trip time)** — `P99` is the propagation budget at the deployment's chosen tail percentile (the variable name `P99` is shorthand for the high-percentile propagation latency; deployments may use P99, P999, P9999 etc. as the actual percentile depending on tail tolerance). `δ` is the cluster's clock-skew bound. We define `1 BTT = P99 + δ` — the time needed for one one-way message to propagate from a sender to all honest receivers under partial-synchrony assumptions. This unit is used throughout for time-budget formulas; the underlying `P99` and `δ` are kept distinct only in §Trust model (where partial synchrony is defined) and in safety arguments (Pigeonhole proofs). Concrete sizing at Config A: `P99 = 150ms, δ = 50ms, 1 BTT = 200ms`.
 
 - **Three distinct deadlines** (do not conflate):
 
-  - **Leader broadcast deadline** `T_broadcast_max = T_commit − 2 BTT`. Each layer's leader must finish broadcasting by this time so that under worst-case propagation, all honest first-observe by `T_commit − 1 BTT`. Per-layer fetch windows fit: `T_k + Δ_1 ≤ T_broadcast_max` for each leader `L_k`.
-  - **Receiver acceptance horizon** `T_accept_max = T_commit + Δ_2a − 1 BTT`. Receivers accept Phase-1 bundles whose first-observation time is in `[slot_start, T_accept_max]`. A bundle first-observed past `T_accept_max` is auth-only-retained (usable for verifying re-flooded V's during Phase-2a, but cannot drive a Phase-2a verdict from the receiving operator; see [§Phase 1 / Late-bundle behavior](#phase-1--candidate-broadcast)).
-  - **Verdict broadcast horizon** `T_verdict_max = T_commit + Δ_2a − 1 BTT`. Operators must emit their Phase-2a verdict envelope by this time so it propagates to all honest peers before Phase-2a end (`T_commit + Δ_2a`). Coincides with `T_accept_max` by construction.
+  - **Leader broadcast deadline** `T_broadcast_max = T_verdict_start − 2 BTT`. Each layer's leader must finish broadcasting by this time so that under worst-case propagation, all honest first-observe by `T_verdict_start − 1 BTT`. Per-layer fetch windows fit: `T_k + Δ_1 ≤ T_broadcast_max` for each leader `L_k`.
+  - **Receiver acceptance horizon** `T_accept_max = T_commit − 1 BTT`. Receivers accept Phase-1 bundles whose first-observation time is in `[slot_start, T_accept_max]`. A bundle first-observed past `T_accept_max` is auth-only-retained (usable for verifying re-flooded V's during Phase-2a, but cannot drive a Phase-2a verdict from the receiving operator; see [§Phase 1 / Late-bundle behavior](#phase-1--candidate-broadcast)).
+  - **Verdict broadcast horizon** `T_verdict_max = T_commit − 1 BTT`. Operators must emit their Phase-2a verdict envelope by this time so it propagates to all honest peers before Phase-2a end (`T_commit`). Coincides with `T_accept_max` by construction.
 
 - **Phase-window minimums:**
 
@@ -133,12 +133,12 @@ Bundles passing cryptographic-auth checks are classified by first-observation ti
 
 **Retention bounds.** Retention state for accepted Phase-1 bundles is keyed by `(slot, layer k, leader_id)`. Per key, an operator retains at most **two distinct `(V, σ_{L_k}^{op})` tuples** — the first auth-valid bundle observed, plus, if a second auth-valid bundle with a *distinct* `value_root` is later observed, that one (sufficient for both Phase-2a verdict on the chosen V *and* leader-equivocation evidence). Further auth-valid bundles for the same `(slot, layer, leader_id)` are dropped silently. Retention lifetime: until the operator's local end of Phase 3; slot state is then cleared. This caps memory at `O(K · n)` bundles per slot in the worst case (every leader equivocates).
 
-**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. Re-flood propagation continues into Phase 2a (the "bundle re-flood" activity below) — late bundles arriving in `(T_commit, T_accept_max]` are absorbed into Phase-2a's verdict-eligibility window for receivers who first-observe them in time.
+**Bundle propagation.** Honest receivers re-flood every bundle via standard gossipsub on first observation. Re-flood propagation continues into Phase 2a (the "bundle re-flood" activity below) — late bundles arriving in `(T_verdict_start, T_accept_max]` are absorbed into Phase-2a's verdict-eligibility window for receivers who first-observe them in time.
 
 **Equivocation handling at Phase 1.** If the receiver retains 2 distinct `(V, σ^{op})` tuples at the same `(slot, layer, leader_id)`, that is leader equivocation. The pair is self-contained slashable evidence (Rule 2; see [§Slashing evidence](#slashing-evidence)), gossipped for out-of-band slashing. The receiver's local Phase-2a verdict for this layer is `NR-due-to-equivocation` regardless of host validity verdicts on either V — single-σ-V exclusivity at Phase-2b prevents the operator from σ-emitting on either side once equivocation is observed.
 
 <a id="phase-2a"></a>
-### Phase 2a — Bundle re-flood + verdict broadcast `[T_commit, T_commit + Δ_2a]`
+### Phase 2a — Bundle re-flood + verdict broadcast `[T_verdict_start, T_commit]`
 
 Two activities run in parallel during Phase 2a:
 
@@ -146,7 +146,7 @@ Two activities run in parallel during Phase 2a:
 
 Standard gossipsub re-flood of any retained Phase-1 bundles. Honest receivers forward bundles to peers on first observation. By Phase-2a end (under partial synchrony with `Δ_2a ≥ 2 BTT`), bundles broadcast at the leader's `T_broadcast_max` deadline have propagated to all honest receivers within Phase-2a's effective acceptance window. Late-arriving bundles past `T_accept_max` enter auth-only retention.
 
-This is the primary bundle-distribution path. The Phase-2a window's purpose for bundle re-flood is identical to OBFT's Phase-2 widening — late re-flood absorption — except that 2abOBFT's split structure means late receivers can issue Phase-2a verdicts on the recovered V (at the cost of the verdict propagating before `T_verdict_max = T_commit + Δ_2a − 1 BTT`).
+This is the primary bundle-distribution path. The Phase-2a window's purpose for bundle re-flood is identical to OBFT's Phase-2 widening — late re-flood absorption — except that 2abOBFT's split structure means late receivers can issue Phase-2a verdicts on the recovered V (at the cost of the verdict propagating before `T_verdict_max = T_commit − 1 BTT`).
 
 #### Activity 2 — Verdict broadcast
 
@@ -174,23 +174,23 @@ The verdict envelope is **op-identity-signed, not threshold-signed**. EKM/slashi
 
 **Verdict-spam handling.** A byzantine operator can broadcast many distinct verdict envelopes per `(slot, layer)`. Honest receivers retain the first-observed for convergence purposes; subsequent envelopes are processed for slashing evidence and otherwise dropped. Each receiver MUST log observed verdict-equivocation evidence per `(slot, layer, operator_id)` once for later out-of-band aggregation; log format is implementation-defined. Per-receiver memory remains bounded by gossipsub message-id deduplication and the per-(slot, layer) retention cap.
 
-**Verdict broadcast timing.** Operators should broadcast their verdict as late as possible within `[T_commit, T_verdict_max]` to maximize the time available for late-arriving bundles to drive the verdict. A practical schedule: each operator broadcasts at `T_verdict_max − ε_proc` where `ε_proc` is the operator's local processing budget for verdict construction + signing. Earlier broadcast risks issuing a verdict that doesn't reflect a late-arriving bundle (forcing the operator into an honest verdict-vs-action revision at Phase-2b end).
+**Verdict broadcast timing.** Operators should broadcast their verdict as late as possible within `[T_verdict_start, T_verdict_max]` to maximize the time available for late-arriving bundles to drive the verdict. A practical schedule: each operator broadcasts at `T_verdict_max − ε_proc` where `ε_proc` is the operator's local processing budget for verdict construction + signing. Earlier broadcast risks issuing a verdict that doesn't reflect a late-arriving bundle (forcing the operator into an honest verdict-vs-action revision at Phase-2b end).
 
-**Verdict propagation budget.** Verdicts broadcast at `T_verdict_max − ε_proc` propagate to all honest peers within `1 BTT` under partial synchrony, reaching them by `T_verdict_max + 1 BTT − ε_proc = T_commit + Δ_2a − ε_proc`. Two distinct slack quantities follow, often conflated:
+**Verdict propagation budget.** Verdicts broadcast at `T_verdict_max − ε_proc` propagate to all honest peers within `1 BTT` under partial synchrony, reaching them by `T_verdict_max + 1 BTT − ε_proc = T_commit − ε_proc`. Two distinct slack quantities follow, often conflated:
 
-  - **Arrival-to-Phase-2a-end slack** = `(T_commit + Δ_2a) − (T_commit + Δ_2a − ε_proc) = ε_proc`. This is the tail margin between the last honest receiver seeing the verdict and Phase-2a closing — the variance budget for the propagation tail above `1 BTT`. Sized to absorb propagation jitter, not separate cycles.
+  - **Arrival-to-Phase-2a-end slack** = `T_commit − (T_commit − ε_proc) = ε_proc`. This is the tail margin between the last honest receiver seeing the verdict and Phase-2a closing — the variance budget for the propagation tail above `1 BTT`. Sized to absorb propagation jitter, not separate cycles.
   - **Within-Δ_2a slack** = `Δ_2a − (1 BTT + ε_proc)`. This is the wiggle room *inside* Phase-2a beyond the structural minimum (one propagation cycle + processing). At recommended `Δ_2a = 2 BTT`, this is `1 BTT − ε_proc` — room for one full propagation cycle's variance.
 
-  **Minimum sizing `Δ_2a = 1 BTT` is broken-by-construction with the late-broadcast schedule.** At `Δ_2a = 1 BTT`, `T_verdict_max = T_commit`, so `T_verdict_max − ε_proc < T_commit` — broadcast is scheduled *before Phase-2a begins*. The within-Δ_2a slack is `−ε_proc`. The recommended `Δ_2a = 2 BTT` is therefore not a defensive choice but the **minimum coherent sizing** for the protocol's verdict-broadcast schedule. Production deployments MUST size `Δ_2a ≥ 2 BTT`; the formula extends linearly for tighter tail-percentile requirements.
+  **Minimum sizing `Δ_2a = 1 BTT` is broken-by-construction with the late-broadcast schedule.** At `Δ_2a = 1 BTT`, `T_verdict_max = T_commit − 1 BTT = T_verdict_start` (Phase 2a starts and the verdict horizon coincide), so the late-broadcast time `T_verdict_max − ε_proc < T_verdict_start` — broadcast is scheduled *before Phase-2a begins*. The within-Δ_2a slack is `−ε_proc`. The recommended `Δ_2a = 2 BTT` is therefore not a defensive choice but the **minimum coherent sizing** for the protocol's verdict-broadcast schedule. Production deployments MUST size `Δ_2a ≥ 2 BTT`; the formula extends linearly for tighter tail-percentile requirements.
 
 **One verdict per operator per (slot, layer).** The operator must commit to their verdict before broadcasting (no "tentative" verdicts that get overwritten — the second verdict is equivocation). To handle late-arriving bundles cleanly, the operator should *delay* their verdict broadcast as long as possible, not issue early-and-revise.
 
-**Late-bundle path within Phase-2a.** A Phase-1 bundle re-flooded into Phase-2a (first-observed past `T_commit` but ≤ `T_accept_max`) lets the receiving operator issue a `σV` verdict instead of `NR` (no-V) — provided the operator's verdict broadcast happens before `T_verdict_max`. If the bundle arrives later than `T_verdict_max`, the operator's verdict will already be NR (no V at verdict time); the bundle becomes auth-only retained.
+**Late-bundle path within Phase-2a.** A Phase-1 bundle re-flooded into Phase-2a (first-observed past `T_verdict_start` but ≤ `T_accept_max`) lets the receiving operator issue a `σV` verdict instead of `NR` (no-V) — provided the operator's verdict broadcast happens before `T_verdict_max`. If the bundle arrives later than `T_verdict_max`, the operator's verdict will already be NR (no V at verdict time); the bundle becomes auth-only retained.
 
 <a id="phase-2b"></a>
-### Phase 2b — σ-or-NR commit `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`
+### Phase 2b — σ-or-NR commit `[T_commit, T_commit + Δ_2b]`
 
-At the start of Phase 2b (`T_commit + Δ_2a`), each operator `i` computes its **convergence decision** per layer based on observed Phase-2a verdicts and its own local state.
+At the start of Phase 2b (`T_commit`), each operator `i` computes its **convergence decision** per layer based on observed Phase-2a verdicts and its own local state.
 
 #### Convergence rule
 
@@ -247,7 +247,7 @@ EKM/slashing-protection is consulted at Phase-2b sign time:
 
 A byzantine operator that publishes both σ and NR on the same `(slot, layer)` is publicly attributable (Rule 1; see [§Slashing evidence](#slashing-evidence)). Under `qEnc = qV`, cross-signing has no safety impact.
 
-### Phase 3 — Local decryption and reconstruction (from `T_commit + Δ_2a + Δ_2b`)
+### Phase 3 — Local decryption and reconstruction (from `T_commit + Δ_2b`)
 
 Each operator attempts a K-layer reconstruction walk. At each layer, the cluster has three possible outcomes: σ-quorum reaches on some V (output produced), or NR-quorum reaches (advance to next layer), or neither (slot misses).
 
@@ -288,7 +288,7 @@ if L_C == K and no σ-quorum reached:
 # End of reconstruction. If output produced, halt; else slot misses.
 ```
 
-**Reconstruction completion target** is `T_commit + Δ_2a + Δ_2b + Δ_3` where `Δ_3 ≥ 1 BTT + ε_3`. Phase 3 has no fixed end — reconstruction runs until σ-quorum reaches or the slot's relay-submission deadline (`T_relay_cutoff − T_submit`) forces termination. Late `KindOnion2b` arrivals can be incorporated by re-running the reconstruction walk (Pigeonhole semantics still hold; safe).
+**Reconstruction completion target** is `T_commit + Δ_2b + Δ_3` where `Δ_3 ≥ 1 BTT + ε_3`. Phase 3 has no fixed end — reconstruction runs until σ-quorum reaches or the slot's relay-submission deadline (`T_relay_cutoff − T_submit`) forces termination. Late `KindOnion2b` arrivals can be incorporated by re-running the reconstruction walk (Pigeonhole semantics still hold; safe).
 
 Multiple operators may reconstruct and submit independently; the downstream system de-duplicates.
 
@@ -324,12 +324,12 @@ There is no `Defer` state. Phase-2a's window IS the deferral mechanism: every op
 
 2abOBFT runs a single agreement round per slot with Phase 2 split into Phase 2a (verdict broadcast) and Phase 2b (σ-or-NR commit). The slot proceeds as follows:
 
-1. **Phase 1** `[slot_start, T_commit]`: K leaders broadcast their Phase-1 bundles per their per-layer fetch windows (`[T_{K-1}, T_{K-1} + Δ_1]`, ..., `[T_0, T_0 + Δ_1]`), with `T_0 + Δ_1 ≤ T_broadcast_max = T_commit − 2 BTT`. **No σ_V partial in Phase-1 bundles** (Variant C). Receivers accept bundles first-observed in `[slot_start, T_accept_max]` where `T_accept_max = T_commit + Δ_2a − 1 BTT`.
-2. **Phase 2a** `[T_commit, T_commit + Δ_2a]`: each operator broadcasts a per-layer verdict envelope (`KindVerdict`) reflecting their σ-eligibility per layer based on observed Phase-1 bundles and host validity verdicts. Bundle re-flood absorbs late-arriving Phase-1 bundles within the window. Operators emit verdicts at the latest-safe time (around `T_commit + Δ_2a − 1 BTT`) to maximize observed peer state.
-3. **Phase 2b** `[T_commit + Δ_2a, T_commit + Δ_2a + Δ_2b]`: each operator computes per-layer convergence decisions from the observed Phase-2a verdict pool (per the convergence rule) and emits σ-or-NR partials per layer. EKM enforces single-σ-V per (slot, layer) per operator at sign time.
-4. **Phase 3** (from `T_commit + Δ_2a + Δ_2b`): each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses (re-running may incorporate late `KindOnion2b` arrivals).
+1. **Phase 1** `[slot_start, T_verdict_start]`: K leaders broadcast their Phase-1 bundles per their per-layer fetch windows (`[T_{K-1}, T_{K-1} + Δ_1]`, ..., `[T_0, T_0 + Δ_1]`), with `T_0 + Δ_1 ≤ T_broadcast_max = T_verdict_start − 2 BTT`. **No σ_V partial in Phase-1 bundles** (Variant C). Receivers accept bundles first-observed in `[slot_start, T_accept_max]` where `T_accept_max = T_commit − 1 BTT`.
+2. **Phase 2a** `[T_verdict_start, T_commit]`: each operator broadcasts a per-layer verdict envelope (`KindVerdict`) reflecting their σ-eligibility per layer based on observed Phase-1 bundles and host validity verdicts. Bundle re-flood absorbs late-arriving Phase-1 bundles within the window. Operators emit verdicts at the latest-safe time (around `T_commit − 1 BTT`) to maximize observed peer state.
+3. **Phase 2b** `[T_commit, T_commit + Δ_2b]`: each operator computes per-layer convergence decisions from the observed Phase-2a verdict pool (per the convergence rule) and emits σ-or-NR partials per layer. EKM enforces single-σ-V per (slot, layer) per operator at sign time.
+4. **Phase 3** (from `T_commit + Δ_2b`): each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses (re-running may incorporate late `KindOnion2b` arrivals).
 
-**Slot timing**: Phase 1 fetch occupies `[slot_start, T_commit]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 = 2 BTT + 2 BTT + 250ms ≈ 1050ms` at recommended Config A sizing (≈ 650ms at minimum sizing); consensus is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`, leaving the rest of the slot as submission slack to `T_relay_cutoff`.
+**Slot timing**: Phase 1 fetch occupies `[slot_start, T_verdict_start]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 = 2 BTT + 2 BTT + 250ms ≈ 1050ms` at recommended Config A sizing (≈ 650ms at minimum sizing); consensus is expected to complete at `T_commit + Δ_2b + Δ_3`, leaving the rest of the slot as submission slack to `T_relay_cutoff`.
 
 ## Preconditions on the host application
 
@@ -391,7 +391,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 ### Trust model
 
 - **Byzantine bound `f`** with cluster size `n = 3f+1` (the BFT-tight setting; see [§Assumed / Standard BFT trust bound at the tight setting](#assumed)): up to `f` operators may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, etc.). Exactly `2f+1` honest.
-- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_commit − 2 BTT` (leader broadcast deadline), `T_accept_max = T_commit + Δ_2a − 1 BTT` (receiver acceptance horizon), `T_verdict_max = T_commit + Δ_2a − 1 BTT` (verdict broadcast horizon, coincident with `T_accept_max`). Reconstruction is expected to complete at `T_commit + Δ_2a + Δ_2b + Δ_3`; the slot's hard wall is the relay-submission deadline `T_relay_cutoff − T_submit`.
+- **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_verdict_start − 2 BTT` (leader broadcast deadline), `T_accept_max = T_commit − 1 BTT` (receiver acceptance horizon), `T_verdict_max = T_commit − 1 BTT` (verdict broadcast horizon, coincident with `T_accept_max`). Reconstruction is expected to complete at `T_commit + Δ_2b + Δ_3`; the slot's hard wall is the relay-submission deadline `T_relay_cutoff − T_submit`.
 
   **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + 1 BTT`:
   - At `Δ_2a = 1 BTT` (BFT-minimum): `2 BTT` = 400ms at Config A.
@@ -536,7 +536,7 @@ If L_1 has the same parent_root issue (e.g., same re-org affects all backup lead
 
 #### Late deepest-layer leader broadcast
 
-A deepest-layer leader L_{K-1} whose Phase-1 bundle's first cluster-observation arrives in `(T_commit, T_accept_max]` (slightly past `T_broadcast_max`, but within Phase-2a's absorption window) is recoverable in 2abOBFT: the late bundle re-floods to honest receivers in Phase-2a, they verdict σV at Phase-2a, verdict-pool reaches qV, σ-emit at Phase-2b. **Slot succeeds at L_{K-1}** where bare OBFT would have lost the bundle past the receiver acceptance window.
+A deepest-layer leader L_{K-1} whose Phase-1 bundle's first cluster-observation arrives in `(T_verdict_start, T_accept_max]` (slightly past `T_broadcast_max`, but within Phase-2a's absorption window) is recoverable in 2abOBFT: the late bundle re-floods to honest receivers in Phase-2a, they verdict σV at Phase-2a, verdict-pool reaches qV, σ-emit at Phase-2b. **Slot succeeds at L_{K-1}** where bare OBFT would have lost the bundle past the receiver acceptance window.
 
 #### Mesh-flakiness coordinated with byz σ-refusal
 
@@ -657,7 +657,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Built-in leader fallback | Yes (K-layer fall-through within Phase 3's reconstruction walk; K configurable, K = n recommended for proposer duty) |
 | Round-change recovery | No — single-round design. Late re-flood within Phase-2a's absorption window is the only within-slot partition-recovery mechanism. |
 | Partial-synchrony absorption window | `Δ_2a + 1 BTT` (single round) — ≈ 600ms at Config A recommended. |
-| Healthy-path latency (post-`T_commit`) | ~1050ms at Config A recommended (Δ_2a=Δ_2b=2 BTT=400ms each + Δ_3=250ms); ~650ms at minimum sizing (Δ_2a=Δ_2b=1 BTT=200ms each + Δ_3=250ms) |
+| Healthy-path latency (post-`T_commit`) | ~650ms at Config A recommended (Δ_2b=2 BTT=400ms + Δ_3=250ms); ~450ms at minimum sizing (Δ_2b=1 BTT=200ms + Δ_3=250ms). Post-`T_commit` here is "post-σ-or-NR commit"; Phase 2a is pre-`T_commit`. |
 | Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +600ms at recommended sizing (extra Phase 2a window of 400ms + Δ_3 +200ms vs single Phase 2); +400ms at minimum sizing (both have Phase 2 window summing to 1 BTT-equivalent, plus Δ_3 difference) |
 | EKM complexity | Lowest in the OBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
 
@@ -679,10 +679,11 @@ For an SSV cluster proposing an Ethereum block, the recommended 2abOBFT configur
 | `V_{L_0}` | MEV-optimized block fetched late from the relay |
 | `L_1, ..., L_{K-1}` (backup leaders) | separately designated operators, distinct from `L_0` and from each other |
 | `V_{L_k}` for k ≥ 1 | safe early-fetched blocks from vanilla beacon-node payloads, refreshed on head changes |
-| `T_commit` | view-fix deadline — anchor: `slot_start + 1.5s` for the configurations below |
-| `T_broadcast_max` | leader broadcast deadline — `T_commit − 2 BTT`; per-layer fetch windows fit within `[0, T_broadcast_max]` |
-| `T_accept_max` | receiver acceptance horizon — `T_commit + Δ_2a − 1 BTT`; bundles first-observed past this are auth-only-retained |
-| `T_verdict_max` | verdict broadcast horizon — coincident with `T_accept_max` |
+| `T_verdict_start` | Phase-1 / Phase-2a boundary — anchor: ≈ `slot_start + 1.60s` for the configurations below. Phase 2a verdict-broadcast window begins here. |
+| `T_commit` | σ-or-NR commit point (start of Phase 2b — the cryptographic point of no return) — anchor: ≈ `slot_start + 2.00s`. Aligned semantically with OBFT/OBFTR/QBFT `T_commit`. |
+| `T_broadcast_max` | leader broadcast deadline — `T_verdict_start − 2 BTT`; per-layer fetch windows fit within `[0, T_broadcast_max]` |
+| `T_accept_max` | receiver acceptance horizon — `T_commit − 1 BTT`; bundles first-observed past this are auth-only-retained |
+| `T_verdict_max` | verdict broadcast horizon — coincident with `T_accept_max` (= `T_commit − 1 BTT`) |
 | `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 100ms` of slack to land (matches OBFT.md's `header_submit_headroom`) |
 
 ### Timing budget — concrete configurations
@@ -695,9 +696,9 @@ Common parameters: **P99 = 150ms (cluster gossipsub P99/P999), δ = 50ms, n = 4,
 
 | Window | Length | End time | Notes |
 |---|---|---|---|
-| Phase 1 fetch (effective) | 1200ms | slot_start + 1.20s | `T_broadcast_max = T_commit − 2 BTT = 1.20s` |
-| Phase-1 propagation slack | 400ms | slot_start + 1.60s = T_commit | Bundles broadcast at deadline propagate to all honest within `1 BTT` |
-| Phase 2a | 400ms | slot_start + 2.00s | `Δ_2a = 2 BTT`; verdict broadcast horizon = `T_commit + Δ_2a − 1 BTT = 1.80s`; absorbs late bundles arriving up to 1.80s |
+| Phase 1 fetch (effective) | 1200ms | slot_start + 1.20s | `T_broadcast_max = T_verdict_start − 2 BTT = 1.20s` |
+| Phase-1 propagation slack | 400ms | slot_start + 1.60s = T_verdict_start | Bundles broadcast at deadline propagate to all honest within `1 BTT` |
+| Phase 2a | 400ms | slot_start + 2.00s = T_commit | `Δ_2a = 2 BTT`; verdict broadcast horizon = `T_commit − 1 BTT = 1.80s`; absorbs late bundles arriving up to 1.80s |
 | Phase 2b | 400ms | slot_start + 2.40s | `Δ_2b = 2 BTT`; σ/NR partials propagate to peers before Phase 3 |
 | Phase 3 | 250ms | slot_start + 2.65s | `Δ_3 = 1 BTT + ε_3 = 250ms`; absorbs end-of-Phase-2b NR-partial propagation + reconstruction |
 | Submission | 1350ms | slot_start + 4.00s | ~13× the 100ms minimum — comfortable headroom |
@@ -737,9 +738,9 @@ This per-operator workflow narrows the divergence window to events landing insid
 
 2. **Deadline coordination.** Clock skew across operators must be bounded by `δ` and known. Three distinct deadlines (do not conflate):
 
-   - **`T_broadcast_max = T_commit − 2 BTT`**: leader broadcast deadline.
-   - **`T_accept_max = T_commit + Δ_2a − 1 BTT`**: receiver acceptance horizon.
-   - **`T_verdict_max = T_commit + Δ_2a − 1 BTT`**: verdict broadcast horizon (coincident with T_accept_max).
+   - **`T_broadcast_max = T_verdict_start − 2 BTT`**: leader broadcast deadline.
+   - **`T_accept_max = T_commit − 1 BTT`**: receiver acceptance horizon.
+   - **`T_verdict_max = T_commit − 1 BTT`**: verdict broadcast horizon (coincident with T_accept_max).
 
    Phase-window minimums: `Δ_2a ≥ 1 BTT`, `Δ_2b ≥ 1 BTT`, `Δ_3 ≥ 1 BTT + ε_3`. Recommended: `Δ_2a = Δ_2b = 2 BTT` for jitter absorption.
 
@@ -787,7 +788,7 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Operator commitment states | σ, NR, NV (3 states) | σ, NR, NV (3 states) |
 | σ-commit timing | Phase 1 (leader) or Phase 2 (others, at `T_commit`) | Phase 2b (uniform across all operators, after Phase-2a observation) |
 | Convergence mechanism | Per-operator local view (each operator commits at `T_commit` based on retained V's) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
-| Healthy-path latency (post-`T_commit`, recommended sizing) | ~450ms | ~1050ms (+600ms for Phase-2a window + Δ_3) |
+| Healthy-path latency (post-`T_commit`, recommended sizing) | ~450ms | ~650ms (Δ_2b + Δ_3; Phase 2a is pre-`T_commit` under aligned semantics) |
 | Marginal h_V_honest=2 + byz silent | Slot misses (σ-pool short, NR-pool short) | Falls through to L_1 ✓ |
 | Equivocation 1-1-1 split | Slot misses | Falls through to L_1 ✓ |
 | Equivocation 2-1, byz cooperates | Succeeds at L_0 | Succeeds at L_0 (tie) |

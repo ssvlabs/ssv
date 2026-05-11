@@ -21,7 +21,7 @@
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
 | h_V=1 selective-delivery deadlock | Class B grief, not recovered in-protocol — algebraic deadlock at f=1, n=4 (σ-pool=2 < qV; NR-pool=2 < qEnc). Deterred via Assumption 4 across slots. | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
-| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 450ms post-T_commit (Config A) | `T_commit + Δ_2a + Δ_2b + Δ_3` ≈ 1050ms post-T_commit (+600ms for Phase-2a window + Δ_3 difference) |
+| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 450ms post-T_commit (Config A) | `T_commit + Δ_2b + Δ_3` ≈ 650ms post-T_commit (Phase 2a is pre-T_commit under aligned naming; +200ms post-T_commit vs bare OBFT, with the +400ms Phase-2a window absorbed into pre-T_commit budget) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
 | Slashing-evidence rules | 5 rules | 5 rules + 1 (verdict-vs-action equivocation) |
 | Late-deepest-layer leader broadcast (Class A) | Mitigated by K ≥ f+2; class-A residual | Closed structurally — late bundle observed in Phase-2a is σ-emittable in Phase-2b |
@@ -182,10 +182,10 @@ A re-org during Phase-1 acceptance window splits honest verdicts: some operators
 
 Bare OBFT's failure mode ([docs/OBFT.md / Failure modes](OBFT.md#failure-modes)): deepest-layer leader broadcasts past T_accept_max → all honest treat as silent → NR-quorum at L_{K-1} → walk advances past L_{K-1}, no L_K → slot misses.
 
-In Variant C, late-arriving Phase-1 bundles are auth-only-retained until Phase-2a ends. If the bundle re-floods to all honest before `T_commit + Δ_2a − 1 BTT`, honest can verdict-claim σV on V; verdict-pool reaches qV; Phase-2b σ-emit on the late V. **Slot succeeds where bare OBFT fails.**
+In Variant C, late-arriving Phase-1 bundles are auth-only-retained until Phase-2a ends. If the bundle re-floods to all honest before `T_commit − 1 BTT`, honest can verdict-claim σV on V; verdict-pool reaches qV; Phase-2b σ-emit on the late V. **Slot succeeds where bare OBFT fails.**
 
 Conditions for recovery:
-- Bundle propagates to all honest before `T_commit + Δ_2a − 1 BTT`. At Config A recommended Δ_2a = 400ms, this is 200ms past T_commit.
+- Bundle propagates to all honest before `T_commit − 1 BTT`. At Config A recommended Δ_2a = 400ms, this is 200ms into Phase 2a (= `T_commit − 200ms` = `T_verdict_start + 200ms`).
 - Operationally: the leader's late broadcast is observed by at least one honest peer who re-floods immediately. The re-flood completes within `1 BTT` of the late observation.
 
 ### Mesh-flakiness coordinated with byz σ-refusal (Class B in OBFT)
@@ -212,9 +212,9 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 **E1: Operator broadcasts verdict too early in Phase-2a.** They commit before observing late-arriving bundles. If a late bundle would have changed their verdict, they're locked on the early verdict (verdict envelope is op-identity-signed; broadcasting a second different verdict is verdict-equivocation, slashable).
 
-- **Mitigation**: operators broadcast verdict as late as possible within Phase-2a, no earlier than `T_commit + Δ_2a − 1 BTT`. This gives maximum time for bundle re-flood while still allowing the verdict to propagate before Phase-2a end.
-- **Failure mode**: an honest operator with a buggy timer broadcasts verdict at `T_commit + 50ms` (way too early). They may verdict NR before a late bundle arrives. Their NR verdict counts in `nr_pool`. If the cluster reaches NR-quorum, fall-through happens (still recovers). If not, the operator may have to emit NR at Phase-2b (since their verdict was NR) even though V arrived later — but then they'd have V_local but NR-verdict; the convergence rule says: if `nr_eligibility_quorum` is met, NR (regardless of V_local); if not, follow own verdict. Per rule, they NR-emit. Slot may still recover via other operators' σ-emits if `verdict_pool[V] ≥ qV` from those who waited.
-- **Recommendation**: implementation should default to "verdict at `T_commit + Δ_2a − 1 BTT` minus a small operator-side processing buffer", not earlier.
+- **Mitigation**: operators broadcast verdict as late as possible within Phase-2a, no earlier than `T_commit − 1 BTT`. This gives maximum time for bundle re-flood while still allowing the verdict to propagate before Phase-2a end.
+- **Failure mode**: an honest operator with a buggy timer broadcasts verdict at `T_verdict_start + 50ms` (way too early). They may verdict NR before a late bundle arrives. Their NR verdict counts in `nr_pool`. If the cluster reaches NR-quorum, fall-through happens (still recovers). If not, the operator may have to emit NR at Phase-2b (since their verdict was NR) even though V arrived later — but then they'd have V_local but NR-verdict; the convergence rule says: if `nr_eligibility_quorum` is met, NR (regardless of V_local); if not, follow own verdict. Per rule, they NR-emit. Slot may still recover via other operators' σ-emits if `verdict_pool[V] ≥ qV` from those who waited.
+- **Recommendation**: implementation should default to "verdict at `T_commit − 1 BTT` minus a small operator-side processing buffer", not earlier.
 
 ### Verdict equivocation by operator
 
@@ -251,7 +251,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 ### Late-arriving bundle vs op-identity verdict equivocation
 
-**E5: Honest A first-observes V_a at T_commit + 100ms, broadcasts verdict σV(V_a) at T_commit + 150ms. Then at T_commit + 250ms, a re-flooded V_b (byzantine equivocation) arrives at A. A now retains V_a + V_b.**
+**E5: Honest A first-observes V_a at T_verdict_start + 100ms, broadcasts verdict σV(V_a) at T_verdict_start + 150ms. Then at T_verdict_start + 250ms, a re-flooded V_b (byzantine equivocation) arrives at A. A now retains V_a + V_b.**
 
 - A's Phase-2a verdict was σV(V_a); A's commit at Phase-2a end is `NR-due-to-equivocation` (equivocation observed override).
 - A cannot broadcast a second verdict to revise — that would be A's verdict equivocation.
@@ -359,13 +359,13 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 ### Phase-2b late σ when bundle re-floods very close to Phase-2a end
 
-**E17: Bundle re-floods to operator A at T_commit + Δ_2a − ε for tiny ε. A barely has time to verdict σV(V) and broadcast.**
+**E17: Bundle re-floods to operator A at T_commit − ε for tiny ε. A barely has time to verdict σV(V) and broadcast.**
 
-- A's verdict broadcast time: `T_commit + Δ_2a − ε`. Propagation to peers: peer first-observes by `T_commit + Δ_2a − ε + 1 BTT`.
-- Peer's Phase-2a end: `T_commit + Δ_2a`. Peer first-observes A's verdict at `T_commit + Δ_2a + 1 BTT − ε` — past Phase-2a end.
+- A's verdict broadcast time: `T_commit − ε`. Propagation to peers: peer first-observes by `T_commit − ε + 1 BTT`.
+- Peer's Phase-2a end: `T_commit`. Peer first-observes A's verdict at `T_commit + 1 BTT − ε` — past Phase-2a end.
 - A's verdict missed Phase-2a's effective deadline; peer doesn't include A in `verdict_pool[V]` for convergence.
 - A's vote is wasted; cluster computes convergence without A. If `verdict_pool[V]` still reaches qV without A, slot succeeds. If not (A was the marginal vote), σ-eligibility short → all NR → fall-through.
-- **Mitigation**: don't broadcast verdict past `T_commit + Δ_2a − 1 BTT`. This is the effective Phase-2a verdict-broadcast cutoff.
+- **Mitigation**: don't broadcast verdict past `T_commit − 1 BTT`. This is the effective Phase-2a verdict-broadcast cutoff.
 
 ### Asymmetric verdict observation at Phase-2a end
 
@@ -390,7 +390,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 5. **Convergence-rule tie-break at n > 3f+1**: when multiple V's could reach `qV` (only possible at non-tight BFT-bound clusters like n=5 f=1), use lexicographic `value_root` tie-break. At n=3f+1 exactly (the SSV cluster sizes), tie-break is moot. Document for completeness.
 
-6. **Late-bundle Phase-2a verdict path**: should an operator who first-observes V via re-flood at, say, T_commit + Δ_2a/2 still broadcast σV verdict? Yes, if propagation slack permits (broadcast ≤ T_commit + Δ_2a − 1 BTT). Implementation: per-operator timer that fires at the latest-safe verdict-broadcast time.
+6. **Late-bundle Phase-2a verdict path**: should an operator who first-observes V via re-flood at, say, T_commit − Δ_2a/2 (= mid-Phase-2a) still broadcast σV verdict? Yes, if propagation slack permits (broadcast ≤ T_commit − 1 BTT). Implementation: per-operator timer that fires at the latest-safe verdict-broadcast time.
 
 7. **Rule 6 evidence handling**: how do receivers determine whether a verdict-vs-action mismatch is honest revision (allowed) vs byzantine equivocation (slashable)? Implementation rule: receiver collects mismatch evidence; honest receivers cross-reference with their cluster verdict view; weakly slashable ("behavioral pattern" quality, like OBFT's selective-delivery). Surfacing this evidence requires the manual-blacklist coordination from OBFT's rational-byzantine-deterrent model (planned protocol extension) — not automated.
 
@@ -398,7 +398,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 9. **What if leader's verdict on their own V is NV?** This is the validity-divergence-with-leader-on-NV-side case. Handled by the convergence rule: leader's verdict NR/NV puts them in `nr_pool`. NR-pool may reach qEnc → fall-through.
 
-10. **Phase-2b emission timing — start-of-window or based on convergence completion?** Operators compute convergence at Phase-2a end (T_commit + Δ_2a) and emit Phase-2b immediately. No need to delay further within Phase-2b; the window is for propagation.
+10. **Phase-2b emission timing — start-of-window or based on convergence completion?** Operators compute convergence at Phase-2a end (T_commit) and emit Phase-2b immediately. No need to delay further within Phase-2b; the window is for propagation.
 
 11. **K = 4 vs K = 3 trade-off**: same as OBFT base. K=4 (= n) has maximum fall-through depth at +3 KB onion bandwidth; K=3 (= f+2) saves bandwidth but is less robust to multi-layer adversarial scenarios. Recommend K = n = 4 for SSV proposer.
 
@@ -414,7 +414,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
     **Partial close in spec.** The spec now includes a SHOULD-level "treat verdict-equivocator as null in convergence count" rule ([2abOBFT.md §Phase 2a](2abOBFT.md#phase-2a)) which routes most verdict-equivocation cases through NR-quorum fall-through. It shrinks the surface to timing-optimized byzantines (those who inject the second verdict late enough that re-flood doesn't complete within Phase-2a for all honest). This question (#16) remains the **full cryptographic close** — when telemetry justifies it.
 
-17. **Verdict-issue timing minimum**: should there be a *minimum* verdict-broadcast time (e.g., `T_commit + Δ_2a/2`) to prevent premature commits? At the boundary case where an honest operator broadcasts verdict immediately on Phase-1-acceptance success and a byzantine equivocation arrives mid-Phase-2a, the honest operator's verdict is on the wire as σV but their commit revises to NR (honest exception under Rule 6). A minimum-broadcast-time would force operators to wait long enough to observe most re-flooded equivocation evidence first. Trade-off: forces all operators to broadcast verdicts in a narrow window near Phase-2a end, potentially adding propagation pressure. Default recommendation: no minimum (broadcast at latest-safe time, which is the natural choice anyway).
+17. **Verdict-issue timing minimum**: should there be a *minimum* verdict-broadcast time (e.g., `T_commit − Δ_2a/2`, = mid-Phase-2a) to prevent premature commits? At the boundary case where an honest operator broadcasts verdict immediately on Phase-1-acceptance success and a byzantine equivocation arrives mid-Phase-2a, the honest operator's verdict is on the wire as σV but their commit revises to NR (honest exception under Rule 6). A minimum-broadcast-time would force operators to wait long enough to observe most re-flooded equivocation evidence first. Trade-off: forces all operators to broadcast verdicts in a narrow window near Phase-2a end, potentially adding propagation pressure. Default recommendation: no minimum (broadcast at latest-safe time, which is the natural choice anyway).
 
 ## Implementation plan — high-level breakdown
 
@@ -445,8 +445,8 @@ The implementation is broken into phases that can be staged across PRs:
 ### Phase 4 — Adapter integration
 
 - Wire the proposer-duty runner to drive the Phase 2a/2b state machine.
-- Add Phase-2a verdict broadcast at `T_commit + Δ_2a − 1 BTT`.
-- Add Phase-2b emission at `T_commit + Δ_2a`.
+- Add Phase-2a verdict broadcast at `T_commit − 1 BTT`.
+- Add Phase-2b emission at `T_commit`.
 
 ### Phase 5 — Slashing-evidence rule 6
 
