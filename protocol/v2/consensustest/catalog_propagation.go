@@ -102,8 +102,17 @@ var scenarioMeshFlakiness = Scenario{
 		for i := 0; i < f; i++ {
 			flakyOverrides[OperatorID(i+2)] = 2 * cfg.BTT
 		}
+		// Wrap whatever Network the profile set (JitteredDelay in stress,
+		// ConstantDelay in correctness) so non-flaky receivers still see
+		// the profile's variance. The slow-op overrides are absolute —
+		// PerReceiverDelay returns them as-is, so the algebraic miss
+		// conditions on flaky ops stay deterministic.
+		inner := cfg.Network
+		if inner == nil {
+			inner = ConstantDelay{D: cfg.BTT}
+		}
 		cfg.Network = PerReceiverDelay{
-			Inner:     ConstantDelay{D: cfg.BTT},
+			Inner:     inner,
 			Overrides: flakyOverrides,
 		}
 		// f byz σ-refusal at op{N-f+1}..op{N}.
@@ -161,8 +170,13 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 		for i := 0; i < f; i++ {
 			overrides[OperatorID(i+2)] = 3 * cfg.BTT
 		}
+		// See MeshFlakiness for the inner-preservation rationale.
+		inner := cfg.Network
+		if inner == nil {
+			inner = ConstantDelay{D: cfg.BTT}
+		}
 		cfg.Network = PerReceiverDelay{
-			Inner:     ConstantDelay{D: cfg.BTT},
+			Inner:     inner,
 			Overrides: overrides,
 		}
 	},
@@ -205,8 +219,13 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 		for i := 0; i < f+1; i++ {
 			overrides[OperatorID(i+2)] = 3 * cfg.BTT
 		}
+		// See MeshFlakiness for the inner-preservation rationale.
+		inner := cfg.Network
+		if inner == nil {
+			inner = ConstantDelay{D: cfg.BTT}
+		}
 		cfg.Network = PerReceiverDelay{
-			Inner:     ConstantDelay{D: cfg.BTT},
+			Inner:     inner,
 			Overrides: overrides,
 		}
 	},
