@@ -56,6 +56,8 @@ function main() {
   root.appendChild(renderHeader(data));
   root.appendChild(renderTOC(data));
   const mainEl = h('main');
+  const overview = renderHeatmap(data);
+  if (overview) mainEl.appendChild(overview);
   data.sweeps.forEach((sw) => mainEl.appendChild(renderSweepSection(sw, data, bucketing)));
   root.appendChild(mainEl);
   // Default-open packs init their charts immediately; collapsed packs
@@ -226,6 +228,123 @@ function renderTOC(data) {
   });
   nav.appendChild(sweepRow);
   return nav;
+}
+
+// renderHeatmap draws a top-of-page overview table — one row per
+// catalog scenario × one column per protocol, colored by success rate.
+// Scans across protocols in a single view so "where does each protocol
+// win" is answerable at a glance. Click any cell to scroll to that
+// scenario's row in the canonical sweep section below.
+//
+// First-pass scope: canonical sweep only, success-rate metric. Sweep /
+// metric pickers can land in a follow-up if the shape reads well.
+function renderHeatmap(data) {
+  const canonical = data.sweeps.find((s) => s.name === 'canonical');
+  if (!canonical || canonical.points.length === 0) return null;
+  const point = canonical.points[0];
+
+  const section = h('section', { class: 'heatmap', id: 'overview' });
+  const head = h('div', { class: 'heatmap-head' });
+  head.appendChild(h('h2', {}, 'Overview: success rate by scenario'));
+  head.appendChild(
+    h(
+      'p',
+      { class: 'desc' },
+      `At the canonical operating point (${(canonical.params || []).join(', ')}). ` +
+        'Each cell is colored by success rate: green = always decides, red = always misses. ' +
+        'Click a cell to drill into the matching scenario.',
+    ),
+  );
+  section.appendChild(head);
+
+  const table = h('table', { class: 'heatmap-grid' });
+  const headerRow = h('tr', {}, h('th', {}));
+  data.protocols.forEach((p) => headerRow.appendChild(h('th', {}, p)));
+  table.appendChild(h('thead', {}, headerRow));
+
+  const tbody = h('tbody');
+  let lastGroup = null;
+  data.scenarios.forEach((sc) => {
+    const group = sc.group || 'Other';
+    if (group !== lastGroup) {
+      const sep = h('tr', { class: 'group-sep' });
+      sep.appendChild(h('td', { colspan: String(1 + data.protocols.length) }, group));
+      tbody.appendChild(sep);
+      lastGroup = group;
+    }
+    const row = h('tr', { 'data-scenario': sc.name });
+    row.appendChild(h('td', { class: 'scen' }, sc.title || sc.name));
+    data.protocols.forEach((p) => {
+      const cell = findCell(point, sc.name, p);
+      row.appendChild(renderHeatmapCell(cell, sc.name, p));
+    });
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  section.appendChild(table);
+  return section;
+}
+
+// renderHeatmapCell colors a single cell by success rate using a
+// continuous HSL gradient (hue 0 = red at 0%, hue 120 = green at 100%).
+// n/a cells (iterations=0) render grey. Cell text shows the numeric
+// success rate; tooltip carries P99 latency for quick scanning without
+// drilling.
+function renderHeatmapCell(cell, scenarioName, protocolName) {
+  if (!cell || cell.iterations === 0) {
+    return h(
+      'td',
+      {
+        class: 'hcell na',
+        title: `${protocolName}: n/a (scenario doesn't apply to this protocol)`,
+        'data-scenario': scenarioName,
+        'data-protocol': protocolName,
+      },
+      'n/a',
+    );
+  }
+  const rate = cell.successRate; // 0..1
+  const hue = Math.round(rate * 120); // 0 (red) → 120 (green)
+  const pct = Math.round(rate * 100);
+  const p99 = cell.decisionTime ? `${Math.round(cell.decisionTime.p99)} ms P99` : 'no decisions';
+  const td = h(
+    'td',
+    {
+      class: 'hcell',
+      style: `--hue: ${hue}`,
+      title: `${protocolName} · ${scenarioName}\n${pct}% success · ${p99}`,
+      'data-scenario': scenarioName,
+      'data-protocol': protocolName,
+    },
+    `${pct}%`,
+  );
+  td.addEventListener('click', () => {
+    // Scroll to the scenario's row in the canonical sweep section,
+    // opening its enclosing group pack if needed.
+    const target = document.querySelector(
+      `section.sweep#sweep-canonical tr[data-scenario="${cssEscape(scenarioName)}"]`,
+    );
+    if (!target) return;
+    const pack = target.closest('details.group-pack');
+    if (pack && !pack.hasAttribute('open')) {
+      pack.setAttribute('open', '');
+      fireChartInit(pack);
+    }
+    target.click(); // select the row so the per-pack chart updates
+    // Use auto behavior so the jump is instant and headless-preview-friendly.
+    // The pack toggle needs one tick to settle before we measure heights.
+    setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'auto' }), 80);
+  });
+  return td;
+}
+
+// cssEscape — minimal CSS.escape polyfill for the scenario names that
+// appear in our selectors. Scenarios use safe ASCII (e.g. "MeshFlakiness"),
+// but we still escape to keep the selector valid if a future scenario
+// name picks up a special character.
+function cssEscape(s) {
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(s);
+  return String(s).replace(/["\\]/g, '\\$&');
 }
 
 function renderSweepSection(sweep, data, bucketing) {

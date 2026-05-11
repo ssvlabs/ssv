@@ -121,6 +121,79 @@ header.page .header-controls button:hover {
   white-space: nowrap;
 }
 
+/* ---- Heatmap overview ---- */
+
+section.heatmap {
+  padding-top: 0.8em;
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+.heatmap-head {
+  padding-bottom: 0.4em;
+  margin-bottom: 0.5em;
+  border-bottom: 1px solid var(--border);
+}
+.heatmap-head h2 {
+  margin: 0 0 0.15em;
+  font-size: 1.3em;
+}
+table.heatmap-grid {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9em;
+  width: 100%;
+  max-width: 720px;
+}
+table.heatmap-grid th {
+  background: var(--surface-muted);
+  font-weight: 600;
+  font-size: 0.84em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+  padding: 0.4em 0.7em;
+  border-radius: 4px;
+}
+table.heatmap-grid tr.group-sep td {
+  background: transparent;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.8em 0 0.2em 0.2em;
+  border: none;
+}
+table.heatmap-grid td.scen {
+  padding: 0.35em 0.7em 0.35em 0.2em;
+  color: #1f2937;
+  background: transparent;
+}
+/* Heatmap cell color: HSL hue from --hue, fixed saturation/lightness.
+ * Cells with no data render as the muted-grey "na" variant. */
+table.heatmap-grid td.hcell {
+  padding: 0.4em 0.7em;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 6em;
+  background: hsl(var(--hue), 62%, 78%);
+  color: #1a1a1a;
+  transition: filter 100ms ease, transform 100ms ease;
+}
+table.heatmap-grid td.hcell:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+table.heatmap-grid td.hcell.na {
+  background: #e2e8f0;
+  color: var(--na);
+  cursor: default;
+}
+
 section.sweep {
   padding-top: 0.8em;
   margin-top: 0;
