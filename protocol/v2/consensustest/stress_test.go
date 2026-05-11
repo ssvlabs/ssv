@@ -12,6 +12,7 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 	"github.com/ssvlabs/ssv/protocol/v2/consensustest/reporting"
 )
 
@@ -82,7 +83,7 @@ func TestStress(t *testing.T) {
 	// from the report without a driver-side change.
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations, clusterSize)
 	require.Len(t, sweeps, 4)
 

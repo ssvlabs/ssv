@@ -9,6 +9,7 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
 // TestCorrectness is the correctness-tier entry point. It runs every
@@ -29,7 +30,7 @@ import (
 // See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestCorrectness(t *testing.T) {
 	profile := ct.CorrectnessProfile(200 * time.Millisecond)
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}}
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeCorrectness)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeCorrectness")
 

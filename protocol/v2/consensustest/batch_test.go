@@ -9,6 +9,7 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
 // TestBatch_Smoke runs a small batch (5 iterations × 3 scenarios × 2
@@ -34,11 +35,11 @@ func TestBatch_Smoke(t *testing.T) {
 		SeedStart:  1,
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
-		Protocols:  []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}},
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}},
 	}
 
 	report := ct.RunBatch(t, cfg)
-	require.Len(t, report.Cells, 6, "3 scenarios × 2 protocols = 6 cells")
+	require.Len(t, report.Cells, 9, "3 scenarios × 3 protocols = 9 cells")
 	require.Greater(t, report.Wallclock, time.Duration(0))
 
 	for _, cell := range report.Cells {
@@ -75,7 +76,7 @@ func TestBatch_Determinism(t *testing.T) {
 		SeedStart:  1,
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
-		Protocols:  []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}},
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}},
 		// Single-goroutine to make this assertion robust against scheduler
 		// reordering effects (cell-level parallelism preserves per-cell
 		// determinism but `report.Cells` order could vary in principle —
@@ -119,19 +120,22 @@ func TestBatch_NotApplicableSkips(t *testing.T) {
 		SeedStart:  1,
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
-		Protocols:  []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}},
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}},
 	}
 	report := ct.RunBatch(t, cfg)
 
-	var obftCell, qbftCell ct.BatchCell
+	var obftCell, twoabCell, qbftCell ct.BatchCell
 	for _, c := range report.Cells {
 		switch c.Protocol {
 		case "OBFT":
 			obftCell = c
+		case "2abOBFT":
+			twoabCell = c
 		case "QBFT":
 			qbftCell = c
 		}
 	}
 	require.Equal(t, 3, obftCell.Iterations, "OBFT-applicable scenario must run all iterations")
+	require.Equal(t, 3, twoabCell.Iterations, "2abOBFT-applicable scenario must run all iterations")
 	require.Equal(t, 0, qbftCell.Iterations, "QBFT-not-applicable scenario must report Iterations=0")
 }

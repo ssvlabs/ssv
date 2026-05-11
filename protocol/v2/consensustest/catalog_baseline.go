@@ -12,8 +12,9 @@ var scenarioHealthy = Scenario{
 		cfg.Host = HostAllValid{}
 	},
 	Expect: map[string]ExpectClass{
-		"OBFT": ExpectSuccessFastest,
-		"QBFT": ExpectSuccessFastest,
+		"OBFT":    ExpectSuccessFastest,
+		"2abOBFT": ExpectSuccessFastest,
+		"QBFT":    ExpectSuccessFastest,
 	},
 	Note: "Both protocols complete at fastest path under all-honest, in-budget propagation. BFT-comparison.md Table 1.",
 }

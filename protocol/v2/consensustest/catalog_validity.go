@@ -34,6 +34,11 @@ var scenarioValidityDivergenceAlgebraicLimit = Scenario{
 		// OBFT: σ-pool=2f < qV=2f+1; NR-pool=f+1 < qEnc=2f+1; chained
 		// decryption blocked → slot misses (algebraic limit).
 		"OBFT": ExpectMiss,
+		// 2abOBFT (key win): same algebraic split at L_0, but row 5 NR drives
+		// all 4 ops to NR-emit → NR-quorum at L_0 (= 4 ≥ qEnc=3) → advance
+		// to L_1 where host-valid retention restores σ-quorum. Spec's
+		// validity-divergence-recovery story made testable.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE pool insufficient (host-NV non-leaders don't
 		// PREPARE); R1 timeout; R2 leader proposes fresh V which validates
 		// at layer 1 (host-NV is layer-0-scoped); decides at R2. Deterministic
@@ -65,6 +70,9 @@ var scenarioValidityDivergence3_1 = Scenario{
 		// Validates "minority NV doesn't break the slot" — distinct from 2-2 (miss)
 		// and 1-3 (fall-through).
 		"OBFT": ExpectSuccessFastest,
+		// 2abOBFT: 3 σV verdicts (op1, op2, op3) reach qV=3 at L_0 → row 3
+		// → σ-emit on V → σ-quorum at L_0. Same outcome as OBFT.
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: 3 ops PREPARE on V (op4 doesn't, host says invalid) → quorum
 		// reached → COMMIT-quorum → R1 succeeds.
 		"QBFT": ExpectSuccessFastest,
@@ -105,6 +113,9 @@ var scenarioValidityDivergenceNRFallThrough = Scenario{
 		// OBFT: σ-pool=f < qV=2f+1; NR-pool=2f+1 = qEnc → NR-quorum unlocks L_1
 		// where host says valid → σ-emit at L_1 → decides at L_1.
 		"OBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: same — 1 σV verdict + 3 NV verdicts at L_0; row 2
+		// NR-pool ≥ qEnc → NR-quorum at L_0 → advance to L_1 → σ at L_1.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE pool insufficient (#valid honest = f, < quorum=2f+1)
 		// → R1 timeout → R2 fresh V → succeeds.
 		"QBFT": ExpectSuccessFallThrough,
@@ -147,6 +158,15 @@ var scenarioValidityDivergence_PassiveByz_Silent_1NV = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pool=2f<qV=2f+1; NR-pool=1<qEnc=2f+1; both quorums short; slot misses.
 		"OBFT": ExpectMiss,
+		// 2abOBFT: same algebraic shape at L_0 → row 5 → NR-emissions across
+		// all honest. NR-pool at L_0 = 2f+1 honest NR (incl. leader who's
+		// host-NV in this variant but emits NR — see byz σ-refusal: f byz
+		// don't emit Onion2b at all). Total NR partials cluster-wide = 3
+		// honest = qEnc — but NR-pool from σ-side perspective for advance
+		// at L_0 is only the honest's NR emissions (≥ qEnc) → advance to L_1
+		// — but L_1+ retention is empty in this scenario; falls through all
+		// layers → MISS. Same outcome as OBFT, different mechanism.
+		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE-quorum unreachable (op-NV+byz-silent); R2 fresh-V
 		// host-validates at layer 1 → succeeds.
 		"QBFT": ExpectSuccessFallThrough,
@@ -183,10 +203,18 @@ var scenarioValidityDivergence_PassiveByz_Silent_2NV = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pool=1<qV; NR-pool=2f<qEnc; both quorums short; slot misses.
 		"OBFT": ExpectMiss,
+		// 2abOBFT (key win at this configuration): host-NV non-leaders emit
+		// NV verdicts at L_0; nr_pool view at honest receivers > qEnc once
+		// the byz are excluded as non-emitters. Row 2 NR-quorum drives all
+		// honest to NR; NR-quorum at L_0 (= 3 honest NR emissions) ≥ qEnc=3
+		// → advance to L_1 where retention is healthy → σ at L_1.
+		// Concrete recovery 2ab provides over base OBFT on this spec
+		// configuration.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE-quorum unreachable; R2 fresh-V at layer 1 host-validates → succeeds.
 		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #2. Worst-case all-NV non-leaders plus f byz silent — σ-pool collapses to leader-only, NR-pool capped below qEnc by byz silence.",
+	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #2. Worst-case all-NV non-leaders plus f byz silent — σ-pool collapses to leader-only, NR-pool capped below qEnc by byz silence. 2ab recovers via row-2 NR-quorum (honest NR emissions reach qEnc at honest receivers).",
 }
 
 // Case #3 from OBFT.md:606: "0 non-leader σ + 2 non-leader NV + byz σ-on-V".
@@ -227,6 +255,9 @@ var scenarioValidityDivergence_PassiveByz_SigmaOnV_2NV = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pool=1+f<qV=2f+1 (for f≥1); NR-pool=2f<qEnc=2f+1; miss.
 		"OBFT": ExpectMiss,
+		// 2abOBFT: row 5 → all-NR at L_0 → NR-quorum (honest NRs reach
+		// qEnc) → advance to L_1 → σ at L_1. Recovery via NR-fall-through.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE pool = leader + f byz = 1+f < quorum=2f+1; R1 timeout;
 		// R2 fresh-V at layer 1 host-validates → succeeds.
 		"QBFT": ExpectSuccessFallThrough,
@@ -248,6 +279,8 @@ var scenarioHostFlipMidSlot = Scenario{
 		// OBFT: ops σ-emit at L_0 (host valid); slot decides at L_0.
 		// Deeper layers' "invalid" verdict isn't queried (validate-once-and-lock).
 		"OBFT": ExpectSuccessFastest,
+		// 2abOBFT: host valid at L_0; σV verdicts at L_0 reach qV → σ at L_0.
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: round 1 PROPOSE host-validates; cluster decides at R1.
 		"QBFT": ExpectSuccessFastest,
 	},
@@ -268,6 +301,9 @@ var scenarioHostInvalidUntilL1 = Scenario{
 		// OBFT: L_0 host-invalid → all NR at L_0 → NR-quorum unlocks L_1 →
 		// L_1 host-valid → σ-emit at L_1 → decides at L_1 (fall-through).
 		"OBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: L_0 all-NV verdicts → row 2 NR-quorum → advance to L_1
+		// where host-valid → σ at L_1.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: round 1 PROPOSE rejected → R1 timeout → R2 fresh-V validates
 		// (host valid at R2 = framework round 1) → decides at R2.
 		"QBFT": ExpectSuccessFallThrough,
@@ -333,6 +369,12 @@ var scenarioValidityDivergence_LeaderNV_PassiveByz = Scenario{
 		// leader's NR despite host-NV. σ-pool=leader+(2f-1 honest)=2f<qV;
 		// NR-pool=1<qEnc; both short; miss.
 		"OBFT": ExpectMiss,
+		// 2abOBFT (key win): Variant C has no Phase-1 σ_V, so the leader
+		// isn't σ-locked despite their Phase-1 broadcast. At Phase 2a the
+		// leader emits NV (host-NV at L_0); cluster verdict pool has NV
+		// verdicts from leader + op{2f+1} → row 5 → NR-quorum drives
+		// advance to L_1 → σ at L_1.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE pool short (host-NV ops don't PREPARE; byz silent);
 		// R2 fresh-V at layer 1 host-validates → succeeds. (HostInvalidForOperators
 		// is layer-0-scoped; round 2 = layer 1 sees all-valid.)

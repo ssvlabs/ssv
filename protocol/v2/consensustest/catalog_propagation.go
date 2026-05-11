@@ -33,9 +33,14 @@ var scenarioHV1SelectiveDelivery = Scenario{
 	},
 	Expect: map[string]ExpectClass{
 		"OBFT": ExpectMiss,
-		"QBFT": ExpectNotApplicable,
+		// 2abOBFT (key win): h_V=f selective delivery. f σV verdicts +
+		// (N-f-1) NR/NV verdicts at L_0. σ-pool < qV; nr_pool reaches qEnc
+		// (since N-1-f honest emit NR via row 5) → NR-quorum at L_0 →
+		// advance to L_1 → σ at L_1.
+		"2abOBFT": ExpectSuccessFallThrough,
+		"QBFT":    ExpectNotApplicable,
 	},
-	Note: "OBFT-specific deadlock pattern (h_V=f at any cluster size). σ-pool=f+1 < qV; NR-pool=2f < qEnc → MISS at L_0 with no fall-through. QBFT's round-change recovers structurally; pattern doesn't translate.",
+	Note: "OBFT-specific deadlock pattern (h_V=f at any cluster size). σ-pool=f+1 < qV; NR-pool=2f < qEnc → MISS at L_0 with no fall-through. QBFT's round-change recovers structurally; pattern doesn't translate. 2ab recovers via NR-quorum fall-through (Phase-2a verdict-pool fragmentation drives row 5).",
 }
 
 // ---- Late L_0 leader broadcast (Phase 3 — Class A spec) ---------------
@@ -53,6 +58,9 @@ var scenarioLateLeaderBroadcast = Scenario{
 		// OBFT: L_0 σ-pool insufficient (byz bundle past T_commit, honest reject);
 		// NR-quorum at L_0 unlocks L_1 → honest L_1 leader broadcasts on time → fall-through.
 		"OBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: same — bundle arrives past T_commit at honest receivers
+		// (rejected); NR-quorum at L_0 → advance to L_1 → σ at L_1.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: no layer concept; "late broadcast" doesn't translate cleanly.
 		"QBFT": ExpectNotApplicable,
 	},
@@ -125,6 +133,12 @@ var scenarioMeshFlakiness = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pool=f+1<qV=2f+1; NR-pool=f<qEnc=2f+1; both short → miss.
 		"OBFT": ExpectMiss,
+		// 2abOBFT: same algebraic shape — flaky honest can't retain V at
+		// L_0 by Phase-2a → NR verdicts; byz σ-refusal contributes nothing.
+		// nr_pool and σ-pool both short of quorum at L_0; walk fall-through
+		// hits same shape at deeper layers (flaky ops still slow). MISS
+		// cleanly. Same outcome as OBFT.
+		"2abOBFT": ExpectMiss,
 		// QBFT: flaky receivers see PROPOSE/PREPAREs with delay but non-flaky
 		// non-byz honest count (N-1-2f) PREPARE among themselves on time;
 		// quorum (qV=2f+1) reaches at R1 once flaky ops' delayed PREPAREs
@@ -184,6 +198,9 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 		// OBFT: σ-pool = N-f = qV at L_0; decides at L_0 with the slow ops
 		// NR'd in their local commits but irrelevant to cluster σ-quorum.
 		"OBFT": ExpectSuccessFastest,
+		// 2abOBFT: σ-pool = N-f at L_0 from on-time receivers; verdict pool
+		// reaches qV at honest receivers → σ-quorum at L_0. Same outcome.
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: slow ops PREPARE late (R1 PROPOSE arrives at them at
 		// 300+3·BTT=900ms; their PREPAREs arrive at others by 1100ms);
 		// PREPARE-quorum reaches at fast ops within R1 (RT=2s); R1 succeeds.
@@ -234,6 +251,10 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 		// with no fall-through (chain stays sealed at L_0). Class A
 		// asymmetric-propagation-past-T_commit per §Failure modes.
 		"OBFT": ExpectMiss,
+		// 2abOBFT: same algebraic shape — (f+1) slow non-leaders retain no V;
+		// σV verdicts < qV. nr_pool also short. Walk fall-through hits same
+		// shape at deeper layers (slow ops persistent) → MISS cleanly.
+		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE pool eventually reaches qV once slow ops'
 		// late PREPAREs arrive within R1's window (RT=2s). Succeeds at R1.
 		// The QBFT-vs-OBFT asymmetry on this exact spec configuration.

@@ -11,8 +11,9 @@ var scenarioSilentLeaderL0 = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzSilentLeader, ByzOperators: []OperatorID{1}}
 	},
 	Expect: map[string]ExpectClass{
-		"OBFT": ExpectSuccessFallThrough, // V_0 silent → in-round to V_1
-		"QBFT": ExpectSuccessFallThrough, // R1 silent → R2 success
+		"OBFT":    ExpectSuccessFallThrough, // V_0 silent → in-round to V_1
+		"2abOBFT": ExpectSuccessFallThrough, // same recovery shape as OBFT
+		"QBFT":    ExpectSuccessFallThrough, // R1 silent → R2 success
 	},
 	Note: "Primary leader silent. OBFT falls through K-layer in-round; QBFT round-changes to R2 (pays RT timeout).",
 }
@@ -31,6 +32,9 @@ var scenarioMultiSilent = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT recovers in-round via K-layer fall-through to L_3.
 		"OBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: same NR-fall-through path; deepest layer L_3 honest leader
+		// reaches σ-quorum on its V via Phase-2a verdict convergence.
+		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT needs 3 round-changes (R1, R2, R3 all silent → R4 honest).
 		// At RT=2s × 3 timeouts = 6s, exceeds RelayCutoff=4s → MISS.
 		"QBFT": ExpectMiss,
@@ -52,6 +56,8 @@ var scenarioSigmaRefusal = Scenario{
 		// OBFT: byz never σ-emits; 3 honest can still reach qV=3 at L_0
 		// (leader + 2 non-leader honest). Healthy path holds.
 		"OBFT": ExpectSuccessFastest,
+		// 2abOBFT: byz never emits Onion2b; 3 honest σ-emit at L_0 (qV met).
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: byz never PREPAREs/COMMITs; 3 honest can still reach qV=3
 		// at R1 (3 PREPAREs and 3 COMMITs from honest). Healthy path holds.
 		"QBFT": ExpectSuccessFastest,
@@ -74,8 +80,9 @@ var scenarioWithholdLeaderDeepest = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzWithholdLeader, ByzOperators: []OperatorID{OperatorID(cfg.N)}}
 	},
 	Expect: map[string]ExpectClass{
-		"OBFT": ExpectSuccessFastest, // L_0 still healthy; deepest never reached
-		"QBFT": ExpectNotApplicable,  // OBFT-specific (layer concept)
+		"OBFT":    ExpectSuccessFastest, // L_0 still healthy; deepest never reached
+		"2abOBFT": ExpectSuccessFastest, // same — L_0 succeeds regardless of deepest
+		"QBFT":    ExpectNotApplicable,  // OBFT-specific (layer concept)
 	},
 	Note: "Class A spec test: deepest-layer leader silenced. L_0 is healthy at any n → cluster decides at L_0 without needing L_{N-1}.",
 }
@@ -91,8 +98,9 @@ var scenarioCertWithholding = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzCertWithholding, ByzOperators: []OperatorID{4}}
 	},
 	Expect: map[string]ExpectClass{
-		"OBFT": ExpectSuccessFastest, // honest ops reconstruct independently
-		"QBFT": ExpectNotApplicable,  // no chained-cert gossip in QBFT
+		"OBFT":    ExpectSuccessFastest, // honest ops reconstruct independently
+		"2abOBFT": ExpectSuccessFastest, // same — honest ops reconstruct independently
+		"QBFT":    ExpectNotApplicable,  // no chained-cert gossip in QBFT
 	},
 	Note: "Byz refuses cert gossip; honest ops reconstruct independently → healthy path holds.",
 }
@@ -143,6 +151,8 @@ var scenarioMultiSilent_AllLayers = Scenario{
 		// OBFT: walks all K layers via NR-quorum; deepest layer has no σ;
 		// no NR tag past deepest → MISS cleanly. Safety holds.
 		"OBFT": ExpectMiss,
+		// 2abOBFT: same — all-NR at every layer → walk exhausts cleanly.
+		"2abOBFT": ExpectMiss,
 		// QBFT: K silent rounds consume the RT budget before any round
 		// can decide. R1 + R2 timeouts > 4s RelayCutoff → MISS.
 		"QBFT": ExpectMiss,
