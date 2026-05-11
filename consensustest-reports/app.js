@@ -4,10 +4,22 @@
  * `make consensustest-report`) and renders the page. Edit freely and
  * refresh the browser; no test rerun required.
  *
- * Layout per sweep:
- *  - 1 point → detail layout (summary matrix + 4 Chart.js panels).
- *  - >1 point → trend layout (3 line charts, X = swept axis, one line
- *    per (scenario, protocol)).
+ * Page structure per sweep:
+ *  Section: <sweep title>
+ *    Part A — Cross-protocol comparison:
+ *      one chart pack per Scenario.Group containing scenarios that
+ *      apply to every protocol.
+ *    Part B — OBFT-only scenarios (at the end):
+ *      one chart pack per Scenario.Group containing scenarios that
+ *      QBFT marks as ExpectNotApplicable. The OBFT-unique view stays
+ *      cleanly separated from the cross-protocol comparison so dense
+ *      legends don't drown out the side-by-side curves.
+ *
+ *  Each pack renders:
+ *    - 1-point sweep → matrix + 4 Chart.js panels (success / latency
+ *      P50/P90/P99 / bandwidth stacked / tradeoff scatter).
+ *    - multi-point sweep → 3 line charts (success rate / P99 latency /
+ *      bandwidth median, plotted against the swept axis).
  */
 
 'use strict';
@@ -17,14 +29,10 @@ const PROTOCOL_COLORS = {
   QBFT: '#cf222e',
 };
 
-// Chart.js instances created during render so we can clean them up
-// on a hypothetical re-render. Not strictly needed today (the page
-// renders once) but keeps the pattern explicit.
+// chartInstances / chartInits — populated during the render pass.
+// chartInits runs once at the end synchronously (rAF is throttled in
+// headless preview environments, which would leave charts blank).
 const chartInstances = [];
-
-// chartInits collects per-canvas initializers. They run after the
-// whole DOM tree is appended so each canvas has measurable dimensions
-// when Chart.js sizes it.
 const chartInits = [];
 
 document.addEventListener('DOMContentLoaded', main);
@@ -35,17 +43,53 @@ function main() {
   if (!data) {
     return; // index.html already shows the placeholder.
   }
+  const bucketing = computeBuckets(data);
+
   root.innerHTML = '';
   root.appendChild(renderHeader(data));
   root.appendChild(renderTOC(data));
   const mainEl = h('main');
-  data.sweeps.forEach((sw) => mainEl.appendChild(renderSweepSection(sw, data)));
+  data.sweeps.forEach((sw) => mainEl.appendChild(renderSweepSection(sw, data, bucketing)));
   root.appendChild(mainEl);
-  // Run chart inits now that every canvas is in the DOM. Synchronous —
-  // headless preview environments throttle requestAnimationFrame, so
-  // deferring would leave charts blank under tools like Puppeteer.
-  // Chart.js sizes from the .chart-wrap CSS dimensions (height: 480px).
+  // Chart.js sizes from .chart-wrap CSS dimensions; canvases are in the
+  // DOM by the time these fire, so synchronous init is safe.
   chartInits.forEach((fn) => fn());
+}
+
+// ---- scope + group bucketing -----------------------------------------
+
+// computeBuckets partitions scenarios into "cross" (applies to every
+// protocol in the data) and "obftOnly" (QBFT marked n/a everywhere).
+// Within each scope, scenarios stay in Catalog order grouped by their
+// Scenario.Group field, with first-appearance ordering of groups.
+function computeBuckets(data) {
+  const scopeByName = {};
+  data.scenarios.forEach((sc) => {
+    let hasQbft = false;
+    outer: for (const sw of data.sweeps) {
+      for (const pt of sw.points) {
+        const cell = findCell(pt, sc.name, 'QBFT');
+        if (cell && cell.iterations > 0) {
+          hasQbft = true;
+          break outer;
+        }
+      }
+    }
+    scopeByName[sc.name] = hasQbft ? 'cross' : 'obftOnly';
+  });
+
+  const buckets = { cross: {}, obftOnly: {} };
+  const groupOrder = { cross: [], obftOnly: [] };
+  data.scenarios.forEach((sc) => {
+    const scope = scopeByName[sc.name];
+    const group = sc.group || 'Other';
+    if (!buckets[scope][group]) {
+      buckets[scope][group] = [];
+      groupOrder[scope].push(group);
+    }
+    buckets[scope][group].push(sc);
+  });
+  return { buckets, groupOrder };
 }
 
 // ---- top-level scaffolding -------------------------------------------
@@ -67,67 +111,74 @@ function renderHeader(data) {
 function renderTOC(data) {
   const nav = h('nav', { class: 'toc' });
   data.sweeps.forEach((sw) => {
-    const a = h('a', { href: `#sweep-${sw.name}` }, sw.title || sw.name);
-    nav.appendChild(a);
+    nav.appendChild(h('a', { href: `#sweep-${sw.name}` }, sw.title || sw.name));
   });
   return nav;
 }
 
-function renderSweepSection(sweep, data) {
+function renderSweepSection(sweep, data, bucketing) {
   const section = h('section', { class: 'sweep', id: `sweep-${sweep.name}` });
   section.appendChild(h('h2', {}, sweep.title || sweep.name));
   if (sweep.description) section.appendChild(h('p', { class: 'desc' }, sweep.description));
   if (sweep.axisLabel) section.appendChild(h('p', { class: 'axis' }, `Swept axis: ${sweep.axisLabel}`));
 
-  if (sweep.points.length === 1) {
-    renderDetailLayout(section, sweep, data);
-  } else {
-    renderTrendLayout(section, sweep, data);
-  }
+  renderScope(section, sweep, data, bucketing, 'cross', 'Cross-protocol comparison', data.protocols);
+  renderScope(section, sweep, data, bucketing, 'obftOnly', 'OBFT-only scenarios', ['OBFT']);
 
   section.appendChild(h('a', { class: 'back-to-top', href: '#top' }, '↑ back to top'));
   return section;
 }
 
-// ---- detail layout (1-point sweep) -----------------------------------
-
-function renderDetailLayout(section, sweep, data) {
-  const point = sweep.points[0];
-  const id = sweep.name;
-
-  section.appendChild(h('h3', {}, 'Summary matrix'));
-  section.appendChild(renderSummaryMatrix(point, data));
-
-  section.appendChild(h('h3', {}, 'Success rate per scenario'));
-  section.appendChild(makeCanvas(`${id}_success`, (c) => drawDetailSuccess(c, point, data)));
-
-  section.appendChild(h('h3', {}, 'Decision time per scenario (P50 / P90 / P99)'));
-  section.appendChild(makeCanvas(`${id}_latency`, (c) => drawDetailLatency(c, point, data)));
-
-  section.appendChild(h('h3', {}, 'Bandwidth per cell (median, stacked by message kind)'));
-  section.appendChild(makeCanvas(`${id}_bandwidth`, (c) => drawDetailBandwidth(c, point, data)));
-
-  section.appendChild(h('h3', {}, 'Trade-off: P99 latency vs success rate'));
-  section.appendChild(makeCanvas(`${id}_tradeoff`, (c) => drawDetailTradeoff(c, point, data)));
+function renderScope(section, sweep, data, bucketing, scopeKey, scopeLabel, protocols) {
+  const groups = bucketing.groupOrder[scopeKey];
+  if (groups.length === 0) return;
+  section.appendChild(h('div', { class: 'scope-heading' }, scopeLabel));
+  groups.forEach((group) => {
+    const scenarios = bucketing.buckets[scopeKey][group];
+    renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols);
+  });
 }
 
-function renderSummaryMatrix(point, data) {
+function renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols) {
+  const packID = `${sweep.name}_${scopeKey}_${slugify(group)}`;
+  section.appendChild(h('h3', { class: 'group-pack' }, `${group} (${scenarios.length})`));
+  if (sweep.points.length === 1) {
+    renderGroupDetail(section, sweep, scenarios, protocols, packID);
+  } else {
+    renderGroupTrend(section, sweep, scenarios, protocols, packID);
+  }
+}
+
+// ---- detail layout (1-point sweep) -----------------------------------
+
+function renderGroupDetail(section, sweep, scenarios, protocols, packID) {
+  const point = sweep.points[0];
+
+  section.appendChild(renderSummaryMatrix(point, scenarios, protocols));
+
+  section.appendChild(h('h4', {}, 'Success rate'));
+  section.appendChild(makeCanvas(`${packID}_success`, (c) => drawDetailSuccess(c, point, scenarios, protocols)));
+
+  section.appendChild(h('h4', {}, 'Decision time (P50 / P90 / P99)'));
+  section.appendChild(makeCanvas(`${packID}_latency`, (c) => drawDetailLatency(c, point, scenarios, protocols)));
+
+  section.appendChild(h('h4', {}, 'Bandwidth per cell (median, stacked by message kind)'));
+  section.appendChild(makeCanvas(`${packID}_bandwidth`, (c) => drawDetailBandwidth(c, point, scenarios, protocols)));
+
+  section.appendChild(h('h4', {}, 'Trade-off: P99 latency vs success rate'));
+  section.appendChild(makeCanvas(`${packID}_tradeoff`, (c) => drawDetailTradeoff(c, point, scenarios, protocols)));
+}
+
+function renderSummaryMatrix(point, scenarios, protocols) {
   const table = h('table', { class: 'matrix' });
   const headerRow = h('tr', {}, h('th', {}, 'Scenario'));
-  data.protocols.forEach((p) => headerRow.appendChild(h('th', {}, p)));
+  protocols.forEach((p) => headerRow.appendChild(h('th', {}, p)));
   table.appendChild(h('thead', {}, headerRow));
 
   const tbody = h('tbody');
-  const colspan = String(1 + data.protocols.length);
-  let currentGroup = '';
-  data.scenarios.forEach((sc) => {
-    const group = sc.group || 'Other';
-    if (group !== currentGroup) {
-      tbody.appendChild(h('tr', { class: 'group' }, h('th', { colspan }, group)));
-      currentGroup = group;
-    }
+  scenarios.forEach((sc) => {
     const row = h('tr', {}, h('td', { class: 'scen' }, sc.title));
-    data.protocols.forEach((p) => {
+    protocols.forEach((p) => {
       const cell = findCell(point, sc.name, p);
       if (!cell || cell.iterations === 0) {
         row.appendChild(h('td', { class: 'na' }, 'n/a'));
@@ -137,8 +188,7 @@ function renderSummaryMatrix(point, data) {
       if (cell.successRate < 0.5) cls = 'miss';
       else if (cell.successRate < 1.0) cls = 'warn';
       const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
-      const txt = `${Math.round(cell.successRate * 100)}% · P99 ${p99}ms`;
-      row.appendChild(h('td', { class: cls }, txt));
+      row.appendChild(h('td', { class: cls }, `${Math.round(cell.successRate * 100)}% · P99 ${p99}ms`));
     });
     tbody.appendChild(row);
   });
@@ -146,12 +196,12 @@ function renderSummaryMatrix(point, data) {
   return table;
 }
 
-function drawDetailSuccess(canvas, point, data) {
-  const labels = data.scenarios.map((s) => s.title);
-  const datasets = data.protocols.map((p) => ({
+function drawDetailSuccess(canvas, point, scenarios, protocols) {
+  const labels = scenarios.map((s) => s.title);
+  const datasets = protocols.map((p) => ({
     label: p,
     backgroundColor: protocolColor(p),
-    data: data.scenarios.map((sc) => valueOr(findCell(point, sc.name, p), (c) => c.successRate)),
+    data: scenarios.map((sc) => valueOr(findCell(point, sc.name, p), (c) => c.successRate)),
   }));
   return new Chart(canvas, {
     type: 'bar',
@@ -167,20 +217,20 @@ function drawDetailSuccess(canvas, point, data) {
   });
 }
 
-function drawDetailLatency(canvas, point, data) {
-  const labels = data.scenarios.map((s) => s.title);
+function drawDetailLatency(canvas, point, scenarios, protocols) {
+  const labels = scenarios.map((s) => s.title);
   const percentiles = [
     { key: 'p50', label: 'P50', alpha: 0.55 },
     { key: 'p90', label: 'P90', alpha: 0.75 },
     { key: 'p99', label: 'P99', alpha: 1.0 },
   ];
   const datasets = [];
-  data.protocols.forEach((p) => {
+  protocols.forEach((p) => {
     percentiles.forEach((pct) => {
       datasets.push({
         label: `${p} ${pct.label}`,
         backgroundColor: protocolColorAlpha(p, pct.alpha),
-        data: data.scenarios.map((sc) => {
+        data: scenarios.map((sc) => {
           const cell = findCell(point, sc.name, p);
           if (!cell || !cell.decisionTime) return null;
           return cell.decisionTime[pct.key];
@@ -202,24 +252,25 @@ function drawDetailLatency(canvas, point, data) {
   });
 }
 
-function drawDetailBandwidth(canvas, point, data) {
-  // Collect all distinct message kinds across cells (sorted for stable legend).
+function drawDetailBandwidth(canvas, point, scenarios, protocols) {
+  // Collect kinds across just this pack's cells.
   const kindSet = new Set();
-  point.cells.forEach((c) => {
-    if (c.perKindBandwidth) Object.keys(c.perKindBandwidth).forEach((k) => kindSet.add(k));
+  scenarios.forEach((sc) => {
+    protocols.forEach((p) => {
+      const cell = findCell(point, sc.name, p);
+      if (cell && cell.perKindBandwidth) Object.keys(cell.perKindBandwidth).forEach((k) => kindSet.add(k));
+    });
   });
   const kinds = [...kindSet].sort();
-  // X labels: "Scenario · Protocol" — one bar per cell so kind segments stack within.
+  // X labels: "Scenario · Protocol" — one bar per cell, segments stacked.
   const labels = [];
-  data.scenarios.forEach((sc) => {
-    data.protocols.forEach((p) => labels.push(`${sc.title} · ${p}`));
-  });
+  scenarios.forEach((sc) => protocols.forEach((p) => labels.push(`${sc.title} · ${p}`)));
   const datasets = kinds.map((kind, i) => ({
     label: kind,
     backgroundColor: kindColor(i, kinds.length),
     data: [].concat(
-      ...data.scenarios.map((sc) =>
-        data.protocols.map((p) => {
+      ...scenarios.map((sc) =>
+        protocols.map((p) => {
           const cell = findCell(point, sc.name, p);
           if (!cell || !cell.perKindBandwidth) return 0;
           return cell.perKindBandwidth[kind] || 0;
@@ -241,11 +292,11 @@ function drawDetailBandwidth(canvas, point, data) {
   });
 }
 
-function drawDetailTradeoff(canvas, point, data) {
-  const palette = scenarioPalette(data.scenarios);
+function drawDetailTradeoff(canvas, point, scenarios, protocols) {
+  const palette = scenarioPalette(scenarios);
   const datasets = [];
-  data.protocols.forEach((p) => {
-    data.scenarios.forEach((sc) => {
+  protocols.forEach((p) => {
+    scenarios.forEach((sc) => {
       const cell = findCell(point, sc.name, p);
       if (!cell || cell.iterations === 0 || !cell.decisionTime) return;
       datasets.push({
@@ -276,37 +327,35 @@ function drawDetailTradeoff(canvas, point, data) {
 
 // ---- trend layout (multi-point sweep) --------------------------------
 
-function renderTrendLayout(section, sweep, data) {
-  const id = sweep.name;
-
-  section.appendChild(h('h3', {}, 'Success rate vs swept axis'));
+function renderGroupTrend(section, sweep, scenarios, protocols, packID) {
+  section.appendChild(h('h4', {}, 'Success rate vs swept axis'));
   section.appendChild(
-    makeCanvas(`${id}_success`, (c) =>
-      drawTrendChart(c, sweep, data, 'successRate', 'Success rate', { min: 0, max: 1 }),
+    makeCanvas(`${packID}_success`, (c) =>
+      drawTrendChart(c, sweep, scenarios, protocols, 'successRate', 'Success rate', { min: 0, max: 1 }),
     ),
   );
 
-  section.appendChild(h('h3', {}, 'Decision time P99 vs swept axis'));
+  section.appendChild(h('h4', {}, 'Decision time P99 vs swept axis'));
   section.appendChild(
-    makeCanvas(`${id}_p99`, (c) =>
-      drawTrendChart(c, sweep, data, 'p99Latency', 'P99 decision time (ms)', null),
+    makeCanvas(`${packID}_p99`, (c) =>
+      drawTrendChart(c, sweep, scenarios, protocols, 'p99Latency', 'P99 decision time (ms)', null),
     ),
   );
 
-  section.appendChild(h('h3', {}, 'Bandwidth median vs swept axis'));
+  section.appendChild(h('h4', {}, 'Bandwidth median vs swept axis'));
   section.appendChild(
-    makeCanvas(`${id}_bw`, (c) =>
-      drawTrendChart(c, sweep, data, 'bandwidthMedian', 'Bytes (median per cell)', null),
+    makeCanvas(`${packID}_bw`, (c) =>
+      drawTrendChart(c, sweep, scenarios, protocols, 'bandwidthMedian', 'Bytes (median per cell)', null),
     ),
   );
 }
 
-function drawTrendChart(canvas, sweep, data, metricKey, yLabel, yRange) {
-  const palette = scenarioPalette(data.scenarios);
+function drawTrendChart(canvas, sweep, scenarios, protocols, metricKey, yLabel, yRange) {
+  const palette = scenarioPalette(scenarios);
   const labels = sweep.points.map((pt) => pt.label);
   const datasets = [];
-  data.scenarios.forEach((sc) => {
-    data.protocols.forEach((p) => {
+  scenarios.forEach((sc) => {
+    protocols.forEach((p) => {
       const values = sweep.points.map((pt) => extractMetric(findCell(pt, sc.name, p), metricKey));
       if (!values.some((v) => v !== null)) return; // skip all-null series
       datasets.push({
@@ -322,9 +371,7 @@ function drawTrendChart(canvas, sweep, data, metricKey, yLabel, yRange) {
       });
     });
   });
-  const yScale = {
-    title: { display: true, text: yLabel },
-  };
+  const yScale = { title: { display: true, text: yLabel } };
   if (yRange) {
     yScale.min = yRange.min;
     yScale.max = yRange.max;
@@ -385,9 +432,6 @@ function h(tag, attrs, ...children) {
   return el;
 }
 
-// makeCanvas wraps a Chart.js canvas in a sized .chart-wrap div and
-// defers initialization until the DOM is laid out (so the canvas has
-// measurable dimensions when Chart.js sizes itself).
 function makeCanvas(id, initFn) {
   const wrap = h('div', { class: 'chart-wrap' });
   const canvas = h('canvas', { id });
@@ -411,9 +455,9 @@ function valueOr(cell, fn) {
   return fn(cell);
 }
 
-// scenarioPalette assigns one HSL color per scenario, spaced evenly
-// around the hue circle. Cached per call (same input always produces
-// the same palette).
+// scenarioPalette assigns one HSL color per scenario in the input list,
+// spaced evenly around the hue circle. Per-pack so each pack's palette
+// stays distinguishable even with only 2-4 scenarios.
 function scenarioPalette(scenarios) {
   const n = scenarios.length;
   const out = {};
@@ -436,8 +480,6 @@ function protocolColorAlpha(name, alpha) {
   return `rgba(${rgb}, ${alpha})`;
 }
 
-// protocolDash returns the Chart.js borderDash array. OBFT solid (empty
-// array), QBFT and others dashed.
 function protocolDash(name) {
   return name === 'OBFT' ? [] : [6, 4];
 }
@@ -457,4 +499,10 @@ function kindColor(idx, total) {
   if (total <= 0) return '#888';
   const hue = Math.round((idx * 360) / total);
   return `hsl(${hue}, 55%, 55%)`;
+}
+
+// slugify converts a human-readable group label to a DOM-safe slug.
+// Used to build canvas IDs like `canonical_cross_silent_operators_success`.
+function slugify(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }

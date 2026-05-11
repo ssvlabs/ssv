@@ -49,23 +49,35 @@ The page is a scrollable SPA with a sticky table-of-contents linking to one sect
 - **heavy_tail** (4 points) — `LogNormalDelay` Sigma ∈ {0.1, 0.3, 0.5, 0.7}.
 - **loss** (4 points) — `LossyNetwork` LossRate ∈ {0, 0.01, 0.05, 0.10}.
 
-Each section renders one of two layouts:
+Each section is split into two scope subsections — **Cross-protocol comparison** first, **OBFT-only scenarios** last — and within each, one **chart pack per scenario group**. The split keeps scenarios that have no QBFT counterpart (where QBFT is `ExpectNotApplicable`) cleanly separated from the side-by-side comparison, so the dense per-group charts don't get drowned out by all-n/a half-rows.
 
-**Single-point sweep → detail layout** (used for `canonical`):
-1. Summary matrix — scenario × protocol grid; cells show "N% success · P99 Xms" color-coded. Scenarios are clustered by `Scenario.Group` (Baseline / Silent operators / Leader equivocation / Host validity / Propagation issues / OBFT-specific attacks) with a header row before each group.
-2. Success rate per scenario — bar chart, OBFT vs QBFT.
-3. Decision time P50/P90/P99 grouped bars — six bars per scenario (protocol × percentile).
+**Cross-protocol comparison** (top of each sweep section, in this order):
+- Baseline (1 scenario)
+- Silent operators (4 cross-protocol scenarios)
+- Leader equivocation (4)
+- Host validity (9)
+- Propagation issues (3 cross-protocol scenarios)
+
+**OBFT-only scenarios** (at the end of each sweep section):
+- Silent operators (2 OBFT-only: deepest-layer withhold, cert withholding)
+- Propagation issues (2 OBFT-only: HV1 selective delivery, late L_0 broadcast)
+- OBFT-specific attacks (4: Rule 1 / 3 / 4 / 5 evidence)
+
+Each chart pack renders one of two layouts:
+
+**Single-point sweep → detail pack**:
+1. Summary matrix — scenario × protocol grid; cells show "N% success · P99 Xms" color-coded.
+2. Success rate per scenario — bar chart.
+3. Decision time P50/P90/P99 grouped bars — three bars per scenario per protocol.
 4. Bandwidth per cell stacked bars — one bar per (scenario, protocol), stacked by message kind.
-5. Trade-off scatter — X = P99 latency, Y = success rate, one dot per (scenario, protocol).
+5. Trade-off scatter — X = P99 latency, Y = success rate.
 
-The bar charts share the same scenario ordering, so related scenarios cluster visually on the X-axis too (no explicit separators — just adjacency).
-
-**Multi-point sweep → trend layout** (used for the four parameter sweeps):
-1. Success rate vs swept axis — line chart, X = parameter value, one line per (scenario, protocol).
+**Multi-point sweep → trend pack**:
+1. Success rate vs swept axis — line chart, one line per (scenario, protocol).
 2. Decision time P99 vs swept axis — same shape, Y in ms.
 3. Bandwidth median vs swept axis — same shape, Y in bytes.
 
-Trend charts use color = scenario, line style = protocol (solid OBFT, dashed QBFT) with point markers (circle OBFT, triangle QBFT). Datasets that are entirely n/a are omitted from the legend to keep it tractable. Chart.js's legend is click-to-filter — toggle individual scenarios on/off to focus.
+OBFT-only packs render only the OBFT data (no empty QBFT bars / lines / matrix columns). Trend charts use color = scenario (per-pack HSL palette), line style = protocol (solid OBFT, dashed QBFT), point markers = protocol (circle OBFT, triangle QBFT). Datasets that are entirely n/a are skipped from the legend.
 
 ## How to interpret each chart
 
