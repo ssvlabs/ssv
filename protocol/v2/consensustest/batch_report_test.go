@@ -2,7 +2,6 @@ package consensustest_test
 
 import (
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -16,8 +15,10 @@ import (
 )
 
 // TestGenerateBatchReport runs DefaultSweeps over the full catalog with
-// both protocols and writes a single self-contained HTML page covering
-// all sweeps inline (canonical detail panels + per-sweep trend charts).
+// both protocols and writes a `data.js` file consumed by the static UI
+// in `consensustest-reports/` (index.html + app.js + styles.css, all
+// tracked in git). Refreshing index.html in a browser re-renders from
+// the new data.js without rerunning this test.
 //
 // Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
 // Iteration count tunable via ITERATIONS env (default 100).
@@ -74,16 +75,16 @@ func TestGenerateBatchReport(t *testing.T) {
 		t.Logf("    %s wallclock: %v", sw.Name, time.Since(swStart))
 	}
 
-	htmlPath := filepath.Join(dir, "index.html")
-	require.NoError(t, reporting.RenderComparison(reporting.Comparison{
+	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
 		Title:       "consensustest comparison — OBFT vs QBFT",
 		Description: "Five curated sweeps × OBFT/QBFT × " + strconv.Itoa(iterations) + " iterations per cell.",
 		Sweeps:      results,
 		Iterations:  iterations,
 		Wallclock:   time.Since(totalStart),
 		GeneratedAt: time.Now(),
-	}, htmlPath))
+	}, dir))
 
-	t.Logf("Report written: %s", htmlPath)
+	t.Logf("Report data written: %s/data.js", dir)
+	t.Logf("Open: %s/index.html", dir)
 	t.Logf("Total wallclock: %v", time.Since(totalStart))
 }

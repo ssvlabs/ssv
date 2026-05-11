@@ -53,9 +53,9 @@ protocol/v2/consensustest/                       FRAMEWORK
     keys.go           keysetForN — uses Testing{4,7,10,13}SharesSet
     adapter_test.go   per-cluster-size healthy + round-change + equivocation fall-through + determinism
 
-  reporting/          REPORT RENDERER (single SPA-style HTML)
-    html.go           RenderComparison + Comparison + Applicable (Chart.js via CDN)
-    html_test.go      end-to-end smoke
+  reporting/          REPORT DATA EMITTER (emits data.js for the static UI)
+    data.go           WriteReportData + Comparison + Applicable
+    data_test.go      JSON-payload + WriteReportData smoke
 ```
 
 ### Universal safety invariants (enforced per sim)
@@ -129,7 +129,9 @@ Spec-test key generation (`Testing{4,7,10,13}SharesSet`) is cached process-wide 
 
 ### Reporting
 
-`make consensustest-report` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes a single self-contained `./consensustest-reports/index.html`. The page is a scrollable SPA with one section per sweep: the canonical sweep gets a detail layout (summary matrix + four Chart.js panels — success rate, latency P50/P90/P99, bandwidth stacked-by-kind, P99-vs-success scatter); multi-point sweeps get a trend layout (three line charts — success rate / P99 latency / bandwidth median, plotted against the swept axis with one line per (scenario, protocol)).
+`make consensustest-report` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes `./consensustest-reports/data.js` (a `window.REPORT_DATA = {...}` script). The static UI files in `consensustest-reports/` (`index.html`, `app.js`, `styles.css` — all tracked in git) read that and render a scrollable SPA: the canonical sweep gets a detail layout (summary matrix + four Chart.js panels — success rate, latency P50/P90/P99, bandwidth stacked-by-kind, P99-vs-success scatter); multi-point sweeps get a trend layout (three line charts — success rate / P99 latency / bandwidth median, plotted against the swept axis with one line per (scenario, protocol)).
+
+Edit the UI files and refresh the browser — no test rerun needed. Re-run the make target only when you want fresh stats.
 
 Override defaults: `ITERATIONS=1000 make consensustest-report` (rare-event scenarios, ~12-15 min); `REPORT_DIR=path make consensustest-report` (custom output dir).
 
