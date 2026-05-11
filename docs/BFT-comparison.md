@@ -358,12 +358,12 @@ These failure modes don't apply to bare OBFT (no L_Bid layer):
 | **C1 — Selective candidate withholding at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
 | **C2 — Candidate / bid equivocation at L_Bid** | n/a | ✓ closed when verdict-quorum doesn't form; otherwise folds into 2-1-byz-defect (below) |
 | **C3 — V_LBid validity-divergence majority (3-of-4)** | n/a | ✓ closed by convergence rule |
-| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock blocks L_0 fall-through); mixed evidence — base leader-equivocation or Rule 7 under candidate/bid equivocation, Rule 8 under NR-emit (Rule 6b in 2abOBFT's numbering), behavioral for silent variants |
-| **Verdict-equivocation at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8 in OBFT/OBFTR; covered by Rule 6 in 2abOBFT's numbering) |
+| **2-1-byz-defect at L_Bid** | n/a | **✗ slot miss** (deadlock blocks L_0 fall-through); mixed evidence — base leader-equivocation or Rule 7 under candidate/bid equivocation, Rule 8 under NR-emit (Rule 6b analog in 2abOBFT's numbering, were 2abOBFT+L_Bid specified), behavioral for silent variants |
+| **Verdict-equivocation at L_Bid** | n/a | **✗ slot miss** (slashable Rule 8 in OBFT+L_Bid; Rule 6a analog in 2abOBFT's numbering — verdict-vs-verdict equivocation) |
 | **2-2 validity split at L_Bid** | n/a | **✗ algebraic limit** |
 | L_0..L_{K-1} rotation-layer failures | (per Table 3) | **Same as bare OBFT** |
 
-In the context of L_Bid integration across the OBFT family — applicable when comparing OBFT+L_Bid against [OBFTR + L_Bid](OBFTR.md#appendix-b--l_bid-mini-consensus-extension) and [2abOBFT + L_Bid](2abOBFT.md#appendix-b--l_bid-mini-consensus-extension):
+In the context of L_Bid integration across the OBFT family — only **OBFT + L_Bid** is specified ([docs/OBFT.md / Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension)); **OBFTR + L_Bid** and **2abOBFT + L_Bid** are hypothetical compositions discussed structurally below but not yet written as appendices in their respective spec docs:
 
 | L_Bid failure mode | OBFT+L_Bid | OBFTR+L_Bid | 2abOBFT+L_Bid |
 |---|---|---|---|
