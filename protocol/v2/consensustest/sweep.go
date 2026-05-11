@@ -57,19 +57,29 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 // docs/CONSENSUSTEST-BATCH-PLAN.md / Phase D2:
 //
 //  1. Canonical — single point at the spec's reference config
-//     (n=4, BTT=200ms, K=4, ConstantDelay). The baseline.
-//  2. Cluster scaling — varies n ∈ {4, 7, 10, 13}. Shows per-protocol
-//     scaling behavior across SSV-supported cluster sizes.
+//     (n=4, BTT=200ms, K=4, JitteredDelay). The baseline.
+//  2. Cluster scaling — varies n ∈ {4, 7, 10, 13} at JitteredDelay.
+//     Shows per-protocol scaling behavior across SSV-supported cluster
+//     sizes.
 //  3. Network degradation — varies BTT ∈ {100ms, 200ms, 400ms, 600ms}
-//     at fixed n=4. Reveals envelope-fit curves.
+//     at fixed n=4 under JitteredDelay (per-BTT scaled jitter). Reveals
+//     envelope-fit curves.
 //  4. Heavy-tail propagation — varies LogNormalDelay Sigma ∈
 //     {0.1, 0.3, 0.5, 0.7} at fixed n=4, Median=BTT/2. Surfaces
-//     P99/P50-ratio effects on OBFT's hard B_k cutoff.
+//     P99/P50-ratio effects on OBFT's hard B_k cutoff. (Network varies
+//     by design; ignores the stress-tier jitter default.)
 //  5. Loss — varies LossyNetwork LossRate ∈ {0, 0.01, 0.05, 0.10}
-//     at fixed n=4, BurstFactor=5. Drop-tolerance curves.
+//     at fixed n=4, BurstFactor=5. Inner model is ConstantDelay to
+//     isolate the loss effect from jitter.
 //
 // All sweeps share Iterations and the input Scenarios / Protocols
 // matrix; only the per-point Network / SimConfig differs.
+//
+// Stress-tier network choice: per Phase 5 of the catalog-split plan,
+// sweeps that don't already vary network shape (canonical / cluster
+// scaling / BTT degradation) use JitteredDelay with ±25% jitter around
+// BTT to model real-world propagation variance. Heavy-tail and loss
+// sweeps each set their own network model and are unaffected.
 //
 // Returns nil if Scenarios or Protocols is empty (defensive — caller
 // driver test should always pass non-empty lists).
@@ -87,17 +97,20 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iterations int) [
 }
 
 func canonicalSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep {
+	btt := 200 * time.Millisecond
+	base := DefaultProposerDutyConfig(btt)
+	base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
 	return Sweep{
 		Name:        "canonical",
 		Title:       "Canonical operating point",
-		Description: "Reference operating point: n=4, BTT=200ms, K=4, ConstantDelay. The spec's canonical config — every other sweep's baseline.",
+		Description: "Reference operating point: n=4, BTT=200ms, K=4, JitteredDelay. The spec's canonical config — every other sweep's baseline.",
 		AxisLabel:   "",
 		Points: []SweepPoint{
 			{
 				Label: "n=4 BTT=200ms",
 				Config: BatchConfig{
 					Iterations: iterations,
-					Base:       DefaultProposerDutyConfig(200 * time.Millisecond),
+					Base:       base,
 					Scenarios:  scenarios,
 					Protocols:  protocols,
 				},
@@ -108,13 +121,15 @@ func canonicalSweep(scenarios []Scenario, protocols []Protocol, iterations int) 
 
 func clusterScalingSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep {
 	pts := make([]SweepPoint, 0, len(ClusterSizes))
+	btt := 200 * time.Millisecond
 	for _, n := range ClusterSizes {
 		base := SimConfig{
 			N:            n,
 			Operators:    MakeOperators(n),
 			SlotDuration: 12 * time.Second,
 			RelayCutoff:  4 * time.Second,
-			BTT:          200 * time.Millisecond,
+			BTT:          btt,
+			Network:      JitteredDelay{D: btt, Jitter: btt / 4},
 		}
 		pts = append(pts, SweepPoint{
 			Label: "n=" + strconv.Itoa(n),
@@ -144,11 +159,14 @@ func bttDegradationSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	}
 	pts := make([]SweepPoint, 0, len(btts))
 	for _, btt := range btts {
+		base := DefaultProposerDutyConfig(btt)
+		// Jitter scales with BTT so the relative variance stays at ±25%.
+		base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
 		pts = append(pts, SweepPoint{
 			Label: "BTT=" + btt.String(),
 			Config: BatchConfig{
 				Iterations: iterations,
-				Base:       DefaultProposerDutyConfig(btt),
+				Base:       base,
 				Scenarios:  scenarios,
 				Protocols:  protocols,
 			},

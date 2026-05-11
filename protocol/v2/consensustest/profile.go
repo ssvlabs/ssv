@@ -90,13 +90,17 @@ func CorrectnessProfile(btt time.Duration) Profile {
 }
 
 // StressProfile is the stochastic preset used by TestStress. Many
-// iterations, varied seeds, safety-only assertions. The network model is
-// passed in so callers can pick LogNormalDelay / JitteredDelay per
-// experiment.
+// iterations, varied seeds, safety-only assertions. Default network is
+// JitteredDelay (±25% jitter around BTT) — modelling real-world
+// propagation variance. Callers can override via `net` when running a
+// sweep that has its own network model (e.g. LogNormal heavy-tail,
+// LossyNetwork) — pass nil for the default jittered shape.
 func StressProfile(btt time.Duration, iterations int, net NetworkModel) Profile {
 	base := DefaultProposerDutyConfig(btt)
 	if net != nil {
 		base.Network = net
+	} else {
+		base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
 	}
 	return Profile{
 		Name:       "stress",
