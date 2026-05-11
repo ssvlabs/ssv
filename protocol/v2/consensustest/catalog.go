@@ -10,6 +10,17 @@ import "time"
 // leader → multi-silent → equivocation patterns → validity divergence →
 // OBFT-specific patterns (n/a for QBFT).
 //
+// Tiers: every catalog scenario opts into BOTH ModeCorrectness and
+// ModeStress (see docs/CONSENSUSTEST-SPLIT-PLAN.md). The Apply functions
+// are pure config mutators (no randomness, no in-body assertions); their
+// expected outcomes are deterministic at the canonical operating point
+// (ConstantDelay), which makes the same scenario meaningful in both tiers
+// — TestCorrectness asserts the deterministic outcome class, TestStress
+// re-runs the scenario over many iterations against a jittered network
+// for stats. A scenario that needs a specific network shape (e.g.,
+// MeshFlakiness's PerReceiverDelay) overrides Profile.BaseConfig.Network
+// in its Apply.
+//
 // Add new scenarios at the end to keep order stable for matrix-rendering.
 //
 // Cluster-size scope: the matrix runs at n=4 (the canonical operating
@@ -74,6 +85,7 @@ var scenarioHealthy = Scenario{
 	Name:  "Healthy",
 	Title: "All-honest healthy path",
 	Group: "Baseline",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzNone}
 		cfg.Host = HostAllValid{}
@@ -91,6 +103,7 @@ var scenarioSilentLeaderL0 = Scenario{
 	Name:  "PrimaryLeaderSilent",
 	Title: "Primary leader silent",
 	Group: "Silent operators",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzSilentLeader, ByzOperators: []OperatorID{1}}
 	},
@@ -107,6 +120,7 @@ var scenarioMultiSilent = Scenario{
 	Name:  "MultiSilent_K3",
 	Title: "Top K-1 leaders silent (deepest is honest)",
 	Group: "Silent operators",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		// Top 3 leaders silent; only the deepest is honest.
 		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: 3}
@@ -134,6 +148,7 @@ var scenarioEquivocate111 = Scenario{
 	Name:  "Equivocate_111",
 	Title: "Leader equivocates: N-1 distinct values",
 	Group: "Leader equivocation",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzEquivocate111, ByzOperators: []OperatorID{1}}
 	},
@@ -152,6 +167,7 @@ var scenarioEquivocateAllNR = Scenario{
 	Name:  "Equivocate_AllNR",
 	Title: "Leader equivocates: floods both values to all",
 	Group: "Leader equivocation",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzEquivocateAllNR, ByzOperators: []OperatorID{1}}
 	},
@@ -182,6 +198,7 @@ var scenarioEquivocateSigmaLockedSplit = Scenario{
 	Name:  "Equivocate_SigmaLockedSplit",
 	Title: "Leader equivocates: σ-locked f-f split",
 	Group: "Leader equivocation",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// First f recipients receive V_a, next f receive V_b. op2..op{f+1}
@@ -221,6 +238,7 @@ var scenarioHV1SelectiveDelivery = Scenario{
 	Name:  "HV1SelectiveDelivery",
 	Title: "Selective delivery: V to f honest only",
 	Group: "Propagation issues",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		recipients := make([]OperatorID, 0, f)
@@ -247,6 +265,7 @@ var scenarioFakeEncryptedPresence = Scenario{
 	Name:  "FakeEncryptedPresence",
 	Title: "Forged encrypted-presence at L_1 (Rule 4)",
 	Group: "OBFT-specific attacks",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{
 			Kind:         ByzFakeEncryptedPresence,
@@ -280,6 +299,7 @@ var scenarioValidityDivergenceAlgebraicLimit = Scenario{
 	Name:  "ValidityDivergence_AlgebraicLimit",
 	Title: "Validity divergence: 2-2 split (algebraic miss)",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		nvCount := cfg.N - 2*f // = f+1 at N=3f+1
@@ -316,6 +336,7 @@ var scenarioValidityDivergence3_1 = Scenario{
 	Name:  "ValidityDivergence_3_1",
 	Title: "Validity divergence: minority NV (3-1)",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Host = HostInvalidForOperators{
 			Layer:     0,
@@ -349,6 +370,7 @@ var scenarioValidityDivergenceNRFallThrough = Scenario{
 	Name:  "ValidityDivergence_NRFallThrough",
 	Title: "Validity divergence: NR-quorum fall-through (1-3)",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		nvCount := 2*cfg.F() + 1 // = qEnc
 		// Pick the LAST nvCount ops as NV (op{N-nvCount+1}..op{N}). At n=4
@@ -394,6 +416,7 @@ var scenarioValidityDivergence_PassiveByz_Silent_1NV = Scenario{
 	Name:  "ValidityDivergence_PassiveByz_Silent_1NV",
 	Title: "Validity divergence + passive byz: 1 NV + f byz silent",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// 1 NV non-leader at op{N-f}; f byz silent at op{N-f+1}..op{N}.
@@ -426,6 +449,7 @@ var scenarioValidityDivergence_PassiveByz_Silent_2NV = Scenario{
 	Name:  "ValidityDivergence_PassiveByz_Silent_2NV",
 	Title: "Validity divergence + passive byz: 2f NV + f byz silent",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// 2f NV non-leaders at op2..op{2f+1}; f byz silent at op{2f+2}..op{N}.
@@ -468,6 +492,7 @@ var scenarioValidityDivergence_PassiveByz_SigmaOnV_2NV = Scenario{
 	Name:  "ValidityDivergence_PassiveByz_SigmaOnV_2NV",
 	Title: "Validity divergence + passive byz: 2f NV + f byz σ-on-V",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// 2f NV non-leaders at op2..op{2f+1}; f byz σ-on-V at op{2f+2}..op{N}
@@ -499,6 +524,7 @@ var scenarioSigmaRefusal = Scenario{
 	Name:  "SigmaRefusal",
 	Title: "Byz σ-refusal (silent) within f-bound",
 	Group: "Silent operators",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: []OperatorID{4}}
 	},
@@ -519,6 +545,7 @@ var scenarioWithholdLeaderDeepest = Scenario{
 	Name:  "WithholdLeader_Deepest",
 	Title: "Deepest-layer leader withholds",
 	Group: "Silent operators",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		// Default rotation: op[k % N] leads layer k. At K=N convention, op{N}
 		// leads the deepest layer L_{N-1}. Pick byz=op{N} so the pattern's
@@ -539,6 +566,7 @@ var scenarioCertWithholding = Scenario{
 	Name:  "CertWithholding",
 	Title: "Byz withholds cert gossip",
 	Group: "Silent operators",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzCertWithholding, ByzOperators: []OperatorID{4}}
 	},
@@ -555,6 +583,7 @@ var scenarioCrossSigningRule1 = Scenario{
 	Name:  "CrossSigning_Rule1",
 	Title: "Cross-signing evidence (Rule 1: σ + NR exclusivity)",
 	Group: "OBFT-specific attacks",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		// byz=op2 (L_1 leader by default rotation): silent at L_1 → real NR at L_1;
 		// adapter forges σ at L_1 in commit → Rule 1 fires at honest receivers.
@@ -573,6 +602,7 @@ var scenarioFakePlaintextSigmaRule5 = Scenario{
 	Name:  "FakePlaintextSigma_Rule5",
 	Title: "Forged plaintext σ at L_0 (Rule 5)",
 	Group: "OBFT-specific attacks",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{Kind: ByzFakePlaintextSigma, ByzOperators: []OperatorID{2}}
 	},
@@ -589,6 +619,7 @@ var scenarioCrossOnionEquivocationRule3 = Scenario{
 	Name:  "CrossOnionEquivocation_Rule3",
 	Title: "Cross-onion equivocation (Rule 3)",
 	Group: "OBFT-specific attacks",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Byz = ByzPattern{
 			Kind:         ByzCrossOnionEquivocation,
@@ -609,6 +640,7 @@ var scenarioHostFlipMidSlot = Scenario{
 	Name:  "HostFlipMidSlot",
 	Title: "Host valid at L_0/R1, flips invalid deeper",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Host = HostFlipMidSlot{ValidUntilLayer: 0}
 	},
@@ -628,6 +660,7 @@ var scenarioLateLeaderBroadcast = Scenario{
 	Name:  "LateLeaderBroadcast_L0",
 	Title: "Late L_0 leader broadcast (past T_commit)",
 	Group: "Propagation issues",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		// byz=op1 is L_0 leader by default rotation; broadcasts past T_commit.
 		cfg.Byz = ByzPattern{Kind: ByzLateLeaderBroadcast, ByzOperators: []OperatorID{1}}
@@ -648,6 +681,7 @@ var scenarioHostInvalidUntilL1 = Scenario{
 	Name:  "HostInvalidUntilL1",
 	Title: "Host invalid at L_0/R1, valid from L_1/R2",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		cfg.Host = HostInvalidUntilLayer{InvalidUntilLayer: 0}
 	},
@@ -673,6 +707,7 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 	Name:  "PartialEquivocation_NaturalRecovery",
 	Title: "Leader equivocates: 2-1 natural recovery",
 	Group: "Leader equivocation",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// 2f recipients for V_a (op2..op{2f+1}), 1 recipient for V_b
@@ -739,6 +774,7 @@ var scenarioMeshFlakiness = Scenario{
 	Name:  "MeshFlakiness",
 	Title: "Mesh-flaky honest + byz σ-refusal",
 	Group: "Propagation issues",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// f mesh-flaky ops at op2..op{f+1}: 2·BTT inbound delay.
@@ -795,6 +831,7 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 	Name:  "AsymmetricPropagation_FSlow_Success",
 	Title: "Asymmetric propagation: f slow receivers (success)",
 	Group: "Propagation issues",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// op2..op{f+1}: 3·BTT inbound delay. Pushes Phase-1 bundle arrival
@@ -840,6 +877,7 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 	Name:  "AsymmetricPropagation_FPlus1Slow_Miss",
 	Title: "Asymmetric propagation: f+1 slow receivers (miss)",
 	Group: "Propagation issues",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// op2..op{f+2}: 3·BTT inbound delay. (f+1) honest slow.
@@ -896,6 +934,7 @@ var scenarioMultiSilent_AllLayers = Scenario{
 	Name:  "MultiSilent_AllLayers",
 	Title: "All K leaders silent (cascade miss)",
 	Group: "Silent operators",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		k := cfg.K
 		if k == 0 {
@@ -951,6 +990,7 @@ var scenarioValidityDivergence_LeaderNV_PassiveByz = Scenario{
 	Name:  "ValidityDivergence_LeaderNV_PassiveByz",
 	Title: "Validity divergence: leader-NV + passive byz (σ-V lock)",
 	Group: "Host validity",
+	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// NV set: leader (op1) host-NV, plus 1 non-leader at op{2f+1}.
