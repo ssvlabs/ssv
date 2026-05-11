@@ -97,15 +97,29 @@ function computeBuckets(data) {
 function renderHeader(data) {
   const header = h('header', { class: 'page', id: 'top' });
   header.appendChild(h('h1', {}, data.title));
-  if (data.description) header.appendChild(h('p', { class: 'desc' }, data.description));
-  header.appendChild(
-    h(
-      'p',
-      { class: 'meta' },
-      `Iterations per cell: ${data.iterations} · Total wallclock: ${data.wallclock} · Generated: ${data.generatedAt}`,
-    ),
-  );
+  if (data.description) {
+    const lead = h('p', { class: 'lead' });
+    lead.innerHTML = formatDescription(data.description);
+    header.appendChild(lead);
+  }
+  const pills = h('div', { class: 'summary-pills' });
+  pills.appendChild(makePill('Iterations per cell', String(data.iterations)));
+  pills.appendChild(makePill('Total wallclock', formatWallclock(data.wallclock)));
+  pills.appendChild(makePill('Generated', data.generatedAt));
+  pills.appendChild(makePill('Sweeps', String(data.sweeps.length)));
+  pills.appendChild(makePill('Scenarios', String(data.scenarios.length)));
+  pills.appendChild(makePill('Protocols', data.protocols.join(' · ')));
+  header.appendChild(pills);
   return header;
+}
+
+function makePill(label, value) {
+  return h(
+    'div',
+    { class: 'pill' },
+    h('span', { class: 'label' }, label),
+    h('span', { class: 'value' }, value),
+  );
 }
 
 function renderTOC(data) {
@@ -119,7 +133,11 @@ function renderTOC(data) {
 function renderSweepSection(sweep, data, bucketing) {
   const section = h('section', { class: 'sweep', id: `sweep-${sweep.name}` });
   section.appendChild(h('h2', {}, sweep.title || sweep.name));
-  if (sweep.description) section.appendChild(h('p', { class: 'desc' }, sweep.description));
+  if (sweep.description) {
+    const desc = h('p', { class: 'desc' });
+    desc.innerHTML = formatDescription(sweep.description);
+    section.appendChild(desc);
+  }
   if (sweep.axisLabel) section.appendChild(h('p', { class: 'axis' }, `Swept axis: ${sweep.axisLabel}`));
 
   renderScope(section, sweep, data, bucketing, 'cross', 'Cross-protocol comparison', data.protocols);
@@ -505,4 +523,52 @@ function kindColor(idx, total) {
 // Used to build canvas IDs like `canonical_cross_silent_operators_success`.
 function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// escapeHtml escapes the five HTML special chars. Used before injecting
+// strings into innerHTML so user-controlled text (descriptions etc.)
+// can't smuggle in markup.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[ch]);
+}
+
+// formatDescription HTML-escapes the input, then wraps three families
+// of tokens in <strong> for visual emphasis:
+//
+//   1. Set literals like `{4, 7, 10, 13}` or `{0.1, 0.3, 0.5, 0.7}`.
+//   2. Parameter assignments like `n=4`, `BTT=200ms`, `Sigma=0.30`,
+//      `LossRate=0.10`, `BurstFactor=5`, `Median=BTT/2`, `K=4`.
+//   3. Known network-model names: ConstantDelay / LogNormalDelay /
+//      LossyNetwork / PerReceiverDelay / CorrelatedLinkDelay /
+//      JitteredDelay. These name the operating-point's network shape
+//      and deserve to stand out.
+//
+// The result is an HTML fragment suitable for innerHTML.
+function formatDescription(text) {
+  const networkModels = '(?:ConstantDelay|LogNormalDelay|LossyNetwork|PerReceiverDelay|CorrelatedLinkDelay|JitteredDelay)';
+  let out = escapeHtml(text);
+  // Order matters: set literals first (they may contain '=') ... actually
+  // sets don't contain '=', so order is fine either way. Bold each family
+  // in turn with a unique pattern.
+  const patterns = [
+    /\{[^}]+\}/g, // sets like {4, 7, 10, 13}
+    /\b[A-Za-z][A-Za-z_0-9]*=[A-Za-z0-9./_]+(?:ms|s)?\b/g, // param=value
+    new RegExp('\\b' + networkModels + '\\b', 'g'), // network model names
+  ];
+  patterns.forEach((re) => {
+    out = out.replace(re, (m) => `<strong>${m}</strong>`);
+  });
+  return out;
+}
+
+// formatWallclock strips subsecond decimals from Go's Duration.String()
+// output for readability: "2m41.872825333s" → "2m41s".
+function formatWallclock(s) {
+  return String(s).replace(/\.\d+s/g, 's');
 }
