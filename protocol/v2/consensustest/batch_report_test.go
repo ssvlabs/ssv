@@ -1,11 +1,9 @@
 package consensustest_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,9 +15,9 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/consensustest/reporting"
 )
 
-// TestGenerateBatchReport runs the curated DefaultSweeps over the full
-// catalog with both protocols and writes per-(sweep, point) HTML / CSV /
-// Markdown reports plus a top-level index.html.
+// TestGenerateBatchReport runs DefaultSweeps over the full catalog with
+// both protocols and writes a single self-contained HTML page covering
+// all sweeps inline (canonical detail panels + per-sweep trend charts).
 //
 // Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
 // Iteration count tunable via ITERATIONS env (default 100).
@@ -66,83 +64,26 @@ func TestGenerateBatchReport(t *testing.T) {
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations)
 	require.Len(t, sweeps, 5)
 
-	var indexEntries []reporting.SweepIndexEntry
 	totalStart := time.Now()
-
+	results := make([]ct.SweepResult, 0, len(sweeps))
 	for _, sw := range sweeps {
-		swDir := filepath.Join(dir, sw.Name)
-		require.NoError(t, os.MkdirAll(swDir, 0o755))
-
 		t.Logf("--- sweep %s (%d points × %d iterations × %d cells)",
 			sw.Name, len(sw.Points), iterations, len(scenarios)*len(protocols))
 		swStart := time.Now()
-		result := ct.RunSweep(t, sw)
+		results = append(results, ct.RunSweep(t, sw))
 		t.Logf("    %s wallclock: %v", sw.Name, time.Since(swStart))
-
-		for i, rep := range result.Reports {
-			pt := result.Sweep.Points[i]
-			ptSlug := sanitizeFilename(pt.Label)
-			title := fmt.Sprintf("%s — %s", sw.Name, pt.Label)
-			br := reporting.NewBatchRun(title, sw.Description, rep)
-			if sw.AxisLabel != "" {
-				br.SweepDimensions[sw.AxisLabel] = []string{pt.Label}
-			}
-
-			htmlPath := filepath.Join(swDir, ptSlug+".html")
-			csvPath := filepath.Join(swDir, ptSlug+".csv")
-			mdPath := filepath.Join(swDir, ptSlug+".md")
-			require.NoError(t, reporting.RenderBatchHTML(br, htmlPath))
-			require.NoError(t, reporting.RenderBatchCSV(br, csvPath))
-			require.NoError(t, reporting.RenderBatchMarkdown(br, mdPath))
-
-			rel := func(p string) string {
-				rp, err := filepath.Rel(dir, p)
-				if err != nil {
-					return p
-				}
-				return rp
-			}
-			indexEntries = append(indexEntries, reporting.SweepIndexEntry{
-				SweepName:        sw.Name,
-				SweepDescription: sw.Description,
-				AxisLabel:        sw.AxisLabel,
-				PointLabel:       pt.Label,
-				HTMLPath:         rel(htmlPath),
-				CSVPath:          rel(csvPath),
-				MarkdownPath:     rel(mdPath),
-			})
-		}
 	}
 
-	indexPath := filepath.Join(dir, "index.html")
-	require.NoError(t, reporting.RenderSweepIndex(
-		"consensustest batch comparison",
-		fmt.Sprintf("Five curated sweeps × OBFT/QBFT × %d iterations. Total wallclock: %v.",
-			iterations, time.Since(totalStart)),
-		indexEntries,
-		indexPath,
-	))
+	htmlPath := filepath.Join(dir, "index.html")
+	require.NoError(t, reporting.RenderComparison(reporting.Comparison{
+		Title:       "consensustest comparison — OBFT vs QBFT",
+		Description: "Five curated sweeps × OBFT/QBFT × " + strconv.Itoa(iterations) + " iterations per cell.",
+		Sweeps:      results,
+		Iterations:  iterations,
+		Wallclock:   time.Since(totalStart),
+		GeneratedAt: time.Now(),
+	}, htmlPath))
 
-	t.Logf("Index written: %s", indexPath)
-	t.Logf("Total entries: %d", len(indexEntries))
+	t.Logf("Report written: %s", htmlPath)
 	t.Logf("Total wallclock: %v", time.Since(totalStart))
-}
-
-// sanitizeFilename returns a filesystem-safe version of label suitable
-// for use as a filename. Replaces spaces / equals / slashes / etc. with
-// underscores and trims leading/trailing junk.
-func sanitizeFilename(label string) string {
-	repl := strings.NewReplacer(
-		" ", "_",
-		"=", "_",
-		"/", "_",
-		":", "_",
-		"·", "_",
-	)
-	out := repl.Replace(label)
-	out = strings.Trim(out, "_")
-	if out == "" {
-		return "unnamed"
-	}
-	return out
 }

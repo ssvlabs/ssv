@@ -53,12 +53,9 @@ protocol/v2/consensustest/                       FRAMEWORK
     keys.go           keysetForN — uses Testing{4,7,10,13}SharesSet
     adapter_test.go   per-cluster-size healthy + round-change + equivocation fall-through + determinism
 
-  reporting/          REPORT RENDERERS (HTML / CSV / Markdown)
-    reporting.go      Run / CellKey / cellSummary
-    csv.go            RenderCSV
-    markdown.go       RenderMarkdown
-    html.go           RenderHTML (Chart.js via CDN)
-    reporting_test.go end-to-end smoke
+  reporting/          REPORT RENDERER (single SPA-style HTML)
+    html.go           RenderComparison + Comparison + Applicable (Chart.js via CDN)
+    html_test.go      end-to-end smoke
 ```
 
 ### Universal safety invariants (enforced per sim)
@@ -77,7 +74,7 @@ protocol/v2/consensustest/                       FRAMEWORK
 |---|---|---|
 | `go test ./protocol/v2/consensustest/...` | Default suite (stub-crypto, all phases) | ~3-4 s |
 | `make consensustest-real-bls` | Real-BLS suite (build tag `real_bls`) — actual threshold-BLS + tlock IBE end-to-end at n=4,7,10,13 | ~17 s |
-| `make consensustest-report` | Generates per-(sweep, point) HTML / CSV / Markdown comparison reports of the catalog matrix to `./consensustest-reports/` (5 curated sweeps × OBFT/QBFT × 100 iterations) | ~75 s |
+| `make consensustest-report` | Generates a single self-contained HTML comparison report at `./consensustest-reports/index.html` (5 curated sweeps × OBFT/QBFT × 100 iterations; scrollable SPA with detail + trend panels per sweep) | ~75 s |
 
 ### Stub-BLS vs real-BLS modes
 
@@ -132,7 +129,7 @@ Spec-test key generation (`Testing{4,7,10,13}SharesSet`) is cached process-wide 
 
 ### Reporting
 
-`make consensustest-report` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes per-(sweep, point) HTML / CSV / Markdown reports plus a navigation `index.html` to `./consensustest-reports/`. Each per-point HTML has five Chart.js panels: summary matrix, success rate, decision-time P50/P90/P99 grouped bars, bandwidth stacked-by-kind, P99 latency vs success-rate scatter.
+`make consensustest-report` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes a single self-contained `./consensustest-reports/index.html`. The page is a scrollable SPA with one section per sweep: the canonical sweep gets a detail layout (summary matrix + four Chart.js panels — success rate, latency P50/P90/P99, bandwidth stacked-by-kind, P99-vs-success scatter); multi-point sweeps get a trend layout (three line charts — success rate / P99 latency / bandwidth median, plotted against the swept axis with one line per (scenario, protocol)).
 
 Override defaults: `ITERATIONS=1000 make consensustest-report` (rare-event scenarios, ~12-15 min); `REPORT_DIR=path make consensustest-report` (custom output dir).
 

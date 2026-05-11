@@ -19,9 +19,19 @@ type SweepPoint struct {
 // one per Point — or as a line/series chart with AxisLabel on the X-axis.
 type Sweep struct {
 	Name        string
+	Title       string // human-readable section heading; falls back to Name when empty
 	Description string
 	AxisLabel   string // e.g. "Cluster size n", "BTT (ms)", "LogNormal sigma"
 	Points      []SweepPoint
+}
+
+// DisplayTitle returns the sweep's Title if set, otherwise Name. Used by
+// report renderers for human-readable section headings.
+func (s Sweep) DisplayTitle() string {
+	if s.Title != "" {
+		return s.Title
+	}
+	return s.Name
 }
 
 // SweepResult bundles a Sweep with the per-Point BatchReports it produced.
@@ -79,6 +89,7 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iterations int) [
 func canonicalSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep {
 	return Sweep{
 		Name:        "canonical",
+		Title:       "Canonical operating point",
 		Description: "Reference operating point: n=4, BTT=200ms, K=4, ConstantDelay. The spec's canonical config — every other sweep's baseline.",
 		AxisLabel:   "",
 		Points: []SweepPoint{
@@ -117,6 +128,7 @@ func clusterScalingSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	}
 	return Sweep{
 		Name:        "cluster_scaling",
+		Title:       "Cluster-size scaling",
 		Description: "Cluster-size scaling: n ∈ {4, 7, 10, 13} at fixed BTT=200ms. Shows per-protocol scaling behavior across SSV-supported cluster sizes.",
 		AxisLabel:   "Cluster size n",
 		Points:      pts,
@@ -144,6 +156,7 @@ func bttDegradationSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	}
 	return Sweep{
 		Name:        "btt_degradation",
+		Title:       "Network-degradation curves (BTT)",
 		Description: "Network-degradation curves: BTT ∈ {100, 200, 400, 600}ms at fixed n=4. Reveals envelope-fit at each protocol's tolerance ceiling.",
 		AxisLabel:   "BTT",
 		Points:      pts,
@@ -172,6 +185,7 @@ func heavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int) 
 	}
 	return Sweep{
 		Name:        "heavy_tail",
+		Title:       "Heavy-tail propagation",
 		Description: "Heavy-tail propagation: LogNormalDelay Sigma ∈ {0.1, 0.3, 0.5, 0.7} at fixed n=4, Median=BTT/2. Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance.",
 		AxisLabel:   "LogNormal sigma",
 		Points:      pts,
@@ -191,7 +205,8 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 		for i, s := range scenarios {
 			inner := s
 			scenariosWithLoss[i] = Scenario{
-				Name: s.Name,
+				Name:  s.Name,
+				Title: s.Title,
 				Apply: func(cfg *SimConfig) {
 					if inner.Apply != nil {
 						inner.Apply(cfg)
@@ -226,6 +241,7 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 	}
 	return Sweep{
 		Name:        "loss",
+		Title:       "Stochastic loss",
 		Description: "Stochastic loss: LossyNetwork LossRate ∈ {0, 0.01, 0.05, 0.10}, BurstFactor=5, at fixed n=4. Each scenario gets a fresh LossyNetwork instance via Apply to preserve per-sim determinism.",
 		AxisLabel:   "Loss rate",
 		Points:      pts,

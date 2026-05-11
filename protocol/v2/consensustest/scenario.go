@@ -7,9 +7,19 @@ import "fmt"
 // declares per-protocol outcome buckets.
 type Scenario struct {
 	Name   string
+	Title  string // human-readable label for reports/charts; falls back to Name when empty
 	Apply  func(*SimConfig)
 	Expect map[string]ExpectClass // keyed by Protocol.Name()
 	Note   string                 // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
+}
+
+// DisplayTitle returns the scenario's Title if set, otherwise Name. Used
+// by report renderers for human-readable chart/section labels.
+func (s Scenario) DisplayTitle() string {
+	if s.Title != "" {
+		return s.Title
+	}
+	return s.Name
 }
 
 // ExpectClass enumerates the canonical outcome buckets.
