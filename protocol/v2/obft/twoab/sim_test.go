@@ -186,3 +186,61 @@ func (s *sim) deliverPhase1Equivocation(
 	}
 	return bA, bB
 }
+
+// applyHostValidityAll applies the host's valid/not-valid verdict for V
+// at layer across every Instance in the sim. Used in Phase F tests to
+// set up the "host says valid/not-valid" branch of ComputeLocalVerdict.
+func (s *sim) applyHostValidityAll(layer int, value Value, valid bool) {
+	s.t.Helper()
+	for _, op := range s.allOperators() {
+		require.NoError(s.t, s.instances[op].ApplyHostValidity(layer, value, valid))
+	}
+}
+
+// applyHostValidityFor applies the host's verdict on only the listed
+// operators (modeling validity-divergence: some honest see V as valid,
+// others don't).
+func (s *sim) applyHostValidityFor(ops []OperatorID, layer int, value Value, valid bool) {
+	s.t.Helper()
+	for _, op := range ops {
+		require.NoError(s.t, s.instances[op].ApplyHostValidity(layer, value, valid))
+	}
+}
+
+// deliverVerdict has `from` build a Verdict at layer and deliver it to
+// every recipient via ObserveVerdict. Returns the built verdict.
+func (s *sim) deliverVerdict(from OperatorID, layer int, recipients []OperatorID) *Verdict {
+	s.t.Helper()
+	v, err := s.instances[from].BuildVerdict(layer)
+	require.NoError(s.t, err, "op %d BuildVerdict at layer %d", from, layer)
+	for _, op := range recipients {
+		require.NoError(s.t, s.instances[op].ObserveVerdict(v),
+			"op %d ObserveVerdict from %d at layer %d", op, from, layer)
+	}
+	return v
+}
+
+// deliverVerdictEquivocation has a byzantine operator broadcast TWO
+// distinct verdicts at the same layer (different Kinds or different
+// ValueRoots), selectively delivering each to different subsets of
+// recipients. Useful for Rule-6a / treat-as-null tests.
+//
+// Both verdicts are constructed directly (bypassing BuildVerdict's
+// idempotent cache) since this models a byzantine that doesn't honor
+// the single-emission rule.
+func (s *sim) deliverVerdictEquivocation(
+	from OperatorID,
+	layer int,
+	vA, vB *Verdict,
+	recipientsA, recipientsB []OperatorID,
+) {
+	s.t.Helper()
+	for _, op := range recipientsA {
+		require.NoError(s.t, s.instances[op].ObserveVerdict(vA),
+			"op %d ObserveVerdict A from %d at layer %d", op, from, layer)
+	}
+	for _, op := range recipientsB {
+		require.NoError(s.t, s.instances[op].ObserveVerdict(vB),
+			"op %d ObserveVerdict B from %d at layer %d", op, from, layer)
+	}
+}

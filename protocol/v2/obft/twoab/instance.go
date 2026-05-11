@@ -63,6 +63,40 @@ type Instance struct {
 	// verify peer-re-flooded V claims at the wire layer.
 	retainedBundles map[int]map[OperatorID][]*retainedBundle
 
+	// hostVerdict[layer][string(value_root)] = host application's
+	// valid/not-valid verdict on the V identified by value_root at this
+	// layer. Populated via ApplyHostValidity; consumed by
+	// ComputeLocalVerdict at Phase-2a verdict-broadcast time. Per spec
+	// §Phase 2a, the host is re-consulted at verdict-broadcast time
+	// (potentially with a more recent head snapshot than at Phase-1
+	// acceptance — narrows the divergence window structurally).
+	hostVerdict map[int]map[string]bool
+
+	// ownVerdict[layer] = the local operator's broadcast Verdict at this
+	// layer, cached after BuildVerdict. Subsequent BuildVerdict calls at
+	// the same layer return the cached entry (idempotent). Per spec
+	// §Phase 2a, each operator emits exactly one Verdict per (slot,
+	// layer); a second distinct Verdict from this operator would be
+	// Rule-6a self-equivocation.
+	ownVerdict map[int]*Verdict
+
+	// peerVerdicts[layer][op] = the first-observed Verdict from op at
+	// this layer. Per spec §Phase 2a, honest receivers count the
+	// first-observed verdict for convergence purposes; subsequent
+	// distinct verdicts are dropped from convergence input but recorded
+	// as Rule-6a evidence.
+	peerVerdicts map[int]map[OperatorID]*Verdict
+
+	// verdictEquivocator[layer][op] = true if op has been observed
+	// broadcasting two distinct verdicts at this layer. Per spec
+	// §Phase 2a "Treat-equivocator-as-null (SHOULD)": receivers SHOULD
+	// treat operator i's contribution as null in the convergence count
+	// once a second distinct KindVerdict from i for the same (slot,
+	// layer) has been observed before convergence-rule evaluation at
+	// Phase-2b start. Phase G's convergence rule reads this map and
+	// excludes flagged operators from both verdict_pool and nr_pool.
+	verdictEquivocator map[int]map[OperatorID]bool
+
 	// Evidence accumulation. Per spec §Slashing evidence, the observer
 	// (if set) fires on FIRST recording per (Rule, OperatorID, Layer)
 	// tuple; subsequent records of the same logical fault are kept in
@@ -72,8 +106,8 @@ type Instance struct {
 	evidenceObserved map[evidenceObservedKey]bool
 
 	// Phase E doesn't yet need per-rule dedup buckets beyond
-	// evidenceObserved; Rules 1 / 3 / 4 / 5 / 6a / 6b dedup will accrete
-	// as Phases F-I land.
+	// evidenceObserved; Rules 1 / 3 / 4 / 5 / 6b dedup will accrete
+	// as Phases G/I land.
 
 	ended bool
 }
@@ -158,17 +192,21 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:              cfg,
-		ownOperatorID:    ownOperatorID,
-		signer:           signer,
-		tagSigner:        tagSigner,
-		ibe:              ibe,
-		clusterPubKey:    clusterPubKey,
-		pubKeyShares:     pubKeyShares,
-		ibePubKeyShares:  ibePubKeyShares,
-		evidenceObserver: evidenceObserver,
-		retainedBundles:  make(map[int]map[OperatorID][]*retainedBundle, K),
-		evidenceObserved: make(map[evidenceObservedKey]bool),
+		cfg:                cfg,
+		ownOperatorID:      ownOperatorID,
+		signer:             signer,
+		tagSigner:          tagSigner,
+		ibe:                ibe,
+		clusterPubKey:      clusterPubKey,
+		pubKeyShares:       pubKeyShares,
+		ibePubKeyShares:    ibePubKeyShares,
+		evidenceObserver:   evidenceObserver,
+		retainedBundles:    make(map[int]map[OperatorID][]*retainedBundle, K),
+		hostVerdict:        make(map[int]map[string]bool, K),
+		ownVerdict:         make(map[int]*Verdict, K),
+		peerVerdicts:       make(map[int]map[OperatorID]*Verdict, K),
+		verdictEquivocator: make(map[int]map[OperatorID]bool, K),
+		evidenceObserved:   make(map[evidenceObservedKey]bool),
 	}, nil
 }
 
