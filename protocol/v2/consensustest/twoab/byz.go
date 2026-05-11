@@ -293,9 +293,11 @@ func (b byzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader twoab.OperatorID, la
 // σ-locked split equivocation: in 2ab, the same scenario that misses
 // under bare OBFT (each receiver retains 1 V; σ-pool < qV; bare OBFT
 // reaches no σ-quorum AND no NR-quorum at L_0 — slot miss) recovers via
-// 2ab's NR-fall-through. Phase-2a verdict pool is split 2-2 across V_a /
-// V_b; neither reaches qV; row 5 → all NR; NR-quorum at L_0 → advance
-// to L_1 where the honest non-byz leader broadcasts in time → σ at L_1.
+// 2ab's NR-fall-through. Phase-2a verdict pool is split f-f across V_a /
+// V_b (1-1 at f=1 / n=4); the byz leader self-observes both bundles and
+// row-1 NRs in their own verdict; the silent rest also NR. Neither V
+// reaches qV; row 5 → all-NR → NR-quorum at L_0 → advance to L_1 where
+// the honest non-byz leader broadcasts in time → σ at L_1.
 type byzEquivocSigmaLockedSplit struct {
 	honestDefaults
 	ByzSet      byzSet
@@ -318,14 +320,21 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader twoab.Ope
 // ---- byzPartialEquivocation -------------------------------------------
 
 // Natural-recovery equivocation: byz leader at L_0 emits V_a to RecipientsA
-// (size 2f) and V_b to RecipientsB (size 1). In 2ab, the 2f receivers of
-// V_a + the leader's own retention sum to 2f+1 = qV σV verdicts at Phase
-// 2a → row 3 σ on V_a. The V_b recipient retains V_b but is alone in the
-// verdict_pool[V_b] → row 4 NR. σ-pool at L_0 reaches qV on V_a (2f σV-side
-// receivers σ-emit) → σ-quorum → SUCCESS at L_0 with V_a.
+// (size 2f) and V_b to RecipientsB (size 1). In bare OBFT the leader's
+// own Phase-1 σ_V partial pushes V_a's σ-pool to 2f+1 = qV → SUCCESS at
+// L_0 with V_a.
 //
-// Pigeonhole 2 holds: at most one V reaches qV cluster-wide. Slot succeeds
-// at L_0 despite the equivocation (byz fumbled the timing).
+// In 2ab (Variant C — no Phase-1 σ_V):
+//   - The byz leader self-observes BOTH bundles via the adapter's leader
+//     self-observation path → 2 distinct V's retained at the leader →
+//     row 1 NR verdict (equivocation observed).
+//   - 2f recipients of V_a issue σV(V_a); the V_b recipient issues
+//     σV(V_b). verdict_pool[V_a] = 2f < qV = 2f+1; verdict_pool[V_b] = 1
+//     < qV. nr_pool = {leader} = 1 < qEnc.
+//   - Row 5 → all NR → NR-quorum at L_0 → advance to L_1 → σ at L_1.
+//
+// 2ab pays one layer for removing the Phase-1 σ_V head-start; Pigeonhole
+// 2 still holds (at most one V reaches qV cluster-wide).
 type byzPartialEquivocation struct {
 	honestDefaults
 	ByzSet      byzSet

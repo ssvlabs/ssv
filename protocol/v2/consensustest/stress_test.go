@@ -12,17 +12,17 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
-	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 	"github.com/ssvlabs/ssv/protocol/v2/consensustest/reporting"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
 // TestStress is the stress-tier entry point per the catalog-split plan.
 // It runs DefaultSweeps over every catalog scenario opted into
-// ModeStress (currently all 29 — see Phase 2) for both protocols and
-// writes a `data.js` file consumed by the static UI in
-// `stresstest-report/` (index.html + app.js + styles.css, all
-// tracked in git). Refreshing index.html in a browser re-renders from
-// the new data.js without rerunning this test.
+// ModeStress (currently all 29 — see Phase 2) for the three registered
+// protocols (OBFT / 2abOBFT / QBFT) and writes a `data.js` file
+// consumed by the static UI in `stresstest-report/` (index.html + app.js
+// + styles.css, all tracked in git). Refreshing index.html in a browser
+// re-renders from the new data.js without rerunning this test.
 //
 // Only safety-invariant violations fail TestStress; per-scenario
 // expectation mismatches are recorded in the report stats but do not
@@ -44,11 +44,11 @@ import (
 //
 // Estimated runtime at CLUSTER_SIZE=4 and default 100 iterations:
 //
-//	canonical          ~5s    (29 scenarios × 2 protocols × 100 sims)
-//	btt_degradation    ~20s   (× 4 BTT values)
-//	heavy_tail         ~20s   (× 4 sigmas)
-//	loss               ~20s   (× 4 loss rates)
-//	TOTAL              ~65s   on a typical dev machine (jittered network).
+//	canonical          ~8s    (29 scenarios × 3 protocols × 100 sims)
+//	btt_degradation    ~30s   (× 4 BTT values)
+//	heavy_tail         ~30s   (× 4 sigmas)
+//	loss               ~30s   (× 4 loss rates)
+//	TOTAL              ~100s  on a typical dev machine (jittered network).
 //
 // At ITERATIONS=1000, scale linearly (~12-15 min). Above that, consider
 // parallelizing across sweeps (currently sequential — per-batch is
@@ -107,8 +107,8 @@ func TestStress(t *testing.T) {
 	}
 
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
-		Title:       "consensustest comparison — OBFT vs QBFT",
-		Description: "Five curated sweeps × OBFT/QBFT × " + strconv.Itoa(iterations) + " iterations per cell.",
+		Title:       "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
+		Description: "Curated sweeps × OBFT/2abOBFT/QBFT × " + strconv.Itoa(iterations) + " iterations per cell.",
 		Sweeps:      results,
 		Iterations:  iterations,
 		Wallclock:   time.Since(totalStart),

@@ -105,9 +105,9 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 
 // computeAttestation populates Outcome.CommitAttestation from data already
 // visible at the adapter boundary. Mirrors base's instrumentation: equivocation
-// is counted from Rule 2 (LeaderEquivocation) + Rule 3 (CrossOnion at all
-// layers + top-level CommitEquivocation) + Rule 6a (VerdictEquivocation,
-// 2ab-specific) evidence fires.
+// is counted from Rule 2 (LeaderEquivocation) + Rule 3 (per-layer
+// CrossOnionEquivocation + top-level OnionEquivocation) + Rule 6a
+// (VerdictEquivocation, 2ab-specific) evidence fires.
 //
 // Rule 6b (VerdictAction) is NOT counted as equivocation: per Rule 6b's
 // boundary-conditional nature (honest revision is permitted), a fire there
