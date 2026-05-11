@@ -68,9 +68,14 @@ func newSim(cfg desConfig) (*sim, error) {
 		clusterPub = []byte{0xCA, 0xFE}
 	}
 
+	// Per-layer candidate values sized to a realistic Electra blinded block.
+	// Each layer's leader (in production) fetches an independent block from
+	// their relay/beacon, so V_0..V_{K-1} are distinct candidates of similar
+	// size. See ct.RealisticBlindedBlockBytes for the size derivation
+	// (~5 KB SSZ-encoded SignedBlindedBeaconBlock at 8-att Electra max).
 	canonValues := make(map[int]obftbase.Value, cfg.K)
 	for k := 0; k < cfg.K; k++ {
-		canonValues[k] = obftbase.Value(fmt.Sprintf("canon-V-layer-%d", k))
+		canonValues[k] = obftbase.Value(ct.MakeRealisticBlindedBlockValue(byte(k + 1)))
 	}
 
 	return &sim{

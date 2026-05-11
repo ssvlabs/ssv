@@ -78,14 +78,16 @@ func newSim(cfg desConfig) (*sim, error) {
 		keys:       keys,
 		committee:  committee,
 		identifier: stableIdentifier(),
-		// startValue is what HONEST round-1 proposers propose. Distinct from
-		// canonValueForRound(1) ("qbft-canon-V-round-1") so traces can tell
-		// the two apart: byz round-1 leaders propose the per-round canon value
-		// (handled by ProposalPlanForRound), making byz V's identifiable in
-		// trace output. Both values are functionally equivalent (any V that
-		// passes the value-checker), but their distinct strings make
-		// "honest-leader vs byz-leader at round 1" debuggable from trace alone.
-		startValue:           []byte("qbft-canon-V"),
+		// startValue is what HONEST round-1 proposers propose. Sized to a
+		// realistic Electra blinded block (see ct.RealisticBlindedBlockBytes —
+		// ~5 KB SSZ for the SignedBlindedBeaconBlock that SSV consensus
+		// actually carries; the prior 12-byte placeholder underweighted
+		// PROPOSE FullData bandwidth by ~3 orders of magnitude). The leading
+		// byte (0xFF) is distinct from canonValueForRound's leading byte so
+		// traces can still tell "honest round-1 V" apart from "byz/canon V"
+		// at the same round (byz round-1 leaders propose canonValueForRound;
+		// both pass value-check; byte 0 distinguishes them in traces).
+		startValue:           ct.MakeRealisticBlindedBlockValue(0xFF),
 		instances:            make(map[spectypes.OperatorID]*qbftinstance.Instance, cfg.N),
 		timers:               make(map[spectypes.OperatorID]*virtualRoundTimer, cfg.N),
 		decided:              make(map[spectypes.OperatorID]decidedRecord, cfg.N),
@@ -238,7 +240,9 @@ func (s *sim) outcome() rawOutcome {
 
 // canonValueForRound returns a per-round canonical value. Different per round
 // so a round-change with fresh-V proposes a different V (mirrors the prior
-// behavioral adapter's semantics).
+// behavioral adapter's semantics). Sized to a realistic Electra blinded
+// block — see ct.RealisticBlindedBlockBytes. The leading byte encodes the
+// round so distinct rounds produce distinct V's.
 func (s *sim) canonValueForRound(round specqbft.Round) []byte {
-	return []byte(fmt.Sprintf("qbft-canon-V-round-%d", round))
+	return ct.MakeRealisticBlindedBlockValue(byte(round))
 }

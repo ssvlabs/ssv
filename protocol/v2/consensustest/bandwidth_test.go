@@ -13,16 +13,16 @@ import (
 
 // TestBandwidth_Healthy_OBFT verifies the OBFT adapter populates
 // Outcome.Bandwidth with non-zero per-kind / per-operator counts on a
-// healthy slot. Asserts per-kind cluster-wide bands (loose ±25% around
+// healthy slot. Asserts per-kind cluster-wide bands (loose around
 // observed values at BTT=200, K=4, n=4) so single-component regressions
-// surface here — a 50% growth in any kind would fail the test, while
-// format-evolution churn under 25% stays green.
+// surface here — a 30% growth in any kind would fail the test, while
+// format-evolution churn under 15% stays green.
 //
-// Spec referent: OBFT.md §Properties summary quotes ~28 KB cluster-wide
-// at K=4 n=4. The sim's stub-BLS / stub-IBE numbers are lower (no SSV
-// outer auth envelope, simpler IBE overhead) — we band against the sim's
-// own expected sizes computed in obft/sizes.go, not the spec's
-// production-envelope quote.
+// V (consensus value) is sized to a realistic Electra blinded block
+// (~5 KB; see ct.RealisticBlindedBlockBytes). OBFT's per-commit V
+// replication across σ-state layers — (K-1) × V bytes per commit in the
+// K=N=4 healthy path — makes Phase-2 the dominant cost; Certificate
+// gossip and Phase-1 bundle add 1 × V per peer-pair each.
 func TestBandwidth_Healthy_OBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := obftadapter.Protocol{}.Run(cfg)
@@ -31,8 +31,11 @@ func TestBandwidth_Healthy_OBFT(t *testing.T) {
 
 	require.Greater(t, out.Bandwidth.TotalBytes, int64(0),
 		"healthy OBFT must record non-zero bandwidth")
-	require.Less(t, out.Bandwidth.TotalBytes, int64(30*1024),
-		"healthy OBFT at n=4 should fit under 30 KB; got %s", out.Bandwidth.SummaryLine())
+	// Healthy-path total at V≈5 KB n=4 K=4: ~320 KB cluster-wide. Loose
+	// upper bound at 400 KB catches any major regression while leaving
+	// room for spec-format evolution under ±25%.
+	require.Less(t, out.Bandwidth.TotalBytes, int64(400*1024),
+		"healthy OBFT at n=4 V≈5 KB should fit under 400 KB; got %s", out.Bandwidth.SummaryLine())
 
 	// Per-kind sanity: leader broadcasts at K=4 layers + commits at every op +
 	// cert-gossip after Phase 3 reconstruction.
@@ -42,30 +45,31 @@ func TestBandwidth_Healthy_OBFT(t *testing.T) {
 		"healthy OBFT should dispatch cert gossip after reconstruction")
 
 	// Per-kind bands (cluster-wide, sim observed at BTT=200 K=4 n=4 stub
-	// crypto; loose ±25% so message-format evolution stays green within a
-	// quarter without false positives, but single-component 50% bloats
-	// fail). The bands check the bandwidth shape, not just totals — a
-	// regression that doubles witness size would shift Commit out of band.
+	// crypto with V≈5 KB realistic Electra blinded block). Bands sit at
+	// observed ±15-20%; a regression that doubles witness/onion size or
+	// changes the V-replication factor would shift the affected kind out
+	// of band.
 	type bandCheck struct {
 		kind string
 		min  int64
 		max  int64
 	}
 	bands := []bandCheck{
-		// LeaderBroadcast: K=4 leaders × (N-1)=3 recipients × ~163 B body
-		// ≈ 1956 B. Stub Phase-1 bundle = ClusterID(32) + OpID(8) + Height(8)
-		// + Layer(4) + V(~15) + SigmaV(96) = 163 B.
-		{"LeaderBroadcast", 1500, 2500},
-		// Commit: N=4 ops × (N-1)=3 recipients × ~1040 B body ≈ 12500 B.
-		// Per-commit body: base(48) + K=4 onion entries + K=4 witnesses
-		// (145 B each = 580 B). Onion: L_0 plaintext (~111 B) + 3×IBE-wrapped
-		// layers (~159 B each) ≈ 588 B. Total body ~1216 B; cluster ~14.6 KB.
-		// Observed sim ~12.5 KB (some commits omit own-leader-layer onion
-		// entries; see phase2.go own-leader skip).
-		{"Commit", 10000, 15000},
-		// Certificate: N=4 ops × (N-1)=3 recipients × ~151 B cert body
-		// ≈ 1812 B. Stub cert = ClusterID(32) + Height(8) + V(~15) + Sig(96).
-		{"Certificate", 1400, 2400},
+		// LeaderBroadcast: K=4 leaders × (N-1)=3 peers × ~5300 B bundle
+		// (V(~5152) + ClusterID(32) + OpID(8) + Height(8) + Layer(4) +
+		// SigmaV(96)) ≈ 62 KB. Observed ~62.1 KB.
+		{"LeaderBroadcast", 55000, 70000},
+		// Commit: N=4 ops × (N-1)=3 peers × ~16 KB commit body ≈ 193 KB.
+		// Per-commit body: base(48) + (K-1)=3 σ-state onion entries with
+		// V(~5152) + Ciphertext(96 σ + 48 IBE for k>0) ≈ ~3×5300 = 15.9 KB,
+		// plus K=4 witnesses (145 B each = 580 B). Cluster total ~190 KB.
+		// Phase-2's V-replication across σ-state layers is the dominant
+		// OBFT cost at realistic V — observed ~193.1 KB.
+		{"Commit", 170000, 220000},
+		// Certificate: N=4 ops × (N-1)=3 peers × ~5300 B cert body
+		// (V(~5152) + ClusterID(32) + Height(8) + Sig(96)) ≈ 62 KB.
+		// Observed ~62.0 KB.
+		{"Certificate", 55000, 70000},
 	}
 	for _, b := range bands {
 		got := out.Bandwidth.PerKindBytes[b.kind]
