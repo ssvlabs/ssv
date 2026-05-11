@@ -1,0 +1,19 @@
+package consensustest
+
+// ---- Healthy ------------------------------------------------------------
+
+var scenarioHealthy = Scenario{
+	Name:  "Healthy",
+	Title: "All-honest healthy path",
+	Group: "Baseline",
+	Modes: []Mode{ModeCorrectness, ModeStress},
+	Apply: func(cfg *SimConfig) {
+		cfg.Byz = ByzPattern{Kind: ByzNone}
+		cfg.Host = HostAllValid{}
+	},
+	Expect: map[string]ExpectClass{
+		"OBFT": ExpectSuccessFastest,
+		"QBFT": ExpectSuccessFastest,
+	},
+	Note: "Both protocols complete at fastest path under all-honest, in-budget propagation. BFT-comparison.md Table 1.",
+}
