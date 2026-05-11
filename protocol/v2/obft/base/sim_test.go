@@ -1,4 +1,4 @@
-package obft
+package base
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 // scenarios), Phase-2 KindCommit exchange, and Phase-3 Resolve. Per-operator
 // host validity verdicts are configurable to exercise the NV path.
 //
-// The simulator uses StubSigner / StubIBE so tests run without real BLS
+// The simulator uses obft.StubSigner / obft.StubIBE so tests run without real BLS
 // machinery; that's fine for protocol-level coverage (the cryptography is
 // exercised separately in blsbackend tests once that package is migrated).
 
@@ -56,7 +56,7 @@ func newSim(t *testing.T, n int) *sim {
 	// Per-layer FetchAt: T_{K-1} earliest (= 0, deepest target clamps), T_0
 	// latest. Shallower layers use 50ms decrements so the schedule is
 	// monotonically decreasing in k.
-	const btt = 150 * time.Millisecond     // P99=100 + δ=50 fixture
+	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
 	const tCommit = 1500 * time.Millisecond
 	budgets, err := DefaultBroadcastBudget(K, btt, tCommit)
 	require.NoError(t, err)

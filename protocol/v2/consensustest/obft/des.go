@@ -7,7 +7,7 @@ import (
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
-	obft "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftbase "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 )
 
@@ -33,44 +33,44 @@ type sim struct {
 	now         time.Duration
 	queue       eventQueue
 	seq         int64
-	operators   []obft.OperatorID
-	cfgObft     *obft.Config
-	pubShares   map[obft.OperatorID][]byte
+	operators   []obftbase.OperatorID
+	cfgObft     *obftbase.Config
+	pubShares   map[obftbase.OperatorID][]byte
 	clusterPub  []byte
-	instances   map[obft.OperatorID]*obft.Instance
-	resolved    map[obft.OperatorID]*obft.Output
-	resolvedAt  map[obft.OperatorID]time.Duration
-	resolveErrs map[obft.OperatorID]error
-	canonValues map[int]obft.Value
+	instances   map[obftbase.OperatorID]*obftbase.Instance
+	resolved    map[obftbase.OperatorID]*obftbase.Output
+	resolvedAt  map[obftbase.OperatorID]time.Duration
+	resolveErrs map[obftbase.OperatorID]error
+	canonValues map[int]obftbase.Value
 	trace       []ct.TraceEntry
 }
 
 func newSim(cfg desConfig) (*sim, error) {
 	N := cfg.N
-	operators := make([]obft.OperatorID, N)
+	operators := make([]obftbase.OperatorID, N)
 	for i := 0; i < N; i++ {
-		operators[i] = obft.OperatorID(cfg.Operators[i])
+		operators[i] = obftbase.OperatorID(cfg.Operators[i])
 	}
 
-	var pubShares map[obft.OperatorID][]byte
+	var pubShares map[obftbase.OperatorID][]byte
 	var clusterPub []byte
 	if cfg.BLSKeys != nil {
-		pubShares = make(map[obft.OperatorID][]byte, N)
+		pubShares = make(map[obftbase.OperatorID][]byte, N)
 		for op, share := range cfg.BLSKeys.PubShares {
-			pubShares[obft.OperatorID(op)] = share
+			pubShares[obftbase.OperatorID(op)] = share
 		}
 		clusterPub = cfg.BLSKeys.ClusterPubKey
 	} else {
-		pubShares = make(map[obft.OperatorID][]byte, N)
+		pubShares = make(map[obftbase.OperatorID][]byte, N)
 		for _, op := range operators {
 			pubShares[op] = []byte{byte(op)}
 		}
 		clusterPub = []byte{0xCA, 0xFE}
 	}
 
-	canonValues := make(map[int]obft.Value, cfg.K)
+	canonValues := make(map[int]obftbase.Value, cfg.K)
 	for k := 0; k < cfg.K; k++ {
-		canonValues[k] = obft.Value(fmt.Sprintf("canon-V-layer-%d", k))
+		canonValues[k] = obftbase.Value(fmt.Sprintf("canon-V-layer-%d", k))
 	}
 
 	return &sim{
@@ -80,24 +80,24 @@ func newSim(cfg desConfig) (*sim, error) {
 		pubShares:   pubShares,
 		clusterPub:  clusterPub,
 		canonValues: canonValues,
-		instances:   make(map[obft.OperatorID]*obft.Instance, N),
-		resolved:    make(map[obft.OperatorID]*obft.Output, N),
-		resolvedAt:  make(map[obft.OperatorID]time.Duration, N),
-		resolveErrs: make(map[obft.OperatorID]error, N),
+		instances:   make(map[obftbase.OperatorID]*obftbase.Instance, N),
+		resolved:    make(map[obftbase.OperatorID]*obftbase.Output, N),
+		resolvedAt:  make(map[obftbase.OperatorID]time.Duration, N),
+		resolveErrs: make(map[obftbase.OperatorID]error, N),
 	}, nil
 }
 
 func (s *sim) start() error {
 	K := s.cfg.K
-	layers := make([]obft.LayerSpec, K)
+	layers := make([]obftbase.LayerSpec, K)
 	for k := 0; k < K; k++ {
-		layers[k] = obft.LayerSpec{
+		layers[k] = obftbase.LayerSpec{
 			Leader:          s.operators[k%s.cfg.N],
 			FetchAt:         s.cfg.FetchAt[k],
 			BroadcastBudget: s.cfg.BroadcastBudget[k],
 		}
 	}
-	cfgObft := &obft.Config{
+	cfgObft := &obftbase.Config{
 		Height:    1,
 		ClusterID: [32]byte{0x01, 0x02, 0x03},
 		Operators: s.operators,
@@ -105,7 +105,7 @@ func (s *sim) start() error {
 		Layers:    layers,
 		TCommit:   s.cfg.TCommit,
 		Delta2:    s.cfg.Delta2,
-		Delta3:    s.cfg.Epsilon3, // production obft.Config.Delta3 is the pure ε_3 budget
+		Delta3:    s.cfg.Epsilon3, // production obftbase.Config.Delta3 is the pure ε_3 budget
 		BTT:       s.cfg.BTT,
 	}
 	if err := cfgObft.Validate(); err != nil {
@@ -115,24 +115,24 @@ func (s *sim) start() error {
 
 	q := s.cfg.N - (s.cfg.N-1)/3
 	useReal := s.cfg.BLSKeys != nil
-	var ibe obft.ThresholdIBE
+	var ibe obftbase.ThresholdIBE
 	if useReal {
 		ibe = blsbackend.NewTLockIBE()
 	} else {
-		ibe = obft.NewStubIBE(q)
+		ibe = obftbase.NewStubIBE(q)
 	}
 	for _, op := range s.operators {
-		var signer, tagSigner obft.Signer
+		var signer, tagSigner obftbase.Signer
 		if useReal {
 			share := s.cfg.BLSKeys.Shares[ct.OperatorID(op)]
 			signer = blsbackend.New(share)
 			tagSigner = blsbackend.NewKyberSigner(share)
 		} else {
-			stub := obft.NewStubSigner(q, []byte{byte(op)})
+			stub := obftbase.NewStubSigner(q, []byte{byte(op)})
 			signer = stub
 			tagSigner = stub
 		}
-		inst, err := obft.NewInstance(cfgObft, op, signer, tagSigner, ibe, s.clusterPub, s.pubShares, nil, nil)
+		inst, err := obftbase.NewInstance(cfgObft, op, signer, tagSigner, ibe, s.clusterPub, s.pubShares, nil, nil)
 		if err != nil {
 			return fmt.Errorf("obft adapter: new instance op %d: %w", op, err)
 		}
@@ -201,7 +201,7 @@ func (s *sim) outcome() rawOutcome {
 	return out
 }
 
-func (s *sim) honestLeaderValue(layer int) obft.Value {
+func (s *sim) honestLeaderValue(layer int) obftbase.Value {
 	return s.canonValues[layer]
 }
 
@@ -213,7 +213,7 @@ func (s *sim) honestLeaderValue(layer int) obft.Value {
 // patterns to push a specific operator's own-emission past a protocol
 // deadline (e.g. OverrideOwnCommitDispatchDelay for late KindCommit
 // scenarios).
-func (s *sim) emitToAll(from obft.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to obft.OperatorID) event) {
+func (s *sim) emitToAll(from obftbase.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to obftbase.OperatorID) event) {
 	for _, to := range s.operators {
 		if to == from {
 			continue

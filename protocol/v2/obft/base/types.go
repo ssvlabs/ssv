@@ -1,38 +1,50 @@
-// Package obft implements the OBFT (Onion BFT) protocol — a single-round
+// Package base implements the bare OBFT (Onion BFT) protocol — a single-round
 // agreement protocol for SSV clusters that produces one collective threshold-
 // signed value per "slot" against a hard deadline.
 //
 // The protocol is described in docs/OBFT.md. OBFT is the simpler-spec cousin
-// of OBFTR (multi-round retry); this package implements the bare single-round
-// (R=1) form.
+// of OBFTR (multi-round retry) and 2abOBFT (Phase 2a/2b split); this package
+// implements the bare single-round (R=1) form.
+//
+// Shared cryptography primitives (Signer, ThresholdIBE, NoQuorumTag, bare
+// type aliases) live in the parent obft package; this package re-exports
+// the type aliases for callers' convenience and owns all bare-OBFT-specific
+// data structures, state machine, wire format, evidence types, and EKM
+// coordinator.
 //
 // This package is intentionally independent of github.com/ssvlabs/ssv-spec.
-// All types here are generic; SSV-specific integration lives in
-// protocol/v2/ssv/runner/obft.
-package obft
+// SSV-specific integration lives in protocol/v2/ssv/runner/obft.
+package base
 
 import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
-// OperatorID identifies a participant in the cluster. Matches the uint64 ID
-// space used elsewhere in SSV but is not coupled to spec types.
-type OperatorID uint64
+// Type aliases for the super-generic primitives owned by the parent obft
+// package, re-exported here so callers using base/ types don't need to
+// import both packages. These are not new types — base.OperatorID and
+// obft.OperatorID are the same underlying uint64.
+type (
+	OperatorID   = obft.OperatorID
+	Height       = obft.Height
+	Value        = obft.Value
+	Signature    = obft.Signature
+	Signer       = obft.Signer
+	ThresholdIBE = obft.ThresholdIBE
+	StubSigner   = obft.StubSigner
+	StubIBE      = obft.StubIBE
+)
 
-// Height is a generic instance identifier — typically a slot number when used
-// in SSV but otherwise opaque. The protocol does not interpret it; tag
-// construction binds it into the IBE labels to prevent cross-instance replay.
-type Height uint64
-
-// Value is the candidate bytes being agreed upon (e.g. a serialized blinded
-// block in the SSV proposer-duty case). The protocol treats it as opaque.
-type Value []byte
-
-// Signature is a BLS signature, either a partial (operator share) or a
-// reconstructed full signature.
-type Signature []byte
+// Re-exported constructors/functions from the parent obft package.
+var (
+	NewStubSigner = obft.NewStubSigner
+	NewStubIBE    = obft.NewStubIBE
+	NoQuorumTag   = obft.NoQuorumTag
+)
 
 // LayerSpec describes one layer of the K-layer onion structure: which
 // operator is the layer's leader, when (relative to slot start) they should

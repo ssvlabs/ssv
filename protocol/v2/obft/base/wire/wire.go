@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/protocol/v2/obft"
+	base "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
 // Wire format versions. Bumped when the on-the-wire layout changes
@@ -67,7 +67,7 @@ const MaxFieldSize = 16 * 1024 * 1024
 //	[Value bytes]
 //	[4]  SigmaV length (uint32 big-endian)
 //	[SigmaV bytes]
-func EncodePhase1Bundle(b *obft.Phase1Bundle) ([]byte, error) {
+func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	if b == nil {
 		return nil, errors.New("wire: nil phase-1 bundle")
 	}
@@ -98,7 +98,7 @@ func EncodePhase1Bundle(b *obft.Phase1Bundle) ([]byte, error) {
 }
 
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
-func DecodePhase1Bundle(data []byte) (*obft.Phase1Bundle, error) {
+func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 	r := newReader(data)
 	version, err := r.byte_("version")
 	if err != nil {
@@ -159,13 +159,13 @@ func DecodePhase1Bundle(data []byte) (*obft.Phase1Bundle, error) {
 	if r.remaining() != 0 {
 		return nil, fmt.Errorf("wire: %d trailing bytes after phase-1 bundle", r.remaining())
 	}
-	return &obft.Phase1Bundle{
+	return &base.Phase1Bundle{
 		ClusterID:  clusterID,
-		OperatorID: obft.OperatorID(opID),
-		Height:     obft.Height(height),
+		OperatorID: base.OperatorID(opID),
+		Height:     base.Height(height),
 		Layer:      int(layer),
-		Value:      obft.Value(value),
-		SigmaV:     obft.Signature(sig),
+		Value:      base.Value(value),
+		SigmaV:     base.Signature(sig),
 	}, nil
 }
 
@@ -202,7 +202,7 @@ const MaxWitnesses = MaxLayers * 2
 //	  [32] ValueRoot        (sha256(V), fixed-length)
 //	  [4]  SigmaV length    (uint32 big-endian)
 //	  [SigmaV bytes]
-func EncodeCommit(c *obft.Commit) ([]byte, error) {
+func EncodeCommit(c *base.Commit) ([]byte, error) {
 	if c == nil {
 		return nil, errors.New("wire: nil commit")
 	}
@@ -279,7 +279,7 @@ func EncodeCommit(c *obft.Commit) ([]byte, error) {
 }
 
 // DecodeCommit parses bytes produced by EncodeCommit.
-func DecodeCommit(data []byte) (*obft.Commit, error) {
+func DecodeCommit(data []byte) (*base.Commit, error) {
 	r := newReader(data)
 	version, err := r.byte_("version")
 	if err != nil {
@@ -313,7 +313,7 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 	if int(numLayers) > MaxLayers {
 		return nil, fmt.Errorf("wire: commit declares %d σ layers (max %d)", numLayers, MaxLayers)
 	}
-	layers := make([]obft.EncryptedLayer, numLayers)
+	layers := make([]base.EncryptedLayer, numLayers)
 	for i := uint16(0); i < numLayers; i++ {
 		valueLen, err := r.uint32_(fmt.Sprintf("layer %d value length", i))
 		if err != nil {
@@ -337,8 +337,8 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		layers[i] = obft.EncryptedLayer{
-			Value:      obft.Value(value),
+		layers[i] = base.EncryptedLayer{
+			Value:      base.Value(value),
 			Ciphertext: ct,
 		}
 	}
@@ -349,7 +349,7 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 	if int(nrCount) > MaxLayers {
 		return nil, fmt.Errorf("wire: commit declares %d NR partials (max %d)", nrCount, MaxLayers)
 	}
-	partials := make([]obft.NRPartial, nrCount)
+	partials := make([]base.NRPartial, nrCount)
 	for i := uint16(0); i < nrCount; i++ {
 		layer, err := r.uint32_(fmt.Sprintf("NR partial %d layer", i))
 		if err != nil {
@@ -369,9 +369,9 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		partials[i] = obft.NRPartial{
+		partials[i] = base.NRPartial{
 			Layer:      int(layer),
-			PartialSig: obft.Signature(sig),
+			PartialSig: base.Signature(sig),
 		}
 	}
 	witnessCount, err := r.uint16_("witness count")
@@ -381,7 +381,7 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 	if int(witnessCount) > MaxWitnesses {
 		return nil, fmt.Errorf("wire: commit declares %d witnesses (max %d)", witnessCount, MaxWitnesses)
 	}
-	witnesses := make([]obft.LeaderSigmaWitness, witnessCount)
+	witnesses := make([]base.LeaderSigmaWitness, witnessCount)
 	for i := uint16(0); i < witnessCount; i++ {
 		layer, err := r.uint32_(fmt.Sprintf("witness %d layer", i))
 		if err != nil {
@@ -411,20 +411,20 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 		}
 		var valueRoot [32]byte
 		copy(valueRoot[:], valueRootBytes)
-		witnesses[i] = obft.LeaderSigmaWitness{
+		witnesses[i] = base.LeaderSigmaWitness{
 			Layer:     int(layer),
-			Leader:    obft.OperatorID(leader),
+			Leader:    base.OperatorID(leader),
 			ValueRoot: valueRoot,
-			SigmaV:    obft.Signature(sig),
+			SigmaV:    base.Signature(sig),
 		}
 	}
 	if r.remaining() != 0 {
 		return nil, fmt.Errorf("wire: %d trailing bytes after commit", r.remaining())
 	}
-	return &obft.Commit{
+	return &base.Commit{
 		ClusterID:  clusterID,
-		OperatorID: obft.OperatorID(opID),
-		Height:     obft.Height(height),
+		OperatorID: base.OperatorID(opID),
+		Height:     base.Height(height),
 		Layers:     layers,
 		NRPartials: partials,
 		Witnesses:  witnesses,
@@ -444,7 +444,7 @@ func DecodeCommit(data []byte) (*obft.Commit, error) {
 //	[Value bytes]
 //	[4]  Signature length  (uint32 big-endian)
 //	[Signature bytes]
-func EncodeCertificate(c *obft.Certificate) ([]byte, error) {
+func EncodeCertificate(c *base.Certificate) ([]byte, error) {
 	if c == nil {
 		return nil, errors.New("wire: nil certificate")
 	}
@@ -470,7 +470,7 @@ func EncodeCertificate(c *obft.Certificate) ([]byte, error) {
 }
 
 // DecodeCertificate parses bytes produced by EncodeCertificate.
-func DecodeCertificate(data []byte) (*obft.Certificate, error) {
+func DecodeCertificate(data []byte) (*base.Certificate, error) {
 	r := newReader(data)
 	version, err := r.byte_("version")
 	if err != nil {
@@ -518,11 +518,11 @@ func DecodeCertificate(data []byte) (*obft.Certificate, error) {
 	if r.remaining() != 0 {
 		return nil, fmt.Errorf("wire: %d trailing bytes after certificate", r.remaining())
 	}
-	return &obft.Certificate{
+	return &base.Certificate{
 		ClusterID: clusterID,
-		Height:    obft.Height(height),
-		Value:     obft.Value(value),
-		Signature: obft.Signature(sig),
+		Height:    base.Height(height),
+		Value:     base.Value(value),
+		Signature: base.Signature(sig),
 	}, nil
 }
 

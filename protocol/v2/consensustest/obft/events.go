@@ -6,7 +6,7 @@ import (
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
-	obft "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftbase "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 )
 
@@ -107,25 +107,25 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 	return out
 }
 
-func (s *sim) forgeByzBundle(leader obft.OperatorID, layer int, v obft.Value) *obft.Phase1Bundle {
-	var signer obft.Signer
+func (s *sim) forgeByzBundle(leader obftbase.OperatorID, layer int, v obftbase.Value) *obftbase.Phase1Bundle {
+	var signer obftbase.Signer
 	if s.cfg.BLSKeys != nil {
 		share := s.cfg.BLSKeys.Shares[ct.OperatorID(leader)]
 		signer = blsbackend.New(share)
 	} else {
 		q := s.cfgObft.QV()
-		signer = obft.NewStubSigner(q, []byte{byte(leader)})
+		signer = obftbase.NewStubSigner(q, []byte{byte(leader)})
 	}
 	sig, err := signer.SignPartial(v)
 	if err != nil {
 		panic(fmt.Sprintf("obft adapter: forge bundle for leader %d: %v", leader, err))
 	}
-	return &obft.Phase1Bundle{
+	return &obftbase.Phase1Bundle{
 		ClusterID:  s.cfgObft.ClusterID,
 		OperatorID: leader,
 		Height:     s.cfgObft.Height,
 		Layer:      layer,
-		Value:      append(obft.Value{}, v...),
+		Value:      append(obftbase.Value{}, v...),
 		SigmaV:     sig,
 	}
 }
@@ -133,9 +133,9 @@ func (s *sim) forgeByzBundle(leader obft.OperatorID, layer int, v obft.Value) *o
 // ---- evtPhase1Arrival --------------------------------------------------
 
 type evtPhase1Arrival struct {
-	from, to obft.OperatorID
+	from, to obftbase.OperatorID
 	layer    int
-	bundle   *obft.Phase1Bundle
+	bundle   *obftbase.Phase1Bundle
 }
 
 func (e *evtPhase1Arrival) describe() string {
@@ -178,7 +178,7 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 		// RoundEndOffset, exercising the spec §Phase 3 late-arrival re-resolve
 		// path (gated by cfg.EnableLateCommitRerun).
 		extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, op)
-		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), extraDelay, func(to obft.OperatorID) event {
+		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), extraDelay, func(to obftbase.OperatorID) event {
 			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(c)}
 		})
 		// Byz patterns may add ADDITIONAL commits (e.g. cross-onion
@@ -188,7 +188,7 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 			if s.cfg.Aggregator != nil {
 				recordCommitToAggregator(s.cfg.Aggregator, extra)
 			}
-			s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), extraDelay, func(to obft.OperatorID) event {
+			s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), extraDelay, func(to obftbase.OperatorID) event {
 				return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
 			})
 		}
@@ -208,7 +208,7 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 // At L_0 the EncryptedLayer.Ciphertext holds the plaintext σ partial bytes
 // directly (no IBE wrapping); deeper layers carry chained-IBE ciphertext.
 // Layer index drives the classification — not Ciphertext-emptiness.
-func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obft.Commit) {
+func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obftbase.Commit) {
 	from := ct.OperatorID(c.OperatorID)
 	for layer, el := range c.Layers {
 		if len(el.Value) == 0 {
@@ -231,8 +231,8 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obft.Commit) {
 // ---- evtCommitArrival --------------------------------------------------
 
 type evtCommitArrival struct {
-	from, to obft.OperatorID
-	commit   *obft.Commit
+	from, to obftbase.OperatorID
+	commit   *obftbase.Commit
 }
 
 func (e *evtCommitArrival) describe() string {
@@ -283,7 +283,7 @@ func (e *evtResolve) handle(s *sim) []scheduledEvent {
 // so re-invocation with additional observed partials is safe (Pigeonholes 1+2
 // guarantee at most one V reaches qV cluster-wide regardless of timing).
 type evtResolveRerun struct {
-	op obft.OperatorID
+	op obftbase.OperatorID
 }
 
 func (e *evtResolveRerun) describe() string {
@@ -308,7 +308,7 @@ func (e *evtResolveRerun) handle(s *sim) []scheduledEvent {
 //
 // On success, clears any prior resolveErrs entry so the late-recovered op
 // reports decided=true with no Err in the outcome.
-func resolveOpAndBroadcastCert(s *sim, op obft.OperatorID) []scheduledEvent {
+func resolveOpAndBroadcastCert(s *sim, op obftbase.OperatorID) []scheduledEvent {
 	res, err := s.instances[op].Resolve()
 	if err != nil {
 		// Record error only if op hasn't decided yet (e.g. via prior cert
@@ -371,8 +371,8 @@ func resolveOpAndBroadcastCert(s *sim, op obft.OperatorID) []scheduledEvent {
 // ---- evtCertArrival ----------------------------------------------------
 
 type evtCertArrival struct {
-	from, to obft.OperatorID
-	cert     *obft.Certificate
+	from, to obftbase.OperatorID
+	cert     *obftbase.Certificate
 }
 
 func (e *evtCertArrival) describe() string {
@@ -387,10 +387,10 @@ func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
 	if _, already := s.resolved[e.to]; already {
 		return nil
 	}
-	s.resolved[e.to] = &obft.Output{
+	s.resolved[e.to] = &obftbase.Output{
 		Layer:     -1,
-		Value:     append(obft.Value{}, e.cert.Value...),
-		Signature: append(obft.Signature{}, e.cert.Signature...),
+		Value:     append(obftbase.Value{}, e.cert.Value...),
+		Signature: append(obftbase.Signature{}, e.cert.Signature...),
 	}
 	s.resolvedAt[e.to] = s.now
 	// Cert-gossip rescue supersedes a prior local-resolve failure; clear the

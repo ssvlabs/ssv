@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/obft"
+	base "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
 func TestPhase1Bundle_Roundtrip(t *testing.T) {
-	in := &obft.Phase1Bundle{
+	in := &base.Phase1Bundle{
 		ClusterID:  [32]byte{0xAA, 0xBB, 0xCC, 0xDD},
 		OperatorID: 7,
 		Height:     12345,
@@ -33,22 +33,22 @@ func TestPhase1Bundle_Roundtrip(t *testing.T) {
 }
 
 func TestCommit_Roundtrip(t *testing.T) {
-	in := &obft.Commit{
+	in := &base.Commit{
 		ClusterID:  [32]byte{0x11, 0x22, 0x33},
 		OperatorID: 3,
 		Height:     999,
-		Layers: []obft.EncryptedLayer{
+		Layers: []base.EncryptedLayer{
 			{Value: []byte("V0"), Ciphertext: []byte("ct0")},
 			{}, // empty (no σ contribution)
 			{Value: []byte("V2"), Ciphertext: []byte("ciphertext-for-layer-2")},
 			{Value: []byte("V3-deepest"), Ciphertext: []byte("CT")},
 		},
-		NRPartials: []obft.NRPartial{
+		NRPartials: []base.NRPartial{
 			{Layer: 1, PartialSig: []byte("nr-sig-layer-1")},
 		},
-		Witnesses: []obft.LeaderSigmaWitness{
-			{Layer: 0, Leader: 1, ValueRoot: obft.ValueRoot([]byte("V0")), SigmaV: []byte("sigma-from-leader-1")},
-			{Layer: 2, Leader: 3, ValueRoot: obft.ValueRoot([]byte("V2")), SigmaV: []byte("sigma-from-leader-3")},
+		Witnesses: []base.LeaderSigmaWitness{
+			{Layer: 0, Leader: 1, ValueRoot: base.ValueRoot([]byte("V0")), SigmaV: []byte("sigma-from-leader-1")},
+			{Layer: 2, Leader: 3, ValueRoot: base.ValueRoot([]byte("V2")), SigmaV: []byte("sigma-from-leader-3")},
 		},
 	}
 	bytes_, err := WrapCommit(in)
@@ -84,10 +84,10 @@ func TestCommit_Roundtrip(t *testing.T) {
 
 func TestCommit_Roundtrip_NoWitnesses(t *testing.T) {
 	// A commit with no witnesses still encodes/decodes (witness count = 0).
-	in := &obft.Commit{
+	in := &base.Commit{
 		OperatorID: 1,
 		Height:     1,
-		Layers:     []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+		Layers:     []base.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
 	}
 	b, err := EncodeCommit(in)
 	require.NoError(t, err)
@@ -97,9 +97,9 @@ func TestCommit_Roundtrip_NoWitnesses(t *testing.T) {
 }
 
 func TestEncodeCommit_RejectsTooManyWitnesses(t *testing.T) {
-	c := &obft.Commit{
-		Layers:    []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
-		Witnesses: make([]obft.LeaderSigmaWitness, MaxWitnesses+1),
+	c := &base.Commit{
+		Layers:    []base.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+		Witnesses: make([]base.LeaderSigmaWitness, MaxWitnesses+1),
 	}
 	_, err := EncodeCommit(c)
 	require.ErrorContains(t, err, "max")
@@ -109,7 +109,7 @@ func TestEncodeCommit_RejectsTooManyWitnesses(t *testing.T) {
 
 func TestDecodePhase1Bundle_RejectsLayerExceedingMaxLayers(t *testing.T) {
 	// Build a syntactically valid bundle with layer = MaxLayers+1.
-	in := &obft.Phase1Bundle{
+	in := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
 		Value: []byte("V"), SigmaV: []byte("s"),
 	}
@@ -129,7 +129,7 @@ func TestDecodePhase1Bundle_RejectsLayerExceedingMaxLayers(t *testing.T) {
 // ---- Auth envelope: ProtocolTag + inner_kind binding ----
 
 func TestDecodePhase1Bundle_RejectsBadProtocolTag(t *testing.T) {
-	in := &obft.Phase1Bundle{
+	in := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
 		Value: []byte("V"), SigmaV: []byte("s"),
 	}
@@ -142,7 +142,7 @@ func TestDecodePhase1Bundle_RejectsBadProtocolTag(t *testing.T) {
 }
 
 func TestDecodePhase1Bundle_RejectsBadInnerKind(t *testing.T) {
-	in := &obft.Phase1Bundle{
+	in := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
 		Value: []byte("V"), SigmaV: []byte("s"),
 	}
@@ -155,9 +155,9 @@ func TestDecodePhase1Bundle_RejectsBadInnerKind(t *testing.T) {
 }
 
 func TestDecodeCommit_RejectsBadInnerKind(t *testing.T) {
-	in := &obft.Commit{
+	in := &base.Commit{
 		OperatorID: 1, Height: 1,
-		Layers: []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+		Layers: []base.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
 	}
 	encoded, err := EncodeCommit(in)
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestDecodeCommit_RejectsBadInnerKind(t *testing.T) {
 }
 
 func TestDecodeCertificate_RejectsBadProtocolTag(t *testing.T) {
-	in := &obft.Certificate{
+	in := &base.Certificate{
 		Height:    1,
 		Value:     []byte("V"),
 		Signature: []byte("s"),
@@ -182,10 +182,10 @@ func TestDecodeCertificate_RejectsBadProtocolTag(t *testing.T) {
 
 func TestDecodeCommit_RejectsNRPartialLayerExceedingMaxLayers(t *testing.T) {
 	// Manually craft a commit with a single NR partial whose layer is huge.
-	c := &obft.Commit{
+	c := &base.Commit{
 		OperatorID: 1, Height: 1,
-		Layers: []obft.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
-		NRPartials: []obft.NRPartial{
+		Layers: []base.EncryptedLayer{{Value: []byte("V"), Ciphertext: []byte("c")}},
+		NRPartials: []base.NRPartial{
 			{Layer: 0, PartialSig: []byte("sig")},
 		},
 	}
@@ -203,7 +203,7 @@ func TestDecodeCommit_RejectsNRPartialLayerExceedingMaxLayers(t *testing.T) {
 }
 
 func TestCertificate_Roundtrip(t *testing.T) {
-	in := &obft.Certificate{
+	in := &base.Certificate{
 		ClusterID: [32]byte{0xCA, 0xFE, 0xBA, 0xBE},
 		Height:    77,
 		Value:     []byte("decided value bytes"),
@@ -240,7 +240,7 @@ func TestDecodePhase1Bundle_RejectsUnknownVersion(t *testing.T) {
 }
 
 func TestEncodeCommit_RejectsTooManyLayers(t *testing.T) {
-	c := &obft.Commit{Layers: make([]obft.EncryptedLayer, MaxLayers+1)}
+	c := &base.Commit{Layers: make([]base.EncryptedLayer, MaxLayers+1)}
 	_, err := EncodeCommit(c)
 	require.ErrorContains(t, err, "max")
 }

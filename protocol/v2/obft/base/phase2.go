@@ -1,8 +1,10 @@
-package obft
+package base
 
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // BuildOwnCommit builds the local operator's KindCommit message at T_commit.
@@ -47,7 +49,7 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 			if err := i.transitionToNR(k, CommitNRSilent); err != nil {
 				continue
 			}
-			tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
+			tag := obft.NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
 			sig, err := i.tagSigner.SignPartial(tag)
 			if err != nil {
 				return nil, fmt.Errorf("obft: sign NR partial at own-leader layer %d: %w", k, err)
@@ -106,7 +108,7 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 			// would have continued); skip rather than corrupt EKM log.
 			continue
 		}
-		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
+		tag := obft.NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, k)
 		sig, err := i.tagSigner.SignPartial(tag)
 		if err != nil {
 			return nil, fmt.Errorf("obft: sign NR partial at layer %d: %w", k, err)
@@ -732,7 +734,7 @@ func (i *Instance) verifyCommitNRPartials(c *Commit) error {
 		return fmt.Errorf("obft: no NR pub-key share for operator %d", c.OperatorID)
 	}
 	for _, p := range c.NRPartials {
-		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
+		tag := obft.NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, p.Layer)
 		if !i.tagSigner.VerifyPartial(pubShare, tag, p.PartialSig) {
 			return fmt.Errorf("obft: NR partial from op %d at layer %d failed verification",
 				c.OperatorID, p.Layer)

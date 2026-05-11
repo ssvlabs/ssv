@@ -9,7 +9,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/protocol/v2/obft"
+	obft "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )

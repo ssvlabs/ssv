@@ -1,4 +1,4 @@
-package obft
+package base
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // Protocol-level tests covering scenarios from docs/OBFT.md:
@@ -327,7 +329,7 @@ func TestObft_Evidence_Rule1_LeaderPhase1SigmaPlusNR(t *testing.T) {
 
 	// Construct a byzantine KindCommit from op1: empty σ at L_0, NR partial at L_0.
 	signer := NewStubSigner(s.cfg.QV(), []byte{1})
-	tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	tag := obft.NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
 	nrSig, err := signer.SignPartial(tag)
 	require.NoError(t, err)
 	byzCommit := &Commit{
@@ -363,7 +365,7 @@ func TestObft_Evidence_Rule1_LeaderNRBeforePhase1Bundle(t *testing.T) {
 	// 1) Build the byzantine NR-at-own-layer KindCommit OUTSIDE the leader's
 	// instance (bypassing EKM). op2 (honest receiver) observes it.
 	signer := NewStubSigner(s.cfg.QV(), []byte{1})
-	tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	tag := obft.NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
 	nrSig, err := signer.SignPartial(tag)
 	require.NoError(t, err)
 	byzCommit := &Commit{
@@ -524,7 +526,7 @@ func TestObft_Evidence_Rule3_SecondKindCommit(t *testing.T) {
 	commit1.Layers[0] = EncryptedLayer{Value: append(Value{}, v0...), Ciphertext: sigA}
 
 	// Distinct second commit: same content but with an extra NR partial at L_1.
-	tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 1)
+	tag := obft.NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 1)
 	nrSig, err := signer.SignPartial(tag)
 	require.NoError(t, err)
 	commit2 := &Commit{
@@ -800,7 +802,7 @@ func TestObft_ClusterID_RejectsMismatchedCertificate(t *testing.T) {
 }
 
 // TestObft_ClusterID_NRTagBinding — NR partials are signed over
-// NoQuorumTag(ClusterID, Height, Layer); a partial signed for cluster A
+// obft.NoQuorumTag(ClusterID, Height, Layer); a partial signed for cluster A
 // fails verification under cluster B's tag construction. This is what
 // prevents cross-cluster replay of NR partials independently of the
 // ClusterID structural check on the carrier Commit.
@@ -810,8 +812,8 @@ func TestObft_ClusterID_NRTagBinding(t *testing.T) {
 	const height = 100
 	const layer = 0
 
-	tagA := NoQuorumTag(clusterA, height, layer)
-	tagB := NoQuorumTag(clusterB, height, layer)
+	tagA := obft.NoQuorumTag(clusterA, height, layer)
+	tagB := obft.NoQuorumTag(clusterB, height, layer)
 	require.NotEqual(t, tagA, tagB, "NR tags for different clusters must differ")
 
 	// Sign tag_A with op2's share, attempt to verify against tag_B → must fail.
@@ -1130,7 +1132,7 @@ func TestObft_PeerCommitHashes_CappedPerOp(t *testing.T) {
 	// Each carries one distinct NR partial layer to vary content.
 	for k := 0; k < MaxCommitHashesPerOp+5; k++ {
 		layer := k % (s.K - 1) // layers in [0, K-1) for NR
-		tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, layer)
+		tag := obft.NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, layer)
 		nrSig, err := signer.SignPartial(tag)
 		require.NoError(t, err)
 		// Vary the partial sig to make each commit structurally distinct.
@@ -1167,7 +1169,7 @@ func TestObft_NoQuorumTag_RejectsNegativeLayer(t *testing.T) {
 		require.NotNil(t, r, "expected panic on negative layer")
 		require.Contains(t, r.(string), "out of range")
 	}()
-	NoQuorumTag([32]byte{1}, 1, -1)
+	obft.NoQuorumTag([32]byte{1}, 1, -1)
 }
 
 // TestObft_NewInstance_RequiresLeaderPubShares — a misconfigured instance

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
-	obft "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftbase "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
 // Protocol is the OBFT adapter. Use as `obft.Protocol{}` in tests.
@@ -65,7 +65,7 @@ type desConfig struct {
 	Operators             []ct.OperatorID
 	TCommit               time.Duration
 	Delta2                time.Duration
-	Epsilon3              time.Duration // forwarded to obft.Config.Delta3 (= ε_3 per spec)
+	Epsilon3              time.Duration // forwarded to obftbase.Config.Delta3 (= ε_3 per spec)
 	BTT                   time.Duration
 	FetchAt               []time.Duration
 	BroadcastBudget       []time.Duration
@@ -159,7 +159,7 @@ func valuePrefix(v []byte) string {
 
 // evidenceByRule maps a slice of obft.Evidence to per-rule fire counts using
 // the framework's standard "OBFT/RuleN/Description" key convention.
-func evidenceByRule(evs []obft.Evidence) map[string]int {
+func evidenceByRule(evs []obftbase.Evidence) map[string]int {
 	if len(evs) == 0 {
 		return nil
 	}
@@ -170,13 +170,13 @@ func evidenceByRule(evs []obft.Evidence) map[string]int {
 	return m
 }
 
-func ruleKey(e obft.Evidence) string {
+func ruleKey(e obftbase.Evidence) string {
 	switch e.Rule {
-	case obft.EvidenceCrossSigning:
+	case obftbase.EvidenceCrossSigning:
 		return "OBFT/Rule1/CrossSigning"
-	case obft.EvidenceLeaderEquivocation:
+	case obftbase.EvidenceLeaderEquivocation:
 		return "OBFT/Rule2/LeaderEquivocation"
-	case obft.EvidenceCrossOnionEquivocation:
+	case obftbase.EvidenceCrossOnionEquivocation:
 		// Layer == -1 indicates the top-level CommitEquivocation variant
 		// (full Commit bodies); per-layer Layer ≥ 0 indicates the per-V σ
 		// variant. Slashing layer treats them as the same fault but per-rule
@@ -185,9 +185,9 @@ func ruleKey(e obft.Evidence) string {
 			return "OBFT/Rule3/CommitEquivocation"
 		}
 		return "OBFT/Rule3/CrossOnionEquivocation"
-	case obft.EvidenceFakeEncryptedPresence:
+	case obftbase.EvidenceFakeEncryptedPresence:
 		return "OBFT/Rule4/FakeEncryptedPresence"
-	case obft.EvidenceFakePlaintextSigma:
+	case obftbase.EvidenceFakePlaintextSigma:
 		return "OBFT/Rule5/FakePlaintextSigma"
 	default:
 		return "OBFT/Unknown"

@@ -2,7 +2,7 @@ package obft
 
 import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
-	obft "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftbase "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
 // Wire-size accounting for OBFT messages. Sizes use standardized BLS field
@@ -38,12 +38,12 @@ const (
 	witnessFramingOverhead = 5
 )
 
-func phase1BundleSize(b *obft.Phase1Bundle) int64 {
+func phase1BundleSize(b *obftbase.Phase1Bundle) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes + layerBytes +
 		int64(len(b.Value)) + ct.StubSignatureSize
 }
 
-func commitSize(c *obft.Commit) int64 {
+func commitSize(c *obftbase.Commit) int64 {
 	size := int64(clusterIDBytes + operatorIDBytes + heightBytes)
 	for layer, el := range c.Layers {
 		if len(el.Value) == 0 {
@@ -67,6 +67,6 @@ func commitSize(c *obft.Commit) int64 {
 	return size
 }
 
-func certSize(c *obft.Certificate) int64 {
+func certSize(c *obftbase.Certificate) int64 {
 	return clusterIDBytes + heightBytes + int64(len(c.Value)) + ct.StubSignatureSize
 }

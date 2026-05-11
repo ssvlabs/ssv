@@ -12,7 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"

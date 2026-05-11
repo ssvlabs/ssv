@@ -1,4 +1,4 @@
-package obft
+package base
 
 // Slashing-evidence types. Per spec §Slashing evidence, OBFT surfaces five
 // rules of byzantine-fault evidence for attribution and out-of-band punishment.

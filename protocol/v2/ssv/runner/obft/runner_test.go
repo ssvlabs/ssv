@@ -13,9 +13,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 

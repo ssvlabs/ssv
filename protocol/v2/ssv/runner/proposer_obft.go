@@ -15,8 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	blindutil "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/blind"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 )
 

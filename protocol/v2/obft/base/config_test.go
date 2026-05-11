@@ -1,4 +1,4 @@
-package obft
+package base
 
 import (
 	"testing"
@@ -103,12 +103,12 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 // to the test's BTT (D+δ = 150ms here).
 func validStaggeredConfig() *Config {
 	cfg := validBaseConfig()
-	btt := cfg.BTT // 150ms
+	btt := cfg.BTT                                     // 150ms
 	cfg.TCommit = 5*btt + btt/2 + 100*time.Millisecond // 925ms
-	cfg.Layers[0].BroadcastBudget = btt           // B_0 = 1 BTT
-	cfg.Layers[1].BroadcastBudget = btt + btt/2   // B_1 = 1.5 BTT
-	cfg.Layers[2].BroadcastBudget = 2*btt + btt/2 // B_2 = 2.5 BTT
-	cfg.Layers[3].BroadcastBudget = cfg.TCommit   // B_3 = T_commit (earliest possible)
+	cfg.Layers[0].BroadcastBudget = btt                // B_0 = 1 BTT
+	cfg.Layers[1].BroadcastBudget = btt + btt/2        // B_1 = 1.5 BTT
+	cfg.Layers[2].BroadcastBudget = 2*btt + btt/2      // B_2 = 2.5 BTT
+	cfg.Layers[3].BroadcastBudget = cfg.TCommit        // B_3 = T_commit (earliest possible)
 	// FetchAt within each layer's per-layer cap T_broadcast_max_k. Deepest
 	// clamps to 0 (B_3 = T_commit → T_broadcast_max_3 = 0).
 	cfg.Layers[0].FetchAt = cfg.TCommit - cfg.Layers[0].BroadcastBudget

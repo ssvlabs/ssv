@@ -11,7 +11,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
 // Controller is the SSV-side state-machine wrapper around obft.Instance.

@@ -1,4 +1,4 @@
-package obft
+package base
 
 import (
 	"errors"

@@ -1,4 +1,4 @@
-package obft
+package base
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // MaxCommitHashesPerOp caps the number of distinct KindCommit content
@@ -116,9 +118,9 @@ type Instance struct {
 	cfg           *Config
 	ownOperatorID OperatorID
 
-	signer          Signer
-	tagSigner       Signer
-	ibe             ThresholdIBE
+	signer          obft.Signer
+	tagSigner       obft.Signer
+	ibe             obft.ThresholdIBE
 	clusterPubKey   []byte
 	pubKeyShares    map[OperatorID][]byte
 	ibePubKeyShares map[OperatorID][]byte // optional under Option A
@@ -296,9 +298,9 @@ type Instance struct {
 func NewInstance(
 	cfg *Config,
 	ownOperatorID OperatorID,
-	signer Signer,
-	tagSigner Signer,
-	ibe ThresholdIBE,
+	signer obft.Signer,
+	tagSigner obft.Signer,
+	ibe obft.ThresholdIBE,
 	clusterPubKey []byte,
 	pubKeyShares map[OperatorID][]byte,
 	ibePubKeyShares map[OperatorID][]byte,
@@ -466,7 +468,7 @@ func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
 	inner := partial
 	// Wrap from innermost (nr_tag_{k-1}) to outermost (nr_tag_0).
 	for j := k - 1; j >= 0; j-- {
-		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, j)
+		tag := obft.NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, j)
 		ct, err := i.ibe.Encrypt(i.clusterPubKey, tag, inner)
 		if err != nil {
 			return nil, fmt.Errorf("encrypt at chain level %d: %w", j, err)

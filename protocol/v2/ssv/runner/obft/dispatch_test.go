@@ -8,8 +8,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
 )
 
 // TestController_BufferAndDrainPending — envelopes buffered before

@@ -8,7 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
 )
 
 // DispatchEnvelope routes a parsed *wire.Envelope to the appropriate

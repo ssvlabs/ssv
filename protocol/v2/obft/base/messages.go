@@ -1,4 +1,4 @@
-package obft
+package base
 
 import (
 	"crypto/sha256"

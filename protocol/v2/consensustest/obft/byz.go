@@ -7,7 +7,7 @@ import (
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
-	obft "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftbase "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
 // internalByz is the OBFT-specific byz interface. Each method has an honest
@@ -28,43 +28,43 @@ import (
 // receivers, exercising the spec §Phase 3 "Re-running on late KindCommit
 // arrivals" recovery path (gated by SimConfig.EnableLateCommitRerun).
 type internalByz interface {
-	LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan
-	AllowCommitBroadcast(op obft.OperatorID) bool
-	AllowCertificateBroadcast(op obft.OperatorID) bool
-	AllowDelivery(from, to obft.OperatorID, kind ct.MsgKind) bool
-	OverrideDelay(rng *mrand.Rand, from, to obft.OperatorID, kind ct.MsgKind) time.Duration
-	OverrideCommit(s *sim, op obft.OperatorID, c *obft.Commit) *obft.Commit
-	BuildExtraCommits(s *sim, op obft.OperatorID, c *obft.Commit) []*obft.Commit
-	OverrideOwnPhase1Delay(s *sim, leader obft.OperatorID) time.Duration
-	OverrideOwnCommitDispatchDelay(s *sim, op obft.OperatorID) time.Duration
+	LeaderBroadcastPlan(s *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan
+	AllowCommitBroadcast(op obftbase.OperatorID) bool
+	AllowCertificateBroadcast(op obftbase.OperatorID) bool
+	AllowDelivery(from, to obftbase.OperatorID, kind ct.MsgKind) bool
+	OverrideDelay(rng *mrand.Rand, from, to obftbase.OperatorID, kind ct.MsgKind) time.Duration
+	OverrideCommit(s *sim, op obftbase.OperatorID, c *obftbase.Commit) *obftbase.Commit
+	BuildExtraCommits(s *sim, op obftbase.OperatorID, c *obftbase.Commit) []*obftbase.Commit
+	OverrideOwnPhase1Delay(s *sim, leader obftbase.OperatorID) time.Duration
+	OverrideOwnCommitDispatchDelay(s *sim, op obftbase.OperatorID) time.Duration
 }
 
 type broadcastPlan struct {
-	V          obft.Value
-	Recipients []obft.OperatorID // nil = all peers
+	V          obftbase.Value
+	Recipients []obftbase.OperatorID // nil = all peers
 }
 
 // byzSet is the set of byzantine operator IDs for the current pattern. Per-
 // kind patterns interpret the set per their semantics; iterating in
 // ByzOperators order keeps determinism.
 type byzSet struct {
-	Members []obft.OperatorID
-	Lookup  map[obft.OperatorID]bool
+	Members []obftbase.OperatorID
+	Lookup  map[obftbase.OperatorID]bool
 }
 
 func newByzSet(ops []ct.OperatorID) byzSet {
 	s := byzSet{
-		Members: make([]obft.OperatorID, len(ops)),
-		Lookup:  make(map[obft.OperatorID]bool, len(ops)),
+		Members: make([]obftbase.OperatorID, len(ops)),
+		Lookup:  make(map[obftbase.OperatorID]bool, len(ops)),
 	}
 	for i, op := range ops {
-		s.Members[i] = obft.OperatorID(op)
-		s.Lookup[obft.OperatorID(op)] = true
+		s.Members[i] = obftbase.OperatorID(op)
+		s.Lookup[obftbase.OperatorID(op)] = true
 	}
 	return s
 }
 
-func (s byzSet) Contains(op obft.OperatorID) bool { return s.Lookup[op] }
+func (s byzSet) Contains(op obftbase.OperatorID) bool { return s.Lookup[op] }
 
 // translateByz maps an abstract consensustest.ByzPattern to an OBFT-internal
 // impl. All catalog kinds are OBFT-applicable; QBFT-only kinds would return
@@ -91,18 +91,18 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 		// V_b. Catalog scenario sets size 2f (f recipients per side) so the
 		// σ-locked-split class holds at any cluster size. Default at f=1 / n=4:
 		// {op2}→V_a, {op3}→V_b.
-		var recipientsA, recipientsB []obft.OperatorID
+		var recipientsA, recipientsB []obftbase.OperatorID
 		if len(p.Recipients) >= 2 {
 			half := len(p.Recipients) / 2
 			for _, r := range p.Recipients[:half] {
-				recipientsA = append(recipientsA, obft.OperatorID(r))
+				recipientsA = append(recipientsA, obftbase.OperatorID(r))
 			}
 			for _, r := range p.Recipients[half:] {
-				recipientsB = append(recipientsB, obft.OperatorID(r))
+				recipientsB = append(recipientsB, obftbase.OperatorID(r))
 			}
 		} else {
-			recipientsA = []obft.OperatorID{2}
-			recipientsB = []obft.OperatorID{3}
+			recipientsA = []obftbase.OperatorID{2}
+			recipientsB = []obftbase.OperatorID{3}
 		}
 		return byzEquivocSigmaLockedSplit{
 			ByzSet:      bs,
@@ -112,13 +112,13 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 	case ct.ByzHV1SelectiveDelivery:
 		// Recipients carries the full list of honest ops that receive V.
 		// Default (no Recipients set): single recipient op2 (f=1 / n=4).
-		recipients := []obft.OperatorID{}
+		recipients := []obftbase.OperatorID{}
 		if len(p.Recipients) > 0 {
 			for _, r := range p.Recipients {
-				recipients = append(recipients, obft.OperatorID(r))
+				recipients = append(recipients, obftbase.OperatorID(r))
 			}
 		} else {
-			recipients = append(recipients, obft.OperatorID(2))
+			recipients = append(recipients, obftbase.OperatorID(2))
 		}
 		return byzHV1Selective{
 			ByzSet:     bs,
@@ -154,16 +154,16 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 		// Recipients positional convention: all-but-last → V_a (size 2f),
 		// last → V_b (size 1). Catalog scenario sets size 2f+1 so σ-pool on
 		// V_a reaches qV at any cluster size.
-		var recipientsA, recipientsB []obft.OperatorID
+		var recipientsA, recipientsB []obftbase.OperatorID
 		if len(p.Recipients) >= 2 {
 			for _, r := range p.Recipients[:len(p.Recipients)-1] {
-				recipientsA = append(recipientsA, obft.OperatorID(r))
+				recipientsA = append(recipientsA, obftbase.OperatorID(r))
 			}
-			recipientsB = append(recipientsB, obft.OperatorID(p.Recipients[len(p.Recipients)-1]))
+			recipientsB = append(recipientsB, obftbase.OperatorID(p.Recipients[len(p.Recipients)-1]))
 		} else {
 			// Default at f=1 / n=4: {op2, op3} → V_a, {op4} → V_b.
-			recipientsA = []obft.OperatorID{2, 3}
-			recipientsB = []obft.OperatorID{4}
+			recipientsA = []obftbase.OperatorID{2, 3}
+			recipientsB = []obftbase.OperatorID{4}
 		}
 		return byzPartialEquivocation{
 			ByzSet:      bs,
@@ -188,24 +188,24 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 
 type honestDefaults struct{}
 
-func (honestDefaults) AllowCommitBroadcast(obft.OperatorID) bool      { return true }
-func (honestDefaults) AllowCertificateBroadcast(obft.OperatorID) bool { return true }
-func (honestDefaults) AllowDelivery(_, _ obft.OperatorID, _ ct.MsgKind) bool {
+func (honestDefaults) AllowCommitBroadcast(obftbase.OperatorID) bool      { return true }
+func (honestDefaults) AllowCertificateBroadcast(obftbase.OperatorID) bool { return true }
+func (honestDefaults) AllowDelivery(_, _ obftbase.OperatorID, _ ct.MsgKind) bool {
 	return true
 }
-func (honestDefaults) OverrideDelay(_ *mrand.Rand, _, _ obft.OperatorID, _ ct.MsgKind) time.Duration {
+func (honestDefaults) OverrideDelay(_ *mrand.Rand, _, _ obftbase.OperatorID, _ ct.MsgKind) time.Duration {
 	return -1
 }
-func (honestDefaults) OverrideCommit(_ *sim, _ obft.OperatorID, c *obft.Commit) *obft.Commit {
+func (honestDefaults) OverrideCommit(_ *sim, _ obftbase.OperatorID, c *obftbase.Commit) *obftbase.Commit {
 	return c
 }
-func (honestDefaults) BuildExtraCommits(_ *sim, _ obft.OperatorID, _ *obft.Commit) []*obft.Commit {
+func (honestDefaults) BuildExtraCommits(_ *sim, _ obftbase.OperatorID, _ *obftbase.Commit) []*obftbase.Commit {
 	return nil
 }
-func (honestDefaults) OverrideOwnPhase1Delay(_ *sim, _ obft.OperatorID) time.Duration {
+func (honestDefaults) OverrideOwnPhase1Delay(_ *sim, _ obftbase.OperatorID) time.Duration {
 	return 0
 }
-func (honestDefaults) OverrideOwnCommitDispatchDelay(_ *sim, _ obft.OperatorID) time.Duration {
+func (honestDefaults) OverrideOwnCommitDispatchDelay(_ *sim, _ obftbase.OperatorID) time.Duration {
 	return 0
 }
 
@@ -213,7 +213,7 @@ func (honestDefaults) OverrideOwnCommitDispatchDelay(_ *sim, _ obft.OperatorID) 
 
 type byzNone struct{ honestDefaults }
 
-func (byzNone) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (byzNone) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
@@ -226,7 +226,7 @@ type byzSilentLeader struct {
 	ByzSet byzSet
 }
 
-func (b byzSilentLeader) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzSilentLeader) LeaderBroadcastPlan(_ *sim, leader obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	if b.ByzSet.Contains(leader) {
 		return nil
 	}
@@ -243,7 +243,7 @@ type byzMultiSilent struct {
 	OnlyHonestLayer int
 }
 
-func (b byzMultiSilent) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzMultiSilent) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if layer < b.OnlyHonestLayer {
 		return nil
 	}
@@ -259,11 +259,11 @@ type byzEquivoc111 struct {
 	ByzSet byzSet
 }
 
-func (b byzEquivoc111) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzEquivoc111) LeaderBroadcastPlan(s *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if !b.ByzSet.Contains(leader) || layer != 0 {
 		return []broadcastPlan{{V: honestV}}
 	}
-	others := make([]obft.OperatorID, 0, len(s.operators)-1)
+	others := make([]obftbase.OperatorID, 0, len(s.operators)-1)
 	for _, op := range s.operators {
 		if op != leader {
 			others = append(others, op)
@@ -271,8 +271,8 @@ func (b byzEquivoc111) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer
 	}
 	plans := make([]broadcastPlan, 0, len(others))
 	for i, recipient := range others {
-		v := append(obft.Value{}, []byte{'b', 'y', 'z', '-', 'V', byte('1' + i)}...)
-		plans = append(plans, broadcastPlan{V: v, Recipients: []obft.OperatorID{recipient}})
+		v := append(obftbase.Value{}, []byte{'b', 'y', 'z', '-', 'V', byte('1' + i)}...)
+		plans = append(plans, broadcastPlan{V: v, Recipients: []obftbase.OperatorID{recipient}})
 	}
 	return plans
 }
@@ -286,14 +286,14 @@ type byzEquivocAllNR struct {
 	ByzSet byzSet
 }
 
-func (b byzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if !b.ByzSet.Contains(leader) || layer != 0 {
 		return []broadcastPlan{{V: honestV}}
 	}
 	all := s.operators
 	return []broadcastPlan{
-		{V: append(obft.Value{}, "byz-V-A"...), Recipients: all},
-		{V: append(obft.Value{}, "byz-V-B"...), Recipients: all},
+		{V: append(obftbase.Value{}, "byz-V-A"...), Recipients: all},
+		{V: append(obftbase.Value{}, "byz-V-B"...), Recipients: all},
 	}
 }
 
@@ -309,19 +309,19 @@ func (b byzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, lay
 type byzEquivocSigmaLockedSplit struct {
 	honestDefaults
 	ByzSet      byzSet
-	RecipientsA []obft.OperatorID
-	RecipientsB []obft.OperatorID
+	RecipientsA []obftbase.OperatorID
+	RecipientsB []obftbase.OperatorID
 }
 
-func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if !b.ByzSet.Contains(leader) || layer != 0 {
 		return []broadcastPlan{{V: honestV}}
 	}
-	vA := append(obft.Value{}, "byz-V-A"...)
-	vB := append(obft.Value{}, "byz-V-B"...)
+	vA := append(obftbase.Value{}, "byz-V-A"...)
+	vB := append(obftbase.Value{}, "byz-V-B"...)
 	return []broadcastPlan{
-		{V: vA, Recipients: append([]obft.OperatorID(nil), b.RecipientsA...)},
-		{V: vB, Recipients: append([]obft.OperatorID(nil), b.RecipientsB...)},
+		{V: vA, Recipients: append([]obftbase.OperatorID(nil), b.RecipientsA...)},
+		{V: vB, Recipients: append([]obftbase.OperatorID(nil), b.RecipientsB...)},
 	}
 }
 
@@ -357,19 +357,19 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader obft.Oper
 type byzPartialEquivocation struct {
 	honestDefaults
 	ByzSet      byzSet
-	RecipientsA []obft.OperatorID // get V_a (size 2f)
-	RecipientsB []obft.OperatorID // get V_b (size 1)
+	RecipientsA []obftbase.OperatorID // get V_a (size 2f)
+	RecipientsB []obftbase.OperatorID // get V_b (size 1)
 }
 
-func (b byzPartialEquivocation) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzPartialEquivocation) LeaderBroadcastPlan(_ *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if !b.ByzSet.Contains(leader) || layer != 0 {
 		return []broadcastPlan{{V: honestV}}
 	}
-	vA := append(obft.Value{}, "byz-V-A"...)
-	vB := append(obft.Value{}, "byz-V-B"...)
+	vA := append(obftbase.Value{}, "byz-V-A"...)
+	vB := append(obftbase.Value{}, "byz-V-B"...)
 	return []broadcastPlan{
-		{V: vA, Recipients: append([]obft.OperatorID(nil), b.RecipientsA...)},
-		{V: vB, Recipients: append([]obft.OperatorID(nil), b.RecipientsB...)},
+		{V: vA, Recipients: append([]obftbase.OperatorID(nil), b.RecipientsA...)},
+		{V: vB, Recipients: append([]obftbase.OperatorID(nil), b.RecipientsB...)},
 	}
 }
 
@@ -383,15 +383,15 @@ func (b byzPartialEquivocation) LeaderBroadcastPlan(_ *sim, leader obft.Operator
 type byzHV1Selective struct {
 	honestDefaults
 	ByzSet     byzSet
-	Recipients []obft.OperatorID
+	Recipients []obftbase.OperatorID
 }
 
-func (b byzHV1Selective) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzHV1Selective) LeaderBroadcastPlan(_ *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if !b.ByzSet.Contains(leader) || layer != 0 {
 		return []broadcastPlan{{V: honestV}}
 	}
 	return []broadcastPlan{
-		{V: honestV, Recipients: append([]obft.OperatorID(nil), b.Recipients...)},
+		{V: honestV, Recipients: append([]obftbase.OperatorID(nil), b.Recipients...)},
 	}
 }
 
@@ -406,14 +406,14 @@ type byzFakeEncryptedPresence struct {
 	GarbageLayer int
 }
 
-func (b byzFakeEncryptedPresence) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzFakeEncryptedPresence) LeaderBroadcastPlan(_ *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if b.ByzSet.Contains(leader) && layer == b.SilentLayer {
 		return nil
 	}
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzFakeEncryptedPresence) OverrideCommit(_ *sim, op obft.OperatorID, c *obft.Commit) *obft.Commit {
+func (b byzFakeEncryptedPresence) OverrideCommit(_ *sim, op obftbase.OperatorID, c *obftbase.Commit) *obftbase.Commit {
 	if !b.ByzSet.Contains(op) {
 		return c
 	}
@@ -421,8 +421,8 @@ func (b byzFakeEncryptedPresence) OverrideCommit(_ *sim, op obft.OperatorID, c *
 		return c
 	}
 	cp := cloneCommit(c)
-	cp.Layers[b.GarbageLayer] = obft.EncryptedLayer{
-		Value:      append(obft.Value{}, "byz-fake-V-at-deeper-layer"...),
+	cp.Layers[b.GarbageLayer] = obftbase.EncryptedLayer{
+		Value:      append(obftbase.Value{}, "byz-fake-V-at-deeper-layer"...),
 		Ciphertext: []byte("garbage-bytes-not-a-valid-ibe-ciphertext"),
 	}
 	return cp
@@ -436,10 +436,10 @@ type byzSigmaRefusal struct {
 	ByzSet byzSet
 }
 
-func (b byzSigmaRefusal) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzSigmaRefusal) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
-func (b byzSigmaRefusal) AllowCommitBroadcast(op obft.OperatorID) bool {
+func (b byzSigmaRefusal) AllowCommitBroadcast(op obftbase.OperatorID) bool {
 	return !b.ByzSet.Contains(op)
 }
 
@@ -463,7 +463,7 @@ type byzWithholdLeader struct {
 	ByzSet byzSet
 }
 
-func (b byzWithholdLeader) LeaderBroadcastPlan(s *sim, leader obft.OperatorID, layer int, honestV obft.Value) []broadcastPlan {
+func (b byzWithholdLeader) LeaderBroadcastPlan(s *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
 	if b.ByzSet.Contains(leader) && layer == s.cfg.K-1 {
 		return nil
 	}
@@ -486,10 +486,10 @@ type byzCertWithholding struct {
 	ByzSet byzSet
 }
 
-func (b byzCertWithholding) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzCertWithholding) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
-func (b byzCertWithholding) AllowCertificateBroadcast(op obft.OperatorID) bool {
+func (b byzCertWithholding) AllowCertificateBroadcast(op obftbase.OperatorID) bool {
 	return !b.ByzSet.Contains(op)
 }
 
@@ -508,14 +508,14 @@ type byzCrossSigning struct {
 	ByzSet byzSet
 }
 
-func (b byzCrossSigning) LeaderBroadcastPlan(_ *sim, leader obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzCrossSigning) LeaderBroadcastPlan(_ *sim, leader obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	if b.ByzSet.Contains(leader) {
 		return nil // byz silent at own leader-layer → naturally NR-emits there
 	}
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzCrossSigning) OverrideCommit(s *sim, op obft.OperatorID, c *obft.Commit) *obft.Commit {
+func (b byzCrossSigning) OverrideCommit(s *sim, op obftbase.OperatorID, c *obftbase.Commit) *obftbase.Commit {
 	if !b.ByzSet.Contains(op) {
 		return c
 	}
@@ -531,8 +531,8 @@ func (b byzCrossSigning) OverrideCommit(s *sim, op obft.OperatorID, c *obft.Comm
 		return c
 	}
 	cp := cloneCommit(c)
-	cp.Layers[leaderLayer] = obft.EncryptedLayer{
-		Value:      append(obft.Value{}, s.canonValues[leaderLayer]...),
+	cp.Layers[leaderLayer] = obftbase.EncryptedLayer{
+		Value:      append(obftbase.Value{}, s.canonValues[leaderLayer]...),
 		Ciphertext: forgeSigmaPartialBytes(op, leaderLayer, s.canonValues[leaderLayer]),
 	}
 	return cp
@@ -548,11 +548,11 @@ type byzFakePlaintextSigma struct {
 	ByzSet byzSet
 }
 
-func (b byzFakePlaintextSigma) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzFakePlaintextSigma) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzFakePlaintextSigma) OverrideCommit(_ *sim, op obft.OperatorID, c *obft.Commit) *obft.Commit {
+func (b byzFakePlaintextSigma) OverrideCommit(_ *sim, op obftbase.OperatorID, c *obftbase.Commit) *obftbase.Commit {
 	if !b.ByzSet.Contains(op) {
 		return c
 	}
@@ -561,8 +561,8 @@ func (b byzFakePlaintextSigma) OverrideCommit(_ *sim, op obft.OperatorID, c *obf
 	}
 	cp := cloneCommit(c)
 	// Fake V at L_0 — distinct from any leader-broadcast canon V.
-	cp.Layers[0] = obft.EncryptedLayer{
-		Value:      append(obft.Value{}, "byz-fake-V-at-L_0"...),
+	cp.Layers[0] = obftbase.EncryptedLayer{
+		Value:      append(obftbase.Value{}, "byz-fake-V-at-L_0"...),
 		Ciphertext: forgeSigmaPartialBytes(op, 0, []byte("byz-fake-V-at-L_0")),
 	}
 	return cp
@@ -579,11 +579,11 @@ type byzCrossOnionEquivocation struct {
 	Layer  int
 }
 
-func (b byzCrossOnionEquivocation) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzCrossOnionEquivocation) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft.Commit) []*obft.Commit {
+func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op obftbase.OperatorID, c *obftbase.Commit) []*obftbase.Commit {
 	if !b.ByzSet.Contains(op) {
 		return nil
 	}
@@ -592,11 +592,11 @@ func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op obft.OperatorID,
 	}
 	cp := cloneCommit(c)
 	primeV := []byte("byz-V-prime")
-	cp.Layers[b.Layer] = obft.EncryptedLayer{
-		Value:      append(obft.Value{}, primeV...),
+	cp.Layers[b.Layer] = obftbase.EncryptedLayer{
+		Value:      append(obftbase.Value{}, primeV...),
 		Ciphertext: forgeSigmaPartialBytes(op, b.Layer, primeV),
 	}
-	return []*obft.Commit{cp}
+	return []*obftbase.Commit{cp}
 }
 
 // ---- byzLateLeaderBroadcast (spec Class A: asymmetric propagation) ------
@@ -615,7 +615,7 @@ type byzLateLeaderBroadcast struct {
 	ByzSet byzSet
 }
 
-func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
@@ -624,7 +624,7 @@ func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _
 // of operating point. Beyond any reasonable shallow B_k (the deepest layer
 // is anchored at T_commit, so 6×BTT past T_commit always exceeds it).
 // Hardcoded delay would silently fail at BTT > 200ms.
-func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader obft.OperatorID) time.Duration {
+func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader obftbase.OperatorID) time.Duration {
 	if !b.ByzSet.Contains(leader) {
 		return 0
 	}
@@ -649,16 +649,16 @@ type byzAggregatorBypass struct {
 	ByzSet byzSet
 }
 
-func (b byzAggregatorBypass) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzAggregatorBypass) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft.Commit) []*obft.Commit {
+func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op obftbase.OperatorID, c *obftbase.Commit) []*obftbase.Commit {
 	if !b.ByzSet.Contains(op) {
 		return nil
 	}
 	primeV := []byte("byz-bypass-V-prime")
-	forged := make([]*obft.Commit, 0, len(s.operators)-1)
+	forged := make([]*obftbase.Commit, 0, len(s.operators)-1)
 	// Forge from every other operator (including the L_0 leader). The
 	// aggregator credits forged identities by c.OperatorID, so we need at
 	// least qV = 2f+1 distinct claimed-sender IDs to reach the V_prime
@@ -673,8 +673,8 @@ func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op obft.OperatorID, c *ob
 		}
 		cp := cloneCommit(c)
 		cp.OperatorID = other // forged claimed sender
-		cp.Layers[0] = obft.EncryptedLayer{
-			Value:      append(obft.Value{}, primeV...),
+		cp.Layers[0] = obftbase.EncryptedLayer{
+			Value:      append(obftbase.Value{}, primeV...),
 			Ciphertext: forgeSigmaPartialBytes(other, 0, primeV),
 		}
 		// Strip deeper layers, NRPartials, and Witnesses so the forged commit
@@ -684,7 +684,7 @@ func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op obft.OperatorID, c *ob
 		// canonical V (harmless for NoOfflineDoubleV — same V dedups by hash —
 		// but obscures what the test is actually exercising).
 		for k := 1; k < len(cp.Layers); k++ {
-			cp.Layers[k] = obft.EncryptedLayer{}
+			cp.Layers[k] = obftbase.EncryptedLayer{}
 		}
 		cp.NRPartials = nil
 		cp.Witnesses = nil
@@ -714,11 +714,11 @@ type byzWitnessForgery struct {
 	ByzSet byzSet
 }
 
-func (b byzWitnessForgery) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzWitnessForgery) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft.Commit) []*obft.Commit {
+func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obftbase.OperatorID, c *obftbase.Commit) []*obftbase.Commit {
 	if !b.ByzSet.Contains(op) {
 		return nil
 	}
@@ -733,7 +733,7 @@ func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft
 	// Witnesses path. Otherwise the byz's original Layers entries would also
 	// hit the aggregator and the test wouldn't isolate Witness crediting.
 	for k := range cp.Layers {
-		cp.Layers[k] = obft.EncryptedLayer{}
+		cp.Layers[k] = obftbase.EncryptedLayer{}
 	}
 	cp.NRPartials = nil
 	cp.Witnesses = nil
@@ -742,20 +742,20 @@ func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obft.OperatorID, c *obft
 	// σ on V_prime at targetLayer. Witnesses ship ValueRoot (sha256(V)) on
 	// the wire, not full V — the aggregator's ObserveSigmaByValueRoot path
 	// keys on that hash directly.
-	primeRoot := obft.ValueRoot(primeV)
+	primeRoot := obftbase.ValueRoot(primeV)
 	qV := s.cfgObft.QV()
 	for _, other := range s.operators {
 		if len(cp.Witnesses) >= qV {
 			break
 		}
-		cp.Witnesses = append(cp.Witnesses, obft.LeaderSigmaWitness{
+		cp.Witnesses = append(cp.Witnesses, obftbase.LeaderSigmaWitness{
 			Layer:     targetLayer,
 			Leader:    other,
 			ValueRoot: primeRoot,
 			SigmaV:    forgeSigmaPartialBytes(other, targetLayer, primeV),
 		})
 	}
-	return []*obft.Commit{cp}
+	return []*obftbase.Commit{cp}
 }
 
 // ---- byzDelayedCommit (late KindCommit dispatch, exercises §Phase 3 re-resolve) ----
@@ -776,11 +776,11 @@ type byzDelayedCommit struct {
 	ByzSet byzSet
 }
 
-func (b byzDelayedCommit) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _ int, honestV obft.Value) []broadcastPlan {
+func (b byzDelayedCommit) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorID, _ int, honestV obftbase.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op obft.OperatorID) time.Duration {
+func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op obftbase.OperatorID) time.Duration {
 	if !b.ByzSet.Contains(op) {
 		return 0
 	}
@@ -793,51 +793,51 @@ func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op obft.Operato
 // event holds an independent copy. Mirrors the QBFT adapter's per-recipient
 // DeepCopy pattern; protects against future receiver-side mutations
 // corrupting other receivers' inbound data.
-func clonePhase1Bundle(b *obft.Phase1Bundle) *obft.Phase1Bundle {
+func clonePhase1Bundle(b *obftbase.Phase1Bundle) *obftbase.Phase1Bundle {
 	cp := *b
-	cp.Value = append(obft.Value(nil), b.Value...)
-	cp.SigmaV = append(obft.Signature(nil), b.SigmaV...)
+	cp.Value = append(obftbase.Value(nil), b.Value...)
+	cp.SigmaV = append(obftbase.Signature(nil), b.SigmaV...)
 	return &cp
 }
 
 // cloneCertificate deep-copies a Certificate so each per-recipient arrival
 // event holds an independent copy. See clonePhase1Bundle.
-func cloneCertificate(c *obft.Certificate) *obft.Certificate {
+func cloneCertificate(c *obftbase.Certificate) *obftbase.Certificate {
 	cp := *c
-	cp.Value = append(obft.Value(nil), c.Value...)
-	cp.Signature = append(obft.Signature(nil), c.Signature...)
+	cp.Value = append(obftbase.Value(nil), c.Value...)
+	cp.Signature = append(obftbase.Signature(nil), c.Signature...)
 	return &cp
 }
 
 // cloneCommit deep-copies a Commit so OverrideCommit / BuildExtraCommits
 // don't mutate the honest-built original.
-func cloneCommit(c *obft.Commit) *obft.Commit {
-	cp := &obft.Commit{
+func cloneCommit(c *obftbase.Commit) *obftbase.Commit {
+	cp := &obftbase.Commit{
 		ClusterID:  c.ClusterID,
 		OperatorID: c.OperatorID,
 		Height:     c.Height,
-		Layers:     make([]obft.EncryptedLayer, len(c.Layers)),
-		NRPartials: make([]obft.NRPartial, len(c.NRPartials)),
-		Witnesses:  make([]obft.LeaderSigmaWitness, len(c.Witnesses)),
+		Layers:     make([]obftbase.EncryptedLayer, len(c.Layers)),
+		NRPartials: make([]obftbase.NRPartial, len(c.NRPartials)),
+		Witnesses:  make([]obftbase.LeaderSigmaWitness, len(c.Witnesses)),
 	}
 	for i, el := range c.Layers {
-		cp.Layers[i] = obft.EncryptedLayer{
-			Value:      append(obft.Value(nil), el.Value...),
+		cp.Layers[i] = obftbase.EncryptedLayer{
+			Value:      append(obftbase.Value(nil), el.Value...),
 			Ciphertext: append([]byte(nil), el.Ciphertext...),
 		}
 	}
 	for i, nr := range c.NRPartials {
-		cp.NRPartials[i] = obft.NRPartial{
+		cp.NRPartials[i] = obftbase.NRPartial{
 			Layer:      nr.Layer,
-			PartialSig: append(obft.Signature(nil), nr.PartialSig...),
+			PartialSig: append(obftbase.Signature(nil), nr.PartialSig...),
 		}
 	}
 	for i, w := range c.Witnesses {
-		cp.Witnesses[i] = obft.LeaderSigmaWitness{
+		cp.Witnesses[i] = obftbase.LeaderSigmaWitness{
 			Layer:     w.Layer,
 			Leader:    w.Leader,
 			ValueRoot: w.ValueRoot,
-			SigmaV:    append(obft.Signature(nil), w.SigmaV...),
+			SigmaV:    append(obftbase.Signature(nil), w.SigmaV...),
 		}
 	}
 	return cp
@@ -850,7 +850,7 @@ func cloneCommit(c *obft.Commit) *obft.Commit {
 // per-rule evidence machinery needs to fire. Byte content depends on (op,
 // layer, value) so two distinct V's at the same (op, layer) produce
 // distinct bytes (mirroring real BLS's V-dependent signatures).
-func forgeSigmaPartialBytes(op obft.OperatorID, layer int, value []byte) []byte {
+func forgeSigmaPartialBytes(op obftbase.OperatorID, layer int, value []byte) []byte {
 	h := sha256.Sum256(append(append([]byte{byte(op), byte(op >> 8), byte(layer), byte(layer >> 8)}, value...), 0xff))
 	out := make([]byte, ct.StubSignatureSize)
 	out[0] = 0xff // distinguishes byz-forged from honest stubs

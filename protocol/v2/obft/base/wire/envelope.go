@@ -3,7 +3,7 @@ package wire
 import (
 	"fmt"
 
-	"github.com/ssvlabs/ssv/protocol/v2/obft"
+	base "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 	sharedwire "github.com/ssvlabs/ssv/protocol/v2/wire"
 )
 
@@ -25,8 +25,8 @@ import (
 //
 //	Unwrap(data) → (kind, parsed message, error)
 //
-// where the parsed message is one of *obft.Phase1Bundle, *obft.Commit,
-// *obft.Certificate matching `Kind`.
+// where the parsed message is one of *base.Phase1Bundle, *base.Commit,
+// *base.Certificate matching `Kind`.
 //
 // Frame layout:
 //
@@ -43,14 +43,14 @@ type MessageKind byte
 
 const (
 	// KindPhase1Bundle indicates the body is an EncodePhase1Bundle-encoded
-	// *obft.Phase1Bundle.
+	// *base.Phase1Bundle.
 	KindPhase1Bundle MessageKind = 0x01
-	// KindCommit indicates the body is an EncodeCommit-encoded *obft.Commit.
+	// KindCommit indicates the body is an EncodeCommit-encoded *base.Commit.
 	// Carries the operator's K-layer onion (σ-side) plus their NR partials
 	// (NR-side) in a single message emitted at T_commit.
 	KindCommit MessageKind = 0x02
 	// KindCertificate indicates the body is an EncodeCertificate-encoded
-	// *obft.Certificate.
+	// *base.Certificate.
 	KindCertificate MessageKind = 0x04
 )
 
@@ -58,14 +58,14 @@ const (
 // set, matching Kind.
 type Envelope struct {
 	Kind         MessageKind
-	Phase1Bundle *obft.Phase1Bundle
-	Commit       *obft.Commit
-	Certificate  *obft.Certificate
+	Phase1Bundle *base.Phase1Bundle
+	Commit       *base.Commit
+	Certificate  *base.Certificate
 }
 
 // WrapPhase1Bundle encodes a Phase1Bundle and wraps it in an OBFT wire
 // envelope.
-func WrapPhase1Bundle(b *obft.Phase1Bundle) ([]byte, error) {
+func WrapPhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	body, err := EncodePhase1Bundle(b)
 	if err != nil {
 		return nil, fmt.Errorf("wire: encode phase-1 bundle: %w", err)
@@ -74,7 +74,7 @@ func WrapPhase1Bundle(b *obft.Phase1Bundle) ([]byte, error) {
 }
 
 // WrapCommit encodes a Commit and wraps it in an OBFT wire envelope.
-func WrapCommit(c *obft.Commit) ([]byte, error) {
+func WrapCommit(c *base.Commit) ([]byte, error) {
 	body, err := EncodeCommit(c)
 	if err != nil {
 		return nil, fmt.Errorf("wire: encode commit: %w", err)
@@ -84,7 +84,7 @@ func WrapCommit(c *obft.Commit) ([]byte, error) {
 
 // WrapCertificate encodes a Certificate and wraps it in an OBFT wire
 // envelope.
-func WrapCertificate(c *obft.Certificate) ([]byte, error) {
+func WrapCertificate(c *base.Certificate) ([]byte, error) {
 	body, err := EncodeCertificate(c)
 	if err != nil {
 		return nil, fmt.Errorf("wire: encode certificate: %w", err)

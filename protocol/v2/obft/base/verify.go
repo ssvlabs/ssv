@@ -1,8 +1,10 @@
-package obft
+package base
 
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // Verifier holds the per-cluster constants needed to verify inner-message
@@ -46,8 +48,8 @@ import (
 //     own per-operator shares; pass them explicitly. The V-shares are not
 //     reused for NR verification.
 type Verifier struct {
-	Signer         Signer // V-keypair signer (verify-only)
-	TagSigner      Signer // IBE-keypair signer (verify-only); may equal Signer under Option A
+	Signer         obft.Signer // V-keypair signer (verify-only)
+	TagSigner      obft.Signer // IBE-keypair signer (verify-only); may equal Signer under Option A
 	PubKeyShares   map[OperatorID][]byte
 	NRPubKeyShares map[OperatorID][]byte // optional; nil → falls back to PubKeyShares (Option A)
 	ClusterPubKey  []byte
@@ -98,7 +100,7 @@ func (v *Verifier) VerifyCommitNRPartials(c *Commit) error {
 		return fmt.Errorf("obft: no NR pub-key share for operator %d", c.OperatorID)
 	}
 	for _, p := range c.NRPartials {
-		tag := NoQuorumTag(c.ClusterID, c.Height, p.Layer)
+		tag := obft.NoQuorumTag(c.ClusterID, c.Height, p.Layer)
 		if !v.TagSigner.VerifyPartial(share, tag, p.PartialSig) {
 			return fmt.Errorf("obft: NR partial from op %d at layer %d does not verify",
 				c.OperatorID, p.Layer)
@@ -109,7 +111,7 @@ func (v *Verifier) VerifyCommitNRPartials(c *Commit) error {
 
 // VerifyCommitWitnesses runs structural checks on the witness section. Per
 // spec §Phase 2 wire format, witnesses ship value_root (32 bytes) + σ_V
-// without the full V; σ_V verifies against V (via the Signer's signing
+// without the full V; σ_V verifies against V (via the obft.Signer's signing
 // target). A standalone Verifier (without access to retained Phase-1
 // bundles) cannot reproduce that verification — V is needed and isn't on
 // the wire.
@@ -157,7 +159,7 @@ func (v *Verifier) VerifyCertificate(c *Certificate) error {
 }
 
 // checkConfigured returns an error if the Verifier is missing required
-// dependencies (nil receiver, nil Signer, nil TagSigner). Callers may also
+// dependencies (nil receiver, nil obft.Signer, nil TagSigner). Callers may also
 // want to set NRPubKeyShares explicitly under Option B; nil falls back to
 // PubKeyShares (Option A).
 func (v *Verifier) checkConfigured() error {
@@ -165,7 +167,7 @@ func (v *Verifier) checkConfigured() error {
 		return errors.New("obft: nil verifier")
 	}
 	if v.Signer == nil {
-		return errors.New("obft: verifier has nil Signer")
+		return errors.New("obft: verifier has nil obft.Signer")
 	}
 	if v.TagSigner == nil {
 		return errors.New("obft: verifier has nil TagSigner")

@@ -18,9 +18,9 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"

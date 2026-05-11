@@ -9,9 +9,9 @@ import (
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
 	"github.com/stretchr/testify/require"
 
-	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft"
+	obftcore "github.com/ssvlabs/ssv/protocol/v2/obft/base"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
-	"github.com/ssvlabs/ssv/protocol/v2/obft/wire"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
 )
 
