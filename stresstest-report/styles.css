@@ -299,10 +299,10 @@ dialog.scenario-modal .sm-content-top .sm-legend {
 dialog.scenario-modal .sm-legend {
   display: grid;
   grid-template-columns: auto auto auto auto auto;
-  row-gap: 0.25em;
-  column-gap: 0.5em;
+  row-gap: 0.2em;
+  column-gap: 0.4em;
   align-items: center;
-  font-size: 0.82em;
+  font-size: 0.75em;
   font-variant-numeric: tabular-nums;
 }
 dialog.scenario-modal .sm-legend-item {
@@ -311,8 +311,8 @@ dialog.scenario-modal .sm-legend-item {
 }
 dialog.scenario-modal .sm-legend-swatch {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 3px;
 }
 dialog.scenario-modal .sm-legend-name {
@@ -321,8 +321,7 @@ dialog.scenario-modal .sm-legend-name {
 }
 dialog.scenario-modal .sm-legend-pct {
   background: hsl(var(--hue), 70%, 76%);
-  padding: 0.05em 0.4em;
-  min-width: 4.5em;
+  padding: 0.05em 0.3em;
   border-radius: 3px;
   font-weight: 600;
   color: #1a1a1a;

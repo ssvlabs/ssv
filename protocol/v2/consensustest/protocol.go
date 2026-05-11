@@ -103,7 +103,18 @@ type SimConfig struct {
 	LeaderBroadcastOffset map[int]time.Duration
 
 	// QBFTRoundTimeout is the QBFT per-round timer (RT). Defaults to 2s.
+	// Used by qbft.Protocol variants with UseFixedRT=true (QBFT-SSV);
+	// QBFT (default) computes RT from PhaseBudget instead.
 	QBFTRoundTimeout time.Duration
+
+	// PhaseBudget is the QBFT per-phase time budget (PROPOSE, PREPARE,
+	// COMMIT, ROUND_CHANGE, post-consensus margin). Defaults to 2·BTT
+	// to mirror OBFT's Δ_2 = 2·BTT propagation convention. Used by:
+	//   - qbft.Protocol (computed-RT variant): RT = 3 × PhaseBudget.
+	//   - qbft DES events.go: post-consensus margin = PhaseBudget.
+	// QBFT-SSV (UseFixedRT=true) consumes PhaseBudget only for the
+	// post-consensus margin; its RT is QBFTRoundTimeout.
+	PhaseBudget time.Duration
 
 	Network NetworkModel
 	Host    HostPattern
@@ -351,6 +362,9 @@ func (c *SimConfig) Validate() error {
 	}
 	if c.QBFTRoundTimeout == 0 {
 		c.QBFTRoundTimeout = 2 * time.Second
+	}
+	if c.PhaseBudget == 0 {
+		c.PhaseBudget = 2 * c.BTT
 	}
 
 	tCommit := c.RelayCutoff - c.HeaderSubmitHeadroom - c.Phase3JitterBuffer - c.Epsilon3 - c.Delta2

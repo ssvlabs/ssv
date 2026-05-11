@@ -16,13 +16,33 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 )
 
-// Protocol is the QBFT adapter. Use as `qbft.Protocol{}` in tests.
+// Protocol is the QBFT adapter. Use as `qbft.Protocol{}` (defaults to
+// "QBFT" + computed-RT variant) or with explicit field overrides for the
+// "QBFT-SSV" variant.
 type Protocol struct {
 	// MaxRounds caps round-change attempts before giving up. Default 4.
 	MaxRounds int
+
+	// VariantName overrides the protocol name reported by Name(). When
+	// empty, defaults to "QBFT".
+	VariantName string
+
+	// UseFixedRT picks the round-timeout source:
+	//   false (default) — RT = 3 × cfg.PhaseBudget (= 6·BTT at PhaseBudget
+	//     defaults). Matches the OBFT-family budget convention where each
+	//     phase is 2·BTT. Use for the "QBFT" research variant.
+	//   true — RT = cfg.QBFTRoundTimeout (= 2s default). Matches production
+	//     SSV QBFT (QuickTimeout in roundtimer/timer.go). Use for the
+	//     "QBFT-SSV" variant.
+	UseFixedRT bool
 }
 
-func (Protocol) Name() string { return "QBFT" }
+func (p Protocol) Name() string {
+	if p.VariantName != "" {
+		return p.VariantName
+	}
+	return "QBFT"
+}
 
 func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
@@ -34,7 +54,16 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	rt := cfg.QBFTRoundTimeout
+	var rt time.Duration
+	if p.UseFixedRT {
+		rt = cfg.QBFTRoundTimeout
+	} else {
+		// Computed RT = 3 phases × PhaseBudget. Phases are PROPOSE,
+		// PREPARE, COMMIT; ROUND_CHANGE is a separate post-timer phase
+		// not counted in RT. At BTT=300 / PhaseBudget=2·BTT this is
+		// 1800ms; at BTT=200 it's 1200ms.
+		rt = 3 * cfg.PhaseBudget
+	}
 	maxRounds := p.MaxRounds
 	if maxRounds == 0 {
 		maxRounds = 4
@@ -58,6 +87,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Operators:    cfg.Operators,
 		BTT:          cfg.BTT,
 		RT:           rt,
+		PhaseBudget:  cfg.PhaseBudget,
 		MaxRounds:    maxRounds,
 		BFTStart:     bftStart,
 		Network:      cfg.Network,
@@ -102,6 +132,7 @@ type desConfig struct {
 	Operators    []ct.OperatorID
 	BTT          time.Duration
 	RT           time.Duration
+	PhaseBudget  time.Duration // per-phase budget (= 2·BTT default); used for post-cons margin
 	MaxRounds    int
 	BFTStart     time.Duration
 	Network      ct.NetworkModel

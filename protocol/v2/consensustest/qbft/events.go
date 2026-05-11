@@ -166,11 +166,13 @@ func (s *sim) recordDecided(op spectypes.OperatorID, round specqbft.Round, value
 	if _, already := s.decided[op]; already {
 		return
 	}
-	// +1 BTT models post-consensus partial-sig collection.
+	// Post-consensus partial-sig collection margin = PhaseBudget (= 2·BTT
+	// at defaults). Matches the OBFT family's Δ_2 = 2·BTT convention and
+	// the per-phase budget assumption used elsewhere in the QBFT adapter.
 	s.decided[op] = decidedRecord{
 		value: append([]byte(nil), value...),
 		round: round,
-		at:    s.now + s.cfg.BTT,
+		at:    s.now + s.cfg.PhaseBudget,
 	}
 	// SSV's QBFT-then-post-consensus model: every honest operator that
 	// reaches Decided broadcasts one PartialSignatureMessage on the

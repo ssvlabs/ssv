@@ -86,7 +86,17 @@ func TestStress(t *testing.T) {
 	// from the report without a driver-side change.
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
-	protocols := []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}}
+	// QBFT comes in two flavors: the research variant (default Protocol{},
+	// RT = 3·PhaseBudget = 6·BTT — apples-to-apples with OBFT's 2·BTT-
+	// per-phase budget convention) and the production SSV variant (RT =
+	// QBFTRoundTimeout = 2s fixed, matching roundtimer/timer.go). Both
+	// share bftStart=0 and PhaseBudget-based post-consensus margin.
+	protocols := []ct.Protocol{
+		obftadapter.Protocol{},
+		twoabadapter.Protocol{},
+		qbftadapter.Protocol{},
+		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
+	}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations, clusterSize)
 	require.Len(t, sweeps, 6)
 

@@ -19,9 +19,10 @@
 // saturation/lightness so the protocols read as peers rather than
 // figure/ground.
 const PROTOCOL_COLORS = {
-  OBFT:    '#ed8936', // light orange
-  '2abOBFT': '#06b6d4', // cyan
-  QBFT:    '#e85a71', // light pink-red
+  OBFT:        '#ed8936', // light orange
+  '2abOBFT':   '#06b6d4', // cyan
+  QBFT:        '#e85a71', // light pink-red (computed-RT variant)
+  'QBFT-SSV':  '#8b5cf6', // purple (production-RT variant)
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
@@ -662,8 +663,8 @@ function buildSweepLegend(sweep, scenario, protocols) {
     // Color the chip by the worst-case (min) rate so a sweep that dips
     // below 80% reads as red even if other points are green.
     const hue = rateToHue(stats.successMin);
-    const sMin = Math.round(stats.successMin * 100);
-    const sMax = Math.round(stats.successMax * 100);
+    const sMin = (stats.successMin * 100).toFixed(2);
+    const sMax = (stats.successMax * 100).toFixed(2);
     const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
     row.appendChild(
       h('span', { class: 'sm-legend-pct', style: `--hue: ${hue}` }, sStr),
@@ -793,7 +794,7 @@ function buildLatencyChart(canvas, sweep, protocols, scenario) {
           callbacks: {
             title: (items) => (items[0] ? `${Math.round(items[0].parsed.x)} ms` : ''),
             label: (ctx) => {
-              const pct = (ctx.parsed.y * 100).toFixed(1);
+              const pct = (ctx.parsed.y * 100).toFixed(2);
               return `${ctx.dataset.label}: ${pct}% finished`;
             },
           },
@@ -843,7 +844,7 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
               items[0] ? `${sweep.axisLabel || 'point'}: ${items[0].label}` : '',
             label: (ctx) => {
               if (isSuccess) {
-                const pct = (ctx.parsed.y * 100).toFixed(1);
+                const pct = (ctx.parsed.y * 100).toFixed(2);
                 return `${ctx.dataset.label}: ${pct}% success`;
               }
               return `${ctx.dataset.label}: p99 ${Math.round(ctx.parsed.y)} ms`;
