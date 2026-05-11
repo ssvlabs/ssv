@@ -186,13 +186,19 @@ table.heatmap-grid th {
 }
 table.heatmap-grid tr.group-sep td {
   background: transparent;
-  font-size: 0.78em;
-  font-weight: 600;
-  color: var(--text-faint);
+  font-size: 0.8em;
+  font-weight: 700;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.8em 0 0.2em 0.2em;
+  letter-spacing: 0.08em;
+  padding: 1.4em 0 0.4em 0.2em;
   border: none;
+  border-top: 1px solid var(--border);
+}
+/* First group has no divider above it (nothing to separate from). */
+table.heatmap-grid tbody tr.group-sep:first-child td {
+  border-top: none;
+  padding-top: 0.2em;
 }
 table.heatmap-grid td.scen {
   padding: 0.35em 0.7em 0.35em 0.2em;
