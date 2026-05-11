@@ -386,7 +386,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 3. **Verdict envelope size**: 32-byte `value_root` plus envelope overhead ≈ 100-200 bytes per verdict per layer. Per slot: K verdicts × n operators × 200 bytes ≈ 3.2 KB at K=4 n=4. Within budget.
 
-4. **Persistent Phase-2a state across restarts**: to avoid Rule-6 false-positives on operator restart, persist verdict + retained V at the EKM-log level. Implementation choice: extend the EKM log schema to include verdict envelopes alongside σ/NR rows? Or use a separate per-slot state file (recommended — keeps EKM minimal).
+4. ~~**Persistent Phase-2a state across restarts**~~ **(out of scope per spec assumption 5).** Was: to avoid Rule-6 false-positives on operator restart, persist verdict + retained V at the EKM-log level. **Resolved by spec simplification** — mid-slot operator restart is out of scope; the cluster treats a crashed operator as silent for the slot. In-slot Phase-2a state stays in operator-local memory; only the EKM slashing-protection log (σ/NR rows) is durable. Implementations that want to support in-slot restart can add durable Phase-2a state, but doing so is beyond the spec's requirements.
 
 5. **Convergence-rule tie-break at n > 3f+1**: when multiple V's could reach `qV` (only possible at non-tight BFT-bound clusters like n=5 f=1), use lexicographic `value_root` tie-break. At n=3f+1 exactly (the SSV cluster sizes), tie-break is moot. Document for completeness.
 
