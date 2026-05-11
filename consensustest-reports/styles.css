@@ -195,23 +195,23 @@ nav.toc {
   z-index: 10;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(8px);
-  padding: 0.5em 0 0.4em;
-  margin: 0 0 0.5em;
+  padding: 0.4em 0 0.3em;
+  margin: 0 0 0.4em;
   border-bottom: 1px solid var(--border);
 }
 nav.toc .toc-row {
   display: flex;
-  gap: 0.4em;
+  gap: 0.35em;
   flex-wrap: wrap;
-  padding: 0.15em 0;
+  padding: 0.1em 0;
 }
 nav.toc .toc-row.sweeps a {
   display: inline-block;
-  padding: 0.35em 0.85em;
+  padding: 0.3em 0.8em;
   background: #f3f5f8;
   border: 1px solid transparent;
-  border-radius: 18px;
-  font-size: 0.86em;
+  border-radius: 16px;
+  font-size: 0.82em;
   color: #1f2937;
   text-decoration: none;
   font-weight: 500;
@@ -227,16 +227,16 @@ nav.toc .toc-row.sweeps a.active {
   border-color: var(--accent);
 }
 nav.toc .toc-row.groups {
-  border-top: 1px dashed var(--border);
-  margin-top: 0.3em;
-  padding-top: 0.35em;
-  min-height: 1.6em;
+  margin-top: 0.1em;
+  padding-top: 0.1em;
+  min-height: 1.4em;
+  align-items: center;
 }
 nav.toc .toc-row.groups a {
-  font-size: 0.78em;
+  font-size: 0.72em;
   color: var(--text-muted);
   text-decoration: none;
-  padding: 0.2em 0.55em;
+  padding: 0.18em 0.5em;
   border-radius: 4px;
   background: transparent;
   border: 1px solid transparent;
@@ -258,29 +258,28 @@ nav.toc .toc-row.groups a.active {
 nav.toc .toc-row.groups .scope-divider {
   display: inline-flex;
   align-items: center;
-  font-size: 0.72em;
+  font-size: 0.62em;
   color: #7c2d12;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0 0.3em 0 0.6em;
-  margin-left: 0.3em;
+  padding: 0 0.25em 0 0.5em;
+  margin-left: 0.2em;
   border-left: 1px solid #e8d4c5;
 }
 
 nav.toc .toc-row.filter {
-  border-top: 1px dashed var(--border);
-  margin-top: 0.3em;
-  padding-top: 0.35em;
-  min-height: 1.6em;
+  margin-top: 0.1em;
+  padding-top: 0.1em;
+  min-height: 1.4em;
 }
 nav.toc .scenario-filter {
   flex: 1;
   font: inherit;
-  font-size: 0.85em;
-  padding: 0.3em 0.7em;
+  font-size: 0.78em;
+  padding: 0.22em 0.65em;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--surface);
   color: #0f172a;
   outline: none;
@@ -325,12 +324,14 @@ details.group-pack.filtered-out summary {
 /* ---- Group pack: <details> card ---- */
 
 details.group-pack {
-  margin: 0.6em 0;
+  margin: 1.1em 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-  overflow: hidden;
+  /* `overflow: hidden` would clip the sticky <summary> as it leaves the
+   * top of the pack. Use `clip-path` for visual rounding instead — the
+   * sticky summary needs `overflow: visible` to stay anchored. */
   scroll-margin-top: 7em; /* clear the sticky TOC when jumping via anchor */
 }
 details.group-pack[open] {
@@ -345,9 +346,13 @@ details.group-pack summary {
   font-size: 0.95em;
   background: var(--surface-muted);
   border-bottom: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
   list-style: none;
   user-select: none;
-  transition: background 100ms ease;
+  transition: background 100ms ease, box-shadow 100ms ease;
+}
+details.group-pack:not([open]) summary {
+  border-radius: 8px;
 }
 details.group-pack summary:hover { background: #f1f4f7; }
 details.group-pack summary::-webkit-details-marker { display: none; }
@@ -363,6 +368,12 @@ details.group-pack[open] summary::before { transform: rotate(90deg); }
 details.group-pack[open] summary {
   border-bottom-color: var(--border);
   background: #f0f4f8;
+  /* Stick the summary below the sticky TOC. As the body scrolls past,
+   * the summary stays visible so "what group am I in?" is always clear. */
+  position: sticky;
+  top: var(--toc-height, 110px);
+  z-index: 5;
+  box-shadow: 0 4px 8px -4px rgba(15, 23, 42, 0.12);
 }
 details.group-pack.obft-only[open] summary {
   background: #fdf4ee;

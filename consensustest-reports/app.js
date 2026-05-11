@@ -70,6 +70,26 @@ function main() {
   chartInits.forEach((fn) => fn());
   setupActiveTOC(data);
   setupHashSync(data);
+  setupTocHeightVar();
+}
+
+// setupTocHeightVar measures the sticky TOC's height and exposes it as
+// `--toc-height` on <html>, so the per-pack sticky <summary> rules can
+// land just below the TOC instead of overlapping it. Re-measures on
+// resize and on sub-row rebuilds (different sweeps can wrap differently).
+function setupTocHeightVar() {
+  const nav = document.querySelector('nav.toc');
+  if (!nav) return;
+  const update = () => {
+    const h = Math.ceil(nav.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--toc-height', `${h}px`);
+  };
+  update();
+  window.addEventListener('resize', update);
+  // Anything inside the TOC that changes layout (sub-row rebuild,
+  // filter input growing on focus, etc.) — observe and react.
+  const obs = new MutationObserver(update);
+  obs.observe(nav, { childList: true, subtree: true, characterData: true });
 }
 
 // scheduleChartInit binds initFn to a pack, firing it on the pack's first
