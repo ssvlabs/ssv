@@ -92,49 +92,111 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 		t.Fatalf("consensustest: RunBatch: %v", err)
 	}
 
+	cellCount := len(cfg.Scenarios) * len(cfg.Protocols)
+	totalIters := cellCount * cfg.Iterations
+
+	// Single iteration-level work queue: each job is one (cellIdx, iter)
+	// sim run. Replaces the prior cell-level pool — by flattening the unit
+	// of work to a single sim, end-of-batch stragglers don't idle cores
+	// (the last cell's iterations spread across all workers instead of
+	// monopolizing a single worker). Net wall-time gain is largest for
+	// sweeps with high per-cell timing variance (heavy_tail, loss).
 	type job struct {
-		scenarioIdx int
-		protocolIdx int
+		cellIdx int
+		iter    int
 	}
 
-	cellCount := len(cfg.Scenarios) * len(cfg.Protocols)
-	results := make([]BatchCell, cellCount)
-	jobs := make(chan job, cellCount)
+	// results[cellIdx][iter] — each slot is written by exactly one
+	// goroutine (the worker that pulls that job), so no per-slot
+	// synchronization is needed. Reduce happens single-threaded after
+	// wg.Wait().
+	results := make([][]iterOutcome, cellCount)
+	for ci := range results {
+		results[ci] = make([]iterOutcome, cfg.Iterations)
+	}
 
+	jobs := make(chan job, totalIters)
+	for ci := 0; ci < cellCount; ci++ {
+		for iter := 0; iter < cfg.Iterations; iter++ {
+			jobs <- job{cellIdx: ci, iter: iter}
+		}
+	}
+	close(jobs)
+
+	scenarioOf := func(cellIdx int) Scenario { return cfg.Scenarios[cellIdx/len(cfg.Protocols)] }
+	protocolOf := func(cellIdx int) Protocol { return cfg.Protocols[cellIdx%len(cfg.Protocols)] }
+
+	start := time.Now()
 	var wg sync.WaitGroup
 	for w := 0; w < cfg.Parallelism; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				idx := j.scenarioIdx*len(cfg.Protocols) + j.protocolIdx
-				results[idx] = runCell(t, cfg, cfg.Scenarios[j.scenarioIdx], cfg.Protocols[j.protocolIdx])
+				simCfg := cfg.Base
+				simCfg.Seed = cfg.SeedStart + int64(j.iter)
+				if apply := scenarioOf(j.cellIdx).Apply; apply != nil {
+					apply(&simCfg)
+				}
+				out, err := protocolOf(j.cellIdx).Run(simCfg)
+				results[j.cellIdx][j.iter] = iterOutcome{out: out, err: err}
 			}
 		}()
 	}
-
-	start := time.Now()
-	for si := range cfg.Scenarios {
-		for pi := range cfg.Protocols {
-			jobs <- job{scenarioIdx: si, protocolIdx: pi}
-		}
-	}
-	close(jobs)
 	wg.Wait()
 	wallclock := time.Since(start)
 
+	// Reduce per-iter results into per-cell BatchCells single-threaded.
+	cells := make([]BatchCell, cellCount)
+	for ci := range cells {
+		cells[ci] = reduceCellResults(t, cfg, scenarioOf(ci), protocolOf(ci), results[ci])
+	}
+
 	return BatchReport{
 		Config:      cfg,
-		Cells:       results,
+		Cells:       cells,
 		Wallclock:   wallclock,
 		GeneratedAt: time.Now().UTC(),
 	}
 }
 
-// runCell runs Iterations sims for one (scenario, protocol) pair and
-// aggregates them into a BatchCell.
-func runCell(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol) BatchCell {
+// iterOutcome captures the per-iteration Outcome + error from one sim
+// run inside RunBatch. Workers write directly to results[cellIdx][iter];
+// reduceCellResults consumes the per-cell slice single-threaded.
+type iterOutcome struct {
+	out Outcome
+	err error
+}
+
+// reduceCellResults aggregates one cell's per-iter outcomes into a
+// BatchCell. Mirrors the per-sim accumulation that runCell used to do
+// inline, lifted out so the parallel iteration loop above can stay
+// straightforward and the reduction stays single-threaded (no per-cell
+// mutex on the distributions / maps).
+//
+// ErrNotApplicable / other Run errors collapse the cell to Iterations=0
+// (renderers show "n/a"). The check looks at the first iter's outcome
+// since these errors are config-level and uniform across iters at a given
+// (protocol, config) pair; if non-uniform behavior is ever introduced
+// upstream this fast path would need to scan all iters.
+func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
 	t.Helper()
+	if len(iters) > 0 {
+		if first := iters[0]; first.err != nil {
+			if errors.Is(first.err, ErrNotApplicable) {
+				return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
+			}
+			// Other Run errors — typically config validation (e.g. at
+			// BTT=600ms, OBFT's deepest layer's broadcast deadline goes
+			// negative). Log once per cell at iter=0 and surface as an
+			// Iterations=0 cell so renderers show "n/a" rather than the
+			// whole batch aborting.
+			t.Logf("RunBatch: %s/%s out of envelope: %v (cell marked n/a)",
+				protocol.Name(), scenario.Name, first.err)
+			return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
+		}
+	}
+
 	cell := BatchCell{
 		Protocol:         protocol.Name(),
 		Scenario:         scenario.Name,
@@ -147,59 +209,39 @@ func runCell(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol
 	}
 
 	successCount := 0
-	for iter := 0; iter < cfg.Iterations; iter++ {
-		simCfg := cfg.Base
-		simCfg.Seed = cfg.SeedStart + int64(iter)
-		if scenario.Apply != nil {
-			scenario.Apply(&simCfg)
-		}
-
-		out, err := protocol.Run(simCfg)
-		if err != nil {
-			if errors.Is(err, ErrNotApplicable) {
-				// Scenario not applicable to this protocol — return an
-				// empty cell with Iterations=0 to signal "n/a" downstream.
-				return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
-			}
-			// Other Run errors — typically config validation (e.g. at
-			// BTT=600ms, OBFT's deepest layer's broadcast deadline goes
-			// negative). Log once per cell at iter=0 and surface as an
-			// Iterations=0 cell so renderers show "n/a" rather than the
-			// whole batch aborting. The user gets all OTHER cells'
-			// comparison data even when one operating point is out of
-			// envelope for one protocol.
-			if iter == 0 {
-				t.Logf("RunBatch: %s/%s out of envelope: %v (cell marked n/a)",
-					protocol.Name(), scenario.Name, err)
-			}
+	for _, r := range iters {
+		if r.err != nil {
+			// Defense in depth — the pre-check above caught uniform errors;
+			// a per-iter err here would indicate non-uniform behavior that
+			// the rest of the framework doesn't anticipate. Mark n/a to be
+			// safe.
 			return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
 		}
 
 		// Universal safety invariants — panic on violation, matching the
-		// existing RunScenarioOnProtocol contract. A safety violation in
-		// batch mode is a hard failure regardless of scenario expectation;
-		// SafetyPanic terminates the test before any further sims run.
-		report := ComputeSafetyReport(out)
+		// existing RunScenarioOnProtocol contract. SafetyPanic terminates
+		// the test before any further reduce work runs.
+		report := ComputeSafetyReport(r.out)
 		if report.IsViolation() {
-			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, out)
+			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, r.out)
 		}
 
-		if out.Decided {
+		if r.out.Decided {
 			successCount++
-			cell.DecisionTime = append(cell.DecisionTime, float64(out.DecisionTime.Milliseconds()))
+			cell.DecisionTime = append(cell.DecisionTime, float64(r.out.DecisionTime.Milliseconds()))
 		} else {
-			cell.MissReasons[classifyMiss(out)]++
+			cell.MissReasons[classifyMiss(r.out)]++
 		}
 
-		cell.ClusterBandwidth = append(cell.ClusterBandwidth, float64(out.Bandwidth.TotalBytes))
-		for kind, bytes := range out.Bandwidth.PerKindBytes {
+		cell.ClusterBandwidth = append(cell.ClusterBandwidth, float64(r.out.Bandwidth.TotalBytes))
+		for kind, bytes := range r.out.Bandwidth.PerKindBytes {
 			cell.PerKindBandwidth[kind] = append(cell.PerKindBandwidth[kind], float64(bytes))
 		}
 
 		// EvidenceCounts: one sample per sim per rule, value = sum of fires
 		// across all operators in this sim.
 		perSimEvidence := make(map[string]int)
-		for _, oo := range out.PerOp {
+		for _, oo := range r.out.PerOp {
 			for rule, count := range oo.EvidenceByRule {
 				perSimEvidence[rule] += count
 			}

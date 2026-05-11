@@ -59,7 +59,7 @@ func makeProposalEnvelope(
 		MsgID:   msgID,
 		Data:    encoded,
 	}
-	sig, err := spectypes.SignSSVMessage(signerKey, ssvMsg)
+	sig, err := signRSAWithCache(signerKey, ssvMsg)
 	if err != nil {
 		return nil, fmt.Errorf("qbft adapter: sign proposal: %w", err)
 	}
