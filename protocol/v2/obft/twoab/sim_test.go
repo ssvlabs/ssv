@@ -288,6 +288,26 @@ func (s *sim) runPhase2bCanonical() []*Onion2b {
 	return out
 }
 
+// withObserver replaces s.instances[op] with a fresh Instance wired to
+// the supplied EvidenceObserver. The replacement Instance shares the
+// sim's config + pub-share map but starts with empty state, so callers
+// should call withObserver before any Observe* / Apply* on that op.
+//
+// Used by Phase-I evidence-observer tests to assert one-fire-per-
+// (Rule, OperatorID, Layer) semantics without rebuilding the cluster.
+func (s *sim) withObserver(op OperatorID, observer EvidenceObserver) {
+	s.t.Helper()
+	inst, err := NewInstance(
+		s.cfg, op,
+		NewStubSigner(s.cfg.QV(), s.pubShares[op]),
+		NewStubSigner(s.cfg.QV(), s.pubShares[op]),
+		NewStubIBE(s.cfg.QEnc()),
+		nil, s.pubShares, nil, observer,
+	)
+	require.NoError(s.t, err)
+	s.instances[op] = inst
+}
+
 // resolveAll calls Resolve on every Instance in the sim and returns
 // per-op outputs. Errors are returned in the second map; tests assert
 // against either the output map or the error map as appropriate.
