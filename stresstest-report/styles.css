@@ -106,7 +106,7 @@ header.page .header-controls button:hover {
 
 .desc {
   color: var(--text-muted);
-  margin: 0.2em 0 0.6em;
+  margin: 0.15em 0 0.3em;
   line-height: 1.55;
   max-width: 80ch;
 }
@@ -122,17 +122,17 @@ header.page .header-controls button:hover {
 }
 
 section.sweep {
-  padding-top: 2em;
-  margin-top: 0.5em;
+  padding-top: 0.8em;
+  margin-top: 0;
 }
 .sweep-head {
-  padding-bottom: 0.6em;
-  margin-bottom: 0.8em;
+  padding-bottom: 0.4em;
+  margin-bottom: 0.3em;
   border-bottom: 1px solid var(--border);
 }
 .sweep-head h2 {
-  margin: 0 0 0.2em;
-  font-size: 1.4em;
+  margin: 0 0 0.15em;
+  font-size: 1.3em;
 }
 
 /* ---- Sticky TOC (two-row) ---- */
@@ -143,15 +143,19 @@ nav.toc {
   z-index: 10;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(8px);
-  padding: 0.4em 0 0.3em;
-  margin: 0 0 0.4em;
+  padding: 0.4em 0 0.35em;
+  margin: 0 0 0.25em;
   border-bottom: 1px solid var(--border);
 }
 nav.toc .toc-row {
   display: flex;
   gap: 0.35em;
   flex-wrap: wrap;
-  padding: 0.1em 0;
+  align-items: center;
+  justify-content: center;
+}
+nav.toc .toc-row + .toc-row {
+  margin-top: 0.3em;
 }
 nav.toc .toc-row.sweeps a {
   display: inline-block;
@@ -174,17 +178,11 @@ nav.toc .toc-row.sweeps a.active {
   color: white;
   border-color: var(--accent);
 }
-nav.toc .toc-row.groups {
-  margin-top: 0.1em;
-  padding-top: 0.1em;
-  min-height: 1.4em;
-  align-items: center;
-}
 nav.toc .toc-row.groups a {
   font-size: 0.72em;
   color: var(--text-muted);
   text-decoration: none;
-  padding: 0.18em 0.5em;
+  padding: 0.22em 0.7em;
   border-radius: 4px;
   background: transparent;
   border: 1px solid transparent;
@@ -216,44 +214,11 @@ nav.toc .toc-row.groups .scope-divider {
   border-left: 1px solid #e8d4c5;
 }
 
-nav.toc .toc-row.filter {
-  margin-top: 0.1em;
-  padding-top: 0.1em;
-  min-height: 1.4em;
-}
-nav.toc .scenario-filter {
-  flex: 1;
-  font: inherit;
-  font-size: 0.78em;
-  padding: 0.22em 0.65em;
-  border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  background: var(--surface);
-  color: #0f172a;
-  outline: none;
-  min-width: 0;
-  transition: border-color 100ms ease, box-shadow 100ms ease;
-}
-nav.toc .scenario-filter:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
-}
-
-/* Filter feedback: dim non-matching matrix rows; hide packs whose
- * matrix has no remaining visible rows. */
-table.matrix tbody tr.filtered { display: none; }
-details.group-pack.filtered-out {
-  opacity: 0.5;
-}
-details.group-pack.filtered-out summary {
-  font-style: italic;
-}
-
 /* ---- Scope heading (softer than the old dark banner) ---- */
 
 .scope-heading {
-  margin: 1.5em 0 0.6em;
-  padding: 0.45em 0.7em;
+  margin: 0.7em 0 0.3em;
+  padding: 0.35em 0.7em;
   font-size: 0.8em;
   font-weight: 600;
   text-transform: uppercase;
@@ -272,7 +237,7 @@ details.group-pack.filtered-out summary {
 /* ---- Group pack: <details> card ---- */
 
 details.group-pack {
-  margin: 1.1em 0;
+  margin: 0.5em 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;

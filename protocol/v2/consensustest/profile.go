@@ -16,8 +16,8 @@ const (
 	ModeCorrectness Mode = "correctness"
 
 	// ModeStress — varied seeds, jittered network, many iterations.
-	// Soft assertions: only framework-level safety invariants. Emits the
-	// consensustest-report.
+	// Soft assertions: only framework-level safety invariants. Run via
+	// `make stresstest`; writes data.js into stresstest-report/.
 	ModeStress Mode = "stress"
 )
 

@@ -1,13 +1,13 @@
 // Package reporting writes the consensustest comparison report data as a
 // small JavaScript bootstrap file (`data.js`) consumed by the static UI
-// in `consensustest-reports/` (index.html + app.js + styles.css).
+// in `stresstest-report/` (index.html + app.js + styles.css).
 //
 // Splitting data from rendering means iteration on the UI is just
 // "edit app.js / styles.css → refresh browser" — no test rerun needed.
-// Re-running the test (`make consensustest-report`) only regenerates
+// Re-running the test (`make stresstest`) only regenerates
 // data.js with fresh stats.
 //
-// The static UI files are checked into git at `consensustest-reports/`;
+// The static UI files are checked into git at `stresstest-report/`;
 // `data.js` is gitignored.
 //
 // Usage from a test:
@@ -18,7 +18,7 @@
 //	    Sweeps: sweepResults, Iterations: 100,
 //	    Wallclock: elapsed,
 //	}
-//	reporting.WriteReportData(c, "./consensustest-reports")
+//	reporting.WriteReportData(c, "./stresstest-report")
 package reporting
 
 import (
@@ -52,7 +52,7 @@ func Applicable(c ct.BatchCell) bool { return c.Iterations > 0 }
 // WriteReportData writes <dir>/data.js containing a `window.REPORT_DATA = {...}`
 // assignment consumed by the static UI in <dir>. The companion files
 // (index.html, app.js, styles.css) are checked into git at
-// `consensustest-reports/` and not touched by this function.
+// `stresstest-report/` and not touched by this function.
 func WriteReportData(c Comparison, dir string) error {
 	if len(c.Sweeps) == 0 {
 		return fmt.Errorf("reporting: WriteReportData: no sweeps")

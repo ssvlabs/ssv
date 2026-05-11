@@ -47,9 +47,9 @@ go.work.sum
 
 # consensustest report — the static UI (index.html / app.js / styles.css)
 # is tracked; only the generated data file is ignored. Regenerate with
-# `make consensustest-report`.
-consensustest-reports/data.js
-**/consensustest-reports/data.js
+# `make stresstest`.
+stresstest-report/data.js
+**/stresstest-report/data.js
 
 # TLA+ tooling artifacts (download separately, not committed)
 tla/tla2tools.jar

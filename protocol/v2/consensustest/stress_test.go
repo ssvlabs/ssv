@@ -18,7 +18,7 @@ import (
 // It runs DefaultSweeps over every catalog scenario opted into
 // ModeStress (currently all 29 — see Phase 2) for both protocols and
 // writes a `data.js` file consumed by the static UI in
-// `consensustest-reports/` (index.html + app.js + styles.css, all
+// `stresstest-report/` (index.html + app.js + styles.css, all
 // tracked in git). Refreshing index.html in a browser re-renders from
 // the new data.js without rerunning this test.
 //
@@ -32,7 +32,7 @@ import (
 //
 // Usage:
 //
-//	make consensustest-report
+//	make stresstest
 //
 // Or directly:
 //
@@ -57,7 +57,7 @@ import (
 func TestStress(t *testing.T) {
 	dir := os.Getenv("REPORT_DIR")
 	if dir == "" {
-		t.Skip("REPORT_DIR not set; skipping report generation. Run via `make consensustest-report` to populate.")
+		t.Skip("REPORT_DIR not set; skipping report generation. Run via `make stresstest` to populate.")
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 

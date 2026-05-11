@@ -74,7 +74,7 @@ protocol/v2/consensustest/                       FRAMEWORK
 |---|---|---|
 | `go test ./protocol/v2/consensustest/...` | Default suite (stub-crypto, all phases) | ~3-4 s |
 | `make consensustest-real-bls` | Real-BLS suite (build tag `real_bls`) — actual threshold-BLS + tlock IBE end-to-end at n=4,7,10,13 | ~17 s |
-| `make consensustest-report` | Generates a single self-contained HTML comparison report at `./consensustest-reports/index.html` (5 curated sweeps × OBFT/QBFT × 100 iterations; scrollable SPA with detail + trend panels per sweep) | ~75 s |
+| `make stresstest` | Generates a single self-contained HTML comparison report at `./stresstest-report/index.html` (5 curated sweeps × OBFT/QBFT × 100 iterations; scrollable SPA with detail + trend panels per sweep) | ~75 s |
 
 ### Stub-BLS vs real-BLS modes
 
@@ -129,11 +129,11 @@ Spec-test key generation (`Testing{4,7,10,13}SharesSet`) is cached process-wide 
 
 ### Reporting
 
-`make consensustest-report` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes `./consensustest-reports/data.js` (a `window.REPORT_DATA = {...}` script). The static UI files in `consensustest-reports/` (`index.html`, `app.js`, `styles.css` — all tracked in git) read that and render a scrollable SPA: the canonical sweep gets a detail layout (summary matrix + four Chart.js panels — success rate, latency P50/P90/P99, bandwidth stacked-by-kind, P99-vs-success scatter); multi-point sweeps get a trend layout (three line charts — success rate / P99 latency / bandwidth median, plotted against the swept axis with one line per (scenario, protocol)).
+`make stresstest` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes `./stresstest-report/data.js` (a `window.REPORT_DATA = {...}` script). The static UI files in `stresstest-report/` (`index.html`, `app.js`, `styles.css` — all tracked in git) read that and render a scrollable SPA: the canonical sweep gets a detail layout (summary matrix + four Chart.js panels — success rate, latency P50/P90/P99, bandwidth stacked-by-kind, P99-vs-success scatter); multi-point sweeps get a trend layout (three line charts — success rate / P99 latency / bandwidth median, plotted against the swept axis with one line per (scenario, protocol)).
 
 Edit the UI files and refresh the browser — no test rerun needed. Re-run the make target only when you want fresh stats.
 
-Override defaults: `ITERATIONS=1000 make consensustest-report` (rare-event scenarios, ~12-15 min); `REPORT_DIR=path make consensustest-report` (custom output dir).
+Override defaults: `ITERATIONS=1000 make stresstest` (rare-event scenarios, ~12-15 min); `REPORT_DIR=path make stresstest` (custom output dir).
 
 See [docs/CONSENSUSTEST-REPORT.md](CONSENSUSTEST-REPORT.md) for the per-chart interpretation guide and how to add new sweeps.
 

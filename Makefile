@@ -111,10 +111,11 @@ consensustest-with-real-bls:
 	@echo "Running consensustest real-BLS suite"
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
-# consensustest-report runs the multi-sim batch-comparison framework
+# stresstest runs the stress-tier batch-comparison framework
 # (5 curated sweeps × OBFT/QBFT × ITERATIONS iterations) and writes
-# per-(sweep, point) HTML / CSV / Markdown reports plus a top-level
-# index.html to REPORT_DIR (default ./consensustest-reports).
+# data.js into REPORT_DIR (default ./stresstest-report) — consumed by
+# the static UI (index.html + app.js + styles.css) already in that
+# folder.
 #
 # Iteration count: override via ITERATIONS (default 100). 100 gives
 # stable P99 stats for success-rate ≥ 50% scenarios; bump to 1000 for
@@ -123,13 +124,13 @@ consensustest-with-real-bls:
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
 #
-# See docs/CONSENSUSTEST-REPORT.md for the framework's usage guide and
+# See docs/STRESSTEST-REPORT.md for the usage guide and
 # docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
-REPORT_DIR ?= ./consensustest-reports
+REPORT_DIR ?= ./stresstest-report
 ITERATIONS ?= 100
-.PHONY: consensustest-report
-consensustest-report:
-	@echo "Generating consensustest reports to $(abspath $(REPORT_DIR)) (ITERATIONS=$(ITERATIONS))"
+.PHONY: stresstest
+stresstest:
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (ITERATIONS=$(ITERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) ITERATIONS=$(ITERATIONS) \
 		go test -tags "blst_enabled lfs" -timeout 30m -run TestStress -v ./protocol/v2/consensustest/
 

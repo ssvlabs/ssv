@@ -5,7 +5,7 @@
 Split the protocol tests into two complementary tiers that share one catalog of scenarios.
 
 - **Correctness** — deterministic params, fixed seed, `ConstantDelay`, hard assertions per scenario. Fast. Never flaky. Runs in CI. No stats / no report.
-- **Stress** — stochastic params, varied seeds, jittered network, many iterations. Soft assertions (framework-level safety only). Slow. Run on-demand / nightly. Emits `consensustest-report`.
+- **Stress** — stochastic params, varied seeds, jittered network, many iterations. Soft assertions (framework-level safety only). Slow. Run on-demand / nightly via `make stresstest`. Writes `stresstest-report/data.js` for the static UI to render.
 
 Both tiers cover the same kinds of scenarios (normal + failure). The tier-level difference is *how* we run them, not *what* we run.
 
@@ -85,7 +85,7 @@ OBFT adapter populates `CommitAttestation.EquivocationChecked` and counts `Rule2
    - All 29 scenarios are pure config mutators (no randomness, no in-body assertions) — `*rand.Rand` threading was unnecessary in practice.
    - All declared `Expect` for both protocols (29 OBFT + 29 QBFT entries). No expansion to `Expectation{Kind,Reason}` was needed.
    - All 29 opted into both modes — annotated with `Modes: []Mode{ModeCorrectness, ModeStress}`.
-6. Verified `make consensustest-report` regenerates `data.js` unchanged.
+6. Verified `make stresstest` regenerates `data.js` unchanged.
 
 ### Phase 3 — Correctness entry point — DONE
 
@@ -93,7 +93,7 @@ Added `TestCorrectness` in `correctness_test.go`. Filters Catalog via `Scenarios
 
 ### Phase 4 — Stress entry point reconciliation — DONE
 
-Renamed `TestGenerateBatchReport` → `TestStress` (file: `batch_report_test.go` → `stress_test.go`, via `git mv` to preserve history). Filters Catalog via `ScenariosWithMode(Catalog, ModeStress)`. Makefile's `consensustest-report` target updated. `WriteReportData` is called only by `TestStress` — confirmed by grep.
+Renamed `TestGenerateBatchReport` → `TestStress` (file: `batch_report_test.go` → `stress_test.go`, via `git mv` to preserve history). Filters Catalog via `ScenariosWithMode(Catalog, ModeStress)`. Makefile's `stresstest` target updated. `WriteReportData` is called only by `TestStress` — confirmed by grep.
 
 ### Phase 5 — Network model — DONE
 

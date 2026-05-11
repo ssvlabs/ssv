@@ -210,7 +210,7 @@ Per commit: run `go test ./protocol/v2/consensustest/...` to confirm no regressi
 - New framework files: `batch.go`, `stats.go`, `sweep.go`, `batch_report_test.go`.
 - New network models in `network.go`: `LogNormalDelay`, `LossyNetwork`, `CorrelatedLinkDelay`. Optional: `SizedDelay`.
 - New reporting files: `reporting/batch_run.go`, plus chart-renderer additions to `reporting/html.go`.
-- New make target: `make consensustest-report` (originally introduced as `consensustest-batch-report`; consolidated post-implementation since this became the canonical comparison report).
+- New make target: `make stresstest` (originally introduced as `consensustest-batch-report`; consolidated post-implementation since this became the canonical comparison report).
 - New doc: `docs/CONSENSUSTEST-REPORT.md` (originally `CONSENSUSTEST-BATCH.md`).
 
 Estimated total: ~13–16 hours / 6-8 commits.
