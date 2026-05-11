@@ -313,22 +313,93 @@ func TestDefaultBroadcastBudget_NonPositiveBTT_Rejected(t *testing.T) {
 
 // --- NewInstance ---
 
+// newInstanceForConfig is a helper for Config-focused tests that need a
+// minimally-wired Instance. Sim-level tests use newSim instead (it wires
+// every cluster member's Instance + stub deps in one shot).
+func newInstanceForConfig(t *testing.T, c *Config, ownOp OperatorID) (*Instance, error) {
+	t.Helper()
+	if c == nil {
+		return NewInstance(nil, ownOp, nil, nil, nil, nil, nil, nil, nil)
+	}
+	pubShares := make(map[OperatorID][]byte, len(c.Operators))
+	for _, op := range c.Operators {
+		pubShares[op] = []byte{byte(op)}
+	}
+	return NewInstance(
+		c, ownOp,
+		NewStubSigner(c.QV(), pubShares[ownOp]),
+		NewStubSigner(c.QV(), pubShares[ownOp]),
+		NewStubIBE(c.QEnc()),
+		nil, // clusterPubKey — stub ignores
+		pubShares,
+		nil, // ibePubKeyShares — Option A
+		nil, // evidenceObserver
+	)
+}
+
 func TestNewInstance_RejectsNilConfig(t *testing.T) {
-	_, err := NewInstance(nil, 1)
+	_, err := newInstanceForConfig(t, nil, 1)
 	require.ErrorIs(t, err, ErrNilConfig)
 }
 
 func TestNewInstance_RejectsInvalidConfig(t *testing.T) {
 	c := healthyConfig()
 	c.F = 0 // invalid
-	_, err := NewInstance(c, 1)
+	_, err := newInstanceForConfig(t, c, 1)
 	require.ErrorContains(t, err, "byzantine bound F")
 }
 
 func TestNewInstance_HealthyConfigAccepted(t *testing.T) {
 	c := healthyConfig()
-	inst, err := NewInstance(c, 1)
+	inst, err := newInstanceForConfig(t, c, 1)
 	require.NoError(t, err)
 	require.Equal(t, c, inst.Config())
 	require.Equal(t, OperatorID(1), inst.OwnOperatorID())
+}
+
+func TestNewInstance_RejectsNilSigner(t *testing.T) {
+	c := healthyConfig()
+	_, err := NewInstance(c, 1, nil, nil, NewStubIBE(c.QEnc()), nil, map[OperatorID][]byte{}, nil, nil)
+	require.ErrorContains(t, err, "nil signer or ibe")
+}
+
+func TestNewInstance_RejectsNilIBE(t *testing.T) {
+	c := healthyConfig()
+	signer := NewStubSigner(c.QV(), nil)
+	_, err := NewInstance(c, 1, signer, signer, nil, nil, map[OperatorID][]byte{}, nil, nil)
+	require.ErrorContains(t, err, "nil signer or ibe")
+}
+
+func TestNewInstance_RejectsNilPubKeyShares(t *testing.T) {
+	c := healthyConfig()
+	signer := NewStubSigner(c.QV(), nil)
+	_, err := NewInstance(c, 1, signer, signer, NewStubIBE(c.QEnc()), nil, nil, nil, nil)
+	require.ErrorContains(t, err, "nil pubKeyShares")
+}
+
+func TestNewInstance_RejectsOwnOpNotInCluster(t *testing.T) {
+	c := healthyConfig()
+	pubShares := map[OperatorID][]byte{1: {1}, 2: {2}, 3: {3}, 4: {4}}
+	signer := NewStubSigner(c.QV(), nil)
+	_, err := NewInstance(c, 99, signer, signer, NewStubIBE(c.QEnc()), nil, pubShares, nil, nil)
+	require.ErrorContains(t, err, "not in cluster")
+}
+
+func TestNewInstance_RejectsMissingPubKeyShare(t *testing.T) {
+	c := healthyConfig()
+	// Missing the share for op 4.
+	pubShares := map[OperatorID][]byte{1: {1}, 2: {2}, 3: {3}}
+	signer := NewStubSigner(c.QV(), nil)
+	_, err := NewInstance(c, 1, signer, signer, NewStubIBE(c.QEnc()), nil, pubShares, nil, nil)
+	require.ErrorContains(t, err, "no pub-key share")
+}
+
+func TestNewInstance_TagSignerDefaultsToSigner(t *testing.T) {
+	// When tagSigner == nil, NewInstance reuses signer (Option A).
+	c := healthyConfig()
+	pubShares := map[OperatorID][]byte{1: {1}, 2: {2}, 3: {3}, 4: {4}}
+	signer := NewStubSigner(c.QV(), nil)
+	inst, err := NewInstance(c, 1, signer, nil, NewStubIBE(c.QEnc()), nil, pubShares, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, inst)
 }

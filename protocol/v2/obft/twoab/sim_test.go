@@ -1,0 +1,188 @@
+package twoab
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+// Test scaffolding shared across twoab/ unit tests. Mirrors base/sim_test.go
+// in shape; the simulator will grow as Phases F-H land (BuildVerdict /
+// ObserveVerdict / BuildOnion2b / ObserveOnion2b / Resolve hooks).
+//
+// At Phase E, the sim helper builds a fully-wired Instance per operator
+// using the StubSigner / StubIBE stubs so tests run without real BLS
+// machinery. Cryptographic correctness is exercised separately in
+// blsbackend tests.
+
+// observedEarly is a Phase-1-bundle first-observation offset comfortably
+// within the accept-eligible window (well before T_accept_max).
+// Healthy-config T_verdict_start = 1.6s, T_accept_max = 1.8s, T_commit = 2.0s.
+const observedEarly = 1200 * time.Millisecond
+
+// observedAuthOnly is past T_accept_max (1.8s) but before T_commit (2.0s)
+// — bundle goes into auth-only retention.
+const observedAuthOnly = 1900 * time.Millisecond
+
+// observedLate is past T_commit — bundle is rejected with
+// ErrLatePhase1Bundle.
+const observedLate = 2100 * time.Millisecond
+
+// sim is a minimal multi-operator harness for protocol-level tests.
+type sim struct {
+	t         *testing.T
+	n, f, K   int
+	cfg       *Config
+	pubShares map[OperatorID][]byte
+	instances map[OperatorID]*Instance
+
+	// canonical Phase-1 V's per layer (populated by tests as needed).
+	candidates map[int]Value
+}
+
+// newSim builds an n-operator cluster at f=1, K=min(4, n) with stub
+// signers + IBE wired into every Instance. Layer leaders rotate by op ID
+// (L_0 leader = op1, L_1 = op2, ..., L_{K-1} = op_K), modeling the
+// simplest layer assignment.
+func newSim(t *testing.T, n int) *sim {
+	t.Helper()
+	require.GreaterOrEqual(t, n, 4, "sim requires n >= 4 (3f+1 at f=1)")
+
+	f := 1
+	K := 4
+	if n < K {
+		K = n
+	}
+
+	c := healthyConfig()
+	// Adjust the cluster to size n if needed (healthyConfig is n=4).
+	if n != 4 {
+		ops := make([]OperatorID, n)
+		layers := make([]LayerSpec, K)
+		btt := 200 * time.Millisecond
+		tCommit := 2000 * time.Millisecond
+		tVerdictStart := tCommit - 400*time.Millisecond
+		budgets, err := DefaultBroadcastBudget(K, btt, tVerdictStart)
+		require.NoError(t, err)
+		for k := 0; k < n; k++ {
+			ops[k] = OperatorID(k + 1)
+		}
+		for k := 0; k < K; k++ {
+			layers[k] = LayerSpec{
+				Leader:          ops[k],
+				FetchAt:         tVerdictStart - budgets[k],
+				BroadcastBudget: budgets[k],
+			}
+			if k == K-1 {
+				layers[k].FetchAt = 0
+			}
+		}
+		c = &Config{
+			Height:    c.Height,
+			ClusterID: c.ClusterID,
+			Operators: ops,
+			F:         f,
+			Layers:    layers,
+			TCommit:   tCommit,
+			Delta2a:   400 * time.Millisecond,
+			Delta2b:   400 * time.Millisecond,
+			Delta3:    250 * time.Millisecond,
+			BTT:       btt,
+		}
+	}
+	require.NoError(t, c.Validate())
+
+	// Build a stub-signer-friendly pubkey-share map: one share per
+	// operator, where the share is derived deterministically from the
+	// operator's ID (so verification works against a known shared key).
+	pubShares := make(map[OperatorID][]byte, n)
+	for _, op := range c.Operators {
+		pubShares[op] = []byte{byte(op)}
+	}
+
+	candidates := make(map[int]Value, K)
+	for k := 0; k < K; k++ {
+		candidates[k] = Value("L" + string(rune('0'+k)) + "-V")
+	}
+
+	s := &sim{
+		t:          t,
+		n:          n,
+		f:          f,
+		K:          K,
+		cfg:        c,
+		pubShares:  pubShares,
+		instances:  make(map[OperatorID]*Instance, n),
+		candidates: candidates,
+	}
+
+	for _, op := range c.Operators {
+		inst, err := NewInstance(
+			c, op,
+			NewStubSigner(c.QV(), pubShares[op]),
+			NewStubSigner(c.QV(), pubShares[op]),
+			NewStubIBE(c.QEnc()),
+			nil, // clusterPubKey — stub VerifyAggregate ignores it
+			pubShares,
+			nil, // ibePubKeyShares — Option A
+			nil, // evidenceObserver — set per test as needed
+		)
+		require.NoError(t, err)
+		s.instances[op] = inst
+	}
+	return s
+}
+
+// allOperators returns the cluster's full operator set.
+func (s *sim) allOperators() []OperatorID {
+	out := make([]OperatorID, len(s.cfg.Operators))
+	copy(out, s.cfg.Operators)
+	return out
+}
+
+// leaderAt returns the designated leader at layer k.
+func (s *sim) leaderAt(layer int) OperatorID {
+	return s.cfg.Layers[layer].Leader
+}
+
+// deliverPhase1 has the leader at `layer` build a bundle for `value`,
+// then delivers it (via ObservePhase1Bundle at the given offset) to each
+// of `recipients` (which may include the leader for self-observe).
+func (s *sim) deliverPhase1(layer int, value Value, recipients []OperatorID, observedOffset time.Duration) *Phase1Bundle {
+	s.t.Helper()
+	leader := s.leaderAt(layer)
+	b, err := s.instances[leader].BuildPhase1Bundle(layer, value)
+	require.NoError(s.t, err)
+	for _, op := range recipients {
+		err := s.instances[op].ObservePhase1Bundle(b, observedOffset)
+		require.NoError(s.t, err, "op %d ObservePhase1Bundle", op)
+	}
+	return b
+}
+
+// deliverPhase1Equivocation has the (presumed-byzantine) leader build
+// TWO distinct bundles V_a and V_b and selectively deliver them to
+// different subsets of recipients. Returns both built bundles for
+// further use.
+func (s *sim) deliverPhase1Equivocation(
+	layer int,
+	vA, vB Value,
+	recipientsA, recipientsB []OperatorID,
+	observedOffset time.Duration,
+) (bA, bB *Phase1Bundle) {
+	s.t.Helper()
+	leader := s.leaderAt(layer)
+	var err error
+	bA, err = s.instances[leader].BuildPhase1Bundle(layer, vA)
+	require.NoError(s.t, err)
+	bB, err = s.instances[leader].BuildPhase1Bundle(layer, vB)
+	require.NoError(s.t, err)
+	for _, op := range recipientsA {
+		require.NoError(s.t, s.instances[op].ObservePhase1Bundle(bA, observedOffset))
+	}
+	for _, op := range recipientsB {
+		require.NoError(s.t, s.instances[op].ObservePhase1Bundle(bB, observedOffset))
+	}
+	return bA, bB
+}
