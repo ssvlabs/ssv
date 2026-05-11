@@ -44,13 +44,16 @@ import (
 //
 // Estimated runtime at CLUSTER_SIZE=4 and default 100 iterations:
 //
-//	canonical          ~8s    (29 scenarios × 3 protocols × 100 sims)
-//	btt_degradation    ~30s   (× 4 BTT values)
-//	heavy_tail         ~30s   (× 4 sigmas)
-//	loss               ~30s   (× 4 loss rates)
-//	TOTAL              ~100s  on a typical dev machine (jittered network).
+//	p2p_ideal              ~8s    (29 scenarios × 3 protocols × 100 sims)
+//	p2p_normal             ~8s    (single point at σ=0.5)
+//	p2p_increasing_BTT     ~45s   (× 6 BTT values)
+//	p2p_heavy_tail         ~45s   (× 6 sigmas)
+//	p2p_packet_loss        ~38s   (× 5 loss rates)
+//	p2p_correlated_delays  ~30s   (× 4 BadLinkProb values)
+//	TOTAL                  ~3 min on a typical dev machine.
 //
-// At ITERATIONS=1000, scale linearly (~12-15 min). Above that, consider
+// At ITERATIONS=1000, scale linearly (~30 min). At ITERATIONS=10000
+// (the Makefile default), expect ~90-100 min. Above that, consider
 // parallelizing across sweeps (currently sequential — per-batch is
 // already parallelized internally).
 //
@@ -85,7 +88,7 @@ func TestStress(t *testing.T) {
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
 	protocols := []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations, clusterSize)
-	require.Len(t, sweeps, 4)
+	require.Len(t, sweeps, 6)
 
 	protocolNames := make([]string, len(protocols))
 	for i, p := range protocols {

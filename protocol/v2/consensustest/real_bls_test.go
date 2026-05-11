@@ -139,7 +139,7 @@ func TestRealBLS_Seeds(t *testing.T) {
 		t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
 			cfg := realBLSConfig(t, 4, 200*time.Millisecond)
 			cfg.Seed = seed
-			cfg.Network = ct.JitteredDelay{D: 200 * time.Millisecond, Jitter: 50 * time.Millisecond}
+			cfg.Network = ct.LogNormalDelay{Median: 100 * time.Millisecond, Sigma: 0.5}
 			out, err := obftadapter.Protocol{}.Run(cfg)
 			require.NoError(t, err)
 			rep := ct.ComputeSafetyReport(out)

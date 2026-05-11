@@ -100,7 +100,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	// of work to a single sim, end-of-batch stragglers don't idle cores
 	// (the last cell's iterations spread across all workers instead of
 	// monopolizing a single worker). Net wall-time gain is largest for
-	// sweeps with high per-cell timing variance (heavy_tail, loss).
+	// sweeps with high per-cell timing variance (p2p_heavy_tail, p2p_packet_loss).
 	type job struct {
 		cellIdx int
 		iter    int

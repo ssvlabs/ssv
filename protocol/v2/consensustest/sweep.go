@@ -55,34 +55,38 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 }
 
 // DefaultSweeps returns the curated set of comparison sweeps the stress
-// driver runs:
+// driver runs. Every sweep models per-message propagation with
+// LogNormalDelay — the production-shaped distribution — anchored at
+// Median = BTT/2 (the spec's typical-mesh P99 propagation per
+// OBFT.md §Setting). Pure JitteredDelay is no longer used.
 //
-//  1. Canonical — single point at the spec's reference config
-//     (BTT=200ms, JitteredDelay) at cluster size n. The baseline.
-//  2. Network degradation — varies BTT ∈ {100ms, 200ms, 400ms, 600ms}
-//     at fixed n under JitteredDelay (per-BTT scaled jitter). Reveals
-//     envelope-fit curves.
-//  3. Heavy-tail propagation — varies LogNormalDelay Sigma ∈
-//     {0.1, 0.3, 0.5, 0.7} at fixed n, Median=BTT/2. Surfaces
-//     P99/P50-ratio effects on OBFT's hard B_k cutoff. (Delay
-//     distribution itself is the variable being studied, so this is
-//     the one sweep that does not layer JitteredDelay underneath.)
-//  4. Loss — varies LossyNetwork LossRate ∈ {0, 0.01, 0.05, 0.10}
-//     at fixed n, BurstFactor=5. Inner is JitteredDelay so loss is
-//     measured against the same realistic baseline as the other sweeps.
+//  1. p2p_ideal — single point at BTT=200ms with LogNormal σ=0.1
+//     (effectively constant; low-noise control baseline).
+//  2. p2p_normal — single point at BTT=200ms with LogNormal σ=0.5
+//     (production-shaped baseline; P99/P50 ≈ 3.2× — matches the
+//     mainnet floor cited in network.go's LogNormalDelay docstring).
+//  3. p2p_increasing_BTT — varies BTT ∈ {100, 200, 400, 600, 800, 1000} ms
+//     at fixed n; per-point LogNormal{Median: BTT/2, σ: 0.5} so the
+//     relative tail shape stays constant and only the configured BTT
+//     budget varies. Probes the protocol's BTT-sizing envelope.
+//  4. p2p_heavy_tail — varies LogNormal σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6,
+//     0.7} at fixed BTT=200ms, Median=BTT/2. Surfaces P99/P50-ratio
+//     effects on OBFT's hard B_k cutoff vs QBFT's round-change
+//     tolerance.
+//  5. p2p_packet_loss — varies LossyNetwork LossRate ∈ {0, 0.01, 0.05,
+//     0.10, 0.20} at fixed n, BurstFactor=5. Inner is LogNormal
+//     {Median: BTT/2, σ: 0.5} so loss is measured against the same
+//     production baseline as p2p_normal.
+//  6. p2p_correlated_delays — varies CorrelatedLinkDelay BadLinkProb ∈
+//     {0, 0.05, 0.10, 0.20} at fixed BadLinkMultiplier=3, BurstMessages
+//     =20, inner LogNormal{Median: BTT/2, σ: 0.5}. Probes per-pair
+//     sustained-slow link behaviour that pure iid LogNormal misses.
 //
 // All sweeps run at the same cluster size n, share Iterations, and run
 // over the same Scenarios / Protocols matrix; only the per-point
 // Network / SimConfig differs. To compare across cluster sizes, re-run
 // the driver with different CLUSTER_SIZE values (each run produces its
 // own data.js).
-//
-// Stress-tier network choice: JitteredDelay with ±25% jitter around BTT
-// is the universal stress baseline for every sweep except heavy-tail
-// (which varies the delay distribution by design). Loss layers
-// LossyNetwork on top of the jittered baseline; the propagation
-// scenarios that wrap PerReceiverDelay preserve whatever inner model
-// their sweep set.
 //
 // Returns nil if Scenarios or Protocols is empty (defensive — caller
 // driver test should always pass non-empty lists).
@@ -91,10 +95,12 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iterations int, n
 		return nil
 	}
 	return []Sweep{
-		canonicalSweep(scenarios, protocols, iterations, n),
-		bttDegradationSweep(scenarios, protocols, iterations, n),
-		heavyTailSweep(scenarios, protocols, iterations, n),
-		lossSweep(scenarios, protocols, iterations, n),
+		p2pIdealSweep(scenarios, protocols, iterations, n),
+		p2pNormalSweep(scenarios, protocols, iterations, n),
+		p2pIncreasingBTTSweep(scenarios, protocols, iterations, n),
+		p2pHeavyTailSweep(scenarios, protocols, iterations, n),
+		p2pPacketLossSweep(scenarios, protocols, iterations, n),
+		p2pCorrelatedDelaysSweep(scenarios, protocols, iterations, n),
 	}
 }
 
@@ -107,20 +113,32 @@ func withClusterSize(cfg SimConfig, n int) SimConfig {
 	return cfg
 }
 
-func canonicalSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+// productionLogNormal returns the production-shaped LogNormal delay
+// model used as the baseline for every stress sweep except p2p_ideal
+// and p2p_heavy_tail (which pick their own σ along the axis).
+// Median = BTT/2 mirrors the spec's typical-mesh P99 propagation per
+// OBFT.md §Setting (BTT = P99_propagation + clock skew δ).
+func productionLogNormal(btt time.Duration) LogNormalDelay {
+	return LogNormalDelay{Median: btt / 2, Sigma: 0.5}
+}
+
+func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
 	btt := 200 * time.Millisecond
 	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-	base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
+	// σ=0.1 makes the LogNormal effectively constant — keeps this baseline
+	// as a low-noise control so deviations in other sweeps are attributable
+	// to their axis variable, not to baseline jitter.
+	base.Network = LogNormalDelay{Median: btt / 2, Sigma: 0.1}
 	nStr := strconv.Itoa(n)
 	return Sweep{
-		Name:        "canonical",
-		Title:       "Normal operations",
-		Params:      []string{"n=" + nStr, "BTT=200ms"},
-		Description: "The spec's canonical config — every other sweep's baseline.",
+		Name:        "p2p_ideal",
+		Title:       "Ideal conditions",
+		Params:      []string{"n=" + nStr, "BTT=200ms", "LogNormal σ=0.1"},
+		Description: "Low-noise control baseline (LogNormal σ=0.1 ≈ constant). Every other sweep is read relative to this.",
 		AxisLabel:   "",
 		Points: []SweepPoint{
 			{
-				Label: "n=" + nStr + " BTT=200ms",
+				Label: "n=" + nStr + " BTT=200ms σ=0.1",
 				Config: BatchConfig{
 					Iterations: iterations,
 					Base:       base,
@@ -132,18 +150,46 @@ func canonicalSweep(scenarios []Scenario, protocols []Protocol, iterations int, 
 	}
 }
 
-func bttDegradationSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pNormalSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+	btt := 200 * time.Millisecond
+	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+	base.Network = productionLogNormal(btt)
+	nStr := strconv.Itoa(n)
+	return Sweep{
+		Name:        "p2p_normal",
+		Title:       "Normal conditions",
+		Params:      []string{"n=" + nStr, "BTT=200ms", "LogNormal σ=0.5"},
+		Description: "Production-shaped baseline (LogNormal σ=0.5; P99/P50 ≈ 3.2× — mainnet floor). Heatmap colors derive from this sweep.",
+		AxisLabel:   "",
+		Points: []SweepPoint{
+			{
+				Label: "n=" + nStr + " BTT=200ms σ=0.5",
+				Config: BatchConfig{
+					Iterations: iterations,
+					Base:       base,
+					Scenarios:  scenarios,
+					Protocols:  protocols,
+				},
+			},
+		},
+	}
+}
+
+func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
 	btts := []time.Duration{
 		100 * time.Millisecond,
 		200 * time.Millisecond,
 		400 * time.Millisecond,
 		600 * time.Millisecond,
+		800 * time.Millisecond,
+		1000 * time.Millisecond,
 	}
 	pts := make([]SweepPoint, 0, len(btts))
 	for _, btt := range btts {
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-		// Jitter scales with BTT so the relative variance stays at ±25%.
-		base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
+		// Median scales with BTT (per-point production tail shape preserved):
+		// only the configured BTT budget varies along the axis.
+		base.Network = productionLogNormal(btt)
 		pts = append(pts, SweepPoint{
 			Label: "BTT=" + btt.String(),
 			Config: BatchConfig{
@@ -155,24 +201,24 @@ func bttDegradationSweep(scenarios []Scenario, protocols []Protocol, iterations 
 		})
 	}
 	return Sweep{
-		Name:        "btt_degradation",
-		Title:       "Network-degradation curves (BTT)",
-		Params:      []string{"n=" + strconv.Itoa(n)},
-		Description: "Reveals envelope-fit at each protocol's tolerance ceiling.",
+		Name:        "p2p_increasing_BTT",
+		Title:       "Increasing BTT",
+		Params:      []string{"n=" + strconv.Itoa(n), "LogNormal σ=0.5"},
+		Description: "BTT-degradation envelope under production-shaped tail (σ=0.5). Reveals where each protocol's window math falls apart.",
 		AxisLabel:   "BTT",
 		Points:      pts,
 	}
 }
 
-func heavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
-	sigmas := []float64{0.1, 0.3, 0.5, 0.7}
+func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
 	pts := make([]SweepPoint, 0, len(sigmas))
 	for _, sigma := range sigmas {
 		base := withClusterSize(DefaultProposerDutyConfig(200*time.Millisecond), n)
 		// Heavy-tail propagation: log-normal centered at BTT/2 (= typical
 		// P50 propagation per spec §Setting), with Sigma controlling tail
 		// fatness. P99/P50 ratio = exp(Sigma · 2.326): 1.27× / 2.01× /
-		// 3.20× / 5.09× at the four sample points.
+		// 2.54× / 3.20× / 4.03× / 5.09× at the six sample points.
 		base.Network = LogNormalDelay{Median: base.BTT / 2, Sigma: sigma}
 		pts = append(pts, SweepPoint{
 			Label: "Sigma=" + strconv.FormatFloat(sigma, 'f', 2, 64),
@@ -185,17 +231,17 @@ func heavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int, 
 		})
 	}
 	return Sweep{
-		Name:        "heavy_tail",
+		Name:        "p2p_heavy_tail",
 		Title:       "Heavy-tail propagation",
-		Params:      []string{"LogNormalDelay", "n=" + strconv.Itoa(n), "Median=BTT/2"},
+		Params:      []string{"LogNormalDelay", "n=" + strconv.Itoa(n), "BTT=200ms", "Median=BTT/2"},
 		Description: "Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance.",
 		AxisLabel:   "LogNormal sigma",
 		Points:      pts,
 	}
 }
 
-func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
-	rates := []float64{0, 0.01, 0.05, 0.10}
+func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+	rates := []float64{0, 0.01, 0.05, 0.10, 0.20}
 	pts := make([]SweepPoint, 0, len(rates))
 	for _, rate := range rates {
 		rate := rate
@@ -235,9 +281,8 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int
 		}
 		btt := 200 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-		// Stress-tier jitter under the loss model — matches the other
-		// non-network-varying sweeps. Loss adds on top.
-		base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
+		// Production-shaped baseline (matches p2p_normal); loss adds on top.
+		base.Network = productionLogNormal(btt)
 		pts = append(pts, SweepPoint{
 			Label: "loss=" + strconv.FormatFloat(rate, 'f', 2, 64),
 			Config: BatchConfig{
@@ -249,11 +294,70 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int
 		})
 	}
 	return Sweep{
-		Name:        "loss",
+		Name:        "p2p_packet_loss",
 		Title:       "Stochastic loss",
-		Params:      []string{"LossyNetwork", "JitteredDelay", "n=" + strconv.Itoa(n), "BurstFactor=5"},
-		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism.",
+		Params:      []string{"LossyNetwork", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "BurstFactor=5"},
+		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism. Inner delay is production-shaped (σ=0.5).",
 		AxisLabel:   "Loss rate",
+		Points:      pts,
+	}
+}
+
+func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+	// BadLinkProb axis spans the mainnet-calibrated 5–20% range cited in
+	// CorrelatedLinkDelay's docstring (network.go §CALIBRATE), with 0 as
+	// the no-correlation control point. Other params held at calibrated
+	// mid-range: BadLinkMultiplier=3 (bad link delivers in 3× baseline
+	// delay), BurstMessages=20 (~mid of the 10–50 dwell-time range).
+	probs := []float64{0, 0.05, 0.10, 0.20}
+	pts := make([]SweepPoint, 0, len(probs))
+	for _, prob := range probs {
+		prob := prob
+		// Per-sim CorrelatedLinkDelay (stateful per-pair Markov chains —
+		// must construct fresh per sim, just like LossyNetwork).
+		scenariosWithCorr := make([]Scenario, len(scenarios))
+		for i, s := range scenarios {
+			inner := s
+			scenariosWithCorr[i] = Scenario{
+				Name:  s.Name,
+				Title: s.Title,
+				Group: s.Group,
+				Modes: s.Modes,
+				Apply: func(cfg *SimConfig) {
+					if inner.Apply != nil {
+						inner.Apply(cfg)
+					}
+					if prob > 0 {
+						base := cfg.Network
+						if base == nil {
+							base = ConstantDelay{D: cfg.BTT}
+						}
+						cfg.Network = NewCorrelatedLinkDelay(base, prob, 3.0, 20)
+					}
+				},
+				Expect: s.Expect,
+				Note:   s.Note,
+			}
+		}
+		btt := 200 * time.Millisecond
+		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+		base.Network = productionLogNormal(btt)
+		pts = append(pts, SweepPoint{
+			Label: "badProb=" + strconv.FormatFloat(prob, 'f', 2, 64),
+			Config: BatchConfig{
+				Iterations: iterations,
+				Base:       base,
+				Scenarios:  scenariosWithCorr,
+				Protocols:  protocols,
+			},
+		})
+	}
+	return Sweep{
+		Name:        "p2p_correlated_delays",
+		Title:       "Correlated link delays",
+		Params:      []string{"CorrelatedLinkDelay", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "mult=3.0", "burst=20"},
+		Description: "Per-pair sustained-slow links over a production-shaped baseline. Captures the correlation iid LogNormal misses.",
+		AxisLabel:   "BadLinkProb",
 		Points:      pts,
 	}
 }

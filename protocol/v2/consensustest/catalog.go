@@ -4,9 +4,9 @@ package consensustest
 // declares a SimConfig modifier and per-protocol expectations sourced from
 // docs/BFT-comparison.md and docs/OBFT.md §Application.
 //
-// Scenarios are ordered roughly by failure-mode taxonomy: healthy → silent
-// leader → multi-silent → equivocation patterns → validity divergence →
-// OBFT-specific patterns (n/a for QBFT).
+// Scenarios are ordered roughly by failure-mode taxonomy: healthy →
+// propagation issues → silent operators → equivocation patterns →
+// validity divergence → OBFT-specific patterns (n/a for QBFT).
 //
 // Tiers: every catalog scenario opts into BOTH ModeCorrectness and
 // ModeStress (see docs/CONSENSUSTEST-SPLIT-PLAN.md). The Apply functions
@@ -15,12 +15,16 @@ package consensustest
 //   - TestCorrectness uses CorrectnessProfile (ConstantDelay): outcomes
 //     are deterministic, the test asserts the declared outcome class.
 //   - TestStress runs the curated DefaultSweeps at a single cluster
-//     size (CLUSTER_SIZE env, default 4). The canonical and
-//     btt_degradation sweeps use JitteredDelay; heavy_tail uses
-//     LogNormalDelay; loss wraps LossyNetwork over JitteredDelay. Many
-//     iterations; stats only. Cross-cluster-size comparison is done by
-//     re-running TestStress with different CLUSTER_SIZE values, not by
-//     a dedicated sweep.
+//     size (CLUSTER_SIZE env, default 4). Every sweep uses
+//     LogNormalDelay as its propagation model (production-shaped per
+//     OBFT.md §Setting): p2p_ideal at σ=0.1 (low-noise control),
+//     p2p_normal at σ=0.5 (production baseline), p2p_increasing_BTT and
+//     p2p_heavy_tail varying BTT and σ along their axes, p2p_packet_loss
+//     wrapping LossyNetwork over the production baseline, and
+//     p2p_correlated_delays wrapping CorrelatedLinkDelay over the same.
+//     Many iterations; stats only. Cross-cluster-size comparison is done
+//     by re-running TestStress with different CLUSTER_SIZE values, not
+//     by a dedicated sweep.
 //
 // A scenario that needs a specific network shape (e.g. MeshFlakiness's
 // PerReceiverDelay, AsymmetricPropagation_*'s per-receiver overrides)
@@ -46,6 +50,13 @@ var Catalog = []Scenario{
 	// Baseline
 	scenarioHealthy,
 
+	// Propagation issues
+	scenarioHV1SelectiveDelivery,
+	scenarioLateLeaderBroadcast,
+	scenarioAsymmetricPropagation_FSlow_Success,
+	scenarioAsymmetricPropagation_FPlus1Slow_Miss,
+	scenarioMeshFlakiness,
+
 	// Silent operators
 	scenarioSilentLeaderL0,
 	scenarioMultiSilent,
@@ -70,13 +81,6 @@ var Catalog = []Scenario{
 	scenarioValidityDivergence_LeaderNV_PassiveByz,
 	scenarioHostInvalidUntilL1,
 	scenarioHostFlipMidSlot,
-
-	// Propagation issues
-	scenarioHV1SelectiveDelivery,
-	scenarioLateLeaderBroadcast,
-	scenarioAsymmetricPropagation_FSlow_Success,
-	scenarioAsymmetricPropagation_FPlus1Slow_Miss,
-	scenarioMeshFlakiness,
 
 	// OBFT-specific attacks
 	scenarioCrossSigningRule1,

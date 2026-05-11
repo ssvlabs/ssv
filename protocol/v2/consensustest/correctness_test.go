@@ -13,10 +13,11 @@ import (
 )
 
 // TestCorrectness is the correctness-tier entry point. It runs every
-// catalog scenario opted into ModeCorrectness against both protocols at
-// the canonical operating point (n=4, BTT=200ms, ConstantDelay,
-// single-iteration / fixed seed) and asserts the declared per-protocol
-// expectation matches the observed outcome.
+// catalog scenario opted into ModeCorrectness against all three
+// registered protocols (OBFT, 2abOBFT, QBFT) at the spec's reference
+// operating point (n=4, BTT=200ms, ConstantDelay, single-iteration /
+// fixed seed) and asserts the declared per-protocol expectation
+// matches the observed outcome.
 //
 // Safety invariants are enforced by the framework — any violation panics
 // inside RunScenarioOnProtocol via SafetyPanic, terminating the test

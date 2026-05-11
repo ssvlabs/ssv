@@ -68,10 +68,15 @@ func TestSmoke_SafetyInvariant(t *testing.T) {
 	require.LessOrEqual(t, len(report.DistinctOutputs), 1)
 }
 
-// TestSmoke_NotApplicable — QBFT should reject OBFT-specific patterns.
+// TestSmoke_NotApplicable — QBFT should reject OBFT-specific byz patterns
+// that have no QBFT analog. ByzFakeEncryptedPresence is one such kind: it
+// relies on the OBFT chained-onion σ-bundle encryption, which QBFT doesn't
+// have. (Earlier ByzHV1SelectiveDelivery worked here too but the QBFT
+// adapter now translates it to a selective-delivery byz model — see
+// qbft/byz.go.)
 func TestSmoke_NotApplicable(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	cfg.Byz = ct.ByzPattern{Kind: ct.ByzHV1SelectiveDelivery, ByzOperators: []ct.OperatorID{1}}
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzFakeEncryptedPresence, ByzOperators: []ct.OperatorID{1}}
 	_, err := qbftadapter.Protocol{}.Run(cfg)
 	require.ErrorIs(t, err, ct.ErrNotApplicable)
 }
@@ -138,21 +143,3 @@ func TestSmoke_TraceDeterministic(t *testing.T) {
 	}
 }
 
-// TestSmoke_JitteredNetwork — exercise the JitteredDelay network model so a
-// regression to its delay computation surfaces. Same seed must produce
-// identical outcomes (determinism even with jitter).
-func TestSmoke_JitteredNetwork(t *testing.T) {
-	btt := 200 * time.Millisecond
-	cfg := ct.DefaultProposerDutyConfig(btt)
-	cfg.Network = ct.JitteredDelay{D: btt, Jitter: 50 * time.Millisecond}
-
-	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
-		out1, err := p.Run(cfg)
-		require.NoError(t, err)
-		out2, err := p.Run(cfg)
-		require.NoError(t, err)
-		require.Equal(t, out1.Decided, out2.Decided, "%s determinism under jitter", p.Name())
-		require.Equal(t, out1.DecisionTime, out2.DecisionTime,
-			"%s decision time determinism under jitter", p.Name())
-	}
-}

@@ -52,26 +52,6 @@ func (c ConstantDelay) Delay(_ *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Dur
 	return c.D
 }
 
-// JitteredDelay draws delay from uniform [D-Jitter, D+Jitter], clamped to ≥1ns.
-// Determinism preserved: RNG draws happen on the event-loop goroutine in
-// scheduling order, so (Seed, NetworkModel) → byte-identical event ordering.
-type JitteredDelay struct {
-	D      time.Duration
-	Jitter time.Duration
-}
-
-func (j JitteredDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Duration {
-	if j.Jitter <= 0 {
-		return j.D
-	}
-	delta := time.Duration(rng.Int63n(int64(2*j.Jitter+1))) - j.Jitter
-	d := j.D + delta
-	if d < time.Nanosecond {
-		d = time.Nanosecond
-	}
-	return d
-}
-
 // PerReceiverDelay applies per-receiver overrides on top of an inner model.
 // Used to simulate partitions where one or more receivers see V late.
 type PerReceiverDelay struct {
@@ -150,10 +130,11 @@ func (c ClockSkewedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind Msg
 	return delay
 }
 
-// LogNormalDelay draws delays from a log-normal distribution — a more
-// production-realistic model than JitteredDelay's uniform jitter. Real
-// gossipsub propagation has a heavy right tail (P99/P50 ratio of ~3-10x
-// in mainnet conditions); log-normal is the standard fit for that shape.
+// LogNormalDelay draws delays from a log-normal distribution — the
+// production-shaped propagation model used as the stress-tier baseline.
+// Real gossipsub propagation has a heavy right tail (P99/P50 ratio of
+// ~3-10× in mainnet conditions); log-normal is the standard fit for
+// that shape.
 //
 // Parameters:
 //   - Median: the 50th-percentile delay, exp(μ) of the underlying normal.

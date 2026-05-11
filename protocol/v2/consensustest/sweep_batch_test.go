@@ -76,13 +76,15 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, 10, 4)
 
-	require.Len(t, sweeps, 4, "four curated sweeps per plan")
+	require.Len(t, sweeps, 6, "six curated sweeps per plan")
 
 	expected := map[string]int{
-		"canonical":       1, // single reference point
-		"btt_degradation": 4, // BTT ∈ {100, 200, 400, 600}
-		"heavy_tail":      4, // Sigma ∈ {0.1, 0.3, 0.5, 0.7}
-		"loss":            4, // LossRate ∈ {0, 0.01, 0.05, 0.10}
+		"p2p_ideal":             1, // single reference point at σ=0.1 (control)
+		"p2p_normal":            1, // single reference point at σ=0.5 (production baseline)
+		"p2p_increasing_BTT":    6, // BTT ∈ {100, 200, 400, 600, 800, 1000} ms
+		"p2p_heavy_tail":        6, // Sigma ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
+		"p2p_packet_loss":       5, // LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20}
+		"p2p_correlated_delays": 4, // BadLinkProb ∈ {0, 0.05, 0.10, 0.20}
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]

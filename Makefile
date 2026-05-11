@@ -112,10 +112,20 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (4 curated sweeps × OBFT/QBFT × ITERATIONS iterations) and writes
-# data.js into REPORT_DIR (default ./stresstest-report) — consumed by
-# the static UI (index.html + app.js + styles.css) already in that
-# folder.
+# (6 curated sweeps × OBFT/2abOBFT/QBFT × ITERATIONS iterations) and
+# writes data.js into REPORT_DIR (default ./stresstest-report) —
+# consumed by the static UI (index.html + app.js + styles.css) already
+# in that folder.
+#
+# Sweeps (all use LogNormalDelay as the production-shaped propagation
+# model; see protocol/v2/consensustest/sweep.go for full docs):
+#   - p2p_ideal             (single point, σ=0.1 — low-noise control)
+#   - p2p_normal            (single point, σ=0.5 — production baseline,
+#                            heatmap source)
+#   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
+#   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
+#   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
+#   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
 #
 # Cluster size: override via CLUSTER_SIZE (default 4). Every sweep
 # runs at this single n; to compare across cluster sizes, re-run with
@@ -124,7 +134,8 @@ consensustest-with-real-bls:
 #
 # Iteration count: override via ITERATIONS (default 1000). 1000 gives
 # stable P99 stats for success-rate ≥ 50% scenarios; bump to 10000 for
-# rare-event scenarios at proportionally longer wallclock (~60-120 min).
+# rare-event scenarios at proportionally longer wallclock (~90-100 min
+# at the new six-sweep layout).
 #
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
