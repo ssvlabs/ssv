@@ -408,15 +408,20 @@ table.matrix td.warn,
 table.matrix td.miss {
   white-space: nowrap;
 }
+/* Fixed widths (not min-widths) so content of varying length — "100%"
+ * vs "0%", "3900 ms" vs "0 ms", "255 KB" vs "4 KB" — occupies the same
+ * column slot and right-aligns to the same X across rows. min-width
+ * lets the longer content stretch the span, which cascaded misalignment
+ * downstream. */
 table.matrix td .pct {
   display: inline-block;
-  min-width: 3.2ch;
+  width: 4ch;
   text-align: right;
   font-weight: 600;
 }
 table.matrix td .lat {
   display: inline-block;
-  min-width: 10ch;
+  width: 11ch;
   text-align: right;
   margin-left: 0.6em;
   color: var(--text-faint);
@@ -424,7 +429,7 @@ table.matrix td .lat {
 }
 table.matrix td .bw {
   display: inline-block;
-  min-width: 5.5ch;
+  width: 7ch;
   text-align: right;
   margin-left: 0.4em;
   color: var(--na);
@@ -475,24 +480,29 @@ table.matrix.trend .cell-line {
   gap: 0.4em;
   line-height: 1.5;
 }
+/* Fixed widths so OBFT and QBFT lines stack visually-aligned: every
+ * span (label / pct / lat / bw) occupies the same column slot in both
+ * lines regardless of content length. Previously min-widths let "100%"
+ * stretch beyond "0%", cascading the latency and bandwidth columns
+ * out of alignment between the two lines of one cell. */
 table.matrix.trend .cell-line .proto {
   color: var(--text-faint);
-  min-width: 3.5ch;
+  width: 5ch;
   font-weight: 500;
 }
 table.matrix.trend .cell-line .pct {
   font-weight: 600;
-  min-width: 3.2ch;
+  width: 4ch;
   text-align: right;
 }
 table.matrix.trend .cell-line .lat {
   color: var(--text-faint);
-  min-width: 7ch;
+  width: 7ch;
   text-align: right;
 }
 table.matrix.trend .cell-line .bw {
   color: var(--na);
-  min-width: 5ch;
+  width: 7ch;
   text-align: right;
   font-size: 0.92em;
 }
