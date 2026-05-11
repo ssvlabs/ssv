@@ -46,64 +46,107 @@ body {
 /* ---- Page header ---- */
 
 header.page {
-  margin: 1.5em 0 1.2em;
-  padding: 1.8em 2em 1.4em;
+  margin: 1em 0 0.8em;
+  padding: 1.1em 1.4em 1em;
   background: linear-gradient(135deg, #f7f9fc 0%, #eaf0f6 100%);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title  controls"
+    "lead   pills"
+    "lead   pills";
+  column-gap: 1.5em;
+  row-gap: 0.4em;
+  align-items: start;
 }
 header.page h1 {
-  margin: 0 0 0.4em;
-  font-size: 1.85em;
+  grid-area: title;
+  margin: 0;
+  font-size: 1.4em;
   font-weight: 700;
   letter-spacing: -0.012em;
   color: #0f172a;
 }
 header.page .lead {
-  margin: 0 0 1.2em;
+  grid-area: lead;
+  margin: 0;
   color: var(--text-muted);
-  font-size: 1em;
+  font-size: 0.9em;
   font-style: normal;
   line-height: 1.5;
   max-width: 70ch;
+  align-self: end;
 }
 header.page .lead strong {
   background: var(--surface);
   border: 1px solid #d6dde6;
-  padding: 0.04em 0.5em;
-  border-radius: 4px;
+  padding: 0.04em 0.45em;
+  border-radius: 3px;
   font-weight: 600;
   color: #0f172a;
   white-space: nowrap;
-  font-size: 0.92em;
+  font-size: 0.88em;
+}
+header.page .header-controls {
+  grid-area: controls;
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+  justify-self: end;
+}
+header.page .header-controls button {
+  font: inherit;
+  font-size: 0.78em;
+  padding: 0.3em 0.7em;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+header.page .header-controls button:hover {
+  background: #f1f4f7;
+  color: #0f172a;
+}
+
+@media (max-width: 900px) {
+  header.page {
+    grid-template-columns: 1fr;
+    grid-template-areas: "title" "lead" "controls" "pills";
+  }
+  header.page .header-controls { justify-self: start; }
 }
 
 .summary-pills {
+  grid-area: pills;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6em;
+  gap: 0.4em;
+  justify-self: end;
 }
 .summary-pills .pill {
   display: inline-flex;
   flex-direction: column;
   background: var(--surface);
-  padding: 0.45em 0.85em 0.5em;
+  padding: 0.3em 0.65em 0.32em;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  min-width: 100px;
-  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
+  border-radius: 4px;
+  min-width: 70px;
 }
 .summary-pills .label {
-  font-size: 0.66em;
+  font-size: 0.6em;
   color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
 }
 .summary-pills .value {
-  margin-top: 0.15em;
-  font-size: 0.95em;
+  margin-top: 0.1em;
+  font-size: 0.86em;
   font-weight: 600;
   color: #0f172a;
   font-variant-numeric: tabular-nums;
@@ -208,6 +251,53 @@ nav.toc .toc-row.groups a.active {
   background: var(--accent-soft);
   color: #0f172a;
   border-color: #b9c8da;
+}
+
+nav.toc .toc-row.groups .scope-divider {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72em;
+  color: #7c2d12;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 0.3em 0 0.6em;
+  margin-left: 0.3em;
+  border-left: 1px solid #e8d4c5;
+}
+
+nav.toc .toc-row.filter {
+  border-top: 1px dashed var(--border);
+  margin-top: 0.3em;
+  padding-top: 0.35em;
+  min-height: 1.6em;
+}
+nav.toc .scenario-filter {
+  flex: 1;
+  font: inherit;
+  font-size: 0.85em;
+  padding: 0.3em 0.7em;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--surface);
+  color: #0f172a;
+  outline: none;
+  min-width: 0;
+  transition: border-color 100ms ease, box-shadow 100ms ease;
+}
+nav.toc .scenario-filter:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+}
+
+/* Filter feedback: dim non-matching matrix rows; hide packs whose
+ * matrix has no remaining visible rows. */
+table.matrix tbody tr.filtered { display: none; }
+details.group-pack.filtered-out {
+  opacity: 0.5;
+}
+details.group-pack.filtered-out summary {
+  font-style: italic;
 }
 
 /* ---- Scope heading (softer than the old dark banner) ---- */
@@ -330,9 +420,39 @@ table.matrix th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-table.matrix td.scen { color: #1f2937; }
+table.matrix td.scen {
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+table.matrix td.scen .scen-title { flex: 1; }
+table.matrix td.scen .cross-sweep-btn {
+  font: inherit;
+  font-size: 0.85em;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0.05em 0.35em;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 100ms ease, background 100ms ease, color 100ms ease;
+}
+table.matrix tbody tr:hover .cross-sweep-btn,
+table.matrix tbody tr.selected .cross-sweep-btn,
+table.matrix tbody tr:focus-within .cross-sweep-btn {
+  opacity: 1;
+}
+table.matrix td.scen .cross-sweep-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: #b9c8da;
+}
 
-/* Numeric cells: two right-aligned spans so columns line up across rows. */
+/* Numeric cells: right-aligned spans so columns line up across rows.
+ * Bandwidth gets a third span (smaller, fainter) after the latency. */
 table.matrix td.ok,
 table.matrix td.warn,
 table.matrix td.miss {
@@ -352,10 +472,34 @@ table.matrix td .lat {
   color: var(--text-faint);
   font-weight: 400;
 }
+table.matrix td .bw {
+  display: inline-block;
+  min-width: 5.5ch;
+  text-align: right;
+  margin-left: 0.4em;
+  color: var(--na);
+  font-size: 0.88em;
+  font-weight: 400;
+}
+table.matrix td .miss-reason {
+  font-size: 0.78em;
+  color: var(--miss);
+  margin-top: 0.15em;
+  font-weight: 500;
+  white-space: normal;
+  max-width: 24ch;
+}
 table.matrix td.ok { color: var(--ok); }
 table.matrix td.warn { color: var(--warn); }
 table.matrix td.miss { color: var(--miss); }
 table.matrix td.na { color: var(--na); }
+
+/* Keyboard focus ring on matrix rows. */
+table.matrix tbody tr:focus {
+  outline: none;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
 
 /* Clickable rows drive the per-group interactive chart below. */
 table.matrix tbody tr {
@@ -396,11 +540,100 @@ table.matrix.trend .cell-line .lat {
   min-width: 7ch;
   text-align: right;
 }
+table.matrix.trend .cell-line .bw {
+  color: var(--na);
+  min-width: 5ch;
+  text-align: right;
+  font-size: 0.92em;
+}
 table.matrix.trend .cell-line.ok .pct { color: var(--ok); }
 table.matrix.trend .cell-line.warn .pct { color: var(--warn); }
 table.matrix.trend .cell-line.miss .pct { color: var(--miss); }
 table.matrix.trend .cell-line.na { color: var(--na); }
 table.matrix.trend .cell-line.na .pct { color: var(--na); font-weight: 500; }
+
+/* ---- Cross-sweep dialog ---- */
+
+dialog.cross-sweep {
+  width: min(960px, 95vw);
+  max-height: 88vh;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+}
+dialog.cross-sweep::backdrop {
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+}
+dialog.cross-sweep .cs-head {
+  position: relative;
+  padding: 1.1em 1.4em 0.9em;
+  background: linear-gradient(135deg, #f7f9fc 0%, #eaf0f6 100%);
+  border-bottom: 1px solid var(--border);
+}
+dialog.cross-sweep .cs-head h2 {
+  margin: 0;
+  font-size: 1.15em;
+  color: #0f172a;
+}
+dialog.cross-sweep .cs-head .cs-meta {
+  margin: 0.15em 0 0;
+  font-size: 0.8em;
+  color: var(--text-faint);
+}
+dialog.cross-sweep .cs-close {
+  position: absolute;
+  top: 0.5em;
+  right: 0.6em;
+  background: transparent;
+  border: none;
+  font-size: 1.4em;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.1em 0.4em;
+  line-height: 1;
+  border-radius: 4px;
+}
+dialog.cross-sweep .cs-close:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+}
+dialog.cross-sweep .cs-body {
+  padding: 0.6em 1.4em 1.4em;
+  overflow-y: auto;
+  max-height: calc(88vh - 5em);
+}
+dialog.cross-sweep .cs-sweep {
+  padding: 0.9em 0;
+  border-bottom: 1px dashed var(--border);
+}
+dialog.cross-sweep .cs-sweep:last-child { border-bottom: none; }
+dialog.cross-sweep .cs-sweep h3 {
+  margin: 0 0 0.2em;
+  font-size: 1em;
+  color: #0f172a;
+}
+dialog.cross-sweep .cs-axis {
+  margin: 0 0 0.4em;
+  font-size: 0.78em;
+  color: var(--text-faint);
+}
+dialog.cross-sweep .cs-summary {
+  margin: 0.2em 0 0.6em;
+  font-size: 0.86em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+dialog.cross-sweep .cs-summary strong { color: #0f172a; font-weight: 600; }
+dialog.cross-sweep .cs-summary .cs-sep { color: var(--text-faint); }
+dialog.cross-sweep .cs-summary .na { color: var(--na); }
+dialog.cross-sweep .cs-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 220px;
+}
 
 /* ---- Chart wrapper ---- */
 

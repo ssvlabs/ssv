@@ -30,9 +30,10 @@ const PROTOCOL_COLORS = {
   QBFT: '#cf222e',
 };
 
-// chartInstances / chartInits — populated during the render pass.
-// chartInits runs once at the end synchronously (rAF is throttled in
-// headless preview environments, which would leave charts blank).
+// chartInstances tracks every Chart.js instance for debug/teardown.
+// chartInits is a fallback list run at startup for any init that wasn't
+// attached to a pack (the cross-sweep panel reuses this). Per-pack inits
+// are scheduled lazily — see scheduleChartInit() and renderGroupPack().
 const chartInstances = [];
 const chartInits = [];
 
@@ -57,10 +58,36 @@ function main() {
   const mainEl = h('main');
   data.sweeps.forEach((sw) => mainEl.appendChild(renderSweepSection(sw, data, bucketing)));
   root.appendChild(mainEl);
-  // Chart.js sizes from .chart-wrap CSS dimensions; canvases are in the
-  // DOM by the time these fire, so synchronous init is safe.
+  // Default-open packs init their charts immediately; collapsed packs
+  // defer until their first toggle (see scheduleChartInit). Any
+  // panel-level inits queued during render run now too.
+  document.querySelectorAll('details.group-pack[open]').forEach((d) => fireChartInit(d));
   chartInits.forEach((fn) => fn());
   setupActiveTOC(data);
+  setupHashSync(data);
+}
+
+// scheduleChartInit binds initFn to a pack, firing it on the pack's first
+// open. If the pack is already open at registration time, it fires
+// synchronously. Subsequent open/close events are no-ops.
+function scheduleChartInit(details, initFn) {
+  let fired = false;
+  const fire = () => {
+    if (fired) return;
+    fired = true;
+    const inst = initFn();
+    if (inst) chartInstances.push(inst);
+  };
+  details._fireChartInit = fire;
+  details.addEventListener('toggle', () => {
+    if (details.hasAttribute('open')) fire();
+  });
+}
+
+// fireChartInit triggers a pack's bound init (if any). Used by the main
+// initial pass to render default-open packs, and by expand-all.
+function fireChartInit(details) {
+  if (details._fireChartInit) details._fireChartInit();
 }
 
 // applyChartDefaults tweaks Chart.js globally so individual chart
@@ -134,6 +161,7 @@ function renderHeader(data) {
     lead.innerHTML = formatDescription(data.description);
     header.appendChild(lead);
   }
+  // Compact metadata pills (right column on wide screens).
   const pills = h('div', { class: 'summary-pills' });
   pills.appendChild(makePill('Iterations per cell', String(data.iterations)));
   pills.appendChild(makePill('Total wallclock', formatWallclock(data.wallclock)));
@@ -142,7 +170,30 @@ function renderHeader(data) {
   pills.appendChild(makePill('Scenarios', String(data.scenarios.length)));
   pills.appendChild(makePill('Protocols', data.protocols.join(' · ')));
   header.appendChild(pills);
+  // Expand-all / collapse-all controls.
+  const controls = h('div', { class: 'header-controls' });
+  const expandBtn = h('button', { type: 'button', 'data-action': 'expand-all' }, 'Expand all');
+  const collapseBtn = h('button', { type: 'button', 'data-action': 'collapse-all' }, 'Collapse all');
+  expandBtn.addEventListener('click', () => toggleAllPacks(true));
+  collapseBtn.addEventListener('click', () => toggleAllPacks(false));
+  controls.appendChild(expandBtn);
+  controls.appendChild(collapseBtn);
+  header.appendChild(controls);
   return header;
+}
+
+// toggleAllPacks opens or closes every <details.group-pack> on the page.
+// Setting/removing the `open` attribute fires the `toggle` event, which
+// the lazy-init wiring picks up.
+function toggleAllPacks(open) {
+  document.querySelectorAll('details.group-pack').forEach((d) => {
+    if (open && !d.hasAttribute('open')) {
+      d.setAttribute('open', '');
+      fireChartInit(d);
+    } else if (!open && d.hasAttribute('open')) {
+      d.removeAttribute('open');
+    }
+  });
 }
 
 function makePill(label, value) {
@@ -154,13 +205,18 @@ function makePill(label, value) {
   );
 }
 
-// renderTOC builds the sticky nav with two rows:
-//   1. Sweep row — one link per sweep, always visible. The active sweep
-//      is highlighted dynamically (see setupActiveTOC).
-//   2. Sub-row   — group anchors for the active sweep, rebuilt on scroll.
-//      Hidden until a sweep is in view.
+// renderTOC builds the sticky nav with three rows:
+//   1. Sweep row     — one pill per sweep; active sweep highlighted.
+//   2. Sub-row       — group anchors for the active sweep, rebuilt on
+//                      scroll. A small `OBFT-only:` divider separates
+//                      the cross-protocol anchors (left) from the
+//                      OBFT-only anchors (right) so the symmetry of
+//                      group names across scopes reads clearly.
+//   3. Filter row    — text input to filter visible scenarios across all
+//                      packs in the active sweep section.
 function renderTOC(data) {
   const nav = h('nav', { class: 'toc' });
+
   const sweepRow = h('div', { class: 'toc-row sweeps' });
   data.sweeps.forEach((sw) => {
     sweepRow.appendChild(
@@ -168,10 +224,41 @@ function renderTOC(data) {
     );
   });
   nav.appendChild(sweepRow);
-  // Sub-row is populated dynamically once the page is laid out and the
-  // observer fires; start with a placeholder div to reserve space.
+
   nav.appendChild(h('div', { class: 'toc-row groups', 'data-active-sweep': '' }));
+
+  // Filter row: type to hide non-matching matrix rows everywhere.
+  const filterRow = h('div', { class: 'toc-row filter' });
+  const input = h('input', {
+    type: 'search',
+    class: 'scenario-filter',
+    placeholder: 'Filter scenarios… (e.g. "validity")',
+    'aria-label': 'Filter scenarios',
+  });
+  input.addEventListener('input', (e) => applyScenarioFilter(e.target.value));
+  filterRow.appendChild(input);
+  nav.appendChild(filterRow);
+
   return nav;
+}
+
+// applyScenarioFilter hides matrix rows whose scenario title does not
+// include the query (case-insensitive). Empty query restores everything.
+// We also dim packs that have no matching rows so the UI cues that the
+// pack is fully filtered out.
+function applyScenarioFilter(raw) {
+  const q = (raw || '').trim().toLowerCase();
+  document.querySelectorAll('table.matrix').forEach((table) => {
+    let visibleCount = 0;
+    table.querySelectorAll('tbody tr').forEach((row) => {
+      const scen = row.querySelector('td.scen')?.textContent?.toLowerCase() || '';
+      const matches = q === '' || scen.includes(q);
+      row.classList.toggle('filtered', !matches);
+      if (matches) visibleCount++;
+    });
+    const pack = table.closest('details.group-pack');
+    if (pack) pack.classList.toggle('filtered-out', visibleCount === 0 && q !== '');
+  });
 }
 
 function renderSweepSection(sweep, data, bucketing) {
@@ -229,13 +316,15 @@ function renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols, 
   details.appendChild(summary);
 
   const body = h('div', { class: `group-body ${isTrend ? 'trend' : 'detail'}` });
-  if (isTrend) {
-    renderGroupTrend(body, sweep, scenarios, protocols, packID);
-  } else {
-    renderGroupDetail(body, sweep, scenarios, protocols, packID);
-  }
+  // renderGroup* returns the init function so we can defer Chart.js
+  // construction until the pack first opens. The matrix is built
+  // eagerly so it shows in the summary view if the user hovers etc.
+  const initFn = isTrend
+    ? renderGroupTrend(body, sweep, scenarios, protocols, packID)
+    : renderGroupDetail(body, sweep, scenarios, protocols, packID);
   details.appendChild(body);
 
+  scheduleChartInit(details, initFn);
   section.appendChild(details);
   packsBySweep[sweep.name].push({ id: `pack-${packID}`, label: group, scope: scopeKey });
 }
@@ -260,18 +349,19 @@ function renderGroupDetail(section, sweep, scenarios, protocols, packID) {
   wrap.appendChild(canvas);
   section.appendChild(wrap);
 
-  chartInits.push(() => {
+  // Returned so the pack can defer Chart.js init until first open.
+  return () => {
     const chart = buildLatencyChart(canvas, point, protocols, initial);
-    chartInstances.push(chart);
     wireMatrixSelection(table, scenarios, initial, (sc) => {
       updateLatencyChart(chart, point, protocols, sc);
     });
-  });
+    return chart;
+  };
 }
 
-// renderCell renders one numeric matrix cell as two stacked spans
-// (success% on the left, "P99 Xms" on the right) so the columns line up
-// across rows. Returns the <td> element.
+// renderCell renders one numeric matrix cell with three right-aligned
+// spans (success% · "P99 Xms" · bandwidth median) so columns line up
+// across rows. A miss reason (if any) shows as a small line below.
 function renderCell(cell) {
   if (!cell || cell.iterations === 0) {
     return h('td', { class: 'na' }, 'n/a');
@@ -280,12 +370,42 @@ function renderCell(cell) {
   if (cell.successRate < 0.5) cls = 'miss';
   else if (cell.successRate < 1.0) cls = 'warn';
   const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
-  return h(
+  const bw = cell.clusterBandwidth ? cell.clusterBandwidth.p50 : null;
+  const td = h(
     'td',
     { class: cls },
     h('span', { class: 'pct' }, `${Math.round(cell.successRate * 100)}%`),
     h('span', { class: 'lat' }, `P99 ${p99} ms`),
+    h('span', { class: 'bw' }, formatBytes(bw)),
   );
+  const reason = topMissReason(cell);
+  if (reason) {
+    td.appendChild(h('div', { class: 'miss-reason' }, reason));
+  }
+  return td;
+}
+
+// formatBytes returns a compact byte string: 16356 → "16 KB", 1234567 → "1.2 MB".
+function formatBytes(n) {
+  if (n == null || isNaN(n) || n <= 0) return '—';
+  if (n < 1024) return `${Math.round(n)} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// topMissReason returns the most-common miss-reason label for a cell,
+// or null if the cell didn't miss or no reasons were reported.
+function topMissReason(cell) {
+  if (!cell || !cell.missReasons) return null;
+  let top = null;
+  let topN = 0;
+  Object.entries(cell.missReasons).forEach(([k, n]) => {
+    if (n > topN) {
+      top = k;
+      topN = n;
+    }
+  });
+  return top;
 }
 
 function renderSummaryMatrix(point, scenarios, protocols) {
@@ -296,12 +416,40 @@ function renderSummaryMatrix(point, scenarios, protocols) {
 
   const tbody = h('tbody');
   scenarios.forEach((sc) => {
-    const row = h('tr', { 'data-scenario': sc.name }, h('td', { class: 'scen' }, sc.title));
+    const row = h(
+      'tr',
+      { 'data-scenario': sc.name },
+      renderScenarioCell(sc),
+    );
     protocols.forEach((p) => row.appendChild(renderCell(findCell(point, sc.name, p))));
     tbody.appendChild(row);
   });
   table.appendChild(tbody);
   return table;
+}
+
+// renderScenarioCell builds the leftmost cell of a matrix row: scenario
+// title plus a small "↗ all sweeps" button that opens the cross-sweep
+// panel for that scenario.
+function renderScenarioCell(sc) {
+  const td = h('td', { class: 'scen' });
+  td.appendChild(h('span', { class: 'scen-title' }, sc.title));
+  const btn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'cross-sweep-btn',
+      'aria-label': `View ${sc.title} across all sweeps`,
+      title: 'View this scenario across all sweeps',
+    },
+    '↗',
+  );
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation(); // don't trigger row selection
+    openCrossSweepPanel(sc);
+  });
+  td.appendChild(btn);
+  return td;
 }
 
 function buildLatencyChart(canvas, point, protocols, scenario) {
@@ -379,13 +527,13 @@ function renderGroupTrend(section, sweep, scenarios, protocols, packID) {
   wrap.appendChild(canvas);
   section.appendChild(wrap);
 
-  chartInits.push(() => {
+  return () => {
     const chart = buildTrendLineChart(canvas, sweep, protocols, initial);
-    chartInstances.push(chart);
     wireMatrixSelection(table, scenarios, initial, (sc) => {
       updateTrendLineChart(chart, sweep, protocols, sc);
     });
-  });
+    return chart;
+  };
 }
 
 function renderTrendMatrix(sweep, scenarios, protocols) {
@@ -396,7 +544,7 @@ function renderTrendMatrix(sweep, scenarios, protocols) {
 
   const tbody = h('tbody');
   scenarios.forEach((sc) => {
-    const row = h('tr', { 'data-scenario': sc.name }, h('td', { class: 'scen' }, sc.title));
+    const row = h('tr', { 'data-scenario': sc.name }, renderScenarioCell(sc));
     sweep.points.forEach((pt) => {
       const td = h('td', { class: 'point' });
       protocols.forEach((p) => {
@@ -412,8 +560,12 @@ function renderTrendMatrix(sweep, scenarios, protocols) {
           else if (cell.successRate < 1.0) cls = 'warn';
           line.classList.add(cls);
           const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
+          const bw = cell.clusterBandwidth ? cell.clusterBandwidth.p50 : null;
           line.appendChild(h('span', { class: 'pct' }, `${Math.round(cell.successRate * 100)}%`));
           line.appendChild(h('span', { class: 'lat' }, `${p99} ms`));
+          line.appendChild(h('span', { class: 'bw' }, formatBytes(bw)));
+          const reason = topMissReason(cell);
+          if (reason) line.title = `Top miss reason: ${reason}`;
         }
         td.appendChild(line);
       });
@@ -492,22 +644,45 @@ function updateTrendLineChart(chart, sweep, protocols, scenario) {
 
 // ---- shared: matrix → chart wiring -----------------------------------
 
-// wireMatrixSelection adds click handlers to every <tbody> row in `table`,
-// highlighting the clicked row with .selected and invoking onSelect with
-// the corresponding scenario. The row for `initial` starts pre-selected.
+// wireMatrixSelection adds click + keyboard handlers to every <tbody>
+// row in `table`. Click selects; ArrowUp/ArrowDown move the selection
+// to the previous/next visible row (skipping filtered-out rows). The
+// row for `initial` starts pre-selected and tabbable.
 function wireMatrixSelection(table, scenarios, initial, onSelect) {
   const byName = new Map();
   scenarios.forEach((sc) => byName.set(sc.name, sc));
-  const rows = table.querySelectorAll('tbody tr');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+  const select = (row) => {
+    const sname = row.getAttribute('data-scenario');
+    const sc = byName.get(sname);
+    if (!sc) return;
+    rows.forEach((r) => {
+      r.classList.remove('selected');
+      r.setAttribute('tabindex', '-1');
+    });
+    row.classList.add('selected');
+    row.setAttribute('tabindex', '0');
+    onSelect(sc);
+  };
+
   rows.forEach((row) => {
     const sname = row.getAttribute('data-scenario');
+    row.setAttribute('tabindex', sname === initial.name ? '0' : '-1');
+    row.setAttribute('role', 'button');
     if (sname === initial.name) row.classList.add('selected');
-    row.addEventListener('click', () => {
-      const sc = byName.get(sname);
-      if (!sc) return;
-      rows.forEach((r) => r.classList.remove('selected'));
-      row.classList.add('selected');
-      onSelect(sc);
+    row.addEventListener('click', () => select(row));
+    row.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+      ev.preventDefault();
+      const dir = ev.key === 'ArrowDown' ? 1 : -1;
+      const visible = rows.filter((r) => !r.classList.contains('filtered'));
+      const idx = visible.indexOf(row);
+      const next = visible[(idx + dir + visible.length) % visible.length];
+      if (next) {
+        select(next);
+        next.focus();
+      }
     });
   });
 }
@@ -599,7 +774,14 @@ function setupActiveTOC(data) {
   const rebuildSubRow = (sweepName) => {
     subRow.innerHTML = '';
     subRow.setAttribute('data-active-sweep', sweepName);
+    let dividerInserted = false;
     (packsBySweep[sweepName] || []).forEach((pack) => {
+      // First time we hit an OBFT-only pack, drop in a visual divider
+      // so the cross-protocol vs OBFT-only split is unmistakable.
+      if (pack.scope === 'obftOnly' && !dividerInserted) {
+        subRow.appendChild(h('span', { class: 'scope-divider' }, 'OBFT-only:'));
+        dividerInserted = true;
+      }
       subRow.appendChild(
         h(
           'a',
@@ -659,6 +841,140 @@ function setupActiveTOC(data) {
   window.addEventListener('scroll', onScroll, { passive: true });
   // Also run once after initial layout in case the page loaded scrolled.
   detectActive();
+}
+
+// ---- cross-sweep panel ------------------------------------------------
+//
+// openCrossSweepPanel shows the selected scenario's behaviour across
+// every sweep in a modal <dialog>. Each sweep renders as a compact
+// section: a one-line summary plus a mini Chart.js chart (bar for
+// single-point sweeps, line for multi-point sweeps).
+
+function openCrossSweepPanel(scenario) {
+  const data = window.REPORT_DATA;
+  if (!data) return;
+
+  // Cache one <dialog> element across opens to avoid leaking listeners.
+  let dlg = document.getElementById('cross-sweep-dialog');
+  if (!dlg) {
+    dlg = h('dialog', { id: 'cross-sweep-dialog', class: 'cross-sweep' });
+    document.body.appendChild(dlg);
+    dlg.addEventListener('click', (ev) => {
+      if (ev.target === dlg) dlg.close(); // backdrop click closes
+    });
+  }
+  dlg.innerHTML = '';
+
+  // Header.
+  const head = h('header', { class: 'cs-head' });
+  head.appendChild(h('h2', {}, scenario.title));
+  head.appendChild(h('p', { class: 'cs-meta' }, `Scenario: ${scenario.name} · group: ${scenario.group || 'Other'}`));
+  const closeBtn = h('button', { type: 'button', class: 'cs-close', 'aria-label': 'Close' }, '×');
+  closeBtn.addEventListener('click', () => dlg.close());
+  head.appendChild(closeBtn);
+  dlg.appendChild(head);
+
+  // One section per sweep.
+  const body = h('div', { class: 'cs-body' });
+  const inits = [];
+  data.sweeps.forEach((sw, swIdx) => {
+    const sec = h('section', { class: 'cs-sweep' });
+    sec.appendChild(h('h3', {}, sw.title || sw.name));
+    if (sw.axisLabel) sec.appendChild(h('p', { class: 'cs-axis' }, `Swept axis: ${sw.axisLabel}`));
+
+    // Summary line: applicable to which protocols? Mean P99 if any.
+    sec.appendChild(buildCrossSweepSummary(sw, scenario, data.protocols));
+
+    // Chart.
+    const wrap = h('div', { class: 'cs-chart-wrap' });
+    const canvas = h('canvas', { id: `cs_${swIdx}_${slugify(scenario.name)}` });
+    wrap.appendChild(canvas);
+    sec.appendChild(wrap);
+    inits.push(() => buildCrossSweepChart(canvas, sw, scenario, data.protocols));
+
+    body.appendChild(sec);
+  });
+  dlg.appendChild(body);
+
+  dlg.showModal();
+  // Init charts after the dialog is in the DOM and visible so canvases
+  // have measurable dimensions.
+  inits.forEach((fn) => {
+    const inst = fn();
+    if (inst) chartInstances.push(inst);
+  });
+}
+
+function buildCrossSweepSummary(sw, scenario, protocols) {
+  // Collect cells for this scenario across every point in the sweep.
+  // Report: "OBFT: success% range, P99 range · QBFT: ..." (or "n/a" for
+  // protocols where every cell is unapplicable).
+  const parts = h('p', { class: 'cs-summary' });
+  protocols.forEach((p, i) => {
+    if (i > 0) parts.appendChild(h('span', { class: 'cs-sep' }, ' · '));
+    const cells = sw.points
+      .map((pt) => findCell(pt, scenario.name, p))
+      .filter((c) => c && c.iterations > 0);
+    const span = h('span', { class: `cs-proto cs-${p.toLowerCase()}` });
+    span.appendChild(h('strong', {}, `${p}:`));
+    if (cells.length === 0) {
+      span.appendChild(h('span', { class: 'na' }, ' n/a'));
+    } else {
+      const successes = cells.map((c) => c.successRate);
+      const p99s = cells.map((c) => (c.decisionTime ? c.decisionTime.p99 : null)).filter((v) => v !== null);
+      const sMin = Math.round(Math.min(...successes) * 100);
+      const sMax = Math.round(Math.max(...successes) * 100);
+      const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
+      let pStr = '—';
+      if (p99s.length > 0) {
+        const pMin = Math.round(Math.min(...p99s));
+        const pMax = Math.round(Math.max(...p99s));
+        pStr = pMin === pMax ? `P99 ${pMin} ms` : `P99 ${pMin}–${pMax} ms`;
+      }
+      span.appendChild(h('span', {}, ` ${sStr} · ${pStr}`));
+    }
+    parts.appendChild(span);
+  });
+  return parts;
+}
+
+function buildCrossSweepChart(canvas, sw, scenario, protocols) {
+  if (sw.points.length === 1) {
+    // Single point → bar chart of P50/P90/P99.
+    return buildLatencyChart(canvas, sw.points[0], protocols, scenario);
+  }
+  // Multi-point → line chart of P99 across the swept axis.
+  return buildTrendLineChart(canvas, sw, protocols, scenario);
+}
+
+// setupHashSync handles deep-linking into the report:
+//   - On page load, if location.hash points to a pack, open it (and
+//     scroll into view a beat later so the open animation completes).
+//   - On every hashchange, do the same. This catches clicks on TOC
+//     sub-row anchors that point at collapsed packs.
+function setupHashSync(data) {
+  const openHash = () => {
+    const hash = (location.hash || '').slice(1);
+    if (!hash) return;
+    const el = document.getElementById(hash);
+    if (!el) return;
+    // If the target is a <details> pack (or contains one), make sure
+    // it's open before scrolling, so the anchor's scroll position
+    // accounts for the now-expanded body.
+    let pack = el.closest && el.closest('details.group-pack');
+    if (!pack && el.tagName === 'DETAILS') pack = el;
+    if (pack && !pack.hasAttribute('open')) {
+      pack.setAttribute('open', '');
+      fireChartInit(pack);
+    }
+    // Re-trigger scroll into view, slightly delayed so layout settles
+    // after opening the pack.
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 30);
+  };
+  window.addEventListener('hashchange', openHash);
+  if (location.hash) openHash();
 }
 
 // escapeHtml escapes the five HTML special chars. Used before injecting

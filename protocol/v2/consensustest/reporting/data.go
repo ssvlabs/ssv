@@ -128,6 +128,7 @@ type cellPayload struct {
 	DecisionTime     *percentilesPayload `json:"decisionTime,omitempty"`
 	ClusterBandwidth *percentilesPayload `json:"clusterBandwidth,omitempty"`
 	PerKindBandwidth map[string]float64  `json:"perKindBandwidth,omitempty"`
+	MissReasons      map[string]int      `json:"missReasons,omitempty"`
 }
 
 type percentilesPayload struct {
@@ -210,6 +211,12 @@ func buildCell(c ct.BatchCell) cellPayload {
 				continue
 			}
 			out.PerKindBandwidth[k] = d.Median()
+		}
+	}
+	if len(c.MissReasons) > 0 {
+		out.MissReasons = make(map[string]int, len(c.MissReasons))
+		for k, v := range c.MissReasons {
+			out.MissReasons[k] = v
 		}
 	}
 	return out
