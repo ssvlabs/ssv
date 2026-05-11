@@ -242,7 +242,21 @@ function renderTOC(data) {
 function renderSweepSection(sweep, data, bucketing) {
   const section = h('section', { class: 'sweep', id: `sweep-${sweep.name}` });
   const head = h('div', { class: 'sweep-head' });
-  head.appendChild(h('h2', {}, sweep.title || sweep.name));
+  // Title row: the heading plus any fixed-config Params (e.g. "n=4",
+  // "BTT=200ms") rendered as inline badges to the right. Single-point
+  // sweeps where every knob is constant use this; multi-point sweeps
+  // (cluster_scaling, btt_degradation, etc.) leave Params empty and
+  // describe their varying axis via AxisLabel + per-point Label.
+  const titleRow = h('div', { class: 'sweep-title-row' });
+  titleRow.appendChild(h('h2', {}, sweep.title || sweep.name));
+  if (Array.isArray(sweep.params) && sweep.params.length > 0) {
+    const params = h('span', { class: 'sweep-params' });
+    sweep.params.forEach((p) => {
+      params.appendChild(h('span', { class: 'sweep-param' }, p));
+    });
+    titleRow.appendChild(params);
+  }
+  head.appendChild(titleRow);
   if (sweep.description) {
     const desc = h('p', { class: 'desc' });
     desc.innerHTML = formatDescription(sweep.description);

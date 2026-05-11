@@ -20,6 +20,7 @@ type SweepPoint struct {
 type Sweep struct {
 	Name        string
 	Title       string // human-readable section heading; falls back to Name when empty
+	Params      []string // optional fixed-config tokens rendered as badges next to the title (e.g. "n=4", "BTT=200ms"); used by single-point sweeps where every config knob is constant
 	Description string
 	AxisLabel   string // e.g. "Cluster size n", "BTT (ms)", "LogNormal sigma"
 	Points      []SweepPoint
@@ -102,8 +103,9 @@ func canonicalSweep(scenarios []Scenario, protocols []Protocol, iterations int) 
 	base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
 	return Sweep{
 		Name:        "canonical",
-		Title:       "Canonical operating point",
-		Description: "Reference operating point: n=4, BTT=200ms, K=4, JitteredDelay. The spec's canonical config — every other sweep's baseline.",
+		Title:       "Normal operations",
+		Params:      []string{"n=4", "BTT=200ms", "K=4"},
+		Description: "The spec's canonical config — every other sweep's baseline.",
 		AxisLabel:   "",
 		Points: []SweepPoint{
 			{

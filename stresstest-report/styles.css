@@ -134,6 +134,30 @@ section.sweep {
   margin: 0 0 0.15em;
   font-size: 1.3em;
 }
+/* Title row: h2 + optional fixed-config param badges (n=4, BTT=200ms, …).
+ * Baseline-aligned so badges sit on the same text baseline as the heading. */
+.sweep-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6em;
+}
+.sweep-title-row .sweep-params {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+.sweep-title-row .sweep-param {
+  background: #f1f5f9;
+  border: 1px solid #d6dde6;
+  padding: 0.05em 0.45em;
+  border-radius: 3px;
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.78em;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  white-space: nowrap;
+}
 
 /* ---- Sticky TOC (two-row) ---- */
 

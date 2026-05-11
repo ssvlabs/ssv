@@ -108,6 +108,7 @@ type scenarioPayload struct {
 type sweepPayload struct {
 	Name        string         `json:"name"`
 	Title       string         `json:"title"`
+	Params      []string       `json:"params,omitempty"`
 	Description string         `json:"description,omitempty"`
 	AxisLabel   string         `json:"axisLabel,omitempty"`
 	Points      []pointPayload `json:"points"`
@@ -156,6 +157,7 @@ func buildPayload(c Comparison) reportPayload {
 		swp := sweepPayload{
 			Name:        sw.Sweep.Name,
 			Title:       sw.Sweep.DisplayTitle(),
+			Params:      sw.Sweep.Params,
 			Description: sw.Sweep.Description,
 			AxisLabel:   sw.Sweep.AxisLabel,
 		}
