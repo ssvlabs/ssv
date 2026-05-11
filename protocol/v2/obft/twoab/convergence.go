@@ -1,9 +1,6 @@
 package twoab
 
-import (
-	"bytes"
-	"fmt"
-)
+import "fmt"
 
 // CommitChoice represents the per-layer Phase-2b convergence-rule
 // decision: σ on a specific V, or NR.
@@ -198,7 +195,3 @@ func (i *Instance) chosenVAtLayer(layer int) (Value, bool) {
 	}
 	return append(Value{}, retained[0].Bundle.Value...), true
 }
-
-// Force the linter to not flag bytes import usage if no in-line bytes
-// comparisons remain after future refactors.
-var _ = bytes.Compare

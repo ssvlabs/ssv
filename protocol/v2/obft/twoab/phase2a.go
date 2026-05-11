@@ -1,9 +1,6 @@
 package twoab
 
-import (
-	"bytes"
-	"fmt"
-)
+import "fmt"
 
 // ApplyHostValidity records the host application's valid / not-valid
 // verdict on the given V at the given layer. Per spec §Phase 2a, the
@@ -265,14 +262,13 @@ func (i *Instance) PeerVerdicts(layer int) map[OperatorID]*Verdict {
 }
 
 // deepCopyVerdict returns an independent copy of v so retention/snapshot
-// state isn't affected by caller-owned mutation.
+// state isn't affected by caller-owned mutation. Verdict is all-value
+// fields (ClusterID and ValueRoot are [32]byte arrays), so a struct
+// value-copy suffices.
 func deepCopyVerdict(v *Verdict) *Verdict {
 	if v == nil {
 		return nil
 	}
-	out := *v // value copy — Verdict is all-value fields, no pointer/slice
-	// (ClusterID is [32]byte array, ValueRoot is [32]byte array, both
-	// copy by value above.)
-	_ = bytes.Equal // ensure bytes import is used in case future fields add slices
+	out := *v
 	return &out
 }

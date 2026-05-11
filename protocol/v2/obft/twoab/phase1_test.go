@@ -96,7 +96,7 @@ func TestObservePhase1Bundle_HealthyRetention(t *testing.T) {
 		retained := s.instances[op].RetainedBundles(0, b.OperatorID)
 		require.Len(t, retained, 1, "op %d should have 1 retained bundle", op)
 		require.False(t, retained[0].AuthOnly, "op %d retention should be regular, not auth-only", op)
-		require.Equal(t, observedEarly, retained[0].FirstObservedAt)
+		require.Equal(t, observedEarly, retained[0].RetentionEstablishedAt)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestObservePhase1Bundle_AuthOnlyRetentionPastTAcceptMax(t *testing.T) {
 	retained := s.instances[2].RetainedBundles(0, b.OperatorID)
 	require.Len(t, retained, 1)
 	require.True(t, retained[0].AuthOnly, "bundle past T_accept_max should be auth-only")
-	require.Equal(t, observedAuthOnly, retained[0].FirstObservedAt)
+	require.Equal(t, observedAuthOnly, retained[0].RetentionEstablishedAt)
 }
 
 func TestObservePhase1Bundle_RejectsPastTCommit(t *testing.T) {
@@ -155,7 +155,7 @@ func TestObservePhase1Bundle_AuthOnlyToRegularPromotion(t *testing.T) {
 	retained = s.instances[2].RetainedBundles(0, b.OperatorID)
 	require.Len(t, retained, 1)
 	require.False(t, retained[0].AuthOnly, "promotion: auth-only → regular")
-	require.Equal(t, observedEarly, retained[0].FirstObservedAt)
+	require.Equal(t, observedEarly, retained[0].RetentionEstablishedAt)
 }
 
 // Reverse: regular → auth-only is NOT a downgrade. Once a bundle is
@@ -169,8 +169,8 @@ func TestObservePhase1Bundle_RegularStaysRegular(t *testing.T) {
 	require.NoError(t, s.instances[2].ObservePhase1Bundle(b, observedAuthOnly))
 	retained := s.instances[2].RetainedBundles(0, b.OperatorID)
 	require.False(t, retained[0].AuthOnly)
-	// FirstObservedAt should be the first (earlier) observation.
-	require.Equal(t, observedEarly, retained[0].FirstObservedAt)
+	// RetentionEstablishedAt should be the first (earlier) observation.
+	require.Equal(t, observedEarly, retained[0].RetentionEstablishedAt)
 }
 
 // ---------- Leader equivocation → Rule 2 ----------

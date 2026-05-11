@@ -121,7 +121,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 			if r.AuthOnly && !authOnly {
 				// Upgrade auth-only → regular retention.
 				r.AuthOnly = false
-				r.FirstObservedAt = observedOffset
+				r.RetentionEstablishedAt = observedOffset
 			}
 			return nil
 		}
@@ -135,9 +135,9 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 
 	copyB := deepCopyBundle(b)
 	newEntry := &retainedBundle{
-		Bundle:          copyB,
-		AuthOnly:        authOnly,
-		FirstObservedAt: observedOffset,
+		Bundle:                 copyB,
+		AuthOnly:               authOnly,
+		RetentionEstablishedAt: observedOffset,
 	}
 
 	if len(retained) == 1 {

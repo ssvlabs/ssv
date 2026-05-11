@@ -181,12 +181,17 @@ type VerdictEquivocationEvidence struct {
 // NR action at Phase-2b) is permitted. The distinguishing condition
 // requires cross-referencing the cluster verdict view; receivers should
 // log Rule-6b observations and aggregate out-of-band before acting.
+//
+// Exactly one of the (SigmaValue+SigmaPartial) or NRPartial sides is
+// populated, disambiguating which side of the verdict-vs-action mismatch
+// fired: σ-action is `len(SigmaPartial) > 0`; NR-action is
+// `len(NRPartial) > 0`. Verdict carries the (σV / NR / NV) declaration
+// being contradicted.
 type VerdictActionEvidence struct {
 	Verdict      *Verdict
-	ActionKind   EvidenceRule // either evidenceActionSigma or evidenceActionNR sentinel
-	SigmaValue   Value        // populated when ActionKind = σ
-	SigmaPartial Signature    // populated when ActionKind = σ
-	NRPartial    Signature    // populated when ActionKind = NR
+	SigmaValue   Value     // populated when the contradicting action was σ
+	SigmaPartial Signature // populated when the contradicting action was σ
+	NRPartial    Signature // populated when the contradicting action was NR
 }
 
 // EvidenceObserver fires on the FIRST recording per (Rule, OperatorID,

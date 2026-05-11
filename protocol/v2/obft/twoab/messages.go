@@ -187,9 +187,9 @@ func ValueRoot(v Value) [32]byte {
 }
 
 // verdictContentHash returns a SHA-256 hash of v's content fields. Used by
-// ObserveVerdict (Phase F) to dedup identical re-broadcasts vs flag distinct
-// second emissions (Rule 6a — verdict-vs-verdict equivocation).
-func verdictContentHash(v *Verdict) [32]byte { //nolint:unused // used from Phase F onward
+// ObserveVerdict to dedup identical re-broadcasts vs flag distinct second
+// emissions (Rule 6a — verdict-vs-verdict equivocation).
+func verdictContentHash(v *Verdict) [32]byte {
 	h := sha256.New()
 	h.Write(v.ClusterID[:])
 	binary.Write(h, binary.BigEndian, uint64(v.OperatorID))
@@ -203,9 +203,9 @@ func verdictContentHash(v *Verdict) [32]byte { //nolint:unused // used from Phas
 }
 
 // onion2bContentHash returns a SHA-256 hash of o's content fields. Used by
-// ObserveOnion2b (Phase G) to dedup identical re-broadcasts vs flag distinct
-// second emissions (cross-onion equivocation evidence).
-func onion2bContentHash(o *Onion2b) [32]byte { //nolint:unused // used from Phase G onward
+// ObserveOnion2b to dedup identical re-broadcasts vs flag distinct second
+// emissions (cross-onion equivocation evidence).
+func onion2bContentHash(o *Onion2b) [32]byte {
 	h := sha256.New()
 	h.Write(o.ClusterID[:])
 	binary.Write(h, binary.BigEndian, uint64(o.OperatorID))

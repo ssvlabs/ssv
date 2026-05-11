@@ -135,7 +135,7 @@ type Instance struct {
 	rule1Fired       map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
 	rule3LeaderFired map[int]map[OperatorID]bool // Rule 3 per (layer, op) at L_0
 	rule4Fired       map[int]map[OperatorID]bool // Rule 4 fake encrypted-presence per (layer, op)
-	rule5UnknownV    map[int]map[OperatorID]bool // Rule 5 unknownV per (layer, op)
+	rule5Fired       map[int]map[OperatorID]bool // Rule 5 (cryptoFake or unknownV) per (layer, op)
 	rule6bFired      map[int]map[OperatorID]bool // Rule 6b per (layer, op)
 
 	// receivedCertificate is the FIRST peer-broadcast Certificate
@@ -173,9 +173,19 @@ type retainedBundle struct {
 	// operator's own Phase-2a verdict.
 	AuthOnly bool
 
-	// FirstObservedAt is the offset (from slot_start) at which the
-	// receiver first observed this bundle. Useful for tests + diagnostics.
-	FirstObservedAt time.Duration
+	// RetentionEstablishedAt is the offset (from slot_start) at which
+	// this retention entry took its current (AuthOnly) status:
+	//
+	//   - First observation of a previously-unseen V at any retention
+	//     mode → set to that observation's offset.
+	//   - Auth-only → regular promotion (a previously auth-only-retained
+	//     V is re-observed within the accept window) → updated to the
+	//     promotion observation's offset.
+	//   - Identical re-broadcast within the same retention mode (silent
+	//     dedup) → NOT updated.
+	//
+	// Useful for tests + diagnostics.
+	RetentionEstablishedAt time.Duration
 }
 
 // NewInstance constructs a 2abOBFT Instance. Validates the config and
@@ -263,7 +273,7 @@ func NewInstance(
 		rule1Fired:         make(map[int]map[OperatorID]bool, K),
 		rule3LeaderFired:   make(map[int]map[OperatorID]bool, K),
 		rule4Fired:         make(map[int]map[OperatorID]bool, K),
-		rule5UnknownV:      make(map[int]map[OperatorID]bool, K),
+		rule5Fired:         make(map[int]map[OperatorID]bool, K),
 		rule6bFired:        make(map[int]map[OperatorID]bool, K),
 		evidenceObserved:   make(map[evidenceObservedKey]bool),
 	}, nil
@@ -288,9 +298,19 @@ func (i *Instance) LeaderAtLayers() []int {
 	return out
 }
 
-// Evidence returns a snapshot copy of accumulated evidence entries.
-// Order is insertion order. Safe to call concurrently with the Instance
-// only if the caller serializes access.
+// Evidence returns a shallow-snapshot copy of accumulated evidence
+// entries. Order is insertion order.
+//
+// SHALLOW: the slice itself is freshly allocated, but each Evidence's
+// typed-payload pointer fields (CrossSigning, LeaderEquivocation, ...)
+// alias the same backing structs stored inside the Instance. Callers
+// MUST treat the returned entries (and their payloads) as read-only;
+// mutating a payload field corrupts internal state. Loggers/persisters
+// should read-only-marshal the entries; if a mutable copy is needed,
+// the caller deep-copies after snapshot.
+//
+// Safe to call concurrently with the Instance only if the caller
+// serializes access.
 func (i *Instance) Evidence() []Evidence {
 	out := make([]Evidence, len(i.evidence))
 	copy(out, i.evidence)
@@ -467,15 +487,17 @@ func (i *Instance) recordRule4(op OperatorID, layer int) bool {
 	return true
 }
 
-// recordRule5UnknownV marks Rule 5 unknownV as fired for (op, layer).
-func (i *Instance) recordRule5UnknownV(op OperatorID, layer int) bool {
-	if i.rule5UnknownV[layer] == nil {
-		i.rule5UnknownV[layer] = make(map[OperatorID]bool)
+// recordRule5Fired marks Rule 5 (fake plaintext σ at L_0 — either
+// cryptoFake or unknownV) as fired for (op, layer). Returns true if this
+// is the first observation; false if Rule 5 was already recorded.
+func (i *Instance) recordRule5Fired(op OperatorID, layer int) bool {
+	if i.rule5Fired[layer] == nil {
+		i.rule5Fired[layer] = make(map[OperatorID]bool)
 	}
-	if i.rule5UnknownV[layer][op] {
+	if i.rule5Fired[layer][op] {
 		return false
 	}
-	i.rule5UnknownV[layer][op] = true
+	i.rule5Fired[layer][op] = true
 	return true
 }
 

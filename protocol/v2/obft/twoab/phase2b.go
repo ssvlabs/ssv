@@ -224,23 +224,29 @@ func (i *Instance) ObserveOnion2b(o *Onion2b) error {
 		//     framing). Skip when the op is the layer's own leader
 		//     (leader cross-V is the Rule-3 leader extension, not
 		//     Rule 5).
+		//
+		// Both branches dedup via recordRule5Fired so re-emissions under
+		// top-level cross-onion equivocation don't accumulate duplicate
+		// Rule 5 entries in the Evidence() slice.
 		fakeAtL0 := false
 		if k == 0 {
 			switch i.peerSigmaAtL0Verdict(o.OperatorID, el) {
 			case l0SigmaCryptoFake:
 				fakeAtL0 = true
-				i.recordEvidence(Evidence{
-					Rule:       EvidenceFakePlaintextSigma,
-					OperatorID: o.OperatorID,
-					Layer:      0,
-					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
-						OnionPartial:        append(Signature{}, el.Ciphertext...),
-						OnionValue:          append(Value{}, el.Value...),
-						RetainedValueHashes: i.retainedL0ValueHashes(),
-					},
-				})
+				if i.recordRule5Fired(o.OperatorID, 0) {
+					i.recordEvidence(Evidence{
+						Rule:       EvidenceFakePlaintextSigma,
+						OperatorID: o.OperatorID,
+						Layer:      0,
+						FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+							OnionPartial:        append(Signature{}, el.Ciphertext...),
+							OnionValue:          append(Value{}, el.Value...),
+							RetainedValueHashes: i.retainedL0ValueHashes(),
+						},
+					})
+				}
 			case l0SigmaUnknownV:
-				if o.OperatorID != i.cfg.Layers[0].Leader && i.recordRule5UnknownV(o.OperatorID, 0) {
+				if o.OperatorID != i.cfg.Layers[0].Leader && i.recordRule5Fired(o.OperatorID, 0) {
 					i.recordEvidence(Evidence{
 						Rule:       EvidenceFakePlaintextSigma,
 						OperatorID: o.OperatorID,
@@ -338,8 +344,18 @@ func (i *Instance) ObserveOnion2b(o *Onion2b) error {
 // boundary-conditional; receivers log and aggregate out-of-band. The
 // (op, layer) dedup ensures one evidence entry per logical fault per
 // receiver.
+//
+// Verdict equivocators are skipped: Rule 6a has already fired against
+// them, and the "first-observed verdict" retained in peerVerdicts isn't
+// authoritative for the byzantine sender (they broadcast a contradictory
+// second verdict). Flagging Rule 6b against the first verdict would be
+// spurious — the byzantine could have broadcast {σV, NR} and emitted
+// either; whichever they emit "contradicts" the other verdict.
 func (i *Instance) checkRule6b(o *Onion2b) {
 	for k := range o.Layers {
+		if i.IsEquivocator(k, o.OperatorID) {
+			continue // Rule 6a subsumes; Rule 6b against first-observed verdict would be spurious
+		}
 		verdict, hasVerdict := i.peerVerdicts[k][o.OperatorID]
 		if !hasVerdict {
 			continue // can't check — no verdict observed
@@ -409,12 +425,12 @@ const (
 //     whether any L_0 bundle has been retained. Fire Rule 5 immediately.
 //  3. el.Value matches a retained V (from the layer's leader at L_0)
 //     → verified.
-//  4. el.Value matches no retained V, but leaderMap is non-empty →
-//     unknownV. Op signed a V we haven't retained; the leader MAY
+//  4. el.Value matches no retained V, but some retention exists at L_0
+//     → unknownV. Op signed a V we haven't retained; the leader MAY
 //     equivocate later and broadcast that V, in which case the entry
 //     could be reclassified — but the protocol doesn't yet implement
-//     retroactive re-evaluation in 2ab Phase G.
-//  5. el.Value matches no retained V AND no L_0 leader retention exists
+//     retroactive re-evaluation.
+//  5. el.Value matches no retained V AND no L_0 retention exists at all
 //     → inconclusive (no way to distinguish "fake V" from "leader hasn't
 //     broadcast yet").
 func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0SigmaVerdict {
@@ -425,27 +441,19 @@ func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0Sigm
 	if !i.signer.VerifyPartial(opPub, el.Value, el.Ciphertext) {
 		return l0SigmaCryptoFake
 	}
-	leaderMap := i.retainedBundles[0]
-	if leaderMap != nil {
-		for _, retained := range leaderMap {
-			for _, r := range retained {
-				if bytes.Equal(r.Bundle.Value, el.Value) {
-					return l0SigmaVerified
-				}
+	hasAnyRetention := false
+	for _, retained := range i.retainedBundles[0] {
+		for _, r := range retained {
+			if bytes.Equal(r.Bundle.Value, el.Value) {
+				return l0SigmaVerified
 			}
 		}
-		// leaderMap non-empty (some bundle has been retained at L_0)
-		// but op's claimed V doesn't match → unknownV.
-		hasAnyRetention := false
-		for _, retained := range leaderMap {
-			if len(retained) > 0 {
-				hasAnyRetention = true
-				break
-			}
+		if len(retained) > 0 {
+			hasAnyRetention = true
 		}
-		if hasAnyRetention {
-			return l0SigmaUnknownV
-		}
+	}
+	if hasAnyRetention {
+		return l0SigmaUnknownV
 	}
 	return l0SigmaInconclusive
 }
