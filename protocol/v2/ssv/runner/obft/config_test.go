@@ -110,3 +110,22 @@ func TestDefaultBroadcastBudgetSchedule_EndpointConstantsMatchK4(t *testing.T) {
 	require.Equal(t, deepestBudgetDefaultBTT100, k4.budgetBTT100[len(k4.budgetBTT100)-1],
 		"deepest budget endpoint must match defaultLayerSchedules[4][K-1]")
 }
+
+// TestDefaultTCommitDecomposition asserts the spec's §Application / Timing
+// budget decomposition at Config A: the post-T_commit window of 600ms = 3 BTT
+// splits as Δ_2 (400ms = 2 BTT) + Δ_3 (50ms = ε_3) + JitterBuffer (50ms) +
+// HeaderSubmitHeadroom (100ms), summing to RelayCutoff − T_commit.
+// Catches accidental drift between the spec's named components and the
+// derived T_commit value.
+func TestDefaultTCommitDecomposition(t *testing.T) {
+	require.Equal(t, 400*time.Millisecond, DefaultDelta2, "Δ_2 = 2 BTT at default")
+	require.Equal(t, 50*time.Millisecond, DefaultDelta3, "Δ_3 = ε_3 ≈ 50ms (spec)")
+	require.Equal(t, 50*time.Millisecond, DefaultJitterBuffer, "JitterBuffer ≈ 50ms (spec)")
+	require.Equal(t, 100*time.Millisecond, DefaultHeaderSubmitHeadroom)
+	require.Equal(t, 3400*time.Millisecond, DefaultTCommit,
+		"T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − Δ_3 − Δ_2")
+	// Post-T_commit window sums to 600ms = 3 BTT exactly.
+	post := DefaultRelayCutoff - DefaultTCommit
+	require.Equal(t, 600*time.Millisecond, post)
+	require.Equal(t, post, DefaultDelta2+DefaultDelta3+DefaultJitterBuffer+DefaultHeaderSubmitHeadroom)
+}

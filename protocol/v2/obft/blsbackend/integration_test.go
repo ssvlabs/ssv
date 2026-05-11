@@ -47,11 +47,19 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 	for i := 0; i < n; i++ {
 		operators[i] = obft.OperatorID(i + 1)
 	}
+	btt := 150 * time.Millisecond
+	tCommit := 1500 * time.Millisecond
+	budgets := obft.DefaultBroadcastBudget(K, btt)
+	// FetchAt must satisfy strict-decreasing-in-k AND ≤ T_commit − B_k.
+	// At BTT=150ms / K=4, budgets are [150, 225, 375, 825]ms, so the
+	// deepest L_3's cap is 1500−825 = 675ms. Pick fetchAt values well below
+	// all caps.
 	layers := make([]obft.LayerSpec, K)
 	for k := 0; k < K; k++ {
 		layers[k] = obft.LayerSpec{
-			Leader:  operators[k],
-			FetchAt: 1100*time.Millisecond - time.Duration(k)*50*time.Millisecond,
+			Leader:          operators[k],
+			FetchAt:         500*time.Millisecond - time.Duration(k)*50*time.Millisecond,
+			BroadcastBudget: budgets[k],
 		}
 	}
 	cfg := &obft.Config{
@@ -60,10 +68,10 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 		Operators: operators,
 		F:         f,
 		Layers:    layers,
-		TCommit:   1500 * time.Millisecond,
+		TCommit:   tCommit,
 		Delta2:    300 * time.Millisecond,
 		Delta3:    250 * time.Millisecond,
-		BTT:       150 * time.Millisecond, // P99=100 + δ=50 fixture
+		BTT:       btt, // P99=100 + δ=50 fixture
 	}
 	require.NoError(t, cfg.Validate())
 

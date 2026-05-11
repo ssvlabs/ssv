@@ -23,24 +23,27 @@ import (
 // Spec Config A operating point (BTT = 200ms, RelayCutoff = 4000ms,
 // HeaderSubmitHeadroom = 100ms):
 //   - Δ_2 = 2 BTT = 400ms (recommended; KindCommit propagation + jitter)
-//   - Δ_3 = ε_3 ≈ 100ms (absolute; doesn't scale with BTT)
-//   - T_commit = RelayCutoff − HeaderSubmitHeadroom − Δ_3 − Δ_2 = 3400ms
+//   - Δ_3 = ε_3 ≈ 50ms (absolute; local CPU reconstruction)
+//   - JitterBuffer ≈ 50ms (absolute; residual slack between Phase-3
+//     completion and cert-broadcast / relay-submit start)
+//   - T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − Δ_3 − Δ_2 = 3400ms
 //
 // Adjusting BTT (deployment's P99+δ) re-derives the post-T_commit budget
-// while keeping Δ_3 and HeaderSubmitHeadroom absolute. Override these via
-// ConfigOverrides for non-default deployments.
+// while keeping Δ_3, JitterBuffer, and HeaderSubmitHeadroom absolute.
+// Override these via ConfigOverrides for non-default deployments.
 const (
 	DefaultBTT                  = 200 * time.Millisecond
 	DefaultHeaderSubmitHeadroom = 100 * time.Millisecond
-	DefaultDelta3               = 100 * time.Millisecond // ε_3, absolute
+	DefaultDelta3               = 50 * time.Millisecond // ε_3, absolute (local CPU reconstruction)
+	DefaultJitterBuffer         = 50 * time.Millisecond // residual jitter between Phase-3-complete and cert/submit
 
 	// Δ_2 = 2 BTT recommended; defaultDelta2 derives from DefaultBTT.
 	DefaultDelta2 = 2 * DefaultBTT
 
-	// T_commit = RelayCutoff − HeaderSubmitHeadroom − Δ_3 − Δ_2.
-	// At Config A: 4000 − 100 − 100 − 400 = 3400ms.
+	// T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − Δ_3 − Δ_2.
+	// At Config A: 4000 − 100 − 50 − 50 − 400 = 3400ms.
 	DefaultRelayCutoff = 4000 * time.Millisecond
-	DefaultTCommit     = DefaultRelayCutoff - DefaultHeaderSubmitHeadroom - DefaultDelta3 - DefaultDelta2
+	DefaultTCommit     = DefaultRelayCutoff - DefaultHeaderSubmitHeadroom - DefaultJitterBuffer - DefaultDelta3 - DefaultDelta2
 
 	// DefaultK is the recommended layer count for SSV proposer duty:
 	// K = n = 4 (every cluster member leads exactly one layer; max
@@ -138,11 +141,15 @@ type ConfigOverrides struct {
 	RelayCutoff          time.Duration // application hard deadline (e.g. 4s for proposer duty)
 	HeaderSubmitHeadroom time.Duration // reserved for cert broadcast + relay submit (absolute)
 
-	// TCommit, Delta2, Delta3 — when zero, derive from the above per spec.
-	// Set explicitly only to deviate from the spec derivation.
-	TCommit time.Duration
-	Delta2  time.Duration
-	Delta3  time.Duration
+	// TCommit, Delta2, Delta3, JitterBuffer — when zero, derive from the
+	// above per spec. Set explicitly only to deviate from the spec
+	// derivation. JitterBuffer is the residual slack between Phase-3
+	// completion and cert-broadcast / relay-submit start (see spec
+	// §Application / Timing budget).
+	TCommit      time.Duration
+	Delta2       time.Duration
+	Delta3       time.Duration
+	JitterBuffer time.Duration
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
 	// defaults are used (Config A K=4: 3000/2900/2700/2100ms). Length
@@ -193,6 +200,15 @@ func (o *ConfigOverrides) delta3() time.Duration {
 	return o.Delta3
 }
 
+// jitterBuffer derives from absolute residual jitter (doesn't scale with
+// BTT per spec §Application / Timing budget).
+func (o *ConfigOverrides) jitterBuffer() time.Duration {
+	if o == nil || o.JitterBuffer == 0 {
+		return DefaultJitterBuffer
+	}
+	return o.JitterBuffer
+}
+
 // delta2 derives as 2 BTT per spec §Phase 2 recommendation (KindCommit
 // propagation + jitter cushion). Override only to deviate.
 func (o *ConfigOverrides) delta2() time.Duration {
@@ -202,13 +218,13 @@ func (o *ConfigOverrides) delta2() time.Duration {
 	return 2 * o.btt()
 }
 
-// tCommit derives as RelayCutoff − HeaderSubmitHeadroom − Δ_3 − Δ_2 per
-// spec §Application / Timing budget.
+// tCommit derives as RelayCutoff − HeaderSubmitHeadroom − JitterBuffer −
+// Δ_3 − Δ_2 per spec §Application / Timing budget.
 func (o *ConfigOverrides) tCommit() time.Duration {
 	if o != nil && o.TCommit != 0 {
 		return o.TCommit
 	}
-	return o.relayCutoff() - o.headerSubmitHeadroom() - o.delta3() - o.delta2()
+	return o.relayCutoff() - o.headerSubmitHeadroom() - o.jitterBuffer() - o.delta3() - o.delta2()
 }
 
 // interpolatedDurationSchedule returns a length-K slice of durations running
@@ -329,24 +345,22 @@ func ConfigForCluster(
 		return nil, fmt.Errorf("obft adapter: FetchAt has %d entries, expected K=%d", len(fetchAt), K)
 	}
 
-	var broadcastBudget []time.Duration
-	if overrides != nil && overrides.BroadcastBudget != nil {
-		if len(overrides.BroadcastBudget) != K {
-			return nil, fmt.Errorf("obft adapter: BroadcastBudget has %d entries, expected K=%d",
-				len(overrides.BroadcastBudget), K)
-		}
-		broadcastBudget = overrides.BroadcastBudget
+	broadcastBudget := overrides.BroadcastBudget
+	if broadcastBudget == nil {
+		broadcastBudget = DefaultBroadcastBudgetSchedule(K, overrides.btt())
+	}
+	if len(broadcastBudget) != K {
+		return nil, fmt.Errorf("obft adapter: BroadcastBudget has %d entries, expected K=%d",
+			len(broadcastBudget), K)
 	}
 
 	layers := make([]obftcore.LayerSpec, K)
 	for k := 0; k < K; k++ {
 		idx := (uint64(slot) + uint64(k)) % uint64(n) //nolint:gosec // small positive ints
 		layers[k] = obftcore.LayerSpec{
-			Leader:  obftcore.OperatorID(sorted[idx]),
-			FetchAt: fetchAt[k],
-		}
-		if broadcastBudget != nil {
-			layers[k].BroadcastBudget = broadcastBudget[k]
+			Leader:          obftcore.OperatorID(sorted[idx]),
+			FetchAt:         fetchAt[k],
+			BroadcastBudget: broadcastBudget[k],
 		}
 	}
 

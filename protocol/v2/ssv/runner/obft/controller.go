@@ -140,11 +140,12 @@ type ControllerOptions struct {
 	Overrides *ConfigOverrides
 
 	// EvidenceObserver, if non-nil, is registered on every per-slot
-	// Instance the Controller creates. Spec §Slashing evidence Rule 5
-	// MUST-gossip says receivers MUST gossip evidence on the wire so
-	// no-retained-V receivers can also attribute. Logged-only is the
-	// impl's substitute (operators monitor logs out-of-band); ideally
-	// this would be on-wire to spread evidence cluster-wide automatically.
+	// Instance the Controller creates. Per spec §Slashing evidence,
+	// honest operators MUST log observed evidence for out-of-band
+	// aggregation (manual-blacklist mechanism is the canonical consumer);
+	// log format is implementation-defined. The SSV adapter wires this
+	// to a zap WARN logger — see makeOBFTEvidenceObserver in
+	// operator/validator/setup_obft.go.
 	EvidenceObserver obftcore.EvidenceObserver
 }
 

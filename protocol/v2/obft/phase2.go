@@ -345,44 +345,80 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// requires plaintext partials.
 		if k == 0 && c.OperatorID == i.cfg.Layers[k].Leader {
 			for _, b := range i.bundles[k][c.OperatorID] {
-				if !bytes.Equal(b.Value, el.Value) {
-					i.recordEvidence(Evidence{
-						Rule:       EvidenceCrossOnionEquivocation,
-						OperatorID: c.OperatorID,
-						Layer:      k,
-						CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
-							ValueA:   append(Value{}, b.Value...),
-							ValueB:   append(Value{}, el.Value...),
-							PartialA: append(Signature{}, b.SigmaV...),
-							PartialB: append(Signature{}, el.Ciphertext...),
-						},
-					})
+				if bytes.Equal(b.Value, el.Value) {
+					continue
+				}
+				if !i.recordRule3Leader(c.OperatorID, k) {
 					break
 				}
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceCrossOnionEquivocation,
+					OperatorID: c.OperatorID,
+					Layer:      k,
+					CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
+						ValueA:   append(Value{}, b.Value...),
+						ValueB:   append(Value{}, el.Value...),
+						PartialA: append(Signature{}, b.SigmaV...),
+						PartialB: append(Signature{}, el.Ciphertext...),
+					},
+				})
+				break
 			}
 		}
 
 		// L_0 validity-gate: at L_0, σ partials are plaintext and verifiable
-		// against the operator's pubkey share. A partial that doesn't verify
-		// is slashable (Rule 5 — Fake plaintext σ). For unambiguous fakes
-		// (cryptoFake — partial fails verify on the claimed V) fire Rule 5
-		// immediately and skip σ-pool insertion. The l0SigmaUnknownV case
-		// (verifies, but V not currently retained) is NOT fired as Rule 5 —
-		// see Instance.Finalize doc-comment for why (false-positive avoidance
-		// under leader-equivocation + asymmetric gossipsub propagation).
+		// against the operator's pubkey share. Per spec §Slashing evidence
+		// Rule 5, "a plaintext σ partial that does not verify against any
+		// retained candidate V at that layer" is slashable. Two verdicts
+		// trigger Rule 5:
+		//
+		//   - cryptoFake: partial fails verify on op's own pubshare for the
+		//     claimed V. Unambiguous byzantine — fire immediately and drop
+		//     the entry from peerOnions (it can't contribute to any V's
+		//     σ-pool).
+		//   - unknownV: partial verifies against op's pubshare on the
+		//     claimed V, but V is not retained locally. Per spec literal
+		//     reading, the partial "does not verify against any retained V"
+		//     and Rule 5 fires. Under leader equivocation an honest peer
+		//     who signed an equivocated V the receiver didn't get is a
+		//     possible false-positive; spec MUST-log framing puts the
+		//     false-positive resolution at the out-of-band aggregation
+		//     layer (manual-blacklist mechanism). The entry stays in
+		//     peerOnions — the partial is byte-valid and may still
+		//     contribute to its V's σ-pool if V later becomes known via
+		//     bundle retention or witness harvest. Skipped when the op is
+		//     the layer's own leader: leader cross-V is Rule 3, not Rule 5,
+		//     and the leader path is the most common source of legitimate
+		//     unknownV (their own bundle vs their own onion equivocation).
 		fakeAtL0 := false
-		if k == 0 && i.peerSigmaAtL0Verdict(c.OperatorID, el) == l0SigmaCryptoFake {
-			fakeAtL0 = true
-			i.recordEvidence(Evidence{
-				Rule:       EvidenceFakePlaintextSigma,
-				OperatorID: c.OperatorID,
-				Layer:      0,
-				FakePlaintextSigma: &FakePlaintextSigmaEvidence{
-					OnionPartial:        append(Signature{}, el.Ciphertext...),
-					OnionValue:          append(Value{}, el.Value...),
-					RetainedValueHashes: i.retainedL0ValueHashes(),
-				},
-			})
+		if k == 0 {
+			switch i.peerSigmaAtL0Verdict(c.OperatorID, el) {
+			case l0SigmaCryptoFake:
+				fakeAtL0 = true
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceFakePlaintextSigma,
+					OperatorID: c.OperatorID,
+					Layer:      0,
+					FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+						OnionPartial:        append(Signature{}, el.Ciphertext...),
+						OnionValue:          append(Value{}, el.Value...),
+						RetainedValueHashes: i.retainedL0ValueHashes(),
+					},
+				})
+			case l0SigmaUnknownV:
+				if c.OperatorID != i.cfg.Layers[0].Leader && i.recordRule5UnknownV(c.OperatorID, 0) {
+					i.recordEvidence(Evidence{
+						Rule:       EvidenceFakePlaintextSigma,
+						OperatorID: c.OperatorID,
+						Layer:      0,
+						FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+							OnionPartial:        append(Signature{}, el.Ciphertext...),
+							OnionValue:          append(Value{}, el.Value...),
+							RetainedValueHashes: i.retainedL0ValueHashes(),
+						},
+					})
+				}
+			}
 		}
 
 		if !fakeAtL0 {
@@ -463,16 +499,85 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	}
 
 	// Witnesses: per spec §Phase 2 wire format, witnesses ship value_root +
-	// σ_V (no full V). Receivers with retained V already had σ_V in the
-	// σ-pool from Phase 1 receipt; receivers without V (V-drop) can't use
-	// the witnessed σ_V because verification needs V (via the Signer's
-	// signing target). So Phase 2 witness observation is a no-op for the
-	// σ-pool — V-drop recovery flows through KindCertificate gossip per
-	// spec §Final-certificate gossip. (Future Appendix-style ship-full-V
-	// variant would add processing here. Currently no per-witness work
-	// happens.)
+	// σ_V (no full V). The σ partial bytes are plaintext at every layer —
+	// they're byte-for-byte copies of the leader's Phase-1 σ partial, not
+	// subject to chained encryption. Receivers who have observed V locally
+	// (via Phase-1 bundle retention or via any peer's σ-onion entry
+	// carrying V) can cross-reference value_root, verify σ_V against the
+	// leader's pubshare on V, and harvest into the σ-pool. Helps reach qV
+	// when the leader's bundle never reached the receiver but V is known
+	// via a different path. V-drop recovery (no V locally) still flows
+	// through KindCertificate gossip per spec §Final-certificate gossip.
+	for _, w := range c.Witnesses {
+		i.harvestWitness(w)
+	}
 
 	return nil
+}
+
+// harvestWitness verifies a peer's witness against the leader's pubshare on
+// any V the receiver has observed locally for the witness's layer, then
+// retains the σ_V partial under (layer, value_root) for inclusion in the
+// σ-pool at Resolve time. Idempotent (first valid harvest wins).
+func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
+	if w.Layer < 0 || w.Layer >= i.cfg.K() {
+		return
+	}
+	// Leader claim was verified structurally in ValidateCommit; defense in
+	// depth.
+	if w.Leader != i.cfg.Layers[w.Layer].Leader {
+		return
+	}
+	bucket := i.witnessedLeaderSigma[w.Layer]
+	if _, exists := bucket[w.ValueRoot]; exists {
+		return
+	}
+	// Resolve V from local state: bundles retained at this layer for this
+	// leader, OR any peerOnion entry at this layer carrying V plaintext.
+	v, ok := i.findVByRoot(w.Layer, w.ValueRoot)
+	if !ok {
+		// V isn't known locally yet — drop the witness. v1 doesn't pend
+		// for retroactive verification; see witnessedLeaderSigma comment
+		// in instance.go for the cross-commit-out-of-order coverage gap.
+		return
+	}
+	pubShare, ok := i.pubKeyShares[w.Leader]
+	if !ok {
+		return
+	}
+	if !i.signer.VerifyPartial(pubShare, v, w.SigmaV) {
+		return
+	}
+	if bucket == nil {
+		bucket = make(map[[32]byte]witnessedSigma)
+		i.witnessedLeaderSigma[w.Layer] = bucket
+	}
+	bucket[w.ValueRoot] = witnessedSigma{
+		Value:  append(Value{}, v...),
+		SigmaV: append(Signature{}, w.SigmaV...),
+	}
+}
+
+// findVByRoot returns the V bytes at `layer` whose sha256 matches `root`,
+// looking in (1) retained Phase-1 bundles for the layer leader, (2) any
+// peer's σ-onion entry at this layer (V is plaintext at every layer). Used
+// to resolve a witness's value_root to V for σ_V verification.
+func (i *Instance) findVByRoot(layer int, root [32]byte) (Value, bool) {
+	for _, bundles := range i.bundles[layer] {
+		for _, b := range bundles {
+			if ValueRoot(b.Value) == root {
+				return b.Value, true
+			}
+		}
+	}
+	for _, entries := range i.peerOnions[layer] {
+		for _, el := range entries {
+			if ValueRoot(el.Value) == root {
+				return el.Value, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // l0SigmaVerdict is the result of checking a peer's L_0 σ entry.
@@ -482,7 +587,7 @@ const (
 	l0SigmaInconclusive l0SigmaVerdict = iota // no retained V or no pub-share for op (config issue, not slashable)
 	l0SigmaVerified                           // matches a retained V AND verifies cryptographically
 	l0SigmaCryptoFake                         // partial does not verify on the claimed V (Rule 5 fires immediately)
-	l0SigmaUnknownV                           // partial verifies but el.Value matches no currently-retained V (Rule 5 inert — see Instance.Finalize for rationale)
+	l0SigmaUnknownV                           // partial verifies but el.Value matches no currently-retained V (Rule 5 fires for non-leader emitters, dedup'd via recordRule5UnknownV; leader unknownV is Rule 3 territory)
 )
 
 // peerSigmaAtL0Verdict classifies a peer's plaintext L_0 σ partial.

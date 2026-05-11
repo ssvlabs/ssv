@@ -141,16 +141,15 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 			b.OperatorID)
 	}
 
-	// Distinct value_root. If we already have one retained, this is
-	// equivocation evidence (Rule 2).
-	if len(retained) >= 1 {
-		// Cap retention at 2 distinct.
-		if len(retained) >= 2 {
-			// Already have 2 distinct from this leader; drop the third
-			// (and beyond). The first two are sufficient evidence.
-			return nil
-		}
-		// Retain the second distinct; record Rule 2 evidence.
+	// Distinct value_root. Cap retention at 2 distinct.
+	if len(retained) >= 2 {
+		// Already have 2 distinct from this leader; drop the third
+		// (and beyond). The first two are sufficient evidence.
+		return nil
+	}
+
+	if len(retained) == 1 {
+		// Second distinct → Rule 2 (leader equivocation).
 		copyB := deepCopyBundle(b)
 		i.bundles[b.Layer][b.OperatorID] = append(retained, copyB)
 		i.recordEvidence(Evidence{
@@ -172,49 +171,67 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		// If the operator already σ-locked on the first V (the byzantine
 		// delivered it before observing equivocation), they stay σ-locked
 		// per cross-phase exclusivity.
-		//
-		// Re-run the L_0 retroactive check: the second V_b can rescue
-		// previously-deferred σ entries that signed V_b. Without this, an
-		// honest peer whose σ on V_b arrived between the V_a and V_b
-		// retentions stays uncategorized until V_b is retained — at which
-		// point reevaluateL0Sigmas can mark it cryptoFake-clear.
-		if b.Layer == 0 {
-			i.reevaluateL0Sigmas()
-		}
-		return nil
+	} else {
+		// First retention for this (layer, leader). Stash a defensive deep
+		// copy so retained bundle bytes are independent of caller-owned slices.
+		i.bundles[b.Layer][b.OperatorID] = []*Phase1Bundle{deepCopyBundle(b)}
 	}
 
-	// First retention for this (layer, leader). Stash a defensive deep copy
-	// so retained bundle bytes are independent of caller-owned slices.
-	i.bundles[b.Layer][b.OperatorID] = []*Phase1Bundle{deepCopyBundle(b)}
+	// Rule 1 (cross-signing) order-independence — leader-specific case.
+	// Spec §Cross-signing detection: "σ from Phase 1 + NR/NV from Phase 2"
+	// pairs a Phase-1 σ_V with an NR partial on the same layer from the same
+	// operator. The symmetric NR-side check in ObserveCommit fires when an NR
+	// partial arrives after the bundle was retained; this branch fires when
+	// the byzantine leader's KindCommit (with NR at their own layer) was
+	// observed first and the bundle is arriving now. Spec detection is
+	// "Immediate (dual partials on the wire)" — order-independent.
+	if nrSig, hasNR := i.peerNR[b.Layer][b.OperatorID]; hasNR && i.recordRule1(b.OperatorID, b.Layer) {
+		i.recordEvidence(Evidence{
+			Rule:       EvidenceCrossSigning,
+			OperatorID: b.OperatorID,
+			Layer:      b.Layer,
+			CrossSigning: &CrossSigningEvidence{
+				SigmaPartial: append(Signature{}, b.SigmaV...),
+				SigmaValue:   append(Value{}, b.Value...),
+				NRPartial:    append(Signature{}, nrSig...),
+			},
+		})
+	}
 
-	// Retroactive cryptoFake check: any L_0 onion entries observed BEFORE any
-	// V was retained at L_0 have not yet been Rule-5-checked (the check at
-	// ObserveCommit gates on hasRetainedVAtL0). Re-evaluate now that a V is
-	// retained — only fires Rule 5 for cryptoFake (unambiguous). Entries
-	// whose σ verifies on a V we still don't have (l0SigmaUnknownV) are
-	// not slashed — they may be honest peers reacting to leader equivocation
-	// + asymmetric gossipsub (our local view doesn't have V_b yet but they
-	// do, and signed it). Per spec §Slashing evidence Rule 5, cluster-wide
-	// attribution for the unknownV case is recovered via out-of-band log
-	// aggregation across operators (each operator logs what they observed
-	// from their local retention state).
+	// Retroactive L_0 evidence checks: any L_0 onion entries observed BEFORE
+	// any V was retained had verdict l0SigmaInconclusive (couldn't evaluate
+	// Rule 5 without a retained V). Re-evaluate now that a V is retained:
+	//   - Rule 5 cryptoFake (partial fails op's own pubshare on claimed V).
+	//   - Rule 5 unknownV (partial verifies on op's claimed V but V not in
+	//     retained set). Dedup'd via recordRule5UnknownV across this
+	//     retroactive path and ObserveCommit's forward-order path.
+	//   - Rule 3 retroactive for the L_0 leader's own onion entry when its
+	//     V differs from the retained bundle V — see reevaluateL0Sigmas.
 	if b.Layer == 0 {
 		i.reevaluateL0Sigmas()
 	}
 	return nil
 }
 
-// reevaluateL0Sigmas re-runs the Rule 5 check on already-observed L_0 onion
-// entries. Called when a Phase-1 bundle is first retained at L_0 to catch
-// fake-σ entries from peers whose KindCommit arrived before the L_0 bundle.
+// reevaluateL0Sigmas re-runs retroactive evidence checks on already-observed
+// L_0 onion entries. Called when a Phase-1 bundle is first (or second)
+// retained at L_0 to catch:
 //
-// Only fires Rule 5 for the unambiguous cryptoFake case (partial fails verify
-// on the claimed V). The "verifies, but V not currently retained" case
-// (l0SigmaUnknownV) is NOT fired anywhere in this codebase — see
-// Instance.Finalize doc-comment for the false-positive rationale. Per spec
-// §Slashing evidence Rule 5, cluster-wide attribution for the unknownV case
-// is recovered via out-of-band log aggregation across operators.
+//   - Rule 5 (FakePlaintextSigma, cryptoFake variant) for peer (non-leader)
+//     onion entries whose σ doesn't verify against the op's pubshare on the
+//     claimed V. Unambiguous byzantine; fires immediately and removes the
+//     offending entry from peerOnions.
+//   - Rule 5 (FakePlaintextSigma, unknownV variant) for peer (non-leader)
+//     onion entries that verify on the op's claimed V but whose V doesn't
+//     match any retained V. Fires per spec MUST-log framing; dedup'd via
+//     recordRule5UnknownV across this retroactive path and the forward-
+//     order path in ObserveCommit. Entry stays in peerOnions so the partial
+//     can still contribute if V later becomes known.
+//   - Rule 3 (CrossOnionEquivocation) for the L_0 leader's own onion entry
+//     where its V differs from a retained Phase-1 bundle V — order-independent
+//     twin of the ObserveCommit check at the σ-side branch. Per spec
+//     §Cross-onion partial-sig equivocation, detection is "Immediate (two
+//     σ partials on different V)".
 //
 // Snapshot semantics: removeOnionEntry rewrites the underlying slice
 // in-place (`out := entries[:0]`); iterating the same slice header while
@@ -226,22 +243,23 @@ func (i *Instance) reevaluateL0Sigmas() {
 		entries []EncryptedLayer
 	}
 	leader := i.cfg.Layers[0].Leader
-	var snapshot []opEntries
+	var peerSnapshot []opEntries
+	var leaderEntries []EncryptedLayer
 	for op, entries := range i.peerOnions[0] {
-		if op == leader {
-			// The layer leader's σ_V is in bundles[0][leader], not
-			// peerOnions; nothing to re-check.
-			continue
-		}
 		// Defensive copy: detach from the underlying array so subsequent
 		// removeOnionEntry mutations don't disturb our iteration.
 		entriesCopy := make([]EncryptedLayer, len(entries))
 		copy(entriesCopy, entries)
-		snapshot = append(snapshot, opEntries{op: op, entries: entriesCopy})
+		if op == leader {
+			leaderEntries = entriesCopy
+			continue
+		}
+		peerSnapshot = append(peerSnapshot, opEntries{op: op, entries: entriesCopy})
 	}
-	for _, oe := range snapshot {
+	for _, oe := range peerSnapshot {
 		for _, el := range oe.entries {
-			if i.peerSigmaAtL0Verdict(oe.op, el) == l0SigmaCryptoFake {
+			switch i.peerSigmaAtL0Verdict(oe.op, el) {
+			case l0SigmaCryptoFake:
 				i.recordEvidence(Evidence{
 					Rule:       EvidenceFakePlaintextSigma,
 					OperatorID: oe.op,
@@ -253,6 +271,55 @@ func (i *Instance) reevaluateL0Sigmas() {
 					},
 				})
 				i.removeOnionEntry(0, oe.op, &el)
+			case l0SigmaUnknownV:
+				// Retroactive Rule 5 unknownV fire: entry was observed
+				// pre-bundle (inconclusive at observe time), now V is
+				// retained but doesn't match this entry's V. Per spec
+				// Rule 5, fire — see the matching forward-order path in
+				// phase2.go ObserveCommit. Dedup via rule5UnknownVFired
+				// across both paths. Entry stays in peerOnions (partial
+				// might still contribute if its V becomes known later).
+				if i.recordRule5UnknownV(oe.op, 0) {
+					i.recordEvidence(Evidence{
+						Rule:       EvidenceFakePlaintextSigma,
+						OperatorID: oe.op,
+						Layer:      0,
+						FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+							OnionPartial:        append(Signature{}, el.Ciphertext...),
+							OnionValue:          append(Value{}, el.Value...),
+							RetainedValueHashes: i.retainedL0ValueHashes(),
+						},
+					})
+				}
+			}
+		}
+	}
+	// Rule 3 retroactive check for the L_0 leader's own onion entry. The
+	// ObserveCommit σ-side branch already fires Rule 3 when the bundle was
+	// retained BEFORE the leader's L_0 onion arrived; this handles the
+	// reverse order (onion first, bundle now). Dedup via the per-(op, layer)
+	// Rule 3 fire-set so the order-flipped twin doesn't double-record.
+	if len(leaderEntries) > 0 {
+		for _, b := range i.bundles[0][leader] {
+			for _, el := range leaderEntries {
+				if bytes.Equal(b.Value, el.Value) {
+					continue
+				}
+				if !i.recordRule3Leader(leader, 0) {
+					return
+				}
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceCrossOnionEquivocation,
+					OperatorID: leader,
+					Layer:      0,
+					CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
+						ValueA:   append(Value{}, b.Value...),
+						ValueB:   append(Value{}, el.Value...),
+						PartialA: append(Signature{}, b.SigmaV...),
+						PartialB: append(Signature{}, el.Ciphertext...),
+					},
+				})
+				return
 			}
 		}
 	}

@@ -96,6 +96,18 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 		}
 	}
 
+	// 1b) Leader's σ_V harvested from peer KindCommit witness sections
+	//     (spec §Phase 2 wire format). Plaintext at every layer (not
+	//     chained-encrypted); contributes to σ-pool when the leader's
+	//     bundle never reached this operator but V is known locally via a
+	//     peer's σ-onion entry. addToGroup dedups per (operator, V), so
+	//     adding the same leader's partial twice (once via bundle, once
+	//     via witness — byte-identical for honest leaders) collapses to
+	//     one partial in the pool.
+	for _, ws := range i.witnessedLeaderSigma[layer] {
+		addToGroup(&groups, ws.Value, leaderID, ws.SigmaV)
+	}
+
 	// 2) Onion contributions. Decrypt at layers > 0 using accumulated
 	//    chained keys.
 	for opID, entries := range i.peerOnions[layer] {

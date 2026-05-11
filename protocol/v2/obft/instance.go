@@ -65,6 +65,16 @@ func (s CommitState) String() string {
 	}
 }
 
+// witnessedSigma holds a leader's σ_V partial harvested from a peer's
+// KindCommit witness section, paired with the V it was verified against.
+// The signature bytes are deterministic BLS so all valid witnesses on the
+// same V are byte-identical; the receiver stores one and treats it as the
+// leader's σ-pool contribution. See Instance.witnessedLeaderSigma.
+type witnessedSigma struct {
+	Value  Value
+	SigmaV Signature
+}
+
 // Instance is the per-slot OBFT state machine. It accumulates observations
 // across Phase 1 (Phase-1 bundles), Phase 2 (peer Commits), and Phase 3
 // (Resolve walk → final certificate gossip).
@@ -133,6 +143,29 @@ type Instance struct {
 	// (extracted from their KindCommit's NRPartials).
 	peerNR map[int]map[OperatorID]Signature
 
+	// witnessedLeaderSigma[layer][value_root] = a leader's σ_V partial
+	// harvested from a peer's KindCommit witness section, verified against
+	// the leader's pubshare on the V whose sha256 matches value_root. Per
+	// spec §Phase 2 wire format, witnesses are plaintext at every layer
+	// (byte-for-byte copies of the leader's Phase-1 partial); receivers
+	// who DID receive V from any source — Phase-1 bundle or any peer's
+	// σ-onion entry carrying V — can use a peer's witness to recover σ_L^V
+	// even if the leader's bundle σ_V never reached them directly.
+	//
+	// First-wins dedup: all honest peers' witnesses on the same V are
+	// byte-identical (deterministic BLS partial), so the first valid one
+	// short-circuits subsequent harvest attempts.
+	//
+	// Limitation (v1): witnesses are only verified at observation time
+	// against V that is already known (bundles[layer][leader].Value or any
+	// peerOnions[layer][*].Value matching the witness's value_root). A
+	// witness whose V isn't yet observed locally is dropped — no retroactive
+	// re-verification once V later arrives. In the common ordering (Phase-1
+	// bundle arrives at T_broadcast_max_k, KindCommits at T_commit), V is
+	// known before witnesses; the cross-commit-out-of-order case (witness in
+	// commit C1, V in commit C2 arriving after) is the residual coverage gap.
+	witnessedLeaderSigma map[int]map[[32]byte]witnessedSigma
+
 	// peerCommitHashes[operator_id] is the set of content hashes observed
 	// from this operator. Identical re-broadcasts are no-ops; the first
 	// distinct second hash is cross-onion equivocation evidence (spec §Phase 2,
@@ -187,6 +220,32 @@ type Instance struct {
 	// distinct σ-emission, not per (op, layer). Deduplication ensures
 	// per-(op, layer) attribution stays atomic.
 	rule1Fired map[int]map[OperatorID]bool
+
+	// rule3LeaderFired[layer][leader] = true once the Rule 3 leader-cross-V
+	// check has fired for that (leader, layer). Shared between the
+	// forward-order path (ObserveCommit's leader-vs-bundle σ check) and
+	// the retroactive path (reevaluateL0Sigmas when a bundle is retained
+	// after the leader's L_0 onion was already in peerOnions) so the
+	// dedup spans both arrival orderings: under leader equivocation +
+	// onion-before-bundle ordering, the same fault would otherwise fire
+	// once from the forward path on the first bundle retention and again
+	// from the retro path on a second equivocated bundle.
+	//
+	// Distinct from the σ-side cross-onion equivocation path (two distinct
+	// onion entries at the same layer from the same op) — that path has
+	// its own structural dedup via len(existing) gates.
+	rule3LeaderFired map[int]map[OperatorID]bool
+
+	// rule5UnknownVFired[layer][op] = true once Rule 5 has fired against op
+	// at this layer for the unknownV variant (op signed σ on a V the
+	// receiver hasn't retained). Dedups across the immediate fire path
+	// (ObserveCommit) and the retroactive path (reevaluateL0Sigmas, when a
+	// bundle retention surfaces additional unknownV entries). cryptoFake
+	// (partial fails verify against op's own share) retains its existing
+	// multi-fire-per-entry behavior — it's unambiguous and the historical
+	// per-(op, layer, entry) granularity is preserved for code-touch
+	// minimization.
+	rule5UnknownVFired map[int]map[OperatorID]bool
 
 	// evidenceObserver fires on FIRST recording per (Rule, OperatorID, Layer)
 	// tuple. Set at NewInstance construction; nil disables. Immutable post-
@@ -275,29 +334,32 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:              cfg,
-		ownOperatorID:    ownOperatorID,
-		signer:           signer,
-		tagSigner:        tagSigner,
-		ibe:              ibe,
-		clusterPubKey:    clusterPubKey,
-		pubKeyShares:     pubKeyShares,
-		ibePubKeyShares:  ibePubKeyShares,
-		evidenceObserver: evidenceObserver,
-		bundles:          make(map[int]map[OperatorID][]*Phase1Bundle, K),
-		hostVerdict:      make(map[int]map[string]bool, K),
-		peerOnions:       make(map[int]map[OperatorID][]EncryptedLayer, K),
-		peerNR:           make(map[int]map[OperatorID]Signature, K),
-		peerCommitHashes: make(map[OperatorID]map[[32]byte]struct{}),
-		peerFirstCommit:  make(map[OperatorID]*Commit),
-		localState:       make([]CommitState, K),
-		sigmaLocked:      make([]bool, K),
-		sigmaLockedV:     make([]Value, K),
-		nrLocked:         make([]bool, K),
-		ownPartials:      make(map[int]Signature),
-		rule4Fired:       make(map[int]map[OperatorID]bool, K),
-		rule1Fired:       make(map[int]map[OperatorID]bool, K),
-		evidenceObserved: make(map[evidenceObservedKey]bool),
+		cfg:                  cfg,
+		ownOperatorID:        ownOperatorID,
+		signer:               signer,
+		tagSigner:            tagSigner,
+		ibe:                  ibe,
+		clusterPubKey:        clusterPubKey,
+		pubKeyShares:         pubKeyShares,
+		ibePubKeyShares:      ibePubKeyShares,
+		evidenceObserver:     evidenceObserver,
+		bundles:              make(map[int]map[OperatorID][]*Phase1Bundle, K),
+		hostVerdict:          make(map[int]map[string]bool, K),
+		peerOnions:           make(map[int]map[OperatorID][]EncryptedLayer, K),
+		peerNR:               make(map[int]map[OperatorID]Signature, K),
+		peerCommitHashes:     make(map[OperatorID]map[[32]byte]struct{}),
+		peerFirstCommit:      make(map[OperatorID]*Commit),
+		localState:           make([]CommitState, K),
+		sigmaLocked:          make([]bool, K),
+		sigmaLockedV:         make([]Value, K),
+		nrLocked:             make([]bool, K),
+		ownPartials:          make(map[int]Signature),
+		rule4Fired:           make(map[int]map[OperatorID]bool, K),
+		rule1Fired:           make(map[int]map[OperatorID]bool, K),
+		rule3LeaderFired:     make(map[int]map[OperatorID]bool, K),
+		rule5UnknownVFired:   make(map[int]map[OperatorID]bool, K),
+		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
+		evidenceObserved:     make(map[evidenceObservedKey]bool),
 	}, nil
 }
 
@@ -341,24 +403,19 @@ func (i *Instance) Evidence() []Evidence {
 //
 // Idempotent — safe to call repeatedly.
 //
-// Note on Rule 5 deferred attribution: σ entries at L_0 that verify
-// cryptographically against the operator's pubshare but sign a V the receiver
-// never retained (l0SigmaUnknownV) are NOT fired as Rule 5 evidence here.
-// Under leader equivocation + asymmetric gossipsub propagation, an honest
-// peer who signed an equivocated V the receiver didn't get would be falsely
-// attributed if we fired Rule 5 on l0SigmaUnknownV at slot end.
-//
-// Per spec §Slashing evidence Rule 5, detection requires the receiver to
-// have retained-or-auth-only-retained V at L_0. Under partial synchrony,
-// Phase-1 bundle re-flood delivers V to all honest receivers within the
-// absorption window, so all honest who first-observe `i`'s σ partial within
-// the window can evaluate Rule 5 locally. Receivers whose V observation
-// lagged past evaluation time do not surface Rule 5; cluster-wide
-// attribution for the unknownV case is recovered via out-of-band log
-// aggregation across operators (the manual-blacklist mechanism is the
-// canonical consumer). The cryptoFake case (σ doesn't verify against op's
-// own share for the claimed V) still fires Rule 5 immediately at observe
-// time; that case is unambiguous regardless of gossipsub propagation.
+// Note on Rule 5 attribution scope: both the cryptoFake verdict (partial
+// fails verify against op's own pubshare on the claimed V — unambiguous
+// byzantine) and the unknownV verdict (partial verifies but claimed V is
+// not retained locally) fire Rule 5 per spec §Slashing evidence. The
+// unknownV path is gated to non-leaders (leader cross-V is Rule 3) and is
+// per-receiver-view by construction: under leader equivocation an honest
+// peer who signed an equivocated V the receiver hasn't observed is logged
+// as Rule 5 here. Per spec MUST-log framing, single-receiver evidence is
+// expected to be reconciled by the out-of-band aggregation layer (the
+// manual-blacklist mechanism is the canonical consumer); false-positives
+// from honest equivocation reactions are visible as evidence from a
+// receiver minority while the equivocated-V-retaining majority logs no
+// Rule 5 (or Rule 3 against the leader instead).
 func (i *Instance) Finalize() {
 	if i.ended {
 		return
@@ -554,6 +611,40 @@ func (i *Instance) recordRule1(op OperatorID, layer int) bool {
 	if bucket == nil {
 		bucket = make(map[OperatorID]bool)
 		i.rule1Fired[layer] = bucket
+	}
+	if bucket[op] {
+		return false
+	}
+	bucket[op] = true
+	return true
+}
+
+// recordRule3Leader marks the Rule 3 leader-cross-V check as fired for
+// (leader, layer). Shared between ObserveCommit's forward-order
+// leader-vs-bundle check and reevaluateL0Sigmas' retroactive check; the
+// first one to fire wins, the other becomes a no-op. See the
+// rule3LeaderFired field comment.
+func (i *Instance) recordRule3Leader(op OperatorID, layer int) bool {
+	bucket := i.rule3LeaderFired[layer]
+	if bucket == nil {
+		bucket = make(map[OperatorID]bool)
+		i.rule3LeaderFired[layer] = bucket
+	}
+	if bucket[op] {
+		return false
+	}
+	bucket[op] = true
+	return true
+}
+
+// recordRule5UnknownV marks Rule 5 as fired against (op, layer) for the
+// unknownV variant. Same pattern as recordRule1 — returns true on first
+// observation, false on dedup. See rule5UnknownVFired field comment.
+func (i *Instance) recordRule5UnknownV(op OperatorID, layer int) bool {
+	bucket := i.rule5UnknownVFired[layer]
+	if bucket == nil {
+		bucket = make(map[OperatorID]bool)
+		i.rule5UnknownVFired[layer] = bucket
 	}
 	if bucket[op] {
 		return false

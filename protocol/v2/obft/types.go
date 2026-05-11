@@ -65,9 +65,10 @@ type LayerSpec struct {
 	// decomposition is informative-only — this field is the single
 	// T_commit-anchored value, NOT the propagation half alone.
 	//
-	// When zero across all layers, falls back to the single uniform cap
-	// 2*BTT for every layer (preserves backwards-compat with configs
-	// that don't opt into the staggered schedule).
+	// Required: must be > 0 on every layer. Config.Validate rejects
+	// zero/negative values and non-strict-increasing schedules. Use
+	// DefaultBroadcastBudget(K, BTT) for the spec-recommended staggered
+	// schedule when constructing a Config manually.
 	BroadcastBudget time.Duration
 }
 
@@ -148,23 +149,61 @@ func (c *Config) Quorum() int {
 	return c.QV()
 }
 
-// BroadcastMaxOffset returns the single-cap T_broadcast_max relative to
-// slot_start: T_commit - 2*BTT. Used as the per-layer fallback when
-// LayerSpec.BroadcastBudget is unset; for explicit per-layer caps see
-// BroadcastMaxOffsetForLayer.
-func (c *Config) BroadcastMaxOffset() time.Duration {
-	return c.TCommit - 2*c.BTT
+// BroadcastMaxOffsetForLayer returns T_commit - B_k for layer k. Per spec
+// §Setting, the leader of layer k must broadcast their Phase-1 bundle by
+// this offset. Config.Validate guarantees every layer's BroadcastBudget is
+// strictly positive, so this never returns a zero-budget fallback in
+// practice; callers should construct Config via DefaultBroadcastBudget
+// (or an explicit per-layer schedule).
+func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
+	return c.TCommit - c.Layers[k].BroadcastBudget
 }
 
-// BroadcastMaxOffsetForLayer returns T_commit - B_k for layer k, falling back
-// to the single cap when LayerSpec.BroadcastBudget is unset. Per spec §Setting,
-// the leader of layer k must broadcast their Phase-1 bundle by this offset.
-func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
-	b := c.Layers[k].BroadcastBudget
-	if b <= 0 {
-		return c.BroadcastMaxOffset()
+// DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
+// for K layers at the given BTT — strictly increasing, deepest ≥ 2·BTT
+// (the BFT-min liveness bound). Matches the spec §Setting recommendation:
+// B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} = 5.5 BTT (last-
+// resort deepest absorption); intermediate layers fall between.
+//
+// At K=4 (the OBFT proposer-duty default) returns [1, 1.5, 2.5, 5.5] × BTT.
+// At K=3 returns [1, 2.5, 5.5] × BTT. For K>4 (n=7, 10, 13 deployments)
+// interpolates linearly between L_0 (1·BTT) and the deepest (5.5·BTT).
+//
+// Callers that need deployment-specific tunings (e.g. the SSV adapter's
+// FetchAt-paired schedule) should provide their own per-layer values; this
+// helper is for tests and minimal callers that want an obviously-correct
+// default. Required by Validate: every LayerSpec.BroadcastBudget entry
+// must be > 0 and the slice must be strictly increasing.
+func DefaultBroadcastBudget(K int, btt time.Duration) []time.Duration {
+	if K < 1 {
+		return nil
 	}
-	return c.TCommit - b
+	out := make([]time.Duration, K)
+	switch K {
+	case 1:
+		out[0] = 2 * btt
+	case 2:
+		out[0] = btt
+		out[1] = 2 * btt
+	case 3:
+		out[0] = btt
+		out[1] = btt * 250 / 100
+		out[2] = btt * 550 / 100
+	case 4:
+		out[0] = btt
+		out[1] = btt * 150 / 100
+		out[2] = btt * 250 / 100
+		out[3] = btt * 550 / 100
+	default:
+		// Linear interp from 100 BTT-hundredths (L_0) to 550 (deepest).
+		const lo, hi = 100, 550
+		step := (hi - lo) / (K - 1)
+		for k := 0; k < K; k++ {
+			mult := lo + k*step
+			out[k] = btt * time.Duration(mult) / 100
+		}
+	}
+	return out
 }
 
 // PhaseTwoStartOffset returns the start of Phase 2 = T_commit relative to
@@ -245,8 +284,8 @@ func (c *Config) Validate() error {
 	if c.Delta3 <= 0 {
 		return errors.New("obft: Delta3 must be positive")
 	}
-	if c.BroadcastMaxOffset() < 0 {
-		return errors.New("obft: TCommit too small for broadcast deadline (need TCommit > 2*BTT)")
+	if c.TCommit < 2*c.BTT {
+		return errors.New("obft: TCommit too small for broadcast deadline (need TCommit >= 2*BTT)")
 	}
 
 	members := make(map[OperatorID]bool, len(c.Operators))
@@ -257,50 +296,36 @@ func (c *Config) Validate() error {
 		members[op] = true
 	}
 
-	// Two BroadcastBudget modes: all unset (single-cap fallback) or all set
-	// (per-layer staggered schedule with strict monotonicity). Negative
-	// values are always invalid.
+	// Per-layer BroadcastBudget — required on every layer per spec §Setting.
+	// Callers can use DefaultBroadcastBudget(K, BTT) for the spec-recommended
+	// staggered schedule, or supply their own per-layer values.
 	for k, l := range c.Layers {
-		if l.BroadcastBudget < 0 {
-			return fmt.Errorf("obft: layer %d BroadcastBudget %v is negative", k, l.BroadcastBudget)
+		if l.BroadcastBudget <= 0 {
+			return fmt.Errorf("obft: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for a spec-conforming staggered schedule)", k)
 		}
 	}
-	allBudgetsSet := true
-	allBudgetsZero := true
-	for _, l := range c.Layers {
-		if l.BroadcastBudget > 0 {
-			allBudgetsZero = false
-		} else {
-			allBudgetsSet = false
+	// B_0 < B_1 < ... < B_{K-1}: deeper layers get strictly larger
+	// absorption / chain-decryption headroom.
+	//
+	// Spec §Setting states "B_k ≥ B_{k-1}" (non-strict). We enforce strict
+	// "<" because all the spec's recommended operating-point schedules
+	// (Config A: 0.5 / 1 / 2 / 5 BTT) are strictly increasing, and equal
+	// adjacent budgets would mean the deeper layer offers no additional
+	// absorption — defeating the purpose of staggering. The strict bound
+	// catches misconfigurations that would silently degrade fall-through
+	// recovery at no protocol benefit.
+	for k := 1; k < len(c.Layers); k++ {
+		if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
+			return errors.New("obft: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")
 		}
 	}
-	if !allBudgetsSet && !allBudgetsZero {
-		return errors.New("obft: LayerSpec.BroadcastBudget must be set on every layer or none (no mixed configs)")
-	}
-	if allBudgetsSet {
-		// B_0 < B_1 < ... < B_{K-1}: deeper layers get strictly larger
-		// absorption / chain-decryption headroom.
-		//
-		// Spec §Setting states "B_k ≥ B_{k-1}" (non-strict). We enforce strict
-		// "<" because all the spec's recommended operating-point schedules
-		// (Config A: 0.5 / 1 / 2 / 5 BTT) are strictly increasing, and equal
-		// adjacent budgets would mean the deeper layer offers no additional
-		// absorption — defeating the purpose of staggering. The strict bound
-		// catches misconfigurations that would silently degrade fall-through
-		// recovery at no protocol benefit.
-		for k := 1; k < len(c.Layers); k++ {
-			if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
-				return errors.New("obft: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")
-			}
-		}
-		// The deepest layer's budget is the cluster's worst-case liveness
-		// guarantee — must satisfy the 2*BTT BFT-min bound.
-		bftMin := 2 * c.BTT
-		K := len(c.Layers)
-		if c.Layers[K-1].BroadcastBudget < bftMin {
-			return fmt.Errorf("obft: deepest layer L_%d BroadcastBudget %v below BFT-min %v: cluster has no liveness guarantee",
-				K-1, c.Layers[K-1].BroadcastBudget, bftMin)
-		}
+	// The deepest layer's budget is the cluster's worst-case liveness
+	// guarantee — must satisfy the 2*BTT BFT-min bound.
+	bftMin := 2 * c.BTT
+	K := len(c.Layers)
+	if c.Layers[K-1].BroadcastBudget < bftMin {
+		return fmt.Errorf("obft: deepest layer L_%d BroadcastBudget %v below BFT-min %v: cluster has no liveness guarantee",
+			K-1, c.Layers[K-1].BroadcastBudget, bftMin)
 	}
 
 	seenLeaders := make(map[OperatorID]bool, len(c.Layers))

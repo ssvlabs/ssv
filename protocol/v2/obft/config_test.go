@@ -8,21 +8,27 @@ import (
 )
 
 func validBaseConfig() *Config {
+	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
+	const tCommit = 1500 * time.Millisecond
+	budgets := DefaultBroadcastBudget(4, btt)
+	// Per-layer T_broadcast_max at this fixture: 1350 / 1275 / 1125 / 675ms.
+	// FetchAt values chosen well below all caps to leave headroom for tests
+	// that perturb FetchAt to trigger specific errors.
 	return &Config{
 		Height:    1,
 		ClusterID: [32]byte{0x01},
 		Operators: []OperatorID{1, 2, 3, 4},
 		F:         1,
 		Layers: []LayerSpec{
-			{Leader: 1, FetchAt: 1100 * time.Millisecond},
-			{Leader: 2, FetchAt: 1050 * time.Millisecond},
-			{Leader: 3, FetchAt: 1000 * time.Millisecond},
-			{Leader: 4, FetchAt: 950 * time.Millisecond},
+			{Leader: 1, FetchAt: 500 * time.Millisecond, BroadcastBudget: budgets[0]},
+			{Leader: 2, FetchAt: 400 * time.Millisecond, BroadcastBudget: budgets[1]},
+			{Leader: 3, FetchAt: 300 * time.Millisecond, BroadcastBudget: budgets[2]},
+			{Leader: 4, FetchAt: 200 * time.Millisecond, BroadcastBudget: budgets[3]},
 		},
-		TCommit: 1500 * time.Millisecond,
+		TCommit: tCommit,
 		Delta2:  300 * time.Millisecond,
 		Delta3:  250 * time.Millisecond,
-		BTT:     150 * time.Millisecond, // P99=100 + δ=50 fixture
+		BTT:     btt,
 	}
 }
 
@@ -60,8 +66,8 @@ func TestConfig_Validate_RejectsNonMonotonicFetchAt(t *testing.T) {
 
 func TestConfig_Validate_RejectsFetchAtPastBroadcastDeadline(t *testing.T) {
 	cfg := validBaseConfig()
-	// T_broadcast_max = TCommit - 2*BTT = 1500 - 300 = 1200ms.
-	cfg.Layers[0].FetchAt = 1300 * time.Millisecond
+	// L_0's T_broadcast_max = TCommit - B_0 = 1500 - 150 = 1350ms.
+	cfg.Layers[0].FetchAt = 1400 * time.Millisecond
 	require.ErrorContains(t, cfg.Validate(), "broadcast deadline")
 }
 
@@ -73,7 +79,10 @@ func TestConfig_Validate_RejectsDelta2BelowBFTMin(t *testing.T) {
 
 func TestConfig_DerivedOffsets(t *testing.T) {
 	cfg := validBaseConfig()
-	require.Equal(t, cfg.TCommit-2*cfg.BTT, cfg.BroadcastMaxOffset())
+	// Per-layer broadcast-max offsets follow T_commit - B_k:
+	for k := range cfg.Layers {
+		require.Equal(t, cfg.TCommit-cfg.Layers[k].BroadcastBudget, cfg.BroadcastMaxOffsetForLayer(k))
+	}
 	require.Equal(t, cfg.TCommit, cfg.PhaseTwoStartOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2, cfg.PhaseTwoEndOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2+cfg.Delta3, cfg.RoundEndOffset())
@@ -131,11 +140,12 @@ func TestConfig_BroadcastBudget_RejectsNonMonotonic(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "strictly increasing")
 }
 
-func TestConfig_BroadcastBudget_RejectsMixedSet(t *testing.T) {
+func TestConfig_BroadcastBudget_RejectsZeroOnAnyLayer(t *testing.T) {
 	cfg := validStaggeredConfig()
-	// Unset budget on one layer while others are set: not allowed.
+	// Zero on any single layer is rejected — BroadcastBudget must be > 0
+	// everywhere.
 	cfg.Layers[2].BroadcastBudget = 0
-	require.ErrorContains(t, cfg.Validate(), "every layer or none")
+	require.ErrorContains(t, cfg.Validate(), "must be > 0")
 }
 
 func TestConfig_BroadcastBudget_RejectsDeepestBelowBFTMin(t *testing.T) {
@@ -154,18 +164,16 @@ func TestConfig_BroadcastBudget_RejectsDeepestBelowBFTMin(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "no liveness guarantee")
 }
 
-func TestConfig_BroadcastBudget_FallbackWhenAllZero(t *testing.T) {
-	// All zero → fall back to the single-cap schedule. This is the
-	// existing test fixture's behavior; still must pass.
+func TestConfig_BroadcastBudget_RejectsAllZero(t *testing.T) {
+	// Per-layer BroadcastBudget is required on every layer; the historical
+	// "all-zero fallback to a uniform 2·BTT cap" mode is no longer supported.
+	// Callers should populate via DefaultBroadcastBudget(K, BTT) or an
+	// explicit per-layer schedule.
 	cfg := validBaseConfig()
-	for _, l := range cfg.Layers {
-		require.Zero(t, l.BroadcastBudget, "test setup")
-	}
-	require.NoError(t, cfg.Validate())
-	// Per-layer cap should match the single cap when budget is unset.
 	for k := range cfg.Layers {
-		require.Equal(t, cfg.BroadcastMaxOffset(), cfg.BroadcastMaxOffsetForLayer(k))
+		cfg.Layers[k].BroadcastBudget = 0
 	}
+	require.ErrorContains(t, cfg.Validate(), "must be > 0")
 }
 
 func TestConfig_BroadcastBudget_RejectsFetchAtExceedingPerLayerCap(t *testing.T) {
@@ -179,5 +187,5 @@ func TestConfig_BroadcastBudget_RejectsFetchAtExceedingPerLayerCap(t *testing.T)
 func TestConfig_BroadcastBudget_RejectsNegative(t *testing.T) {
 	cfg := validBaseConfig()
 	cfg.Layers[1].BroadcastBudget = -1 * time.Millisecond
-	require.ErrorContains(t, cfg.Validate(), "negative")
+	require.ErrorContains(t, cfg.Validate(), "must be > 0")
 }

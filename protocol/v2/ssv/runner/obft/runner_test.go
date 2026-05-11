@@ -24,6 +24,21 @@ import (
 // Verifies all operators converge on the same Output and that SubmitOutput
 // fires.
 
+// compressedTestBroadcastBudget returns a K=4 BroadcastBudget tuned for the
+// compressed-timing test fixtures (TCommit=200ms / BTT=30ms): strictly
+// increasing, deepest = 2·BTT BFT-min, leaves enough headroom for the
+// existing FetchAt [130, 110, 90, 70]ms schedule. The full spec-recommended
+// schedule (1, 1.5, 2.5, 5.5)·BTT would put B_3 = 165ms — exceeding the
+// test's tight TCommit and leaving no fetchAt window for the deepest layer.
+func compressedTestBroadcastBudget() []time.Duration {
+	return []time.Duration{
+		30 * time.Millisecond, // B_0 = 1·BTT
+		40 * time.Millisecond,
+		50 * time.Millisecond,
+		60 * time.Millisecond, // B_3 = 2·BTT BFT-min
+	}
+}
+
 type runnerNode struct {
 	op    spectypes.OperatorID
 	ctrl  *Controller
@@ -50,13 +65,15 @@ func TestRunProposerSlot_Healthy_n4_K4(t *testing.T) {
 		Delta3:  60 * time.Millisecond,
 		BTT:     30 * time.Millisecond,
 		// T_broadcast_max = TCommit - 2*BTT = 200 - 60 = 140ms; all
-		// FetchAt entries must be ≤ 140 and non-increasing in k.
+		// FetchAt entries must be ≤ per-layer cap (TCommit - B_k) and non-
+		// increasing in k.
 		FetchAt: []time.Duration{
 			130 * time.Millisecond,
 			110 * time.Millisecond,
 			90 * time.Millisecond,
 			70 * time.Millisecond,
 		},
+		BroadcastBudget: compressedTestBroadcastBudget(),
 	}
 
 	nodes := buildCluster(t, 4, overrides)
@@ -131,6 +148,7 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 			90 * time.Millisecond,
 			70 * time.Millisecond,
 		},
+		BroadcastBudget: compressedTestBroadcastBudget(),
 	}
 
 	nodes := buildCluster(t, 4, overrides)
@@ -383,12 +401,13 @@ func (h *runnerHooks) LifecycleHooks() *LifecycleHooks {
 // available window and uses the last (freshest) successful result.
 func TestScheduler_IterativeFetch_PicksFreshest(t *testing.T) {
 	nodes := buildCluster(t, 4, &ConfigOverrides{
-		K:       4,
-		TCommit: 200 * time.Millisecond,
-		Delta2:  60 * time.Millisecond,
-		Delta3:  60 * time.Millisecond,
-		BTT:     30 * time.Millisecond,
-		FetchAt: []time.Duration{130 * time.Millisecond, 110 * time.Millisecond, 90 * time.Millisecond, 70 * time.Millisecond},
+		K:               4,
+		TCommit:         200 * time.Millisecond,
+		Delta2:          60 * time.Millisecond,
+		Delta3:          60 * time.Millisecond,
+		BTT:             30 * time.Millisecond,
+		FetchAt:         []time.Duration{130 * time.Millisecond, 110 * time.Millisecond, 90 * time.Millisecond, 70 * time.Millisecond},
+		BroadcastBudget: compressedTestBroadcastBudget(),
 	})
 	leader := nodes[0]
 
@@ -428,12 +447,13 @@ func TestScheduler_IterativeFetch_PicksFreshest(t *testing.T) {
 // single fetch+return rather than spinning.
 func TestScheduler_IterativeFetch_DegradesToSingleShot(t *testing.T) {
 	nodes := buildCluster(t, 4, &ConfigOverrides{
-		K:       4,
-		TCommit: 200 * time.Millisecond,
-		Delta2:  60 * time.Millisecond,
-		Delta3:  60 * time.Millisecond,
-		BTT:     30 * time.Millisecond,
-		FetchAt: []time.Duration{130 * time.Millisecond, 110 * time.Millisecond, 90 * time.Millisecond, 70 * time.Millisecond},
+		K:               4,
+		TCommit:         200 * time.Millisecond,
+		Delta2:          60 * time.Millisecond,
+		Delta3:          60 * time.Millisecond,
+		BTT:             30 * time.Millisecond,
+		FetchAt:         []time.Duration{130 * time.Millisecond, 110 * time.Millisecond, 90 * time.Millisecond, 70 * time.Millisecond},
+		BroadcastBudget: compressedTestBroadcastBudget(),
 	})
 	leader := nodes[0]
 

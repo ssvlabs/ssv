@@ -54,13 +54,16 @@ func newSim(t *testing.T, n int) *sim {
 	}
 
 	// Per-layer FetchAt: T_{K-1} earliest, T_0 latest. Use 50ms decrements
-	// so the schedule is monotonically decreasing in k. All within the
-	// broadcast deadline for the timing config below.
+	// so the schedule is monotonically decreasing in k. All within each
+	// layer's broadcast deadline for the timing config below.
+	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
+	budgets := DefaultBroadcastBudget(K, btt)
 	layers := make([]LayerSpec, K)
 	for k := 0; k < K; k++ {
 		layers[k] = LayerSpec{
-			Leader:  operators[k%n],
-			FetchAt: 1100*time.Millisecond - time.Duration(k)*50*time.Millisecond,
+			Leader:          operators[k%n],
+			FetchAt:         500*time.Millisecond - time.Duration(k)*50*time.Millisecond,
+			BroadcastBudget: budgets[k],
 		}
 	}
 
@@ -73,7 +76,7 @@ func newSim(t *testing.T, n int) *sim {
 		TCommit:   1500 * time.Millisecond,
 		Delta2:    300 * time.Millisecond,
 		Delta3:    250 * time.Millisecond,
-		BTT:       150 * time.Millisecond, // P99=100 + δ=50, matching old D+Delta fixture
+		BTT:       btt,
 	}
 	require.NoError(t, cfg.Validate())
 

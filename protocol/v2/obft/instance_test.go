@@ -351,6 +351,60 @@ func TestObft_Evidence_Rule1_LeaderPhase1SigmaPlusNR(t *testing.T) {
 	require.True(t, found, "expected Rule 1 evidence against op1 at L_0; got %+v", ev)
 }
 
+// TestObft_Evidence_Rule1_LeaderNRBeforePhase1Bundle is the reverse-order
+// twin of TestObft_Evidence_Rule1_LeaderPhase1SigmaPlusNR: the byzantine
+// leader's KindCommit (carrying NR at their own layer) is observed BEFORE
+// their Phase-1 bundle. Per spec §Cross-signing detection, Rule 1 detection
+// is "Immediate (dual partials on the wire)" — order-independent.
+func TestObft_Evidence_Rule1_LeaderNRBeforePhase1Bundle(t *testing.T) {
+	s := newSim(t, 4)
+	v0 := s.candidates[0]
+
+	// 1) Build the byzantine NR-at-own-layer KindCommit OUTSIDE the leader's
+	// instance (bypassing EKM). op2 (honest receiver) observes it.
+	signer := NewStubSigner(s.cfg.QV(), []byte{1})
+	tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	nrSig, err := signer.SignPartial(tag)
+	require.NoError(t, err)
+	byzCommit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Layers:     make([]EncryptedLayer, s.K),
+		NRPartials: []NRPartial{{Layer: 0, PartialSig: nrSig}},
+	}
+	require.NoError(t, s.instances[2].ObserveCommit(byzCommit))
+
+	// At this point Rule 1 cannot have fired yet — op2 hasn't seen the
+	// leader's Phase-1 σ.
+	for _, e := range s.instances[2].Evidence() {
+		require.NotEqualf(t, EvidenceCrossSigning, e.Rule,
+			"Rule 1 must not fire before Phase-1 bundle is observed")
+	}
+
+	// 2) Now the leader's Phase-1 bundle arrives at op2. The bundle's σ_V
+	// signs v0. Rule 1 should fire from ObservePhase1Bundle now that both
+	// sides of the cross-signing pair are present.
+	leaderBundle, err := s.instances[1].BuildPhase1Bundle(0, v0)
+	require.NoError(t, err)
+	require.NoError(t, s.instances[2].ObservePhase1Bundle(leaderBundle, observedEarly))
+
+	ev := s.instances[2].Evidence()
+	found := false
+	for _, e := range ev {
+		if e.Rule == EvidenceCrossSigning && e.OperatorID == 1 && e.Layer == 0 {
+			require.NotNil(t, e.CrossSigning, "Rule 1 evidence must carry payload")
+			require.True(t, bytes.Equal(e.CrossSigning.SigmaValue, v0),
+				"Rule 1 SigmaValue must match the leader's σ_V target")
+			require.True(t, bytes.Equal(e.CrossSigning.NRPartial, nrSig),
+				"Rule 1 NRPartial must match the byzantine NR partial")
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected Rule 1 evidence against op1 at L_0 after reverse-order delivery; got %+v", ev)
+}
+
 // ---- Evidence: leader cross-onion equivocation via Phase-1 σ + onion (E2) ---
 
 func TestObft_Evidence_Rule3_LeaderPhase1SigmaPlusOnion(t *testing.T) {
@@ -387,6 +441,65 @@ func TestObft_Evidence_Rule3_LeaderPhase1SigmaPlusOnion(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected Rule 3 evidence (V_a vs V_b) at L_0 op1; got %+v", ev)
+}
+
+// TestObft_Evidence_Rule3_LeaderOnionBeforePhase1Bundle is the reverse-order
+// twin of TestObft_Evidence_Rule3_LeaderPhase1SigmaPlusOnion: the byzantine
+// leader's L_0 onion entry on V_b is observed BEFORE their Phase-1 bundle on
+// V_a. Per spec §Cross-onion partial-sig equivocation, detection is
+// "Immediate (two σ partials on different V)" — order-independent.
+func TestObft_Evidence_Rule3_LeaderOnionBeforePhase1Bundle(t *testing.T) {
+	s := newSim(t, 4)
+	vA := []byte("V-a")
+	vB := []byte("V-b")
+
+	// 1) op1 (L_0 leader) byzantinely emits a KindCommit with σ on V_b at L_0.
+	// op2 (honest) observes this first.
+	signer := NewStubSigner(s.cfg.QV(), []byte{1})
+	sigB, err := signer.SignPartial(vB)
+	require.NoError(t, err)
+	layers := make([]EncryptedLayer, s.K)
+	layers[0] = EncryptedLayer{Value: append(Value{}, vB...), Ciphertext: sigB}
+	byzCommit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+	require.NoError(t, s.instances[2].ObserveCommit(byzCommit))
+
+	// At this point Rule 3 cannot have fired yet — op2 hasn't seen the
+	// leader's Phase-1 σ on V_a. The L_0 onion entry should sit in
+	// peerOnions[0][op1] (verified σ on V_b against op1's share — verdict =
+	// l0SigmaUnknownV, retained but no evidence).
+	for _, e := range s.instances[2].Evidence() {
+		require.NotEqualf(t, EvidenceCrossOnionEquivocation, e.Rule,
+			"Rule 3 must not fire before Phase-1 bundle is observed; got %+v", e)
+	}
+
+	// 2) Leader's Phase-1 bundle on V_a now arrives at op2. The retroactive
+	// Rule 3 check in reevaluateL0Sigmas should fire.
+	leaderBundle, err := s.instances[1].BuildPhase1Bundle(0, vA)
+	require.NoError(t, err)
+	require.NoError(t, s.instances[2].ObservePhase1Bundle(leaderBundle, observedEarly))
+
+	ev := s.instances[2].Evidence()
+	found := false
+	for _, e := range ev {
+		if e.Rule == EvidenceCrossOnionEquivocation && e.OperatorID == 1 && e.Layer == 0 &&
+			e.CrossOnionEquivocation != nil &&
+			!bytes.Equal(e.CrossOnionEquivocation.ValueA, e.CrossOnionEquivocation.ValueB) {
+			// Bundle V (vA) vs onion V (vB) should be the pair recorded.
+			va, vb := e.CrossOnionEquivocation.ValueA, e.CrossOnionEquivocation.ValueB
+			require.True(t,
+				(bytes.Equal(va, vA) && bytes.Equal(vb, vB)) ||
+					(bytes.Equal(va, vB) && bytes.Equal(vb, vA)),
+				"Rule 3 evidence must pair vA and vB; got ValueA=%q ValueB=%q", va, vb)
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected Rule 3 evidence (vA vs vB) at L_0 op1 after reverse-order delivery; got %+v", ev)
 }
 
 // ---- Evidence: second distinct KindCommit per operator (E3) ---
@@ -483,23 +596,23 @@ func TestObft_Witness_BuildOwnCommit_PacksRetainedBundles(t *testing.T) {
 	}
 }
 
-// TestObft_Witness_DoesNotRehydrateMissedPhase1 — a receiver who missed the
-// L_0 Phase-1 broadcast does NOT recover via witness rehydration.
+// TestObft_Witness_HarvestsLeaderSigmaWhenVKnownViaPeerOnion — a receiver
+// who missed the L_0 Phase-1 broadcast directly but learned V through a
+// peer's σ-onion entry CAN recover the leader's σ_V via the peer's witness
+// section.
 //
-// Per spec §Phase 2 wire format (post-refactor), witnesses ship value_root +
-// σ_V (no full V). A V-drop receiver gets value_root + σ_V from peer
-// witnesses but lacks V — σ_V verification requires V (via the Signer's
-// signing target), so the witnessed σ_V cannot be added to the local σ-pool.
-// V-drop recovery flows through KindCertificate gossip per spec
-// §Final-certificate gossip — a faster peer who reconstructed (V, S)
-// gossips it, and the V-drop receiver consumes the cert directly.
+// Per spec §Phase 2 wire format: witnesses ship value_root + σ_V (plaintext
+// at every layer). When the receiver has V locally — from any source,
+// including a peer's σ-onion entry carrying V — they can cross-reference
+// value_root, verify σ_V against the leader's pubshare on V, and harvest
+// the leader's partial into their σ-pool. Reaches qV in cases where the
+// leader's bundle never reached this operator directly.
 //
-// Setup mirrors the old rehydration test: op4 misses the L_0 bundle;
-// op1/op2/op3 receive it. After Phase 2, op4's local σ-pool at L_0 tops
-// out at 2 (op2 + op3) — qV=3 unreachable. op4 cannot reconstruct
-// locally. Cert-gossip path (out of scope for this unit test) is the
-// recovery mechanism.
-func TestObft_Witness_DoesNotRehydrateMissedPhase1(t *testing.T) {
+// Setup: op4 misses the L_0 bundle; op1/op2/op3 receive it. In Phase 2,
+// op2/op3 emit σ-onion entries at L_0 carrying V plus witness sections
+// with op1's σ_V. op4 receives both: V from op2/op3's onion entries +
+// op1's σ_V from witnesses. Local σ-pool: op2 + op3 + harvested op1 = qV=3.
+func TestObft_Witness_HarvestsLeaderSigmaWhenVKnownViaPeerOnion(t *testing.T) {
 	s := newSim(t, 4)
 
 	// Partition L_0: only op1, op2, op3 receive the bundle. op4 misses.
@@ -512,24 +625,29 @@ func TestObft_Witness_DoesNotRehydrateMissedPhase1(t *testing.T) {
 	require.Empty(t, s.instances[4].bundles[0][1], "op4 should not yet have L_0 bundle from op1")
 
 	// Phase 2: every op builds and broadcasts their KindCommit. op2/op3 pack
-	// witnesses for op1's L_0 bundle (carrying value_root + σ_V, not V).
+	// witnesses for op1's L_0 bundle (value_root + σ_V).
 	s.runPhase2(nil)
 
-	// Spec model: witness carries value_root + σ_V (no full V). op4 cannot
-	// rehydrate the bundle — its bundles[0][1] stays empty. (Old impl
-	// would have populated this from the witness; new impl explicitly skips
-	// the no-match case in ObserveCommit's witness loop.)
+	// Bundle retention stays empty — witnesses don't rehydrate the full bundle.
 	require.Empty(t, s.instances[4].bundles[0][1],
-		"op4 must NOT rehydrate from witness without V — V-drop recovery is via cert gossip")
+		"witnesses must not synthesize a Phase-1 bundle (no V transport)")
 
-	// op4's local L_0 σ-pool: op2's σ + op3's σ = 2 < qV=3. No σ_L^V (op4 has
-	// no V to verify the witnessed leader σ). op4's local Resolve cannot
-	// reach σ-quorum at L_0 OR fall through (op4 NR'd L_0 only because it
-	// missed the bundle; op2/op3 σ'd, so NR-quorum=1 < qEnc=3). Expect a
-	// Resolve error or no decision — V-drop recovery is via cert gossip
-	// (out of scope for this unit test).
-	_, err := s.instances[4].Resolve()
-	require.Error(t, err, "op4 cannot reach σ-quorum or NR-quorum at L_0; cert gossip is the recovery path")
+	// But the witnessed σ_V SHOULD have been harvested into
+	// witnessedLeaderSigma — op2/op3 carried V in their σ-onion entries,
+	// giving op4 a local copy of V to verify witnesses against.
+	root := ValueRoot(s.candidates[0])
+	bucket := s.instances[4].witnessedLeaderSigma[0]
+	require.NotEmpty(t, bucket, "op4 should harvest leader σ_V from peer witnesses")
+	_, ok := bucket[root]
+	require.True(t, ok, "witnessedLeaderSigma must contain entry for L_0's V root")
+
+	// And op4's local Resolve at L_0 now reaches qV: op2 + op3 (from
+	// peerOnions) + op1 leader's σ_V (from witness) = 3 = qV.
+	out, err := s.instances[4].Resolve()
+	require.NoError(t, err, "op4 reaches σ-quorum at L_0 via witness harvest")
+	require.NotNil(t, out)
+	require.Equal(t, 0, out.Layer)
+	require.True(t, bytes.Equal(out.Value, s.candidates[0]))
 }
 
 // TestObft_Witness_RejectsBadLeaderClaim — ValidateCommit rejects a witness
@@ -774,26 +892,24 @@ func TestObft_NRPartial_RejectedUnderOptionA(t *testing.T) {
 	require.Empty(t, s.instances[3].peerNR[0])
 }
 
-// TestObft_UnknownV_NoRule5_NotFiredAtFinalize — per spec §Slashing
-// evidence Rule 5, detection requires the receiver to have retained-or-
-// auth-only-retained V at L_0. A byzantine that broadcasts a KindCommit
-// with a σ partial verifying on a V the cluster never retained is
-// l0SigmaUnknownV; Rule 5 is NOT fired for unknownV anywhere, including
-// at Finalize, to avoid false-positives against honest peers who signed
-// an equivocated V their receivers didn't get via gossipsub.
+// TestObft_UnknownV_Rule5_FiresWhenVNotRetained — per spec §Slashing
+// evidence Rule 5, "a plaintext σ partial that does not verify against any
+// retained candidate V at that layer (where the receiver has retained at
+// least one such V) … is a slashable byzantine fault". The unknownV
+// variant — σ verifies against op's own share on the claimed V, but
+// claimed V is not in the receiver's retained set — fires Rule 5
+// immediately once the receiver has at least one V to compare against.
 //
-// See Instance.Finalize doc-comment for the rationale: cluster-wide
-// attribution for the unknownV case is recovered via out-of-band log
-// aggregation across operators (the manual-blacklist mechanism is the
-// canonical consumer). The cryptoFake case (σ doesn't verify on claimed
-// V) still fires Rule 5 immediately — see
-// TestObft_Rule5_CryptoFakeSilentLeader.
-func TestObft_UnknownV_NoRule5_NotFiredAtFinalize(t *testing.T) {
+// Per spec MUST-log framing, per-receiver-view evidence is logged
+// regardless of whether other receivers might have retained the V via a
+// different path (e.g. leader equivocation); out-of-band aggregation
+// reconciles. See TestObft_Rule5_NoFireWhenBothEquivocatedVsRetained for
+// the negative case where the receiver retained BOTH equivocated V's.
+func TestObft_UnknownV_Rule5_FiresWhenVNotRetained(t *testing.T) {
 	s := newSim(t, 4)
 
-	// Op2 honestly signs a V the cluster never broadcast (e.g., they
-	// received it via a leader-equivocation path the receiver missed).
-	// The signature verifies cryptographically against op2's own share.
+	// Op2 signs a V the cluster never broadcast. The signature verifies
+	// against op2's own share but doesn't match any V the leader signed.
 	signer := NewStubSigner(s.cfg.QV(), []byte{2})
 	fakeV := []byte("never-broadcast-V")
 	sigOnFakeV, err := signer.SignPartial(fakeV)
@@ -807,29 +923,88 @@ func TestObft_UnknownV_NoRule5_NotFiredAtFinalize(t *testing.T) {
 		Layers:     layers,
 	}
 
-	// Receiver observes the Commit before any L_0 bundle: inconclusive,
-	// no Rule 5.
-	require.NoError(t, s.instances[3].ObserveCommit(byzCommit))
-	for _, e := range s.instances[3].Evidence() {
+	receiver := s.instances[3]
+
+	// Pre-retention: receiver has no V at L_0. peerSigmaAtL0Verdict
+	// returns inconclusive — Rule 5 cannot fire yet.
+	require.NoError(t, receiver.ObserveCommit(byzCommit))
+	for _, e := range receiver.Evidence() {
 		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
-			"Rule 5 must NOT fire before retention")
+			"Rule 5 must NOT fire before any V is retained")
 	}
 
-	// L_0 leader's bundle arrives (V_a, not the one op2 signed).
-	// reevaluateL0Sigmas fires only on cryptoFake — op2's σ verifies on
-	// fakeV (just unknownV), so still no Rule 5.
+	// Leader's bundle on V_a arrives. reevaluateL0Sigmas re-checks the
+	// peerOnion entry: verdict is now unknownV (fakeV doesn't match V_a).
+	// Rule 5 fires retroactively.
 	s.deliverPhase1(0, s.candidates[0], []OperatorID{1, 2, 3, 4}, observedEarly, true)
-	for _, e := range s.instances[3].Evidence() {
-		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
-			"Rule 5 must NOT fire on unknownV at retention time")
+	found := false
+	for _, e := range receiver.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 && e.Layer == 0 {
+			require.NotNil(t, e.FakePlaintextSigma)
+			require.True(t, bytes.Equal(e.FakePlaintextSigma.OnionValue, fakeV),
+				"Rule 5 evidence must carry the offending OnionValue")
+			found = true
+			break
+		}
 	}
+	require.True(t, found, "expected Rule 5 evidence against op2 at L_0 after V_a retention; got %+v", receiver.Evidence())
+}
 
-	// Finalize is now a pure ended-flag flip; no Rule 5 attribution swept.
-	s.instances[3].Finalize()
-	for _, e := range s.instances[3].Evidence() {
-		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
-			"Rule 5 must NOT fire on unknownV at Finalize either; got %+v", e)
+// TestObft_Rule5_NoFireWhenBothEquivocatedVsRetained — when an L_0 leader
+// equivocates (V_a then V_b), and the receiver retains BOTH V's (per the
+// 2-distinct retention rule), an honest peer's σ on V_b verifies against
+// the retained V_b. Verdict = l0SigmaVerified, no Rule 5 fires. The
+// leader still gets Rule 2 (LeaderEquivocation) evidence — the slot's
+// byzantine attribution targets the leader, not the honest equivocation-
+// reactor.
+func TestObft_Rule5_NoFireWhenBothEquivocatedVsRetained(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.cfg.Layers[0].Leader
+	vA := s.candidates[0]
+	vB := []byte("equivocated-V_b")
+
+	receiver := s.instances[3]
+
+	// Step 1: receiver retains BOTH leader bundles (Rule 2 fires at
+	// retention of the second). deliverPhase1Equivocation routes V_a and
+	// V_b to disjoint sets but both reach op3 via the recipientsA + B
+	// arguments.
+	s.deliverPhase1Equivocation(0, vA, vB,
+		[]OperatorID{1, 2, 3, 4}, []OperatorID{3},
+		observedEarly, true)
+	require.GreaterOrEqualf(t, len(receiver.bundles[0][leaderID]), 2,
+		"setup: receiver must retain both equivocated V's")
+
+	// Step 2: honest op2 σ-signs V_b (received it from the leader's
+	// equivocation broadcast). Op2's commit arrives at receiver. Verdict
+	// = l0SigmaVerified (matches retained V_b). Rule 5 must NOT fire.
+	op2Signer := NewStubSigner(s.cfg.QV(), []byte{2})
+	op2SigOnVb, err := op2Signer.SignPartial(vB)
+	require.NoError(t, err)
+	layers := make([]EncryptedLayer, s.K)
+	layers[0] = EncryptedLayer{Value: vB, Ciphertext: op2SigOnVb}
+	op2Commit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 2,
+		Height:     s.cfg.Height,
+		Layers:     layers,
 	}
+	require.NoError(t, receiver.ObserveCommit(op2Commit))
+
+	for _, e := range receiver.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 {
+			t.Fatalf("Rule 5 must NOT fire against op2 when V_b is retained: %+v", e)
+		}
+	}
+	// Leader still attributed via Rule 2.
+	rule2Found := false
+	for _, e := range receiver.Evidence() {
+		if e.Rule == EvidenceLeaderEquivocation && e.OperatorID == leaderID {
+			rule2Found = true
+			break
+		}
+	}
+	require.True(t, rule2Found, "Rule 2 (leader equivocation) must still fire against the leader")
 }
 
 // TestObft_Finalize_Idempotent — Finalize is safe to call repeatedly.
@@ -853,21 +1028,19 @@ func TestObft_Finalize_Idempotent(t *testing.T) {
 	require.Len(t, inst.Evidence(), len(preEv), "second Finalize must not mutate Evidence")
 }
 
-// TestObft_Rule5_NoFalsePositiveOnEquivocation — when an L_0 leader equivocates
-// (V_a then V_b), an honest peer who σ-signed V_b before V_b reached our
-// retention must NOT be flagged Rule 5. The σ partial verifies cryptographically
-// against the peer's pubshare on V_b — Rule 5 evidence is reserved for partials
-// that either don't verify on their claimed V, or that sign a V the cluster
-// never retains.
-func TestObft_Rule5_NoFalsePositiveOnEquivocation(t *testing.T) {
+// TestObft_Rule5_FiresOnMinorityEquivocationView — when a leader equivocates
+// V_a/V_b and a receiver retains only V_a (V_b's bundle never arrived to
+// this receiver), an honest peer who σ-signed V_b is logged Rule 5 from
+// the receiver's local view. Per spec MUST-log framing this is expected:
+// out-of-band aggregation reconciles minority views against the majority
+// (receivers who retained V_b log no Rule 5 against the peer; leader still
+// attributed via Rule 2 from any receiver who retained both V's).
+func TestObft_Rule5_FiresOnMinorityEquivocationView(t *testing.T) {
 	s := newSim(t, 4)
-
-	// Setup: leader (op1 by default) emits V_a; receiver (op3) retains it.
 	leaderID := s.cfg.Layers[0].Leader
 	V_a := s.candidates[0]
 	V_b := []byte("equivocating-leader-V_b")
 
-	// Honest op2 σ-signs V_b (it received V_b first under the equivocation).
 	op2Signer := NewStubSigner(s.cfg.QV(), []byte{byte(2)})
 	op2SigOnVb, err := op2Signer.SignPartial(V_b)
 	require.NoError(t, err)
@@ -882,43 +1055,25 @@ func TestObft_Rule5_NoFalsePositiveOnEquivocation(t *testing.T) {
 
 	receiver := s.instances[3]
 
-	// Step 1: receiver retains leader's V_a first. deliverPhase1 has the
-	// leader self-observe and delivers to the rest of the recipients.
+	// Receiver retains leader's V_a (the V_b bundle never reaches this
+	// receiver; the equivocation is invisible from their local view).
 	s.deliverPhase1(0, V_a, []OperatorID{1, 2, 3, 4}, observedEarly, true)
 	require.NotZero(t, len(receiver.bundles[0][leaderID]),
 		"setup: receiver must have V_a retained")
 
-	// Step 2: op2's commit arrives. el.Value=V_b. retained={V_a}. Under the
-	// old flat-fake verdict this would fire Rule 5 falsely; under the new
-	// split it's l0SigmaUnknownV → deferred.
+	// Op2's commit on V_b arrives. peerSigmaAtL0Verdict = l0SigmaUnknownV
+	// (verifies on V_b, but V_b is not retained). Per spec literal reading
+	// of Rule 5 ("does not verify against any retained candidate V"),
+	// receiver logs Rule 5 against op2.
 	require.NoError(t, receiver.ObserveCommit(op2Commit))
-	for _, e := range receiver.Evidence() {
-		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
-			"Rule 5 must NOT fire while V_b is still pending; got %+v", e)
-	}
-
-	// Step 3: leader (byzantine) finally broadcasts V_b — equivocation
-	// retention. Op2's entry should now be rescued (verified, not fake).
-	leaderSigner := NewStubSigner(s.cfg.QV(), []byte{byte(leaderID)})
-	leaderSigOnVb, err := leaderSigner.SignPartial(V_b)
-	require.NoError(t, err)
-	leaderBundleVb := &Phase1Bundle{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: leaderID,
-		Height:     s.cfg.Height,
-		Layer:      0,
-		Value:      V_b,
-		SigmaV:     leaderSigOnVb,
-	}
-	require.NoError(t, receiver.ObservePhase1Bundle(leaderBundleVb, observedEarly))
-
-	// Step 4: at Finalize, op2's σ on V_b matches retained V_b → verified, no Rule 5.
-	receiver.Finalize()
+	rule5Found := false
 	for _, e := range receiver.Evidence() {
 		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 2 {
-			t.Fatalf("Rule 5 false-positive against honest op2: %+v", e)
+			rule5Found = true
+			break
 		}
 	}
+	require.True(t, rule5Found, "Rule 5 must fire against op2 from minority-view receiver")
 }
 
 // TestObft_Rule5_CryptoFakeSilentLeader — a byzantine's L_0 σ partial that
