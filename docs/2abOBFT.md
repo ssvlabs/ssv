@@ -14,8 +14,8 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 - High-P99 networks (`P99` ≈ 300–500ms) where multi-round protocols don't fit a 4s relay cutoff but a single round with the Phase-2 split still does.
 
 **Not suited for:**
-- Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [OBFT](OBFT.md) saves 200-600ms but exposes the closed-here failure modes.
-- Deployments where the **2-1-byz-defect grief pattern** dominates the adversarial-byz threat profile. 2abOBFT regresses on this case vs bare OBFT — see [§2-1 split](#2-1-split) and [§What 2abOBFT does NOT close](#what-2abobft-does-not-close). Bare OBFT would have closed it via the Phase-1 σ_L^V cryptographic lock; 2abOBFT removed that lock to gain validity-divergence and 1-1-1 equivocation recovery. The two are complementary recovery profiles, not strictly comparable: 2abOBFT closes more cases overall but specifically opens this one.
+- Deployments where every millisecond of submission headroom is critical and the Class B grief patterns 2abOBFT closes are not relevant (e.g., low-stake testnet clusters with cooperative byzantines). [OBFT](OBFT.md) saves ~600ms (= 3 BTT at Config A: Phase 2a window 400ms + extra broadcast slack 200ms) but exposes the closed-here failure modes.
+- Deployments where the **2-1-byz-defect grief pattern** dominates the adversarial-byz threat profile. 2abOBFT regresses on this case vs bare OBFT — see [§2-1 split](#2-1-split) and [§Failure modes](#failure-modes). Bare OBFT would have closed it via the Phase-1 σ_L^V cryptographic lock; 2abOBFT removed that lock to gain validity-divergence and 1-1-1 equivocation recovery. The two are complementary recovery profiles, not strictly comparable: 2abOBFT closes more cases overall but specifically opens this one.
 - General-purpose state-machine replication where decision *agreement* across operators (not just *output*) is required. 2abOBFT (like the rest of the OBFT family) gives a unique cluster-wide *output* via cryptographic safety; honest operators may locally observe different intermediate states without affecting the output.
 - Scenarios requiring host-validity-divergence recovery in 2-2 splits at f=1 n=4 (still Class A; the witness phase narrows the divergence window but cannot eliminate it). [QBFT](#a3--comparison-with-bare-obft-and-qbft) is the appropriate choice when validity is meaningfully unstable across the consensus window.
 - Sustained partition tails beyond the absorption window (`Δ_2a + 1 BTT` ≈ 600ms at Config A recommended). Multi-round extensions are a future direction.
@@ -25,7 +25,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 - A cluster of `n` participants with byzantine bound `f` such that `n = 3f+1` (the BFT-tight setting; matches SSV's deployment configurations `n ∈ {4, 7, 10, 13}`). Running example: `n = 4, f = 1`. The threshold formula `qV = qEnc = 2f+1` below equals `n − f` exactly at this setting; this equality is what makes the bare Pigeonhole arguments in [§Safety](#safety-cryptographic-honest-majority) hold. (At `n > 3f+1`, the convergence rule's verdict-pool tie-break + `nr_eligibility_quorum` override would need to do the safety work — see [§Phase 2b convergence rule](#phase-2b); current spec does not exercise this case.)
 - **Two threshold BLS keypairs** from independent DKGs run once at cluster init:
   - **V-signing keypair** at threshold `qV = 2f+1`. Used to produce the per-validator signature on `V` (e.g. an Ethereum block in the SSV proposer-duty application). Reconstructing a full `V` signature requires `qV` partial sigs. At `n = 4`, `qV = 3`.
-  - **IBE keypair** at threshold `qEnc = 2f+1`. Used (a) as the threshold-signing scheme for no-quorum tags and (b) as the decryption oracle for threshold identity-based encryption (IBE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair. The two keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), but share the threshold — see [Safety](#safety). At `n = 4`, `qEnc = 3`.
+  - **IBE keypair** at threshold `qEnc = 2f+1`. Used (a) as the threshold-signing scheme for no-quorum tags and (b) as the decryption oracle for threshold identity-based encryption (IBE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair. The two keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), but share the threshold — see [Safety](#safety-cryptographic-honest-majority). At `n = 4`, `qEnc = 3`.
 - A **leader-authentication signature scheme** (operator-identity key) for candidate broadcasts, verdict envelopes, and Phase-2b onion auth. Distinct from the two threshold keypairs. Practical choice: reuse each operator's long-term P2P/SSV identity key.
 - **K layers** (`max(2, f+1) ≤ K ≤ n`, configurable; **K ≥ f+2 strongly recommended** — see below) with deterministically-derived leaders: layer 0 with **primary leader** `L_0`, layer 1 with **backup leader** `L_1`, ..., layer `K-1` with `L_{K-1}`. Leaders must be distinct (`L_i ≠ L_j` for `i ≠ j`). For `K = n`, every cluster member is a leader at exactly one layer per slot.
 
@@ -393,9 +393,7 @@ This section consolidates everything the protocol guarantees — and doesn't —
 - **Byzantine bound `f`** with cluster size `n = 3f+1` (the BFT-tight setting; see [§Assumed / Standard BFT trust bound at the tight setting](#assumed)): up to `f` operators may be arbitrarily malicious (collude, equivocate, cross-sign, withhold, etc.). Exactly `2f+1` honest.
 - **Partial synchrony for liveness**: messages eventually deliver within bounded delay `P99` (propagation P99/P999) and clock skew `δ`. Three distinct cutoffs operationalize this bound: `T_broadcast_max = T_verdict_start − 2 BTT` (leader broadcast deadline), `T_accept_max = T_commit − 1 BTT` (receiver acceptance horizon), `T_verdict_max = T_commit − 1 BTT` (verdict broadcast horizon, coincident with `T_accept_max`). Reconstruction is expected to complete at `T_commit + Δ_2b + Δ_3`; the slot's hard wall is the relay-submission deadline `T_relay_cutoff − T_submit`.
 
-  **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + 1 BTT`:
-  - At `Δ_2a = 1 BTT` (BFT-minimum): `2 BTT` = 400ms at Config A.
-  - At `Δ_2a = 2 BTT` (recommended): `3 BTT` ≈ 600ms at Config A.
+  **2abOBFT's effective absorption window** = `T_accept_max − T_broadcast_max = Δ_2a + 1 BTT = 3 BTT ≈ 600ms` at Config A (at the mandatory `Δ_2a = 2 BTT` recommended sizing; sub-2-BTT sizings are broken-by-construction with the late-broadcast verdict schedule — see [§Phase 2a](#phase-2a)).
 
   Real propagation > absorption window is Class A "sustained partition" — out of envelope by definition.
 
@@ -611,7 +609,7 @@ The slot misses (no V signature is produced) under any of the following.
 
   **This is a wider attack surface than 2-1-byz-defect** — it triggers on any slot where marginal h_V puts the cluster at the convergence boundary, not only on byz-leader slots. The trigger condition (h_V_honest = 2 at f=1 n=4) sits inside the absorption-window envelope under partial synchrony but is plausible under realistic network conditions. The deeper structural issue: the convergence rule's "first-observed wins" semantics implicitly assumes peer-convergence on the verdict view, which a byzantine can break by per-peer verdict injection. The rational-byzantine deterrent (assumption 4) is the practical defense; per-slot, this case slot-misses cleanly with cryptographic evidence (Rule 6a) on the wire.
 
-  **Mitigation options at implementation time** (not in current spec; see [Appendix C / Open questions](#open-questions--decisions-to-make-at-implementation-time) #16):
+  **Mitigation options at implementation time** (not in current spec; see [docs/2abOBFT-design-notes.md / Open questions](2abOBFT-design-notes.md#open-questions--decisions-to-make-at-implementation-time) #16):
   - EKM-bind verdicts so byz cannot issue more than one verdict per `(slot, layer)` from their own EKM. Byzantine bypass of own EKM is still possible (byz controls their software), but cluster-wide receiver behavior on observing two verdicts can include "treat verdict-equivocator's verdict as null" — which would route this scenario through NR-quorum fall-through. Closes both this and the 2-1-byz-defect regression at the cost of an EKM "verdict-void" operation gated on equivocation evidence (to preserve honest verdict revision when bundle equivocation is observed mid-Phase-2a).
   - Accept the regression: rely on rational-byzantine deterrent across slots.
 
@@ -791,7 +789,7 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Validity-divergence at 2-2 boundary | Slot misses (Class A) | Slot misses (Class A — same algebraic limit) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) ✓ |
 | Mesh-flakiness | Class B | Mitigated ✓ |
-| Submission headroom (Config A recommended) | ~2.0s | ~1.3s |
+| Submission headroom (Config A recommended) | ~2.0s | ~1.5s |
 | Bandwidth (healthy, n=4, K=4) | ~28 KB across 1 emission (includes the σ_L^V witness section ≈ +2.3 KB at K=4 n=4) | ~30 KB across 2 emissions (no σ_L^V witness — 2abOBFT has no Phase-1 σ_L^V; +3 KB for verdicts vs OBFT baseline before witness) |
 | EKM complexity | Phase-1 σ_V + Phase-2 σ + NR coordination | Phase-2b σ XOR NR only — simplest in the family |
 | Slashing-evidence rules | 5 | 7 (Rules 1-5 inherited + Rule 6a verdict-vs-verdict cryptographic + Rule 6b verdict-vs-action gossipsub-pattern-quality) |
@@ -842,7 +840,7 @@ These are patterns where bare OBFT's σ-emit-during-Phase-2 cross-phase exclusiv
 - **Mesh-flakiness coordinated with byz σ-refusal at byz-leader slots**: no Phase-1 σ_V from byz leader → bare OBFT's σ-pool is starved when 1 honest mesh-flakes incorrectly to NR; 2abOBFT routes to NR fall-through via convergence rule.
 - **σ-locked equivocation 1-1-1 split**: bare OBFT's σ partials split below qV; 2abOBFT's verdict pool short → all NR → fall-through.
 - **h_V=1 selective-delivery deadlock**: same algebraic shape — bare OBFT's σ-locked-on-V honest can't switch sides; 2abOBFT's deferred binding allows convergence-rule fall-through.
-- **Validity-divergence majority recovery (3-of-4 at f=1 n=4)**: bare OBFT's leader Phase-1 σ_V locks σ-side onto stale V at re-org; 2abOBFT's leader doesn't pre-lock (Variant C in [Appendix C / Variants considered](#variants-considered)) — Phase-2b binds against post-observation stabilized verdict pool.
+- **Validity-divergence majority recovery (3-of-4 at f=1 n=4)**: bare OBFT's leader Phase-1 σ_V locks σ-side onto stale V at re-org; 2abOBFT's leader doesn't pre-lock (Variant C in [docs/2abOBFT-design-notes.md / Variants considered](2abOBFT-design-notes.md#variants-considered)) — Phase-2b binds against post-observation stabilized verdict pool.
 - **Late deepest-layer-leader broadcast within Phase-2a**: Phase 2a re-flood absorbs cleanly; bare OBFT needs widened Δ_2 with its own absorption-vs-validity-divergence-window trade-off.
 
 These all involve adversarial-byz patterns or application validity-divergence — **pure all-honest network failures fall in Bucket 1, not here.** Extending Δ_2 in bare OBFT (matching 2abOBFT's commit deadline) does not close these patterns; the cross-phase exclusivity is structural, not time-based.
@@ -877,12 +875,12 @@ These are patterns 2abOBFT introduces or fails to recover, where bare OBFT and/o
 
 At SSV proposer-duty default budget (~4s relay cutoff with P99 = 150ms, δ = 50ms), each protocol allocates the budget differently:
 
-All counts at recommended sizing (2 BTT per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)). Numbers use the cross-protocol convention (Phase 3 = 0 BTT); deployment-time accounting lists `Δ_3 = ε_3 ≈ 50ms` separately (≈ 0.25 BTT at Config A), aligned with OBFT/OBFTR — see [§Slot timing](#slot-structure).
+All counts at recommended sizing (2 BTT per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)). Numbers use the cross-protocol convention (Phase 3 = 0 BTT); deployment-time accounting lists `Δ_3 = ε_3 ≈ 50ms` separately (≈ 0.25 BTT at Config A), aligned with OBFT/OBFTR — see [§Timing budget — concrete configurations](#timing-budget--concrete-configurations).
 
 | Aspect | bare OBFT | 2abOBFT | QBFT-SSV (RT=2s, current SSV) |
 |---|---|---|---|
 | Consensus budget (incl. retry) | ~600ms | ~1200ms | ~3.6s (R1 + RT + R2 fits) |
-| Submission headroom | ~2.0s | ~1.2s | ~0.4s |
+| Submission headroom | ~2.0s | ~1.4s | ~0.4s |
 | Healthy-path R1 latency | ~600ms | ~1200ms | ~1600ms |
 | Bandwidth (n=4, K=4 healthy) | ~28 KB | ~30 KB | ~14 KB |
 | Cryptographic primitives | BLS + threshold IBE/SWE | BLS + threshold IBE/SWE | BLS threshold |
