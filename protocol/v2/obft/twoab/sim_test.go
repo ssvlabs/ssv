@@ -46,18 +46,29 @@ type sim struct {
 // (L_0 leader = op1, L_1 = op2, ..., L_{K-1} = op_K), modeling the
 // simplest layer assignment.
 func newSim(t *testing.T, n int) *sim {
-	t.Helper()
-	require.GreaterOrEqual(t, n, 4, "sim requires n >= 4 (3f+1 at f=1)")
+	return newSimWithF(t, n, 1)
+}
 
-	f := 1
+// newSimWithF is the F-parameterized variant of newSim, used by Phase-J
+// n=7/f=2 scenarios that exercise the validity-divergence majority claim
+// at larger cluster sizes.
+func newSimWithF(t *testing.T, n, f int) *sim {
+	t.Helper()
+	require.GreaterOrEqual(t, n, 3*f+1, "sim requires n >= 3f+1")
+
 	K := 4
 	if n < K {
 		K = n
 	}
+	// At f >= 2, Config.Validate enforces K >= f+2 (>= 4 at f=2 is the
+	// late-leader-resilience minimum).
+	if K < f+2 {
+		K = f + 2
+	}
 
 	c := healthyConfig()
-	// Adjust the cluster to size n if needed (healthyConfig is n=4).
-	if n != 4 {
+	// Adjust the cluster to size n if needed (healthyConfig is n=4, f=1).
+	if n != 4 || f != 1 {
 		ops := make([]OperatorID, n)
 		layers := make([]LayerSpec, K)
 		btt := 200 * time.Millisecond
