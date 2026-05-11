@@ -126,7 +126,11 @@ func (r SafetyReport) String() string {
 // NoOfflineDoubleV is read from o.OfflineAgg (set by adapters that
 // instrument the aggregator). When unset (zero value), defaults to true so
 // adapters not yet instrumenting the aggregator don't trigger spurious
-// safety panics — Phase 1 + Phase 2 wire this up.
+// safety panics. The same graceful-degradation pattern applies to the
+// CommitAttestation-driven invariants (QuorumBackedDecision,
+// NoEquivocationAccepted, OBFTCommitKindValid, OBFTHostValidityRespect):
+// adapters set the corresponding *Checked field to opt in, and only then
+// can a violation be reported.
 func ComputeSafetyReport(o Outcome) SafetyReport {
 	r := SafetyReport{
 		SingleV:                 true,
@@ -224,8 +228,8 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 // SafetyPanic panics with a structured diagnostic. Should never fire on a
 // correct protocol implementation. expected is the scenario's declared
 // per-protocol expectation (e.g. ExpectSuccessFastest); a per-op evidence
-// summary and the trace (when enabled) are appended so a violating run is
-// self-diagnosing.
+// summary, the CommitAttestation diagnostic fields, and the trace (when
+// enabled) are appended so a violating run is self-diagnosing.
 func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expected ExpectClass, o Outcome) {
 	msg := fmt.Sprintf(
 		"CONSENSUSTEST SAFETY VIOLATION\nscenario=%s protocol=%s expected=%s\n  %s\n  outcome: decided=%v round=%d value=%x\n  distinct outputs: %v\n  %s",
@@ -235,6 +239,20 @@ func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expecte
 		report.DistinctOutputs,
 		o.OfflineAgg,
 	)
+	// Surface the CommitAttestation diagnostic fields whenever any of the
+	// attestation-driven invariants fired. Without these, panic messages
+	// for quorum / equivocation / σ-or-NR / host-validity failures would
+	// say "FAIL" without showing the offending counts/kind.
+	att := o.CommitAttestation
+	if !report.QuorumBackedDecision || !report.NoEquivocationAccepted ||
+		!report.OBFTCommitKindValid || !report.OBFTHostValidityRespect {
+		msg += fmt.Sprintf(
+			"\n  attestation: quorumSigners=%d quorumRequired=%d equivObserved=%d equivAccepted=%d obftCommitKind=%q obftHostValidityRejecters=%d",
+			att.QuorumSigners, att.QuorumRequired,
+			att.EquivocationsObserved, att.EquivocationsAccepted,
+			att.OBFTCommitKind, att.OBFTHostValidityRejecters,
+		)
+	}
 	// Iterate ops in sorted order so the panic message is deterministic
 	// across runs (Go map iteration is randomized). EvidenceByRule's %v
 	// formatting is already sorted by Go's printer for map types.

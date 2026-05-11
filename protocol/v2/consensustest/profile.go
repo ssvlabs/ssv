@@ -1,8 +1,6 @@
 package consensustest
 
-import (
-	"time"
-)
+import "time"
 
 // Mode identifies which test tier a scenario participates in. Scenarios
 // declare their supported modes via Scenario.Modes; test entry points
@@ -62,26 +60,29 @@ const (
 // WHAT goes wrong; a profile describes HOW we run it. The same catalog
 // scenario can be executed under either profile (assuming it opts in via
 // Scenario.Modes).
+//
+// Today the framework consumes BaseConfig directly. The other fields
+// document the tier's intended runtime shape for callers / future
+// runner-side wiring (e.g. a Profile-aware batch driver that honors
+// Iterations / Seed / Assertions instead of carrying those knobs
+// separately on BatchConfig).
 type Profile struct {
-	Name        string
-	Mode        Mode
-	Network     NetworkModel
-	Iterations  int
-	Seed        SeedStrategy
-	Assertions  AssertLevel
-	BaseConfig  SimConfig // template; the runner sets Seed + applies scenario Apply
+	Name       string
+	Mode       Mode
+	Iterations int
+	Seed       SeedStrategy
+	Assertions AssertLevel
+	BaseConfig SimConfig // template; the runner copies + applies scenario.Apply per sim
 }
 
 // CorrectnessProfile is the deterministic preset used by TestCorrectness.
-// One iteration per scenario, ConstantDelay, hard assertions. Scenarios
-// that consult the profile's RNG produce the same fault every time.
+// One iteration per scenario, ConstantDelay, hard assertions.
 func CorrectnessProfile(btt time.Duration) Profile {
 	base := DefaultProposerDutyConfig(btt)
 	base.Network = ConstantDelay{D: btt}
 	return Profile{
 		Name:       "correctness",
 		Mode:       ModeCorrectness,
-		Network:    base.Network,
 		Iterations: 1,
 		Seed:       SeedFixed,
 		Assertions: AssertHard,
@@ -105,23 +106,9 @@ func StressProfile(btt time.Duration, iterations int, net NetworkModel) Profile 
 	return Profile{
 		Name:       "stress",
 		Mode:       ModeStress,
-		Network:    base.Network,
 		Iterations: iterations,
 		Seed:       SeedDerived,
 		Assertions: AssertSafetyOnly,
 		BaseConfig: base,
-	}
-}
-
-// BatchConfig translates the profile into the existing BatchConfig the
-// runner consumes. Scenarios + Protocols are caller-supplied because the
-// profile is agnostic to which slice of the catalog gets run.
-func (p Profile) BatchConfig(scenarios []Scenario, protocols []Protocol) BatchConfig {
-	return BatchConfig{
-		Iterations: p.Iterations,
-		SeedStart:  p.BaseConfig.Seed,
-		Base:       p.BaseConfig,
-		Scenarios:  scenarios,
-		Protocols:  protocols,
 	}
 }

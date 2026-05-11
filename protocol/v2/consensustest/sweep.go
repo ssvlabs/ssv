@@ -144,7 +144,7 @@ func clusterScalingSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	return Sweep{
 		Name:        "cluster_scaling",
 		Title:       "Cluster-size scaling",
-		Description: "Cluster-size scaling: n ∈ {4, 7, 10, 13} at fixed BTT=200ms. Shows per-protocol scaling behavior across SSV-supported cluster sizes.",
+		Description: "Cluster-size scaling: n ∈ {4, 7, 10, 13} at fixed BTT=200ms, JitteredDelay. Shows per-protocol scaling behavior across SSV-supported cluster sizes.",
 		AxisLabel:   "Cluster size n",
 		Points:      pts,
 	}
@@ -175,7 +175,7 @@ func bttDegradationSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	return Sweep{
 		Name:        "btt_degradation",
 		Title:       "Network-degradation curves (BTT)",
-		Description: "Network-degradation curves: BTT ∈ {100, 200, 400, 600}ms at fixed n=4. Reveals envelope-fit at each protocol's tolerance ceiling.",
+		Description: "Network-degradation curves: BTT ∈ {100, 200, 400, 600}ms at fixed n=4, JitteredDelay (jitter = BTT/4). Reveals envelope-fit at each protocol's tolerance ceiling.",
 		AxisLabel:   "BTT",
 		Points:      pts,
 	}
@@ -226,6 +226,7 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 				Name:  s.Name,
 				Title: s.Title,
 				Group: s.Group,
+				Modes: s.Modes,
 				Apply: func(cfg *SimConfig) {
 					if inner.Apply != nil {
 						inner.Apply(cfg)

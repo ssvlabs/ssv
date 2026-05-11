@@ -30,13 +30,10 @@ import (
 func TestCorrectness(t *testing.T) {
 	profile := ct.CorrectnessProfile(200 * time.Millisecond)
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeCorrectness)
+	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeCorrectness")
 
-	scenarios := 0
-	for _, s := range ct.Catalog {
-		if !s.HasMode(ct.ModeCorrectness) {
-			continue
-		}
-		scenarios++
+	for _, s := range scenarios {
 		t.Run(s.Name, func(t *testing.T) {
 			for _, p := range protocols {
 				t.Run(p.Name(), func(t *testing.T) {
@@ -48,5 +45,4 @@ func TestCorrectness(t *testing.T) {
 			}
 		})
 	}
-	require.Greater(t, scenarios, 0, "no catalog scenarios opted into ModeCorrectness")
 }

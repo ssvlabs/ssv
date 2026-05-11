@@ -72,7 +72,7 @@ func TestAdapter_MultiByzSilentAtN7(t *testing.T) {
 
 // TestAdapter_PerRuleEvidence verifies the FakeEncryptedPresence scenario
 // fires Rule 4 evidence at honest receivers, classified under
-// "OBFT/Rule4/FakeEncryptedPresence". Exercises the full per-rule plumbing
+// obftadapter.RuleFakeEncryptedPresence. Exercises the full per-rule plumbing
 // path (instance.Evidence() collection, adapter ruleKey mapping, EvidenceByRule
 // map propagation) AND validates that Rule 4 detection actually fires under
 // the canonical chained-decrypt-fails scenario.
@@ -89,7 +89,7 @@ func TestAdapter_PerRuleEvidence(t *testing.T) {
 
 	totalRule4 := 0
 	for _, oo := range out.PerOp {
-		totalRule4 += oo.EvidenceByRule["OBFT/Rule4/FakeEncryptedPresence"]
+		totalRule4 += oo.EvidenceByRule[obftadapter.RuleFakeEncryptedPresence]
 	}
 	require.GreaterOrEqual(t, totalRule4, 3,
 		"all 3 honest receivers should fire Rule 4 against byz; got: %v",
@@ -129,7 +129,7 @@ func TestAdapter_FakeEncryptedPresence_StaysSealed_WhenL0Decides(t *testing.T) {
 
 	totalRule4 := 0
 	for _, oo := range out.PerOp {
-		totalRule4 += oo.EvidenceByRule["OBFT/Rule4/FakeEncryptedPresence"]
+		totalRule4 += oo.EvidenceByRule[obftadapter.RuleFakeEncryptedPresence]
 	}
 	require.Equal(t, 0, totalRule4,
 		"Rule 4 must NOT fire when chain stays sealed (cluster decides at L_0 → no NR-quorum → no chain decryption at L_2 → garbage never observed). got evidence: %v",
@@ -260,7 +260,7 @@ func TestAdapter_ByzCrossSigning(t *testing.T) {
 
 	totalRule1 := 0
 	for _, oo := range out.PerOp {
-		totalRule1 += oo.EvidenceByRule["OBFT/Rule1/CrossSigning"]
+		totalRule1 += oo.EvidenceByRule[obftadapter.RuleCrossSigning]
 	}
 	require.GreaterOrEqual(t, totalRule1, 1,
 		"at least one honest op should fire Rule 1; got: %v", operatorEvidence(out.PerOp))
@@ -280,7 +280,7 @@ func TestAdapter_ByzFakePlaintextSigma(t *testing.T) {
 
 	totalRule5 := 0
 	for _, oo := range out.PerOp {
-		totalRule5 += oo.EvidenceByRule["OBFT/Rule5/FakePlaintextSigma"]
+		totalRule5 += oo.EvidenceByRule[obftadapter.RuleFakePlaintextSigma]
 	}
 	require.GreaterOrEqual(t, totalRule5, 1,
 		"at least one honest op should fire Rule 5; got: %v", operatorEvidence(out.PerOp))
@@ -304,7 +304,7 @@ func TestAdapter_LeaderEquivocation_Rule2(t *testing.T) {
 
 	totalRule2 := 0
 	for _, oo := range out.PerOp {
-		totalRule2 += oo.EvidenceByRule["OBFT/Rule2/LeaderEquivocation"]
+		totalRule2 += oo.EvidenceByRule[obftadapter.RuleLeaderEquivocation]
 	}
 	require.GreaterOrEqual(t, totalRule2, 1,
 		"at least one honest op should fire Rule 2; got: %v", operatorEvidence(out.PerOp))
@@ -326,8 +326,8 @@ func TestAdapter_ByzCrossOnionEquivocation(t *testing.T) {
 	totalRule3 := 0
 	for _, oo := range out.PerOp {
 		// Rule 3 has two variants: top-level (Layer=-1) and per-layer.
-		totalRule3 += oo.EvidenceByRule["OBFT/Rule3/CrossOnionEquivocation"]
-		totalRule3 += oo.EvidenceByRule["OBFT/Rule3/CommitEquivocation"]
+		totalRule3 += oo.EvidenceByRule[obftadapter.RuleCrossOnionEquivocation]
+		totalRule3 += oo.EvidenceByRule[obftadapter.RuleCommitEquivocation]
 	}
 	require.GreaterOrEqual(t, totalRule3, 1,
 		"at least one honest op should fire Rule 3; got: %v", operatorEvidence(out.PerOp))

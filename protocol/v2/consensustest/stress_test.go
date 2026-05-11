@@ -42,12 +42,12 @@ import (
 //
 // Estimated runtime at default 100 iterations:
 //
-//	canonical          ~4s    (25 scenarios × 2 protocols × 100 sims)
-//	cluster_scaling    ~25s   (× 4 cluster sizes)
-//	btt_degradation    ~16s   (× 4 BTT values)
-//	heavy_tail         ~16s   (× 4 sigmas)
-//	loss               ~16s   (× 4 loss rates)
-//	TOTAL              ~75s   on a typical dev machine.
+//	canonical          ~5s    (29 scenarios × 2 protocols × 100 sims)
+//	cluster_scaling    ~30s   (× 4 cluster sizes)
+//	btt_degradation    ~20s   (× 4 BTT values)
+//	heavy_tail         ~20s   (× 4 sigmas)
+//	loss               ~20s   (× 4 loss rates)
+//	TOTAL              ~95s   on a typical dev machine (jittered network).
 //
 // At ITERATIONS=1000, scale linearly (~12-15 min). Above that, consider
 // parallelizing across sweeps (currently sequential — per-batch is
@@ -73,12 +73,7 @@ func TestStress(t *testing.T) {
 	// audit); the filter is defensive — future scenarios that opt out of
 	// stress (e.g. correctness-only behavioral checks) will be excluded
 	// from the report without a driver-side change.
-	scenarios := make([]ct.Scenario, 0, len(ct.Catalog))
-	for _, s := range ct.Catalog {
-		if s.HasMode(ct.ModeStress) {
-			scenarios = append(scenarios, s)
-		}
-	}
+	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations)

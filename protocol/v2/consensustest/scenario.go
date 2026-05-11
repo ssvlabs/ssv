@@ -37,6 +37,19 @@ func (s Scenario) HasMode(m Mode) bool {
 	return false
 }
 
+// ScenariosWithMode filters a scenario slice to those opted into mode m.
+// Used by tier entry points (TestCorrectness, TestStress) to derive their
+// scenario lists from Catalog.
+func ScenariosWithMode(scenarios []Scenario, m Mode) []Scenario {
+	out := make([]Scenario, 0, len(scenarios))
+	for _, s := range scenarios {
+		if s.HasMode(m) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // DisplayTitle returns the scenario's Title if set, otherwise Name. Used
 // by report renderers for human-readable chart/section labels.
 func (s Scenario) DisplayTitle() string {

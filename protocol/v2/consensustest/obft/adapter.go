@@ -100,9 +100,9 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 
 	for _, oo := range out.PerOp {
 		for rule, n := range oo.EvidenceByRule {
-			if rule == "OBFT/Rule2/LeaderEquivocation" ||
-				rule == "OBFT/Rule3/CrossOnionEquivocation" ||
-				rule == "OBFT/Rule3/CommitEquivocation" {
+			if rule == RuleLeaderEquivocation ||
+				rule == RuleCrossOnionEquivocation ||
+				rule == RuleCommitEquivocation {
 				att.EquivocationsObserved += n
 			}
 		}
@@ -223,26 +223,39 @@ func evidenceByRule(evs []obftbase.Evidence) map[string]int {
 	return m
 }
 
+// Rule-name constants for OperatorOutcome.EvidenceByRule keys. Shared
+// between the per-emission classifier (ruleKey) and the consumer
+// instrumentation (computeAttestation) so a rename happens in one place.
+const (
+	RuleCrossSigning           = "OBFT/Rule1/CrossSigning"
+	RuleLeaderEquivocation     = "OBFT/Rule2/LeaderEquivocation"
+	RuleCommitEquivocation     = "OBFT/Rule3/CommitEquivocation"
+	RuleCrossOnionEquivocation = "OBFT/Rule3/CrossOnionEquivocation"
+	RuleFakeEncryptedPresence  = "OBFT/Rule4/FakeEncryptedPresence"
+	RuleFakePlaintextSigma     = "OBFT/Rule5/FakePlaintextSigma"
+	RuleUnknown                = "OBFT/Unknown"
+)
+
 func ruleKey(e obftbase.Evidence) string {
 	switch e.Rule {
 	case obftbase.EvidenceCrossSigning:
-		return "OBFT/Rule1/CrossSigning"
+		return RuleCrossSigning
 	case obftbase.EvidenceLeaderEquivocation:
-		return "OBFT/Rule2/LeaderEquivocation"
+		return RuleLeaderEquivocation
 	case obftbase.EvidenceCrossOnionEquivocation:
 		// Layer == -1 indicates the top-level CommitEquivocation variant
 		// (full Commit bodies); per-layer Layer ≥ 0 indicates the per-V σ
 		// variant. Slashing layer treats them as the same fault but per-rule
 		// telemetry distinguishes them.
 		if e.Layer < 0 {
-			return "OBFT/Rule3/CommitEquivocation"
+			return RuleCommitEquivocation
 		}
-		return "OBFT/Rule3/CrossOnionEquivocation"
+		return RuleCrossOnionEquivocation
 	case obftbase.EvidenceFakeEncryptedPresence:
-		return "OBFT/Rule4/FakeEncryptedPresence"
+		return RuleFakeEncryptedPresence
 	case obftbase.EvidenceFakePlaintextSigma:
-		return "OBFT/Rule5/FakePlaintextSigma"
+		return RuleFakePlaintextSigma
 	default:
-		return "OBFT/Unknown"
+		return RuleUnknown
 	}
 }

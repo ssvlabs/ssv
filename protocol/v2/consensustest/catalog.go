@@ -10,14 +10,18 @@ package consensustest
 //
 // Tiers: every catalog scenario opts into BOTH ModeCorrectness and
 // ModeStress (see docs/CONSENSUSTEST-SPLIT-PLAN.md). The Apply functions
-// are pure config mutators (no randomness, no in-body assertions); their
-// expected outcomes are deterministic at the canonical operating point
-// (ConstantDelay), which makes the same scenario meaningful in both tiers
-// — TestCorrectness asserts the deterministic outcome class, TestStress
-// re-runs the scenario over many iterations against a jittered network
-// for stats. A scenario that needs a specific network shape (e.g.,
-// MeshFlakiness's PerReceiverDelay) overrides Profile.BaseConfig.Network
-// in its Apply.
+// are pure config mutators (no randomness, no in-body assertions). Each
+// tier runs them with a different network model:
+//   - TestCorrectness uses CorrectnessProfile (ConstantDelay): outcomes
+//     are deterministic, the test asserts the declared outcome class.
+//   - TestStress runs the curated DefaultSweeps; non-network-varying
+//     sweeps (canonical / cluster_scaling / btt_degradation) use
+//     JitteredDelay, heavy_tail uses LogNormalDelay, loss uses
+//     ConstantDelay wrapped in LossyNetwork. Many iterations; stats only.
+//
+// A scenario that needs a specific network shape (e.g. MeshFlakiness's
+// PerReceiverDelay, AsymmetricPropagation_*'s per-receiver overrides)
+// overrides the tier's Network in its Apply.
 //
 // Add new scenarios at the end to keep order stable for matrix-rendering.
 //
