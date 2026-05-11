@@ -132,11 +132,13 @@ header.page .header-controls button:hover {
   display: inline-flex;
   flex-direction: column;
   background: var(--surface);
-  padding: 0.3em 0.65em 0.32em;
+  padding: 0.3em 0.7em 0.32em;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
-  min-width: 70px;
+  min-width: 90px;
 }
+.summary-pills .pill[title] { cursor: help; }
+.summary-pills .pill[title]:hover { border-color: var(--accent); }
 .summary-pills .label {
   font-size: 0.6em;
   color: var(--text-faint);

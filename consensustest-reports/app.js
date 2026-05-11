@@ -166,14 +166,21 @@ function renderHeader(data) {
     lead.innerHTML = formatDescription(data.description);
     header.appendChild(lead);
   }
-  // Compact metadata pills (right column on wide screens).
+  // Compact metadata pills (right column on wide screens). Three of them;
+  // names paired with hover tooltips for any term that's framework-jargon.
   const pills = h('div', { class: 'summary-pills' });
-  pills.appendChild(makePill('Iterations per cell', String(data.iterations)));
-  pills.appendChild(makePill('Total wallclock', formatWallclock(data.wallclock)));
+  pills.appendChild(
+    makePill('Sims per cell', String(data.iterations),
+      'Each "cell" is one (scenario × protocol) pair. ' +
+      'Every cell runs this many simulations to aggregate stats (P50/P90/P99, success rate, bandwidth).'),
+  );
+  pills.appendChild(
+    makePill('Parameter sweeps', String(data.sweeps.length),
+      'Curated comparison configurations — each sweep varies one operating-point parameter. ' +
+      'The current set: canonical operating point, cluster-size scaling, BTT degradation, ' +
+      'heavy-tail propagation, stochastic loss.'),
+  );
   pills.appendChild(makePill('Generated', data.generatedAt));
-  pills.appendChild(makePill('Sweeps', String(data.sweeps.length)));
-  pills.appendChild(makePill('Scenarios', String(data.scenarios.length)));
-  pills.appendChild(makePill('Protocols', data.protocols.join(' · ')));
   header.appendChild(pills);
   // Expand-all / collapse-all controls.
   const controls = h('div', { class: 'header-controls' });
@@ -201,10 +208,12 @@ function toggleAllPacks(open) {
   });
 }
 
-function makePill(label, value) {
+function makePill(label, value, tooltip) {
+  const attrs = { class: 'pill' };
+  if (tooltip) attrs.title = tooltip;
   return h(
     'div',
-    { class: 'pill' },
+    attrs,
     h('span', { class: 'label' }, label),
     h('span', { class: 'value' }, value),
   );
