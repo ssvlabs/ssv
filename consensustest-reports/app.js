@@ -7,19 +7,20 @@
  * Page structure per sweep:
  *  Section: <sweep title>
  *    Part A — Cross-protocol comparison:
- *      one chart pack per Scenario.Group containing scenarios that
- *      apply to every protocol.
+ *      one <details>-collapsible chart pack per Scenario.Group.
  *    Part B — OBFT-only scenarios (at the end):
- *      one chart pack per Scenario.Group containing scenarios that
- *      QBFT marks as ExpectNotApplicable. The OBFT-unique view stays
- *      cleanly separated from the cross-protocol comparison so dense
- *      legends don't drown out the side-by-side curves.
+ *      one collapsible pack per group containing scenarios where QBFT
+ *      is ExpectNotApplicable.
  *
- *  Each pack renders:
- *    - 1-point sweep → matrix + 4 Chart.js panels (success / latency
- *      P50/P90/P99 / bandwidth stacked / tradeoff scatter).
- *    - multi-point sweep → 3 line charts (success rate / P99 latency /
- *      bandwidth median, plotted against the swept axis).
+ *  Each pack contains: matrix (clickable rows) + ONE interactive chart
+ *  showing the selected scenario's data:
+ *    - 1-point sweep  → bar chart of P50/P90/P99 decision time.
+ *    - multi-point    → line chart of P99 decision time vs swept axis.
+ *
+ *  The first pack of each sweep is open by default; the rest are
+ *  collapsed to keep the page short. Scroll-driven IntersectionObserver
+ *  highlights the active sweep in the sticky TOC and exposes a
+ *  per-sweep sub-row of group anchors.
  */
 
 'use strict';
@@ -35,6 +36,10 @@ const PROTOCOL_COLORS = {
 const chartInstances = [];
 const chartInits = [];
 
+// packsBySweep keeps track of the group packs in each sweep so the
+// sub-TOC can rebuild its group anchors when the active sweep changes.
+const packsBySweep = {};
+
 document.addEventListener('DOMContentLoaded', main);
 
 function main() {
@@ -43,6 +48,7 @@ function main() {
   if (!data) {
     return; // index.html already shows the placeholder.
   }
+  applyChartDefaults();
   const bucketing = computeBuckets(data);
 
   root.innerHTML = '';
@@ -54,6 +60,32 @@ function main() {
   // Chart.js sizes from .chart-wrap CSS dimensions; canvases are in the
   // DOM by the time these fire, so synchronous init is safe.
   chartInits.forEach((fn) => fn());
+  setupActiveTOC(data);
+}
+
+// applyChartDefaults tweaks Chart.js globally so individual chart
+// configs stay short. Lighter gridlines, friendlier tooltips, rounded
+// bars, the page's typography.
+function applyChartDefaults() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = '#475569';
+  Chart.defaults.borderColor = 'rgba(15, 23, 42, 0.06)';
+  Chart.defaults.elements.bar.borderRadius = 4;
+  Chart.defaults.elements.bar.borderWidth = 0;
+  Chart.defaults.elements.line.tension = 0.15;
+  Chart.defaults.elements.line.borderWidth = 2.5;
+  Chart.defaults.elements.point.radius = 4;
+  Chart.defaults.elements.point.hoverRadius = 7;
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 6;
+  Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.92)';
+  Chart.defaults.plugins.tooltip.titleFont = { size: 12, weight: '600' };
+  Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
+  Chart.defaults.plugins.tooltip.boxPadding = 6;
+  Chart.defaults.plugins.legend.labels.boxWidth = 12;
+  Chart.defaults.plugins.legend.labels.font = { size: 12 };
 }
 
 // ---- scope + group bucketing -----------------------------------------
@@ -122,49 +154,90 @@ function makePill(label, value) {
   );
 }
 
+// renderTOC builds the sticky nav with two rows:
+//   1. Sweep row — one link per sweep, always visible. The active sweep
+//      is highlighted dynamically (see setupActiveTOC).
+//   2. Sub-row   — group anchors for the active sweep, rebuilt on scroll.
+//      Hidden until a sweep is in view.
 function renderTOC(data) {
   const nav = h('nav', { class: 'toc' });
+  const sweepRow = h('div', { class: 'toc-row sweeps' });
   data.sweeps.forEach((sw) => {
-    nav.appendChild(h('a', { href: `#sweep-${sw.name}` }, sw.title || sw.name));
+    sweepRow.appendChild(
+      h('a', { href: `#sweep-${sw.name}`, 'data-sweep': sw.name }, sw.title || sw.name),
+    );
   });
+  nav.appendChild(sweepRow);
+  // Sub-row is populated dynamically once the page is laid out and the
+  // observer fires; start with a placeholder div to reserve space.
+  nav.appendChild(h('div', { class: 'toc-row groups', 'data-active-sweep': '' }));
   return nav;
 }
 
 function renderSweepSection(sweep, data, bucketing) {
   const section = h('section', { class: 'sweep', id: `sweep-${sweep.name}` });
-  section.appendChild(h('h2', {}, sweep.title || sweep.name));
+  const head = h('div', { class: 'sweep-head' });
+  head.appendChild(h('h2', {}, sweep.title || sweep.name));
   if (sweep.description) {
     const desc = h('p', { class: 'desc' });
     desc.innerHTML = formatDescription(sweep.description);
-    section.appendChild(desc);
+    head.appendChild(desc);
   }
-  if (sweep.axisLabel) section.appendChild(h('p', { class: 'axis' }, `Swept axis: ${sweep.axisLabel}`));
+  section.appendChild(head);
 
+  packsBySweep[sweep.name] = [];
   renderScope(section, sweep, data, bucketing, 'cross', 'Cross-protocol comparison', data.protocols);
   renderScope(section, sweep, data, bucketing, 'obftOnly', 'OBFT-only scenarios', ['OBFT']);
 
-  section.appendChild(h('a', { class: 'back-to-top', href: '#top' }, '↑ back to top'));
   return section;
 }
 
 function renderScope(section, sweep, data, bucketing, scopeKey, scopeLabel, protocols) {
   const groups = bucketing.groupOrder[scopeKey];
   if (groups.length === 0) return;
-  section.appendChild(h('div', { class: 'scope-heading' }, scopeLabel));
-  groups.forEach((group) => {
+  const isObftOnly = scopeKey === 'obftOnly';
+  section.appendChild(
+    h(
+      'div',
+      { class: `scope-heading ${isObftOnly ? 'obft-only' : 'cross'}` },
+      scopeLabel,
+    ),
+  );
+  groups.forEach((group, idx) => {
     const scenarios = bucketing.buckets[scopeKey][group];
-    renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols);
+    // Default-open the very first pack of each sweep (Cross-protocol
+    // Baseline); everything else starts collapsed for a calmer page.
+    const open = scopeKey === 'cross' && idx === 0;
+    renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols, open);
   });
 }
 
-function renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols) {
+function renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols, open) {
   const packID = `${sweep.name}_${scopeKey}_${slugify(group)}`;
-  section.appendChild(h('h3', { class: 'group-pack' }, `${group} (${scenarios.length})`));
-  if (sweep.points.length === 1) {
-    renderGroupDetail(section, sweep, scenarios, protocols, packID);
+  const isTrend = sweep.points.length > 1;
+  const details = h('details', {
+    class: `group-pack ${isTrend ? 'trend' : 'detail'} ${scopeKey === 'obftOnly' ? 'obft-only' : ''}`,
+    id: `pack-${packID}`,
+  });
+  if (open) details.setAttribute('open', '');
+
+  const summary = h('summary');
+  summary.appendChild(h('span', { class: 'group-name' }, group));
+  summary.appendChild(
+    h('span', { class: 'group-count' }, `${scenarios.length} scenario${scenarios.length !== 1 ? 's' : ''}`),
+  );
+  details.appendChild(summary);
+
+  const body = h('div', { class: `group-body ${isTrend ? 'trend' : 'detail'}` });
+  if (isTrend) {
+    renderGroupTrend(body, sweep, scenarios, protocols, packID);
   } else {
-    renderGroupTrend(section, sweep, scenarios, protocols, packID);
+    renderGroupDetail(body, sweep, scenarios, protocols, packID);
   }
+  details.appendChild(body);
+
+  section.appendChild(details);
+  packsBySweep[sweep.name].push({ id: `pack-${packID}`, label: group, scope: scopeKey });
 }
 
 // ---- detail layout (1-point sweep) -----------------------------------
@@ -182,7 +255,6 @@ function renderGroupDetail(section, sweep, scenarios, protocols, packID) {
   const table = renderSummaryMatrix(point, scenarios, protocols);
   section.appendChild(table);
 
-  section.appendChild(h('h4', {}, 'Decision time percentiles · selected scenario'));
   const wrap = h('div', { class: 'chart-wrap' });
   const canvas = h('canvas', { id: `${packID}_chart` });
   wrap.appendChild(canvas);
@@ -197,6 +269,25 @@ function renderGroupDetail(section, sweep, scenarios, protocols, packID) {
   });
 }
 
+// renderCell renders one numeric matrix cell as two stacked spans
+// (success% on the left, "P99 Xms" on the right) so the columns line up
+// across rows. Returns the <td> element.
+function renderCell(cell) {
+  if (!cell || cell.iterations === 0) {
+    return h('td', { class: 'na' }, 'n/a');
+  }
+  let cls = 'ok';
+  if (cell.successRate < 0.5) cls = 'miss';
+  else if (cell.successRate < 1.0) cls = 'warn';
+  const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
+  return h(
+    'td',
+    { class: cls },
+    h('span', { class: 'pct' }, `${Math.round(cell.successRate * 100)}%`),
+    h('span', { class: 'lat' }, `P99 ${p99} ms`),
+  );
+}
+
 function renderSummaryMatrix(point, scenarios, protocols) {
   const table = h('table', { class: 'matrix' });
   const headerRow = h('tr', {}, h('th', {}, 'Scenario'));
@@ -206,18 +297,7 @@ function renderSummaryMatrix(point, scenarios, protocols) {
   const tbody = h('tbody');
   scenarios.forEach((sc) => {
     const row = h('tr', { 'data-scenario': sc.name }, h('td', { class: 'scen' }, sc.title));
-    protocols.forEach((p) => {
-      const cell = findCell(point, sc.name, p);
-      if (!cell || cell.iterations === 0) {
-        row.appendChild(h('td', { class: 'na' }, 'n/a'));
-        return;
-      }
-      let cls = 'ok';
-      if (cell.successRate < 0.5) cls = 'miss';
-      else if (cell.successRate < 1.0) cls = 'warn';
-      const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
-      row.appendChild(h('td', { class: cls }, `${Math.round(cell.successRate * 100)}% · P99 ${p99}ms`));
-    });
+    protocols.forEach((p) => row.appendChild(renderCell(findCell(point, sc.name, p))));
     tbody.appendChild(row);
   });
   table.appendChild(tbody);
@@ -232,12 +312,25 @@ function buildLatencyChart(canvas, point, protocols, scenario) {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        y: { title: { display: true, text: 'ms (only successful sims)' } },
-        x: { title: { display: true, text: 'percentile' } },
+        y: {
+          title: { display: true, text: 'decision time (ms)' },
+          grid: { color: 'rgba(15, 23, 42, 0.06)' },
+          ticks: { padding: 6 },
+        },
+        x: {
+          title: { display: false },
+          grid: { display: false },
+          ticks: { padding: 4 },
+        },
       },
       plugins: {
-        title: { display: true, text: scenario.title, font: { size: 14 } },
-        legend: { position: 'top' },
+        legend: { position: 'top', align: 'end' },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0] ? items[0].label : '',
+            label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)} ms`,
+          },
+        },
       },
     },
   });
@@ -281,7 +374,6 @@ function renderGroupTrend(section, sweep, scenarios, protocols, packID) {
   const table = renderTrendMatrix(sweep, scenarios, protocols);
   section.appendChild(table);
 
-  section.appendChild(h('h4', {}, 'P99 decision time vs swept axis · selected scenario'));
   const wrap = h('div', { class: 'chart-wrap' });
   const canvas = h('canvas', { id: `${packID}_chart` });
   wrap.appendChild(canvas);
@@ -307,22 +399,23 @@ function renderTrendMatrix(sweep, scenarios, protocols) {
     const row = h('tr', { 'data-scenario': sc.name }, h('td', { class: 'scen' }, sc.title));
     sweep.points.forEach((pt) => {
       const td = h('td', { class: 'point' });
-      protocols.forEach((p, pi) => {
+      protocols.forEach((p) => {
         const cell = findCell(pt, sc.name, p);
-        const line = h('span', { class: 'cell-line' });
+        const line = h('div', { class: 'cell-line' });
+        line.appendChild(h('span', { class: 'proto' }, `${p}:`));
         if (!cell || cell.iterations === 0) {
           line.classList.add('na');
-          line.textContent = `${p}: n/a`;
+          line.appendChild(h('span', { class: 'pct' }, 'n/a'));
         } else {
           let cls = 'ok';
           if (cell.successRate < 0.5) cls = 'miss';
           else if (cell.successRate < 1.0) cls = 'warn';
           line.classList.add(cls);
           const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
-          line.textContent = `${p}: ${Math.round(cell.successRate * 100)}% · ${p99}ms`;
+          line.appendChild(h('span', { class: 'pct' }, `${Math.round(cell.successRate * 100)}%`));
+          line.appendChild(h('span', { class: 'lat' }, `${p99} ms`));
         }
         td.appendChild(line);
-        if (pi < protocols.length - 1) td.appendChild(h('br'));
       });
       row.appendChild(td);
     });
@@ -341,12 +434,25 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
       maintainAspectRatio: false,
       interaction: { mode: 'nearest', intersect: false },
       scales: {
-        x: { title: { display: true, text: sweep.axisLabel || '' } },
-        y: { title: { display: true, text: 'P99 decision time (ms)' } },
+        x: {
+          title: { display: true, text: sweep.axisLabel || '' },
+          grid: { display: false },
+          ticks: { padding: 4 },
+        },
+        y: {
+          title: { display: true, text: 'P99 decision time (ms)' },
+          grid: { color: 'rgba(15, 23, 42, 0.06)' },
+          ticks: { padding: 6 },
+        },
       },
       plugins: {
-        title: { display: true, text: scenario.title, font: { size: 14 } },
-        legend: { position: 'top' },
+        legend: { position: 'top', align: 'end' },
+        tooltip: {
+          callbacks: {
+            title: (items) => (items[0] ? `${sweep.axisLabel || 'point'}: ${items[0].label}` : ''),
+            label: (ctx) => `${ctx.dataset.label}: P99 ${Math.round(ctx.parsed.y)} ms`,
+          },
+        },
       },
     },
   });
@@ -469,6 +575,90 @@ function protocolPointStyle(name) {
 // Used to build canvas IDs like `canonical_cross_silent_operators_success`.
 function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// setupActiveTOC wires the sticky nav's two rows to scroll position via
+// a scroll listener (IntersectionObserver was less reliable in headless
+// preview environments — sticking with the simpler approach):
+//   - Top row: highlight the sweep section whose top is just above the
+//     viewport's 25%-from-top probe point.
+//   - Sub-row: rebuild on every active-sweep change to list that sweep's
+//     group anchors; highlight the pack whose top is similarly near the
+//     probe.
+function setupActiveTOC(data) {
+  const sweepLinks = new Map();
+  document.querySelectorAll('nav.toc .toc-row.sweeps a[data-sweep]').forEach((a) => {
+    sweepLinks.set(a.getAttribute('data-sweep'), a);
+  });
+  const subRow = document.querySelector('nav.toc .toc-row.groups');
+  if (!subRow || sweepLinks.size === 0) return;
+
+  let activeSweep = data.sweeps[0]?.name;
+  let activePack = null;
+
+  const rebuildSubRow = (sweepName) => {
+    subRow.innerHTML = '';
+    subRow.setAttribute('data-active-sweep', sweepName);
+    (packsBySweep[sweepName] || []).forEach((pack) => {
+      subRow.appendChild(
+        h(
+          'a',
+          { href: `#${pack.id}`, class: pack.scope === 'obftOnly' ? 'obft-only' : 'cross' },
+          pack.label,
+        ),
+      );
+    });
+    if (activePack) markPackActive(activePack);
+  };
+  const markSweepActive = (name) => {
+    if (activeSweep === name) return;
+    activeSweep = name;
+    sweepLinks.forEach((a, n) => a.classList.toggle('active', n === name));
+    rebuildSubRow(name);
+  };
+  const markPackActive = (id) => {
+    activePack = id;
+    subRow.querySelectorAll('a').forEach((a) => {
+      a.classList.toggle('active', a.getAttribute('href') === `#${id}`);
+    });
+  };
+
+  // Initial render.
+  rebuildSubRow(activeSweep);
+  sweepLinks.get(activeSweep)?.classList.add('active');
+
+  // Probe is at 25% of viewport height from the top — far enough below
+  // the sticky TOC that "what section am I reading" maps to the section
+  // whose top is at-or-above the probe.
+  const detectActive = () => {
+    const probeY = window.scrollY + window.innerHeight * 0.25;
+    const sections = document.querySelectorAll('section.sweep');
+    let active = sections[0];
+    sections.forEach((s) => {
+      if (s.offsetTop <= probeY) active = s;
+    });
+    if (active) markSweepActive(active.id.replace(/^sweep-/, ''));
+
+    const packs = document.querySelectorAll('details.group-pack');
+    let activeP = null;
+    packs.forEach((p) => {
+      if (p.offsetTop <= probeY) activeP = p;
+    });
+    if (activeP) markPackActive(activeP.id);
+  };
+
+  let scrollPending = false;
+  const onScroll = () => {
+    if (scrollPending) return;
+    scrollPending = true;
+    setTimeout(() => {
+      scrollPending = false;
+      detectActive();
+    }, 60);
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  // Also run once after initial layout in case the page loaded scrolled.
+  detectActive();
 }
 
 // escapeHtml escapes the five HTML special chars. Used before injecting

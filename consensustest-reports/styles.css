@@ -2,7 +2,24 @@
  * Edit freely and refresh the browser; no test rerun required.
  */
 
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface-muted: #fafbfd;
+  --border: #e1e6ec;
+  --border-strong: #cdd5de;
+  --text: #1a1a1a;
+  --text-muted: #475569;
+  --text-faint: #6b7280;
+  --accent: #0969da;
+  --accent-soft: #e0e8f0;
+  --ok: #1a7f37;
+  --warn: #b07d00;
+  --miss: #d1242f;
+  --na: #94a3b8;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -10,13 +27,14 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 1.5em 4em;
-  color: #1a1a1a;
+  color: var(--text);
   line-height: 1.5;
+  background: var(--bg);
 }
 
 .placeholder {
   padding: 3em 0;
-  color: #555;
+  color: var(--text-muted);
 }
 .placeholder code {
   background: #f4f4f4;
@@ -25,11 +43,13 @@ body {
   font-size: 0.92em;
 }
 
+/* ---- Page header ---- */
+
 header.page {
-  margin: 1.5em 0 1.5em;
+  margin: 1.5em 0 1.2em;
   padding: 1.8em 2em 1.4em;
   background: linear-gradient(135deg, #f7f9fc 0%, #eaf0f6 100%);
-  border: 1px solid #d8dee5;
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
@@ -42,14 +62,14 @@ header.page h1 {
 }
 header.page .lead {
   margin: 0 0 1.2em;
-  color: #475569;
+  color: var(--text-muted);
   font-size: 1em;
   font-style: normal;
   line-height: 1.5;
   max-width: 70ch;
 }
 header.page .lead strong {
-  background: #ffffff;
+  background: var(--surface);
   border: 1px solid #d6dde6;
   padding: 0.04em 0.5em;
   border-radius: 4px;
@@ -67,16 +87,16 @@ header.page .lead strong {
 .summary-pills .pill {
   display: inline-flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--surface);
   padding: 0.45em 0.85em 0.5em;
-  border: 1px solid #d8dee5;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   min-width: 100px;
   box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
 }
 .summary-pills .label {
   font-size: 0.66em;
-  color: #64748b;
+  color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 600;
@@ -89,7 +109,14 @@ header.page .lead strong {
   font-variant-numeric: tabular-nums;
 }
 
-.desc { color: #475569; margin: 0.2em 0 0.6em; line-height: 1.55; max-width: 80ch; }
+/* ---- Sweep section + heading ---- */
+
+.desc {
+  color: var(--text-muted);
+  margin: 0.2em 0 0.6em;
+  line-height: 1.55;
+  max-width: 80ch;
+}
 .desc strong {
   background: #f1f5f9;
   border: 1px solid #d6dde6;
@@ -100,8 +127,22 @@ header.page .lead strong {
   font-size: 0.92em;
   white-space: nowrap;
 }
-.meta { color: #888; font-size: 0.9em; margin: 0.2em 0; }
-.axis { color: #64748b; font-size: 0.85em; margin: 0.1em 0 0.5em; }
+
+section.sweep {
+  padding-top: 2em;
+  margin-top: 0.5em;
+}
+.sweep-head {
+  padding-bottom: 0.6em;
+  margin-bottom: 0.8em;
+  border-bottom: 1px solid var(--border);
+}
+.sweep-head h2 {
+  margin: 0 0 0.2em;
+  font-size: 1.4em;
+}
+
+/* ---- Sticky TOC (two-row) ---- */
 
 nav.toc {
   position: sticky;
@@ -109,14 +150,17 @@ nav.toc {
   z-index: 10;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(8px);
-  padding: 0.7em 0;
-  margin: 0 0 1em;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0.5em 0 0.4em;
+  margin: 0 0 0.5em;
+  border-bottom: 1px solid var(--border);
+}
+nav.toc .toc-row {
   display: flex;
   gap: 0.4em;
   flex-wrap: wrap;
+  padding: 0.15em 0;
 }
-nav.toc a {
+nav.toc .toc-row.sweeps a {
   display: inline-block;
   padding: 0.35em 0.85em;
   background: #f3f5f8;
@@ -126,120 +170,245 @@ nav.toc a {
   color: #1f2937;
   text-decoration: none;
   font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-nav.toc a:hover {
+nav.toc .toc-row.sweeps a:hover {
   background: #e6ebf1;
-  border-color: #cdd5de;
+  border-color: var(--border-strong);
 }
-
-section.sweep {
-  padding-top: 2em;
-  margin-top: 1em;
-  border-top: 1px solid #eee;
+nav.toc .toc-row.sweeps a.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
-section.sweep h2 { margin: 0 0 0.2em; font-size: 1.4em; }
-
-/* Scope heading — major divider between Cross-protocol and OBFT-only
- * parts of a sweep section. */
-.scope-heading {
-  margin: 2em 0 0.5em;
-  padding: 0.5em 0.8em;
-  background: #1a2233;
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.95em;
-  letter-spacing: 0.03em;
+nav.toc .toc-row.groups {
+  border-top: 1px dashed var(--border);
+  margin-top: 0.3em;
+  padding-top: 0.35em;
+  min-height: 1.6em;
+}
+nav.toc .toc-row.groups a {
+  font-size: 0.78em;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 0.2em 0.55em;
   border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+nav.toc .toc-row.groups a:hover {
+  background: #f3f5f8;
+}
+nav.toc .toc-row.groups a.obft-only {
+  color: #7c2d12; /* warm-brown so OBFT-only anchors are distinct */
+}
+nav.toc .toc-row.groups a.active {
+  background: var(--accent-soft);
+  color: #0f172a;
+  border-color: #b9c8da;
 }
 
-/* Per-group pack heading. */
-section.sweep h3.group-pack {
-  margin: 1.4em 0 0.3em;
-  font-size: 1.05em;
-  color: #1a1a1a;
-  font-weight: 600;
-  padding-bottom: 0.2em;
-  border-bottom: 1px solid #eee;
-}
+/* ---- Scope heading (softer than the old dark banner) ---- */
 
-/* Chart-pack inner heading (matrix title / chart title). */
-section.sweep h4 {
-  margin: 0.9em 0 0.3em;
-  font-size: 0.92em;
+.scope-heading {
+  margin: 1.5em 0 0.6em;
+  padding: 0.45em 0.7em;
+  font-size: 0.8em;
   font-weight: 600;
-  color: #555;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  border-left: 3px solid var(--accent);
+  background: rgba(9, 105, 218, 0.05);
+  border-radius: 0 4px 4px 0;
 }
+.scope-heading.obft-only {
+  border-left-color: #c2410c;
+  background: rgba(194, 65, 12, 0.05);
+  color: #7c2d12;
+}
+
+/* ---- Group pack: <details> card ---- */
+
+details.group-pack {
+  margin: 0.6em 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  overflow: hidden;
+  scroll-margin-top: 7em; /* clear the sticky TOC when jumping via anchor */
+}
+details.group-pack[open] {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
+}
+details.group-pack summary {
+  cursor: pointer;
+  padding: 0.7em 1em;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  font-size: 0.95em;
+  background: var(--surface-muted);
+  border-bottom: 1px solid transparent;
+  list-style: none;
+  user-select: none;
+  transition: background 100ms ease;
+}
+details.group-pack summary:hover { background: #f1f4f7; }
+details.group-pack summary::-webkit-details-marker { display: none; }
+details.group-pack summary::before {
+  content: '▸';
+  font-size: 0.75em;
+  color: var(--text-faint);
+  transition: transform 120ms ease;
+  width: 0.9em;
+  display: inline-block;
+}
+details.group-pack[open] summary::before { transform: rotate(90deg); }
+details.group-pack[open] summary {
+  border-bottom-color: var(--border);
+  background: #f0f4f8;
+}
+details.group-pack.obft-only[open] summary {
+  background: #fdf4ee;
+  border-bottom-color: #e8d4c5;
+}
+details.group-pack summary .group-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+details.group-pack summary .group-count {
+  margin-left: auto;
+  font-size: 0.78em;
+  color: var(--text-faint);
+  font-weight: 500;
+  background: rgba(15, 23, 42, 0.05);
+  padding: 0.12em 0.5em;
+  border-radius: 10px;
+}
+
+.group-body {
+  padding: 0.8em 1em 1em;
+}
+
+/* Two-column layout for detail packs on wide screens: matrix left, chart right. */
+.group-body.detail {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.85fr) 1.4fr;
+  gap: 1.5em;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .group-body.detail { grid-template-columns: 1fr; }
+}
+/* Trend packs stack: the matrix is too wide for a sidebar layout. */
+.group-body.trend { display: block; }
+
+/* ---- Matrix table ---- */
 
 table.matrix {
   border-collapse: collapse;
-  margin: 0.6em 0;
+  margin: 0;
   font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
 }
 table.matrix th,
 table.matrix td {
   padding: 0.35em 0.7em;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #eef1f4;
   vertical-align: top;
 }
-table.matrix th { background: #f7f7f7; font-weight: 600; }
-table.matrix td.scen { color: #444; }
-table.matrix td.ok { color: #1a7f37; }
-table.matrix td.warn { color: #b07d00; }
-table.matrix td.miss { color: #d1242f; }
-table.matrix td.na { color: #999; }
+table.matrix th {
+  background: var(--surface-muted);
+  font-weight: 600;
+  font-size: 0.84em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+table.matrix td.scen { color: #1f2937; }
 
-/* Clickable rows — drives the per-group interactive chart below. */
+/* Numeric cells: two right-aligned spans so columns line up across rows. */
+table.matrix td.ok,
+table.matrix td.warn,
+table.matrix td.miss {
+  white-space: nowrap;
+}
+table.matrix td .pct {
+  display: inline-block;
+  min-width: 3.2ch;
+  text-align: right;
+  font-weight: 600;
+}
+table.matrix td .lat {
+  display: inline-block;
+  min-width: 10ch;
+  text-align: right;
+  margin-left: 0.6em;
+  color: var(--text-faint);
+  font-weight: 400;
+}
+table.matrix td.ok { color: var(--ok); }
+table.matrix td.warn { color: var(--warn); }
+table.matrix td.miss { color: var(--miss); }
+table.matrix td.na { color: var(--na); }
+
+/* Clickable rows drive the per-group interactive chart below. */
 table.matrix tbody tr {
   cursor: pointer;
   transition: background 100ms ease;
 }
-table.matrix tbody tr:hover {
-  background: #f4f7fb;
-}
-table.matrix tbody tr.selected {
-  background: #e2eaf3;
-}
-table.matrix tbody tr.selected td.scen {
-  font-weight: 600;
-}
+table.matrix tbody tr:hover { background: #f4f7fb; }
+table.matrix tbody tr.selected { background: var(--accent-soft); }
+table.matrix tbody tr.selected td.scen { font-weight: 600; }
 table.matrix tbody tr.selected td:first-child {
-  border-left: 3px solid #0969da;
+  border-left: 3px solid var(--accent);
   padding-left: calc(0.7em - 3px);
 }
 
-/* Trend matrix: each cell stacks one "<protocol>: <status>" line per
- * protocol. Colored by status (ok/warn/miss/na). */
+/* Trend matrix: each cell stacks one line per protocol with aligned spans. */
 table.matrix.trend td.point {
+  font-size: 0.82em;
   white-space: nowrap;
-  font-size: 0.85em;
-  line-height: 1.45;
+  padding: 0.3em 0.65em;
 }
-table.matrix.trend .cell-line { display: inline; }
-table.matrix.trend .cell-line.ok { color: #1a7f37; }
-table.matrix.trend .cell-line.warn { color: #b07d00; }
-table.matrix.trend .cell-line.miss { color: #d1242f; }
-table.matrix.trend .cell-line.na { color: #999; }
+table.matrix.trend .cell-line {
+  display: flex;
+  gap: 0.4em;
+  line-height: 1.5;
+}
+table.matrix.trend .cell-line .proto {
+  color: var(--text-faint);
+  min-width: 3.5ch;
+  font-weight: 500;
+}
+table.matrix.trend .cell-line .pct {
+  font-weight: 600;
+  min-width: 3.2ch;
+  text-align: right;
+}
+table.matrix.trend .cell-line .lat {
+  color: var(--text-faint);
+  min-width: 7ch;
+  text-align: right;
+}
+table.matrix.trend .cell-line.ok .pct { color: var(--ok); }
+table.matrix.trend .cell-line.warn .pct { color: var(--warn); }
+table.matrix.trend .cell-line.miss .pct { color: var(--miss); }
+table.matrix.trend .cell-line.na { color: var(--na); }
+table.matrix.trend .cell-line.na .pct { color: var(--na); font-weight: 500; }
 
-/* Chart wrappers — slightly shorter than before since per-group packs
- * have fewer scenarios on the X-axis. */
+/* ---- Chart wrapper ---- */
+
 .chart-wrap {
   position: relative;
   width: 100%;
-  max-width: 1300px;
-  height: 380px;
-  margin: 0.3em 0 1.2em;
+  height: 340px;
+  margin: 0;
 }
+.group-body.trend .chart-wrap { margin-top: 0.7em; }
 canvas { display: block; max-width: 100%; }
-
-.back-to-top {
-  display: inline-block;
-  margin: 1em 0 0;
-  font-size: 0.85em;
-  color: #0969da;
-  text-decoration: none;
-}
-.back-to-top:hover { text-decoration: underline; }
