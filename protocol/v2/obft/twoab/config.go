@@ -258,6 +258,20 @@ func (c *Config) RoundEndOffset() time.Duration {
 	return c.TCommit + c.Delta2b + c.Delta3
 }
 
+// ErrInsufficientVerdictStart is returned by DefaultBroadcastBudget when
+// TVerdictStart is too small for the spec's staggered default schedule to
+// fit (TVerdictStart ≤ 2.5·BTT for K≥3, with smaller bounds at K<3). At
+// this operating point the schedule's strict-increasing invariant cannot
+// be satisfied: the shallow layer B_{K-2} = 2.5·BTT already exceeds the
+// deepest's "earliest possible" anchor.
+//
+// Callers that hit this can either supply a custom per-layer schedule via
+// LayerSpec.BroadcastBudget, or treat the operating point as out of
+// envelope for 2abOBFT (the consensustest adapter wraps as
+// consensustest.ErrNotApplicable so cells render cleanly as "n/a"
+// rather than logging a verbose error per scenario).
+var ErrInsufficientVerdictStart = errors.New("twoab: TVerdictStart too small for default staggered schedule")
+
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
 // for K layers at the given BTT and TVerdictStart. Matches the spec's
 // recommendation: B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} =
@@ -271,9 +285,10 @@ func (c *Config) RoundEndOffset() time.Duration {
 // intermediate layers (k = 3, ..., K-2) interpolate linearly from 2.5·BTT
 // to TVerdictStart in duration space.
 //
-// Returns an error when TVerdictStart ≤ 2.5·BTT (the default deepest would
-// no longer be strictly greater than B_{K-2} = 2.5·BTT). Callers operating
-// at extreme degraded BTT can provide a custom per-layer schedule.
+// Returns an error wrapping ErrInsufficientVerdictStart when
+// TVerdictStart ≤ 2.5·BTT (the default deepest would no longer be strictly
+// greater than B_{K-2} = 2.5·BTT). Callers operating at extreme degraded
+// BTT can provide a custom per-layer schedule.
 func DefaultBroadcastBudget(K int, btt, tVerdictStart time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget K=%d must be ≥ 1", K)
@@ -291,8 +306,8 @@ func DefaultBroadcastBudget(K int, btt, tVerdictStart time.Duration) ([]time.Dur
 		minDeepest = btt * 250 / 100
 	}
 	if tVerdictStart <= minDeepest {
-		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget TVerdictStart=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule for this operating point",
-			tVerdictStart, minDeepest, K, btt)
+		return nil, fmt.Errorf("%w: TVerdictStart=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule for this operating point",
+			ErrInsufficientVerdictStart, tVerdictStart, minDeepest, K, btt)
 	}
 	out := make([]time.Duration, K)
 	switch K {

@@ -14,6 +14,7 @@
 package twoab
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -61,6 +62,17 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// T_commit; we replace them with 2ab-anchored equivalents.
 	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, cfg.BTT, tVerdictStart)
 	if err != nil {
+		// TVerdictStart too small for the default staggered schedule is a
+		// structural operating-point incompatibility (2abOBFT's 4·BTT
+		// Phase-2 tax leaves too little room for the schedule's
+		// B_{K-2} = 2.5·BTT shallow layer — e.g., BTT=600ms gives
+		// TVerdictStart=200ms vs required 1.5s). Surface as
+		// ErrNotApplicable so the framework cleanly marks the cell n/a
+		// without per-scenario log spam — same treatment as OBFT-
+		// specific byz patterns the QBFT adapter can't run.
+		if errors.Is(err, twoab.ErrInsufficientVerdictStart) {
+			return ct.Outcome{}, ct.ErrNotApplicable
+		}
 		return ct.Outcome{}, fmt.Errorf("twoab adapter: derive BroadcastBudget: %w", err)
 	}
 	fetchAt := make([]time.Duration, cfg.K)
