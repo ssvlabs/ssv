@@ -14,10 +14,13 @@ package consensustest
 // tier runs them with a different network model:
 //   - TestCorrectness uses CorrectnessProfile (ConstantDelay): outcomes
 //     are deterministic, the test asserts the declared outcome class.
-//   - TestStress runs the curated DefaultSweeps; non-network-varying
-//     sweeps (canonical / cluster_scaling / btt_degradation) use
-//     JitteredDelay, heavy_tail uses LogNormalDelay, loss uses
-//     ConstantDelay wrapped in LossyNetwork. Many iterations; stats only.
+//   - TestStress runs the curated DefaultSweeps at a single cluster
+//     size (CLUSTER_SIZE env, default 4). The canonical and
+//     btt_degradation sweeps use JitteredDelay; heavy_tail uses
+//     LogNormalDelay; loss wraps LossyNetwork over JitteredDelay. Many
+//     iterations; stats only. Cross-cluster-size comparison is done by
+//     re-running TestStress with different CLUSTER_SIZE values, not by
+//     a dedicated sweep.
 //
 // A scenario that needs a specific network shape (e.g. MeshFlakiness's
 // PerReceiverDelay, AsymmetricPropagation_*'s per-receiver overrides)
@@ -25,13 +28,14 @@ package consensustest
 //
 // Add new scenarios at the end to keep order stable for matrix-rendering.
 //
-// Cluster-size scope: the matrix runs at n=4 (the canonical operating
-// point per OBFT.md §Application). The larger-n sweep
-// (TestSweep_FullCatalog_LargerN in sweep_test.go) runs every scenario at
-// n ∈ {7, 10, 13} too, enforcing universal safety invariants and asserting
-// per-cell expectation matches. Every catalog scenario produces the same
-// outcome class at all SSV cluster sizes — Apply functions scale with
-// cfg.N / cfg.F() so f-quorum mechanics are preserved.
+// Cluster-size scope: TestCorrectness runs at n=4 (the canonical
+// operating point per OBFT.md §Application). The larger-n sweep
+// (TestSweep_FullCatalog_LargerN in sweep_test.go) exercises every
+// scenario at n ∈ {7, 10, 13} too, enforcing universal safety invariants
+// and asserting per-cell expectation matches. Every catalog scenario
+// produces the same outcome class at all SSV cluster sizes — Apply
+// functions scale with cfg.N / cfg.F() so f-quorum mechanics are
+// preserved.
 //
 // Generalization key: scenarios named with a number suffix (e.g. "_3_1",
 // "_AlgebraicLimit", "_NRFallThrough", "_NaturalRecovery") describe the
