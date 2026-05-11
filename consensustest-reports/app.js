@@ -25,9 +25,14 @@
 
 'use strict';
 
+// Protocol series colors — used for chart bars, lines, and point markers.
+// Picked as a warm-toned pair with similar saturation/lightness so the
+// two protocols read as peers, not as figure/ground. The UI accent
+// (sticky TOC active state, focus ring, etc.) lives in styles.css and
+// stays cool blue, independent of these.
 const PROTOCOL_COLORS = {
-  OBFT: '#0969da',
-  QBFT: '#cf222e',
+  OBFT: '#ed8936', // light orange
+  QBFT: '#e85a71', // light pink-red
 };
 
 // chartInstances tracks every Chart.js instance for debug/teardown.
