@@ -8,8 +8,8 @@ Findings were originally collected during a faithfulness review and then re-veri
 
 | Item | Status | Notes |
 |---|---|---|
-| D1 — Rule 1 order-dependent | **Open** | Original finding; still requires the proposed `ObservePhase1Bundle` cross-check. |
-| D2 — Rule 3 leader cross-V order-dependent | **Open** | Original finding; requires the proposed `reevaluateL0Sigmas` extension. |
+| D1 — Rule 1 order-dependent | **Fixed** | `ObservePhase1Bundle` at phase1.go:180-199 now checks `peerNR[layer][leader]` on bundle arrival and fires Rule 1 if the byzantine commit was observed first. Tested by `TestObft_Evidence_Rule1_LeaderNRBeforePhase1Bundle`. |
+| D2 — Rule 3 leader cross-V order-dependent | **Fixed** | `reevaluateL0Sigmas` at phase1.go:297-325 records `EvidenceCrossOnionEquivocation` when a retained bundle's V differs from the leader's already-observed L_0 onion entry, dedup'd via `recordRule3Leader`. Tested by `TestObft_Evidence_Rule3_LeaderOnionBeforePhase1Bundle`. |
 | D3 — Witness section σ_L^V unused | **Fixed** | Production now harvests σ_L^V via `harvestWitness` (phase2.go:507-509) and consumes via `findVByRoot` / Resolve. Spec was simultaneously widened (OBFT.md:219 "Broadened V-source") to allow V cross-reference from peer onion entries. |
 | D4 — `l0SigmaUnknownV` not escalated to Rule 5 | **Fixed (Option A)** | phase2.go:404-415 fires Rule 5 on unknownV for non-leader emitters (leader unknownV is Rule 3 territory; honest equivocation-reaction false-positive avoided via the leader carve-out). Negative test `TestObft_Rule5_NoFireWhenBothEquivocatedVsRetained` covers the documented equivocation-reaction case. |
 | D5 — Δ_3 default conflates ε_3 with jitter | **Fixed** | `DefaultDelta3 = 50ms` (was 100ms), `DefaultJitterBuffer = 50ms` added; `T_commit` derivation now subtracts both. Verified at `TestDefaultTCommitDecomposition`. |
@@ -17,7 +17,7 @@ Findings were originally collected during a faithfulness review and then re-veri
 | D7 — Stale MUST-gossip comments | **Fixed** | No remaining "MUST-gossip" comments in setup_obft.go / controller.go / instance.go (verified via grep). |
 | D8 — Stricter K floor than spec BFT-min | **Document-only** | Intentional — keep MinK = max(3, f+2). |
 
-**Net open items:** D1 and D2 (both Rule-1/Rule-3 order-dependence in `ObservePhase1Bundle` / `reevaluateL0Sigmas`).
+**All D-items resolved.** D1–D7 fixes are in production with passing tests; D8 is an intentional design choice documented here.
 
 ## D1 — Rule 1 cross-signing detection is order-dependent (bug)
 
