@@ -53,7 +53,6 @@ function main() {
   const bucketing = computeBuckets(data);
 
   root.innerHTML = '';
-  root.appendChild(renderHeader(data));
   root.appendChild(renderTOC(data));
   const mainEl = h('main');
   const overview = renderHeatmap(data);
@@ -172,47 +171,6 @@ function computeBuckets(data) {
 }
 
 // ---- top-level scaffolding -------------------------------------------
-
-function renderHeader(data) {
-  const header = h('header', { class: 'page', id: 'top' });
-  // Single self-explanatory sentence covers everything: the count and
-  // role of sweeps, the protocols being compared, and the per-cell
-  // sample size (and what "cell" means). No separate title, lead, or
-  // pills — those split the same content across more visual chrome
-  // than it deserves.
-  const meta = h('p', { class: 'meta-line' });
-  meta.innerHTML =
-    `<strong>${data.sweeps.length} parameter sweeps</strong>` +
-    ` comparing <strong>${escapeHtml(data.protocols.join(' vs '))}</strong>` +
-    ` — each <strong>(scenario, protocol) pair</strong>` +
-    ` simulated <strong>${data.iterations} times</strong>`;
-  header.appendChild(meta);
-
-  // Expand-all / collapse-all controls.
-  const controls = h('div', { class: 'header-controls' });
-  const expandBtn = h('button', { type: 'button', 'data-action': 'expand-all' }, 'Expand all');
-  const collapseBtn = h('button', { type: 'button', 'data-action': 'collapse-all' }, 'Collapse all');
-  expandBtn.addEventListener('click', () => toggleAllPacks(true));
-  collapseBtn.addEventListener('click', () => toggleAllPacks(false));
-  controls.appendChild(expandBtn);
-  controls.appendChild(collapseBtn);
-  header.appendChild(controls);
-  return header;
-}
-
-// toggleAllPacks opens or closes every <details.group-pack> on the page.
-// Setting/removing the `open` attribute fires the `toggle` event, which
-// the lazy-init wiring picks up.
-function toggleAllPacks(open) {
-  document.querySelectorAll('details.group-pack').forEach((d) => {
-    if (open && !d.hasAttribute('open')) {
-      d.setAttribute('open', '');
-      fireChartInit(d);
-    } else if (!open && d.hasAttribute('open')) {
-      d.removeAttribute('open');
-    }
-  });
-}
 
 // renderTOC builds the sticky nav with one row of sweep pills. The
 // active sweep is highlighted by setupActiveTOC based on scroll

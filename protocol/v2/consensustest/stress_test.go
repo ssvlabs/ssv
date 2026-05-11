@@ -3,6 +3,7 @@ package consensustest_test
 import (
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,11 +80,20 @@ func TestStress(t *testing.T) {
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations)
 	require.Len(t, sweeps, 5)
 
+	protocolNames := make([]string, len(protocols))
+	for i, p := range protocols {
+		protocolNames[i] = p.Name()
+	}
 	totalStart := time.Now()
 	results := make([]ct.SweepResult, 0, len(sweeps))
 	for _, sw := range sweeps {
-		t.Logf("--- sweep %s (%d points × %d iterations × %d cells)",
-			sw.Name, len(sw.Points), iterations, len(scenarios)*len(protocols))
+		pointLabels := make([]string, len(sw.Points))
+		for i, pt := range sw.Points {
+			pointLabels[i] = pt.Label
+		}
+		t.Logf("--- sweep %s: %d sweep points [%s] × %d iterations × %d scenarios × %d protocols [%s]",
+			sw.Name, len(sw.Points), strings.Join(pointLabels, ", "),
+			iterations, len(scenarios), len(protocols), strings.Join(protocolNames, ", "))
 		swStart := time.Now()
 		results = append(results, ct.RunSweep(t, sw))
 		t.Logf("    %s wallclock: %v", sw.Name, time.Since(swStart))
