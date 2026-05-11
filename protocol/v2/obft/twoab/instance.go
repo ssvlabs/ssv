@@ -1,6 +1,7 @@
 package twoab
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"time"
@@ -97,6 +98,45 @@ type Instance struct {
 	// excludes flagged operators from both verdict_pool and nr_pool.
 	verdictEquivocator map[int]map[OperatorID]bool
 
+	// Phase-2b local commitment state — per-layer σ/NR lock + cached σ
+	// partials. EKM enforces single-σ-V and σ-XOR-NR per (slot, layer)
+	// at sign time.
+	sigmaLocked  []bool
+	sigmaLockedV []Value // when sigmaLocked[k], sigmaLockedV[k] is the V signed
+	nrLocked     []bool
+	ownPartials  map[int]Signature // cached σ partials per layer
+
+	// ownOnion2b is the cached local Phase-2b emission. Set once by
+	// BuildOwnOnion2b; subsequent calls return the same instance per
+	// spec §Phase 2b (single emission per slot per operator).
+	ownOnion2b *Onion2b
+
+	// peerOnions[layer][op] = the σ-side onion entries seen from this
+	// operator at this layer (one per Onion2b they emitted). Multiple
+	// distinct entries means cross-onion equivocation (Rule 3).
+	peerOnions map[int]map[OperatorID][]EncryptedLayer
+
+	// peerNR[layer][op] = the operator's NR partial for this layer (one
+	// per Onion2b they emitted).
+	peerNR map[int]map[OperatorID]Signature
+
+	// peerOnion2bHashes[op] = set of content hashes observed from op.
+	// Identical re-broadcasts are no-ops; the first distinct second hash
+	// is top-level Rule-3 cross-onion equivocation.
+	peerOnion2bHashes map[OperatorID]map[[32]byte]struct{}
+
+	// peerFirstOnion2b retains a deep copy of the FIRST Onion2b observed
+	// from each operator so the second distinct emission can package
+	// both bodies into Rule-3 evidence at Layer=-1.
+	peerFirstOnion2b map[OperatorID]*Onion2b
+
+	// Per-rule dedup buckets — ensure one Evidence entry per logical
+	// fault even when multiple detection paths fire.
+	rule1Fired       map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
+	rule3LeaderFired map[int]map[OperatorID]bool // Rule 3 per (layer, op) at L_0
+	rule5UnknownV    map[int]map[OperatorID]bool // Rule 5 unknownV per (layer, op)
+	rule6bFired      map[int]map[OperatorID]bool // Rule 6b per (layer, op)
+
 	// Evidence accumulation. Per spec §Slashing evidence, the observer
 	// (if set) fires on FIRST recording per (Rule, OperatorID, Layer)
 	// tuple; subsequent records of the same logical fault are kept in
@@ -104,10 +144,6 @@ type Instance struct {
 	evidence         []Evidence
 	evidenceObserver EvidenceObserver
 	evidenceObserved map[evidenceObservedKey]bool
-
-	// Phase E doesn't yet need per-rule dedup buckets beyond
-	// evidenceObserved; Rules 1 / 3 / 4 / 5 / 6b dedup will accrete
-	// as Phases G/I land.
 
 	ended bool
 }
@@ -206,6 +242,18 @@ func NewInstance(
 		ownVerdict:         make(map[int]*Verdict, K),
 		peerVerdicts:       make(map[int]map[OperatorID]*Verdict, K),
 		verdictEquivocator: make(map[int]map[OperatorID]bool, K),
+		sigmaLocked:        make([]bool, K),
+		sigmaLockedV:       make([]Value, K),
+		nrLocked:           make([]bool, K),
+		ownPartials:        make(map[int]Signature, K),
+		peerOnions:         make(map[int]map[OperatorID][]EncryptedLayer, K),
+		peerNR:             make(map[int]map[OperatorID]Signature, K),
+		peerOnion2bHashes:  make(map[OperatorID]map[[32]byte]struct{}),
+		peerFirstOnion2b:   make(map[OperatorID]*Onion2b),
+		rule1Fired:         make(map[int]map[OperatorID]bool, K),
+		rule3LeaderFired:   make(map[int]map[OperatorID]bool, K),
+		rule5UnknownV:      make(map[int]map[OperatorID]bool, K),
+		rule6bFired:        make(map[int]map[OperatorID]bool, K),
 		evidenceObserved:   make(map[evidenceObservedKey]bool),
 	}, nil
 }
@@ -282,4 +330,138 @@ func (i *Instance) recordEvidence(e Evidence) {
 	}
 	i.evidenceObserved[key] = true
 	i.evidenceObserver(e)
+}
+
+// ---------- Phase-2b EKM coordination ----------
+
+// transitionToSigma applies the σ-emit EKM lock for `layer` on `value`.
+// Returns ErrSigmaLocked if already locked on a different V (single-σ-V
+// invariant); ErrNRLocked if the operator already NR-committed at this
+// layer (σ-XOR-NR invariant). Idempotent on (layer, value).
+func (i *Instance) transitionToSigma(layer int, value Value) error {
+	if i.nrLocked[layer] {
+		return ErrNRLocked
+	}
+	if i.sigmaLocked[layer] {
+		if !bytes.Equal(i.sigmaLockedV[layer], value) {
+			return ErrSigmaLocked
+		}
+		return nil
+	}
+	i.sigmaLocked[layer] = true
+	i.sigmaLockedV[layer] = append(Value{}, value...)
+	return nil
+}
+
+// transitionToNR applies the NR-emit EKM lock for `layer`. Returns
+// ErrSigmaLocked if the operator already σ-committed at this layer
+// (σ-XOR-NR invariant). Idempotent.
+func (i *Instance) transitionToNR(layer int) error {
+	if i.sigmaLocked[layer] {
+		return ErrSigmaLocked
+	}
+	i.nrLocked[layer] = true
+	return nil
+}
+
+// chainEncryptForLayer encrypts `partial` for layer `k` using the
+// chained-IBE construction from spec §Phase 2b emission:
+//
+//	layer k:  E_{nr_tag_0}( ... E_{nr_tag_{k-1}}( σ_partial ) ... )
+//
+// The innermost wrap uses nr_tag_{k-1}; the outermost uses nr_tag_0.
+// At k = 0, returns `partial` unchanged (plaintext per spec).
+func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
+	if k == 0 {
+		return partial, nil
+	}
+	inner := partial
+	for j := k - 1; j >= 0; j-- {
+		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, j)
+		ct, err := i.ibe.Encrypt(i.clusterPubKey, tag, inner)
+		if err != nil {
+			return nil, fmt.Errorf("twoab: encrypt at chain level %d: %w", j, err)
+		}
+		inner = ct
+	}
+	return inner, nil
+}
+
+// chainDecryptForLayer decrypts a layer-`k` ciphertext using
+// `decryptionKeys` where decryptionKeys[j] is the aggregated NR-partials
+// signature on nr_tag_j. Used by Phase H (reconstruction); included here
+// for completeness alongside chainEncryptForLayer.
+//
+// Decryption applies keys outermost-first.
+func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys [][]byte) ([]byte, error) {
+	if k == 0 {
+		return ciphertext, nil
+	}
+	if len(decryptionKeys) < k {
+		return nil, fmt.Errorf("twoab: need %d chained-decryption keys for layer %d, have %d",
+			k, k, len(decryptionKeys))
+	}
+	outer := ciphertext
+	for j := 0; j < k; j++ {
+		pt, err := i.ibe.Decrypt(outer, decryptionKeys[j])
+		if err != nil {
+			return nil, fmt.Errorf("twoab: decrypt at chain level %d: %w", j, err)
+		}
+		outer = pt
+	}
+	return outer, nil
+}
+
+// recordRule1 marks Rule 1 (CrossSigning) as fired for (op, layer).
+// Returns true if this is the first observation; false if Rule 1 was
+// already recorded.
+func (i *Instance) recordRule1(op OperatorID, layer int) bool {
+	if i.rule1Fired[layer] == nil {
+		i.rule1Fired[layer] = make(map[OperatorID]bool)
+	}
+	if i.rule1Fired[layer][op] {
+		return false
+	}
+	i.rule1Fired[layer][op] = true
+	return true
+}
+
+// recordRule3Leader marks Rule 3 leader-extension as fired for (op, layer).
+// Used by ObserveOnion2b's σ-side branch at L_0 when a leader's onion σ
+// differs from their retained Phase-1 V — though in 2ab the bundle has
+// no σ_V, this check fires when the onion's claimed V differs from any
+// retained V from the same leader at L_0 (the bare-OBFT analog).
+func (i *Instance) recordRule3Leader(op OperatorID, layer int) bool {
+	if i.rule3LeaderFired[layer] == nil {
+		i.rule3LeaderFired[layer] = make(map[OperatorID]bool)
+	}
+	if i.rule3LeaderFired[layer][op] {
+		return false
+	}
+	i.rule3LeaderFired[layer][op] = true
+	return true
+}
+
+// recordRule5UnknownV marks Rule 5 unknownV as fired for (op, layer).
+func (i *Instance) recordRule5UnknownV(op OperatorID, layer int) bool {
+	if i.rule5UnknownV[layer] == nil {
+		i.rule5UnknownV[layer] = make(map[OperatorID]bool)
+	}
+	if i.rule5UnknownV[layer][op] {
+		return false
+	}
+	i.rule5UnknownV[layer][op] = true
+	return true
+}
+
+// recordRule6b marks Rule 6b verdict-vs-action as fired for (op, layer).
+func (i *Instance) recordRule6b(op OperatorID, layer int) bool {
+	if i.rule6bFired[layer] == nil {
+		i.rule6bFired[layer] = make(map[OperatorID]bool)
+	}
+	if i.rule6bFired[layer][op] {
+		return false
+	}
+	i.rule6bFired[layer][op] = true
+	return true
 }

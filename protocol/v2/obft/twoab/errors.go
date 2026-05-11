@@ -26,3 +26,18 @@ var ErrEmptyValue = errors.New("twoab: empty value")
 // ErrLayerOutOfRange is returned when a layer index is outside
 // [0, K).
 var ErrLayerOutOfRange = errors.New("twoab: layer out of range")
+
+// ErrSigmaLocked is returned when the EKM detects an attempt to σ-commit
+// on a different V than the one already locked at this (slot, layer), or
+// to σ-commit at a layer where NR is already locked. Single-σ-V + σ-XOR-NR
+// invariants per spec §EKM coordination.
+var ErrSigmaLocked = errors.New("twoab: σ already locked at this layer (single-σ-V or σ-XOR-NR violation)")
+
+// ErrNRLocked is returned when the EKM detects an attempt to σ-commit at
+// a layer where NR is already locked (σ-XOR-NR invariant).
+var ErrNRLocked = errors.New("twoab: NR already locked at this layer (σ-XOR-NR violation)")
+
+// ErrOnion2bAlreadyEmitted is returned by BuildOwnOnion2b on a second
+// call within the same slot. Per spec §Phase 2b emission, each operator
+// emits exactly one Onion2b per (slot, operator).
+var ErrOnion2bAlreadyEmitted = errors.New("twoab: Onion2b already emitted for this slot")

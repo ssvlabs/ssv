@@ -244,3 +244,46 @@ func (s *sim) deliverVerdictEquivocation(
 			"op %d ObserveVerdict B from %d at layer %d", op, from, layer)
 	}
 }
+
+// runPhase2aCanonical has every operator BuildVerdict + broadcast at
+// each layer in [0, K). Returns a slice of all broadcast verdicts so
+// tests can inspect them.
+func (s *sim) runPhase2aCanonical() []*Verdict {
+	s.t.Helper()
+	var out []*Verdict
+	for k := 0; k < s.K; k++ {
+		for _, op := range s.allOperators() {
+			v, err := s.instances[op].BuildVerdict(k)
+			require.NoError(s.t, err, "op %d BuildVerdict layer %d", op, k)
+			out = append(out, v)
+			for _, peer := range s.allOperators() {
+				if peer == op {
+					continue
+				}
+				require.NoError(s.t, s.instances[peer].ObserveVerdict(v))
+			}
+		}
+	}
+	return out
+}
+
+// runPhase2bCanonical has every operator BuildOwnOnion2b and broadcasts
+// to every other operator. Returns the slice of all built onions in
+// operator-ID order.
+func (s *sim) runPhase2bCanonical() []*Onion2b {
+	s.t.Helper()
+	var out []*Onion2b
+	for _, op := range s.allOperators() {
+		o, err := s.instances[op].BuildOwnOnion2b()
+		require.NoError(s.t, err, "op %d BuildOwnOnion2b", op)
+		out = append(out, o)
+		for _, peer := range s.allOperators() {
+			if peer == op {
+				continue
+			}
+			require.NoError(s.t, s.instances[peer].ObserveOnion2b(o),
+				"op %d ObserveOnion2b from %d", peer, op)
+		}
+	}
+	return out
+}
