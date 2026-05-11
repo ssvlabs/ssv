@@ -223,3 +223,61 @@ func TestApplicable_ZeroIterationsIsFalse(t *testing.T) {
 	require.False(t, reporting.Applicable(ct.BatchCell{Iterations: 0}))
 	require.True(t, reporting.Applicable(ct.BatchCell{Iterations: 1}))
 }
+
+// TestRenderComparison_SummaryMatrixGroupHeaders — the summary matrix
+// emits a row of class "group" for each distinct Scenario.Group, in the
+// order scenarios appear. Scenarios within a group share the header row
+// above them.
+func TestRenderComparison_SummaryMatrixGroupHeaders(t *testing.T) {
+	// Two scenarios from "Silent operators", one from "Leader equivocation".
+	picked := []ct.Scenario{}
+	wanted := map[string]bool{
+		"PrimaryLeaderSilent": true, // Silent operators
+		"MultiSilent_K3":      true, // Silent operators
+		"Equivocate_AllNR":    true, // Leader equivocation
+	}
+	for _, s := range ct.Catalog {
+		if wanted[s.Name] {
+			picked = append(picked, s)
+		}
+	}
+	require.Len(t, picked, 3)
+
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	canonical := runOneSweep(t, "canonical", "n=4", "",
+		[]ct.SweepPoint{{Label: "n=4 BTT=200ms",
+			Config: ct.BatchConfig{
+				Iterations: 2, SeedStart: 1,
+				Base:      ct.DefaultProposerDutyConfig(200 * time.Millisecond),
+				Scenarios: picked, Protocols: protos,
+			}}})
+
+	path := t.TempDir() + "/groups.html"
+	require.NoError(t, reporting.RenderComparison(reporting.Comparison{
+		Title: "group test", Sweeps: []ct.SweepResult{canonical}, Iterations: 2,
+		GeneratedAt: time.Now(),
+	}, path))
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	bodyStr := string(body)
+	require.Contains(t, bodyStr, `<tr class="group"><th colspan="3">Silent operators</th>`)
+	require.Contains(t, bodyStr, `<tr class="group"><th colspan="3">Leader equivocation</th>`)
+	// "Silent operators" header must come before its two scenarios;
+	// "Leader equivocation" header must come before the third.
+	idxSilent := indexOf(bodyStr, "Silent operators</th>")
+	idxLeader := indexOf(bodyStr, "Leader equivocation</th>")
+	idxPrimary := indexOf(bodyStr, "Primary leader silent")
+	idxEquiv := indexOf(bodyStr, "Leader equivocates: floods both values")
+	require.Less(t, idxSilent, idxPrimary, "Silent operators header precedes its scenarios")
+	require.Less(t, idxPrimary, idxLeader, "Silent group precedes Leader equivocation group")
+	require.Less(t, idxLeader, idxEquiv, "Leader equivocation header precedes its scenario")
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}

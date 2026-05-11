@@ -207,6 +207,7 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 			scenariosWithLoss[i] = Scenario{
 				Name:  s.Name,
 				Title: s.Title,
+				Group: s.Group,
 				Apply: func(cfg *SimConfig) {
 					if inner.Apply != nil {
 						inner.Apply(cfg)

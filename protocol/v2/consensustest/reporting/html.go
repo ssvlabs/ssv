@@ -113,6 +113,7 @@ table.matrix { border-collapse: collapse; margin: 0.6em 0; font-size: 0.9em; }
 table.matrix th, table.matrix td { padding: 0.35em 0.7em; text-align: left; border-bottom: 1px solid #eee; }
 table.matrix th { background: #f7f7f7; font-weight: 600; }
 table.matrix td.scen { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #444; }
+table.matrix tr.group th { background: #eef2f6; color: #1a1a1a; font-size: 0.85em; padding: 0.55em 0.7em; text-transform: uppercase; letter-spacing: 0.04em; border-top: 1px solid #ddd; }
 .ok { color: #1a7f37; }
 .warn { color: #b07d00; }
 .miss { color: #d1242f; }
@@ -200,7 +201,22 @@ func writeSummaryMatrix(sb *strings.Builder, report ct.BatchReport, scenarios []
 		fmt.Fprintf(sb, "<th>%s</th>", html.EscapeString(p))
 	}
 	sb.WriteString("</tr></thead>\n<tbody>\n")
+	// Group-header row emitted whenever Scenario.Group changes (and on
+	// the first scenario). Scenarios in Catalog order are pre-grouped;
+	// a caller passing a custom unsorted list would see repeated group
+	// headers, which is at worst visually noisy but informative.
+	colspan := 1 + len(protocols)
+	currentGroup := ""
 	for _, sc := range scenarios {
+		group := sc.Group
+		if group == "" {
+			group = "Other"
+		}
+		if group != currentGroup {
+			fmt.Fprintf(sb, "<tr class=\"group\"><th colspan=\"%d\">%s</th></tr>\n",
+				colspan, html.EscapeString(group))
+			currentGroup = group
+		}
 		fmt.Fprintf(sb, "<tr><td class=\"scen\">%s</td>", html.EscapeString(sc.DisplayTitle()))
 		for _, p := range protocols {
 			cell, ok := findCell(report.Cells, sc.Name, p)

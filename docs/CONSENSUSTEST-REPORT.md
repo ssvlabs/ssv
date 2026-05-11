@@ -36,11 +36,13 @@ One file: `./consensustest-reports/index.html`. The page is a scrollable SPA wit
 Each section renders one of two layouts:
 
 **Single-point sweep → detail layout** (used for `canonical`):
-1. Summary matrix — scenario × protocol grid; cells show "N% success · P99 Xms" color-coded.
+1. Summary matrix — scenario × protocol grid; cells show "N% success · P99 Xms" color-coded. Scenarios are clustered by `Scenario.Group` (Baseline / Silent operators / Leader equivocation / Host validity / Propagation issues / OBFT-specific attacks) with a header row before each group.
 2. Success rate per scenario — bar chart, OBFT vs QBFT.
 3. Decision time P50/P90/P99 grouped bars — six bars per scenario (protocol × percentile).
 4. Bandwidth per cell stacked bars — one bar per (scenario, protocol), stacked by message kind.
 5. Trade-off scatter — X = P99 latency, Y = success rate, one dot per (scenario, protocol).
+
+The bar charts share the same scenario ordering, so related scenarios cluster visually on the X-axis too (no explicit separators — just adjacency).
 
 **Multi-point sweep → trend layout** (used for the four parameter sweeps):
 1. Success rate vs swept axis — line chart, X = parameter value, one line per (scenario, protocol).

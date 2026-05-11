@@ -8,6 +8,7 @@ import "fmt"
 type Scenario struct {
 	Name   string
 	Title  string // human-readable label for reports/charts; falls back to Name when empty
+	Group  string // taxonomic bucket for report grouping (e.g. "Silent operators"); empty = "Other"
 	Apply  func(*SimConfig)
 	Expect map[string]ExpectClass // keyed by Protocol.Name()
 	Note   string                 // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
