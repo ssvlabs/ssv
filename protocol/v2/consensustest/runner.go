@@ -34,9 +34,10 @@ type Result struct {
 
 // RunScenarioOnProtocol applies `s` to `base`, runs `p`, computes safety
 // invariants, classifies outcome vs expectation, and returns a Result.
-// SingleV / HonestAgreement / NoOfflineDoubleV violations panic; non-safety
-// mismatches are recorded in Result.Match for the caller to assert. Does not
-// call t.Fatal.
+// Any SafetyReport.IsViolation() panics (Agreement, QuorumBackedDecision,
+// NoEquivocationAccepted, and the OBFT-specific commit-kind /
+// host-validity checks); non-safety mismatches are recorded in
+// Result.Match for the caller to assert. Does not call t.Fatal.
 func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig) Result {
 	t.Helper()
 	cfg := base
@@ -85,7 +86,7 @@ func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig)
 	}
 
 	safety := ComputeSafetyReport(out)
-	if !safety.SingleV || !safety.HonestAgreement || !safety.NoOfflineDoubleV {
+	if safety.IsViolation() {
 		SafetyPanic(safety, s.Name, p.Name(), expect, out)
 	}
 	if !safety.Terminated {

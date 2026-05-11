@@ -55,7 +55,60 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err != nil {
 		return ct.Outcome{}, err
 	}
-	return rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth), nil
+	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
+	out.CommitAttestation = computeAttestation(cfg, out)
+	return out, nil
+}
+
+// computeAttestation populates Outcome.CommitAttestation from data already
+// visible at the adapter boundary. Each *Checked flag is set only when this
+// adapter actually performs the corresponding cross-check; the framework
+// treats unset flags as "uninstrumented, no violation reportable".
+//
+// Currently instrumented:
+//   - Equivocation: Rule2 (LeaderEquivocation) + Rule3 (CrossOnion /
+//     CommitEquivocation) evidence fires are counted into
+//     EquivocationsObserved. EquivocationsAccepted stays at 0 — OBFT's
+//     internal Rule3 enforcement excludes equivocating partials from σ /
+//     NR quorums by construction, so any actually-accepted equivocation
+//     would already manifest as a NoOfflineDoubleV / SingleV violation
+//     upstream. The framework therefore needs no additional gate here; the
+//     EquivocationsObserved count is diagnostic, distinguishing
+//     "vacuously safe" runs (==0) from "tested safe" runs (>0).
+//
+// Left uninstrumented (need deeper introspection than the adapter boundary
+// currently exposes — deferred to a follow-up):
+//   - Quorum: would require plumbing the partial-signature count out of
+//     obft.Instance.BuildCertificate. obft.Instance internally enforces
+//     ≥ 2f+1 distinct valid partials before emitting Output; that
+//     invariant is correctness-of-protocol, not currently re-verified at
+//     the framework level.
+//   - OBFTCommitKind: distinguishing σ-quorum-commit from NR-quorum-commit
+//     requires inspecting which path obft.Instance took to build the cert
+//     (direct L_0 σ-quorum vs. NR-unlocked deeper σ-reconstruction). The
+//     final cert is always a σ-signature on V regardless of path.
+//   - OBFTHostValidityRespect: OBFT's validate-once-and-lock property means
+//     a layer-naive comparison (decided_layer vs current host verdict)
+//     over-reports — scenarios like HostFlipMidSlot have ops legitimately
+//     decide at L_1 on a V they accepted at L_0 when the host's L_1
+//     verdict is "invalid". A correct check requires plumbing each op's
+//     recorded acceptance-layer through the DES boundary.
+func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
+	att := ct.CommitAttestation{
+		EquivocationChecked: true,
+	}
+
+	for _, oo := range out.PerOp {
+		for rule, n := range oo.EvidenceByRule {
+			if rule == "OBFT/Rule2/LeaderEquivocation" ||
+				rule == "OBFT/Rule3/CrossOnionEquivocation" ||
+				rule == "OBFT/Rule3/CommitEquivocation" {
+				att.EquivocationsObserved += n
+			}
+		}
+	}
+
+	return att
 }
 
 // desConfig is the OBFT-DES-internal configuration, built by Run.

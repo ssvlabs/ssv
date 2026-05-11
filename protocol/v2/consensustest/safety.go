@@ -8,8 +8,9 @@ import (
 
 // SafetyReport captures the universal invariants the framework checks on
 // every Outcome regardless of protocol or scenario. Any false field is a
-// load-bearing safety violation; the framework panics on SingleV /
-// HonestAgreement / NoOfflineDoubleV breaches.
+// load-bearing safety violation; the framework panics on any of:
+// SingleV, HonestAgreement, NoOfflineDoubleV, QuorumBackedDecision,
+// NoEquivocationAccepted, OBFTCommitKindValid, OBFTHostValidityRespect.
 type SafetyReport struct {
 	// SingleV: at most one distinct Value is reconstructed cluster-wide
 	// (Pigeonhole claim: "at most one full V signature per slot"). Round
@@ -18,7 +19,8 @@ type SafetyReport struct {
 
 	// Terminated: every operator is either Decided or has a non-empty Err.
 	// Protocols that leave ops waiting for events that will never fire fail
-	// this check.
+	// this check. Treated as a soft warning (not a safety violation) so the
+	// matrix run continues.
 	Terminated bool
 
 	// HonestAgreement: all deciders agree on Value. Same check as SingleV
@@ -32,9 +34,43 @@ type SafetyReport struct {
 	// observed-but-not-locally-applied partials.
 	NoOfflineDoubleV bool
 
+	// QuorumBackedDecision: when the adapter instrumented its commit
+	// certificate (Outcome.CommitAttestation.QuorumChecked), the decided
+	// value is backed by ≥ QuorumRequired distinct valid signatures.
+	// Default true (uninstrumented adapter ⇒ no violation reportable).
+	QuorumBackedDecision bool
+
+	// NoEquivocationAccepted: when the adapter instrumented equivocation
+	// detection (Outcome.CommitAttestation.EquivocationChecked), no honest
+	// validator committed based on an equivocating proposal in the same
+	// (instance, round). Default true.
+	NoEquivocationAccepted bool
+
+	// OBFTCommitKindValid (OBFT-specific): when the adapter populated
+	// Outcome.CommitAttestation.OBFTCommitKind, the value is either
+	// "sigma" or "nr". Default true.
+	OBFTCommitKindValid bool
+
+	// OBFTHostValidityRespect (OBFT-specific): when the adapter
+	// instrumented host-validity comparison, no honest validator's
+	// predicate rejected the decided value. Default true.
+	OBFTHostValidityRespect bool
+
 	// DistinctOutputs records (Round, Value) pairs for diagnostic dumps;
 	// length > 1 means SingleV was violated.
 	DistinctOutputs []OutputTuple
+}
+
+// IsViolation reports whether any load-bearing safety property is false.
+// Terminated is excluded (soft warning, see SafetyReport.Terminated).
+func (r SafetyReport) IsViolation() bool {
+	return !r.SingleV ||
+		!r.HonestAgreement ||
+		!r.NoOfflineDoubleV ||
+		!r.QuorumBackedDecision ||
+		!r.NoEquivocationAccepted ||
+		!r.OBFTCommitKindValid ||
+		!r.OBFTHostValidityRespect
 }
 
 type OutputTuple struct {
@@ -44,7 +80,9 @@ type OutputTuple struct {
 
 // String renders a one-line summary; non-OK fields go first.
 func (r SafetyReport) String() string {
-	if r.SingleV && r.Terminated && r.HonestAgreement && r.NoOfflineDoubleV {
+	if r.SingleV && r.Terminated && r.HonestAgreement && r.NoOfflineDoubleV &&
+		r.QuorumBackedDecision && r.NoEquivocationAccepted &&
+		r.OBFTCommitKindValid && r.OBFTHostValidityRespect {
 		return "SAFETY OK"
 	}
 	parts := []string{}
@@ -53,6 +91,18 @@ func (r SafetyReport) String() string {
 	}
 	if !r.NoOfflineDoubleV {
 		parts = append(parts, "NoOfflineDoubleV=FAIL (offline aggregator could rebuild ≥ 2 V sigs)")
+	}
+	if !r.QuorumBackedDecision {
+		parts = append(parts, "QuorumBackedDecision=FAIL (decision lacks quorum-sized signature set)")
+	}
+	if !r.NoEquivocationAccepted {
+		parts = append(parts, "NoEquivocationAccepted=FAIL (honest validator committed on equivocating proposal)")
+	}
+	if !r.OBFTCommitKindValid {
+		parts = append(parts, "OBFTCommitKindValid=FAIL (commit not justified by σ-quorum or NR-quorum)")
+	}
+	if !r.OBFTHostValidityRespect {
+		parts = append(parts, "OBFTHostValidityRespect=FAIL (decided value rejected by some honest validator's host-validity predicate)")
 	}
 	if !r.Terminated {
 		parts = append(parts, "Terminated=FAIL (some operator still in-flight)")
@@ -79,10 +129,14 @@ func (r SafetyReport) String() string {
 // safety panics — Phase 1 + Phase 2 wire this up.
 func ComputeSafetyReport(o Outcome) SafetyReport {
 	r := SafetyReport{
-		SingleV:          true,
-		Terminated:       true,
-		HonestAgreement:  true,
-		NoOfflineDoubleV: true,
+		SingleV:                 true,
+		Terminated:              true,
+		HonestAgreement:         true,
+		NoOfflineDoubleV:        true,
+		QuorumBackedDecision:    true,
+		NoEquivocationAccepted:  true,
+		OBFTCommitKindValid:     true,
+		OBFTHostValidityRespect: true,
 	}
 
 	distinctValues := [][]byte{}
@@ -140,6 +194,29 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 		r.NoOfflineDoubleV = false
 	}
 	// else: zero value, adapter didn't instrument; leave true.
+
+	// Per-decision invariants read CommitAttestation. Each *Checked bool
+	// gates the corresponding check; uninstrumented invariants stay at
+	// default true. Adapter migration plan: see protocol.go docstring.
+	att := o.CommitAttestation
+	if att.QuorumChecked && o.Decided {
+		if att.QuorumRequired > 0 && att.QuorumSigners < att.QuorumRequired {
+			r.QuorumBackedDecision = false
+		}
+	}
+	if att.EquivocationChecked && att.EquivocationsAccepted > 0 {
+		r.NoEquivocationAccepted = false
+	}
+	if att.OBFTCommitKindChecked && o.Decided {
+		if att.OBFTCommitKind != "sigma" && att.OBFTCommitKind != "nr" {
+			r.OBFTCommitKindValid = false
+		}
+	}
+	if att.OBFTHostValidityChecked && o.Decided {
+		if att.OBFTHostValidityRejecters > 0 {
+			r.OBFTHostValidityRespect = false
+		}
+	}
 
 	return r
 }

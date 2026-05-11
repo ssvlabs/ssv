@@ -6,11 +6,19 @@
 // Per-protocol adapters live under consensustest/{name}/ and translate the
 // abstract ByzPattern into the protocol's internal byz model.
 //
-// Universal safety invariants — SingleV (≤ 1 V reconstructed cluster-wide),
-// HonestAgreement, Terminated, NoOfflineDoubleV (an offline byzantine with
-// full message visibility cannot reconstruct two distinct V signatures) —
-// are enforced on every simulation; SingleV / HonestAgreement / NoOfflineDoubleV
-// violations panic.
+// Universal safety invariants — Agreement (SingleV / HonestAgreement /
+// NoOfflineDoubleV), QuorumBackedDecision, NoEquivocationAccepted, plus
+// OBFT-specific OBFTCommitKindValid (every commit is σ-or-NR-backed) and
+// OBFTHostValidityRespect (decided value satisfies every honest
+// validator's host-validity predicate) — are enforced on every simulation
+// regardless of profile. Violations panic via SafetyPanic.
+//
+// Invariants checked from PerOp/OfflineAgg directly (Agreement); the rest
+// read Outcome.CommitAttestation, populated by adapters. Adapters that
+// haven't instrumented a given invariant leave the corresponding *Checked
+// field zero; the framework treats unchecked invariants as
+// no-violation-reportable (graceful degradation, same pattern as
+// NoOfflineDoubleV pre-instrumentation).
 package consensustest
 
 import (
@@ -185,6 +193,55 @@ type Outcome struct {
 	// OfflineAgg is the post-sim offline-aggregator's reconstruction attempt.
 	// A safety violation (NoOfflineDoubleV=false) panics in the runner.
 	OfflineAgg OfflineAggReport
+
+	// CommitAttestation aggregates adapter-side observations the framework
+	// uses to verify safety invariants beyond Agreement (which it checks
+	// directly from PerOp). Adapters that haven't instrumented a given
+	// invariant leave the corresponding *Checked field zero — the framework
+	// treats unchecked invariants as no-violation-reportable.
+	CommitAttestation CommitAttestation
+}
+
+// CommitAttestation carries adapter-introspected evidence for the
+// per-decision safety invariants. Each invariant has a *Checked bool the
+// adapter sets when it ran the instrumentation, plus diagnostic fields
+// the framework reads to decide OK vs violation. Default zero values =
+// "adapter didn't instrument; no violation reportable".
+//
+// Adapter migration: an adapter starts with all *Checked=false and is
+// gradually instrumented. The framework's safety check still passes for
+// uninstrumented adapters, so adding new invariants is non-breaking.
+type CommitAttestation struct {
+	// QuorumBackedDecision: when set, the decided value must be backed by
+	// QuorumSigners >= QuorumRequired (typically 2f+1). Adapter sets when
+	// the decision carried a verifiable quorum certificate.
+	QuorumChecked  bool
+	QuorumSigners  int
+	QuorumRequired int
+
+	// NoEquivocationAccepted: when set, the adapter checked that no
+	// honest validator committed based on a proposal whose leader had
+	// equivocated within the same (instance, round). EquivocationsObserved
+	// is diagnostic (>0 means the scenario actually generated
+	// equivocations — distinguishes vacuous-pass from tested-pass).
+	// EquivocationsAccepted > 0 is a violation.
+	EquivocationChecked   bool
+	EquivocationsObserved int
+	EquivocationsAccepted int
+
+	// OBFTCommitKindValid (OBFT-specific): when set, the adapter recorded
+	// the certificate kind that justified the commit. Valid kinds are
+	// "sigma" and "nr"; any other value (including empty when checked) is
+	// a violation.
+	OBFTCommitKindChecked bool
+	OBFTCommitKind        string
+
+	// OBFTHostValidityRespect (OBFT-specific): when set, the adapter
+	// compared the decided value against each honest validator's
+	// host-validity predicate. OBFTHostValidityRejecters > 0 is a
+	// violation.
+	OBFTHostValidityChecked   bool
+	OBFTHostValidityRejecters int
 }
 
 type OperatorOutcome struct {

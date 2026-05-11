@@ -74,10 +74,10 @@ func (c *BatchConfig) validate() error {
 // aggregates results. Cells run in parallel up to BatchConfig.Parallelism;
 // sims within a cell run sequentially.
 //
-// Safety: RunBatch panics on a NoOfflineDoubleV / SingleV / HonestAgreement
-// violation in any sim, per the existing RunScenarioOnProtocol contract.
-// A safety violation in batch mode is a hard test failure regardless of
-// declared scenario expectation.
+// Safety: RunBatch panics on any SafetyReport.IsViolation() in any sim,
+// per the existing RunScenarioOnProtocol contract. A safety violation in
+// batch mode is a hard test failure regardless of declared scenario
+// expectation.
 //
 // Scenarios that return ErrNotApplicable for a given protocol contribute
 // a cell with zero Iterations (Iterations field reflects ATTEMPTED count;
@@ -180,7 +180,7 @@ func runCell(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol
 		// batch mode is a hard failure regardless of scenario expectation;
 		// SafetyPanic terminates the test before any further sims run.
 		report := ComputeSafetyReport(out)
-		if !report.SingleV || !report.HonestAgreement || !report.NoOfflineDoubleV {
+		if report.IsViolation() {
 			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, out)
 		}
 

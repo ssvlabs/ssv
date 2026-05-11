@@ -4,14 +4,37 @@ import "fmt"
 
 // Scenario describes a test condition independently of the protocol under
 // test. Apply modifies SimConfig (typically Byz / Host / Network); Expect
-// declares per-protocol outcome buckets.
+// declares per-protocol outcome buckets; Modes opts the scenario into the
+// correctness and/or stress tiers (see docs/CONSENSUSTEST-SPLIT-PLAN.md).
 type Scenario struct {
-	Name   string
-	Title  string // human-readable label for reports/charts; falls back to Name when empty
-	Group  string // taxonomic bucket for report grouping (e.g. "Silent operators"); empty = "Other"
+	Name  string
+	Title string // human-readable label for reports/charts; falls back to Name when empty
+	Group string // taxonomic bucket for report grouping (e.g. "Silent operators"); empty = "Other"
+
+	// Modes lists the tiers this scenario participates in. An empty slice
+	// is treated as {ModeStress} for back-compat — every Catalog scenario
+	// is currently a stress contributor; correctness opt-ins are filled in
+	// during the per-scenario audit (Phase 2 of the split plan).
+	Modes []Mode
+
 	Apply  func(*SimConfig)
 	Expect map[string]ExpectClass // keyed by Protocol.Name()
 	Note   string                 // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
+}
+
+// HasMode reports whether the scenario participates in mode m. An empty
+// Modes slice is treated as {ModeStress} so unannotated Catalog entries
+// keep flowing into the existing stress report unchanged.
+func (s Scenario) HasMode(m Mode) bool {
+	if len(s.Modes) == 0 {
+		return m == ModeStress
+	}
+	for _, x := range s.Modes {
+		if x == m {
+			return true
+		}
+	}
+	return false
 }
 
 // DisplayTitle returns the scenario's Title if set, otherwise Name. Used
