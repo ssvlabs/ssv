@@ -271,6 +271,46 @@ func TestDefaultBroadcastBudget_TooSmallTVerdictStart(t *testing.T) {
 	require.ErrorContains(t, err, "TVerdictStart")
 }
 
+func TestDefaultBroadcastBudget_K1(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tVerdictStart := 1600 * time.Millisecond
+	out, err := DefaultBroadcastBudget(1, btt, tVerdictStart)
+	require.NoError(t, err)
+	require.Equal(t, []time.Duration{tVerdictStart}, out,
+		"K=1: single layer = deepest = TVerdictStart")
+}
+
+func TestDefaultBroadcastBudget_K1_RejectsTVerdictStartBelowTwoBTT(t *testing.T) {
+	// At K=1, the only layer IS the deepest; its minimum is 2·BTT.
+	_, err := DefaultBroadcastBudget(1, 200*time.Millisecond, 300*time.Millisecond)
+	require.ErrorContains(t, err, "TVerdictStart")
+}
+
+func TestDefaultBroadcastBudget_K2(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tVerdictStart := 1600 * time.Millisecond
+	out, err := DefaultBroadcastBudget(2, btt, tVerdictStart)
+	require.NoError(t, err)
+	require.Equal(t, []time.Duration{btt, tVerdictStart}, out,
+		"K=2: B_0 = 1 BTT, B_1 = TVerdictStart")
+}
+
+func TestDefaultBroadcastBudget_K2_RejectsTVerdictStartBelowOneBTT(t *testing.T) {
+	// At K=2, B_0 = BTT; TVerdictStart must be > BTT for strict-increasing.
+	_, err := DefaultBroadcastBudget(2, 200*time.Millisecond, 150*time.Millisecond)
+	require.ErrorContains(t, err, "TVerdictStart")
+}
+
+func TestDefaultBroadcastBudget_K0_Rejected(t *testing.T) {
+	_, err := DefaultBroadcastBudget(0, 200*time.Millisecond, 1600*time.Millisecond)
+	require.ErrorContains(t, err, "K=0")
+}
+
+func TestDefaultBroadcastBudget_NonPositiveBTT_Rejected(t *testing.T) {
+	_, err := DefaultBroadcastBudget(4, 0, 1600*time.Millisecond)
+	require.ErrorContains(t, err, "BTT")
+}
+
 // --- NewInstance ---
 
 func TestNewInstance_RejectsNilConfig(t *testing.T) {

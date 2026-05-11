@@ -111,7 +111,7 @@ func (v *Verifier) VerifyCommitNRPartials(c *Commit) error {
 
 // VerifyCommitWitnesses runs structural checks on the witness section. Per
 // spec §Phase 2 wire format, witnesses ship value_root (32 bytes) + σ_V
-// without the full V; σ_V verifies against V (via the obft.Signer's signing
+// without the full V; σ_V verifies against V (via the Signer's signing
 // target). A standalone Verifier (without access to retained Phase-1
 // bundles) cannot reproduce that verification — V is needed and isn't on
 // the wire.
@@ -159,7 +159,7 @@ func (v *Verifier) VerifyCertificate(c *Certificate) error {
 }
 
 // checkConfigured returns an error if the Verifier is missing required
-// dependencies (nil receiver, nil obft.Signer, nil TagSigner). Callers may also
+// dependencies (nil receiver, nil Signer, nil TagSigner). Callers may also
 // want to set NRPubKeyShares explicitly under Option B; nil falls back to
 // PubKeyShares (Option A).
 func (v *Verifier) checkConfigured() error {
@@ -167,7 +167,7 @@ func (v *Verifier) checkConfigured() error {
 		return errors.New("obft: nil verifier")
 	}
 	if v.Signer == nil {
-		return errors.New("obft: verifier has nil obft.Signer")
+		return errors.New("obft: verifier has nil Signer")
 	}
 	if v.TagSigner == nil {
 		return errors.New("obft: verifier has nil TagSigner")

@@ -54,9 +54,19 @@ const (
 const MaxLayers = 32
 
 // MaxFieldSize caps individual length-prefixed fields (values, ciphertexts,
-// signatures). 16 MiB is far above realistic SSV proposer-duty values
-// (~1 KB blinded blocks, ~96 B signatures) but still safe against unbounded
-// allocation from a malformed message.
+// signatures). 16 MiB is conservative — realistic 2abOBFT messages are far
+// smaller:
+//
+//   - Phase1Bundle: ~1 KB (ClusterID + IDs + ~1 KB blinded block)
+//   - Verdict: ~100 bytes (no value, just a 32-byte ValueRoot for σV)
+//   - Onion2b: ~4-5 KB at K=4 (K layers × ~1 KB V + ~50 byte ciphertext, plus
+//     up to K-1 NR partials × ~100 bytes); ~10 KB headroom for K=13 high-end
+//   - Certificate: ~1.5 KB (value + aggregate signature)
+//
+// The 16 MiB cap matches base/wire's choice so the same shared
+// SignedSSVMessage envelope sizing applies uniformly across protocols.
+// Anything past this size is malformed/malicious; the cap prevents
+// unbounded allocation during DecodeXxx.
 const MaxFieldSize = 16 * 1024 * 1024
 
 // ---------- Phase1Bundle ----------

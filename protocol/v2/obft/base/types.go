@@ -40,11 +40,23 @@ type (
 )
 
 // Re-exported constructors/functions from the parent obft package.
-var (
-	NewStubSigner = obft.NewStubSigner
-	NewStubIBE    = obft.NewStubIBE
-	NoQuorumTag   = obft.NoQuorumTag
-)
+// Wrapper functions (not var aliases) so the symbols are immutable and
+// can't be rebound at runtime.
+
+// NewStubSigner returns a deterministic test signer. See obft.NewStubSigner.
+func NewStubSigner(quorum int, share []byte) *obft.StubSigner {
+	return obft.NewStubSigner(quorum, share)
+}
+
+// NewStubIBE returns a deterministic test IBE. See obft.NewStubIBE.
+func NewStubIBE(quorum int) *obft.StubIBE {
+	return obft.NewStubIBE(quorum)
+}
+
+// NoQuorumTag derives the IBE tag for layer k. See obft.NoQuorumTag.
+func NoQuorumTag(clusterID [32]byte, height obft.Height, layer int) []byte {
+	return obft.NoQuorumTag(clusterID, height, layer)
+}
 
 // LayerSpec describes one layer of the K-layer onion structure: which
 // operator is the layer's leader, when (relative to slot start) they should

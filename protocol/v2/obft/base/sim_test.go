@@ -16,7 +16,7 @@ import (
 // scenarios), Phase-2 KindCommit exchange, and Phase-3 Resolve. Per-operator
 // host validity verdicts are configurable to exercise the NV path.
 //
-// The simulator uses obft.StubSigner / obft.StubIBE so tests run without real BLS
+// The simulator uses StubSigner / StubIBE so tests run without real BLS
 // machinery; that's fine for protocol-level coverage (the cryptography is
 // exercised separately in blsbackend tests once that package is migrated).
 

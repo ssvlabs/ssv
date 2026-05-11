@@ -92,10 +92,10 @@ func TestVerifier_Certificate_AcceptsValid(t *testing.T) {
 }
 
 func TestVerifier_RejectsNilSigner(t *testing.T) {
-	// A misconfigured Verifier with nil obft.Signer must error rather than panic
+	// A misconfigured Verifier with nil Signer must error rather than panic
 	// on the nil method call (defensive against caller misconfiguration).
 	v := &Verifier{Signer: nil, TagSigner: NewStubSigner(3, nil)}
-	require.ErrorContains(t, v.VerifyPhase1Bundle(&Phase1Bundle{}), "nil obft.Signer")
+	require.ErrorContains(t, v.VerifyPhase1Bundle(&Phase1Bundle{}), "nil Signer")
 
 	v = &Verifier{Signer: NewStubSigner(3, nil), TagSigner: nil}
 	require.ErrorContains(t, v.VerifyCommitNRPartials(&Commit{NRPartials: []NRPartial{{Layer: 0, PartialSig: []byte("x")}}}), "nil TagSigner")
