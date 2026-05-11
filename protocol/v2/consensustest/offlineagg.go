@@ -19,12 +19,18 @@ import (
 // NoOfflineDoubleV=false is a load-bearing failure (not just a non-decision)
 // and panics in the runner.
 //
-// In stub-BLS mode, "reconstruction" is shallow — the framework verifies
-// quorum-cardinality and pubkey-distinctness but does not run real BLS
-// math. In real-BLS mode (cfg.BLSKeys set), reconstruction performs actual
-// threshold aggregation + verification. Both modes catch the same class of
-// safety violation; real-BLS additionally validates the cryptographic
-// primitive's threshold property.
+// Reconstruction is cardinality+hash based in both stub-BLS and real-BLS
+// modes — the aggregator counts distinct partials per (layer, value-hash)
+// bucket and reports reconstruction-feasible if any bucket meets QV.
+// It does NOT run actual BLS threshold aggregation; the safety claim it
+// validates is "no offline aggregator could COLLECT ≥ qV partials on two
+// distinct V's", which is independent of whether the partials would
+// cryptographically aggregate (the protocol's per-partial verify, run
+// inside obft.Instance, already gates that). Adding real-BLS aggregation
+// here would catch the same class of safety violation; the value would
+// be belt-and-braces confirmation that QV partials genuinely aggregate
+// into a valid full signature — a property the production OBFT path
+// already exercises.
 type OfflineAggregator struct {
 	// SigmaPartials groups observed σ partials by (layer, value-hash).
 	// Each bucket records the contributing operators; a quorum (≥ QV) on

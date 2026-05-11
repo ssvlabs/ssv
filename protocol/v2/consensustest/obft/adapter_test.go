@@ -216,7 +216,13 @@ func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testin
 
 // TestAdapter_ByzWithholdLeader verifies the deepest-layer leader silenced
 // pattern: at K = n = 4 with byz=op4 (the L_3 leader), the cluster decides
-// at L_2 (op3) without needing the deepest layer.
+// at L_0 (op1 leader still broadcasts healthy) without ever reaching the
+// silenced deepest layer. Validates that silencing a deeper-layer leader
+// is irrelevant when shallower layers succeed — the assertion is
+// DecidedRound < 3 (must NOT need L_3), which the L_0 path satisfies.
+//
+// For the case where ALL layers must be exhausted before the slot misses,
+// see TestComparison_Matrix's all-silent scenario.
 func TestAdapter_ByzWithholdLeader(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	// Default rotation: L_0=op1, L_1=op2, L_2=op3, L_3=op4. byz=op4 silences L_3.

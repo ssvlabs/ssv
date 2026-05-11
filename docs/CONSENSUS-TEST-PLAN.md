@@ -4,6 +4,13 @@
 
 The framework is **built and tested**. This document carries both a current-state guide (this section) and the original implementation plan (sections below from "Goal" onward — kept as a historical reference for design rationale).
 
+**Follow-on work since this plan was written:**
+
+- [docs/OBFT-SPEC-ALIGNMENT-PLAN.md](OBFT-SPEC-ALIGNMENT-PLAN.md) — 13-task pass aligning the test suite to current OBFT.md spec wording (witness sizes, ε_3 / Δ_2 split, max-MEV broadcast knob, late-`KindCommit` re-resolve framework, plus 4 new catalog scenarios: validity-divergence-with-passive-byz × 3, mesh-flakiness × 1).
+- [docs/CONSENSUSTEST-BATCH-PLAN.md](CONSENSUSTEST-BATCH-PLAN.md) — 14-task pass adding the batch-comparison framework (multi-sim distribution-aware reports). See [docs/CONSENSUSTEST-BATCH.md](CONSENSUSTEST-BATCH.md) for usage.
+
+The "Known gaps / follow-up work" and "Catalog at 21 scenarios" notes in this doc are pre-alignment-pass; current catalog count is **25 scenarios** and several follow-up gaps have been closed in the alignment / batch plans above.
+
 ### Architecture as built
 
 ```

@@ -320,7 +320,16 @@ func resolveOpAndBroadcastCert(s *sim, op obft.OperatorID) []scheduledEvent {
 		return nil
 	}
 	s.resolved[op] = res
-	s.resolvedAt[op] = s.now
+	// Phase-3 walk cost grows linearly with the number of layers visited
+	// (OBFT.md §Phase 3: "ε_3 scales with the number of layers actually
+	// walked ... ~ε_3 × K at K=4 with K−1 silent layers"). evtResolve fires
+	// at RoundEndOffset = T_commit + Δ_2 + ε_3, which is the post-Phase-3
+	// time assuming single-layer reconstruction at L_0. For fall-through
+	// to L_k, add k × ε_3 to model the per-layer chained-decryption +
+	// aggregation walks. At L_0 the extra cost is zero (single-layer
+	// walk already in the base ε_3 budget).
+	decisionTime := s.now + time.Duration(res.Layer)*s.cfg.Epsilon3
+	s.resolvedAt[op] = decisionTime
 	// Late-resolve success supersedes any prior error.
 	delete(s.resolveErrs, op)
 
@@ -348,8 +357,11 @@ func resolveOpAndBroadcastCert(s *sim, op obft.OperatorID) []scheduledEvent {
 			s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
 				ct.KindCertificate, -1, certBytes)
 		}
+		// Cert is broadcast immediately after this op's local decision,
+		// not at evtResolve's fire time. Important when the per-layer walk
+		// cost shifted decisionTime past s.now.
 		out = append(out, scheduledEvent{
-			when: s.now + delay,
+			when: decisionTime + delay,
 			ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},
 		})
 	}

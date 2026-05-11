@@ -51,6 +51,10 @@ var Catalog = []Scenario{
 	scenarioLateLeaderBroadcast,
 	scenarioPartialEquivocationNaturalRecovery,
 	scenarioMeshFlakiness,
+	scenarioAsymmetricPropagation_FSlow_Success,
+	scenarioAsymmetricPropagation_FPlus1Slow_Miss,
+	scenarioMultiSilent_AllLayers,
+	scenarioValidityDivergence_LeaderNV_PassiveByz,
 }
 
 // ---- Healthy ------------------------------------------------------------
@@ -705,4 +709,206 @@ var scenarioMeshFlakiness = Scenario{
 		"QBFT": ExpectSuccessFastest,
 	},
 	Note: "OBFT.md §Properties / Mesh-flakiness tolerance: flaky honest NR-emits incorrectly + byz σ-refusal → OBFT both quorums short → no fall-through (miss). QBFT recovers at R1 (PREPARE-pool reaches qV once delayed flaky PREPAREs arrive — no hard cutoff). Validates the spec's 'mesh-flaky honest = f-budget consumer' claim and the QBFT-vs-OBFT asymmetry.",
+}
+
+// ---- Asymmetric-propagation f-boundary (OBFT.md §Liveness) -----------
+
+// Spec quote (§Liveness / "Adversarial scheduling within partial synchrony"):
+// "Liveness — adversary delays V to ≤ 1 honest past T_commit: The other 2
+// honest σ-emit on time; σ-pool = 2 + leader = 3 = qV. **Quorum reaches
+// without the delayed operator.**"
+//
+// Pure NETWORK-only — no byz operator. Distinct from scenarioHV1Selective
+// (which is byz-leader-driven via deliberate unicast). Tests the network-
+// side of the same algebraic boundary the spec describes.
+//
+// At any n with f = (n-1)/3: marking f non-leader receivers slow (inbound
+// delay > B_0) leaves N-f operators able to σ-emit on time → σ-pool =
+// leader + (N-1-f) on-time non-leaders = N-f = 2f+1 = qV. Quorum reaches.
+//
+// At n=4, f=1: 1 slow receiver (op2) at 3·BTT inbound delay. Phase-1
+// bundle for L_0 arrives at op2 at FetchAt[0] + 3·BTT = 3150 + 600 = 3750ms
+// > T_commit=3400ms → op2 rejects. σ-pool at L_0 = op1(leader) + op3 + op4
+// = 3 = qV. Cluster decides at L_0.
+var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
+	Name: "AsymmetricPropagation_FSlow_Success",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// op2..op{f+1}: 3·BTT inbound delay. Pushes Phase-1 bundle arrival
+		// past T_commit at those ops; σ-pool retains the remaining
+		// (N-1-f) on-time honest non-leaders + leader's σ_L^V = N-f = qV.
+		overrides := make(map[OperatorID]time.Duration, f)
+		for i := 0; i < f; i++ {
+			overrides[OperatorID(i+2)] = 3 * cfg.BTT
+		}
+		cfg.Network = PerReceiverDelay{
+			Inner:     ConstantDelay{D: cfg.BTT},
+			Overrides: overrides,
+		}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool = N-f = qV at L_0; decides at L_0 with the slow ops
+		// NR'd in their local commits but irrelevant to cluster σ-quorum.
+		"OBFT": ExpectSuccessFastest,
+		// QBFT: slow ops PREPARE late (R1 PROPOSE arrives at them at
+		// 300+3·BTT=900ms; their PREPAREs arrive at others by 1100ms);
+		// PREPARE-quorum reaches at fast ops within R1 (RT=2s); R1 succeeds.
+		"QBFT": ExpectSuccessFastest,
+	},
+	Note: "OBFT.md §Liveness 'Adversary delays V to ≤ 1 honest past T_commit'. Pure network-driven (no byz). Cluster σ-pool reaches qV at L_0 from the (N-f) in-time operators. Complement to HV1SelectiveDelivery (which is byz-leader-driven at the SAME algebraic boundary).",
+}
+
+// Spec quote (§Liveness / "Adversary delays V to ≥ 2 honest past T_commit"):
+// At h_V=1 shape (1 honest receives V, 2 honest delayed), recipient is
+// σ-locked and can't NR; NR-pool = 2 < qEnc → **chain stays sealed at this
+// layer with no fall-through. ✗ slot-miss cleanly.**
+//
+// At any n with f+1 slow non-leaders: σ-pool = leader + (N-1-(f+1)) =
+// N-f-1 < qV (since qV = 2f+1 and N-f-1 = 2f at N=3f+1). NR-pool = f+1
+// (slow honest NR) < qEnc = 2f+1 when f ≥ 1. Both quorums short → MISS at
+// L_0 with no fall-through (chain at L_0 stays sealed).
+//
+// At n=4, f=1: 2 slow receivers (op2, op3). σ-pool = op1+op4 = 2 < qV.
+// NR-pool = op2+op3 = 2 < qEnc. Miss.
+//
+// Pure NETWORK-only; bracketed against scenarioAsymmetricPropagation_FSlow_Success
+// to make the boundary observable directly.
+var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
+	Name: "AsymmetricPropagation_FPlus1Slow_Miss",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// op2..op{f+2}: 3·BTT inbound delay. (f+1) honest slow.
+		overrides := make(map[OperatorID]time.Duration, f+1)
+		for i := 0; i < f+1; i++ {
+			overrides[OperatorID(i+2)] = 3 * cfg.BTT
+		}
+		cfg.Network = PerReceiverDelay{
+			Inner:     ConstantDelay{D: cfg.BTT},
+			Overrides: overrides,
+		}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: σ-pool=N-f-1<qV; NR-pool=f+1<qEnc; both short; miss at L_0
+		// with no fall-through (chain stays sealed at L_0). Class A
+		// asymmetric-propagation-past-T_commit per §Failure modes.
+		"OBFT": ExpectMiss,
+		// QBFT: R1 PREPARE pool eventually reaches qV once slow ops'
+		// late PREPAREs arrive within R1's window (RT=2s). Succeeds at R1.
+		// The QBFT-vs-OBFT asymmetry on this exact spec configuration.
+		"QBFT": ExpectSuccessFastest,
+	},
+	Note: "OBFT.md §Liveness / §Failure modes — h_V=1-shape asymmetric propagation. (f+1) honest miss V at T_commit; σ-pool < qV and NR-pool < qEnc; chain stays sealed; OBFT misses. QBFT R1 PREPARE eventually reaches qV from late-arriving slow ops within RT, so R1 succeeds. Pure network-driven (no byz) — distinct from scenarioHV1SelectiveDelivery which is byz-engineered.",
+}
+
+// ---- All-layers-silent cascade miss (deepest-layer load-bearing) -----
+
+// Spec referent: OBFT.md §Failure modes / "Late deepest-layer leader
+// broadcast" and the Class A "all-layer cascade failure" case. The
+// existing scenarioMultiSilent (K=3) tests fall-through to L_3 when
+// only the top 3 layers are silent; this scenario complements it by
+// silencing ALL K layers — exercising the path where OBFT walks every
+// layer via NR-quorum but finds no σ at any of them, then misses.
+//
+// At K = N (default), silencing all K leaders is "every cluster member
+// silent at their leader role" — operationally equivalent to all leaders
+// suffering coincident silent/late-broadcast failures (Class A: cluster's
+// implicit assumption that ≥ 1 leader broadcasts on time is violated).
+// Rare in practice; the test is the boundary check that confirms
+// graceful miss when the boundary breaks.
+//
+// Outcome at OBFT (K=N=4, f=1, byz=0):
+//   - L_0: all 3 honest non-leaders + leader silent → no V retained
+//     anywhere → all 4 emit NR at L_0. NR-pool = 4 = qEnc ✓.
+//   - Chain unlocks to L_1: same shape, NR-pool = qEnc → unlocks L_2.
+//   - L_2 → L_3 via same NR-quorum. L_3 has no NR tag (deepest).
+//   - No σ at any layer → no qV reached → MISS cleanly. Safety holds.
+//
+// Outcome at QBFT (K silent rounds within RT budget):
+//   - R1 PROPOSE never arrives → R1 timeout (~2s).
+//   - R2 PROPOSE never arrives → R2 timeout (~4s, past RelayCutoff).
+//   - MISS by deadline.
+var scenarioMultiSilent_AllLayers = Scenario{
+	Name: "MultiSilent_AllLayers",
+	Apply: func(cfg *SimConfig) {
+		k := cfg.K
+		if k == 0 {
+			k = DefaultK(cfg.N)
+		}
+		// All K layers silent: K=cluster.K means OnlyHonestLayer=K, so the
+		// "layer < OnlyHonestLayer" check in byzMultiSilent.LeaderBroadcastPlan
+		// fires for every layer in [0, K), silencing every leader.
+		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: k}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: walks all K layers via NR-quorum; deepest layer has no σ;
+		// no NR tag past deepest → MISS cleanly. Safety holds.
+		"OBFT": ExpectMiss,
+		// QBFT: K silent rounds consume the RT budget before any round
+		// can decide. R1 + R2 timeouts > 4s RelayCutoff → MISS.
+		"QBFT": ExpectMiss,
+	},
+	Note: "OBFT.md §Failure modes / Backup-leader cascade failure + Late deepest-layer leader broadcast. Complement to scenarioMultiSilent (K-1 silent → success at L_{K-1}): silencing ALL K layers exercises the deepest-layer miss path where OBFT walks every layer via NR-quorum and finds nothing. Both protocols miss cleanly; safety invariants hold.",
+}
+
+// ---- Leader-NV symmetric validity-divergence variant -----------------
+
+// Spec referent: OBFT.md §Failure modes / Validity-divergence deadlock —
+// "Symmetric configs when leader's host-verdict is itself NV (Phase-1 σ_V
+// locks leader σ-side regardless of leader's host's later opinion)."
+//
+// Exercises the OBFT-specific invariant: a leader who σ-emits in Phase 1
+// stays σ-locked at that layer even if their host application later
+// returns NV. Cross-phase exclusivity prevents the leader from emitting
+// NR for the same layer — they CAN'T flip sides post-σ_V.
+//
+// Configuration (algebraically equivalent to
+// scenarioValidityDivergence_PassiveByz_Silent_1NV with the additional
+// leader-NV; outcome is also MISS):
+//   - Leader (op1): host-NV at L_0, BUT Phase-1 σ_V locks σ-side.
+//   - op2..op{2f}: σ-emit (host valid).
+//   - op{2f+1}: NV (host invalid; emits NR).
+//   - op{N-f+1}..op{N}: byz silent (consume f-budget).
+//
+// At f=1, n=4: leader op1 NV (σ-locked), op2 σ, op3 NV, op4 byz silent.
+// σ-pool = leader's locked σ_V + op2 = 2 < qV=3. NR-pool = op3 = 1 <
+// qEnc=3 (leader CAN'T NR despite host-NV; cross-phase exclusivity).
+// MISS — same algebraic outcome as the non-leader-NV variant.
+//
+// The test is the in-suite proof of the spec's σ-V-lock invariant:
+// without it, the leader would NR instead, NR-pool would be 2 < qEnc
+// still, but the σ-pool would shrink to 1, and the bottom-line outcome
+// would still be MISS — algebraically equivalent. What the σ-lock
+// invariant actually changes is the off-wire EKM single-σ-V invariant:
+// the leader's σ_V is the σ-side commitment for this slot, period.
+var scenarioValidityDivergence_LeaderNV_PassiveByz = Scenario{
+	Name: "ValidityDivergence_LeaderNV_PassiveByz",
+	Apply: func(cfg *SimConfig) {
+		f := cfg.F()
+		// NV set: leader (op1) host-NV, plus 1 non-leader at op{2f+1}.
+		// Leader's σ_V is locked via Phase-1 (BuildPhase1Bundle runs
+		// before ApplyHostValidity); host-NV doesn't undo the σ-side
+		// commitment.
+		nv := map[OperatorID]bool{
+			1:                   true,
+			OperatorID(2*f + 1): true,
+		}
+		// Byz silent: f operators at op{N-f+1}..op{N}.
+		byzOps := make([]OperatorID, f)
+		for i := 0; i < f; i++ {
+			byzOps[i] = OperatorID(cfg.N - f + 1 + i)
+		}
+		cfg.Host = HostInvalidForOperators{Layer: 0, Operators: nv}
+		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
+	},
+	Expect: map[string]ExpectClass{
+		// OBFT: leader's σ_V locks σ-side; cross-phase exclusivity prevents
+		// leader's NR despite host-NV. σ-pool=leader+(2f-1 honest)=2f<qV;
+		// NR-pool=1<qEnc; both short; miss.
+		"OBFT": ExpectMiss,
+		// QBFT: R1 PREPARE pool short (host-NV ops don't PREPARE; byz silent);
+		// R2 fresh-V at layer 1 host-validates → succeeds. (HostInvalidForOperators
+		// is layer-0-scoped; round 2 = layer 1 sees all-valid.)
+		"QBFT": ExpectSuccessFallThrough,
+	},
+	Note: "OBFT.md §Failure modes — Validity-divergence deadlock, leader-NV symmetric variant. Validates the spec's σ_V-lock-despite-host-NV invariant: a Phase-1-σ-emitted leader stays σ-locked even when their host returns NV. Same algebraic miss outcome as the non-leader-NV passive-byz scenarios; the leader-NV-locked configuration is the additional spec coverage.",
 }
