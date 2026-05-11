@@ -172,6 +172,24 @@ func (s *sim) recordDecided(op spectypes.OperatorID, round specqbft.Round, value
 		round: round,
 		at:    s.now + s.cfg.BTT,
 	}
+	// SSV's QBFT-then-post-consensus model: every honest operator that
+	// reaches Decided broadcasts one PartialSignatureMessage on the
+	// decided value so the cluster can aggregate the full validator
+	// signature. Count the bandwidth here (the +1 BTT above already
+	// accounts for the time cost); the partial-sig propagation latency
+	// is not modeled beyond the BTT-aggregate signal since this phase
+	// is past the consensus decision and not load-bearing for the
+	// simulator's success/miss accounting.
+	if s.cfg.Bandwidth != nil {
+		from := ct.OperatorID(op)
+		for _, peer := range s.operators {
+			to := ct.OperatorID(peer)
+			if to == from {
+				continue
+			}
+			s.cfg.Bandwidth.Emission(from, to, ct.KindPostConsensus, -1, postConsensusInnerBytes)
+		}
+	}
 }
 
 // ---- evtByzProposal: byz round-leader fabricates PROPOSE ----------------

@@ -91,8 +91,10 @@ func TestBandwidth_Healthy_OBFT(t *testing.T) {
 }
 
 // TestBandwidth_Healthy_QBFT verifies the QBFT adapter populates Bandwidth
-// from real SignedSSVMessage encoding. PROPOSE + PREPARE + COMMIT produce
-// distinct per-kind buckets at canonical config.
+// from inner-only SSVMessage encoding (apples-to-apples with OBFT — see
+// consensustest/qbft/network.go messageWireBytes). PROPOSE + PREPARE +
+// COMMIT + post-consensus partial-sigs produce distinct per-kind buckets
+// at canonical config.
 func TestBandwidth_Healthy_QBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := qbftadapter.Protocol{}.Run(cfg)
@@ -105,6 +107,11 @@ func TestBandwidth_Healthy_QBFT(t *testing.T) {
 	// PROPOSE = LeaderBroadcast; PREPARE+COMMIT = Commit kind (mesh-shared).
 	require.Greater(t, out.Bandwidth.PerKindBytes["LeaderBroadcast"], int64(0))
 	require.Greater(t, out.Bandwidth.PerKindBytes["Commit"], int64(0))
+	// SSV's QBFT-then-post-consensus model: each honest decided op
+	// broadcasts one PartialSignatureMessage. At n=4, expect 4 × 3 × ~233 B
+	// = ~2.8 KB of post-consensus traffic.
+	require.Greater(t, out.Bandwidth.PerKindBytes["PostConsensus"], int64(0),
+		"healthy QBFT should dispatch post-consensus partial-sigs after decided")
 
 	for op, oo := range out.PerOp {
 		require.Greaterf(t, oo.BandwidthOut, int64(0),

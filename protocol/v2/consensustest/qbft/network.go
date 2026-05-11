@@ -69,25 +69,40 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 	return nil
 }
 
-// messageWireBytes returns the wire-byte count for one SignedSSVMessage:
-// encoded inner SSVMessage + per-signer (signature + operator-ID) + FullData.
+// messageWireBytes returns the wire-byte count for one consensus message,
+// counting inner SSVMessage + FullData only. The outer SignedSSVMessage
+// wrapper bytes (Signatures + OperatorIDs arrays) are excluded so QBFT's
+// per-message accounting is apples-to-apples with the OBFT adapter, which
+// counts inner-message bytes only (see consensustest/obft/sizes.go).
 // Encode failure is reported via the second return so callers can record a
-// trace entry; the byte count omits only the inner-encoded portion in that
-// case (signatures and FullData are still included). Treat any non-nil err
-// as a programmer error — Encode failing on a well-formed adapter-built
-// message indicates structural corruption upstream.
+// trace entry; the byte count omits the inner-encoded portion in that case
+// (FullData is still included). Treat any non-nil err as a programmer error
+// — Encode failing on a well-formed adapter-built message indicates
+// structural corruption upstream.
 func messageWireBytes(msg *spectypes.SignedSSVMessage) (int64, error) {
 	var n int64
 	encoded, err := msg.SSVMessage.Encode()
 	if err == nil {
 		n = int64(len(encoded))
 	}
-	for i := range msg.Signatures {
-		n += int64(len(msg.Signatures[i])) + 8
-	}
 	n += int64(len(msg.FullData))
 	return n, err
 }
+
+// postConsensusInnerBytes is the inner-byte count for one operator's
+// post-consensus PartialSignatureMessage SSVMessage carrying a single
+// partial-sig on the decided value:
+//
+//	SSVMessage envelope:   MsgType + MsgID(56) + SSZ framing ≈ 65 B
+//	PartialSignatureMessages SSZ wrapper:  Type(8) + Slot(8) + list offset + framing ≈ 24 B
+//	one PartialSignatureMessage:           PartialSignature(96) + SigningRoot(32) +
+//	                                       Signer(8) + ValidatorIndex(8) = 144 B
+//
+// ≈ 233 B per post-consensus message, inner-only (matches the OBFT adapter's
+// inner-byte framing in consensustest/obft/sizes.go). Constant rather than
+// a runtime SSZ encode so bandwidth-mode tests don't depend on spec-types'
+// encoding stability.
+const postConsensusInnerBytes int64 = 233
 
 // frameworkRoundFor maps a QBFT round (1-indexed) to the framework's
 // 0-indexed convention used by Bandwidth.PerLayerBytes; round ≤ 0 (undecodable)
