@@ -23,8 +23,8 @@ import (
 // fail the corresponding sub-test without affecting other scenarios.
 //
 // One operating point per scenario; no sweeps (sweeps live in the stress
-// tier — see TestGenerateBatchReport). Re-running this test produces
-// identical results: ConstantDelay is deterministic, seeds are fixed.
+// tier — see TestStress). Re-running this test produces identical
+// results: ConstantDelay is deterministic, seeds are fixed.
 //
 // See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestCorrectness(t *testing.T) {

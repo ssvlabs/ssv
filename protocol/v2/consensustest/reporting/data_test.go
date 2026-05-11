@@ -84,14 +84,13 @@ func TestWriteReportData_PayloadShape(t *testing.T) {
 		Sweeps:      []ct.SweepResult{canonical},
 		Iterations:  3,
 		Wallclock:   123 * time.Millisecond,
-		GeneratedAt: time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC),
 	}, dir))
 
 	payload := parseDataJS(t, dir)
 	require.Equal(t, "smoke comparison", payload["title"])
 	require.Equal(t, "three scenarios × two protocols", payload["description"])
 	require.EqualValues(t, 3, payload["iterations"])
-	require.Equal(t, "2026-05-11 12:00:00", payload["generatedAt"])
+	require.NotContains(t, payload, "generatedAt", "generatedAt field removed from payload")
 
 	protocols := payload["protocols"].([]any)
 	require.Equal(t, []any{"OBFT", "QBFT"}, protocols)
@@ -140,7 +139,6 @@ func TestWriteReportData_NACellOmitsDecisionTime(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
 		Title: "na test", Sweeps: []ct.SweepResult{canonical}, Iterations: 3,
-		GeneratedAt: time.Now(),
 	}, dir))
 	payload := parseDataJS(t, dir)
 	cells := payload["sweeps"].([]any)[0].(map[string]any)["points"].([]any)[0].(map[string]any)["cells"].([]any)
@@ -187,7 +185,6 @@ func TestWriteReportData_DuplicateSweepNames(t *testing.T) {
 
 	err := reporting.WriteReportData(reporting.Comparison{
 		Title: "dup", Sweeps: []ct.SweepResult{one, two}, Iterations: 1,
-		GeneratedAt: time.Now(),
 	}, t.TempDir())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `duplicate sweep name "same"`)
@@ -216,7 +213,6 @@ func TestWriteReportData_MultiPointSweep(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
 		Title: "trend", Sweeps: []ct.SweepResult{btt}, Iterations: 2,
-		GeneratedAt: time.Now(),
 	}, dir))
 
 	payload := parseDataJS(t, dir)

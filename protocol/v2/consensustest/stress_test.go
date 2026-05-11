@@ -14,11 +14,18 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/consensustest/reporting"
 )
 
-// TestGenerateBatchReport runs DefaultSweeps over the full catalog with
-// both protocols and writes a `data.js` file consumed by the static UI
-// in `consensustest-reports/` (index.html + app.js + styles.css, all
+// TestStress is the stress-tier entry point per the catalog-split plan.
+// It runs DefaultSweeps over every catalog scenario opted into
+// ModeStress (currently all 29 — see Phase 2) for both protocols and
+// writes a `data.js` file consumed by the static UI in
+// `consensustest-reports/` (index.html + app.js + styles.css, all
 // tracked in git). Refreshing index.html in a browser re-renders from
 // the new data.js without rerunning this test.
+//
+// Only safety-invariant violations fail TestStress; per-scenario
+// expectation mismatches are recorded in the report stats but do not
+// fail the test. Per-scenario expectation enforcement lives in
+// TestCorrectness (single deterministic operating point per scenario).
 //
 // Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
 // Iteration count tunable via ITERATIONS env (default 100).
@@ -30,7 +37,7 @@ import (
 // Or directly:
 //
 //	REPORT_DIR=./reports ITERATIONS=100 \
-//	    go test -timeout 30m -run TestGenerateBatchReport \
+//	    go test -timeout 30m -run TestStress \
 //	    ./protocol/v2/consensustest/
 //
 // Estimated runtime at default 100 iterations:
@@ -45,7 +52,9 @@ import (
 // At ITERATIONS=1000, scale linearly (~12-15 min). Above that, consider
 // parallelizing across sweeps (currently sequential — per-batch is
 // already parallelized internally).
-func TestGenerateBatchReport(t *testing.T) {
+//
+// See docs/CONSENSUSTEST-SPLIT-PLAN.md.
+func TestStress(t *testing.T) {
 	dir := os.Getenv("REPORT_DIR")
 	if dir == "" {
 		t.Skip("REPORT_DIR not set; skipping report generation. Run via `make consensustest-report` to populate.")
@@ -60,7 +69,17 @@ func TestGenerateBatchReport(t *testing.T) {
 		iterations = n
 	}
 
-	scenarios := ct.Catalog
+	// Filter the catalog to ModeStress opt-ins. Currently all 29 (Phase 2
+	// audit); the filter is defensive — future scenarios that opt out of
+	// stress (e.g. correctness-only behavioral checks) will be excluded
+	// from the report without a driver-side change.
+	scenarios := make([]ct.Scenario, 0, len(ct.Catalog))
+	for _, s := range ct.Catalog {
+		if s.HasMode(ct.ModeStress) {
+			scenarios = append(scenarios, s)
+		}
+	}
+	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations)
 	require.Len(t, sweeps, 5)
@@ -81,7 +100,6 @@ func TestGenerateBatchReport(t *testing.T) {
 		Sweeps:      results,
 		Iterations:  iterations,
 		Wallclock:   time.Since(totalStart),
-		GeneratedAt: time.Now(),
 	}, dir))
 
 	t.Logf("Report data written: %s/data.js", dir)

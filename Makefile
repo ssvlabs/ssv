@@ -131,7 +131,7 @@ ITERATIONS ?= 100
 consensustest-report:
 	@echo "Generating consensustest reports to $(abspath $(REPORT_DIR)) (ITERATIONS=$(ITERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) ITERATIONS=$(ITERATIONS) \
-		go test -tags "blst_enabled lfs" -timeout 30m -run TestGenerateBatchReport -v ./protocol/v2/consensustest/
+		go test -tags "blst_enabled lfs" -timeout 30m -run TestStress -v ./protocol/v2/consensustest/
 
 .PHONY: docker-spec-test
 docker-spec-test:

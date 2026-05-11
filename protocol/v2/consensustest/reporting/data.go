@@ -16,7 +16,7 @@
 //	c := reporting.Comparison{
 //	    Title: "OBFT vs QBFT", Description: "...",
 //	    Sweeps: sweepResults, Iterations: 100,
-//	    Wallclock: elapsed, GeneratedAt: time.Now(),
+//	    Wallclock: elapsed,
 //	}
 //	reporting.WriteReportData(c, "./consensustest-reports")
 package reporting
@@ -43,7 +43,6 @@ type Comparison struct {
 	Sweeps      []ct.SweepResult
 	Iterations  int
 	Wallclock   time.Duration
-	GeneratedAt time.Time
 }
 
 // Applicable reports whether the cell ran ≥ 1 iteration. n/a cells (the
@@ -95,7 +94,6 @@ type reportPayload struct {
 	Description string            `json:"description,omitempty"`
 	Iterations  int               `json:"iterations"`
 	Wallclock   string            `json:"wallclock"`
-	GeneratedAt string            `json:"generatedAt"`
 	Scenarios   []scenarioPayload `json:"scenarios"`
 	Protocols   []string          `json:"protocols"`
 	Sweeps      []sweepPayload    `json:"sweeps"`
@@ -147,7 +145,6 @@ func buildPayload(c Comparison) reportPayload {
 		Description: c.Description,
 		Iterations:  c.Iterations,
 		Wallclock:   c.Wallclock.String(),
-		GeneratedAt: c.GeneratedAt.Format("2006-01-02 15:04:05"),
 		Protocols:   protocols,
 	}
 	for _, sc := range scenarios {
