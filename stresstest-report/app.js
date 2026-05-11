@@ -434,31 +434,93 @@ function renderScenarioCell(sc) {
   return td;
 }
 
+// ---- CDF chart (single-point sweep detail layout) --------------------
+//
+// Each successful sim contributes 1/Iterations to the cumulative
+// success fraction at its decision time. The line steps up at every
+// sample's x-coordinate and plateaus at the right edge — protocols
+// that don't decide every time leave the plateau below 1.0; protocols
+// that never decide stay flat at 0. No synthetic "no decision" bars
+// needed: the failure mode is encoded in the curve shape itself.
+//
+// Reading: which line is lower / further-left = faster protocol; which
+// line plateaus higher = more reliable protocol.
+
+// SLOT_END_MS is the canonical relay cutoff (the spec's 4s proposer-duty
+// deadline). Used as the right edge of the CDF x-axis so misses render
+// as a visible plateau between the last sample and the deadline.
+const SLOT_END_MS = 4000;
+
+function cdfPoints(sortedSamples, iterations) {
+  if (!iterations) return [];
+  const pts = [{ x: 0, y: 0 }];
+  for (let i = 0; i < sortedSamples.length; i++) {
+    pts.push({ x: sortedSamples[i], y: (i + 1) / iterations });
+  }
+  // Extend the line to the relay cutoff so a less-than-100% success
+  // rate manifests as a visible plateau.
+  pts.push({ x: SLOT_END_MS, y: sortedSamples.length / iterations });
+  return pts;
+}
+
+function cdfChartData(point, protocols, scenario) {
+  return {
+    datasets: protocols.map((p) => {
+      const cell = findCell(point, scenario.name, p);
+      const samples = (cell && cell.decisionTimes) || [];
+      const iters = cell ? cell.iterations : 0;
+      return {
+        label: `${p} (${samples.length}/${iters})`,
+        borderColor: protocolColor(p),
+        backgroundColor: protocolColor(p),
+        stepped: 'after',
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+        data: cdfPoints(samples, iters),
+      };
+    }),
+  };
+}
+
 function buildLatencyChart(canvas, point, protocols, scenario) {
   return new Chart(canvas, {
-    type: 'bar',
-    data: latencyChartData(point, protocols, scenario),
+    type: 'line',
+    data: cdfChartData(point, protocols, scenario),
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false, axis: 'x' },
       scales: {
-        y: {
-          title: { display: true, text: 'decision time (ms)' },
-          grid: { color: 'rgba(15, 23, 42, 0.06)' },
-          ticks: { padding: 6 },
-        },
         x: {
-          title: { display: false },
+          type: 'linear',
+          title: { display: true, text: 'decision time (ms)' },
+          min: 0,
+          max: SLOT_END_MS,
           grid: { display: false },
           ticks: { padding: 4 },
+        },
+        y: {
+          title: { display: true, text: 'cumulative success rate' },
+          min: 0,
+          max: 1,
+          grid: { color: 'rgba(15, 23, 42, 0.06)' },
+          ticks: {
+            padding: 6,
+            callback: (v) => `${Math.round(v * 100)}%`,
+          },
         },
       },
       plugins: {
         legend: { position: 'top', align: 'end' },
         tooltip: {
           callbacks: {
-            title: (items) => items[0] ? items[0].label : '',
-            label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)} ms`,
+            title: (items) => (items[0] ? `${Math.round(items[0].parsed.x)} ms` : ''),
+            label: (ctx) => {
+              const p = ctx.dataset.label.split(' ')[0];
+              const pct = (ctx.parsed.y * 100).toFixed(1);
+              return `${p}: ${pct}% finished`;
+            },
           },
         },
       },
@@ -466,56 +528,9 @@ function buildLatencyChart(canvas, point, protocols, scenario) {
   });
 }
 
-// SLOT_END_MS is the canonical relay cutoff (the spec's 4s proposer-duty
-// deadline). Used as the synthetic bar height for "no decision" runs:
-// a protocol that ran iterations but never decided consumed the full
-// slot budget, so a full-height grey bar communicates that visually
-// instead of silently dropping the dataset.
-const SLOT_END_MS = 4000;
-const NO_DECISION_COLOR = 'rgba(148, 163, 184, 0.55)';
-const NO_DECISION_BORDER = 'rgba(100, 116, 139, 0.85)';
-
-function latencyChartData(point, protocols, scenario) {
-  return {
-    labels: ['P50', 'P90', 'P99'],
-    datasets: protocols.map((p) => {
-      const cell = findCell(point, scenario.name, p);
-      if (cell && cell.decisionTime) {
-        return {
-          label: p,
-          backgroundColor: protocolColor(p),
-          borderColor: protocolColor(p),
-          data: [cell.decisionTime.p50, cell.decisionTime.p90, cell.decisionTime.p99],
-        };
-      }
-      // Ran iterations but never decided → render a grey bar at the
-      // slot-end deadline so the failure is visually present (instead
-      // of an unexplained gap where the protocol's bars would be).
-      if (cell && cell.iterations > 0) {
-        return {
-          label: `${p} (no decision)`,
-          backgroundColor: NO_DECISION_COLOR,
-          borderColor: NO_DECISION_BORDER,
-          borderWidth: 1,
-          data: [SLOT_END_MS, SLOT_END_MS, SLOT_END_MS],
-        };
-      }
-      // Scenario is n/a for this protocol (no iterations ran).
-      return {
-        label: p,
-        backgroundColor: protocolColor(p),
-        borderColor: protocolColor(p),
-        data: [null, null, null],
-      };
-    }),
-  };
-}
-
 function updateLatencyChart(chart, point, protocols, scenario) {
-  const d = latencyChartData(point, protocols, scenario);
-  chart.data.labels = d.labels;
+  const d = cdfChartData(point, protocols, scenario);
   chart.data.datasets = d.datasets;
-  chart.options.plugins.title.text = scenario.title;
   chart.update();
 }
 

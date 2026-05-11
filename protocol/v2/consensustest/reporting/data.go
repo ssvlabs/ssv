@@ -120,10 +120,15 @@ type pointPayload struct {
 }
 
 type cellPayload struct {
-	Scenario         string              `json:"scenario"`
-	Protocol         string              `json:"protocol"`
-	Iterations       int                 `json:"iterations"`
-	SuccessRate      float64             `json:"successRate"`
+	Scenario   string  `json:"scenario"`
+	Protocol   string  `json:"protocol"`
+	Iterations int     `json:"iterations"`
+	SuccessRate float64 `json:"successRate"`
+	// DecisionTimes is the sorted ms-integer decision-time sample for
+	// every successful sim. Length = SuccessRate × Iterations. Emitted
+	// so the UI can render a CDF directly instead of just summary
+	// percentiles. omitted when no sim decided.
+	DecisionTimes    []int               `json:"decisionTimes,omitempty"`
 	DecisionTime     *percentilesPayload `json:"decisionTime,omitempty"`
 	ClusterBandwidth *percentilesPayload `json:"clusterBandwidth,omitempty"`
 	PerKindBandwidth map[string]float64  `json:"perKindBandwidth,omitempty"`
@@ -187,6 +192,14 @@ func buildCell(c ct.BatchCell) cellPayload {
 			P99:  c.DecisionTime.Percentile(99),
 			Mean: c.DecisionTime.Mean(),
 		}
+		// Sorted integer-ms samples for the UI CDF chart. One per successful
+		// sim; absent values (missed sims) are implicit via Iterations -
+		// len(DecisionTimes).
+		out.DecisionTimes = make([]int, len(c.DecisionTime))
+		for i, v := range c.DecisionTime {
+			out.DecisionTimes[i] = int(v + 0.5)
+		}
+		sort.Ints(out.DecisionTimes)
 	}
 	if c.ClusterBandwidth.Len() > 0 {
 		out.ClusterBandwidth = &percentilesPayload{
