@@ -101,7 +101,7 @@ fuzz-validation:
 		go test -tags blst_enabled -run='^$$' -fuzz="^$$target"'$$' -fuzztime=$(FUZZTIME) ./message/validation/ || exit 1; \
 	done
 
-# consensustest-real-bls runs the consensustest framework's real-BLS suite
+# consensustest-with-real-bls runs the consensustest framework's real-BLS suite
 # (gated behind the `real_bls` build tag). The suite exercises the OBFT
 # adapter's threshold-IBE + real-BLS signing path end-to-end across cluster
 # sizes, scenarios, and seeds. Default `unit-test` runs stub-crypto only;
