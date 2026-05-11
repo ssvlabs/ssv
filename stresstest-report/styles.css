@@ -126,7 +126,7 @@ header.page .header-controls button:hover {
 section.heatmap {
   padding-top: 0.8em;
   margin-top: 0;
-  margin-bottom: 1em;
+  margin-bottom: 1.5em;
 }
 .heatmap-head {
   padding-bottom: 0.4em;
@@ -137,13 +137,41 @@ section.heatmap {
   margin: 0 0 0.15em;
   font-size: 1.3em;
 }
+/* Side-by-side: heatmap grid on the left, inline CDF chart on the right.
+ * Stacks vertically below 1100px so the chart still reads on narrower
+ * viewports. */
+.heatmap-body {
+  display: grid;
+  grid-template-columns: minmax(360px, max-content) 1fr;
+  gap: 1.5em;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .heatmap-body { grid-template-columns: 1fr; }
+}
+.heatmap-chart-area {
+  /* Sticky so the chart stays in view while the user scans down the
+   * heatmap rows on the left. Top offset matches the sticky TOC. */
+  position: sticky;
+  top: var(--toc-height, 90px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8em 1em 1em;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.heatmap-chart-title {
+  margin: 0 0 0.5em;
+  font-size: 1em;
+  color: #0f172a;
+}
+.heatmap-chart-wrap { height: 320px; }
+
 table.heatmap-grid {
   border-collapse: separate;
   border-spacing: 2px;
   font-variant-numeric: tabular-nums;
   font-size: 0.9em;
-  width: 100%;
-  max-width: 720px;
 }
 table.heatmap-grid th {
   background: var(--surface-muted);
@@ -192,6 +220,18 @@ table.heatmap-grid td.hcell.na {
   background: #e2e8f0;
   color: var(--na);
   cursor: default;
+}
+/* Selected row highlight — boxes the whole row including the scenario
+ * label. Subtle but anchors the "which row drives the chart" question. */
+table.heatmap-grid tr.selected td.scen {
+  font-weight: 600;
+  color: #0f172a;
+  border-left: 3px solid var(--accent);
+  padding-left: calc(0.2em);
+  margin-left: -3px;
+}
+table.heatmap-grid tr.selected td.hcell {
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 section.sweep {

@@ -230,11 +230,11 @@ function renderTOC(data) {
   return nav;
 }
 
-// renderHeatmap draws a top-of-page overview table — one row per
-// catalog scenario × one column per protocol, colored by success rate.
-// Scans across protocols in a single view so "where does each protocol
-// win" is answerable at a glance. Click any cell to scroll to that
-// scenario's row in the canonical sweep section below.
+// renderHeatmap draws a top-of-page overview: a grid of scenario rows ×
+// protocol columns colored by canonical-sweep success rate, paired with
+// an inline CDF chart that updates on cell click. The chart lives in the
+// same section, sticky-positioned, so flipping between scenarios stays in
+// the heatmap region — no scrolling down to a per-pack chart needed.
 //
 // First-pass scope: canonical sweep only, success-rate metric. Sweep /
 // metric pickers can land in a follow-up if the shape reads well.
@@ -251,11 +251,12 @@ function renderHeatmap(data) {
       'p',
       { class: 'desc' },
       `At the canonical operating point (${(canonical.params || []).join(', ')}). ` +
-        'Each cell is colored by success rate: green = always decides, red = always misses. ' +
-        'Click a cell to drill into the matching scenario.',
+        'Green ≥ 90%, yellow 80–90%, red ≤ 80%. Click any cell to view the CDF.',
     ),
   );
   section.appendChild(head);
+
+  const body = h('div', { class: 'heatmap-body' });
 
   const table = h('table', { class: 'heatmap-grid' });
   const headerRow = h('tr', {}, h('th', {}));
@@ -281,12 +282,46 @@ function renderHeatmap(data) {
     tbody.appendChild(row);
   });
   table.appendChild(tbody);
-  section.appendChild(table);
+  body.appendChild(table);
+
+  // Side-by-side chart area. Sticks below the page header while the user
+  // scans down the heatmap rows so clicking a cell always reveals a chart
+  // already in view.
+  const chartArea = h('div', { class: 'heatmap-chart-area' });
+  chartArea.appendChild(h('h3', { class: 'heatmap-chart-title' }, 'Click a cell to view CDF'));
+  const chartWrap = h('div', { class: 'chart-wrap heatmap-chart-wrap' });
+  const canvas = h('canvas', { id: 'heatmap-chart-canvas' });
+  chartWrap.appendChild(canvas);
+  chartArea.appendChild(chartWrap);
+  body.appendChild(chartArea);
+
+  section.appendChild(body);
+
+  // Pre-select the first scenario so the chart isn't empty at page load.
+  // The first selection both builds the chart and highlights the row.
+  setTimeout(() => {
+    const firstRow = tbody.querySelector('tr[data-scenario]');
+    if (firstRow) selectHeatmapScenario(firstRow.getAttribute('data-scenario'));
+  }, 0);
+
   return section;
 }
 
-// renderHeatmapCell colors a single cell by success rate using a
-// continuous HSL gradient (hue 0 = red at 0%, hue 120 = green at 100%).
+// rateToHue maps a success rate to a chart-friendly hue:
+//   rate ≤ 80% → red (hue 0)
+//   rate = 90% → yellow (hue 60)
+//   rate = 100% → green (hue 120)
+//   between: linear interpolation
+// 80% / 90% threshold pick: a stress-tier scenario decides on most
+// iterations but jitter can push a few past the cutoff → 90%+ is "fine,"
+// 80–90% is "marginal," <80% is a real problem worth flagging.
+function rateToHue(rate) {
+  if (rate <= 0.8) return 0;
+  if (rate >= 1.0) return 120;
+  return Math.round((rate - 0.8) * 600);
+}
+
+// renderHeatmapCell colors a single cell by success rate via rateToHue.
 // n/a cells (iterations=0) render grey. Cell text shows the numeric
 // success rate; tooltip carries P99 latency for quick scanning without
 // drilling.
@@ -304,7 +339,7 @@ function renderHeatmapCell(cell, scenarioName, protocolName) {
     );
   }
   const rate = cell.successRate; // 0..1
-  const hue = Math.round(rate * 120); // 0 (red) → 120 (green)
+  const hue = rateToHue(rate);
   const pct = Math.round(rate * 100);
   const p99 = cell.decisionTime ? `${Math.round(cell.decisionTime.p99)} ms P99` : 'no decisions';
   const td = h(
@@ -318,24 +353,43 @@ function renderHeatmapCell(cell, scenarioName, protocolName) {
     },
     `${pct}%`,
   );
-  td.addEventListener('click', () => {
-    // Scroll to the scenario's row in the canonical sweep section,
-    // opening its enclosing group pack if needed.
-    const target = document.querySelector(
-      `section.sweep#sweep-canonical tr[data-scenario="${cssEscape(scenarioName)}"]`,
-    );
-    if (!target) return;
-    const pack = target.closest('details.group-pack');
-    if (pack && !pack.hasAttribute('open')) {
-      pack.setAttribute('open', '');
-      fireChartInit(pack);
-    }
-    target.click(); // select the row so the per-pack chart updates
-    // Use auto behavior so the jump is instant and headless-preview-friendly.
-    // The pack toggle needs one tick to settle before we measure heights.
-    setTimeout(() => target.scrollIntoView({ block: 'center', behavior: 'auto' }), 80);
-  });
+  td.addEventListener('click', () => selectHeatmapScenario(scenarioName));
   return td;
+}
+
+// heatmapChart caches the Chart.js instance + the canonical sweep's only
+// point so re-renders on click are cheap (chart.update() instead of
+// rebuild).
+let heatmapChart = null;
+
+// selectHeatmapScenario builds (or updates) the heatmap's inline CDF
+// chart for the named scenario and visually marks the matching row.
+function selectHeatmapScenario(scenarioName) {
+  const data = window.REPORT_DATA;
+  if (!data) return;
+  const canonical = data.sweeps.find((s) => s.name === 'canonical');
+  if (!canonical || canonical.points.length === 0) return;
+  const point = canonical.points[0];
+  const scenario = data.scenarios.find((s) => s.name === scenarioName);
+  if (!scenario) return;
+
+  const section = document.querySelector('section.heatmap');
+  if (!section) return;
+  section.querySelectorAll('tr.selected').forEach((r) => r.classList.remove('selected'));
+  const row = section.querySelector(`tr[data-scenario="${cssEscape(scenarioName)}"]`);
+  if (row) row.classList.add('selected');
+
+  const title = section.querySelector('.heatmap-chart-title');
+  if (title) title.textContent = scenario.title || scenarioName;
+
+  const canvas = section.querySelector('#heatmap-chart-canvas');
+  if (!canvas) return;
+  if (!heatmapChart) {
+    heatmapChart = buildLatencyChart(canvas, point, data.protocols, scenario);
+    chartInstances.push(heatmapChart);
+  } else {
+    updateLatencyChart(heatmapChart, point, data.protocols, scenario);
+  }
 }
 
 // cssEscape — minimal CSS.escape polyfill for the scenario names that
