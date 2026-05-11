@@ -38,9 +38,12 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		// (since N-1-f honest emit NR via row 5) → NR-quorum at L_0 →
 		// advance to L_1 → σ at L_1.
 		"2abOBFT": ExpectSuccessFallThrough,
-		"QBFT":    ExpectNotApplicable,
+		// QBFT analog: byz R1 leader's PROPOSE reaches only f recipients →
+		// PREPARE-pool below qV → R1 round-changes → honest R2 leader
+		// (round-robin) succeeds with fresh V. Outcome class = fall-through.
+		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "OBFT-specific deadlock pattern (h_V=f at any cluster size). σ-pool=f+1 < qV; NR-pool=2f < qEnc → MISS at L_0 with no fall-through. QBFT's round-change recovers structurally; pattern doesn't translate. 2ab recovers via NR-quorum fall-through (Phase-2a verdict-pool fragmentation drives row 5).",
+	Note: "OBFT-specific deadlock at L_0 (σ-pool=f+1 < qV, NR-pool=2f < qEnc → no L_1 fall-through). 2abOBFT recovers via NR-quorum at L_0. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
 }
 
 // ---- Late L_0 leader broadcast (Phase 3 — Class A spec) ---------------
@@ -61,10 +64,12 @@ var scenarioLateLeaderBroadcast = Scenario{
 		// 2abOBFT: same — bundle arrives past T_commit at honest receivers
 		// (rejected); NR-quorum at L_0 → advance to L_1 → σ at L_1.
 		"2abOBFT": ExpectSuccessFallThrough,
-		// QBFT: no layer concept; "late broadcast" doesn't translate cleanly.
-		"QBFT": ExpectNotApplicable,
+		// QBFT analog: byz R1 leader's PROPOSE arrives past R1's timer
+		// (functionally equivalent to silent leader) → R1 round-changes →
+		// honest R2 leader succeeds with fresh V.
+		"QBFT": ExpectSuccessFallThrough,
 	},
-	Note: "Class A spec test (asymmetric propagation past T_commit). Validates per-layer absorption-window mechanism; cluster falls through to deeper layer with wider receiver-side absorption.",
+	Note: "Class A spec test (asymmetric propagation past T_commit). OBFT-family falls through to a deeper layer via the per-layer absorption window; QBFT round-changes to an honest R2 leader.",
 }
 
 // ---- Mesh-flakiness deadlock (OBFT.md §Properties summary) -------------

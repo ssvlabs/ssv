@@ -42,7 +42,7 @@ func DefaultBkSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, erro
 	minDeepest := btt * 250 / 100 // 2.5·BTT (B_{K-2} for K≥3)
 	if tCommit <= minDeepest {
 		return nil, fmt.Errorf("%w: consensustest: DefaultBkSchedule T_commit=%v must be > %v (B_{K-2} = 2.5·BTT at BTT=%v); supply a custom per-layer schedule",
-			ErrNotApplicable, tCommit, minDeepest, btt)
+			ErrConfigOutOfEnvelope, tCommit, minDeepest, btt)
 	}
 	mul := func(x float64) time.Duration { return time.Duration(x * float64(btt)) }
 	if K == 3 {
@@ -109,7 +109,7 @@ func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[
 	for k := 1; k < K; k++ {
 		if out[k] >= out[k-1] {
 			return nil, fmt.Errorf("%w: consensustest: DefaultFetchSchedule T_%d=%v >= T_%d=%v at BTT=%v T_commit=%v (operating point too tight for default schedule)",
-				ErrNotApplicable, k, out[k], k-1, out[k-1], btt, tCommit)
+				ErrConfigOutOfEnvelope, k, out[k], k-1, out[k-1], btt, tCommit)
 		}
 	}
 	return out, nil

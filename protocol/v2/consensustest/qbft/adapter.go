@@ -40,14 +40,17 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		maxRounds = 4
 	}
 
-	// BFT_start anchored so R2 success fits the relay deadline. R2 path is
-	// RT (R1 timer) + 1 BTT (ROUND_CHANGE prop) + 3 BTT (PROPOSE/PREPARE/COMMIT)
-	// + 1 BTT (post-consensus headroom) past BFT_start. At Config A this
-	// resolves to 0.9s.
-	bftStart := cfg.RelayCutoff - rt - 5*cfg.BTT - cfg.HeaderSubmitHeadroom
-	if bftStart < 0 {
-		bftStart = 0
-	}
+	// BFT_start = 0 (slot start). Anchored to OBFT's earliest broadcast
+	// time (FetchAt[K-1] ≈ 0 in the default schedule — the deepest /
+	// lowest-MEV layer), which is the apples-to-apples reference point
+	// for QBFT: both protocols start their "lowest-MEV" path at slot
+	// start, then OBFT layer-walks toward L_0 while QBFT just runs R1.
+	//
+	// This also matches production SSV QBFT (proposer-role headStart=0
+	// in roundtimer/timer.go). The R2 fallback still fits: R2 success
+	// lands at RT + 4·BTT ≈ 3.2s at BTT=300ms, within the 3.9s
+	// effective deadline.
+	bftStart := time.Duration(0)
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{

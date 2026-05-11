@@ -174,11 +174,20 @@ type iterOutcome struct {
 // straightforward and the reduction stays single-threaded (no per-cell
 // mutex on the distributions / maps).
 //
-// ErrNotApplicable / other Run errors collapse the cell to Iterations=0
-// (renderers show "n/a"). The check looks at the first iter's outcome
-// since these errors are config-level and uniform across iters at a given
-// (protocol, config) pair; if non-uniform behavior is ever introduced
-// upstream this fast path would need to scan all iters.
+// Two error classes get distinct cell treatments:
+//   - ErrNotApplicable (scenario semantically doesn't translate to this
+//     protocol — e.g. OBFT-only byz patterns on QBFT): Iterations=0,
+//     renderers show "n/a".
+//   - ErrConfigOutOfEnvelope (the scenario applies but the SimConfig
+//     derives an infeasible schedule — e.g. BTT=600ms collapses OBFT's
+//     deepest broadcast budget to negative): Iterations=cfg.Iterations,
+//     SuccessRate=0, renderers show a red 0%. This is a protocol failure
+//     mode at this operating point, not an inapplicability.
+//   - Any other Run error: still treated as n/a (with a t.Logf — these are
+//     bugs to investigate).
+//
+// The check inspects the first iter only since these errors are config-level
+// and uniform across iters at a given (protocol, config) pair.
 func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
 	t.Helper()
 	if len(iters) > 0 {
@@ -186,12 +195,20 @@ func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protoco
 			if errors.Is(first.err, ErrNotApplicable) {
 				return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
 			}
-			// Other Run errors — typically config validation (e.g. at
-			// BTT=600ms, OBFT's deepest layer's broadcast deadline goes
-			// negative). Log once per cell at iter=0 and surface as an
-			// Iterations=0 cell so renderers show "n/a" rather than the
-			// whole batch aborting.
-			t.Logf("RunBatch: %s/%s out of envelope: %v (cell marked n/a)",
+			if errors.Is(first.err, ErrConfigOutOfEnvelope) {
+				// Protocol can't operate at this operating point — return a
+				// full-Iterations cell with no successful decisions so the
+				// UI renders it as a hard 0% (red) rather than n/a.
+				return BatchCell{
+					Protocol:    protocol.Name(),
+					Scenario:    scenario.Name,
+					Iterations:  cfg.Iterations,
+					SuccessRate: 0,
+					MissReasons: map[string]int{"config out of envelope": cfg.Iterations},
+				}
+			}
+			// Unexpected non-applicability / envelope error — bug to chase.
+			t.Logf("RunBatch: %s/%s unexpected error: %v (cell marked n/a)",
 				protocol.Name(), scenario.Name, first.err)
 			return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
 		}

@@ -20,7 +20,7 @@ type SweepPoint struct {
 type Sweep struct {
 	Name        string
 	Title       string // human-readable section heading; falls back to Name when empty
-	Params      []string // optional fixed-config tokens rendered as badges next to the title (e.g. "n=4", "BTT=200ms"); used by single-point sweeps where every config knob is constant
+	Params      []string // optional fixed-config tokens rendered as badges next to the title (e.g. "n=4", "BTT=300ms"); used by single-point sweeps where every config knob is constant
 	Description string
 	AxisLabel   string // e.g. "Cluster size n", "BTT (ms)", "LogNormal sigma"
 	Points      []SweepPoint
@@ -60,9 +60,9 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 // Median = BTT/2 (the spec's typical-mesh P99 propagation per
 // OBFT.md §Setting). Pure JitteredDelay is no longer used.
 //
-//  1. p2p_ideal — single point at BTT=200ms with LogNormal σ=0.1
+//  1. p2p_ideal — single point at BTT=300ms with LogNormal σ=0.1
 //     (effectively constant; low-noise control baseline).
-//  2. p2p_normal — single point at BTT=200ms with LogNormal σ=0.5
+//  2. p2p_normal — single point at BTT=300ms with LogNormal σ=0.5
 //     (production-shaped baseline; P99/P50 ≈ 3.2× — matches the
 //     mainnet floor cited in network.go's LogNormalDelay docstring).
 //  3. p2p_increasing_BTT — varies BTT ∈ {100, 200, 400, 600, 800, 1000} ms
@@ -70,7 +70,7 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 //     relative tail shape stays constant and only the configured BTT
 //     budget varies. Probes the protocol's BTT-sizing envelope.
 //  4. p2p_heavy_tail — varies LogNormal σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6,
-//     0.7} at fixed BTT=200ms, Median=BTT/2. Surfaces P99/P50-ratio
+//     0.7} at fixed BTT=300ms, Median=BTT/2. Surfaces P99/P50-ratio
 //     effects on OBFT's hard B_k cutoff vs QBFT's round-change
 //     tolerance.
 //  5. p2p_packet_loss — varies LossyNetwork LossRate ∈ {0, 0.01, 0.05,
@@ -123,7 +123,7 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 }
 
 func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
-	btt := 200 * time.Millisecond
+	btt := 300 * time.Millisecond
 	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 	// σ=0.1 makes the LogNormal effectively constant — keeps this baseline
 	// as a low-noise control so deviations in other sweeps are attributable
@@ -133,12 +133,12 @@ func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iterations int, n
 	return Sweep{
 		Name:        "p2p_ideal",
 		Title:       "Ideal conditions",
-		Params:      []string{"n=" + nStr, "BTT=200ms", "LogNormal σ=0.1"},
+		Params:      []string{"n=" + nStr, "BTT=300ms", "LogNormal σ=0.1"},
 		Description: "Low-noise control baseline (LogNormal σ=0.1 ≈ constant). Every other sweep is read relative to this.",
 		AxisLabel:   "",
 		Points: []SweepPoint{
 			{
-				Label: "n=" + nStr + " BTT=200ms σ=0.1",
+				Label: "n=" + nStr + " BTT=300ms σ=0.1",
 				Config: BatchConfig{
 					Iterations: iterations,
 					Base:       base,
@@ -151,19 +151,19 @@ func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iterations int, n
 }
 
 func p2pNormalSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
-	btt := 200 * time.Millisecond
+	btt := 300 * time.Millisecond
 	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 	base.Network = productionLogNormal(btt)
 	nStr := strconv.Itoa(n)
 	return Sweep{
 		Name:        "p2p_normal",
 		Title:       "Normal conditions",
-		Params:      []string{"n=" + nStr, "BTT=200ms", "LogNormal σ=0.5"},
+		Params:      []string{"n=" + nStr, "BTT=300ms", "LogNormal σ=0.5"},
 		Description: "Production-shaped baseline (LogNormal σ=0.5; P99/P50 ≈ 3.2× — mainnet floor). Heatmap colors derive from this sweep.",
 		AxisLabel:   "",
 		Points: []SweepPoint{
 			{
-				Label: "n=" + nStr + " BTT=200ms σ=0.5",
+				Label: "n=" + nStr + " BTT=300ms σ=0.5",
 				Config: BatchConfig{
 					Iterations: iterations,
 					Base:       base,
@@ -214,7 +214,7 @@ func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations in
 	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
 	pts := make([]SweepPoint, 0, len(sigmas))
 	for _, sigma := range sigmas {
-		base := withClusterSize(DefaultProposerDutyConfig(200*time.Millisecond), n)
+		base := withClusterSize(DefaultProposerDutyConfig(300*time.Millisecond), n)
 		// Heavy-tail propagation: log-normal centered at BTT/2 (= typical
 		// P50 propagation per spec §Setting), with Sigma controlling tail
 		// fatness. P99/P50 ratio = exp(Sigma · 2.326): 1.27× / 2.01× /
@@ -233,7 +233,7 @@ func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations in
 	return Sweep{
 		Name:        "p2p_heavy_tail",
 		Title:       "Heavy-tail propagation",
-		Params:      []string{"LogNormalDelay", "n=" + strconv.Itoa(n), "BTT=200ms", "Median=BTT/2"},
+		Params:      []string{"LogNormalDelay", "n=" + strconv.Itoa(n), "BTT=300ms", "Median=BTT/2"},
 		Description: "Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance.",
 		AxisLabel:   "LogNormal sigma",
 		Points:      pts,
@@ -279,7 +279,7 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iterations i
 				Note:   s.Note,
 			}
 		}
-		btt := 200 * time.Millisecond
+		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		// Production-shaped baseline (matches p2p_normal); loss adds on top.
 		base.Network = productionLogNormal(btt)
@@ -339,7 +339,7 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iterat
 				Note:   s.Note,
 			}
 		}
-		btt := 200 * time.Millisecond
+		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		base.Network = productionLogNormal(btt)
 		pts = append(pts, SweepPoint{

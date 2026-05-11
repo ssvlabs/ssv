@@ -173,8 +173,16 @@ type Protocol interface {
 
 // ErrNotApplicable is returned by Run when a scenario doesn't translate to
 // this protocol (e.g. OBFT-specific h_V=1 on QBFT). The framework treats it
-// as "skip" rather than "fail" when comparing outcomes.
+// as "skip" rather than "fail" when comparing outcomes (renders as n/a).
 var ErrNotApplicable = fmt.Errorf("scenario not applicable to this protocol")
+
+// ErrConfigOutOfEnvelope signals that the SimConfig itself is infeasible at
+// the requested operating point — the protocol applies in principle, but the
+// derived schedule (B_k, FetchAt, T_commit) can't be made strict-monotonic /
+// non-negative. The framework treats it as a protocol failure (renders as
+// 0% / red) rather than n/a, since the protocol genuinely cannot operate at
+// that configuration.
+var ErrConfigOutOfEnvelope = fmt.Errorf("config out of envelope for this protocol")
 
 // Outcome is the algorithm-agnostic per-sim result.
 type Outcome struct {

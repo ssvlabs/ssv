@@ -65,7 +65,16 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 			RecipientsA: recipientsA,
 			RecipientsB: recipientsB,
 		}, nil
-	case ct.ByzHV1SelectiveDelivery, ct.ByzFakeEncryptedPresence:
+	case ct.ByzHV1SelectiveDelivery:
+		// QBFT analog: byz R1 leader sends PROPOSE only to the f specified
+		// recipients. Non-recipients never see PROPOSE → don't send PREPARE
+		// for V → PREPARE-pool stalls below qV (= 2f+1) at all operators →
+		// R1 times out → round-change to R2 → honest leader at R2 (round-
+		// robin) → R2 succeeds with a fresh V. Outcome class matches OBFT's
+		// 2abOBFT row 5 (fall-through), not OBFT's straight MISS.
+		return byzSelectiveDelivery{ByzSet: bs, Recipients: p.Recipients}, nil
+	case ct.ByzFakeEncryptedPresence:
+		// IBE-specific (encrypted Witnesses[]); no QBFT analog.
 		return nil, ct.ErrNotApplicable
 	case ct.ByzSigmaRefusal:
 		return byzSigmaRefusal{ByzSet: bs}, nil
@@ -85,8 +94,15 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 			RecipientsA: recipientsA,
 			RecipientsB: recipientsB,
 		}, nil
+	case ct.ByzLateLeaderBroadcast, ct.ByzWithholdLeader:
+		// QBFT analog: byz leader fails to propose on time (either too late
+		// for R1's timer, or never). At any round the byz operator leads,
+		// the round times out → round-change → next (honest) leader → R2
+		// succeeds. The two OBFT patterns differ in timing but collapse to
+		// the same QBFT outcome (silent leader at the round they lead).
+		return byzSilentLeader{ByzSet: bs}, nil
 	case ct.ByzCrossSigning, ct.ByzCrossOnionEquivocation, ct.ByzFakePlaintextSigma,
-		ct.ByzLateLeaderBroadcast, ct.ByzWithholdLeader, ct.ByzAggregatorBypass,
+		ct.ByzAggregatorBypass,
 		ct.ByzWitnessForgery, ct.ByzCertWithholding, ct.ByzDelayedCommit:
 		// OBFT-only patterns; QBFT has no analog (no chained-onion encryption,
 		// no per-layer leader-σ, no cluster-wide cert gossip, no Witnesses[],
@@ -295,6 +311,34 @@ func (b byzPartialEquivocation) ProposalPlanForRound(_ *sim, leader ct.OperatorI
 	return []proposalPlan{
 		{V: []byte("byz-V-A"), Recipients: append([]ct.OperatorID(nil), b.RecipientsA...)},
 		{V: []byte("byz-V-B"), Recipients: append([]ct.OperatorID(nil), b.RecipientsB...)},
+	}
+}
+
+// ---- byzSelectiveDelivery (byz leader sends PROPOSE to ≤f recipients) --
+
+// QBFT analog of OBFT's HV1SelectiveDelivery: byz R1 leader's PROPOSE goes
+// only to `Recipients` (default: f honest operators). Non-recipients never
+// register the PROPOSE → don't emit PREPARE for V → PREPARE-pool at every
+// receiver stays at ≤ f (only the recipients PREPARE for V) → below qV →
+// R1 times out → round-change → honest R2 leader proposes fresh V → R2
+// succeeds.
+type byzSelectiveDelivery struct {
+	honestDefaults
+	ByzSet     byzSet
+	Recipients []ct.OperatorID
+}
+
+func (b byzSelectiveDelivery) IsByz(op ct.OperatorID) bool { return b.ByzSet.Contains(op) }
+func (b byzSelectiveDelivery) ProposalPlanForRound(_ *sim, leader ct.OperatorID, round int, honestV []byte) []proposalPlan {
+	if !b.ByzSet.Contains(leader) || round != 1 {
+		return []proposalPlan{{V: honestV}}
+	}
+	if len(b.Recipients) == 0 {
+		// Defensive: empty recipients → equivalent to silent leader.
+		return nil
+	}
+	return []proposalPlan{
+		{V: honestV, Recipients: append([]ct.OperatorID(nil), b.Recipients...)},
 	}
 }
 

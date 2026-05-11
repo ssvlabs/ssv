@@ -82,9 +82,11 @@ var scenarioWithholdLeaderDeepest = Scenario{
 	Expect: map[string]ExpectClass{
 		"OBFT":    ExpectSuccessFastest, // L_0 still healthy; deepest never reached
 		"2abOBFT": ExpectSuccessFastest, // same — L_0 succeeds regardless of deepest
-		"QBFT":    ExpectNotApplicable,  // OBFT-specific (layer concept)
+		// QBFT: byz=op{N} only leads R{N} under round-robin. R1's honest
+		// leader (op1) succeeds → byz round is never reached → fastest.
+		"QBFT": ExpectSuccessFastest,
 	},
-	Note: "Class A spec test: deepest-layer leader silenced. L_0 is healthy at any n → cluster decides at L_0 without needing L_{N-1}.",
+	Note: "Class A spec test: deepest-layer leader silenced. L_0 / R1 are healthy at any n → cluster decides at the first leader without needing the silent one.",
 }
 
 // ---- Cert withholding (Phase 3) ---------------------------------------
