@@ -152,15 +152,19 @@ type ConfigOverrides struct {
 	JitterBuffer time.Duration
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
-	// defaults are used (Config A K=4: 3000/2900/2700/2100ms). Length
-	// must match K (or zero/nil to use defaults).
+	// defaults are used (tabulated in defaultLayerSchedules — see the
+	// per-K schedule for production values at the current operating
+	// point). Length must match K (or zero/nil to use defaults).
 	FetchAt []time.Duration
 
 	// BroadcastBudget overrides the default per-layer absorption windows
-	// (T_commit-anchored, per spec §Setting). When nil, all layers fall
-	// back to obft.Config's single uniform cap 2*BTT — equivalent to
-	// the historical pre-staggered behavior. When set, length must match K
-	// and values must be strictly increasing in layer index.
+	// `B_k` (T_commit-anchored, per spec §Setting). When nil,
+	// ConfigForCluster substitutes DefaultBroadcastBudgetSchedule(K, BTT)
+	// which produces a strictly-increasing schedule conforming to spec
+	// (K=4 Config A: [1, 1.5, 2.5, 5.5]·BTT). obft.Config.Validate now
+	// requires every layer's BroadcastBudget > 0 — no all-zero fallback.
+	// When set, length must match K and values must be strictly
+	// increasing in layer index.
 	BroadcastBudget []time.Duration
 }
 
@@ -310,6 +314,14 @@ func ConfigForCluster(
 ) (*obftcore.Config, error) {
 	if len(committee) == 0 {
 		return nil, errors.New("obft adapter: empty committee")
+	}
+	// Normalize nil overrides to the zero-value struct so subsequent field
+	// reads (FetchAt, BroadcastBudget — not nil-safe accessors) don't
+	// panic. The k()/btt()/etc. methods are already nil-safe via the
+	// receiver-nil check; this normalization gives the field-read sites
+	// the same behavior.
+	if overrides == nil {
+		overrides = &ConfigOverrides{}
 	}
 	n := len(committee)
 	if (n-1)%3 != 0 {

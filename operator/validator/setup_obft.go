@@ -65,12 +65,26 @@ func buildOBFTControllerForProposer(
 
 	// Production proposer-duty config: enable per-layer staggered absorption
 	// per spec §Setting / §Application Config A (deeper layers tolerate wider
-	// propagation tails). At default K=4 the spec-recommended T_commit-anchored
-	// schedule [1, 1.5, 2.5, 5.5] BTT — strictly increasing, deepest ≥ 2·BTT
-	// BFT-min, paired with the FetchAt schedule. Values scale with BTT: at
-	// the production default BTT=200ms they resolve to [200, 300, 500, 1100]ms.
+	// propagation tails). The K-vs-f bound is max(DefaultK, f+2) where
+	// f = (n-1)/3 — late-leader-resilience requires K ≥ f+2 at each cluster
+	// size (spec §Setting / "Two distinct K bounds"). For n ∈ {4, 7} the
+	// default K=4 already satisfies the bound; n ∈ {10, 13} need K=5 / K=6
+	// respectively. BroadcastBudget must be built with the SAME K so its
+	// length matches ConfigForCluster's expectation.
+	//
+	// Values scale with BTT: at the production default BTT=200ms, K=4 resolves
+	// to [200, 300, 500, 1100]ms; larger K interpolates linearly between L_0
+	// (1·BTT) and the deepest layer (5.5·BTT) per
+	// obftadapter.DefaultBroadcastBudgetSchedule.
+	n := len(ssvShare.Committee)
+	f := (n - 1) / 3
+	K := obftadapter.DefaultK
+	if minK := f + 2; K < minK {
+		K = minK
+	}
 	overrides := &obftadapter.ConfigOverrides{
-		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(obftadapter.DefaultK, obftadapter.DefaultBTT),
+		K:               K,
+		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(K, obftadapter.DefaultBTT),
 	}
 
 	// Wrap the V-side BLS signer so OBFT partials are computed over the

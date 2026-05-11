@@ -4,6 +4,21 @@ Tracks deltas between [docs/OBFT.md](OBFT.md) and the [protocol/v2/obft](../prot
 
 Findings were originally collected during a faithfulness review and then re-verified against the current spec (post commits `0e8c1e37d` "slashing-evidence change", `75865bd11` "2nd-pass review feedback", `4f501db9f` "lower ε_3 from 100ms to 50ms"). Items the spec changes resolved are dropped; items that remain are listed below with the proposed fix.
 
+## Status
+
+| Item | Status | Notes |
+|---|---|---|
+| D1 — Rule 1 order-dependent | **Open** | Original finding; still requires the proposed `ObservePhase1Bundle` cross-check. |
+| D2 — Rule 3 leader cross-V order-dependent | **Open** | Original finding; requires the proposed `reevaluateL0Sigmas` extension. |
+| D3 — Witness section σ_L^V unused | **Fixed** | Production now harvests σ_L^V via `harvestWitness` (phase2.go:507-509) and consumes via `findVByRoot` / Resolve. Spec was simultaneously widened (OBFT.md:219 "Broadened V-source") to allow V cross-reference from peer onion entries. |
+| D4 — `l0SigmaUnknownV` not escalated to Rule 5 | **Fixed (Option A)** | phase2.go:404-415 fires Rule 5 on unknownV for non-leader emitters (leader unknownV is Rule 3 territory; honest equivocation-reaction false-positive avoided via the leader carve-out). Negative test `TestObft_Rule5_NoFireWhenBothEquivocatedVsRetained` covers the documented equivocation-reaction case. |
+| D5 — Δ_3 default conflates ε_3 with jitter | **Fixed** | `DefaultDelta3 = 50ms` (was 100ms), `DefaultJitterBuffer = 50ms` added; `T_commit` derivation now subtracts both. Verified at `TestDefaultTCommitDecomposition`. |
+| D6 — Default `BroadcastBudget` fallback policy | **Fixed** | `obft.Config.Validate` now rejects zero/non-positive `BroadcastBudget` (types.go ~303-305); all callers (production setup + tests) use `DefaultBroadcastBudgetSchedule` or explicit per-layer values. |
+| D7 — Stale MUST-gossip comments | **Fixed** | No remaining "MUST-gossip" comments in setup_obft.go / controller.go / instance.go (verified via grep). |
+| D8 — Stricter K floor than spec BFT-min | **Document-only** | Intentional — keep MinK = max(3, f+2). |
+
+**Net open items:** D1 and D2 (both Rule-1/Rule-3 order-dependence in `ObservePhase1Bundle` / `reevaluateL0Sigmas`).
+
 ## D1 — Rule 1 cross-signing detection is order-dependent (bug)
 
 **Spec.** §Cross-signing detection table line 562: "Immediate (dual partials on the wire)". The two surfaces are σ-from-Phase-1 + NR-from-Phase-2 (leader-specific) and σ-from-Phase-2 + NR-from-Phase-2. The spec doesn't condition detection on arrival order.

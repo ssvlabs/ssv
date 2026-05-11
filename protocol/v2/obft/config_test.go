@@ -94,17 +94,18 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 // ---- M3: per-layer staggered broadcast deadlines (BroadcastBudget) ----
 
 // validStaggeredConfig returns a config with spec-recommended per-layer
-// BroadcastBudget values (B_0=0.5 BTT, B_1=1 BTT, B_2=2 BTT, B_3=5 BTT)
-// scaled to the test's BTT (D+δ = 150ms here).
+// BroadcastBudget values (B_0=1 BTT, B_1=1.5 BTT, B_2=2.5 BTT, B_3=5.5 BTT
+// per spec §Setting Config A at K=4) scaled to the test's BTT
+// (D+δ = 150ms here).
 func validStaggeredConfig() *Config {
 	cfg := validBaseConfig()
 	btt := cfg.BTT // 150ms
-	// Adjust TCommit so the deepest layer's B_3 = 5*BTT fits.
-	cfg.TCommit = 5*btt + 100*time.Millisecond
-	cfg.Layers[0].BroadcastBudget = btt / 2 // B_0 = 0.5 BTT
-	cfg.Layers[1].BroadcastBudget = btt     // B_1 = 1 BTT
-	cfg.Layers[2].BroadcastBudget = 2 * btt // B_2 = 2 BTT
-	cfg.Layers[3].BroadcastBudget = 5 * btt // B_3 = 5 BTT
+	// Adjust TCommit so the deepest layer's B_3 = 5.5*BTT fits with 100ms buffer.
+	cfg.TCommit = 5*btt + btt/2 + 100*time.Millisecond
+	cfg.Layers[0].BroadcastBudget = btt           // B_0 = 1 BTT
+	cfg.Layers[1].BroadcastBudget = btt + btt/2   // B_1 = 1.5 BTT
+	cfg.Layers[2].BroadcastBudget = 2*btt + btt/2 // B_2 = 2.5 BTT
+	cfg.Layers[3].BroadcastBudget = 5*btt + btt/2 // B_3 = 5.5 BTT
 	// FetchAt within each layer's per-layer cap T_commit - B_k.
 	cfg.Layers[0].FetchAt = cfg.TCommit - cfg.Layers[0].BroadcastBudget
 	cfg.Layers[1].FetchAt = cfg.TCommit - cfg.Layers[1].BroadcastBudget

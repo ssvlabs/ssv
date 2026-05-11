@@ -309,11 +309,11 @@ func (c *Config) Validate() error {
 	//
 	// Spec §Setting states "B_k ≥ B_{k-1}" (non-strict). We enforce strict
 	// "<" because all the spec's recommended operating-point schedules
-	// (Config A: 0.5 / 1 / 2 / 5 BTT) are strictly increasing, and equal
-	// adjacent budgets would mean the deeper layer offers no additional
-	// absorption — defeating the purpose of staggering. The strict bound
-	// catches misconfigurations that would silently degrade fall-through
-	// recovery at no protocol benefit.
+	// (Config A at K=4: 1 / 1.5 / 2.5 / 5.5 BTT) are strictly increasing,
+	// and equal adjacent budgets would mean the deeper layer offers no
+	// additional absorption — defeating the purpose of staggering. The
+	// strict bound catches misconfigurations that would silently degrade
+	// fall-through recovery at no protocol benefit.
 	for k := 1; k < len(c.Layers); k++ {
 		if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
 			return errors.New("obft: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")

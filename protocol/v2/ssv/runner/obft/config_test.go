@@ -1,9 +1,12 @@
 package obft
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,6 +117,54 @@ func TestDefaultBroadcastBudgetSchedule_EndpointConstantsMatchK4(t *testing.T) {
 // TestDefaultTCommitDecomposition asserts the spec's §Application / Timing
 // budget decomposition at Config A: the post-T_commit window of 600ms = 3 BTT
 // splits as Δ_2 (400ms = 2 BTT) + Δ_3 (50ms = ε_3) + JitterBuffer (50ms) +
+// TestConfigForCluster_NilOverrides — passing nil for the *ConfigOverrides
+// arg must not panic; the function normalizes nil to a zero-valued struct
+// so subsequent field reads (FetchAt, BroadcastBudget) are nil-safe. Spec
+// referent: the accessor methods k()/btt()/delta2()/etc. are nil-safe,
+// but the direct field reads on lines 340/348 of config.go aren't —
+// hence the normalization at the top of ConfigForCluster.
+func TestConfigForCluster_NilOverrides(t *testing.T) {
+	committee := []spectypes.OperatorID{1, 2, 3, 4}
+	cfg, err := ConfigForCluster(phase0.Slot(1), committee, [32]byte{0x01}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.Equal(t, DefaultK, cfg.K(), "nil overrides → DefaultK")
+}
+
+// TestConfigForCluster_KDerivedFromClusterSize — for n=10 (f=3) and
+// n=13 (f=4) the late-leader-resilience floor (K ≥ f+2) exceeds
+// DefaultK=4. Production callers must set the K override; without it
+// ConfigForCluster rejects. This test confirms the n=10/n=13 paths
+// work when K is set correctly (validates the BroadcastBudget
+// schedule's length-matches-K invariant at those K values).
+func TestConfigForCluster_KDerivedFromClusterSize(t *testing.T) {
+	cases := []struct {
+		n int
+		k int
+	}{
+		{4, 4},  // f=1, DefaultK
+		{7, 4},  // f=2, MinK = f+2 = 4 = DefaultK
+		{10, 5}, // f=3, MinK = f+2 = 5
+		{13, 6}, // f=4, MinK = f+2 = 6
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run("n="+strconv.Itoa(tc.n)+"/K="+strconv.Itoa(tc.k), func(t *testing.T) {
+			committee := make([]spectypes.OperatorID, tc.n)
+			for i := range committee {
+				committee[i] = spectypes.OperatorID(i + 1)
+			}
+			overrides := &ConfigOverrides{
+				K:               tc.k,
+				BroadcastBudget: DefaultBroadcastBudgetSchedule(tc.k, DefaultBTT),
+			}
+			cfg, err := ConfigForCluster(phase0.Slot(1), committee, [32]byte{0x01}, overrides)
+			require.NoError(t, err, "n=%d K=%d must validate", tc.n, tc.k)
+			require.Equal(t, tc.k, cfg.K())
+		})
+	}
+}
+
 // HeaderSubmitHeadroom (100ms), summing to RelayCutoff − T_commit.
 // Catches accidental drift between the spec's named components and the
 // derived T_commit value.
