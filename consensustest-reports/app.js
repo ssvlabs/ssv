@@ -982,33 +982,84 @@ function buildCrossSweepChart(canvas, sw, scenario, protocols) {
 }
 
 // setupHashSync handles deep-linking into the report:
-//   - On page load, if location.hash points to a pack, open it (and
-//     scroll into view a beat later so the open animation completes).
-//   - On every hashchange, do the same. This catches clicks on TOC
-//     sub-row anchors that point at collapsed packs.
+//   - On page load (and every hashchange), if location.hash points to a
+//     pack, open it and run focusPackIntoView.
+//   - Direct click handler on every nav.toc anchor so repeat clicks on
+//     the SAME anchor (hashchange won't fire then) still re-focus the
+//     target pack.
 function setupHashSync(data) {
-  const openHash = () => {
-    const hash = (location.hash || '').slice(1);
+  const goto = (hash) => {
     if (!hash) return;
     const el = document.getElementById(hash);
     if (!el) return;
-    // If the target is a <details> pack (or contains one), make sure
-    // it's open before scrolling, so the anchor's scroll position
-    // accounts for the now-expanded body.
     let pack = el.closest && el.closest('details.group-pack');
     if (!pack && el.tagName === 'DETAILS') pack = el;
     if (pack && !pack.hasAttribute('open')) {
       pack.setAttribute('open', '');
       fireChartInit(pack);
     }
-    // Re-trigger scroll into view, slightly delayed so layout settles
-    // after opening the pack.
-    setTimeout(() => {
-      el.scrollIntoView({ behavior: 'auto', block: 'start' });
-    }, 30);
+    // Layout has to settle after opening before we measure heights to
+    // place the chart in view. Two rAFs is enough in real browsers; a
+    // small setTimeout works around rAF throttling in headless preview.
+    setTimeout(() => focusPackIntoView(el, pack), 80);
   };
-  window.addEventListener('hashchange', openHash);
-  if (location.hash) openHash();
+  window.addEventListener('hashchange', () => goto((location.hash || '').slice(1)));
+  // Event-delegated click handler — catches clicks on the sub-row
+  // anchors too, which are rebuilt dynamically per active sweep.
+  const nav = document.querySelector('nav.toc');
+  if (nav) {
+    nav.addEventListener('click', (ev) => {
+      const a = ev.target.closest('a[href^="#"]');
+      if (!a || !nav.contains(a)) return;
+      const href = a.getAttribute('href');
+      if (!href) return;
+      // Always handle ourselves so repeat clicks (same hash, no
+      // hashchange) still re-focus. preventDefault stops the browser's
+      // native jump, which would race with our measure-then-scroll.
+      ev.preventDefault();
+      const hash = href.slice(1);
+      if (location.hash !== '#' + hash) {
+        history.replaceState(null, '', '#' + hash);
+      }
+      goto(hash);
+    });
+  }
+  if (location.hash) goto(location.hash.slice(1));
+}
+
+// focusPackIntoView scrolls so the pack's summary sits just below the
+// sticky TOC AND, if possible, the chart fits inside the viewport. If
+// the pack is taller than the viewport (long matrix), we scroll past
+// the matrix top to keep the chart-bottom visible — the sticky summary
+// keeps "what group" anchored anyway.
+function focusPackIntoView(el, pack) {
+  const tocH =
+    parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--toc-height'),
+    ) || 110;
+  const viewportH = window.innerHeight;
+  const docTop = (rect) => rect.top + window.scrollY;
+
+  const elRect = el.getBoundingClientRect();
+  // Default: pack top sits 8px below the sticky TOC.
+  let targetY = docTop(elRect) - tocH - 8;
+
+  if (pack) {
+    const chart = pack.querySelector('.chart-wrap');
+    if (chart) {
+      const cRect = chart.getBoundingClientRect();
+      const chartBottom = docTop(cRect) + cRect.height;
+      // If chart-bottom would land below viewport-bottom at our default
+      // target, push scroll down (= more) so chart-bottom sits ~24px
+      // above viewport-bottom. The sticky summary keeps the title
+      // visible even when this pushes matrix-top off the top.
+      const visibleBottom = targetY + viewportH - 24;
+      if (chartBottom > visibleBottom) {
+        targetY += chartBottom - visibleBottom;
+      }
+    }
+  }
+  window.scrollTo({ top: Math.max(0, targetY), behavior: 'auto' });
 }
 
 // escapeHtml escapes the five HTML special chars. Used before injecting

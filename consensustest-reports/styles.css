@@ -2,6 +2,13 @@
  * Edit freely and refresh the browser; no test rerun required.
  */
 
+html {
+  /* Browser-native anchor jumps (clicking <a href="#X">) align the
+   * target with viewport top minus this padding. Matches the sticky
+   * TOC height so anchor targets always appear just below it. */
+  scroll-padding-top: var(--toc-height, 110px);
+}
+
 :root {
   color-scheme: light;
   --bg: #f6f8fb;
