@@ -107,7 +107,7 @@ fuzz-validation:
 # sizes, scenarios, and seeds. Default `unit-test` runs stub-crypto only;
 # this target adds real-crypto coverage on demand. Budget: <10 min wall time.
 .PHONY: consensustest-real-bls
-consensustest-real-bls:
+consensustest-with-real-bls:
 	@echo "Running consensustest real-BLS suite"
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
