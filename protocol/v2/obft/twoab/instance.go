@@ -134,8 +134,18 @@ type Instance struct {
 	// fault even when multiple detection paths fire.
 	rule1Fired       map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
 	rule3LeaderFired map[int]map[OperatorID]bool // Rule 3 per (layer, op) at L_0
+	rule4Fired       map[int]map[OperatorID]bool // Rule 4 fake encrypted-presence per (layer, op)
 	rule5UnknownV    map[int]map[OperatorID]bool // Rule 5 unknownV per (layer, op)
 	rule6bFired      map[int]map[OperatorID]bool // Rule 6b per (layer, op)
+
+	// receivedCertificate is the FIRST peer-broadcast Certificate
+	// observed via ObserveCertificate at this Instance. Per spec
+	// §Final-certificate gossip, surviving peers' certificates allow an
+	// operator that failed to reconstruct locally to submit (V, S)
+	// downstream — protects against the lone-reconstructor's beacon-
+	// path-fails failure mode. Subsequent ObserveCertificate calls
+	// (post-first) are silent dedup no-ops.
+	receivedCertificate *Certificate
 
 	// Evidence accumulation. Per spec §Slashing evidence, the observer
 	// (if set) fires on FIRST recording per (Rule, OperatorID, Layer)
@@ -252,6 +262,7 @@ func NewInstance(
 		peerFirstOnion2b:   make(map[OperatorID]*Onion2b),
 		rule1Fired:         make(map[int]map[OperatorID]bool, K),
 		rule3LeaderFired:   make(map[int]map[OperatorID]bool, K),
+		rule4Fired:         make(map[int]map[OperatorID]bool, K),
 		rule5UnknownV:      make(map[int]map[OperatorID]bool, K),
 		rule6bFired:        make(map[int]map[OperatorID]bool, K),
 		evidenceObserved:   make(map[evidenceObservedKey]bool),
@@ -439,6 +450,20 @@ func (i *Instance) recordRule3Leader(op OperatorID, layer int) bool {
 		return false
 	}
 	i.rule3LeaderFired[layer][op] = true
+	return true
+}
+
+// recordRule4 marks Rule 4 (fake encrypted-presence at k > 0) as fired
+// for (op, layer). Returns true if this is the first observation; false
+// if Rule 4 was already recorded.
+func (i *Instance) recordRule4(op OperatorID, layer int) bool {
+	if i.rule4Fired[layer] == nil {
+		i.rule4Fired[layer] = make(map[OperatorID]bool)
+	}
+	if i.rule4Fired[layer][op] {
+		return false
+	}
+	i.rule4Fired[layer][op] = true
 	return true
 }
 

@@ -287,3 +287,36 @@ func (s *sim) runPhase2bCanonical() []*Onion2b {
 	}
 	return out
 }
+
+// resolveAll calls Resolve on every Instance in the sim and returns
+// per-op outputs. Errors are returned in the second map; tests assert
+// against either the output map or the error map as appropriate.
+func (s *sim) resolveAll() (map[OperatorID]*Output, map[OperatorID]error) {
+	s.t.Helper()
+	outputs := make(map[OperatorID]*Output, len(s.cfg.Operators))
+	errs := make(map[OperatorID]error, len(s.cfg.Operators))
+	for _, op := range s.allOperators() {
+		out, err := s.instances[op].Resolve()
+		outputs[op] = out
+		errs[op] = err
+	}
+	return outputs, errs
+}
+
+// requireAllAgree asserts that every (non-nil) output across operators
+// agrees on the same (Layer, Value) pair. Returns the canonical output
+// for the test to assert against.
+func requireAllAgree(t *testing.T, outputs map[OperatorID]*Output) *Output {
+	t.Helper()
+	var first *Output
+	for op, out := range outputs {
+		require.NotNil(t, out, "op %d reached no output", op)
+		if first == nil {
+			first = out
+			continue
+		}
+		require.Equal(t, first.Layer, out.Layer, "op %d disagrees on layer", op)
+		require.Equal(t, first.Value, out.Value, "op %d disagrees on value", op)
+	}
+	return first
+}

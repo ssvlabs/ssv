@@ -41,3 +41,9 @@ var ErrNRLocked = errors.New("twoab: NR already locked at this layer (σ-XOR-NR 
 // call within the same slot. Per spec §Phase 2b emission, each operator
 // emits exactly one Onion2b per (slot, operator).
 var ErrOnion2bAlreadyEmitted = errors.New("twoab: Onion2b already emitted for this slot")
+
+// ErrNoQuorum is returned by Resolve when the K-layer walk exhausts
+// without σ-quorum reaching at any layer AND without NR-quorum at the
+// previous layer to unlock decryption at the next. Per spec §Phase 3,
+// the slot misses cleanly in this case (no safety violation).
+var ErrNoQuorum = errors.New("twoab: no quorum (slot missed)")
