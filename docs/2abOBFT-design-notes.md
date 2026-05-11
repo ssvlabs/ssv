@@ -239,7 +239,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 - **Fix**: Rule 6 is conditional on the cluster's verdict pool. Honest revision when equivocation is observed is permitted. Receivers who observe A's mismatch should check whether A had grounds to revise:
   - Did the cluster also observe equivocation at this layer? (E.g., is there a `verdict_pool[V']` with at least one entry?) If so, A's revision is plausibly honest.
   - Was σ-eligibility-quorum reached cluster-wide? If yes and A still NR'd, that's a stronger byzantine signal.
-- **Implementation**: receivers who detect a Rule-6 mismatch should retain the evidence (verdict + action) but not propagate as slashable until they have enough cluster-wide context. This is a fundamental limitation of Rule 6 (gossipsub-pattern-quality) — it's a deterrent, not a clean self-contained rule.
+- **Implementation**: receivers who detect a Rule-6 mismatch should log the evidence (verdict + action) locally; cluster-wide context gathering happens out-of-band via log aggregation (no dedicated on-wire slashing-evidence channel). This is a fundamental limitation of Rule 6 (gossipsub-pattern-quality) — it's a deterrent, not a clean self-contained rule.
 
 ### Byzantine verdict-vs-action equivocation
 
@@ -256,7 +256,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 - A's Phase-2a verdict was σV(V_a); A's commit at Phase-2a end is `NR-due-to-equivocation` (equivocation observed override).
 - A cannot broadcast a second verdict to revise — that would be A's verdict equivocation.
 - A emits NR at Phase-2b. Rule 6 evidence (verdict σV(V_a) + action NR) — receivers must check cluster context; equivocation observed cluster-wide is the honest revision condition.
-- **Implementation note**: this case requires receivers to retain the operator's first verdict + full Phase-1 retention state. To enable receivers to verify a Rule 6 mismatch is honest, the gossiped equivocation evidence (the V_a, V_b bundle pair) must be globally observable. Receivers without the equivocation evidence may falsely flag A as Rule-6 byzantine.
+- **Implementation note**: this case requires receivers to retain the operator's first verdict + full Phase-1 retention state. To enable receivers to verify a Rule 6 mismatch is honest, the equivocation evidence (the V_a, V_b bundle pair) must be operator-locally observable; the V_a / V_b bundles propagate via standard gossipsub re-flood (load-bearing for protocol functionality, not for evidence). Receivers without the equivocation bundles in retention may locally log a Rule-6 candidate that out-of-band aggregation should treat as false-positive-prone — cluster-wide attribution depends on cross-operator log aggregation rather than single-observer confidence.
 - **Mitigation**: Rule 6 attribution is best-effort and should not trigger automated slashing or automated blacklist without cluster-wide consensus on the evidence. This is consistent with OBFT's slashing model (manual blacklist by surviving operators; planned protocol extension).
 
 ### Encrypted Phase-2b σ at deeper layers
@@ -275,13 +275,13 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 - Byz's Phase-2b σ on V is wasted (counts in σ-pool but cluster σ-quorum requires qV ≥ 2f+1; byz alone is < qV). At most byz's σ inflates the σ-pool by 1.
 - **Result**: byz's lone σ-emission has no liveness effect at f=1 n=4 (cluster either reaches qV with honest cooperation or doesn't reach at all). Same outcome as OBFT. No new grief surface.
 
-### Phase-2a verdict envelope rate-limit
+### Phase-2a verdict envelope spam handling
 
 **E8: Byzantine spams 100 distinct verdicts per (slot, layer) — different `value_root` each time.**
 
 - Each verdict envelope is op-identity-signed. Honest receivers count *first-observed* per `(slot, layer, operator_id)`; subsequent verdicts are dropped from convergence input but recorded for slashing.
 - Per-receiver memory: bounded by gossipsub message-id deduplication and the per-(slot, layer) retention cap.
-- **Rate-limit (anti-amplification rule)**: same as OBFT's Rule 5 rate-limit ([docs/OBFT.md / Slashing evidence](OBFT.md#slashing-evidence)). Each honest receiver gossips slashable verdict-equivocation evidence at most once per `(slot, layer, operator_id)` tuple. Caps amplification.
+- **Logging requirement**: each honest receiver MUST log observed verdict-equivocation evidence once per `(slot, layer, operator_id)` for later out-of-band aggregation. Log format is implementation-defined. (Matches the family-wide slashing-evidence treatment in [docs/OBFT.md / Slashing evidence](OBFT.md#slashing-evidence).)
 
 ### Phase-2a verdict propagation at high latency
 
@@ -382,7 +382,7 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 
 1. **Δ_2a vs Δ_2b sizing**: minimum vs recommended? At Config A minimum (Δ_2a = Δ_2b = 1 BTT = 200ms), submission headroom is wider; at recommended (2 BTT = 400ms) the headroom narrows by ~400ms but mesh-jitter absorption widens. Recommend recommended for mesh-flakiness mitigation; revisit if production telemetry shows submission tail eats the headroom.
 
-2. **Verdict equivocation rate-limit**: should honest receivers gossip slashable verdict-equivocation evidence on first detection or wait for cluster confirmation? OBFT Rule 5 uses first-observed gossip with a per-(slot, layer, operator_id) cap; same rule fits here.
+2. ~~**Verdict equivocation rate-limit**~~ **(superseded).** Was: should honest receivers gossip slashable verdict-equivocation evidence on first detection or wait for cluster confirmation? **Resolved** by the family-wide slashing change — honest operators MUST log observed evidence per `(slot, layer, operator_id)` once for out-of-band aggregation; no dedicated evidence gossip. See [2abOBFT.md §Slashing evidence](2abOBFT.md#slashing-evidence) and the SHOULD-level treat-equivocator-as-null rule that partially closes the verdict-equivocation surface. Full cryptographic close remains open as #16.
 
 3. **Verdict envelope size**: 32-byte `value_root` plus envelope overhead ≈ 100-200 bytes per verdict per layer. Per slot: K verdicts × n operators × 200 bytes ≈ 3.2 KB at K=4 n=4. Within budget.
 
@@ -411,6 +411,8 @@ Standard 3f+1 violation → slot misses. Same as OBFT.
 15. **Package layout**: 2abOBFT can be implemented as its own `protocol/v2/obft/` package (or extension of an existing OBFT-family package once one lands). Either approach works; preserving test infrastructure and IBE plumbing reuse argues for extension if a parallel OBFT package already exists.
 
 16. **Verdict EKM-binding (open trade-off)**: should Phase-2a verdicts be logged in the EKM at issue time, with Phase-2b sign requests required to match? Closes the 2-1-byz-defect regression but adds complexity (verdicts become EKM-tracked events; honest revision upon equivocation needs a "verdict-void" EKM operation gated on equivocation evidence). Default recommendation: accept the regression in v1; revisit if production telemetry shows defection-grief at meaningful rates. If adopted, the EKM coordinator gains: `(slot, layer, verdict_side, value_root)` log row at Phase-2a issue + `LogPhase2bSign` checks against the verdict row + `VoidVerdict(equivocation_evidence)` for honest revision.
+
+    **Partial close in spec.** The spec now includes a SHOULD-level "treat verdict-equivocator as null in convergence count" rule ([2abOBFT.md §Phase 2a](2abOBFT.md#phase-2a)) which routes most verdict-equivocation cases through NR-quorum fall-through. It shrinks the surface to timing-optimized byzantines (those who inject the second verdict late enough that re-flood doesn't complete within Phase-2a for all honest). This question (#16) remains the **full cryptographic close** — when telemetry justifies it.
 
 17. **Verdict-issue timing minimum**: should there be a *minimum* verdict-broadcast time (e.g., `T_commit + Δ_2a/2`) to prevent premature commits? At the boundary case where an honest operator broadcasts verdict immediately on Phase-1-acceptance success and a byzantine equivocation arrives mid-Phase-2a, the honest operator's verdict is on the wire as σV but their commit revises to NR (honest exception under Rule 6). A minimum-broadcast-time would force operators to wait long enough to observe most re-flooded equivocation evidence first. Trade-off: forces all operators to broadcast verdicts in a narrow window near Phase-2a end, potentially adding propagation pressure. Default recommendation: no minimum (broadcast at latest-safe time, which is the natural choice anyway).
 
@@ -450,7 +452,7 @@ The implementation is broken into phases that can be staged across PRs:
 
 - Detect verdict-vs-action mismatches in Phase-3 reconstruction.
 - Honest-revision exception: cross-reference cluster verdict view; slashable iff cluster's verdict pool would have honestly converged on the verdict side.
-- Surface evidence via existing slashing-evidence gossip mechanism.
+- Log evidence per-rule for out-of-band aggregation (see [docs/2abOBFT.md §Slashing evidence](2abOBFT.md#slashing-evidence) — no dedicated on-wire evidence gossip; the family-wide treatment is operator-local logging).
 
 ### Phase 6 — Testing and rollout
 

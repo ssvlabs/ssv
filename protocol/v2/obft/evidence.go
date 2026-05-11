@@ -12,10 +12,13 @@ package obft
 // The protocol layer surfaces evidence as inner-message contradictions; the
 // adapter layer pairs each piece of evidence with the SignedSSVMessage
 // envelopes that authenticate it (the outer SSV signature binds each inner
-// message to its sender's identity). For Rule 5 specifically, the spec
-// requires honest receivers to gossip the evidence (rate-limited per
-// (slot, layer, operator_id)) so receivers without retained V can also
-// attribute the fault.
+// message to its sender's identity). Per spec §Slashing evidence, honest
+// operators MUST log observed evidence per-rule for out-of-band aggregation
+// (the manual-blacklist mechanism is the canonical consumer). There is no
+// dedicated on-wire evidence gossip — underlying signed messages (bundles,
+// commits) already propagate via normal protocol message flow. Log format is
+// implementation-defined; this package surfaces evidence via the
+// EvidenceObserver callback.
 
 // EvidenceRule names the five rules from spec §Slashing evidence.
 type EvidenceRule int
@@ -63,8 +66,11 @@ const (
 	// EvidenceFakePlaintextSigma — Rule 5: at L_0, an operator's auth-signed
 	// Onion carries a plaintext σ partial that does not verify against any
 	// retained leader-broadcast V. Detection is immediate at retained-V
-	// receivers; the spec's MUST-gossip rule (rate-limited per
-	// (slot, layer, operator_id)) lets no-V receivers also attribute.
+	// receivers; under partial synchrony, Phase-1 bundle re-flood delivers V
+	// (at least auth-only-retained) to all honest receivers within the
+	// absorption window. Receivers whose V observation lagged do not surface
+	// Rule 5 locally; cluster-wide attribution recovers via out-of-band log
+	// aggregation across operators.
 	EvidenceFakePlaintextSigma EvidenceRule = 5
 )
 

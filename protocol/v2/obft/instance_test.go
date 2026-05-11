@@ -556,11 +556,13 @@ func TestObft_Witness_RejectsBadLeaderClaim(t *testing.T) {
 // Per spec §Phase 2 wire format, witnesses ship value_root + σ_V (no full
 // V). Rule 2 evidence requires the BUNDLE pair (V_a/σ_V_a, V_b/σ_V_b) —
 // witnesses don't carry V, so they cannot independently introduce V's into
-// retention. Cluster-wide Rule 2 attribution requires either: (a) at least
+// retention. Cluster-wide Rule 2 attribution requires either (a) at least
 // one honest receiver to have observed both V's via Phase-1 bundles
-// directly (gossipsub re-flood scenario), or (b) the future
-// MUST-gossip-Rule-5-style evidence-broadcast extension (see
-// docs/OBFT.md §Slashing evidence Rule 5).
+// directly (gossipsub re-flood scenario), or (b) a future Appendix-style
+// ship-full-V witness variant. Per spec §Slashing evidence, the
+// honest-operator MUST-log requirement covers the per-operator detection
+// surface; out-of-band log aggregation across operators handles the
+// asymmetric-retention case at the cluster level.
 //
 // The trade-off is documented: dropping full V from witnesses saves ~10×
 // bandwidth at the cost of losing cross-receiver Rule 2 attribution in
@@ -772,20 +774,19 @@ func TestObft_NRPartial_RejectedUnderOptionA(t *testing.T) {
 	require.Empty(t, s.instances[3].peerNR[0])
 }
 
-// TestObft_UnknownV_NoRule5_NotFiredAtFinalize — under the current spec-
-// compliance posture (no on-wire Rule 5 MUST-gossip implemented), a
-// byzantine that broadcasts a KindCommit with a σ partial verifying on a
-// V the cluster never retained is l0SigmaUnknownV. Rule 5 is NOT fired
-// for unknownV anywhere, including at Finalize, to avoid false-positives
-// against honest peers who signed an equivocated V their receivers didn't
-// get via gossipsub.
+// TestObft_UnknownV_NoRule5_NotFiredAtFinalize — per spec §Slashing
+// evidence Rule 5, detection requires the receiver to have retained-or-
+// auth-only-retained V at L_0. A byzantine that broadcasts a KindCommit
+// with a σ partial verifying on a V the cluster never retained is
+// l0SigmaUnknownV; Rule 5 is NOT fired for unknownV anywhere, including
+// at Finalize, to avoid false-positives against honest peers who signed
+// an equivocated V their receivers didn't get via gossipsub.
 //
-// See Instance.Finalize doc-comment for the rationale: the spec's
-// MUST-gossip mitigation would let cluster-wide attestations distinguish
-// "byzantine signed fake V" from "honest signed V receiver didn't get",
-// but until that's wired up we trade unknownV attribution coverage for
-// strict no-false-positives. The cryptoFake case (σ doesn't verify on
-// claimed V) still fires Rule 5 immediately — see
+// See Instance.Finalize doc-comment for the rationale: cluster-wide
+// attribution for the unknownV case is recovered via out-of-band log
+// aggregation across operators (the manual-blacklist mechanism is the
+// canonical consumer). The cryptoFake case (σ doesn't verify on claimed
+// V) still fires Rule 5 immediately — see
 // TestObft_Rule5_CryptoFakeSilentLeader.
 func TestObft_UnknownV_NoRule5_NotFiredAtFinalize(t *testing.T) {
 	s := newSim(t, 4)
@@ -1057,10 +1058,11 @@ func TestObft_PeerSigmaAtL0_MissingPubkeyNotSlashable(t *testing.T) {
 	_ = c
 }
 
-// TestObft_EvidenceObserver_FiresOncePerTuple verifies the spec-substitute
-// for Rule 5 MUST-gossip: an EvidenceObserver fires once per
-// (Rule, OperatorID, Layer) tuple on first observation, regardless of how
-// many redundant detections trigger.
+// TestObft_EvidenceObserver_FiresOncePerTuple verifies the spec's MUST-log
+// surface: an EvidenceObserver fires once per (Rule, OperatorID, Layer)
+// tuple on first observation, regardless of how many redundant detections
+// trigger. This is the per-operator logging cap; cluster-wide attribution
+// happens out-of-band via log aggregation.
 func TestObft_EvidenceObserver_FiresOncePerTuple(t *testing.T) {
 	s := newSim(t, 4)
 

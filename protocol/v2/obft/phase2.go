@@ -468,9 +468,9 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	// the witnessed σ_V because verification needs V (via the Signer's
 	// signing target). So Phase 2 witness observation is a no-op for the
 	// σ-pool — V-drop recovery flows through KindCertificate gossip per
-	// spec §Final-certificate gossip. (Future extensions — Rule 5
-	// MUST-gossip, Appendix-style ship-full-V variant — would add
-	// processing here. Currently no per-witness work happens.)
+	// spec §Final-certificate gossip. (Future Appendix-style ship-full-V
+	// variant would add processing here. Currently no per-witness work
+	// happens.)
 
 	return nil
 }
@@ -504,9 +504,9 @@ const (
 //     The op signed a V we haven't retained yet; the leader MAY equivocate
 //     later and broadcast that V, in which case reevaluation reclassifies
 //     to verified. Currently NOT fired as Rule 5 anywhere — see
-//     Instance.Finalize doc-comment for the false-positive rationale and
-//     the on-wire MUST-gossip path that is the spec-compliant attribution
-//     mechanism (not yet implemented).
+//     Instance.Finalize doc-comment for the false-positive rationale. Per
+//     spec §Slashing evidence Rule 5, cluster-wide attribution for this
+//     case is recovered via out-of-band log aggregation across operators.
 //  5. el.Value matches no retained V AND leaderMap is empty → inconclusive.
 //     Without any retention we cannot distinguish "fake V" from "leader
 //     hasn't broadcast yet"; defer.

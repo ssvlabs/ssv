@@ -192,13 +192,13 @@ type Instance struct {
 	// tuple. Set at NewInstance construction; nil disables. Immutable post-
 	// construction so there's no concurrency contract for callers to honor.
 	//
-	// Spec §Slashing evidence Rule 5 MUST-gossip rule says receivers MUST
-	// gossip evidence on the wire so no-retained-V receivers can also
-	// attribute. This impl substitutes out-of-band logging — the observer
-	// surfaces evidence to the SSV runner, which logs it for operator
-	// review. (Ideally this should be on-wire to spread evidence cluster-
-	// wide automatically; logged-only is a deliberate scope choice —
-	// operators monitor logs out-of-band.)
+	// Per spec §Slashing evidence, honest operators MUST log observed evidence
+	// per-rule for out-of-band aggregation; this callback is the logging
+	// surface (the SSV runner wires it to its preferred logger). The spec has
+	// no dedicated on-wire evidence-gossip channel — underlying signed
+	// messages (bundles, commits) propagate via normal protocol flow, and
+	// cluster-wide attribution is recovered out-of-band by aggregating
+	// operator logs (manual-blacklist mechanism is the canonical consumer).
 	evidenceObserver EvidenceObserver
 	evidenceObserved map[evidenceObservedKey]bool
 
@@ -297,6 +297,7 @@ func NewInstance(
 		ownPartials:      make(map[int]Signature),
 		rule4Fired:       make(map[int]map[OperatorID]bool, K),
 		rule1Fired:       make(map[int]map[OperatorID]bool, K),
+		evidenceObserved: make(map[evidenceObservedKey]bool),
 	}, nil
 }
 
@@ -345,17 +346,19 @@ func (i *Instance) Evidence() []Evidence {
 // never retained (l0SigmaUnknownV) are NOT fired as Rule 5 evidence here.
 // Under leader equivocation + asymmetric gossipsub propagation, an honest
 // peer who signed an equivocated V the receiver didn't get would be falsely
-// attributed if we fired Rule 5 on l0SigmaUnknownV at slot end. Per spec
-// §Slashing evidence Rule 5, the spec's mitigation is on-wire MUST-gossip:
-// every retained-V receiver gossips Rule 5 evidence (rate-limited per
-// (slot, layer, operator_id)) so cluster-wide attribution converges and
-// honest receivers' "I have V" attestations distinguish "byzantine signed
-// fake V" from "honest signed V I didn't get". The on-wire gossip is not
-// yet implemented in this codebase — until it lands, we trade Rule 5
-// attribution coverage for the unknownV case (false-negative-prone) for
-// strict no-false-positives. The cryptoFake case (σ doesn't verify against
-// op's own share for the claimed V) still fires Rule 5 immediately at
-// observe time; that case is unambiguous regardless of gossipsub propagation.
+// attributed if we fired Rule 5 on l0SigmaUnknownV at slot end.
+//
+// Per spec §Slashing evidence Rule 5, detection requires the receiver to
+// have retained-or-auth-only-retained V at L_0. Under partial synchrony,
+// Phase-1 bundle re-flood delivers V to all honest receivers within the
+// absorption window, so all honest who first-observe `i`'s σ partial within
+// the window can evaluate Rule 5 locally. Receivers whose V observation
+// lagged past evaluation time do not surface Rule 5; cluster-wide
+// attribution for the unknownV case is recovered via out-of-band log
+// aggregation across operators (the manual-blacklist mechanism is the
+// canonical consumer). The cryptoFake case (σ doesn't verify against op's
+// own share for the claimed V) still fires Rule 5 immediately at observe
+// time; that case is unambiguous regardless of gossipsub propagation.
 func (i *Instance) Finalize() {
 	if i.ended {
 		return
@@ -495,10 +498,10 @@ func (i *Instance) transitionToNR(layer int, state CommitState) error {
 // the callback runs synchronously inside the protocol layer's recording
 // path.
 //
-// Per spec §Slashing evidence Rule 5, the spec mandates MUST-gossip on
-// the wire so no-retained-V receivers can also attribute. This impl
-// substitutes out-of-band logging via this observer — see the
-// evidenceObserver field comment on Instance.
+// Per spec §Slashing evidence, honest operators MUST log observed evidence
+// per-rule for out-of-band aggregation. This callback is the logging
+// surface — see the evidenceObserver field comment on Instance for the
+// surrounding model.
 type EvidenceObserver func(Evidence)
 
 type evidenceObservedKey struct {
@@ -518,9 +521,6 @@ func (i *Instance) recordEvidence(e Evidence) {
 	// Rule 3 redundant emissions) do not re-fire.
 	if i.evidenceObserver == nil {
 		return
-	}
-	if i.evidenceObserved == nil {
-		i.evidenceObserved = make(map[evidenceObservedKey]bool)
 	}
 	key := evidenceObservedKey{rule: e.Rule, op: e.OperatorID, layer: e.Layer}
 	if i.evidenceObserved[key] {

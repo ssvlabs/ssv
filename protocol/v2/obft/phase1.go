@@ -195,9 +195,10 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// whose σ verifies on a V we still don't have (l0SigmaUnknownV) are
 	// not slashed — they may be honest peers reacting to leader equivocation
 	// + asymmetric gossipsub (our local view doesn't have V_b yet but they
-	// do, and signed it). On-wire Rule 5 MUST-gossip per spec §Slashing
-	// evidence is the spec's mitigation for the genuine-byzantine case;
-	// not yet implemented in this codebase.
+	// do, and signed it). Per spec §Slashing evidence Rule 5, cluster-wide
+	// attribution for the unknownV case is recovered via out-of-band log
+	// aggregation across operators (each operator logs what they observed
+	// from their local retention state).
 	if b.Layer == 0 {
 		i.reevaluateL0Sigmas()
 	}
@@ -211,8 +212,9 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 // Only fires Rule 5 for the unambiguous cryptoFake case (partial fails verify
 // on the claimed V). The "verifies, but V not currently retained" case
 // (l0SigmaUnknownV) is NOT fired anywhere in this codebase — see
-// Instance.Finalize doc-comment for the false-positive rationale and the
-// on-wire MUST-gossip path that would be the spec-compliant mitigation.
+// Instance.Finalize doc-comment for the false-positive rationale. Per spec
+// §Slashing evidence Rule 5, cluster-wide attribution for the unknownV case
+// is recovered via out-of-band log aggregation across operators.
 //
 // Snapshot semantics: removeOnionEntry rewrites the underlying slice
 // in-place (`out := entries[:0]`); iterating the same slice header while
