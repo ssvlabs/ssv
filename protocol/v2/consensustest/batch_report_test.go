@@ -21,16 +21,16 @@ import (
 // catalog with both protocols and writes per-(sweep, point) HTML / CSV /
 // Markdown reports plus a top-level index.html.
 //
-// Gated on the BATCH_REPORT_DIR env var so default `go test` runs stay
-// quiet. Iteration count tunable via BATCH_ITERATIONS env (default 100).
+// Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
+// Iteration count tunable via ITERATIONS env (default 100).
 //
 // Usage:
 //
-//	make consensustest-batch-report
+//	make consensustest-report
 //
 // Or directly:
 //
-//	BATCH_REPORT_DIR=./reports BATCH_ITERATIONS=100 \
+//	REPORT_DIR=./reports ITERATIONS=100 \
 //	    go test -timeout 30m -run TestGenerateBatchReport \
 //	    ./protocol/v2/consensustest/
 //
@@ -43,21 +43,21 @@ import (
 //	loss               ~16s   (× 4 loss rates)
 //	TOTAL              ~75s   on a typical dev machine.
 //
-// At BATCH_ITERATIONS=1000, scale linearly (~12-15 min). Above that,
-// consider parallelizing across sweeps (currently sequential —
-// per-batch is already parallelized internally).
+// At ITERATIONS=1000, scale linearly (~12-15 min). Above that, consider
+// parallelizing across sweeps (currently sequential — per-batch is
+// already parallelized internally).
 func TestGenerateBatchReport(t *testing.T) {
-	dir := os.Getenv("BATCH_REPORT_DIR")
+	dir := os.Getenv("REPORT_DIR")
 	if dir == "" {
-		t.Skip("BATCH_REPORT_DIR not set; skipping batch-report generation. Run via `make consensustest-batch-report` to populate.")
+		t.Skip("REPORT_DIR not set; skipping report generation. Run via `make consensustest-report` to populate.")
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	iterations := 100
-	if v := os.Getenv("BATCH_ITERATIONS"); v != "" {
+	if v := os.Getenv("ITERATIONS"); v != "" {
 		n, err := strconv.Atoi(v)
-		require.NoErrorf(t, err, "invalid BATCH_ITERATIONS=%q", v)
-		require.Greater(t, n, 0, "BATCH_ITERATIONS must be > 0")
+		require.NoErrorf(t, err, "invalid ITERATIONS=%q", v)
+		require.Greater(t, n, 0, "ITERATIONS must be > 0")
 		iterations = n
 	}
 

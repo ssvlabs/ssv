@@ -1,3 +1,20 @@
+// Package reporting renders consensustest batch results as HTML / CSV /
+// Markdown for visual inspection of stress-test comparisons. Reports are
+// gated behind a Makefile target so default `go test` runs stay quiet.
+//
+// Reports cover the matrix of (scenario × protocol) cells aggregated
+// across N iterations per cell — success rate, decision-time
+// distribution, per-kind bandwidth distribution, evidence counts.
+// HTML reports load Chart.js via CDN (single self-contained file,
+// viewable in any modern browser).
+//
+// Usage from a test:
+//
+//	report := ct.RunBatch(t, batchCfg)
+//	br := reporting.NewBatchRun("OBFT vs QBFT — canonical", "...", report)
+//	reporting.RenderBatchHTML(br, "out.html")
+//	reporting.RenderBatchCSV(br, "out.csv")
+//	reporting.RenderBatchMarkdown(br, "out.md")
 package reporting
 
 import (
@@ -8,16 +25,7 @@ import (
 )
 
 // BatchRun is the render-layer struct for a multi-sim batch comparison.
-// Parallel to Run (which holds single-sim Results); BatchRun holds
-// distribution-aware BatchCells from a consensustest.BatchReport.
-//
-// Usage:
-//
-//	report := ct.RunBatch(t, batchCfg)
-//	br := reporting.NewBatchRun("OBFT vs QBFT — canonical", "...", report)
-//	reporting.RenderBatchHTML(br, "out.html")
-//	reporting.RenderBatchCSV(br, "out.csv")
-//	reporting.RenderBatchMarkdown(br, "out.md")
+// Holds distribution-aware BatchCells from a consensustest.BatchReport.
 type BatchRun struct {
 	Title       string
 	Description string
@@ -45,7 +53,7 @@ type BatchRun struct {
 
 	// SweepDimensions optionally describes the parameter axes a sweep
 	// varied across multiple BatchRuns (e.g., {"BTT": ["200ms", "400ms"]}).
-	// Single-BatchRun reports leave this empty.
+	// Single-point reports leave this empty.
 	SweepDimensions map[string][]string
 }
 

@@ -7,7 +7,7 @@ The framework is **built and tested**. This document carries both a current-stat
 **Follow-on work since this plan was written:**
 
 - [docs/OBFT-SPEC-ALIGNMENT-PLAN.md](OBFT-SPEC-ALIGNMENT-PLAN.md) — 13-task pass aligning the test suite to current OBFT.md spec wording (witness sizes, ε_3 / Δ_2 split, max-MEV broadcast knob, late-`KindCommit` re-resolve framework, plus 4 new catalog scenarios: validity-divergence-with-passive-byz × 3, mesh-flakiness × 1).
-- [docs/CONSENSUSTEST-BATCH-PLAN.md](CONSENSUSTEST-BATCH-PLAN.md) — 14-task pass adding the batch-comparison framework (multi-sim distribution-aware reports). See [docs/CONSENSUSTEST-BATCH.md](CONSENSUSTEST-BATCH.md) for usage.
+- [docs/CONSENSUSTEST-BATCH-PLAN.md](CONSENSUSTEST-BATCH-PLAN.md) — 14-task pass adding the batch-comparison framework (multi-sim distribution-aware reports). See [docs/CONSENSUSTEST-REPORT.md](CONSENSUSTEST-REPORT.md) for usage.
 
 The "Known gaps / follow-up work" and "Catalog at 21 scenarios" notes in this doc are pre-alignment-pass; current catalog count is **25 scenarios** and several follow-up gaps have been closed in the alignment / batch plans above.
 
@@ -77,7 +77,7 @@ protocol/v2/consensustest/                       FRAMEWORK
 |---|---|---|
 | `go test ./protocol/v2/consensustest/...` | Default suite (stub-crypto, all phases) | ~3-4 s |
 | `make consensustest-real-bls` | Real-BLS suite (build tag `real_bls`) — actual threshold-BLS + tlock IBE end-to-end at n=4,7,10,13 | ~17 s |
-| `make consensustest-report` | Generates HTML / CSV / Markdown reports of the catalog matrix to `./consensustest-reports/` | ~1 s |
+| `make consensustest-report` | Generates per-(sweep, point) HTML / CSV / Markdown comparison reports of the catalog matrix to `./consensustest-reports/` (5 curated sweeps × OBFT/QBFT × 100 iterations) | ~75 s |
 
 ### Stub-BLS vs real-BLS modes
 
@@ -132,13 +132,11 @@ Spec-test key generation (`Testing{4,7,10,13}SharesSet`) is cached process-wide 
 
 ### Reporting
 
-`make consensustest-report` runs the catalog matrix at canonical config (`n=4`, `BTT=200ms`) and writes three files:
+`make consensustest-report` runs five curated sweeps (canonical operating point + cluster_scaling + btt_degradation + heavy_tail + loss) × OBFT/QBFT × 100 iterations per cell and writes per-(sweep, point) HTML / CSV / Markdown reports plus a navigation `index.html` to `./consensustest-reports/`. Each per-point HTML has five Chart.js panels: summary matrix, success rate, decision-time P50/P90/P99 grouped bars, bandwidth stacked-by-kind, P99 latency vs success-rate scatter.
 
-- `consensustest.html` — interactive matrix table + Chart.js bar charts (bandwidth, decision time)
-- `consensustest.csv` — one row per (scenario, protocol) cell with outcome / decision-time / bandwidth / evidence count
-- `consensustest.md` — markdown matrix table + per-cell bandwidth, suitable for inclusion in PR descriptions
+Override defaults: `ITERATIONS=1000 make consensustest-report` (rare-event scenarios, ~12-15 min); `REPORT_DIR=path make consensustest-report` (custom output dir).
 
-Output dir is `./consensustest-reports/` by default; override via `make consensustest-report REPORT_DIR=path`.
+See [docs/CONSENSUSTEST-REPORT.md](CONSENSUSTEST-REPORT.md) for the per-chart interpretation guide and how to add new sweeps.
 
 ### Known gaps / follow-up work
 

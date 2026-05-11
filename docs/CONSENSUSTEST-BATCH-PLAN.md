@@ -166,7 +166,7 @@ consensustest-batch-report:
 
 ### Task F1 — Framework doc
 
-`docs/CONSENSUSTEST-BATCH.md` — usage guide for the batch framework:
+`docs/CONSENSUSTEST-REPORT.md` — usage guide for the batch framework:
 - How to add a new sweep.
 - How to interpret each chart type.
 - Default iteration count rationale (100 is sufficient for P99 stability at success rates ≥ 50%; bump to 1000 for rare-success scenarios).
@@ -210,8 +210,8 @@ Per commit: run `go test ./protocol/v2/consensustest/...` to confirm no regressi
 - New framework files: `batch.go`, `stats.go`, `sweep.go`, `batch_report_test.go`.
 - New network models in `network.go`: `LogNormalDelay`, `LossyNetwork`, `CorrelatedLinkDelay`. Optional: `SizedDelay`.
 - New reporting files: `reporting/batch_run.go`, plus chart-renderer additions to `reporting/html.go`.
-- New make target: `make consensustest-batch-report`.
-- New doc: `docs/CONSENSUSTEST-BATCH.md`.
+- New make target: `make consensustest-report` (originally introduced as `consensustest-batch-report`; consolidated post-implementation since this became the canonical comparison report).
+- New doc: `docs/CONSENSUSTEST-REPORT.md` (originally `CONSENSUSTEST-BATCH.md`).
 
 Estimated total: ~13–16 hours / 6-8 commits.
 

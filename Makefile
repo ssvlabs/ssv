@@ -111,33 +111,26 @@ consensustest-real-bls:
 	@echo "Running consensustest real-BLS suite"
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
-# consensustest-report runs the catalog matrix and writes HTML / CSV /
-# Markdown reports to REPORT_DIR (default ./consensustest-reports relative to
-# repo root). Override the dir with `make consensustest-report REPORT_DIR=path/to/dir`.
-# `$(abspath ...)` resolves the path before passing to `go test` so the
-# reports land where the user expects regardless of `go test`'s package CWD.
-REPORT_DIR ?= ./consensustest-reports
-.PHONY: consensustest-report
-consensustest-report:
-	@echo "Generating consensustest reports to $(abspath $(REPORT_DIR))"
-	@REPORT_DIR=$(abspath $(REPORT_DIR)) go test -tags "blst_enabled lfs" -run TestGenerateReport -v ./protocol/v2/consensustest/
-
-# consensustest-batch-report runs the multi-sim batch-comparison framework
-# (5 curated sweeps × OBFT/QBFT × BATCH_ITERATIONS iterations) and writes
+# consensustest-report runs the multi-sim batch-comparison framework
+# (5 curated sweeps × OBFT/QBFT × ITERATIONS iterations) and writes
 # per-(sweep, point) HTML / CSV / Markdown reports plus a top-level
-# index.html to BATCH_REPORT_DIR (default ./consensustest-batch-reports).
+# index.html to REPORT_DIR (default ./consensustest-reports).
 #
-# Iteration count: override via BATCH_ITERATIONS (default 100). 100 gives
+# Iteration count: override via ITERATIONS (default 100). 100 gives
 # stable P99 stats for success-rate ≥ 50% scenarios; bump to 1000 for
 # rare-event scenarios at proportionally longer wallclock (~12-15 min).
 #
-# See docs/CONSENSUSTEST-BATCH-PLAN.md for the framework design.
-BATCH_REPORT_DIR ?= ./consensustest-batch-reports
-BATCH_ITERATIONS ?= 100
-.PHONY: consensustest-batch-report
-consensustest-batch-report:
-	@echo "Generating consensustest batch reports to $(abspath $(BATCH_REPORT_DIR)) (BATCH_ITERATIONS=$(BATCH_ITERATIONS))"
-	@BATCH_REPORT_DIR=$(abspath $(BATCH_REPORT_DIR)) BATCH_ITERATIONS=$(BATCH_ITERATIONS) \
+# `$(abspath ...)` resolves the path before passing to `go test` so
+# reports land where the user expects regardless of `go test`'s package CWD.
+#
+# See docs/CONSENSUSTEST-REPORT.md for the framework's usage guide and
+# docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
+REPORT_DIR ?= ./consensustest-reports
+ITERATIONS ?= 100
+.PHONY: consensustest-report
+consensustest-report:
+	@echo "Generating consensustest reports to $(abspath $(REPORT_DIR)) (ITERATIONS=$(ITERATIONS))"
+	@REPORT_DIR=$(abspath $(REPORT_DIR)) ITERATIONS=$(ITERATIONS) \
 		go test -tags "blst_enabled lfs" -timeout 30m -run TestGenerateBatchReport -v ./protocol/v2/consensustest/
 
 .PHONY: docker-spec-test

@@ -1,14 +1,14 @@
-# `consensustest` batch comparison framework
+# `consensustest` comparison report framework
 
 A multi-sim comparison framework for SSV consensus protocols. Plugs OBFT and QBFT into the same scenario matrix, runs each `(scenario, protocol)` cell N times with deterministic per-seed reproducibility, and renders the aggregated distributions as Chart.js comparison reports.
 
-Built on top of the existing single-sim [`consensustest`](../protocol/v2/consensustest/) framework — see [docs/CONSENSUS-TEST-PLAN.md](CONSENSUS-TEST-PLAN.md) for the underlying scenario-execution engine and [docs/CONSENSUSTEST-BATCH-PLAN.md](CONSENSUSTEST-BATCH-PLAN.md) for the design rationale.
+Built on top of the per-scenario [`consensustest`](../protocol/v2/consensustest/) engine — see [docs/CONSENSUS-TEST-PLAN.md](CONSENSUS-TEST-PLAN.md) for the underlying scenario-execution layer and [docs/CONSENSUSTEST-BATCH-PLAN.md](CONSENSUSTEST-BATCH-PLAN.md) for the design rationale.
 
 ## Quick start
 
 ```bash
-make consensustest-batch-report
-open ./consensustest-batch-reports/index.html
+make consensustest-report
+open ./consensustest-reports/index.html
 ```
 
 That runs the five curated sweeps × OBFT/QBFT × 100 iterations per cell (≈ 21k sims total) in ~75 seconds and opens the navigation index in your browser.
@@ -17,15 +17,15 @@ Override defaults:
 
 ```bash
 # Higher iteration count for rare-event scenarios:
-BATCH_ITERATIONS=1000 make consensustest-batch-report
+ITERATIONS=1000 make consensustest-report
 
 # Different output directory:
-BATCH_REPORT_DIR=/tmp/batch-out make consensustest-batch-report
+REPORT_DIR=/tmp/report-out make consensustest-report
 ```
 
 ## What you get
 
-`./consensustest-batch-reports/index.html` lists 17 per-(sweep, point) reports grouped by sweep:
+`./consensustest-reports/index.html` lists 17 per-(sweep, point) reports grouped by sweep:
 
 - **canonical** (1 point) — the baseline. n=4, BTT=200ms, K=4, `ConstantDelay`.
 - **cluster_scaling** (4 points) — n ∈ {4, 7, 10, 13} at fixed BTT.
@@ -89,7 +89,7 @@ return []Sweep{
 }
 ```
 
-Run `make consensustest-batch-report` — the new sweep appears in `index.html` automatically.
+Run `make consensustest-report` — the new sweep appears in `index.html` automatically.
 
 ## How to use the batch framework directly (not via DefaultSweeps)
 
