@@ -67,20 +67,22 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 //     envelope-fit curves.
 //  4. Heavy-tail propagation — varies LogNormalDelay Sigma ∈
 //     {0.1, 0.3, 0.5, 0.7} at fixed n=4, Median=BTT/2. Surfaces
-//     P99/P50-ratio effects on OBFT's hard B_k cutoff. (Network varies
-//     by design; ignores the stress-tier jitter default.)
+//     P99/P50-ratio effects on OBFT's hard B_k cutoff. (Delay
+//     distribution itself is the variable being studied, so this is
+//     the one sweep that does not layer JitteredDelay underneath.)
 //  5. Loss — varies LossyNetwork LossRate ∈ {0, 0.01, 0.05, 0.10}
-//     at fixed n=4, BurstFactor=5. Inner model is ConstantDelay to
-//     isolate the loss effect from jitter.
+//     at fixed n=4, BurstFactor=5. Inner is JitteredDelay so loss is
+//     measured against the same realistic baseline as the other sweeps.
 //
 // All sweeps share Iterations and the input Scenarios / Protocols
 // matrix; only the per-point Network / SimConfig differs.
 //
 // Stress-tier network choice: per Phase 5 of the catalog-split plan,
-// sweeps that don't already vary network shape (canonical / cluster
-// scaling / BTT degradation) use JitteredDelay with ±25% jitter around
-// BTT to model real-world propagation variance. Heavy-tail and loss
-// sweeps each set their own network model and are unaffected.
+// JitteredDelay with ±25% jitter around BTT is the universal stress
+// baseline for every sweep except heavy-tail (which varies the delay
+// distribution by design). Loss layers LossyNetwork on top of the
+// jittered baseline; the propagation scenarios that wrap
+// PerReceiverDelay preserve whatever inner model their sweep set.
 //
 // Returns nil if Scenarios or Protocols is empty (defensive — caller
 // driver test should always pass non-empty lists).
@@ -254,11 +256,16 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 				Note:   s.Note,
 			}
 		}
+		btt := 200 * time.Millisecond
+		base := DefaultProposerDutyConfig(btt)
+		// Stress-tier jitter under the loss model — matches the other
+		// non-network-varying sweeps. Loss adds on top.
+		base.Network = JitteredDelay{D: btt, Jitter: btt / 4}
 		pts = append(pts, SweepPoint{
 			Label: "loss=" + strconv.FormatFloat(rate, 'f', 2, 64),
 			Config: BatchConfig{
 				Iterations: iterations,
-				Base:       DefaultProposerDutyConfig(200 * time.Millisecond),
+				Base:       base,
 				Scenarios:  scenariosWithLoss,
 				Protocols:  protocols,
 			},
@@ -267,7 +274,7 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 	return Sweep{
 		Name:        "loss",
 		Title:       "Stochastic loss",
-		Params:      []string{"LossyNetwork", "n=4", "BurstFactor=5"},
+		Params:      []string{"LossyNetwork", "JitteredDelay", "n=4", "BurstFactor=5"},
 		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism.",
 		AxisLabel:   "Loss rate",
 		Points:      pts,
