@@ -25,16 +25,42 @@ const PROTOCOL_COLORS = {
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
-// deadline). Used as the right edge of the CDF x-axis so misses render as
-// a visible plateau between the last sample and the deadline.
+// deadline). Right edge of the CDF x-axis, pinned regardless of
+// slot_start — the chart axis is absolute slot time.
 const SLOT_END_MS = 4000;
 
-// cdfZonesPlugin paints three horizontal bands across the CDF chart area
-// keyed to the cumulative-success-rate y-axis: red ≤ 90%, yellow 90–99%,
-// green 99–100%. Tints are kept light (low saturation × low alpha) so
-// the bands read as background, not as data. Applied only to single-
-// point CDF charts (buildLatencyChart); the trend chart's y-axis is in
-// milliseconds, where these thresholds don't apply.
+// SLOT_STARTS is the set of "operator joins at" offsets the picker
+// offers. The chart x-axis is absolute slot time; cdfSlotStartPlugin
+// draws a dashed marker at slot_start showing where in the slot the
+// operator became available.
+//   QBFT: pipeline runs slot_start later, so sample x = decide_time +
+//     slot_start; sample fails when it overflows SLOT_END_MS.
+//   OBFT / 2abOBFT: broadcast schedule is slot-anchored, so sample x =
+//     T_k_broadcast (unchanged); sample fails when T_k_broadcast <
+//     slot_start (operator missed the deciding layer's broadcast).
+const SLOT_STARTS = [0, 400, 800, 1200, 1600, 2000, 2400, 2800];
+
+// selectedSlotStart is shared module state across every sweep tab.
+// User picks via the slot_start picker; the value persists when
+// switching between tabs (staggered slot-start should be comparable
+// across baselines + the multi-point sweeps).
+let selectedSlotStart = 0;
+
+// selectedTrendMetric controls the y-axis on multi-point trend charts:
+//   'success' — per-point success rate (0..1), bounded y-axis with
+//      red/yellow/green zone bands.
+//   'p99'     — per-point p99 of (shifted) decision times in ms, free
+//      y-axis with no zones.
+// Ignored for single-point CDF tabs (their y-axis is always cumulative
+// success rate).
+let selectedTrendMetric = 'success';
+
+// cdfZonesPlugin paints three horizontal bands keyed to the y-axis:
+// red ≤ 90%, yellow 90–99%, green 99–100%. Used by both chart families
+// (single-point CDF + multi-point trend) — both now plot success rate
+// on the y-axis, so the same zone semantics apply. Tints are kept light
+// (low saturation × low alpha) so the bands read as background, not as
+// data.
 const cdfZonesPlugin = {
   id: 'cdfZones',
   beforeDatasetsDraw(chart) {
@@ -57,6 +83,33 @@ const cdfZonesPlugin = {
   },
 };
 
+// cdfSlotStartPlugin shades the left-side band [0, slot_start] — time
+// the operator wasn't present in the slot yet — and draws a dashed
+// vertical line at slot_start. No-op when slot_start = 0 (operator
+// joined at slot start, nothing to mark).
+const cdfSlotStartPlugin = {
+  id: 'cdfSlotStart',
+  beforeDatasetsDraw(chart) {
+    if (selectedSlotStart === 0) return;
+    const { ctx, chartArea, scales } = chart;
+    const x = scales.x;
+    if (!x) return;
+    const xStart = x.getPixelForValue(selectedSlotStart);
+    if (xStart <= chartArea.left) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.05)';
+    ctx.fillRect(chartArea.left, chartArea.top, xStart - chartArea.left, chartArea.bottom - chartArea.top);
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.3)';
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xStart, chartArea.top);
+    ctx.lineTo(xStart, chartArea.bottom);
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
 document.addEventListener('DOMContentLoaded', main);
 
 function main() {
@@ -66,11 +119,87 @@ function main() {
     return; // index.html already shows the placeholder.
   }
   applyChartDefaults();
+  // One-time precompute of slot_start variants for every single-point
+  // sweep cell. Cached on the cell itself as `cell.slotShifts[slotStart]`
+  // → shifted cell view. Subsequent reads (heatmap render on slot
+  // change, modal chart rebuild, legend stats) are O(1) lookups.
+  precomputeSlotShifts(data);
   root.innerHTML = '';
   const mainEl = h('main');
   const overview = renderHeatmap(data);
   if (overview) mainEl.appendChild(overview);
   root.appendChild(mainEl);
+}
+
+// precomputeSlotShifts warms shiftedCell's cache for the heatmap's
+// single-point sweep so the first slot_start change doesn't trigger a
+// burst of shift computations under the click. Multi-point sweeps are
+// left to lazy-compute on first chart render (cheap; ≤ 18 cells per
+// chart). Cells with no samples (n/a, 0%) are skipped — nothing to
+// shift.
+function precomputeSlotShifts(data) {
+  data.sweeps.forEach((sweep) => {
+    if (sweep.points.length !== 1) return;
+    sweep.points[0].cells.forEach((cell) => {
+      if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
+      for (let i = 1; i < SLOT_STARTS.length; i++) {
+        shiftedCell(cell, SLOT_STARTS[i]);
+      }
+    });
+  });
+}
+
+// shiftedCell returns a slot-start-adjusted view of `cell`, lazily
+// computing + caching the result on `cell.slotShifts`. Short-circuits
+// the slotStart=0 case and cells with nothing to shift.
+function shiftedCell(cell, slotStart) {
+  if (!cell || slotStart === 0) return cell;
+  if (!cell.decisionTimes || cell.decisionTimes.length === 0) return cell;
+  if (!cell.slotShifts) cell.slotShifts = {};
+  if (!cell.slotShifts[slotStart]) {
+    cell.slotShifts[slotStart] = shiftCell(cell, slotStart);
+  }
+  return cell.slotShifts[slotStart];
+}
+
+// onSlotStartChange is the central handler for slot_start picker clicks
+// from either the page-header picker or any modal picker. Updates state
+// and re-renders every view that derives from slot_start: heatmap colors
+// + (when the modal is open) the active modal tab's chart and legend.
+function onSlotStartChange(newSlot) {
+  if (newSlot === selectedSlotStart) return;
+  selectedSlotStart = newSlot;
+  // Re-render heatmap section in place so cell colors reflect the new
+  // slot_start. The header (including the picker itself) rebuilds with
+  // the new active button.
+  const oldOverview = document.getElementById('overview');
+  if (oldOverview) {
+    oldOverview.replaceWith(renderHeatmap(window.REPORT_DATA));
+  }
+  rerenderActiveModalTab();
+}
+
+// onTrendMetricChange handles the y-axis-metric toggle for multi-point
+// sweep tabs. Only the modal's active tab needs re-rendering — the
+// heatmap is unaffected (it's always keyed to success rate).
+function onTrendMetricChange(newMetric) {
+  if (newMetric === selectedTrendMetric) return;
+  selectedTrendMetric = newMetric;
+  rerenderActiveModalTab();
+}
+
+// rerenderActiveModalTab rebuilds the modal's currently-active tab in
+// place. Scenario + active sweep are tracked on the dialog (via dataset)
+// and the active .sm-tab respectively. No-op when the modal is closed.
+function rerenderActiveModalTab() {
+  const dlg = document.getElementById('scenario-dialog');
+  if (!dlg || !dlg.open) return;
+  const data = window.REPORT_DATA;
+  const scenario = data.scenarios.find((s) => s.name === dlg.dataset.scenario);
+  const tab = dlg.querySelector('.sm-tab.active');
+  if (!scenario || !tab) return;
+  const sweep = data.sweeps.find((s) => s.name === tab.getAttribute('data-sweep'));
+  if (sweep) selectSweepTab(dlg, scenario, sweep);
 }
 
 // applyChartDefaults tweaks Chart.js globally so individual chart configs
@@ -122,6 +251,11 @@ function renderHeatmap(data) {
       `At the p2p_normal operating point (${(baseline.params || []).join(', ')}).`,
     ),
   );
+  // Page-level slot_start picker — drives heatmap colors and, when the
+  // scenario modal is open, the modal's chart + legend. Sits below the
+  // header description so it reads as a global control affecting
+  // everything below.
+  head.appendChild(buildSlotPicker());
   section.appendChild(head);
 
   // Shared column-header bar — sits above every group card. Empty
@@ -150,10 +284,22 @@ function renderHeatmap(data) {
     groups.get(g).forEach((sc) => {
       const row = h('div', { class: 'hrow', 'data-scenario': sc.name });
       row.appendChild(h('div', { class: 'hname' }, sc.title || sc.name));
+      let hasData = false;
       data.protocols.forEach((p) => {
         const cell = findCell(point, sc.name, p);
+        if (cell && cell.iterations > 0) hasData = true;
         row.appendChild(renderHeatmapCell(cell, sc));
       });
+      // Row-level click handler: anywhere in the row drills in, not just
+      // the cells. Rows whose cells are all n/a (no protocol applies)
+      // stay non-interactive.
+      if (hasData) {
+        row.classList.add('clickable');
+        row.addEventListener('click', () => {
+          selectHeatmapRow(row);
+          openScenarioModal(sc);
+        });
+      }
       rows.appendChild(row);
     });
     card.appendChild(rows);
@@ -165,20 +311,21 @@ function renderHeatmap(data) {
 
 // rateToHue maps a success rate to a chart-friendly hue:
 //   rate ≤ 80% → red (hue 0)
-//   rate = 90% → yellow (hue 60)
+//   rate = 90% → warm yellow (hue 50, biased away from green)
 //   rate = 100% → green (hue 120)
-// Threshold pick: a stress-tier scenario decides on most iterations but
-// jitter can push a few past the cutoff → 90%+ is "fine," 80–90% is
-// "marginal," <80% is a real problem worth flagging.
+// Two-segment ramp: 80→90% spends a wider hue range on the red→yellow
+// transition so 90% reads as actually-yellow rather than yellow-green.
 function rateToHue(rate) {
   if (rate <= 0.8) return 0;
   if (rate >= 1.0) return 120;
-  return Math.round((rate - 0.8) * 600);
+  if (rate <= 0.9) return Math.round((rate - 0.8) * 500); // 80%→0, 90%→50
+  return Math.round(50 + (rate - 0.9) * 700); // 90%→50, 100%→120
 }
 
 // renderHeatmapCell colors a single cell by success rate via rateToHue.
-// n/a cells (iterations=0) render grey and don't open the modal. Click
-// highlights the row and opens the scenario modal.
+// n/a cells (iterations=0) render grey. The row carries the click
+// handler; cells just visualize per-protocol values. successRate / p99
+// reflect the active slot_start via shiftedCell.
 function renderHeatmapCell(cell, scenario) {
   if (!cell || cell.iterations === 0) {
     return h(
@@ -190,11 +337,12 @@ function renderHeatmapCell(cell, scenario) {
       'n/a',
     );
   }
-  const rate = cell.successRate;
+  const shifted = shiftedCell(cell, selectedSlotStart);
+  const rate = shifted.successRate;
   const hue = rateToHue(rate);
   const pct = Math.round(rate * 100);
-  const p99 = cell.decisionTime ? `${Math.round(cell.decisionTime.p99)} ms p99` : 'no decisions';
-  const el = h(
+  const p99 = shifted.decisionTime ? `${Math.round(shifted.decisionTime.p99)} ms p99` : 'no decisions';
+  return h(
     'div',
     {
       class: 'hcell',
@@ -203,11 +351,6 @@ function renderHeatmapCell(cell, scenario) {
     },
     `${pct}%`,
   );
-  el.addEventListener('click', () => {
-    selectHeatmapRow(el);
-    openScenarioModal(scenario);
-  });
-  return el;
 }
 
 // selectHeatmapRow visually marks the row containing `el` as selected,
@@ -265,6 +408,9 @@ function openScenarioModal(scenario) {
     dlg.addEventListener('cancel', destroyCurrentChart);
   }
   dlg.innerHTML = '';
+  // Track which scenario the modal is showing so onSlotStartChange can
+  // re-render the modal chart in place when the picker is clicked.
+  dlg.dataset.scenario = scenario.name;
 
   // Header — scenario title + identifiers + close button.
   const head = h('header', { class: 'sm-head' });
@@ -336,6 +482,18 @@ function selectSweepTab(dlg, scenario, sweep) {
   top.appendChild(buildSweepLegend(sweep, scenario, data.protocols));
   content.appendChild(top);
 
+  // Controls row: slot_start picker on every tab; multi-point tabs also
+  // get the y-axis metric toggle (success rate ↔ p99 decision time).
+  // selectedSlotStart + selectedTrendMetric are module state, kept in
+  // sync with the page-header picker (slot_start) and persistent across
+  // tab switches.
+  const controls = h('div', { class: 'sm-controls' });
+  controls.appendChild(buildSlotPicker());
+  if (sweep.points.length > 1) {
+    controls.appendChild(buildMetricToggle());
+  }
+  content.appendChild(controls);
+
   const wrap = h('div', { class: 'sm-chart-wrap' });
   const canvas = h('canvas');
   wrap.appendChild(canvas);
@@ -345,13 +503,123 @@ function selectSweepTab(dlg, scenario, sweep) {
   currentChart = buildSweepChart(canvas, sweep, scenario, data.protocols);
 }
 
+// buildSlotPicker renders the six-value slot_start picker. Used at both
+// the page-header level (affects heatmap colors) and inside the modal
+// (affects the open scenario's chart + legend). Both instances share
+// `selectedSlotStart` and route clicks through `onSlotStartChange`,
+// which handles re-rendering the heatmap + (if open) the modal.
+function buildSlotPicker() {
+  const picker = h('div', { class: 'sm-slot-picker' });
+  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'slot_start:'));
+  SLOT_STARTS.forEach((slotStart) => {
+    const btn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'sm-slot-btn' + (slotStart === selectedSlotStart ? ' active' : ''),
+      },
+      `${slotStart} ms`,
+    );
+    btn.addEventListener('click', () => onSlotStartChange(slotStart));
+    picker.appendChild(btn);
+  });
+  return picker;
+}
+
+// buildMetricToggle renders a two-option segmented control that flips
+// the multi-point trend chart's y-axis between success rate and p99
+// decision time. Visually mirrors buildSlotPicker so both controls read
+// as one row of sibling pickers.
+function buildMetricToggle() {
+  const picker = h('div', { class: 'sm-slot-picker' });
+  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'y-axis:'));
+  const options = [
+    { value: 'success', label: 'success rate' },
+    { value: 'p99', label: 'p99 decision time' },
+  ];
+  options.forEach((opt) => {
+    const btn = h(
+      'button',
+      {
+        type: 'button',
+        class: 'sm-slot-btn' + (opt.value === selectedTrendMetric ? ' active' : ''),
+      },
+      opt.label,
+    );
+    btn.addEventListener('click', () => onTrendMetricChange(opt.value));
+    picker.appendChild(btn);
+  });
+  return picker;
+}
+
+// shiftCell returns a slot-start-adjusted view of `cell` in absolute
+// slot time (chart x = when in the slot the decision lands).
+// Protocol-aware:
+//   QBFT — pipeline runs slot_start later → sample plots at
+//     decide_time + slot_start. Sample fails when the shifted value
+//     overflows SLOT_END_MS.
+//   OBFT / 2abOBFT — broadcast schedule is slot-anchored → sample
+//     plots at T_k_broadcast unchanged. Sample fails when T_k <
+//     slot_start (broadcast fired before operator joined).
+// successRate, decisionTimes, and decisionTime are recomputed from
+// surviving samples; other fields (bandwidth, miss reasons) carry
+// through unchanged. Pure — never mutates the input.
+function shiftCell(cell, slotStart) {
+  if (!cell || cell.iterations === 0 || slotStart === 0) return cell;
+  const samples = cell.decisionTimes || [];
+  const adjusted = [];
+  const isQBFT = cell.protocol === 'QBFT';
+  for (let i = 0; i < samples.length; i++) {
+    const t = samples[i];
+    if (isQBFT) {
+      const shifted = t + slotStart;
+      if (shifted <= SLOT_END_MS) adjusted.push(shifted);
+    } else {
+      if (t >= slotStart) adjusted.push(t);
+    }
+  }
+  let decisionTime = null;
+  if (adjusted.length > 0) {
+    decisionTime = {
+      p50: percentileOf(adjusted, 50),
+      p90: percentileOf(adjusted, 90),
+      p99: percentileOf(adjusted, 99),
+      mean: adjusted.reduce((a, b) => a + b, 0) / adjusted.length,
+    };
+  }
+  return Object.assign({}, cell, {
+    decisionTimes: adjusted,
+    successRate: adjusted.length / cell.iterations,
+    decisionTime,
+  });
+}
+
+// percentileOf computes the p-th percentile of a sorted-ascending array
+// using linear interpolation. Matches the Go-side
+// Distribution.Percentile formula (position = (p/100) * (N-1), interp
+// between floor and ceil) so legend p99 values for shifted samples stay
+// consistent with the unshifted case (which uses Go-computed percentiles).
+function percentileOf(sortedArr, p) {
+  const N = sortedArr.length;
+  if (N === 0) return 0;
+  if (p <= 0) return sortedArr[0];
+  if (p >= 100) return sortedArr[N - 1];
+  const pos = (p / 100) * (N - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sortedArr[lo];
+  const frac = pos - lo;
+  return sortedArr[lo] + frac * (sortedArr[hi] - sortedArr[lo]);
+}
+
 // protocolStats returns success-rate and P99 ranges for `protocol` across
 // the sweep's points, or null when the scenario doesn't apply at any
 // point. Used by buildSweepLegend to render the colored per-protocol
-// summary rows above each chart.
+// summary rows above each chart. Every sweep — single- or multi-point —
+// sees the slot_start-shifted view of each cell.
 function protocolStats(sweep, scenario, protocol) {
   const cells = sweep.points
-    .map((pt) => findCell(pt, scenario.name, protocol))
+    .map((pt) => shiftedCell(findCell(pt, scenario.name, protocol), selectedSlotStart))
     .filter((c) => c && c.iterations > 0);
   if (cells.length === 0) return null;
   const successes = cells.map((c) => c.successRate);
@@ -458,7 +726,7 @@ function cdfChartData(sweep, protocols, scenario) {
   const point = sweep.points[0];
   return {
     datasets: protocols.map((p) => {
-      const cell = findCell(point, scenario.name, p);
+      const cell = shiftedCell(findCell(point, scenario.name, p), selectedSlotStart);
       const samples = (cell && cell.decisionTimes) || [];
       const iters = cell ? cell.iterations : 0;
       const pts = cdfPoints(samples, iters);
@@ -494,7 +762,7 @@ function buildLatencyChart(canvas, sweep, protocols, scenario) {
   return new Chart(canvas, {
     type: 'line',
     data: cdfChartData(sweep, protocols, scenario),
-    plugins: [cdfZonesPlugin],
+    plugins: [cdfZonesPlugin, cdfSlotStartPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -502,7 +770,7 @@ function buildLatencyChart(canvas, sweep, protocols, scenario) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'decision time (ms)' },
+          title: { display: true, text: 'decision time within slot (ms)' },
           min: 0,
           max: SLOT_END_MS,
           grid: { display: false },
@@ -538,9 +806,23 @@ function buildLatencyChart(canvas, sweep, protocols, scenario) {
 // ---- trend line chart (multi-point sweep) ---------------------------
 
 function buildTrendLineChart(canvas, sweep, protocols, scenario) {
+  const isSuccess = selectedTrendMetric !== 'p99';
+  const ySuccess = {
+    title: { display: true, text: 'success rate' },
+    min: 0,
+    max: 1,
+    grid: { color: 'rgba(15, 23, 42, 0.06)' },
+    ticks: { padding: 6, callback: (v) => `${Math.round(v * 100)}%` },
+  };
+  const yP99 = {
+    title: { display: true, text: 'p99 decision time (ms)' },
+    grid: { color: 'rgba(15, 23, 42, 0.06)' },
+    ticks: { padding: 6 },
+  };
   return new Chart(canvas, {
     type: 'line',
     data: trendLineChartData(sweep, protocols, scenario),
+    plugins: isSuccess ? [cdfZonesPlugin] : [],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -551,11 +833,7 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
           grid: { display: false },
           ticks: { padding: 4 },
         },
-        y: {
-          title: { display: true, text: 'p99 decision time (ms)' },
-          grid: { color: 'rgba(15, 23, 42, 0.06)' },
-          ticks: { padding: 6 },
-        },
+        y: isSuccess ? ySuccess : yP99,
       },
       plugins: {
         legend: { display: false },
@@ -563,7 +841,13 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
           callbacks: {
             title: (items) =>
               items[0] ? `${sweep.axisLabel || 'point'}: ${items[0].label}` : '',
-            label: (ctx) => `${ctx.dataset.label}: p99 ${Math.round(ctx.parsed.y)} ms`,
+            label: (ctx) => {
+              if (isSuccess) {
+                const pct = (ctx.parsed.y * 100).toFixed(1);
+                return `${ctx.dataset.label}: ${pct}% success`;
+              }
+              return `${ctx.dataset.label}: p99 ${Math.round(ctx.parsed.y)} ms`;
+            },
           },
         },
       },
@@ -572,13 +856,15 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
 }
 
 function trendLineChartData(sweep, protocols, scenario) {
+  const isSuccess = selectedTrendMetric !== 'p99';
   return {
     labels: sweep.points.map((pt) => pt.label),
     datasets: protocols.map((p) => {
       const data = sweep.points.map((pt) => {
-        const cell = findCell(pt, scenario.name, p);
-        if (!cell || cell.iterations === 0 || !cell.decisionTime) return null;
-        return cell.decisionTime.p99;
+        const cell = shiftedCell(findCell(pt, scenario.name, p), selectedSlotStart);
+        if (!cell || cell.iterations === 0) return null;
+        if (isSuccess) return cell.successRate;
+        return cell.decisionTime ? cell.decisionTime.p99 : null;
       });
       return {
         label: p,

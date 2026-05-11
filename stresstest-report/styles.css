@@ -1,29 +1,16 @@
-/* consensustest comparison report — static styles.
+/* stresstest comparison report — static styles.
  * Edit freely and refresh the browser; no test rerun required.
  */
-
-html {
-  /* Browser-native anchor jumps (clicking <a href="#X">) align the
-   * target with viewport top minus this padding. Matches the sticky
-   * TOC height so anchor targets always appear just below it. */
-  scroll-padding-top: var(--toc-height, 110px);
-}
 
 :root {
   color-scheme: light;
   --bg: #f6f8fb;
-  --surface: #ffffff;
   --surface-muted: #fafbfd;
   --border: #e1e6ec;
-  --border-strong: #cdd5de;
   --text: #1a1a1a;
   --text-muted: #475569;
   --text-faint: #6b7280;
   --accent: #0969da;
-  --accent-soft: #e0e8f0;
-  --ok: #1a7f37;
-  --warn: #b07d00;
-  --miss: #d1242f;
   --na: #94a3b8;
 }
 
@@ -50,8 +37,6 @@ body {
   font-size: 0.92em;
 }
 
-/* ---- Sweep section + heading ---- */
-
 .desc {
   color: var(--text-muted);
   margin: 0.15em 0 0.3em;
@@ -72,506 +57,148 @@ body {
 /* ---- Heatmap overview ---- */
 
 section.heatmap {
-  padding-top: 0.8em;
-  margin-top: 0;
-  margin-bottom: 1.5em;
+  padding-top: 1.2em;
+  --hcols: 3;
 }
 .heatmap-head {
   padding-bottom: 0.4em;
-  margin-bottom: 0.5em;
+  margin-bottom: 0.8em;
   border-bottom: 1px solid var(--border);
 }
 .heatmap-head h2 {
   margin: 0 0 0.15em;
   font-size: 1.3em;
 }
-/* Side-by-side: heatmap grid on the left, inline CDF chart on the right.
- * Stacks vertically below 1100px so the chart still reads on narrower
- * viewports. */
-.heatmap-body {
-  display: grid;
-  grid-template-columns: minmax(360px, max-content) 1fr;
-  gap: 1.5em;
-  align-items: start;
-}
-@media (max-width: 1100px) {
-  .heatmap-body { grid-template-columns: 1fr; }
-}
-.heatmap-chart-area {
-  /* Sticky so the chart stays in view while the user scans down the
-   * heatmap rows on the left. Top offset matches the sticky TOC. */
-  position: sticky;
-  top: var(--toc-height, 90px);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.8em 1em 1em;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-.heatmap-chart-title {
-  margin: 0 0 0.5em;
-  font-size: 1em;
-  color: #0f172a;
-}
-.heatmap-chart-wrap { height: 320px; }
 
-table.heatmap-grid {
-  border-collapse: separate;
-  border-spacing: 2px;
-  font-variant-numeric: tabular-nums;
-  font-size: 0.9em;
+/* Shared grid template — every .hrow inside every card uses the same
+ * column geometry so cells align vertically across cards and the
+ * column-header bar. Both rules below stay in sync. */
+.heatmap-cols, .hrow {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) repeat(var(--hcols), minmax(96px, 130px));
+  gap: 2px;
+  align-items: center;
 }
-table.heatmap-grid th {
+
+/* Column header bar — sits above the cards. Padded horizontally to
+ * match the card interior so column positions line up. */
+.heatmap-cols {
+  padding: 0 1em;
+  margin-bottom: 0.6em;
+  font-variant-numeric: tabular-nums;
+}
+.col-head {
   background: var(--surface-muted);
   font-weight: 600;
   font-size: 0.84em;
   color: var(--text-muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   text-align: center;
   padding: 0.4em 0.7em;
   border-radius: 4px;
 }
-table.heatmap-grid tr.group-sep td {
-  background: transparent;
-  font-size: 0.8em;
+.col-head.scen { background: transparent; }
+
+/* Group card — one per Scenario.Group. Surface bg + subtle border so
+ * each group reads as its own chunk against the grey page bg. */
+.heatmap-group {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7em 1em 0.9em;
+  margin-bottom: 0.7em;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.heatmap-group-label {
+  margin: 0 0 0.5em;
+  font-size: 0.78em;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  padding: 1.4em 0 0.4em 0.2em;
-  border: none;
-  border-top: 1px solid var(--border);
 }
-/* First group has no divider above it (nothing to separate from). */
-table.heatmap-grid tbody tr.group-sep:first-child td {
-  border-top: none;
-  padding-top: 0.2em;
+
+.heatmap-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9em;
 }
-table.heatmap-grid td.scen {
-  padding: 0.35em 0.7em 0.35em 0.2em;
+.hname {
+  padding: 0.4em 0.5em 0.4em 0.7em;
   color: #1f2937;
-  background: transparent;
 }
 /* Heatmap cell color: HSL hue from --hue, fixed saturation/lightness.
- * Cells with no data render as the muted-grey "na" variant. */
-table.heatmap-grid td.hcell {
+ * Cells with no data render as the muted-grey "na" variant. The whole
+ * .hrow carries the click handler, so cells inherit row-level cursor
+ * affordance — no per-cell cursor here. */
+.hcell {
   padding: 0.4em 0.7em;
   text-align: center;
   font-weight: 600;
   border-radius: 4px;
-  cursor: pointer;
-  min-width: 6em;
-  background: hsl(var(--hue), 62%, 78%);
+  background: hsl(var(--hue), 70%, 76%);
   color: #1a1a1a;
-  transition: filter 100ms ease, transform 100ms ease;
 }
-table.heatmap-grid td.hcell:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
-}
-table.heatmap-grid td.hcell.na {
+.hcell.na {
   background: #e2e8f0;
   color: var(--na);
-  cursor: default;
 }
-/* Selected row highlight — boxes the whole row including the scenario
- * label. Subtle but anchors the "which row drives the chart" question. */
-table.heatmap-grid tr.selected td.scen {
-  font-weight: 600;
-  color: #0f172a;
-  border-left: 3px solid var(--accent);
-  padding-left: calc(0.2em);
-  margin-left: -3px;
-}
-table.heatmap-grid tr.selected td.hcell {
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-section.sweep {
-  padding-top: 0.8em;
-  margin-top: 0;
-}
-.sweep-head {
-  padding-bottom: 0.4em;
-  margin-bottom: 0.3em;
-  border-bottom: 1px solid var(--border);
-}
-.sweep-head h2 {
-  margin: 0 0 0.15em;
-  font-size: 1.3em;
-}
-/* Title row: h2 + optional fixed-config param badges (n=4, BTT=200ms, …).
- * Baseline-aligned so badges sit on the same text baseline as the heading. */
-.sweep-title-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.6em;
-}
-.sweep-title-row .sweep-params {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.35em;
-}
-.sweep-title-row .sweep-param {
-  background: #f1f5f9;
-  border: 1px solid #d6dde6;
-  padding: 0.05em 0.45em;
-  border-radius: 3px;
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 0.78em;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  white-space: nowrap;
-}
-
-/* ---- Sticky TOC (two-row) ---- */
-
-nav.toc {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.97);
-  backdrop-filter: blur(8px);
-  padding: 0.4em 0 0.35em;
-  margin: 0 0 0.25em;
-  border-bottom: 1px solid var(--border);
-}
-nav.toc .toc-row {
-  display: flex;
-  gap: 0.35em;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-}
-nav.toc .toc-row.sweeps a {
-  display: inline-block;
-  padding: 0.3em 0.8em;
-  background: #f3f5f8;
-  border: 1px solid transparent;
-  border-radius: 16px;
-  font-size: 0.82em;
-  color: #1f2937;
-  text-decoration: none;
-  font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-}
-nav.toc .toc-row.sweeps a:hover {
-  background: #e6ebf1;
-  border-color: var(--border-strong);
-}
-nav.toc .toc-row.sweeps a.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-/* ---- Scope heading (softer than the old dark banner) ---- */
-
-.scope-heading {
-  margin: 0.7em 0 0.3em;
-  padding: 0.35em 0.7em;
-  font-size: 0.8em;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  border-left: 3px solid var(--accent);
-  background: rgba(9, 105, 218, 0.05);
-  border-radius: 0 4px 4px 0;
-}
-.scope-heading.obft-only {
-  border-left-color: #c2410c;
-  background: rgba(194, 65, 12, 0.05);
-  color: #7c2d12;
-}
-
-/* ---- Group pack: <details> card ---- */
-
-details.group-pack {
-  margin: 0.5em 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-  /* `overflow: hidden` would clip the sticky <summary> as it leaves the
-   * top of the pack. Use `clip-path` for visual rounding instead — the
-   * sticky summary needs `overflow: visible` to stay anchored. */
-  scroll-margin-top: 7em; /* clear the sticky TOC when jumping via anchor */
-}
-details.group-pack[open] {
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05);
-}
-details.group-pack summary {
-  cursor: pointer;
-  padding: 0.7em 1em;
-  display: flex;
-  align-items: center;
-  gap: 0.6em;
-  font-size: 0.95em;
-  background: var(--surface-muted);
-  border-bottom: 1px solid transparent;
-  border-radius: 8px 8px 0 0;
-  list-style: none;
-  user-select: none;
-  transition: background 100ms ease, box-shadow 100ms ease;
-}
-details.group-pack:not([open]) summary {
-  border-radius: 8px;
-}
-details.group-pack summary:hover { background: #f1f4f7; }
-details.group-pack summary::-webkit-details-marker { display: none; }
-details.group-pack summary::before {
-  content: '▸';
-  font-size: 0.75em;
-  color: var(--text-faint);
-  transition: transform 120ms ease;
-  width: 0.9em;
-  display: inline-block;
-}
-details.group-pack[open] summary::before { transform: rotate(90deg); }
-details.group-pack[open] summary {
-  border-bottom-color: var(--border);
-  background: #f0f4f8;
-  /* Stick the summary below the sticky TOC. As the body scrolls past,
-   * the summary stays visible so "what group am I in?" is always clear. */
-  position: sticky;
-  top: var(--toc-height, 110px);
-  z-index: 5;
-  box-shadow: 0 4px 8px -4px rgba(15, 23, 42, 0.12);
-}
-details.group-pack.obft-only[open] summary {
-  background: #fdf4ee;
-  border-bottom-color: #e8d4c5;
-}
-details.group-pack summary .group-name {
-  font-weight: 600;
-  color: #0f172a;
-}
-details.group-pack summary .group-count {
-  margin-left: auto;
-  font-size: 0.78em;
-  color: var(--text-faint);
-  font-weight: 500;
-  background: rgba(15, 23, 42, 0.05);
-  padding: 0.12em 0.5em;
-  border-radius: 10px;
-}
-
-.group-body {
-  padding: 0.8em 1em 1em;
-}
-
-/* Detail packs stack: matrix on top, chart below. The matrix is wide
- * enough (≥ 2 protocol columns + a multi-line scenario column) that a
- * side-by-side grid systematically squeezed one side or the other,
- * so we keep the layout uniform across viewport widths. */
-.group-body.detail { display: block; }
-.group-body.detail table.matrix { margin-bottom: 1em; }
-/* Trend packs stack too (matrix is too wide for a sidebar). */
-.group-body.trend { display: block; }
-
-/* ---- Matrix table ---- */
-
-table.matrix {
-  border-collapse: collapse;
-  margin: 0;
-  font-size: 0.9em;
-  font-variant-numeric: tabular-nums;
-}
-table.matrix th,
-table.matrix td {
-  padding: 0.35em 0.7em;
-  text-align: left;
-  border-bottom: 1px solid #eef1f4;
-  vertical-align: top;
-}
-table.matrix th {
-  background: var(--surface-muted);
-  font-weight: 600;
-  font-size: 0.84em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-table.matrix td.scen {
-  color: #1f2937;
-  display: flex;
-  /* Top-align so the scenario name lines up with the first data line in
-   * its row, even when an adjacent cell has a multi-line miss-reason
-   * underneath. align-items: center used to leave short scenario names
-   * floating mid-row between two-line data cells. */
-  align-items: flex-start;
-  gap: 0.4em;
-}
-table.matrix td.scen .scen-title { flex: 1; }
-table.matrix td.scen .cross-sweep-btn {
-  font: inherit;
-  font-size: 0.85em;
-  background: transparent;
-  border: 1px solid transparent;
+/* Row-level hover and selection — the row is the click target, so the
+ * whole row highlights as one entity (background tint + left accent
+ * stripe on selected) rather than outlining each cell individually.
+ * Rows whose cells are all n/a don't get .clickable and stay inert. */
+.hrow {
   border-radius: 4px;
-  color: var(--text-faint);
-  cursor: pointer;
-  padding: 0.05em 0.35em;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 100ms ease, background 100ms ease, color 100ms ease;
-}
-table.matrix tbody tr:hover .cross-sweep-btn,
-table.matrix tbody tr.selected .cross-sweep-btn,
-table.matrix tbody tr:focus-within .cross-sweep-btn {
-  opacity: 1;
-}
-table.matrix td.scen .cross-sweep-btn:hover {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: #b9c8da;
-}
-
-/* Numeric cells: right-aligned spans so columns line up across rows.
- * Bandwidth gets a third span (smaller, fainter) after the latency. */
-table.matrix td.ok,
-table.matrix td.warn,
-table.matrix td.miss {
-  white-space: nowrap;
-}
-/* Fixed widths (not min-widths) so content of varying length — "100%"
- * vs "0%", "3900 ms" vs "0 ms", "255 KB" vs "4 KB" — occupies the same
- * column slot and right-aligns to the same X across rows. min-width
- * lets the longer content stretch the span, which cascaded misalignment
- * downstream. */
-table.matrix td .pct {
-  display: inline-block;
-  width: 4ch;
-  text-align: right;
-  font-weight: 600;
-}
-table.matrix td .lat {
-  display: inline-block;
-  width: 11ch;
-  text-align: right;
-  margin-left: 0.6em;
-  color: var(--text-faint);
-  font-weight: 400;
-}
-table.matrix td .bw {
-  display: inline-block;
-  width: 7ch;
-  text-align: right;
-  margin-left: 0.4em;
-  color: var(--na);
-  font-size: 0.88em;
-  font-weight: 400;
-}
-table.matrix td .miss-reason {
-  font-size: 0.78em;
-  color: var(--miss);
-  margin-top: 0.15em;
-  font-weight: 500;
-  white-space: normal;
-  max-width: 24ch;
-}
-table.matrix td.ok { color: var(--ok); }
-table.matrix td.warn { color: var(--warn); }
-table.matrix td.miss { color: var(--miss); }
-table.matrix td.na { color: var(--na); }
-
-/* Keyboard focus ring on matrix rows. */
-table.matrix tbody tr:focus {
-  outline: none;
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
-/* Clickable rows drive the per-group interactive chart below. */
-table.matrix tbody tr {
-  cursor: pointer;
   transition: background 100ms ease;
 }
-table.matrix tbody tr:hover { background: #f4f7fb; }
-table.matrix tbody tr.selected { background: var(--accent-soft); }
-table.matrix tbody tr.selected td.scen { font-weight: 600; }
-table.matrix tbody tr.selected td:first-child {
-  border-left: 3px solid var(--accent);
-  padding-left: calc(0.7em - 3px);
+.hrow.clickable {
+  cursor: pointer;
 }
-
-/* Trend matrix: each cell stacks one line per protocol with aligned spans. */
-table.matrix.trend td.point {
-  font-size: 0.82em;
-  white-space: nowrap;
-  padding: 0.3em 0.65em;
+.hrow.clickable:hover {
+  background: rgba(15, 23, 42, 0.05);
 }
-table.matrix.trend .cell-line {
-  display: flex;
-  gap: 0.4em;
-  line-height: 1.5;
+.hrow.selected {
+  background: rgba(9, 105, 218, 0.10);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
-/* Fixed widths so OBFT and QBFT lines stack visually-aligned: every
- * span (label / pct / lat / bw) occupies the same column slot in both
- * lines regardless of content length. Previously min-widths let "100%"
- * stretch beyond "0%", cascading the latency and bandwidth columns
- * out of alignment between the two lines of one cell. */
-table.matrix.trend .cell-line .proto {
-  color: var(--text-faint);
-  width: 5ch;
-  font-weight: 500;
+.hrow.clickable.selected:hover {
+  background: rgba(9, 105, 218, 0.14);
 }
-table.matrix.trend .cell-line .pct {
+.hrow.selected .hname {
   font-weight: 600;
-  width: 4ch;
-  text-align: right;
+  color: #0f172a;
 }
-table.matrix.trend .cell-line .lat {
-  color: var(--text-faint);
-  width: 7ch;
-  text-align: right;
-}
-table.matrix.trend .cell-line .bw {
-  color: var(--na);
-  width: 7ch;
-  text-align: right;
-  font-size: 0.92em;
-}
-table.matrix.trend .cell-line.ok .pct { color: var(--ok); }
-table.matrix.trend .cell-line.warn .pct { color: var(--warn); }
-table.matrix.trend .cell-line.miss .pct { color: var(--miss); }
-table.matrix.trend .cell-line.na { color: var(--na); }
-table.matrix.trend .cell-line.na .pct { color: var(--na); font-weight: 500; }
 
-/* ---- Cross-sweep dialog ---- */
+/* ---- Scenario modal (tabbed sweep selector) ---- */
 
-dialog.cross-sweep {
-  width: min(960px, 95vw);
-  max-height: 88vh;
+dialog.scenario-modal {
+  width: min(1180px, 96vw);
+  max-height: 92vh;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
   overflow: hidden;
 }
-dialog.cross-sweep::backdrop {
+dialog.scenario-modal::backdrop {
   background: rgba(15, 23, 42, 0.35);
   backdrop-filter: blur(2px);
 }
-dialog.cross-sweep .cs-head {
+dialog.scenario-modal .sm-head {
   position: relative;
   padding: 1.1em 1.4em 0.9em;
   background: linear-gradient(135deg, #f7f9fc 0%, #eaf0f6 100%);
   border-bottom: 1px solid var(--border);
 }
-dialog.cross-sweep .cs-head h2 {
+dialog.scenario-modal .sm-head h2 {
   margin: 0;
   font-size: 1.15em;
   color: #0f172a;
+  font-weight: normal;
 }
-dialog.cross-sweep .cs-head .cs-meta {
-  margin: 0.15em 0 0;
-  font-size: 0.8em;
-  color: var(--text-faint);
-}
-dialog.cross-sweep .cs-close {
+dialog.scenario-modal .sm-close {
   position: absolute;
   top: 0.5em;
   right: 0.6em;
@@ -584,52 +211,201 @@ dialog.cross-sweep .cs-close {
   line-height: 1;
   border-radius: 4px;
 }
-dialog.cross-sweep .cs-close:hover {
+dialog.scenario-modal .sm-close:hover {
   background: rgba(15, 23, 42, 0.05);
   color: #0f172a;
 }
-dialog.cross-sweep .cs-body {
-  padding: 0.6em 1.4em 1.4em;
+dialog.scenario-modal .sm-body {
+  padding: 0;
   overflow-y: auto;
-  max-height: calc(88vh - 5em);
+  max-height: calc(92vh - 5em);
 }
-dialog.cross-sweep .cs-sweep {
-  padding: 0.9em 0;
-  border-bottom: 1px dashed var(--border);
+
+/* Tab bar — sits between the header and the per-sweep content. Active
+ * tab carries an accent-colored bottom border. */
+dialog.scenario-modal .sm-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 1em;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: center;
 }
-dialog.cross-sweep .cs-sweep:last-child { border-bottom: none; }
-dialog.cross-sweep .cs-sweep h3 {
-  margin: 0 0 0.2em;
-  font-size: 1em;
-  color: #0f172a;
-}
-dialog.cross-sweep .cs-axis {
-  margin: 0 0 0.4em;
-  font-size: 0.78em;
+dialog.scenario-modal .sm-tabs-label {
+  padding: 0.6em 0.8em 0.6em 0;
+  font-size: 0.82em;
   color: var(--text-faint);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-dialog.cross-sweep .cs-summary {
-  margin: 0.2em 0 0.6em;
+dialog.scenario-modal .sm-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.6em 0.95em;
+  margin-bottom: -1px;
+  font: inherit;
   font-size: 0.86em;
   color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  font-weight: 500;
+  transition: color 100ms ease, border-color 100ms ease, background 100ms ease;
 }
-dialog.cross-sweep .cs-summary strong { color: #0f172a; font-weight: 600; }
-dialog.cross-sweep .cs-summary .cs-sep { color: var(--text-faint); }
-dialog.cross-sweep .cs-summary .na { color: var(--na); }
-dialog.cross-sweep .cs-chart-wrap {
-  position: relative;
-  width: 100%;
-  height: 220px;
+dialog.scenario-modal .sm-tab:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.03);
+}
+dialog.scenario-modal .sm-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
-/* ---- Chart wrapper ---- */
+dialog.scenario-modal .sm-content {
+  padding: 1em 1.4em 1.4em;
+}
 
-.chart-wrap {
-  position: relative;
-  width: 100%;
-  height: 340px;
+/* Top strip: description on the left, legend pinned to the top-right.
+ * margin-left:auto on the legend keeps it right-aligned even when
+ * there's no description. flex-wrap lets the legend drop below on
+ * narrow viewports. */
+dialog.scenario-modal .sm-content-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5em;
+  margin-bottom: 0.9em;
+  flex-wrap: wrap;
+}
+dialog.scenario-modal .sm-content-top .desc {
+  flex: 1;
+  min-width: 0;
   margin: 0;
 }
-.group-body.trend .chart-wrap { margin-top: 0.7em; }
+dialog.scenario-modal .sm-content-top .sm-legend {
+  margin: 0 0 0 auto;
+}
+
+/* Custom legend — one row per protocol, with hue-tinted success-rate
+ * chip matching the heatmap gradient. Replaces Chart.js's built-in
+ * legend (which is disabled in the chart options).
+ *
+ * Uses a single parent grid (5 columns: swatch · name · chip · sep ·
+ * p99) so columns align across rows; each .sm-legend-item is
+ * display:contents so its children participate in the parent grid
+ * directly. Every row emits exactly 5 children (n/a rows include empty
+ * placeholders for sep + p99) to keep grid placement deterministic. */
+dialog.scenario-modal .sm-legend {
+  display: grid;
+  grid-template-columns: auto auto auto auto auto;
+  row-gap: 0.25em;
+  column-gap: 0.5em;
+  align-items: center;
+  font-size: 0.82em;
+  font-variant-numeric: tabular-nums;
+}
+dialog.scenario-modal .sm-legend-item {
+  display: contents;
+  color: var(--text);
+}
+dialog.scenario-modal .sm-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+dialog.scenario-modal .sm-legend-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+dialog.scenario-modal .sm-legend-pct {
+  background: hsl(var(--hue), 70%, 76%);
+  padding: 0.05em 0.4em;
+  min-width: 4.5em;
+  border-radius: 3px;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-align: center;
+}
+dialog.scenario-modal .sm-legend-pct.na {
+  background: #e2e8f0;
+  color: var(--na);
+  font-weight: 500;
+}
+dialog.scenario-modal .sm-legend-sep {
+  color: var(--text-faint);
+}
+dialog.scenario-modal .sm-legend-p99 {
+  color: var(--text-muted);
+}
+
+/* Modal controls row — holds the slot_start picker and (on multi-point
+ * sweeps) the y-axis metric toggle. slot_start picker sits left, metric
+ * toggle (if present) gets pushed to the right via margin-left:auto.
+ * flex-wrap lets the toggle drop to its own row on narrow viewports. */
+dialog.scenario-modal .sm-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em 1.4em;
+  align-items: center;
+  margin: 0 0 0.7em;
+}
+dialog.scenario-modal .sm-controls .sm-slot-picker {
+  margin: 0;
+}
+dialog.scenario-modal .sm-controls .sm-slot-picker + .sm-slot-picker {
+  margin-left: auto;
+}
+
+/* slot_start picker — used in both the page header (drives heatmap
+ * colors) and inside the scenario modal (drives the open chart). Both
+ * instances share the same module-level `selectedSlotStart`, so the
+ * active button stays in sync wherever the picker is shown. */
+.sm-slot-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em;
+  margin: 0.5em 0 0.2em;
+  font-size: 0.85em;
+}
+.sm-slot-picker-label {
+  color: var(--text-faint);
+  font-weight: 500;
+  margin-right: 0.3em;
+}
+.sm-slot-btn {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.25em 0.6em;
+  font: inherit;
+  font-size: 0.86em;
+  color: var(--text);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.sm-slot-btn:hover:not(.active) {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: var(--text-faint);
+}
+.sm-slot-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+/* Modal-context override — slightly tighter top margin since the
+ * legend already sits above it. */
+dialog.scenario-modal .sm-slot-picker {
+  margin: 0 0 0.7em;
+}
+
+dialog.scenario-modal .sm-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: clamp(380px, 56vh, 540px);
+}
+
 canvas { display: block; max-width: 100%; }
