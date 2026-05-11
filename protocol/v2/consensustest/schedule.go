@@ -29,7 +29,14 @@ func DefaultBkSchedule(K int, btt time.Duration) []time.Duration {
 	)
 	mul := func(x float64) time.Duration { return time.Duration(x * float64(btt)) }
 	if K == 3 {
-		return []time.Duration{mul(l0), mul(l1), mul(ld)}
+		// Match production SSV-adapter K=3 schedule (protocol/v2/ssv/runner/
+		// obft/config.go defaultLayerSchedules) to keep framework simulations
+		// and production validation operating on the same envelope at K=3.
+		// Both choices ([1, 1.5, 5.5] and [1, 2.5, 5.5]) are spec-compliant
+		// (strictly increasing, B_0 ≥ 1 BTT). Production picked [1, 2.5, 5.5]
+		// — wider L_1 absorption when K=3 means only one backup before the
+		// deepest. Framework follows.
+		return []time.Duration{mul(l0), mul(l2), mul(ld)}
 	}
 	out := make([]time.Duration, K)
 	out[0] = mul(l0)
