@@ -180,28 +180,20 @@ function computeBuckets(data) {
 
 function renderHeader(data) {
   const header = h('header', { class: 'page', id: 'top' });
-  header.appendChild(h('h1', {}, data.title));
-  if (data.description) {
-    const lead = h('p', { class: 'lead' });
-    lead.innerHTML = formatDescription(data.description);
-    header.appendChild(lead);
-  }
-  // Compact metadata pills (right column on wide screens). Three of them;
-  // names paired with hover tooltips for any term that's framework-jargon.
-  const pills = h('div', { class: 'summary-pills' });
-  pills.appendChild(
-    makePill('Sims per cell', String(data.iterations),
-      'Each "cell" is one (scenario × protocol) pair. ' +
-      'Every cell runs this many simulations to aggregate stats (P50/P90/P99, success rate, bandwidth).'),
-  );
-  pills.appendChild(
-    makePill('Parameter sweeps', String(data.sweeps.length),
-      'Curated comparison configurations — each sweep varies one operating-point parameter. ' +
-      'The current set: canonical operating point, cluster-size scaling, BTT degradation, ' +
-      'heavy-tail propagation, stochastic loss.'),
-  );
-  pills.appendChild(makePill('Generated', data.generatedAt));
-  header.appendChild(pills);
+  // Single self-explanatory sentence covers everything: the count and
+  // role of sweeps, the protocols being compared, the per-cell sample
+  // size (and what "cell" means), and the generation timestamp. No
+  // separate title, lead, or pills — those split the same content
+  // across more visual chrome than it deserves.
+  const meta = h('p', { class: 'meta-line' });
+  meta.innerHTML =
+    `<strong>${data.sweeps.length} parameter sweeps</strong>` +
+    ` comparing <strong>${escapeHtml(data.protocols.join(' vs '))}</strong>` +
+    ` — each <strong>(scenario, protocol) pair</strong>` +
+    ` simulated <strong>${data.iterations} times</strong>` +
+    ` — generated <strong>${escapeHtml(data.generatedAt)}</strong>`;
+  header.appendChild(meta);
+
   // Expand-all / collapse-all controls.
   const controls = h('div', { class: 'header-controls' });
   const expandBtn = h('button', { type: 'button', 'data-action': 'expand-all' }, 'Expand all');
@@ -226,17 +218,6 @@ function toggleAllPacks(open) {
       d.removeAttribute('open');
     }
   });
-}
-
-function makePill(label, value, tooltip) {
-  const attrs = { class: 'pill' };
-  if (tooltip) attrs.title = tooltip;
-  return h(
-    'div',
-    attrs,
-    h('span', { class: 'label' }, label),
-    h('span', { class: 'value' }, value),
-  );
 }
 
 // renderTOC builds the sticky nav with three rows:

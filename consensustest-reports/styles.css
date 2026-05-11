@@ -53,56 +53,33 @@ body {
 /* ---- Page header ---- */
 
 header.page {
-  margin: 1em 0 0.8em;
-  padding: 1.1em 1.4em 1em;
+  margin: 0.8em 0 0.6em;
+  padding: 0.7em 1.1em;
   background: linear-gradient(135deg, #f7f9fc 0%, #eaf0f6 100%);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "title  controls"
-    "lead   pills"
-    "lead   pills";
-  column-gap: 1.5em;
-  row-gap: 0.4em;
-  align-items: start;
+  display: flex;
+  align-items: center;
+  gap: 1.5em;
 }
-header.page h1 {
-  grid-area: title;
-  margin: 0;
-  font-size: 1.4em;
-  font-weight: 700;
-  letter-spacing: -0.012em;
-  color: #0f172a;
-}
-header.page .lead {
-  grid-area: lead;
+header.page .meta-line {
+  flex: 1;
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.9em;
-  font-style: normal;
-  line-height: 1.5;
-  max-width: 70ch;
-  align-self: end;
+  font-size: 0.92em;
+  line-height: 1.4;
 }
-header.page .lead strong {
-  background: var(--surface);
-  border: 1px solid #d6dde6;
-  padding: 0.04em 0.45em;
-  border-radius: 3px;
+header.page .meta-line strong {
   font-weight: 600;
   color: #0f172a;
   white-space: nowrap;
-  font-size: 0.88em;
 }
 header.page .header-controls {
-  grid-area: controls;
   display: flex;
   gap: 0.3em;
   align-items: center;
-  justify-self: end;
+  flex-shrink: 0;
 }
 header.page .header-controls button {
   font: inherit;
@@ -121,44 +98,8 @@ header.page .header-controls button:hover {
 }
 
 @media (max-width: 900px) {
-  header.page {
-    grid-template-columns: 1fr;
-    grid-template-areas: "title" "lead" "controls" "pills";
-  }
-  header.page .header-controls { justify-self: start; }
-}
-
-.summary-pills {
-  grid-area: pills;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4em;
-  justify-self: end;
-}
-.summary-pills .pill {
-  display: inline-flex;
-  flex-direction: column;
-  background: var(--surface);
-  padding: 0.3em 0.7em 0.32em;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  min-width: 90px;
-}
-.summary-pills .pill[title] { cursor: help; }
-.summary-pills .pill[title]:hover { border-color: var(--accent); }
-.summary-pills .label {
-  font-size: 0.6em;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-}
-.summary-pills .value {
-  margin-top: 0.1em;
-  font-size: 0.86em;
-  font-weight: 600;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
+  header.page { flex-direction: column; align-items: flex-start; }
+  header.page .header-controls { align-self: flex-end; }
 }
 
 /* ---- Sweep section + heading ---- */
