@@ -183,6 +183,7 @@ table.matrix td {
   padding: 0.35em 0.7em;
   text-align: left;
   border-bottom: 1px solid #eee;
+  vertical-align: top;
 }
 table.matrix th { background: #f7f7f7; font-weight: 600; }
 table.matrix td.scen { color: #444; }
@@ -190,6 +191,38 @@ table.matrix td.ok { color: #1a7f37; }
 table.matrix td.warn { color: #b07d00; }
 table.matrix td.miss { color: #d1242f; }
 table.matrix td.na { color: #999; }
+
+/* Clickable rows — drives the per-group interactive chart below. */
+table.matrix tbody tr {
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+table.matrix tbody tr:hover {
+  background: #f4f7fb;
+}
+table.matrix tbody tr.selected {
+  background: #e2eaf3;
+}
+table.matrix tbody tr.selected td.scen {
+  font-weight: 600;
+}
+table.matrix tbody tr.selected td:first-child {
+  border-left: 3px solid #0969da;
+  padding-left: calc(0.7em - 3px);
+}
+
+/* Trend matrix: each cell stacks one "<protocol>: <status>" line per
+ * protocol. Colored by status (ok/warn/miss/na). */
+table.matrix.trend td.point {
+  white-space: nowrap;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+table.matrix.trend .cell-line { display: inline; }
+table.matrix.trend .cell-line.ok { color: #1a7f37; }
+table.matrix.trend .cell-line.warn { color: #b07d00; }
+table.matrix.trend .cell-line.miss { color: #d1242f; }
+table.matrix.trend .cell-line.na { color: #999; }
 
 /* Chart wrappers — slightly shorter than before since per-group packs
  * have fewer scenarios on the X-axis. */

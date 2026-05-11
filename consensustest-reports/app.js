@@ -168,23 +168,33 @@ function renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols) 
 }
 
 // ---- detail layout (1-point sweep) -----------------------------------
+//
+// Each group renders ONE interactive chart driven by the matrix:
+//   - Summary matrix with clickable rows; first row selected by default.
+//   - Bar chart below shows decision-time P50/P90/P99 (in ms) for the
+//     selected scenario, with one bar group per protocol.
+// Success rate is NOT redrawn in chart form — it's already in the matrix.
 
 function renderGroupDetail(section, sweep, scenarios, protocols, packID) {
   const point = sweep.points[0];
+  const initial = scenarios[0];
 
-  section.appendChild(renderSummaryMatrix(point, scenarios, protocols));
+  const table = renderSummaryMatrix(point, scenarios, protocols);
+  section.appendChild(table);
 
-  section.appendChild(h('h4', {}, 'Success rate'));
-  section.appendChild(makeCanvas(`${packID}_success`, (c) => drawDetailSuccess(c, point, scenarios, protocols)));
+  section.appendChild(h('h4', {}, 'Decision time percentiles · selected scenario'));
+  const wrap = h('div', { class: 'chart-wrap' });
+  const canvas = h('canvas', { id: `${packID}_chart` });
+  wrap.appendChild(canvas);
+  section.appendChild(wrap);
 
-  section.appendChild(h('h4', {}, 'Decision time (P50 / P90 / P99)'));
-  section.appendChild(makeCanvas(`${packID}_latency`, (c) => drawDetailLatency(c, point, scenarios, protocols)));
-
-  section.appendChild(h('h4', {}, 'Bandwidth per cell (median, stacked by message kind)'));
-  section.appendChild(makeCanvas(`${packID}_bandwidth`, (c) => drawDetailBandwidth(c, point, scenarios, protocols)));
-
-  section.appendChild(h('h4', {}, 'Trade-off: P99 latency vs success rate'));
-  section.appendChild(makeCanvas(`${packID}_tradeoff`, (c) => drawDetailTradeoff(c, point, scenarios, protocols)));
+  chartInits.push(() => {
+    const chart = buildLatencyChart(canvas, point, protocols, initial);
+    chartInstances.push(chart);
+    wireMatrixSelection(table, scenarios, initial, (sc) => {
+      updateLatencyChart(chart, point, protocols, sc);
+    });
+  });
 }
 
 function renderSummaryMatrix(point, scenarios, protocols) {
@@ -195,7 +205,7 @@ function renderSummaryMatrix(point, scenarios, protocols) {
 
   const tbody = h('tbody');
   scenarios.forEach((sc) => {
-    const row = h('tr', {}, h('td', { class: 'scen' }, sc.title));
+    const row = h('tr', { 'data-scenario': sc.name }, h('td', { class: 'scen' }, sc.title));
     protocols.forEach((p) => {
       const cell = findCell(point, sc.name, p);
       if (!cell || cell.iterations === 0) {
@@ -214,216 +224,186 @@ function renderSummaryMatrix(point, scenarios, protocols) {
   return table;
 }
 
-function drawDetailSuccess(canvas, point, scenarios, protocols) {
-  const labels = scenarios.map((s) => s.title);
-  const datasets = protocols.map((p) => ({
-    label: p,
-    backgroundColor: protocolColor(p),
-    data: scenarios.map((sc) => valueOr(findCell(point, sc.name, p), (c) => c.successRate)),
-  }));
+function buildLatencyChart(canvas, point, protocols, scenario) {
   return new Chart(canvas, {
     type: 'bar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: { min: 0, max: 1, title: { display: true, text: 'Success rate' } },
-        x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 30 } },
-      },
-    },
-  });
-}
-
-function drawDetailLatency(canvas, point, scenarios, protocols) {
-  const labels = scenarios.map((s) => s.title);
-  const percentiles = [
-    { key: 'p50', label: 'P50', alpha: 0.55 },
-    { key: 'p90', label: 'P90', alpha: 0.75 },
-    { key: 'p99', label: 'P99', alpha: 1.0 },
-  ];
-  const datasets = [];
-  protocols.forEach((p) => {
-    percentiles.forEach((pct) => {
-      datasets.push({
-        label: `${p} ${pct.label}`,
-        backgroundColor: protocolColorAlpha(p, pct.alpha),
-        data: scenarios.map((sc) => {
-          const cell = findCell(point, sc.name, p);
-          if (!cell || !cell.decisionTime) return null;
-          return cell.decisionTime[pct.key];
-        }),
-      });
-    });
-  });
-  return new Chart(canvas, {
-    type: 'bar',
-    data: { labels, datasets },
+    data: latencyChartData(point, protocols, scenario),
     options: {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
         y: { title: { display: true, text: 'ms (only successful sims)' } },
-        x: { ticks: { autoSkip: false, maxRotation: 60, minRotation: 30 } },
-      },
-    },
-  });
-}
-
-function drawDetailBandwidth(canvas, point, scenarios, protocols) {
-  // Collect kinds across just this pack's cells.
-  const kindSet = new Set();
-  scenarios.forEach((sc) => {
-    protocols.forEach((p) => {
-      const cell = findCell(point, sc.name, p);
-      if (cell && cell.perKindBandwidth) Object.keys(cell.perKindBandwidth).forEach((k) => kindSet.add(k));
-    });
-  });
-  const kinds = [...kindSet].sort();
-  // X labels: "Scenario · Protocol" — one bar per cell, segments stacked.
-  const labels = [];
-  scenarios.forEach((sc) => protocols.forEach((p) => labels.push(`${sc.title} · ${p}`)));
-  const datasets = kinds.map((kind, i) => ({
-    label: kind,
-    backgroundColor: kindColor(i, kinds.length),
-    data: [].concat(
-      ...scenarios.map((sc) =>
-        protocols.map((p) => {
-          const cell = findCell(point, sc.name, p);
-          if (!cell || !cell.perKindBandwidth) return 0;
-          return cell.perKindBandwidth[kind] || 0;
-        }),
-      ),
-    ),
-  }));
-  return new Chart(canvas, {
-    type: 'bar',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: { stacked: true, ticks: { autoSkip: false, maxRotation: 70, minRotation: 45 } },
-        y: { stacked: true, title: { display: true, text: 'Bytes (median per cell)' } },
-      },
-    },
-  });
-}
-
-function drawDetailTradeoff(canvas, point, scenarios, protocols) {
-  const palette = scenarioPalette(scenarios);
-  const datasets = [];
-  protocols.forEach((p) => {
-    scenarios.forEach((sc) => {
-      const cell = findCell(point, sc.name, p);
-      if (!cell || cell.iterations === 0 || !cell.decisionTime) return;
-      datasets.push({
-        label: `${sc.title} (${p})`,
-        backgroundColor: palette[sc.name],
-        borderColor: palette[sc.name],
-        pointStyle: protocolPointStyle(p),
-        data: [{ x: cell.decisionTime.p99, y: cell.successRate }],
-      });
-    });
-  });
-  return new Chart(canvas, {
-    type: 'scatter',
-    data: { datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: { title: { display: true, text: 'P99 decision time (ms)' } },
-        y: { min: 0, max: 1, title: { display: true, text: 'Success rate' } },
+        x: { title: { display: true, text: 'percentile' } },
       },
       plugins: {
-        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } },
+        title: { display: true, text: scenario.title, font: { size: 14 } },
+        legend: { position: 'top' },
       },
     },
   });
+}
+
+function latencyChartData(point, protocols, scenario) {
+  return {
+    labels: ['P50', 'P90', 'P99'],
+    datasets: protocols.map((p) => {
+      const cell = findCell(point, scenario.name, p);
+      const data = cell && cell.decisionTime
+        ? [cell.decisionTime.p50, cell.decisionTime.p90, cell.decisionTime.p99]
+        : [null, null, null];
+      return {
+        label: p,
+        backgroundColor: protocolColor(p),
+        borderColor: protocolColor(p),
+        data,
+      };
+    }),
+  };
+}
+
+function updateLatencyChart(chart, point, protocols, scenario) {
+  const d = latencyChartData(point, protocols, scenario);
+  chart.data.labels = d.labels;
+  chart.data.datasets = d.datasets;
+  chart.options.plugins.title.text = scenario.title;
+  chart.update();
 }
 
 // ---- trend layout (multi-point sweep) --------------------------------
+//
+// Each group renders ONE interactive line chart driven by a per-axis
+// matrix. The chart plots P99 decision time vs swept axis for the
+// selected scenario, with one line per protocol.
 
 function renderGroupTrend(section, sweep, scenarios, protocols, packID) {
-  section.appendChild(h('h4', {}, 'Success rate vs swept axis'));
-  section.appendChild(
-    makeCanvas(`${packID}_success`, (c) =>
-      drawTrendChart(c, sweep, scenarios, protocols, 'successRate', 'Success rate', { min: 0, max: 1 }),
-    ),
-  );
+  const initial = scenarios[0];
 
-  section.appendChild(h('h4', {}, 'Decision time P99 vs swept axis'));
-  section.appendChild(
-    makeCanvas(`${packID}_p99`, (c) =>
-      drawTrendChart(c, sweep, scenarios, protocols, 'p99Latency', 'P99 decision time (ms)', null),
-    ),
-  );
+  const table = renderTrendMatrix(sweep, scenarios, protocols);
+  section.appendChild(table);
 
-  section.appendChild(h('h4', {}, 'Bandwidth median vs swept axis'));
-  section.appendChild(
-    makeCanvas(`${packID}_bw`, (c) =>
-      drawTrendChart(c, sweep, scenarios, protocols, 'bandwidthMedian', 'Bytes (median per cell)', null),
-    ),
-  );
-}
+  section.appendChild(h('h4', {}, 'P99 decision time vs swept axis · selected scenario'));
+  const wrap = h('div', { class: 'chart-wrap' });
+  const canvas = h('canvas', { id: `${packID}_chart` });
+  wrap.appendChild(canvas);
+  section.appendChild(wrap);
 
-function drawTrendChart(canvas, sweep, scenarios, protocols, metricKey, yLabel, yRange) {
-  const palette = scenarioPalette(scenarios);
-  const labels = sweep.points.map((pt) => pt.label);
-  const datasets = [];
-  scenarios.forEach((sc) => {
-    protocols.forEach((p) => {
-      const values = sweep.points.map((pt) => extractMetric(findCell(pt, sc.name, p), metricKey));
-      if (!values.some((v) => v !== null)) return; // skip all-null series
-      datasets.push({
-        label: `${sc.title} (${p})`,
-        borderColor: palette[sc.name],
-        backgroundColor: palette[sc.name],
-        pointStyle: protocolPointStyle(p),
-        spanGaps: true,
-        fill: false,
-        tension: 0.15,
-        borderDash: protocolDash(p),
-        data: values,
-      });
+  chartInits.push(() => {
+    const chart = buildTrendLineChart(canvas, sweep, protocols, initial);
+    chartInstances.push(chart);
+    wireMatrixSelection(table, scenarios, initial, (sc) => {
+      updateTrendLineChart(chart, sweep, protocols, sc);
     });
   });
-  const yScale = { title: { display: true, text: yLabel } };
-  if (yRange) {
-    yScale.min = yRange.min;
-    yScale.max = yRange.max;
-  }
+}
+
+function renderTrendMatrix(sweep, scenarios, protocols) {
+  const table = h('table', { class: 'matrix trend' });
+  const headerRow = h('tr', {}, h('th', {}, 'Scenario'));
+  sweep.points.forEach((pt) => headerRow.appendChild(h('th', {}, pt.label)));
+  table.appendChild(h('thead', {}, headerRow));
+
+  const tbody = h('tbody');
+  scenarios.forEach((sc) => {
+    const row = h('tr', { 'data-scenario': sc.name }, h('td', { class: 'scen' }, sc.title));
+    sweep.points.forEach((pt) => {
+      const td = h('td', { class: 'point' });
+      protocols.forEach((p, pi) => {
+        const cell = findCell(pt, sc.name, p);
+        const line = h('span', { class: 'cell-line' });
+        if (!cell || cell.iterations === 0) {
+          line.classList.add('na');
+          line.textContent = `${p}: n/a`;
+        } else {
+          let cls = 'ok';
+          if (cell.successRate < 0.5) cls = 'miss';
+          else if (cell.successRate < 1.0) cls = 'warn';
+          line.classList.add(cls);
+          const p99 = cell.decisionTime ? Math.round(cell.decisionTime.p99) : 0;
+          line.textContent = `${p}: ${Math.round(cell.successRate * 100)}% · ${p99}ms`;
+        }
+        td.appendChild(line);
+        if (pi < protocols.length - 1) td.appendChild(h('br'));
+      });
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+function buildTrendLineChart(canvas, sweep, protocols, scenario) {
   return new Chart(canvas, {
     type: 'line',
-    data: { labels, datasets },
+    data: trendLineChartData(sweep, protocols, scenario),
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'nearest', intersect: false },
       scales: {
         x: { title: { display: true, text: sweep.axisLabel || '' } },
-        y: yScale,
+        y: { title: { display: true, text: 'P99 decision time (ms)' } },
       },
       plugins: {
-        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } },
+        title: { display: true, text: scenario.title, font: { size: 14 } },
+        legend: { position: 'top' },
       },
     },
   });
 }
 
-function extractMetric(cell, metricKey) {
-  if (!cell || cell.iterations === 0) return null;
-  switch (metricKey) {
-    case 'successRate':
-      return cell.successRate;
-    case 'p99Latency':
-      return cell.decisionTime ? cell.decisionTime.p99 : null;
-    case 'bandwidthMedian':
-      return cell.clusterBandwidth ? cell.clusterBandwidth.p50 : null;
-    default:
-      return null;
-  }
+function trendLineChartData(sweep, protocols, scenario) {
+  return {
+    labels: sweep.points.map((pt) => pt.label),
+    datasets: protocols.map((p) => {
+      const data = sweep.points.map((pt) => {
+        const cell = findCell(pt, scenario.name, p);
+        if (!cell || cell.iterations === 0 || !cell.decisionTime) return null;
+        return cell.decisionTime.p99;
+      });
+      return {
+        label: p,
+        borderColor: protocolColor(p),
+        backgroundColor: protocolColor(p),
+        pointStyle: protocolPointStyle(p),
+        spanGaps: true,
+        fill: false,
+        tension: 0.15,
+        borderDash: protocolDash(p),
+        data,
+      };
+    }),
+  };
+}
+
+function updateTrendLineChart(chart, sweep, protocols, scenario) {
+  const d = trendLineChartData(sweep, protocols, scenario);
+  chart.data.labels = d.labels;
+  chart.data.datasets = d.datasets;
+  chart.options.plugins.title.text = scenario.title;
+  chart.update();
+}
+
+// ---- shared: matrix → chart wiring -----------------------------------
+
+// wireMatrixSelection adds click handlers to every <tbody> row in `table`,
+// highlighting the clicked row with .selected and invoking onSelect with
+// the corresponding scenario. The row for `initial` starts pre-selected.
+function wireMatrixSelection(table, scenarios, initial, onSelect) {
+  const byName = new Map();
+  scenarios.forEach((sc) => byName.set(sc.name, sc));
+  const rows = table.querySelectorAll('tbody tr');
+  rows.forEach((row) => {
+    const sname = row.getAttribute('data-scenario');
+    if (sname === initial.name) row.classList.add('selected');
+    row.addEventListener('click', () => {
+      const sc = byName.get(sname);
+      if (!sc) return;
+      rows.forEach((r) => r.classList.remove('selected'));
+      row.classList.add('selected');
+      onSelect(sc);
+    });
+  });
 }
 
 // ---- helpers ---------------------------------------------------------
@@ -466,36 +446,8 @@ function findCell(point, scenarioName, protocolName) {
   return point.cells.find((c) => c.scenario === scenarioName && c.protocol === protocolName) || null;
 }
 
-// valueOr returns fn(cell) if cell is applicable, else null. Used by
-// bar-chart datasets which emit `null` for n/a (Chart.js renders a gap).
-function valueOr(cell, fn) {
-  if (!cell || cell.iterations === 0) return null;
-  return fn(cell);
-}
-
-// scenarioPalette assigns one HSL color per scenario in the input list,
-// spaced evenly around the hue circle. Per-pack so each pack's palette
-// stays distinguishable even with only 2-4 scenarios.
-function scenarioPalette(scenarios) {
-  const n = scenarios.length;
-  const out = {};
-  scenarios.forEach((sc, i) => {
-    const hue = Math.round((i * 360) / Math.max(1, n));
-    out[sc.name] = `hsl(${hue}, 65%, 50%)`;
-  });
-  return out;
-}
-
 function protocolColor(name) {
   return PROTOCOL_COLORS[name] || '#888';
-}
-
-function protocolColorAlpha(name, alpha) {
-  const rgb = {
-    OBFT: '9, 105, 218',
-    QBFT: '207, 34, 46',
-  }[name] || '136, 136, 136';
-  return `rgba(${rgb}, ${alpha})`;
 }
 
 function protocolDash(name) {
@@ -511,12 +463,6 @@ function protocolPointStyle(name) {
     default:
       return 'rect';
   }
-}
-
-function kindColor(idx, total) {
-  if (total <= 0) return '#888';
-  const hue = Math.round((idx * 360) / total);
-  return `hsl(${hue}, 55%, 55%)`;
 }
 
 // slugify converts a human-readable group label to a DOM-safe slug.

@@ -63,21 +63,17 @@ Each section is split into two scope subsections — **Cross-protocol comparison
 - Propagation issues (2 OBFT-only: HV1 selective delivery, late L_0 broadcast)
 - OBFT-specific attacks (4: Rule 1 / 3 / 4 / 5 evidence)
 
-Each chart pack renders one of two layouts:
+Each chart pack is **interactive**: a scenario table (rows clickable) drives one chart that shows just the selected scenario's data. The first row of every pack is selected by default; click a different row to swap the chart.
 
 **Single-point sweep → detail pack**:
-1. Summary matrix — scenario × protocol grid; cells show "N% success · P99 Xms" color-coded.
-2. Success rate per scenario — bar chart.
-3. Decision time P50/P90/P99 grouped bars — three bars per scenario per protocol.
-4. Bandwidth per cell stacked bars — one bar per (scenario, protocol), stacked by message kind.
-5. Trade-off scatter — X = P99 latency, Y = success rate.
+- Summary matrix — one row per scenario, color-coded "N% success · P99 Xms" cells per protocol.
+- One bar chart below — decision time **P50/P90/P99** for the selected scenario, one bar group per protocol (OBFT vs QBFT).
 
 **Multi-point sweep → trend pack**:
-1. Success rate vs swept axis — line chart, one line per (scenario, protocol).
-2. Decision time P99 vs swept axis — same shape, Y in ms.
-3. Bandwidth median vs swept axis — same shape, Y in bytes.
+- Trend matrix — one row per scenario; each axis-point column shows two stacked lines: `OBFT: 100% · 1700ms`, `QBFT: 100% · 3900ms`.
+- One line chart below — **P99 decision time vs swept axis** for the selected scenario, one line per protocol (solid OBFT, dashed QBFT).
 
-OBFT-only packs render only the OBFT data (no empty QBFT bars / lines / matrix columns). Trend charts use color = scenario (per-pack HSL palette), line style = protocol (solid OBFT, dashed QBFT), point markers = protocol (circle OBFT, triangle QBFT). Datasets that are entirely n/a are skipped from the legend.
+OBFT-only packs render only the OBFT data (no empty QBFT rows / lines). Success rate isn't redrawn as a chart anywhere — it's already in the matrix. Bandwidth isn't shown by the per-group chart today; if you need a per-kind breakdown for a specific run, hold off on this report and use the raw `BatchReport` from a custom driver.
 
 ## How to interpret each chart
 
