@@ -19,7 +19,7 @@ protocol/v2/consensustest/                       FRAMEWORK
   byz.go              ByzPattern (with ByzOperators slice, multi-byz)
   host.go             HostPattern + Phase enum + HostFlipMidSlot, HostInvalidUntilLayer
   network.go          NetworkModel + ConstantDelay, JitteredDelay, PerReceiverDelay, PartitionedNetwork
-  schedule.go         DefaultBkSchedule, DefaultFetchSchedule (BTT-anchored, K-aware)
+  schedule.go         DefaultBkSchedule, DefaultFetchSchedule (BTT + T_commit-anchored, K-aware; deepest B_{K-1} = T_commit)
   bandwidth.go        BandwidthReport (per-kind, per-layer, per-op)
   stubsig.go          BLS-realistic byte-size constants
   offlineagg.go       OfflineAggregator + AttemptAll (NoOfflineDoubleV safety check)

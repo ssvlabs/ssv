@@ -1,59 +1,62 @@
 package consensustest
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // DefaultBkSchedule returns the per-layer T_commit-anchored broadcast-budget
-// schedule for K layers, scaled by BTT. The schedule follows OBFT.md §Setting
-// example values for K=4 ([1, 1.5, 2.5, 5.5] BTT) and extends to other K via:
+// schedule for K layers at the given BTT and T_commit. Shallow layers follow
+// OBFT.md §Setting recommended multipliers (1·BTT, 1.5·BTT, 2.5·BTT at K=4);
+// the deepest layer is always T_commit ("earliest possible" — deepest leader
+// broadcasts at slot start):
 //
-//   - K=3: [1, 1.5, 5.5] BTT — fix L_0, L_1 at spec values; deepest at 5.5 BTT
-//     so the cluster keeps the wide-tail absorption tolerance the spec
-//     establishes for the deepest fall-through layer.
-//   - K=4: [1, 1.5, 2.5, 5.5] BTT — spec example (Config A).
-//   - K≥5: [1, 1.5, 2.5, ...interpolated..., 5.5] BTT — keep the spec's first
-//     3 layers, then linearly interpolate from 2.5 BTT to 5.5 BTT across the
-//     remaining K-3 layers.
+//   - K=3: [1·BTT, 2.5·BTT, T_commit] — matches the production SSV-adapter K=3
+//     schedule so framework simulations and production validation operate on
+//     the same envelope.
+//   - K=4: [1·BTT, 1.5·BTT, 2.5·BTT, T_commit] — spec example (Config A).
+//   - K≥5: [1·BTT, 1.5·BTT, 2.5·BTT, ...interpolated..., T_commit] — keep the
+//     spec's first 3 shallow layers, then linearly interpolate from 2.5·BTT
+//     to T_commit (in duration space) across the remaining K-4 intermediate
+//     layers.
 //
-// The result is monotonically increasing in k. Returns nil for K<3 (caller's
-// SimConfig.Validate enforces K ≥ max(3, f+2) so this should never trip in
-// practice).
-func DefaultBkSchedule(K int, btt time.Duration) []time.Duration {
+// Returns an error when T_commit ≤ B_{K-2} (default would fail strict-
+// increasing). Callers operating at extreme degraded BTT must supply a custom
+// per-layer schedule via SimConfig.BroadcastBudget. K<3 also returns error
+// (caller's SimConfig.Validate enforces K ≥ max(3, f+2) so this should never
+// trip in practice).
+func DefaultBkSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 3 {
-		return nil
+		return nil, fmt.Errorf("consensustest: DefaultBkSchedule K=%d below minimum 3", K)
 	}
-	const (
-		l0 = 1.0
-		l1 = 1.5
-		l2 = 2.5
-		ld = 5.5
-	)
+	if btt <= 0 {
+		return nil, fmt.Errorf("consensustest: DefaultBkSchedule BTT=%v must be > 0", btt)
+	}
+	minDeepest := btt * 250 / 100 // 2.5·BTT (B_{K-2} for K≥3)
+	if tCommit <= minDeepest {
+		return nil, fmt.Errorf("consensustest: DefaultBkSchedule T_commit=%v must be > %v (B_{K-2} = 2.5·BTT at BTT=%v); supply a custom per-layer schedule",
+			tCommit, minDeepest, btt)
+	}
 	mul := func(x float64) time.Duration { return time.Duration(x * float64(btt)) }
 	if K == 3 {
-		// Match production SSV-adapter K=3 schedule (protocol/v2/ssv/runner/
-		// obft/config.go defaultLayerSchedules) to keep framework simulations
-		// and production validation operating on the same envelope at K=3.
-		// Both choices ([1, 1.5, 5.5] and [1, 2.5, 5.5]) are spec-compliant
-		// (strictly increasing, B_0 ≥ 1 BTT). Production picked [1, 2.5, 5.5]
-		// — wider L_1 absorption when K=3 means only one backup before the
-		// deepest. Framework follows.
-		return []time.Duration{mul(l0), mul(l2), mul(ld)}
+		return []time.Duration{mul(1.0), mul(2.5), tCommit}, nil
 	}
 	out := make([]time.Duration, K)
-	out[0] = mul(l0)
-	out[1] = mul(l1)
-	out[2] = mul(l2)
-	out[K-1] = mul(ld)
+	out[0] = mul(1.0)
+	out[1] = mul(1.5)
+	out[2] = mul(2.5)
+	out[K-1] = tCommit
 	if K == 4 {
-		return out
+		return out, nil
 	}
-	// K ≥ 5: linear interpolation from L_2 (2.5 BTT) to L_{K-1} (5.5 BTT)
-	// across K-3 steps, filling indices 3..K-2.
+	// K ≥ 5: linear interpolation from L_2 (2.5·BTT) to L_{K-1} (T_commit)
+	// in duration space, filling indices 3..K-2.
+	span := tCommit - out[2]
 	steps := K - 3
-	stride := (ld - l2) / float64(steps)
 	for k := 3; k < K-1; k++ {
-		out[k] = mul(l2 + float64(k-2)*stride)
+		out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
 	}
-	return out
+	return out, nil
 }
 
 // DefaultFetchSchedule returns the per-layer leader fetch-offset schedule for
@@ -68,13 +71,13 @@ func DefaultBkSchedule(K int, btt time.Duration) []time.Duration {
 // (the spec's max-MEV operating point per OBFT.md §Timing budget). Pass nil
 // for the default everywhere.
 //
-// Bk is sourced from DefaultBkSchedule(K, btt) so the schedules stay
-// consistent.
-func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[int]time.Duration) []time.Duration {
-	if K < 3 {
-		return nil
+// Bk is sourced from DefaultBkSchedule(K, btt, tCommit) so the schedules stay
+// consistent. Returns an error in the same conditions as DefaultBkSchedule.
+func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[int]time.Duration) ([]time.Duration, error) {
+	bk, err := DefaultBkSchedule(K, btt, tCommit)
+	if err != nil {
+		return nil, err
 	}
-	bk := DefaultBkSchedule(K, btt)
 	defaultBuffer := btt / 4
 
 	out := make([]time.Duration, K)
@@ -90,5 +93,5 @@ func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[
 			out[k] = 0
 		}
 	}
-	return out
+	return out, nil
 }

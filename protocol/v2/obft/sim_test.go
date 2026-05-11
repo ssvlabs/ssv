@@ -53,16 +53,22 @@ func newSim(t *testing.T, n int) *sim {
 		pubKeyShares[op] = []byte{byte(op)}
 	}
 
-	// Per-layer FetchAt: T_{K-1} earliest, T_0 latest. Use 50ms decrements
-	// so the schedule is monotonically decreasing in k. All within each
-	// layer's broadcast deadline for the timing config below.
-	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
-	budgets := DefaultBroadcastBudget(K, btt)
+	// Per-layer FetchAt: T_{K-1} earliest (= 0, deepest target clamps), T_0
+	// latest. Shallower layers use 50ms decrements so the schedule is
+	// monotonically decreasing in k.
+	const btt = 150 * time.Millisecond     // P99=100 + δ=50 fixture
+	const tCommit = 1500 * time.Millisecond
+	budgets, err := DefaultBroadcastBudget(K, btt, tCommit)
+	require.NoError(t, err)
 	layers := make([]LayerSpec, K)
 	for k := 0; k < K; k++ {
+		var fetchAt time.Duration
+		if k < K-1 {
+			fetchAt = 500*time.Millisecond - time.Duration(k)*50*time.Millisecond
+		} // deepest leaves fetchAt = 0
 		layers[k] = LayerSpec{
 			Leader:          operators[k%n],
-			FetchAt:         500*time.Millisecond - time.Duration(k)*50*time.Millisecond,
+			FetchAt:         fetchAt,
 			BroadcastBudget: budgets[k],
 		}
 	}
@@ -73,7 +79,7 @@ func newSim(t *testing.T, n int) *sim {
 		Operators: operators,
 		F:         f,
 		Layers:    layers,
-		TCommit:   1500 * time.Millisecond,
+		TCommit:   tCommit,
 		Delta2:    300 * time.Millisecond,
 		Delta3:    250 * time.Millisecond,
 		BTT:       btt,

@@ -621,9 +621,9 @@ func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ obft.OperatorID, _
 
 // OverrideOwnPhase1Delay returns a BTT-scaled delay (6×BTT) so the byz
 // leader's bundle arrives past T_commit at every honest receiver regardless
-// of operating point. The factor 6 covers the deepest K=4 absorption window
-// (`B_3 = 5.5 BTT`); for L_0 (`B_0 = 1 BTT`) this is 6× over. Hardcoded
-// delay would silently fail at BTT > 200ms.
+// of operating point. Beyond any reasonable shallow B_k (the deepest layer
+// is anchored at T_commit, so 6×BTT past T_commit always exceeds it).
+// Hardcoded delay would silently fail at BTT > 200ms.
 func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader obft.OperatorID) time.Duration {
 	if !b.ByzSet.Contains(leader) {
 		return 0

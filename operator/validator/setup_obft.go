@@ -72,19 +72,24 @@ func buildOBFTControllerForProposer(
 	// respectively. BroadcastBudget must be built with the SAME K so its
 	// length matches ConfigForCluster's expectation.
 	//
-	// Values scale with BTT: at the production default BTT=200ms, K=4 resolves
-	// to [200, 300, 500, 1100]ms; larger K interpolates linearly between L_0
-	// (1·BTT) and the deepest layer (5.5·BTT) per
-	// obftadapter.DefaultBroadcastBudgetSchedule.
+	// Values scale with BTT: at the production default BTT=200ms,
+	// T_commit=3400ms, K=4 resolves to [200, 300, 500, 3400]ms; larger K
+	// keeps the shallow [1·BTT, 1.5·BTT, 2.5·BTT] head and interpolates
+	// intermediate layers between 2.5·BTT and T_commit (the deepest layer's
+	// "earliest possible" target) per obftadapter.DefaultBroadcastBudgetSchedule.
 	n := len(ssvShare.Committee)
 	f := (n - 1) / 3
 	K := obftadapter.DefaultK
 	if minK := f + 2; K < minK {
 		K = minK
 	}
+	broadcastBudget, err := obftadapter.DefaultBroadcastBudgetSchedule(K, obftadapter.DefaultBTT, obftadapter.DefaultTCommit)
+	if err != nil {
+		return nil, fmt.Errorf("build OBFT broadcast budget: %w", err)
+	}
 	overrides := &obftadapter.ConfigOverrides{
 		K:               K,
-		BroadcastBudget: obftadapter.DefaultBroadcastBudgetSchedule(K, obftadapter.DefaultBTT),
+		BroadcastBudget: broadcastBudget,
 	}
 
 	// Wrap the V-side BLS signer so OBFT partials are computed over the

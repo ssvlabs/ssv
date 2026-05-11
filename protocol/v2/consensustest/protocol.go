@@ -75,7 +75,7 @@ type SimConfig struct {
 
 	// BroadcastBudget carries the OBFT per-layer T_commit-anchored propagation
 	// budget B_k (per spec §Setting). Strictly increasing in k. When nil,
-	// derived from BTT via DefaultBkSchedule(K, BTT).
+	// derived from BTT + T_commit via DefaultBkSchedule(K, BTT, T_commit).
 	BroadcastBudget []time.Duration
 
 	// FetchAt carries the OBFT per-layer leader fetch offsets. Strictly
@@ -295,7 +295,11 @@ func (c *SimConfig) Validate() error {
 	}
 
 	if c.BroadcastBudget == nil {
-		c.BroadcastBudget = DefaultBkSchedule(c.K, c.BTT)
+		bk, err := DefaultBkSchedule(c.K, c.BTT, tCommit)
+		if err != nil {
+			return fmt.Errorf("consensustest: %w", err)
+		}
+		c.BroadcastBudget = bk
 	}
 	if len(c.BroadcastBudget) != c.K {
 		return fmt.Errorf("consensustest: BroadcastBudget has %d entries, expected K=%d",
@@ -309,7 +313,11 @@ func (c *SimConfig) Validate() error {
 	}
 
 	if c.FetchAt == nil {
-		c.FetchAt = DefaultFetchSchedule(c.K, c.BTT, tCommit, c.LeaderBroadcastOffset)
+		fa, err := DefaultFetchSchedule(c.K, c.BTT, tCommit, c.LeaderBroadcastOffset)
+		if err != nil {
+			return fmt.Errorf("consensustest: %w", err)
+		}
+		c.FetchAt = fa
 	}
 	if len(c.FetchAt) != c.K {
 		return fmt.Errorf("consensustest: FetchAt has %d entries, expected K=%d",

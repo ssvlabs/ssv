@@ -10,10 +10,14 @@ import (
 func validBaseConfig() *Config {
 	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
 	const tCommit = 1500 * time.Millisecond
-	budgets := DefaultBroadcastBudget(4, btt)
-	// Per-layer T_broadcast_max at this fixture: 1350 / 1275 / 1125 / 675ms.
-	// FetchAt values chosen well below all caps to leave headroom for tests
-	// that perturb FetchAt to trigger specific errors.
+	budgets, err := DefaultBroadcastBudget(4, btt, tCommit)
+	if err != nil {
+		panic(err)
+	}
+	// Per-layer T_broadcast_max at this fixture: 1350 / 1275 / 1125 / 0ms.
+	// Deepest layer's target clamps to 0 ("earliest possible" per spec §Setting)
+	// because B_3 = T_commit by default. Shallower FetchAt values chosen well
+	// below their caps to leave headroom for tests that perturb FetchAt.
 	return &Config{
 		Height:    1,
 		ClusterID: [32]byte{0x01},
@@ -23,7 +27,7 @@ func validBaseConfig() *Config {
 			{Leader: 1, FetchAt: 500 * time.Millisecond, BroadcastBudget: budgets[0]},
 			{Leader: 2, FetchAt: 400 * time.Millisecond, BroadcastBudget: budgets[1]},
 			{Leader: 3, FetchAt: 300 * time.Millisecond, BroadcastBudget: budgets[2]},
-			{Leader: 4, FetchAt: 200 * time.Millisecond, BroadcastBudget: budgets[3]},
+			{Leader: 4, FetchAt: 0, BroadcastBudget: budgets[3]},
 		},
 		TCommit: tCommit,
 		Delta2:  300 * time.Millisecond,
@@ -94,23 +98,23 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 // ---- M3: per-layer staggered broadcast deadlines (BroadcastBudget) ----
 
 // validStaggeredConfig returns a config with spec-recommended per-layer
-// BroadcastBudget values (B_0=1 BTT, B_1=1.5 BTT, B_2=2.5 BTT, B_3=5.5 BTT
-// per spec §Setting Config A at K=4) scaled to the test's BTT
-// (D+δ = 150ms here).
+// BroadcastBudget values (B_0=1·BTT, B_1=1.5·BTT, B_2=2.5·BTT, B_3=T_commit
+// per spec §Setting Config A at K=4 — deepest "earliest possible") scaled
+// to the test's BTT (D+δ = 150ms here).
 func validStaggeredConfig() *Config {
 	cfg := validBaseConfig()
 	btt := cfg.BTT // 150ms
-	// Adjust TCommit so the deepest layer's B_3 = 5.5*BTT fits with 100ms buffer.
-	cfg.TCommit = 5*btt + btt/2 + 100*time.Millisecond
+	cfg.TCommit = 5*btt + btt/2 + 100*time.Millisecond // 925ms
 	cfg.Layers[0].BroadcastBudget = btt           // B_0 = 1 BTT
 	cfg.Layers[1].BroadcastBudget = btt + btt/2   // B_1 = 1.5 BTT
 	cfg.Layers[2].BroadcastBudget = 2*btt + btt/2 // B_2 = 2.5 BTT
-	cfg.Layers[3].BroadcastBudget = 5*btt + btt/2 // B_3 = 5.5 BTT
-	// FetchAt within each layer's per-layer cap T_commit - B_k.
+	cfg.Layers[3].BroadcastBudget = cfg.TCommit   // B_3 = T_commit (earliest possible)
+	// FetchAt within each layer's per-layer cap T_broadcast_max_k. Deepest
+	// clamps to 0 (B_3 = T_commit → T_broadcast_max_3 = 0).
 	cfg.Layers[0].FetchAt = cfg.TCommit - cfg.Layers[0].BroadcastBudget
 	cfg.Layers[1].FetchAt = cfg.TCommit - cfg.Layers[1].BroadcastBudget
 	cfg.Layers[2].FetchAt = cfg.TCommit - cfg.Layers[2].BroadcastBudget
-	cfg.Layers[3].FetchAt = cfg.TCommit - cfg.Layers[3].BroadcastBudget
+	cfg.Layers[3].FetchAt = 0
 	return cfg
 }
 
@@ -168,7 +172,7 @@ func TestConfig_BroadcastBudget_RejectsDeepestBelowBFTMin(t *testing.T) {
 func TestConfig_BroadcastBudget_RejectsAllZero(t *testing.T) {
 	// Per-layer BroadcastBudget is required on every layer; the historical
 	// "all-zero fallback to a uniform 2·BTT cap" mode is no longer supported.
-	// Callers should populate via DefaultBroadcastBudget(K, BTT) or an
+	// Callers should populate via DefaultBroadcastBudget(K, BTT, T_commit) or an
 	// explicit per-layer schedule.
 	cfg := validBaseConfig()
 	for k := range cfg.Layers {
@@ -189,4 +193,35 @@ func TestConfig_BroadcastBudget_RejectsNegative(t *testing.T) {
 	cfg := validBaseConfig()
 	cfg.Layers[1].BroadcastBudget = -1 * time.Millisecond
 	require.ErrorContains(t, cfg.Validate(), "must be > 0")
+}
+
+// Per spec §Setting, B_k is a target absorption budget, not a hard cap.
+// When B_k > T_commit the deepest layer's target T_broadcast_max_k clamps
+// at 0 — leader broadcasts best-effort from slot start. Validation must
+// accept this degraded but well-defined config with FetchAt = 0 on the
+// affected layer.
+func TestConfig_BroadcastBudget_AllowsDeepestBkOverTCommit(t *testing.T) {
+	cfg := validStaggeredConfig()
+	// Inflate B_3 past T_commit. Strict-increasing still holds; deepest
+	// stays ≥ BFT-min. FetchAt[3] = 0 is required by the clamped target.
+	cfg.Layers[3].BroadcastBudget = cfg.TCommit + 500*time.Millisecond
+	cfg.Layers[3].FetchAt = 0
+	require.NoError(t, cfg.Validate())
+	require.Equal(t, time.Duration(0), cfg.BroadcastMaxOffsetForLayer(3),
+		"clamp at 0 when B_k > T_commit")
+	// Shallower layers unchanged, still positive.
+	for k := 0; k < 3; k++ {
+		require.Positive(t, cfg.BroadcastMaxOffsetForLayer(k))
+	}
+}
+
+// Strict-decreasing FetchAt still trips when two deep layers both clamp
+// to fetch-at-0 — no fall-through depth remains.
+func TestConfig_BroadcastBudget_RejectsTwoLayersOverTCommit(t *testing.T) {
+	cfg := validStaggeredConfig()
+	cfg.Layers[2].BroadcastBudget = cfg.TCommit + 100*time.Millisecond
+	cfg.Layers[3].BroadcastBudget = cfg.TCommit + 500*time.Millisecond
+	cfg.Layers[2].FetchAt = 0
+	cfg.Layers[3].FetchAt = 0
+	require.ErrorContains(t, cfg.Validate(), "strictly decreasing")
 }

@@ -48,27 +48,39 @@ type LayerSpec struct {
 	Leader  OperatorID
 	FetchAt time.Duration
 
-	// BroadcastBudget is the layer's T_commit-anchored absorption window
-	// `B_k` per OBFT.md §Setting: the leader must broadcast their Phase-1
-	// bundle no later than `T_commit − B_k = T_broadcast_max_k`, so the
-	// bundle's first-observation at any honest receiver lands by
+	// BroadcastBudget is the layer's T_commit-anchored absorption *target*
+	// `B_k` per OBFT.md §Setting: the leader aims to broadcast their
+	// Phase-1 bundle by `T_broadcast_max_k = max(0, T_commit − B_k)` so
+	// the bundle's first-observation at any honest receiver lands by
 	// `T_commit` under partial-synchrony assumptions for that layer's
 	// propagation budget. Per spec `B_0 < B_1 < ... < B_{K-1}` — deeper
 	// layers get larger budgets (wider absorption); the primary gets the
 	// smallest (max MEV-fetch headroom, willing to fall through to L_1+
 	// if propagation slips).
 	//
-	// Spec K=4 Config A (BTT=200ms): B_k values are 1, 1.5, 2.5, 5.5 BTT
-	// (= 200/300/500/1100 ms). Internally each B_k decomposes as typical-
-	// mesh propagation + convergence buffer (spec §Setting quotes B_0 = 1
+	// B_k is a *target*, not a hard runtime cap. The only runtime
+	// acceptance gate is `T_commit` (peers admit bundles first-observed
+	// in `[slot_start, T_commit]` regardless of which layer they came
+	// from). A leader that cannot meet `T_broadcast_max_k` broadcasts
+	// best-effort (broadcast as soon as the bundle is ready). When
+	// `B_k ≥ T_commit`, `T_broadcast_max_k` clamps at 0 — the leader's
+	// target broadcast time is slot start. The recommended deepest
+	// `B_{K-1} = T_commit` deliberately hits this clamp ("earliest
+	// possible" deepest broadcast).
+	//
+	// Spec K=4 Config A (BTT=200ms, T_commit=3400ms): B_k values are 1·BTT,
+	// 1.5·BTT, 2.5·BTT, T_commit (= 200/300/500/3400 ms). The deepest
+	// is "earliest possible" — leader's target broadcast clamps to slot
+	// start. Internally each shallow B_k decomposes as typical-mesh
+	// propagation + convergence buffer (spec §Setting quotes B_0 = 1
 	// BTT as ≈0.5 BTT propagation + 0.5 BTT convergence); the
 	// decomposition is informative-only — this field is the single
 	// T_commit-anchored value, NOT the propagation half alone.
 	//
 	// Required: must be > 0 on every layer. Config.Validate rejects
 	// zero/negative values and non-strict-increasing schedules. Use
-	// DefaultBroadcastBudget(K, BTT) for the spec-recommended staggered
-	// schedule when constructing a Config manually.
+	// DefaultBroadcastBudget(K, BTT, T_commit) for the spec-recommended
+	// staggered schedule when constructing a Config manually.
 	BroadcastBudget time.Duration
 }
 
@@ -149,61 +161,98 @@ func (c *Config) Quorum() int {
 	return c.QV()
 }
 
-// BroadcastMaxOffsetForLayer returns T_commit - B_k for layer k. Per spec
-// §Setting, the leader of layer k must broadcast their Phase-1 bundle by
-// this offset. Config.Validate guarantees every layer's BroadcastBudget is
-// strictly positive, so this never returns a zero-budget fallback in
-// practice; callers should construct Config via DefaultBroadcastBudget
-// (or an explicit per-layer schedule).
+// BroadcastMaxOffsetForLayer returns `T_broadcast_max_k = max(0, T_commit − B_k)`
+// for layer k — the leader's target broadcast time per spec §Setting.
+//
+// `B_k` is a target, not a hard cap; the clamp at 0 handles the degraded case
+// where the layer's design-time budget overshoots T_commit. In that case the
+// leader broadcasts best-effort from slot start and the layer's effective
+// absorption window contracts to T_commit (= `min(B_k, T_commit)`). The only
+// runtime acceptance gate remains T_commit at receivers.
 func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
-	return c.TCommit - c.Layers[k].BroadcastBudget
+	if d := c.TCommit - c.Layers[k].BroadcastBudget; d > 0 {
+		return d
+	}
+	return 0
 }
 
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
-// for K layers at the given BTT — strictly increasing, deepest ≥ 2·BTT
-// (the BFT-min liveness bound). Matches the spec §Setting recommendation:
-// B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} = 5.5 BTT (last-
-// resort deepest absorption); intermediate layers fall between.
+// for K layers at the given BTT and T_commit — strictly increasing, deepest
+// = T_commit (the spec §Setting "earliest possible" deepest: leader's target
+// broadcast clamps to slot start). Matches the spec §Setting recommendation:
+// B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} = T_commit (deepest
+// broadcasts at slot start, last-resort absorption ≈ entire slot);
+// intermediate shallow layers at 1.5 / 2.5 BTT.
 //
-// At K=4 (the OBFT proposer-duty default) returns [1, 1.5, 2.5, 5.5] × BTT.
-// At K=3 returns [1, 2.5, 5.5] × BTT. For K>4 (n=7, 10, 13 deployments)
-// interpolates linearly between L_0 (1·BTT) and the deepest (5.5·BTT).
+// At K=4 (the OBFT proposer-duty default) returns [1·BTT, 1.5·BTT, 2.5·BTT,
+// T_commit]. At K=3 returns [1·BTT, 2.5·BTT, T_commit]. For K>4 (n=7, 10, 13
+// deployments) the first three layers stay at 1 / 1.5 / 2.5 BTT and the
+// intermediate layers (k = 3, ..., K-2) interpolate linearly from 2.5·BTT
+// to T_commit in duration space.
+//
+// Returns an error when T_commit ≤ 2.5·BTT (the default deepest would no
+// longer be strictly greater than B_{K-2} = 2.5·BTT). Callers operating at
+// extreme degraded BTT can provide a custom per-layer schedule.
 //
 // Callers that need deployment-specific tunings (e.g. the SSV adapter's
 // FetchAt-paired schedule) should provide their own per-layer values; this
 // helper is for tests and minimal callers that want an obviously-correct
 // default. Required by Validate: every LayerSpec.BroadcastBudget entry
 // must be > 0 and the slice must be strictly increasing.
-func DefaultBroadcastBudget(K int, btt time.Duration) []time.Duration {
+func DefaultBroadcastBudget(K int, btt, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
-		return nil
+		return nil, fmt.Errorf("obft: DefaultBroadcastBudget K=%d must be ≥ 1", K)
+	}
+	if btt <= 0 {
+		return nil, fmt.Errorf("obft: DefaultBroadcastBudget BTT=%v must be > 0", btt)
+	}
+	// The shallow staggered values reach 2.5·BTT at L_2 (K≥3) or 2·BTT at
+	// L_1 (K=2). The deepest must be > the shallowest-but-deepest entry,
+	// and that is 2.5·BTT for K≥3, 1·BTT for K=2, 2·BTT for K=1.
+	var minDeepest time.Duration
+	switch {
+	case K == 1:
+		minDeepest = 2 * btt
+	case K == 2:
+		minDeepest = btt
+	default:
+		minDeepest = btt * 250 / 100
+	}
+	if tCommit <= minDeepest {
+		return nil, fmt.Errorf("obft: DefaultBroadcastBudget T_commit=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule for this operating point",
+			tCommit, minDeepest, K, btt)
 	}
 	out := make([]time.Duration, K)
 	switch K {
 	case 1:
-		out[0] = 2 * btt
+		out[0] = tCommit
 	case 2:
 		out[0] = btt
-		out[1] = 2 * btt
+		out[1] = tCommit
 	case 3:
 		out[0] = btt
 		out[1] = btt * 250 / 100
-		out[2] = btt * 550 / 100
+		out[2] = tCommit
 	case 4:
 		out[0] = btt
 		out[1] = btt * 150 / 100
 		out[2] = btt * 250 / 100
-		out[3] = btt * 550 / 100
+		out[3] = tCommit
 	default:
-		// Linear interp from 100 BTT-hundredths (L_0) to 550 (deepest).
-		const lo, hi = 100, 550
-		step := (hi - lo) / (K - 1)
-		for k := 0; k < K; k++ {
-			mult := lo + k*step
-			out[k] = btt * time.Duration(mult) / 100
+		// First three layers at 1 / 1.5 / 2.5 BTT (spec values); intermediate
+		// layers interpolate linearly in duration space from 2.5·BTT (at L_2)
+		// to T_commit (at L_{K-1}).
+		out[0] = btt
+		out[1] = btt * 150 / 100
+		out[2] = btt * 250 / 100
+		out[K-1] = tCommit
+		span := tCommit - out[2]
+		steps := K - 3
+		for k := 3; k < K-1; k++ {
+			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // PhaseTwoStartOffset returns the start of Phase 2 = T_commit relative to
@@ -297,7 +346,7 @@ func (c *Config) Validate() error {
 	}
 
 	// Per-layer BroadcastBudget — required on every layer per spec §Setting.
-	// Callers can use DefaultBroadcastBudget(K, BTT) for the spec-recommended
+	// Callers can use DefaultBroadcastBudget(K, BTT, T_commit) for the spec-recommended
 	// staggered schedule, or supply their own per-layer values.
 	for k, l := range c.Layers {
 		if l.BroadcastBudget <= 0 {
@@ -309,11 +358,11 @@ func (c *Config) Validate() error {
 	//
 	// Spec §Setting states "B_k ≥ B_{k-1}" (non-strict). We enforce strict
 	// "<" because all the spec's recommended operating-point schedules
-	// (Config A at K=4: 1 / 1.5 / 2.5 / 5.5 BTT) are strictly increasing,
-	// and equal adjacent budgets would mean the deeper layer offers no
-	// additional absorption — defeating the purpose of staggering. The
-	// strict bound catches misconfigurations that would silently degrade
-	// fall-through recovery at no protocol benefit.
+	// (Config A at K=4: 1·BTT / 1.5·BTT / 2.5·BTT / T_commit) are strictly
+	// increasing, and equal adjacent budgets would mean the deeper layer
+	// offers no additional absorption — defeating the purpose of
+	// staggering. The strict bound catches misconfigurations that would
+	// silently degrade fall-through recovery at no protocol benefit.
 	for k := 1; k < len(c.Layers); k++ {
 		if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
 			return errors.New("obft: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")
@@ -341,8 +390,12 @@ func (c *Config) Validate() error {
 			return errors.New("obft: layer FetchAt must be non-negative")
 		}
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
-			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v",
-				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k))
+			// When B_k ≥ T_commit the deadline clamps to 0 (best-effort
+			// broadcast at slot start, per spec §Setting); FetchAt must
+			// then be 0 too. Surface the underlying T_commit−B_k value
+			// so over-budget configs are obvious in the error.
+			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v (T_commit−B_k = %v)",
+				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k), c.TCommit-c.Layers[k].BroadcastBudget)
 		}
 		// Per spec §Setting: T_{K-1} < ... < T_1 < T_0. Layer index k
 		// increases as we go deeper; FetchAt must strictly decrease
