@@ -257,9 +257,16 @@ function renderHeatmap(data) {
 
   // Pre-select the first scenario so the chart isn't empty at page load.
   // The first selection both builds the chart and highlights the row.
+  // Suppress the scroll-into-view step on this first call so the page
+  // doesn't yank itself down to the chart on first paint at narrow
+  // viewports.
   setTimeout(() => {
     const firstRow = tbody.querySelector('tr[data-scenario]');
-    if (firstRow) selectHeatmapScenario(firstRow.getAttribute('data-scenario'));
+    if (firstRow) {
+      skipInitialScroll = true;
+      selectHeatmapScenario(firstRow.getAttribute('data-scenario'));
+      skipInitialScroll = false;
+    }
   }, 0);
 
   return section;
@@ -348,7 +355,30 @@ function selectHeatmapScenario(scenarioName) {
   } else {
     updateLatencyChart(heatmapChart, point, data.protocols, scenario);
   }
+
+  // At narrow viewports the heatmap-body grid stacks vertically, so the
+  // chart can end up well below the visible region. If the chart isn't
+  // visible after a cell click, scroll it into view — preserves the
+  // "click → chart" UX without affecting wide-viewport users who already
+  // see it side-by-side. Uses explicit window.scrollTo rather than
+  // Element.scrollIntoView because the latter is unreliable in some
+  // headless preview environments.
+  const chartArea = section.querySelector('.heatmap-chart-area');
+  if (chartArea && !skipInitialScroll) {
+    const rect = chartArea.getBoundingClientRect();
+    const tocH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--toc-height')) || 90;
+    const offScreen = rect.bottom < tocH + 40 || rect.top > window.innerHeight - 40;
+    if (offScreen) {
+      const targetY = window.scrollY + rect.top - tocH - 8;
+      window.scrollTo({ top: Math.max(0, targetY), behavior: 'auto' });
+    }
+  }
 }
+
+// skipInitialScroll: when true, selectHeatmapScenario skips the
+// "scroll chart into view" step. Set on the initial page-load auto-select
+// so we don't yank the page on first paint.
+let skipInitialScroll = false;
 
 // cssEscape — minimal CSS.escape polyfill for the scenario names that
 // appear in our selectors. Scenarios use safe ASCII (e.g. "MeshFlakiness"),
