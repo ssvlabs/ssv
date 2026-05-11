@@ -112,14 +112,19 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (5 curated sweeps × OBFT/QBFT × ITERATIONS iterations) and writes
+# (4 curated sweeps × OBFT/QBFT × ITERATIONS iterations) and writes
 # data.js into REPORT_DIR (default ./stresstest-report) — consumed by
 # the static UI (index.html + app.js + styles.css) already in that
 # folder.
 #
-# Iteration count: override via ITERATIONS (default 100). 100 gives
-# stable P99 stats for success-rate ≥ 50% scenarios; bump to 1000 for
-# rare-event scenarios at proportionally longer wallclock (~12-15 min).
+# Cluster size: override via CLUSTER_SIZE (default 4). Every sweep
+# runs at this single n; to compare across cluster sizes, re-run with
+# a different CLUSTER_SIZE and REPORT_DIR (`make stresstest` produces
+# one data.js per run).
+#
+# Iteration count: override via ITERATIONS (default 1000). 1000 gives
+# stable P99 stats for success-rate ≥ 50% scenarios; bump to 10000 for
+# rare-event scenarios at proportionally longer wallclock (~20 min).
 #
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
@@ -127,11 +132,12 @@ consensustest-with-real-bls:
 # See docs/STRESSTEST-REPORT.md for the usage guide and
 # docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
 REPORT_DIR ?= ./stresstest-report
-ITERATIONS ?= 100
+CLUSTER_SIZE ?= 4
+ITERATIONS ?= 1000
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (ITERATIONS=$(ITERATIONS))"
-	@REPORT_DIR=$(abspath $(REPORT_DIR)) ITERATIONS=$(ITERATIONS) \
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS))"
+	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS) \
 		go test -tags "blst_enabled lfs" -timeout 30m -run TestStress -v ./protocol/v2/consensustest/
 
 .PHONY: docker-spec-test

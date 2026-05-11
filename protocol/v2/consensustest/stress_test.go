@@ -41,14 +41,13 @@ import (
 //	    go test -timeout 30m -run TestStress \
 //	    ./protocol/v2/consensustest/
 //
-// Estimated runtime at default 100 iterations:
+// Estimated runtime at CLUSTER_SIZE=4 and default 100 iterations:
 //
 //	canonical          ~5s    (29 scenarios × 2 protocols × 100 sims)
-//	cluster_scaling    ~30s   (× 4 cluster sizes)
 //	btt_degradation    ~20s   (× 4 BTT values)
 //	heavy_tail         ~20s   (× 4 sigmas)
 //	loss               ~20s   (× 4 loss rates)
-//	TOTAL              ~95s   on a typical dev machine (jittered network).
+//	TOTAL              ~65s   on a typical dev machine (jittered network).
 //
 // At ITERATIONS=1000, scale linearly (~12-15 min). Above that, consider
 // parallelizing across sweeps (currently sequential — per-batch is
@@ -62,6 +61,13 @@ func TestStress(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
+	clusterSize := 4
+	if v := os.Getenv("CLUSTER_SIZE"); v != "" {
+		n, err := strconv.Atoi(v)
+		require.NoErrorf(t, err, "invalid CLUSTER_SIZE=%q", v)
+		require.Greater(t, n, 0, "CLUSTER_SIZE must be > 0")
+		clusterSize = n
+	}
 	iterations := 100
 	if v := os.Getenv("ITERATIONS"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -77,8 +83,8 @@ func TestStress(t *testing.T) {
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations)
-	require.Len(t, sweeps, 5)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations, clusterSize)
+	require.Len(t, sweeps, 4)
 
 	protocolNames := make([]string, len(protocols))
 	for i, p := range protocols {

@@ -41,13 +41,14 @@ stresstest-report/
 
 ## Sections
 
-The page is a scrollable SPA with a sticky table-of-contents linking to one section per sweep. Five sweeps in `DefaultSweeps`:
+The page is a scrollable SPA with a sticky table-of-contents linking to one section per sweep. Four sweeps in `DefaultSweeps`, all running at the same cluster size (default n=4, overridable via `CLUSTER_SIZE`):
 
-- **canonical** (1 point) — n=4, BTT=200ms, K=4, `ConstantDelay`. Reference operating point.
-- **cluster_scaling** (4 points) — n ∈ {4, 7, 10, 13} at fixed BTT=200ms.
-- **btt_degradation** (4 points) — BTT ∈ {100, 200, 400, 600}ms at fixed n=4.
+- **canonical** (1 point) — n, BTT=200ms, `JitteredDelay`. Reference operating point.
+- **btt_degradation** (4 points) — BTT ∈ {100, 200, 400, 600}ms at fixed n.
 - **heavy_tail** (4 points) — `LogNormalDelay` Sigma ∈ {0.1, 0.3, 0.5, 0.7}.
 - **loss** (4 points) — `LossyNetwork` LossRate ∈ {0, 0.01, 0.05, 0.10}.
+
+To compare across cluster sizes, re-run the driver with different `CLUSTER_SIZE` values; each run produces its own `data.js`.
 
 Each section is split into two scope subsections — **Cross-protocol comparison** first, **OBFT-only scenarios** last — and within each, one **chart pack per scenario group**. The split keeps scenarios that have no QBFT counterpart (where QBFT is `ExpectNotApplicable`) cleanly separated from the side-by-side comparison, so the dense per-group charts don't get drowned out by all-n/a half-rows.
 

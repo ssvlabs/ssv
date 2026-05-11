@@ -74,13 +74,12 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	require.Len(t, scenarios, 1)
 
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, 10)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, 10, 4)
 
-	require.Len(t, sweeps, 5, "five curated sweeps per plan")
+	require.Len(t, sweeps, 4, "four curated sweeps per plan")
 
 	expected := map[string]int{
 		"canonical":       1, // single reference point
-		"cluster_scaling": 4, // n ∈ {4, 7, 10, 13}
 		"btt_degradation": 4, // BTT ∈ {100, 200, 400, 600}
 		"heavy_tail":      4, // Sigma ∈ {0.1, 0.3, 0.5, 0.7}
 		"loss":            4, // LossRate ∈ {0, 0.01, 0.05, 0.10}
@@ -99,7 +98,8 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 // scenarios or protocols (defensive).
 func TestDefaultSweeps_EmptyInputs(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}}
-	require.Nil(t, ct.DefaultSweeps(nil, protocols, 10))
-	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, nil, 10))
-	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, protocols, 0))
+	require.Nil(t, ct.DefaultSweeps(nil, protocols, 10, 4))
+	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, nil, 10, 4))
+	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, protocols, 0, 4))
+	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, protocols, 10, 0))
 }
