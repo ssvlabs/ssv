@@ -41,10 +41,6 @@ const PROTOCOL_COLORS = {
 // inline (see openCrossSweepPanel).
 const chartInstances = [];
 
-// packsBySweep keeps track of the group packs in each sweep so the
-// sub-TOC can rebuild its group anchors when the active sweep changes.
-const packsBySweep = {};
-
 document.addEventListener('DOMContentLoaded', main);
 
 function main() {
@@ -216,16 +212,12 @@ function toggleAllPacks(open) {
   });
 }
 
-// renderTOC builds the sticky nav with two rows:
-//   1. Sweep row — one pill per sweep; active sweep highlighted.
-//   2. Sub-row   — group anchors for the active sweep, rebuilt on
-//                  scroll. A small `OBFT-only:` divider separates
-//                  the cross-protocol anchors (left) from the
-//                  OBFT-only anchors (right) so the symmetry of
-//                  group names across scopes reads clearly.
+// renderTOC builds the sticky nav with one row of sweep pills. The
+// active sweep is highlighted by setupActiveTOC based on scroll
+// position. (An earlier sub-row of per-sweep group anchors was dropped
+// once the per-group packs became cheap to skim by scrolling.)
 function renderTOC(data) {
   const nav = h('nav', { class: 'toc' });
-
   const sweepRow = h('div', { class: 'toc-row sweeps' });
   data.sweeps.forEach((sw) => {
     sweepRow.appendChild(
@@ -233,9 +225,6 @@ function renderTOC(data) {
     );
   });
   nav.appendChild(sweepRow);
-
-  nav.appendChild(h('div', { class: 'toc-row groups', 'data-active-sweep': '' }));
-
   return nav;
 }
 
@@ -264,7 +253,6 @@ function renderSweepSection(sweep, data, bucketing) {
   }
   section.appendChild(head);
 
-  packsBySweep[sweep.name] = [];
   renderScope(section, sweep, data, bucketing, 'cross', 'Cross-protocol comparison', data.protocols);
   renderScope(section, sweep, data, bucketing, 'obftOnly', 'OBFT-only scenarios', ['OBFT']);
 
@@ -318,7 +306,6 @@ function renderGroupPack(section, sweep, scopeKey, group, scenarios, protocols, 
 
   scheduleChartInit(details, initFn);
   section.appendChild(details);
-  packsBySweep[sweep.name].push({ id: `pack-${packID}`, label: group, scope: scopeKey });
 }
 
 // ---- detail layout (1-point sweep) -----------------------------------
@@ -764,66 +751,26 @@ function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
-// setupActiveTOC wires the sticky nav's two rows to scroll position via
-// a scroll listener (IntersectionObserver was less reliable in headless
-// preview environments — sticking with the simpler approach):
-//   - Top row: highlight the sweep section whose top is just above the
-//     viewport's 25%-from-top probe point.
-//   - Sub-row: rebuild on every active-sweep change to list that sweep's
-//     group anchors; highlight the pack whose top is similarly near the
-//     probe.
+// setupActiveTOC highlights the sweep pill whose section's top sits at
+// or above a probe point 25% from the viewport top. Scroll-listener
+// driven; IntersectionObserver behaved unreliably in headless preview.
 function setupActiveTOC(data) {
   const sweepLinks = new Map();
   document.querySelectorAll('nav.toc .toc-row.sweeps a[data-sweep]').forEach((a) => {
     sweepLinks.set(a.getAttribute('data-sweep'), a);
   });
-  const subRow = document.querySelector('nav.toc .toc-row.groups');
-  if (!subRow || sweepLinks.size === 0) return;
+  if (sweepLinks.size === 0) return;
 
   let activeSweep = data.sweeps[0]?.name;
-  let activePack = null;
 
-  const rebuildSubRow = (sweepName) => {
-    subRow.innerHTML = '';
-    subRow.setAttribute('data-active-sweep', sweepName);
-    let dividerInserted = false;
-    (packsBySweep[sweepName] || []).forEach((pack) => {
-      // First time we hit an OBFT-only pack, drop in a visual divider
-      // so the cross-protocol vs OBFT-only split is unmistakable.
-      if (pack.scope === 'obftOnly' && !dividerInserted) {
-        subRow.appendChild(h('span', { class: 'scope-divider' }, 'OBFT-only:'));
-        dividerInserted = true;
-      }
-      subRow.appendChild(
-        h(
-          'a',
-          { href: `#${pack.id}`, class: pack.scope === 'obftOnly' ? 'obft-only' : 'cross' },
-          pack.label,
-        ),
-      );
-    });
-    if (activePack) markPackActive(activePack);
-  };
   const markSweepActive = (name) => {
     if (activeSweep === name) return;
     activeSweep = name;
     sweepLinks.forEach((a, n) => a.classList.toggle('active', n === name));
-    rebuildSubRow(name);
-  };
-  const markPackActive = (id) => {
-    activePack = id;
-    subRow.querySelectorAll('a').forEach((a) => {
-      a.classList.toggle('active', a.getAttribute('href') === `#${id}`);
-    });
   };
 
-  // Initial render.
-  rebuildSubRow(activeSweep);
   sweepLinks.get(activeSweep)?.classList.add('active');
 
-  // Probe is at 25% of viewport height from the top — far enough below
-  // the sticky TOC that "what section am I reading" maps to the section
-  // whose top is at-or-above the probe.
   const detectActive = () => {
     const probeY = window.scrollY + window.innerHeight * 0.25;
     const sections = document.querySelectorAll('section.sweep');
@@ -832,13 +779,6 @@ function setupActiveTOC(data) {
       if (s.offsetTop <= probeY) active = s;
     });
     if (active) markSweepActive(active.id.replace(/^sweep-/, ''));
-
-    const packs = document.querySelectorAll('details.group-pack');
-    let activeP = null;
-    packs.forEach((p) => {
-      if (p.offsetTop <= probeY) activeP = p;
-    });
-    if (activeP) markPackActive(activeP.id);
   };
 
   let scrollPending = false;
@@ -851,7 +791,6 @@ function setupActiveTOC(data) {
     }, 60);
   };
   window.addEventListener('scroll', onScroll, { passive: true });
-  // Also run once after initial layout in case the page loaded scrolled.
   detectActive();
 }
 

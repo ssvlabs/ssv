@@ -146,7 +146,8 @@ func clusterScalingSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	return Sweep{
 		Name:        "cluster_scaling",
 		Title:       "Cluster-size scaling",
-		Description: "Cluster-size scaling: n ∈ {4, 7, 10, 13} at fixed BTT=200ms, JitteredDelay. Shows per-protocol scaling behavior across SSV-supported cluster sizes.",
+		Params:      []string{"BTT=200ms"},
+		Description: "Per-protocol scaling behavior across SSV-supported cluster sizes.",
 		AxisLabel:   "Cluster size n",
 		Points:      pts,
 	}
@@ -177,7 +178,8 @@ func bttDegradationSweep(scenarios []Scenario, protocols []Protocol, iterations 
 	return Sweep{
 		Name:        "btt_degradation",
 		Title:       "Network-degradation curves (BTT)",
-		Description: "Network-degradation curves: BTT ∈ {100, 200, 400, 600}ms at fixed n=4, JitteredDelay (jitter = BTT/4). Reveals envelope-fit at each protocol's tolerance ceiling.",
+		Params:      []string{"n=4"},
+		Description: "Reveals envelope-fit at each protocol's tolerance ceiling.",
 		AxisLabel:   "BTT",
 		Points:      pts,
 	}
@@ -206,7 +208,8 @@ func heavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int) 
 	return Sweep{
 		Name:        "heavy_tail",
 		Title:       "Heavy-tail propagation",
-		Description: "Heavy-tail propagation: LogNormalDelay Sigma ∈ {0.1, 0.3, 0.5, 0.7} at fixed n=4, Median=BTT/2. Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance.",
+		Params:      []string{"LogNormalDelay", "n=4", "Median=BTT/2"},
+		Description: "Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance.",
 		AxisLabel:   "LogNormal sigma",
 		Points:      pts,
 	}
@@ -264,7 +267,8 @@ func lossSweep(scenarios []Scenario, protocols []Protocol, iterations int) Sweep
 	return Sweep{
 		Name:        "loss",
 		Title:       "Stochastic loss",
-		Description: "Stochastic loss: LossyNetwork LossRate ∈ {0, 0.01, 0.05, 0.10}, BurstFactor=5, at fixed n=4. Each scenario gets a fresh LossyNetwork instance via Apply to preserve per-sim determinism.",
+		Params:      []string{"LossyNetwork", "n=4", "BurstFactor=5"},
+		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism.",
 		AxisLabel:   "Loss rate",
 		Points:      pts,
 	}

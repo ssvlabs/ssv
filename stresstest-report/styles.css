@@ -178,9 +178,6 @@ nav.toc .toc-row {
   align-items: center;
   justify-content: center;
 }
-nav.toc .toc-row + .toc-row {
-  margin-top: 0.3em;
-}
 nav.toc .toc-row.sweeps a {
   display: inline-block;
   padding: 0.3em 0.8em;
@@ -202,42 +199,6 @@ nav.toc .toc-row.sweeps a.active {
   color: white;
   border-color: var(--accent);
 }
-nav.toc .toc-row.groups a {
-  font-size: 0.72em;
-  color: var(--text-muted);
-  text-decoration: none;
-  padding: 0.22em 0.7em;
-  border-radius: 4px;
-  background: transparent;
-  border: 1px solid transparent;
-  font-weight: 500;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
-}
-nav.toc .toc-row.groups a:hover {
-  background: #f3f5f8;
-}
-nav.toc .toc-row.groups a.obft-only {
-  color: #7c2d12; /* warm-brown so OBFT-only anchors are distinct */
-}
-nav.toc .toc-row.groups a.active {
-  background: var(--accent-soft);
-  color: #0f172a;
-  border-color: #b9c8da;
-}
-
-nav.toc .toc-row.groups .scope-divider {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.62em;
-  color: #7c2d12;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0 0.25em 0 0.5em;
-  margin-left: 0.2em;
-  border-left: 1px solid #e8d4c5;
-}
-
 /* ---- Scope heading (softer than the old dark banner) ---- */
 
 .scope-heading {
