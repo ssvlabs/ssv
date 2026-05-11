@@ -155,3 +155,48 @@ func requireRouterDropCounter(t *testing.T, reader *metric.ManualReader, reason 
 	}
 	t.Fatalf("no drop counter data point found for reason=%q", reason)
 }
+
+func TestMessageRouter_RecordDrop_FallbackForUnregisteredReason(t *testing.T) {
+	t.Parallel()
+
+	reader, droppedCounter, bufferFillGauge := newRouterTestMetrics(t)
+	router := newMessageRouterWithMetrics(log.TestLogger(t), droppedCounter, bufferFillGauge)
+
+	const reason = "synthetic_unregistered_reason"
+	router.recordDrop(t.Context(), reason)
+
+	requireRouterDropCounter(t, reader, reason, 1)
+}
+
+func TestRouter_ConcurrentRoute_RecordsAllBufferFullDrops(t *testing.T) {
+	t.Parallel()
+
+	reader, droppedCounter, bufferFillGauge := newRouterTestMetrics(t)
+	router := newMessageRouterWithMetrics(log.TestLogger(t), droppedCounter, bufferFillGauge)
+
+	msg := &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+			Data:    []byte("data"),
+		},
+	}
+
+	for range bufSize {
+		router.ch <- msg
+	}
+
+	const callers = 64
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for i := 0; i < callers; i++ {
+		go func() {
+			defer wg.Done()
+			router.Route(context.Background(), msg)
+		}()
+	}
+	wg.Wait()
+
+	require.Equal(t, bufSize, router.Len(), "buffer must not grow past capacity under contention")
+	requireRouterDropCounter(t, reader, routerDropReasonBufferFull, callers)
+}
