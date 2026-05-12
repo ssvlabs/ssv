@@ -1,5 +1,7 @@
 # Broadcast-budget redesign — plan
 
+> **Historical note (post-merge):** Decision #1 in this plan ("return error when `T_commit ≤ 2.5·BTT`") has since been reversed. The schedule helpers and `Config.Validate` now accept degraded operating points and cap shallow `B_k` at `T_commit` so the schedule stays non-decreasing; multiple layers may collide at `BFT_start` at runtime without rejection. The "two-layer-clamp rejection test stays" line under [§Tests](#tests) is similarly stale — that rejection was lifted. See [OBFT.md / §Setting / Per-layer leader broadcast deadlines](OBFT.md#per-layer-leader-broadcast-deadlines) and [2abOBFT.md / §Setting](2abOBFT.md#setting) for the current behaviour. The rest of this plan (default deepest = `T_commit`, 2abOBFT gains staggering) is still accurate.
+
 Two coupled changes, executed in one PR:
 
 1. **OBFT default deepest `B_{K-1}` changes from `5.5·BTT` to `T_commit`** ("earliest possible" — deepest leader broadcasts at slot start). At K=4 the default schedule becomes `[1·BTT, 1.5·BTT, 2.5·BTT, T_commit]`. The clamp-at-0 logic added in the previous change becomes the *normal* operating point for the deepest layer.

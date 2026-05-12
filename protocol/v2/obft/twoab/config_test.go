@@ -198,7 +198,7 @@ func TestConfig_Validate_RejectsDeepestBudgetBelowBFTMin(t *testing.T) {
 	// Default schedule at K=4 BTT=200ms gives B_3 = TVerdictStart = 1600ms,
 	// well above 2*BTT=400ms. Force it down.
 	c.Layers[3].BroadcastBudget = c.BTT // = 1 BTT, < 2*BTT
-	// Need to also adjust earlier budgets so strict-increasing still holds.
+	// Adjust earlier budgets so the non-decreasing invariant still holds.
 	c.Layers[0].BroadcastBudget = c.BTT / 4
 	c.Layers[1].BroadcastBudget = c.BTT / 3
 	c.Layers[2].BroadcastBudget = c.BTT / 2

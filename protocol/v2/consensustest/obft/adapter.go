@@ -19,7 +19,11 @@ func (Protocol) Name() string { return "OBFT" }
 
 func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
-		return ct.Outcome{}, err
+		// SimConfig.Validate covers schedule shape (BroadcastBudget,
+		// FetchAt), T_commit positivity, and other operating-point-
+		// derived constraints. Wrap as ErrConfigOutOfEnvelope so the
+		// framework renders these cells as red 0% rather than n/a.
+		return ct.Outcome{}, fmt.Errorf("%w: %v", ct.ErrConfigOutOfEnvelope, err)
 	}
 
 	internal, err := translateByz(cfg.Byz)

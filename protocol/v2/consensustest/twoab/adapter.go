@@ -28,7 +28,11 @@ func (Protocol) Name() string { return "2abOBFT" }
 
 func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
-		return ct.Outcome{}, err
+		// SimConfig.Validate covers schedule shape (BroadcastBudget,
+		// FetchAt), T_commit positivity, and other operating-point-
+		// derived constraints. Wrap as ErrConfigOutOfEnvelope so the
+		// framework renders these cells as red 0% rather than n/a.
+		return ct.Outcome{}, fmt.Errorf("%w: %v", ct.ErrConfigOutOfEnvelope, err)
 	}
 
 	internal, err := translateByz(cfg.Byz)
@@ -51,8 +55,12 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	delta2 := delta2a + delta2b
 	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Phase3JitterBuffer - cfg.Epsilon3 - delta2
 	if tCommit <= 0 {
-		return ct.Outcome{}, fmt.Errorf("twoab adapter: derived T_commit=%v is non-positive (RelayCutoff=%v BTT=%v)",
-			tCommit, cfg.RelayCutoff, cfg.BTT)
+		// Operating-point-incompatible (BTT too large for the 2ab
+		// Δ_2a + Δ_2b phase-2 tax to fit before RelayCutoff). Wrap as
+		// ErrConfigOutOfEnvelope so the cell renders red 0% rather
+		// than as an unexpected error.
+		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derived T_commit=%v is non-positive (RelayCutoff=%v BTT=%v)",
+			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, cfg.BTT)
 	}
 	tVerdictStart := tCommit - delta2a
 

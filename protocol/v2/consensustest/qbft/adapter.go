@@ -11,6 +11,7 @@
 package qbft
 
 import (
+	"fmt"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -46,7 +47,10 @@ func (p Protocol) Name() string {
 
 func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
-		return ct.Outcome{}, err
+		// Mirror the OBFT / 2abOBFT adapters: SimConfig.Validate failures
+		// at this point mean the operating point is incompatible with
+		// QBFT. Wrap as ErrConfigOutOfEnvelope so cells render red 0%.
+		return ct.Outcome{}, fmt.Errorf("%w: %v", ct.ErrConfigOutOfEnvelope, err)
 	}
 
 	internal, err := translateByz(cfg.Byz)

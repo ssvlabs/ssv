@@ -118,7 +118,13 @@ func (s *sim) start() error {
 		BTT:       s.cfg.BTT,
 	}
 	if err := cfgTwoab.Validate(); err != nil {
-		return fmt.Errorf("twoab adapter: invalid 2ab config: %w", err)
+		// Validate failures at this point mean the SimConfig translates
+		// to an operating-point-incompatible twoab.Config (e.g. TCommit
+		// non-positive at high BTT, deepest B_{K-1} below BFT-min).
+		// Wrap with ErrConfigOutOfEnvelope so the framework renders the
+		// cell as red 0% rather than logging an unexpected-error warning.
+		return fmt.Errorf("%w: twoab adapter: invalid 2ab config: %v",
+			ct.ErrConfigOutOfEnvelope, err)
 	}
 	s.cfgTwoab = cfgTwoab
 

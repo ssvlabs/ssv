@@ -69,10 +69,13 @@ func TestDefaultBroadcastBudgetSchedule_K7_InterpolatesCleanly(t *testing.T) {
 	require.Equal(t, 300*time.Millisecond, got[1], "L_1 = 1.5·BTT")
 	require.Equal(t, 500*time.Millisecond, got[2], "L_2 = 2.5·BTT")
 	require.Equal(t, DefaultTCommit, got[6], "L_K-1 = T_commit (earliest possible)")
-	// Verify monotonically strictly increasing — Validate() depends on this.
+	// Verify non-decreasing. Strict-increasing holds at this operating
+	// point (none of the shallow multiples hit the T_commit cap) but the
+	// underlying obft.Config.Validate only requires non-decreasing post-
+	// relaxation; the test asserts the relaxed invariant.
 	for k := 1; k < len(got); k++ {
-		require.Greaterf(t, got[k], got[k-1],
-			"budget must be strictly increasing in layer index; got[%d]=%v, got[%d]=%v",
+		require.GreaterOrEqualf(t, got[k], got[k-1],
+			"budget must be non-decreasing in layer index; got[%d]=%v, got[%d]=%v",
 			k, got[k], k-1, got[k-1])
 	}
 }
@@ -86,22 +89,33 @@ func TestDefaultBroadcastBudgetSchedule_K10_InterpolatesCleanly(t *testing.T) {
 	require.Equal(t, 200*time.Millisecond, got[0], "L_0 must be 1·BTT")
 	require.Equal(t, DefaultTCommit, got[9], "L_K-1 must be T_commit")
 
-	// Verify monotonically strictly increasing — Validate() depends on this.
+	// Verify non-decreasing (relaxed from strict-increasing in Phase 2).
 	for k := 1; k < len(got); k++ {
-		require.Greaterf(t, got[k], got[k-1],
-			"budget must be strictly increasing in layer index; got[%d]=%v, got[%d]=%v",
+		require.GreaterOrEqualf(t, got[k], got[k-1],
+			"budget must be non-decreasing in layer index; got[%d]=%v, got[%d]=%v",
 			k, got[k], k-1, got[k-1])
 	}
 }
 
-// TestDefaultBroadcastBudgetSchedule_TCommitTooSmall_Errors verifies the
-// helper rejects T_commit ≤ 2.5·BTT (the default deepest would no longer be
-// strictly greater than B_{K-2} = 2.5·BTT).
-func TestDefaultBroadcastBudgetSchedule_TCommitTooSmall_Errors(t *testing.T) {
-	// At BTT=400ms, T_commit=1000ms = 2.5·BTT — deepest would equal B_2.
-	_, err := DefaultBroadcastBudgetSchedule(4, 400*time.Millisecond, 1000*time.Millisecond)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "T_commit")
+// TestDefaultBroadcastBudgetSchedule_TCommitTooSmall_Caps verifies the
+// helper caps shallow B_k at T_commit at degraded operating points
+// (was an error pre-relaxation; now the helper returns a non-decreasing
+// schedule with multiple layers clamping at BFT_start at runtime).
+func TestDefaultBroadcastBudgetSchedule_TCommitTooSmall_Caps(t *testing.T) {
+	// At BTT=400ms, T_commit=1000ms = 2.5·BTT. Pre-cap shallow values
+	// would be [400, 600, 1000, 1000]; the cap leaves them unchanged
+	// since out[2] = 2.5·BTT exactly equals T_commit. Pick an even
+	// tighter T_commit to force a real cap.
+	got, err := DefaultBroadcastBudgetSchedule(4, 400*time.Millisecond, 800*time.Millisecond)
+	require.NoError(t, err)
+	require.Len(t, got, 4)
+	require.Equal(t, 400*time.Millisecond, got[0])
+	require.Equal(t, 600*time.Millisecond, got[1])
+	require.Equal(t, 800*time.Millisecond, got[2], "capped: was 2.5·BTT=1000ms, > T_commit=800ms")
+	require.Equal(t, 800*time.Millisecond, got[3], "deepest = T_commit")
+	for k := 1; k < len(got); k++ {
+		require.GreaterOrEqualf(t, got[k], got[k-1], "non-decreasing post-cap")
+	}
 }
 
 // TestDefaultBroadcastBudgetSchedule_EndpointConstantMatchK4 guards against

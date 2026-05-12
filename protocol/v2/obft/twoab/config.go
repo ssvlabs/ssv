@@ -87,7 +87,9 @@ type LayerSpec struct {
 	// first-observed past that are auth-only-retained.
 	//
 	// Required: must be > 0 on every layer. Config.Validate rejects
-	// zero/negative values and non-strict-increasing schedules. Use
+	// zero/negative values and decreasing-in-k schedules (equal adjacent
+	// budgets are accepted — multiple layers may share the BFT_start
+	// clamp at degraded operating points; see spec §Setting). Use
 	// DefaultBroadcastBudget(K, BTT, T_verdict_start) for the spec-
 	// recommended staggered schedule when constructing a Config manually.
 	BroadcastBudget time.Duration

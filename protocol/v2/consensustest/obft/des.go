@@ -114,7 +114,14 @@ func (s *sim) start() error {
 		BTT:       s.cfg.BTT,
 	}
 	if err := cfgObft.Validate(); err != nil {
-		return fmt.Errorf("obft adapter: invalid OBFT config: %w", err)
+		// Validate failures at this point mean the SimConfig translates
+		// to an operating-point-incompatible obft.Config (e.g. TCommit
+		// too small for the broadcast deadline at degraded BTT, deepest
+		// B_{K-1} below BFT-min). Wrap with ErrConfigOutOfEnvelope so
+		// the framework renders the cell as red 0% rather than logging
+		// an unexpected-error warning.
+		return fmt.Errorf("%w: obft adapter: invalid OBFT config: %v",
+			ct.ErrConfigOutOfEnvelope, err)
 	}
 	s.cfgObft = cfgObft
 

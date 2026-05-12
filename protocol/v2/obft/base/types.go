@@ -102,7 +102,9 @@ type LayerSpec struct {
 	// T_commit-anchored value, NOT the propagation half alone.
 	//
 	// Required: must be > 0 on every layer. Config.Validate rejects
-	// zero/negative values and non-strict-increasing schedules. Use
+	// zero/negative values and decreasing-in-k schedules (equal adjacent
+	// budgets are accepted — multiple layers may share the BFT_start
+	// clamp at degraded operating points; see spec §Setting). Use
 	// DefaultBroadcastBudget(K, BTT, T_commit) for the spec-recommended
 	// staggered schedule when constructing a Config manually.
 	BroadcastBudget time.Duration

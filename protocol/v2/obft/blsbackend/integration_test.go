@@ -51,10 +51,11 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 	tCommit := 1500 * time.Millisecond
 	budgets, err := obft.DefaultBroadcastBudget(K, btt, tCommit)
 	require.NoError(t, err)
-	// FetchAt must satisfy strict-decreasing-in-k AND ≤ T_broadcast_max_k =
-	// max(0, T_commit − B_k). At BTT=150ms / K=4, budgets are [150, 225, 375,
-	// T_commit]ms; the deepest L_3's cap clamps to 0 ("earliest possible").
-	// Shallower fetchAt values chosen well below their caps.
+	// FetchAt must satisfy non-increasing-in-k AND ≤ T_broadcast_max_k =
+	// max(BFT_start, T_commit − B_k). At BTT=150ms / K=4, budgets are
+	// [150, 225, 375, T_commit]ms; the deepest L_3's cap clamps to
+	// BFT_start ("earliest possible"). Shallower fetchAt values chosen
+	// well below their caps.
 	layers := make([]obft.LayerSpec, K)
 	for k := 0; k < K; k++ {
 		var fetchAt time.Duration
