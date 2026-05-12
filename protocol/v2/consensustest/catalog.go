@@ -17,14 +17,14 @@ package consensustest
 //   - TestStress runs the curated DefaultSweeps at a single cluster
 //     size (CLUSTER_SIZE env, default 4). Every sweep uses
 //     LogNormalDelay as its propagation model (production-shaped per
-//     OBFT.md §Setting): p2p_ideal at σ=0.1 (low-noise control),
-//     p2p_normal at σ=0.5 (production baseline), p2p_increasing_BTT and
-//     p2p_heavy_tail varying BTT and σ along their axes, p2p_packet_loss
-//     wrapping LossyNetwork over the production baseline, and
-//     p2p_correlated_delays wrapping CorrelatedLinkDelay over the same.
-//     Many iterations; stats only. Cross-cluster-size comparison is done
-//     by re-running TestStress with different CLUSTER_SIZE values, not
-//     by a dedicated sweep.
+//     OBFT.md §Setting): p2p_baseline (K × BTT × σ cross-product),
+//     p2p_increasing_BTT and p2p_heavy_tail varying BTT and σ along
+//     their axes × K, p2p_packet_loss wrapping LossyNetwork × K,
+//     p2p_correlated_delays wrapping CorrelatedLinkDelay × K, and
+//     p2p_node_slowness varying slow-op count × K. Many iterations
+//     (baseline / unstable split); stats only. Cross-cluster-size
+//     comparison is done by re-running TestStress with different
+//     CLUSTER_SIZE values, not by a dedicated sweep.
 //
 // A scenario that needs a specific network shape (e.g. MeshFlakiness's
 // PerReceiverDelay, AsymmetricPropagation_*'s per-receiver overrides)

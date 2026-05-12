@@ -158,10 +158,11 @@ func withClusterSize(cfg SimConfig, n int) SimConfig {
 }
 
 // productionLogNormal returns the production-shaped LogNormal delay
-// model used as the baseline for every stress sweep except p2p_ideal
-// and p2p_heavy_tail (which pick their own σ along the axis).
-// Median = BTT/2 mirrors the spec's typical-mesh P99 propagation per
-// OBFT.md §Setting (BTT = P99_propagation + clock skew δ).
+// model (σ=0.5) used as the baseline by every stress sweep except
+// p2p_baseline and p2p_heavy_tail (which pick their own σ along the
+// axis). Median = BTT/2 mirrors the spec's typical-mesh P99
+// propagation per OBFT.md §Setting (BTT = P99_propagation + clock
+// skew δ).
 func productionLogNormal(btt time.Duration) LogNormalDelay {
 	return LogNormalDelay{Median: btt / 2, Sigma: 0.5}
 }

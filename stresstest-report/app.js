@@ -312,6 +312,23 @@ function availableBaselineDimensions(data) {
   };
 }
 
+// clusterSizeFromData reads the cluster size (n) embedded in any
+// sweep's Params (each sweep builder includes "n=N" as a fixed-config
+// badge). Falls back to 4 — the default CLUSTER_SIZE — when no sweep
+// exposes the value (defensive; should always be present in
+// well-formed data).
+function clusterSizeFromData(data) {
+  if (!data || !Array.isArray(data.sweeps)) return 4;
+  for (const sw of data.sweeps) {
+    if (!sw.params) continue;
+    for (const p of sw.params) {
+      const m = /^n\s*=\s*(\d+)$/.exec(p);
+      if (m) return parseInt(m[1], 10);
+    }
+  }
+  return 4;
+}
+
 // filterSweepByK returns a shallow copy of `sweep` with Points
 // filtered to those whose Fields.K matches `k`. Points without a K
 // field (e.g. legacy single-axis sweeps) pass through. Used by the
@@ -366,7 +383,7 @@ function renderConditionsSection(data) {
   const head = h('div', { class: 'conditions-head' });
   const titleEl = h('h2', { class: 'conditions-title' });
   head.appendChild(titleEl);
-  head.appendChild(h('span', { class: 'conditions-subtitle' }, 'n=4'));
+  head.appendChild(h('span', { class: 'conditions-subtitle' }, 'n=' + clusterSizeFromData(data)));
   sec.appendChild(head);
 
   const desc = h('p', { class: 'desc conditions-desc' });
