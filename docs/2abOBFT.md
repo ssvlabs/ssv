@@ -4,7 +4,7 @@ A single-round agreement protocol for SSV clusters that produces one collective 
 
 The "2ab" in the name reflects this split — the protocol's defining feature relative to OBFT-family ancestors. Cryptographic safety is identical to single-Phase-2 protocols (chained IBE + EKM-enforced per-operator commitments + qV = qEnc = 2f+1); the split buys *liveness* — equivocation σ-locked split recovery, h_V=1 selective-delivery deadlock recovery, validity-divergence recovery within the f-bound, mesh-flakiness mitigation — at +1 RTT cost vs single-Phase-2 designs.
 
-2abOBFT operates with K configurable layers (`max(2, f+1) ≤ K ≤ n`), each layer with its own deterministically-derived leader, falling through within a single Phase-3 reconstruction walk (sequential local decryption, no per-layer RTT). The running example throughout is `n = 4, f = 1, K = 4` for SSV Ethereum proposer duty; algebra generalizes to higher cluster sizes.
+2abOBFT operates with K configurable layers (`f+1 ≤ K ≤ n`), each layer with its own deterministically-derived leader, falling through within a single Phase-3 reconstruction walk (sequential local decryption, no per-layer RTT). The running example throughout is `n = 4, f = 1, K = 4` for clarity; algebra generalizes uniformly across the supported K-range and to higher cluster sizes.
 
 ## When to use it
 
@@ -27,13 +27,13 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
   - **V-signing keypair** at threshold `qV = 2f+1`. Used to produce the per-validator signature on `V` (e.g. an Ethereum block in the SSV proposer-duty application). Reconstructing a full `V` signature requires `qV` partial sigs. At `n = 4`, `qV = 3`.
   - **IBE keypair** at threshold `qEnc = 2f+1`. Used (a) as the threshold-signing scheme for no-quorum tags and (b) as the decryption oracle for threshold identity-based encryption (IBE), the same primitive used by `drand/tlock`. Decryption of a ciphertext under tag `T` requires `qEnc` partial sigs on `T` from this keypair. The two keypairs are distinct (different cryptographic backends so the IBE primitive can use its expected DST), but share the threshold — see [Safety](#safety-cryptographic-honest-majority). At `n = 4`, `qEnc = 3`.
 - A **leader-authentication signature scheme** (operator-identity key) for candidate broadcasts, verdict envelopes, and Phase-2b onion auth. Distinct from the two threshold keypairs. Practical choice: reuse each operator's long-term P2P/SSV identity key.
-- **K layers** (`max(2, f+1) ≤ K ≤ n`, configurable; **K ≥ f+2 strongly recommended** — see below) with deterministically-derived leaders: layer 0 with **primary leader** `L_0`, layer 1 with **backup leader** `L_1`, ..., layer `K-1` with `L_{K-1}`. Leaders must be distinct (`L_i ≠ L_j` for `i ≠ j`). For `K = n`, every cluster member is a leader at exactly one layer per slot.
+- **K layers** (`f+1 ≤ K ≤ n`, configurable) with deterministically-derived leaders: layer 0 with **primary leader** `L_0`, layer 1 with **backup leader** `L_1`, ..., layer `K-1` with `L_{K-1}`. Leaders must be distinct (`L_i ≠ L_j` for `i ≠ j`). For `K = n`, every cluster member is a leader at exactly one layer per slot.
 
-  **Two distinct K bounds:**
-  - **`K ≥ f+1` is the BFT-liveness minimum** — pigeonhole over the f-byz bound guarantees at least one honest leader. At K < f+1, all leaders could be byzantine and no σ-quorum reaches at any layer.
-  - **`K ≥ f+2` is the late-leader-resilience minimum** — pigeonhole guarantees ≥ 2 honest leaders, so a single late-broadcasting honest leader doesn't foreclose the slot via the deepest-layer NR-lock pathology.
+  **Spec-level K bounds:**
+  - **`K ≥ f+1` is the BFT-liveness minimum** — pigeonhole over the f-byz bound guarantees at least one honest leader. At `K < f+1`, all leaders could be byzantine and no σ-quorum reaches at any layer. This is the only K-floor the protocol mandates.
+  - At `K = f+1`, the cluster has exactly one honest leader; a single late-broadcasting honest leader can foreclose the slot via the deepest-layer NR-lock pathology. `K ≥ f+2` guarantees ≥ 2 honest leaders, providing late-leader-resilience at the cost of one additional layer's leader-broadcast budget.
 
-  Concrete minimums by f: at `f = 1`, BFT-min `K = 2` but **late-leader-resilient `K = 3` recommended**, with **`K = n = 4` as the 2abOBFT default** for SSV proposer duty (every cluster member leads exactly one layer; maximum honest-leader probability via pigeonhole). At `f = 2, n = 7`, BFT-min `K = 3` but resilient `K = 4` recommended; at `f = 3, n = 10`, resilient `K = 5`.
+  Choice of K is **deployment-dependent** and left to the operator. Clusters with low-tail propagation, tight per-operator SLAs, or no expected Byzantine presence may prefer smaller K (fewer leaders, simpler Phase 3 walk, smaller chained-encryption depth). Clusters operating closer to the partial-synchrony tail or treating adversarial-byz tolerance as a hard requirement may prefer `K ≥ f+2` or `K = n`. The running protocol example below uses `n = 4, f = 1, K = 4` for clarity but the spec applies uniformly across `f+1 ≤ K ≤ n`.
 
 - **Single agreement round per slot.** R is fixed at 1: one Phase 1 → Phase 2a → Phase 2b → Phase 3 sequence per slot, no retry, no re-flood across rounds. The slot's reconstruction deadline is the only deadline. Operators who do not reach σ-emit-eligibility by Phase-2a end commit NR at Phase 2b per the convergence rule (see [§Phase 2b](#phase-2b)). For deployments needing the wider partial-synchrony absorption of multi-round retry, see [OBFTR(R≥2)](OBFTR.md) (which currently runs without the Phase-2 split, but the split composes orthogonally with R-round retry — that's a future direction, not specified here).
 
@@ -654,7 +654,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 
 ## Application: SSV Ethereum proposer duty
 
-For an SSV cluster proposing an Ethereum block, the recommended 2abOBFT configuration is **`K = 4` (= n)** — every cluster member is a leader at exactly one layer; pigeonhole guarantees ≥ 3 honest leaders at f=1, providing maximum K-layer fall-through depth within the single round. `K = 3 = f+2` is also viable at slightly lower onion bandwidth (~3KB savings per Phase-2b onion, same timing). `K = 2` (BFT-min at f=1) is **not recommended** — exposes the late-deepest-layer-leader-broadcast Class A failure mode at K=2 (no L_2 to fall through to).
+For an SSV cluster proposing an Ethereum block, the SSV adapter's default 2abOBFT configuration is **`K = 4` (= n)** — every cluster member is a leader at exactly one layer; pigeonhole guarantees ≥ 3 honest leaders at f=1, providing maximum K-layer fall-through depth within the single round. The adapter also supports `K = f+2 = 3` (slightly lower onion bandwidth, ~3KB savings per Phase-2b onion, same timing) and `K = f+1 = 2` (BFT-liveness minimum at f=1, smallest envelope; exposes the late-deepest-layer-leader-broadcast Class A failure mode at K=2 since no L_2 exists to fall through to — see §Setting for the K-bounds discussion). The K choice is per-cluster and deployment-dependent.
 
 | 2abOBFT concept | SSV mapping |
 |---|---|
@@ -726,7 +726,7 @@ This per-operator workflow narrows the divergence window to events landing insid
 
    Phase-window minimums: **`Δ_2a ≥ 2 BTT`** (sub-2-BTT sizing is broken-by-construction with the late-broadcast verdict schedule — see [§Phase 2a / Verdict propagation budget](#phase-2a)), `Δ_2b ≥ 1 BTT + ε_proc` (sized for Phase-2b emission propagation under the early-emission discipline at [§Phase 2b](#phase-2b)), `Δ_3 ≥ ε_3`. Recommended: `Δ_2a = Δ_2b = 2 BTT` for jitter absorption.
 
-3. **Choosing K (layer count).** K is per-duty. `K = 2` (BFT-min at f=1) is not recommended — exposes the late-deepest-layer-leader-broadcast at K=2 (no L_2 to fall through to). `K = 3..n` provides multiple fall-through layers within Phase 3's single reconstruction walk. **Recommended for 2abOBFT proposer duty: `K = n = 4`** (maximum fall-through depth at f=1).
+3. **Choosing K (layer count).** K is per-duty within `f+1 ≤ K ≤ n` — deployment-dependent (see §Setting). `K = f+1 = 2` at f=1 is the BFT-liveness minimum and exposes the late-deepest-layer-leader-broadcast Class A failure mode (no L_2 to fall through to). `K = 3..n` provides additional fall-through layers within Phase 3's single reconstruction walk. The SSV adapter's default for proposer duty is `K = n = 4` (maximum fall-through depth at f=1).
 
 4. **R is fixed at 1.** 2abOBFT is single-round by design. Multi-round extension (combining Phase 2a/2b split with R-round retry) is an open future direction — composes cleanly but is not specified here.
 
