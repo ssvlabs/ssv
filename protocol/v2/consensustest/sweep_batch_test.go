@@ -107,17 +107,24 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	require.Empty(t, expected, "missing sweep names: %v", expected)
 }
 
-// TestDefaultSweeps_EmptyInputs — DefaultSweeps returns nil on empty
-// scenarios / protocols / non-positive iter counts (defensive).
-func TestDefaultSweeps_EmptyInputs(t *testing.T) {
+// TestDefaultSweeps_InvalidInputs — DefaultSweeps panics with a specific
+// reason on each invalid-input class. Programmer-error inputs (empty
+// scenarios / protocols, non-positive iter budgets, non-positive cluster
+// size) surface at the call site instead of confusingly returning nil.
+func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}}
 	scen := []ct.Scenario{ct.Catalog[0]}
 	good := ct.Iterations{Baseline: 10, Unstable: 10}
-	require.Nil(t, ct.DefaultSweeps(nil, protocols, good, 4))
-	require.Nil(t, ct.DefaultSweeps(scen, nil, good, 4))
-	require.Nil(t, ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4))
-	require.Nil(t, ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4))
-	require.Nil(t, ct.DefaultSweeps(scen, protocols, good, 0))
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty scenarios",
+		func() { ct.DefaultSweeps(nil, protocols, good, 4) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty protocols",
+		func() { ct.DefaultSweeps(scen, nil, good, 4) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got 0)",
+		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Unstable must be > 0 (got 0)",
+		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps: cluster size n must be > 0 (got 0)",
+		func() { ct.DefaultSweeps(scen, protocols, good, 0) })
 }
 
 // TestPhase2_AllSweepPoints_NoSetupErrors runs one sim of Healthy at

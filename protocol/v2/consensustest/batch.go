@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -185,32 +186,48 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	}
 }
 
-// iterOutcome captures the per-iteration Outcome + error from one sim
-// run inside RunBatch. Workers write directly to results[cellIdx][iter];
-// reduceCellResults consumes the per-cell slice single-threaded.
+// iterOutcome captures the per-iteration Outcome + error + seed from
+// one sim run inside RunBatch. Workers write directly to
+// results[cellIdx][iter]; reduceCellResults consumes the per-cell slice
+// single-threaded. seed is the SimConfig.Seed used for this iter — kept
+// alongside the outcome so SafetyPanic can attach it for repro.
 type iterOutcome struct {
-	out Outcome
-	err error
+	out  Outcome
+	err  error
+	seed int64
 }
+
+// errSimPanic is the sentinel returned by runOneSim's recover wrapper.
+// Treated as a per-iter miss by aggregateCellIters (recorded under
+// MissReasons["sim_panic"]) rather than collapsing the whole cell to n/a
+// — a single panicking seed in a 1000-iter baseline cell shouldn't hide
+// the other 999 sims' data.
+var errSimPanic = fmt.Errorf("consensustest: sim panic")
 
 // runOneSim runs one iteration on its own goroutine and returns an
 // iterOutcome. A panic from inside the protocol (adapter or production
-// code under it) is recovered and returned as an error so a single buggy
-// sim doesn't take down the whole stress run — the offending cell is
-// classified as "unexpected error → n/a" by reduceCellResults. Safety
+// code under it) is recovered and returned as errSimPanic — wrapped
+// with the seed + scenario / protocol identity + a stack snapshot — so
+// a single buggy sim doesn't take down the whole stress run. The cell
+// then surfaces the failure as a per-iter miss (see
+// aggregateCellIters), preserving every other iter's data. Safety
 // panics (SafetyPanic) intentionally do NOT happen here: safety is
 // checked in the single-threaded reduce phase, where panic propagation
 // is well-defined.
 //
 // The panic-wrap error string includes the seed so the operator can
 // reproduce the panic by re-running with that exact seed (sims are
-// deterministic given (cfg, seed)).
+// deterministic given (cfg, seed)). The stack snapshot is attached so
+// the root cause is loggable without re-running.
 func runOneSim(cfg BatchConfig, sc Scenario, p Protocol, iter int) (oc iterOutcome) {
 	seed := cfg.SeedStart + int64(iter)
 	defer func() {
 		if r := recover(); r != nil {
-			oc = iterOutcome{err: fmt.Errorf("%s/%s iter %d seed %d: sim panic: %v",
-				p.Name(), sc.Name, iter, seed, r)}
+			oc = iterOutcome{
+				err: fmt.Errorf("%w: %s/%s iter %d seed %d: %v\n%s",
+					errSimPanic, p.Name(), sc.Name, iter, seed, r, debug.Stack()),
+				seed: seed,
+			}
 		}
 	}()
 	simCfg := cfg.Base
@@ -219,7 +236,7 @@ func runOneSim(cfg BatchConfig, sc Scenario, p Protocol, iter int) (oc iterOutco
 		sc.Apply(&simCfg)
 	}
 	out, err := p.Run(simCfg)
-	return iterOutcome{out: out, err: err}
+	return iterOutcome{out: out, err: err, seed: seed}
 }
 
 // reduceCellResults aggregates one cell's per-iter outcomes into a
@@ -251,15 +268,17 @@ func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol P
 	if cell, classified := classifyCellErrors(t, cellIter, scenario, protocol, iters); classified {
 		return cell
 	}
-	return aggregateCellIters(cellIter, scenario, protocol, iters)
+	return aggregateCellIters(t, cellIter, scenario, protocol, iters)
 }
 
 // classifyCellErrors scans every iter's err once and emits a special-case
 // BatchCell if the cell hit a uniform config-level error (ErrNotApplicable
-// or ErrConfigOutOfEnvelope). An unexpected error in any iter logs and
-// returns an n/a cell. Returns (cell, true) when a special-case applies;
-// (zero, false) when every iter ran successfully and the caller should
-// aggregate normally.
+// or ErrConfigOutOfEnvelope). errSimPanic is NOT a special case here —
+// per-iter sim panics flow into aggregateCellIters and are recorded as
+// per-iter misses (MissReasons["sim_panic"]++), preserving every other
+// iter's data instead of collapsing the cell to n/a. Other unexpected
+// errors log and return an n/a cell. Returns (cell, true) when a
+// special-case applies; (zero, false) when the caller should aggregate.
 func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) (BatchCell, bool) {
 	t.Helper()
 	hasNotApplicable, hasOutOfEnvelope, hasOtherErr := false, false, false
@@ -273,6 +292,8 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 			hasNotApplicable = true
 		case errors.Is(r.err, ErrConfigOutOfEnvelope):
 			hasOutOfEnvelope = true
+		case errors.Is(r.err, errSimPanic):
+			// per-iter; aggregate normally and record as a miss
 		default:
 			if !hasOtherErr {
 				firstOther = r.err
@@ -307,7 +328,12 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 // classifyCellErrors. Panics on any SafetyReport violation, matching the
 // RunScenarioOnProtocol contract — safety panics are intentional and
 // terminate the test before any further reduce work runs.
-func aggregateCellIters(cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
+//
+// Per-iter errSimPanic results contribute MissReasons["sim_panic"]++
+// (rather than collapsing the whole cell to n/a) so a single panicking
+// seed doesn't hide the other surviving iters' samples.
+func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
+	t.Helper()
 	cell := BatchCell{
 		Protocol:         protocol.Name(),
 		Scenario:         scenario.Name,
@@ -319,10 +345,23 @@ func aggregateCellIters(cellIter int, scenario Scenario, protocol Protocol, iter
 		MissReasons:      make(map[string]int),
 	}
 	successCount := 0
-	for _, r := range iters {
+	loggedPanic := false
+	for i, r := range iters {
+		if errors.Is(r.err, errSimPanic) {
+			// Surface the first panic's full stack at the cell level (the
+			// stack lives in r.err per runOneSim) so the failing seed can
+			// be reproduced from the log; subsequent panics in the same
+			// cell increment the counter without re-spamming the log.
+			cell.MissReasons["sim_panic"]++
+			if !loggedPanic {
+				t.Logf("RunBatch: %s", r.err)
+				loggedPanic = true
+			}
+			continue
+		}
 		report := ComputeSafetyReport(r.out)
 		if report.IsViolation() {
-			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, r.out)
+			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, r.seed, r.out)
 		}
 		if r.out.Decided {
 			successCount++
@@ -332,6 +371,7 @@ func aggregateCellIters(cellIter int, scenario Scenario, protocol Protocol, iter
 		}
 		cell.ClusterBandwidth = append(cell.ClusterBandwidth, float64(r.out.Bandwidth.TotalBytes))
 		for kind, bytes := range r.out.Bandwidth.PerKindBytes {
+			ensureLen(cell.PerKindBandwidth, kind, i)
 			cell.PerKindBandwidth[kind] = append(cell.PerKindBandwidth[kind], float64(bytes))
 		}
 		// One evidence sample per sim per rule (value = sum of fires across
@@ -343,11 +383,44 @@ func aggregateCellIters(cellIter int, scenario Scenario, protocol Protocol, iter
 			}
 		}
 		for rule, count := range perSimEvidence {
+			ensureLen(cell.EvidenceCounts, rule, i)
 			cell.EvidenceCounts[rule] = append(cell.EvidenceCounts[rule], float64(count))
 		}
 	}
+	// Right-pad every kind / rule slice with zeros so its length matches
+	// cell.Iterations. Without this, kinds / rules that only fire on some
+	// iters publish a Median computed over the subset where they fired,
+	// biasing reported per-kind / per-rule percentiles upward and silently
+	// disagreeing with cell.ClusterBandwidth.Len() / cell.Iterations.
+	padToIters(cell.PerKindBandwidth, len(iters))
+	padToIters(cell.EvidenceCounts, len(iters))
 	cell.SuccessRate = float64(successCount) / float64(cellIter)
 	return cell
+}
+
+// ensureLen left-pads m[key] with zeros up to `iterIdx` so the next append
+// at iteration `iterIdx` lands at the right position. Used by
+// aggregateCellIters to back-fill prior iterations where a kind / rule
+// didn't appear in r.out.Bandwidth.PerKindBytes or r.out.PerOp's
+// EvidenceByRule.
+func ensureLen(m map[string]Distribution, key string, iterIdx int) {
+	d := m[key]
+	for len(d) < iterIdx {
+		d = append(d, 0)
+	}
+	m[key] = d
+}
+
+// padToIters extends every map value to length `iters` by right-padding
+// with zeros. Mirrors ensureLen for kinds / rules whose final iteration
+// was a no-op.
+func padToIters(m map[string]Distribution, iters int) {
+	for key, d := range m {
+		for len(d) < iters {
+			d = append(d, 0)
+		}
+		m[key] = d
+	}
 }
 
 // classifyMiss returns a coarse string label for why an Outcome reported
@@ -409,6 +482,8 @@ func shortenErr(err string) string {
 		{"noquorum", "no_quorum"},
 		{"timed out", "timeout"},
 		{"timeout", "timeout"},
+		{"missed relay deadline", "deadline_miss"},
+		{"sim panic", "sim_panic"},
 		{"context", "context_cancel"},
 	}
 	for _, k := range known {

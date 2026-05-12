@@ -187,6 +187,19 @@ var ErrConfigOutOfEnvelope = fmt.Errorf("config out of envelope for this protoco
 // there internally (QBFT round-changing past its timer, OBFT recovering via
 // evtResolveRerun on a late KindCommit, etc.). Earliest-decider gate matches
 // the framework's "any in-time op submits and the slot succeeds" semantic.
+//
+// Post-clip Outcome fields:
+//   - Decided        = false
+//   - DecidedRound   = -1
+//   - DecidedValue   = preserved (diagnostic: which V the protocol would
+//     have decided had it landed in time)
+//   - DecisionTime   = preserved (diagnostic: when the late decision
+//     actually landed; useful for measuring "how far past the deadline?")
+//   - PerOp[op].Time = preserved on the same basis as DecisionTime
+//
+// Aggregation only reads DecisionTime / DecidedValue when r.out.Decided
+// is true (see aggregateCellIters), so the preserved values don't leak
+// into reported metrics — they're available solely for trace diagnosis.
 func ClipLateDecision(out *Outcome, deadline time.Duration) {
 	if !out.Decided || out.DecisionTime <= deadline {
 		return

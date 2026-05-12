@@ -37,9 +37,6 @@ func NewBandwidthReport() BandwidthReport {
 // at OBFT `layer` (use -1 for layer-agnostic / non-OBFT messages). Both ends
 // are charged.
 func (b *BandwidthReport) Emission(from, to OperatorID, kind MsgKind, layer int, bytes int64) {
-	if b.PerKindBytes == nil {
-		*b = NewBandwidthReport()
-	}
 	b.TotalBytes += bytes
 	b.PerKindBytes[kind.String()] += bytes
 	b.PerLayerBytes[layer] += bytes
@@ -49,11 +46,9 @@ func (b *BandwidthReport) Emission(from, to OperatorID, kind MsgKind, layer int,
 
 // Rejection records `bytes` bytes dropped at the validation layer (byz
 // garbage that didn't reach the protocol). Counted separately from
-// successful emissions; not summed into TotalBytes.
+// successful emissions; not summed into TotalBytes. Construct the report
+// via NewBandwidthReport so the maps are non-nil before calling this.
 func (b *BandwidthReport) Rejection(bytes int64) {
-	if b.PerKindBytes == nil {
-		*b = NewBandwidthReport()
-	}
 	b.RejectedBytes += bytes
 }
 

@@ -3,7 +3,6 @@ package consensustest
 import (
 	"math"
 	mrand "math/rand"
-	"sync"
 	"time"
 )
 
@@ -66,25 +65,36 @@ func (p PerReceiverDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKi
 	return p.Inner.Delay(rng, from, to, kind)
 }
 
-// MarkovianSlownessDelay models per-operator "slow" links with per-message
-// Markov persistence in both directions. For every message touching a
-// slow op (from-side or to-side):
-//   - The 1st such message returns ExtraDelay unconditionally (the slow
-//     op's link is in the "bad" period when the slot starts — by the
-//     time we observe the first inbound, it's already affected).
-//   - Each subsequent message independently returns ExtraDelay with
-//     probability PersistP, or falls through to Inner.Delay otherwise.
+// MarkovianSlownessDelay models per-operator "slow" links via a real
+// two-state Markov chain (slow / fast) keyed by the slow op. For every
+// message touching a slow op (from-side or to-side):
+//   - The chain stays in its current state with probability PersistP;
+//     it flips with probability (1 − PersistP). In the slow state the
+//     call returns ExtraDelay; in the fast state it falls through to
+//     Inner.Delay.
+//   - Each slow op starts in the slow state so the very first message
+//     touching it returns ExtraDelay (matches the spec assumption that
+//     the slot starts mid-bad-period).
 //
-// PersistP (typically ~0.8) models real-world correlation: networking
-// problems (latency, congestion, GC pauses, link saturation) tend to
-// persist across consecutive messages rather than randomly toggle
-// per-message. Both directions share the same per-op state so inbound
-// and outbound slowness are coupled, matching how peer-link issues
-// actually behave in practice.
+// This is a genuine two-state Markov chain (not memoryless Bernoulli):
+// the next-message outcome depends on the current state, so runs of
+// consecutive slow-state messages cluster — matching real-world bursts
+// where networking problems persist across stretches of consecutive
+// messages instead of toggling per-packet.
 //
-// State (one entry per slow op) lives on the struct. Construct a fresh
-// instance per iteration to avoid cross-iteration contamination —
-// scenarios.Apply should build a new MarkovianSlownessDelay each time.
+// At PersistP = 0.8 the steady-state is 50/50 slow/fast (symmetric
+// chain), with mean dwell time 1/(1−PersistP) = 5 messages in each
+// state. Raising PersistP lengthens dwell times in both states without
+// changing the steady-state fraction; lowering toward 0.5 weakens the
+// burst structure toward independent Bernoulli; PersistP = 0 makes
+// every call flip and is degenerate (don't do this).
+//
+// Both directions share per-op state so inbound and outbound slowness
+// are coupled, matching how peer-link issues actually behave in
+// practice. State (one entry per slow op) lives on the struct.
+// Construct a fresh instance per iteration to avoid cross-iteration
+// contamination — scenarios.Apply should build a new
+// MarkovianSlownessDelay each time.
 type MarkovianSlownessDelay struct {
 	Inner      NetworkModel
 	SlowOps    map[OperatorID]bool
@@ -93,8 +103,14 @@ type MarkovianSlownessDelay struct {
 	State      map[OperatorID]*markovSlownessState
 }
 
+// markovSlownessState carries the chain state for one slow op. slow=true
+// means the next call returns ExtraDelay (subject to a PersistP/flip
+// roll on every call AFTER initialization); slow=false falls through to
+// Inner.Delay. inited marks the first observation so the chain enters
+// in the slow state (no transition roll on call #1).
 type markovSlownessState struct {
-	seenFirst bool
+	inited bool
+	slow   bool
 }
 
 func (m MarkovianSlownessDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
@@ -112,11 +128,13 @@ func (m MarkovianSlownessDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind
 		state = &markovSlownessState{}
 		m.State[slowOp] = state
 	}
-	if !state.seenFirst {
-		state.seenFirst = true
-		return m.ExtraDelay
+	if !state.inited {
+		state.inited = true
+		state.slow = true // spec: slot starts mid-bad-period
+	} else if rng.Float64() >= m.PersistP {
+		state.slow = !state.slow
 	}
-	if rng.Float64() < m.PersistP {
+	if state.slow {
 		return m.ExtraDelay
 	}
 	return m.Inner.Delay(rng, from, to, kind)
@@ -261,10 +279,12 @@ func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.
 // BurstFactor from observed dwell-time in lossy periods (~5-20 messages
 // based on typical gossipsub mesh-churn windows).
 //
-// Stateful: holds a single network-wide (good/bad) state with a mutex.
-// CONSTRUCT FRESH PER SIM via NewLossyNetwork — sharing one instance
-// across multiple parallel sims would cross-contaminate state and break
-// determinism. For batch usage, instantiate inside Scenario.Apply.
+// Stateful: holds a single network-wide (good/bad) state. Per-sim
+// freshness is the contract — sharing one instance across parallel sims
+// would cross-contaminate state AND break determinism. Construct via
+// NewLossyNetwork inside Scenario.Apply so each iteration gets its own
+// instance and the DES (which is single-goroutine within one sim) is
+// the only caller of Delay; no mutex is needed under that contract.
 //
 // For per-PAIR sustained flakiness (a specific link is bad while others
 // are fine), use CorrelatedLinkDelay instead. The two are composable
@@ -274,7 +294,6 @@ type LossyNetwork struct {
 	LossRate    float64
 	BurstFactor int
 
-	mu     sync.Mutex
 	state  byte // 0=good, 1=bad
 	inited bool
 }
@@ -304,14 +323,11 @@ func NewLossyNetwork(inner NetworkModel, lossRate float64, burstFactor int) *Los
 const DroppedDelay = time.Hour
 
 func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
-	l.mu.Lock()
 	// Fast-path edge cases first (avoid wasting RNG draws).
 	if l.LossRate <= 0 {
-		l.mu.Unlock()
 		return l.Inner.Delay(rng, from, to, kind)
 	}
 	if l.LossRate >= 1 {
-		l.mu.Unlock()
 		return DroppedDelay
 	}
 	// Initial state: weighted by steady-state P(bad) = LossRate.
@@ -336,10 +352,7 @@ func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind)
 		}
 	}
 
-	bad := l.state == 1
-	l.mu.Unlock()
-
-	if bad {
+	if l.state == 1 {
 		return DroppedDelay
 	}
 	return l.Inner.Delay(rng, from, to, kind)
@@ -371,16 +384,17 @@ func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind)
 // observed dwell time in bad-pair status (~10-50 messages per typical
 // mesh-churn window).
 //
-// Stateful: per-pair state map with a mutex. CONSTRUCT FRESH PER SIM
-// via NewCorrelatedLinkDelay — sharing across sims would cross-
-// contaminate per-pair state.
+// Stateful: per-pair state map. Per-sim freshness is the contract —
+// construct via NewCorrelatedLinkDelay inside Scenario.Apply so each
+// iteration gets its own instance; the DES (single-goroutine within
+// one sim) is the only caller of Delay, so no mutex is needed. Sharing
+// across sims would break determinism AND cross-contaminate state.
 type CorrelatedLinkDelay struct {
 	Inner             NetworkModel
 	BadLinkProb       float64
 	BadLinkMultiplier float64
 	BurstMessages     int
 
-	mu       sync.Mutex
 	linkBad  map[linkKey]bool
 	linkSeen map[linkKey]bool
 }
@@ -412,12 +426,6 @@ func NewCorrelatedLinkDelay(inner NetworkModel, badLinkProb, badLinkMultiplier f
 func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
 	pair := linkKey{from: from, to: to}
 
-	c.mu.Lock()
-	if c.linkBad == nil {
-		c.linkBad = make(map[linkKey]bool)
-		c.linkSeen = make(map[linkKey]bool)
-	}
-
 	// Lazy per-pair init at first observation: weighted by steady-state
 	// P(bad) = BadLinkProb.
 	if !c.linkSeen[pair] {
@@ -444,7 +452,6 @@ func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind M
 		}
 	}
 	bad := c.linkBad[pair]
-	c.mu.Unlock()
 
 	base := c.Inner.Delay(rng, from, to, kind)
 	if bad {

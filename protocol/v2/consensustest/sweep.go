@@ -132,11 +132,23 @@ var (
 // cluster sizes, re-run the driver with different CLUSTER_SIZE values
 // (each run produces its own data.js).
 //
-// Returns nil if Scenarios or Protocols is empty (defensive — caller
-// driver test should always pass non-empty lists).
+// Panics with a specific reason on invalid input (empty scenarios /
+// protocols, non-positive iteration budgets or cluster size). These are
+// programmer errors — the test driver should always pass valid inputs;
+// a panic surfaces the bug at the failure site rather than collapsing
+// to a confusing "expected N sweeps got 0" downstream.
 func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) []Sweep {
-	if len(scenarios) == 0 || len(protocols) == 0 || iters.Baseline <= 0 || iters.Unstable <= 0 || n <= 0 {
-		return nil
+	switch {
+	case len(scenarios) == 0:
+		panic("consensustest: DefaultSweeps called with empty scenarios")
+	case len(protocols) == 0:
+		panic("consensustest: DefaultSweeps called with empty protocols")
+	case iters.Baseline <= 0:
+		panic(fmt.Sprintf("consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got %d)", iters.Baseline))
+	case iters.Unstable <= 0:
+		panic(fmt.Sprintf("consensustest: DefaultSweeps: Iterations.Unstable must be > 0 (got %d)", iters.Unstable))
+	case n <= 0:
+		panic(fmt.Sprintf("consensustest: DefaultSweeps: cluster size n must be > 0 (got %d)", n))
 	}
 	return []Sweep{
 		p2pBaselineSweep(scenarios, protocols, iters, n),

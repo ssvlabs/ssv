@@ -864,13 +864,19 @@ function renderHeatmapCell(cell, scenario) {
   const rate = shifted.successRate;
   const { bg, fg } = rateToColor(rate);
   const pct = Math.round(rate * 100);
+  const successes = (shifted.decisionTimes && shifted.decisionTimes.length) || 0;
   const p99 = shifted.decisionTime ? `${Math.round(shifted.decisionTime.p99)} ms p99` : 'no decisions';
+  // Include N samples in the tooltip so the user can judge precision of
+  // the displayed percentage / P99 — important at the unstable iter
+  // budget (default 10) where 1/N = 10% increments dominate the rate
+  // and the P99 may be derived from very few successful samples.
+  const samplesNote = `${successes}/${cell.iterations} successes (P99 from ${successes} samples)`;
   return h(
     'div',
     {
       class: 'hcell',
       style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}`,
-      title: `${scenario.title || scenario.name} · ${cell.protocol}\n${pct}% success · ${p99}\nClick to drill in`,
+      title: `${scenario.title || scenario.name} · ${cell.protocol}\n${pct}% success · ${p99}\n${samplesNote}\nClick to drill in`,
     },
     `${pct}%`,
   );
@@ -997,11 +1003,17 @@ function protocolStats(sweep, scenario, protocol) {
   const p99s = cells
     .map((c) => (c.decisionTime ? c.decisionTime.p99 : null))
     .filter((v) => v !== null);
+  // Smallest per-cell iteration count drives the displayed-precision floor:
+  // when the worst-sampled cell has e.g. 10 iters, 1/10 = 10% increments
+  // are the finest meaningful resolution; printing 2 decimal places implies
+  // a precision we don't have.
+  const minIters = Math.min(...cells.map((c) => c.iterations));
   return {
     successMin: Math.min(...successes),
     successMax: Math.max(...successes),
     p99Min: p99s.length > 0 ? Math.min(...p99s) : null,
     p99Max: p99s.length > 0 ? Math.max(...p99s) : null,
+    minIters,
   };
 }
 
@@ -1033,8 +1045,14 @@ function buildSweepLegend(sweep, scenario, protocols) {
     // Color the chip by the worst-case (min) rate so a sweep that dips
     // into the red zone reads as red even if other points are green.
     const { bg, fg } = rateToColor(stats.successMin);
-    const sMin = (stats.successMin * 100).toFixed(2);
-    const sMax = (stats.successMax * 100).toFixed(2);
+    // Suppress fractional precision when the per-cell sample size can't
+    // support it. At N < 100 iterations the sample resolution is ≥ 1%,
+    // so 2-decimal-place rates are spurious precision; round to whole
+    // percent. The heatmap cells already do this; this brings the legend
+    // chip into line.
+    const decimals = stats.minIters >= 100 ? 2 : 0;
+    const sMin = (stats.successMin * 100).toFixed(decimals);
+    const sMax = (stats.successMax * 100).toFixed(decimals);
     const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
     row.appendChild(
       h('span', { class: 'sm-legend-pct', style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}` }, sStr),

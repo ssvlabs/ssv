@@ -87,7 +87,7 @@ func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig)
 
 	safety := ComputeSafetyReport(out)
 	if safety.IsViolation() {
-		SafetyPanic(safety, s.Name, p.Name(), expect, out)
+		SafetyPanic(safety, s.Name, p.Name(), expect, cfg.Seed, out)
 	}
 	if !safety.Terminated {
 		// Adapters shouldn't produce this state in normal operation; warn

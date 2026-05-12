@@ -230,10 +230,14 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 // per-protocol expectation (e.g. ExpectSuccessFastest); a per-op evidence
 // summary, the CommitAttestation diagnostic fields, and the trace (when
 // enabled) are appended so a violating run is self-diagnosing.
-func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expected ExpectClass, o Outcome) {
+//
+// seed is the SimConfig.Seed that produced this Outcome — included in the
+// panic message so the failing sim is reproducible by re-running with
+// (scenario, protocol, seed) without re-iterating the batch.
+func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expected ExpectClass, seed int64, o Outcome) {
 	msg := fmt.Sprintf(
-		"CONSENSUSTEST SAFETY VIOLATION\nscenario=%s protocol=%s expected=%s\n  %s\n  outcome: decided=%v round=%d value=%x\n  distinct outputs: %v\n  %s",
-		scenarioName, protocolName, expected,
+		"CONSENSUSTEST SAFETY VIOLATION\nscenario=%s protocol=%s seed=%d expected=%s\n  %s\n  outcome: decided=%v round=%d value=%x\n  distinct outputs: %v\n  %s",
+		scenarioName, protocolName, seed, expected,
 		report,
 		o.Decided, o.DecidedRound, o.DecidedValue,
 		report.DistinctOutputs,

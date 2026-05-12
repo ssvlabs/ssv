@@ -77,11 +77,11 @@ func TestBatch_Determinism(t *testing.T) {
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
 		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}},
-		// Single-goroutine to make this assertion robust against scheduler
-		// reordering effects (cell-level parallelism preserves per-cell
-		// determinism but `report.Cells` order could vary in principle —
-		// pinning Parallelism=1 keeps the assertion strict).
-		Parallelism: 1,
+		// Parallelism left at the default (GOMAXPROCS). RunBatch's Cells
+		// slice is index-assigned in (cellIdx) order regardless of which
+		// worker finishes first, and each (cellIdx, iter) sim is fully
+		// determined by its seed — so the report is byte-identical at any
+		// parallelism, not just at 1.
 	}
 
 	r1 := ct.RunBatch(t, cfg)
