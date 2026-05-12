@@ -112,21 +112,24 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (7 curated sweeps × OBFT/2abOBFT/QBFT × per-scenario iterations) and
+# (6 curated sweeps × OBFT/2abOBFT/QBFT × per-scenario iterations) and
 # writes data.js into REPORT_DIR (default ./stresstest-report) —
 # consumed by the static UI (index.html + app.js + styles.css) already
 # in that folder.
 #
 # Sweeps (all use LogNormalDelay as the production-shaped propagation
-# model; see protocol/v2/consensustest/sweep.go for full docs):
-#   - p2p_ideal             (single point, σ=0.1 — low-noise control)
-#   - p2p_normal            (single point, σ=0.5 — production baseline,
-#                            heatmap source)
-#   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
-#   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
-#   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
-#   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
-#   - p2p_node_slowness     (slow op count ∈ {0, 1, 2, 3}, markov persistence 0.8)
+# model; see protocol/v2/consensustest/sweep.go for full docs). Every
+# sweep crosses with K ∈ {3, 4}; p2p_baseline additionally crosses BTT
+# and σ:
+#   - p2p_baseline          (K × BTT × σ cross-product = 2 × 5 × 4 =
+#                            40 points; subsumes the old p2p_ideal +
+#                            p2p_normal pair; heatmap source)
+#   - p2p_increasing_BTT    (K × BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
+#   - p2p_heavy_tail        (K × σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
+#   - p2p_packet_loss       (K × LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
+#   - p2p_correlated_delays (K × BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
+#   - p2p_node_slowness     (K × slow op count ∈ {0, 1, 2, 3}, markov
+#                            persistence 0.8)
 #
 # Cluster size: override via CLUSTER_SIZE (default 4). Every sweep
 # runs at this single n; to compare across cluster sizes, re-run with
@@ -134,19 +137,17 @@ consensustest-with-real-bls:
 # one data.js per run).
 #
 # Iteration count split into two budgets:
-#   - ITERATIONS_BASELINE_OPERATIONS (default 100) — high-confidence
+#   - ITERATIONS_BASELINE_OPERATIONS (default 1000) — high-confidence
 #     count for scenarios with Group == "Baseline" (currently just
 #     "Healthy"). Keeps the headline CDF tail well-sampled.
-#   - ITERATIONS_UNSTABLE_OPERATIONS (default 10) — low count for every
-#     other scenario (adversarial / rare-event groups), where 10 sims
-#     is enough to surface non-zero behaviour without paying the full
-#     baseline cost across dozens of cells.
+#   - ITERATIONS_UNSTABLE_OPERATIONS (default 100) — lower count for
+#     every other scenario (adversarial / rare-event groups), where a
+#     smaller sample is enough to surface non-zero behaviour without
+#     paying the full baseline cost across dozens of cells.
 #
 # ITERATIONS (legacy single knob) overrides both — set it when you
 # want to bump every scenario to the same higher count (e.g.
-# `ITERATIONS=1000 make stresstest` for stable P99s on every cell at
-# ~30 min wallclock, or ITERATIONS=10000 for rare-event surfaces at
-# ~90-100 min).
+# `ITERATIONS=10000 make stresstest` for rare-event tail stability).
 #
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
@@ -154,8 +155,8 @@ consensustest-with-real-bls:
 # See docs/STRESSTEST-REPORT.md for the usage guide and
 # docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
 REPORT_DIR ?= ./stresstest-report
-ITERATIONS_BASELINE_OPERATIONS ?= 100
-ITERATIONS_UNSTABLE_OPERATIONS ?= 10
+ITERATIONS_BASELINE_OPERATIONS ?= 1000
+ITERATIONS_UNSTABLE_OPERATIONS ?= 100
 CLUSTER_SIZE ?= 4
 .PHONY: stresstest
 stresstest:

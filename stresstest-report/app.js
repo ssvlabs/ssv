@@ -10,8 +10,8 @@
  *      and the heatmap below; legend (per-protocol success rate) sits
  *      Y-aligned to the right of the pickers.
  *   2. Heatmap — scenario rows × protocol columns colored by the
- *      p2p_normal-sweep success rate. Clicking a row updates the
- *      Conditions chart above.
+ *      currently-selected p2p_baseline point's success rate. Clicking
+ *      a row updates the Conditions chart above.
  *   3. Collapsibles — one per multi-point sweep (Increasing BTT,
  *      Heavy-tail, Stochastic loss, Correlated link delays). Each has
  *      its own slot_start + y-axis pickers placed just above the chart.
@@ -60,11 +60,12 @@ let selectedSlotStart = 0;
 // "Normal operations (all-honest healthy path)".
 let selectedScenario = 'Healthy';
 
-// Picker dimensions for the Normal operations chart. Phase 1 (no
-// regen yet) constrains buttons to the values backed by existing data:
-//   K ∈ {data-derived}; BTT ∈ {data-derived}; σ ∈ {data-derived}
-// Phase 2 will widen these via the new p2pBaselineSweep cross-product
-// (K ∈ {3,4}, BTT ∈ {100..500ms}, σ ∈ {0.1, 0.3, 0.5, 0.7}).
+// Initial values for the conditions chart's K/BTT/σ pickers, snapped at
+// page load to the closest values present in p2p_baseline (see
+// initBaselineSelections). Phase 2 baseline sweeps K ∈ {3, 4}, BTT ∈
+// {100..500ms}, σ ∈ {0.1, 0.3, 0.5, 0.7}; legacy data.js with only
+// p2p_normal / p2p_ideal collapses to a single available value per
+// axis.
 let selectedK = 4;
 let selectedBTT = 300;
 let selectedSigma = 0.5;
@@ -141,16 +142,16 @@ function main() {
     return; // index.html already shows the placeholder.
   }
   applyChartDefaults();
-  // One-time precompute of slot_start variants for every single-point
-  // sweep cell. Cached on the cell itself as `cell.slotShifts[slotStart]`
-  // → shifted cell view. Subsequent reads (heatmap render on slot
-  // change, conditions chart rebuild, legend stats) are O(1) lookups.
-  precomputeSlotShifts(data);
-  // Initialize selectedSigma / selectedBTT / selectedK to whichever
-  // values the loaded data actually has (Phase 1: single-value lookup
-  // against p2p_normal). Phase 2's baseline sweep will widen each
-  // picker's button set.
+  // Snap selectedK/selectedBTT/selectedSigma to values actually present
+  // in p2p_baseline (or stay at defaults if no baseline is loaded).
+  // Must run before precomputeSlotShifts since the latter warms the
+  // matched point's shifts.
   initBaselineSelections(data);
+  // One-time precompute of slot_start variants for the heatmap point.
+  // Cached on the cell itself as `cell.slotShifts[slotStart]` → shifted
+  // cell view. Subsequent reads (heatmap render on slot change,
+  // legend stats) are O(1) lookups.
+  precomputeSlotShifts(data);
   root.innerHTML = '';
   const mainEl = h('main');
   // Page layout (top → bottom):
@@ -177,12 +178,13 @@ function initBaselineSelections(data) {
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep || sweep.points.length === 0) return;
   const dims = availableBaselineDimensions(data);
-  // Pick the first available value along each axis that's >= the
-  // current selection, so we get a sensible default without snapping
-  // to the smallest K/BTT/σ.
+  // Snap each axis to the current selection if present (approximate
+  // equality so float-rounded Sigma values match), else to the middle
+  // of the set as a sensible default.
   const pickClosest = (set, current) => {
     if (set.length === 0) return current;
-    if (set.includes(current)) return current;
+    const found = set.find((v) => Math.abs(v - current) < 1e-6);
+    if (found !== undefined) return found;
     return set[Math.floor(set.length / 2)];
   };
   selectedK = pickClosest(dims.Ks, selectedK);
@@ -191,20 +193,26 @@ function initBaselineSelections(data) {
 }
 
 // precomputeSlotShifts warms shiftedCell's cache for the heatmap's
-// single-point sweep so the first slot_start change doesn't trigger a
-// burst of shift computations under the click. Multi-point sweeps are
-// left to lazy-compute on first chart render (cheap; ≤ 18 cells per
-// chart). Cells with no samples (n/a, 0%) are skipped — nothing to
-// shift.
+// source point so the first slot_start change doesn't trigger a burst
+// of shift computations under the click. Only the heatmap point is
+// warmed (collapsibles lazy-compute on first expansion + the
+// conditions chart picks a single point lazily). Cells with no samples
+// (n/a, 0%) are skipped — nothing to shift.
 function precomputeSlotShifts(data) {
-  data.sweeps.forEach((sweep) => {
-    if (sweep.points.length !== 1) return;
-    sweep.points[0].cells.forEach((cell) => {
-      if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
-      for (let i = 1; i < SLOT_STARTS.length; i++) {
-        shiftedCell(cell, SLOT_STARTS[i]);
-      }
-    });
+  let point = null;
+  const match = findBaselineSweepPoint(data);
+  if (match) {
+    point = match.point;
+  } else {
+    const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
+    if (legacy && legacy.points.length > 0) point = legacy.points[0];
+  }
+  if (!point) return;
+  point.cells.forEach((cell) => {
+    if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
+    for (let i = 1; i < SLOT_STARTS.length; i++) {
+      shiftedCell(cell, SLOT_STARTS[i]);
+    }
   });
 }
 
@@ -253,9 +261,9 @@ function onSlotStartChange(newSlot) {
 // the picker-chosen (K, BTT, σ, slot_start). Heatmap row click updates
 // the selected scenario; pickers update K/BTT/σ/slot_start.
 //
-// Data source for Phase 1: p2p_ideal (σ=0.1) OR p2p_normal (σ=0.5) —
-// whichever matches `selectedSigma`. Phase 2 will collapse these into
-// a single p2p_baseline sweep with multi-axis (K × BTT × σ) points.
+// Data source: p2p_baseline (Phase 2's K × BTT × σ cross-product),
+// looked up by (selectedK, selectedBTT, selectedSigma) via
+// findBaselineSweepPoint.
 
 // findBaselineSweepPoint returns {sweep, point} matching the current
 // (K, BTT, σ) selection within p2p_baseline, or null if no point
@@ -648,14 +656,27 @@ function applyChartDefaults() {
 // ---- heatmap overview ------------------------------------------------
 
 // renderHeatmap draws a grid of scenario rows × protocol columns
-// colored by p2p_normal-sweep success rate (the production-shaped
-// baseline). Each Scenario.Group becomes its own card so groups read
-// as visually distinct chunks rather than rows in one wall of data.
-// Clicking a row updates the Conditions chart's selected scenario.
+// colored by the currently-selected baseline operating point (K/BTT/σ).
+// Each Scenario.Group becomes its own card so groups read as visually
+// distinct chunks rather than rows in one wall of data. Clicking a row
+// updates the Conditions chart's selected scenario.
+//
+// Source: p2p_baseline matched to (selectedK, selectedBTT, selectedSigma)
+// via findBaselineSweepPoint. Falls back to legacy p2p_normal's single
+// point when data.js predates Phase 2 (so the heatmap still renders
+// against an older data.js without a regen).
 function renderHeatmap(data) {
-  const baseline = data.sweeps.find((s) => s.name === 'p2p_normal');
-  if (!baseline || baseline.points.length === 0) return null;
-  const point = baseline.points[0];
+  let point = null;
+  const match = findBaselineSweepPoint(data);
+  if (match) {
+    point = match.point;
+  } else {
+    const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
+    if (legacy && legacy.points.length > 0) {
+      point = legacy.points[0];
+    }
+  }
+  if (!point) return null;
 
   const section = h('section', { class: 'heatmap', id: 'overview' });
   // --hcols drives the shared grid template (column-header row + every

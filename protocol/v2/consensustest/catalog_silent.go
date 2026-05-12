@@ -128,10 +128,10 @@ var scenarioCertWithholding = Scenario{
 
 // Spec referent: OBFT.md §Failure modes / "Late deepest-layer leader
 // broadcast" and the Class A "all-layer cascade failure" case. The
-// existing scenarioMultiSilent (K=3) tests fall-through to L_3 when
-// only the top 3 layers are silent; this scenario complements it by
-// silencing ALL K layers — exercising the path where OBFT walks every
-// layer via NR-quorum but finds no σ at any of them, then misses.
+// existing scenarioMultiSilent (K-1 silent, deepest honest) tests
+// fall-through to L_{K-1}; this scenario complements it by silencing
+// ALL K layers — exercising the path where OBFT walks every layer via
+// NR-quorum but finds no σ at any of them, then misses.
 //
 // At K = N (default), silencing all K leaders is "every cluster member
 // silent at their leader role" — operationally equivalent to all leaders
