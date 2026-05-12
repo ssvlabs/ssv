@@ -126,6 +126,7 @@ consensustest-with-real-bls:
 #   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
 #   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
 #   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
+#   - p2p_node_slowness     (slow op count ∈ {0, 1, 2, 3}, markov persistence 0.8)
 #
 # Cluster size: override via CLUSTER_SIZE (default 4). Every sweep
 # runs at this single n; to compare across cluster sizes, re-run with
@@ -143,8 +144,10 @@ consensustest-with-real-bls:
 # See docs/STRESSTEST-REPORT.md for the usage guide and
 # docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
 REPORT_DIR ?= ./stresstest-report
+# TODO: ITERATIONS=10 for prototyping, will update to 1000+ later
+ITERATIONS ?= 10
+#ITERATIONS ?= 1000
 CLUSTER_SIZE ?= 4
-ITERATIONS ?= 1000
 .PHONY: stresstest
 stresstest:
 	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS))"
