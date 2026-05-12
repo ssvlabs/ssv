@@ -12,19 +12,30 @@ import (
 )
 
 // BatchConfig parameterizes a multi-sim batch run. Each (scenario, protocol)
-// cell runs Iterations times with seeds [SeedStart, SeedStart+Iterations);
-// per-cell goroutines parallelize across cells (sims within a cell run
-// sequentially, since they share the same RNG-derived state across seeds).
+// cell runs `IterationsFor(scenario)` times with seeds
+// [SeedStart, SeedStart+iter); per-cell goroutines parallelize across cells
+// (sims within a cell run sequentially, since they share the same RNG-
+// derived state across seeds).
 //
 // Determinism: byte-identical BatchReport stats are guaranteed for the same
-// (Iterations, SeedStart, Base, Scenarios, Protocols) tuple. Parallelism
-// reorders WHEN sims execute but not WHICH outputs they produce — each
-// sim is wholly determined by its (cfg, seed) input.
+// (Iterations, IterationsByGroup, SeedStart, Base, Scenarios, Protocols)
+// tuple. Parallelism reorders WHEN sims execute but not WHICH outputs they
+// produce — each sim is wholly determined by its (cfg, seed) input.
 type BatchConfig struct {
-	// Iterations is the number of sims per (scenario, protocol) cell. Must
-	// be > 0. Default in the driver test is 100; 1000+ surfaces rare-event
-	// distributions but takes proportionally longer.
+	// Iterations is the default per-cell iteration count, used for any
+	// scenario whose Group is not covered by IterationsByGroup. Must be
+	// > 0. Typical drivers set it to the "unstable" budget (e.g. 10)
+	// so the iteration cost stays bounded on the long tail of
+	// adversarial scenarios.
 	Iterations int
+
+	// IterationsByGroup, if set, overrides the per-cell iteration count
+	// for scenarios whose Group is a key here. The intended split is
+	// "Baseline" (high iteration count — Healthy / normal-operations
+	// flavor) vs everything else (low count — rare-event behaviour
+	// where 10 sims is enough to surface a non-zero success rate).
+	// Map values must be > 0; non-positive entries are ignored.
+	IterationsByGroup map[string]int
 
 	// SeedStart is the per-cell first seed; iter k uses Seed = SeedStart+k.
 	// Different SeedStart values produce a different (but still
@@ -47,8 +58,20 @@ type BatchConfig struct {
 
 	// Parallelism caps the number of goroutines running cells in parallel.
 	// 0 → GOMAXPROCS. A single goroutine processes its assigned cell's
-	// Iterations sims sequentially, so per-cell determinism is preserved.
+	// iter-count sims sequentially, so per-cell determinism is preserved.
 	Parallelism int
+}
+
+// IterationsFor returns the per-cell iteration count for scenario `sc`.
+// If IterationsByGroup has a positive entry for sc.Group, that wins;
+// otherwise Iterations is the fallback.
+func (c BatchConfig) IterationsFor(sc Scenario) int {
+	if c.IterationsByGroup != nil {
+		if v, ok := c.IterationsByGroup[sc.Group]; ok && v > 0 {
+			return v
+		}
+	}
+	return c.Iterations
 }
 
 // validate sanity-checks the config and fills defaults.
@@ -93,7 +116,18 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	}
 
 	cellCount := len(cfg.Scenarios) * len(cfg.Protocols)
-	totalIters := cellCount * cfg.Iterations
+	scenarioOf := func(cellIdx int) Scenario { return cfg.Scenarios[cellIdx/len(cfg.Protocols)] }
+	protocolOf := func(cellIdx int) Protocol { return cfg.Protocols[cellIdx%len(cfg.Protocols)] }
+
+	// Per-cell iteration count — looked up via IterationsFor(scenario) so
+	// "Baseline"-group scenarios can run with a different budget than
+	// adversarial / unstable ones.
+	cellIters := make([]int, cellCount)
+	totalIters := 0
+	for ci := 0; ci < cellCount; ci++ {
+		cellIters[ci] = cfg.IterationsFor(scenarioOf(ci))
+		totalIters += cellIters[ci]
+	}
 
 	// Single iteration-level work queue: each job is one (cellIdx, iter)
 	// sim run. Replaces the prior cell-level pool — by flattening the unit
@@ -112,19 +146,16 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	// wg.Wait().
 	results := make([][]iterOutcome, cellCount)
 	for ci := range results {
-		results[ci] = make([]iterOutcome, cfg.Iterations)
+		results[ci] = make([]iterOutcome, cellIters[ci])
 	}
 
 	jobs := make(chan job, totalIters)
 	for ci := 0; ci < cellCount; ci++ {
-		for iter := 0; iter < cfg.Iterations; iter++ {
+		for iter := 0; iter < cellIters[ci]; iter++ {
 			jobs <- job{cellIdx: ci, iter: iter}
 		}
 	}
 	close(jobs)
-
-	scenarioOf := func(cellIdx int) Scenario { return cfg.Scenarios[cellIdx/len(cfg.Protocols)] }
-	protocolOf := func(cellIdx int) Protocol { return cfg.Protocols[cellIdx%len(cfg.Protocols)] }
 
 	start := time.Now()
 	var wg sync.WaitGroup
@@ -149,7 +180,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	// Reduce per-iter results into per-cell BatchCells single-threaded.
 	cells := make([]BatchCell, cellCount)
 	for ci := range cells {
-		cells[ci] = reduceCellResults(t, cfg, scenarioOf(ci), protocolOf(ci), results[ci])
+		cells[ci] = reduceCellResults(t, cellIters[ci], scenarioOf(ci), protocolOf(ci), results[ci])
 	}
 
 	return BatchReport{
@@ -174,13 +205,16 @@ type iterOutcome struct {
 // straightforward and the reduction stays single-threaded (no per-cell
 // mutex on the distributions / maps).
 //
+// cellIter is the iteration count BatchConfig.IterationsFor returned for
+// this cell's scenario — already used to size results[ci] in RunBatch.
+//
 // Two error classes get distinct cell treatments:
 //   - ErrNotApplicable (scenario semantically doesn't translate to this
 //     protocol — e.g. OBFT-only byz patterns on QBFT): Iterations=0,
 //     renderers show "n/a".
 //   - ErrConfigOutOfEnvelope (the scenario applies but the SimConfig
 //     derives an infeasible schedule — e.g. BTT=600ms collapses OBFT's
-//     deepest broadcast budget to negative): Iterations=cfg.Iterations,
+//     deepest broadcast budget to negative): Iterations=cellIter,
 //     SuccessRate=0, renderers show a red 0%. This is a protocol failure
 //     mode at this operating point, not an inapplicability.
 //   - Any other Run error: still treated as n/a (with a t.Logf — these are
@@ -188,7 +222,7 @@ type iterOutcome struct {
 //
 // The check inspects the first iter only since these errors are config-level
 // and uniform across iters at a given (protocol, config) pair.
-func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
+func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
 	t.Helper()
 	if len(iters) > 0 {
 		if first := iters[0]; first.err != nil {
@@ -197,14 +231,14 @@ func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protoco
 			}
 			if errors.Is(first.err, ErrConfigOutOfEnvelope) {
 				// Protocol can't operate at this operating point — return a
-				// full-Iterations cell with no successful decisions so the
+				// full-iter-count cell with no successful decisions so the
 				// UI renders it as a hard 0% (red) rather than n/a.
 				return BatchCell{
 					Protocol:    protocol.Name(),
 					Scenario:    scenario.Name,
-					Iterations:  cfg.Iterations,
+					Iterations:  cellIter,
 					SuccessRate: 0,
-					MissReasons: map[string]int{"config out of envelope": cfg.Iterations},
+					MissReasons: map[string]int{"config out of envelope": cellIter},
 				}
 			}
 			// Unexpected non-applicability / envelope error — bug to chase.
@@ -217,9 +251,9 @@ func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protoco
 	cell := BatchCell{
 		Protocol:         protocol.Name(),
 		Scenario:         scenario.Name,
-		Iterations:       cfg.Iterations,
-		DecisionTime:     make(Distribution, 0, cfg.Iterations),
-		ClusterBandwidth: make(Distribution, 0, cfg.Iterations),
+		Iterations:       cellIter,
+		DecisionTime:     make(Distribution, 0, cellIter),
+		ClusterBandwidth: make(Distribution, 0, cellIter),
 		PerKindBandwidth: make(map[string]Distribution),
 		EvidenceCounts:   make(map[string]Distribution),
 		MissReasons:      make(map[string]int),
@@ -268,7 +302,7 @@ func reduceCellResults(t *testing.T, cfg BatchConfig, scenario Scenario, protoco
 		}
 	}
 
-	cell.SuccessRate = float64(successCount) / float64(cfg.Iterations)
+	cell.SuccessRate = float64(successCount) / float64(cellIter)
 	return cell
 }
 

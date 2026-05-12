@@ -30,7 +30,17 @@ import (
 // TestCorrectness (single deterministic operating point per scenario).
 //
 // Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
-// Iteration count tunable via ITERATIONS env (default 100).
+// Iteration count split into two env vars:
+//
+//   - ITERATIONS_BASELINE_OPERATIONS (default 100) — used for scenarios
+//     with Group == "Baseline" (currently just "Healthy"). Higher count
+//     keeps the healthy-path CDF tail well-sampled.
+//   - ITERATIONS_UNSTABLE_OPERATIONS (default 10) — used for every
+//     other scenario. Lower count, since rare-event behaviour reaches
+//     non-zero success rates at far fewer samples.
+//
+// ITERATIONS (legacy single-knob) is honored as a backwards-compatible
+// override: if set, it overrides BOTH budgets.
 //
 // Usage:
 //
@@ -38,24 +48,16 @@ import (
 //
 // Or directly:
 //
-//	REPORT_DIR=./reports ITERATIONS=100 \
+//	REPORT_DIR=./reports ITERATIONS_BASELINE_OPERATIONS=100 \
+//	    ITERATIONS_UNSTABLE_OPERATIONS=10 \
 //	    go test -timeout 30m -run TestStress \
 //	    ./protocol/v2/consensustest/
 //
-// Estimated runtime at CLUSTER_SIZE=4 and default 100 iterations:
-//
-//	p2p_ideal              ~8s    (29 scenarios × 3 protocols × 100 sims)
-//	p2p_normal             ~8s    (single point at σ=0.5)
-//	p2p_increasing_BTT     ~45s   (× 6 BTT values)
-//	p2p_heavy_tail         ~45s   (× 6 sigmas)
-//	p2p_packet_loss        ~38s   (× 5 loss rates)
-//	p2p_correlated_delays  ~30s   (× 4 BadLinkProb values)
-//	TOTAL                  ~3 min on a typical dev machine.
-//
-// At ITERATIONS=1000, scale linearly (~30 min). At ITERATIONS=10000
-// (the Makefile default), expect ~90-100 min. Above that, consider
-// parallelizing across sweeps (currently sequential — per-batch is
-// already parallelized internally).
+// At the default split (100 / 10), expected runtime at CLUSTER_SIZE=4
+// is a few minutes on a typical dev machine — most cells are at the
+// unstable budget, so wallclock is dominated by sweep count × sweep
+// fan-out × Unstable budget, with Baseline contributing a tiny
+// constant overhead.
 //
 // See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestStress(t *testing.T) {
@@ -72,12 +74,28 @@ func TestStress(t *testing.T) {
 		require.Greater(t, n, 0, "CLUSTER_SIZE must be > 0")
 		clusterSize = n
 	}
-	iterations := 100
+
+	// Defaults: 100 baseline / 10 unstable. ITERATIONS (legacy) overrides
+	// both for callers that don't care about the split.
+	iters := ct.Iterations{Baseline: 100, Unstable: 10}
+	if v := os.Getenv("ITERATIONS_BASELINE_OPERATIONS"); v != "" {
+		n, err := strconv.Atoi(v)
+		require.NoErrorf(t, err, "invalid ITERATIONS_BASELINE_OPERATIONS=%q", v)
+		require.Greater(t, n, 0, "ITERATIONS_BASELINE_OPERATIONS must be > 0")
+		iters.Baseline = n
+	}
+	if v := os.Getenv("ITERATIONS_UNSTABLE_OPERATIONS"); v != "" {
+		n, err := strconv.Atoi(v)
+		require.NoErrorf(t, err, "invalid ITERATIONS_UNSTABLE_OPERATIONS=%q", v)
+		require.Greater(t, n, 0, "ITERATIONS_UNSTABLE_OPERATIONS must be > 0")
+		iters.Unstable = n
+	}
 	if v := os.Getenv("ITERATIONS"); v != "" {
 		n, err := strconv.Atoi(v)
 		require.NoErrorf(t, err, "invalid ITERATIONS=%q", v)
 		require.Greater(t, n, 0, "ITERATIONS must be > 0")
-		iterations = n
+		iters.Baseline = n
+		iters.Unstable = n
 	}
 
 	// Filter the catalog to ModeStress opt-ins. Currently all 29 (Phase 2
@@ -97,8 +115,8 @@ func TestStress(t *testing.T) {
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 	}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iterations, clusterSize)
-	require.Len(t, sweeps, 6)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, clusterSize)
+	require.Len(t, sweeps, 7)
 
 	protocolNames := make([]string, len(protocols))
 	for i, p := range protocols {
@@ -111,9 +129,9 @@ func TestStress(t *testing.T) {
 		for i, pt := range sw.Points {
 			pointLabels[i] = pt.Label
 		}
-		t.Logf("--- sweep %s: %d sweep points [%s] × %d iterations × %d scenarios × %d protocols [%s]",
+		t.Logf("--- sweep %s: %d sweep points [%s] × baseline=%d unstable=%d iterations × %d scenarios × %d protocols [%s]",
 			sw.Name, len(sw.Points), strings.Join(pointLabels, ", "),
-			iterations, len(scenarios), len(protocols), strings.Join(protocolNames, ", "))
+			iters.Baseline, iters.Unstable, len(scenarios), len(protocols), strings.Join(protocolNames, ", "))
 		swStart := time.Now()
 		results = append(results, ct.RunSweep(t, sw))
 		t.Logf("    %s wallclock: %v", sw.Name, time.Since(swStart))
@@ -121,9 +139,9 @@ func TestStress(t *testing.T) {
 
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
 		Title:       "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
-		Description: "Curated sweeps × OBFT/2abOBFT/QBFT × " + strconv.Itoa(iterations) + " iterations per cell.",
+		Description: "Curated sweeps × OBFT/2abOBFT/QBFT × " + strconv.Itoa(iters.Baseline) + " baseline / " + strconv.Itoa(iters.Unstable) + " unstable iterations per cell.",
 		Sweeps:      results,
-		Iterations:  iterations,
+		Iterations:  iters.Baseline,
 		Wallclock:   time.Since(totalStart),
 	}, dir))
 

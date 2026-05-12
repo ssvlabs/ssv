@@ -74,7 +74,8 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	require.Len(t, scenarios, 1)
 
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, 10, 4)
+	iters := ct.Iterations{Baseline: 10, Unstable: 10}
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4)
 
 	require.Len(t, sweeps, 7, "seven curated sweeps per plan")
 
@@ -98,11 +99,14 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 }
 
 // TestDefaultSweeps_EmptyInputs — DefaultSweeps returns nil on empty
-// scenarios or protocols (defensive).
+// scenarios / protocols / non-positive iter counts (defensive).
 func TestDefaultSweeps_EmptyInputs(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}}
-	require.Nil(t, ct.DefaultSweeps(nil, protocols, 10, 4))
-	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, nil, 10, 4))
-	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, protocols, 0, 4))
-	require.Nil(t, ct.DefaultSweeps([]ct.Scenario{ct.Catalog[0]}, protocols, 10, 0))
+	scen := []ct.Scenario{ct.Catalog[0]}
+	good := ct.Iterations{Baseline: 10, Unstable: 10}
+	require.Nil(t, ct.DefaultSweeps(nil, protocols, good, 4))
+	require.Nil(t, ct.DefaultSweeps(scen, nil, good, 4))
+	require.Nil(t, ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4))
+	require.Nil(t, ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4))
+	require.Nil(t, ct.DefaultSweeps(scen, protocols, good, 0))
 }

@@ -54,6 +54,30 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 	return res
 }
 
+// Iterations carries the per-scenario-group iteration counts the stress
+// driver applies. Baseline-group scenarios (currently just "Healthy")
+// run at the larger Baseline budget; everything else (adversarial /
+// rare-event groups) runs at the smaller Unstable budget. Splitting the
+// budget keeps the high-confidence "is the happy path healthy?"
+// signal sharp without paying the same cost on dozens of low-success-
+// rate scenarios where 10 samples is enough to surface non-zero
+// behaviour.
+//
+// The struct is converted to BatchConfig.{Iterations, IterationsByGroup}
+// inside each sweep builder via asBatchIterations.
+type Iterations struct {
+	Baseline int // applied to scenarios with Group == "Baseline"
+	Unstable int // applied to every other scenario (default fallback)
+}
+
+// asBatchIterations expands `i` into the (fallback, group-overrides)
+// fields BatchConfig exposes. Centralizing the conversion keeps each
+// sweep builder identical and ensures all sweeps split the budget the
+// same way.
+func (i Iterations) asBatchIterations() (int, map[string]int) {
+	return i.Unstable, map[string]int{"Baseline": i.Baseline}
+}
+
 // DefaultSweeps returns the curated set of comparison sweeps the stress
 // driver runs. Every sweep models per-message propagation with
 // LogNormalDelay — the production-shaped distribution — anchored at
@@ -88,26 +112,26 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 //     LogNormal{Median: BTT/2, σ: 0.5}. Probes the f vs f+1 boundary
 //     under correlated peer-link degradation.
 //
-// All sweeps run at the same cluster size n, share Iterations, and run
-// over the same Scenarios / Protocols matrix; only the per-point
-// Network / SimConfig differs. To compare across cluster sizes, re-run
-// the driver with different CLUSTER_SIZE values (each run produces its
-// own data.js).
+// All sweeps run at the same cluster size n, share the Iterations
+// split, and run over the same Scenarios / Protocols matrix; only the
+// per-point Network / SimConfig differs. To compare across cluster
+// sizes, re-run the driver with different CLUSTER_SIZE values (each
+// run produces its own data.js).
 //
 // Returns nil if Scenarios or Protocols is empty (defensive — caller
 // driver test should always pass non-empty lists).
-func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iterations int, n int) []Sweep {
-	if len(scenarios) == 0 || len(protocols) == 0 || iterations <= 0 || n <= 0 {
+func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) []Sweep {
+	if len(scenarios) == 0 || len(protocols) == 0 || iters.Baseline <= 0 || iters.Unstable <= 0 || n <= 0 {
 		return nil
 	}
 	return []Sweep{
-		p2pIdealSweep(scenarios, protocols, iterations, n),
-		p2pNormalSweep(scenarios, protocols, iterations, n),
-		p2pIncreasingBTTSweep(scenarios, protocols, iterations, n),
-		p2pHeavyTailSweep(scenarios, protocols, iterations, n),
-		p2pPacketLossSweep(scenarios, protocols, iterations, n),
-		p2pCorrelatedDelaysSweep(scenarios, protocols, iterations, n),
-		p2pNodeSlownessSweep(scenarios, protocols, iterations, n),
+		p2pIdealSweep(scenarios, protocols, iters, n),
+		p2pNormalSweep(scenarios, protocols, iters, n),
+		p2pIncreasingBTTSweep(scenarios, protocols, iters, n),
+		p2pHeavyTailSweep(scenarios, protocols, iters, n),
+		p2pPacketLossSweep(scenarios, protocols, iters, n),
+		p2pCorrelatedDelaysSweep(scenarios, protocols, iters, n),
+		p2pNodeSlownessSweep(scenarios, protocols, iters, n),
 	}
 }
 
@@ -129,7 +153,8 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 	return LogNormalDelay{Median: btt / 2, Sigma: 0.5}
 }
 
-func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	btt := 300 * time.Millisecond
 	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 	// σ=0.1 makes the LogNormal effectively constant — keeps this baseline
@@ -147,17 +172,19 @@ func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iterations int, n
 			{
 				Label: "n=" + nStr + " BTT=300ms σ=0.1",
 				Config: BatchConfig{
-					Iterations: iterations,
-					Base:       base,
-					Scenarios:  scenarios,
-					Protocols:  protocols,
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenarios,
+					Protocols:         protocols,
 				},
 			},
 		},
 	}
 }
 
-func p2pNormalSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pNormalSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	btt := 300 * time.Millisecond
 	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 	base.Network = productionLogNormal(btt)
@@ -172,17 +199,19 @@ func p2pNormalSweep(scenarios []Scenario, protocols []Protocol, iterations int, 
 			{
 				Label: "n=" + nStr + " BTT=300ms σ=0.5",
 				Config: BatchConfig{
-					Iterations: iterations,
-					Base:       base,
-					Scenarios:  scenarios,
-					Protocols:  protocols,
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenarios,
+					Protocols:         protocols,
 				},
 			},
 		},
 	}
 }
 
-func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	btts := []time.Duration{
 		100 * time.Millisecond,
 		200 * time.Millisecond,
@@ -200,10 +229,11 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iteration
 		pts = append(pts, SweepPoint{
 			Label: "BTT=" + btt.String(),
 			Config: BatchConfig{
-				Iterations: iterations,
-				Base:       base,
-				Scenarios:  scenarios,
-				Protocols:  protocols,
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         scenarios,
+				Protocols:         protocols,
 			},
 		})
 	}
@@ -217,7 +247,8 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iteration
 	}
 }
 
-func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
 	pts := make([]SweepPoint, 0, len(sigmas))
 	for _, sigma := range sigmas {
@@ -230,10 +261,11 @@ func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations in
 		pts = append(pts, SweepPoint{
 			Label: "Sigma=" + strconv.FormatFloat(sigma, 'f', 2, 64),
 			Config: BatchConfig{
-				Iterations: iterations,
-				Base:       base,
-				Scenarios:  scenarios,
-				Protocols:  protocols,
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         scenarios,
+				Protocols:         protocols,
 			},
 		})
 	}
@@ -247,7 +279,8 @@ func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iterations in
 	}
 }
 
-func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	rates := []float64{0, 0.01, 0.05, 0.10, 0.20}
 	pts := make([]SweepPoint, 0, len(rates))
 	for _, rate := range rates {
@@ -293,10 +326,11 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iterations i
 		pts = append(pts, SweepPoint{
 			Label: "loss=" + strconv.FormatFloat(rate, 'f', 2, 64),
 			Config: BatchConfig{
-				Iterations: iterations,
-				Base:       base,
-				Scenarios:  scenariosWithLoss,
-				Protocols:  protocols,
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         scenariosWithLoss,
+				Protocols:         protocols,
 			},
 		})
 	}
@@ -310,7 +344,8 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iterations i
 	}
 }
 
-func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	// BadLinkProb axis spans the mainnet-calibrated 5–20% range cited in
 	// CorrelatedLinkDelay's docstring (network.go §CALIBRATE), with 0 as
 	// the no-correlation control point. Other params held at calibrated
@@ -352,10 +387,11 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iterat
 		pts = append(pts, SweepPoint{
 			Label: "badProb=" + strconv.FormatFloat(prob, 'f', 2, 64),
 			Config: BatchConfig{
-				Iterations: iterations,
-				Base:       base,
-				Scenarios:  scenariosWithCorr,
-				Protocols:  protocols,
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         scenariosWithCorr,
+				Protocols:         protocols,
 			},
 		})
 	}
@@ -382,7 +418,8 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iterat
 // n=4; k=3 stresses past the boundary. Wraps a production-shaped
 // LogNormal baseline so non-slow ops still see the spec's typical-mesh
 // variance.
-func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
 	const persistP = 0.8
 	counts := []int{0, 1, 2, 3}
 	pts := make([]SweepPoint, 0, len(counts))
@@ -426,10 +463,11 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iterations
 		pts = append(pts, SweepPoint{
 			Label: "slowOps=" + strconv.Itoa(k),
 			Config: BatchConfig{
-				Iterations: iterations,
-				Base:       base,
-				Scenarios:  scenariosWithSlowness,
-				Protocols:  protocols,
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         scenariosWithSlowness,
+				Protocols:         protocols,
 			},
 		})
 	}

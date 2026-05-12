@@ -112,7 +112,7 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (6 curated sweeps × OBFT/2abOBFT/QBFT × ITERATIONS iterations) and
+# (7 curated sweeps × OBFT/2abOBFT/QBFT × per-scenario iterations) and
 # writes data.js into REPORT_DIR (default ./stresstest-report) —
 # consumed by the static UI (index.html + app.js + styles.css) already
 # in that folder.
@@ -133,10 +133,20 @@ consensustest-with-real-bls:
 # a different CLUSTER_SIZE and REPORT_DIR (`make stresstest` produces
 # one data.js per run).
 #
-# Iteration count: override via ITERATIONS (default 1000). 1000 gives
-# stable P99 stats for success-rate ≥ 50% scenarios; bump to 10000 for
-# rare-event scenarios at proportionally longer wallclock (~90-100 min
-# at the new six-sweep layout).
+# Iteration count split into two budgets:
+#   - ITERATIONS_BASELINE_OPERATIONS (default 100) — high-confidence
+#     count for scenarios with Group == "Baseline" (currently just
+#     "Healthy"). Keeps the headline CDF tail well-sampled.
+#   - ITERATIONS_UNSTABLE_OPERATIONS (default 10) — low count for every
+#     other scenario (adversarial / rare-event groups), where 10 sims
+#     is enough to surface non-zero behaviour without paying the full
+#     baseline cost across dozens of cells.
+#
+# ITERATIONS (legacy single knob) overrides both — set it when you
+# want to bump every scenario to the same higher count (e.g.
+# `ITERATIONS=1000 make stresstest` for stable P99s on every cell at
+# ~30 min wallclock, or ITERATIONS=10000 for rare-event surfaces at
+# ~90-100 min).
 #
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
@@ -144,12 +154,16 @@ consensustest-with-real-bls:
 # See docs/STRESSTEST-REPORT.md for the usage guide and
 # docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
 REPORT_DIR ?= ./stresstest-report
-ITERATIONS ?= 1000
+ITERATIONS_BASELINE_OPERATIONS ?= 100
+ITERATIONS_UNSTABLE_OPERATIONS ?= 10
 CLUSTER_SIZE ?= 4
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS))"
-	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE=$(CLUSTER_SIZE) ITERATIONS=$(ITERATIONS) \
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE=$(CLUSTER_SIZE) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE=$(CLUSTER_SIZE) \
+		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
+		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \
+		$(if $(ITERATIONS),ITERATIONS=$(ITERATIONS)) \
 		go test -tags "blst_enabled lfs" -timeout=0 -run TestStress -v ./protocol/v2/consensustest/
 
 .PHONY: docker-spec-test
