@@ -178,12 +178,20 @@ consensustest-with-real-bls:
 REPORT_DIR ?= ./stresstest-report
 ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 100
-CLUSTER_SIZE_N ?= 4
-LAYERS_K ?= 3
+# CLUSTER_SIZE_N / LAYERS_K unset = "all". Empty CLUSTER_SIZE_N
+# expands to ClusterSizes = [4, 7, 10, 13]; empty LAYERS_K expands per
+# cluster size to MinK(N)..N (where MinK = f+1, f = (N-1)/3). All
+# combinations run sequentially; their data merges into one data.js
+# via the WriteReportData merge path. Set either to a single int to
+# scope a run (e.g. CLUSTER_SIZE_N=4 LAYERS_K=4 for the quick
+# canonical config).
+CLUSTER_SIZE_N ?=
+LAYERS_K ?=
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE_N=$(CLUSTER_SIZE_N)$(if $(LAYERS_K), LAYERS_K=$(LAYERS_K), LAYERS_K=<default=N>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
-	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE_N=$(CLUSTER_SIZE_N) \
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE_N=$(if $(CLUSTER_SIZE_N),$(CLUSTER_SIZE_N),all) LAYERS_K=$(if $(LAYERS_K),$(LAYERS_K),all) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
+		$(if $(CLUSTER_SIZE_N),CLUSTER_SIZE_N=$(CLUSTER_SIZE_N)) \
 		$(if $(LAYERS_K),LAYERS_K=$(LAYERS_K)) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \

@@ -67,26 +67,55 @@ func TestStress(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
-	clusterSize := 4
+	// CLUSTER_SIZE_N / LAYERS_K semantics:
+	//   - unset → "all": iterate every supported size (ClusterSizes) and
+	//     every valid K per size (MinK(N)..N).
+	//   - set to a single int: scope to that one value.
+	// Reruns at different (n, K) merge into the same data.js via
+	// WriteReportData's Fields-tuple match; running with both unset is
+	// the "fill the whole matrix" mode.
+	var clusterSizes []int
 	if v := os.Getenv("CLUSTER_SIZE_N"); v != "" {
 		n, err := strconv.Atoi(v)
 		require.NoErrorf(t, err, "invalid CLUSTER_SIZE_N=%q", v)
 		require.Greater(t, n, 0, "CLUSTER_SIZE_N must be > 0")
-		clusterSize = n
+		clusterSizes = []int{n}
+	} else {
+		clusterSizes = append([]int{}, ct.ClusterSizes...)
 	}
 
-	// LAYERS_K defaults to DefaultK(N) = N (each operator leads exactly
-	// one layer — SSV production convention). Each `make stresstest` run
-	// produces data for a single (n, k) operating point; reporting merges
-	// reruns at different (n, k) into the same data.js so the UI can pick
-	// across the matrix.
-	layersK := ct.DefaultK(clusterSize)
+	// LAYERS_K env (single int) constrains to that K for every cluster
+	// size. Empty LAYERS_K iterates the full MinK(N)..N range per size.
+	// Per-(n, K) validation skips combinations where the K is out of the
+	// valid range for that size (e.g. LAYERS_K=2 only fits n=4 where
+	// MinK(4)=2; logged + skipped for larger sizes).
+	var layersKEnv int
+	useExplicitK := false
 	if v := os.Getenv("LAYERS_K"); v != "" {
 		k, err := strconv.Atoi(v)
 		require.NoErrorf(t, err, "invalid LAYERS_K=%q", v)
 		require.Greater(t, k, 0, "LAYERS_K must be > 0")
-		layersK = k
+		layersKEnv = k
+		useExplicitK = true
 	}
+	type runPair struct{ n, k int }
+	var pairs []runPair
+	for _, n := range clusterSizes {
+		minK, maxK := ct.MinK(n), n
+		if useExplicitK {
+			if layersKEnv < minK || layersKEnv > maxK {
+				t.Logf("LAYERS_K=%d skipped for CLUSTER_SIZE_N=%d (valid range %d..%d)",
+					layersKEnv, n, minK, maxK)
+				continue
+			}
+			pairs = append(pairs, runPair{n: n, k: layersKEnv})
+		} else {
+			for k := minK; k <= maxK; k++ {
+				pairs = append(pairs, runPair{n: n, k: k})
+			}
+		}
+	}
+	require.NotEmpty(t, pairs, "no valid (n, K) combinations to run; check CLUSTER_SIZE_N / LAYERS_K env")
 
 	// Defaults: 100 baseline / 10 unstable. ITERATIONS (legacy) overrides
 	// both for callers that don't care about the split.
@@ -128,36 +157,44 @@ func TestStress(t *testing.T) {
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 	}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, clusterSize, layersK)
-	require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps — check inputs")
-
 	protocolNames := make([]string, len(protocols))
 	for i, p := range protocols {
 		protocolNames[i] = p.Name()
 	}
 	totalStart := time.Now()
-	results := make([]ct.SweepResult, 0, len(sweeps))
-	for _, sw := range sweeps {
-		pointLabels := make([]string, len(sw.Points))
-		for i, pt := range sw.Points {
-			pointLabels[i] = pt.Label
+	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
+	for pairIdx, pp := range pairs {
+		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k)
+		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
+		pairStart := time.Now()
+		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)
+		results := make([]ct.SweepResult, 0, len(sweeps))
+		for _, sw := range sweeps {
+			pointLabels := make([]string, len(sw.Points))
+			for i, pt := range sw.Points {
+				pointLabels[i] = pt.Label
+			}
+			t.Logf("    sweep %s: %d sweep points [%s] × baseline=%d unstable=%d iterations × %d scenarios × %d protocols [%s]",
+				sw.Name, len(sw.Points), strings.Join(pointLabels, ", "),
+				iters.Baseline, iters.Unstable, len(scenarios), len(protocols), strings.Join(protocolNames, ", "))
+			swStart := time.Now()
+			results = append(results, ct.RunSweep(t, sw))
+			t.Logf("        %s wallclock: %v", sw.Name, time.Since(swStart))
 		}
-		t.Logf("--- sweep %s: %d sweep points [%s] × baseline=%d unstable=%d iterations × %d scenarios × %d protocols [%s]",
-			sw.Name, len(sw.Points), strings.Join(pointLabels, ", "),
-			iters.Baseline, iters.Unstable, len(scenarios), len(protocols), strings.Join(protocolNames, ", "))
-		swStart := time.Now()
-		results = append(results, ct.RunSweep(t, sw))
-		t.Logf("    %s wallclock: %v", sw.Name, time.Since(swStart))
+		// Each (n, K) pair's data merges into data.js — WriteReportData
+		// reads the existing file and combines by Fields-tuple, so
+		// iterating multiple pairs in one process composes the same way
+		// as multiple `make stresstest` invocations would.
+		require.NoError(t, reporting.WriteReportData(reporting.Comparison{
+			Title:              "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
+			Description:        "Curated sweeps × OBFT/2abOBFT/QBFT across diverse network conditions and cluster sizes.",
+			Sweeps:             results,
+			BaselineIterations: iters.Baseline,
+			UnstableIterations: iters.Unstable,
+			Wallclock:          time.Since(pairStart),
+		}, dir))
+		t.Logf("    n=%d K=%d wallclock: %v", pp.n, pp.k, time.Since(pairStart))
 	}
-
-	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
-		Title:              "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
-		Description:        "Curated sweeps × OBFT/2abOBFT/QBFT across diverse network conditions and cluster sizes.",
-		Sweeps:             results,
-		BaselineIterations: iters.Baseline,
-		UnstableIterations: iters.Unstable,
-		Wallclock:          time.Since(totalStart),
-	}, dir))
 
 	t.Logf("Report data written: %s/data.js", dir)
 	t.Logf("Open: %s/index.html", dir)
