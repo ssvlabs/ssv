@@ -159,6 +159,7 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 		p2pPacketLossSweep(scenarios, protocols, iters, n, k),
 		p2pCorrelatedDelaysSweep(scenarios, protocols, iters, n, k),
 		p2pNodeSlownessSweep(scenarios, protocols, iters, n, k),
+		p2pInstabilitySweep(scenarios, protocols, iters, n, k),
 	}
 }
 
@@ -181,41 +182,62 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 	return LogNormalDelay{Median: btt / 2, Sigma: 0.5}
 }
 
-// p2pBaselineSweep enumerates the BTT × σ cross-product at (n, k) using
-// the production-shaped LogNormal delay model {Median: BTT/2, σ: σ}.
-// The UI's conditions section picks one point at a time via the
-// N/K/BTT/σ pickers; the heatmap cell colors derive from whichever
-// point is selected.
+// p2pBaselineSweep enumerates the BTT × σ × instability cross-product
+// at (n, k) using the production-shaped LogNormal delay model
+// {Median: BTT/2, σ: σ}. The UI's conditions section picks one point
+// at a time via the N/K/BTT/σ/instability pickers; the heatmap cell
+// colors derive from whichever point is selected.
+//
+// Instability variants (Level > 0) emit ONLY Baseline-group scenarios
+// (Healthy) — non-Baseline scenarios are instability-invariant by
+// construction (the wrap is a no-op for them, and the same seed
+// produces the same outcome), so duplicating their runs at every
+// level would just waste compute. The UI's per-row cell lookup falls
+// back to the Level=0 point for non-Baseline scenarios when the
+// picker is elsewhere.
 func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
-	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(baselineSigmaValues))
+	baselineOnly := filterBaselineScenarios(scenarios)
+	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(baselineSigmaValues)*len(InstabilityLevels))
 	for _, btt := range baselineBTTValues {
 		for _, sigma := range baselineSigmaValues {
-			base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-			base.K = k
-			base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
-			pts = append(pts, SweepPoint{
-				Label: fmt.Sprintf("n=%d K=%d BTT=%dms σ=%.1f", n, k, btt.Milliseconds(), sigma),
-				Fields: map[string]float64{
-					"N":     float64(n),
-					"K":     float64(k),
-					"BTT":   float64(btt.Milliseconds()),
-					"Sigma": sigma,
-				},
-				Config: BatchConfig{
-					Iterations:        fallback,
-					IterationsByGroup: byGroup,
-					Base:              base,
-					Scenarios:         scenarios,
-					Protocols:         protocols,
-				},
-			})
+			for _, level := range InstabilityLevels {
+				base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+				base.K = k
+				base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
+				// At level=0 we run the full catalog (no wrap is a no-op
+				// for non-Baseline anyway, but emitting them here is what
+				// the heatmap reads for the bulk of scenarios). At
+				// level>0 only the Baseline group reruns under the wrap.
+				pointScenarios := scenarios
+				if level.Level > 0 {
+					pointScenarios = baselineOnly
+				}
+				pts = append(pts, SweepPoint{
+					Label: fmt.Sprintf("n=%d K=%d BTT=%dms σ=%.1f instab=%s",
+						n, k, btt.Milliseconds(), sigma, level.Name),
+					Fields: map[string]float64{
+						"N":           float64(n),
+						"K":           float64(k),
+						"BTT":         float64(btt.Milliseconds()),
+						"Sigma":       sigma,
+						"Instability": float64(level.Level),
+					},
+					Config: BatchConfig{
+						Iterations:        fallback,
+						IterationsByGroup: byGroup,
+						Base:              base,
+						Scenarios:         wrapAllForInstability(pointScenarios, level),
+						Protocols:         protocols,
+					},
+				})
+			}
 		}
 	}
 	return Sweep{
 		Name:        "p2p_baseline",
 		Title:       "Baseline conditions",
-		Description: "Production-shaped LogNormal baseline across (n, K, BTT, σ). The conditions section's pickers select the operating point; heatmap cell colors track the same selection. Each `make stresstest` run contributes one (n, K) slice; reruns at different (n, K) compose into the same data.js.",
+		Description: "Production-shaped LogNormal baseline across (n, K, BTT, σ, instability). The conditions section's pickers select the operating point; heatmap cell colors track the same selection. The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
 		AxisLabel:   "", // multi-axis; UI picks one point at a time.
 		Points:      pts,
 	}
@@ -518,6 +540,51 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 		Params:      []string{"MarkovianSlownessDelay", "LogNormal σ=0.5", "ExtraDelay=3·BTT", "PersistP=0.8"},
 		Description: "Per-op Markov slowness over a production-shaped baseline (two-state chain, P(stay)=0.8 in both states). One (n, K) slice per run; chart filters by selected (n, K).",
 		AxisLabel:   "Slow op count",
+		Points:      pts,
+	}
+}
+
+// p2pInstabilitySweep is the dedicated "Healthy under production p2p"
+// chart: 5 points along the instability axis (none / low / moderate /
+// high / extreme) at fixed (BTT=300ms, σ=0.5), with the Healthy
+// scenario wrapped by MarkovianSlowness + LossyNetwork per the level.
+// Renders as the rightmost collapsible chart so the user can see how
+// the all-honest healthy path degrades as the simulated mesh gets
+// worse. Non-Baseline scenarios are skipped entirely — the same
+// instability picker on p2p_baseline already drives the heatmap's
+// Healthy row across the same axis.
+func p2pInstabilitySweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
+	const btt = 300 * time.Millisecond
+	const sigma = 0.5
+	baselineOnly := filterBaselineScenarios(scenarios)
+	pts := make([]SweepPoint, 0, len(InstabilityLevels))
+	for _, level := range InstabilityLevels {
+		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+		base.K = k
+		base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
+		pts = append(pts, SweepPoint{
+			Label: fmt.Sprintf("n=%d K=%d %s", n, k, level.Name),
+			Fields: map[string]float64{
+				"N":           float64(n),
+				"K":           float64(k),
+				"Instability": float64(level.Level),
+			},
+			Config: BatchConfig{
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         wrapAllForInstability(baselineOnly, level),
+				Protocols:         protocols,
+			},
+		})
+	}
+	return Sweep{
+		Name:        "p2p_instability",
+		Title:       "P2P instability (Healthy only)",
+		Params:      []string{"BTT=300ms", "LogNormal σ=0.5", "MarkovianSlowness + LossyNetwork on top"},
+		Description: "Healthy-path degradation across 5 instability levels (none → low → moderate → high → extreme). Each level layers MarkovianSlowness + LossyNetwork on the production-shaped LogNormal baseline; see InstabilityLevels in instability.go for the per-level params. Same picker in the Conditions section drives Healthy on the main heatmap; this chart visualizes the full curve side-by-side.",
+		AxisLabel:   "Instability level",
 		Points:      pts,
 	}
 }

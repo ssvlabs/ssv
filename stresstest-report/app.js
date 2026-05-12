@@ -70,6 +70,17 @@ let selectedN = 4;
 let selectedK = 4;
 let selectedBTT = 300;
 let selectedSigma = 0.5;
+// selectedInstability is the p2p_instability picker value (0..4 →
+// none / low / moderate / high / extreme; see InstabilityLevels in
+// protocol/v2/consensustest/instability.go). Only affects the
+// Baseline-group scenario (Healthy) in the heatmap and conditions
+// chart; non-Baseline rows fall back to the level=none cell via
+// findBaselineCellForScenario.
+let selectedInstability = 0;
+
+// INSTABILITY_NAMES maps the numeric Level to the picker label.
+// Mirrors InstabilityLevels.Name in the Go side.
+const INSTABILITY_NAMES = ['none', 'low', 'moderate', 'high', 'extreme'];
 
 // collapsibleState[sweepName] = { expanded: bool, metric: 'success'|'p99', slotStart: int }
 // Per-section state for the collapsible sweep charts (Increasing BTT,
@@ -191,6 +202,7 @@ function initBaselineSelections(data) {
   selectedK = pickClosest(dims.Ks, selectedK);
   selectedBTT = pickClosest(dims.BTTs, selectedBTT);
   selectedSigma = pickClosest(dims.Sigmas, selectedSigma);
+  selectedInstability = pickClosest(dims.Instabilities, selectedInstability);
 }
 
 // precomputeSlotShifts warms shiftedCell's cache for the heatmap's
@@ -267,10 +279,21 @@ function onSlotStartChange(newSlot) {
 // findBaselineSweepPoint.
 
 // findBaselineSweepPoint returns {sweep, point} matching the current
-// (N, K, BTT, σ) selection within p2p_baseline, or null if no point
-// matches. Reads sweep_point.fields (set by sweep.go) — see
-// reporting.pointPayload.Fields for the schema.
+// (N, K, BTT, σ, instability) selection within p2p_baseline, or null
+// if no point matches. Reads sweep_point.fields (set by sweep.go) —
+// see reporting.pointPayload.Fields for the schema. Points without an
+// Instability field (legacy / pre-instability data) match
+// selectedInstability=0 only.
 function findBaselineSweepPoint(data) {
+  return findBaselinePointAtInstability(data, selectedInstability);
+}
+
+// findBaselinePointAtInstability looks up the p2p_baseline point at
+// the current (N, K, BTT, σ) and the requested instability level.
+// Returns null when no matching point exists (e.g. the level=high
+// slice hasn't been generated). Pulled out so non-Baseline-row cell
+// lookups can force-fall-back to level=0 regardless of the picker.
+function findBaselinePointAtInstability(data, instability) {
   if (!data) return null;
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep) return null;
@@ -281,12 +304,28 @@ function findBaselineSweepPoint(data) {
       f.N === selectedN &&
       f.K === selectedK &&
       f.BTT === selectedBTT &&
-      Math.abs(f.Sigma - selectedSigma) < 1e-6
+      Math.abs(f.Sigma - selectedSigma) < 1e-6 &&
+      (f.Instability ?? 0) === instability
     ) {
       return { sweep, point: pt };
     }
   }
   return null;
+}
+
+// findBaselineCellForScenario looks up the cell for the given scenario
+// at the current (N, K, BTT, σ, instability). For Baseline-group
+// scenarios (Healthy) the cell is the per-level variant; for every
+// other scenario the cell falls back to the level=none point — those
+// scenarios are instability-invariant by construction, so generating
+// duplicate cells at every level would just waste compute (see
+// p2pBaselineSweep in sweep.go).
+function findBaselineCellForScenario(data, scenario, protocol) {
+  const isBaseline = scenario && scenario.group === 'Baseline';
+  const wanted = isBaseline ? selectedInstability : 0;
+  const match = findBaselinePointAtInstability(data, wanted);
+  if (!match) return null;
+  return findCell(match.point, scenario.name, protocol);
 }
 
 // availableBaselineDimensions reads the distinct N/K/BTT/σ values
@@ -300,6 +339,7 @@ function availableBaselineDimensions(data) {
   const Kset = new Set();
   const BTTset = new Set();
   const sigmaSet = new Set();
+  const instabilitySet = new Set();
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (sw) {
     for (const pt of sw.points) {
@@ -309,21 +349,31 @@ function availableBaselineDimensions(data) {
       if (typeof f.K === 'number' && f.K > 0) Kset.add(f.K);
       if (typeof f.BTT === 'number') BTTset.add(f.BTT);
       if (typeof f.Sigma === 'number') sigmaSet.add(f.Sigma);
+      // Always-show all 5 levels; greyed if the (n, K, BTT, σ) slice
+      // doesn't contain that level. Below we still seed from data so
+      // a future expanded levels-set is auto-discovered.
+      if (typeof f.Instability === 'number') instabilitySet.add(f.Instability);
     }
   }
+  // Backfill 0..4 so the picker always shows all 5 levels even on
+  // data.js generated before instability existed (those points have
+  // no Instability field and fall back to level=0 via findBaseline*).
+  for (let i = 0; i < INSTABILITY_NAMES.length; i++) instabilitySet.add(i);
   return {
     Ns: [...Nset].sort((a, b) => a - b),
     Ks: [...Kset].sort((a, b) => a - b),
     BTTs: [...BTTset].sort((a, b) => a - b),
     Sigmas: [...sigmaSet].sort((a, b) => a - b),
+    Instabilities: [...instabilitySet].sort((a, b) => a - b),
   };
 }
 
 // baselinePointExists reports whether p2p_baseline has a point matching
-// the exact (n, k, btt, σ) tuple. Used by the pickers to grey out
-// buttons whose specific combination wasn't produced by any
-// `make stresstest` run.
-function baselinePointExists(data, n, k, btt, sigma) {
+// the exact (n, k, btt, σ, instability) tuple. Used by the pickers
+// to grey out buttons whose specific combination wasn't produced by
+// any `make stresstest` run. Points without Instability in Fields
+// (legacy data) match instability=0 only.
+function baselinePointExists(data, n, k, btt, sigma, instability) {
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sw) return false;
   return sw.points.some((pt) => {
@@ -333,7 +383,8 @@ function baselinePointExists(data, n, k, btt, sigma) {
       f.N === n &&
       f.K === k &&
       f.BTT === btt &&
-      Math.abs(f.Sigma - sigma) < 1e-6
+      Math.abs(f.Sigma - sigma) < 1e-6 &&
+      (f.Instability ?? 0) === instability
     );
   });
 }
@@ -363,6 +414,15 @@ function filterSweepByNK(sweep, n, k) {
 // the page in an empty-data state until the user reconciles the other
 // axes). When disabledFor is null, no greying happens.
 function buildBaselinePicker(label, values, suffix, getValue, setValue, disabledFor) {
+  return buildBaselinePickerLabeled(label, values, (v) => String(v) + (suffix || ''),
+    getValue, setValue, disabledFor);
+}
+
+// buildBaselinePickerLabeled is buildBaselinePicker with a custom
+// labelFor(v) callback in place of "stringify + suffix". Used by the
+// instability picker (numeric Level values render as "none" / "low" /
+// "moderate" / "high" / "extreme" strings).
+function buildBaselinePickerLabeled(label, values, labelFor, getValue, setValue, disabledFor) {
   const picker = h('div', { class: 'sm-slot-picker' });
   picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, label));
   values.forEach((v) => {
@@ -374,7 +434,7 @@ function buildBaselinePicker(label, values, suffix, getValue, setValue, disabled
     if (disabled) cls += ' disabled';
     const attrs = { type: 'button', class: cls };
     if (disabled) attrs.title = 'no data for this value at the current selection';
-    const btn = h('button', attrs, String(v) + (suffix || ''));
+    const btn = h('button', attrs, labelFor(v));
     btn.addEventListener('click', () => setValue(v));
     picker.appendChild(btn);
   });
@@ -405,7 +465,11 @@ function renderConditionsSection(data) {
   sec.appendChild(desc);
 
   const scenario = data.scenarios.find((s) => s.name === selectedScenario);
-  const match = findBaselineSweepPoint(data);
+  // Baseline scenarios read from the per-level point; others from level=0.
+  const wantedInstab = scenario && scenario.group === 'Baseline'
+    ? selectedInstability
+    : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab);
   if (scenario) {
     titleEl.textContent = scenario.title || scenario.name;
     if (scenario.note) {
@@ -423,25 +487,38 @@ function renderConditionsSection(data) {
     buildBaselinePicker('n:', dims.Ns.length ? dims.Ns : [selectedN], null,
       () => selectedN,
       (v) => { selectedN = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedSigma)),
+      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedSigma, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
       (v) => { selectedK = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedSigma)),
+      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedSigma, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
       (v) => { selectedBTT = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedSigma)),
+      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedSigma, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('σ:', dims.Sigmas.length ? dims.Sigmas : [selectedSigma], null,
       () => selectedSigma,
       (v) => { selectedSigma = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v)),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability)),
+  );
+  pickers.appendChild(
+    // The instability picker shows level NAMES instead of numbers; map
+    // selectedInstability through INSTABILITY_NAMES on the way in and
+    // back out. disabledFor uses the level number (the data axis).
+    buildBaselinePickerLabeled(
+      'p2p_instability (Healthy only):',
+      dims.Instabilities.length ? dims.Instabilities : [selectedInstability],
+      (v) => INSTABILITY_NAMES[v] || ('L' + v),
+      () => selectedInstability,
+      (v) => { selectedInstability = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedSigma, v),
+    ),
   );
   pickers.appendChild(buildSlotPicker());
   bodyRow.appendChild(pickers);
@@ -501,8 +578,14 @@ function rebuildConditionsChart(data) {
   const canvas = document.getElementById('conditions-chart-canvas');
   if (!canvas) return;
   destroyCurrentChart();
-  const match = findBaselineSweepPoint(data);
   const scenario = data.scenarios.find((s) => s.name === selectedScenario);
+  // Baseline-group scenarios (Healthy) read from the per-level point;
+  // every other scenario only has data at level=0 (see p2pBaselineSweep
+  // in sweep.go for the rationale).
+  const wantedInstab = scenario && scenario.group === 'Baseline'
+    ? selectedInstability
+    : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab);
   if (!match || !scenario) return;
   const onePtSweep = { ...match.sweep, points: [match.point] };
   currentChart = buildLatencyChart(canvas, onePtSweep, data.protocols, scenario);
@@ -708,26 +791,29 @@ function applyChartDefaults() {
 // point when data.js predates Phase 2 (so the heatmap still renders
 // against an older data.js without a regen).
 function renderHeatmap(data) {
-  let point = null;
-  const match = findBaselineSweepPoint(data);
-  if (match) {
-    point = match.point;
-  } else {
+  // We check at instability=0 (where non-Baseline scenarios always
+  // live) to decide whether ANY data exists for this (n, K, BTT, σ).
+  // If even level=0 has no data, the slice is genuinely missing and
+  // we show the empty-state notice. If level=0 exists but the
+  // currently-selected level>0 doesn't, the Baseline row will fall
+  // back via findBaselineCellForScenario (which uses level=0 for
+  // non-Baseline) but the Baseline row's cell will be missing —
+  // rendered as an empty cell so the user sees "this level wasn't
+  // generated yet" without losing the rest of the heatmap.
+  const level0 = findBaselinePointAtInstability(data, 0);
+  if (!level0) {
     const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
-    if (legacy && legacy.points.length > 0) {
-      point = legacy.points[0];
+    if (!legacy || legacy.points.length === 0) {
+      // Always return a section so callers that replace this element
+      // (renderConditionsSection's picker handlers, onSlotStartChange)
+      // get a real DOM node — returning null would have replaceWith
+      // insert a literal "null" text node.
+      const empty = h('section', { class: 'heatmap empty', id: 'overview' });
+      empty.appendChild(h('p', { class: 'desc' },
+        `No data for n=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, σ=${selectedSigma}. ` +
+        `Generate this slice with: make stresstest CLUSTER_SIZE_N=${selectedN} LAYERS_K=${selectedK}`));
+      return empty;
     }
-  }
-  if (!point) {
-    // Always return a section so callers that replace this element
-    // (renderConditionsSection's picker handlers, onSlotStartChange)
-    // get a real DOM node — returning null would have replaceWith
-    // insert a literal "null" text node.
-    const empty = h('section', { class: 'heatmap empty', id: 'overview' });
-    empty.appendChild(h('p', { class: 'desc' },
-      `No data for n=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, σ=${selectedSigma}. ` +
-      `Generate this slice with: make stresstest CLUSTER_SIZE_N=${selectedN} LAYERS_K=${selectedK}`));
-    return empty;
   }
 
   const section = h('section', { class: 'heatmap', id: 'overview' });
@@ -777,7 +863,10 @@ function renderHeatmap(data) {
       row.appendChild(h('div', { class: 'hname' }, sc.title || sc.name));
       let hasData = false;
       data.protocols.forEach((p) => {
-        const cell = findCell(point, sc.name, p);
+        // Baseline rows pull from the selectedInstability point;
+        // every other row pulls from instability=0 (those scenarios
+        // are instability-invariant and only have data at level=0).
+        const cell = findBaselineCellForScenario(data, sc, p);
         if (cell && cell.iterations > 0) hasData = true;
         row.appendChild(renderHeatmapCell(cell, sc));
       });

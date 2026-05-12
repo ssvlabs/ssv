@@ -132,14 +132,24 @@ consensustest-with-real-bls:
 #
 # Sweeps (all use LogNormalDelay as the production-shaped propagation
 # model; see protocol/v2/consensustest/sweep.go for full docs):
-#   - p2p_baseline          (BTT × σ = 5 × 4 = 20 points per run;
-#                            heatmap source)
+#   - p2p_baseline          (BTT × σ × instability = 5 × 5 × 5 = 125
+#                            points per run; heatmap source. The
+#                            instability axis applies only to the
+#                            Baseline-group scenario, Healthy — non-
+#                            Baseline rows are instability-invariant.)
 #   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
-#   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
+#   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9})
 #   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
 #   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
 #   - p2p_node_slowness     (slow op count ∈ {0, 1, 2, 3}, markov
 #                            persistence 0.8)
+#   - p2p_instability       (5 levels: none / low / moderate / high /
+#                            extreme — Healthy-only "production p2p"
+#                            chart; layers MarkovianSlowness +
+#                            LossyNetwork on top of the LogNormal
+#                            jitter. See InstabilityLevels in
+#                            protocol/v2/consensustest/instability.go
+#                            for the per-level params.)
 #
 # Operating-point env vars:
 #   - CLUSTER_SIZE_N (default 4) — the SSV cluster size n.

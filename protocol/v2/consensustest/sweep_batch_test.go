@@ -79,15 +79,16 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4)
 
-	require.Len(t, sweeps, 6, "six curated sweeps per plan")
+	require.Len(t, sweeps, 7, "seven curated sweeps per plan")
 
 	expected := map[string]int{
-		"p2p_baseline":          5 * 5, // BTT × σ
-		"p2p_increasing_BTT":    6,     // BTT
-		"p2p_heavy_tail":        7,     // σ
-		"p2p_packet_loss":       5,     // LossRate
-		"p2p_correlated_delays": 4,     // BadLinkProb
-		"p2p_node_slowness":     4,     // slow-op count
+		"p2p_baseline":          5 * 5 * 5, // BTT × σ × instability
+		"p2p_increasing_BTT":    6,         // BTT
+		"p2p_heavy_tail":        7,         // σ
+		"p2p_packet_loss":       5,         // LossRate
+		"p2p_correlated_delays": 4,         // BadLinkProb
+		"p2p_node_slowness":     4,         // slow-op count
+		"p2p_instability":       5,         // instability level
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]
@@ -171,7 +172,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4)
-	require.Len(t, sweeps, 6)
+	require.Len(t, sweeps, 7)
 
 	totalPoints := 0
 	for _, sw := range sweeps {
