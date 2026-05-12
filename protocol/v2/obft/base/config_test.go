@@ -90,9 +90,24 @@ func TestConfig_Validate_RejectsDuplicateLeader(t *testing.T) {
 
 func TestConfig_Validate_RejectsNonMonotonicFetchAt(t *testing.T) {
 	cfg := validBaseConfig()
-	// Layer 1's FetchAt > layer 0's — violates T_{K-1} < ... < T_0.
+	// Layer 1's FetchAt > layer 0's — violates T_{K-1} ≤ ... ≤ T_0.
+	// Non-increasing is allowed (ties at BFT_start when shallow targets
+	// clamp); strictly-increasing in k is still rejected.
 	cfg.Layers[1].FetchAt = cfg.Layers[0].FetchAt + 100*time.Millisecond
-	require.ErrorContains(t, cfg.Validate(), "strictly decreasing")
+	require.ErrorContains(t, cfg.Validate(), "non-increasing")
+}
+
+// TestConfig_Validate_AcceptsTiedFetchAtCollision verifies that two
+// adjacent layers tying their FetchAt — what used to happen when shallow
+// broadcast targets clamp to BFT_start at degraded operating points — is
+// accepted post-relaxation. Documents the new non-increasing-FetchAt
+// invariant (was strict-decreasing).
+func TestConfig_Validate_AcceptsTiedFetchAtCollision(t *testing.T) {
+	cfg := validBaseConfig()
+	// Push L_2 and L_3 to both clamp at 0 by giving them equal B_k.
+	cfg.Layers[2].FetchAt = 0
+	cfg.Layers[3].FetchAt = 0
+	require.NoError(t, cfg.Validate())
 }
 
 func TestConfig_Validate_RejectsFetchAtPastBroadcastDeadline(t *testing.T) {
@@ -165,11 +180,27 @@ func TestConfig_BroadcastBudget_PrimaryAllowedTighter(t *testing.T) {
 	require.NoError(t, cfg.Validate())
 }
 
-func TestConfig_BroadcastBudget_RejectsNonMonotonic(t *testing.T) {
+func TestConfig_BroadcastBudget_RejectsDecreasing(t *testing.T) {
 	cfg := validStaggeredConfig()
-	// B_1 ≤ B_0 violates strict monotonicity.
+	// B_1 < B_0 violates non-decreasing in k. Equal adjacent budgets are
+	// allowed (see TestConfig_BroadcastBudget_AllowsEqualAdjacent below);
+	// only an actual decrease in k is rejected.
+	cfg.Layers[1].BroadcastBudget = cfg.Layers[0].BroadcastBudget - time.Millisecond
+	// Adjust L_1's FetchAt so the per-layer cap stays feasible.
+	cfg.Layers[1].FetchAt = cfg.TCommit - cfg.Layers[1].BroadcastBudget
+	require.ErrorContains(t, cfg.Validate(), "non-decreasing")
+}
+
+// Equal adjacent BroadcastBudget entries are accepted post-relaxation —
+// at degraded operating points the canonical schedule pushes multiple
+// shallow layers' targets to clamp at BFT_start, which materializes as
+// ties in B_k across adjacent layers.
+func TestConfig_BroadcastBudget_AllowsEqualAdjacent(t *testing.T) {
+	cfg := validStaggeredConfig()
 	cfg.Layers[1].BroadcastBudget = cfg.Layers[0].BroadcastBudget
-	require.ErrorContains(t, cfg.Validate(), "strictly increasing")
+	// Bring FetchAt in line so the per-layer caps stay non-increasing in k.
+	cfg.Layers[1].FetchAt = cfg.Layers[0].FetchAt
+	require.NoError(t, cfg.Validate())
 }
 
 func TestConfig_BroadcastBudget_RejectsZeroOnAnyLayer(t *testing.T) {
@@ -242,13 +273,19 @@ func TestConfig_BroadcastBudget_AllowsDeepestBkOverTCommit(t *testing.T) {
 	}
 }
 
-// Strict-decreasing FetchAt still trips when two deep layers both clamp
-// to fetch-at-0 — no fall-through depth remains.
-func TestConfig_BroadcastBudget_RejectsTwoLayersOverTCommit(t *testing.T) {
+// Two adjacent deep layers both clamping to fetch-at-0 — what used to
+// be a strict-decreasing-FetchAt rejection — is now accepted. The
+// fall-through depth between the colliding layers is zero (both
+// leaders fetch + broadcast at BFT_start) but the cluster's deeper-
+// layer fall-through path still operates, and the user explicitly
+// opted into this degenerate config by inflating B_k past T_commit.
+func TestConfig_BroadcastBudget_AllowsTwoLayersOverTCommit(t *testing.T) {
 	cfg := validStaggeredConfig()
 	cfg.Layers[2].BroadcastBudget = cfg.TCommit + 100*time.Millisecond
 	cfg.Layers[3].BroadcastBudget = cfg.TCommit + 500*time.Millisecond
 	cfg.Layers[2].FetchAt = 0
 	cfg.Layers[3].FetchAt = 0
-	require.ErrorContains(t, cfg.Validate(), "strictly decreasing")
+	require.NoError(t, cfg.Validate())
+	require.Equal(t, time.Duration(0), cfg.BroadcastMaxOffsetForLayer(2))
+	require.Equal(t, time.Duration(0), cfg.BroadcastMaxOffsetForLayer(3))
 }

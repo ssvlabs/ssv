@@ -367,9 +367,17 @@ func (c *SimConfig) Validate() error {
 		return fmt.Errorf("consensustest: BroadcastBudget has %d entries, expected K=%d",
 			len(c.BroadcastBudget), c.K)
 	}
+	// Non-decreasing in k: deeper layers get ≥ their predecessor's
+	// absorption budget. Strict-increasing was historically required, but
+	// at degraded operating points the canonical schedule pushes shallow
+	// B_k above T_commit and several layers' targets all clamp to
+	// BFT_start; relaxing to non-decreasing lets those configurations
+	// pass through the framework instead of being rejected up-front. The
+	// runtime clamp (`max(BFT_start, T_commit − B_k)`) handles the
+	// resulting collisions.
 	for k := 1; k < c.K; k++ {
-		if c.BroadcastBudget[k] <= c.BroadcastBudget[k-1] {
-			return fmt.Errorf("consensustest: BroadcastBudget must be strictly increasing in k (B_%d=%v <= B_%d=%v)",
+		if c.BroadcastBudget[k] < c.BroadcastBudget[k-1] {
+			return fmt.Errorf("consensustest: BroadcastBudget must be non-decreasing in k (B_%d=%v < B_%d=%v)",
 				k, c.BroadcastBudget[k], k-1, c.BroadcastBudget[k-1])
 		}
 	}
@@ -385,9 +393,15 @@ func (c *SimConfig) Validate() error {
 		return fmt.Errorf("consensustest: FetchAt has %d entries, expected K=%d",
 			len(c.FetchAt), c.K)
 	}
+	// Non-increasing in k: deeper layers fetch ≤ their predecessor's
+	// offset. Strict-decreasing was historically required, but at degraded
+	// operating points multiple layers all clamp to BFT_start and their
+	// FetchAt entries collide there. Relaxing to non-increasing keeps the
+	// MEV-fetch ordering meaningful (primary fetches latest, deepest
+	// fetches earliest) without rejecting the clamp-collision case.
 	for k := 1; k < c.K; k++ {
-		if c.FetchAt[k] >= c.FetchAt[k-1] {
-			return fmt.Errorf("consensustest: FetchAt must be strictly decreasing in k (T_%d=%v >= T_%d=%v)",
+		if c.FetchAt[k] > c.FetchAt[k-1] {
+			return fmt.Errorf("consensustest: FetchAt must be non-increasing in k (T_%d=%v > T_%d=%v)",
 				k, c.FetchAt[k], k-1, c.FetchAt[k-1])
 		}
 	}

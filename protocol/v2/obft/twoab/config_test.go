@@ -171,13 +171,25 @@ func TestConfig_Validate_RejectsLayerWithZeroBroadcastBudget(t *testing.T) {
 		"got: %v", err)
 }
 
-func TestConfig_Validate_RejectsNonIncreasingBroadcastBudgets(t *testing.T) {
+func TestConfig_Validate_RejectsDecreasingBroadcastBudgets(t *testing.T) {
 	c := healthyConfig()
-	// Swap L_1 and L_2 budgets so the schedule is no longer strictly
-	// increasing.
+	// Swap L_1 and L_2 budgets so the schedule strictly decreases at L_2.
+	// Non-decreasing is the relaxed invariant (ties allowed when shallow
+	// targets clamp to BFT_start); an actual decrease is rejected.
 	c.Layers[1].BroadcastBudget, c.Layers[2].BroadcastBudget =
 		c.Layers[2].BroadcastBudget, c.Layers[1].BroadcastBudget
-	require.ErrorContains(t, c.Validate(), "strictly increasing")
+	require.ErrorContains(t, c.Validate(), "non-decreasing")
+}
+
+// Equal adjacent BroadcastBudget entries are accepted post-relaxation —
+// at degraded operating points the canonical schedule pushes multiple
+// shallow layers' targets to clamp at BFT_start, which materializes as
+// ties in B_k across adjacent layers.
+func TestConfig_Validate_AcceptsEqualAdjacentBroadcastBudgets(t *testing.T) {
+	c := healthyConfig()
+	c.Layers[1].BroadcastBudget = c.Layers[0].BroadcastBudget
+	c.Layers[1].FetchAt = c.Layers[0].FetchAt // collide at the same BFT_start anchor
+	require.NoError(t, c.Validate())
 }
 
 func TestConfig_Validate_RejectsDeepestBudgetBelowBFTMin(t *testing.T) {
@@ -209,16 +221,26 @@ func TestConfig_Validate_RejectsDuplicateLayerLeader(t *testing.T) {
 	require.ErrorContains(t, c.Validate(), "duplicate leader")
 }
 
-func TestConfig_Validate_RejectsNonDecreasingFetchAt(t *testing.T) {
+func TestConfig_Validate_RejectsIncreasingFetchAt(t *testing.T) {
 	c := healthyConfig()
-	// Set L_0 and L_1 fetch equal within both layers' broadcast deadlines so
-	// the strict-decreasing check fires (and not the per-layer deadline
-	// check). Healthy config: L_0 deadline=1400ms, L_1 deadline=1300ms.
-	// A value ≤ 1300ms satisfies both deadlines but equals violate strict-
-	// decreasing.
+	// Pure-increase in k (L_1 > L_0) violates non-increasing. Equal
+	// adjacent FetchAt entries are accepted (collide-at-BFT_start case);
+	// only a strict increase in k is rejected.
 	c.Layers[0].FetchAt = 1000 * time.Millisecond
-	c.Layers[1].FetchAt = 1000 * time.Millisecond
-	require.ErrorContains(t, c.Validate(), "strictly decreasing")
+	c.Layers[1].FetchAt = 1100 * time.Millisecond
+	require.ErrorContains(t, c.Validate(), "non-increasing")
+}
+
+func TestConfig_Validate_AcceptsEqualAdjacentFetchAt(t *testing.T) {
+	c := healthyConfig()
+	// Tied FetchAt at adjacent deep layers — what materializes when both
+	// layers' broadcast targets clamp at BFT_start. Tie L_2 and L_3 at 0
+	// (the natural collide-at-BFT_start position for the deepest pair);
+	// shallower layers stay at their original strictly-decreasing values
+	// so the wider non-increasing invariant still holds.
+	c.Layers[2].FetchAt = 0
+	c.Layers[3].FetchAt = 0
+	require.NoError(t, c.Validate())
 }
 
 func TestConfig_Validate_RejectsFetchAtBeyondBroadcastDeadline(t *testing.T) {
@@ -295,9 +317,26 @@ func TestDefaultBroadcastBudget_K5_InterpolatesIntermediate(t *testing.T) {
 	require.Less(t, out[3], out[4])
 }
 
-func TestDefaultBroadcastBudget_TooSmallTVerdictStart(t *testing.T) {
-	_, err := DefaultBroadcastBudget(4, 200*time.Millisecond, 400*time.Millisecond)
-	require.ErrorContains(t, err, "TVerdictStart")
+// At degraded operating points where TVerdictStart shrinks below the
+// canonical staggered multiples, DefaultBroadcastBudget caps shallow
+// B_k at TVerdictStart so the schedule stays non-decreasing. The
+// capped layers' broadcast targets all clamp at BFT_start at runtime
+// (T_broadcast_max_k = max(BFT_start, TVerdictStart − TVerdictStart) =
+// BFT_start).
+func TestDefaultBroadcastBudget_DegradedOperatingPoint(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tVerdictStart := 400 * time.Millisecond // < 2.5·BTT
+	out, err := DefaultBroadcastBudget(4, btt, tVerdictStart)
+	require.NoError(t, err)
+	require.Len(t, out, 4)
+	require.Equal(t, btt, out[0])           // 200ms — fits
+	require.Equal(t, 150*btt/100, out[1])   // 300ms — fits
+	require.Equal(t, tVerdictStart, out[2]) // capped (was 500ms, now 400ms)
+	require.Equal(t, tVerdictStart, out[3]) // deepest = TVerdictStart
+	// Non-decreasing post-cap.
+	for k := 1; k < len(out); k++ {
+		require.GreaterOrEqual(t, out[k], out[k-1])
+	}
 }
 
 func TestDefaultBroadcastBudget_K1(t *testing.T) {
@@ -309,10 +348,17 @@ func TestDefaultBroadcastBudget_K1(t *testing.T) {
 		"K=1: single layer = deepest = TVerdictStart")
 }
 
-func TestDefaultBroadcastBudget_K1_RejectsTVerdictStartBelowTwoBTT(t *testing.T) {
-	// At K=1, the only layer IS the deepest; its minimum is 2·BTT.
-	_, err := DefaultBroadcastBudget(1, 200*time.Millisecond, 300*time.Millisecond)
-	require.ErrorContains(t, err, "TVerdictStart")
+// At K=1 the only layer is the deepest = TVerdictStart, regardless of
+// whether TVerdictStart satisfies any minimum bound — the helper just
+// returns the value verbatim. Liveness-min enforcement happens at
+// Config.Validate via the 2·BTT bound on the deepest layer, not in
+// the budget helper.
+func TestDefaultBroadcastBudget_K1_LowTVerdictStart(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tVerdictStart := 300 * time.Millisecond // < 2·BTT
+	out, err := DefaultBroadcastBudget(1, btt, tVerdictStart)
+	require.NoError(t, err)
+	require.Equal(t, []time.Duration{tVerdictStart}, out)
 }
 
 func TestDefaultBroadcastBudget_K2(t *testing.T) {
@@ -324,10 +370,14 @@ func TestDefaultBroadcastBudget_K2(t *testing.T) {
 		"K=2: B_0 = 1 BTT, B_1 = TVerdictStart")
 }
 
-func TestDefaultBroadcastBudget_K2_RejectsTVerdictStartBelowOneBTT(t *testing.T) {
-	// At K=2, B_0 = BTT; TVerdictStart must be > BTT for strict-increasing.
-	_, err := DefaultBroadcastBudget(2, 200*time.Millisecond, 150*time.Millisecond)
-	require.ErrorContains(t, err, "TVerdictStart")
+// At K=2 with TVerdictStart < BTT, the helper caps B_0 at TVerdictStart
+// so both layers tie at the anchor — non-decreasing holds.
+func TestDefaultBroadcastBudget_K2_LowTVerdictStart(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tVerdictStart := 150 * time.Millisecond // < BTT
+	out, err := DefaultBroadcastBudget(2, btt, tVerdictStart)
+	require.NoError(t, err)
+	require.Equal(t, []time.Duration{tVerdictStart, tVerdictStart}, out)
 }
 
 func TestDefaultBroadcastBudget_K0_Rejected(t *testing.T) {

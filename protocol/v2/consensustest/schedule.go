@@ -21,14 +21,17 @@ import (
 //     to T_commit (in duration space) across the remaining K-4 intermediate
 //     layers.
 //
-// Returns an error wrapping ErrNotApplicable when T_commit ≤ B_{K-2} —
-// the operating point is too tight for the default staggered schedule's
-// strict-increasing invariant. Callers can either supply a custom schedule
-// via SimConfig.BroadcastBudget or treat the cluster as out-of-envelope
-// for this BTT (the framework's batch driver renders such cells as "n/a"
-// silently, no per-scenario log spam). Wrapping with ErrNotApplicable
-// makes this an "operating point not applicable to default schedule"
-// signal rather than a hard config error.
+// At extreme operating points where the canonical staggered shallow
+// budgets exceed T_commit (e.g. BTT=1000ms collapses T_commit below
+// 2.5·BTT = B_{K-2}), the schedule is emitted as-is: the shallow B_k
+// values can be larger than T_commit, and the protocol's runtime
+// `T_broadcast_max_k = max(BFT_start, T_commit − B_k)` clamps those
+// layers' targets at BFT_start (= slot_start in the simplified test
+// timing). Multiple layers may share the BFT_start broadcast target
+// without violating the schedule — fall-through depth shrinks at the
+// degraded operating point but safety holds. The caller is responsible
+// for deciding whether the resulting schedule is meaningful for their
+// experiment.
 //
 // K<2 / BTT≤0 return plain errors (programmer errors — SimConfig.Validate
 // enforces K ≥ f+1 and BTT > 0 upstream, so these shouldn't trip
@@ -40,40 +43,42 @@ func DefaultBkSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, erro
 	if btt <= 0 {
 		return nil, fmt.Errorf("consensustest: DefaultBkSchedule BTT=%v must be > 0", btt)
 	}
-	// minDeepest is the bound the deepest layer must strictly exceed for the
-	// schedule's strict-increasing invariant to hold. At K=2 the shallow
-	// penultimate is B_0 = 1·BTT; at K≥3 it is B_{K-2} = 2.5·BTT.
-	var minDeepest time.Duration
-	if K == 2 {
-		minDeepest = btt
-	} else {
-		minDeepest = btt * 250 / 100 // 2.5·BTT (B_{K-2} for K≥3)
-	}
-	if tCommit <= minDeepest {
-		return nil, fmt.Errorf("%w: consensustest: DefaultBkSchedule T_commit=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule",
-			ErrConfigOutOfEnvelope, tCommit, minDeepest, K, btt)
-	}
 	mul := func(x float64) time.Duration { return time.Duration(x * float64(btt)) }
-	if K == 2 {
-		return []time.Duration{mul(1.0), tCommit}, nil
-	}
-	if K == 3 {
-		return []time.Duration{mul(1.0), mul(2.5), tCommit}, nil
-	}
 	out := make([]time.Duration, K)
-	out[0] = mul(1.0)
-	out[1] = mul(1.5)
-	out[2] = mul(2.5)
-	out[K-1] = tCommit
-	if K == 4 {
-		return out, nil
+	switch K {
+	case 2:
+		out[0] = mul(1.0)
+		out[1] = tCommit
+	case 3:
+		out[0] = mul(1.0)
+		out[1] = mul(2.5)
+		out[2] = tCommit
+	default:
+		out[0] = mul(1.0)
+		out[1] = mul(1.5)
+		out[2] = mul(2.5)
+		out[K-1] = tCommit
+		// K ≥ 5: linear interpolation from L_2 (2.5·BTT) to L_{K-1}
+		// (T_commit) in duration space, filling indices 3..K-2.
+		span := tCommit - out[2]
+		steps := K - 3
+		for k := 3; k < K-1; k++ {
+			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
+		}
 	}
-	// K ≥ 5: linear interpolation from L_2 (2.5·BTT) to L_{K-1} (T_commit)
-	// in duration space, filling indices 3..K-2.
-	span := tCommit - out[2]
-	steps := K - 3
-	for k := 3; k < K-1; k++ {
-		out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
+	// Cap shallow B_k at T_commit so the schedule stays non-decreasing
+	// even at degraded operating points where the canonical staggered
+	// multiples (1·BTT, 1.5·BTT, 2.5·BTT, ...) overshoot. Capped layers
+	// share `T_broadcast_max_k = max(BFT_start, T_commit − B_k) =
+	// BFT_start` — multiple layers may collide at BFT_start without
+	// safety impact. The deepest layer is already T_commit by
+	// construction; the cap turns degraded shallow layers into
+	// "broadcast at BFT_start" peers of the deepest, which is the
+	// natural degradation mode at tight T_commit.
+	for k := 0; k < K; k++ {
+		if out[k] > tCommit {
+			out[k] = tCommit
+		}
 	}
 	return out, nil
 }
@@ -82,8 +87,10 @@ func DefaultBkSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, erro
 // K layers, anchored at tCommit and BTT. Each layer's FetchAt sits a small
 // buffer (default 0.25 BTT) ahead of the layer's T_broadcast_max so each
 // leader has non-negative headroom to fetch+sign before its broadcast
-// deadline. Strictly decreasing in k (deeper layers fetch progressively
-// earlier).
+// deadline. Non-increasing in k (deeper layers fetch progressively earlier
+// at typical operating points; multiple layers may tie at BFT_start when
+// the operating point is degraded enough that their computed offsets all
+// clamp to BFT_start).
 //
 // perLayerOffset overrides the default 0.25 BTT buffer per-layer: missing key
 // → default; explicit zero → leader broadcasts exactly at T_broadcast_max_k
@@ -91,13 +98,13 @@ func DefaultBkSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, erro
 // for the default everywhere.
 //
 // Bk is sourced from DefaultBkSchedule(K, btt, tCommit) so the schedules stay
-// consistent. Returns an error wrapping ErrNotApplicable when the derived
-// schedule would violate the strict-decreasing-in-k invariant — typically
-// because two or more shallow layers' computed FetchAt clamp to 0 at
-// degraded BTT (e.g. at BTT≈800ms with the default buffer, T_{K-2} ≤ 0 just
-// as T_{K-1} = 0 from the "earliest possible" deepest, so T_{K-1} ≮ T_{K-2}).
-// Wrapping with ErrNotApplicable makes the operating-point-too-tight case a
-// quiet "n/a" in batch runs rather than a per-cell log line.
+// consistent. At degraded operating points (BTT large enough that the
+// computed offsets push past BFT_start for multiple layers) the schedule is
+// returned as-is — multiple FetchAt entries can collide at BFT_start.
+// Functionally this means those layers' leaders fetch and broadcast at
+// BFT_start; fall-through depth shrinks but the protocol still operates.
+// The caller is responsible for deciding whether the resulting schedule is
+// meaningful for their experiment.
 func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[int]time.Duration) ([]time.Duration, error) {
 	bk, err := DefaultBkSchedule(K, btt, tCommit)
 	if err != nil {
@@ -116,12 +123,6 @@ func DefaultFetchSchedule(K int, btt, tCommit time.Duration, perLayerOffset map[
 		out[k] = tCommit - bk[k] - buf
 		if out[k] < 0 {
 			out[k] = 0
-		}
-	}
-	for k := 1; k < K; k++ {
-		if out[k] >= out[k-1] {
-			return nil, fmt.Errorf("%w: consensustest: DefaultFetchSchedule T_%d=%v >= T_%d=%v at BTT=%v T_commit=%v (operating point too tight for default schedule)",
-				ErrConfigOutOfEnvelope, k, out[k], k-1, out[k-1], btt, tCommit)
 		}
 	}
 	return out, nil

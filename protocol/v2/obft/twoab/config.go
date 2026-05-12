@@ -258,24 +258,10 @@ func (c *Config) RoundEndOffset() time.Duration {
 	return c.TCommit + c.Delta2b + c.Delta3
 }
 
-// ErrInsufficientVerdictStart is returned by DefaultBroadcastBudget when
-// TVerdictStart is too small for the spec's staggered default schedule to
-// fit (TVerdictStart ≤ 2.5·BTT for K≥3, with smaller bounds at K<3). At
-// this operating point the schedule's strict-increasing invariant cannot
-// be satisfied: the shallow layer B_{K-2} = 2.5·BTT already exceeds the
-// deepest's "earliest possible" anchor.
-//
-// Callers that hit this can either supply a custom per-layer schedule via
-// LayerSpec.BroadcastBudget, or treat the operating point as out of
-// envelope for 2abOBFT (the consensustest adapter wraps as
-// consensustest.ErrNotApplicable so cells render cleanly as "n/a"
-// rather than logging a verbose error per scenario).
-var ErrInsufficientVerdictStart = errors.New("twoab: TVerdictStart too small for default staggered schedule")
-
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
 // for K layers at the given BTT and TVerdictStart. Matches the spec's
 // recommendation: B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} =
-// TVerdictStart (deepest broadcasts at slot start, last-resort absorption
+// TVerdictStart (deepest broadcasts at BFT_start, last-resort absorption
 // ≈ entire pre-Phase-2a budget); intermediate shallow layers at 1.5 /
 // 2.5 BTT.
 //
@@ -285,29 +271,22 @@ var ErrInsufficientVerdictStart = errors.New("twoab: TVerdictStart too small for
 // intermediate layers (k = 3, ..., K-2) interpolate linearly from 2.5·BTT
 // to TVerdictStart in duration space.
 //
-// Returns an error wrapping ErrInsufficientVerdictStart when
-// TVerdictStart ≤ 2.5·BTT (the default deepest would no longer be strictly
-// greater than B_{K-2} = 2.5·BTT). Callers operating at extreme degraded
-// BTT can provide a custom per-layer schedule.
+// At extreme degraded operating points where TVerdictStart shrinks below
+// the canonical shallow multiples (e.g. TVerdictStart ≤ 2.5·BTT at K≥3),
+// the helper still returns a schedule — the shallow B_k values can
+// exceed TVerdictStart. The protocol's runtime
+// `T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k)` clamps those
+// layers' targets at BFT_start, so the configuration remains valid (the
+// fall-through depth shrinks but the cluster still operates). Callers
+// that want the canonical staggered shape preserved can either widen
+// TVerdictStart (loosen Δ_2a / Δ_2b / Δ_3 / header headroom) or supply
+// their own per-layer schedule.
 func DefaultBroadcastBudget(K int, btt, tVerdictStart time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget BTT=%v must be > 0", btt)
-	}
-	var minDeepest time.Duration
-	switch {
-	case K == 1:
-		minDeepest = 2 * btt
-	case K == 2:
-		minDeepest = btt
-	default:
-		minDeepest = btt * 250 / 100
-	}
-	if tVerdictStart <= minDeepest {
-		return nil, fmt.Errorf("%w: TVerdictStart=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule for this operating point",
-			ErrInsufficientVerdictStart, tVerdictStart, minDeepest, K, btt)
 	}
 	out := make([]time.Duration, K)
 	switch K {
@@ -326,6 +305,9 @@ func DefaultBroadcastBudget(K int, btt, tVerdictStart time.Duration) ([]time.Dur
 		out[2] = btt * 250 / 100
 		out[3] = tVerdictStart
 	default:
+		// First three layers at 1 / 1.5 / 2.5 BTT (spec values); intermediate
+		// layers interpolate linearly in duration space from 2.5·BTT (at
+		// L_2) to TVerdictStart (at L_{K-1}).
 		out[0] = btt
 		out[1] = btt * 150 / 100
 		out[2] = btt * 250 / 100
@@ -334,6 +316,19 @@ func DefaultBroadcastBudget(K int, btt, tVerdictStart time.Duration) ([]time.Dur
 		steps := K - 3
 		for k := 3; k < K-1; k++ {
 			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
+		}
+	}
+	// Cap each B_k at TVerdictStart so the schedule stays non-decreasing
+	// even at degraded operating points where the canonical staggered
+	// shallow multiples overshoot. Capped layers share `T_broadcast_max_k
+	// = max(BFT_start, TVerdictStart − B_k) = BFT_start` — multiple
+	// layers may collide at BFT_start without safety impact. The deepest
+	// layer is already TVerdictStart by construction; the cap turns
+	// degraded shallow layers into "broadcast at BFT_start" peers of the
+	// deepest.
+	for k := 0; k < K; k++ {
+		if out[k] > tVerdictStart {
+			out[k] = tVerdictStart
 		}
 	}
 	return out, nil
@@ -400,11 +395,19 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("twoab: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for a spec-conforming staggered schedule)", k)
 		}
 	}
-	// B_0 < B_1 < ... < B_{K-1}: deeper layers get strictly larger
-	// absorption / chain-decryption headroom (spec §Setting).
+	// B_0 ≤ B_1 ≤ ... ≤ B_{K-1}: deeper layers get ≥ their predecessor's
+	// absorption / chain-decryption headroom (spec §Setting "B_k ≥
+	// B_{k-1}" verbatim). Equal adjacent budgets are tolerated: at
+	// degraded operating points multiple layers' broadcast targets clamp
+	// to BFT_start (the runtime `max(BFT_start, TVerdictStart − B_k)`
+	// floor), and at extreme operating points the canonical staggered
+	// shallow budgets even exceed TVerdictStart. Strict-increasing was
+	// historically enforced but rejected these degenerate-but-still-valid
+	// configs; non-decreasing keeps the staggering intent without
+	// blocking them.
 	for k := 1; k < len(c.Layers); k++ {
-		if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
-			return errors.New("twoab: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")
+		if c.Layers[k].BroadcastBudget < c.Layers[k-1].BroadcastBudget {
+			return errors.New("twoab: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
 		}
 	}
 	// The deepest layer's budget is the cluster's worst-case liveness
@@ -432,12 +435,15 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (TVerdictStart−B_k = %v)",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k), c.TVerdictStart()-c.Layers[k].BroadcastBudget)
 		}
-		// Per spec §Setting: T_{K-1} < ... < T_1 < T_0. Layer index k
-		// increases as we go deeper; FetchAt must strictly decrease
-		// with k so backups fetch from progressively-deeper-confirmed
-		// parents.
-		if k > 0 && layer.FetchAt >= c.Layers[k-1].FetchAt {
-			return errors.New("twoab: layer fetch times must be strictly decreasing in k")
+		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
+		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
+		// fetch asymmetry). Strict-decreasing was historically enforced;
+		// the non-increasing relaxation lets multiple layers' targets
+		// collide at BFT_start when the operating point pushes shallow
+		// targets past TVerdictStart (matches the BroadcastBudget
+		// non-decreasing relaxation above).
+		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
+			return errors.New("twoab: layer fetch times must be non-increasing in k")
 		}
 	}
 	return nil

@@ -201,12 +201,10 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 }
 
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
-// for K layers at the given BTT and T_commit — strictly increasing, deepest
-// = T_commit (the spec §Setting "earliest possible" deepest: leader's target
-// broadcast clamps to slot start). Matches the spec §Setting recommendation:
-// B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} = T_commit (deepest
-// broadcasts at slot start, last-resort absorption ≈ entire slot);
-// intermediate shallow layers at 1.5 / 2.5 BTT.
+// for K layers at the given BTT and T_commit. Matches the spec §Setting
+// recommendation: B_0 = 1 BTT (max MEV freshness at primary), B_{K-1} =
+// T_commit (deepest broadcasts at BFT_start, last-resort absorption ≈
+// entire slot); intermediate shallow layers at 1.5 / 2.5 BTT.
 //
 // At K=4 (the OBFT proposer-duty default) returns [1·BTT, 1.5·BTT, 2.5·BTT,
 // T_commit]. At K=3 returns [1·BTT, 2.5·BTT, T_commit]. For K>4 (n=7, 10, 13
@@ -214,37 +212,27 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 // intermediate layers (k = 3, ..., K-2) interpolate linearly from 2.5·BTT
 // to T_commit in duration space.
 //
-// Returns an error when T_commit ≤ 2.5·BTT (the default deepest would no
-// longer be strictly greater than B_{K-2} = 2.5·BTT). Callers operating at
-// extreme degraded BTT can provide a custom per-layer schedule.
+// At extreme degraded operating points where T_commit shrinks below the
+// canonical shallow multiples (e.g. T_commit ≤ 2.5·BTT at K≥3), the
+// helper still returns a schedule — the shallow B_k values can exceed
+// T_commit. The protocol's runtime `T_broadcast_max_k = max(BFT_start,
+// T_commit − B_k)` clamps those layers' targets at BFT_start, so the
+// configuration remains valid (fall-through depth shrinks but the
+// cluster still operates). Callers that want the canonical staggered
+// shape preserved can either widen T_commit (loosen Δ_2 / Δ_3 / header
+// headroom) or supply their own per-layer schedule.
 //
 // Callers that need deployment-specific tunings (e.g. the SSV adapter's
 // FetchAt-paired schedule) should provide their own per-layer values; this
 // helper is for tests and minimal callers that want an obviously-correct
 // default. Required by Validate: every LayerSpec.BroadcastBudget entry
-// must be > 0 and the slice must be strictly increasing.
+// must be > 0 and the slice must be non-decreasing.
 func DefaultBroadcastBudget(K int, btt, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft: DefaultBroadcastBudget K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("obft: DefaultBroadcastBudget BTT=%v must be > 0", btt)
-	}
-	// The shallow staggered values reach 2.5·BTT at L_2 (K≥3) or 2·BTT at
-	// L_1 (K=2). The deepest must be > the shallowest-but-deepest entry,
-	// and that is 2.5·BTT for K≥3, 1·BTT for K=2, 2·BTT for K=1.
-	var minDeepest time.Duration
-	switch {
-	case K == 1:
-		minDeepest = 2 * btt
-	case K == 2:
-		minDeepest = btt
-	default:
-		minDeepest = btt * 250 / 100
-	}
-	if tCommit <= minDeepest {
-		return nil, fmt.Errorf("obft: DefaultBroadcastBudget T_commit=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule for this operating point",
-			tCommit, minDeepest, K, btt)
 	}
 	out := make([]time.Duration, K)
 	switch K {
@@ -274,6 +262,18 @@ func DefaultBroadcastBudget(K int, btt, tCommit time.Duration) ([]time.Duration,
 		steps := K - 3
 		for k := 3; k < K-1; k++ {
 			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
+		}
+	}
+	// Cap each B_k at T_commit so the schedule stays non-decreasing even
+	// at degraded operating points where the canonical staggered shallow
+	// multiples overshoot. Capped layers share `T_broadcast_max_k =
+	// max(BFT_start, T_commit − B_k) = BFT_start` — multiple layers may
+	// collide at BFT_start without safety impact. The deepest layer is
+	// already T_commit by construction; the cap turns degraded shallow
+	// layers into "broadcast at BFT_start" peers of the deepest.
+	for k := 0; k < K; k++ {
+		if out[k] > tCommit {
+			out[k] = tCommit
 		}
 	}
 	return out, nil
@@ -376,19 +376,18 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("obft: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for a spec-conforming staggered schedule)", k)
 		}
 	}
-	// B_0 < B_1 < ... < B_{K-1}: deeper layers get strictly larger
-	// absorption / chain-decryption headroom.
-	//
-	// Spec §Setting states "B_k ≥ B_{k-1}" (non-strict). We enforce strict
-	// "<" because all the spec's recommended operating-point schedules
-	// (Config A at K=4: 1·BTT / 1.5·BTT / 2.5·BTT / T_commit) are strictly
-	// increasing, and equal adjacent budgets would mean the deeper layer
-	// offers no additional absorption — defeating the purpose of
-	// staggering. The strict bound catches misconfigurations that would
-	// silently degrade fall-through recovery at no protocol benefit.
+	// B_0 ≤ B_1 ≤ ... ≤ B_{K-1}: deeper layers get ≥ their predecessor's
+	// absorption / chain-decryption headroom (spec §Setting "B_k ≥
+	// B_{k-1}" verbatim). Equal adjacent budgets are tolerated: at
+	// degraded operating points multiple layers' broadcast targets clamp
+	// to BFT_start (the runtime `max(BFT_start, T_commit − B_k)` floor),
+	// and at extreme operating points the canonical staggered shallow
+	// budgets even exceed T_commit. Strict-increasing was historically
+	// enforced but rejected these degenerate-but-still-valid configs;
+	// non-decreasing keeps the staggering intent without blocking them.
 	for k := 1; k < len(c.Layers); k++ {
-		if c.Layers[k].BroadcastBudget <= c.Layers[k-1].BroadcastBudget {
-			return errors.New("obft: BroadcastBudget must be strictly increasing in layer index (B_0 < B_1 < ...)")
+		if c.Layers[k].BroadcastBudget < c.Layers[k-1].BroadcastBudget {
+			return errors.New("obft: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
 		}
 	}
 	// The deepest layer's budget is the cluster's worst-case liveness
@@ -420,13 +419,15 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v (T_commit−B_k = %v)",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k), c.TCommit-c.Layers[k].BroadcastBudget)
 		}
-		// Per spec §Setting: T_{K-1} < ... < T_1 < T_0. Layer index k
-		// increases as we go deeper; FetchAt must strictly decrease
-		// with k so backups fetch from progressively-deeper-confirmed
-		// parents (re-org resistance) and the asymmetric MEV-fetch
-		// advantage between primary and backups is preserved.
-		if k > 0 && layer.FetchAt >= c.Layers[k-1].FetchAt {
-			return errors.New("obft: layer fetch times must be strictly decreasing in k")
+		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
+		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
+		// fetch asymmetry between primary and backups). Strict-
+		// decreasing was historically enforced; the non-increasing
+		// relaxation lets multiple layers' targets collide at BFT_start
+		// when the operating point pushes shallow targets past T_commit
+		// (matches the BroadcastBudget non-decreasing relaxation above).
+		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
+			return errors.New("obft: layer fetch times must be non-increasing in k")
 		}
 	}
 	return nil
