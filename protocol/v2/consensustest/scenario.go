@@ -22,6 +22,29 @@ type Scenario struct {
 	Note   string                 // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
 }
 
+// IsAdversarial reports whether the scenario requires active byzantine
+// behavior to reproduce (cfg.Byz.Kind != ByzNone after Apply). Honest-
+// cluster failure modes — pure-network slowness, host validity issues,
+// passive-byz scenarios — return false. Auto-detected via a probe run
+// of Apply against a minimal SimConfig so adding a new scenario doesn't
+// require remembering to flag it.
+//
+// Used by the UI to visually distinguish "happens in production with
+// honest nodes" from "requires an attacker".
+func (s Scenario) IsAdversarial() bool {
+	if s.Apply == nil {
+		return false
+	}
+	probe := SimConfig{
+		N:         4,
+		Operators: MakeOperators(4),
+		K:         4,
+		BTT:       200,
+	}
+	s.Apply(&probe)
+	return probe.Byz.Kind != ByzNone
+}
+
 // HasMode reports whether the scenario participates in mode m. An empty
 // Modes slice is treated as {ModeStress} so unannotated Catalog entries
 // keep flowing into the existing stress report unchanged.

@@ -4,7 +4,7 @@ package consensustest
 
 var scenarioHealthy = Scenario{
 	Name:  "Healthy",
-	Title: "All-honest healthy path",
+	Title: "Normal operations (all-honest healthy path)",
 	Group: "Baseline",
 	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {

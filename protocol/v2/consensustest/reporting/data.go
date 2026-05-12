@@ -100,9 +100,10 @@ type reportPayload struct {
 }
 
 type scenarioPayload struct {
-	Name  string `json:"name"`
-	Title string `json:"title"`
-	Group string `json:"group,omitempty"`
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Group       string `json:"group,omitempty"`
+	Adversarial bool   `json:"adversarial,omitempty"`
 }
 
 type sweepPayload struct {
@@ -156,6 +157,7 @@ func buildPayload(c Comparison) reportPayload {
 	for _, sc := range scenarios {
 		pl.Scenarios = append(pl.Scenarios, scenarioPayload{
 			Name: sc.Name, Title: sc.DisplayTitle(), Group: sc.Group,
+			Adversarial: sc.IsAdversarial(),
 		})
 	}
 	for _, sw := range c.Sweeps {

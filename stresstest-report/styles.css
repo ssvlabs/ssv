@@ -149,16 +149,27 @@ section.heatmap {
 /* Row-level hover and selection — the row is the click target, so the
  * whole row highlights as one entity (background tint + left accent
  * stripe on selected) rather than outlining each cell individually.
- * Rows whose cells are all n/a don't get .clickable and stay inert. */
+ * Rows whose cells are all n/a don't get .clickable and stay inert.
+ *
+ * Adversarial rows (scenario requires active byzantine behavior — sets
+ * cfg.Byz to non-None) get a darker grey background so the reader can
+ * tell at a glance which scenarios are "honest cluster" failure modes
+ * vs which ones require an attacker. */
 .hrow {
   border-radius: 4px;
   transition: background 100ms ease;
+}
+.hrow.adversarial {
+  background: rgba(15, 23, 42, 0.05);
 }
 .hrow.clickable {
   cursor: pointer;
 }
 .hrow.clickable:hover {
   background: rgba(15, 23, 42, 0.05);
+}
+.hrow.clickable.adversarial:hover {
+  background: rgba(15, 23, 42, 0.09);
 }
 .hrow.selected {
   background: rgba(9, 105, 218, 0.10);
@@ -272,19 +283,19 @@ dialog.scenario-modal .sm-content {
  * margin-left:auto on the legend keeps it right-aligned even when
  * there's no description. flex-wrap lets the legend drop below on
  * narrow viewports. */
-dialog.scenario-modal .sm-content-top {
+.sm-content-top {
   display: flex;
   align-items: flex-start;
   gap: 1.5em;
   margin-bottom: 0.9em;
   flex-wrap: wrap;
 }
-dialog.scenario-modal .sm-content-top .desc {
+.sm-content-top .desc {
   flex: 1;
   min-width: 0;
   margin: 0;
 }
-dialog.scenario-modal .sm-content-top .sm-legend {
+.sm-content-top .sm-legend {
   margin: 0 0 0 auto;
 }
 
@@ -297,7 +308,7 @@ dialog.scenario-modal .sm-content-top .sm-legend {
  * display:contents so its children participate in the parent grid
  * directly. Every row emits exactly 5 children (n/a rows include empty
  * placeholders for sep + p99) to keep grid placement deterministic. */
-dialog.scenario-modal .sm-legend {
+.sm-legend {
   display: grid;
   grid-template-columns: auto auto auto auto auto;
   row-gap: 0.2em;
@@ -306,21 +317,21 @@ dialog.scenario-modal .sm-legend {
   font-size: 0.75em;
   font-variant-numeric: tabular-nums;
 }
-dialog.scenario-modal .sm-legend-item {
+.sm-legend-item {
   display: contents;
   color: var(--text);
 }
-dialog.scenario-modal .sm-legend-swatch {
+.sm-legend-swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 3px;
 }
-dialog.scenario-modal .sm-legend-name {
+.sm-legend-name {
   font-weight: 600;
   color: #0f172a;
 }
-dialog.scenario-modal .sm-legend-pct {
+.sm-legend-pct {
   background: hsla(var(--hue), 70%, 76%, 0.7);
   padding: 0.05em 0.3em;
   border-radius: 3px;
@@ -328,15 +339,15 @@ dialog.scenario-modal .sm-legend-pct {
   color: #1a1a1a;
   text-align: center;
 }
-dialog.scenario-modal .sm-legend-pct.na {
+.sm-legend-pct.na {
   background: #e2e8f0;
   color: var(--na);
   font-weight: 500;
 }
-dialog.scenario-modal .sm-legend-sep {
+.sm-legend-sep {
   color: var(--text-faint);
 }
-dialog.scenario-modal .sm-legend-p99 {
+.sm-legend-p99 {
   color: var(--text-muted);
 }
 
@@ -344,17 +355,17 @@ dialog.scenario-modal .sm-legend-p99 {
  * sweeps) the y-axis metric toggle. slot_start picker sits left, metric
  * toggle (if present) gets pushed to the right via margin-left:auto.
  * flex-wrap lets the toggle drop to its own row on narrow viewports. */
-dialog.scenario-modal .sm-controls {
+.sm-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4em 1.4em;
   align-items: center;
   margin: 0 0 0.7em;
 }
-dialog.scenario-modal .sm-controls .sm-slot-picker {
+.sm-controls .sm-slot-picker {
   margin: 0;
 }
-dialog.scenario-modal .sm-controls .sm-slot-picker + .sm-slot-picker {
+.sm-controls .sm-slot-picker + .sm-slot-picker {
   margin-left: auto;
 }
 
@@ -398,14 +409,95 @@ dialog.scenario-modal .sm-controls .sm-slot-picker + .sm-slot-picker {
 }
 /* Modal-context override — slightly tighter top margin since the
  * legend already sits above it. */
-dialog.scenario-modal .sm-slot-picker {
+.sm-slot-picker {
   margin: 0 0 0.7em;
 }
 
-dialog.scenario-modal .sm-chart-wrap {
+.sm-chart-wrap {
   position: relative;
   width: 100%;
   height: clamp(380px, 56vh, 540px);
+}
+
+/* Same sizing for the Conditions section's chart at the top of the
+ * page and for any collapsible body's chart — Chart.js needs an
+ * explicit height on the container or the canvas collapses to 0px. */
+section.conditions .sm-chart-wrap,
+.collapsible-body .sm-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: clamp(380px, 56vh, 540px);
+}
+
+section.conditions {
+  padding-top: 1em;
+  padding-bottom: 0.5em;
+}
+section.conditions .conditions-head h2 {
+  margin: 0 0 0.4em;
+  font-size: 1.3em;
+}
+section.conditions .conditions-desc {
+  margin: 0;
+}
+section.conditions .conditions-desc-title {
+  font-weight: 600;
+  color: #0f172a;
+}
+section.conditions .conditions-pickers {
+  margin: 0.5em 0 0.8em;
+}
+
+/* Collapsibles below the heatmap — one section per multi-point sweep,
+ * collapsed by default. Header is a click target; body slides under
+ * via display:none when collapsed (no animation — keeps the page
+ * snappy on toggle). */
+section.collapsibles {
+  margin-top: 1em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+.collapsible {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  width: 100%;
+  padding: 0.7em 1em;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: left;
+}
+.collapsible-header:hover {
+  background: rgba(15, 23, 42, 0.03);
+}
+.collapsible-arrow {
+  width: 1em;
+  color: var(--text-muted);
+}
+.collapsible-title {
+  flex: 1;
+}
+.collapsible-body {
+  padding: 0 1em 1em;
+  border-top: 1px solid var(--border);
+}
+.collapsible-body.collapsed {
+  display: none;
+}
+.collapsible-controls {
+  margin: 0.6em 0 0.8em;
 }
 
 canvas { display: block; max-width: 100%; }
