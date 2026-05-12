@@ -433,7 +433,7 @@ func TestSweep_ClockSkew(t *testing.T) {
 // structurally indistinguishable from honest network/operator failure:
 //   - Healthy (baseline; no byz)
 //   - PrimaryLeaderSilent (byz silent at L_0 — looks like offline op1)
-//   - MultiSilent_K3 (top K silent — looks like multi-failure)
+//   - MultiSilent_KMinus1 (top K-1 silent — looks like multi-failure)
 //   - SigmaRefusal (byz never σ-emits — looks like CPU-stuck honest)
 //   - WithholdLeader_Deepest (silent at deepest layer — looks like
 //     late/offline deepest leader)
@@ -461,7 +461,7 @@ func TestSweep_PassiveByz_UnderStress(t *testing.T) {
 	passiveByzNames := map[string]bool{
 		"Healthy":                true,
 		"PrimaryLeaderSilent":    true,
-		"MultiSilent_K3":         true,
+		"MultiSilent_KMinus1":    true,
 		"SigmaRefusal":           true,
 		"WithholdLeader_Deepest": true,
 		"LateLeaderBroadcast_L0": true,
@@ -564,7 +564,7 @@ func TestSweep_MultiByz_n7(t *testing.T) {
 		require.NoError(t, err)
 		// R1 + R2 timeouts = 2 × RT = 4s alone — already past RelayCutoff=4s.
 		// R3's PROPOSE arrives past the deadline → cluster MISSES, mirroring
-		// the QBFT-SSV-side observation in MultiSilent_K3 at n=4 (RT-budget
+		// the QBFT-SSV-side observation in MultiSilent_KMinus1 at K=N=4 (RT-budget
 		// dominates fall-through cost at production RT=2s).
 		require.False(t, out.Decided,
 			"QBFT-SSV n=7 with 2 byz silent leaders should MISS (2 round-changes consume the relay budget)")

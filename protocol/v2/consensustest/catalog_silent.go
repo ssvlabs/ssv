@@ -18,28 +18,39 @@ var scenarioSilentLeaderL0 = Scenario{
 	Note: "Primary leader silent. OBFT falls through K-layer in-round; QBFT round-changes to R2 (pays RT timeout).",
 }
 
-// ---- Multi-silent (top 3 of 4 leaders silent) --------------------------
+// ---- Multi-silent (top K-1 leaders silent, deepest honest) -------------
 
 var scenarioMultiSilent = Scenario{
-	Name:  "MultiSilent_K3",
+	Name:  "MultiSilent_KMinus1",
 	Title: "Top K-1 leaders silent (deepest is honest)",
 	Group: "Silent operators",
 	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
-		// Top 3 leaders silent; only the deepest is honest.
-		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: 3}
+		// Silence top K-1 leaders; only the deepest (L_{K-1}) is honest.
+		// K-generic so the scenario probes the "fall-through to deepest"
+		// shape consistently across K ∈ {2, 3, 4, ...} sweep points.
+		k := cfg.K
+		if k == 0 {
+			k = DefaultK(cfg.N)
+		}
+		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: k - 1}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT recovers in-round via K-layer fall-through to L_3.
+		// OBFT recovers in-round via K-layer fall-through to L_{K-1}.
 		"OBFT": ExpectSuccessFallThrough,
-		// 2abOBFT: same NR-fall-through path; deepest layer L_3 honest leader
+		// 2abOBFT: same NR-fall-through path; deepest layer's honest leader
 		// reaches σ-quorum on its V via Phase-2a verdict convergence.
 		"2abOBFT": ExpectSuccessFallThrough,
-		// QBFT needs 3 round-changes (R1, R2, R3 all silent → R4 honest).
-		// At RT=2s × 3 timeouts = 6s, exceeds RelayCutoff=4s → MISS.
-		"QBFT": ExpectMiss,
+		// QBFT needs K-1 round-changes (R1..R_{K-1} silent → R_K honest).
+		// Timing depends on K and RT vs RelayCutoff:
+		//   K=2 → 1 timeout → ~2s < 4s → SUCCESS.
+		//   K=3 → 2 timeouts → ~4s ≈ cutoff → SUCCESS or MISS (borderline).
+		//   K=4 → 3 timeouts → ~6s > 4s → MISS.
+		// ExpectSuccessOrMiss accepts the timing-dependent outcome across
+		// the sweep's K values.
+		"QBFT": ExpectSuccessOrMiss,
 	},
-	Note: "Top 3 of 4 leaders silent; only the deepest is honest. Structural OBFT-family advantage at any (BFT_start, D) where the healthy path fits — multi-leader-silent fall-through is in-round, vs QBFT's serial round-change exceeding budget.",
+	Note: "Top K-1 of K leaders silent; only the deepest is honest. Structural OBFT-family advantage at any (BFT_start, D) where the healthy path fits — multi-leader-silent fall-through is in-round, vs QBFT's serial round-change pacing against RelayCutoff.",
 }
 
 // ---- σ-refusal (byz never contributes) --------------------------------
@@ -73,20 +84,26 @@ var scenarioWithholdLeaderDeepest = Scenario{
 	Group: "Silent operators",
 	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
-		// Default rotation: op[k % N] leads layer k. At K=N convention, op{N}
-		// leads the deepest layer L_{N-1}. Pick byz=op{N} so the pattern's
-		// "silence at the deepest layer they lead" check fires at any cluster
-		// size (n=4 → byz=op4 leads L_3; n=7 → byz=op7 leads L_6; etc.).
-		cfg.Byz = ByzPattern{Kind: ByzWithholdLeader, ByzOperators: []OperatorID{OperatorID(cfg.N)}}
+		// Default rotation: layer k → operators[k % N], i.e. OperatorID
+		// (k % N + 1). The deepest layer's leader is therefore
+		// OperatorID((K-1) % N + 1). K-generic so the scenario probes the
+		// same shape regardless of K vs N (at K=N the deepest leader is
+		// op{N}; at K<N it's an earlier op in the rotation).
+		k := cfg.K
+		if k == 0 {
+			k = DefaultK(cfg.N)
+		}
+		deepestLeader := OperatorID((k-1)%cfg.N + 1)
+		cfg.Byz = ByzPattern{Kind: ByzWithholdLeader, ByzOperators: []OperatorID{deepestLeader}}
 	},
 	Expect: map[string]ExpectClass{
 		"OBFT":    ExpectSuccessFastest, // L_0 still healthy; deepest never reached
 		"2abOBFT": ExpectSuccessFastest, // same — L_0 succeeds regardless of deepest
-		// QBFT: byz=op{N} only leads R{N} under round-robin. R1's honest
-		// leader (op1) succeeds → byz round is never reached → fastest.
+		// QBFT: byz only leads its own round (under round-robin from op1).
+		// R1 honest → byz round is never reached → fastest.
 		"QBFT": ExpectSuccessFastest,
 	},
-	Note: "Class A spec test: deepest-layer leader silenced. L_0 / R1 are healthy at any n → cluster decides at the first leader without needing the silent one.",
+	Note: "Class A spec test: deepest-layer leader silenced. L_0 / R1 are healthy at any (n, K) → cluster decides at the first leader without needing the silent one.",
 }
 
 // ---- Cert withholding (Phase 3) ---------------------------------------

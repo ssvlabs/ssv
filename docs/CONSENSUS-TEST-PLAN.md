@@ -88,7 +88,7 @@ protocol/v2/consensustest/                       FRAMEWORK
 |---|---|
 | `Healthy` | `OBFT.md §Application` canonical operating point fits at BTT=200ms |
 | `PrimaryLeaderSilent` | OBFT in-round fall-through; QBFT R2 round-change |
-| `MultiSilent_K3` | OBFT advantage when ≥1 of K-1 leaders silent (`BFT-comparison.md` Table 3) |
+| `MultiSilent_KMinus1` | OBFT advantage when ≥1 of K-1 leaders silent (`BFT-comparison.md` Table 3) |
 | `Equivocate_111` / `Equivocate_AllNR` / `Equivocate_SigmaLockedSplit` | Equivocation patterns from `BFT-comparison.md` Table 3 |
 | `HV1SelectiveDelivery` | OBFT-specific h_V=1 deadlock pattern |
 | `FakeEncryptedPresence` | Rule 4 detection at honest receivers |
@@ -170,7 +170,7 @@ These probe the "graceful failure" boundary: out-of-envelope conditions where th
 | Test | Axis | Verifies |
 |---|---|---|
 | `TestSweep_Partition` | `PartitionedNetwork` isolating f operators across catalog | BFT-comparison.md Table 3 "Sustained partition > absorption window" — must miss cleanly, no safety violation. |
-| ~~`TestSweep_LivenessEdge`~~ | ~~Paired runs at partial-synchrony boundary~~ | **Dropped.** The simulator's qbft.Instance emits without per-emission scheduling slack, so the simulator's R1 actual completion is ~4·BTT instead of the doc's recommended-sizing 8·BTT. The cliff the simulator can probe (BTT≈666ms, where 3·BTT collides with `RT=2s` and partitions quorum across rounds) sits far above any production-relevant BTT, and doesn't match the doc's deadline-driven cliff (≈487ms with 8·BTT R1). Clean-miss invariants are already covered on more meaningful axes by `TestSweep_Partition`, `TestSweep_Asymmetric` and the `MultiSilent_K3` catalog cell. |
+| ~~`TestSweep_LivenessEdge`~~ | ~~Paired runs at partial-synchrony boundary~~ | **Dropped.** The simulator's qbft.Instance emits without per-emission scheduling slack, so the simulator's R1 actual completion is ~4·BTT instead of the doc's recommended-sizing 8·BTT. The cliff the simulator can probe (BTT≈666ms, where 3·BTT collides with `RT=2s` and partitions quorum across rounds) sits far above any production-relevant BTT, and doesn't match the doc's deadline-driven cliff (≈487ms with 8·BTT R1). Clean-miss invariants are already covered on more meaningful axes by `TestSweep_Partition`, `TestSweep_Asymmetric` and the `MultiSilent_KMinus1` catalog cell. |
 | `TestSweep_OutOfEnvelope` | BTT > deepest-layer absorption (`B_{K-1} × BTT > 4000ms`) | All protocols miss at out-of-envelope BTT; no safety violation. (Existing `TestSweep_BTT` at BTT=400ms logs misses but doesn't assert clean-miss; this test makes the assertion explicit.) |
 
 #### Tier 3 — Active-byz grief (safety-focused, planned for later)
