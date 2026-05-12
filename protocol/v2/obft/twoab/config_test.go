@@ -137,10 +137,20 @@ func TestConfig_Validate_AcceptsDelta2aAtTwoBTT(t *testing.T) {
 	require.NoError(t, c.Validate())
 }
 
-func TestConfig_Validate_RejectsDelta2bBelowOneBTT(t *testing.T) {
+// Delta2b < 1·BTT is the BFT-liveness minimum (Phase-2b σ/NR partials
+// need 1 BTT to propagate before Phase 3 starts). Validate accepts —
+// the floor is informational only — and the cluster systematically
+// misses at runtime. Validate still rejects Delta2b ≤ 0.
+func TestConfig_Validate_AcceptsDelta2bBelowOneBTT(t *testing.T) {
 	c := healthyConfig()
 	c.Delta2b = c.BTT / 2 // < 1 BTT
-	require.ErrorContains(t, c.Validate(), "Delta2b must be >= 1 BTT")
+	require.NoError(t, c.Validate())
+}
+
+func TestConfig_Validate_RejectsDelta2bNonPositive(t *testing.T) {
+	c := healthyConfig()
+	c.Delta2b = 0
+	require.ErrorContains(t, c.Validate(), "Delta2b must be positive")
 }
 
 func TestConfig_Validate_RejectsNonPositiveDelta3(t *testing.T) {
@@ -192,21 +202,22 @@ func TestConfig_Validate_AcceptsEqualAdjacentBroadcastBudgets(t *testing.T) {
 	require.NoError(t, c.Validate())
 }
 
-func TestConfig_Validate_RejectsDeepestBudgetBelowBFTMin(t *testing.T) {
+// Deepest BroadcastBudget < 2·BTT is the BFT-liveness minimum (spec
+// §Setting recommends ≥ 2·BTT so the deepest leader's bundle fits one
+// broadcast cycle + Phase-2 absorption). Validate accepts — the floor
+// is informational only — and the cluster systematically misses at
+// runtime. The 2abOBFT smoke test at BTT=500ms exercises exactly this
+// case naturally (4·BTT phase-2 tax pushes TVerdictStart below 2·BTT).
+func TestConfig_Validate_AcceptsDeepestBudgetBelowBFTMin(t *testing.T) {
 	c := healthyConfig()
-	// Manually craft a Config where the deepest budget is below 2*BTT.
-	// Default schedule at K=4 BTT=200ms gives B_3 = TVerdictStart = 1600ms,
-	// well above 2*BTT=400ms. Force it down.
 	c.Layers[3].BroadcastBudget = c.BTT // = 1 BTT, < 2*BTT
-	// Adjust earlier budgets so the non-decreasing invariant still holds.
 	c.Layers[0].BroadcastBudget = c.BTT / 4
 	c.Layers[1].BroadcastBudget = c.BTT / 3
 	c.Layers[2].BroadcastBudget = c.BTT / 2
-	// FetchAt also needs to be within new deadlines.
 	for k := range c.Layers {
-		c.Layers[k].FetchAt = 0 // safest: fetch at slot start
+		c.Layers[k].FetchAt = 0
 	}
-	require.ErrorContains(t, c.Validate(), "below BFT-min")
+	require.NoError(t, c.Validate())
 }
 
 func TestConfig_Validate_RejectsLayerLeaderNotInCluster(t *testing.T) {

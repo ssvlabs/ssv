@@ -352,15 +352,20 @@ func (c *Config) Validate() error {
 	if c.TCommit <= 0 {
 		return errors.New("obft: TCommit must be positive")
 	}
-	if c.Delta2 < c.BTT {
-		return errors.New("obft: Delta2 must be >= 1 BTT (BFT minimum per spec §Phase 2)")
+	if c.Delta2 <= 0 {
+		return errors.New("obft: Delta2 must be positive")
 	}
 	if c.Delta3 <= 0 {
 		return errors.New("obft: Delta3 must be positive")
 	}
-	if c.TCommit < 2*c.BTT {
-		return errors.New("obft: TCommit too small for broadcast deadline (need TCommit >= 2*BTT)")
-	}
+	// Delta2 < 1 BTT and TCommit < 2 BTT are the BFT-liveness minimums for
+	// Phase 2 propagation and the broadcast deadline (spec §Setting). Below
+	// these thresholds the cluster systematically misses (KindCommit
+	// messages don't propagate before Phase 3 starts; leader broadcasts
+	// don't fit before T_commit). Validate does not enforce these floors
+	// — that's a deployment / operator choice. The simulator and
+	// production stack still run; the resulting 0% success-rate is
+	// informative data, not a setup error.
 
 	members := make(map[OperatorID]bool, len(c.Operators))
 	for _, op := range c.Operators {
@@ -393,13 +398,14 @@ func (c *Config) Validate() error {
 		}
 	}
 	// The deepest layer's budget is the cluster's worst-case liveness
-	// guarantee — must satisfy the 2*BTT BFT-min bound.
-	bftMin := 2 * c.BTT
-	K := len(c.Layers)
-	if c.Layers[K-1].BroadcastBudget < bftMin {
-		return fmt.Errorf("obft: deepest layer L_%d BroadcastBudget %v below BFT-min %v: cluster has no liveness guarantee",
-			K-1, c.Layers[K-1].BroadcastBudget, bftMin)
-	}
+	// guarantee. Spec §Setting recommends `B_{K-1} ≥ 2·BTT` for the
+	// cluster to have a liveness guarantee at any layer; below that the
+	// deepest leader's bundle can't both propagate and reach Phase-2
+	// quorum before T_commit, so the cluster systematically misses. The
+	// floor is *informational* — Validate does not enforce it. Operators
+	// who want to study (or knowingly run) at extreme operating points
+	// where no layer has a liveness guarantee can; the simulator and
+	// production stack still execute.
 
 	seenLeaders := make(map[OperatorID]bool, len(c.Layers))
 	for k, layer := range c.Layers {

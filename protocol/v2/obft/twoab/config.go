@@ -367,18 +367,26 @@ func (c *Config) Validate() error {
 	// Per spec §Setting: Δ_2a ≥ 2 BTT is the minimum coherent sizing
 	// (Δ_2a = 1 BTT is broken-by-construction with the late-broadcast
 	// schedule — verdict broadcast at TVerdictMax − ε_proc would fall
-	// before Phase 2a begins).
+	// before Phase 2a begins). This is a structural coherency floor,
+	// not a BFT-liveness floor — keep enforced.
 	if c.Delta2a < 2*c.BTT {
 		return errors.New("twoab: Delta2a must be >= 2 BTT (minimum coherent sizing per spec §Setting)")
 	}
-	if c.Delta2b < c.BTT {
-		return errors.New("twoab: Delta2b must be >= 1 BTT (BFT minimum per spec §Setting)")
+	if c.Delta2b <= 0 {
+		return errors.New("twoab: Delta2b must be positive")
 	}
 	if c.Delta3 <= 0 {
 		return errors.New("twoab: Delta3 must be positive")
 	}
+	// Delta2b < 1 BTT is the BFT-liveness minimum for Phase-2b propagation
+	// (spec §Setting recommends Δ_2b ≥ 1 BTT so σ/NR partials reach all
+	// honest before Phase 3 starts). Below that the cluster systematically
+	// misses; Validate does not enforce — operator choice.
+	//
 	// TCommit must accommodate the Phase-1 broadcast budget (TVerdictStart
 	// = TCommit − Delta2a > 0) plus the deepest-layer broadcast cushion.
+	// This is a basic-feasibility floor (the protocol can't run with
+	// non-positive TVerdictStart) — keep enforced.
 	if c.TCommit <= c.Delta2a {
 		return errors.New("twoab: TCommit must be > Delta2a so TVerdictStart is positive")
 	}
@@ -413,13 +421,14 @@ func (c *Config) Validate() error {
 		}
 	}
 	// The deepest layer's budget is the cluster's worst-case liveness
-	// guarantee — must satisfy the 2*BTT BFT-min bound.
-	bftMin := 2 * c.BTT
-	K := len(c.Layers)
-	if c.Layers[K-1].BroadcastBudget < bftMin {
-		return fmt.Errorf("twoab: deepest layer L_%d BroadcastBudget %v below BFT-min %v: cluster has no liveness guarantee",
-			K-1, c.Layers[K-1].BroadcastBudget, bftMin)
-	}
+	// guarantee. Spec §Setting recommends `B_{K-1} ≥ 2·BTT` for the
+	// cluster to have a liveness guarantee at any layer; below that the
+	// deepest leader's bundle can't both propagate and reach Phase-2b
+	// quorum before commit, so the cluster systematically misses. The
+	// floor is *informational* — Validate does not enforce it. Operators
+	// who want to study (or knowingly run) at extreme operating points
+	// where no layer has a liveness guarantee can; the simulator and
+	// production stack still execute.
 
 	seenLeaders := make(map[OperatorID]bool, len(c.Layers))
 	for k, layer := range c.Layers {

@@ -117,10 +117,20 @@ func TestConfig_Validate_RejectsFetchAtPastBroadcastDeadline(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "broadcast deadline")
 }
 
-func TestConfig_Validate_RejectsDelta2BelowBFTMin(t *testing.T) {
+// Delta2 < 1·BTT is the BFT-liveness minimum (KindCommit messages need
+// 1 BTT to propagate). Validate accepts the configuration — the floor is
+// informational only — and the cluster systematically misses at runtime.
+// Validate still rejects Delta2 ≤ 0 as a basic-feasibility check.
+func TestConfig_Validate_AcceptsDelta2BelowBFTMin(t *testing.T) {
 	cfg := validBaseConfig()
 	cfg.Delta2 = cfg.BTT - 1
-	require.ErrorContains(t, cfg.Validate(), "Delta2")
+	require.NoError(t, cfg.Validate())
+}
+
+func TestConfig_Validate_RejectsDelta2NonPositive(t *testing.T) {
+	cfg := validBaseConfig()
+	cfg.Delta2 = 0
+	require.ErrorContains(t, cfg.Validate(), "Delta2 must be positive")
 }
 
 func TestConfig_DerivedOffsets(t *testing.T) {
@@ -211,20 +221,22 @@ func TestConfig_BroadcastBudget_RejectsZeroOnAnyLayer(t *testing.T) {
 	require.ErrorContains(t, cfg.Validate(), "must be > 0")
 }
 
-func TestConfig_BroadcastBudget_RejectsDeepestBelowBFTMin(t *testing.T) {
+// Deepest BroadcastBudget < 2·BTT is the BFT-liveness minimum (spec
+// §Setting recommends ≥ 2·BTT so the deepest leader's bundle fits one
+// broadcast cycle + Phase-2 absorption). Validate accepts — the floor is
+// informational only — and the cluster systematically misses at runtime.
+func TestConfig_BroadcastBudget_AcceptsDeepestBelowBFTMin(t *testing.T) {
 	cfg := validStaggeredConfig()
 	bftMin := 2 * cfg.BTT
-	// Set deepest below BFT-min — cluster has no liveness guarantee.
 	cfg.Layers[3].BroadcastBudget = bftMin - 1
-	// Bump shallower layers down to keep monotonicity intact.
+	// Bump shallower layers down to keep non-decreasing in k.
 	cfg.Layers[0].BroadcastBudget = bftMin / 8
 	cfg.Layers[1].BroadcastBudget = bftMin / 4
 	cfg.Layers[2].BroadcastBudget = bftMin / 2
-	// Adjust FetchAt so per-layer caps remain feasible.
 	for k := range cfg.Layers {
 		cfg.Layers[k].FetchAt = cfg.TCommit - cfg.Layers[k].BroadcastBudget
 	}
-	require.ErrorContains(t, cfg.Validate(), "no liveness guarantee")
+	require.NoError(t, cfg.Validate())
 }
 
 func TestConfig_BroadcastBudget_RejectsAllZero(t *testing.T) {
