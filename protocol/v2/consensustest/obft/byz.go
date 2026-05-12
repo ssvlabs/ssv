@@ -448,16 +448,16 @@ func (b byzSigmaRefusal) AllowCommitBroadcast(op obftbase.OperatorID) bool {
 // Each byz silences ONLY at the deepest layer they lead. Tests the Class A
 // late-deepest-layer pathology — at K = f+2 the cluster has exactly 2
 // honest leaders so silencing the deepest one means the honest one before
-// must broadcast in time. At K = f+1 (< MinK) the silenced byz at L_{K-1}
-// has no honest fall-through.
+// must broadcast in time. At K = f+1 (BFT-liveness minimum, e.g. K=2 at
+// f=1) the silenced byz at L_{K-1} has no honest fall-through depth.
 //
-// Silent no-op fallback: at K < N (or with a byz operator that doesn't lead
-// any layer at all, e.g. byz=op N at K=2 where rotation only covers ops 1, 2),
-// no byz is the deepest-layer leader and the pattern degrades to "healthy"
-// for all leaders. The catalog scenario assumes the production K=N convention
-// where every operator leads exactly one layer; sweep tests using K < N
-// should not pair this pattern with byz IDs outside the leader rotation
-// (translateByz emits a runtime warning via the assertion below).
+// Pattern is a no-op fallback if the byz isn't a leader at any layer
+// (e.g. K < N with byz outside the leader rotation — at K=2 the default
+// rotation only covers ops 1..K, so a byz with id > K leads no layer and
+// the pattern degrades to healthy). The catalog scenario assumes the
+// production K=N convention where every operator leads exactly one layer;
+// at K < N callers should pair this pattern with a byz id that is in the
+// leader rotation to actually exercise the deepest-layer silencing.
 type byzWithholdLeader struct {
 	honestDefaults
 	ByzSet byzSet

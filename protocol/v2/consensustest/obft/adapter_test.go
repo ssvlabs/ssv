@@ -233,6 +233,38 @@ func TestAdapter_ByzWithholdLeader(t *testing.T) {
 	require.Less(t, out.DecidedRound, 3, "should NOT need the silenced deepest layer (L_3)")
 }
 
+// TestAdapter_ByzWithholdLeader_K2 verifies the deepest-layer-silenced pattern
+// at K=2 (BFT-liveness minimum at f=1): rotation covers ops 1..2, so byz=op2
+// is the deepest leader (L_1). L_1 silent; L_0 (op1) broadcasts healthy →
+// cluster decides at L_0. Confirms K=2 is a first-class supported config for
+// this byz pattern when the byz is paired with a leader in the K-truncated
+// rotation.
+func TestAdapter_ByzWithholdLeader_K2(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.K = 2
+	// At K=2 the leader rotation is L_0=op1, L_1=op2. byz=op2 silences L_1.
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzWithholdLeader, ByzOperators: []ct.OperatorID{2}}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "L_0 healthy → cluster should decide at L_0")
+	require.Equal(t, 0, out.DecidedRound, "silenced deepest L_1 is irrelevant when L_0 succeeds")
+}
+
+// TestAdapter_ByzWithholdLeader_K2_ByzNotInRotation documents the no-op
+// fallback case: at K=2 with byz=op4 (outside the K=2 leader rotation
+// {op1, op2}), the byz isn't a leader at any layer, so the pattern doesn't
+// engage and the cluster decides healthy. Pairs with the byz.go doc
+// comment's guidance for K < N callers.
+func TestAdapter_ByzWithholdLeader_K2_ByzNotInRotation(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.K = 2
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzWithholdLeader, ByzOperators: []ct.OperatorID{4}}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided)
+	require.Equal(t, 0, out.DecidedRound, "byz=op4 leads no layer at K=2; pattern is a no-op")
+}
+
 // TestAdapter_ByzCertWithholding verifies that a byz refusing cert gossip
 // doesn't break the slot — honest ops reconstruct independently.
 func TestAdapter_ByzCertWithholding(t *testing.T) {

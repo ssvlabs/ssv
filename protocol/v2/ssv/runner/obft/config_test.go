@@ -132,20 +132,20 @@ func TestConfigForCluster_NilOverrides(t *testing.T) {
 }
 
 // TestConfigForCluster_KDerivedFromClusterSize — for n=10 (f=3) and
-// n=13 (f=4) the late-leader-resilience floor (K ≥ f+2) exceeds
-// DefaultK=4. Production callers must set the K override; without it
-// ConfigForCluster rejects. This test confirms the n=10/n=13 paths
-// work when K is set correctly (validates the BroadcastBudget
-// schedule's length-matches-K invariant at those K values).
+// n=13 (f=4) the BFT-liveness floor (K ≥ f+1) exceeds DefaultK=4.
+// Production callers must set the K override; without it ConfigForCluster
+// rejects. This test confirms the n=10/n=13 paths work when K is set
+// correctly (validates the BroadcastBudget schedule's length-matches-K
+// invariant at those K values).
 func TestConfigForCluster_KDerivedFromClusterSize(t *testing.T) {
 	cases := []struct {
 		n int
 		k int
 	}{
 		{4, 4},  // f=1, DefaultK
-		{7, 4},  // f=2, MinK = f+2 = 4 = DefaultK
-		{10, 5}, // f=3, MinK = f+2 = 5
-		{13, 6}, // f=4, MinK = f+2 = 6
+		{7, 4},  // f=2, K=f+2 (= 4)
+		{10, 5}, // f=3, K=f+2 (= 5)
+		{13, 6}, // f=4, K=f+2 (= 6)
 	}
 	for _, tc := range cases {
 		tc := tc

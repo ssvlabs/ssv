@@ -11,6 +11,7 @@ import (
 // the deepest layer is always T_commit ("earliest possible" — deepest leader
 // broadcasts at slot start):
 //
+//   - K=2: [1·BTT, T_commit] — BFT-liveness minimum at f=1.
 //   - K=3: [1·BTT, 2.5·BTT, T_commit] — matches the production SSV-adapter K=3
 //     schedule so framework simulations and production validation operate on
 //     the same envelope.
@@ -29,22 +30,33 @@ import (
 // makes this an "operating point not applicable to default schedule"
 // signal rather than a hard config error.
 //
-// K<3 / BTT≤0 return plain errors (programmer errors — SimConfig.Validate
-// enforces K ≥ max(3, f+2) and BTT > 0 upstream, so these shouldn't trip
+// K<2 / BTT≤0 return plain errors (programmer errors — SimConfig.Validate
+// enforces K ≥ f+1 and BTT > 0 upstream, so these shouldn't trip
 // in practice).
 func DefaultBkSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, error) {
-	if K < 3 {
-		return nil, fmt.Errorf("consensustest: DefaultBkSchedule K=%d below minimum 3", K)
+	if K < 2 {
+		return nil, fmt.Errorf("consensustest: DefaultBkSchedule K=%d below minimum 2", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("consensustest: DefaultBkSchedule BTT=%v must be > 0", btt)
 	}
-	minDeepest := btt * 250 / 100 // 2.5·BTT (B_{K-2} for K≥3)
+	// minDeepest is the bound the deepest layer must strictly exceed for the
+	// schedule's strict-increasing invariant to hold. At K=2 the shallow
+	// penultimate is B_0 = 1·BTT; at K≥3 it is B_{K-2} = 2.5·BTT.
+	var minDeepest time.Duration
+	if K == 2 {
+		minDeepest = btt
+	} else {
+		minDeepest = btt * 250 / 100 // 2.5·BTT (B_{K-2} for K≥3)
+	}
 	if tCommit <= minDeepest {
-		return nil, fmt.Errorf("%w: consensustest: DefaultBkSchedule T_commit=%v must be > %v (B_{K-2} = 2.5·BTT at BTT=%v); supply a custom per-layer schedule",
-			ErrConfigOutOfEnvelope, tCommit, minDeepest, btt)
+		return nil, fmt.Errorf("%w: consensustest: DefaultBkSchedule T_commit=%v must be > %v (B_{K-2} for K=%d at BTT=%v); supply a custom per-layer schedule",
+			ErrConfigOutOfEnvelope, tCommit, minDeepest, K, btt)
 	}
 	mul := func(x float64) time.Duration { return time.Duration(x * float64(btt)) }
+	if K == 2 {
+		return []time.Duration{mul(1.0), tCommit}, nil
+	}
 	if K == 3 {
 		return []time.Duration{mul(1.0), mul(2.5), tCommit}, nil
 	}

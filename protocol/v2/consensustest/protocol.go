@@ -47,7 +47,7 @@ type SimConfig struct {
 
 	// K is the OBFT layer count. Defaults via DefaultK(N) to N (every operator
 	// leads exactly one layer — SSV production convention). QBFT adapters
-	// ignore this. Must satisfy MinK(N) ≤ K ≤ N where MinK = max(3, f+2).
+	// ignore this. Must satisfy MinK(N) ≤ K ≤ N where MinK = f+1.
 	K int
 
 	SlotStart    time.Duration // virtual-time offset of slot start; usually 0
@@ -143,26 +143,18 @@ func (c *SimConfig) F() int {
 // operator leads exactly one layer per slot. Mirrors production obft.DefaultK.
 func DefaultK(n int) int { return n }
 
-// MinK returns the BFT-liveness K floor for cluster size n: max(3, f+2)
-// where f = (n-1)/3. Below this floor the cluster has no late-leader
-// resilience guarantee.
+// MinK returns the BFT-liveness K floor for cluster size n: f+1 where
+// f = (n-1)/3. Pigeonhole over the f-byz bound guarantees ≥ 1 honest
+// leader. At K < f+1 all leaders could be byzantine and no σ-quorum
+// reaches at any layer.
 //
-// Policy note: OBFT.md §Setting / "Two distinct K bounds" identifies
-// K ≥ f+1 as the BFT-liveness minimum but K ≥ f+2 as the late-leader-
-// resilience recommended minimum (so a single late-broadcasting honest
-// leader doesn't foreclose the slot via the deepest-layer NR-lock
-// pathology). The framework enforces the recommended floor (f+2),
-// excluding the K=f+1 boundary pathology from the test matrix by
-// construction. Deployments running below this floor (not recommended
-// per spec) would surface §Failure modes / "Late deepest-layer leader
-// broadcast" as a Class A miss vector.
+// Policy note: OBFT.md §Setting also describes K ≥ f+2 as providing
+// late-leader-resilience (≥ 2 honest leaders); that choice is left to
+// the operator/deployment per spec and is NOT enforced here. The
+// framework accepts the full spec range `f+1 ≤ K ≤ n`.
 func MinK(n int) int {
 	f := (n - 1) / 3
-	k := f + 2
-	if k < 3 {
-		k = 3
-	}
-	return k
+	return f + 1
 }
 
 // Protocol is implemented by per-algorithm adapters. Adapters MUST be
@@ -332,7 +324,7 @@ func (c *SimConfig) Validate() error {
 	}
 	minK := MinK(c.N)
 	if c.K < minK {
-		return fmt.Errorf("consensustest: K=%d below late-leader-resilience minimum %d (= max(3, f+2) at n=%d)",
+		return fmt.Errorf("consensustest: K=%d below BFT-liveness minimum %d (= f+1 at n=%d)",
 			c.K, minK, c.N)
 	}
 	if c.K > c.N {

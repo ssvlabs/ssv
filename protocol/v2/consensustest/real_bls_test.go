@@ -150,7 +150,7 @@ func TestRealBLS_Seeds(t *testing.T) {
 	}
 }
 
-// TestRealBLS_KSweep_n7 — at n=7 (f=2), K varies from MinK(7)=4 up to N=7.
+// TestRealBLS_KSweep_n7 — at n=7 (f=2), K varies from MinK(7)=3 up to N=7.
 // Exercises the per-K BLS share count + per-layer IBE encryption depth.
 func TestRealBLS_KSweep_n7(t *testing.T) {
 	for k := ct.MinK(7); k <= 7; k++ {

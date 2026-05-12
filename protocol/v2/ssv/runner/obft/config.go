@@ -50,10 +50,12 @@ const (
 	// fall-through depth at f = 1).
 	DefaultK = 4
 
-	// MinKFloor is the minimum K floor at f=1 (late-leader resilience: K ≥ f+2).
-	// At higher f the K-vs-f bound is computed in ConfigForCluster as
-	// max(MinKFloor, f+2); Config.Validate enforces the same bound.
-	MinKFloor = 3
+	// MinKFloor is the BFT-liveness K floor at f=1 (K ≥ f+1). Per spec
+	// §Setting K ≥ f+2 additionally provides late-leader-resilience; that
+	// choice is left to the operator/deployment and is not enforced here.
+	// Both the adapter's ConfigForCluster and Config.Validate enforce the
+	// same f+1 bound.
+	MinKFloor = 2
 )
 
 // Per-layer defaults for the asymmetric staggered schedule (spec §Setting,
@@ -99,12 +101,16 @@ const (
 // at 1 / 1.5 / 2.5 BTT and intermediate layers interpolate linearly from
 // 2.5·BTT (at L_2) to T_commit (at L_{K-1}).
 //
-// K=2 is intentionally absent: MinKFloor=3 enforces K ≥ f+2 floor at f=1,
-// so K=2 is rejected before reaching the schedule lookup.
+// K=2 is the BFT-liveness minimum at f=1; per spec §Setting it is accepted
+// (the operator/deployment decides whether to use it instead of K ≥ f+2).
 var defaultLayerSchedules = map[int]struct {
 	fetchAt             []time.Duration
 	shallowBudgetBTT100 []int // BTT-hundredths for L_0 .. L_{K-2}; deepest is always T_commit
 }{
+	2: {
+		fetchAt:             []time.Duration{151 * time.Millisecond, 0},
+		shallowBudgetBTT100: []int{100}, // 1.0 BTT (L_0); deepest L_1 = T_commit
+	},
 	3: {
 		fetchAt:             []time.Duration{152 * time.Millisecond, 151 * time.Millisecond, 0},
 		shallowBudgetBTT100: []int{100, 250}, // 1.0, 2.5 BTT (L_0, L_1); deepest L_2 = T_commit
@@ -280,10 +286,11 @@ func interpolatedBudgetSchedule(K int, l0BTT100 int, deepest, btt time.Duration)
 }
 
 // defaultFetchSchedule returns the K-tier per-layer FetchAt schedule —
-// strictly decreasing in layer index k. K=2 isn't supported (MinKFloor=3).
+// strictly decreasing in layer index k.
 //
-// For K=3 and K=4, returns the tabulated defaults. For K>4 (n=7, n=10,
-// n=13 deployments), interpolates linearly from primary to deepest.
+// For K=2 (BFT-liveness minimum at f=1), K=3 and K=4, returns the tabulated
+// defaults. For K>4 (n=7, n=10, n=13 deployments), interpolates linearly
+// from primary to deepest.
 //
 // FetchAt is RANDAO-anchored (absolute, not BTT-scaled).
 func defaultFetchSchedule(K int) []time.Duration {
@@ -299,14 +306,14 @@ func defaultFetchSchedule(K int) []time.Duration {
 // shallow multipliers at K=4, with the deepest layer fixed at T_commit
 // ("earliest possible": deepest leader broadcasts at slot start).
 //
-// For K=3 returns [1·BTT, 2.5·BTT, T_commit]. For K=4 returns [1·BTT, 1.5·BTT,
+// For K=2 returns [1·BTT, T_commit] (BFT-liveness minimum at f=1). For K=3
+// returns [1·BTT, 2.5·BTT, T_commit]. For K=4 returns [1·BTT, 1.5·BTT,
 // 2.5·BTT, T_commit]. For K>4 the first three shallow layers stay at 1 /
 // 1.5 / 2.5 BTT and intermediate layers interpolate linearly in duration
 // space from 2.5·BTT to T_commit at L_{K-1}.
 //
-// Returns an error when T_commit ≤ 2.5·BTT (the default deepest would no
-// longer be strictly greater than B_{K-2} = 2.5·BTT for K≥3); callers
-// operating at extreme degraded BTT must supply a custom schedule.
+// Returns an error when T_commit ≤ 2.5·BTT for K≥3 (or ≤ 1·BTT at K=2);
+// callers operating at extreme degraded BTT must supply a custom schedule.
 //
 // Spec example values at BTT=200ms, T_commit=3400ms (Config A): K=4 →
 // [200, 300, 500, 3400]ms. At BTT=600ms, T_commit=2600ms (degraded mesh):
@@ -377,15 +384,17 @@ func ConfigForCluster(
 	f := (n - 1) / 3
 
 	K := overrides.k()
-	// Per spec §Setting: enforce late-leader-resilience minimum K ≥ f+2,
-	// floored at MinKFloor so the f=1 case stays at K ≥ 3 (which is f+2 at f=1).
-	// At f≥2 the f+2 bound dominates and prevents BFT-liveness violations.
-	minK := f + 2
+	// Per spec §Setting: K ≥ f+1 is the BFT-liveness minimum (pigeonhole
+	// guarantees ≥ 1 honest leader). K ≥ f+2 additionally provides
+	// late-leader-resilience and is not enforced here — the deployment
+	// chooses. MinKFloor (= 2) is the floor at the smallest supported
+	// cluster (n=4, f=1).
+	minK := f + 1
 	if minK < MinKFloor {
 		minK = MinKFloor
 	}
 	if K < minK {
-		return nil, fmt.Errorf("obft adapter: K=%d below late-leader-resilience minimum %d (= max(%d, f+2) at f=%d)",
+		return nil, fmt.Errorf("obft adapter: K=%d below BFT-liveness minimum %d (= max(%d, f+1) at f=%d)",
 			K, minK, MinKFloor, f)
 	}
 	if K > n {
