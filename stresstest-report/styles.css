@@ -60,15 +60,6 @@ section.heatmap {
   padding-top: 1.2em;
   --hcols: 3;
 }
-.heatmap-head {
-  padding-bottom: 0.4em;
-  margin-bottom: 0.8em;
-  border-bottom: 1px solid var(--border);
-}
-.heatmap-head h2 {
-  margin: 0 0 0.15em;
-  font-size: 1.3em;
-}
 
 /* Shared grid template — every .hrow inside every card uses the same
  * column geometry so cells align vertically across cards and the
@@ -183,101 +174,9 @@ section.heatmap {
   color: #0f172a;
 }
 
-/* ---- Scenario modal (tabbed sweep selector) ---- */
-
-dialog.scenario-modal {
-  width: min(1180px, 96vw);
-  max-height: 92vh;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
-  overflow: hidden;
-}
-dialog.scenario-modal::backdrop {
-  background: rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(2px);
-}
-dialog.scenario-modal .sm-head {
-  position: relative;
-  padding: 1.1em 1.4em 0.9em;
-  background: linear-gradient(135deg, #f7f9fc 0%, #eaf0f6 100%);
-  border-bottom: 1px solid var(--border);
-}
-dialog.scenario-modal .sm-head h2 {
-  margin: 0;
-  font-size: 1.15em;
-  color: #0f172a;
-  font-weight: normal;
-}
-dialog.scenario-modal .sm-close {
-  position: absolute;
-  top: 0.5em;
-  right: 0.6em;
-  background: transparent;
-  border: none;
-  font-size: 1.4em;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0.1em 0.4em;
-  line-height: 1;
-  border-radius: 4px;
-}
-dialog.scenario-modal .sm-close:hover {
-  background: rgba(15, 23, 42, 0.05);
-  color: #0f172a;
-}
-dialog.scenario-modal .sm-body {
-  padding: 0;
-  overflow-y: auto;
-  max-height: calc(92vh - 5em);
-}
-
-/* Tab bar — sits between the header and the per-sweep content. Active
- * tab carries an accent-colored bottom border. */
-dialog.scenario-modal .sm-tabs {
-  display: flex;
-  gap: 0;
-  padding: 0 1em;
-  background: var(--surface-muted);
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-  align-items: center;
-}
-dialog.scenario-modal .sm-tabs-label {
-  padding: 0.6em 0.8em 0.6em 0;
-  font-size: 0.82em;
-  color: var(--text-faint);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-dialog.scenario-modal .sm-tab {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.6em 0.95em;
-  margin-bottom: -1px;
-  font: inherit;
-  font-size: 0.86em;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-weight: 500;
-  transition: color 100ms ease, border-color 100ms ease, background 100ms ease;
-}
-dialog.scenario-modal .sm-tab:hover {
-  color: #0f172a;
-  background: rgba(15, 23, 42, 0.03);
-}
-dialog.scenario-modal .sm-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
-
-dialog.scenario-modal .sm-content {
-  padding: 1em 1.4em 1.4em;
-}
+/* ---- Shared chart-strip components ---- */
+/* Used by the Conditions section at the top of the page and by each
+ * collapsible-body below the heatmap. */
 
 /* Top strip: description on the left, legend pinned to the top-right.
  * margin-left:auto on the legend keeps it right-aligned even when
@@ -351,10 +250,10 @@ dialog.scenario-modal .sm-content {
   color: var(--text-muted);
 }
 
-/* Modal controls row — holds the slot_start picker and (on multi-point
- * sweeps) the y-axis metric toggle. slot_start picker sits left, metric
- * toggle (if present) gets pushed to the right via margin-left:auto.
- * flex-wrap lets the toggle drop to its own row on narrow viewports. */
+/* Collapsible controls row — holds the slot_start picker and the
+ * y-axis metric toggle. slot_start sits left, metric toggle gets pushed
+ * right via margin-left:auto. flex-wrap lets the toggle drop to its own
+ * row on narrow viewports. */
 .sm-controls {
   display: flex;
   flex-wrap: wrap;
@@ -369,16 +268,16 @@ dialog.scenario-modal .sm-content {
   margin-left: auto;
 }
 
-/* slot_start picker — used in both the page header (drives heatmap
- * colors) and inside the scenario modal (drives the open chart). Both
- * instances share the same module-level `selectedSlotStart`, so the
- * active button stays in sync wherever the picker is shown. */
+/* slot_start / y-axis picker — one button group with a label. Used at
+ * the page level (drives heatmap + Conditions chart) and inside each
+ * collapsible (drives only that section's chart). The container always
+ * provides its own margin; this rule sets layout + sizing only. */
 .sm-slot-picker {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35em;
-  margin: 0.5em 0 0.2em;
+  margin: 0 0 0.7em;
   font-size: 0.85em;
 }
 .sm-slot-picker-label {
@@ -407,23 +306,10 @@ dialog.scenario-modal .sm-content {
   color: white;
   border-color: var(--accent);
 }
-/* Modal-context override — slightly tighter top margin since the
- * legend already sits above it. */
-.sm-slot-picker {
-  margin: 0 0 0.7em;
-}
 
+/* Chart canvas wrapper — Chart.js needs an explicit height on the
+ * container or the canvas collapses to 0px. */
 .sm-chart-wrap {
-  position: relative;
-  width: 100%;
-  height: clamp(380px, 56vh, 540px);
-}
-
-/* Same sizing for the Conditions section's chart at the top of the
- * page and for any collapsible body's chart — Chart.js needs an
- * explicit height on the container or the canvas collapses to 0px. */
-section.conditions .sm-chart-wrap,
-.collapsible-body .sm-chart-wrap {
   position: relative;
   width: 100%;
   height: clamp(380px, 56vh, 540px);
@@ -433,19 +319,78 @@ section.conditions {
   padding-top: 1em;
   padding-bottom: 0.5em;
 }
-section.conditions .conditions-head h2 {
-  margin: 0 0 0.4em;
-  font-size: 1.3em;
+/* Header row — scenario title on the left, "n=4" cluster-setup label
+ * on the right. baseline alignment keeps the subtitle's text sitting
+ * on the title's text baseline. flex-wrap lets the subtitle drop
+ * below on narrow viewports. */
+section.conditions .conditions-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+  flex-wrap: wrap;
+  margin: 0 0 0.3em;
+}
+/* Title smaller than the body's <h2> default so the section reads as
+ * a compact header; the rest of the conditions strip (pickers + legend)
+ * is tuned proportionally below. */
+section.conditions .conditions-title {
+  margin: 0;
+  font-size: 1em;
+}
+/* "n=4" stays at 0.95em — deliberately the largest element on the
+ * conditions strip after the title shrinks, since it's the single
+ * cluster-setup indicator. */
+section.conditions .conditions-subtitle {
+  color: var(--text-muted);
+  font-size: 0.95em;
 }
 section.conditions .conditions-desc {
   margin: 0;
 }
-section.conditions .conditions-desc-title {
-  font-weight: 600;
-  color: #0f172a;
+
+/* Body row — pickers stack (left) + legend block (right). Both sides
+ * are 4-row grids with identical row heights, so picker[N] center-Y
+ * matches protocol[N] center-Y in the legend. The legend's internal
+ * 5-column grid is preserved so swatch / name / chip / sep / p99
+ * columns align across protocol rows. */
+section.conditions .conditions-body-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5em;
+  margin: 0.6em 0 0.9em;
+  flex-wrap: wrap;
 }
-section.conditions .conditions-pickers {
-  margin: 0.5em 0 0.8em;
+section.conditions .conditions-pickers-stack {
+  display: grid;
+  /* Use rem (not em) so the picker stack and legend below share row
+   * heights despite their elements having different inherited
+   * font-sizes. */
+  grid-template-rows: repeat(4, 1.8rem);
+  align-items: center;
+  min-width: 0;
+}
+section.conditions .conditions-pickers-stack .sm-slot-picker {
+  margin: 0;
+  font-size: 0.78em;
+}
+/* Picker labels left-aligned at a fixed width — all buttons across
+ * the four rows start at the same X. */
+section.conditions .conditions-pickers-stack .sm-slot-picker-label {
+  min-width: 5em;
+  text-align: left;
+}
+section.conditions .conditions-legend {
+  margin-left: auto;
+}
+/* Match legend row heights to the picker stack (1.8rem each). Legend
+ * inherits its default 0.75em font-size from .sm-legend; the smaller
+ * size pairs with the shrunken picker text without the legend
+ * dominating the strip. */
+section.conditions .conditions-legend .sm-legend {
+  grid-template-rows: repeat(4, 1.8rem);
+  align-items: center;
+  row-gap: 0;
 }
 
 /* Collapsibles below the heatmap — one section per multi-point sweep,
@@ -490,7 +435,7 @@ section.collapsibles {
   flex: 1;
 }
 .collapsible-body {
-  padding: 0 1em 1em;
+  padding: 0.9em 1em 1em;
   border-top: 1px solid var(--border);
 }
 .collapsible-body.collapsed {

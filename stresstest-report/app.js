@@ -4,20 +4,24 @@
  * `make stresstest`) and renders the page. Edit freely and refresh the
  * browser; no test rerun required.
  *
- * Page structure:
- *  Heatmap section: scenario rows × protocol columns colored by the
- *  p2p_normal-sweep success rate (production-shaped baseline). Clicking
- *  any cell opens a modal dialog with a tab bar to flip between sweeps;
- *  each tab shows a CDF (single-point sweep) or a P99 trend line
- *  (multi-point sweep) for the selected scenario × all protocols.
+ * Page structure (top → bottom):
+ *   1. Conditions section — always-visible CDF for the selected
+ *      scenario. Pickers (K, BTT, σ, slot_start) drive both this chart
+ *      and the heatmap below; legend (per-protocol success rate) sits
+ *      Y-aligned to the right of the pickers.
+ *   2. Heatmap — scenario rows × protocol columns colored by the
+ *      p2p_normal-sweep success rate. Clicking a row updates the
+ *      Conditions chart above.
+ *   3. Collapsibles — one per multi-point sweep (Increasing BTT,
+ *      Heavy-tail, Stochastic loss, Correlated link delays). Each has
+ *      its own slot_start + y-axis pickers placed just above the chart.
  */
 
 'use strict';
 
 // Protocol series colors — used for chart lines, dataset point markers,
-// and the modal's per-protocol summary line. Picked with similar
-// saturation/lightness so the protocols read as peers rather than
-// figure/ground.
+// and the per-protocol legend rows. Picked with similar saturation/
+// lightness so the protocols read as peers rather than figure/ground.
 const PROTOCOL_COLORS = {
   OBFT:        '#ed8936', // light orange
   '2abOBFT':   '#06b6d4', // cyan
@@ -41,29 +45,19 @@ const SLOT_END_MS = 4000;
 //     slot_start (operator missed the deciding layer's broadcast).
 const SLOT_STARTS = [0, 400, 800, 1200, 1600, 2000, 2400, 2800];
 
-// selectedSlotStart is shared module state across every sweep tab.
-// User picks via the slot_start picker; the value persists when
-// switching between tabs (staggered slot-start should be comparable
-// across baselines + the multi-point sweeps).
+// selectedSlotStart is the page-level slot_start used by the Conditions
+// chart at the top, the heatmap cell colors, and the cdfSlotStartPlugin's
+// dashed marker. The collapsibles use their own per-section slot_start
+// in collapsibleState[name].slotStart instead.
 let selectedSlotStart = 0;
 
-// selectedTrendMetric controls the y-axis on multi-point trend charts:
-//   'success' — per-point success rate (0..1), bounded y-axis with
-//      red/yellow/green zone bands.
-//   'p99'     — per-point p99 of (shifted) decision times in ms, free
-//      y-axis with no zones.
-// Module-level only because the legacy modal still uses it. Each
-// collapsible chart owns its own copy in `collapsibleState` so they
-// can be toggled independently.
-let selectedTrendMetric = 'success';
-
-// selectedScenario drives the "Normal operations" chart at the top of
-// the page (the previously modal-tabbed CDF chart, now always-visible).
+// selectedScenario drives the Conditions chart at the top of the page.
 // Heatmap row click updates this; the chart re-renders for the new
-// scenario at the picker-chosen (K, BTT, σ, slot_start).
+// scenario at the picker-chosen (K, BTT, σ, slot_start). Not persisted
+// across reloads on purpose — refresh resets back to "Healthy".
 //
-// Default is "Healthy" — the all-honest baseline scenario whose Title
-// is "Normal operations (all-honest healthy path)".
+// Default is "Healthy" — the all-honest baseline whose Title is
+// "Normal operations (all-honest healthy path)".
 let selectedScenario = 'Healthy';
 
 // Picker dimensions for the Normal operations chart. Phase 1 (no
@@ -160,14 +154,14 @@ function main() {
   root.innerHTML = '';
   const mainEl = h('main');
   // Page layout (top → bottom):
-  //   1. Normal operations chart — the always-visible CDF that used
-  //      to live in the modal. Pickers (K, BTT, σ, slot_start) drive
-  //      both this chart and the heatmap's cell colors.
+  //   1. Conditions section — always-visible CDF for the selected
+  //      scenario. Pickers (K, BTT, σ, slot_start) drive both this
+  //      chart and the heatmap's cell colors.
   //   2. Heatmap — colored by the same pickers; row click updates the
-  //      Normal operations chart's selected scenario.
+  //      Conditions chart's selected scenario.
   //   3. Collapsibles — Increasing BTT, Heavy-tail propagation,
-  //      Stochastic loss, Correlated link delays, Correlated node
-  //      slowness. Each has its own local pickers + y-axis toggle.
+  //      Stochastic loss, Correlated link delays. Each has its own
+  //      local pickers (slot_start + y-axis) just above the chart.
   mainEl.appendChild(renderConditionsSection(data));
   const overview = renderHeatmap(data);
   if (overview) mainEl.appendChild(overview);
@@ -253,16 +247,7 @@ function onSlotStartChange(newSlot) {
   }
 }
 
-// onTrendMetricChange handles the y-axis-metric toggle for multi-point
-// sweep tabs. Only the modal's active tab needs re-rendering — the
-// heatmap is unaffected (it's always keyed to success rate).
-function onTrendMetricChange(newMetric) {
-  if (newMetric === selectedTrendMetric) return;
-  selectedTrendMetric = newMetric;
-  rerenderActiveModalTab();
-}
-
-// ---- Normal operations (Conditions) section -----------------------
+// ---- Conditions (Normal operations) section -----------------------
 //
 // The Conditions section is the always-visible primary CDF chart at the
 // top of the page. It shows the currently-selected scenario's CDF at
@@ -370,18 +355,45 @@ function buildBaselinePicker(label, values, suffix, getValue, setValue) {
   return picker;
 }
 
-// renderConditionsSection builds the always-visible "Normal operations"
-// chart at the top of the page.
+// renderConditionsSection builds the always-visible primary CDF chart at
+// the top of the page. Layout:
+//   header  — scenario title on the left, "n=4" cluster-setup label
+//             on the right.
+//   desc    — scenario.note, full width below the header.
+//   bodyRow — two columns: left holds the K/BTT/σ/slot_start picker
+//             stack; right holds the per-protocol legend block
+//             (buildSweepLegend keeps swatch/name/chip/sep/p99 columns
+//             aligned across protocol rows). Both columns use grid
+//             rows of identical height so picker[N] aligns Y-by-Y
+//             with protocol[N].
+//   chart   — CDF canvas, full width below the body row.
 function renderConditionsSection(data) {
   const sec = h('section', { class: 'conditions', id: 'conditions' });
 
   const head = h('div', { class: 'conditions-head' });
-  head.appendChild(h('h2', {}, 'Normal operations'));
+  const titleEl = h('h2', { class: 'conditions-title' });
+  head.appendChild(titleEl);
+  head.appendChild(h('span', { class: 'conditions-subtitle' }, 'n=4'));
   sec.appendChild(head);
 
-  // Pickers row: K, BTT, σ, slot_start.
+  const desc = h('p', { class: 'desc conditions-desc' });
+  sec.appendChild(desc);
+
+  const scenario = data.scenarios.find((s) => s.name === selectedScenario);
+  const match = findBaselineSweepPoint(data);
+  if (scenario) {
+    titleEl.textContent = scenario.title || scenario.name;
+    if (scenario.note) {
+      desc.textContent = scenario.note;
+    } else {
+      desc.style.display = 'none';
+    }
+  }
+
+  const bodyRow = h('div', { class: 'conditions-body-row' });
+
   const dims = availableBaselineDimensions(data);
-  const pickers = h('div', { class: 'sm-controls conditions-pickers' });
+  const pickers = h('div', { class: 'conditions-pickers-stack' });
   pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
@@ -398,26 +410,30 @@ function renderConditionsSection(data) {
       (v) => { selectedSigma = v; onConditionsChange(); }),
   );
   pickers.appendChild(buildSlotPicker());
-  sec.appendChild(pickers);
+  bodyRow.appendChild(pickers);
 
-  // Top strip: description + legend (legend gets right-aligned via
-  // margin-left:auto, mirroring the modal layout).
-  const top = h('div', { class: 'sm-content-top' });
-  const desc = h('p', { class: 'desc conditions-desc' });
-  top.appendChild(desc);
-  const legendSlot = h('div', { id: 'conditions-legend-slot' });
-  top.appendChild(legendSlot);
-  sec.appendChild(top);
+  // Legend block — pass a synthetic single-point sweep so buildSweepLegend
+  // renders single values (not ranges). Empty when no sweep matches the
+  // current K/BTT/σ; the legend then shows "n/a" per protocol.
+  const legendWrap = h('div', { class: 'conditions-legend' });
+  if (scenario) {
+    const onePtSweep = match
+      ? { ...match.sweep, points: [match.point] }
+      : { name: '', points: [] };
+    legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols));
+  }
+  bodyRow.appendChild(legendWrap);
 
-  // Chart canvas.
+  sec.appendChild(bodyRow);
+
   const wrap = h('div', { class: 'sm-chart-wrap' });
   const canvas = h('canvas', { id: 'conditions-chart-canvas' });
   wrap.appendChild(canvas);
   sec.appendChild(wrap);
 
-  // Chart.js needs the canvas to be in the live DOM (with computed
-  // dimensions) before construction, so defer the build to the next
-  // microtask after this section is mounted by main()/onConditionsChange.
+  // Chart.js needs the canvas in the live DOM with computed dimensions
+  // before construction; defer to the next microtask after the caller
+  // mounts the section.
   Promise.resolve().then(() => rebuildConditionsChart(data));
   return sec;
 }
@@ -438,43 +454,18 @@ function onConditionsChange() {
   }
 }
 
-// rebuildConditionsChart re-draws the Normal operations CDF for the
-// currently-selected scenario at the current K/BTT/σ/slot_start.
+// rebuildConditionsChart re-draws the conditions CDF on the canvas
+// rendered by renderConditionsSection. Title, description, and the
+// per-protocol legend rows are built once during section render —
+// re-rendering the whole section (via onConditionsChange / heatmap row
+// click) is how those get refreshed.
 function rebuildConditionsChart(data) {
   const canvas = document.getElementById('conditions-chart-canvas');
   if (!canvas) return;
   destroyCurrentChart();
-
   const match = findBaselineSweepPoint(data);
   const scenario = data.scenarios.find((s) => s.name === selectedScenario);
   if (!match || !scenario) return;
-
-  // Build the description: scenario title in bold + optional note text.
-  // Avoid <strong> here because `.desc strong` carries a chip/badge
-  // style that would wrap the title in a button-like box.
-  const desc = document.querySelector('.conditions-desc');
-  if (desc) {
-    const scenTitle = scenario.title || scenario.name;
-    desc.innerHTML = '';
-    const titleSpan = h('span', { class: 'conditions-desc-title' }, scenTitle);
-    desc.appendChild(titleSpan);
-    if (scenario.note) {
-      desc.appendChild(document.createTextNode(' — ' + scenario.note));
-    }
-  }
-
-  // Build the legend (per-protocol chip + p99) for this point.
-  const legendSlot = document.getElementById('conditions-legend-slot');
-  if (legendSlot) {
-    legendSlot.innerHTML = '';
-    // Build a "fake sweep" with just this point so buildSweepLegend
-    // sees a single-point sweep (which is what the Conditions chart
-    // semantically is).
-    const onePtSweep = { ...match.sweep, points: [match.point] };
-    legendSlot.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols));
-  }
-
-  // Build the chart. Single-point sweep → CDF (buildLatencyChart).
   const onePtSweep = { ...match.sweep, points: [match.point] };
   currentChart = buildLatencyChart(canvas, onePtSweep, data.protocols, scenario);
 }
@@ -536,19 +527,31 @@ function renderCollapsible(sweep, data) {
   return wrap;
 }
 
-// renderCollapsibleBody fills a collapsible section with description +
-// per-section pickers (slot_start + y-axis toggle) + chart.
+// renderCollapsibleBody fills a collapsible section. Vertical order:
+//   top strip (description left, legend right) → controls (slot_start
+//   + y-axis) → chart. Description + legend share one flex row so they
+//   read as a single header block; controls sit just above the chart
+//   so they're associated with it.
 function renderCollapsibleBody(body, sweep, data, state) {
   body.innerHTML = '';
+
+  // Top strip — description (flex:1, left) + legend (margin-left:auto,
+  // right). Sharing one .sm-content-top row puts them on the same line.
+  const scenario = data.scenarios.find((s) => s.name === selectedScenario) || data.scenarios[0];
+  const top = h('div', { class: 'sm-content-top' });
   if (sweep.description) {
     const desc = h('p', { class: 'desc' });
     desc.textContent = sweep.description;
-    body.appendChild(desc);
+    top.appendChild(desc);
   }
+  if (scenario) {
+    top.appendChild(buildSweepLegend(sweep, scenario, data.protocols));
+  }
+  if (top.children.length > 0) body.appendChild(top);
 
-  // Section-local pickers. slot_start picker reuses the global
-  // selectedSlotStart for now — could be local-only later if cross-
-  // section comparability is unwanted.
+  // Section-local pickers — placed just above the chart so the user
+  // associates them with the chart, not the title. slot_start picker
+  // reuses the global selectedSlotStart for now.
   const controls = h('div', { class: 'sm-controls collapsible-controls' });
   controls.appendChild(buildLocalSlotPicker(state, () => {
     renderCollapsibleBody(body, sweep, data, state);
@@ -558,14 +561,6 @@ function renderCollapsibleBody(body, sweep, data, state) {
   }));
   body.appendChild(controls);
 
-  // Legend.
-  const scenario = data.scenarios.find((s) => s.name === selectedScenario) || data.scenarios[0];
-  if (scenario) {
-    const top = h('div', { class: 'sm-content-top' });
-    top.appendChild(buildSweepLegend(sweep, scenario, data.protocols));
-    body.appendChild(top);
-  }
-
   // Chart canvas.
   const wrap = h('div', { class: 'sm-chart-wrap' });
   const canvas = h('canvas');
@@ -573,19 +568,16 @@ function renderCollapsibleBody(body, sweep, data, state) {
   body.appendChild(wrap);
 
   if (scenario) {
-    // Each collapsible has its OWN slot_start + metric state. We
-    // temporarily swap module state, build the chart, then restore —
-    // a small hack to reuse the existing buildTrendLineChart helper
-    // which reads module state directly.
+    // Each collapsible has its own slot_start. Temporarily swap the
+    // module-level selectedSlotStart so cdfSlotStartPlugin + shiftedCell
+    // see the section-local value while the chart builds; metric is
+    // passed through as an explicit param.
     const savedSlot = selectedSlotStart;
-    const savedMetric = selectedTrendMetric;
     selectedSlotStart = state.slotStart;
-    selectedTrendMetric = state.metric;
     try {
-      buildTrendLineChart(canvas, sweep, data.protocols, scenario);
+      buildTrendLineChart(canvas, sweep, data.protocols, scenario, state.metric);
     } finally {
       selectedSlotStart = savedSlot;
-      selectedTrendMetric = savedMetric;
     }
   }
 }
@@ -636,20 +628,6 @@ function buildLocalMetricToggle(state, onChange) {
   return picker;
 }
 
-// rerenderActiveModalTab rebuilds the modal's currently-active tab in
-// place. Scenario + active sweep are tracked on the dialog (via dataset)
-// and the active .sm-tab respectively. No-op when the modal is closed.
-function rerenderActiveModalTab() {
-  const dlg = document.getElementById('scenario-dialog');
-  if (!dlg || !dlg.open) return;
-  const data = window.REPORT_DATA;
-  const scenario = data.scenarios.find((s) => s.name === dlg.dataset.scenario);
-  const tab = dlg.querySelector('.sm-tab.active');
-  if (!scenario || !tab) return;
-  const sweep = data.sweeps.find((s) => s.name === tab.getAttribute('data-sweep'));
-  if (sweep) selectSweepTab(dlg, scenario, sweep);
-}
-
 // applyChartDefaults tweaks Chart.js globally so individual chart configs
 // stay short.
 function applyChartDefaults() {
@@ -674,11 +652,11 @@ function applyChartDefaults() {
 
 // ---- heatmap overview ------------------------------------------------
 
-// renderHeatmap draws the page's only persistent section: a grid of
-// scenario rows × protocol columns colored by p2p_normal-sweep success
-// rate (the production-shaped baseline). Each Scenario.Group becomes its
-// own card so groups read as visually distinct chunks rather than rows
-// in one wall of data. Clicking a cell opens the per-scenario modal.
+// renderHeatmap draws a grid of scenario rows × protocol columns
+// colored by p2p_normal-sweep success rate (the production-shaped
+// baseline). Each Scenario.Group becomes its own card so groups read
+// as visually distinct chunks rather than rows in one wall of data.
+// Clicking a row updates the Conditions chart's selected scenario.
 function renderHeatmap(data) {
   const baseline = data.sweeps.find((s) => s.name === 'p2p_normal');
   if (!baseline || baseline.points.length === 0) return null;
@@ -690,14 +668,10 @@ function renderHeatmap(data) {
   // align horizontally with the column-header bar.
   section.style.setProperty('--hcols', String(data.protocols.length));
 
-  // No h2 — the page's titular chart is "Normal operations" above.
-  // Subtitle just names the cluster setup; K/BTT/σ/slot_start live in
-  // the Conditions section's pickers and drive these cell colors too.
-  const head = h('div', { class: 'heatmap-head' });
-  head.appendChild(
-    h('p', { class: 'desc' }, 'SSV proposer duty at n=4'),
-  );
-  section.appendChild(head);
+  // No header/subtitle on the heatmap — the cluster-setup label
+  // ("SSV proposer duty at n=4") now lives in the Conditions section's
+  // header above. The column-header bar (protocol names) sits at the
+  // top of the heatmap directly.
 
   // Shared column-header bar — sits above every group card. Empty
   // top-left placeholder lines up with the scenario-name column.
@@ -732,16 +706,28 @@ function renderHeatmap(data) {
         if (cell && cell.iterations > 0) hasData = true;
         row.appendChild(renderHeatmapCell(cell, sc));
       });
-      // Row-level click handler: clicking a row updates the Normal
-      // operations chart at the top of the page (no modal). Rows
-      // whose cells are all n/a stay non-interactive.
+      // Row-level click handler: clicking a row sets the Conditions
+      // chart's selected scenario, re-renders that section (so the
+      // legend reflects the new scenario), and scrolls the page up so
+      // the chart is back in focus. Selection is not persisted —
+      // refresh snaps back to the default scenario.
       if (hasData) {
         row.classList.add('clickable');
         row.addEventListener('click', () => {
           selectHeatmapRow(row);
           selectedScenario = sc.name;
-          rebuildConditionsChart(data);
+          const oldCond = document.getElementById('conditions');
+          if (oldCond) {
+            const fresh = renderConditionsSection(data);
+            oldCond.replaceWith(fresh);
+            fresh.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
         });
+      }
+      // Apply the visual selection state on first render too so the
+      // default scenario's row is highlighted from page load.
+      if (sc.name === selectedScenario) {
+        row.classList.add('selected');
       }
       rows.appendChild(row);
     });
@@ -797,8 +783,8 @@ function renderHeatmapCell(cell, scenario) {
 }
 
 // selectHeatmapRow visually marks the row containing `el` as selected,
-// clearing any previous selection. Provides "you're looking at this one"
-// feedback that persists after the modal is dismissed.
+// clearing any previous selection. Provides "you're looking at this
+// one" feedback synchronized with the Conditions chart above.
 function selectHeatmapRow(el) {
   const section = el.closest('section.heatmap');
   if (!section) return;
@@ -807,16 +793,11 @@ function selectHeatmapRow(el) {
   if (row) row.classList.add('selected');
 }
 
-// ---- scenario modal --------------------------------------------------
-//
-// One <dialog> element is cached across opens. Each open rebuilds the
-// content (cheap; ≤ 4 tabs and 1 chart). Tab clicks rebuild the content
-// area in place rather than maintaining 4 hidden charts — keeps memory
-// usage flat and avoids the Chart.js "hidden canvas → 0 dims" foot-gun.
+// ---- chart lifecycle -------------------------------------------------
 
-// currentChart is the live Chart.js instance shown in the modal, or null
-// when the modal is closed (or between renders). Tracked so we can
-// destroy it before swapping tabs / closing the modal.
+// currentChart is the live Chart.js instance for the Conditions chart
+// at the top of the page. Tracked so we can destroy() it before
+// swapping scenarios or reconfiguring K/BTT/σ/slot_start.
 let currentChart = null;
 
 function destroyCurrentChart() {
@@ -826,131 +807,10 @@ function destroyCurrentChart() {
   }
 }
 
-function closeScenarioModal(dlg) {
-  destroyCurrentChart();
-  dlg.close();
-}
-
-function openScenarioModal(scenario) {
-  const data = window.REPORT_DATA;
-  if (!data) return;
-
-  let dlg = document.getElementById('scenario-dialog');
-  if (!dlg) {
-    dlg = h('dialog', { id: 'scenario-dialog', class: 'scenario-modal' });
-    document.body.appendChild(dlg);
-    // Backdrop click closes (clicks inside the dialog target inner
-    // elements, not dlg itself).
-    dlg.addEventListener('click', (ev) => {
-      if (ev.target === dlg) closeScenarioModal(dlg);
-    });
-    // ESC-key closes the modal natively; `cancel` fires before close.
-    // We also tear down the chart on `close` so cases not covered by
-    // closeScenarioModal (ESC, future programmatic closers) are safe.
-    dlg.addEventListener('close', destroyCurrentChart);
-    dlg.addEventListener('cancel', destroyCurrentChart);
-  }
-  dlg.innerHTML = '';
-  // Track which scenario the modal is showing so onSlotStartChange can
-  // re-render the modal chart in place when the picker is clicked.
-  dlg.dataset.scenario = scenario.name;
-
-  // Header — scenario title + identifiers + close button.
-  const head = h('header', { class: 'sm-head' });
-  head.appendChild(h('h2', {}, scenario.title || scenario.name));
-  const closeBtn = h('button', { type: 'button', class: 'sm-close', 'aria-label': 'Close' }, '×');
-  closeBtn.addEventListener('click', () => closeScenarioModal(dlg));
-  head.appendChild(closeBtn);
-  dlg.appendChild(head);
-
-  const body = h('div', { class: 'sm-body' });
-
-  // Tab bar — one tab per sweep, in catalog order. p2p_ideal first.
-  // Prefixed with a "p2p network:" label since every sweep dimension
-  // (BTT, heavy-tail, loss, correlated delays) is a network-layer knob.
-  const tabs = h('div', { class: 'sm-tabs', role: 'tablist' });
-  tabs.appendChild(h('span', { class: 'sm-tabs-label' }, 'p2p network:'));
-  data.sweeps.forEach((sw) => {
-    const tab = h(
-      'button',
-      {
-        type: 'button',
-        class: 'sm-tab',
-        role: 'tab',
-        'data-sweep': sw.name,
-      },
-      sw.title || sw.name,
-    );
-    tab.addEventListener('click', () => selectSweepTab(dlg, scenario, sw));
-    tabs.appendChild(tab);
-  });
-  body.appendChild(tabs);
-
-  // Content area — swapped on every tab click.
-  body.appendChild(h('div', { class: 'sm-content' }));
-  dlg.appendChild(body);
-
-  dlg.showModal();
-  // Default to p2p_normal — matches what the heatmap colors are derived
-  // from. Falls back to the first sweep if p2p_normal isn't present
-  // (defensive against custom sweep lists).
-  const defaultSweep = data.sweeps.find((s) => s.name === 'p2p_normal') || data.sweeps[0];
-  selectSweepTab(dlg, scenario, defaultSweep);
-}
-
-// selectSweepTab activates the tab for `sweep` and rebuilds the content
-// area: sweep description (if any), per-protocol summary, and the chart
-// (CDF for single-point sweeps, P99 trend line for multi-point).
-function selectSweepTab(dlg, scenario, sweep) {
-  const data = window.REPORT_DATA;
-  if (!data) return;
-
-  dlg.querySelectorAll('.sm-tab').forEach((t) => {
-    t.classList.toggle('active', t.getAttribute('data-sweep') === sweep.name);
-  });
-
-  const content = dlg.querySelector('.sm-content');
-  if (!content) return;
-  content.innerHTML = '';
-
-  // Top strip: description on the left, per-protocol legend pinned to
-  // the top-right. Legend uses `margin-left: auto` so it stays right-
-  // aligned even when there's no description.
-  const top = h('div', { class: 'sm-content-top' });
-  if (sweep.description) {
-    const desc = h('p', { class: 'desc' });
-    desc.innerHTML = formatDescription(sweep.description);
-    top.appendChild(desc);
-  }
-  top.appendChild(buildSweepLegend(sweep, scenario, data.protocols));
-  content.appendChild(top);
-
-  // Controls row: slot_start picker on every tab; multi-point tabs also
-  // get the y-axis metric toggle (success rate ↔ p99 decision time).
-  // selectedSlotStart + selectedTrendMetric are module state, kept in
-  // sync with the page-header picker (slot_start) and persistent across
-  // tab switches.
-  const controls = h('div', { class: 'sm-controls' });
-  controls.appendChild(buildSlotPicker());
-  if (sweep.points.length > 1) {
-    controls.appendChild(buildMetricToggle());
-  }
-  content.appendChild(controls);
-
-  const wrap = h('div', { class: 'sm-chart-wrap' });
-  const canvas = h('canvas');
-  wrap.appendChild(canvas);
-  content.appendChild(wrap);
-
-  destroyCurrentChart();
-  currentChart = buildSweepChart(canvas, sweep, scenario, data.protocols);
-}
-
-// buildSlotPicker renders the six-value slot_start picker. Used at both
-// the page-header level (affects heatmap colors) and inside the modal
-// (affects the open scenario's chart + legend). Both instances share
-// `selectedSlotStart` and route clicks through `onSlotStartChange`,
-// which handles re-rendering the heatmap + (if open) the modal.
+// buildSlotPicker renders the page-level slot_start picker shown in the
+// Conditions section. Clicks route through onSlotStartChange, which
+// re-renders the heatmap (cell colors track slot_start) and the
+// Conditions section (active button + chart).
 function buildSlotPicker() {
   const picker = h('div', { class: 'sm-slot-picker' });
   picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'slot_start:'));
@@ -964,32 +824,6 @@ function buildSlotPicker() {
       `${slotStart} ms`,
     );
     btn.addEventListener('click', () => onSlotStartChange(slotStart));
-    picker.appendChild(btn);
-  });
-  return picker;
-}
-
-// buildMetricToggle renders a two-option segmented control that flips
-// the multi-point trend chart's y-axis between success rate and p99
-// decision time. Visually mirrors buildSlotPicker so both controls read
-// as one row of sibling pickers.
-function buildMetricToggle() {
-  const picker = h('div', { class: 'sm-slot-picker' });
-  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'y-axis:'));
-  const options = [
-    { value: 'success', label: 'success rate' },
-    { value: 'p99', label: 'p99 decision time' },
-  ];
-  options.forEach((opt) => {
-    const btn = h(
-      'button',
-      {
-        type: 'button',
-        class: 'sm-slot-btn' + (opt.value === selectedTrendMetric ? ' active' : ''),
-      },
-      opt.label,
-    );
-    btn.addEventListener('click', () => onTrendMetricChange(opt.value));
     picker.appendChild(btn);
   });
   return picker;
@@ -1126,15 +960,6 @@ function buildSweepLegend(sweep, scenario, protocols) {
   return legend;
 }
 
-// buildSweepChart returns a CDF (for a 1-point sweep) or a P99 trend
-// line (for a multi-point sweep).
-function buildSweepChart(canvas, sweep, scenario, protocols) {
-  if (sweep.points.length === 1) {
-    return buildLatencyChart(canvas, sweep, protocols, scenario);
-  }
-  return buildTrendLineChart(canvas, sweep, protocols, scenario);
-}
-
 // ---- CDF chart (single-point sweep) ---------------------------------
 //
 // Each successful sim contributes 1/Iterations to the cumulative success
@@ -1209,6 +1034,10 @@ function buildLatencyChart(canvas, sweep, protocols, scenario) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Inset the plot area on the right by roughly the y-axis-label
+      // footprint on the left so the chart reads as horizontally
+      // centered (otherwise the last x-tick label hugs the page edge).
+      layout: { padding: { right: 40 } },
       interaction: { mode: 'nearest', intersect: false, axis: 'x' },
       scales: {
         x: {
@@ -1247,9 +1076,13 @@ function buildLatencyChart(canvas, sweep, protocols, scenario) {
 }
 
 // ---- trend line chart (multi-point sweep) ---------------------------
+//
+// metric: 'success' (default) draws success rate on a 0..100% y-axis
+//   with red/yellow/green zone bands; 'p99' draws p99 decision time
+//   (ms) on a free y-axis without zones.
 
-function buildTrendLineChart(canvas, sweep, protocols, scenario) {
-  const isSuccess = selectedTrendMetric !== 'p99';
+function buildTrendLineChart(canvas, sweep, protocols, scenario, metric) {
+  const isSuccess = metric !== 'p99';
   const ySuccess = {
     title: { display: true, text: 'success rate' },
     min: 0,
@@ -1264,11 +1097,14 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
   };
   return new Chart(canvas, {
     type: 'line',
-    data: trendLineChartData(sweep, protocols, scenario),
+    data: trendLineChartData(sweep, protocols, scenario, metric),
     plugins: isSuccess ? [cdfZonesPlugin] : [],
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Match the Conditions chart's right inset so the collapsed-
+      // chart plot area reads as horizontally centered too.
+      layout: { padding: { right: 40 } },
       interaction: { mode: 'nearest', intersect: false },
       scales: {
         x: {
@@ -1298,8 +1134,8 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario) {
   });
 }
 
-function trendLineChartData(sweep, protocols, scenario) {
-  const isSuccess = selectedTrendMetric !== 'p99';
+function trendLineChartData(sweep, protocols, scenario, metric) {
+  const isSuccess = metric !== 'p99';
   return {
     labels: sweep.points.map((pt) => pt.label),
     datasets: protocols.map((p) => {
@@ -1371,30 +1207,3 @@ function protocolPointStyle(name) {
   }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (ch) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  })[ch]);
-}
-
-// formatDescription HTML-escapes the input, then wraps three families of
-// tokens in <strong> for visual emphasis: set literals like {4, 7, 10},
-// parameter assignments like n=4 / BTT=200ms, and known network-model
-// names. Result is an HTML fragment suitable for innerHTML.
-function formatDescription(text) {
-  const networkModels = '(?:ConstantDelay|LogNormalDelay|LossyNetwork|PerReceiverDelay|CorrelatedLinkDelay|JitteredDelay)';
-  let out = escapeHtml(text);
-  const patterns = [
-    /\{[^}]+\}/g,
-    /\b[A-Za-z][A-Za-z_0-9]*=[A-Za-z0-9./_]+(?:ms|s)?\b/g,
-    new RegExp('\\b' + networkModels + '\\b', 'g'),
-  ];
-  patterns.forEach((re) => {
-    out = out.replace(re, (m) => `<strong>${m}</strong>`);
-  });
-  return out;
-}
