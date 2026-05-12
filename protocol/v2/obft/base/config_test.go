@@ -40,10 +40,37 @@ func TestConfig_Validate_OK(t *testing.T) {
 	require.NoError(t, validBaseConfig().Validate())
 }
 
-func TestConfig_Validate_RejectsKTooSmall(t *testing.T) {
+func TestConfig_Validate_RejectsKBelowBFTLivenessMinimum(t *testing.T) {
 	cfg := validBaseConfig()
-	cfg.Layers = cfg.Layers[:2]
-	require.ErrorContains(t, cfg.Validate(), "below late-leader-resilience minimum")
+	// K=1 at F=1: K < f+1, no honest-leader guarantee.
+	cfg.Layers = cfg.Layers[:1]
+	require.ErrorContains(t, cfg.Validate(), "below BFT-liveness minimum")
+}
+
+// K=2 at F=1 is the BFT-liveness minimum and is supported. Spec §Setting
+// leaves the choice between K=f+1 (smaller envelope) and K≥f+2 (late-leader
+// resilient) to the operator. Builds a fresh K=2 config from scratch — the
+// validBaseConfig() shallow B_k values are sized for K=4 and don't satisfy
+// the deepest-layer BFT-min (2·BTT) once shortened to K=2.
+func TestConfig_Validate_AllowsKAtBFTLivenessMinimum(t *testing.T) {
+	const btt = 150 * time.Millisecond
+	const tCommit = 1500 * time.Millisecond
+	cfg := &Config{
+		Height:    1,
+		ClusterID: [32]byte{0x01},
+		Operators: []OperatorID{1, 2, 3, 4},
+		F:         1,
+		Layers: []LayerSpec{
+			{Leader: 1, FetchAt: tCommit - btt, BroadcastBudget: btt},
+			{Leader: 2, FetchAt: 0, BroadcastBudget: tCommit},
+		},
+		TCommit: tCommit,
+		Delta2:  300 * time.Millisecond,
+		Delta3:  250 * time.Millisecond,
+		BTT:     btt,
+	}
+	require.NoError(t, cfg.Validate())
+	require.Equal(t, 2, cfg.K())
 }
 
 func TestConfig_Validate_RejectsClusterSizeTooSmall(t *testing.T) {

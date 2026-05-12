@@ -63,11 +63,40 @@ func TestConfig_Validate_RejectsClusterBelow3Fplus1(t *testing.T) {
 	require.ErrorContains(t, c.Validate(), "at least 3F+1")
 }
 
-func TestConfig_Validate_RejectsKBelowLateLeaderResilience(t *testing.T) {
-	// At f=1 the late-leader-resilience minimum is K=3 (floor=3 per Validate).
+func TestConfig_Validate_RejectsKBelowBFTLivenessMinimum(t *testing.T) {
+	// At f=1 the BFT-liveness minimum is K=f+1=2; K=1 has no honest-leader
+	// guarantee and is rejected.
 	c := healthyConfig()
-	c.Layers = c.Layers[:2] // K=2 < 3
-	require.ErrorContains(t, c.Validate(), "late-leader-resilience minimum")
+	c.Layers = c.Layers[:1]
+	require.ErrorContains(t, c.Validate(), "below BFT-liveness minimum")
+}
+
+// K=2 at F=1 is the BFT-liveness minimum and is supported. Spec §Setting
+// leaves the choice between K=f+1 (smaller envelope) and K≥f+2 (late-leader
+// resilient) to the operator. Builds a fresh K=2 config from scratch — the
+// healthyConfig() shallow B_k values are sized for K=4 and don't satisfy
+// the deepest-layer BFT-min (2·BTT) once shortened to K=2.
+func TestConfig_Validate_AllowsKAtBFTLivenessMinimum(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tCommit := 2000 * time.Millisecond
+	tVerdictStart := tCommit - 400*time.Millisecond // = 1600ms
+	c := &Config{
+		Height:    Height(42),
+		ClusterID: [32]byte{0xab},
+		Operators: []OperatorID{1, 2, 3, 4},
+		F:         1,
+		Layers: []LayerSpec{
+			{Leader: 1, FetchAt: tVerdictStart - btt, BroadcastBudget: btt},
+			{Leader: 2, FetchAt: 0, BroadcastBudget: tVerdictStart},
+		},
+		TCommit: tCommit,
+		Delta2a: 400 * time.Millisecond,
+		Delta2b: 400 * time.Millisecond,
+		Delta3:  250 * time.Millisecond,
+		BTT:     btt,
+	}
+	require.NoError(t, c.Validate())
+	require.Equal(t, 2, c.K())
 }
 
 func TestConfig_Validate_RejectsKAboveClusterSize(t *testing.T) {

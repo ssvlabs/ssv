@@ -49,6 +49,36 @@ func TestObft_Healthy_n4(t *testing.T) {
 	require.True(t, bytes.Equal(s.candidates[0], out.Value))
 }
 
+// K=2 is the BFT-liveness minimum (K = f+1 at f=1). Healthy path: both
+// leaders broadcast and the cluster decides at L_0.
+func TestObft_Healthy_n4_K2(t *testing.T) {
+	s := newSimWithK(t, 4, 2)
+	for k := 0; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+
+	s.runPhase2(nil)
+
+	outputs := s.resolveAll(nil)
+	out := requireAllAgree(t, outputs)
+	require.Equal(t, 0, out.Layer)
+	require.True(t, bytes.Equal(s.candidates[0], out.Value))
+}
+
+// K=2 silent-primary: L_0 silent, L_1 (deepest) broadcasts; cluster falls
+// through to the single remaining layer.
+func TestObft_SilentLeaderL0_n4_K2(t *testing.T) {
+	s := newSimWithK(t, 4, 2)
+	s.deliverPhase1(1, s.candidates[1], s.allOperators(), observedEarly, true)
+
+	s.runPhase2(nil)
+
+	outputs := s.resolveAll(nil)
+	out := requireAllAgree(t, outputs)
+	require.Equal(t, 1, out.Layer, "K=2 fall-through reaches L_1")
+	require.True(t, bytes.Equal(s.candidates[1], out.Value))
+}
+
 // ---- Silent leader at L_0 -------------------------------------------------
 
 func TestObft_SilentLeaderL0_n4(t *testing.T) {

@@ -33,17 +33,22 @@ type sim struct {
 
 // newSim builds a cluster of size n with K = min(4, n) layers (the OBFT
 // proposer-duty default). Layer leaders rotate by op-id: layer k's leader
-// is operator (k mod n) + 1.
+// is operator (k mod n) + 1. For K=2 simulations, use newSimWithK.
 func newSim(t *testing.T, n int) *sim {
 	t.Helper()
-	f := (n - 1) / 3
 	K := 4
 	if K > n {
 		K = n
 	}
-	if K < 3 {
-		t.Fatalf("OBFT requires K >= 3; cluster size n=%d only supports K=%d", n, K)
-	}
+	return newSimWithK(t, n, K)
+}
+
+// newSimWithK builds a cluster of size n with the caller-chosen K layers.
+// Use this for K=f+1 (BFT-liveness minimum) tests; newSim defaults to K=4
+// which is the SSV proposer-duty default.
+func newSimWithK(t *testing.T, n, K int) *sim {
+	t.Helper()
+	f := (n - 1) / 3
 
 	operators := make([]OperatorID, n)
 	pubKeyShares := make(map[OperatorID][]byte, n)

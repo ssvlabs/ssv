@@ -348,15 +348,14 @@ func (c *Config) Validate() error {
 	if len(c.Operators) < 3*c.F+1 {
 		return errors.New("twoab: cluster size must be at least 3F+1")
 	}
-	// Per spec §Setting: K ≥ max(2, f+1) is BFT-liveness minimum;
-	// K ≥ f+2 is the late-leader-resilience recommendation (≥ 2 honest
-	// leaders). We enforce the stricter f+2 bound and floor at 3.
-	minK := c.F + 2
-	if minK < 3 {
-		minK = 3
-	}
+	// Per spec §Setting: K ≥ f+1 is the BFT-liveness minimum (pigeonhole
+	// over the f-byz bound guarantees ≥ 1 honest leader). K ≥ f+2
+	// additionally provides late-leader-resilience (≥ 2 honest leaders);
+	// that choice is left to the operator/deployment per spec §Setting
+	// and is not enforced here.
+	minK := c.F + 1
 	if len(c.Layers) < minK {
-		return fmt.Errorf("twoab: K=%d below late-leader-resilience minimum %d (= max(3, f+2) at f=%d)",
+		return fmt.Errorf("twoab: K=%d below BFT-liveness minimum %d (= f+1 at f=%d)",
 			len(c.Layers), minK, c.F)
 	}
 	if len(c.Layers) > len(c.Operators) {

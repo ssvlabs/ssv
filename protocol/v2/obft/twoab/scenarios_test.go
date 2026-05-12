@@ -69,6 +69,42 @@ func TestScenario_HealthyL0Success(t *testing.T) {
 	require.Equal(t, Value("V0"), out.Value)
 }
 
+// K=2 (BFT-liveness minimum) healthy slot: both leaders broadcast, cluster
+// decides at L_0. Exercises 2abOBFT at the smallest supported layer count.
+func TestScenario_HealthyL0Success_K2(t *testing.T) {
+	s := newSimWithK(t, 4, 2)
+	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
+	s.applyHostValidityAll(0, Value("V0"), true)
+	s.runPhase2aCanonical()
+	s.runPhase2bCanonical()
+
+	outputs, errs := s.resolveAll()
+	for op, err := range errs {
+		require.NoError(t, err, "op %d Resolve", op)
+	}
+	out := requireAllAgree(t, outputs)
+	require.Equal(t, 0, out.Layer)
+	require.Equal(t, Value("V0"), out.Value)
+}
+
+// K=2 silent-primary fall-through: L_0 silent, L_1 (deepest) broadcasts;
+// cluster falls through to the single remaining layer.
+func TestScenario_SilentL0FallsThroughToL1_K2(t *testing.T) {
+	s := newSimWithK(t, 4, 2)
+	s.deliverPhase1(1, s.candidates[1], s.allOperators(), observedEarly)
+	s.applyHostValidityAll(1, s.candidates[1], true)
+	s.runPhase2aCanonical()
+	s.runPhase2bCanonical()
+
+	outputs, errs := s.resolveAll()
+	for op, err := range errs {
+		require.NoError(t, err, "op %d Resolve", op)
+	}
+	out := requireAllAgree(t, outputs)
+	require.Equal(t, 1, out.Layer, "K=2 fall-through reaches L_1")
+	require.Equal(t, s.candidates[1], out.Value)
+}
+
 // Marginal h_V=3: 3 ops retain V_0; 1 doesn't. σ-eligibility quorum
 // reaches (3 σV verdicts == qV); σ-quorum at L_0 succeeds.
 func TestScenario_MarginalHV3SucceedsAtL0(t *testing.T) {

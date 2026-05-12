@@ -51,24 +51,33 @@ func newSim(t *testing.T, n int) *sim {
 
 // newSimWithF is the F-parameterized variant of newSim, used by Phase-J
 // n=7/f=2 scenarios that exercise the validity-divergence majority claim
-// at larger cluster sizes.
+// at larger cluster sizes. Uses the SSV proposer-duty default K=min(4, n)
+// (capped at n for small clusters); for K=f+1 BFT-liveness-minimum tests
+// at f=1, see newSimWithK.
 func newSimWithF(t *testing.T, n, f int) *sim {
-	t.Helper()
-	require.GreaterOrEqual(t, n, 3*f+1, "sim requires n >= 3f+1")
-
 	K := 4
 	if n < K {
 		K = n
 	}
-	// At f >= 2, Config.Validate enforces K >= f+2 (>= 4 at f=2 is the
-	// late-leader-resilience minimum).
-	if K < f+2 {
-		K = f + 2
-	}
+	return newSimWithFK(t, n, f, K)
+}
+
+// newSimWithK builds an f=1 sim with the caller-chosen K (≥ f+1 = 2).
+// Use for K=2 (BFT-liveness minimum) tests at the default n=4.
+func newSimWithK(t *testing.T, n, K int) *sim {
+	return newSimWithFK(t, n, 1, K)
+}
+
+// newSimWithFK is the underlying constructor — explicit n, f, K.
+func newSimWithFK(t *testing.T, n, f, K int) *sim {
+	t.Helper()
+	require.GreaterOrEqual(t, n, 3*f+1, "sim requires n >= 3f+1")
+	require.GreaterOrEqual(t, K, f+1, "sim requires K >= f+1 (BFT-liveness minimum)")
+	require.LessOrEqual(t, K, n, "sim requires K <= n")
 
 	c := healthyConfig()
-	// Adjust the cluster to size n if needed (healthyConfig is n=4, f=1).
-	if n != 4 || f != 1 {
+	// Adjust the cluster shape if it differs from healthyConfig (n=4, f=1, K=4).
+	if n != 4 || f != 1 || K != 4 {
 		ops := make([]OperatorID, n)
 		layers := make([]LayerSpec, K)
 		btt := 200 * time.Millisecond
