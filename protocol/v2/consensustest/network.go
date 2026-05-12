@@ -72,9 +72,15 @@ func (p PerReceiverDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKi
 //     it flips with probability (1 − PersistP). In the slow state the
 //     call returns ExtraDelay; in the fast state it falls through to
 //     Inner.Delay.
-//   - Each slow op starts in the slow state so the very first message
-//     touching it returns ExtraDelay (matches the spec assumption that
-//     the slot starts mid-bad-period).
+//   - Each slow op starts in the slow state by design: the very first
+//     message touching it returns ExtraDelay unconditionally (no
+//     transition roll on call #1). This is a deliberate asymmetric
+//     initial condition vs the symmetric steady state — it encodes
+//     the spec assumption that the slot starts mid-bad-period rather
+//     than at a random point in the chain's stationary distribution.
+//     Practical consequence: at low message counts per slow op, the
+//     observed slow fraction sits above 50% (the steady-state value);
+//     for a typical slot's worth of messages it converges to 50%.
 //
 // This is a genuine two-state Markov chain (not memoryless Bernoulli):
 // the next-message outcome depends on the current state, so runs of

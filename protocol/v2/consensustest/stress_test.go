@@ -185,15 +185,21 @@ func TestStress(t *testing.T) {
 		// reads the existing file and combines by Fields-tuple, so
 		// iterating multiple pairs in one process composes the same way
 		// as multiple `make stresstest` invocations would.
+		//
+		// Wallclock is passed as time.Since(totalStart) — i.e. the
+		// CUMULATIVE elapsed time across every pair run so far — so
+		// after the final pair the field in data.js reflects the full
+		// matrix-run duration. Passing per-pair time would leave data.js
+		// showing only the last pair's time (the merge keeps next.Wallclock).
 		require.NoError(t, reporting.WriteReportData(reporting.Comparison{
 			Title:              "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
 			Description:        "Curated sweeps × OBFT/2abOBFT/QBFT across diverse network conditions and cluster sizes.",
 			Sweeps:             results,
 			BaselineIterations: iters.Baseline,
 			UnstableIterations: iters.Unstable,
-			Wallclock:          time.Since(pairStart),
+			Wallclock:          time.Since(totalStart),
 		}, dir))
-		t.Logf("    n=%d K=%d wallclock: %v", pp.n, pp.k, time.Since(pairStart))
+		t.Logf("    n=%d K=%d wallclock: %v (cumulative %v)", pp.n, pp.k, time.Since(pairStart), time.Since(totalStart))
 	}
 
 	t.Logf("Report data written: %s/data.js", dir)

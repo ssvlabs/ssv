@@ -1,6 +1,9 @@
 package consensustest
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // InstabilityLevel encodes a "p2p_instability" picker value. The
 // Baseline-group scenarios (currently just Healthy) wrap their Network
@@ -34,13 +37,50 @@ type InstabilityLevel struct {
 
 	LossRate    float64 // network-wide bursty stochastic loss
 	BurstFactor int     // mean dwell time in the lossy state, in messages
-	SlowOps     int     // number of operators flagged as "markov-slow"
-	SlowMul     float64 // slow op's ExtraDelay = SlowMul × cfg.BTT
-	PersistP    float64 // symmetric chain P(stay) in each state
+	// SlowOpsFraction is the share of the cluster flagged as
+	// markov-slow. Effective count is ceil(SlowOpsFraction × N),
+	// capped at N−1 so the leader (op1) stays fast. Using a fraction
+	// rather than a raw count keeps "extreme" qualitatively-similar
+	// across cluster sizes: SlowOps=3 at n=4 means 3-of-4 slow (only
+	// leader fast), but at n=13 it means just 3-of-13 — well within
+	// the byzantine bound, qualitatively a much milder configuration.
+	// Cross-cluster comparison via the n-picker is one of the matrix
+	// mode's selling points, so scaling preserves that comparison.
+	SlowOpsFraction float64
+	SlowMul         float64 // slow op's ExtraDelay = SlowMul × cfg.BTT
+	PersistP        float64 // symmetric chain P(stay) in each state
 }
 
-// InstabilityLevels are the 5 calibrated picker values. Calibration
-// notes (likely to need 1-2 rounds of empirical tuning):
+// slowCountForN returns the actual number of markov-slow operators
+// for this level at cluster size n. Always leaves at least the leader
+// (op1) fast (cap at n−1), and yields zero for level=none (fraction=0).
+func (l InstabilityLevel) slowCountForN(n int) int {
+	count := int(math.Ceil(l.SlowOpsFraction * float64(n)))
+	if count > n-1 {
+		count = n - 1
+	}
+	if count < 0 {
+		count = 0
+	}
+	return count
+}
+
+// InstabilityLevels are the 5 calibrated picker values. SlowOpsFraction
+// values were chosen to match the original raw-count calibration at the
+// canonical n=4 reference (low=1, moderate=2, high=2, extreme=3) and
+// scale proportionally to larger cluster sizes:
+//
+//	level     fraction  n=4  n=7  n=10  n=13
+//	low       0.25       1    2    3     4
+//	moderate  0.50       2    4    5     7
+//	high      0.50       2    4    5     7
+//	extreme   0.75       3    6    8     10
+//
+// (moderate/high share their slow-op count at every n; LossRate and
+// SlowMul are what distinguishes them between adjacent levels.)
+//
+// Tuning notes (expect a round of empirical adjustment per cluster
+// size if you change ranges):
 //   - none      pass-through; reproduces pre-instability stats.
 //   - low       very rare instabilities; Healthy success rate should
 //               be ≥ 99% — basically indistinguishable from "none"
@@ -55,10 +95,10 @@ type InstabilityLevel struct {
 //               same flat line).
 var InstabilityLevels = []InstabilityLevel{
 	{Name: "none", Level: 0},
-	{Name: "low", Level: 1, LossRate: 0.005, BurstFactor: 5, SlowOps: 1, SlowMul: 1.5, PersistP: 0.5},
-	{Name: "moderate", Level: 2, LossRate: 0.02, BurstFactor: 5, SlowOps: 2, SlowMul: 2.0, PersistP: 0.7},
-	{Name: "high", Level: 3, LossRate: 0.10, BurstFactor: 8, SlowOps: 2, SlowMul: 3.0, PersistP: 0.8},
-	{Name: "extreme", Level: 4, LossRate: 0.15, BurstFactor: 8, SlowOps: 3, SlowMul: 4.0, PersistP: 0.85},
+	{Name: "low", Level: 1, LossRate: 0.005, BurstFactor: 5, SlowOpsFraction: 0.25, SlowMul: 1.5, PersistP: 0.5},
+	{Name: "moderate", Level: 2, LossRate: 0.02, BurstFactor: 5, SlowOpsFraction: 0.50, SlowMul: 2.0, PersistP: 0.7},
+	{Name: "high", Level: 3, LossRate: 0.10, BurstFactor: 8, SlowOpsFraction: 0.50, SlowMul: 3.0, PersistP: 0.8},
+	{Name: "extreme", Level: 4, LossRate: 0.15, BurstFactor: 8, SlowOpsFraction: 0.75, SlowMul: 4.0, PersistP: 0.85},
 }
 
 // IsBaselineGroup reports whether `s` is one of the Group=="Baseline"
@@ -89,11 +129,7 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 			if inner.Apply != nil {
 				inner.Apply(cfg)
 			}
-			slowCount := level.SlowOps
-			if slowCount > cfg.N-1 {
-				// keep the leader (op1) out of the slow set
-				slowCount = cfg.N - 1
-			}
+			slowCount := level.slowCountForN(cfg.N)
 			slowOps := make([]OperatorID, 0, slowCount)
 			for i := 0; i < slowCount; i++ {
 				slowOps = append(slowOps, OperatorID(i+2))

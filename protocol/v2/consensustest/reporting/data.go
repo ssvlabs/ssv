@@ -102,8 +102,24 @@ func WriteReportData(c Comparison, dir string) error {
 	out := append([]byte("window.REPORT_DATA = "), body...)
 	out = append(out, ';', '\n')
 
-	if err := os.WriteFile(path, out, 0o644); err != nil {
-		return fmt.Errorf("reporting: write %s: %w", path, err)
+	// Atomic write: write to a sibling temp file then rename onto the
+	// real path. If the process is killed mid-write, the temp file is
+	// partial / orphaned and the real data.js stays intact — without
+	// this, os.WriteFile would open-O_TRUNC the real file first and a
+	// kill before the write completes would leave it truncated, which
+	// readReportData on the next run would treat as "no prior data"
+	// and silently overwrite (losing every prior (n, K) slice). Rename
+	// is atomic on POSIX, so any reader either sees the old file or
+	// the fully-written new one.
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return fmt.Errorf("reporting: write tmp %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		// Clean up the temp file on rename failure so we don't leave
+		// half-written debris in REPORT_DIR.
+		_ = os.Remove(tmp)
+		return fmt.Errorf("reporting: rename %s -> %s: %w", tmp, path, err)
 	}
 	return nil
 }
@@ -151,8 +167,18 @@ func mergePayloads(prev, next reportPayload) reportPayload {
 		BaselineIterations: next.BaselineIterations,
 		UnstableIterations: next.UnstableIterations,
 		Wallclock:          next.Wallclock,
-		Scenarios:          next.Scenarios,
-		Protocols:          next.Protocols,
+		// Scenarios/Protocols are UNIONED across prev+next, not just
+		// taken from next. Reason: if the catalog changes between runs
+		// (scenario added, renamed, or removed), taking only next's
+		// list silently hides cells in PRIOR (n, K, ...) points for
+		// scenarios that aren't in the freshest run's catalog. Union
+		// keeps every scenario whose data lives somewhere in the
+		// merged sweeps so the heatmap still renders it. Conflict
+		// resolution: next-side metadata (Title / Group / Note) wins
+		// on Name match (treat the freshest run as canonical for the
+		// scenario's documentation).
+		Scenarios: mergeScenarios(prev.Scenarios, next.Scenarios),
+		Protocols: mergeProtocols(prev.Protocols, next.Protocols),
 	}
 	// Build sweep-by-name map from prev, then walk next sweeps: matching
 	// names get their points merged; new sweeps are appended.
@@ -175,6 +201,54 @@ func mergePayloads(prev, next reportPayload) reportPayload {
 	for _, psw := range prev.Sweeps {
 		if !usedPrev[psw.Name] {
 			out.Sweeps = append(out.Sweeps, psw)
+		}
+	}
+	return out
+}
+
+// mergeScenarios returns the union of `prev` and `next` keyed by Name.
+// Entries unique to `prev` come first (preserves catalog order from
+// earlier runs); entries from `next` either update an existing one's
+// Title/Group/Adversarial/Note (freshest metadata wins) or get
+// appended after the prev-only entries. Result ordering: prev-only
+// scenarios stay where they were, next-side scenarios in next's
+// catalog order. The UI iterates this list to render heatmap rows;
+// preserving prev-only scenarios stops their old cells from being
+// silently hidden.
+func mergeScenarios(prev, next []scenarioPayload) []scenarioPayload {
+	byName := make(map[string]int, len(prev)+len(next))
+	out := make([]scenarioPayload, 0, len(prev)+len(next))
+	for _, s := range prev {
+		byName[s.Name] = len(out)
+		out = append(out, s)
+	}
+	for _, s := range next {
+		if i, ok := byName[s.Name]; ok {
+			out[i] = s // freshest metadata wins
+		} else {
+			byName[s.Name] = len(out)
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// mergeProtocols returns the union of `prev` and `next` by name string.
+// Mirrors mergeScenarios's approach; protocols are just strings here so
+// "freshest metadata wins" reduces to "names match by string equality".
+func mergeProtocols(prev, next []string) []string {
+	seen := make(map[string]bool, len(prev)+len(next))
+	out := make([]string, 0, len(prev)+len(next))
+	for _, p := range prev {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	for _, p := range next {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
 		}
 	}
 	return out
@@ -216,8 +290,18 @@ func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
 }
 
 // fieldsKey returns a stable string identity for a point's Fields map.
-// Keys are sorted lexicographically; values formatted with full
-// precision to avoid spurious collisions on floats like Sigma=0.5.
+// Keys are sorted lexicographically; values formatted via `%g` for the
+// shortest round-trippable representation. Two points merge iff their
+// fieldsKey strings are byte-identical.
+//
+// CONTRACT for sweep builders: axis values emitted into Fields must be
+// byte-identical floats across runs. Today every axis value is a
+// literal (BTT-as-int-ms, σ as literal 0.1/0.3/..., InstabilityLevel
+// as small int, etc.) so `%g` produces stable strings. If a future
+// sweep ever computes a Fields value (e.g. derived from BTT/2 ratio
+// or sqrt), it MUST round to a canonical form before storing — `%g`
+// would otherwise serialize the last-ulp drift differently across
+// runs and silently split one logical point into two.
 func fieldsKey(fields map[string]float64) string {
 	if len(fields) == 0 {
 		return ""

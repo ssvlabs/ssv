@@ -79,8 +79,10 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4)
 
-	require.Len(t, sweeps, 7, "seven curated sweeps per plan")
-
+	// `expected` below double-counts as both the per-name shape check
+	// AND the total-count check: every entry must be matched, and
+	// `require.Truef` rejects any unexpected name. No magic number to
+	// keep in sync as sweeps are added or removed.
 	expected := map[string]int{
 		"p2p_baseline":          5 * 5 * 5, // BTT × σ × instability
 		"p2p_increasing_BTT":    6,         // BTT
@@ -172,7 +174,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4)
-	require.Len(t, sweeps, 7)
+	require.NotEmpty(t, sweeps, "DefaultSweeps must return at least one sweep")
 
 	totalPoints := 0
 	for _, sw := range sweeps {
@@ -205,5 +207,5 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 			totalPoints++
 		}
 	}
-	t.Logf("verified %d sweep points × Healthy at K ∈ {3, 4}", totalPoints)
+	t.Logf("verified %d sweep points × Healthy at (n=4, K=4)", totalPoints)
 }
