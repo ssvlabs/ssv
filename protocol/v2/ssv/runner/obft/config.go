@@ -49,13 +49,6 @@ const (
 	// K = n = 4 (every cluster member leads exactly one layer; max
 	// fall-through depth at f = 1).
 	DefaultK = 4
-
-	// MinKFloor is the BFT-liveness K floor at f=1 (K ≥ f+1). Per spec
-	// §Setting K ≥ f+2 additionally provides late-leader-resilience; that
-	// choice is left to the operator/deployment and is not enforced here.
-	// Both the adapter's ConfigForCluster and Config.Validate enforce the
-	// same f+1 bound.
-	MinKFloor = 2
 )
 
 // Per-layer defaults for the asymmetric staggered schedule (spec §Setting,
@@ -387,15 +380,11 @@ func ConfigForCluster(
 	// Per spec §Setting: K ≥ f+1 is the BFT-liveness minimum (pigeonhole
 	// guarantees ≥ 1 honest leader). K ≥ f+2 additionally provides
 	// late-leader-resilience and is not enforced here — the deployment
-	// chooses. MinKFloor (= 2) is the floor at the smallest supported
-	// cluster (n=4, f=1).
+	// chooses.
 	minK := f + 1
-	if minK < MinKFloor {
-		minK = MinKFloor
-	}
 	if K < minK {
-		return nil, fmt.Errorf("obft adapter: K=%d below BFT-liveness minimum %d (= max(%d, f+1) at f=%d)",
-			K, minK, MinKFloor, f)
+		return nil, fmt.Errorf("obft adapter: K=%d below BFT-liveness minimum %d (= f+1 at f=%d)",
+			K, minK, f)
 	}
 	if K > n {
 		return nil, fmt.Errorf("obft adapter: K=%d exceeds cluster size %d", K, n)
