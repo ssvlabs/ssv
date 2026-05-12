@@ -144,8 +144,8 @@ consensustest-with-real-bls:
 # See docs/STRESSTEST-REPORT.md for the usage guide and
 # docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
 REPORT_DIR ?= ./stresstest-report
-# TODO: ITERATIONS=10 for prototyping, will update to 1000+ later
-ITERATIONS ?= 10
+# TODO: ITERATIONS=100 for prototyping, will update to 1000+ later
+ITERATIONS ?= 100
 #ITERATIONS ?= 1000
 CLUSTER_SIZE ?= 4
 .PHONY: stresstest
