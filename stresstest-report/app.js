@@ -170,25 +170,24 @@ function main() {
 }
 
 // initBaselineSelections snaps selectedK/selectedBTT/selectedSigma to
-// values actually present in the loaded data, so the Normal operations
-// chart can render on first load even when data was generated against
-// an earlier sweep config than the current UI expects.
+// values actually present in p2p_baseline, so the conditions chart can
+// render on first load even when data was generated against a slightly
+// different cross-product than the picker defaults expect.
 function initBaselineSelections(data) {
-  const sweep = data.sweeps.find((s) => s.name === 'p2p_normal') ||
-                data.sweeps.find((s) => s.name === 'p2p_ideal');
+  const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep || sweep.points.length === 0) return;
-  const cfg = sweep.points[0].config && sweep.points[0].config.Base;
-  if (cfg) {
-    if (typeof cfg.K === 'number' && cfg.K > 0) selectedK = cfg.K;
-    if (typeof cfg.BTT === 'number') selectedBTT = Math.round(cfg.BTT / 1e6);
-  }
-  // σ is read from sweep params (e.g. "LogNormal σ=0.5"); fall through
-  // to default 0.5 when the sweep doesn't expose it explicitly.
-  const sigmaParam = (sweep.params || []).find((p) => /σ\s*=/.test(p));
-  if (sigmaParam) {
-    const m = /σ\s*=\s*(\d+(?:\.\d+)?)/.exec(sigmaParam);
-    if (m) selectedSigma = parseFloat(m[1]);
-  }
+  const dims = availableBaselineDimensions(data);
+  // Pick the first available value along each axis that's >= the
+  // current selection, so we get a sensible default without snapping
+  // to the smallest K/BTT/σ.
+  const pickClosest = (set, current) => {
+    if (set.length === 0) return current;
+    if (set.includes(current)) return current;
+    return set[Math.floor(set.length / 2)];
+  };
+  selectedK = pickClosest(dims.Ks, selectedK);
+  selectedBTT = pickClosest(dims.BTTs, selectedBTT);
+  selectedSigma = pickClosest(dims.Sigmas, selectedSigma);
 }
 
 // precomputeSlotShifts warms shiftedCell's cache for the heatmap's
@@ -259,71 +258,43 @@ function onSlotStartChange(newSlot) {
 // a single p2p_baseline sweep with multi-axis (K × BTT × σ) points.
 
 // findBaselineSweepPoint returns {sweep, point} matching the current
-// K / BTT / σ selection, or null if no point matches. Phase 1 picks
-// p2p_ideal / p2p_normal by σ; Phase 2 will look up by (K, BTT, σ)
-// tuple in a unified p2p_baseline sweep.
+// (K, BTT, σ) selection within p2p_baseline, or null if no point
+// matches. Reads sweep_point.fields (set by sweep.go) — see
+// reporting.pointPayload.Fields for the schema.
 function findBaselineSweepPoint(data) {
   if (!data) return null;
-  // Prefer the Phase-2 unified sweep when it exists.
-  let sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
-  if (sweep) {
-    for (const pt of sweep.points) {
-      const c = pt.config && pt.config.Base;
-      if (!c) continue;
-      const bttMs = Math.round(c.BTT / 1e6);
-      // σ pulled from the sweep point's per-point label or config;
-      // matching by approximate float equality.
-      const sigma = sweepPointSigma(sweep, pt);
-      if (
-        c.K === selectedK &&
-        bttMs === selectedBTT &&
-        Math.abs(sigma - selectedSigma) < 1e-6
-      ) {
-        return { sweep, point: pt };
-      }
+  const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
+  if (!sweep) return null;
+  for (const pt of sweep.points) {
+    const f = pt.fields;
+    if (!f) continue;
+    if (
+      f.K === selectedK &&
+      f.BTT === selectedBTT &&
+      Math.abs(f.Sigma - selectedSigma) < 1e-6
+    ) {
+      return { sweep, point: pt };
     }
-    return null;
   }
-  // Phase 1 fallback: σ=0.1 → p2p_ideal, σ=0.5 → p2p_normal.
-  if (Math.abs(selectedSigma - 0.1) < 1e-6) {
-    sweep = data.sweeps.find((s) => s.name === 'p2p_ideal');
-  } else {
-    sweep = data.sweeps.find((s) => s.name === 'p2p_normal');
-  }
-  if (!sweep || sweep.points.length === 0) return null;
-  return { sweep, point: sweep.points[0] };
+  return null;
 }
 
-// sweepPointSigma extracts σ from the point's config/label/sweep name.
-// Phase 2 baseline points will encode it explicitly in their label.
-function sweepPointSigma(sweep, point) {
-  if (point && point.label) {
-    const m = /σ\s*=\s*(\d+(?:\.\d+)?)/.exec(point.label);
-    if (m) return parseFloat(m[1]);
-  }
-  if (sweep.name === 'p2p_ideal') return 0.1;
-  if (sweep.name === 'p2p_normal') return 0.5;
-  return 0.5;
-}
-
-// Picker dimensions actually present in the loaded data. Used to
-// populate K/BTT/σ button sets — buttons only appear for values
-// backed by data, so Phase 1 sees single-value pickers and Phase 2
-// sees the full cross-product.
+// availableBaselineDimensions reads the distinct K/BTT/σ values
+// present in the p2p_baseline sweep — used to populate the conditions
+// section's K/BTT/σ pickers. Each button only appears when the data
+// actually contains a point with that value.
 function availableBaselineDimensions(data) {
   const Kset = new Set();
   const BTTset = new Set();
   const sigmaSet = new Set();
-  const sweeps = ['p2p_baseline', 'p2p_normal', 'p2p_ideal'];
-  for (const name of sweeps) {
-    const sw = data.sweeps.find((s) => s.name === name);
-    if (!sw) continue;
+  const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
+  if (sw) {
     for (const pt of sw.points) {
-      const cfg = pt.config && pt.config.Base;
-      if (!cfg) continue;
-      if (typeof cfg.K === 'number' && cfg.K > 0) Kset.add(cfg.K);
-      if (typeof cfg.BTT === 'number') BTTset.add(Math.round(cfg.BTT / 1e6));
-      sigmaSet.add(sweepPointSigma(sw, pt));
+      const f = pt.fields;
+      if (!f) continue;
+      if (typeof f.K === 'number' && f.K > 0) Kset.add(f.K);
+      if (typeof f.BTT === 'number') BTTset.add(f.BTT);
+      if (typeof f.Sigma === 'number') sigmaSet.add(f.Sigma);
     }
   }
   return {
@@ -331,6 +302,20 @@ function availableBaselineDimensions(data) {
     BTTs: [...BTTset].sort((a, b) => a - b),
     Sigmas: [...sigmaSet].sort((a, b) => a - b),
   };
+}
+
+// filterSweepByK returns a shallow copy of `sweep` with Points
+// filtered to those whose Fields.K matches `k`. Points without a K
+// field (e.g. legacy single-axis sweeps) pass through. Used by the
+// collapsible trend charts so the multi-K cross-product reads as one
+// trend at the currently-selected K.
+function filterSweepByK(sweep, k) {
+  if (!sweep || !Array.isArray(sweep.points)) return sweep;
+  const filtered = sweep.points.filter((pt) => {
+    if (!pt.fields || pt.fields.K == null) return true;
+    return Math.abs(pt.fields.K - k) < 1e-6;
+  });
+  return { ...sweep, points: filtered };
 }
 
 // buildBaselinePicker renders a labeled button group for one picker
@@ -439,18 +424,22 @@ function renderConditionsSection(data) {
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap
-// (cell colors reflect the new K/BTT/σ) and the conditions chart.
+// (cell colors reflect the new K/BTT/σ), the conditions chart, and
+// the collapsibles below (their trend charts filter by selectedK, so
+// a K change has to repaint them).
 function onConditionsChange() {
   const data = window.REPORT_DATA;
-  // Re-render heatmap so cell colors track the new (K, BTT, σ).
   const oldOverview = document.getElementById('overview');
   if (oldOverview) {
     oldOverview.replaceWith(renderHeatmap(data));
   }
-  // Re-render conditions section (pickers + chart) in place.
   const oldCond = document.getElementById('conditions');
   if (oldCond) {
     oldCond.replaceWith(renderConditionsSection(data));
+  }
+  const oldCollapsibles = document.querySelector('section.collapsibles');
+  if (oldCollapsibles) {
+    oldCollapsibles.replaceWith(renderCollapsibles(data));
   }
 }
 
@@ -535,6 +524,12 @@ function renderCollapsible(sweep, data) {
 function renderCollapsibleBody(body, sweep, data, state) {
   body.innerHTML = '';
 
+  // Filter the sweep's points to the currently-selected K. Each Phase-2
+  // sweep point carries a Fields["K"] entry (3 or 4); filterSweepByK
+  // keeps only the matching subset, so the trend chart reads as one
+  // K-specific trend rather than overlapping K=3 + K=4 points.
+  const filtered = filterSweepByK(sweep, selectedK);
+
   // Top strip — description (flex:1, left) + legend (margin-left:auto,
   // right). Sharing one .sm-content-top row puts them on the same line.
   const scenario = data.scenarios.find((s) => s.name === selectedScenario) || data.scenarios[0];
@@ -545,7 +540,7 @@ function renderCollapsibleBody(body, sweep, data, state) {
     top.appendChild(desc);
   }
   if (scenario) {
-    top.appendChild(buildSweepLegend(sweep, scenario, data.protocols));
+    top.appendChild(buildSweepLegend(filtered, scenario, data.protocols));
   }
   if (top.children.length > 0) body.appendChild(top);
 
@@ -575,7 +570,7 @@ function renderCollapsibleBody(body, sweep, data, state) {
     const savedSlot = selectedSlotStart;
     selectedSlotStart = state.slotStart;
     try {
-      buildTrendLineChart(canvas, sweep, data.protocols, scenario, state.metric);
+      buildTrendLineChart(canvas, filtered, data.protocols, scenario, state.metric);
     } finally {
       selectedSlotStart = savedSlot;
     }

@@ -1,6 +1,7 @@
 package consensustest
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -9,9 +10,17 @@ import (
 // SweepPoint is one axis-point of a Sweep — a labeled BatchConfig that
 // will produce one BatchReport when the Sweep runs. Label is shown in
 // reports as the axis-tick text (e.g., "n=7", "BTT=400ms", "Sigma=0.5").
+//
+// Fields carries the numeric axis values (K, BTT, Sigma, …) for the
+// point in a machine-readable form. Picker-driven UIs (the
+// stresstest-report's K/BTT/σ pickers in particular) consume Fields to
+// drive lookups by exact value, without parsing the human-readable
+// Label. Keys are uppercase per-axis names: "K", "BTT" (ms), "Sigma",
+// "Loss", "BadLinkProb", "SlowOps" — whichever the point varies.
 type SweepPoint struct {
 	Label  string
 	Config BatchConfig
+	Fields map[string]float64
 }
 
 // Sweep is an ordered series of SweepPoints sharing a theme. Built once,
@@ -78,45 +87,50 @@ func (i Iterations) asBatchIterations() (int, map[string]int) {
 	return i.Unstable, map[string]int{"Baseline": i.Baseline}
 }
 
+// baselineKValues, baselineBTTValues, baselineSigmaValues — the axes
+// that p2p_baseline sweeps as a K × BTT × σ cross-product (2 × 5 × 4 =
+// 40 points). Other sweeps cross with baselineKValues only and vary
+// their own axis at the production-baseline (BTT=300ms, σ=0.5).
+var (
+	baselineKValues   = []int{3, 4}
+	baselineBTTValues = []time.Duration{
+		100 * time.Millisecond,
+		200 * time.Millisecond,
+		300 * time.Millisecond,
+		400 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+	baselineSigmaValues = []float64{0.1, 0.3, 0.5, 0.7}
+)
+
 // DefaultSweeps returns the curated set of comparison sweeps the stress
 // driver runs. Every sweep models per-message propagation with
 // LogNormalDelay — the production-shaped distribution — anchored at
 // Median = BTT/2 (the spec's typical-mesh P99 propagation per
 // OBFT.md §Setting). Pure JitteredDelay is no longer used.
 //
-//  1. p2p_ideal — single point at BTT=300ms with LogNormal σ=0.1
-//     (effectively constant; low-noise control baseline).
-//  2. p2p_normal — single point at BTT=300ms with LogNormal σ=0.5
-//     (production-shaped baseline; P99/P50 ≈ 3.2× — matches the
-//     mainnet floor cited in network.go's LogNormalDelay docstring).
-//  3. p2p_increasing_BTT — varies BTT ∈ {100, 200, 400, 600, 800, 1000} ms
-//     at fixed n; per-point LogNormal{Median: BTT/2, σ: 0.5} so the
-//     relative tail shape stays constant and only the configured BTT
-//     budget varies. Probes the protocol's BTT-sizing envelope.
-//  4. p2p_heavy_tail — varies LogNormal σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6,
-//     0.7} at fixed BTT=300ms, Median=BTT/2. Surfaces P99/P50-ratio
-//     effects on OBFT's hard B_k cutoff vs QBFT's round-change
-//     tolerance.
-//  5. p2p_packet_loss — varies LossyNetwork LossRate ∈ {0, 0.01, 0.05,
-//     0.10, 0.20} at fixed n, BurstFactor=5. Inner is LogNormal
-//     {Median: BTT/2, σ: 0.5} so loss is measured against the same
-//     production baseline as p2p_normal.
-//  6. p2p_correlated_delays — varies CorrelatedLinkDelay BadLinkProb ∈
-//     {0, 0.05, 0.10, 0.20} at fixed BadLinkMultiplier=3, BurstMessages
-//     =20, inner LogNormal{Median: BTT/2, σ: 0.5}. Probes per-pair
-//     sustained-slow link behaviour that pure iid LogNormal misses.
-//  7. p2p_node_slowness — varies the count of "markov-slow" operators
-//     k ∈ {0, 1, 2, 3}. Each flagged op's link is slow on the 1st
-//     message touching it and stays slow per-message with probability
-//     0.8 (independent draws) thereafter. ExtraDelay=3·BTT, inner
-//     LogNormal{Median: BTT/2, σ: 0.5}. Probes the f vs f+1 boundary
-//     under correlated peer-link degradation.
+//  1. p2p_baseline — K × BTT × σ cross-product (2 × 5 × 4 = 40 points).
+//     K ∈ {3, 4}, BTT ∈ {100..500} ms, σ ∈ {0.1, 0.3, 0.5, 0.7}.
+//     Subsumes the prior p2p_ideal (σ=0.1) and p2p_normal (σ=0.5)
+//     single-point sweeps; UI pickers select the operating point.
+//  2. p2p_increasing_BTT — BTT ∈ {100, 200, 400, 600, 800, 1000} ms
+//     crossed with K ∈ {3, 4}; per-point LogNormal{Median: BTT/2,
+//     σ: 0.5} so the relative tail shape stays constant.
+//  3. p2p_heavy_tail — σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7} crossed with
+//     K ∈ {3, 4}; BTT=300ms, Median=BTT/2.
+//  4. p2p_packet_loss — LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20} crossed
+//     with K ∈ {3, 4} at fixed BTT=300ms, BurstFactor=5, σ=0.5.
+//  5. p2p_correlated_delays — BadLinkProb ∈ {0, 0.05, 0.10, 0.20}
+//     crossed with K ∈ {3, 4}; BadLinkMultiplier=3, BurstMessages=20,
+//     inner LogNormal σ=0.5.
+//  6. p2p_node_slowness — slow op count ∈ {0, 1, 2, 3} crossed with K
+//     ∈ {3, 4}; ExtraDelay=3·BTT, PersistP=0.8, inner LogNormal σ=0.5.
 //
 // All sweeps run at the same cluster size n, share the Iterations
 // split, and run over the same Scenarios / Protocols matrix; only the
-// per-point Network / SimConfig differs. To compare across cluster
-// sizes, re-run the driver with different CLUSTER_SIZE values (each
-// run produces its own data.js).
+// per-point Network / SimConfig (and K) differ. To compare across
+// cluster sizes, re-run the driver with different CLUSTER_SIZE values
+// (each run produces its own data.js).
 //
 // Returns nil if Scenarios or Protocols is empty (defensive — caller
 // driver test should always pass non-empty lists).
@@ -125,8 +139,7 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 		return nil
 	}
 	return []Sweep{
-		p2pIdealSweep(scenarios, protocols, iters, n),
-		p2pNormalSweep(scenarios, protocols, iters, n),
+		p2pBaselineSweep(scenarios, protocols, iters, n),
 		p2pIncreasingBTTSweep(scenarios, protocols, iters, n),
 		p2pHeavyTailSweep(scenarios, protocols, iters, n),
 		p2pPacketLossSweep(scenarios, protocols, iters, n),
@@ -153,60 +166,46 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 	return LogNormalDelay{Median: btt / 2, Sigma: 0.5}
 }
 
-func p2pIdealSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
+// p2pBaselineSweep enumerates the K × BTT × σ cross-product (40 points
+// at the current axis sizes) using the production-shaped LogNormal
+// delay model {Median: BTT/2, σ: σ}. The UI's conditions section picks
+// one point at a time via the K/BTT/σ pickers; the heatmap cell colors
+// derive from whichever point is selected. Replaces the older
+// single-point p2p_ideal / p2p_normal pair.
+func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
-	btt := 300 * time.Millisecond
-	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-	// σ=0.1 makes the LogNormal effectively constant — keeps this baseline
-	// as a low-noise control so deviations in other sweeps are attributable
-	// to their axis variable, not to baseline jitter.
-	base.Network = LogNormalDelay{Median: btt / 2, Sigma: 0.1}
-	nStr := strconv.Itoa(n)
-	return Sweep{
-		Name:        "p2p_ideal",
-		Title:       "Ideal conditions",
-		Params:      []string{"n=" + nStr, "BTT=300ms", "LogNormal σ=0.1"},
-		Description: "Low-noise control baseline (LogNormal σ=0.1 ≈ constant). Every other sweep is read relative to this.",
-		AxisLabel:   "",
-		Points: []SweepPoint{
-			{
-				Label: "n=" + nStr + " BTT=300ms σ=0.1",
-				Config: BatchConfig{
-					Iterations:        fallback,
-					IterationsByGroup: byGroup,
-					Base:              base,
-					Scenarios:         scenarios,
-					Protocols:         protocols,
-				},
-			},
-		},
+	pts := make([]SweepPoint, 0, len(baselineKValues)*len(baselineBTTValues)*len(baselineSigmaValues))
+	for _, k := range baselineKValues {
+		for _, btt := range baselineBTTValues {
+			for _, sigma := range baselineSigmaValues {
+				base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+				base.K = k
+				base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
+				pts = append(pts, SweepPoint{
+					Label: fmt.Sprintf("K=%d BTT=%dms σ=%.1f", k, btt.Milliseconds(), sigma),
+					Fields: map[string]float64{
+						"K":     float64(k),
+						"BTT":   float64(btt.Milliseconds()),
+						"Sigma": sigma,
+					},
+					Config: BatchConfig{
+						Iterations:        fallback,
+						IterationsByGroup: byGroup,
+						Base:              base,
+						Scenarios:         scenarios,
+						Protocols:         protocols,
+					},
+				})
+			}
+		}
 	}
-}
-
-func p2pNormalSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
-	fallback, byGroup := iters.asBatchIterations()
-	btt := 300 * time.Millisecond
-	base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-	base.Network = productionLogNormal(btt)
-	nStr := strconv.Itoa(n)
 	return Sweep{
-		Name:        "p2p_normal",
-		Title:       "Normal conditions",
-		Params:      []string{"n=" + nStr, "BTT=300ms", "LogNormal σ=0.5"},
-		Description: "Production-shaped baseline (LogNormal σ=0.5; P99/P50 ≈ 3.2× — mainnet floor). Heatmap colors derive from this sweep.",
-		AxisLabel:   "",
-		Points: []SweepPoint{
-			{
-				Label: "n=" + nStr + " BTT=300ms σ=0.5",
-				Config: BatchConfig{
-					Iterations:        fallback,
-					IterationsByGroup: byGroup,
-					Base:              base,
-					Scenarios:         scenarios,
-					Protocols:         protocols,
-				},
-			},
-		},
+		Name:        "p2p_baseline",
+		Title:       "Baseline conditions",
+		Params:      []string{"n=" + strconv.Itoa(n)},
+		Description: "Production-shaped LogNormal baseline across (K, BTT, σ) cross-product. The conditions section's pickers select the operating point; heatmap cell colors track the same selection.",
+		AxisLabel:   "", // multi-axis; UI picks one point at a time.
+		Points:      pts,
 	}
 }
 
@@ -220,28 +219,35 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 		800 * time.Millisecond,
 		1000 * time.Millisecond,
 	}
-	pts := make([]SweepPoint, 0, len(btts))
-	for _, btt := range btts {
-		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-		// Median scales with BTT (per-point production tail shape preserved):
-		// only the configured BTT budget varies along the axis.
-		base.Network = productionLogNormal(btt)
-		pts = append(pts, SweepPoint{
-			Label: "BTT=" + btt.String(),
-			Config: BatchConfig{
-				Iterations:        fallback,
-				IterationsByGroup: byGroup,
-				Base:              base,
-				Scenarios:         scenarios,
-				Protocols:         protocols,
-			},
-		})
+	pts := make([]SweepPoint, 0, len(baselineKValues)*len(btts))
+	for _, k := range baselineKValues {
+		for _, btt := range btts {
+			base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+			base.K = k
+			// Median scales with BTT (per-point production tail shape preserved):
+			// only the configured BTT budget varies along the axis.
+			base.Network = productionLogNormal(btt)
+			pts = append(pts, SweepPoint{
+				Label: fmt.Sprintf("K=%d BTT=%s", k, btt),
+				Fields: map[string]float64{
+					"K":   float64(k),
+					"BTT": float64(btt.Milliseconds()),
+				},
+				Config: BatchConfig{
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenarios,
+					Protocols:         protocols,
+				},
+			})
+		}
 	}
 	return Sweep{
 		Name:        "p2p_increasing_BTT",
 		Title:       "Increasing BTT",
 		Params:      []string{"n=" + strconv.Itoa(n), "LogNormal σ=0.5"},
-		Description: "BTT-degradation envelope under production-shaped tail (σ=0.5). Reveals where each protocol's window math falls apart.",
+		Description: "BTT-degradation envelope under production-shaped tail (σ=0.5). Points cross K ∈ {3, 4}; the chart filters by the currently-selected K.",
 		AxisLabel:   "BTT",
 		Points:      pts,
 	}
@@ -250,30 +256,37 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
-	pts := make([]SweepPoint, 0, len(sigmas))
-	for _, sigma := range sigmas {
-		base := withClusterSize(DefaultProposerDutyConfig(300*time.Millisecond), n)
-		// Heavy-tail propagation: log-normal centered at BTT/2 (= typical
-		// P50 propagation per spec §Setting), with Sigma controlling tail
-		// fatness. P99/P50 ratio = exp(Sigma · 2.326): 1.27× / 2.01× /
-		// 2.54× / 3.20× / 4.03× / 5.09× at the six sample points.
-		base.Network = LogNormalDelay{Median: base.BTT / 2, Sigma: sigma}
-		pts = append(pts, SweepPoint{
-			Label: "Sigma=" + strconv.FormatFloat(sigma, 'f', 2, 64),
-			Config: BatchConfig{
-				Iterations:        fallback,
-				IterationsByGroup: byGroup,
-				Base:              base,
-				Scenarios:         scenarios,
-				Protocols:         protocols,
-			},
-		})
+	pts := make([]SweepPoint, 0, len(baselineKValues)*len(sigmas))
+	for _, k := range baselineKValues {
+		for _, sigma := range sigmas {
+			base := withClusterSize(DefaultProposerDutyConfig(300*time.Millisecond), n)
+			base.K = k
+			// Heavy-tail propagation: log-normal centered at BTT/2 (= typical
+			// P50 propagation per spec §Setting), with Sigma controlling tail
+			// fatness. P99/P50 ratio = exp(Sigma · 2.326): 1.27× / 2.01× /
+			// 2.54× / 3.20× / 4.03× / 5.09× at the six sample points.
+			base.Network = LogNormalDelay{Median: base.BTT / 2, Sigma: sigma}
+			pts = append(pts, SweepPoint{
+				Label: fmt.Sprintf("K=%d Sigma=%.2f", k, sigma),
+				Fields: map[string]float64{
+					"K":     float64(k),
+					"Sigma": sigma,
+				},
+				Config: BatchConfig{
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenarios,
+					Protocols:         protocols,
+				},
+			})
+		}
 	}
 	return Sweep{
 		Name:        "p2p_heavy_tail",
 		Title:       "Heavy-tail propagation",
 		Params:      []string{"LogNormalDelay", "n=" + strconv.Itoa(n), "BTT=300ms", "Median=BTT/2"},
-		Description: "Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance.",
+		Description: "Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance. Points cross K ∈ {3, 4}; the chart filters by the currently-selected K.",
 		AxisLabel:   "LogNormal sigma",
 		Points:      pts,
 	}
@@ -282,63 +295,70 @@ func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iters Iterati
 func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	rates := []float64{0, 0.01, 0.05, 0.10, 0.20}
-	pts := make([]SweepPoint, 0, len(rates))
-	for _, rate := range rates {
-		rate := rate
-		// Each point gets its OWN scenario list with the loss model
-		// injected via Apply — fresh LossyNetwork per sim is required
-		// (the Markov state is stateful per-instance; sharing across
-		// sims would cross-contaminate).
-		scenariosWithLoss := make([]Scenario, len(scenarios))
-		for i, s := range scenarios {
-			inner := s
-			scenariosWithLoss[i] = Scenario{
-				Name:  s.Name,
-				Title: s.Title,
-				Group: s.Group,
-				Modes: s.Modes,
-				Apply: func(cfg *SimConfig) {
-					if inner.Apply != nil {
-						inner.Apply(cfg)
-					}
-					if rate > 0 {
-						// Compose: wrap whatever Network the inner scenario
-						// configured (e.g. PerReceiverDelay for MeshFlakiness)
-						// so loss adds ON TOP of the inner model. cfg.Network
-						// may be nil if the inner scenario didn't set it; use
-						// ConstantDelay{D: BTT} as the equivalent of Validate's
-						// default.
-						base := cfg.Network
-						if base == nil {
-							base = ConstantDelay{D: cfg.BTT}
+	pts := make([]SweepPoint, 0, len(baselineKValues)*len(rates))
+	for _, k := range baselineKValues {
+		for _, rate := range rates {
+			rate := rate
+			// Each point gets its OWN scenario list with the loss model
+			// injected via Apply — fresh LossyNetwork per sim is required
+			// (the Markov state is stateful per-instance; sharing across
+			// sims would cross-contaminate).
+			scenariosWithLoss := make([]Scenario, len(scenarios))
+			for i, s := range scenarios {
+				inner := s
+				scenariosWithLoss[i] = Scenario{
+					Name:  s.Name,
+					Title: s.Title,
+					Group: s.Group,
+					Modes: s.Modes,
+					Apply: func(cfg *SimConfig) {
+						if inner.Apply != nil {
+							inner.Apply(cfg)
 						}
-						cfg.Network = NewLossyNetwork(base, rate, 5)
-					}
-				},
-				Expect: s.Expect,
-				Note:   s.Note,
+						if rate > 0 {
+							// Compose: wrap whatever Network the inner scenario
+							// configured (e.g. PerReceiverDelay for MeshFlakiness)
+							// so loss adds ON TOP of the inner model. cfg.Network
+							// may be nil if the inner scenario didn't set it; use
+							// ConstantDelay{D: BTT} as the equivalent of Validate's
+							// default.
+							base := cfg.Network
+							if base == nil {
+								base = ConstantDelay{D: cfg.BTT}
+							}
+							cfg.Network = NewLossyNetwork(base, rate, 5)
+						}
+					},
+					Expect: s.Expect,
+					Note:   s.Note,
+				}
 			}
+			btt := 300 * time.Millisecond
+			base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+			base.K = k
+			// Production-shaped baseline; loss adds on top.
+			base.Network = productionLogNormal(btt)
+			pts = append(pts, SweepPoint{
+				Label: fmt.Sprintf("K=%d loss=%.2f", k, rate),
+				Fields: map[string]float64{
+					"K":    float64(k),
+					"Loss": rate,
+				},
+				Config: BatchConfig{
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenariosWithLoss,
+					Protocols:         protocols,
+				},
+			})
 		}
-		btt := 300 * time.Millisecond
-		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-		// Production-shaped baseline (matches p2p_normal); loss adds on top.
-		base.Network = productionLogNormal(btt)
-		pts = append(pts, SweepPoint{
-			Label: "loss=" + strconv.FormatFloat(rate, 'f', 2, 64),
-			Config: BatchConfig{
-				Iterations:        fallback,
-				IterationsByGroup: byGroup,
-				Base:              base,
-				Scenarios:         scenariosWithLoss,
-				Protocols:         protocols,
-			},
-		})
 	}
 	return Sweep{
 		Name:        "p2p_packet_loss",
 		Title:       "Stochastic loss",
 		Params:      []string{"LossyNetwork", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "BurstFactor=5"},
-		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism. Inner delay is production-shaped (σ=0.5).",
+		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism. Inner delay is production-shaped (σ=0.5). Points cross K ∈ {3, 4}; the chart filters by the currently-selected K.",
 		AxisLabel:   "Loss rate",
 		Points:      pts,
 	}
@@ -352,54 +372,61 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 	// mid-range: BadLinkMultiplier=3 (bad link delivers in 3× baseline
 	// delay), BurstMessages=20 (~mid of the 10–50 dwell-time range).
 	probs := []float64{0, 0.05, 0.10, 0.20}
-	pts := make([]SweepPoint, 0, len(probs))
-	for _, prob := range probs {
-		prob := prob
-		// Per-sim CorrelatedLinkDelay (stateful per-pair Markov chains —
-		// must construct fresh per sim, just like LossyNetwork).
-		scenariosWithCorr := make([]Scenario, len(scenarios))
-		for i, s := range scenarios {
-			inner := s
-			scenariosWithCorr[i] = Scenario{
-				Name:  s.Name,
-				Title: s.Title,
-				Group: s.Group,
-				Modes: s.Modes,
-				Apply: func(cfg *SimConfig) {
-					if inner.Apply != nil {
-						inner.Apply(cfg)
-					}
-					if prob > 0 {
-						base := cfg.Network
-						if base == nil {
-							base = ConstantDelay{D: cfg.BTT}
+	pts := make([]SweepPoint, 0, len(baselineKValues)*len(probs))
+	for _, k := range baselineKValues {
+		for _, prob := range probs {
+			prob := prob
+			// Per-sim CorrelatedLinkDelay (stateful per-pair Markov chains —
+			// must construct fresh per sim, just like LossyNetwork).
+			scenariosWithCorr := make([]Scenario, len(scenarios))
+			for i, s := range scenarios {
+				inner := s
+				scenariosWithCorr[i] = Scenario{
+					Name:  s.Name,
+					Title: s.Title,
+					Group: s.Group,
+					Modes: s.Modes,
+					Apply: func(cfg *SimConfig) {
+						if inner.Apply != nil {
+							inner.Apply(cfg)
 						}
-						cfg.Network = NewCorrelatedLinkDelay(base, prob, 3.0, 20)
-					}
-				},
-				Expect: s.Expect,
-				Note:   s.Note,
+						if prob > 0 {
+							base := cfg.Network
+							if base == nil {
+								base = ConstantDelay{D: cfg.BTT}
+							}
+							cfg.Network = NewCorrelatedLinkDelay(base, prob, 3.0, 20)
+						}
+					},
+					Expect: s.Expect,
+					Note:   s.Note,
+				}
 			}
+			btt := 300 * time.Millisecond
+			base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+			base.K = k
+			base.Network = productionLogNormal(btt)
+			pts = append(pts, SweepPoint{
+				Label: fmt.Sprintf("K=%d badProb=%.2f", k, prob),
+				Fields: map[string]float64{
+					"K":           float64(k),
+					"BadLinkProb": prob,
+				},
+				Config: BatchConfig{
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenariosWithCorr,
+					Protocols:         protocols,
+				},
+			})
 		}
-		btt := 300 * time.Millisecond
-		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-		base.Network = productionLogNormal(btt)
-		pts = append(pts, SweepPoint{
-			Label: "badProb=" + strconv.FormatFloat(prob, 'f', 2, 64),
-			Config: BatchConfig{
-				Iterations:        fallback,
-				IterationsByGroup: byGroup,
-				Base:              base,
-				Scenarios:         scenariosWithCorr,
-				Protocols:         protocols,
-			},
-		})
 	}
 	return Sweep{
 		Name:        "p2p_correlated_delays",
 		Title:       "Correlated link delays",
 		Params:      []string{"CorrelatedLinkDelay", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "mult=3.0", "burst=20"},
-		Description: "Per-pair sustained-slow links over a production-shaped baseline. Captures the correlation iid LogNormal misses.",
+		Description: "Per-pair sustained-slow links over a production-shaped baseline. Points cross K ∈ {3, 4}; the chart filters by the currently-selected K.",
 		AxisLabel:   "BadLinkProb",
 		Points:      pts,
 	}
@@ -422,60 +449,67 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 	fallback, byGroup := iters.asBatchIterations()
 	const persistP = 0.8
 	counts := []int{0, 1, 2, 3}
-	pts := make([]SweepPoint, 0, len(counts))
-	for _, k := range counts {
-		k := k
-		// Each point gets its OWN scenario list with a fresh
-		// MarkovianSlownessDelay constructed per Apply call — the
-		// per-op state map must NOT be shared across iterations.
-		scenariosWithSlowness := make([]Scenario, len(scenarios))
-		for i, s := range scenarios {
-			inner := s
-			scenariosWithSlowness[i] = Scenario{
-				Name:  s.Name,
-				Title: s.Title,
-				Group: s.Group,
-				Modes: s.Modes,
-				Apply: func(cfg *SimConfig) {
-					if inner.Apply != nil {
-						inner.Apply(cfg)
-					}
-					if k <= 0 {
-						return
-					}
-					slowOps := make([]OperatorID, 0, k)
-					for j := 0; j < k; j++ {
-						slowOps = append(slowOps, OperatorID(j+2))
-					}
-					base := cfg.Network
-					if base == nil {
-						base = ConstantDelay{D: cfg.BTT}
-					}
-					cfg.Network = NewMarkovianSlowness(base, slowOps, 3*cfg.BTT, persistP)
-				},
-				Expect: s.Expect,
-				Note:   s.Note,
+	pts := make([]SweepPoint, 0, len(baselineKValues)*len(counts))
+	for _, kLayers := range baselineKValues {
+		for _, slowCount := range counts {
+			slowCount := slowCount
+			// Each point gets its OWN scenario list with a fresh
+			// MarkovianSlownessDelay constructed per Apply call — the
+			// per-op state map must NOT be shared across iterations.
+			scenariosWithSlowness := make([]Scenario, len(scenarios))
+			for i, s := range scenarios {
+				inner := s
+				scenariosWithSlowness[i] = Scenario{
+					Name:  s.Name,
+					Title: s.Title,
+					Group: s.Group,
+					Modes: s.Modes,
+					Apply: func(cfg *SimConfig) {
+						if inner.Apply != nil {
+							inner.Apply(cfg)
+						}
+						if slowCount <= 0 {
+							return
+						}
+						slowOps := make([]OperatorID, 0, slowCount)
+						for j := 0; j < slowCount; j++ {
+							slowOps = append(slowOps, OperatorID(j+2))
+						}
+						base := cfg.Network
+						if base == nil {
+							base = ConstantDelay{D: cfg.BTT}
+						}
+						cfg.Network = NewMarkovianSlowness(base, slowOps, 3*cfg.BTT, persistP)
+					},
+					Expect: s.Expect,
+					Note:   s.Note,
+				}
 			}
+			btt := 300 * time.Millisecond
+			base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+			base.K = kLayers
+			base.Network = productionLogNormal(btt)
+			pts = append(pts, SweepPoint{
+				Label: fmt.Sprintf("K=%d slowOps=%d", kLayers, slowCount),
+				Fields: map[string]float64{
+					"K":       float64(kLayers),
+					"SlowOps": float64(slowCount),
+				},
+				Config: BatchConfig{
+					Iterations:        fallback,
+					IterationsByGroup: byGroup,
+					Base:              base,
+					Scenarios:         scenariosWithSlowness,
+					Protocols:         protocols,
+				},
+			})
 		}
-		btt := 300 * time.Millisecond
-		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-		base.Network = productionLogNormal(btt)
-		pts = append(pts, SweepPoint{
-			Label: "slowOps=" + strconv.Itoa(k),
-			Config: BatchConfig{
-				Iterations:        fallback,
-				IterationsByGroup: byGroup,
-				Base:              base,
-				Scenarios:         scenariosWithSlowness,
-				Protocols:         protocols,
-			},
-		})
 	}
 	return Sweep{
 		Name:        "p2p_node_slowness",
 		Title:       "Correlated node slowness",
 		Params:      []string{"MarkovianSlownessDelay", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "ExtraDelay=3·BTT", "PersistP=0.8"},
-		Description: "Per-op Markov slowness over a production-shaped baseline: 1st message touching a slow op is 100% slow, each subsequent has 80% chance of being slow. Models correlated peer-link degradation (latency / GC / congestion stretches).",
+		Description: "Per-op Markov slowness over a production-shaped baseline: 1st message touching a slow op is 100% slow, each subsequent has 80% chance of being slow. Models correlated peer-link degradation. Points cross K ∈ {3, 4}; chart filters by selected K.",
 		AxisLabel:   "Slow op count",
 		Points:      pts,
 	}

@@ -59,10 +59,11 @@ func TestRunSweep_Smoke(t *testing.T) {
 	}
 }
 
-// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the seven
-// curated sweeps with the documented names and at least one point each.
-// Doesn't actually RUN the sweeps (would take minutes); just verifies
-// the metadata + point construction.
+// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the six
+// curated sweeps with the documented names and the expected point
+// counts after the K × axis cross-product. Doesn't actually RUN the
+// sweeps (would take minutes); just verifies the metadata + point
+// construction.
 func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	scenarios := []ct.Scenario{}
 	for _, s := range ct.Catalog {
@@ -77,22 +78,29 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4)
 
-	require.Len(t, sweeps, 7, "seven curated sweeps per plan")
+	require.Len(t, sweeps, 6, "six curated sweeps per plan")
 
+	// Phase 2 point counts: each non-baseline sweep crosses K ∈ {3, 4}
+	// with its existing axis, so previous counts double.
 	expected := map[string]int{
-		"p2p_ideal":             1, // single reference point at σ=0.1 (control)
-		"p2p_normal":            1, // single reference point at σ=0.5 (production baseline)
-		"p2p_increasing_BTT":    6, // BTT ∈ {100, 200, 400, 600, 800, 1000} ms
-		"p2p_heavy_tail":        6, // Sigma ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
-		"p2p_packet_loss":       5, // LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20}
-		"p2p_correlated_delays": 4, // BadLinkProb ∈ {0, 0.05, 0.10, 0.20}
-		"p2p_node_slowness":     4, // slow op count ∈ {0, 1, 2, 3}
+		"p2p_baseline":          2 * 5 * 4, // K × BTT × σ
+		"p2p_increasing_BTT":    2 * 6,     // K × BTT
+		"p2p_heavy_tail":        2 * 6,     // K × σ
+		"p2p_packet_loss":       2 * 5,     // K × LossRate
+		"p2p_correlated_delays": 2 * 4,     // K × BadLinkProb
+		"p2p_node_slowness":     2 * 4,     // K × slow-op count
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]
 		require.Truef(t, ok, "unexpected sweep name %q", sw.Name)
 		require.Equalf(t, wantPoints, len(sw.Points), "sweep %s point count", sw.Name)
 		require.NotEmpty(t, sw.Description, "sweep %s description", sw.Name)
+		// Every point carries a Fields["K"] entry (3 or 4); the UI uses
+		// this to filter trend charts by selected K.
+		for _, pt := range sw.Points {
+			require.NotNil(t, pt.Fields, "sweep %s point %q missing Fields", sw.Name, pt.Label)
+			require.Containsf(t, pt.Fields, "K", "sweep %s point %q missing K field", sw.Name, pt.Label)
+		}
 		delete(expected, sw.Name)
 	}
 	require.Empty(t, expected, "missing sweep names: %v", expected)

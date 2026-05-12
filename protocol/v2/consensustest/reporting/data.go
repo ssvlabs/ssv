@@ -117,8 +117,12 @@ type sweepPayload struct {
 }
 
 type pointPayload struct {
-	Label string        `json:"label"`
-	Cells []cellPayload `json:"cells"`
+	Label string `json:"label"`
+	// Fields exposes the numeric axis values for this point (K, BTT in ms,
+	// Sigma, …) so the UI can look up points by exact value without
+	// parsing Label. Mirrors SweepPoint.Fields verbatim.
+	Fields map[string]float64 `json:"fields,omitempty"`
+	Cells  []cellPayload      `json:"cells"`
 }
 
 type cellPayload struct {
@@ -171,7 +175,10 @@ func buildPayload(c Comparison) reportPayload {
 			AxisLabel:   sw.Sweep.AxisLabel,
 		}
 		for i, rep := range sw.Reports {
-			pt := pointPayload{Label: sw.Sweep.Points[i].Label}
+			pt := pointPayload{
+				Label:  sw.Sweep.Points[i].Label,
+				Fields: sw.Sweep.Points[i].Fields,
+			}
 			for _, cell := range rep.Cells {
 				pt.Cells = append(pt.Cells, buildCell(cell))
 			}
