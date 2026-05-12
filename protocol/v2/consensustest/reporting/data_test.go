@@ -237,3 +237,69 @@ func TestApplicable_ZeroIterationsIsFalse(t *testing.T) {
 	require.False(t, reporting.Applicable(ct.BatchCell{Iterations: 0}))
 	require.True(t, reporting.Applicable(ct.BatchCell{Iterations: 1}))
 }
+
+// TestWriteReportData_MergesAcrossRuns — WriteReportData composes points
+// from multiple runs at different (n, K) operating points into one
+// data.js instead of overwriting. Run 1 contributes (n=4, K=4); run 2
+// contributes (n=4, K=2); run 3 re-runs (n=4, K=4) and the freshest
+// data replaces the original-K=4 point.
+func TestWriteReportData_MergesAcrossRuns(t *testing.T) {
+	scenarios := smallScenarios(t)
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	dir := t.TempDir()
+
+	build := func(n, k int) reporting.Comparison {
+		base := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+		base.N = n
+		base.Operators = ct.MakeOperators(n)
+		base.K = k
+		return reporting.Comparison{
+			Title:              "merge test",
+			BaselineIterations: 1,
+			UnstableIterations: 1,
+			Sweeps: []ct.SweepResult{runOneSweep(t, "p2p_baseline", "", "", []ct.SweepPoint{{
+				Label:  "n=" + itoa(n) + " K=" + itoa(k),
+				Fields: map[string]float64{"N": float64(n), "K": float64(k), "BTT": 300, "Sigma": 0.5},
+				Config: ct.BatchConfig{
+					Iterations: 1, SeedStart: 1,
+					Base:      base,
+					Scenarios: scenarios, Protocols: protos,
+				},
+			}})},
+		}
+	}
+
+	// Run 1: (n=4, K=4)
+	require.NoError(t, reporting.WriteReportData(build(4, 4), dir))
+	pl := parseDataJS(t, dir)
+	pts := pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
+	require.Len(t, pts, 1, "after run 1, one point")
+	require.Equal(t, "n=4 K=4", pts[0].(map[string]any)["label"])
+
+	// Run 2: (n=4, K=2) — appended, prior point preserved.
+	require.NoError(t, reporting.WriteReportData(build(4, 2), dir))
+	pl = parseDataJS(t, dir)
+	pts = pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
+	require.Len(t, pts, 2, "after run 2, two points (one per (n, K))")
+	labels := []string{
+		pts[0].(map[string]any)["label"].(string),
+		pts[1].(map[string]any)["label"].(string),
+	}
+	require.Contains(t, labels, "n=4 K=4")
+	require.Contains(t, labels, "n=4 K=2")
+
+	// Run 3: (n=4, K=4) — replaces the original K=4 slice, point count unchanged.
+	require.NoError(t, reporting.WriteReportData(build(4, 4), dir))
+	pl = parseDataJS(t, dir)
+	pts = pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
+	require.Len(t, pts, 2, "after re-run, point count still 2")
+}
+
+// itoa is a tiny local helper so we don't pull strconv into the test
+// file just for label assembly above.
+func itoa(n int) string {
+	if n < 10 {
+		return string(rune('0' + n))
+	}
+	return string(rune('0'+n/10)) + string(rune('0'+n%10))
+}

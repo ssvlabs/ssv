@@ -68,11 +68,24 @@ func TestStress(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	clusterSize := 4
-	if v := os.Getenv("CLUSTER_SIZE"); v != "" {
+	if v := os.Getenv("CLUSTER_SIZE_N"); v != "" {
 		n, err := strconv.Atoi(v)
-		require.NoErrorf(t, err, "invalid CLUSTER_SIZE=%q", v)
-		require.Greater(t, n, 0, "CLUSTER_SIZE must be > 0")
+		require.NoErrorf(t, err, "invalid CLUSTER_SIZE_N=%q", v)
+		require.Greater(t, n, 0, "CLUSTER_SIZE_N must be > 0")
 		clusterSize = n
+	}
+
+	// LAYERS_K defaults to DefaultK(N) = N (each operator leads exactly
+	// one layer — SSV production convention). Each `make stresstest` run
+	// produces data for a single (n, k) operating point; reporting merges
+	// reruns at different (n, k) into the same data.js so the UI can pick
+	// across the matrix.
+	layersK := ct.DefaultK(clusterSize)
+	if v := os.Getenv("LAYERS_K"); v != "" {
+		k, err := strconv.Atoi(v)
+		require.NoErrorf(t, err, "invalid LAYERS_K=%q", v)
+		require.Greater(t, k, 0, "LAYERS_K must be > 0")
+		layersK = k
 	}
 
 	// Defaults: 100 baseline / 10 unstable. ITERATIONS (legacy) overrides
@@ -115,7 +128,7 @@ func TestStress(t *testing.T) {
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 	}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, clusterSize)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, clusterSize, layersK)
 	require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps — check inputs")
 
 	protocolNames := make([]string, len(protocols))

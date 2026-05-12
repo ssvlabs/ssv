@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -59,6 +60,20 @@ func Applicable(c ct.BatchCell) bool { return c.Iterations > 0 }
 // assignment consumed by the static UI in <dir>. The companion files
 // (index.html, app.js, styles.css) are checked into git at
 // `stresstest-report/` and not touched by this function.
+//
+// If <dir>/data.js already exists with a parseable payload, the new
+// run's points are MERGED into the existing data by Fields-tuple
+// rather than overwriting. This lets multiple `make stresstest` runs
+// at different (n, K) operating points compose into one report: each
+// run contributes its (n, K) slice and the UI's pickers select across
+// the matrix. Sweeps are matched by Name; within a sweep, points are
+// matched by their Fields map (so a (n=4, K=4) point from run 1 and a
+// (n=4, K=2) point from run 2 coexist; a re-run at (n=4, K=4)
+// replaces its slice with the freshest data).
+//
+// If the existing data.js is unparseable or has incompatible shape
+// (e.g. handwritten / from a much older format), the new run
+// overwrites it cleanly.
 func WriteReportData(c Comparison, dir string) error {
 	if len(c.Sweeps) == 0 {
 		return fmt.Errorf("reporting: WriteReportData: no sweeps")
@@ -73,6 +88,13 @@ func WriteReportData(c Comparison, dir string) error {
 	}
 
 	payload := buildPayload(c)
+	path := filepath.Join(dir, "data.js")
+	// Merge with existing data.js if any — unparseable existing data is
+	// treated as "no prior data" (overwritten cleanly).
+	if existing, err := readReportData(path); err == nil && existing != nil {
+		payload = mergePayloads(*existing, payload)
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("reporting: marshal: %w", err)
@@ -80,11 +102,139 @@ func WriteReportData(c Comparison, dir string) error {
 	out := append([]byte("window.REPORT_DATA = "), body...)
 	out = append(out, ';', '\n')
 
-	path := filepath.Join(dir, "data.js")
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return fmt.Errorf("reporting: write %s: %w", path, err)
 	}
 	return nil
+}
+
+// readReportData parses an existing data.js (the `window.REPORT_DATA =
+// {...};` shape WriteReportData emits). Returns (nil, nil) when the
+// file is absent or unparseable — the caller treats those cases as
+// "no prior data" and overwrites cleanly.
+func readReportData(path string) (*reportPayload, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	// Strip the JS wrapper: leading `window.REPORT_DATA = ` and trailing `;`
+	// plus optional whitespace / newline.
+	const prefix = "window.REPORT_DATA = "
+	s := string(raw)
+	i := strings.Index(s, prefix)
+	if i < 0 {
+		return nil, nil
+	}
+	body := strings.TrimSpace(s[i+len(prefix):])
+	body = strings.TrimSuffix(body, ";")
+	body = strings.TrimSpace(body)
+	var p reportPayload
+	if err := json.Unmarshal([]byte(body), &p); err != nil {
+		return nil, nil // treat as "no prior data"
+	}
+	return &p, nil
+}
+
+// mergePayloads composes `prev` and `next` into a single payload. Within
+// each sweep, points are merged by Fields-tuple (e.g. {N=4, K=4, BTT=300,
+// σ=0.5}); the freshest occurrence wins on duplicate, and new
+// (n, K)-or-other-axis combinations are appended. New sweeps not present
+// in `prev` are appended; sweeps unique to `prev` are kept as-is.
+// Scenarios and Protocols carry forward from `next` (the freshest
+// catalog is canonical); top-level metadata (Title, Description,
+// Iterations counts, Wallclock) is also taken from `next` since it
+// describes the most recent run that produced merged output.
+func mergePayloads(prev, next reportPayload) reportPayload {
+	out := reportPayload{
+		Title:              next.Title,
+		Description:        next.Description,
+		BaselineIterations: next.BaselineIterations,
+		UnstableIterations: next.UnstableIterations,
+		Wallclock:          next.Wallclock,
+		Scenarios:          next.Scenarios,
+		Protocols:          next.Protocols,
+	}
+	// Build sweep-by-name map from prev, then walk next sweeps: matching
+	// names get their points merged; new sweeps are appended.
+	prevByName := make(map[string]int, len(prev.Sweeps))
+	for i, sw := range prev.Sweeps {
+		prevByName[sw.Name] = i
+	}
+	usedPrev := make(map[string]bool, len(prev.Sweeps))
+	for _, nsw := range next.Sweeps {
+		if pi, ok := prevByName[nsw.Name]; ok {
+			usedPrev[nsw.Name] = true
+			merged := mergeSweepPoints(prev.Sweeps[pi], nsw)
+			out.Sweeps = append(out.Sweeps, merged)
+		} else {
+			out.Sweeps = append(out.Sweeps, nsw)
+		}
+	}
+	// Append sweeps that existed in prev but not in next (e.g. an old
+	// sweep was removed from the catalog — preserve historical data).
+	for _, psw := range prev.Sweeps {
+		if !usedPrev[psw.Name] {
+			out.Sweeps = append(out.Sweeps, psw)
+		}
+	}
+	return out
+}
+
+// mergeSweepPoints merges next's points into prev's points by
+// Fields-tuple. next-side points replace prev-side points with the same
+// Fields (fresh data wins); new Fields combinations are appended.
+// next's sweep metadata (Title, Description, etc.) takes precedence.
+func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
+	out := sweepPayload{
+		Name:        next.Name,
+		Title:       next.Title,
+		Params:      next.Params,
+		Description: next.Description,
+		AxisLabel:   next.AxisLabel,
+	}
+	// Index next points by Fields-tuple so we can find replaced ones.
+	nextKeys := make(map[string]int, len(next.Points))
+	for i, pt := range next.Points {
+		nextKeys[fieldsKey(pt.Fields)] = i
+	}
+	usedNext := make(map[int]bool, len(next.Points))
+	for _, ppt := range prev.Points {
+		key := fieldsKey(ppt.Fields)
+		if ni, ok := nextKeys[key]; ok {
+			out.Points = append(out.Points, next.Points[ni])
+			usedNext[ni] = true
+		} else {
+			out.Points = append(out.Points, ppt)
+		}
+	}
+	for i, npt := range next.Points {
+		if !usedNext[i] {
+			out.Points = append(out.Points, npt)
+		}
+	}
+	return out
+}
+
+// fieldsKey returns a stable string identity for a point's Fields map.
+// Keys are sorted lexicographically; values formatted with full
+// precision to avoid spurious collisions on floats like Sigma=0.5.
+func fieldsKey(fields map[string]float64) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		fmt.Fprintf(&b, "%s=%g", k, fields[k])
+	}
+	return b.String()
 }
 
 // ---- payload DTOs ----------------------------------------------------

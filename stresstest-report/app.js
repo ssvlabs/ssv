@@ -60,12 +60,13 @@ let selectedSlotStart = 0;
 // "Normal operations (all-honest healthy path)".
 let selectedScenario = 'Healthy';
 
-// Initial values for the conditions chart's K/BTT/σ pickers, snapped at
+// Initial values for the conditions chart's N/K/BTT/σ pickers, snapped at
 // page load to the closest values present in p2p_baseline (see
-// initBaselineSelections). Phase 2 baseline sweeps K ∈ {3, 4}, BTT ∈
-// {100..500ms}, σ ∈ {0.1, 0.3, 0.5, 0.7}; legacy data.js with only
-// p2p_normal / p2p_ideal collapses to a single available value per
-// axis.
+// initBaselineSelections). Each `make stresstest` run contributes ONE
+// (n, K) slice; reruns at different (n, K) merge into the same data.js
+// so the pickers may surface multiple values for both axes. Greyed-out
+// buttons indicate (n, K) combinations the user hasn't generated yet.
+let selectedN = 4;
 let selectedK = 4;
 let selectedBTT = 300;
 let selectedSigma = 0.5;
@@ -164,15 +165,14 @@ function main() {
   //      Stochastic loss, Correlated link delays. Each has its own
   //      local pickers (slot_start + y-axis) just above the chart.
   mainEl.appendChild(renderConditionsSection(data));
-  const overview = renderHeatmap(data);
-  if (overview) mainEl.appendChild(overview);
+  mainEl.appendChild(renderHeatmap(data));
   mainEl.appendChild(renderCollapsibles(data));
   root.appendChild(mainEl);
 }
 
-// initBaselineSelections snaps selectedK/selectedBTT/selectedSigma to
-// values actually present in p2p_baseline, so the conditions chart can
-// render on first load even when data was generated against a slightly
+// initBaselineSelections snaps selectedN/selectedK/selectedBTT/selectedSigma
+// to values actually present in p2p_baseline, so the conditions chart
+// can render on first load even when data was generated against a
 // different cross-product than the picker defaults expect.
 function initBaselineSelections(data) {
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
@@ -187,6 +187,7 @@ function initBaselineSelections(data) {
     if (found !== undefined) return found;
     return set[Math.floor(set.length / 2)];
   };
+  selectedN = pickClosest(dims.Ns, selectedN);
   selectedK = pickClosest(dims.Ks, selectedK);
   selectedBTT = pickClosest(dims.BTTs, selectedBTT);
   selectedSigma = pickClosest(dims.Sigmas, selectedSigma);
@@ -266,7 +267,7 @@ function onSlotStartChange(newSlot) {
 // findBaselineSweepPoint.
 
 // findBaselineSweepPoint returns {sweep, point} matching the current
-// (K, BTT, σ) selection within p2p_baseline, or null if no point
+// (N, K, BTT, σ) selection within p2p_baseline, or null if no point
 // matches. Reads sweep_point.fields (set by sweep.go) — see
 // reporting.pointPayload.Fields for the schema.
 function findBaselineSweepPoint(data) {
@@ -277,6 +278,7 @@ function findBaselineSweepPoint(data) {
     const f = pt.fields;
     if (!f) continue;
     if (
+      f.N === selectedN &&
       f.K === selectedK &&
       f.BTT === selectedBTT &&
       Math.abs(f.Sigma - selectedSigma) < 1e-6
@@ -287,11 +289,14 @@ function findBaselineSweepPoint(data) {
   return null;
 }
 
-// availableBaselineDimensions reads the distinct K/BTT/σ values
+// availableBaselineDimensions reads the distinct N/K/BTT/σ values
 // present in the p2p_baseline sweep — used to populate the conditions
-// section's K/BTT/σ pickers. Each button only appears when the data
-// actually contains a point with that value.
+// section's pickers. Each picker button is rendered for every value
+// the merged data.js contains (across all `make stresstest` runs);
+// the disabledFor callback then greys out values whose specific combo
+// with the current other selections has no data.
 function availableBaselineDimensions(data) {
+  const Nset = new Set();
   const Kset = new Set();
   const BTTset = new Set();
   const sigmaSet = new Set();
@@ -300,65 +305,76 @@ function availableBaselineDimensions(data) {
     for (const pt of sw.points) {
       const f = pt.fields;
       if (!f) continue;
+      if (typeof f.N === 'number' && f.N > 0) Nset.add(f.N);
       if (typeof f.K === 'number' && f.K > 0) Kset.add(f.K);
       if (typeof f.BTT === 'number') BTTset.add(f.BTT);
       if (typeof f.Sigma === 'number') sigmaSet.add(f.Sigma);
     }
   }
   return {
+    Ns: [...Nset].sort((a, b) => a - b),
     Ks: [...Kset].sort((a, b) => a - b),
     BTTs: [...BTTset].sort((a, b) => a - b),
     Sigmas: [...sigmaSet].sort((a, b) => a - b),
   };
 }
 
-// clusterSizeFromData reads the cluster size (n) embedded in any
-// sweep's Params (each sweep builder includes "n=N" as a fixed-config
-// badge). Falls back to 4 — the default CLUSTER_SIZE — when no sweep
-// exposes the value (defensive; should always be present in
-// well-formed data).
-function clusterSizeFromData(data) {
-  if (!data || !Array.isArray(data.sweeps)) return 4;
-  for (const sw of data.sweeps) {
-    if (!sw.params) continue;
-    for (const p of sw.params) {
-      const m = /^n\s*=\s*(\d+)$/.exec(p);
-      if (m) return parseInt(m[1], 10);
-    }
-  }
-  return 4;
+// baselinePointExists reports whether p2p_baseline has a point matching
+// the exact (n, k, btt, σ) tuple. Used by the pickers to grey out
+// buttons whose specific combination wasn't produced by any
+// `make stresstest` run.
+function baselinePointExists(data, n, k, btt, sigma) {
+  const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
+  if (!sw) return false;
+  return sw.points.some((pt) => {
+    const f = pt.fields;
+    if (!f) return false;
+    return (
+      f.N === n &&
+      f.K === k &&
+      f.BTT === btt &&
+      Math.abs(f.Sigma - sigma) < 1e-6
+    );
+  });
 }
 
-// filterSweepByK returns a shallow copy of `sweep` with Points
-// filtered to those whose Fields.K matches `k`. Points without a K
-// field (e.g. legacy single-axis sweeps) pass through. Used by the
-// collapsible trend charts so the multi-K cross-product reads as one
-// trend at the currently-selected K.
-function filterSweepByK(sweep, k) {
+// filterSweepByNK returns a shallow copy of `sweep` with Points
+// filtered to those whose Fields.N and Fields.K match the currently-
+// selected (n, k) slice. Points without an N or K field pass through
+// (defensive for legacy single-axis sweeps). Used by the collapsible
+// trend charts so multi-(n, K) merged data reads as one trend per
+// (n, K) selection.
+function filterSweepByNK(sweep, n, k) {
   if (!sweep || !Array.isArray(sweep.points)) return sweep;
   const filtered = sweep.points.filter((pt) => {
-    if (!pt.fields || pt.fields.K == null) return true;
-    return Math.abs(pt.fields.K - k) < 1e-6;
+    if (!pt.fields) return true;
+    if (pt.fields.N != null && Math.abs(pt.fields.N - n) > 1e-6) return false;
+    if (pt.fields.K != null && Math.abs(pt.fields.K - k) > 1e-6) return false;
+    return true;
   });
   return { ...sweep, points: filtered };
 }
 
 // buildBaselinePicker renders a labeled button group for one picker
-// dimension (K, BTT, or σ). Buttons mirror buildSlotPicker styling.
-function buildBaselinePicker(label, values, suffix, getValue, setValue) {
+// dimension (n, K, BTT, or σ). Buttons mirror buildSlotPicker styling.
+// `disabledFor(v)` returns true when value `v` has no data for the
+// current selection in OTHER axes — the button gets a `.disabled` style
+// and a "no data here" title, but stays clickable (clicking just leaves
+// the page in an empty-data state until the user reconciles the other
+// axes). When disabledFor is null, no greying happens.
+function buildBaselinePicker(label, values, suffix, getValue, setValue, disabledFor) {
   const picker = h('div', { class: 'sm-slot-picker' });
   picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, label));
   values.forEach((v) => {
     const cur = getValue();
     const active = Math.abs(v - cur) < 1e-6;
-    const btn = h(
-      'button',
-      {
-        type: 'button',
-        class: 'sm-slot-btn' + (active ? ' active' : ''),
-      },
-      String(v) + (suffix || ''),
-    );
+    const disabled = disabledFor ? disabledFor(v) : false;
+    let cls = 'sm-slot-btn';
+    if (active) cls += ' active';
+    if (disabled) cls += ' disabled';
+    const attrs = { type: 'button', class: cls };
+    if (disabled) attrs.title = 'no data for this value at the current selection';
+    const btn = h('button', attrs, String(v) + (suffix || ''));
     btn.addEventListener('click', () => setValue(v));
     picker.appendChild(btn);
   });
@@ -383,7 +399,6 @@ function renderConditionsSection(data) {
   const head = h('div', { class: 'conditions-head' });
   const titleEl = h('h2', { class: 'conditions-title' });
   head.appendChild(titleEl);
-  head.appendChild(h('span', { class: 'conditions-subtitle' }, 'n=' + clusterSizeFromData(data)));
   sec.appendChild(head);
 
   const desc = h('p', { class: 'desc conditions-desc' });
@@ -405,19 +420,28 @@ function renderConditionsSection(data) {
   const dims = availableBaselineDimensions(data);
   const pickers = h('div', { class: 'conditions-pickers-stack' });
   pickers.appendChild(
+    buildBaselinePicker('n:', dims.Ns.length ? dims.Ns : [selectedN], null,
+      () => selectedN,
+      (v) => { selectedN = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedSigma)),
+  );
+  pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
-      (v) => { selectedK = v; onConditionsChange(); }),
+      (v) => { selectedK = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedSigma)),
   );
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
-      (v) => { selectedBTT = v; onConditionsChange(); }),
+      (v) => { selectedBTT = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedSigma)),
   );
   pickers.appendChild(
     buildBaselinePicker('σ:', dims.Sigmas.length ? dims.Sigmas : [selectedSigma], null,
       () => selectedSigma,
-      (v) => { selectedSigma = v; onConditionsChange(); }),
+      (v) => { selectedSigma = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v)),
   );
   pickers.appendChild(buildSlotPicker());
   bodyRow.appendChild(pickers);
@@ -549,11 +573,12 @@ function renderCollapsible(sweep, data) {
 function renderCollapsibleBody(body, sweep, data, state) {
   body.innerHTML = '';
 
-  // Filter the sweep's points to the currently-selected K. Each Phase-2
-  // sweep point carries a Fields["K"] entry (3 or 4); filterSweepByK
-  // keeps only the matching subset, so the trend chart reads as one
-  // K-specific trend rather than overlapping K=3 + K=4 points.
-  const filtered = filterSweepByK(sweep, selectedK);
+  // Filter the sweep's points to the currently-selected (n, K) slice.
+  // Each sweep point carries Fields["N"]/["K"]; filterSweepByNK keeps
+  // only matching points so the trend chart reads as one (n, K)-
+  // specific trend rather than overlapping multiple (n, K) slices the
+  // merged data.js may contain.
+  const filtered = filterSweepByNK(sweep, selectedN, selectedK);
 
   // Top strip — description (flex:1, left) + legend (margin-left:auto,
   // right). Sharing one .sm-content-top row puts them on the same line.
@@ -693,7 +718,17 @@ function renderHeatmap(data) {
       point = legacy.points[0];
     }
   }
-  if (!point) return null;
+  if (!point) {
+    // Always return a section so callers that replace this element
+    // (renderConditionsSection's picker handlers, onSlotStartChange)
+    // get a real DOM node — returning null would have replaceWith
+    // insert a literal "null" text node.
+    const empty = h('section', { class: 'heatmap empty', id: 'overview' });
+    empty.appendChild(h('p', { class: 'desc' },
+      `No data for n=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, σ=${selectedSigma}. ` +
+      `Generate this slice with: make stresstest CLUSTER_SIZE_N=${selectedN} LAYERS_K=${selectedK}`));
+    return empty;
+  }
 
   const section = h('section', { class: 'heatmap', id: 'overview' });
   // --hcols drives the shared grid template (column-header row + every

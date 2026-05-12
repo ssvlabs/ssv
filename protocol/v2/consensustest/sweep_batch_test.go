@@ -62,9 +62,9 @@ func TestRunSweep_Smoke(t *testing.T) {
 
 // TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the six
 // curated sweeps with the documented names and the expected point
-// counts after the K × axis cross-product. Doesn't actually RUN the
-// sweeps (would take minutes); just verifies the metadata + point
-// construction.
+// counts. Each run is one (n, k) slice; reruns at different (n, k)
+// merge into the report. Doesn't actually RUN the sweeps (would take
+// minutes); just verifies the metadata + point construction.
 func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	scenarios := []ct.Scenario{}
 	for _, s := range ct.Catalog {
@@ -77,29 +77,30 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4)
 
 	require.Len(t, sweeps, 6, "six curated sweeps per plan")
 
-	// Phase 2 point counts: each non-baseline sweep crosses K ∈ {3, 4}
-	// with its existing axis, so previous counts double.
 	expected := map[string]int{
-		"p2p_baseline":          2 * 5 * 4, // K × BTT × σ
-		"p2p_increasing_BTT":    2 * 6,     // K × BTT
-		"p2p_heavy_tail":        2 * 6,     // K × σ
-		"p2p_packet_loss":       2 * 5,     // K × LossRate
-		"p2p_correlated_delays": 2 * 4,     // K × BadLinkProb
-		"p2p_node_slowness":     2 * 4,     // K × slow-op count
+		"p2p_baseline":          5 * 4, // BTT × σ
+		"p2p_increasing_BTT":    6,     // BTT
+		"p2p_heavy_tail":        6,     // σ
+		"p2p_packet_loss":       5,     // LossRate
+		"p2p_correlated_delays": 4,     // BadLinkProb
+		"p2p_node_slowness":     4,     // slow-op count
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]
 		require.Truef(t, ok, "unexpected sweep name %q", sw.Name)
 		require.Equalf(t, wantPoints, len(sw.Points), "sweep %s point count", sw.Name)
 		require.NotEmpty(t, sw.Description, "sweep %s description", sw.Name)
-		// Every point carries a Fields["K"] entry (3 or 4); the UI uses
-		// this to filter trend charts by selected K.
+		// Every point carries Fields["N"] and Fields["K"]; the merge in
+		// reporting.WriteReportData uses the full Fields-tuple to dedup /
+		// append points across multiple `make stresstest` runs at
+		// different (n, k) operating points.
 		for _, pt := range sw.Points {
 			require.NotNil(t, pt.Fields, "sweep %s point %q missing Fields", sw.Name, pt.Label)
+			require.Containsf(t, pt.Fields, "N", "sweep %s point %q missing N field", sw.Name, pt.Label)
 			require.Containsf(t, pt.Fields, "K", "sweep %s point %q missing K field", sw.Name, pt.Label)
 		}
 		delete(expected, sw.Name)
@@ -116,15 +117,17 @@ func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 	scen := []ct.Scenario{ct.Catalog[0]}
 	good := ct.Iterations{Baseline: 10, Unstable: 10}
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty scenarios",
-		func() { ct.DefaultSweeps(nil, protocols, good, 4) })
+		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty protocols",
-		func() { ct.DefaultSweeps(scen, nil, good, 4) })
+		func() { ct.DefaultSweeps(scen, nil, good, 4, 4) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4) })
+		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Unstable must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4) })
+		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: cluster size n must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 0) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps: layer count k must be > 0 (got 0)",
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0) })
 }
 
 // TestPhase2_AllSweepPoints_NoSetupErrors runs one sim of Healthy at
@@ -167,7 +170,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 		qbftadapter.Protocol{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
-	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4)
+	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4)
 	require.Len(t, sweeps, 6)
 
 	totalPoints := 0

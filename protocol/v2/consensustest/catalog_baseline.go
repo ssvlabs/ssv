@@ -16,5 +16,5 @@ var scenarioHealthy = Scenario{
 		"2abOBFT": ExpectSuccessFastest,
 		"QBFT":    ExpectSuccessFastest,
 	},
-	Note: "Both protocols complete at fastest path under all-honest, in-budget propagation. BFT-comparison.md Table 1.",
+	Note: "Protocols complete at fastest path under all-honest, in-budget propagation. BFT-comparison.md Table 1.",
 }

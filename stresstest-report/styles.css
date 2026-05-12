@@ -342,6 +342,31 @@ section.heatmap {
   color: white;
   border-color: var(--accent);
 }
+/* Disabled = "this value exists in the data but has no point for the
+ * current selection in other axes". Click still works (it just leaves
+ * the page in an empty-data state until the user reconciles the
+ * sibling pickers), so we keep the cursor pointer; the muted styling
+ * is the affordance that "this slice isn't populated yet". */
+.sm-slot-btn.disabled {
+  background: transparent;
+  color: var(--text-faint);
+  border-color: var(--border);
+  border-style: dashed;
+  opacity: 0.55;
+}
+.sm-slot-btn.disabled:hover {
+  background: rgba(15, 23, 42, 0.02);
+}
+.sm-slot-btn.active.disabled {
+  /* The user actively selected a slice that has no data — keep the
+   * accent stripe so "current selection" stays visible, but with a
+   * dashed border to mark the missing-data state. */
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  border-style: dashed;
+  opacity: 0.7;
+}
 
 /* Chart canvas wrapper — Chart.js needs an explicit height on the
  * container or the canvas collapses to 0px. */

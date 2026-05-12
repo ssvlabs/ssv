@@ -113,28 +113,39 @@ consensustest-with-real-bls:
 
 # stresstest runs the stress-tier batch-comparison framework
 # (6 curated sweeps × OBFT/2abOBFT/QBFT × per-scenario iterations) and
-# writes data.js into REPORT_DIR (default ./stresstest-report) —
-# consumed by the static UI (index.html + app.js + styles.css) already
-# in that folder.
+# writes / merges data.js into REPORT_DIR (default ./stresstest-report)
+# — consumed by the static UI (index.html + app.js + styles.css)
+# already in that folder.
+#
+# Each `make stresstest` run produces data for a SINGLE (n, K) operating
+# point (set via CLUSTER_SIZE_N and LAYERS_K). The reporting layer
+# merges new (n, K) slices into the existing data.js by Fields-tuple,
+# so multiple runs at different (n, K) compose into one report instead
+# of overwriting. Example:
+#
+#   make stresstest CLUSTER_SIZE_N=4 LAYERS_K=4
+#   make stresstest CLUSTER_SIZE_N=4 LAYERS_K=2
+#   make stresstest CLUSTER_SIZE_N=7 LAYERS_K=3
+#
+# leaves a single data.js with all three (n, K) slices, selectable in
+# the UI via the n and K pickers (greyed out where a slice is missing).
 #
 # Sweeps (all use LogNormalDelay as the production-shaped propagation
-# model; see protocol/v2/consensustest/sweep.go for full docs). Every
-# sweep crosses with K ∈ {3, 4}; p2p_baseline additionally crosses BTT
-# and σ:
-#   - p2p_baseline          (K × BTT × σ cross-product = 2 × 5 × 4 =
-#                            40 points; subsumes the old p2p_ideal +
-#                            p2p_normal pair; heatmap source)
-#   - p2p_increasing_BTT    (K × BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
-#   - p2p_heavy_tail        (K × σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
-#   - p2p_packet_loss       (K × LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
-#   - p2p_correlated_delays (K × BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
-#   - p2p_node_slowness     (K × slow op count ∈ {0, 1, 2, 3}, markov
+# model; see protocol/v2/consensustest/sweep.go for full docs):
+#   - p2p_baseline          (BTT × σ = 5 × 4 = 20 points per run;
+#                            heatmap source)
+#   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
+#   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7})
+#   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
+#   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
+#   - p2p_node_slowness     (slow op count ∈ {0, 1, 2, 3}, markov
 #                            persistence 0.8)
 #
-# Cluster size: override via CLUSTER_SIZE (default 4). Every sweep
-# runs at this single n; to compare across cluster sizes, re-run with
-# a different CLUSTER_SIZE and REPORT_DIR (`make stresstest` produces
-# one data.js per run).
+# Operating-point env vars:
+#   - CLUSTER_SIZE_N (default 4) — the SSV cluster size n.
+#   - LAYERS_K       (default = n; SSV's K=N convention) — OBFT layer
+#                    count. Production SSV uses K = n; smaller K trades
+#                    fall-through depth for tighter per-layer budgets.
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 1000) — high-confidence
@@ -157,11 +168,13 @@ consensustest-with-real-bls:
 REPORT_DIR ?= ./stresstest-report
 ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 100
-CLUSTER_SIZE ?= 4
+CLUSTER_SIZE_N ?= 4
+LAYERS_K ?= 4
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE=$(CLUSTER_SIZE) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
-	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE=$(CLUSTER_SIZE) \
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE_N=$(CLUSTER_SIZE_N)$(if $(LAYERS_K), LAYERS_K=$(LAYERS_K), LAYERS_K=<default=N>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@REPORT_DIR=$(abspath $(REPORT_DIR)) CLUSTER_SIZE_N=$(CLUSTER_SIZE_N) \
+		$(if $(LAYERS_K),LAYERS_K=$(LAYERS_K)) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \
 		$(if $(ITERATIONS),ITERATIONS=$(ITERATIONS)) \
