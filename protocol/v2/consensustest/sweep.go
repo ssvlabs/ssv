@@ -98,7 +98,7 @@ var (
 		400 * time.Millisecond,
 		500 * time.Millisecond,
 	}
-	baselineSigmaValues = []float64{0.1, 0.3, 0.5, 0.7}
+	baselineSigmaValues = []float64{0.1, 0.3, 0.5, 0.7, 0.9}
 )
 
 // DefaultSweeps returns the curated set of comparison sweeps the stress
@@ -266,7 +266,7 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 
 func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
-	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
+	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9}
 	pts := make([]SweepPoint, 0, len(sigmas))
 	for _, sigma := range sigmas {
 		base := withClusterSize(DefaultProposerDutyConfig(300*time.Millisecond), n)

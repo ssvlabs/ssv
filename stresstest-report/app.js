@@ -43,7 +43,7 @@ const SLOT_END_MS = 4000;
 //   OBFT / 2abOBFT: broadcast schedule is slot-anchored, so sample x =
 //     T_k_broadcast (unchanged); sample fails when T_k_broadcast <
 //     slot_start (operator missed the deciding layer's broadcast).
-const SLOT_STARTS = [0, 400, 800, 1200, 1600, 2000, 2400, 2800];
+const SLOT_STARTS = [0, 400, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800];
 
 // selectedSlotStart is the page-level slot_start used by the Conditions
 // chart at the top, the heatmap cell colors, and the cdfSlotStartPlugin's

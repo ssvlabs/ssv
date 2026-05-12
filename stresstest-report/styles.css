@@ -266,13 +266,23 @@ section.heatmap {
   font-weight: 600;
   color: #0f172a;
 }
+/* min-width sized to fit the widest single-value formatting we emit
+ * ("99.90%" = 6 chars at tabular-nums); display:inline-block makes
+ * min-width effective on the underlying <span>. Without this the chip
+ * shrinks to fit "100%" (4 chars) and the row jitters when toggling
+ * between sweep points whose worst-case rate flips between 100 and
+ * 99.x. Range strings ("99.50–99.90%") still grow beyond the floor —
+ * those are infrequent and the user expects a wider chip there. */
 .sm-legend-pct {
+  display: inline-block;
+  min-width: 5.8em;
   background: var(--hcell-bg);
   padding: 0.05em 0.3em;
   border-radius: 3px;
   font-size: 0.88em;
   color: var(--hcell-fg, #1a1a1a);
   text-align: center;
+  box-sizing: border-box;
 }
 .sm-legend-pct.na {
   background: #e2e8f0;

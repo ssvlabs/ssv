@@ -82,9 +82,9 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	require.Len(t, sweeps, 6, "six curated sweeps per plan")
 
 	expected := map[string]int{
-		"p2p_baseline":          5 * 4, // BTT × σ
+		"p2p_baseline":          5 * 5, // BTT × σ
 		"p2p_increasing_BTT":    6,     // BTT
-		"p2p_heavy_tail":        6,     // σ
+		"p2p_heavy_tail":        7,     // σ
 		"p2p_packet_loss":       5,     // LossRate
 		"p2p_correlated_delays": 4,     // BadLinkProb
 		"p2p_node_slowness":     4,     // slow-op count
