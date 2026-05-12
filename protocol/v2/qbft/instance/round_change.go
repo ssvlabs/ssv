@@ -57,6 +57,11 @@ func (i *Instance) uponRoundChange(
 		i.metrics.EndStage(ctx, i.State.Round)
 		i.metrics.StartStage(stageProposal)
 
+		// hasReceivedProposalJustificationForLeadingRound accepts future-round quorums, but CreateProposal
+		// uses i.State.Round as the proposal round and MessagesForRound(i.State.Round) selects the
+		// round-change justifications - so bump to the justified round here before building the proposal.
+		i.bumpToRound(justifiedRoundChangeMsg.QBFTMessage.Round)
+
 		roundChangeJustificationSignedMessages, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
 
 		roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
