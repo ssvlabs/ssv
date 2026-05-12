@@ -257,7 +257,18 @@ func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.
 	}
 	mu := math.Log(float64(l.Median))
 	z := rng.NormFloat64()
-	d := time.Duration(math.Exp(mu + l.Sigma*z))
+	raw := math.Exp(mu + l.Sigma*z)
+	// Clamp before int64 conversion: math.Exp can return +Inf at extreme
+	// tail draws (z·Sigma ≳ 44 at Median≈1s), and time.Duration(+Inf) is
+	// implementation-defined — typically MinInt64, which downstream code
+	// would interpret as a NEGATIVE duration. DroppedDelay is the sentinel
+	// the framework already uses for "doesn't arrive within the slot", so
+	// extreme-tail draws collapse to the same semantic as PartitionedNetwork
+	// / LossyNetwork: the receiver simply never sees the message in time.
+	if raw > float64(DroppedDelay) || math.IsNaN(raw) || math.IsInf(raw, 1) {
+		return DroppedDelay
+	}
+	d := time.Duration(raw)
 	if d < time.Nanosecond {
 		d = time.Nanosecond
 	}
@@ -405,8 +416,21 @@ type CorrelatedLinkDelay struct {
 	linkSeen map[linkKey]bool
 }
 
+// linkKey identifies a pair of operators in undirected form: the two
+// IDs are sorted at construction so (A→B) and (B→A) share state. The
+// model is documented as "per-pair sustained flakiness" — a degraded
+// physical path slows both directions simultaneously — so the chain
+// for a link must not split across the two directions. Use newLinkKey
+// to construct.
 type linkKey struct {
-	from, to OperatorID
+	lo, hi OperatorID
+}
+
+func newLinkKey(a, b OperatorID) linkKey {
+	if a > b {
+		a, b = b, a
+	}
+	return linkKey{lo: a, hi: b}
 }
 
 // NewCorrelatedLinkDelay constructs a CorrelatedLinkDelay with fresh
@@ -430,7 +454,7 @@ func NewCorrelatedLinkDelay(inner NetworkModel, badLinkProb, badLinkMultiplier f
 }
 
 func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
-	pair := linkKey{from: from, to: to}
+	pair := newLinkKey(from, to)
 
 	// Lazy per-pair init at first observation: weighted by steady-state
 	// P(bad) = BadLinkProb.
@@ -443,10 +467,18 @@ func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind M
 
 	// Per-pair Markov step.
 	if !c.linkBad[pair] {
-		// good → bad with prob a.
-		a := c.BadLinkProb / (float64(c.BurstMessages) * (1 - c.BadLinkProb))
+		// good → bad with prob a. Guard BadLinkProb >= 1 first so we
+		// never divide by (1 - BadLinkProb) when it's zero / negative
+		// (would silently produce +Inf or NaN before falling back to 1).
+		// BadLinkProb >= 1 is also degenerate in practice — init above
+		// always sets linkBad=true at that ratio, so this branch is
+		// unreachable — but the guard keeps the code defensive against
+		// future state-machine refactors.
+		var a float64
 		if c.BadLinkProb >= 1 {
 			a = 1
+		} else {
+			a = c.BadLinkProb / (float64(c.BurstMessages) * (1 - c.BadLinkProb))
 		}
 		if rng.Float64() < a {
 			c.linkBad[pair] = true

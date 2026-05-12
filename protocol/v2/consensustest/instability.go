@@ -115,6 +115,17 @@ func IsBaselineGroup(s Scenario) bool { return s.Group == "Baseline" }
 //
 // Slow ops are picked as op2..op{SlowOps+1} so the leader (op1) stays
 // fast (matches the convention in p2pNodeSlownessSweep).
+//
+// CAVEAT: the pinned-low-index choice biases the slow set toward the
+// shallow-layer leaders under SSV's op-id-ordered leader rotation
+// (op_k typically leads L_{k-1}). That's the intended worst case for
+// stress, but it means a single sim/seed exercises only one slice of
+// "which ops are slow". Cross-sim variety comes from the LossyNetwork
+// + MarkovianSlowness Markov chains rerolling per seed within a fixed
+// op set, not from rerolling the op set itself. If a future sweep
+// wants to surface "average-case slow-set" rather than "leader-biased
+// worst case", randomize SlowOps selection per sim before changing
+// this convention.
 func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 	if !IsBaselineGroup(s) || level.Level == 0 {
 		return s

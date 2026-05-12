@@ -357,6 +357,13 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 				t.Logf("RunBatch: %s", r.err)
 				loggedPanic = true
 			}
+			// Record a 0-byte ClusterBandwidth sample for the panicked iter
+			// so cell.ClusterBandwidth.Len() == cellIter, matching the
+			// PerKindBandwidth / EvidenceCounts series after padToIters.
+			// Without this, cluster-total medians sit over (cellIter -
+			// panicCount) samples while per-kind medians sit over cellIter
+			// (with phantom zeros), and the two disagree.
+			cell.ClusterBandwidth = append(cell.ClusterBandwidth, 0)
 			continue
 		}
 		report := ComputeSafetyReport(r.out)

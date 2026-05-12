@@ -64,6 +64,15 @@ func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
 //
 // Used by the UI to visually distinguish "happens in production with
 // honest nodes" from "requires an attacker".
+//
+// PROBE SCOPE: the probe runs at fixed N=4 (f=1). Every catalog Apply
+// today picks Byz.Kind unconditionally (or scales the byz count with
+// cfg.F() but always at non-zero count for f≥1), so N=4 is sufficient
+// to surface the adversarial verdict — adding a new scenario that
+// only ENGAGES byz at N>4 would break this. If such a pattern is
+// introduced, change the probe to OR the verdict across multiple N's
+// (e.g. {4, 7, 10, 13}) and document the cross-N invariant on the
+// scenario itself.
 func (s Scenario) IsAdversarial() bool {
 	if s.Apply == nil {
 		return false

@@ -32,12 +32,14 @@ import (
 // Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
 // Iteration count split into two env vars:
 //
-//   - ITERATIONS_BASELINE_OPERATIONS (default 100) — used for scenarios
-//     with Group == "Baseline" (currently just "Healthy"). Higher count
-//     keeps the healthy-path CDF tail well-sampled.
-//   - ITERATIONS_UNSTABLE_OPERATIONS (default 10) — used for every
-//     other scenario. Lower count, since rare-event behaviour reaches
-//     non-zero success rates at far fewer samples.
+//   - ITERATIONS_BASELINE_OPERATIONS — used for scenarios with Group ==
+//     "Baseline" (currently just "Healthy"). Higher count keeps the
+//     healthy-path CDF tail well-sampled. Test-internal fallback when
+//     unset: 100. `make stresstest` sets this to 1000 (see Makefile).
+//   - ITERATIONS_UNSTABLE_OPERATIONS — used for every other scenario.
+//     Lower count, since rare-event behaviour reaches non-zero success
+//     rates at far fewer samples. Test-internal fallback when unset:
+//     10. `make stresstest` sets this to 100 (see Makefile).
 //
 // ITERATIONS (legacy single-knob) is honored as a backwards-compatible
 // override: if set, it overrides BOTH budgets.
@@ -53,11 +55,12 @@ import (
 //	    go test -timeout 30m -run TestStress \
 //	    ./protocol/v2/consensustest/
 //
-// At the default split (100 / 10), expected runtime at CLUSTER_SIZE=4
-// is a few minutes on a typical dev machine — most cells are at the
-// unstable budget, so wallclock is dominated by sweep count × sweep
-// fan-out × Unstable budget, with Baseline contributing a tiny
-// constant overhead.
+// At the test-internal-default split (100 / 10), expected runtime at
+// CLUSTER_SIZE_N=4 LAYERS_K=4 is a few minutes on a typical dev machine;
+// at the `make stresstest` default (1000 / 100) it's roughly an order
+// of magnitude longer. Most cells run at the Unstable budget, so
+// wallclock is dominated by sweep count × sweep fan-out × Unstable
+// budget, with Baseline contributing a smaller constant overhead.
 //
 // See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestStress(t *testing.T) {

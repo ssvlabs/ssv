@@ -1069,7 +1069,10 @@ function shiftCell(cell, slotStart) {
   if (!cell || cell.iterations === 0 || slotStart === 0) return cell;
   const samples = cell.decisionTimes || [];
   const adjusted = [];
-  const isQBFT = cell.protocol === 'QBFT';
+  // Prefix match so QBFT family variants (QBFT, QBFT-SSV, future QBFT-*)
+  // all share the pipeline-shift semantic. Exact-equality match would
+  // silently mis-shift QBFT-SSV cells with the OBFT-family branch.
+  const isQBFT = cell.protocol === 'QBFT' || cell.protocol.startsWith('QBFT-');
   for (let i = 0; i < samples.length; i++) {
     const t = samples[i];
     if (isQBFT) {

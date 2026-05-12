@@ -108,18 +108,24 @@ var (
 // P99 propagation per OBFT.md §Setting). Pure JitteredDelay is no
 // longer used.
 //
-//  1. p2p_baseline — BTT × σ cross-product (5 × 4 = 20 points per run).
-//     BTT ∈ {100..500} ms, σ ∈ {0.1, 0.3, 0.5, 0.7}.
+//  1. p2p_baseline — BTT × σ × instability cross-product (5 × 5 × 5 =
+//     125 points per run). BTT ∈ {100, 200, 300, 400, 500} ms, σ ∈
+//     {0.1, 0.3, 0.5, 0.7, 0.9}, instability ∈ {none, low, moderate,
+//     high, extreme}. Level=0 emits the full catalog; Level>0 emits
+//     ONLY Baseline-group scenarios (non-Baseline rows are
+//     instability-invariant — see p2pBaselineSweep).
 //  2. p2p_increasing_BTT — BTT ∈ {100, 200, 400, 600, 800, 1000} ms;
 //     per-point LogNormal{Median: BTT/2, σ: 0.5}.
-//  3. p2p_heavy_tail — σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7}; BTT=300ms,
-//     Median=BTT/2.
+//  3. p2p_heavy_tail — σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9} (7
+//     points); BTT=300ms, Median=BTT/2.
 //  4. p2p_packet_loss — LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20} at
 //     fixed BTT=300ms, BurstFactor=5, σ=0.5.
 //  5. p2p_correlated_delays — BadLinkProb ∈ {0, 0.05, 0.10, 0.20};
 //     BadLinkMultiplier=3, BurstMessages=20, inner LogNormal σ=0.5.
 //  6. p2p_node_slowness — slow op count ∈ {0, 1, 2, 3}; ExtraDelay=3·BTT,
 //     PersistP=0.8, inner LogNormal σ=0.5.
+//  7. p2p_instability — 5 levels (none/low/moderate/high/extreme);
+//     fixed BTT=300ms σ=0.5; Healthy-only "production p2p" curve.
 //
 // All sweeps run at the same (n, k), share the Iterations split, and
 // run over the same Scenarios / Protocols matrix; only the per-point

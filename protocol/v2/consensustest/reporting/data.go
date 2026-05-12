@@ -160,6 +160,16 @@ func readReportData(path string) (*reportPayload, error) {
 // catalog is canonical); top-level metadata (Title, Description,
 // Iterations counts, Wallclock) is also taken from `next` since it
 // describes the most recent run that produced merged output.
+//
+// CAVEAT on BaselineIterations / UnstableIterations / Wallclock after
+// merge: these reflect ONLY next's run, not the merged content. Prev-
+// origin points may carry distributions of a different per-cell iter
+// count if next ran at a different budget than prev did. cellPayload.
+// Iterations is per-point and stays authoritative; renderers should
+// read that for "how many samples back this cell" rather than the
+// top-level fields. The top-level values are useful only as "what
+// budget did the latest run TRY to apply", not "what budget produced
+// every cell in this file".
 func mergePayloads(prev, next reportPayload) reportPayload {
 	out := reportPayload{
 		Title:              next.Title,
@@ -490,21 +500,50 @@ func buildCell(c ct.BatchCell) cellPayload {
 	return out
 }
 
+// extractScenarios returns the UNION of scenarios across every (sweep,
+// report) in the comparison, preserving first-seen order. Unions —
+// rather than reading just sweeps[0].Reports[0] — because a sweep
+// point's scenario list can be filtered relative to the overall
+// catalog (e.g. p2pBaselineSweep's level>0 points keep only Baseline-
+// group scenarios per the rationale in sweep.go). A naive
+// "first-report wins" extraction would silently drop every non-
+// Baseline scenario from a fresh data.js if the first report happened
+// to be a filtered slice, which the UI then renders as a near-empty
+// heatmap with no error.
 func extractScenarios(sweeps []ct.SweepResult) []ct.Scenario {
-	if len(sweeps) == 0 || len(sweeps[0].Reports) == 0 {
-		return nil
+	seen := make(map[string]int)
+	var out []ct.Scenario
+	for _, sw := range sweeps {
+		for _, rep := range sw.Reports {
+			for _, sc := range rep.Config.Scenarios {
+				if _, ok := seen[sc.Name]; ok {
+					continue
+				}
+				seen[sc.Name] = len(out)
+				out = append(out, sc)
+			}
+		}
 	}
-	return sweeps[0].Reports[0].Config.Scenarios
+	return out
 }
 
+// extractProtocols returns the UNION of protocol names across every
+// (sweep, report). Mirrors extractScenarios's union semantic for the
+// same reason: defensive against any sweep emitting a filtered subset.
 func extractProtocols(sweeps []ct.SweepResult) []string {
-	if len(sweeps) == 0 || len(sweeps[0].Reports) == 0 {
-		return nil
+	seen := make(map[string]bool)
+	var out []string
+	for _, sw := range sweeps {
+		for _, rep := range sw.Reports {
+			for _, p := range rep.Config.Protocols {
+				name := p.Name()
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+				out = append(out, name)
+			}
+		}
 	}
-	protos := sweeps[0].Reports[0].Config.Protocols
-	names := make([]string, len(protos))
-	for i, p := range protos {
-		names[i] = p.Name()
-	}
-	return names
+	return out
 }

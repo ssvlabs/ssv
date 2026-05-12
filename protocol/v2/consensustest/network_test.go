@@ -224,12 +224,18 @@ func TestLossyNetwork_Deterministic(t *testing.T) {
 // many pairs and many calls, the per-pair time-fraction-in-bad-state
 // should average to p. Test sums bad-state observations across all
 // pairs and verifies the fraction matches.
+//
+// Note on pair semantics: CorrelatedLinkDelay is per-undirected-pair —
+// (A→B) and (B→A) share one Markov chain — so n=4 has 6 distinct
+// pair-chains observed via 12 directed visits per outer iteration.
+// The fraction-in-bad steady-state doesn't depend on chain count, so
+// the long-run fraction check is unaffected.
 func TestCorrelatedLinkDelay_PerPairFraction(t *testing.T) {
 	const (
 		badProb       = 0.20
 		badMul        = 3.0
 		burstMessages = 10
-		pairs         = 12 // n=4 cluster has 12 directed pairs (4*3)
+		pairs         = 12 // 12 directed visits per outer iter; 6 undirected pair-chains
 		callsPerPair  = 1000
 		seed          = int64(7)
 		base          = 200 * time.Millisecond
