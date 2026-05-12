@@ -143,13 +143,9 @@ Outcome: σ-pool = leader + 1 honest = 2 < qV; NR-pool = 1 (flaky) + 0 (byz neve
 
 **Effort.** ~1 h.
 
-### Task 3.2 — Document `MinK = max(3, f+2)` policy
+### Task 3.2 — Document `MinK = max(3, f+2)` policy — **SUPERSEDED**
 
-**Why.** Current MinK forbids K=f+1; spec's "Late deepest-layer leader broadcast" at the BFT-min boundary isn't surfaceable. The spec disrecommends K=f+1 so this is intentional.
-
-**Action.** Add a one-line comment in `protocol.go` MinK function citing OBFT.md §Setting / "Two distinct K bounds": K=f+1 is BFT-min but not late-leader-resilient; framework enforces the late-leader-resilience floor.
-
-**Effort.** ~5 min.
+**Status.** Superseded by [K2-FIRST-CLASS-PLAN.md](K2-FIRST-CLASS-PLAN.md). The K=f+1 floor is now the spec mandate; the `max(3, f+2)` hard floor was removed and the late-leader-resilience choice was returned to operators per spec §Setting. `MinK` returns `f+1`.
 
 ### Task 3.3 — Optional: honest leader without σ_V
 
