@@ -31,16 +31,24 @@ import (
 type OperatorID uint64
 
 // SimConfig is the algorithm-agnostic input to one simulation. Per-protocol
-// adapters translate fields into their internal config. Timing is anchored at
-// slot start (virtual-time 0); RelayCutoff is the hard deadline by which a
-// signed output must be produced.
+// adapters translate fields into their internal config. Timing is anchored
+// at slot start (virtual-time 0); RelayCutoff is the hard deadline by which
+// a signed output must be produced.
 //
-// Configurable spec parameters are first-class fields; everything else is
-// derived inside adapters per OBFT.md §Setting / §Application:
-//   - T_commit         = RelayCutoff − HeaderSubmitHeadroom − Phase3JitterBuffer − Epsilon3 − Delta2
-//   - T_broadcast_max  = T_commit − BroadcastBudget[k]   (T_commit-anchored)
-//   - qV = qEnc        = 2f+1 from N
-//   - F                = (N−1)/3
+// SimConfig carries only what the framework or MULTIPLE adapters need to
+// share. Protocol-specific timing derivation (OBFT's Δ_2 / B_k schedule /
+// FetchAt; QBFT's RT / PhaseBudget) lives on the per-adapter Protocol
+// struct and is derived from BTT at Run-time. The bridge value is BTT —
+// adapters multiply it by their per-variant BTTMultiplier before deriving
+// budgets, so the sweep can drive every protocol family from the same
+// network BTT while letting each variant model a different operator-side
+// pessimism.
+//
+//   - qV = qEnc       = 2f+1 from N
+//   - F               = (N−1)/3
+//   - T_commit, B_k, FetchAt, Delta2, RT, PhaseBudget — all derived
+//     inside the relevant adapter from BTT (× the variant's multiplier)
+//     and RelayCutoff − HeaderSubmitHeadroom.
 type SimConfig struct {
 	N         int          // cluster size; F = (N-1)/3 is implied
 	Operators []OperatorID // typically 1..N
@@ -55,66 +63,18 @@ type SimConfig struct {
 	RelayCutoff  time.Duration // application hard deadline (4s for proposer duty)
 
 	// HeaderSubmitHeadroom is reserved between consensus completion and
-	// RelayCutoff for cert broadcast + relay submit. 100ms at the operating point.
+	// RelayCutoff for cert broadcast + relay submit. Operator-side
+	// (cert-build + I/O cost), not network propagation — every adapter
+	// reads it for ClipLateDecision against `RelayCutoff −
+	// HeaderSubmitHeadroom`. 100ms at the spec's operating point.
 	HeaderSubmitHeadroom time.Duration
 
 	// BTT (broadcast trip time) = network P99 one-way propagation + clock skew δ.
-	// Protocols derive their per-phase windows from this (OBFT Δ_2 = 2 BTT;
-	// QBFT round trip ≈ 1 BTT per message).
+	// The single network-side knob the sweep varies; each Protocol-family
+	// adapter scales BTT by its own BTTMultiplier (default 1.0) before
+	// deriving every internal timing budget (OBFT Δ_2 = 2·bttEff; 2ab's
+	// Δ_2a + Δ_2b = 4·bttEff total; QBFT phase budget = 2·bttEff).
 	BTT time.Duration
-
-	// Delta2 is the OBFT Phase-2 propagation budget. Defaults to 2*BTT if zero.
-	Delta2 time.Duration
-
-	// Epsilon3 is the OBFT Phase-3 local-CPU budget (BLS aggregation + IBE
-	// decryption walk + certificate construction). Per OBFT.md §Phase 3 /
-	// §Timing budget: `Δ_3 ≈ ε_3 ≈ 50ms` at Config A. Absolute (does not scale
-	// with BTT). Defaults to 50ms if zero. Passed verbatim to obft.Config.Delta3
-	// (the production single-instance ε_3 field).
-	Epsilon3 time.Duration
-
-	// Phase3JitterBuffer is the residual jitter buffer between Phase-3
-	// completion and cert/submit. Per OBFT.md §Timing budget: "the 600ms after
-	// T_commit decomposes as Δ_2 (400ms) + Δ_3 (50ms) + header_submit_headroom
-	// (100ms) + ~50ms residual jitter buffer". Defaults to 50ms. Used only in
-	// the T_commit anchor derivation; production obft.Config does not consume
-	// this directly.
-	Phase3JitterBuffer time.Duration
-
-	// BroadcastBudget carries the OBFT per-layer T_commit-anchored propagation
-	// budget B_k (per spec §Setting). Strictly increasing in k. When nil,
-	// derived from BTT + T_commit via DefaultBkSchedule(K, BTT, T_commit).
-	BroadcastBudget []time.Duration
-
-	// FetchAt carries the OBFT per-layer leader fetch offsets. Strictly
-	// decreasing in k (deeper layers fetch from deeper-confirmed parents).
-	// When nil, derived from BTT via DefaultFetchSchedule(K, BTT, T_commit,
-	// LeaderBroadcastOffset).
-	FetchAt []time.Duration
-
-	// LeaderBroadcastOffset overrides the per-layer fetch buffer (BTT/4 default)
-	// used when FetchAt is derived from defaults. Map key is the layer index;
-	// missing key falls back to the default buffer. A zero offset places the
-	// leader's broadcast exactly at T_broadcast_max_k — the spec's max-MEV
-	// operating point per OBFT.md §Timing budget. Use WithMaxMEVFetch() for the
-	// every-leader-at-the-boundary convenience setup.
-	//
-	// Ignored when FetchAt is set explicitly.
-	LeaderBroadcastOffset map[int]time.Duration
-
-	// QBFTRoundTimeout is the QBFT per-round timer (RT). Defaults to 2s.
-	// Used by qbft.Protocol variants with UseFixedRT=true (QBFT-SSV);
-	// QBFT (default) computes RT from PhaseBudget instead.
-	QBFTRoundTimeout time.Duration
-
-	// PhaseBudget is the QBFT per-phase time budget (PROPOSE, PREPARE,
-	// COMMIT, ROUND_CHANGE, post-consensus margin). Defaults to 2·BTT
-	// to mirror OBFT's Δ_2 = 2·BTT propagation convention. Used by:
-	//   - qbft.Protocol (computed-RT variant): RT = 3 × PhaseBudget.
-	//   - qbft DES events.go: post-consensus margin = PhaseBudget.
-	// QBFT-SSV (UseFixedRT=true) consumes PhaseBudget only for the
-	// post-consensus margin; its RT is QBFTRoundTimeout.
-	PhaseBudget time.Duration
 
 	Network NetworkModel
 	Host    HostPattern
@@ -374,77 +334,14 @@ func (c *SimConfig) Validate() error {
 	if c.HeaderSubmitHeadroom == 0 {
 		c.HeaderSubmitHeadroom = 100 * time.Millisecond
 	}
-	if c.Delta2 == 0 {
-		c.Delta2 = 2 * c.BTT
-	}
-	if c.Epsilon3 == 0 {
-		c.Epsilon3 = 50 * time.Millisecond
-	}
-	if c.Phase3JitterBuffer == 0 {
-		c.Phase3JitterBuffer = 50 * time.Millisecond
-	}
-	if c.QBFTRoundTimeout == 0 {
-		c.QBFTRoundTimeout = 2 * time.Second
-	}
-	if c.PhaseBudget == 0 {
-		c.PhaseBudget = 2 * c.BTT
-	}
 
-	tCommit := c.RelayCutoff - c.HeaderSubmitHeadroom - c.Phase3JitterBuffer - c.Epsilon3 - c.Delta2
-	if tCommit <= 0 {
-		return fmt.Errorf("consensustest: derived T_commit=%v is non-positive (RelayCutoff=%v HeaderSubmit=%v Phase3JitterBuffer=%v Epsilon3=%v Delta2=%v)",
-			tCommit, c.RelayCutoff, c.HeaderSubmitHeadroom, c.Phase3JitterBuffer, c.Epsilon3, c.Delta2)
-	}
-
-	if c.BroadcastBudget == nil {
-		bk, err := DefaultBkSchedule(c.K, c.BTT, tCommit)
-		if err != nil {
-			return fmt.Errorf("consensustest: %w", err)
-		}
-		c.BroadcastBudget = bk
-	}
-	if len(c.BroadcastBudget) != c.K {
-		return fmt.Errorf("consensustest: BroadcastBudget has %d entries, expected K=%d",
-			len(c.BroadcastBudget), c.K)
-	}
-	// Non-decreasing in k: deeper layers get ≥ their predecessor's
-	// absorption budget. Strict-increasing was historically required, but
-	// at degraded operating points the canonical schedule pushes shallow
-	// B_k above T_commit and several layers' targets all clamp to
-	// BFT_start; relaxing to non-decreasing lets those configurations
-	// pass through the framework instead of being rejected up-front. The
-	// runtime clamp (`max(BFT_start, T_commit − B_k)`) handles the
-	// resulting collisions.
-	for k := 1; k < c.K; k++ {
-		if c.BroadcastBudget[k] < c.BroadcastBudget[k-1] {
-			return fmt.Errorf("consensustest: BroadcastBudget must be non-decreasing in k (B_%d=%v < B_%d=%v)",
-				k, c.BroadcastBudget[k], k-1, c.BroadcastBudget[k-1])
-		}
-	}
-
-	if c.FetchAt == nil {
-		fa, err := DefaultFetchSchedule(c.K, c.BTT, tCommit, c.LeaderBroadcastOffset)
-		if err != nil {
-			return fmt.Errorf("consensustest: %w", err)
-		}
-		c.FetchAt = fa
-	}
-	if len(c.FetchAt) != c.K {
-		return fmt.Errorf("consensustest: FetchAt has %d entries, expected K=%d",
-			len(c.FetchAt), c.K)
-	}
-	// Non-increasing in k: deeper layers fetch ≤ their predecessor's
-	// offset. Strict-decreasing was historically required, but at degraded
-	// operating points multiple layers all clamp to BFT_start and their
-	// FetchAt entries collide there. Relaxing to non-increasing keeps the
-	// MEV-fetch ordering meaningful (primary fetches latest, deepest
-	// fetches earliest) without rejecting the clamp-collision case.
-	for k := 1; k < c.K; k++ {
-		if c.FetchAt[k] > c.FetchAt[k-1] {
-			return fmt.Errorf("consensustest: FetchAt must be non-increasing in k (T_%d=%v > T_%d=%v)",
-				k, c.FetchAt[k], k-1, c.FetchAt[k-1])
-		}
-	}
+	// Protocol-specific timing derivation (Delta2, BroadcastBudget,
+	// FetchAt, RT, PhaseBudget) lives on the per-adapter Protocol struct
+	// and runs inside Protocol.Run, not here. The framework checks only
+	// what every adapter shares: cluster topology, slot constants, and
+	// the BTT > 0 / RelayCutoff > 0 anchors above. Per-adapter T_commit
+	// non-positivity (e.g. at high BTT × Δ_2 tax) surfaces as
+	// ErrConfigOutOfEnvelope from the adapter, not here.
 
 	f := c.F()
 	seenByz := make(map[OperatorID]struct{}, len(c.Byz.ByzOperators))
@@ -497,26 +394,6 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		Host:                 HostAllValid{},
 		Byz:                  ByzPattern{Kind: ByzNone},
 		Seed:                 1,
-	}
-}
-
-// WithMaxMEVFetch sets per-layer LeaderBroadcastOffset to zero for every layer
-// in [0, K), placing each leader's broadcast exactly at T_broadcast_max_k.
-// This is the spec's max-MEV boundary operating point (OBFT.md §Timing
-// budget) — the freshest possible fetch window per layer at the cost of zero
-// propagation safety margin within that layer's budget. Call after K is set
-// (or defaults are applied via Validate).
-//
-// Ignored if c.FetchAt is set explicitly (FetchAt takes precedence over
-// derived schedules).
-func (c *SimConfig) WithMaxMEVFetch() {
-	k := c.K
-	if k == 0 {
-		k = DefaultK(c.N)
-	}
-	c.LeaderBroadcastOffset = make(map[int]time.Duration, k)
-	for i := 0; i < k; i++ {
-		c.LeaderBroadcastOffset[i] = 0
 	}
 }
 

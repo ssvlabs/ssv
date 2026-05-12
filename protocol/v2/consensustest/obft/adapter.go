@@ -12,17 +12,78 @@ import (
 	obftbase "github.com/ssvlabs/ssv/protocol/v2/obft/base"
 )
 
-// Protocol is the OBFT adapter. Use as `obft.Protocol{}` in tests.
-type Protocol struct{}
+// Adapter-internal constants. NOT network-derived: ε_3 is the BLS-aggregation
+// + IBE-decryption-walk CPU cost per fall-through layer (OBFT.md §Phase 3 /
+// §Timing budget), and phase3JitterBuffer is the residual scheduling jitter
+// between Phase 3 completion and cert/submit. Both are operator-side, so
+// they don't scale with the BTT-multiplier (which models network slack only).
+const (
+	epsilon3           = 50 * time.Millisecond
+	phase3JitterBuffer = 50 * time.Millisecond
+)
 
-func (Protocol) Name() string { return "OBFT" }
+// Protocol is the OBFT adapter. Use as `obft.Protocol{}` for the canonical
+// variant, or with BTTMultiplier > 1 to model a "loose" deployment that
+// over-budgets its internal timing assumptions relative to the network's
+// actual BTT (see CAVEAT below).
+type Protocol struct {
+	// VariantName overrides the reported protocol name. Empty → "OBFT".
+	// Used for registering Loose / MaxMEV-style variants alongside the
+	// canonical adapter in the stress matrix without name collisions.
+	VariantName string
 
-func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	// BTTMultiplier scales cfg.BTT internally before deriving any timing
+	// budget (Delta2, BroadcastBudget shallow layers, FetchAt fetch
+	// buffer, and the BTT field forwarded to obftbase.Config). Zero is
+	// treated as 1.0 (no scaling).
+	//
+	// CAVEAT — the multiplier affects the protocol's INTERNAL assumptions
+	// only; the simulated network still propagates at cfg.BTT. Multiplier
+	// > 1 ("loose") means the protocol budgets more slack per BTT-multiple
+	// at the cost of an earlier T_commit (since Delta2 = 2·bttEff
+	// consumes more of RelayCutoff); multiplier < 1 ("tight") is the
+	// inverse trade. The CPU-side constants (epsilon3,
+	// phase3JitterBuffer, cfg.HeaderSubmitHeadroom) do NOT scale —
+	// they're operator-side reserves, not network propagation slack.
+	BTTMultiplier float64
+
+	// MaxMEVFetch removes the per-layer fetch buffer (the BTT/4 margin
+	// between leader fetch and T_broadcast_max_k). When true, every leader
+	// fetches and broadcasts exactly at its T_broadcast_max_k — the spec's
+	// max-MEV operating point per OBFT.md §Timing budget. Mainly useful
+	// for adapter-level unit tests exercising the spec's B_k decomposition
+	// boundary; the stress driver doesn't register this variant.
+	MaxMEVFetch bool
+}
+
+func (p Protocol) Name() string {
+	if p.VariantName != "" {
+		return p.VariantName
+	}
+	return "OBFT"
+}
+
+// effectiveBTT applies the BTTMultiplier to cfg.BTT, clamped to ≥ 1ns.
+// Zero multiplier is treated as 1.0 (no scaling) so the zero-value
+// Protocol{} behaves identically to the canonical OBFT.
+func (p Protocol) effectiveBTT(btt time.Duration) time.Duration {
+	mul := p.BTTMultiplier
+	if mul <= 0 {
+		mul = 1
+	}
+	out := time.Duration(float64(btt) * mul)
+	if out < time.Nanosecond {
+		out = time.Nanosecond
+	}
+	return out
+}
+
+func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
-		// SimConfig.Validate covers schedule shape (BroadcastBudget,
-		// FetchAt), T_commit positivity, and other operating-point-
-		// derived constraints. Wrap as ErrConfigOutOfEnvelope so the
-		// framework renders these cells as red 0% rather than n/a.
+		// SimConfig.Validate covers cluster topology (N/K/Operators) and
+		// the slot constants (BTT > 0, RelayCutoff > 0, RelayCutoff ≤
+		// SlotDuration). Wrap as ErrConfigOutOfEnvelope so the framework
+		// renders these cells as red 0% rather than n/a.
 		return ct.Outcome{}, fmt.Errorf("%w: %v", ct.ErrConfigOutOfEnvelope, err)
 	}
 
@@ -31,7 +92,50 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Phase3JitterBuffer - cfg.Epsilon3 - cfg.Delta2
+	// Derive every timing budget internally from bttEff = multiplier ·
+	// cfg.BTT. The framework no longer carries Delta2 / BroadcastBudget /
+	// FetchAt on SimConfig; OBFT family adapters own the spec's BTT-as-
+	// unit conventions (Delta2 = 2·BTT recommended; B_k staggered as
+	// 1·/1.5·/2.5·BTT; fetch buffer = BTT/4 default).
+	bttEff := p.effectiveBTT(cfg.BTT)
+	delta2 := 2 * bttEff
+	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
+	if tCommit <= 0 {
+		return ct.Outcome{}, fmt.Errorf(
+			"%w: obft adapter: derived T_commit=%v non-positive (RelayCutoff=%v HeaderSubmit=%v Phase3JitterBuffer=%v Epsilon3=%v Delta2=%v at BTTMultiplier=%v)",
+			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, cfg.HeaderSubmitHeadroom,
+			phase3JitterBuffer, epsilon3, delta2, p.BTTMultiplier)
+	}
+
+	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, bttEff, tCommit)
+	if err != nil {
+		return ct.Outcome{}, fmt.Errorf("%w: obft adapter: derive BroadcastBudget: %v",
+			ct.ErrConfigOutOfEnvelope, err)
+	}
+	// Cap shallow B_k at T_commit so the schedule stays non-decreasing
+	// (the production helper doesn't clamp; the consensustest sim's DES
+	// expects monotone fetch offsets).
+	for k := range broadcastBudget {
+		if broadcastBudget[k] > tCommit {
+			broadcastBudget[k] = tCommit
+		}
+	}
+
+	// Per-layer fetch buffer: bttEff/4 by default, 0 under MaxMEVFetch
+	// (the spec's max-MEV-freshness boundary — leader fetches and
+	// broadcasts at T_broadcast_max_k exactly).
+	fetchBuffer := bttEff / 4
+	if p.MaxMEVFetch {
+		fetchBuffer = 0
+	}
+	fetchAt := make([]time.Duration, cfg.K)
+	for k := 0; k < cfg.K; k++ {
+		fa := tCommit - broadcastBudget[k] - fetchBuffer
+		if fa < 0 {
+			fa = 0
+		}
+		fetchAt[k] = fa
+	}
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
@@ -39,11 +143,11 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		K:                     cfg.K,
 		Operators:             cfg.Operators,
 		TCommit:               tCommit,
-		Delta2:                cfg.Delta2,
-		Epsilon3:              cfg.Epsilon3,
-		BTT:                   cfg.BTT,
-		FetchAt:               cfg.FetchAt,
-		BroadcastBudget:       cfg.BroadcastBudget,
+		Delta2:                delta2,
+		Epsilon3:              epsilon3,
+		BTT:                   bttEff,
+		FetchAt:               fetchAt,
+		BroadcastBudget:       broadcastBudget,
 		Network:               cfg.Network,
 		Host:                  cfg.Host,
 		Byz:                   internal,

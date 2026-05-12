@@ -149,14 +149,22 @@ func TestStress(t *testing.T) {
 	// from the report without a driver-side change.
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
-	// QBFT comes in two flavors: the research variant (default Protocol{},
-	// RT = 3·PhaseBudget = 6·BTT — apples-to-apples with OBFT's 2·BTT-
-	// per-phase budget convention) and the production SSV variant (RT =
-	// QBFTRoundTimeout = 2s fixed, matching roundtimer/timer.go). Both
-	// share bftStart=0 and PhaseBudget-based post-consensus margin.
+	// Two flavor axes:
+	//   - OBFT and 2abOBFT each ship in a canonical (multiplier=1) form
+	//     and a "loose" (multiplier=2) form. The loose variant scales
+	//     bttEff internally — every BTT-derived budget (Δ_2, B_k shallow
+	//     layers, FetchAt fetch buffer, and 2ab's TAcceptMax/TVerdictMax
+	//     horizons) doubles. T_commit lands earlier as a result (Δ_2 =
+	//     4·BTT for OBFT-L; Δ_2a + Δ_2b = 8·BTT for 2abOBFT-L) at the
+	//     cost of MEV freshness. Network propagation still happens at
+	//     the sweep's actual BTT.
+	//   - QBFT ships in the research variant (computed RT = 3·PhaseBudget
+	//     = 6·bttEff) and the production SSV variant (fixed 2s RT).
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
+		obftadapter.Protocol{VariantName: "OBFT-L", BTTMultiplier: 2},
 		twoabadapter.Protocol{},
+		twoabadapter.Protocol{VariantName: "2abOBFT-L", BTTMultiplier: 2},
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 	}

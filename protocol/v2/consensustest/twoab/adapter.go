@@ -21,16 +21,64 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
 )
 
-// Protocol is the 2abOBFT adapter. Use as `twoab.Protocol{}` in tests.
-type Protocol struct{}
+// Adapter-internal constants. Mirrors the OBFT adapter — these are
+// operator-side reserves (BLS aggregation / IBE walk CPU cost, residual
+// scheduling jitter), so they don't scale with BTTMultiplier.
+const (
+	epsilon3           = 50 * time.Millisecond
+	phase3JitterBuffer = 50 * time.Millisecond
+)
 
-func (Protocol) Name() string { return "2abOBFT" }
+// Protocol is the 2abOBFT adapter. Use as `twoab.Protocol{}` for the
+// canonical variant, or with BTTMultiplier > 1 to model a "loose"
+// deployment that over-budgets its internal timing assumptions relative
+// to the network's actual BTT (see CAVEAT below).
+type Protocol struct {
+	// VariantName overrides the reported protocol name. Empty → "2abOBFT".
+	VariantName string
 
-func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	// BTTMultiplier scales cfg.BTT internally before deriving every
+	// timing budget (Delta2a, Delta2b, BroadcastBudget shallow layers,
+	// and the BTT field forwarded to twoab.Config — which 2ab uses to
+	// compute its TAcceptMax = TCommit − 1·BTT receiver horizon). Zero
+	// is treated as 1.0.
+	//
+	// CAVEAT — the multiplier affects the protocol's INTERNAL
+	// assumptions only; the simulated network still propagates at
+	// cfg.BTT. Multiplier > 1 ("loose") widens all four Phase-2 windows
+	// (Δ_2a + Δ_2b = 4·bttEff total, vs 4·BTT canonical) and pushes
+	// T_commit earlier in the slot by 2·(bttEff − cfg.BTT). The CPU-
+	// side reserves (epsilon3, phase3JitterBuffer,
+	// cfg.HeaderSubmitHeadroom) do NOT scale.
+	BTTMultiplier float64
+}
+
+func (p Protocol) Name() string {
+	if p.VariantName != "" {
+		return p.VariantName
+	}
+	return "2abOBFT"
+}
+
+// effectiveBTT applies the BTTMultiplier to cfg.BTT, clamped to ≥ 1ns.
+// Zero multiplier is treated as 1.0 so zero-value Protocol{} behaves
+// identically to the canonical 2abOBFT.
+func (p Protocol) effectiveBTT(btt time.Duration) time.Duration {
+	mul := p.BTTMultiplier
+	if mul <= 0 {
+		mul = 1
+	}
+	out := time.Duration(float64(btt) * mul)
+	if out < time.Nanosecond {
+		out = time.Nanosecond
+	}
+	return out
+}
+
+func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
-		// SimConfig.Validate covers schedule shape (BroadcastBudget,
-		// FetchAt), T_commit positivity, and other operating-point-
-		// derived constraints. Wrap as ErrConfigOutOfEnvelope so the
+		// SimConfig.Validate covers cluster topology (N/K/Operators) and
+		// the slot constants. Wrap as ErrConfigOutOfEnvelope so the
 		// framework renders these cells as red 0% rather than n/a.
 		return ct.Outcome{}, fmt.Errorf("%w: %v", ct.ErrConfigOutOfEnvelope, err)
 	}
@@ -42,40 +90,41 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 
 	// 2abOBFT splits Phase 2 into Phase 2a (verdict broadcast, Δ_2a ≥ 2 BTT
 	// per spec §Setting) and Phase 2b (σ-or-NR propagation, Δ_2b ≥ 1 BTT;
-	// recommended 2 BTT). We use spec-recommended sizings (Δ_2a = Δ_2b =
-	// 2 BTT) and derive 2ab-shaped T_commit / BroadcastBudget / FetchAt
-	// from cfg.RelayCutoff + cfg.BTT + cfg.K.
-	//
-	// The framework's cfg.Delta2 = 2 BTT (single-window OBFT shape) is
-	// replaced here — 2ab's Phase 2 total budget is 4 BTT. T_commit lands
-	// 2 BTT earlier than OBFT's at the same RelayCutoff (the spec's
-	// "cost" for the validity-divergence safety story).
-	delta2a := 2 * cfg.BTT
-	delta2b := 2 * cfg.BTT
+	// recommended 2 BTT). Spec-recommended sizings (Δ_2a = Δ_2b = 2·bttEff)
+	// give the 2ab Phase-2 total = 4·bttEff. T_commit lands 2·bttEff
+	// earlier than OBFT's at the same RelayCutoff — the spec's "cost" for
+	// the validity-divergence safety story.
+	bttEff := p.effectiveBTT(cfg.BTT)
+	delta2a := 2 * bttEff
+	delta2b := 2 * bttEff
 	delta2 := delta2a + delta2b
-	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - cfg.Phase3JitterBuffer - cfg.Epsilon3 - delta2
+	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
 	if tCommit <= 0 {
-		// Operating-point-incompatible (BTT too large for the 2ab
-		// Δ_2a + Δ_2b phase-2 tax to fit before RelayCutoff). Wrap as
+		// Operating-point-incompatible (bttEff too large for the 2ab
+		// 4·BTT Phase-2 tax to fit before RelayCutoff). Wrap as
 		// ErrConfigOutOfEnvelope so the cell renders red 0% rather
 		// than as an unexpected error.
-		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derived T_commit=%v is non-positive (RelayCutoff=%v BTT=%v)",
-			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, cfg.BTT)
+		return ct.Outcome{}, fmt.Errorf(
+			"%w: twoab adapter: derived T_commit=%v non-positive (RelayCutoff=%v bttEff=%v at BTTMultiplier=%v)",
+			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, bttEff, p.BTTMultiplier)
 	}
 	tVerdictStart := tCommit - delta2a
 
-	// Derive 2ab-shaped BroadcastBudget + FetchAt. The framework's Validate
-	// already populated cfg.BroadcastBudget / cfg.FetchAt under an OBFT-shape
-	// T_commit; we replace them with 2ab-anchored equivalents.
+	// 2ab anchors B_k at TVerdictStart (= TCommit − Δ_2a), not TCommit —
+	// the Phase-1 broadcast must complete before the Phase-2a verdict
+	// window starts, not before TCommit. The DefaultBroadcastBudget
+	// helper from the production package gives the spec's staggered
+	// schedule against that anchor.
 	//
 	// At extreme degraded operating points the helper returns a schedule
 	// with shallow B_k values exceeding TVerdictStart; the per-layer
 	// runtime `T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k)`
 	// clamps those layers' broadcast targets at BFT_start. Errors here
 	// are only the K<1 / BTT≤0 programmer-error class.
-	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, cfg.BTT, tVerdictStart)
+	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, bttEff, tVerdictStart)
 	if err != nil {
-		return ct.Outcome{}, fmt.Errorf("twoab adapter: derive BroadcastBudget: %w", err)
+		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
+			ct.ErrConfigOutOfEnvelope, err)
 	}
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
@@ -93,8 +142,8 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		TCommit:               tCommit,
 		Delta2a:               delta2a,
 		Delta2b:               delta2b,
-		Epsilon3:              cfg.Epsilon3,
-		BTT:                   cfg.BTT,
+		Epsilon3:              epsilon3,
+		BTT:                   bttEff,
 		FetchAt:               fetchAt,
 		BroadcastBudget:       broadcastBudget,
 		Network:               cfg.Network,

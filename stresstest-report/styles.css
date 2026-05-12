@@ -434,10 +434,15 @@ section.conditions .conditions-body-row {
 }
 section.conditions .conditions-pickers-stack {
   display: grid;
-  /* Use rem (not em) so the picker stack and legend below share row
-   * heights despite their elements having different inherited
-   * font-sizes. */
-  grid-template-rows: repeat(4, 1.8rem);
+  /* grid-auto-rows (not grid-template-rows) so the stack grows with
+   * however many pickers the section currently renders. The page
+   * started at 4 pickers (K/BTT/σ/slot_start) but now ships 6
+   * (n/K/BTT/σ/p2p_instability/slot_start); hard-coded `repeat(4, ...)`
+   * left the extra rows in `grid-auto-rows: auto` and drifted out of
+   * row-height alignment with the legend on the right. Use rem (not
+   * em) so the picker stack and legend below share row heights despite
+   * their elements having different inherited font-sizes. */
+  grid-auto-rows: 1.8rem;
   align-items: center;
   min-width: 0;
 }
@@ -445,21 +450,30 @@ section.conditions .conditions-pickers-stack .sm-slot-picker {
   margin: 0;
   font-size: 0.78em;
 }
-/* Picker labels left-aligned at a fixed width — all buttons across
- * the four rows start at the same X. */
+/* Picker labels right-aligned inside a fixed-width column — buttons
+ * start at the same X across all rows (label column width = widest
+ * label's natural width, currently "p2p_instability:" ≈ 8.5em at
+ * 0.78em font-size), but the label TEXT sits flush against its
+ * trailing margin so short labels ("n:", "σ:") don't leave a wide
+ * gap before their first button. Without the right-align, short
+ * labels sat at the column's left edge with empty space between
+ * them and their buttons. */
 section.conditions .conditions-pickers-stack .sm-slot-picker-label {
-  min-width: 5em;
-  text-align: left;
+  min-width: 9em;
+  text-align: right;
 }
 section.conditions .conditions-legend {
   margin-left: auto;
 }
-/* Match legend row heights to the picker stack (1.8rem each). Legend
+/* Match legend row heights to the picker stack (1.8rem each), via
+ * grid-auto-rows so the legend grows with the protocol count (6 today
+ * vs 4 when this strip was first sized) without a CSS edit. Legend
  * inherits its default 0.75em font-size from .sm-legend; the smaller
  * size pairs with the shrunken picker text without the legend
  * dominating the strip. */
 section.conditions .conditions-legend .sm-legend {
-  grid-template-rows: repeat(4, 1.8rem);
+  grid-auto-rows: 1.8rem;
+  grid-template-rows: none;
   align-items: center;
   row-gap: 0;
 }

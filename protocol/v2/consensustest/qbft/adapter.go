@@ -17,6 +17,10 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 )
 
+// Default QBFT round timeout used by the UseFixedRT variant ("QBFT-SSV").
+// Mirrors production SSV QBFT's QuickTimeout (roundtimer/timer.go).
+const defaultFixedRT = 2 * time.Second
+
 // Protocol is the QBFT adapter. Use as `qbft.Protocol{}` (defaults to
 // "QBFT" + computed-RT variant) or with explicit field overrides for the
 // "QBFT-SSV" variant.
@@ -28,14 +32,27 @@ type Protocol struct {
 	// empty, defaults to "QBFT".
 	VariantName string
 
+	// BTTMultiplier scales cfg.BTT internally before deriving PhaseBudget
+	// (= 2·bttEff), and — when UseFixedRT=false — the round timeout
+	// (RT = 3 × PhaseBudget = 6·bttEff). Zero → 1.0 (no scaling).
+	// Matches the OBFT/2abOBFT variant convention so the whole protocol
+	// family shares one "loose-vs-tight" knob.
+	BTTMultiplier float64
+
 	// UseFixedRT picks the round-timeout source:
-	//   false (default) — RT = 3 × cfg.PhaseBudget (= 6·BTT at PhaseBudget
-	//     defaults). Matches the OBFT-family budget convention where each
-	//     phase is 2·BTT. Use for the "QBFT" research variant.
-	//   true — RT = cfg.QBFTRoundTimeout (= 2s default). Matches production
-	//     SSV QBFT (QuickTimeout in roundtimer/timer.go). Use for the
-	//     "QBFT-SSV" variant.
+	//   false (default) — RT = 3 × PhaseBudget (= 6·bttEff). Matches the
+	//     OBFT-family budget convention where each phase is 2·BTT. Use
+	//     for the "QBFT" research variant.
+	//   true — RT = FixedRT (= 2s when zero). Matches production SSV
+	//     QBFT (QuickTimeout in roundtimer/timer.go). Use for the
+	//     "QBFT-SSV" variant. BTTMultiplier does NOT scale FixedRT —
+	//     it's an absolute SSV-deployment constant, not a BTT-derived
+	//     budget.
 	UseFixedRT bool
+
+	// FixedRT overrides the fixed-RT value when UseFixedRT=true. Zero
+	// defaults to 2s. Has no effect when UseFixedRT=false.
+	FixedRT time.Duration
 }
 
 func (p Protocol) Name() string {
@@ -43,6 +60,20 @@ func (p Protocol) Name() string {
 		return p.VariantName
 	}
 	return "QBFT"
+}
+
+// effectiveBTT applies the BTTMultiplier to cfg.BTT, clamped to ≥ 1ns.
+// Zero multiplier → 1.0 (no scaling).
+func (p Protocol) effectiveBTT(btt time.Duration) time.Duration {
+	mul := p.BTTMultiplier
+	if mul <= 0 {
+		mul = 1
+	}
+	out := time.Duration(float64(btt) * mul)
+	if out < time.Nanosecond {
+		out = time.Nanosecond
+	}
+	return out
 }
 
 func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
@@ -58,15 +89,25 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
+	// PhaseBudget = 2·bttEff mirrors OBFT's Δ_2 convention so the two
+	// protocols compare on equal-budget-per-phase footing under the
+	// computed-RT variant. Used both for RT (computed) and for the
+	// post-consensus margin in events.go.
+	bttEff := p.effectiveBTT(cfg.BTT)
+	phaseBudget := 2 * bttEff
+
 	var rt time.Duration
 	if p.UseFixedRT {
-		rt = cfg.QBFTRoundTimeout
+		rt = p.FixedRT
+		if rt == 0 {
+			rt = defaultFixedRT
+		}
 	} else {
 		// Computed RT = 3 phases × PhaseBudget. Phases are PROPOSE,
 		// PREPARE, COMMIT; ROUND_CHANGE is a separate post-timer phase
-		// not counted in RT. At BTT=300 / PhaseBudget=2·BTT this is
+		// not counted in RT. At BTT=300 with multiplier=1 this is
 		// 1800ms; at BTT=200 it's 1200ms.
-		rt = 3 * cfg.PhaseBudget
+		rt = 3 * phaseBudget
 	}
 	maxRounds := p.MaxRounds
 	if maxRounds == 0 {
@@ -89,9 +130,9 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	desCfg := desConfig{
 		N:            cfg.N,
 		Operators:    cfg.Operators,
-		BTT:          cfg.BTT,
+		BTT:          bttEff,
 		RT:           rt,
-		PhaseBudget:  cfg.PhaseBudget,
+		PhaseBudget:  phaseBudget,
 		MaxRounds:    maxRounds,
 		BFTStart:     bftStart,
 		Network:      cfg.Network,

@@ -22,11 +22,15 @@
 // Protocol series colors — used for chart lines, dataset point markers,
 // and the per-protocol legend rows. Picked with similar saturation/
 // lightness so the protocols read as peers rather than figure/ground.
+// "-L" loose variants share the family hue but with a noticeably lighter
+// / desaturated tint so they read as siblings of the canonical variant.
 const PROTOCOL_COLORS = {
-  OBFT:        '#ed8936', // light orange
-  '2abOBFT':   '#06b6d4', // cyan
-  QBFT:        '#e85a71', // light pink-red (computed-RT variant)
-  'QBFT-SSV':  '#8b5cf6', // purple (production-RT variant)
+  OBFT:         '#ed8936', // light orange
+  'OBFT-L':     '#f6ad55', // paler orange — sibling of OBFT
+  '2abOBFT':    '#06b6d4', // cyan
+  '2abOBFT-L':  '#67e8f9', // paler cyan — sibling of 2abOBFT
+  QBFT:         '#e85a71', // light pink-red (computed-RT variant)
+  'QBFT-SSV':   '#8b5cf6', // purple (production-RT variant)
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
@@ -154,6 +158,13 @@ function main() {
     return; // index.html already shows the placeholder.
   }
   applyChartDefaults();
+  // Group protocol variants (e.g. OBFT / OBFT-L) so the legend and
+  // chart-series order read as families regardless of how the data.js
+  // was assembled. data.js may have been MERGED across multiple runs
+  // (mergeProtocols appends new names in arrival order), so an in-place
+  // sort here is the load-bearing fix — relying on the Go-side
+  // registration order alone wouldn't survive merges.
+  data.protocols = sortProtocolsByFamily(data.protocols);
   // Snap selectedK/selectedBTT/selectedSigma to values actually present
   // in p2p_baseline (or stay at defaults if no baseline is loaded).
   // Must run before precomputeSlotShifts since the latter warms the
@@ -512,7 +523,7 @@ function renderConditionsSection(data) {
     // selectedInstability through INSTABILITY_NAMES on the way in and
     // back out. disabledFor uses the level number (the data axis).
     buildBaselinePickerLabeled(
-      'p2p_instability (Healthy only):',
+      'p2p_instability:',
       dims.Instabilities.length ? dims.Instabilities : [selectedInstability],
       (v) => INSTABILITY_NAMES[v] || ('L' + v),
       () => selectedInstability,
@@ -1429,6 +1440,47 @@ function findCell(point, scenarioName, protocolName) {
 
 function protocolColor(name) {
   return PROTOCOL_COLORS[name] || '#888';
+}
+
+// sortProtocolsByFamily reorders the protocol list so variants sit next
+// to their base — e.g. ["OBFT","2abOBFT","QBFT","QBFT-SSV","OBFT-L",
+// "2abOBFT-L"] becomes ["OBFT","OBFT-L","2abOBFT","2abOBFT-L","QBFT",
+// "QBFT-SSV"]. The "family" is everything before the first hyphen; the
+// canonical form (no hyphen) always sorts first inside a family. Family
+// order itself is preserved from first-occurrence in the input — so the
+// data-driven ordering (whichever protocol Go registered first) wins,
+// we just regroup variants under their parent.
+function sortProtocolsByFamily(protocols) {
+  if (!Array.isArray(protocols) || protocols.length <= 1) return protocols;
+  const familyOf = (name) => {
+    const i = name.indexOf('-');
+    return i < 0 ? name : name.slice(0, i);
+  };
+  const families = []; // first-occurrence order
+  const byFamily = new Map();
+  protocols.forEach((p) => {
+    const fam = familyOf(p);
+    if (!byFamily.has(fam)) {
+      families.push(fam);
+      byFamily.set(fam, []);
+    }
+    byFamily.get(fam).push(p);
+  });
+  const out = [];
+  families.forEach((fam) => {
+    // Canonical (=== fam, no hyphen) first; variants (hyphenated) after
+    // in their input-order so multiple variants within one family stay
+    // stable.
+    const group = byFamily.get(fam);
+    group.sort((a, b) => {
+      const aBase = a === fam;
+      const bBase = b === fam;
+      if (aBase === bBase) return 0; // stable for the variants vs each other
+      return aBase ? -1 : 1;
+    });
+    out.push(...group);
+  });
+  return out;
 }
 
 function protocolDash(name) {
