@@ -45,10 +45,9 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Byz:                   internal,
 		Seed:                  cfg.Seed,
 		TraceEnabled:          cfg.TraceEnabled,
-		BLSKeys:               cfg.BLSKeys,
-		Aggregator:            ct.NewOfflineAggregator(cfg.N),
-		Bandwidth:             &bw,
-		EnableLateCommitRerun: cfg.EnableLateCommitRerun,
+		BLSKeys:    cfg.BLSKeys,
+		Aggregator: ct.NewOfflineAggregator(cfg.N),
+		Bandwidth:  &bw,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -113,24 +112,23 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 
 // desConfig is the OBFT-DES-internal configuration, built by Run.
 type desConfig struct {
-	N                     int
-	K                     int
-	Operators             []ct.OperatorID
-	TCommit               time.Duration
-	Delta2                time.Duration
-	Epsilon3              time.Duration // forwarded to obftbase.Config.Delta3 (= ε_3 per spec)
-	BTT                   time.Duration
-	FetchAt               []time.Duration
-	BroadcastBudget       []time.Duration
-	Network               ct.NetworkModel
-	Host                  ct.HostPattern
-	Byz                   internalByz
-	Seed                  int64
-	TraceEnabled          bool
-	BLSKeys               *ct.BLSKeys
-	Aggregator            *ct.OfflineAggregator
-	Bandwidth             *ct.BandwidthReport
-	EnableLateCommitRerun bool // mirrors SimConfig.EnableLateCommitRerun
+	N               int
+	K               int
+	Operators       []ct.OperatorID
+	TCommit         time.Duration
+	Delta2          time.Duration
+	Epsilon3        time.Duration // forwarded to obftbase.Config.Delta3 (= ε_3 per spec)
+	BTT             time.Duration
+	FetchAt         []time.Duration
+	BroadcastBudget []time.Duration
+	Network         ct.NetworkModel
+	Host            ct.HostPattern
+	Byz             internalByz
+	Seed            int64
+	TraceEnabled    bool
+	BLSKeys         *ct.BLSKeys
+	Aggregator      *ct.OfflineAggregator
+	Bandwidth       *ct.BandwidthReport
 }
 
 // rawOutcome is the OBFT-internal outcome before translation to ct.Outcome.

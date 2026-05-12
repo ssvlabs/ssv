@@ -175,8 +175,8 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 			recordCommitToAggregator(s.cfg.Aggregator, c)
 		}
 		// Byz patterns may delay their own KindCommit dispatch to land past
-		// RoundEndOffset, exercising the spec §Phase 3 late-arrival re-resolve
-		// path (gated by cfg.EnableLateCommitRerun).
+		// RoundEndOffset, exercising the spec §Phase 3 late-arrival
+		// re-resolve recovery path.
 		extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, op)
 		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), extraDelay, func(to obftbase.OperatorID) event {
 			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(c)}
@@ -242,12 +242,9 @@ func (e *evtCommitArrival) describe() string {
 func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
 	_ = s.instances[e.to].ObserveCommit(e.commit)
 
-	// Spec §Phase 3 / "Re-running on late KindCommit arrivals": if this commit
-	// landed past RoundEndOffset, the receiver may re-run Resolve to
+	// Spec §Phase 3 / "Re-running on late KindCommit arrivals": if this
+	// commit landed past RoundEndOffset, the receiver re-runs Resolve to
 	// incorporate the new partial. Skip if the receiver already decided.
-	if !s.cfg.EnableLateCommitRerun {
-		return nil
-	}
 	if s.now <= s.cfgObft.RoundEndOffset() {
 		return nil
 	}

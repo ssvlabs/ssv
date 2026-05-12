@@ -535,9 +535,15 @@ func TestSweep_Seeds(t *testing.T) {
 }
 
 // TestSweep_MultiByz_n7 — n=7 (f=2) with 2 byz silent leaders. OBFT falls
-// through past both byz-led layers (in-round, decides at L_2). QBFT round-
-// changes past both, but two RT timeouts consume the relay budget (2×2s = 4s
-// = RelayCutoff) so R3's success arrives past the deadline → MISS.
+// through past both byz-led layers (in-round, decides at L_2). QBFT-SSV
+// (production RT=2s) round-changes past both, but two RT timeouts consume
+// the relay budget (2×2s = 4s = RelayCutoff) so R3's success arrives past
+// the deadline → MISS.
+//
+// Uses the QBFT-SSV variant because the assertion is calibrated against
+// the production RT=2s; the research-mode "QBFT" variant (default
+// Protocol{}, RT=6·BTT=1200ms at BTT=200) has a tighter round timer that
+// lets R3 land before RelayCutoff in this exact configuration.
 func TestSweep_MultiByz_n7(t *testing.T) {
 	cfg := baseSweepConfig(7, 200*time.Millisecond)
 	cfg.Byz = ct.ByzPattern{
@@ -553,15 +559,15 @@ func TestSweep_MultiByz_n7(t *testing.T) {
 			"should fall through past both byz-led layers (L_0, L_1); got L_%d", out.DecidedRound)
 	})
 
-	t.Run("QBFT", func(t *testing.T) {
-		out, err := qbftadapter.Protocol{}.Run(cfg)
+	t.Run("QBFT-SSV", func(t *testing.T) {
+		out, err := qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true}.Run(cfg)
 		require.NoError(t, err)
 		// R1 + R2 timeouts = 2 × RT = 4s alone — already past RelayCutoff=4s.
 		// R3's PROPOSE arrives past the deadline → cluster MISSES, mirroring
-		// the QBFT-side observation in MultiSilent_K3 at n=4 (RT-budget
-		// dominates fall-through cost).
+		// the QBFT-SSV-side observation in MultiSilent_K3 at n=4 (RT-budget
+		// dominates fall-through cost at production RT=2s).
 		require.False(t, out.Decided,
-			"QBFT n=7 with 2 byz silent leaders should MISS (2 round-changes consume the relay budget)")
+			"QBFT-SSV n=7 with 2 byz silent leaders should MISS (2 round-changes consume the relay budget)")
 	})
 }
 
@@ -681,7 +687,21 @@ func TestSweep_DocTable(t *testing.T) {
 // new scenario that needs n-aware Apply.
 func TestSweep_FullCatalog_LargerN(t *testing.T) {
 	btt := 200 * time.Millisecond
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	// Use the QBFT-SSV variant (UseFixedRT: production RT=2s) for cross-n
+	// catalog-expectation checks. The catalog's per-scenario Expect map
+	// was sized at n=4 with a fixed 2s round timer; the computed-RT
+	// variant (default Protocol{}) has a tighter `3·PhaseBudget = 6·BTT`
+	// timer that shifts some marginal MeshFlakiness-class scenarios from
+	// R1-success to R2-success at larger n. That's an expected difference
+	// between the two variants, not a cross-n regression in the framework.
+	protocols := []ct.Protocol{
+		obftadapter.Protocol{},
+		// UseFixedRT (production RT=2s) without renaming so the catalog
+		// Expect map lookup still hits the "QBFT" entry. The QBFT-SSV
+		// rename only matters for the stress-tier reporting view; here we
+		// just want the production-timing variant under the standard name.
+		qbftadapter.Protocol{UseFixedRT: true},
+	}
 
 	for _, n := range ct.ClusterSizes {
 		if n == 4 {

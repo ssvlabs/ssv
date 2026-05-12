@@ -103,12 +103,15 @@ func TestBatch_Determinism(t *testing.T) {
 }
 
 // TestBatch_NotApplicableSkips — scenarios marked OBFT-specific (e.g.,
-// HV1SelectiveDelivery) return ErrNotApplicable on QBFT, producing an
+// CertWithholding) return ErrNotApplicable on QBFT, producing an
 // Iterations=0 cell. RunBatch must handle this without t.Fatal.
 func TestBatch_NotApplicableSkips(t *testing.T) {
 	scenarios := []ct.Scenario{}
 	for _, s := range ct.Catalog {
-		if s.Name == "HV1SelectiveDelivery" {
+		// CertWithholding is OBFT-specific (cluster cert gossip phase)
+		// and translates to ErrNotApplicable on the QBFT side — a stable
+		// pick for testing the n/a code path.
+		if s.Name == "CertWithholding" {
 			scenarios = append(scenarios, s)
 			break
 		}

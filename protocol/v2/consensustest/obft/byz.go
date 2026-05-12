@@ -26,7 +26,7 @@ import (
 // model's per-pair delay) for `op`'s Phase-2 KindCommit emission. Used by
 // late-commit byz patterns to push the commit past T_commit + Δ_2 + ε_3 at
 // receivers, exercising the spec §Phase 3 "Re-running on late KindCommit
-// arrivals" recovery path (gated by SimConfig.EnableLateCommitRerun).
+// arrivals" recovery path.
 type internalByz interface {
 	LeaderBroadcastPlan(s *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan
 	AllowCommitBroadcast(op obftbase.OperatorID) bool
@@ -763,14 +763,14 @@ func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obftbase.OperatorID, c *
 // Byz operators behave honestly except for delaying their own Phase-2
 // KindCommit emission. Returned delay is 1.5 × BTT, sized to put arrival
 // past RoundEndOffset (T_commit + 2·BTT + ε_3 at recommended sizing) by
-// half a BTT — well into the spec's "late arrival" regime that requires
-// SimConfig.EnableLateCommitRerun to recover. At BTT=200ms: arrival lands
-// at T_commit + 1 BTT + 1.5 BTT = T_commit + 2.5 BTT ≈ 3900ms, ~50ms past
-// RoundEndOffset=3850ms.
+// half a BTT — well into the spec's "late arrival" regime. At BTT=200ms:
+// arrival lands at T_commit + 1 BTT + 1.5 BTT = T_commit + 2.5 BTT ≈
+// 3900ms, ~50ms past RoundEndOffset=3850ms.
 //
-// Pairs with the spec §Phase 3 "Re-running on late KindCommit arrivals"
-// recovery: a slot whose σ-pool was short of qV at the initial Resolve can
-// salvage when the delayed σ partial arrives and triggers evtResolveRerun.
+// Exercises the spec §Phase 3 "Re-running on late KindCommit arrivals"
+// recovery: a slot whose σ-pool was short of qV at the initial Resolve
+// salvages when the delayed σ partial arrives and triggers
+// evtResolveRerun (always-on in this framework).
 type byzDelayedCommit struct {
 	honestDefaults
 	ByzSet byzSet

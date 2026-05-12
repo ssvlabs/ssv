@@ -115,7 +115,7 @@ var scenarioMeshFlakiness = Scenario{
 		for i := 0; i < f; i++ {
 			flakyOverrides[OperatorID(i+2)] = 2 * cfg.BTT
 		}
-		// Wrap whatever Network the profile set (JitteredDelay in stress,
+		// Wrap whatever Network the profile set (LogNormal in stress,
 		// ConstantDelay in correctness) so non-flaky receivers still see
 		// the profile's variance. The slow-op overrides are absolute —
 		// PerReceiverDelay returns them as-is, so the algebraic miss

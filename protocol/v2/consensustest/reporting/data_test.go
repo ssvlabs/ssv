@@ -120,7 +120,10 @@ func TestWriteReportData_PayloadShape(t *testing.T) {
 func TestWriteReportData_NACellOmitsDecisionTime(t *testing.T) {
 	naScenario := []ct.Scenario{}
 	for _, s := range ct.Catalog {
-		if s.Name == "HV1SelectiveDelivery" {
+		// CertWithholding is OBFT-specific (cluster cert gossip phase)
+		// and translates to ErrNotApplicable on the QBFT side — a stable
+		// "n/a for QBFT" pick for this test.
+		if s.Name == "CertWithholding" {
 			naScenario = append(naScenario, s)
 			break
 		}

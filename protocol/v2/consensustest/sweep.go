@@ -81,6 +81,12 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 //     {0, 0.05, 0.10, 0.20} at fixed BadLinkMultiplier=3, BurstMessages
 //     =20, inner LogNormal{Median: BTT/2, σ: 0.5}. Probes per-pair
 //     sustained-slow link behaviour that pure iid LogNormal misses.
+//  7. p2p_node_slowness — varies the count of "markov-slow" operators
+//     k ∈ {0, 1, 2, 3}. Each flagged op's link is slow on the 1st
+//     message touching it and stays slow per-message with probability
+//     0.8 (independent draws) thereafter. ExtraDelay=3·BTT, inner
+//     LogNormal{Median: BTT/2, σ: 0.5}. Probes the f vs f+1 boundary
+//     under correlated peer-link degradation.
 //
 // All sweeps run at the same cluster size n, share Iterations, and run
 // over the same Scenarios / Protocols matrix; only the per-point
@@ -101,6 +107,7 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iterations int, n
 		p2pHeavyTailSweep(scenarios, protocols, iterations, n),
 		p2pPacketLossSweep(scenarios, protocols, iterations, n),
 		p2pCorrelatedDelaysSweep(scenarios, protocols, iterations, n),
+		p2pNodeSlownessSweep(scenarios, protocols, iterations, n),
 	}
 }
 
@@ -358,6 +365,80 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iterat
 		Params:      []string{"CorrelatedLinkDelay", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "mult=3.0", "burst=20"},
 		Description: "Per-pair sustained-slow links over a production-shaped baseline. Captures the correlation iid LogNormal misses.",
 		AxisLabel:   "BadLinkProb",
+		Points:      pts,
+	}
+}
+
+// p2pNodeSlownessSweep varies the number of operators flagged as
+// "markov-slow" — each flagged op's link returns ExtraDelay (= 3·BTT)
+// for the first message it touches (in either direction), and for each
+// subsequent touched message independently with probability PersistP
+// (= 0.8). Models correlated peer-link degradation: real-world latency /
+// congestion / GC pauses persist for stretches, not toggle per-packet.
+//
+// Axis = slow-op count ∈ {0, 1, 2, 3}, with k slow ops at op2..op{k+1}
+// (leader op1 stays fast). k=0 is the no-degradation baseline; k=1
+// crosses into "f slow" territory; k=2 hits the "f+1 slow" boundary at
+// n=4; k=3 stresses past the boundary. Wraps a production-shaped
+// LogNormal baseline so non-slow ops still see the spec's typical-mesh
+// variance.
+func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iterations int, n int) Sweep {
+	const persistP = 0.8
+	counts := []int{0, 1, 2, 3}
+	pts := make([]SweepPoint, 0, len(counts))
+	for _, k := range counts {
+		k := k
+		// Each point gets its OWN scenario list with a fresh
+		// MarkovianSlownessDelay constructed per Apply call — the
+		// per-op state map must NOT be shared across iterations.
+		scenariosWithSlowness := make([]Scenario, len(scenarios))
+		for i, s := range scenarios {
+			inner := s
+			scenariosWithSlowness[i] = Scenario{
+				Name:  s.Name,
+				Title: s.Title,
+				Group: s.Group,
+				Modes: s.Modes,
+				Apply: func(cfg *SimConfig) {
+					if inner.Apply != nil {
+						inner.Apply(cfg)
+					}
+					if k <= 0 {
+						return
+					}
+					slowOps := make([]OperatorID, 0, k)
+					for j := 0; j < k; j++ {
+						slowOps = append(slowOps, OperatorID(j+2))
+					}
+					base := cfg.Network
+					if base == nil {
+						base = ConstantDelay{D: cfg.BTT}
+					}
+					cfg.Network = NewMarkovianSlowness(base, slowOps, 3*cfg.BTT, persistP)
+				},
+				Expect: s.Expect,
+				Note:   s.Note,
+			}
+		}
+		btt := 300 * time.Millisecond
+		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+		base.Network = productionLogNormal(btt)
+		pts = append(pts, SweepPoint{
+			Label: "slowOps=" + strconv.Itoa(k),
+			Config: BatchConfig{
+				Iterations: iterations,
+				Base:       base,
+				Scenarios:  scenariosWithSlowness,
+				Protocols:  protocols,
+			},
+		})
+	}
+	return Sweep{
+		Name:        "p2p_node_slowness",
+		Title:       "Correlated node slowness",
+		Params:      []string{"MarkovianSlownessDelay", "LogNormal σ=0.5", "n=" + strconv.Itoa(n), "ExtraDelay=3·BTT", "PersistP=0.8"},
+		Description: "Per-op Markov slowness over a production-shaped baseline: 1st message touching a slow op is 100% slow, each subsequent has 80% chance of being slow. Models correlated peer-link degradation (latency / GC / congestion stretches).",
+		AxisLabel:   "Slow op count",
 		Points:      pts,
 	}
 }

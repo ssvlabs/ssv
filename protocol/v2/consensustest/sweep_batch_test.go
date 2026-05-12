@@ -59,7 +59,7 @@ func TestRunSweep_Smoke(t *testing.T) {
 	}
 }
 
-// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the five
+// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the seven
 // curated sweeps with the documented names and at least one point each.
 // Doesn't actually RUN the sweeps (would take minutes); just verifies
 // the metadata + point construction.
@@ -76,7 +76,7 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	sweeps := ct.DefaultSweeps(scenarios, protocols, 10, 4)
 
-	require.Len(t, sweeps, 6, "six curated sweeps per plan")
+	require.Len(t, sweeps, 7, "seven curated sweeps per plan")
 
 	expected := map[string]int{
 		"p2p_ideal":             1, // single reference point at σ=0.1 (control)
@@ -85,6 +85,7 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 		"p2p_heavy_tail":        6, // Sigma ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7}
 		"p2p_packet_loss":       5, // LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20}
 		"p2p_correlated_delays": 4, // BadLinkProb ∈ {0, 0.05, 0.10, 0.20}
+		"p2p_node_slowness":     4, // slow op count ∈ {0, 1, 2, 3}
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]

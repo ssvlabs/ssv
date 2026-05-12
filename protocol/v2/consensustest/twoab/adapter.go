@@ -100,10 +100,9 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Byz:                   internal,
 		Seed:                  cfg.Seed,
 		TraceEnabled:          cfg.TraceEnabled,
-		BLSKeys:               cfg.BLSKeys,
-		Aggregator:            ct.NewOfflineAggregator(cfg.N),
-		Bandwidth:             &bw,
-		EnableLateCommitRerun: cfg.EnableLateCommitRerun,
+		BLSKeys:    cfg.BLSKeys,
+		Aggregator: ct.NewOfflineAggregator(cfg.N),
+		Bandwidth:  &bw,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -159,25 +158,24 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 // the 2ab-spec-shaped Phase-2 split (Delta2a + Delta2b) separately from
 // the framework's single-window cfg.Delta2.
 type desConfig struct {
-	N                     int
-	K                     int
-	Operators             []ct.OperatorID
-	TCommit               time.Duration
-	Delta2a               time.Duration
-	Delta2b               time.Duration
-	Epsilon3              time.Duration // forwarded to twoab.Config.Delta3 (= ε_3 per spec)
-	BTT                   time.Duration
-	FetchAt               []time.Duration
-	BroadcastBudget       []time.Duration
-	Network               ct.NetworkModel
-	Host                  ct.HostPattern
-	Byz                   internalByz
-	Seed                  int64
-	TraceEnabled          bool
-	BLSKeys               *ct.BLSKeys
-	Aggregator            *ct.OfflineAggregator
-	Bandwidth             *ct.BandwidthReport
-	EnableLateCommitRerun bool // mirrors SimConfig.EnableLateCommitRerun (applied to late Onion2b arrivals)
+	N               int
+	K               int
+	Operators       []ct.OperatorID
+	TCommit         time.Duration
+	Delta2a         time.Duration
+	Delta2b         time.Duration
+	Epsilon3        time.Duration // forwarded to twoab.Config.Delta3 (= ε_3 per spec)
+	BTT             time.Duration
+	FetchAt         []time.Duration
+	BroadcastBudget []time.Duration
+	Network         ct.NetworkModel
+	Host            ct.HostPattern
+	Byz             internalByz
+	Seed            int64
+	TraceEnabled    bool
+	BLSKeys         *ct.BLSKeys
+	Aggregator      *ct.OfflineAggregator
+	Bandwidth       *ct.BandwidthReport
 }
 
 // rawOutcome is the 2ab-internal outcome before translation to ct.Outcome.

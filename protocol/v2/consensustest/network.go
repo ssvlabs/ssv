@@ -66,6 +66,78 @@ func (p PerReceiverDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKi
 	return p.Inner.Delay(rng, from, to, kind)
 }
 
+// MarkovianSlownessDelay models per-operator "slow" links with per-message
+// Markov persistence in both directions. For every message touching a
+// slow op (from-side or to-side):
+//   - The 1st such message returns ExtraDelay unconditionally (the slow
+//     op's link is in the "bad" period when the slot starts — by the
+//     time we observe the first inbound, it's already affected).
+//   - Each subsequent message independently returns ExtraDelay with
+//     probability PersistP, or falls through to Inner.Delay otherwise.
+//
+// PersistP (typically ~0.8) models real-world correlation: networking
+// problems (latency, congestion, GC pauses, link saturation) tend to
+// persist across consecutive messages rather than randomly toggle
+// per-message. Both directions share the same per-op state so inbound
+// and outbound slowness are coupled, matching how peer-link issues
+// actually behave in practice.
+//
+// State (one entry per slow op) lives on the struct. Construct a fresh
+// instance per iteration to avoid cross-iteration contamination —
+// scenarios.Apply should build a new MarkovianSlownessDelay each time.
+type MarkovianSlownessDelay struct {
+	Inner      NetworkModel
+	SlowOps    map[OperatorID]bool
+	ExtraDelay time.Duration
+	PersistP   float64
+	State      map[OperatorID]*markovSlownessState
+}
+
+type markovSlownessState struct {
+	seenFirst bool
+}
+
+func (m MarkovianSlownessDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
+	var slowOp OperatorID
+	switch {
+	case m.SlowOps[from]:
+		slowOp = from
+	case m.SlowOps[to]:
+		slowOp = to
+	default:
+		return m.Inner.Delay(rng, from, to, kind)
+	}
+	state := m.State[slowOp]
+	if state == nil {
+		state = &markovSlownessState{}
+		m.State[slowOp] = state
+	}
+	if !state.seenFirst {
+		state.seenFirst = true
+		return m.ExtraDelay
+	}
+	if rng.Float64() < m.PersistP {
+		return m.ExtraDelay
+	}
+	return m.Inner.Delay(rng, from, to, kind)
+}
+
+// NewMarkovianSlowness constructs a fresh MarkovianSlownessDelay with an
+// initialized state map (per-iteration init — see the type doc).
+func NewMarkovianSlowness(inner NetworkModel, slowOps []OperatorID, extra time.Duration, persistP float64) MarkovianSlownessDelay {
+	set := make(map[OperatorID]bool, len(slowOps))
+	for _, op := range slowOps {
+		set[op] = true
+	}
+	return MarkovianSlownessDelay{
+		Inner:      inner,
+		SlowOps:    set,
+		ExtraDelay: extra,
+		PersistP:   persistP,
+		State:      make(map[OperatorID]*markovSlownessState),
+	}
+}
+
 // PartitionedNetwork drops messages whose receiver is in Partitioned. Inner
 // supplies the delay for non-partitioned receivers. Use a sustained sim-long
 // time as the dropped delay (1h) so the message effectively never arrives.

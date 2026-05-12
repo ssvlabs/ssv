@@ -279,12 +279,8 @@ func (e *evtOnion2bArrival) handle(s *sim) []scheduledEvent {
 	_ = s.instances[e.to].ObserveOnion2b(e.onion)
 
 	// Spec §Phase 3 "Re-running on late KindOnion2b arrivals": if this
-	// onion landed past RoundEndOffset, the receiver may re-run Resolve
-	// to incorporate the new partial. Skip if the receiver already
-	// decided.
-	if !s.cfg.EnableLateCommitRerun {
-		return nil
-	}
+	// onion landed past RoundEndOffset, the receiver re-runs Resolve to
+	// incorporate the new partial. Skip if the receiver already decided.
 	if s.now <= s.cfgTwoab.RoundEndOffset() {
 		return nil
 	}
