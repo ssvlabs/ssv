@@ -60,6 +60,11 @@ func (i *Instance) uponRoundChange(
 		// hasReceivedProposalJustificationForLeadingRound accepts future-round quorums, but CreateProposal
 		// uses i.State.Round as the proposal round and MessagesForRound(i.State.Round) selects the
 		// round-change justifications - so bump to the justified round here before building the proposal.
+		//
+		// In practice this branch never observes a future-round quorum: on natural message flow, the
+		// partial-quorum branch (f+1 < 2f+1) fires on an earlier uponRoundChange call and advances
+		// State.Round before this branch can see a full quorum, so bumpToRound here is always a no-op.
+		// Kept as defense-in-depth in case the message-processing flow changes.
 		i.bumpToRound(justifiedRoundChangeMsg.QBFTMessage.Round)
 
 		roundChangeJustificationSignedMessages, _ := justifiedRoundChangeMsg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
