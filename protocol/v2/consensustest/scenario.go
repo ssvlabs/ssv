@@ -1,6 +1,10 @@
 package consensustest
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Scenario describes a test condition independently of the protocol under
 // test. Apply modifies SimConfig (typically Byz / Host / Network); Expect
@@ -17,9 +21,38 @@ type Scenario struct {
 	// during the per-scenario audit (Phase 2 of the split plan).
 	Modes []Mode
 
-	Apply  func(*SimConfig)
-	Expect map[string]ExpectClass // keyed by Protocol.Name()
-	Note   string                 // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
+	Apply func(*SimConfig)
+	// Expect is keyed by Protocol.Name(). Use ExpectFor(name) for lookup
+	// rather than direct map access — it falls back from variant names
+	// (e.g. "QBFT-SSV") to the base name (e.g. "QBFT") so variants don't
+	// each need their own entry unless they expect a different outcome.
+	Expect map[string]ExpectClass
+	Note   string // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
+}
+
+// ExpectFor looks up the declared expectation for protocol name `pname`,
+// with variant fallback so QBFT-family variants (QBFT-SSV, future
+// QBFT-*) don't each need their own Expect-map entry. Lookup order:
+//
+//  1. exact match on pname
+//  2. fallback to the protocol's "base" name (the prefix before "-")
+//     when pname carries a "<base>-<suffix>" shape — e.g. "QBFT-SSV"
+//     falls back to "QBFT"
+//
+// Scenarios that legitimately need a different expectation for a
+// variant (e.g. QBFT-SSV's tighter fixed-RT misses where QBFT's
+// computed-RT succeeds) can override by setting both keys explicitly.
+// Returns (zero, false) when neither key is present.
+func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
+	if v, ok := s.Expect[pname]; ok {
+		return v, true
+	}
+	if i := strings.IndexByte(pname, '-'); i > 0 {
+		if v, ok := s.Expect[pname[:i]]; ok {
+			return v, true
+		}
+	}
+	return 0, false
 }
 
 // IsAdversarial reports whether the scenario requires active byzantine
@@ -39,10 +72,21 @@ func (s Scenario) IsAdversarial() bool {
 		N:         4,
 		Operators: MakeOperators(4),
 		K:         4,
-		BTT:       200,
+		// BTT is set to a realistic value so scenarios whose Apply scales
+		// per-receiver overrides off cfg.BTT (e.g. MeshFlakiness's 2·BTT)
+		// don't accidentally trip over a degenerate near-zero override. The
+		// probe doesn't run a sim so this only affects what gets recorded
+		// into the probe SimConfig; the IsAdversarial verdict cares only
+		// about probe.Byz.Kind, but keeping BTT realistic is cheap insurance
+		// against future Apply functions that branch on cfg.BTT.
+		BTT: 200 * time.Millisecond,
 	}
 	s.Apply(&probe)
-	return probe.Byz.Kind != ByzNone
+	// ByzMultiSilent is topology-driven (silences whichever operator leads
+	// the top K layers — see byz.go's ByzPattern doc); it doesn't require
+	// an attacker. Treat it as a non-adversarial failure mode so the UI
+	// doesn't flag it as "needs byz" in the heatmap legend.
+	return probe.Byz.Kind != ByzNone && probe.Byz.Kind != ByzMultiSilent
 }
 
 // HasMode reports whether the scenario participates in mode m. An empty

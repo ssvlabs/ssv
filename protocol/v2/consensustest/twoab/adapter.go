@@ -113,6 +113,10 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
+	// Match the OBFT/QBFT adapters: late-recovered decisions past
+	// RelayCutoff − HeaderSubmitHeadroom can't be submitted in production
+	// either, so the comparison clips them to MISS.
+	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
 	return out, nil
 }
 

@@ -61,13 +61,21 @@ func TestAdapter_MultiByzSilentAtN7(t *testing.T) {
 	}
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
-	require.True(t, out.Decided, "n=7 with 2 byz silent leaders should still decide via fall-through")
-	require.Greater(t, out.DecidedRound, 1, "should fall through past both byz-led layers (L_0, L_1)")
+	// At default ε_3 = 50ms, falling through to L_2 (the first honest
+	// layer past the two byz-led ones) takes 2 × ε_3 = 100ms of walk cost
+	// on top of RoundEndOffset, landing the decision at 3950ms — past
+	// RelayCutoff − HeaderSubmitHeadroom = 3900ms. ClipLateDecision then
+	// converts the late decision to MISS so the framework matches
+	// production submit-budget semantics. The structural property under
+	// test (the protocol can in principle decide via fall-through) is
+	// still exercised — we just can't deliver in time here.
+	require.False(t, out.Decided, "n=7 with 2 byz silent leaders: fall-through to L_2 lands past RelayCutoff − HeaderSubmitHeadroom (3950ms > 3900ms); production would miss")
+	require.Equal(t, -1, out.DecidedRound, "clipped MISS reports DecidedRound = -1")
 
 	rep := ct.ComputeSafetyReport(out)
 	require.True(t, rep.SingleV, "SingleV: %s", rep)
 	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
-	t.Logf("n=7 K=%d 2-byz-silent: decided at %v on L_%d", ct.DefaultK(cfg.N), out.DecisionTime, out.DecidedRound)
+	t.Logf("n=7 K=%d 2-byz-silent: clipped at deadline; per-op records preserved for safety", ct.DefaultK(cfg.N))
 }
 
 // TestAdapter_PerRuleEvidence verifies the FakeEncryptedPresence scenario

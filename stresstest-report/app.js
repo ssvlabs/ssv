@@ -729,7 +729,14 @@ function renderHeatmap(data) {
     const card = h('div', { class: 'heatmap-group' });
     card.appendChild(h('h3', { class: 'heatmap-group-label' }, g));
     const rows = h('div', { class: 'heatmap-rows' });
-    groups.get(g).forEach((sc) => {
+    // Within each group: non-adversarial (honest-cluster failure modes)
+    // first, intentional-byz scenarios last. Stable sort preserves catalog
+    // order within each subset so adjacent rows in the same "honest /
+    // adversarial" bucket still read in the spec's progression.
+    const scenarios = [...groups.get(g)].sort(
+      (a, b) => (a.adversarial ? 1 : 0) - (b.adversarial ? 1 : 0),
+    );
+    scenarios.forEach((sc) => {
       const rowClass = sc.adversarial ? 'hrow adversarial' : 'hrow';
       const row = h('div', { class: rowClass, 'data-scenario': sc.name });
       row.appendChild(h('div', { class: 'hname' }, sc.title || sc.name));
@@ -771,20 +778,74 @@ function renderHeatmap(data) {
   return section;
 }
 
-// rateToHue maps a success rate to a chart-friendly hue:
-//   rate ≤ 80% → red (hue 0)
-//   rate = 90% → warm yellow (hue 50, biased away from green)
-//   rate = 100% → green (hue 120)
-// Two-segment ramp: 80→90% spends a wider hue range on the red→yellow
-// transition so 90% reads as actually-yellow rather than yellow-green.
-function rateToHue(rate) {
-  if (rate <= 0.8) return 0;
-  if (rate >= 1.0) return 120;
-  if (rate <= 0.9) return Math.round((rate - 0.8) * 500); // 80%→0, 90%→50
-  return Math.round(50 + (rate - 0.9) * 700); // 90%→50, 100%→120
+// CELL_BG_ALPHA controls how strongly the heatmap cell tint shows through.
+// 0.45 keeps the gradient legible while letting the underlying surface
+// (white .heatmap-group card on non-adversarial rows; faint crisscross
+// pattern on adversarial rows) bleed through — the cell colors read as
+// "labels" over the row's identity rather than swallowing it.
+const CELL_BG_ALPHA = 0.45;
+
+// rateToColor maps a success rate in [0, 1] to a {bg, fg} pair used as
+// the heatmap cell / legend chip colors. Two-segment ramp:
+//   0%   → deep saturated red — hsl(0, 75%, 42%)
+//   90%  → clear yellow      — hsl(52, 90%, 60%)
+//   100% → soft green        — hsl(125, 55%, 65%)
+// 0%→90% varies hue + saturation + lightness so failure cells deepen
+// continuously (no flat zone below 80% like the prior implementation);
+// 90%→100% transitions yellow → green with the saturation winding back.
+// The result is emitted at CELL_BG_ALPHA so cells read as tinted
+// overlays over the row background rather than opaque blocks.
+//
+// Foreground is picked for best WCAG contrast against the EFFECTIVE
+// (alpha-blended-with-white) cell color so text stays legible even with
+// the underlying card showing through.
+function rateToColor(rate) {
+  let hue, sat, light;
+  if (rate >= 1.0) {
+    hue = 125; sat = 55; light = 65;
+  } else if (rate >= 0.9) {
+    const t = (rate - 0.9) / 0.1;
+    hue = 52 + t * 73;
+    sat = 90 - t * 35;
+    light = 60 + t * 5;
+  } else {
+    const t = rate / 0.9;
+    hue = t * 52;
+    sat = 75 + t * 15;
+    light = 42 + t * 18;
+  }
+  const bg = `hsla(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%, ${CELL_BG_ALPHA})`;
+  // Effective luminance after compositing onto the white .heatmap-group
+  // card. With surface = (1,1,1), L_effective = α·L_bg + (1−α)·1.
+  const lBgEffective = CELL_BG_ALPHA * relativeLuminance(hue, sat, light) + (1 - CELL_BG_ALPHA);
+  const lDark = 0.0114; // sRGB luminance of #1a1a1a
+  const lLight = 0.9131; // sRGB luminance of #f7fafc
+  const ratioDark = (Math.max(lBgEffective, lDark) + 0.05) / (Math.min(lBgEffective, lDark) + 0.05);
+  const ratioLight = (Math.max(lBgEffective, lLight) + 0.05) / (Math.min(lBgEffective, lLight) + 0.05);
+  const fg = ratioLight > ratioDark ? '#f7fafc' : '#1a1a1a';
+  return { bg, fg };
 }
 
-// renderHeatmapCell colors a single cell by success rate via rateToHue.
+// relativeLuminance returns WCAG relative luminance for an HSL color.
+// Converts HSL → sRGB → linearized RGB → weighted sum.
+function relativeLuminance(h, s, l) {
+  const hp = h / 360, sp = s / 100, lp = l / 100;
+  const q = lp < 0.5 ? lp * (1 + sp) : lp + sp - lp * sp;
+  const p = 2 * lp - q;
+  const hueToRGB = (t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const rgb = [hueToRGB(hp + 1 / 3), hueToRGB(hp), hueToRGB(hp - 1 / 3)];
+  const lin = rgb.map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+// renderHeatmapCell colors a single cell by success rate via rateToColor.
 // n/a cells (iterations=0) render grey. The row carries the click
 // handler; cells just visualize per-protocol values. successRate / p99
 // reflect the active slot_start via shiftedCell.
@@ -801,14 +862,14 @@ function renderHeatmapCell(cell, scenario) {
   }
   const shifted = shiftedCell(cell, selectedSlotStart);
   const rate = shifted.successRate;
-  const hue = rateToHue(rate);
+  const { bg, fg } = rateToColor(rate);
   const pct = Math.round(rate * 100);
   const p99 = shifted.decisionTime ? `${Math.round(shifted.decisionTime.p99)} ms p99` : 'no decisions';
   return h(
     'div',
     {
       class: 'hcell',
-      style: `--hue: ${hue}`,
+      style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}`,
       title: `${scenario.title || scenario.name} · ${cell.protocol}\n${pct}% success · ${p99}\nClick to drill in`,
     },
     `${pct}%`,
@@ -945,7 +1006,7 @@ function protocolStats(sweep, scenario, protocol) {
 }
 
 // buildSweepLegend renders one row per protocol: colored swatch + name +
-// success-rate chip (hue-tinted by the worst-case rate via rateToHue,
+// success-rate chip (HSL-tinted by the worst-case rate via rateToColor,
 // matching the heatmap gradient) + p99 (range when the sweep is
 // multi-point). Replaces Chart.js's built-in legend, which is disabled
 // in the chart options.
@@ -970,13 +1031,13 @@ function buildSweepLegend(sweep, scenario, protocols) {
       return;
     }
     // Color the chip by the worst-case (min) rate so a sweep that dips
-    // below 80% reads as red even if other points are green.
-    const hue = rateToHue(stats.successMin);
+    // into the red zone reads as red even if other points are green.
+    const { bg, fg } = rateToColor(stats.successMin);
     const sMin = (stats.successMin * 100).toFixed(2);
     const sMax = (stats.successMax * 100).toFixed(2);
     const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
     row.appendChild(
-      h('span', { class: 'sm-legend-pct', style: `--hue: ${hue}` }, sStr),
+      h('span', { class: 'sm-legend-pct', style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}` }, sStr),
     );
     if (stats.p99Min !== null) {
       const pMin = Math.round(stats.p99Min);

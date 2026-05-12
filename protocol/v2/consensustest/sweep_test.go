@@ -554,9 +554,14 @@ func TestSweep_MultiByz_n7(t *testing.T) {
 	t.Run("OBFT", func(t *testing.T) {
 		out, err := obftadapter.Protocol{}.Run(cfg)
 		require.NoError(t, err)
-		require.True(t, out.Decided, "OBFT n=7 with 2 byz silent leaders must fall through")
-		require.Greater(t, out.DecidedRound, 1,
-			"should fall through past both byz-led layers (L_0, L_1); got L_%d", out.DecidedRound)
+		// At default ε_3=50ms, fall-through past 2 silent layers walks to
+		// L_2 with 2·ε_3 = 100ms cost on top of RoundEndOffset, landing the
+		// decision at 3950ms — past RelayCutoff − HeaderSubmitHeadroom
+		// (3900ms). ClipLateDecision converts this to MISS to match
+		// production submit-budget semantics; the protocol still resolved
+		// internally (safety invariants assert on the per-op records).
+		require.False(t, out.Decided,
+			"OBFT n=7 with 2 byz silent leaders: fall-through to L_2 lands past deadline; production would miss")
 	})
 
 	t.Run("QBFT-SSV", func(t *testing.T) {

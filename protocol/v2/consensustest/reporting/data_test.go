@@ -79,17 +79,20 @@ func TestWriteReportData_PayloadShape(t *testing.T) {
 
 	dir := t.TempDir()
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
-		Title:       "smoke comparison",
-		Description: "three scenarios × two protocols",
-		Sweeps:      []ct.SweepResult{canonical},
-		Iterations:  3,
-		Wallclock:   123 * time.Millisecond,
+		Title:              "smoke comparison",
+		Description:        "three scenarios × two protocols",
+		Sweeps:             []ct.SweepResult{canonical},
+		BaselineIterations: 3,
+		UnstableIterations: 3,
+		Wallclock:          123 * time.Millisecond,
 	}, dir))
 
 	payload := parseDataJS(t, dir)
 	require.Equal(t, "smoke comparison", payload["title"])
 	require.Equal(t, "three scenarios × two protocols", payload["description"])
-	require.EqualValues(t, 3, payload["iterations"])
+	require.EqualValues(t, 3, payload["baselineIterations"])
+	require.EqualValues(t, 3, payload["unstableIterations"])
+	require.NotContains(t, payload, "iterations", "legacy top-level iterations field removed from payload")
 	require.NotContains(t, payload, "generatedAt", "generatedAt field removed from payload")
 
 	protocols := payload["protocols"].([]any)
@@ -141,7 +144,7 @@ func TestWriteReportData_NACellOmitsDecisionTime(t *testing.T) {
 
 	dir := t.TempDir()
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
-		Title: "na test", Sweeps: []ct.SweepResult{canonical}, Iterations: 3,
+		Title: "na test", Sweeps: []ct.SweepResult{canonical}, BaselineIterations: 3, UnstableIterations: 3,
 	}, dir))
 	payload := parseDataJS(t, dir)
 	cells := payload["sweeps"].([]any)[0].(map[string]any)["points"].([]any)[0].(map[string]any)["cells"].([]any)
@@ -187,7 +190,7 @@ func TestWriteReportData_DuplicateSweepNames(t *testing.T) {
 		}}})
 
 	err := reporting.WriteReportData(reporting.Comparison{
-		Title: "dup", Sweeps: []ct.SweepResult{one, two}, Iterations: 1,
+		Title: "dup", Sweeps: []ct.SweepResult{one, two}, BaselineIterations: 1, UnstableIterations: 1,
 	}, t.TempDir())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), `duplicate sweep name "same"`)
@@ -215,7 +218,7 @@ func TestWriteReportData_MultiPointSweep(t *testing.T) {
 
 	dir := t.TempDir()
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
-		Title: "trend", Sweeps: []ct.SweepResult{btt}, Iterations: 2,
+		Title: "trend", Sweeps: []ct.SweepResult{btt}, BaselineIterations: 2, UnstableIterations: 2,
 	}, dir))
 
 	payload := parseDataJS(t, dir)

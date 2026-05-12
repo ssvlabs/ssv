@@ -36,11 +36,15 @@ var scenarioMultiSilent = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: k - 1}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT recovers in-round via K-layer fall-through to L_{K-1}.
-		"OBFT": ExpectSuccessFallThrough,
-		// 2abOBFT: same NR-fall-through path; deepest layer's honest leader
-		// reaches σ-quorum on its V via Phase-2a verdict convergence.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// OBFT/2abOBFT: structurally the fall-through is in-round, but the
+		// Phase-3 walk cost (ε_3 × K) plus HeaderSubmitHeadroom exceeds the
+		// reserved post-RoundEndOffset budget at K ≥ 3 / default ε_3=50ms.
+		// At K=2 the walk fits (1×ε_3 = 50ms → decision at 3900ms = deadline
+		// → just succeeds); at K ≥ 3 the decision lands past
+		// RelayCutoff − HeaderSubmitHeadroom and the slot misses.
+		// ExpectSuccessOrMiss reflects the K-dependent boundary.
+		"OBFT":    ExpectSuccessOrMiss,
+		"2abOBFT": ExpectSuccessOrMiss,
 		// QBFT needs K-1 round-changes (R1..R_{K-1} silent → R_K honest).
 		// Timing depends on K and RT vs RelayCutoff:
 		//   K=2 → 1 timeout → ~2s < 4s → SUCCESS.
@@ -50,7 +54,7 @@ var scenarioMultiSilent = Scenario{
 		// the sweep's K values.
 		"QBFT": ExpectSuccessOrMiss,
 	},
-	Note: "Top K-1 of K leaders silent; only the deepest is honest. Structural OBFT-family advantage at any (BFT_start, D) where the healthy path fits — multi-leader-silent fall-through is in-round, vs QBFT's serial round-change pacing against RelayCutoff.",
+	Note: "Top K-1 of K leaders silent; only the deepest is honest. OBFT's K-layer in-round fall-through is structurally faster than QBFT's serial round-changes, but the per-layer Phase-3 walk cost (ε_3) accumulates: at ε_3=50ms / RelayCutoff=4s the deepest-honest case fits within deadline only at K=2; at K ≥ 3 the decision lands past RelayCutoff − HeaderSubmitHeadroom and the slot misses. ExpectSuccessOrMiss for all three protocols reflects the K-dependent boundary.",
 }
 
 // ---- σ-refusal (byz never contributes) --------------------------------

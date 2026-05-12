@@ -19,6 +19,31 @@ import (
 // to the catalog. RunScenarioOnProtocol panics on safety violations, so a
 // catalog scenario using these kinds would crash every matrix-style test.
 // Better to fail fast and pointed here than to debug a SafetyPanic stack.
+// TestScenario_ExpectForVariantFallback asserts ExpectFor falls back from a
+// "<base>-<suffix>" protocol name to the base name when no exact key is
+// present, and that an explicit override on the variant key wins.
+func TestScenario_ExpectForVariantFallback(t *testing.T) {
+	s := ct.Scenario{
+		Name: "x",
+		Expect: map[string]ct.ExpectClass{
+			"QBFT":    ct.ExpectSuccessFastest,
+			"QBFT-EX": ct.ExpectMiss, // explicit override for one variant
+		},
+	}
+	if v, ok := s.ExpectFor("QBFT"); !ok || v != ct.ExpectSuccessFastest {
+		t.Fatalf("exact match QBFT: got (%v, %v)", v, ok)
+	}
+	if v, ok := s.ExpectFor("QBFT-SSV"); !ok || v != ct.ExpectSuccessFastest {
+		t.Fatalf("variant fallback QBFT-SSV -> QBFT: got (%v, %v)", v, ok)
+	}
+	if v, ok := s.ExpectFor("QBFT-EX"); !ok || v != ct.ExpectMiss {
+		t.Fatalf("explicit override QBFT-EX: got (%v, %v)", v, ok)
+	}
+	if _, ok := s.ExpectFor("OBFT"); ok {
+		t.Fatalf("unknown base OBFT: expected (0, false)")
+	}
+}
+
 func TestCatalog_NoUnsafeByzKinds(t *testing.T) {
 	base := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	unsafeKinds := map[ct.ByzKind]string{

@@ -120,18 +120,20 @@ section.heatmap {
   padding: 0.4em 0.5em 0.4em 0.7em;
   color: #1f2937;
 }
-/* Heatmap cell color: HSL hue from --hue, fixed saturation/lightness.
- * Cells with no data render as the muted-grey "na" variant. The whole
- * .hrow carries the click handler, so cells inherit row-level cursor
- * affordance — no per-cell cursor here. Font-weight inherits from the
- * row (= regular) so the % text reads at the same visual weight as the
- * scenario name; the colored background carries the emphasis.  */
+/* Heatmap cell color: full HSL string from --hcell-bg (computed by
+ * app.js rateToColor; deep red at 0% → yellow at 90% → soft green at
+ * 100%). Cells with no data render as the muted-grey "na" variant. The
+ * whole .hrow carries the click handler, so cells inherit row-level
+ * cursor affordance — no per-cell cursor here. Font-weight inherits
+ * from the row (= regular) so the % text reads at the same visual
+ * weight as the scenario name; the colored background carries the
+ * emphasis.  */
 .hcell {
   padding: 0.4em 0.7em;
   text-align: center;
   border-radius: 4px;
-  background: hsla(var(--hue), 70%, 76%, 0.7);
-  color: #1a1a1a;
+  background: var(--hcell-bg);
+  color: var(--hcell-fg, #1a1a1a);
 }
 .hcell.na {
   background: #e2e8f0;
@@ -150,8 +152,28 @@ section.heatmap {
   border-radius: 4px;
   transition: background 100ms ease;
 }
+/* Adversarial rows use a faint criss-cross mesh to flag "this scenario
+ * needs an attacker" at a glance, distinct from the flat tint used by
+ * hover/selected. Two stacked repeating-linear-gradients at ±45° give
+ * the crisscross; the line width is intentionally narrow (1px line /
+ * 7px gap) so the pattern reads as texture, not foreground, and the
+ * heatmap-cell colors stay visible through it. */
 .hrow.adversarial {
-  background: rgba(15, 23, 42, 0.05);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0,
+      transparent 7px,
+      rgba(0, 0, 0, 0.16) 7px,
+      rgba(0, 0, 0, 0.16) 8px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 7px,
+      rgba(0, 0, 0, 0.16) 7px,
+      rgba(0, 0, 0, 0.16) 8px
+    );
 }
 .hrow.clickable {
   cursor: pointer;
@@ -160,7 +182,21 @@ section.heatmap {
   background: rgba(15, 23, 42, 0.05);
 }
 .hrow.clickable.adversarial:hover {
-  background: rgba(15, 23, 42, 0.09);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0,
+      transparent 7px,
+      rgba(0, 0, 0, 0.24) 7px,
+      rgba(0, 0, 0, 0.24) 8px
+    ),
+    repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 7px,
+      rgba(0, 0, 0, 0.24) 7px,
+      rgba(0, 0, 0, 0.24) 8px
+    );
 }
 .hrow.selected {
   background: rgba(9, 105, 218, 0.10);
@@ -231,11 +267,11 @@ section.heatmap {
   color: #0f172a;
 }
 .sm-legend-pct {
-  background: hsla(var(--hue), 70%, 76%, 0.7);
+  background: var(--hcell-bg);
   padding: 0.05em 0.3em;
   border-radius: 3px;
   font-size: 0.88em;
-  color: #1a1a1a;
+  color: var(--hcell-fg, #1a1a1a);
   text-align: center;
 }
 .sm-legend-pct.na {

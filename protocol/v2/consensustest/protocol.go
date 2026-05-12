@@ -178,6 +178,33 @@ var ErrNotApplicable = fmt.Errorf("scenario not applicable to this protocol")
 // that configuration.
 var ErrConfigOutOfEnvelope = fmt.Errorf("config out of envelope for this protocol")
 
+// ClipLateDecision converts a successful Outcome whose earliest-decider time
+// exceeds `deadline` into a MISS, and clears every per-op decided=true that
+// also misses the deadline. Adapters apply this in their Run after the DES
+// completes so the framework's notion of "decided" matches production: a
+// cluster that doesn't have the cert / decision in hand by RelayCutoff −
+// HeaderSubmitHeadroom can't submit, regardless of how the protocol got
+// there internally (QBFT round-changing past its timer, OBFT recovering via
+// evtResolveRerun on a late KindCommit, etc.). Earliest-decider gate matches
+// the framework's "any in-time op submits and the slot succeeds" semantic.
+func ClipLateDecision(out *Outcome, deadline time.Duration) {
+	if !out.Decided || out.DecisionTime <= deadline {
+		return
+	}
+	out.Decided = false
+	out.DecidedRound = -1
+	for op, oo := range out.PerOp {
+		if oo.Decided && oo.Time > deadline {
+			oo.Decided = false
+			oo.Round = -1
+			if oo.Err == "" {
+				oo.Err = "missed relay deadline"
+			}
+			out.PerOp[op] = oo
+		}
+	}
+}
+
 // Outcome is the algorithm-agnostic per-sim result.
 type Outcome struct {
 	Decided      bool

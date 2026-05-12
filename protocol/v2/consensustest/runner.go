@@ -45,7 +45,7 @@ func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig)
 		s.Apply(&cfg)
 	}
 
-	expect, declared := s.Expect[p.Name()]
+	expect, declared := s.ExpectFor(p.Name())
 	if !declared {
 		t.Fatalf("scenario %q has no Expect entry for protocol %q (Expect map keys: %v)",
 			s.Name, p.Name(), expectKeys(s.Expect))

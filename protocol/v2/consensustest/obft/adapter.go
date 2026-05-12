@@ -60,6 +60,13 @@ func (Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
+	// Clip late decisions to MISS so the outcome reflects deployed-protocol
+	// behavior. Phase 3's evtResolveRerun can recover from a late-arriving
+	// KindCommit past RoundEndOffset, but if the rebuilt decision lands past
+	// RelayCutoff − HeaderSubmitHeadroom, production would miss the slot too
+	// (no time left to broadcast the cert and submit). Mirrors the QBFT
+	// adapter's deadline clip so the comparison is apples-to-apples.
+	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
 	return out, nil
 }
 

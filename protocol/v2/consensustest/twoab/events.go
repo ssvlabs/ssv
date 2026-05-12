@@ -149,7 +149,6 @@ type evtVerdictBroadcastStart struct{}
 func (e *evtVerdictBroadcastStart) describe() string { return "VerdictBroadcastStart" }
 
 func (e *evtVerdictBroadcastStart) handle(s *sim) []scheduledEvent {
-	var out []scheduledEvent
 	K := s.cfg.K
 	for _, op := range s.operators {
 		for k := 0; k < K; k++ {
@@ -177,7 +176,8 @@ func (e *evtVerdictBroadcastStart) handle(s *sim) []scheduledEvent {
 			}
 		}
 	}
-	return out
+	// emitToAll schedules directly via s.schedule; nothing to return.
+	return nil
 }
 
 // ---- evtVerdictArrival -------------------------------------------------

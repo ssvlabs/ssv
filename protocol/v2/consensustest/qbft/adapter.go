@@ -111,22 +111,10 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// The Instance runs round-changes regardless of wall time; the
 	// application's relay cutoff is what makes long chains a slot miss in
 	// practice. Clip post-deadline decisions to MISS so the outcome reflects
-	// deployed-protocol behavior.
-	deadline := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom
-	if out.Decided && out.DecisionTime > deadline {
-		out.Decided = false
-		out.DecidedRound = -1
-		for op, oo := range out.PerOp {
-			if oo.Decided && oo.Time > deadline {
-				oo.Decided = false
-				oo.Round = -1
-				if oo.Err == "" {
-					oo.Err = "missed relay deadline"
-				}
-				out.PerOp[op] = oo
-			}
-		}
-	}
+	// deployed-protocol behavior. Shared with the OBFT/2abOBFT adapters via
+	// ct.ClipLateDecision so all three protocols honor the same submit
+	// deadline (RelayCutoff − HeaderSubmitHeadroom).
+	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
 	return out, nil
 }
 

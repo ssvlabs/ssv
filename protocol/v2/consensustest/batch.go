@@ -164,13 +164,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				simCfg := cfg.Base
-				simCfg.Seed = cfg.SeedStart + int64(j.iter)
-				if apply := scenarioOf(j.cellIdx).Apply; apply != nil {
-					apply(&simCfg)
-				}
-				out, err := protocolOf(j.cellIdx).Run(simCfg)
-				results[j.cellIdx][j.iter] = iterOutcome{out: out, err: err}
+				results[j.cellIdx][j.iter] = runOneSim(cfg, scenarioOf(j.cellIdx), protocolOf(j.cellIdx), j.iter)
 			}
 		}()
 	}
@@ -199,16 +193,44 @@ type iterOutcome struct {
 	err error
 }
 
+// runOneSim runs one iteration on its own goroutine and returns an
+// iterOutcome. A panic from inside the protocol (adapter or production
+// code under it) is recovered and returned as an error so a single buggy
+// sim doesn't take down the whole stress run — the offending cell is
+// classified as "unexpected error → n/a" by reduceCellResults. Safety
+// panics (SafetyPanic) intentionally do NOT happen here: safety is
+// checked in the single-threaded reduce phase, where panic propagation
+// is well-defined.
+//
+// The panic-wrap error string includes the seed so the operator can
+// reproduce the panic by re-running with that exact seed (sims are
+// deterministic given (cfg, seed)).
+func runOneSim(cfg BatchConfig, sc Scenario, p Protocol, iter int) (oc iterOutcome) {
+	seed := cfg.SeedStart + int64(iter)
+	defer func() {
+		if r := recover(); r != nil {
+			oc = iterOutcome{err: fmt.Errorf("%s/%s iter %d seed %d: sim panic: %v",
+				p.Name(), sc.Name, iter, seed, r)}
+		}
+	}()
+	simCfg := cfg.Base
+	simCfg.Seed = seed
+	if sc.Apply != nil {
+		sc.Apply(&simCfg)
+	}
+	out, err := p.Run(simCfg)
+	return iterOutcome{out: out, err: err}
+}
+
 // reduceCellResults aggregates one cell's per-iter outcomes into a
-// BatchCell. Mirrors the per-sim accumulation that runCell used to do
-// inline, lifted out so the parallel iteration loop above can stay
-// straightforward and the reduction stays single-threaded (no per-cell
-// mutex on the distributions / maps).
+// BatchCell. Single-threaded by construction (no per-cell mutex on the
+// distributions / maps); the parallel sims write to results[cellIdx][iter]
+// independently in RunBatch and this function reduces post-Wait.
 //
 // cellIter is the iteration count BatchConfig.IterationsFor returned for
 // this cell's scenario — already used to size results[ci] in RunBatch.
 //
-// Two error classes get distinct cell treatments:
+// Two error classes get distinct cell treatments via classifyCellErrors:
 //   - ErrNotApplicable (scenario semantically doesn't translate to this
 //     protocol — e.g. OBFT-only byz patterns on QBFT): Iterations=0,
 //     renderers show "n/a".
@@ -217,37 +239,75 @@ type iterOutcome struct {
 //     deepest broadcast budget to negative): Iterations=cellIter,
 //     SuccessRate=0, renderers show a red 0%. This is a protocol failure
 //     mode at this operating point, not an inapplicability.
-//   - Any other Run error: still treated as n/a (with a t.Logf — these are
+//   - Any other Run error: treated as n/a (with a t.Logf — these are
 //     bugs to investigate).
 //
-// The check inspects the first iter only since these errors are config-level
-// and uniform across iters at a given (protocol, config) pair.
+// classifyCellErrors scans every iter so a non-uniform error (e.g. one
+// iter hits ErrConfigOutOfEnvelope while iter 0 succeeded) still surfaces
+// — config-level errors should be uniform across iters, but the scan
+// catches sim-internal bugs that breach that invariant.
 func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
 	t.Helper()
-	if len(iters) > 0 {
-		if first := iters[0]; first.err != nil {
-			if errors.Is(first.err, ErrNotApplicable) {
-				return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
+	if cell, classified := classifyCellErrors(t, cellIter, scenario, protocol, iters); classified {
+		return cell
+	}
+	return aggregateCellIters(cellIter, scenario, protocol, iters)
+}
+
+// classifyCellErrors scans every iter's err once and emits a special-case
+// BatchCell if the cell hit a uniform config-level error (ErrNotApplicable
+// or ErrConfigOutOfEnvelope). An unexpected error in any iter logs and
+// returns an n/a cell. Returns (cell, true) when a special-case applies;
+// (zero, false) when every iter ran successfully and the caller should
+// aggregate normally.
+func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) (BatchCell, bool) {
+	t.Helper()
+	hasNotApplicable, hasOutOfEnvelope, hasOtherErr := false, false, false
+	var firstOther error
+	for _, r := range iters {
+		if r.err == nil {
+			continue
+		}
+		switch {
+		case errors.Is(r.err, ErrNotApplicable):
+			hasNotApplicable = true
+		case errors.Is(r.err, ErrConfigOutOfEnvelope):
+			hasOutOfEnvelope = true
+		default:
+			if !hasOtherErr {
+				firstOther = r.err
 			}
-			if errors.Is(first.err, ErrConfigOutOfEnvelope) {
-				// Protocol can't operate at this operating point — return a
-				// full-iter-count cell with no successful decisions so the
-				// UI renders it as a hard 0% (red) rather than n/a.
-				return BatchCell{
-					Protocol:    protocol.Name(),
-					Scenario:    scenario.Name,
-					Iterations:  cellIter,
-					SuccessRate: 0,
-					MissReasons: map[string]int{"config out of envelope": cellIter},
-				}
-			}
-			// Unexpected non-applicability / envelope error — bug to chase.
-			t.Logf("RunBatch: %s/%s unexpected error: %v (cell marked n/a)",
-				protocol.Name(), scenario.Name, first.err)
-			return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
+			hasOtherErr = true
 		}
 	}
+	switch {
+	case hasOtherErr:
+		t.Logf("RunBatch: %s/%s unexpected error (cell marked n/a): %v",
+			protocol.Name(), scenario.Name, firstOther)
+		return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}, true
+	case hasOutOfEnvelope:
+		// Protocol can't operate at this operating point — return a
+		// full-iter-count cell with no successful decisions so the UI
+		// renders it as a hard 0% (red) rather than n/a.
+		return BatchCell{
+			Protocol:    protocol.Name(),
+			Scenario:    scenario.Name,
+			Iterations:  cellIter,
+			SuccessRate: 0,
+			MissReasons: map[string]int{"config out of envelope": cellIter},
+		}, true
+	case hasNotApplicable:
+		return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}, true
+	}
+	return BatchCell{}, false
+}
 
+// aggregateCellIters reduces a cell's successful iters into a BatchCell.
+// Caller must have already routed config-level errors through
+// classifyCellErrors. Panics on any SafetyReport violation, matching the
+// RunScenarioOnProtocol contract — safety panics are intentional and
+// terminate the test before any further reduce work runs.
+func aggregateCellIters(cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
 	cell := BatchCell{
 		Protocol:         protocol.Name(),
 		Scenario:         scenario.Name,
@@ -258,39 +318,24 @@ func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol P
 		EvidenceCounts:   make(map[string]Distribution),
 		MissReasons:      make(map[string]int),
 	}
-
 	successCount := 0
 	for _, r := range iters {
-		if r.err != nil {
-			// Defense in depth — the pre-check above caught uniform errors;
-			// a per-iter err here would indicate non-uniform behavior that
-			// the rest of the framework doesn't anticipate. Mark n/a to be
-			// safe.
-			return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}
-		}
-
-		// Universal safety invariants — panic on violation, matching the
-		// existing RunScenarioOnProtocol contract. SafetyPanic terminates
-		// the test before any further reduce work runs.
 		report := ComputeSafetyReport(r.out)
 		if report.IsViolation() {
 			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, r.out)
 		}
-
 		if r.out.Decided {
 			successCount++
 			cell.DecisionTime = append(cell.DecisionTime, float64(r.out.DecisionTime.Milliseconds()))
 		} else {
 			cell.MissReasons[classifyMiss(r.out)]++
 		}
-
 		cell.ClusterBandwidth = append(cell.ClusterBandwidth, float64(r.out.Bandwidth.TotalBytes))
 		for kind, bytes := range r.out.Bandwidth.PerKindBytes {
 			cell.PerKindBandwidth[kind] = append(cell.PerKindBandwidth[kind], float64(bytes))
 		}
-
-		// EvidenceCounts: one sample per sim per rule, value = sum of fires
-		// across all operators in this sim.
+		// One evidence sample per sim per rule (value = sum of fires across
+		// all operators in this sim).
 		perSimEvidence := make(map[string]int)
 		for _, oo := range r.out.PerOp {
 			for rule, count := range oo.EvidenceByRule {
@@ -301,7 +346,6 @@ func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol P
 			cell.EvidenceCounts[rule] = append(cell.EvidenceCounts[rule], float64(count))
 		}
 	}
-
 	cell.SuccessRate = float64(successCount) / float64(cellIter)
 	return cell
 }
@@ -331,15 +375,20 @@ func classifyMiss(o Outcome) string {
 	if len(classes) == 0 {
 		return "unknown"
 	}
-	if len(classes) == 1 {
-		for k := range classes {
-			return k
-		}
+	// Iterate sorted keys so ties in the "+mixed" branch resolve deterministically
+	// (lex order). Without this, Go map iteration randomization makes the chosen
+	// "top" flip across runs when two classes have equal counts.
+	keys := make([]string, 0, len(classes))
+	for k := range classes {
+		keys = append(keys, k)
 	}
-	// Multiple classes — return the most common one with a "+mixed" suffix.
+	sort.Strings(keys)
+	if len(keys) == 1 {
+		return keys[0]
+	}
 	top, topCount := "", 0
-	for k, c := range classes {
-		if c > topCount {
+	for _, k := range keys {
+		if c := classes[k]; c > topCount {
 			top = k
 			topCount = c
 		}

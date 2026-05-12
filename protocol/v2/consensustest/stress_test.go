@@ -138,11 +138,12 @@ func TestStress(t *testing.T) {
 	}
 
 	require.NoError(t, reporting.WriteReportData(reporting.Comparison{
-		Title:       "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
-		Description: "Curated sweeps × OBFT/2abOBFT/QBFT × " + strconv.Itoa(iters.Baseline) + " baseline / " + strconv.Itoa(iters.Unstable) + " unstable iterations per cell.",
-		Sweeps:      results,
-		Iterations:  iters.Baseline,
-		Wallclock:   time.Since(totalStart),
+		Title:              "consensustest comparison — OBFT vs 2abOBFT vs QBFT",
+		Description:        "Curated sweeps × OBFT/2abOBFT/QBFT across diverse network conditions and cluster sizes.",
+		Sweeps:             results,
+		BaselineIterations: iters.Baseline,
+		UnstableIterations: iters.Unstable,
+		Wallclock:          time.Since(totalStart),
 	}, dir))
 
 	t.Logf("Report data written: %s/data.js", dir)

@@ -15,7 +15,8 @@
 //	sweepResults := []ct.SweepResult{ct.RunSweep(t, ct.DefaultSweeps(...)[0]), ...}
 //	c := reporting.Comparison{
 //	    Title: "OBFT vs QBFT", Description: "...",
-//	    Sweeps: sweepResults, Iterations: 100,
+//	    Sweeps: sweepResults,
+//	    BaselineIterations: 100, UnstableIterations: 10,
 //	    Wallclock: elapsed,
 //	}
 //	reporting.WriteReportData(c, "./stresstest-report")
@@ -41,8 +42,13 @@ type Comparison struct {
 	Title       string
 	Description string
 	Sweeps      []ct.SweepResult
-	Iterations  int
-	Wallclock   time.Duration
+	// BaselineIterations / UnstableIterations carry the per-group iteration
+	// counts the test driver applied (Baseline-group scenarios at Baseline,
+	// every other scenario at Unstable). Per-cell counts also live on
+	// BatchCell.Iterations, which is what the UI reads for rendering.
+	BaselineIterations int
+	UnstableIterations int
+	Wallclock          time.Duration
 }
 
 // Applicable reports whether the cell ran ≥ 1 iteration. n/a cells (the
@@ -90,13 +96,17 @@ func WriteReportData(c Comparison, dir string) error {
 // omits decisionTime entirely; the UI treats missing as "no samples").
 
 type reportPayload struct {
-	Title       string            `json:"title"`
-	Description string            `json:"description,omitempty"`
-	Iterations  int               `json:"iterations"`
-	Wallclock   string            `json:"wallclock"`
-	Scenarios   []scenarioPayload `json:"scenarios"`
-	Protocols   []string          `json:"protocols"`
-	Sweeps      []sweepPayload    `json:"sweeps"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+	// BaselineIterations / UnstableIterations carry the per-group counts the
+	// driver applied. Per-cell iteration counts live on cellPayload.Iterations
+	// (which is what the UI's CDF rendering keys off of).
+	BaselineIterations int               `json:"baselineIterations,omitempty"`
+	UnstableIterations int               `json:"unstableIterations,omitempty"`
+	Wallclock          string            `json:"wallclock"`
+	Scenarios          []scenarioPayload `json:"scenarios"`
+	Protocols          []string          `json:"protocols"`
+	Sweeps             []sweepPayload    `json:"sweeps"`
 }
 
 type scenarioPayload struct {
@@ -153,11 +163,12 @@ func buildPayload(c Comparison) reportPayload {
 	protocols := extractProtocols(c.Sweeps)
 
 	pl := reportPayload{
-		Title:       c.Title,
-		Description: c.Description,
-		Iterations:  c.Iterations,
-		Wallclock:   c.Wallclock.String(),
-		Protocols:   protocols,
+		Title:              c.Title,
+		Description:        c.Description,
+		BaselineIterations: c.BaselineIterations,
+		UnstableIterations: c.UnstableIterations,
+		Wallclock:          c.Wallclock.String(),
+		Protocols:          protocols,
 	}
 	for _, sc := range scenarios {
 		pl.Scenarios = append(pl.Scenarios, scenarioPayload{
