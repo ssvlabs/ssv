@@ -314,6 +314,79 @@ func TestCorrelatedLinkDelay_Deterministic(t *testing.T) {
 	require.Equal(t, a, b, "same seed must produce identical delay sequence")
 }
 
+// TestMarkovianSlowness_Additive verifies that the slow state adds ExtraDelay
+// on top of Inner.Delay rather than replacing it. The first call for a new
+// link is always in the slow state (spec: slot starts mid-bad-period), so
+// the returned delay must equal Inner.Delay + ExtraDelay.
+func TestMarkovianSlowness_Additive(t *testing.T) {
+	const (
+		base  = 100 * time.Millisecond
+		extra = 200 * time.Millisecond
+	)
+	model := ct.NewMarkovianSlowness(ct.ConstantDelay{D: base}, []ct.OperatorID{2}, extra, 0.8)
+	rng := mrand.New(mrand.NewSource(42))
+
+	d := model.Delay(rng, 1, 2, ct.KindCommit)
+	require.Equal(t, base+extra, d,
+		"slow state must return Inner.Delay + ExtraDelay, not ExtraDelay alone")
+}
+
+// TestMarkovianSlowness_PairIndependence verifies that two links sharing a
+// slow op (e.g. op2) each start in the slow state independently. Under the
+// old per-op model the second link would inherit the already-inited op2
+// chain and potentially be in fast state; with per-pair state both links
+// must be slow on their first call.
+func TestMarkovianSlowness_PairIndependence(t *testing.T) {
+	const (
+		base  = 100 * time.Millisecond
+		extra = 200 * time.Millisecond
+	)
+	// PersistP=1: chain never flips after init, so slow state is permanent
+	// once entered. This rules out coincidental slow results.
+	model := ct.NewMarkovianSlowness(ct.ConstantDelay{D: base}, []ct.OperatorID{2}, extra, 1.0)
+	rng := mrand.New(mrand.NewSource(7))
+
+	// Both pairs involve slow op2 but are distinct links.
+	d12 := model.Delay(rng, 1, 2, ct.KindCommit)
+	d32 := model.Delay(rng, 3, 2, ct.KindCommit)
+
+	require.Equal(t, base+extra, d12, "link (1,2): first call must be slow")
+	require.Equal(t, base+extra, d32, "link (3,2): must start slow independently of (1,2)")
+}
+
+// TestLossyNetwork_PairIndependence verifies that different links have
+// independent loss chains. With a high BurstFactor the per-link Markov
+// chains exhibit sustained bursts; if the chains were shared (old global
+// model), two disjoint links would both drop simultaneously whenever the
+// single chain is in bad state, producing a co-drop rate equal to LossRate.
+// With independent per-link chains the co-drop rate converges on LossRate².
+func TestLossyNetwork_PairIndependence(t *testing.T) {
+	const (
+		lossRate    = 0.5
+		burstFactor = 50 // high burst amplifies correlation when chains are shared
+		samples     = 10000
+		seed        = int64(42)
+	)
+	model := ct.NewLossyNetwork(ct.ConstantDelay{D: 200*time.Millisecond}, lossRate, burstFactor)
+	rng := mrand.New(mrand.NewSource(seed))
+
+	bothDrop := 0
+	for i := 0; i < samples; i++ {
+		d12 := model.Delay(rng, 1, 2, ct.KindCommit)
+		d34 := model.Delay(rng, 3, 4, ct.KindCommit)
+		if d12 == ct.DroppedDelay && d34 == ct.DroppedDelay {
+			bothDrop++
+		}
+	}
+	observed := float64(bothDrop) / float64(samples)
+	// Independent chains: P(both drop) ≈ LossRate² = 0.25.
+	// Fully correlated (old global chain): P(both drop) ≈ LossRate = 0.50.
+	// Tolerance ±0.06 is ~2× the std error at N_eff ≈ samples/burstFactor = 200.
+	require.InDeltaf(t, lossRate*lossRate, observed, 0.06,
+		"co-drop rate %.4f; independent chains expect ~%.2f, shared chain would give ~%.2f",
+		observed, lossRate*lossRate, lossRate)
+}
+
 // formatFloat — fixed-2-decimal float format for subtest names. Uses
 // strconv with explicit precision for stable, deterministic strings.
 func formatFloat(f float64) string {

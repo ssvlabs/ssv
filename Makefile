@@ -118,18 +118,18 @@ consensustest-with-real-bls:
 # — consumed by the static UI (index.html + app.js + styles.css)
 # already in that folder.
 #
-# Each `make stresstest` run produces data for a SINGLE (n, K) operating
-# point (set via CLUSTER_SIZE_N and LAYERS_K). The reporting layer
+# Each `make stresstest` run produces data for one or more (n, K) pairs
+# (controlled by CLUSTER_SIZES_N and LAYERS_K). The reporting layer
 # merges new (n, K) slices into the existing data.js by Fields-tuple,
 # so multiple runs at different (n, K) compose into one report instead
 # of overwriting. Example:
 #
-#   make stresstest CLUSTER_SIZE_N=4 LAYERS_K=4
-#   make stresstest CLUSTER_SIZE_N=4 LAYERS_K=2
-#   make stresstest CLUSTER_SIZE_N=7 LAYERS_K=3
+#   make stresstest CLUSTER_SIZES_N=4 LAYERS_K=4
+#   make stresstest CLUSTER_SIZES_N=4 LAYERS_K=2
+#   make stresstest CLUSTER_SIZES_N=7 LAYERS_K=3,4
 #
-# leaves a single data.js with all three (n, K) slices, selectable in
-# the UI via the n and K pickers (greyed out where a slice is missing).
+# leaves a single data.js with all four (n, K) slices, selectable in
+# the UI via the N and K pickers (greyed out where a slice is missing).
 #
 # Sweeps (all use LogNormalDelay as the production-shaped propagation
 # model; see protocol/v2/consensustest/sweep.go for full docs):
@@ -152,11 +152,15 @@ consensustest-with-real-bls:
 #                            protocol/v2/consensustest/instability.go
 #                            for the per-level params.)
 #
-# Operating-point env vars:
-#   - CLUSTER_SIZE_N (default 4) — the SSV cluster size n.
-#   - LAYERS_K       (default = n; SSV's K=N convention) — OBFT layer
-#                    count. Production SSV uses K = n; smaller K trades
-#                    fall-through depth for tighter per-layer budgets.
+# Operating-point env vars (all have defaults; override to scope runs):
+#   - CLUSTER_SIZES_N (default 4) — comma-separated cluster sizes ∈ {4, 7}.
+#     Multiple values → one run per size, all merging into the same data.js.
+#   - LAYERS_K        (default 2,4) — comma-separated K values ∈ {2, 3, 4}.
+#     Brackets the BFT-liveness floor (K=2 at n=4) and SSV's K=N convention.
+#     A K value is skipped for any n where K < MinK(n).
+#   - P2P_DELAYS      (default 0.1,0.5,0.7,0.9) — comma-separated LogNormal
+#     σ values for the p2p_baseline sweep's jitter axis. Each value becomes
+#     one point in the BTT × p2p_delay × instability cross-product.
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 1000) — high-confidence
@@ -179,30 +183,38 @@ consensustest-with-real-bls:
 REPORT_DIR ?= ./stresstest-report
 ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 100
-# CLUSTER_SIZE_N / LAYERS_K behavior:
-#   - BOTH unset (quick default): runs the curated pair {(n=4, K=2),
-#     (n=4, K=4)} — fast, representative, brackets the BFT-liveness
-#     floor (MinK(4)=2) and the SSV K=N convention.
-#   - Only CLUSTER_SIZE_N set: iterates every valid K for that n
-#     (MinK(N)..N).
-#   - Only LAYERS_K set: iterates every supported n in [4, 7, 10, 13],
-#     keeping only (n, K) pairs where K is valid for that n.
-#   - Both set: a single (n, K) point.
-# Reruns merge into the same data.js via the WriteReportData merge
-# path, so iterative widening (start at the default, then add specific
-# (n, K) slices) composes naturally.
-CLUSTER_SIZE_N ?=
-LAYERS_K ?=
+CLUSTER_SIZES_N ?= 4
+LAYERS_K ?= 2,4
+P2P_DELAYS ?= 0.1,0.5,0.7,0.9
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE_N=$(if $(CLUSTER_SIZE_N),$(CLUSTER_SIZE_N),default) LAYERS_K=$(if $(LAYERS_K),$(LAYERS_K),default) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_DELAYS=$(P2P_DELAYS) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
-		$(if $(CLUSTER_SIZE_N),CLUSTER_SIZE_N=$(CLUSTER_SIZE_N)) \
-		$(if $(LAYERS_K),LAYERS_K=$(LAYERS_K)) \
+		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
+		LAYERS_K=$(LAYERS_K) \
+		P2P_DELAYS=$(P2P_DELAYS) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \
 		$(if $(ITERATIONS),ITERATIONS=$(ITERATIONS)) \
 		go test -tags "blst_enabled lfs" -timeout=0 -run TestStress -v ./protocol/v2/consensustest/
+
+# stresstest-clean removes the generated data.js from REPORT_DIR,
+# leaving the static UI files (index.html, app.js, styles.css) intact.
+# Run this to start a fresh sweep rather than merging into existing data.
+# stresstest-all is a convenience alias for the full (n × K) matrix:
+# CLUSTER_SIZES_N=4,7 × LAYERS_K=2,3,4. Equivalent to:
+#   make stresstest CLUSTER_SIZES_N=4,7 LAYERS_K=2,3,4
+# All other variables (ITERATIONS_*, P2P_DELAYS, REPORT_DIR) use their
+# defaults or can be overridden on the command line.
+.PHONY: stresstest-all
+stresstest-all: CLUSTER_SIZES_N = 4,7
+stresstest-all: LAYERS_K = 2,3,4
+stresstest-all: stresstest
+
+.PHONY: stresstest-clean
+stresstest-clean:
+	@rm -f "$(abspath $(REPORT_DIR))/data.js" "$(abspath $(REPORT_DIR))/data.js.tmp"
+	@echo "Cleaned $(abspath $(REPORT_DIR))/data.js"
 
 .PHONY: docker-spec-test
 docker-spec-test:

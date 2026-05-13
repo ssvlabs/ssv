@@ -44,23 +44,22 @@ import (
 // ITERATIONS (legacy single-knob) is honored as a backwards-compatible
 // override: if set, it overrides BOTH budgets.
 //
+// Operating-point env vars (all have Makefile defaults):
+//
+//   - CLUSTER_SIZES_N — comma-separated cluster sizes ∈ {4, 7}. Default: 4.
+//   - LAYERS_K — comma-separated K values ∈ {2, 3, 4}. Default: 2,4.
+//   - P2P_DELAYS — comma-separated LogNormal σ values for the p2p_baseline
+//     sweep's jitter axis. Default: 0.1,0.5,0.7,0.9.
+//
 // Usage:
 //
 //	make stresstest
 //
 // Or directly:
 //
-//	REPORT_DIR=./reports ITERATIONS_BASELINE_OPERATIONS=100 \
-//	    ITERATIONS_UNSTABLE_OPERATIONS=10 \
-//	    go test -timeout 30m -run TestStress \
-//	    ./protocol/v2/consensustest/
-//
-// At the test-internal-default split (100 / 10), expected runtime at
-// CLUSTER_SIZE_N=4 LAYERS_K=4 is a few minutes on a typical dev machine;
-// at the `make stresstest` default (1000 / 100) it's roughly an order
-// of magnitude longer. Most cells run at the Unstable budget, so
-// wallclock is dominated by sweep count × sweep fan-out × Unstable
-// budget, with Baseline contributing a smaller constant overhead.
+//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2,4 P2P_DELAYS=0.1,0.5,0.7,0.9 \
+//	    ITERATIONS_BASELINE_OPERATIONS=100 ITERATIONS_UNSTABLE_OPERATIONS=10 \
+//	    go test -timeout 30m -run TestStress ./protocol/v2/consensustest/
 //
 // See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestStress(t *testing.T) {
@@ -70,69 +69,86 @@ func TestStress(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
-	// CLUSTER_SIZE_N / LAYERS_K semantics:
-	//   - BOTH unset → curated quick default: {(n=4, K=2), (n=4, K=4)}.
-	//     The two K values bracket the f=1/n=4 BFT-liveness floor
-	//     (MinK(4)=2) and the SSV K=N convention (4), giving useful
-	//     coverage in a single fast run.
-	//   - Only CLUSTER_SIZE_N set: scope to that n, iterate every valid K
-	//     for it (MinK(N)..N).
-	//   - Only LAYERS_K set: iterate every supported n (ClusterSizes),
-	//     keeping only (n, K) pairs where K is valid for that n.
-	//   - Both set: a single (n, K) point.
-	// Reruns at different (n, K) merge into the same data.js via
-	// WriteReportData's Fields-tuple match.
+	// CLUSTER_SIZES_N — comma-separated cluster sizes, each ∈ {4, 7}
+	// (the two SSV-relevant sizes: f=1 and f=2). Default: 4.
+	const validClusterSizesDesc = "{4, 7}"
+	validClusterSizes := map[int]bool{4: true, 7: true}
+	clusterSizesRaw := os.Getenv("CLUSTER_SIZES_N")
+	if clusterSizesRaw == "" {
+		clusterSizesRaw = "4"
+	}
+	var clusterSizes []int
+	for _, s := range strings.Split(clusterSizesRaw, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		n, err := strconv.Atoi(s)
+		require.NoErrorf(t, err, "invalid CLUSTER_SIZES_N value %q", s)
+		require.Truef(t, validClusterSizes[n], "CLUSTER_SIZES_N value %d not in %s", n, validClusterSizesDesc)
+		clusterSizes = append(clusterSizes, n)
+	}
+	require.NotEmpty(t, clusterSizes, "CLUSTER_SIZES_N is empty after parsing")
+
+	// LAYERS_K — comma-separated K values, each ∈ {2, 3, 4}. Default: 2,4
+	// (brackets the BFT-liveness floor and SSV's K=N convention for n=4).
+	// A K value is skipped for a given n when K < MinK(n) — below the
+	// BFT-liveness floor for that cluster size. For example, K=2 is
+	// skipped for n=7 (MinK(7)=3).
+	const validLayersKDesc = "{2, 3, 4}"
+	validLayersKSet := map[int]bool{2: true, 3: true, 4: true}
+	layersKRaw := os.Getenv("LAYERS_K")
+	if layersKRaw == "" {
+		layersKRaw = "2,4"
+	}
+	var layersK []int
+	for _, s := range strings.Split(layersKRaw, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		k, err := strconv.Atoi(s)
+		require.NoErrorf(t, err, "invalid LAYERS_K value %q", s)
+		require.Truef(t, validLayersKSet[k], "LAYERS_K value %d not in %s", k, validLayersKDesc)
+		layersK = append(layersK, k)
+	}
+	require.NotEmpty(t, layersK, "LAYERS_K is empty after parsing")
+
+	// P2P_DELAYS — comma-separated LogNormal σ values for the p2p_baseline
+	// sweep's jitter axis. Default: 0.1,0.5,0.7,0.9. Each value becomes
+	// one p2p_delay point in the BTT × p2p_delay × instability cross-product.
+	p2pDelaysRaw := os.Getenv("P2P_DELAYS")
+	if p2pDelaysRaw == "" {
+		p2pDelaysRaw = "0.1,0.5,0.7,0.9"
+	}
+	var sigmas []float64
+	for _, s := range strings.Split(p2pDelaysRaw, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		v, err := strconv.ParseFloat(s, 64)
+		require.NoErrorf(t, err, "invalid P2P_DELAYS value %q", s)
+		require.GreaterOrEqualf(t, v, 0.0, "P2P_DELAYS value %g must be >= 0", v)
+		sigmas = append(sigmas, v)
+	}
+	require.NotEmpty(t, sigmas, "P2P_DELAYS is empty after parsing")
+
+	// Build (n, K) pairs: cross-product of clusterSizes × layersK,
+	// filtering out pairs where K < MinK(n) (below BFT-liveness floor).
 	type runPair struct{ n, k int }
 	var pairs []runPair
-
-	clusterSizeEnv := os.Getenv("CLUSTER_SIZE_N")
-	layersKEnvRaw := os.Getenv("LAYERS_K")
-
-	if clusterSizeEnv == "" && layersKEnvRaw == "" {
-		// Quick default — small, fast, representative. Iterating the
-		// full ClusterSizes × MinK..N matrix at the make-stresstest
-		// iteration budget runs for ~hours; this default fits the
-		// "PR-time smoke" use case. Set CLUSTER_SIZE_N / LAYERS_K to
-		// scope or expand from here.
-		pairs = []runPair{{n: 4, k: 2}, {n: 4, k: 4}}
-	} else {
-		var clusterSizes []int
-		if clusterSizeEnv != "" {
-			n, err := strconv.Atoi(clusterSizeEnv)
-			require.NoErrorf(t, err, "invalid CLUSTER_SIZE_N=%q", clusterSizeEnv)
-			require.Greater(t, n, 0, "CLUSTER_SIZE_N must be > 0")
-			clusterSizes = []int{n}
-		} else {
-			clusterSizes = append([]int{}, ct.ClusterSizes...)
-		}
-
-		var layersKEnv int
-		useExplicitK := false
-		if layersKEnvRaw != "" {
-			k, err := strconv.Atoi(layersKEnvRaw)
-			require.NoErrorf(t, err, "invalid LAYERS_K=%q", layersKEnvRaw)
-			require.Greater(t, k, 0, "LAYERS_K must be > 0")
-			layersKEnv = k
-			useExplicitK = true
-		}
-
-		for _, n := range clusterSizes {
-			minK, maxK := ct.MinK(n), n
-			if useExplicitK {
-				if layersKEnv < minK || layersKEnv > maxK {
-					t.Logf("LAYERS_K=%d skipped for CLUSTER_SIZE_N=%d (valid range %d..%d)",
-						layersKEnv, n, minK, maxK)
-					continue
-				}
-				pairs = append(pairs, runPair{n: n, k: layersKEnv})
-			} else {
-				for k := minK; k <= maxK; k++ {
-					pairs = append(pairs, runPair{n: n, k: k})
-				}
+	for _, n := range clusterSizes {
+		for _, k := range layersK {
+			minK := ct.MinK(n)
+			if k < minK {
+				t.Logf("LAYERS_K=%d skipped for CLUSTER_SIZES_N=%d (MinK(%d)=%d)", k, n, n, minK)
+				continue
 			}
+			pairs = append(pairs, runPair{n: n, k: k})
 		}
 	}
-	require.NotEmpty(t, pairs, "no valid (n, K) combinations to run; check CLUSTER_SIZE_N / LAYERS_K env")
+	require.NotEmptyf(t, pairs, "no valid (n, K) pairs after filtering; check CLUSTER_SIZES_N=%s × LAYERS_K=%s against MinK constraints", clusterSizesRaw, layersKRaw)
 
 	// Defaults: 100 baseline / 10 unstable. ITERATIONS (legacy) overrides
 	// both for callers that don't care about the split.
@@ -192,7 +208,7 @@ func TestStress(t *testing.T) {
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
 	for pairIdx, pp := range pairs {
-		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k)
+		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, sigmas)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		pairStart := time.Now()
 		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)

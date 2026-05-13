@@ -120,6 +120,13 @@ section.heatmap {
   padding: 0.4em 0.5em 0.4em 0.7em;
   color: #1f2937;
 }
+.conditions-iters {
+  color: var(--text-faint);
+  font-size: 0.82em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  align-self: center;
+}
 /* Heatmap cell color: full HSL string from --hcell-bg (computed by
  * app.js rateToColor; deep red at 0% → yellow at 90% → soft green at
  * 100%). Cells with no data render as the muted-grey "na" variant. The
@@ -129,11 +136,12 @@ section.heatmap {
  * weight as the scenario name; the colored background carries the
  * emphasis.  */
 .hcell {
-  padding: 0.4em 0.7em;
+  padding: 0.15em 0.5em;
   text-align: center;
   border-radius: 4px;
   background: var(--hcell-bg);
   color: var(--hcell-fg, #1a1a1a);
+  font-size: 0.88em;
 }
 .hcell.na {
   background: #e2e8f0;
@@ -151,6 +159,8 @@ section.heatmap {
 .hrow {
   border-radius: 4px;
   transition: background 100ms ease;
+  min-height: 3.8em;
+  align-content: center;
 }
 /* Adversarial rows use a faint criss-cross mesh to flag "this scenario
  * needs an attacker" at a glance, distinct from the flat tint used by
@@ -242,7 +252,13 @@ section.heatmap {
  * p99) so columns align across rows; each .sm-legend-item is
  * display:contents so its children participate in the parent grid
  * directly. Every row emits exactly 5 children (n/a rows include empty
- * placeholders for sep + p99) to keep grid placement deterministic. */
+ * placeholders for sep + p99) to keep grid placement deterministic.
+ *
+ * --checkable variant adds a 6th column (checkbox) at the left for the
+ * Conditions section's protocol filter. Each .sm-legend-item > * reads
+ * --sm-legend-item-opacity so inactive (unchecked) rows can be dimmed
+ * by setting the custom property on the display:contents item, which
+ * inherits into its children. */
 .sm-legend {
   display: grid;
   grid-template-columns: auto auto auto auto auto;
@@ -252,9 +268,16 @@ section.heatmap {
   font-size: 0.75em;
   font-variant-numeric: tabular-nums;
 }
+.sm-legend.sm-legend--checkable {
+  grid-template-columns: auto auto auto auto auto auto;
+}
 .sm-legend-item {
   display: contents;
   color: var(--text);
+}
+.sm-legend-item > * {
+  opacity: var(--sm-legend-item-opacity, 1);
+  transition: opacity 120ms ease;
 }
 .sm-legend-swatch {
   display: inline-block;
@@ -283,6 +306,7 @@ section.heatmap {
   color: var(--hcell-fg, #1a1a1a);
   text-align: center;
   box-sizing: border-box;
+  white-space: nowrap;
 }
 .sm-legend-pct.na {
   background: #e2e8f0;
@@ -294,6 +318,7 @@ section.heatmap {
 }
 .sm-legend-p99 {
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Collapsible controls row — holds the slot_start picker and the
@@ -465,15 +490,7 @@ section.conditions .conditions-pickers-stack .sm-slot-picker-label {
 section.conditions .conditions-legend {
   margin-left: auto;
 }
-/* Match legend row heights to the picker stack (1.8rem each), via
- * grid-auto-rows so the legend grows with the protocol count (6 today
- * vs 4 when this strip was first sized) without a CSS edit. Legend
- * inherits its default 0.75em font-size from .sm-legend; the smaller
- * size pairs with the shrunken picker text without the legend
- * dominating the strip. */
 section.conditions .conditions-legend .sm-legend {
-  grid-auto-rows: 1.8rem;
-  grid-template-rows: none;
   align-items: center;
   row-gap: 0;
 }

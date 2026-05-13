@@ -97,8 +97,8 @@ var InstabilityLevels = []InstabilityLevel{
 	{Name: "none", Level: 0},
 	{Name: "low", Level: 1, LossRate: 0.005, BurstFactor: 5, SlowOpsFraction: 0.25, SlowMul: 1.5, PersistP: 0.5},
 	{Name: "moderate", Level: 2, LossRate: 0.02, BurstFactor: 5, SlowOpsFraction: 0.50, SlowMul: 2.0, PersistP: 0.7},
-	{Name: "high", Level: 3, LossRate: 0.10, BurstFactor: 8, SlowOpsFraction: 0.50, SlowMul: 3.0, PersistP: 0.8},
-	{Name: "extreme", Level: 4, LossRate: 0.15, BurstFactor: 8, SlowOpsFraction: 0.75, SlowMul: 4.0, PersistP: 0.85},
+	{Name: "high", Level: 3, LossRate: 0.07, BurstFactor: 6, SlowOpsFraction: 0.35, SlowMul: 2.1, PersistP: 0.55},
+	{Name: "extreme", Level: 4, LossRate: 0.10, BurstFactor: 6, SlowOpsFraction: 0.55, SlowMul: 2.8, PersistP: 0.60},
 }
 
 // IsBaselineGroup reports whether `s` is one of the Group=="Baseline"

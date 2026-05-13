@@ -8,14 +8,15 @@ import (
 
 // SweepPoint is one axis-point of a Sweep — a labeled BatchConfig that
 // will produce one BatchReport when the Sweep runs. Label is shown in
-// reports as the axis-tick text (e.g., "n=7", "BTT=400ms", "Sigma=0.5").
+// reports as the axis-tick text (e.g., "n=7", "BTT=400ms", "p2p_delay=0.5").
 //
-// Fields carries the numeric axis values (K, BTT, Sigma, …) for the
+// Fields carries the numeric axis values (K, BTT, p2p_delay, …) for the
 // point in a machine-readable form. Picker-driven UIs (the
-// stresstest-report's K/BTT/σ pickers in particular) consume Fields to
-// drive lookups by exact value, without parsing the human-readable
-// Label. Keys are uppercase per-axis names: "K", "BTT" (ms), "Sigma",
-// "Loss", "BadLinkProb", "SlowOps" — whichever the point varies.
+// stresstest-report's K/BTT/p2p_delay pickers in particular) consume
+// Fields to drive lookups by exact value, without parsing the
+// human-readable Label. Keys are uppercase per-axis names: "K", "BTT"
+// (ms), "p2p_delay" (LogNormal σ), "Loss", "BadLinkProb", "SlowOps" —
+// whichever the point varies.
 type SweepPoint struct {
 	Label  string
 	Config BatchConfig
@@ -86,20 +87,17 @@ func (i Iterations) asBatchIterations() (int, map[string]int) {
 	return i.Unstable, map[string]int{"Baseline": i.Baseline}
 }
 
-// baselineBTTValues / baselineSigmaValues — the BTT × σ axes that
-// p2p_baseline sweeps. K and N are now passed in per-run (one (n, k)
-// combo per `make stresstest`); the UI composes data from multiple runs
-// and the K / N pickers select the slice.
-var (
-	baselineBTTValues = []time.Duration{
-		100 * time.Millisecond,
-		200 * time.Millisecond,
-		300 * time.Millisecond,
-		400 * time.Millisecond,
-		500 * time.Millisecond,
-	}
-	baselineSigmaValues = []float64{0.1, 0.3, 0.5, 0.7, 0.9}
-)
+// baselineBTTValues — the BTT axis that p2p_baseline sweeps. K and N
+// are passed per-run (one (n, k) combo per `make stresstest`); the σ
+// axis is controlled by the sigmas parameter to DefaultSweeps (driven
+// by P2P_DELAYS in the stress driver, default {0.1, 0.5, 0.7, 0.9}).
+var baselineBTTValues = []time.Duration{
+	100 * time.Millisecond,
+	200 * time.Millisecond,
+	300 * time.Millisecond,
+	400 * time.Millisecond,
+	500 * time.Millisecond,
+}
 
 // DefaultSweeps returns the curated set of comparison sweeps the stress
 // driver runs at a single (n, k) operating point. Every sweep models
@@ -108,12 +106,13 @@ var (
 // P99 propagation per OBFT.md §Setting). Pure JitteredDelay is no
 // longer used.
 //
-//  1. p2p_baseline — BTT × σ × instability cross-product (5 × 5 × 5 =
-//     125 points per run). BTT ∈ {100, 200, 300, 400, 500} ms, σ ∈
-//     {0.1, 0.3, 0.5, 0.7, 0.9}, instability ∈ {none, low, moderate,
-//     high, extreme}. Level=0 emits the full catalog; Level>0 emits
-//     ONLY Baseline-group scenarios (non-Baseline rows are
-//     instability-invariant — see p2pBaselineSweep).
+//  1. p2p_baseline — BTT × σ × instability cross-product. BTT ∈
+//     {100, 200, 300, 400, 500} ms, σ from the sigmas parameter
+//     (default {0.1, 0.5, 0.7, 0.9} via P2P_DELAYS env var),
+//     instability ∈ {none, low, moderate, high, extreme}. Level=0
+//     emits the full catalog; Level>0 emits ONLY Baseline-group
+//     scenarios (non-Baseline rows are instability-invariant — see
+//     p2pBaselineSweep).
 //  2. p2p_increasing_BTT — BTT ∈ {100, 200, 400, 600, 800, 1000} ms;
 //     per-point LogNormal{Median: BTT/2, σ: 0.5}.
 //  3. p2p_heavy_tail — σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9} (7
@@ -139,16 +138,18 @@ var (
 // reporting.WriteReportData uses that tuple to dedup / append.
 //
 // Panics with a specific reason on invalid input (empty scenarios /
-// protocols, non-positive iteration budgets, non-positive n or k).
-// These are programmer errors — the test driver should always pass
+// protocols / sigmas, non-positive iteration budgets, non-positive n or
+// k). These are programmer errors — the test driver should always pass
 // valid inputs; a panic surfaces the bug at the failure site rather
 // than collapsing to a confusing "expected N sweeps got 0" downstream.
-func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) []Sweep {
+func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, sigmas []float64) []Sweep {
 	switch {
 	case len(scenarios) == 0:
 		panic("consensustest: DefaultSweeps called with empty scenarios")
 	case len(protocols) == 0:
 		panic("consensustest: DefaultSweeps called with empty protocols")
+	case len(sigmas) == 0:
+		panic("consensustest: DefaultSweeps called with empty sigmas")
 	case iters.Baseline <= 0:
 		panic(fmt.Sprintf("consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got %d)", iters.Baseline))
 	case iters.Unstable <= 0:
@@ -159,7 +160,7 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 		panic(fmt.Sprintf("consensustest: DefaultSweeps: layer count k must be > 0 (got %d)", k))
 	}
 	return []Sweep{
-		p2pBaselineSweep(scenarios, protocols, iters, n, k),
+		p2pBaselineSweep(scenarios, protocols, iters, n, k, sigmas),
 		p2pIncreasingBTTSweep(scenarios, protocols, iters, n, k),
 		p2pHeavyTailSweep(scenarios, protocols, iters, n, k),
 		p2pPacketLossSweep(scenarios, protocols, iters, n, k),
@@ -201,12 +202,12 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 // level would just waste compute. The UI's per-row cell lookup falls
 // back to the Level=0 point for non-Baseline scenarios when the
 // picker is elsewhere.
-func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
+func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, sigmas []float64) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	baselineOnly := filterBaselineScenarios(scenarios)
-	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(baselineSigmaValues)*len(InstabilityLevels))
+	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(sigmas)*len(InstabilityLevels))
 	for _, btt := range baselineBTTValues {
-		for _, sigma := range baselineSigmaValues {
+		for _, sigma := range sigmas {
 			for _, level := range InstabilityLevels {
 				base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 				base.K = k
@@ -220,13 +221,13 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 					pointScenarios = baselineOnly
 				}
 				pts = append(pts, SweepPoint{
-					Label: fmt.Sprintf("n=%d K=%d BTT=%dms σ=%.1f instab=%s",
+					Label: fmt.Sprintf("n=%d K=%d BTT=%dms p2p_delay=%.1f instab=%s",
 						n, k, btt.Milliseconds(), sigma, level.Name),
 					Fields: map[string]float64{
 						"N":           float64(n),
 						"K":           float64(k),
 						"BTT":         float64(btt.Milliseconds()),
-						"Sigma":       sigma,
+						"p2p_delay":   sigma,
 						"Instability": float64(level.Level),
 					},
 					Config: BatchConfig{

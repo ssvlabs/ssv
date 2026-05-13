@@ -77,7 +77,7 @@ let selectedScenario = 'Healthy';
 let selectedN = 4;
 let selectedK = 4;
 let selectedBTT = 300;
-let selectedSigma = 0.5;
+let selectedP2pDelay = 0.5;
 // selectedInstability is the p2p_instability picker value (0..4 →
 // none / low / moderate / high / extreme; see InstabilityLevels in
 // protocol/v2/consensustest/instability.go). Only affects the
@@ -85,6 +85,47 @@ let selectedSigma = 0.5;
 // chart; non-Baseline rows fall back to the level=none cell via
 // findBaselineCellForScenario.
 let selectedInstability = 0;
+
+// activeProtocols is the set of protocol names currently shown in the
+// heatmap, charts, and collapsible legends. Initialized in main() from
+// localStorage (key: stresstest-active-protocols). Default (empty
+// localStorage) is the three canonical protocols: OBFT, 2abOBFT, QBFT.
+// Persisted to localStorage on every checkbox change so it survives
+// page refreshes. null until main() fires (safe — filteredProtocols
+// checks for null and falls back to the full list).
+let activeProtocols = null;
+
+const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
+
+function loadActiveProtocols(allProtocols) {
+  const DEFAULT_ACTIVE = new Set(['OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV']);
+  const stored = localStorage.getItem(LS_KEY_PROTOCOLS);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        const active = new Set(parsed.filter((p) => allProtocols.includes(p)));
+        if (active.size > 0) return active;
+      }
+    } catch (_) { /* corrupt entry — fall through to defaults */ }
+  }
+  return new Set(allProtocols.filter((p) => DEFAULT_ACTIVE.has(p)));
+}
+
+function saveActiveProtocols() {
+  try {
+    localStorage.setItem(LS_KEY_PROTOCOLS, JSON.stringify([...activeProtocols]));
+  } catch (_) { /* storage may be blocked in some contexts; safe to ignore */ }
+}
+
+// filteredProtocols returns the subset of `protocols` that is currently
+// active (checked in the Conditions legend). Falls back to the full list
+// before activeProtocols is initialized or if it becomes empty (the
+// latter prevents a blank heatmap when the user unchecks everything).
+function filteredProtocols(protocols) {
+  if (!activeProtocols || activeProtocols.size === 0) return protocols;
+  return protocols.filter((p) => activeProtocols.has(p));
+}
 
 // INSTABILITY_NAMES maps the numeric Level to the picker label.
 // Mirrors InstabilityLevels.Name in the Go side.
@@ -169,7 +210,11 @@ function main() {
   // sort here is the load-bearing fix — relying on the Go-side
   // registration order alone wouldn't survive merges.
   data.protocols = sortProtocolsByFamily(data.protocols);
-  // Snap selectedK/selectedBTT/selectedSigma to values actually present
+  // Initialize the protocol filter from localStorage. Must run after
+  // sortProtocolsByFamily so stored names are matched against the full
+  // sorted list.
+  activeProtocols = loadActiveProtocols(data.protocols);
+  // Snap selectedK/selectedBTT/selectedP2pDelay to values actually present
   // in p2p_baseline (or stay at defaults if no baseline is loaded).
   // Must run before precomputeSlotShifts since the latter warms the
   // matched point's shifts.
@@ -196,7 +241,8 @@ function main() {
   root.appendChild(mainEl);
 }
 
-// initBaselineSelections snaps selectedN/selectedK/selectedBTT/selectedSigma
+
+// initBaselineSelections snaps selectedN/selectedK/selectedBTT/selectedP2pDelay
 // to values actually present in p2p_baseline, so the conditions chart
 // can render on first load even when data was generated against a
 // different cross-product than the picker defaults expect.
@@ -216,7 +262,7 @@ function initBaselineSelections(data) {
   selectedN = pickClosest(dims.Ns, selectedN);
   selectedK = pickClosest(dims.Ks, selectedK);
   selectedBTT = pickClosest(dims.BTTs, selectedBTT);
-  selectedSigma = pickClosest(dims.Sigmas, selectedSigma);
+  selectedP2pDelay = pickClosest(dims.P2pDelays, selectedP2pDelay);
   selectedInstability = pickClosest(dims.Instabilities, selectedInstability);
 }
 
@@ -290,7 +336,7 @@ function onSlotStartChange(newSlot) {
 // the selected scenario; pickers update K/BTT/σ/slot_start.
 //
 // Data source: p2p_baseline (Phase 2's K × BTT × σ cross-product),
-// looked up by (selectedK, selectedBTT, selectedSigma) via
+// looked up by (selectedK, selectedBTT, selectedP2pDelay) via
 // findBaselineSweepPoint.
 
 // findBaselineSweepPoint returns {sweep, point} matching the current
@@ -319,7 +365,7 @@ function findBaselinePointAtInstability(data, instability) {
       f.N === selectedN &&
       f.K === selectedK &&
       f.BTT === selectedBTT &&
-      Math.abs(f.Sigma - selectedSigma) < 1e-6 &&
+      Math.abs(f.p2p_delay - selectedP2pDelay) < 1e-6 &&
       (f.Instability ?? 0) === instability
     ) {
       return { sweep, point: pt };
@@ -353,7 +399,7 @@ function availableBaselineDimensions(data) {
   const Nset = new Set();
   const Kset = new Set();
   const BTTset = new Set();
-  const sigmaSet = new Set();
+  const p2pDelaySet = new Set();
   const instabilitySet = new Set();
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (sw) {
@@ -363,7 +409,7 @@ function availableBaselineDimensions(data) {
       if (typeof f.N === 'number' && f.N > 0) Nset.add(f.N);
       if (typeof f.K === 'number' && f.K > 0) Kset.add(f.K);
       if (typeof f.BTT === 'number') BTTset.add(f.BTT);
-      if (typeof f.Sigma === 'number') sigmaSet.add(f.Sigma);
+      if (typeof f.p2p_delay === 'number') p2pDelaySet.add(f.p2p_delay);
       // Always-show all 5 levels; greyed if the (n, K, BTT, σ) slice
       // doesn't contain that level. Below we still seed from data so
       // a future expanded levels-set is auto-discovered.
@@ -378,7 +424,7 @@ function availableBaselineDimensions(data) {
     Ns: [...Nset].sort((a, b) => a - b),
     Ks: [...Kset].sort((a, b) => a - b),
     BTTs: [...BTTset].sort((a, b) => a - b),
-    Sigmas: [...sigmaSet].sort((a, b) => a - b),
+    P2pDelays: [...p2pDelaySet].sort((a, b) => a - b),
     Instabilities: [...instabilitySet].sort((a, b) => a - b),
   };
 }
@@ -388,7 +434,7 @@ function availableBaselineDimensions(data) {
 // to grey out buttons whose specific combination wasn't produced by
 // any `make stresstest` run. Points without Instability in Fields
 // (legacy data) match instability=0 only.
-function baselinePointExists(data, n, k, btt, sigma, instability) {
+function baselinePointExists(data, n, k, btt, p2pDelay, instability) {
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sw) return false;
   return sw.points.some((pt) => {
@@ -398,7 +444,7 @@ function baselinePointExists(data, n, k, btt, sigma, instability) {
       f.N === n &&
       f.K === k &&
       f.BTT === btt &&
-      Math.abs(f.Sigma - sigma) < 1e-6 &&
+      Math.abs(f.p2p_delay - p2pDelay) < 1e-6 &&
       (f.Instability ?? 0) === instability
     );
   });
@@ -492,6 +538,15 @@ function renderConditionsSection(data) {
     } else {
       desc.style.display = 'none';
     }
+    // Actual accumulated iteration count for this scenario at the current
+    // operating point — may exceed the configured budget when stresstest
+    // runs are additive (e.g. 3 × 1000-iter runs → 3000 here).
+    if (match) {
+      const cell = match.point.cells.find(
+        (c) => c.scenario === scenario.name && c.iterations > 0,
+      );
+      if (cell) head.appendChild(h('span', { class: 'conditions-iters' }, `×${cell.iterations}`));
+    }
   }
 
   const bodyRow = h('div', { class: 'conditions-body-row' });
@@ -499,27 +554,27 @@ function renderConditionsSection(data) {
   const dims = availableBaselineDimensions(data);
   const pickers = h('div', { class: 'conditions-pickers-stack' });
   pickers.appendChild(
-    buildBaselinePicker('n:', dims.Ns.length ? dims.Ns : [selectedN], null,
+    buildBaselinePicker('N:', dims.Ns.length ? dims.Ns : [selectedN], null,
       () => selectedN,
       (v) => { selectedN = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedSigma, selectedInstability)),
+      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pDelay, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
       (v) => { selectedK = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedSigma, selectedInstability)),
+      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pDelay, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
       (v) => { selectedBTT = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedSigma, selectedInstability)),
+      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pDelay, selectedInstability)),
   );
   pickers.appendChild(
-    buildBaselinePicker('σ:', dims.Sigmas.length ? dims.Sigmas : [selectedSigma], null,
-      () => selectedSigma,
-      (v) => { selectedSigma = v; onConditionsChange(); },
+    buildBaselinePicker('p2p_delay:', dims.P2pDelays.length ? dims.P2pDelays : [selectedP2pDelay], null,
+      () => selectedP2pDelay,
+      (v) => { selectedP2pDelay = v; onConditionsChange(); },
       (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability)),
   );
   pickers.appendChild(
@@ -532,7 +587,7 @@ function renderConditionsSection(data) {
       (v) => INSTABILITY_NAMES[v] || ('L' + v),
       () => selectedInstability,
       (v) => { selectedInstability = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedSigma, v),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pDelay, v),
     ),
   );
   pickers.appendChild(buildSlotPicker());
@@ -540,13 +595,16 @@ function renderConditionsSection(data) {
 
   // Legend block — pass a synthetic single-point sweep so buildSweepLegend
   // renders single values (not ranges). Empty when no sweep matches the
-  // current K/BTT/σ; the legend then shows "n/a" per protocol.
+  // current K/BTT/p2p_delay; the legend then shows "n/a" per protocol.
+  // Always passes all protocols (not filtered) so checkboxes for every
+  // protocol are present and the user can re-enable unchecked ones.
   const legendWrap = h('div', { class: 'conditions-legend' });
   if (scenario) {
     const onePtSweep = match
       ? { ...match.sweep, points: [match.point] }
       : { name: '', points: [] };
-    legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols));
+    legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols,
+      () => onConditionsChange()));
   }
   bodyRow.appendChild(legendWrap);
 
@@ -603,7 +661,7 @@ function rebuildConditionsChart(data) {
   const match = findBaselinePointAtInstability(data, wantedInstab);
   if (!match || !scenario) return;
   const onePtSweep = { ...match.sweep, points: [match.point] };
-  currentChart = buildLatencyChart(canvas, onePtSweep, data.protocols, scenario);
+  currentChart = buildLatencyChart(canvas, onePtSweep, filteredProtocols(data.protocols), scenario);
 }
 
 // renderCollapsibles builds the collapsible sections below the heatmap
@@ -688,7 +746,7 @@ function renderCollapsibleBody(body, sweep, data, state) {
     top.appendChild(desc);
   }
   if (scenario) {
-    top.appendChild(buildSweepLegend(filtered, scenario, data.protocols));
+    top.appendChild(buildSweepLegend(filtered, scenario, filteredProtocols(data.protocols)));
   }
   if (top.children.length > 0) body.appendChild(top);
 
@@ -718,7 +776,7 @@ function renderCollapsibleBody(body, sweep, data, state) {
     const savedSlot = selectedSlotStart;
     selectedSlotStart = state.slotStart;
     try {
-      buildTrendLineChart(canvas, filtered, data.protocols, scenario, state.metric);
+      buildTrendLineChart(canvas, filtered, filteredProtocols(data.protocols), scenario, state.metric);
     } finally {
       selectedSlotStart = savedSlot;
     }
@@ -801,7 +859,7 @@ function applyChartDefaults() {
 // distinct chunks rather than rows in one wall of data. Clicking a row
 // updates the Conditions chart's selected scenario.
 //
-// Source: p2p_baseline matched to (selectedK, selectedBTT, selectedSigma)
+// Source: p2p_baseline matched to (selectedK, selectedBTT, selectedP2pDelay)
 // via findBaselineSweepPoint. Falls back to legacy p2p_normal's single
 // point when data.js predates Phase 2 (so the heatmap still renders
 // against an older data.js without a regen).
@@ -825,17 +883,18 @@ function renderHeatmap(data) {
       // insert a literal "null" text node.
       const empty = h('section', { class: 'heatmap empty', id: 'overview' });
       empty.appendChild(h('p', { class: 'desc' },
-        `No data for n=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, σ=${selectedSigma}. ` +
-        `Generate this slice with: make stresstest CLUSTER_SIZE_N=${selectedN} LAYERS_K=${selectedK}`));
+        `No data for N=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, p2p_delay=${selectedP2pDelay}. ` +
+        `Generate this slice with: make stresstest CLUSTER_SIZES_N=${selectedN} LAYERS_K=${selectedK}`));
       return empty;
     }
   }
 
   const section = h('section', { class: 'heatmap', id: 'overview' });
+  const activeProtos = filteredProtocols(data.protocols);
   // --hcols drives the shared grid template (column-header row + every
   // .hrow inside every card). Keeping one CSS var means cards always
   // align horizontally with the column-header bar.
-  section.style.setProperty('--hcols', String(data.protocols.length));
+  section.style.setProperty('--hcols', String(activeProtos.length));
 
   // No header/subtitle on the heatmap — the cluster-setup label
   // ("SSV proposer duty at n=4") now lives in the Conditions section's
@@ -846,7 +905,7 @@ function renderHeatmap(data) {
   // top-left placeholder lines up with the scenario-name column.
   const cols = h('div', { class: 'heatmap-cols' });
   cols.appendChild(h('div', { class: 'col-head scen' }));
-  data.protocols.forEach((p) => cols.appendChild(h('div', { class: 'col-head' }, p)));
+  activeProtos.forEach((p) => cols.appendChild(h('div', { class: 'col-head' }, p)));
   section.appendChild(cols);
 
   // Bucket scenarios by group, preserving catalog order.
@@ -877,7 +936,7 @@ function renderHeatmap(data) {
       const row = h('div', { class: rowClass, 'data-scenario': sc.name });
       row.appendChild(h('div', { class: 'hname' }, sc.title || sc.name));
       let hasData = false;
-      data.protocols.forEach((p) => {
+      activeProtos.forEach((p) => {
         // Baseline rows pull from the selectedInstability point;
         // every other row pulls from instability=0 (those scenarios
         // are instability-invariant and only have data at level=0).
@@ -1002,7 +1061,7 @@ function renderHeatmapCell(cell, scenario) {
   const shifted = shiftedCell(cell, selectedSlotStart);
   const rate = shifted.successRate;
   const { bg, fg } = rateToColor(rate);
-  const pct = Math.round(rate * 100);
+  const pct = (rate * 100).toFixed(2);
   const successes = (shifted.decisionTimes && shifted.decisionTimes.length) || 0;
   const p99 = shifted.decisionTime ? `${Math.round(shifted.decisionTime.p99)} ms p99` : 'no decisions';
   // Include N samples in the tooltip so the user can judge precision of
@@ -1165,13 +1224,40 @@ function protocolStats(sweep, scenario, protocol) {
 // multi-point). Replaces Chart.js's built-in legend, which is disabled
 // in the chart options.
 //
+// When onProtocolToggle is provided the legend switches to checkable
+// mode: a checkbox is prepended to each row (6-column grid via
+// .sm-legend--checkable) so the user can enable / disable protocols.
+// In checkable mode ALL protocols are expected (not pre-filtered) so
+// unchecked ones remain visible and can be re-enabled. Inactive rows
+// are dimmed via the --sm-legend-item-opacity CSS variable.
+//
 // Every row contributes exactly five children (swatch, name, chip, sep,
-// p99) so the parent grid keeps columns aligned across rows; n/a rows
-// emit empty placeholders for the missing sep/p99 slots.
-function buildSweepLegend(sweep, scenario, protocols) {
-  const legend = h('div', { class: 'sm-legend' });
+// p99) — or six when checkable (checkbox first) — so the parent grid
+// keeps columns aligned across rows; n/a rows emit empty placeholders
+// for the missing sep/p99 slots.
+function buildSweepLegend(sweep, scenario, protocols, onProtocolToggle) {
+  const checkable = typeof onProtocolToggle === 'function';
+  const legend = h('div', { class: checkable ? 'sm-legend sm-legend--checkable' : 'sm-legend' });
   protocols.forEach((p) => {
     const row = h('div', { class: 'sm-legend-item' });
+    const isActive = !activeProtocols || activeProtocols.has(p);
+    if (!isActive) {
+      row.style.setProperty('--sm-legend-item-opacity', '0.35');
+    }
+    let checkbox = null;
+    if (checkable) {
+      checkbox = h('input', { type: 'checkbox' });
+      checkbox.checked = isActive;
+      checkbox.addEventListener('change', () => {
+        if (activeProtocols) {
+          if (checkbox.checked) activeProtocols.add(p);
+          else activeProtocols.delete(p);
+        }
+        saveActiveProtocols();
+        onProtocolToggle();
+      });
+      row.appendChild(checkbox);
+    }
     row.appendChild(
       h('span', { class: 'sm-legend-swatch', style: `background: ${protocolColor(p)}` }),
     );
@@ -1181,33 +1267,44 @@ function buildSweepLegend(sweep, scenario, protocols) {
       row.appendChild(h('span', { class: 'sm-legend-pct na' }, 'n/a'));
       row.appendChild(h('span', { class: 'sm-legend-sep' }));
       row.appendChild(h('span', { class: 'sm-legend-p99' }));
-      legend.appendChild(row);
-      return;
-    }
-    // Color the chip by the worst-case (min) rate so a sweep that dips
-    // into the red zone reads as red even if other points are green.
-    const { bg, fg } = rateToColor(stats.successMin);
-    // Suppress fractional precision when the per-cell sample size can't
-    // support it. At N < 100 iterations the sample resolution is ≥ 1%,
-    // so 2-decimal-place rates are spurious precision; round to whole
-    // percent. The heatmap cells already do this; this brings the legend
-    // chip into line.
-    const decimals = stats.minIters >= 100 ? 2 : 0;
-    const sMin = (stats.successMin * 100).toFixed(decimals);
-    const sMax = (stats.successMax * 100).toFixed(decimals);
-    const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
-    row.appendChild(
-      h('span', { class: 'sm-legend-pct', style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}` }, sStr),
-    );
-    if (stats.p99Min !== null) {
-      const pMin = Math.round(stats.p99Min);
-      const pMax = Math.round(stats.p99Max);
-      const pStr = pMin === pMax ? `p99 ${pMin} ms` : `p99 ${pMin}–${pMax} ms`;
-      row.appendChild(h('span', { class: 'sm-legend-sep' }, '·'));
-      row.appendChild(h('span', { class: 'sm-legend-p99' }, pStr));
     } else {
-      row.appendChild(h('span', { class: 'sm-legend-sep' }));
-      row.appendChild(h('span', { class: 'sm-legend-p99' }));
+      // Color the chip by the worst-case (min) rate so a sweep that dips
+      // into the red zone reads as red even if other points are green.
+      const { bg, fg } = rateToColor(stats.successMin);
+      // Suppress fractional precision when the per-cell sample size can't
+      // support it. At N < 100 iterations the sample resolution is ≥ 1%,
+      // so 2-decimal-place rates are spurious precision; round to whole
+      // percent. The heatmap cells already do this; this brings the legend
+      // chip into line.
+      const decimals = stats.minIters >= 100 ? 2 : 0;
+      const sMin = (stats.successMin * 100).toFixed(decimals);
+      const sMax = (stats.successMax * 100).toFixed(decimals);
+      const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
+      row.appendChild(
+        h('span', { class: 'sm-legend-pct', style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}` }, sStr),
+      );
+      if (stats.p99Min !== null) {
+        const pMin = Math.round(stats.p99Min);
+        const pMax = Math.round(stats.p99Max);
+        const pStr = pMin === pMax ? `p99 ${pMin} ms` : `p99 ${pMin}–${pMax} ms`;
+        row.appendChild(h('span', { class: 'sm-legend-sep' }, '·'));
+        row.appendChild(h('span', { class: 'sm-legend-p99' }, pStr));
+      } else {
+        row.appendChild(h('span', { class: 'sm-legend-sep' }));
+        row.appendChild(h('span', { class: 'sm-legend-p99' }));
+      }
+    }
+    // Make every non-checkbox child act as a click target for the row,
+    // so the user can toggle a protocol by clicking anywhere on its row.
+    if (checkable && checkbox) {
+      [...row.children].forEach((child) => {
+        if (child === checkbox) return;
+        child.style.cursor = 'pointer';
+        child.addEventListener('click', () => {
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change'));
+        });
+      });
     }
     legend.appendChild(row);
   });
