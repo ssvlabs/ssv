@@ -279,6 +279,19 @@ func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol P
 // iter's data instead of collapsing the cell to n/a. Other unexpected
 // errors log and return an n/a cell. Returns (cell, true) when a
 // special-case applies; (zero, false) when the caller should aggregate.
+//
+// Priority on mixed errors (an adapter bug, but defensive):
+//
+//  1. hasOtherErr  — unknown error class → n/a + log
+//  2. NotApplicable — "scenario doesn't translate" trumps all timing
+//     verdicts; cell renders as n/a (0 iters)
+//  3. OutOfEnvelope — "schedule collapsed" → red 0% with miss reason
+//
+// NotApplicable beats OutOfEnvelope because the former is a per-cfg
+// semantic dispatch decision (translateByz) and the latter is a
+// derived-schedule verdict. If even one iter said NotApplicable, the
+// scenario didn't apply at all — surfacing the noisy OOE classification
+// from the buggy iters would mislead the reader.
 func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) (BatchCell, bool) {
 	t.Helper()
 	hasNotApplicable, hasOutOfEnvelope, hasOtherErr := false, false, false
@@ -306,6 +319,18 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 		t.Logf("RunBatch: %s/%s unexpected error (cell marked n/a): %v",
 			protocol.Name(), scenario.Name, firstOther)
 		return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}, true
+	case hasNotApplicable:
+		// NotApplicable is a semantic "this scenario doesn't translate
+		// to this protocol" — adapters set it from per-cfg dispatch
+		// (e.g. translateByz), so it should be uniform across every
+		// iter of a cell. It takes priority over OutOfEnvelope because
+		// "the scenario doesn't apply" is a stronger statement than
+		// "the schedule collapsed" — if even one iter returned
+		// NotApplicable, the scenario didn't apply at all and the
+		// remaining iters' OOE classifications are spurious noise
+		// from an adapter bug. Render as n/a (0 iters) rather than
+		// red 0%.
+		return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}, true
 	case hasOutOfEnvelope:
 		// Protocol can't operate at this operating point — return a
 		// full-iter-count cell with no successful decisions so the UI
@@ -317,8 +342,6 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 			SuccessRate: 0,
 			MissReasons: map[string]int{"config out of envelope": cellIter},
 		}, true
-	case hasNotApplicable:
-		return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}, true
 	}
 	return BatchCell{}, false
 }
@@ -405,11 +428,14 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 	return cell
 }
 
-// ensureLen left-pads m[key] with zeros up to `iterIdx` so the next append
-// at iteration `iterIdx` lands at the right position. Used by
-// aggregateCellIters to back-fill prior iterations where a kind / rule
-// didn't appear in r.out.Bandwidth.PerKindBytes or r.out.PerOp's
-// EvidenceByRule.
+// ensureLen extends m[key] with trailing zeros until its length is
+// `iterIdx`, so the caller's next append lands at position `iterIdx`.
+// (Mechanically it's `append` — appends zeros to the right end — but
+// the EFFECT from the caller's perspective is to back-fill the
+// "missing" iter slots before iterIdx with zeros, so the resulting
+// series is aligned with the iter axis.) Used by aggregateCellIters
+// to handle kinds / rules that didn't appear in r.out.Bandwidth.
+// PerKindBytes or r.out.PerOp's EvidenceByRule on prior iterations.
 func ensureLen(m map[string]Distribution, key string, iterIdx int) {
 	d := m[key]
 	for len(d) < iterIdx {

@@ -414,6 +414,18 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 		prob := prob
 		// Per-sim CorrelatedLinkDelay (stateful per-pair Markov chains —
 		// must construct fresh per sim, just like LossyNetwork).
+		//
+		// COMPOSITION: wrap whatever Network the inner scenario configured
+		// (e.g. PerReceiverDelay for MeshFlakiness, AsymmetricPropagation_*)
+		// so correlated-link slowness composes ON TOP of the scenario's
+		// own per-receiver model. cfg.Network may be nil if the inner
+		// scenario didn't set it; use ConstantDelay{D: BTT} as the
+		// equivalent of Validate's default. NOTE that for scenarios with
+		// hand-tuned per-receiver delays (MeshFlakiness's exactly-2·BTT
+		// flaky receivers), the extra correlated-slowness wrap pushes
+		// those receivers off the scenario's calibrated boundary — the
+		// resulting cell measures the COMPOUND effect, not the isolated
+		// scenario, which is the intended interpretation for this sweep.
 		scenariosWithCorr := make([]Scenario, len(scenarios))
 		for i, s := range scenarios {
 			inner := s
@@ -491,6 +503,17 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 		// Each point gets its OWN scenario list with a fresh
 		// MarkovianSlownessDelay constructed per Apply call — the
 		// per-op state map must NOT be shared across iterations.
+		//
+		// COMPOSITION: wrap whatever Network the inner scenario configured
+		// (e.g. PerReceiverDelay for MeshFlakiness, AsymmetricPropagation_*)
+		// so markov slowness composes ON TOP of the scenario's per-receiver
+		// model. cfg.Network may be nil if the inner scenario didn't set
+		// it; use ConstantDelay{D: BTT} as the equivalent of Validate's
+		// default. NOTE that for scenarios with hand-tuned per-receiver
+		// delays, the extra slowness wrap distorts the scenario's
+		// calibrated boundary — the resulting cell measures the COMPOUND
+		// effect (scenario + slowness), not the isolated scenario, which
+		// is the intended interpretation for this sweep.
 		scenariosWithSlowness := make([]Scenario, len(scenarios))
 		for i, s := range scenarios {
 			inner := s

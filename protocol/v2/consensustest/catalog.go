@@ -14,17 +14,22 @@ package consensustest
 // tier runs them with a different network model:
 //   - TestCorrectness uses CorrectnessProfile (ConstantDelay): outcomes
 //     are deterministic, the test asserts the declared outcome class.
-//   - TestStress runs the curated DefaultSweeps at a single cluster
-//     size (CLUSTER_SIZE env, default 4). Every sweep uses
+//   - TestStress runs the seven curated DefaultSweeps at a single
+//     (n, K) operating point across the OBFT, 2abOBFT, and QBFT
+//     protocol families (with BTT-multiplier variants — see
+//     stress_test.go for the full registered list). Every sweep uses
 //     LogNormalDelay as its propagation model (production-shaped per
-//     OBFT.md §Setting): p2p_baseline (K × BTT × σ cross-product),
-//     p2p_increasing_BTT and p2p_heavy_tail varying BTT and σ along
-//     their axes × K, p2p_packet_loss wrapping LossyNetwork × K,
-//     p2p_correlated_delays wrapping CorrelatedLinkDelay × K, and
-//     p2p_node_slowness varying slow-op count × K. Many iterations
-//     (baseline / unstable split); stats only. Cross-cluster-size
-//     comparison is done by re-running TestStress with different
-//     CLUSTER_SIZE values, not by a dedicated sweep.
+//     OBFT.md §Setting):
+//       p2p_baseline           (BTT × σ × instability cross-product)
+//       p2p_increasing_BTT     (BTT axis)
+//       p2p_heavy_tail         (σ axis)
+//       p2p_packet_loss        (LossyNetwork × LossRate axis)
+//       p2p_correlated_delays  (CorrelatedLinkDelay × BadLinkProb axis)
+//       p2p_node_slowness      (MarkovianSlownessDelay × slow-op count)
+//       p2p_instability        (Healthy-only instability-level curve)
+//     Many iterations (baseline / unstable split); stats only. Cross-
+//     (n, K) comparison is done by re-running TestStress with different
+//     CLUSTER_SIZE_N / LAYERS_K values, not by a dedicated sweep.
 //
 // A scenario that needs a specific network shape (e.g. MeshFlakiness's
 // PerReceiverDelay, AsymmetricPropagation_*'s per-receiver overrides)

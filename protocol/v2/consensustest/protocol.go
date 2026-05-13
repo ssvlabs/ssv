@@ -390,10 +390,13 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		RelayCutoff:          4 * time.Second,
 		HeaderSubmitHeadroom: 100 * time.Millisecond,
 		BTT:                  btt,
-		Network:              ConstantDelay{D: btt},
-		Host:                 HostAllValid{},
-		Byz:                  ByzPattern{Kind: ByzNone},
-		Seed:                 1,
+		// Network is intentionally nil here. Validate() defaults it to
+		// ConstantDelay{D: BTT}, and every sweep builder overrides
+		// it to LogNormalDelay before running, so setting it here was
+		// redundant — and risked implying the value was load-bearing.
+		Host: HostAllValid{},
+		Byz:  ByzPattern{Kind: ByzNone},
+		Seed: 1,
 	}
 }
 

@@ -470,10 +470,13 @@ func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind M
 		// good → bad with prob a. Guard BadLinkProb >= 1 first so we
 		// never divide by (1 - BadLinkProb) when it's zero / negative
 		// (would silently produce +Inf or NaN before falling back to 1).
-		// BadLinkProb >= 1 is also degenerate in practice — init above
-		// always sets linkBad=true at that ratio, so this branch is
-		// unreachable — but the guard keeps the code defensive against
-		// future state-machine refactors.
+		// At BadLinkProb=1 this branch IS reachable in practice: init
+		// always sets linkBad=true on call #1, but the bad → good
+		// branch below can flip it back via the 1/BurstMessages
+		// recovery roll, and subsequent calls then re-enter this good
+		// branch — where a=1 immediately snaps the link back to bad.
+		// The guard's job is just to keep the algebra defined at the
+		// degenerate end-point.
 		var a float64
 		if c.BadLinkProb >= 1 {
 			a = 1

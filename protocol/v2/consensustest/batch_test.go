@@ -52,7 +52,8 @@ func TestBatch_Smoke(t *testing.T) {
 		require.Equal(t, 5, cell.Iterations, "every cell must run all iterations")
 		require.GreaterOrEqual(t, cell.SuccessRate, 0.0)
 		require.LessOrEqual(t, cell.SuccessRate, 1.0)
-		require.Equal(t, 0, cell.SafetyViolations, "no safety violations expected")
+		// Safety violations would have panic'd in aggregateCellIters via
+		// SafetyPanic — reaching this point at all means the cell is safe.
 		// ClusterBandwidth is recorded per-sim regardless of decide outcome.
 		require.Equal(t, 5, cell.ClusterBandwidth.Len(),
 			"ClusterBandwidth should have one sample per iter")

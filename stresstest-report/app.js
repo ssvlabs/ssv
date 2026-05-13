@@ -22,13 +22,17 @@
 // Protocol series colors — used for chart lines, dataset point markers,
 // and the per-protocol legend rows. Picked with similar saturation/
 // lightness so the protocols read as peers rather than figure/ground.
-// "-L" loose variants share the family hue but with a noticeably lighter
-// / desaturated tint so they read as siblings of the canonical variant.
+// "x<n>" multiplier variants share the family hue but with a noticeably
+// lighter / desaturated tint that gets paler as the multiplier grows,
+// so x2 reads as "slightly looser sibling of canonical" and x3 reads
+// as "even looser".
 const PROTOCOL_COLORS = {
   OBFT:         '#ed8936', // light orange
-  'OBFT-L':     '#f6ad55', // paler orange — sibling of OBFT
+  OBFTx2:       '#f6ad55', // paler orange — looser OBFT (×2)
+  OBFTx3:       '#fbd38d', // very pale orange — much-looser OBFT (×3)
   '2abOBFT':    '#06b6d4', // cyan
-  '2abOBFT-L':  '#67e8f9', // paler cyan — sibling of 2abOBFT
+  '2abOBFTx2':  '#67e8f9', // paler cyan — looser 2abOBFT (×2)
+  '2abOBFTx3':  '#a5f3fc', // very pale cyan — much-looser 2abOBFT (×3)
   QBFT:         '#e85a71', // light pink-red (computed-RT variant)
   'QBFT-SSV':   '#8b5cf6', // purple (production-RT variant)
 };
@@ -1443,18 +1447,37 @@ function protocolColor(name) {
 }
 
 // sortProtocolsByFamily reorders the protocol list so variants sit next
-// to their base — e.g. ["OBFT","2abOBFT","QBFT","QBFT-SSV","OBFT-L",
-// "2abOBFT-L"] becomes ["OBFT","OBFT-L","2abOBFT","2abOBFT-L","QBFT",
-// "QBFT-SSV"]. The "family" is everything before the first hyphen; the
-// canonical form (no hyphen) always sorts first inside a family. Family
-// order itself is preserved from first-occurrence in the input — so the
-// data-driven ordering (whichever protocol Go registered first) wins,
+// to their canonical base — e.g.
+//   ["OBFT","2abOBFT","QBFT","QBFT-SSV","OBFTx2","OBFTx3"]
+// becomes
+//   ["OBFT","OBFTx2","OBFTx3","2abOBFT","QBFT","QBFT-SSV"]
+// Variant suffixes follow two conventions: "x<n>" (multiplier variants
+// like OBFTx2) and "-<suffix>" (variant flavors like QBFT-SSV). Family
+// order itself is preserved from first-occurrence in the input so the
+// data-driven ordering (whichever protocol Go registered first) wins;
 // we just regroup variants under their parent.
+//
+// Within a family, sort order is: canonical (=== family) first, then
+// numeric "x<n>" multiplier variants in ascending n, then "-suffix"
+// variants in lexical order. Stable for input ties.
 function sortProtocolsByFamily(protocols) {
   if (!Array.isArray(protocols) || protocols.length <= 1) return protocols;
   const familyOf = (name) => {
+    // Numeric "x<n>" multiplier suffix (e.g. "OBFTx2" → "OBFT").
+    const xm = name.match(/^(.+?)x\d+$/);
+    if (xm) return xm[1];
+    // Hyphenated variant suffix (e.g. "QBFT-SSV" → "QBFT").
     const i = name.indexOf('-');
     return i < 0 ? name : name.slice(0, i);
+  };
+  // Variant sort key: [canonical-rank, multiplier-or-0, suffix-string].
+  // Canonical=0 wins everything; x<n> variants sort by n; hyphenated
+  // variants sort lexically after numeric variants.
+  const variantKey = (name, fam) => {
+    if (name === fam) return [0, 0, ''];
+    const xm = name.match(/^.+?x(\d+)$/);
+    if (xm) return [1, parseInt(xm[1], 10), ''];
+    return [2, 0, name];
   };
   const families = []; // first-occurrence order
   const byFamily = new Map();
@@ -1468,15 +1491,13 @@ function sortProtocolsByFamily(protocols) {
   });
   const out = [];
   families.forEach((fam) => {
-    // Canonical (=== fam, no hyphen) first; variants (hyphenated) after
-    // in their input-order so multiple variants within one family stay
-    // stable.
     const group = byFamily.get(fam);
     group.sort((a, b) => {
-      const aBase = a === fam;
-      const bBase = b === fam;
-      if (aBase === bBase) return 0; // stable for the variants vs each other
-      return aBase ? -1 : 1;
+      const ka = variantKey(a, fam);
+      const kb = variantKey(b, fam);
+      if (ka[0] !== kb[0]) return ka[0] - kb[0];
+      if (ka[1] !== kb[1]) return ka[1] - kb[1];
+      return ka[2] < kb[2] ? -1 : ka[2] > kb[2] ? 1 : 0;
     });
     out.push(...group);
   });

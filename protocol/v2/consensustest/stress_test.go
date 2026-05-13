@@ -71,50 +71,64 @@ func TestStress(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	// CLUSTER_SIZE_N / LAYERS_K semantics:
-	//   - unset → "all": iterate every supported size (ClusterSizes) and
-	//     every valid K per size (MinK(N)..N).
-	//   - set to a single int: scope to that one value.
+	//   - BOTH unset → curated quick default: {(n=4, K=2), (n=4, K=4)}.
+	//     The two K values bracket the f=1/n=4 BFT-liveness floor
+	//     (MinK(4)=2) and the SSV K=N convention (4), giving useful
+	//     coverage in a single fast run.
+	//   - Only CLUSTER_SIZE_N set: scope to that n, iterate every valid K
+	//     for it (MinK(N)..N).
+	//   - Only LAYERS_K set: iterate every supported n (ClusterSizes),
+	//     keeping only (n, K) pairs where K is valid for that n.
+	//   - Both set: a single (n, K) point.
 	// Reruns at different (n, K) merge into the same data.js via
-	// WriteReportData's Fields-tuple match; running with both unset is
-	// the "fill the whole matrix" mode.
-	var clusterSizes []int
-	if v := os.Getenv("CLUSTER_SIZE_N"); v != "" {
-		n, err := strconv.Atoi(v)
-		require.NoErrorf(t, err, "invalid CLUSTER_SIZE_N=%q", v)
-		require.Greater(t, n, 0, "CLUSTER_SIZE_N must be > 0")
-		clusterSizes = []int{n}
-	} else {
-		clusterSizes = append([]int{}, ct.ClusterSizes...)
-	}
-
-	// LAYERS_K env (single int) constrains to that K for every cluster
-	// size. Empty LAYERS_K iterates the full MinK(N)..N range per size.
-	// Per-(n, K) validation skips combinations where the K is out of the
-	// valid range for that size (e.g. LAYERS_K=2 only fits n=4 where
-	// MinK(4)=2; logged + skipped for larger sizes).
-	var layersKEnv int
-	useExplicitK := false
-	if v := os.Getenv("LAYERS_K"); v != "" {
-		k, err := strconv.Atoi(v)
-		require.NoErrorf(t, err, "invalid LAYERS_K=%q", v)
-		require.Greater(t, k, 0, "LAYERS_K must be > 0")
-		layersKEnv = k
-		useExplicitK = true
-	}
+	// WriteReportData's Fields-tuple match.
 	type runPair struct{ n, k int }
 	var pairs []runPair
-	for _, n := range clusterSizes {
-		minK, maxK := ct.MinK(n), n
-		if useExplicitK {
-			if layersKEnv < minK || layersKEnv > maxK {
-				t.Logf("LAYERS_K=%d skipped for CLUSTER_SIZE_N=%d (valid range %d..%d)",
-					layersKEnv, n, minK, maxK)
-				continue
-			}
-			pairs = append(pairs, runPair{n: n, k: layersKEnv})
+
+	clusterSizeEnv := os.Getenv("CLUSTER_SIZE_N")
+	layersKEnvRaw := os.Getenv("LAYERS_K")
+
+	if clusterSizeEnv == "" && layersKEnvRaw == "" {
+		// Quick default — small, fast, representative. Iterating the
+		// full ClusterSizes × MinK..N matrix at the make-stresstest
+		// iteration budget runs for ~hours; this default fits the
+		// "PR-time smoke" use case. Set CLUSTER_SIZE_N / LAYERS_K to
+		// scope or expand from here.
+		pairs = []runPair{{n: 4, k: 2}, {n: 4, k: 4}}
+	} else {
+		var clusterSizes []int
+		if clusterSizeEnv != "" {
+			n, err := strconv.Atoi(clusterSizeEnv)
+			require.NoErrorf(t, err, "invalid CLUSTER_SIZE_N=%q", clusterSizeEnv)
+			require.Greater(t, n, 0, "CLUSTER_SIZE_N must be > 0")
+			clusterSizes = []int{n}
 		} else {
-			for k := minK; k <= maxK; k++ {
-				pairs = append(pairs, runPair{n: n, k: k})
+			clusterSizes = append([]int{}, ct.ClusterSizes...)
+		}
+
+		var layersKEnv int
+		useExplicitK := false
+		if layersKEnvRaw != "" {
+			k, err := strconv.Atoi(layersKEnvRaw)
+			require.NoErrorf(t, err, "invalid LAYERS_K=%q", layersKEnvRaw)
+			require.Greater(t, k, 0, "LAYERS_K must be > 0")
+			layersKEnv = k
+			useExplicitK = true
+		}
+
+		for _, n := range clusterSizes {
+			minK, maxK := ct.MinK(n), n
+			if useExplicitK {
+				if layersKEnv < minK || layersKEnv > maxK {
+					t.Logf("LAYERS_K=%d skipped for CLUSTER_SIZE_N=%d (valid range %d..%d)",
+						layersKEnv, n, minK, maxK)
+					continue
+				}
+				pairs = append(pairs, runPair{n: n, k: layersKEnv})
+			} else {
+				for k := minK; k <= maxK; k++ {
+					pairs = append(pairs, runPair{n: n, k: k})
+				}
 			}
 		}
 	}
@@ -151,20 +165,23 @@ func TestStress(t *testing.T) {
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
 	// Two flavor axes:
 	//   - OBFT and 2abOBFT each ship in a canonical (multiplier=1) form
-	//     and a "loose" (multiplier=2) form. The loose variant scales
-	//     bttEff internally — every BTT-derived budget (Δ_2, B_k shallow
-	//     layers, FetchAt fetch buffer, and 2ab's TAcceptMax/TVerdictMax
-	//     horizons) doubles. T_commit lands earlier as a result (Δ_2 =
-	//     4·BTT for OBFT-L; Δ_2a + Δ_2b = 8·BTT for 2abOBFT-L) at the
-	//     cost of MEV freshness. Network propagation still happens at
-	//     the sweep's actual BTT.
+	//     plus "x2" and "x3" multiplier variants that scale bttEff
+	//     internally. Every BTT-derived budget (Δ_2, B_k shallow layers,
+	//     FetchAt fetch buffer, and 2ab's TAcceptMax / TVerdictMax
+	//     horizons) scales linearly with the multiplier. T_commit lands
+	//     earlier as a result (Δ_2 = 2·m·BTT for OBFT-m; Δ_2a + Δ_2b =
+	//     4·m·BTT for 2abOBFT-m) at the cost of MEV freshness.
+	//     Network propagation still happens at the sweep's actual BTT —
+	//     the multiplier models operator-side pessimism only.
 	//   - QBFT ships in the research variant (computed RT = 3·PhaseBudget
 	//     = 6·bttEff) and the production SSV variant (fixed 2s RT).
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
-		obftadapter.Protocol{VariantName: "OBFT-L", BTTMultiplier: 2},
+		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
+		obftadapter.Protocol{VariantName: "OBFTx3", BTTMultiplier: 3},
 		twoabadapter.Protocol{},
-		twoabadapter.Protocol{VariantName: "2abOBFT-L", BTTMultiplier: 2},
+		twoabadapter.Protocol{VariantName: "2abOBFTx2", BTTMultiplier: 2},
+		twoabadapter.Protocol{VariantName: "2abOBFTx3", BTTMultiplier: 3},
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 	}

@@ -31,71 +31,102 @@ type Scenario struct {
 }
 
 // ExpectFor looks up the declared expectation for protocol name `pname`,
-// with variant fallback so QBFT-family variants (QBFT-SSV, future
-// QBFT-*) don't each need their own Expect-map entry. Lookup order:
+// with variant fallback so family variants don't each need their own
+// Expect-map entry. Lookup order:
 //
 //  1. exact match on pname
-//  2. fallback to the protocol's "base" name (the prefix before "-")
-//     when pname carries a "<base>-<suffix>" shape — e.g. "QBFT-SSV"
-//     falls back to "QBFT"
+//  2. fallback to the protocol's "base" name (canonical family),
+//     determined by stripping either of the two variant-suffix
+//     conventions: "xN" multiplier suffix ("OBFTx2" → "OBFT") or
+//     "-suffix" variant suffix ("QBFT-SSV" → "QBFT")
 //
 // Scenarios that legitimately need a different expectation for a
 // variant (e.g. QBFT-SSV's tighter fixed-RT misses where QBFT's
-// computed-RT succeeds) can override by setting both keys explicitly.
+// computed-RT succeeds; OBFTx3's T_commit collapse at a BTT where
+// OBFT succeeds) can override by setting both keys explicitly.
 // Returns (zero, false) when neither key is present.
 func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
 	if v, ok := s.Expect[pname]; ok {
 		return v, true
 	}
-	if i := strings.IndexByte(pname, '-'); i > 0 {
-		if v, ok := s.Expect[pname[:i]]; ok {
+	if base := variantBase(pname); base != pname {
+		if v, ok := s.Expect[base]; ok {
 			return v, true
 		}
 	}
 	return 0, false
 }
 
+// variantBase returns the canonical family name for a protocol-variant
+// name. Strips the two suffix conventions the framework uses:
+//   - "xN" multiplier suffix (e.g. "OBFTx2" → "OBFT", "2abOBFTx3" →
+//     "2abOBFT") where N is one or more trailing digits preceded by 'x'
+//   - "-suffix" variant flavor (e.g. "QBFT-SSV" → "QBFT")
+//
+// Returns the input unchanged when neither suffix is present.
+func variantBase(name string) string {
+	// "xN" suffix: walk back from the end while the byte is a digit;
+	// if at least one digit was consumed and the byte before is 'x',
+	// strip both.
+	digitStart := len(name)
+	for digitStart > 0 && name[digitStart-1] >= '0' && name[digitStart-1] <= '9' {
+		digitStart--
+	}
+	if digitStart < len(name) && digitStart > 0 && name[digitStart-1] == 'x' {
+		return name[:digitStart-1]
+	}
+	// "-suffix" suffix.
+	if i := strings.IndexByte(name, '-'); i > 0 {
+		return name[:i]
+	}
+	return name
+}
+
 // IsAdversarial reports whether the scenario requires active byzantine
 // behavior to reproduce (cfg.Byz.Kind != ByzNone after Apply). Honest-
 // cluster failure modes — pure-network slowness, host validity issues,
-// passive-byz scenarios — return false. Auto-detected via a probe run
-// of Apply against a minimal SimConfig so adding a new scenario doesn't
+// passive-byz scenarios — return false. Auto-detected via probe runs
+// of Apply against minimal SimConfigs so adding a new scenario doesn't
 // require remembering to flag it.
 //
 // Used by the UI to visually distinguish "happens in production with
 // honest nodes" from "requires an attacker".
 //
-// PROBE SCOPE: the probe runs at fixed N=4 (f=1). Every catalog Apply
-// today picks Byz.Kind unconditionally (or scales the byz count with
-// cfg.F() but always at non-zero count for f≥1), so N=4 is sufficient
-// to surface the adversarial verdict — adding a new scenario that
-// only ENGAGES byz at N>4 would break this. If such a pattern is
-// introduced, change the probe to OR the verdict across multiple N's
-// (e.g. {4, 7, 10, 13}) and document the cross-N invariant on the
-// scenario itself.
+// Probe runs at every supported cluster size (ClusterSizes) and ORs the
+// verdicts so a scenario whose Apply only ENGAGES byz at N>4 — none
+// today, but plausible if a future scenario scales adversarial activity
+// with cfg.F() and turns dormant at f=1 — still reads as adversarial.
+// The cross-N OR is cheap (a handful of Apply calls, no sim runs) and
+// removes the latent footgun.
 func (s Scenario) IsAdversarial() bool {
 	if s.Apply == nil {
 		return false
 	}
-	probe := SimConfig{
-		N:         4,
-		Operators: MakeOperators(4),
-		K:         4,
-		// BTT is set to a realistic value so scenarios whose Apply scales
-		// per-receiver overrides off cfg.BTT (e.g. MeshFlakiness's 2·BTT)
-		// don't accidentally trip over a degenerate near-zero override. The
-		// probe doesn't run a sim so this only affects what gets recorded
-		// into the probe SimConfig; the IsAdversarial verdict cares only
-		// about probe.Byz.Kind, but keeping BTT realistic is cheap insurance
-		// against future Apply functions that branch on cfg.BTT.
-		BTT: 200 * time.Millisecond,
+	for _, n := range ClusterSizes {
+		probe := SimConfig{
+			N:         n,
+			Operators: MakeOperators(n),
+			K:         n,
+			// BTT is set to a realistic value so scenarios whose Apply
+			// scales per-receiver overrides off cfg.BTT (e.g.
+			// MeshFlakiness's 2·BTT) don't accidentally trip over a
+			// degenerate near-zero override. The probe doesn't run a
+			// sim so this only affects what gets recorded into the
+			// probe SimConfig; the IsAdversarial verdict cares only
+			// about probe.Byz.Kind.
+			BTT: 200 * time.Millisecond,
+		}
+		s.Apply(&probe)
+		// ByzMultiSilent is topology-driven (silences whichever
+		// operator leads the top K layers — see byz.go's ByzPattern
+		// doc); it doesn't require an attacker. Treat it as a non-
+		// adversarial failure mode so the UI doesn't flag it as
+		// "needs byz" in the heatmap legend.
+		if probe.Byz.Kind != ByzNone && probe.Byz.Kind != ByzMultiSilent {
+			return true
+		}
 	}
-	s.Apply(&probe)
-	// ByzMultiSilent is topology-driven (silences whichever operator leads
-	// the top K layers — see byz.go's ByzPattern doc); it doesn't require
-	// an attacker. Treat it as a non-adversarial failure mode so the UI
-	// doesn't flag it as "needs byz" in the heatmap legend.
-	return probe.Byz.Kind != ByzNone && probe.Byz.Kind != ByzMultiSilent
+	return false
 }
 
 // HasMode reports whether the scenario participates in mode m. An empty

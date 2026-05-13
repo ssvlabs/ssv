@@ -112,8 +112,9 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (6 curated sweeps × OBFT/2abOBFT/QBFT × per-scenario iterations) and
-# writes / merges data.js into REPORT_DIR (default ./stresstest-report)
+# (7 curated sweeps × OBFT family + 2abOBFT family + QBFT family ×
+# per-scenario iterations) and writes / merges data.js into REPORT_DIR
+# (default ./stresstest-report)
 # — consumed by the static UI (index.html + app.js + styles.css)
 # already in that folder.
 #
@@ -178,18 +179,23 @@ consensustest-with-real-bls:
 REPORT_DIR ?= ./stresstest-report
 ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 100
-# CLUSTER_SIZE_N / LAYERS_K unset = "all". Empty CLUSTER_SIZE_N
-# expands to ClusterSizes = [4, 7, 10, 13]; empty LAYERS_K expands per
-# cluster size to MinK(N)..N (where MinK = f+1, f = (N-1)/3). All
-# combinations run sequentially; their data merges into one data.js
-# via the WriteReportData merge path. Set either to a single int to
-# scope a run (e.g. CLUSTER_SIZE_N=4 LAYERS_K=4 for the quick
-# canonical config).
+# CLUSTER_SIZE_N / LAYERS_K behavior:
+#   - BOTH unset (quick default): runs the curated pair {(n=4, K=2),
+#     (n=4, K=4)} — fast, representative, brackets the BFT-liveness
+#     floor (MinK(4)=2) and the SSV K=N convention.
+#   - Only CLUSTER_SIZE_N set: iterates every valid K for that n
+#     (MinK(N)..N).
+#   - Only LAYERS_K set: iterates every supported n in [4, 7, 10, 13],
+#     keeping only (n, K) pairs where K is valid for that n.
+#   - Both set: a single (n, K) point.
+# Reruns merge into the same data.js via the WriteReportData merge
+# path, so iterative widening (start at the default, then add specific
+# (n, K) slices) composes naturally.
 CLUSTER_SIZE_N ?=
 LAYERS_K ?=
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE_N=$(if $(CLUSTER_SIZE_N),$(CLUSTER_SIZE_N),all) LAYERS_K=$(if $(LAYERS_K),$(LAYERS_K),all) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZE_N=$(if $(CLUSTER_SIZE_N),$(CLUSTER_SIZE_N),default) LAYERS_K=$(if $(LAYERS_K),$(LAYERS_K),default) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		$(if $(CLUSTER_SIZE_N),CLUSTER_SIZE_N=$(CLUSTER_SIZE_N)) \
 		$(if $(LAYERS_K),LAYERS_K=$(LAYERS_K)) \

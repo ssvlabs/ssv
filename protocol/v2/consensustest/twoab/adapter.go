@@ -109,6 +109,36 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, bttEff, p.BTTMultiplier)
 	}
 	tVerdictStart := tCommit - delta2a
+	if tVerdictStart <= 0 {
+		// Even with T_commit positive, T_verdict_start can land before
+		// slot 0 when Δ_2a > T_commit — i.e. the Phase-2a verdict
+		// window would need to start before the slot exists. The
+		// Phase-1 broadcast schedule collapses to BFT_start (FetchAt
+		// clamps `< 0` to 0) and no leader can meet its target; every
+		// sim fails to decide. Flag this band as OOE so it renders
+		// red `config out of envelope` rather than a stealth 0%
+		// success rate — the protocol genuinely can't operate at this
+		// (bttEff, RelayCutoff, K) point.
+		//
+		// Boundary: let R = RelayCutoff − HeaderSubmitHeadroom −
+		// Phase3JitterBuffer − Epsilon3 (the "available phase-2
+		// budget", everything before Δ_2 is subtracted). Then
+		// T_commit = R − (Δ_2a + Δ_2b) > 0 iff Δ_2a + Δ_2b < R, and
+		// T_verdict_start = R − (2·Δ_2a + Δ_2b) > 0 iff 2·Δ_2a + Δ_2b
+		// < R. This guard catches the narrow band
+		//
+		//   Δ_2a + Δ_2b  <  R  ≤  2·Δ_2a + Δ_2b
+		//
+		// where T_commit slips through positive but T_verdict_start is
+		// non-positive. Concrete examples at R = 4000−100−50−50 =
+		// 3800ms: 2abOBFTx3 at BTT=300 has Δ_2a = Δ_2b = 1800ms
+		// (T_commit=200, T_verdict_start=−1600); 2abOBFTx2 at BTT=400
+		// has Δ_2a = Δ_2b = 1600ms (T_commit=600, T_verdict_start=
+		// −1000).
+		return ct.Outcome{}, fmt.Errorf(
+			"%w: twoab adapter: derived T_verdict_start=%v non-positive (T_commit=%v Delta2a=%v bttEff=%v at BTTMultiplier=%v)",
+			ct.ErrConfigOutOfEnvelope, tVerdictStart, tCommit, delta2a, bttEff, p.BTTMultiplier)
+	}
 
 	// 2ab anchors B_k at TVerdictStart (= TCommit − Δ_2a), not TCommit —
 	// the Phase-1 broadcast must complete before the Phase-2a verdict

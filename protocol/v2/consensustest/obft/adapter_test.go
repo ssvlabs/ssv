@@ -206,8 +206,10 @@ func TestAdapter_MaxMEVFetch_HealthyAtBoundary(t *testing.T) {
 // boundary miss.
 func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	// Network = ConstantDelay{D: BTT} from DefaultProposerDutyConfig — consumes
-	// the full B_0 budget with zero margin.
+	// Network left nil so cfg.Validate() inside Run defaults it to
+	// ConstantDelay{D: BTT}. That full-BTT propagation consumes the
+	// entire B_0 budget with zero margin — the spec pathology this
+	// test exercises.
 
 	out, err := obftadapter.Protocol{MaxMEVFetch: true}.Run(cfg)
 	require.NoError(t, err)

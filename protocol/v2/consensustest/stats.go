@@ -125,10 +125,11 @@ func (d Distribution) sorted() []float64 {
 // "host_invalid", "asymmetric_propagation"). Free-form; renderer treats
 // it as an attribute table.
 //
-// SafetyViolations should always be zero. RunBatch panics on a safety
-// violation per the existing RunScenarioOnProtocol contract; this field
-// exists as a belt-and-braces counter for any post-batch verification
-// that wants to read the report.
+// Safety violations are NOT carried on this struct — aggregateCellIters
+// panics via SafetyPanic the moment ComputeSafetyReport flags a
+// violation, so the batch run terminates immediately and the cell never
+// gets emitted. Post-batch readers therefore see only safe data; there
+// is no per-cell counter to consult.
 type BatchCell struct {
 	Protocol         string
 	Scenario         string
@@ -139,7 +140,6 @@ type BatchCell struct {
 	PerKindBandwidth map[string]Distribution
 	EvidenceCounts   map[string]Distribution
 	MissReasons      map[string]int
-	SafetyViolations int
 }
 
 // BatchReport is the top-level aggregate from a RunBatch call. Cells are
