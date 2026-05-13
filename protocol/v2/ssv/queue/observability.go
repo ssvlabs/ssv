@@ -31,11 +31,21 @@ var (
 			metric.WithDescription("the latest observed inbox size (for some queue)"),
 		),
 	)
+
+	droppedMessagesMetric = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "messages.dropped"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of dropped queue messages by queue and reason"),
+		),
+	)
 )
 
 const (
 	ValidatorQueueMetricType = "validator"
 	CommitteeQueueMetricType = "committee"
+
+	DropReasonBufferFull = "buffer_full"
 )
 
 // ValidatorMetricID returns a queue identifier to differentiate validator-related queues (in metrics).

@@ -32,6 +32,12 @@ const (
 	statusUnknown       validatorStatus = "unknown"
 )
 
+// router drop reasons reported via routerDroppedMessagesCounter.
+const (
+	routerDropReasonContextCanceled = "context_canceled"
+	routerDropReasonBufferFull      = "buffer_full"
+)
+
 var (
 	tracer = otel.Tracer(observabilityName)
 	meter  = otel.Meter(observabilityName)
@@ -52,12 +58,11 @@ var (
 			observability.InstrumentName(observabilityNamespace, "errors"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
-
-	routerDroppedCounter = metrics.New(
+	routerDroppedMessagesCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "router.messages.dropped"),
 			metric.WithUnit("{message}"),
-			metric.WithDescription("total number of messages dropped because the router buffer was full")))
+			metric.WithDescription("total number of router-dropped messages by reason")))
 
 	routerBufferFillGauge = metrics.New(
 		meter.Int64Gauge(
