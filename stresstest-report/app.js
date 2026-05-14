@@ -6,15 +6,16 @@
  *
  * Page structure (top → bottom):
  *   1. Conditions section — always-visible CDF for the selected
- *      scenario. Pickers (K, BTT, σ, slot_start) drive both this chart
- *      and the heatmap below; legend (per-protocol success rate) sits
- *      Y-aligned to the right of the pickers.
+ *      scenario. Pickers (K, BTT, p2p_profile, slot_start) drive both
+ *      this chart and the heatmap below; legend (per-protocol success
+ *      rate) sits Y-aligned to the right of the pickers.
  *   2. Heatmap — scenario rows × protocol columns colored by the
  *      currently-selected p2p_baseline point's success rate. Clicking
  *      a row updates the Conditions chart above.
  *   3. Collapsibles — one per multi-point sweep (Increasing BTT,
- *      Heavy-tail, Stochastic loss, Correlated link delays). Each has
- *      its own slot_start + y-axis pickers placed just above the chart.
+ *      Stochastic loss, Correlated link delays, Correlated node
+ *      slowness, P2P instability). Each has its own slot_start +
+ *      y-axis pickers placed just above the chart.
  */
 
 'use strict';
@@ -61,14 +62,14 @@ let selectedSlotStart = 0;
 
 // selectedScenario drives the Conditions chart at the top of the page.
 // Heatmap row click updates this; the chart re-renders for the new
-// scenario at the picker-chosen (K, BTT, σ, slot_start). Not persisted
+// scenario at the picker-chosen (K, BTT, profile, slot_start). Not persisted
 // across reloads on purpose — refresh resets back to "Healthy".
 //
 // Default is "Healthy" — the all-honest baseline whose Title is
 // "Normal operations (all-honest healthy path)".
 let selectedScenario = 'Healthy';
 
-// Initial values for the conditions chart's N/K/BTT/σ pickers, snapped at
+// Initial values for the conditions chart's N/K/BTT/profile pickers, snapped at
 // page load to the closest values present in p2p_baseline (see
 // initBaselineSelections). Each `make stresstest` run contributes ONE
 // (n, K) slice; reruns at different (n, K) merge into the same data.js
@@ -142,10 +143,10 @@ const INSTABILITY_NAMES = ['none', 'low', 'moderate', 'high', 'extreme'];
 
 // collapsibleState[sweepName] = { expanded: bool, metric: 'success'|'p99', slotStart: int }
 // Per-section state for the collapsible sweep charts (Increasing BTT,
-// Heavy-tail propagation, Stochastic loss, Correlated link delays,
-// Correlated node slowness). Each has its OWN pickers independent of
-// the page-level ones, so the user can compare different operating
-// points across the four collapsibles without rebinding global state.
+// Stochastic loss, Correlated link delays, Correlated node slowness,
+// P2P instability). Each has its OWN pickers independent of the
+// page-level ones, so the user can compare different operating points
+// across the collapsibles without rebinding global state.
 const collapsibleState = {};
 
 // cdfZonesPlugin paints three horizontal bands keyed to the y-axis:
@@ -237,13 +238,14 @@ function main() {
   const mainEl = h('main');
   // Page layout (top → bottom):
   //   1. Conditions section — always-visible CDF for the selected
-  //      scenario. Pickers (K, BTT, σ, slot_start) drive both this
+  //      scenario. Pickers (K, BTT, profile, slot_start) drive both this
   //      chart and the heatmap's cell colors.
   //   2. Heatmap — colored by the same pickers; row click updates the
   //      Conditions chart's selected scenario.
-  //   3. Collapsibles — Increasing BTT, Heavy-tail propagation,
-  //      Stochastic loss, Correlated link delays. Each has its own
-  //      local pickers (slot_start + y-axis) just above the chart.
+  //   3. Collapsibles — Increasing BTT, Stochastic loss, Correlated
+  //      link delays, Correlated node slowness, P2P instability. Each
+  //      has its own local pickers (slot_start + y-axis) just above
+  //      the chart.
   mainEl.appendChild(renderConditionsSection(data));
   mainEl.appendChild(renderHeatmap(data));
   mainEl.appendChild(renderCollapsibles(data));
@@ -384,7 +386,7 @@ function findBaselinePointAtInstability(data, instability) {
 }
 
 // findBaselineCellForScenario looks up the cell for the given scenario
-// at the current (N, K, BTT, σ, instability). For Baseline-group
+// at the current (N, K, BTT, profile, instability). For Baseline-group
 // scenarios (Healthy) the cell is the per-level variant; for every
 // other scenario the cell falls back to the level=none point — those
 // scenarios are instability-invariant by construction, so generating
@@ -479,7 +481,7 @@ function filterSweepByNK(sweep, n, k) {
 }
 
 // buildBaselinePicker renders a labeled button group for one picker
-// dimension (n, K, BTT, or σ). Buttons mirror buildSlotPicker styling.
+// dimension (n, K, BTT, or profile index). Buttons mirror buildSlotPicker styling.
 // `disabledFor(v)` returns true when value `v` has no data for the
 // current selection in OTHER axes — the button gets a `.disabled` style
 // and a "no data here" title, but stays clickable (clicking just leaves
@@ -518,7 +520,7 @@ function buildBaselinePickerLabeled(label, values, labelFor, getValue, setValue,
 //   header  — scenario title on the left, "n=4" cluster-setup label
 //             on the right.
 //   desc    — scenario.note, full width below the header.
-//   bodyRow — two columns: left holds the K/BTT/σ/slot_start picker
+//   bodyRow — two columns: left holds the K/BTT/profile/slot_start picker
 //             stack; right holds the per-protocol legend block
 //             (buildSweepLegend keeps swatch/name/chip/sep/p99 columns
 //             aligned across protocol rows). Both columns use grid
@@ -642,7 +644,7 @@ function renderConditionsSection(data) {
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap
-// (cell colors reflect the new K/BTT/σ), the conditions chart, and
+// (cell colors reflect the new K/BTT/profile), the conditions chart, and
 // the collapsibles below (their trend charts filter by selectedK, so
 // a K change has to repaint them).
 function onConditionsChange() {
@@ -684,16 +686,16 @@ function rebuildConditionsChart(data) {
 }
 
 // renderCollapsibles builds the collapsible sections below the heatmap
-// — one per multi-point sweep (Increasing BTT, Heavy-tail, Stochastic
-// loss, Correlated link delays, Correlated node slowness). Each section
-// has its OWN pickers + y-axis toggle (collapsibleState[sweepName]).
-// Default collapsed.
+// — one per multi-point sweep (Increasing BTT, Stochastic loss,
+// Correlated link delays, Correlated node slowness, P2P instability).
+// Each section has its OWN pickers + y-axis toggle
+// (collapsibleState[sweepName]). Default collapsed.
 //
-// p2p_baseline is excluded: it's a multi-axis cross-product (BTT × σ ×
-// instability per (n, K) slice) consumed by the Conditions section and
-// heatmap via point-by-point lookup. Rendering it here as a trend chart
-// would interleave the three axes onto one x-axis and produce a large,
-// misleading line.
+// p2p_baseline is excluded: it's a multi-axis cross-product
+// (BTT × profile × instability per (n, K) slice) consumed by the
+// Conditions section and heatmap via point-by-point lookup. Rendering
+// it here as a trend chart would interleave the three axes onto one
+// x-axis and produce a large, misleading line.
 function renderCollapsibles(data) {
   const sec = h('section', { class: 'collapsibles' });
   data.sweeps.forEach((sw) => {
@@ -1121,7 +1123,7 @@ function selectHeatmapRow(el) {
 
 // currentChart is the live Chart.js instance for the Conditions chart
 // at the top of the page. Tracked so we can destroy() it before
-// swapping scenarios or reconfiguring K/BTT/σ/slot_start.
+// swapping scenarios or reconfiguring K/BTT/profile/slot_start.
 let currentChart = null;
 
 function destroyCurrentChart() {

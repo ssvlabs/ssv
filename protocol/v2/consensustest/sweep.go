@@ -270,7 +270,7 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	return Sweep{
 		Name:        "p2p_baseline",
 		Title:       "Baseline conditions",
-		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×4 / outlier frequency ×4 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
+		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×4 / outlier frequency ×4 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. Important: under empirical profiles, the BTT axis is a PROTOCOL-BUDGET axis, not a network-speed axis — the network model is the profile (≈ 1-10 ms in prod), while BTT (100-500 ms here) drives the protocol's internal timing budgets (OBFT Δ_2 = 2·BTT, QBFT phase budget = 2·BTT, etc.). The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
 		AxisLabel:   "", // multi-axis; UI picks one point at a time.
 		Points:      pts,
 	}
@@ -384,10 +384,15 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 		})
 	}
 	return Sweep{
-		Name:        "p2p_packet_loss",
-		Title:       "Stochastic loss",
-		Params:      []string{"LossyNetwork", "LogNormal σ=0.5", "BurstFactor=5"},
-		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism. Inner delay is production-shaped (σ=0.5). One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
+		Name:  "p2p_packet_loss",
+		Title: "Stochastic loss",
+		Params: []string{
+			"LossyNetwork",
+			"BurstFactor=5",
+			"direct: LogNormal{Median: BTT/2, σ: 0.5}",
+			"mesh per-hop: LogNormal{Median: BTT/3, σ: 0.3}",
+		},
+		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism. Direct-path inner delay is production-shaped (σ=0.5); mesh per-hop inner delay uses the framework's calibration (σ=0.3) so the convolution over ~2 mesh hops matches direct's cluster-wide envelope. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
 		AxisLabel:   "Loss rate",
 		Points:      pts,
 	}
@@ -462,10 +467,16 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 		})
 	}
 	return Sweep{
-		Name:        "p2p_correlated_delays",
-		Title:       "Correlated link delays",
-		Params:      []string{"CorrelatedLinkDelay", "LogNormal σ=0.5", "mult=3.0", "burst=20"},
-		Description: "Per-pair sustained-slow links over a production-shaped baseline. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
+		Name:  "p2p_correlated_delays",
+		Title: "Correlated link delays",
+		Params: []string{
+			"CorrelatedLinkDelay",
+			"mult=3.0",
+			"burst=20",
+			"direct: LogNormal{Median: BTT/2, σ: 0.5}",
+			"mesh per-hop: LogNormal{Median: BTT/3, σ: 0.3}",
+		},
+		Description: "Per-pair sustained-slow links over a production-shaped baseline. Direct-path inner delay is σ=0.5; mesh per-hop inner delay uses the framework's calibration (σ=0.3). One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
 		AxisLabel:   "BadLinkProb",
 		Points:      pts,
 	}
@@ -554,10 +565,16 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 		})
 	}
 	return Sweep{
-		Name:        "p2p_node_slowness",
-		Title:       "Correlated node slowness",
-		Params:      []string{"MarkovianSlownessDelay", "LogNormal σ=0.5", "ExtraDelay=3·BTT", "PersistP=0.8"},
-		Description: "Per-op Markov slowness over a production-shaped baseline (two-state chain, P(stay)=0.8 in both states). One (n, K) slice per run; chart filters by selected (n, K).",
+		Name:  "p2p_node_slowness",
+		Title: "Correlated node slowness",
+		Params: []string{
+			"MarkovianSlownessDelay",
+			"ExtraDelay=3·BTT",
+			"PersistP=0.8",
+			"direct: LogNormal{Median: BTT/2, σ: 0.5}",
+			"mesh per-hop: LogNormal{Median: BTT/3, σ: 0.3}",
+		},
+		Description: "Per-op Markov slowness over a production-shaped baseline (two-state chain, P(stay)=0.8 in both states). Direct-path inner delay is σ=0.5; mesh per-hop inner delay uses the framework's calibration (σ=0.3). One (n, K) slice per run; chart filters by selected (n, K).",
 		AxisLabel:   "Slow op count",
 		Points:      pts,
 	}

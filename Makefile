@@ -181,8 +181,8 @@ consensustest-with-real-bls:
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
 #
-# See docs/STRESSTEST-REPORT.md for the usage guide and
-# docs/CONSENSUSTEST-BATCH-PLAN.md for the design rationale.
+# Driver docstring: protocol/v2/consensustest/stress_test.go TestStress.
+# Sweep definitions: protocol/v2/consensustest/sweep.go DefaultSweeps.
 REPORT_DIR ?= ./stresstest-report
 ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 100

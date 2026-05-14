@@ -253,9 +253,9 @@ func TestStress(t *testing.T) {
 				"DecisionTime semantic: \"ready to submit\" for all three protocols — for OBFT/2abOBFT this is " +
 				"the earliest local σ-cert in hand; for QBFT it is the earliest receiver to accumulate 2f+1 " +
 				"post-consensus partial sigs on the decided value (Phase C of the mesh-transport plan). " +
-				"Healthy is the only scenario that runs through the libp2p-shaped mesh transport (4 cluster " +
-				"ops + 4 forward-only relays at n=4); every adversarial scenario uses direct fanout to keep " +
-				"per-(from, to) byz primitives precise.",
+				"Healthy is the only scenario that runs through the libp2p-shaped mesh transport (per-cluster: " +
+				"N protocol peers + N forward-only relay peers, each node at degree 3); every adversarial " +
+				"scenario uses direct fanout to keep per-(from, to) byz primitives precise.",
 			Sweeps:             results,
 			BaselineIterations: iters.Baseline,
 			UnstableIterations: iters.Unstable,

@@ -292,8 +292,12 @@ func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.
 //   X = exp(μ_i + σ_i · Z),  Z ~ N(0, 1)
 //
 // Parameters per component:
-//   - Weight: π_i, the mixture weight. Must sum to 1 across components
-//     (the constructor normalizes; the Delay method assumes normalized).
+//   - Weight: π_i, the mixture weight. The constructor builds an
+//     internal normalized cumulative-weight table (cumWeights) used at
+//     sampling time; the public Components slice retains the raw
+//     weights as the caller supplied them (not mutated). Callers may
+//     pass weights summing to any positive value — the per-component
+//     fractions used at sampling are weight_i / Σ weight.
 //   - Median: exp(μ_i), the per-component median.
 //   - Sigma:  σ_i, log-space stddev of component i.
 //
@@ -517,35 +521,77 @@ func (l *LogNormalMixtureDelay) Slowed(factor float64) *LogNormalMixtureDelay {
 	return NewLogNormalMixtureDelay(out)
 }
 
-// HeavyTailed returns a copy of `l` with each component's Sigma scaled
-// so the probability of drawing a value above the *original*
-// distribution's P99 increases by `outlierFreqMultiplier`. Per-component
-// median is left unchanged, so the mixture's overall median shifts by
-// only a few percent (re-weighting at constant component medians).
+// HeavyTailed returns a copy of `l` with every component's Sigma
+// scaled by the SAME factor, chosen so the mixture-level probability
+// of drawing a value above the original mixture's P99 grows by
+// `outlierFreqMultiplier`. Each component's median is left unchanged,
+// so the mixture's overall median shifts by only a few percent.
 // Used by derived profiles like "heavy_tail" (outlier-freq×4 over prod).
 //
-// Math: for one lognormal component with location μ = ln(median) and
-// scale σ, P(X > V) = 1 − Φ((ln V − μ)/σ). With V fixed at the original
-// P99 (so (ln V − μ)/σ_old = z_{0.99} ≈ 2.326), we want the new
-// distribution to satisfy 1 − Φ((ln V − μ)/σ_new) = outlierFreqMultiplier
-// × (1 − Φ(z_{0.99})). Solving: σ_new = σ_old × z_{0.99} / z_{1 − k·(1−q)},
-// with q=0.99 and k=outlierFreqMultiplier. At k=4 the scale factor is
-// 2.326/Φ^{-1}(0.96) ≈ 2.326/1.751 ≈ 1.328.
+// For a single-component mixture, the math admits the closed-form
+// scale σ_new = σ_old · Φ^{-1}(0.99) / Φ^{-1}(1 − k·(1−0.99)). For
+// multi-component mixtures with different per-component σ_i the
+// closed form doesn't generalize: applying it to each component
+// independently is a single-component property, not a mixture-level
+// one, and the mixture's actual outlier-frequency multiplier comes
+// out far below the target (≈ 1.8 for prod when targeting 4). Instead
+// the implementation:
 //
-// Panics on k ≤ 0 (no meaningful "negative outlier frequency"); also
-// panics when k·(1−q) ≥ 1 (k ≥ 100 at q=0.99 — beyond that the
-// post-transformation P99-threshold falls inside the bulk of the
-// distribution and Φ^{-1} of a non-positive argument is undefined).
+//  1. Computes the original mixture's P99 (V) via bisection on the
+//     analytic mixture CDF.
+//  2. Binary-searches the uniform σ scale `s` such that the new
+//     mixture's CDF at V equals 1 − k·(1−0.99) = 0.96 for k=4.
+//
+// At prod (3 components, σ_i ∈ {0.38, 1.49, 0.41}) the converged
+// scale is ≈ 2.0 — higher than the single-component shortcut would
+// give, because the fat (σ=1.49) component already contributes most
+// of the tail mass and needs more σ-amplification to drag the mixture
+// outlier frequency up to the target.
+//
+// Panics on k ≤ 0 or k·(1−q) ≥ 1 (the target tail mass must be in
+// (0, 1)). Also panics if the bisection's lower bracket (s=1, the
+// no-op) already produces CDF below the target — that case implies
+// the mixture P99 derivation broke, which is a programmer error.
 func (l *LogNormalMixtureDelay) HeavyTailed(outlierFreqMultiplier float64) *LogNormalMixtureDelay {
 	if outlierFreqMultiplier <= 0 {
 		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: multiplier must be > 0, got %v", outlierFreqMultiplier))
 	}
 	const refQ = 0.99
-	newP := 1.0 - outlierFreqMultiplier*(1.0-refQ)
-	if newP <= 0 || newP >= 1 {
-		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: multiplier %v at q=%v drives target quantile out of (0, 1)", outlierFreqMultiplier, refQ))
+	targetTailMass := outlierFreqMultiplier * (1.0 - refQ)
+	if targetTailMass >= 1.0 {
+		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: multiplier %v at q=%v drives target tail mass ≥ 1", outlierFreqMultiplier, refQ))
 	}
-	scale := standardNormalQuantile(refQ) / standardNormalQuantile(newP)
+	targetCDF := 1.0 - targetTailMass
+
+	// V = original mixture's P99. Bisection in log-space; 80 iterations
+	// converge to ~10⁻²³ relative precision in ns, way under any
+	// downstream tolerance.
+	V := l.mixtureQuantile(refQ)
+	if V <= 0 || math.IsInf(V, 0) || math.IsNaN(V) {
+		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: mixture P99 is %v — degenerate input?", V))
+	}
+
+	// Uniform σ scale s ∈ (1, ∞). At s=1, CDF(V) = refQ = 0.99 by
+	// construction (above the target). As s→∞, each Φ((lnV − μ)/(σ·s))
+	// → Φ(0) = 0.5, so mixture CDF → 0.5, well below any practical
+	// target. Bisection brackets the crossing point.
+	lo, hi := 1.0, 100.0
+	if cdf := l.scaledMixtureCDF(hi, V); cdf > targetCDF {
+		// Sanity guard: even at s=100 the CDF is still above target.
+		// Happens only at multiplier values pushing tail mass beyond
+		// what σ-scaling alone can produce (relative to medians).
+		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: multiplier %v unreachable; CDF stuck at %v ≥ target %v at max scale", outlierFreqMultiplier, cdf, targetCDF))
+	}
+	for i := 0; i < 80; i++ {
+		s := (lo + hi) / 2
+		if l.scaledMixtureCDF(s, V) > targetCDF {
+			lo = s
+		} else {
+			hi = s
+		}
+	}
+	scale := (lo + hi) / 2
+
 	out := make([]LogNormalComponent, len(l.Components))
 	for i, c := range l.Components {
 		out[i] = LogNormalComponent{
@@ -557,14 +603,65 @@ func (l *LogNormalMixtureDelay) HeavyTailed(outlierFreqMultiplier float64) *LogN
 	return NewLogNormalMixtureDelay(out)
 }
 
-// standardNormalQuantile returns Φ^{-1}(p) — the inverse CDF of the
-// standard normal. Implemented as √2 · erfinv(2p − 1) since Go's stdlib
-// exposes Erfinv but not the inverse normal directly. Inputs outside
-// (0, 1) panic by way of math.Erfinv returning ±Inf, which propagates
-// to the caller's σ-scaling computation as an invalid factor — caught
-// upstream by HeavyTailed's range check.
-func standardNormalQuantile(p float64) float64 {
-	return math.Sqrt2 * math.Erfinv(2*p-1)
+// mixtureCDF returns the analytic mixture CDF at `x` (sum of weighted
+// per-component lognormal CDFs, normalized by total weight). x ≤ 0
+// returns 0; total weight ≤ 0 returns 0 (degenerate input, but the
+// constructor already rejects that case).
+func (l *LogNormalMixtureDelay) mixtureCDF(x float64) float64 {
+	return l.scaledMixtureCDF(1.0, x)
+}
+
+// scaledMixtureCDF returns the mixture CDF at x after multiplying each
+// component's σ by `scale`. Single helper for both the quantile
+// derivation (scale=1) and the heavy-tail σ search (scale > 1).
+func (l *LogNormalMixtureDelay) scaledMixtureCDF(scale, x float64) float64 {
+	if x <= 0 {
+		return 0
+	}
+	var sumWeighted, totalWeight float64
+	lnX := math.Log(x)
+	for _, c := range l.Components {
+		if c.Median <= 0 || c.Sigma <= 0 || c.Weight <= 0 {
+			continue
+		}
+		z := (lnX - math.Log(float64(c.Median))) / (c.Sigma * scale)
+		sumWeighted += c.Weight * standardNormalCDF(z)
+		totalWeight += c.Weight
+	}
+	if totalWeight == 0 {
+		return 0
+	}
+	return sumWeighted / totalWeight
+}
+
+// mixtureQuantile returns x such that mixtureCDF(x) = p. Bisection in
+// log-space; the search window covers 1 ns to 1 hour, which brackets
+// every practical mesh-hop delay by many orders of magnitude. 80
+// iterations give ~10⁻²³ relative precision.
+func (l *LogNormalMixtureDelay) mixtureQuantile(p float64) float64 {
+	if p <= 0 {
+		return 0
+	}
+	if p >= 1 {
+		return math.Inf(1)
+	}
+	lo, hi := math.Log(1.0), math.Log(float64(time.Hour))
+	for i := 0; i < 80; i++ {
+		mid := (lo + hi) / 2
+		if l.mixtureCDF(math.Exp(mid)) < p {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	return math.Exp((lo + hi) / 2)
+}
+
+// standardNormalCDF returns Φ(z), the CDF of the standard normal.
+// Implemented via math.Erf so callers don't need to bring a numerics
+// dependency.
+func standardNormalCDF(z float64) float64 {
+	return 0.5 * (1 + math.Erf(z/math.Sqrt2))
 }
 
 // LossyNetwork models bursty stochastic packet loss via a per-link two-state

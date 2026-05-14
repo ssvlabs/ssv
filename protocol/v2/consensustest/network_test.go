@@ -1,8 +1,8 @@
 package consensustest_test
 
 import (
-	"math"
 	mrand "math/rand"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -444,58 +444,93 @@ func TestLogNormalMixture_Slowed(t *testing.T) {
 	}
 }
 
-// TestLogNormalMixture_HeavyTailed — HeavyTailed(k) scales each σ so
-// the probability of drawing above the original P99 grows by k. Verify
-// empirically on a single-component mixture (where the math is exact)
-// and structurally on the calibrated prod mixture.
+// TestLogNormalMixture_HeavyTailed — HeavyTailed(k) scales every σ by
+// the same binary-searched factor such that the mixture-level
+// P(X > original-mixture-P99) grows by k. Asserted empirically on
+// both a single-component mixture (where the per-component math is
+// equivalent to the mixture math) and the calibrated prod mixture
+// (where they diverge — the per-component formula would deliver ~1.8x
+// at the mixture level, this test catches that regression).
 func TestLogNormalMixture_HeavyTailed(t *testing.T) {
-	// Single-component sanity test: P(X > original-P99) should be ~k%
-	// after HeavyTailed(k). Use a synthetic single-component mixture
-	// so component effects don't interfere with the measurement.
-	const (
-		mid   = 1000 * time.Microsecond
-		sigma = 0.5
-		k     = 4.0
-		N     = 50000
-	)
-	origP99 := time.Duration(float64(mid) * math.Exp(2.326*sigma))
-	heavy := ct.NewLogNormalMixtureDelay([]ct.LogNormalComponent{
-		{Weight: 1, Median: mid, Sigma: sigma},
-	}).HeavyTailed(k)
-	rng := mrand.New(mrand.NewSource(7))
-	exceed := 0
-	for i := 0; i < N; i++ {
-		d := heavy.Delay(rng, 1, 2, ct.KindCommit)
-		if d > origP99 {
-			exceed++
-		}
+	cases := []struct {
+		name string
+		base *ct.LogNormalMixtureDelay
+	}{
+		{
+			name: "single-component",
+			base: ct.NewLogNormalMixtureDelay([]ct.LogNormalComponent{
+				{Weight: 1, Median: 1000 * time.Microsecond, Sigma: 0.5},
+			}),
+		},
+		{
+			name: "prod-3-component",
+			base: ct.Prod_1_2_3_4_CalibratedLogNormalMixture(),
+		},
 	}
-	observed := float64(exceed) / float64(N)
-	// Expected ≈ 4% (1% × k). Tolerance ±0.6% absorbs P99-tail sampling
-	// noise at N=50_000.
-	require.InDeltaf(t, 0.04, observed, 0.006,
-		"P(X > original-P99) after HeavyTailed(%v): expected 0.04, got %v (%d/%d exceeded %v)",
-		k, observed, exceed, N, origP99)
+	const (
+		k = 4.0
+		// Large sample so the P99-tail estimate is tight. SE of an
+		// empirical probability p over N draws is √(p(1−p)/N); at
+		// p≈0.04, N=200k gives SE ≈ 0.00044, i.e. ±0.0011 at 2.5σ.
+		N = 200_000
+	)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			origP99Empirical := sampleMixtureP99(tc.base, 100_000, 13)
+			heavy := tc.base.HeavyTailed(k)
+			rng := mrand.New(mrand.NewSource(7))
+			exceed := 0
+			for i := 0; i < N; i++ {
+				d := heavy.Delay(rng, 1, 2, ct.KindCommit)
+				if d > origP99Empirical {
+					exceed++
+				}
+			}
+			observed := float64(exceed) / float64(N)
+			// Expected = 1% × k = 4%. Tolerance ±0.5% absorbs the
+			// compound P99-estimation error (±0.5% in V_99) and
+			// sampling noise at p=0.04 (±0.11% at 2.5σ).
+			require.InDeltaf(t, 0.04, observed, 0.005,
+				"%s: P(X > original-P99=%v) after HeavyTailed(%v): expected 0.04, got %v (%d/%d)",
+				tc.name, origP99Empirical, k, observed, exceed, N)
+		})
+	}
 
-	// Structural test on the calibrated prod mixture: each component's
-	// σ must scale by the same factor; medians unchanged.
+	// Structural sanity: HeavyTailed preserves Weight and Median for
+	// every component; only Sigma changes.
 	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture()
-	heavyProd := base.HeavyTailed(4)
+	heavyProd := base.HeavyTailed(k)
 	require.Len(t, heavyProd.Components, len(base.Components))
-	// Exact: Φ^-1(0.99)/Φ^-1(0.96) at k=4. Computed inline from math.Erfinv
-	// so the assertion stays tight (epsilon = 1e-9) and the expected
-	// number doesn't drift if someone re-tunes the math constant.
-	z99 := math.Sqrt2 * math.Erfinv(2*0.99-1)
-	z96 := math.Sqrt2 * math.Erfinv(2*0.96-1)
-	expectScale := z99 / z96
 	for i, c := range base.Components {
 		require.Equal(t, c.Median, heavyProd.Components[i].Median,
 			"component %d median must be unchanged", i)
 		require.Equal(t, c.Weight, heavyProd.Components[i].Weight,
 			"component %d weight must be unchanged", i)
-		require.InEpsilonf(t, c.Sigma*expectScale, heavyProd.Components[i].Sigma, 1e-9,
-			"component %d sigma must scale by Φ^-1(0.99)/Φ^-1(0.96)=%v", i, expectScale)
+		require.Greater(t, heavyProd.Components[i].Sigma, c.Sigma,
+			"component %d sigma must grow (heavy-tailing widens, not narrows)", i)
 	}
+	// All components share the same uniform σ scale (heavy-tail invariant).
+	scale0 := heavyProd.Components[0].Sigma / base.Components[0].Sigma
+	for i := 1; i < len(base.Components); i++ {
+		got := heavyProd.Components[i].Sigma / base.Components[i].Sigma
+		require.InEpsilonf(t, scale0, got, 1e-9,
+			"component %d sigma scale (%v) must match component 0 scale (%v)", i, got, scale0)
+	}
+}
+
+// sampleMixtureP99 estimates the P99 of a mixture by drawing N samples
+// and taking the 99th percentile. Empirical rather than analytic so
+// the test doesn't import the internal mixtureQuantile helper.
+func sampleMixtureP99(m *ct.LogNormalMixtureDelay, N int, seed int64) time.Duration {
+	rng := mrand.New(mrand.NewSource(seed))
+	samples := make([]time.Duration, N)
+	for i := 0; i < N; i++ {
+		samples[i] = m.Delay(rng, 1, 2, ct.KindCommit)
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	idx := int(0.99 * float64(N-1))
+	return samples[idx]
 }
 
 // TestP2PProfile_AllNamesResolve — every name in P2PProfileNames must
@@ -524,4 +559,3 @@ func TestP2PProfile_AllNamesResolve(t *testing.T) {
 		func() { ct.P2PProfileIndex("nope-not-a-profile") },
 		"P2PProfileIndex should panic on unknown name")
 }
-
