@@ -99,6 +99,9 @@ func TestBatch_Determinism(t *testing.T) {
 		require.Equal(t, []float64(r1.Cells[i].DecisionTime), []float64(r2.Cells[i].DecisionTime),
 			"cell %d %s/%s DecisionTime samples differ",
 			i, r1.Cells[i].Protocol, r1.Cells[i].Scenario)
+		require.Equal(t, []float64(r1.Cells[i].DecidingBroadcastTime), []float64(r2.Cells[i].DecidingBroadcastTime),
+			"cell %d %s/%s DecidingBroadcastTime samples differ",
+			i, r1.Cells[i].Protocol, r1.Cells[i].Scenario)
 		require.Equal(t, []float64(r1.Cells[i].ClusterBandwidth), []float64(r2.Cells[i].ClusterBandwidth))
 	}
 }

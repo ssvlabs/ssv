@@ -24,10 +24,15 @@ import (
 // + styles.css, all tracked in git). Refreshing index.html in a browser
 // re-renders from the new data.js without rerunning this test.
 //
-// Only safety-invariant violations fail TestStress; per-scenario
-// expectation mismatches are recorded in the report stats but do not
-// fail the test. Per-scenario expectation enforcement lives in
-// TestCorrectness (single deterministic operating point per scenario).
+// Only safety-invariant violations fail TestStress. Per-scenario
+// expectations (ExpectSuccessFastest, ExpectSlotMiss, etc.) are NOT
+// enforced here — the report records raw per-cell aggregates
+// (SuccessRate, DecisionTime distribution, MissReasons), not pass/fail
+// against the scenario's expectation. Reading the report means
+// comparing the aggregate against the scenario's documented behavior
+// manually; for automated expectation enforcement use TestCorrectness
+// (single deterministic operating point per scenario, where Match is
+// computed against the expectation).
 //
 // Gated on the REPORT_DIR env var so default `go test` runs stay quiet.
 // Iteration count split into two env vars:

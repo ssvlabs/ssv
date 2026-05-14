@@ -669,9 +669,16 @@ function rebuildConditionsChart(data) {
 // loss, Correlated link delays, Correlated node slowness). Each section
 // has its OWN pickers + y-axis toggle (collapsibleState[sweepName]).
 // Default collapsed.
+//
+// p2p_baseline is excluded: it's a multi-axis cross-product (BTT × σ ×
+// instability per (n, K) slice) consumed by the Conditions section and
+// heatmap via point-by-point lookup. Rendering it here as a trend chart
+// would interleave the three axes onto one x-axis and produce a large,
+// misleading line.
 function renderCollapsibles(data) {
   const sec = h('section', { class: 'collapsibles' });
   data.sweeps.forEach((sw) => {
+    if (sw.name === 'p2p_baseline') return;
     if (sw.points.length <= 1) return; // single-point sweeps go on the Conditions chart
     sec.appendChild(renderCollapsible(sw, data));
   });
@@ -1134,14 +1141,23 @@ function buildSlotPicker() {
 //     decide_time + slot_start. Sample fails when the shifted value
 //     overflows SLOT_END_MS.
 //   OBFT / 2abOBFT — broadcast schedule is slot-anchored → sample
-//     plots at T_k_broadcast unchanged. Sample fails when T_k <
-//     slot_start (broadcast fired before operator joined).
+//     plots at decide_time unchanged. Sample fails when
+//     T_broadcast_max for the deciding layer < slot_start (the
+//     deciding broadcast had already fired by the time the operator
+//     joined, so the captured cert is MEV-stale even if the cluster
+//     reconstructs later via gossip). The deciding-layer broadcast
+//     deadline is sourced per-sample from cell.decidingBroadcastTimes
+//     (index-aligned with decisionTimes); pre-fix data without the
+//     field falls back to comparing against decision time, which is
+//     the legacy — and over-permissive — behavior.
 // successRate, decisionTimes, and decisionTime are recomputed from
 // surviving samples; other fields (bandwidth, miss reasons) carry
 // through unchanged. Pure — never mutates the input.
 function shiftCell(cell, slotStart) {
   if (!cell || cell.iterations === 0 || slotStart === 0) return cell;
   const samples = cell.decisionTimes || [];
+  const broadcasts = cell.decidingBroadcastTimes;
+  const hasBroadcasts = Array.isArray(broadcasts) && broadcasts.length === samples.length;
   const adjusted = [];
   // Prefix match so QBFT family variants (QBFT, QBFT-SSV, future QBFT-*)
   // all share the pipeline-shift semantic. Exact-equality match would
@@ -1153,7 +1169,11 @@ function shiftCell(cell, slotStart) {
       const shifted = t + slotStart;
       if (shifted <= SLOT_END_MS) adjusted.push(shifted);
     } else {
-      if (t >= slotStart) adjusted.push(t);
+      // Filter on the deciding-layer broadcast deadline when available;
+      // fall back to decision time for legacy data (over-permissive,
+      // documented above) so older data.js files still render.
+      const cutoff = hasBroadcasts ? broadcasts[i] : t;
+      if (cutoff >= slotStart) adjusted.push(t);
     }
   }
   let decisionTime = null;

@@ -164,6 +164,14 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
+	// Stamp the deciding-layer broadcast deadline so the reporting
+	// layer's slot_start adjustment can model a late-joining operator
+	// catching (or missing) the live broadcast. broadcastBudget[k] is
+	// already clamped to ≤ tCommit upstream, so the subtraction never
+	// goes negative.
+	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
+		out.DecidingBroadcastTime = tCommit - broadcastBudget[out.DecidedRound]
+	}
 	// Clip late decisions to MISS so the outcome reflects deployed-protocol
 	// behavior. Phase 3's evtResolveRerun can recover from a late-arriving
 	// KindCommit past RoundEndOffset, but if the rebuilt decision lands past

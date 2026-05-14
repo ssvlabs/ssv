@@ -388,8 +388,17 @@ type cellPayload struct {
 	// every successful sim. Length = SuccessRate × Iterations. Emitted
 	// so the UI can render a CDF directly instead of just summary
 	// percentiles. omitted when no sim decided.
-	DecisionTimes    []int               `json:"decisionTimes,omitempty"`
-	DecisionTime     *percentilesPayload `json:"decisionTime,omitempty"`
+	DecisionTimes []int `json:"decisionTimes,omitempty"`
+	// DecidingBroadcastTimes is index-aligned with DecisionTimes: entry
+	// i is T_broadcast_max (slot-anchored, in ms) for the deciding
+	// layer of the i-th decision sample. The UI's slot_start adjustment
+	// filters OBFT-family samples on this value (vs. comparing against
+	// decision time, which is much later than the broadcast deadline).
+	// Zero values for protocols with no slot-anchored broadcast (QBFT)
+	// — that branch in the UI uses a pipeline-shift rule that doesn't
+	// read this field. Omitted when no sim decided.
+	DecidingBroadcastTimes []int               `json:"decidingBroadcastTimes,omitempty"`
+	DecisionTime           *percentilesPayload `json:"decisionTime,omitempty"`
 	ClusterBandwidth *percentilesPayload `json:"clusterBandwidth,omitempty"`
 	PerKindBandwidth map[string]float64  `json:"perKindBandwidth,omitempty"`
 	MissReasons      map[string]int      `json:"missReasons,omitempty"`
@@ -458,14 +467,36 @@ func buildCell(c ct.BatchCell) cellPayload {
 			P99:  c.DecisionTime.Percentile(99),
 			Mean: c.DecisionTime.Mean(),
 		}
-		// Sorted integer-ms samples for the UI CDF chart. One per successful
-		// sim; absent values (missed sims) are implicit via Iterations -
-		// len(DecisionTimes).
-		out.DecisionTimes = make([]int, len(c.DecisionTime))
-		for i, v := range c.DecisionTime {
-			out.DecisionTimes[i] = int(v + 0.5)
+		// Sorted integer-ms samples for the UI CDF chart, paired with the
+		// per-sample deciding-layer broadcast deadline (T_broadcast_max
+		// for the sample's deciding layer). Both arrays are sorted by
+		// decision time jointly so the UI's slot_start filter can read
+		// the i-th broadcast deadline alongside the i-th decision time.
+		// One entry per successful sim; absent values (missed sims) are
+		// implicit via Iterations - len(DecisionTimes).
+		n := len(c.DecisionTime)
+		idx := make([]int, n)
+		for i := range idx {
+			idx[i] = i
 		}
-		sort.Ints(out.DecisionTimes)
+		sort.SliceStable(idx, func(i, j int) bool {
+			return c.DecisionTime[idx[i]] < c.DecisionTime[idx[j]]
+		})
+		out.DecisionTimes = make([]int, n)
+		// DecidingBroadcastTime is index-aligned with DecisionTime
+		// (aggregateCellIters appends both inside the Decided branch
+		// together), so missing alignment here would be an aggregator
+		// bug, not a data shape we should silently tolerate.
+		hasBroadcast := len(c.DecidingBroadcastTime) == n
+		if hasBroadcast {
+			out.DecidingBroadcastTimes = make([]int, n)
+		}
+		for i, k := range idx {
+			out.DecisionTimes[i] = int(c.DecisionTime[k] + 0.5)
+			if hasBroadcast {
+				out.DecidingBroadcastTimes[i] = int(c.DecidingBroadcastTime[k] + 0.5)
+			}
+		}
 	}
 	if c.ClusterBandwidth.Len() > 0 {
 		out.ClusterBandwidth = &percentilesPayload{

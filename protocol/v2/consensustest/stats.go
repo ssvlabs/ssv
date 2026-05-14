@@ -110,11 +110,12 @@ func (d Distribution) sorted() []float64 {
 // BatchCell aggregates Iterations sims for one (protocol, scenario) pair.
 //
 // DecisionTime samples come ONLY from successful sims (deadlocks have no
-// decision time). SuccessRate gives the overall success fraction.
-// ClusterBandwidth samples come from ALL sims regardless of decision —
-// even a deadlock emits messages before it's declared a slot-miss, so
-// bandwidth is observable. PerKindBandwidth breaks ClusterBandwidth down
-// by MsgKind for stacked-chart rendering.
+// decision time). DecidingBroadcastTime is paired one-for-one with
+// DecisionTime — same length, same per-sim index. SuccessRate gives the
+// overall success fraction. ClusterBandwidth samples come from ALL sims
+// regardless of decision — even a deadlock emits messages before it's
+// declared a slot-miss, so bandwidth is observable. PerKindBandwidth
+// breaks ClusterBandwidth down by MsgKind for stacked-chart rendering.
 //
 // EvidenceCounts is keyed by EvidenceRule (e.g. "OBFT/Rule4/FakeEncryptedPresence"
 // or "QBFT/equivocation"); each Distribution holds per-sim total counts
@@ -131,15 +132,22 @@ func (d Distribution) sorted() []float64 {
 // gets emitted. Post-batch readers therefore see only safe data; there
 // is no per-cell counter to consult.
 type BatchCell struct {
-	Protocol         string
-	Scenario         string
-	Iterations       int
-	SuccessRate      float64
-	DecisionTime     Distribution
-	ClusterBandwidth Distribution
-	PerKindBandwidth map[string]Distribution
-	EvidenceCounts   map[string]Distribution
-	MissReasons      map[string]int
+	Protocol    string
+	Scenario    string
+	Iterations  int
+	SuccessRate float64
+	// DecisionTime carries one sample per successful sim. DecidingBroadcastTime
+	// is the same length and is index-aligned with DecisionTime: entry i is
+	// T_broadcast_max for the deciding layer of the i-th successful sim
+	// (zero when the protocol has no slot-anchored broadcast, e.g. QBFT).
+	// Reporting layer relies on the index alignment to emit parallel-sorted
+	// arrays for the UI's slot_start adjustment.
+	DecisionTime          Distribution
+	DecidingBroadcastTime Distribution
+	ClusterBandwidth      Distribution
+	PerKindBandwidth      map[string]Distribution
+	EvidenceCounts        map[string]Distribution
+	MissReasons           map[string]int
 }
 
 // BatchReport is the top-level aggregate from a RunBatch call. Cells are

@@ -66,18 +66,22 @@ func (l InstabilityLevel) slowCountForN(n int) int {
 }
 
 // InstabilityLevels are the 5 calibrated picker values. SlowOpsFraction
-// values were chosen to match the original raw-count calibration at the
-// canonical n=4 reference (low=1, moderate=2, high=2, extreme=3) and
-// scale proportionally to larger cluster sizes:
+// was originally anchored to the n=4 raw-count calibration
+// (low=1, moderate=2, high=2, extreme=3); high and extreme were
+// subsequently dialled back to leave a clearer gap between adjacent
+// levels at the larger cluster sizes (and below). Counts at each n
+// come from ceil(SlowOpsFraction × n), capped at n−1:
 //
 //	level     fraction  n=4  n=7  n=10  n=13
 //	low       0.25       1    2    3     4
 //	moderate  0.50       2    4    5     7
-//	high      0.50       2    4    5     7
-//	extreme   0.75       3    6    8     10
+//	high      0.35       2    3    4     5
+//	extreme   0.55       3    4    6     8
 //
-// (moderate/high share their slow-op count at every n; LossRate and
-// SlowMul are what distinguishes them between adjacent levels.)
+// (moderate and high collide at n=4 — by design, anchored to the
+// original n=4 calibration — but diverge for larger n. LossRate,
+// BurstFactor, SlowMul, and PersistP further separate adjacent
+// levels.)
 //
 // Tuning notes (expect a round of empirical adjustment per cluster
 // size if you change ranges):

@@ -192,6 +192,18 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
+	// Stamp the deciding-layer broadcast deadline (anchored at
+	// tVerdictStart, not tCommit, because the Phase-1 broadcast must
+	// complete before Phase-2a opens). Shallow layers whose B_k exceed
+	// tVerdictStart clamp to BFT_start, matching the runtime rule
+	// T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k).
+	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
+		bt := tVerdictStart - broadcastBudget[out.DecidedRound]
+		if bt < 0 {
+			bt = 0
+		}
+		out.DecidingBroadcastTime = bt
+	}
 	// Match the OBFT/QBFT adapters: late-recovered decisions past
 	// RelayCutoff − HeaderSubmitHeadroom can't be submitted in production
 	// either, so the comparison clips them to MISS.

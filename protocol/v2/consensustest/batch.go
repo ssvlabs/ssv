@@ -358,14 +358,15 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
 	t.Helper()
 	cell := BatchCell{
-		Protocol:         protocol.Name(),
-		Scenario:         scenario.Name,
-		Iterations:       cellIter,
-		DecisionTime:     make(Distribution, 0, cellIter),
-		ClusterBandwidth: make(Distribution, 0, cellIter),
-		PerKindBandwidth: make(map[string]Distribution),
-		EvidenceCounts:   make(map[string]Distribution),
-		MissReasons:      make(map[string]int),
+		Protocol:              protocol.Name(),
+		Scenario:              scenario.Name,
+		Iterations:            cellIter,
+		DecisionTime:          make(Distribution, 0, cellIter),
+		DecidingBroadcastTime: make(Distribution, 0, cellIter),
+		ClusterBandwidth:      make(Distribution, 0, cellIter),
+		PerKindBandwidth:      make(map[string]Distribution),
+		EvidenceCounts:        make(map[string]Distribution),
+		MissReasons:           make(map[string]int),
 	}
 	successCount := 0
 	loggedPanic := false
@@ -396,6 +397,7 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 		if r.out.Decided {
 			successCount++
 			cell.DecisionTime = append(cell.DecisionTime, float64(r.out.DecisionTime.Milliseconds()))
+			cell.DecidingBroadcastTime = append(cell.DecidingBroadcastTime, float64(r.out.DecidingBroadcastTime.Milliseconds()))
 		} else {
 			cell.MissReasons[classifyMiss(r.out)]++
 		}

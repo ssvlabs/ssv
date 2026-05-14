@@ -185,8 +185,21 @@ type Outcome struct {
 	DecidedValue []byte        // protocol-opaque
 	// DecidedRound is 0-indexed (OBFT layer or QBFT round-1); -1 if !Decided.
 	DecidedRound int
-	PerOp        map[OperatorID]OperatorOutcome
-	Trace        []TraceEntry // non-nil iff cfg.TraceEnabled was set
+	// DecidingBroadcastTime is the slot-anchored T_broadcast_max_k for
+	// k=DecidedRound — i.e. the latest absolute slot time at which the
+	// deciding layer's primary broadcast could still fire. Used by the
+	// reporting layer's slot_start adjustment: a late-joining operator
+	// (slot_start > 0) catches the deciding broadcast iff
+	// DecidingBroadcastTime ≥ slot_start; otherwise the broadcast fired
+	// before the operator joined and the slot is MEV-stale.
+	//
+	// Set only by adapters with a slot-anchored Phase-1 schedule (OBFT
+	// family and 2abOBFT family). QBFT's pipeline shifts wholesale with
+	// slot_start, so the QBFT branch in the UI's shiftCell uses a
+	// different rule and leaves this field unread. Zero when !Decided.
+	DecidingBroadcastTime time.Duration
+	PerOp                 map[OperatorID]OperatorOutcome
+	Trace                 []TraceEntry // non-nil iff cfg.TraceEnabled was set
 
 	// Bandwidth aggregates per-message byte counts emitted during the sim.
 	// Populated by adapters that instrument message emission.
