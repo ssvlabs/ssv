@@ -17,10 +17,12 @@ import (
 //     that fetches at the layer's FetchAt and broadcasts a Phase-1 bundle.
 //  3. At T_commit: BuildAndBroadcastCommit (single emission per spec
 //     §Phase 2; carries both σ partials and NR partials).
-//  4. From T_commit + Δ_2 onward: poll Resolve opportunistically until
-//     σ-quorum reaches (output → SubmitOutput, broadcast Certificate),
-//     a peer's Certificate arrives (Certificate → SubmitOutput), or the
-//     slot's submission deadline (ctx) is reached.
+//  4. Immediately from T_commit onward: ResolveAndSubmitOpportunistically
+//     blocks on the controller's per-slot state-delta signal, calling
+//     Resolve on each inbound KindCommit / KindCertificate observation
+//     until σ-quorum reaches (output → SubmitOutput, broadcast
+//     Certificate), a peer's Certificate arrives (Certificate →
+//     SubmitOutput), or the slot's submission deadline (ctx) is reached.
 //  5. EndInstance.
 //
 // Per spec §Phase 3: T_commit + Δ_2 + Δ_3 (= RoundEndOffset) is a SOFT
@@ -29,7 +31,9 @@ import (
 // Certificate gossip lets an operator that hasn't completed local
 // reconstruction submit (V, S) directly. Late KindCommit arrivals can
 // also be incorporated by re-running the reconstruction walk — Pigeonhole
-// semantics still hold.
+// semantics still hold. Resolve is idempotent (re-running on partial state
+// returns ErrNoQuorum without mutation), so the opportunistic call at
+// T_commit is safe even before any peer's commit has arrived.
 //
 // Returns the result of ResolveAndSubmitOpportunistically (or the first
 // non-recoverable error encountered earlier). Phase-1 fetch errors are
@@ -114,19 +118,16 @@ func RunProposerSlot(
 		return fmt.Errorf("obft runner: phase-2 commit broadcast: %w", err)
 	}
 
-	// Phase 3 — Resolve opportunistically from T_commit + Δ_2 onward.
-	// Per spec §Phase 3, reconstruction starts at T_commit + Δ_2 (when
-	// in-envelope KindCommits have propagated) and runs until σ-quorum
-	// reaches or the relay-submission deadline (ctx) forces termination.
-	// Late KindCommits arriving past T_commit + Δ_2 can be incorporated by
-	// re-running the walk; Pigeonhole semantics ensure at most one V can
-	// reconstruct cluster-wide regardless of timing.
-	phase3Start := slotStart.Add(cfg.PhaseTwoEndOffset())
-	if !sleepUntil(ctx, phase3Start) {
-		fetchWG.Wait()
-		return ctx.Err()
-	}
-
+	// Phase 3 — Resolve opportunistically from T_commit onward. The previous
+	// Δ_2 pre-wait was conservative-by-tradition: Resolve is idempotent and
+	// returns ErrNoQuorum cleanly on incomplete state. Calling immediately
+	// after Commit emission lets σ-quorum trigger submission as soon as the
+	// last needed partial arrives — saving ~Δ_2 + ticker latency per slot in
+	// the average case. The scheduler blocks on the controller's per-slot
+	// state-delta channel; each KindCommit / KindCertificate observation
+	// wakes a single Resolve attempt. Late KindCommits arriving past
+	// RoundEndOffset are still incorporated (Pigeonhole keeps cluster-wide
+	// uniqueness regardless of timing).
 	err = sched.ResolveAndSubmitOpportunistically(ctx, slot)
 	fetchWG.Wait()
 	return err

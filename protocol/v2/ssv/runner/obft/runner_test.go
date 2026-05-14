@@ -117,6 +117,71 @@ func TestRunProposerSlot_Healthy_n4_K4(t *testing.T) {
 	require.Equal(t, 0, ref.Layer, "healthy case should decide at L_0")
 }
 
+// TestRunProposerSlot_OpportunisticTiming_NoDelta2Wait verifies that with
+// the observer-mode Phase-3 implementation (no Δ_2 pre-wait, no 25ms
+// poller), submission lands before T_commit + Δ_2 in the healthy case.
+// Under the previous schedule-anchored implementation, RunProposerSlot
+// slept until T_commit + Δ_2 = 260ms before even starting to poll Resolve;
+// observer-mode collapses that wait, so submission lands within a few BTTs
+// of T_commit (well under Δ_2).
+func TestRunProposerSlot_OpportunisticTiming_NoDelta2Wait(t *testing.T) {
+	budget, fetchAt := compressedTestSchedule(t)
+	const tCommit = 200 * time.Millisecond
+	const delta2 = 60 * time.Millisecond // 2*BTT; old wait endpoint = 260ms
+	overrides := &ConfigOverrides{
+		K:               4,
+		TCommit:         tCommit,
+		Delta2:          delta2,
+		Delta3:          60 * time.Millisecond,
+		BTT:             30 * time.Millisecond,
+		FetchAt:         fetchAt,
+		BroadcastBudget: budget,
+	}
+
+	nodes := buildCluster(t, 4, overrides)
+	const slot = phase0.Slot(13)
+	slotStart := time.Now()
+
+	bus := newBroadcastBus(nodes, slotStart)
+	defer bus.stop()
+	for _, n := range nodes {
+		n := n
+		n.hooks.broadcastFn = func(ctx context.Context, slot phase0.Slot, data []byte) error {
+			bus.broadcast(n.op, data)
+			return nil
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for _, n := range nodes {
+		n := n
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := RunProposerSlot(ctx, n.sched, slot, slotStart)
+			require.NoErrorf(t, err, "op %d RunProposerSlot", n.op)
+		}()
+	}
+	wg.Wait()
+
+	for _, n := range nodes {
+		n.hooks.mu.Lock()
+		require.NotEmptyf(t, n.hooks.submittedAt, "op %d submitted no output", n.op)
+		elapsed := n.hooks.submittedAt[0].Sub(slotStart)
+		n.hooks.mu.Unlock()
+		// Submission must land before the old schedule-anchored wait endpoint
+		// (T_commit + Δ_2 = 260ms). Healthy in-process bus has microsecond
+		// dispatch, so the expected window is ~T_commit + a few ms.
+		require.Lessf(t, elapsed, tCommit+delta2,
+			"op %d submitted at %v after slot start; expected < T_commit+Δ_2 = %v "+
+				"(observer-mode should fire on first σ-quorum, not wait the Δ_2 budget)",
+			n.op, elapsed, tCommit+delta2)
+	}
+}
+
 // TestRunProposerSlot_LateCommit_OpportunisticResolve verifies that the
 // runner's Phase-3 polling salvages a slot where a peer's KindCommit is
 // delayed past the soft target (RoundEndOffset = T_commit + Δ_2 + Δ_3) but
@@ -168,8 +233,8 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 	}
 
 	// ctx deadline must be wide enough that the late commits arrive before
-	// it fires (lateCommitDelay = 500ms ≪ 2s) AND the polling has time to
-	// pick them up.
+	// it fires (lateCommitDelay = 500ms ≪ 2s); observer-mode wakes on each
+	// arrival via the state-delta channel and retries Resolve immediately.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -198,6 +263,87 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 		}
 		require.True(t, bytes.Equal(ref.Value, out.Value), "op %d value differs", n.op)
 		require.True(t, bytes.Equal(ref.Signature, out.Signature), "op %d signature differs", n.op)
+	}
+}
+
+// TestScheduler_OpportunisticResolve_EndInstanceWhileWaiting verifies the
+// risk-mitigation invariant from OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §Risks:
+// "The Controller's StateDeltaChan(slot) must close when EndInstance fires
+// for that slot. Orphaned waiters in ResolveAndSubmitOpportunistically
+// must unblock cleanly."
+//
+// Setup: build a cluster but only let ONE node start its instance. The
+// node's Resolve will return ErrNoQuorum (own partials < qV); the
+// scheduler enters its select-on-deltas loop with nothing to receive.
+// We then call EndInstance externally, which closes the state-delta
+// channel. The scheduler must (a) not panic from a send-on-closed-channel
+// race (impossible by the Ended()-under-instanceMu pattern but the race
+// detector validates), (b) detect the close and nil the deltas case, and
+// (c) eventually return cleanly when ctx fires.
+func TestScheduler_OpportunisticResolve_EndInstanceWhileWaiting(t *testing.T) {
+	budget, fetchAt := compressedTestSchedule(t)
+	overrides := &ConfigOverrides{
+		K:               4,
+		TCommit:         200 * time.Millisecond,
+		Delta2:          60 * time.Millisecond,
+		Delta3:          60 * time.Millisecond,
+		BTT:             30 * time.Millisecond,
+		FetchAt:         fetchAt,
+		BroadcastBudget: budget,
+	}
+	nodes := buildCluster(t, 4, overrides)
+	node := nodes[0]
+
+	const slot = phase0.Slot(99)
+	_, err := node.ctrl.StartNewInstance(slot)
+	require.NoError(t, err)
+
+	// 1s ctx — generous upper bound on the unblock time. Actual return time
+	// after EndInstance is dominated by ctx.Done() firing (the scheduler
+	// nils the deltas case on close, leaving only ctx as the exit), so the
+	// resolver waits the rest of the ctx after the external EndInstance.
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	// Build own commit so the instance has self-observed partials in pool.
+	// (Optimistic Resolve will still return ErrNoQuorum at qV=3 because
+	// the cluster's other 3 ops haven't emitted; that's the point — the
+	// scheduler then blocks on stateDelta.)
+	_, err = node.sched.BuildAndBroadcastCommit(ctx, slot)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- node.sched.ResolveAndSubmitOpportunistically(ctx, slot)
+	}()
+
+	// Give the resolver time to enter its wait loop. Without this brief
+	// sleep the EndInstance below could close the channel before the
+	// resolver even reads from it, leaving the test less faithful to the
+	// "resolver actively waiting → externally torn down" scenario.
+	time.Sleep(50 * time.Millisecond)
+
+	endStart := time.Now()
+	node.ctrl.EndInstance(slot)
+
+	// Resolver must return within ctx timeout + small slack. The race
+	// detector validates that the channel close happened concurrently with
+	// the receive without panic.
+	const slack = 200 * time.Millisecond
+	select {
+	case err := <-done:
+		elapsed := time.Since(endStart)
+		require.Less(t, elapsed, 1*time.Second+slack,
+			"resolver took %v to return after external EndInstance; expected ≤ ctx timeout + %v",
+			elapsed, slack)
+		// Returned error should reflect the ctx exit path. ErrNoActiveInstance
+		// would also be acceptable (if a delta fire happened to coincide with
+		// the close) but the typical path here is ctx.Done() → wrapped
+		// ctx.Err().
+		require.Error(t, err, "resolver should return an error after ctx fires")
+		t.Logf("resolver returned %v after %v (external EndInstance + ctx unblock)", err, elapsed)
+	case <-time.After(2 * time.Second):
+		t.Fatal("resolver deadlocked after external EndInstance — channel-close handling broken")
 	}
 }
 
@@ -337,8 +483,9 @@ type runnerHooks struct {
 	hostValidateFn func(context.Context, phase0.Slot, int, []byte) (bool, error)
 	broadcastFn    func(context.Context, phase0.Slot, []byte) error
 
-	submitted []*obftcore.Output
-	missed    []phase0.Slot
+	submitted   []*obftcore.Output
+	submittedAt []time.Time
+	missed      []phase0.Slot
 }
 
 func newRunnerHooks(op spectypes.OperatorID) *runnerHooks {
@@ -378,6 +525,7 @@ func (h *runnerHooks) LifecycleHooks() *LifecycleHooks {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			h.submitted = append(h.submitted, out)
+			h.submittedAt = append(h.submittedAt, time.Now())
 			return nil
 		},
 		OnMissedSlot: func(ctx context.Context, slot phase0.Slot, reason error) {

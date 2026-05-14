@@ -300,6 +300,13 @@ func (e *evtPhaseTwoBStart) handle(s *sim) []scheduledEvent {
 				return &evtOnion2bArrival{from: op, to: to, onion: cloneOnion2b(extra)}
 			})
 		}
+		// Observer-mode self-resolve probe: BuildOwnOnion2b self-observes
+		// the op's own σ/NR partials into its local pools, so an op at
+		// f=0 (qV=1) can satisfy σ-quorum from its own self-observation
+		// alone. At realistic f≥1 the probe returns ErrNoQuorum (1 partial
+		// < qV) and is a no-op. Mirrors OBFT's evtPhaseTwoStart probe per
+		// OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §2abOBFT instrumentation table.
+		tryOpportunisticResolve(s, op)
 	}
 	return nil
 }
@@ -344,6 +351,14 @@ func (e *evtOnion2bArrival) describe() string {
 func (e *evtOnion2bArrival) handle(s *sim) []scheduledEvent {
 	_ = s.instances[e.to].ObserveOnion2b(e.onion)
 
+	// Observer-mode quorum detection: probe Resolve immediately on every
+	// onion arrival. First-success records vQuorumAt[e.to] = s.now —
+	// the earliest moment this op holds a submittable σ-cert. Resolve
+	// is stateless / idempotent (spec §Phase 3) so probing on every
+	// arrival is safe. The Outcome layer reads vQuorumAt as the
+	// BTT-sensitive DecisionTime. See docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	tryOpportunisticResolve(s, e.to)
+
 	// Spec §Phase 3 "Re-running on late KindOnion2b arrivals": if this
 	// onion landed past RoundEndOffset, the receiver re-runs Resolve to
 	// incorporate the new partial. Skip if the receiver already decided.
@@ -354,6 +369,24 @@ func (e *evtOnion2bArrival) handle(s *sim) []scheduledEvent {
 		return nil
 	}
 	return []scheduledEvent{{when: s.now, ev: &evtResolveRerun{op: e.to}}}
+}
+
+// tryOpportunisticResolve mirrors the OBFT adapter's helper of the
+// same name. See protocol/v2/consensustest/obft/events.go for the
+// design rationale. 2abOBFT differs only in the trigger event
+// (evtOnion2bArrival here vs evtCommitArrival in base) and the
+// concrete Resolve impl walks the chained-NR ladder via Onion2b
+// contributions instead of Commit. The dedup-and-record step delegates
+// to the framework-level RecordFirstOpportunisticQuorum helper.
+func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
+	if _, already := s.vQuorumAt[op]; already {
+		return
+	}
+	res, err := s.instances[op].Resolve()
+	if err != nil {
+		return
+	}
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
 }
 
 // ---- evtResolve --------------------------------------------------------
@@ -406,6 +439,11 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 	// Mirror the OBFT adapter's per-layer ε_3 accrual.
 	decisionTime := s.now + time.Duration(res.Layer)*s.cfg.Epsilon3
 	s.resolvedAt[op] = decisionTime
+	// Schedule-anchored fallback for the observer-mode metric: if no
+	// prior onion/cert arrival already set vQuorumAt, capture the
+	// schedule-anchored decision time here so outcome() reads
+	// uniformly from vQuorumAt.
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
 	delete(s.resolveErrs, op)
 
 	if !s.cfg.Byz.AllowCertificateBroadcast(op) {
@@ -475,6 +513,11 @@ func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
 		Signature: append(twoab.Signature{}, e.cert.Signature...),
 	}
 	s.resolvedAt[e.to] = s.now
+	// Cert receipt is itself the earliest "submittable" moment for this
+	// op — mirror OBFT's evtCertArrival. Layer is unknown for cert-decided
+	// outputs; pass 0 so the recorded time is exactly s.now (no walk
+	// cost).
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, e.to, 0, s.now, s.cfg.Epsilon3)
 	delete(s.resolveErrs, e.to)
 	return nil
 }

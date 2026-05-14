@@ -290,10 +290,17 @@ func (c *Config) PhaseTwoStartOffset() time.Duration {
 	return c.TCommit
 }
 
-// PhaseTwoEndOffset returns the end of Phase 2 — when Phase 3 reconstruction
-// begins. Each operator emits exactly one KindCommit at T_commit; the Δ_2
-// window is sized for that message to propagate to all honest peers before
-// Phase 3.
+// PhaseTwoEndOffset returns the end of the Phase-2 propagation budget —
+// `T_commit + Delta2`. By this offset, every honest operator's KindCommit
+// should be observable cluster-wide under nominal partial synchrony.
+//
+// This is the SOFT target for "Phase-2 inputs are complete enough for
+// σ-quorum to form", not a hard gate on Phase-3 Resolve. Resolve is
+// idempotent (re-running on incomplete state returns ErrNoQuorum without
+// mutation), so the canonical implementation is observer-mode: Resolve is
+// invoked opportunistically from T_commit onward on every KindCommit /
+// KindCertificate arrival, and the average healthy slot decides well
+// before this offset.
 func (c *Config) PhaseTwoEndOffset() time.Duration {
 	return c.TCommit + c.Delta2
 }
@@ -303,9 +310,11 @@ func (c *Config) PhaseTwoEndOffset() time.Duration {
 // complete under nominal partial synchrony. Per spec §Phase 3, this is
 // NOT a hard deadline:
 //
-//   - Phase 3 starts at T_commit + Delta2 (= PhaseTwoEndOffset) and runs
-//     until σ-quorum reaches OR the slot's relay-submission deadline
-//     forces termination.
+//   - Phase 3 may be attempted opportunistically from T_commit onward
+//     (Resolve is idempotent and returns ErrNoQuorum cleanly on incomplete
+//     state). PhaseTwoEndOffset is the SOFT propagation target, not a
+//     Resolve-gating wall. The canonical implementation observes inbound
+//     KindCommit / KindCertificate arrivals and calls Resolve on each.
 //   - Reconstruction overrunning Delta3 can spill into the submission
 //     slack; a faster peer's KindCertificate gossip can let an operator
 //     that hasn't completed local reconstruction submit (V, S) directly.

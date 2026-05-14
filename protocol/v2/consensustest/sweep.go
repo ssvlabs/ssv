@@ -29,7 +29,7 @@ type SweepPoint struct {
 // one per Point — or as a line/series chart with AxisLabel on the X-axis.
 type Sweep struct {
 	Name        string
-	Title       string // human-readable section heading; falls back to Name when empty
+	Title       string   // human-readable section heading; falls back to Name when empty
 	Params      []string // optional fixed-config tokens rendered as badges next to the title (e.g. "n=4", "BTT=300ms"); used by single-point sweeps where every config knob is constant
 	Description string
 	AxisLabel   string // e.g. "Cluster size n", "BTT (ms)", "LogNormal sigma"

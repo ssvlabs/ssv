@@ -28,6 +28,16 @@ import (
 //
 // As a side effect, Rule-4 evidence (fake encrypted-presence at k > 0) is
 // recorded for any peer whose Onion entry decrypts to garbage.
+//
+// Resolve is stateless / idempotent — re-running on late KindCommit
+// arrivals incorporates additional contributions without contradicting
+// prior outcomes (Pigeonhole semantics still hold). The canonical
+// implementation calls Resolve opportunistically on every state delta
+// (KindCommit / KindCertificate observation) starting at T_commit, not
+// once at T_commit + Δ_2 — Δ_2 is the propagation budget, not a Resolve
+// gate. ErrNoQuorum on incomplete state is returned cleanly without
+// mutating Instance state, so observer-mode call sites pay no cost for
+// pre-quorum attempts.
 func (i *Instance) Resolve() (*Output, error) {
 	K := i.cfg.K()
 	// chainedKeys[j] is the aggregated NR-partials sig on nr_tag_j. To

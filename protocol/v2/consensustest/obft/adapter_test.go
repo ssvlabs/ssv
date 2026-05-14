@@ -116,6 +116,72 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 	t.Logf("mesh-mode healthy: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
 }
 
+// TestAdapter_OpportunisticDecisionTime — Phase 1 of the
+// OBFT-OPPORTUNISTIC-PHASE3 plan. Asserts the observer-mode metric is
+// active: under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum
+// at L_0 reaches at T_commit + 1·BTT = 3600ms (vs the pre-instrumentation
+// schedule-anchored 3850ms = RoundEndOffset). Pinning this 250ms saving
+// catches a regression where vQuorumAt isn't being written by the
+// commit-arrival path.
+func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "healthy should decide")
+	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
+	// At BTT=200ms, T_commit=3400ms, ConstantDelay propagation=200ms →
+	// commits arrive at peers at 3600ms; the (qV-1)th commit arrival
+	// hits σ-quorum at that moment. Walk cost at L_0 is 0 (no
+	// fall-through). Pre-instrumentation this was 3850ms (RoundEndOffset).
+	require.Equal(t, 3600*time.Millisecond, out.DecisionTime,
+		"observer-mode Resolve should catch L_0 σ-quorum at T_commit + 1·BTT = 3600ms (was schedule-anchored 3850ms)")
+}
+
+// TestAdapter_OpportunisticDecisionTime_Fallthrough is the OBFT-
+// OPPORTUNISTIC-PHASE3 plan's "FallbackToScheduleAnchor" test, adapted to
+// the observer-mode implementation. The plan was written before observer-
+// mode landed and expected DecisionTime to fall back to
+// `RoundEndOffset + 1·Epsilon3` in fall-through cases. Under observer-
+// mode, the cumulative pool reaches the L_1 σ-quorum at the commit-
+// arrival moment too — Resolve walks L_0 (NR-quorum from honest+silent-
+// leader NR partials) → L_1 (σ-quorum from honest σ partials) inline on
+// every arrival.
+//
+// What this test pins: the fall-through DecisionTime is T_commit +
+// 1·BTT + 1·Epsilon3 (commit-arrival + one-layer-walk cost), NOT the
+// schedule-anchored RoundEndOffset + 1·Epsilon3. The 200ms saving for
+// fall-through cases is the same opportunistic gap the L_0 healthy
+// test pins. The schedule-anchored `resolveOpAndBroadcastCert`
+// fallback (which also writes vQuorumAt via RecordFirstOpportunisticQuorum)
+// remains as defensive coverage if a future change makes opportunistic
+// fail; under the current wiring the opportunistic commit-arrival path
+// always beats it.
+func TestAdapter_OpportunisticDecisionTime_Fallthrough(t *testing.T) {
+	btt := 200 * time.Millisecond
+	cfg := ct.DefaultProposerDutyConfig(btt)
+	// Silent L_0 leader (op 1): no Phase-1 bundle from op 1 → no honest
+	// op retains V at L_0 → all 4 ops emit NR at L_0 in their commits.
+	// L_1..L_3 leaders broadcast healthy, so σ partials at those layers
+	// flow through commits normally.
+	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
+
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "fall-through to L_1 should decide")
+	require.Equal(t, 1, out.DecidedRound, "decided at L_1 (L_0 silent → fall-through)")
+
+	// Opportunistic Resolve fires on each commit arrival; the qV-th arrival
+	// (3 of 4 commits) brings σ-pool at L_1 to qV and NR-pool at L_0 to
+	// qEnc, satisfying the walk. Layer-walk cost is 1·Epsilon3 (one NR-
+	// advance from L_0 to L_1). At BTT=200ms (ConstantDelay), commits arrive
+	// at T_commit + 1·BTT = 3600ms; at Epsilon3 = 50ms (DefaultProposerDutyConfig
+	// leaves Epsilon3 unset → Validate() applies the default), the
+	// vQuorumAt write is 3600 + 50 = 3650ms.
+	require.Equal(t, 3650*time.Millisecond, out.DecisionTime,
+		"observer-mode fall-through should record vQuorumAt = T_commit + 1·BTT + 1·Epsilon3 = 3650ms "+
+			"(NOT the pre-instrumentation schedule-anchored RoundEndOffset + 1·Epsilon3 = 3900ms)")
+}
+
 // TestAdapter_HealthyAtClusterSizes verifies the adapter runs healthy at
 // every SSV-supported cluster size (n=4,7,10,13). Phase 1 plumbs cfg.K /
 // cfg.BroadcastBudget / cfg.FetchAt through the adapter; n != 4 was previously
@@ -148,8 +214,19 @@ func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 }
 
 // TestAdapter_MultiByzSilentAtN7 runs at n=7 (f=2) with TWO byz operators
-// silent as layer leaders; OBFT should still decide via layer fall-through
-// to a non-byz-led layer.
+// silent as layer leaders; OBFT decides via NR fall-through to the first
+// honest-led layer (L_2 here), and the observer-mode Resolve catches
+// quorum at commit-arrival rather than at the schedule anchor.
+//
+// Pre-observer-mode (when Resolve fired once at RoundEndOffset =
+// 3850ms): fall-through to L_2 added 2·ε_3 = 100ms walk cost on top of
+// RoundEndOffset → decisionTime = 3950ms > the 3900ms relay-submit
+// deadline, so ClipLateDecision converted to MISS. Observer-mode
+// (Phase 1 of docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md): Resolve runs at
+// every commit arrival; at BTT=200ms commits arrive at T_commit + 1·BTT
+// = 3600ms; the L_2 σ-walk completes at 3600 + 100ms = 3700ms, inside
+// the 3900ms deadline. The new semantic correctly reflects that
+// production observer-mode runners would NOT miss this scenario.
 func TestAdapter_MultiByzSilentAtN7(t *testing.T) {
 	btt := 200 * time.Millisecond
 	cfg := ct.SimConfig{
@@ -166,21 +243,14 @@ func TestAdapter_MultiByzSilentAtN7(t *testing.T) {
 	}
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
-	// At default ε_3 = 50ms, falling through to L_2 (the first honest
-	// layer past the two byz-led ones) takes 2 × ε_3 = 100ms of walk cost
-	// on top of RoundEndOffset, landing the decision at 3950ms — past
-	// RelayCutoff − HeaderSubmitHeadroom = 3900ms. ClipLateDecision then
-	// converts the late decision to MISS so the framework matches
-	// production submit-budget semantics. The structural property under
-	// test (the protocol can in principle decide via fall-through) is
-	// still exercised — we just can't deliver in time here.
-	require.False(t, out.Decided, "n=7 with 2 byz silent leaders: fall-through to L_2 lands past RelayCutoff − HeaderSubmitHeadroom (3950ms > 3900ms); production would miss")
-	require.Equal(t, -1, out.DecidedRound, "clipped MISS reports DecidedRound = -1")
+	require.True(t, out.Decided, "n=7 with 2 byz silent leaders: observer-mode opportunistic Resolve catches L_2 σ-quorum at commit arrival (3600ms + 2·ε_3 = 3700ms), well inside the 3900ms submit deadline")
+	require.Equal(t, 2, out.DecidedRound, "decided at L_2 — first honest-led layer past the two byz-led ones")
 
 	rep := ct.ComputeSafetyReport(out)
 	require.True(t, rep.SingleV, "SingleV: %s", rep)
 	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
-	t.Logf("n=7 K=%d 2-byz-silent: clipped at deadline; per-op records preserved for safety", ct.DefaultK(cfg.N))
+	t.Logf("n=7 K=%d 2-byz-silent: decided at %v on L_%d via observer-mode opportunistic Resolve",
+		ct.DefaultK(cfg.N), out.DecisionTime, out.DecidedRound)
 }
 
 // TestAdapter_PerRuleEvidence verifies the FakeEncryptedPresence scenario

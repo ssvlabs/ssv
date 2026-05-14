@@ -11,6 +11,26 @@ import (
 	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
+// TestAdapter_OpportunisticDecisionTime — Phase 1 of the
+// OBFT-OPPORTUNISTIC-PHASE3 plan, mirrored for 2abOBFT. Asserts the
+// observer-mode metric is active: under DeliveryDirect at BTT=200ms
+// (ConstantDelay), σ-quorum at L_0 reaches via the Onion2b-arrival
+// observer path at T_commit + 1·BTT (vs pre-instrumentation
+// RoundEndOffset). 2abOBFT's T_commit is later than OBFT's because of
+// the Phase-2a Δ_2a budget: T_commit = RelayCutoff − HeaderSubmitHeadroom
+// − phase3JitterBuffer − ε_3 − Δ_2a − Δ_2b. At BTT=200ms, Δ_2a=Δ_2b=400ms,
+// so T_commit = 4000 − 100 − 50 − 50 − 400 − 400 = 3000ms; commits arrive
+// at 3000 + 200 = 3200ms — well before RoundEndOffset = 3450ms.
+func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	out, err := twoabadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "healthy should decide")
+	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
+	require.Equal(t, 3200*time.Millisecond, out.DecisionTime,
+		"observer-mode Resolve should catch L_0 σ-quorum at T_commit + 1·BTT = 3200ms (was schedule-anchored 3450ms)")
+}
+
 // TestAdapter_HealthyMesh_N4 — 2abOBFT healthy through the mesh
 // transport. See the OBFT adapter's mesh smoke for the rationale.
 func TestAdapter_HealthyMesh_N4(t *testing.T) {

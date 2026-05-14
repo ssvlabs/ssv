@@ -351,42 +351,6 @@ func (s *Scheduler) BuildAndBroadcastCommit(ctx context.Context, slot phase0.Slo
 	return c, nil
 }
 
-// resolvePollInterval is how often Phase-3 Resolve is retried while waiting
-// for σ-quorum to materialize. The spec describes Phase 3 as opportunistic
-// from T_commit + Δ_2 onward — re-running on late KindCommit arrivals to
-// salvage slots where partials trickled in past Δ_2. A 25ms interval is
-// well below ε_3 (~100ms local CPU at Config A) and BTT (~200ms gossipsub),
-// so polling overhead is negligible relative to the protocol's natural
-// time-scales but tight enough to land submissions promptly when σ-quorum
-// reaches.
-const resolvePollInterval = 25 * time.Millisecond
-
-// ResolveAndSubmit runs Phase-3 Resolve once (single attempt). On success:
-// hands the Output to hooks.SubmitOutput, then (if BroadcastCertificate is
-// set) broadcasts the final-certificate gossip message.
-//
-// On failure: tries falling back to a peer's Certificate (if RetainedCertificate
-// returns one); else calls hooks.OnMissedSlot.
-//
-// This is the single-shot resolution path; production runners should prefer
-// ResolveAndSubmitOpportunistically (which polls until σ-quorum reaches or
-// the context is canceled) per spec §Phase 3.
-func (s *Scheduler) ResolveAndSubmit(ctx context.Context, slot phase0.Slot) error {
-	out, err := s.controller.Resolve(slot)
-	if err != nil {
-		// Local reconstruction failed — try peer-certificate fallback.
-		if submitted := s.tryCertFastPath(ctx, slot); submitted {
-			return nil
-		}
-		if s.hooks.OnMissedSlot != nil {
-			s.hooks.OnMissedSlot(ctx, slot, err)
-		}
-		return fmt.Errorf("obft scheduler: resolve: %w", err)
-	}
-
-	return s.submitAndBroadcastCert(ctx, slot, out)
-}
-
 // tryCertFastPath attempts to submit a peer-broadcast Certificate as the
 // fallback path. Per spec §Final-certificate gossip, receivers SHOULD re-run
 // host application validity on V before submitting downstream — so we call
@@ -413,11 +377,18 @@ func (s *Scheduler) tryCertFastPath(ctx context.Context, slot phase0.Slot) bool 
 	return s.hooks.SubmitOutput(ctx, slot, fallbackOut) == nil
 }
 
-// ResolveAndSubmitOpportunistically polls Phase-3 Resolve until σ-quorum
+// ResolveAndSubmitOpportunistically runs Phase-3 Resolve until σ-quorum
 // reaches (the operator's local reconstruction succeeds), a peer's
 // Certificate arrives (alternative submission path via gossip), or ctx is
 // canceled (the slot's relay-submission deadline is reached and the slot
 // misses).
+//
+// Observer-mode: instead of polling at fixed intervals, blocks on the
+// Controller's per-slot state-delta channel which fires after every
+// successful ObserveCommit / ObserveCertificate. Each delta wakes a single
+// Resolve attempt (and a peer-cert fast-path check). Typical healthy slot:
+// 3-4 Resolve calls (one per arriving Commit until σ-quorum reaches) versus
+// the historical ticker's ~16+ idle polls per slot.
 //
 // Per spec §Phase 3 ("Re-running on late KindCommit arrivals"): late
 // KindCommit messages can push σ-pool past qV at a layer that didn't
@@ -429,9 +400,15 @@ func (s *Scheduler) tryCertFastPath(ctx context.Context, slot phase0.Slot) bool 
 // Δ_2 + Δ_3) is a SOFT per-operator target — not a hard deadline; the hard
 // wall is ctx (the relay-submission deadline).
 func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot phase0.Slot) error {
-	// Optimistic first attempt before allocating the ticker — the common
-	// healthy path is "all KindCommits arrived within Δ_2 → σ-quorum on the
-	// initial walk".
+	// Acquire the state-delta channel BEFORE the optimistic attempt — any
+	// arrival between the optimistic Resolve and the channel acquisition
+	// would otherwise be lost. The channel is buffered (cap 1) so the send
+	// from the controller is non-blocking; coalesced deltas are harmless
+	// because Resolve re-reads instance state on each wake.
+	deltas := s.controller.StateDeltaChan(slot)
+
+	// Optimistic first attempt — the common healthy path is "all KindCommits
+	// arrived by the time we get here → σ-quorum on the initial walk".
 	if out, err := s.controller.Resolve(slot); err == nil {
 		return s.submitAndBroadcastCert(ctx, slot, out)
 	} else if !errors.Is(err, obftcore.ErrNoQuorum) {
@@ -441,11 +418,6 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 		}
 		return fmt.Errorf("obft scheduler: resolve: %w", err)
 	}
-
-	// σ-quorum hasn't reached yet. Poll until either (a) Resolve succeeds,
-	// (b) a peer's Certificate arrives, or (c) ctx fires.
-	ticker := time.NewTicker(resolvePollInterval)
-	defer ticker.Stop()
 
 	for {
 		select {
@@ -461,7 +433,16 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 			}
 			return fmt.Errorf("obft scheduler: resolve: %w", ctx.Err())
 
-		case <-ticker.C:
+		case _, ok := <-deltas:
+			if !ok {
+				// Channel closed by EndInstance — slot torn down externally
+				// (e.g. test cleanup). Nil the channel so this case stops
+				// firing and the only remaining exit is ctx.Done(); the
+				// next Resolve would return ErrNoActiveInstance which we'd
+				// surface as a non-recoverable miss anyway.
+				deltas = nil
+				continue
+			}
 			// Try peer-certificate fast path before re-running local
 			// reconstruction. If a peer broadcasted (V, S), submit directly.
 			if s.tryCertFastPath(ctx, slot) {
@@ -479,16 +460,14 @@ func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot 
 				}
 				return fmt.Errorf("obft scheduler: resolve: %w", err)
 			}
-			// Still no quorum — wait for the next tick, late KindCommit
-			// arrival, or ctx.
+			// Still no quorum — wait for the next delta or ctx.
 		}
 	}
 }
 
 // submitAndBroadcastCert hands a successfully-reconstructed Output to
 // hooks.SubmitOutput and (if BroadcastCertificate is set) broadcasts the
-// final-certificate gossip message. Shared between ResolveAndSubmit and
-// ResolveAndSubmitOpportunistically.
+// final-certificate gossip message.
 //
 // Re-runs HostValidate on the decided V before submitting. Per spec
 // §Final-certificate gossip and §Phase 3, between observe-time (when V

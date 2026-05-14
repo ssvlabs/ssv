@@ -380,9 +380,9 @@ type pointPayload struct {
 }
 
 type cellPayload struct {
-	Scenario   string  `json:"scenario"`
-	Protocol   string  `json:"protocol"`
-	Iterations int     `json:"iterations"`
+	Scenario    string  `json:"scenario"`
+	Protocol    string  `json:"protocol"`
+	Iterations  int     `json:"iterations"`
 	SuccessRate float64 `json:"successRate"`
 	// DecisionTimes is the sorted ms-integer decision-time sample for
 	// every successful sim. Length = SuccessRate × Iterations. Emitted
@@ -399,9 +399,9 @@ type cellPayload struct {
 	// read this field. Omitted when no sim decided.
 	DecidingBroadcastTimes []int               `json:"decidingBroadcastTimes,omitempty"`
 	DecisionTime           *percentilesPayload `json:"decisionTime,omitempty"`
-	ClusterBandwidth *percentilesPayload `json:"clusterBandwidth,omitempty"`
-	PerKindBandwidth map[string]float64  `json:"perKindBandwidth,omitempty"`
-	MissReasons      map[string]int      `json:"missReasons,omitempty"`
+	ClusterBandwidth       *percentilesPayload `json:"clusterBandwidth,omitempty"`
+	PerKindBandwidth       map[string]float64  `json:"perKindBandwidth,omitempty"`
+	MissReasons            map[string]int      `json:"missReasons,omitempty"`
 }
 
 type percentilesPayload struct {

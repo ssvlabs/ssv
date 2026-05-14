@@ -22,12 +22,12 @@ package consensustest
 //     prod / stage gossipsub telemetry; the synthetic-degradation
 //     sweeps retain LogNormal anchors so their parameter axis stays
 //     meaningful:
-//       p2p_baseline           (BTT × profile × instability cross-product)
-//       p2p_increasing_BTT     (BTT axis, LogNormal{Median: BTT/2, σ: 0.5})
-//       p2p_packet_loss        (LossyNetwork × LossRate axis)
-//       p2p_correlated_delays  (CorrelatedLinkDelay × BadLinkProb axis)
-//       p2p_node_slowness      (MarkovianSlownessDelay × slow-op count)
-//       p2p_instability        (Healthy-only instability-level curve)
+//     p2p_baseline           (BTT × profile × instability cross-product)
+//     p2p_increasing_BTT     (BTT axis, LogNormal{Median: BTT/2, σ: 0.5})
+//     p2p_packet_loss        (LossyNetwork × LossRate axis)
+//     p2p_correlated_delays  (CorrelatedLinkDelay × BadLinkProb axis)
+//     p2p_node_slowness      (MarkovianSlownessDelay × slow-op count)
+//     p2p_instability        (Healthy-only instability-level curve)
 //     Many iterations (baseline / unstable split); stats only. Cross-
 //     (n, K) comparison is done by re-running TestStress with different
 //     CLUSTER_SIZE_N / LAYERS_K values, not by a dedicated sweep.

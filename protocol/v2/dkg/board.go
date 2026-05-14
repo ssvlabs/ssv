@@ -25,13 +25,13 @@ import (
 // justificationCh) where the kyber DKG protocol picks it up via its
 // IncomingDeal / IncomingResponse / IncomingJustification entry points.
 type kyberBoard struct {
-	log              *zap.Logger
-	broadcast        func([]byte) error
-	clusterID        [32]byte
-	generation       uint64
-	dealCh           chan dkg.DealBundle
-	responseCh       chan dkg.ResponseBundle
-	justificationCh  chan dkg.JustificationBundle
+	log             *zap.Logger
+	broadcast       func([]byte) error
+	clusterID       [32]byte
+	generation      uint64
+	dealCh          chan dkg.DealBundle
+	responseCh      chan dkg.ResponseBundle
+	justificationCh chan dkg.JustificationBundle
 }
 
 // boardChannelBuffer sizes the per-kind incoming channels. A small buffer

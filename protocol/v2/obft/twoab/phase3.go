@@ -39,7 +39,13 @@ import (
 //
 // Resolve is stateless / idempotent — re-running on late KindOnion2b
 // arrivals incorporates additional contributions without contradicting
-// prior outcomes (Pigeonhole semantics still hold).
+// prior outcomes (Pigeonhole semantics still hold). The canonical
+// implementation calls Resolve opportunistically on every state delta
+// (KindOnion2b / KindCertificate observation) starting at TCommit, not
+// once at TCommit + Δ_2b — Δ_2b is the propagation budget, not a Resolve
+// gate. ErrNoQuorum on incomplete state is returned cleanly without
+// mutating Instance state, so observer-mode call sites pay no cost for
+// pre-quorum attempts.
 func (i *Instance) Resolve() (*Output, error) {
 	K := i.cfg.K()
 	// chainedKeys[j] is the aggregated NR-partials sig on nr_tag_j.

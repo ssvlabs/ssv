@@ -142,4 +142,3 @@ func TestSmoke_TraceDeterministic(t *testing.T) {
 		}
 	}
 }
-

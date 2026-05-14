@@ -287,6 +287,15 @@ func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 				return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
 			})
 		}
+		// Observer-mode self-resolve probe: BuildOwnCommit self-observes
+		// the op's own σ/NR partials into its local pools, so an op that
+		// is itself the L_0 leader at f=0 (degenerate cluster size n=1,
+		// qV=1) can satisfy σ-quorum from its own self-observation alone.
+		// At realistic f≥1 the probe returns ErrNoQuorum (1 partial < qV)
+		// and is a no-op. Cheap insurance against future degenerate-fixture
+		// regressions; matches OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §OBFT
+		// instrumentation table.
+		tryOpportunisticResolve(s, op)
 	}
 	return nil
 }
@@ -337,6 +346,16 @@ func (e *evtCommitArrival) describe() string {
 func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
 	_ = s.instances[e.to].ObserveCommit(e.commit)
 
+	// Observer-mode quorum detection: probe Resolve at the receiver
+	// immediately on every commit arrival. First-success records
+	// vQuorumAt[e.to] = s.now — the earliest moment this op holds a
+	// submittable σ-cert. Resolve is stateless / idempotent (spec §Phase
+	// 3) so probing on every arrival is safe and cheap. The Outcome
+	// layer reads vQuorumAt as the BTT-sensitive DecisionTime, matching
+	// QBFT's post-consensus partial-sig quorum semantic. See
+	// docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	tryOpportunisticResolve(s, e.to)
+
 	// Spec §Phase 3 / "Re-running on late KindCommit arrivals": if this
 	// commit landed past RoundEndOffset, the receiver re-runs Resolve to
 	// incorporate the new partial. Skip if the receiver already decided.
@@ -349,6 +368,29 @@ func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
 	// Schedule the re-resolve immediately at the current sim time so the new
 	// state is incorporated before any further events fire at this timestamp.
 	return []scheduledEvent{{when: s.now, ev: &evtResolveRerun{op: e.to}}}
+}
+
+// tryOpportunisticResolve probes Resolve at `op` and records the first
+// successful resolve time in s.vQuorumAt via the framework-level
+// RecordFirstOpportunisticQuorum helper. Mirrors what an observer-mode
+// production runner does — call Resolve on every state delta, submit as
+// soon as σ-quorum reaches. Returns nothing — the metric is recorded as
+// a side effect; the actual decided-value plumbing (s.resolved /
+// s.resolvedAt) is left to the schedule-anchored evtResolve path or to
+// evtCertArrival's cert-rescue path.
+//
+// Fast-paths the dedup before calling Resolve so a per-arrival call
+// doesn't pay the walk-cost when σ-quorum was already captured earlier
+// in the slot.
+func tryOpportunisticResolve(s *sim, op obftbase.OperatorID) {
+	if _, already := s.vQuorumAt[op]; already {
+		return
+	}
+	res, err := s.instances[op].Resolve()
+	if err != nil {
+		return // ErrNoQuorum or transient — quorum not yet reached
+	}
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
 }
 
 // ---- evtResolve --------------------------------------------------------
@@ -422,6 +464,12 @@ func resolveOpAndBroadcastCert(s *sim, op obftbase.OperatorID) []scheduledEvent 
 	// walk already in the base ε_3 budget).
 	decisionTime := s.now + time.Duration(res.Layer)*s.cfg.Epsilon3
 	s.resolvedAt[op] = decisionTime
+	// Schedule-anchored fallback for the observer-mode metric: if no
+	// prior commit/cert arrival already set vQuorumAt (i.e., L_0
+	// σ-quorum never reached via Phase-2 propagation alone), capture
+	// the schedule-anchored decision time here. Ensures every decided
+	// op has a vQuorumAt entry the outcome layer can read uniformly.
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
 	// Late-resolve success supersedes any prior error.
 	delete(s.resolveErrs, op)
 
@@ -499,6 +547,14 @@ func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
 		Signature: append(obftbase.Signature{}, e.cert.Signature...),
 	}
 	s.resolvedAt[e.to] = s.now
+	// Cert receipt is itself the earliest "submittable" moment for this
+	// op (the cert IS a complete cluster signature; no further local
+	// resolve work is required). Capture it in vQuorumAt — mirrors how a
+	// production observer-mode runner would short-circuit Resolve and
+	// submit directly upon cert receipt (tryCertFastPath). Layer is
+	// unknown for cert-decided outputs; pass 0 so the recorded time is
+	// exactly s.now (no walk cost).
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, e.to, 0, s.now, s.cfg.Epsilon3)
 	// Cert-gossip rescue supersedes a prior local-resolve failure; clear the
 	// stale error so outcome() doesn't report decided=true with a non-empty
 	// Err (otherwise confuses callers reading the per-op outcome).

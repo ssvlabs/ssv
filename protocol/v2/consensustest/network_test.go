@@ -368,7 +368,7 @@ func TestLossyNetwork_PairIndependence(t *testing.T) {
 		samples     = 10000
 		seed        = int64(42)
 	)
-	model := ct.NewLossyNetwork(ct.ConstantDelay{D: 200*time.Millisecond}, lossRate, burstFactor)
+	model := ct.NewLossyNetwork(ct.ConstantDelay{D: 200 * time.Millisecond}, lossRate, burstFactor)
 	rng := mrand.New(mrand.NewSource(seed))
 
 	bothDrop := 0

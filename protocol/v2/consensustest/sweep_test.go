@@ -554,14 +554,20 @@ func TestSweep_MultiByz_n7(t *testing.T) {
 	t.Run("OBFT", func(t *testing.T) {
 		out, err := obftadapter.Protocol{}.Run(cfg)
 		require.NoError(t, err)
-		// At default ε_3=50ms, fall-through past 2 silent layers walks to
-		// L_2 with 2·ε_3 = 100ms cost on top of RoundEndOffset, landing the
-		// decision at 3950ms — past RelayCutoff − HeaderSubmitHeadroom
-		// (3900ms). ClipLateDecision converts this to MISS to match
-		// production submit-budget semantics; the protocol still resolved
-		// internally (safety invariants assert on the per-op records).
-		require.False(t, out.Decided,
-			"OBFT n=7 with 2 byz silent leaders: fall-through to L_2 lands past deadline; production would miss")
+		// Observer-mode Resolve (Phase 1 of OBFT-OPPORTUNISTIC-PHASE3
+		// plan): at BTT=200ms commits arrive at T_commit + 1·BTT =
+		// 3600ms; the L_2 fall-through walk completes at 3600 + 2·ε_3 =
+		// 3700ms, comfortably inside the 3900ms submit deadline.
+		// Pre-observer-mode this same configuration missed (Resolve
+		// fired at the 3850ms schedule anchor + 100ms walk = 3950ms,
+		// just past the deadline) — the new behavior correctly reflects
+		// that an opportunistic-Resolve production runner makes the
+		// slot here. Safety invariants still hold per the framework's
+		// SafetyPanic gate.
+		require.True(t, out.Decided,
+			"OBFT n=7 with 2 byz silent leaders: observer-mode Resolve catches L_2 σ-quorum at commit arrival (~3700ms), inside the 3900ms deadline")
+		require.Equal(t, 2, out.DecidedRound,
+			"decided at L_2 — first honest-led layer past the two byz-led ones")
 	})
 
 	t.Run("QBFT-SSV", func(t *testing.T) {

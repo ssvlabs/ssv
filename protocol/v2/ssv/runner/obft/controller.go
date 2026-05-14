@@ -122,6 +122,16 @@ type RunningInstance struct {
 
 	instanceMu sync.Mutex
 	instance   *obftcore.Instance
+
+	// stateDelta is a buffered (cap 1) signal channel fired after every
+	// successful ObserveCommit / ObserveCertificate. The Scheduler's
+	// ResolveAndSubmitOpportunistically blocks on receives from this
+	// channel and retries Resolve on each delta. Closed by EndInstance
+	// under instanceMu after Finalize seals the instance, so any
+	// concurrent sender that acquired instanceMu before EndInstance has
+	// already returned (and any sender that acquires it after sees
+	// Ended()==true and skips the send).
+	stateDelta chan struct{}
 }
 
 // ControllerOptions parameterizes Controller construction.
@@ -288,6 +298,7 @@ func (c *Controller) StartNewInstance(slot phase0.Slot) (*RunningInstance, error
 		Config:         cfg,
 		LeaderAtLayers: leaderAt,
 		instance:       inst,
+		stateDelta:     make(chan struct{}, 1),
 	}
 	c.instances[slot] = r
 	return r, nil
@@ -325,6 +336,11 @@ func (c *Controller) EndInstance(slot phase0.Slot) {
 	}
 	r.instanceMu.Lock()
 	r.instance.Finalize()
+	// Close the state-delta channel under instanceMu. Mutators (ProcessCommit /
+	// ProcessCertificate) re-check Ended() under instanceMu before sending,
+	// so any goroutine that acquires instanceMu after this point sees the
+	// finalized instance and skips the send — no send-on-closed-channel race.
+	close(r.stateDelta)
 	r.instanceMu.Unlock()
 	delete(c.instances, slot)
 	c.removePendingLocked(slot)
@@ -432,7 +448,11 @@ func (c *Controller) ProcessCommit(cm *obftcore.Commit) error {
 	if r.instance.Ended() {
 		return ErrNoActiveInstance
 	}
-	return r.instance.ObserveCommit(cm)
+	if err := r.instance.ObserveCommit(cm); err != nil {
+		return err
+	}
+	signalStateDeltaLocked(r)
+	return nil
 }
 
 // ProcessCertificate routes a peer's Certificate to the right instance.
@@ -449,7 +469,43 @@ func (c *Controller) ProcessCertificate(cert *obftcore.Certificate) error {
 	if r.instance.Ended() {
 		return ErrNoActiveInstance
 	}
-	return r.instance.ObserveCertificate(cert)
+	if err := r.instance.ObserveCertificate(cert); err != nil {
+		return err
+	}
+	signalStateDeltaLocked(r)
+	return nil
+}
+
+// signalStateDeltaLocked publishes a non-blocking signal on r.stateDelta to
+// wake the Scheduler's opportunistic-Resolve waiter. The channel is buffered
+// (cap 1) so a pending unread signal coalesces follow-up deltas — the waiter
+// re-reads instance state on each receive, so coalescing loses no
+// information. Caller must hold r.instanceMu; this guarantees the channel
+// is not yet closed (EndInstance closes under the same lock).
+func signalStateDeltaLocked(r *RunningInstance) {
+	select {
+	case r.stateDelta <- struct{}{}:
+	default:
+	}
+}
+
+// StateDeltaChan returns the per-slot state-delta signal channel for the
+// running instance. The Scheduler's ResolveAndSubmitOpportunistically uses
+// this in place of a fixed-cadence ticker — see scheduler.go.
+//
+// If no instance is running for `slot`, returns a pre-closed channel so the
+// caller's receive returns immediately; the caller will then exit via a
+// subsequent Resolve(slot) returning ErrNoActiveInstance.
+func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.instances[slot]
+	if !ok {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	return r.stateDelta
 }
 
 // BuildOwnCommit builds the local operator's KindCommit at T_commit. Single

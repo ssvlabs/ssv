@@ -1289,3 +1289,87 @@ func TestObft_EvidenceObserver_FiresOncePerTuple(t *testing.T) {
 	// records every entry (observer dedup is independent of evidence storage).
 	require.Len(t, inst.Evidence(), 5, "Evidence() should retain all 5 records")
 }
+
+// TestObft_ResolveIdempotency verifies Resolve is stateless / idempotent
+// across both the pre-quorum and post-quorum regimes, as documented by
+// spec §Phase 3 "Re-running on late KindCommit arrivals" and load-bearing
+// for the runner's observer-on-arrival pattern (which calls Resolve on
+// every state delta — many more times per slot than the historical
+// schedule-anchored single call).
+//
+//   - Pre-quorum: calling Resolve on incomplete state returns ErrNoQuorum
+//     without mutating Instance state. Verified by interleaving Resolve
+//     calls between Commit observations and confirming the final
+//     post-quorum Resolve still produces the same output as a clean run.
+//   - Post-quorum: calling Resolve twice after σ-quorum reaches produces
+//     byte-identical Output. Catches mutations that would surface as
+//     nondeterminism under observer-mode's higher call count.
+func TestObft_ResolveIdempotency(t *testing.T) {
+	// Baseline: a clean run with no extra Resolve calls. Captures the
+	// canonical output for the equality assertion below.
+	baseline := newSim(t, 4)
+	for k := 0; k < baseline.K; k++ {
+		baseline.deliverPhase1(k, baseline.candidates[k], baseline.allOperators(), observedEarly, true)
+	}
+	baseline.runPhase2(nil)
+	baselineOut, err := baseline.instances[2].Resolve()
+	require.NoError(t, err)
+	require.NotNil(t, baselineOut)
+
+	// Interleaved: re-build the cluster and inject pre-quorum Resolve
+	// calls between Commit observations. The instance at op 2 sees Commits
+	// arrive one at a time, with Resolve called after each observation.
+	interleaved := newSim(t, 4)
+	for k := 0; k < interleaved.K; k++ {
+		interleaved.deliverPhase1(k, interleaved.candidates[k], interleaved.allOperators(), observedEarly, true)
+	}
+	victim := interleaved.instances[2]
+	// op 2 builds its own commit (self-observes its partials).
+	_, err = victim.BuildOwnCommit()
+	require.NoError(t, err)
+	// Pre-quorum Resolve #1: only own partials in pool. Must return
+	// ErrNoQuorum without mutating state.
+	out, err := victim.Resolve()
+	require.ErrorIs(t, err, ErrNoQuorum)
+	require.Nil(t, out)
+	// Pre-quorum Resolve #2: same state. Must still return ErrNoQuorum
+	// (idempotent on empty pool).
+	out, err = victim.Resolve()
+	require.ErrorIs(t, err, ErrNoQuorum)
+	require.Nil(t, out)
+
+	// Deliver remaining ops' commits one at a time, calling Resolve in
+	// between each.
+	for _, sender := range []OperatorID{1, 3, 4} {
+		c, err := interleaved.instances[sender].BuildOwnCommit()
+		require.NoError(t, err)
+		require.NoError(t, victim.ObserveCommit(c))
+		_, _ = victim.Resolve() // ErrNoQuorum until qV=3 reaches.
+	}
+
+	// Final Resolve must succeed and produce the same output as the
+	// baseline. Any mutation introduced by the pre-quorum Resolve calls
+	// would surface here (different layer, different value, or different
+	// reconstructed signature).
+	finalOut, err := victim.Resolve()
+	require.NoError(t, err)
+	require.NotNil(t, finalOut)
+	require.Equal(t, baselineOut.Layer, finalOut.Layer,
+		"interleaved Resolves changed decided layer")
+	require.True(t, bytes.Equal(baselineOut.Value, finalOut.Value),
+		"interleaved Resolves changed decided value")
+	require.True(t, bytes.Equal(baselineOut.Signature, finalOut.Signature),
+		"interleaved Resolves changed reconstructed signature")
+
+	// Post-quorum re-run: calling Resolve again on a fully-quorum'd
+	// instance must produce byte-identical output.
+	rerunOut, err := victim.Resolve()
+	require.NoError(t, err)
+	require.NotNil(t, rerunOut)
+	require.Equal(t, finalOut.Layer, rerunOut.Layer,
+		"post-quorum Resolve re-run changed decided layer")
+	require.True(t, bytes.Equal(finalOut.Value, rerunOut.Value),
+		"post-quorum Resolve re-run changed decided value")
+	require.True(t, bytes.Equal(finalOut.Signature, rerunOut.Signature),
+		"post-quorum Resolve re-run changed reconstructed signature")
+}

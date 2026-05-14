@@ -42,6 +42,16 @@ type sim struct {
 	resolved    map[obftbase.OperatorID]*obftbase.Output
 	resolvedAt  map[obftbase.OperatorID]time.Duration
 	resolveErrs map[obftbase.OperatorID]error
+	// vQuorumAt[op] records the FIRST moment Resolve succeeded at op —
+	// the earliest moment that op holds a submittable σ-cert. Driven by
+	// opportunistic Resolve calls on every state-delta event
+	// (evtCommitArrival, evtCertArrival), mirroring an observer-mode
+	// production runner. Falls back to the schedule-anchored resolvedAt
+	// time when the schedule-anchored evtResolve at RoundEndOffset is
+	// what first produces quorum (since resolveOpAndBroadcastCert also
+	// writes here as a fallback). Read by outcome() as Outcome.DecisionTime.
+	// Plan: docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	vQuorumAt   map[obftbase.OperatorID]time.Duration
 	canonValues map[int]obftbase.Value
 	trace       []ct.TraceEntry
 }
@@ -90,6 +100,7 @@ func newSim(cfg desConfig) (*sim, error) {
 		resolved:    make(map[obftbase.OperatorID]*obftbase.Output, N),
 		resolvedAt:  make(map[obftbase.OperatorID]time.Duration, N),
 		resolveErrs: make(map[obftbase.OperatorID]error, N),
+		vQuorumAt:   make(map[obftbase.OperatorID]time.Duration, N),
 	}, nil
 }
 
@@ -196,7 +207,18 @@ func (s *sim) outcome() rawOutcome {
 			o.decided = true
 			o.layer = res.Layer
 			o.value = append([]byte{}, res.Value...)
-			o.time = s.resolvedAt[op]
+			// Prefer the observer-mode vQuorumAt time (recorded on the
+			// first state-delta that produces σ-quorum at op, BTT-
+			// sensitive). Falls back to resolvedAt for the rare path
+			// where decided was set without a vQuorumAt write — should
+			// not happen in current code since resolveOpAndBroadcastCert
+			// always writes vQuorumAt as a fallback, but the fallback
+			// here keeps the metric safely defined.
+			if t, ok := s.vQuorumAt[op]; ok {
+				o.time = t
+			} else {
+				o.time = s.resolvedAt[op]
+			}
 			if earliestT < 0 || o.time < earliestT {
 				earliestT = o.time
 				out.decided = true

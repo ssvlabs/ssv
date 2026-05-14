@@ -54,7 +54,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 - **Phase-window minimums:**
 
   - **`Δ_2a ≥ 2 BTT`** so verdict envelopes and re-flooded Phase-1 bundles propagate before Phase-2a end. Sub-2-BTT sizing is **broken-by-construction** with the late-broadcast verdict schedule — see [§Phase 2a / Verdict propagation budget](#phase-2a). `Δ_2a = 2 BTT` is the minimum coherent sizing, not a defensive choice; also absorbs mesh-jitter and late-arriving bundles.
-  - **`Δ_2b ≥ 1 BTT + ε_proc`** so Phase-2b σ/NR partials — emitted at start of Phase 2b after `ε_proc` convergence computation (see [§Phase 2b](#phase-2b)) — propagate to all honest peers before Phase 3 starts. **Recommended: `Δ_2b = 2 BTT`** for jitter absorption (one full propagation cycle of slack on top of P99 propagation).
+  - **`Δ_2b ≥ 1 BTT + ε_proc`** so Phase-2b σ/NR partials — emitted at start of Phase 2b after `ε_proc` convergence computation (see [§Phase 2b](#phase-2b)) — propagate to all honest peers by the SOFT Phase-3 target `T_commit + Δ_2b`. **Recommended: `Δ_2b = 2 BTT`** for jitter absorption (one full propagation cycle of slack on top of P99 propagation).
   - **`Δ_3 ≥ ε_3`** where `ε_3` ≈ 50ms is local processing time (BLS aggregation + IBE decryption walk + certificate construction). Δ_3 is propagation-independent — `Δ_2b` absorbs Phase-2b emission propagation, so Δ_3 is purely local reconstruction processing. Aligned with OBFT/OBFTR convention.
 
 - **K-1 NR tags**: `nr_tag_k = ("slot", N, "cluster", C, "layer", k, "no-quorum")` for `k ∈ {0, ..., K-2}`. Each tag corresponds to a layer-advance unlock — when `qEnc` partials on `nr_tag_k` aggregate, the cluster can decrypt next-layer (`L_{k+1}`) σ partials. The deepest layer (`L_{K-1}`) has no NR tag.
@@ -194,7 +194,7 @@ The verdict envelope is **op-identity-signed, not threshold-signed**. EKM/slashi
 <a id="phase-2b"></a>
 ### Phase 2b — σ-or-NR commit `[T_commit, T_commit + Δ_2b]`
 
-At the start of Phase 2b (`T_commit`), each operator `i` computes its **convergence decision** per layer based on observed Phase-2a verdicts and its own local state. **Operators MUST emit their Phase-2b onion no later than `T_commit + Δ_2b − 1 BTT`** so the σ/NR partials propagate within `Δ_2b` and reach all honest peers before Phase 3 starts at `T_commit + Δ_2b`. In practice operators emit at `T_commit + ε_proc` (immediately after convergence computation completes), maximizing propagation slack; the `T_commit + Δ_2b − 1 BTT` bound is the latest conformant emission time. Emission past this bound is non-conformant — the partial may not propagate before reconstruction begins, at risk of being missed by peers' Phase-3 walks. This emission discipline is what makes `Δ_3 ≥ ε_3` (processing-only) sufficient, analogous to OBFT's synchronous `KindCommit` emission at `T_commit` — see [§Setting / Phase-window minimums](#setting).
+At the start of Phase 2b (`T_commit`), each operator `i` computes its **convergence decision** per layer based on observed Phase-2a verdicts and its own local state. **Operators MUST emit their Phase-2b onion no later than `T_commit + Δ_2b − 1 BTT`** so the σ/NR partials propagate within `Δ_2b` and reach all honest peers by the SOFT propagation target `T_commit + Δ_2b`. In practice operators emit at `T_commit + ε_proc` (immediately after convergence computation completes), maximizing propagation slack; the `T_commit + Δ_2b − 1 BTT` bound is the latest conformant emission time. Emission past this bound is non-conformant — the partial may not propagate before σ-quorum can definitively form, at risk of being missed by peers' Phase-3 walks. This emission discipline is what makes `Δ_3 ≥ ε_3` (processing-only) sufficient on the worst-case-tail target, analogous to OBFT's synchronous `KindCommit` emission at `T_commit` — see [§Setting / Phase-window minimums](#setting). (Receivers MAY attempt Resolve opportunistically from `T_commit` onward; see §Phase 3 for the observer-on-arrival pattern.)
 
 #### Convergence rule
 
@@ -251,7 +251,7 @@ EKM/slashing-protection is consulted at Phase-2b sign time:
 
 A byzantine operator that publishes both σ and NR on the same `(slot, layer)` is publicly attributable (Rule 1; see [§Slashing evidence](#slashing-evidence)). Under `qEnc = qV`, cross-signing has no safety impact.
 
-### Phase 3 — Local decryption and reconstruction (from `T_commit + Δ_2b`)
+### Phase 3 — Local decryption and reconstruction (target completion `T_commit + Δ_2b + Δ_3`; opportunistic Resolve from `T_commit` onward)
 
 Each operator attempts a K-layer reconstruction walk. At each layer, the cluster has three possible outcomes: σ-quorum reaches on some V (output produced), or NR-quorum reaches (advance to next layer), or neither (slot misses).
 
@@ -292,7 +292,19 @@ if L_C == K and no σ-quorum reached:
 # End of reconstruction. If output produced, halt; else slot misses.
 ```
 
-**Reconstruction completion target** is `T_commit + Δ_2b + Δ_3` where `Δ_3 ≥ ε_3 ≈ 50ms` (purely local processing — `Δ_2b` absorbs Phase-2b emission propagation per the early-emission discipline; see [§Phase 2b](#phase-2b)). Phase 3 has no fixed end — reconstruction runs until σ-quorum reaches or the slot's relay-submission deadline (`T_relay_cutoff − T_submit`) forces termination. Late `KindOnion2b` arrivals can be incorporated by re-running the reconstruction walk (Pigeonhole semantics still hold; safe).
+**Reconstruction completion target** is `T_commit + Δ_2b + Δ_3` where `Δ_3 ≥ ε_3 ≈ 50ms` (purely local processing — `Δ_2b` is the SOFT propagation budget for Phase-2b emissions under the early-emission discipline; see [§Phase 2b](#phase-2b)). This is the SOFT target for the worst-case propagation tail. Phase 3 has no fixed end — reconstruction runs until σ-quorum reaches or the slot's relay-submission deadline (`T_relay_cutoff − T_submit`) forces termination.
+
+**Observer-on-arrival — canonical implementation pattern.** Resolve (the reconstruction walk above) is stateless and idempotent: re-running it on partial state returns "no quorum yet" without mutating any Instance state. The canonical implementation drops the historical "wait `Δ_2b`, then poll" pattern in favor of invoking Resolve on every state delta:
+
+```text
+on KindOnion2b observed:      run Resolve; if output, submit + broadcast cert
+on KindCertificate observed:  if cert verifies, submit (V, S) directly
+otherwise:                    block (no idle wakeups) until next arrival or slot deadline
+```
+
+This collapses the per-slot Δ_2b wait (typically 400ms at recommended sizing) into the propagation time the cluster actually needs — measured 1–3 ms median per mesh-hop at SSV's production cluster — so σ-quorum at L_0 typically forms within a few BTTs of `T_commit`, and the slot decides materially before `T_commit + Δ_2b`. Late `KindOnion2b` arrivals past `T_commit + Δ_2b` can be incorporated by the same observer hook; the walk above is re-run, and Pigeonhole semantics still hold (at most one `V` reconstructs cluster-wide regardless of timing), so re-running is safe.
+
+**Rationale for relaxing the Δ_2b gate.** Empirical measurements on SSV's production mesh (see [`Prod_1_2_3_4_CalibratedLogNormalMixture`](../protocol/v2/consensustest/network.go) in the consensustest framework) put typical mesh-hop propagation at 1–3 ms median, with the long tail of the lognormal mixture extending into hundreds of ms but representing a small fraction of arrivals. The recommended `Δ_2b = 2·BTT ≈ 400 ms` is sized for that worst-case tail, not the typical case — so gating Resolve on the full `Δ_2b` budget forfeits the propagation gap on nearly every slot. Observer-mode reclaims it without changing any wire-format invariant or σ/NR-pool aggregation rule: late arrivals still participate via re-runs, and Pigeonhole 2 still caps cluster-wide reconstruction at one `V`.
 
 Multiple operators may reconstruct and submit independently; the downstream system de-duplicates.
 
@@ -331,7 +343,7 @@ There is no `Defer` state. Phase-2a's window IS the deferral mechanism: every op
 1. **Phase 1** `[BFT_start, T_verdict_start]`: K leaders broadcast their Phase-1 bundles per their per-layer fetch windows (`[T_{K-1}, T_{K-1} + Δ_1]`, ..., `[T_0, T_0 + Δ_1]`), with `T_k + Δ_1 ≤ T_broadcast_max_k = max(BFT_start, T_verdict_start − B_k)` per layer (deepest target clamps to `BFT_start`; see §Setting). **No σ_V partial in Phase-1 bundles** (Variant C). Receivers accept bundles first-observed in `[slot_start, T_accept_max]` where `T_accept_max = T_commit − 1 BTT`.
 2. **Phase 2a** `[T_verdict_start, T_commit]`: each operator broadcasts a per-layer verdict envelope (`KindVerdict`) reflecting their σ-eligibility per layer based on observed Phase-1 bundles and host validity verdicts. Bundle re-flood absorbs late-arriving Phase-1 bundles within the window. Operators emit verdicts at the latest-safe time (around `T_commit − 1 BTT`) to maximize observed peer state.
 3. **Phase 2b** `[T_commit, T_commit + Δ_2b]`: each operator computes per-layer convergence decisions from the observed Phase-2a verdict pool (per the convergence rule) and emits σ-or-NR partials per layer. EKM enforces single-σ-V per (slot, layer) per operator at sign time.
-4. **Phase 3** (from `T_commit + Δ_2b`): each operator runs the K-layer reconstruction walk. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer, the slot misses (re-running may incorporate late `KindOnion2b` arrivals).
+4. **Phase 3** (opportunistic from `T_commit` onward; SOFT target `T_commit + Δ_2b + Δ_3`): each operator runs the K-layer reconstruction walk on every state delta (`KindOnion2b` / `KindCertificate` observation), not on a fixed schedule. If σ-quorum reaches on some V at any layer, output the V; halt. If NR-quorum reaches up to some layer `L_C < K`, advance L_C and continue the walk. If neither σ-quorum nor NR-quorum advance unlock at any layer on a given delta, the operator waits for the next delta or the relay-submission deadline (re-running on each subsequent arrival picks up late `KindOnion2b` arrivals).
 
 **Slot timing**: Phase 1 fetch occupies `[slot_start, T_verdict_start]`. Total consensus budget (Phase 2a + Phase 2b + Phase 3) is `Δ_2a + Δ_2b + Δ_3 = 2 BTT + 2 BTT + ε_3 ≈ 850ms` at recommended Config A sizing; consensus is expected to complete at `T_commit + Δ_2b + Δ_3`, leaving the rest of the slot as submission slack to `T_relay_cutoff`.
 

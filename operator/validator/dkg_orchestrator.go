@@ -363,4 +363,3 @@ func ibeThresholdForCommitteeSize(n int) int {
 	f := (n - 1) / 3
 	return 2*f + 1
 }
-

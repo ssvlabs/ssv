@@ -87,16 +87,16 @@ func (l InstabilityLevel) slowCountForN(n int) int {
 // size if you change ranges):
 //   - none      pass-through; reproduces pre-instability stats.
 //   - low       very rare instabilities; Healthy success rate should
-//               be ≥ 99% — basically indistinguishable from "none"
-//               unless the user looks carefully.
+//     be ≥ 99% — basically indistinguishable from "none"
+//     unless the user looks carefully.
 //   - moderate  occasional disruption; success rate drops a few %.
 //   - high      sustained-but-recoverable instability; success rate
-//               drops 10-30%.
+//     drops 10-30%.
 //   - extreme   clearly worse than high but still informative —
-//               success rate should land in roughly the 0-30% range
-//               so per-protocol differences stay visible (going all
-//               the way to 0% just collapses every protocol to the
-//               same flat line).
+//     success rate should land in roughly the 0-30% range
+//     so per-protocol differences stay visible (going all
+//     the way to 0% just collapses every protocol to the
+//     same flat line).
 var InstabilityLevels = []InstabilityLevel{
 	{Name: "none", Level: 0},
 	{Name: "low", Level: 1, LossRate: 0.005, BurstFactor: 5, SlowOpsFraction: 0.25, SlowMul: 1.5, PersistP: 0.5},

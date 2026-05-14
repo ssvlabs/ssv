@@ -226,13 +226,27 @@ func (c *Config) Phase2bStartOffset() time.Duration {
 	return c.TCommit
 }
 
-// Phase2bEndOffset returns the end of Phase 2b — `TCommit + Delta2b`.
-// After this, Phase 3 reconstruction begins.
+// Phase2bEndOffset returns the end of the Phase-2b propagation budget —
+// `TCommit + Delta2b`. By this offset, all honest peers' σ/NR partials are
+// expected to be observable cluster-wide under nominal partial synchrony.
+//
+// This is the SOFT target for "Phase-2b inputs are complete enough for
+// σ-quorum to form", not a hard gate on Phase-3 Resolve. Resolve is
+// idempotent (re-running on incomplete state returns ErrNoQuorum without
+// mutation), so the canonical implementation is observer-mode: Resolve is
+// invoked opportunistically from TCommit onward on every KindOnion2b /
+// KindCertificate arrival, and the average healthy slot decides well
+// before this offset.
 func (c *Config) Phase2bEndOffset() time.Duration {
 	return c.TCommit + c.Delta2b
 }
 
-// Phase3StartOffset returns the start of Phase 3 (= Phase2bEndOffset).
+// Phase3StartOffset returns the SOFT target by which Phase-3 reconstruction
+// is expected to *complete the propagation-budget portion* — coincident
+// with Phase2bEndOffset. Operators MAY (and the production runner DOES)
+// invoke Resolve opportunistically from TCommit onward; this offset marks
+// the moment by which σ-quorum should form under partial synchrony, not a
+// gate on attempting reconstruction.
 func (c *Config) Phase3StartOffset() time.Duration {
 	return c.TCommit + c.Delta2b
 }
@@ -242,9 +256,11 @@ func (c *Config) Phase3StartOffset() time.Duration {
 // complete under nominal partial synchrony. Per spec §Phase 3, this is
 // NOT a hard deadline:
 //
-//   - Phase 3 starts at TCommit + Delta2b (= Phase3StartOffset) and runs
-//     until σ-quorum reaches OR the slot's relay-submission deadline
-//     forces termination.
+//   - Phase 3 may be attempted opportunistically from TCommit onward
+//     (Resolve is idempotent and returns ErrNoQuorum cleanly on incomplete
+//     state). Phase2bEndOffset is the SOFT propagation target, not a
+//     Resolve-gating wall. The canonical implementation observes inbound
+//     KindOnion2b / KindCertificate arrivals and calls Resolve on each.
 //   - Reconstruction overrunning Delta3 can spill into the submission
 //     slack; a faster peer's KindCertificate gossip can let an operator
 //     that hasn't completed local reconstruction submit (V, S) directly.
