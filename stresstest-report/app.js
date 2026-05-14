@@ -77,7 +77,16 @@ let selectedScenario = 'Healthy';
 let selectedN = 4;
 let selectedK = 4;
 let selectedBTT = 300;
-let selectedP2pDelay = 0.5;
+// selectedP2pProfile is the index into P2P_PROFILE_LABELS, matching the
+// Go-side ct.P2PProfileNames slice. Cells encode the profile choice as
+// Fields["p2p_profile"]=index; the UI translates back to a label when
+// rendering the picker.
+let selectedP2pProfile = 0;
+// P2P_PROFILE_LABELS — must mirror ct.P2PProfileNames in
+// protocol/v2/consensustest/network.go. Order is load-bearing: the
+// Go-side stores the profile choice in Fields["p2p_profile"] as the
+// index into this slice, and the picker round-trips via the same index.
+const P2P_PROFILE_LABELS = ['prod', 'stage1', 'stage2', 'slow', 'heavy_tail', 'slow_heavy_tail'];
 // selectedInstability is the p2p_instability picker value (0..4 →
 // none / low / moderate / high / extreme; see InstabilityLevels in
 // protocol/v2/consensustest/instability.go). Only affects the
@@ -214,7 +223,7 @@ function main() {
   // sortProtocolsByFamily so stored names are matched against the full
   // sorted list.
   activeProtocols = loadActiveProtocols(data.protocols);
-  // Snap selectedK/selectedBTT/selectedP2pDelay to values actually present
+  // Snap selectedK/selectedBTT/selectedP2pProfile to values actually present
   // in p2p_baseline (or stay at defaults if no baseline is loaded).
   // Must run before precomputeSlotShifts since the latter warms the
   // matched point's shifts.
@@ -242,7 +251,7 @@ function main() {
 }
 
 
-// initBaselineSelections snaps selectedN/selectedK/selectedBTT/selectedP2pDelay
+// initBaselineSelections snaps selectedN/selectedK/selectedBTT/selectedP2pProfile
 // to values actually present in p2p_baseline, so the conditions chart
 // can render on first load even when data was generated against a
 // different cross-product than the picker defaults expect.
@@ -251,8 +260,8 @@ function initBaselineSelections(data) {
   if (!sweep || sweep.points.length === 0) return;
   const dims = availableBaselineDimensions(data);
   // Snap each axis to the current selection if present (approximate
-  // equality so float-rounded Sigma values match), else to the middle
-  // of the set as a sensible default.
+  // equality so float-rounded values match), else to the middle of the
+  // set as a sensible default.
   const pickClosest = (set, current) => {
     if (set.length === 0) return current;
     const found = set.find((v) => Math.abs(v - current) < 1e-6);
@@ -262,7 +271,7 @@ function initBaselineSelections(data) {
   selectedN = pickClosest(dims.Ns, selectedN);
   selectedK = pickClosest(dims.Ks, selectedK);
   selectedBTT = pickClosest(dims.BTTs, selectedBTT);
-  selectedP2pDelay = pickClosest(dims.P2pDelays, selectedP2pDelay);
+  selectedP2pProfile = pickClosest(dims.P2pProfiles, selectedP2pProfile);
   selectedInstability = pickClosest(dims.Instabilities, selectedInstability);
 }
 
@@ -332,16 +341,16 @@ function onSlotStartChange(newSlot) {
 //
 // The Conditions section is the always-visible primary CDF chart at the
 // top of the page. It shows the currently-selected scenario's CDF at
-// the picker-chosen (K, BTT, σ, slot_start). Heatmap row click updates
-// the selected scenario; pickers update K/BTT/σ/slot_start.
+// the picker-chosen (K, BTT, profile, slot_start). Heatmap row click
+// updates the selected scenario; pickers update K/BTT/profile/slot_start.
 //
-// Data source: p2p_baseline (Phase 2's K × BTT × σ cross-product),
-// looked up by (selectedK, selectedBTT, selectedP2pDelay) via
+// Data source: p2p_baseline (BTT × profile × instability cross-product),
+// looked up by (selectedK, selectedBTT, selectedP2pProfile) via
 // findBaselineSweepPoint.
 
 // findBaselineSweepPoint returns {sweep, point} matching the current
-// (N, K, BTT, σ, instability) selection within p2p_baseline, or null
-// if no point matches. Reads sweep_point.fields (set by sweep.go) —
+// (N, K, BTT, profile, instability) selection within p2p_baseline, or
+// null if no point matches. Reads sweep_point.fields (set by sweep.go) —
 // see reporting.pointPayload.Fields for the schema. Points without an
 // Instability field (legacy / pre-instability data) match
 // selectedInstability=0 only.
@@ -350,7 +359,7 @@ function findBaselineSweepPoint(data) {
 }
 
 // findBaselinePointAtInstability looks up the p2p_baseline point at
-// the current (N, K, BTT, σ) and the requested instability level.
+// the current (N, K, BTT, profile) and the requested instability level.
 // Returns null when no matching point exists (e.g. the level=high
 // slice hasn't been generated). Pulled out so non-Baseline-row cell
 // lookups can force-fall-back to level=0 regardless of the picker.
@@ -365,7 +374,7 @@ function findBaselinePointAtInstability(data, instability) {
       f.N === selectedN &&
       f.K === selectedK &&
       f.BTT === selectedBTT &&
-      Math.abs(f.p2p_delay - selectedP2pDelay) < 1e-6 &&
+      f.p2p_profile === selectedP2pProfile &&
       (f.Instability ?? 0) === instability
     ) {
       return { sweep, point: pt };
@@ -389,7 +398,7 @@ function findBaselineCellForScenario(data, scenario, protocol) {
   return findCell(match.point, scenario.name, protocol);
 }
 
-// availableBaselineDimensions reads the distinct N/K/BTT/σ values
+// availableBaselineDimensions reads the distinct N/K/BTT/profile values
 // present in the p2p_baseline sweep — used to populate the conditions
 // section's pickers. Each picker button is rendered for every value
 // the merged data.js contains (across all `make stresstest` runs);
@@ -399,7 +408,7 @@ function availableBaselineDimensions(data) {
   const Nset = new Set();
   const Kset = new Set();
   const BTTset = new Set();
-  const p2pDelaySet = new Set();
+  const p2pProfileSet = new Set();
   const instabilitySet = new Set();
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (sw) {
@@ -409,10 +418,12 @@ function availableBaselineDimensions(data) {
       if (typeof f.N === 'number' && f.N > 0) Nset.add(f.N);
       if (typeof f.K === 'number' && f.K > 0) Kset.add(f.K);
       if (typeof f.BTT === 'number') BTTset.add(f.BTT);
-      if (typeof f.p2p_delay === 'number') p2pDelaySet.add(f.p2p_delay);
-      // Always-show all 5 levels; greyed if the (n, K, BTT, σ) slice
-      // doesn't contain that level. Below we still seed from data so
-      // a future expanded levels-set is auto-discovered.
+      // p2p_profile is the index into P2P_PROFILE_LABELS (mirror of
+      // ct.P2PProfileNames). Picker buttons render the label.
+      if (typeof f.p2p_profile === 'number') p2pProfileSet.add(f.p2p_profile);
+      // Always-show all 5 levels; greyed if the (n, K, BTT, profile)
+      // slice doesn't contain that level. Below we still seed from data
+      // so a future expanded levels-set is auto-discovered.
       if (typeof f.Instability === 'number') instabilitySet.add(f.Instability);
     }
   }
@@ -424,17 +435,17 @@ function availableBaselineDimensions(data) {
     Ns: [...Nset].sort((a, b) => a - b),
     Ks: [...Kset].sort((a, b) => a - b),
     BTTs: [...BTTset].sort((a, b) => a - b),
-    P2pDelays: [...p2pDelaySet].sort((a, b) => a - b),
+    P2pProfiles: [...p2pProfileSet].sort((a, b) => a - b),
     Instabilities: [...instabilitySet].sort((a, b) => a - b),
   };
 }
 
 // baselinePointExists reports whether p2p_baseline has a point matching
-// the exact (n, k, btt, σ, instability) tuple. Used by the pickers
+// the exact (n, k, btt, profile, instability) tuple. Used by the pickers
 // to grey out buttons whose specific combination wasn't produced by
 // any `make stresstest` run. Points without Instability in Fields
 // (legacy data) match instability=0 only.
-function baselinePointExists(data, n, k, btt, p2pDelay, instability) {
+function baselinePointExists(data, n, k, btt, p2pProfile, instability) {
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sw) return false;
   return sw.points.some((pt) => {
@@ -444,7 +455,7 @@ function baselinePointExists(data, n, k, btt, p2pDelay, instability) {
       f.N === n &&
       f.K === k &&
       f.BTT === btt &&
-      Math.abs(f.p2p_delay - p2pDelay) < 1e-6 &&
+      f.p2p_profile === p2pProfile &&
       (f.Instability ?? 0) === instability
     );
   });
@@ -557,25 +568,33 @@ function renderConditionsSection(data) {
     buildBaselinePicker('N:', dims.Ns.length ? dims.Ns : [selectedN], null,
       () => selectedN,
       (v) => { selectedN = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pDelay, selectedInstability)),
+      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pProfile, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
       (v) => { selectedK = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pDelay, selectedInstability)),
+      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pProfile, selectedInstability)),
   );
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
       (v) => { selectedBTT = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pDelay, selectedInstability)),
+      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pProfile, selectedInstability)),
   );
   pickers.appendChild(
-    buildBaselinePicker('p2p_delay:', dims.P2pDelays.length ? dims.P2pDelays : [selectedP2pDelay], null,
-      () => selectedP2pDelay,
-      (v) => { selectedP2pDelay = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability)),
+    // The p2p_profile picker shows the calibrated mixture LABEL (prod /
+    // stage1 / stage2 / slow / heavy_tail / slow_heavy_tail) instead
+    // of the float index; the data axis is still the index that the
+    // Go side stores in Fields["p2p_profile"].
+    buildBaselinePickerLabeled(
+      'p2p_profile:',
+      dims.P2pProfiles.length ? dims.P2pProfiles : [selectedP2pProfile],
+      (v) => P2P_PROFILE_LABELS[v] || ('p' + v),
+      () => selectedP2pProfile,
+      (v) => { selectedP2pProfile = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability),
+    ),
   );
   pickers.appendChild(
     // The instability picker shows level NAMES instead of numbers; map
@@ -587,7 +606,7 @@ function renderConditionsSection(data) {
       (v) => INSTABILITY_NAMES[v] || ('L' + v),
       () => selectedInstability,
       (v) => { selectedInstability = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pDelay, v),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, v),
     ),
   );
   pickers.appendChild(buildSlotPicker());
@@ -595,7 +614,7 @@ function renderConditionsSection(data) {
 
   // Legend block — pass a synthetic single-point sweep so buildSweepLegend
   // renders single values (not ranges). Empty when no sweep matches the
-  // current K/BTT/p2p_delay; the legend then shows "n/a" per protocol.
+  // current K/BTT/profile; the legend then shows "n/a" per protocol.
   // Always passes all protocols (not filtered) so checkboxes for every
   // protocol are present and the user can re-enable unchecked ones.
   const legendWrap = h('div', { class: 'conditions-legend' });
@@ -861,18 +880,18 @@ function applyChartDefaults() {
 // ---- heatmap overview ------------------------------------------------
 
 // renderHeatmap draws a grid of scenario rows × protocol columns
-// colored by the currently-selected baseline operating point (K/BTT/σ).
-// Each Scenario.Group becomes its own card so groups read as visually
-// distinct chunks rather than rows in one wall of data. Clicking a row
-// updates the Conditions chart's selected scenario.
+// colored by the currently-selected baseline operating point
+// (K/BTT/profile). Each Scenario.Group becomes its own card so groups
+// read as visually distinct chunks rather than rows in one wall of
+// data. Clicking a row updates the Conditions chart's selected scenario.
 //
-// Source: p2p_baseline matched to (selectedK, selectedBTT, selectedP2pDelay)
+// Source: p2p_baseline matched to (selectedK, selectedBTT, selectedP2pProfile)
 // via findBaselineSweepPoint. Falls back to legacy p2p_normal's single
 // point when data.js predates Phase 2 (so the heatmap still renders
 // against an older data.js without a regen).
 function renderHeatmap(data) {
   // We check at instability=0 (where non-Baseline scenarios always
-  // live) to decide whether ANY data exists for this (n, K, BTT, σ).
+  // live) to decide whether ANY data exists for this (n, K, BTT, profile).
   // If even level=0 has no data, the slice is genuinely missing and
   // we show the empty-state notice. If level=0 exists but the
   // currently-selected level>0 doesn't, the Baseline row will fall
@@ -890,7 +909,7 @@ function renderHeatmap(data) {
       // insert a literal "null" text node.
       const empty = h('section', { class: 'heatmap empty', id: 'overview' });
       empty.appendChild(h('p', { class: 'desc' },
-        `No data for N=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, p2p_delay=${selectedP2pDelay}. ` +
+        `No data for N=${selectedN}, K=${selectedK}, BTT=${selectedBTT}ms, profile=${P2P_PROFILE_LABELS[selectedP2pProfile] || selectedP2pProfile}. ` +
         `Generate this slice with: make stresstest CLUSTER_SIZES_N=${selectedN} LAYERS_K=${selectedK}`));
       return empty;
     }

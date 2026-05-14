@@ -131,15 +131,16 @@ consensustest-with-real-bls:
 # leaves a single data.js with all four (n, K) slices, selectable in
 # the UI via the N and K pickers (greyed out where a slice is missing).
 #
-# Sweeps (all use LogNormalDelay as the production-shaped propagation
-# model; see protocol/v2/consensustest/sweep.go for full docs):
-#   - p2p_baseline          (BTT × σ × instability = 5 × 5 × 5 = 125
-#                            points per run; heatmap source. The
+# Sweeps (p2p_baseline uses calibrated empirical mesh-hop profiles
+# fitted to real SSV gossipsub telemetry; the synthetic-axis sweeps
+# retain LogNormal anchors so the parameter axis stays meaningful.
+# See protocol/v2/consensustest/sweep.go for full docs):
+#   - p2p_baseline          (BTT × profile × instability = 5 × 6 × 5 =
+#                            150 points per run; heatmap source. The
 #                            instability axis applies only to the
 #                            Baseline-group scenario, Healthy — non-
 #                            Baseline rows are instability-invariant.)
 #   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
-#   - p2p_heavy_tail        (σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9})
 #   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
 #   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
 #   - p2p_node_slowness     (slow op count ∈ {0, 1, 2, 3}, markov
@@ -158,9 +159,11 @@ consensustest-with-real-bls:
 #   - LAYERS_K        (default 2,4) — comma-separated K values ∈ {2, 3, 4}.
 #     Brackets the BFT-liveness floor (K=2 at n=4) and SSV's K=N convention.
 #     A K value is skipped for any n where K < MinK(n).
-#   - P2P_DELAYS      (default 0.1,0.5,0.7,0.9) — comma-separated LogNormal
-#     σ values for the p2p_baseline sweep's jitter axis. Each value becomes
-#     one point in the BTT × p2p_delay × instability cross-product.
+#   - P2P_PROFILES    (default = all six) — comma-separated calibrated
+#     mesh-hop profile names. Valid: prod, stage1, stage2, slow,
+#     heavy_tail, slow_heavy_tail. Each name becomes one point in the
+#     BTT × profile × instability cross-product, with both cfg.Network
+#     and cfg.Mesh.HopDelay sourced from the named profile.
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 1000) — high-confidence
@@ -185,14 +188,14 @@ ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 100
 CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2,4
-P2P_DELAYS ?= 0.1,0.5,0.7,0.9
+P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_DELAYS=$(P2P_DELAYS) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
-		P2P_DELAYS=$(P2P_DELAYS) \
+		P2P_PROFILES=$(P2P_PROFILES) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \
 		$(if $(ITERATIONS),ITERATIONS=$(ITERATIONS)) \
@@ -204,7 +207,7 @@ stresstest:
 # stresstest-all is a convenience alias for the full (n × K) matrix:
 # CLUSTER_SIZES_N=4,7 × LAYERS_K=2,3,4. Equivalent to:
 #   make stresstest CLUSTER_SIZES_N=4,7 LAYERS_K=2,3,4
-# All other variables (ITERATIONS_*, P2P_DELAYS, REPORT_DIR) use their
+# All other variables (ITERATIONS_*, P2P_PROFILES, REPORT_DIR) use their
 # defaults or can be overridden on the command line.
 .PHONY: stresstest-all
 stresstest-all: CLUSTER_SIZES_N = 4,7

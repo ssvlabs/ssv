@@ -96,9 +96,9 @@ func CorrectnessProfile(btt time.Duration) Profile {
 // typical-mesh P99 propagation per OBFT.md §Setting, with a P99/P50
 // ratio (~3.2×) matching the mainnet floor cited in network.go's
 // LogNormalDelay docstring. Callers can override via `net` when running
-// a sweep that has its own network model (e.g. p2p_heavy_tail with a
-// different σ, p2p_packet_loss wrapping LossyNetwork) — pass nil for
-// the production-shaped default.
+// a sweep that has its own network model (e.g. p2p_baseline passing
+// a calibrated P2PProfile, p2p_packet_loss wrapping LossyNetwork) —
+// pass nil for the production-shaped default.
 func StressProfile(btt time.Duration, iterations int, net NetworkModel) Profile {
 	base := DefaultProposerDutyConfig(btt)
 	if net != nil {

@@ -77,22 +77,23 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
-	// 5 σ values — matches the point count expectations below.
-	sigmas := []float64{0.1, 0.3, 0.5, 0.7, 0.9}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, sigmas)
+	// All six calibrated profiles — point count expectations below
+	// derive from len(profiles).
+	profiles := ct.P2PProfileNames
+
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles)
 
 	// `expected` below double-counts as both the per-name shape check
 	// AND the total-count check: every entry must be matched, and
 	// `require.Truef` rejects any unexpected name. No magic number to
 	// keep in sync as sweeps are added or removed.
 	expected := map[string]int{
-		"p2p_baseline":          5 * len(sigmas) * 5, // BTT × p2p_delay × instability
-		"p2p_increasing_BTT":    6,                   // BTT
-		"p2p_heavy_tail":        7,                   // σ
-		"p2p_packet_loss":       5,                   // LossRate
-		"p2p_correlated_delays": 4,                   // BadLinkProb
-		"p2p_node_slowness":     4,                   // slow-op count
-		"p2p_instability":       5,                   // instability level
+		"p2p_baseline":          5 * len(profiles) * 5, // BTT × profile × instability
+		"p2p_increasing_BTT":    6,                     // BTT
+		"p2p_packet_loss":       5,                     // LossRate
+		"p2p_correlated_delays": 4,                     // BadLinkProb
+		"p2p_node_slowness":     4,                     // slow-op count
+		"p2p_instability":       5,                     // instability level
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]
@@ -115,28 +116,28 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 
 // TestDefaultSweeps_InvalidInputs — DefaultSweeps panics with a specific
 // reason on each invalid-input class. Programmer-error inputs (empty
-// scenarios / protocols / sigmas, non-positive iter budgets, non-positive
+// scenarios / protocols / profiles, non-positive iter budgets, non-positive
 // cluster size) surface at the call site instead of confusingly returning
 // nil.
 func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}}
 	scen := []ct.Scenario{ct.Catalog[0]}
 	good := ct.Iterations{Baseline: 10, Unstable: 10}
-	sigmas := []float64{0.5}
+	profiles := []string{"prod"}
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty scenarios",
-		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4, sigmas) })
+		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4, profiles) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty protocols",
-		func() { ct.DefaultSweeps(scen, nil, good, 4, 4, sigmas) })
-	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty sigmas",
+		func() { ct.DefaultSweeps(scen, nil, good, 4, 4, profiles) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty profiles",
 		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, nil) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4, sigmas) })
+		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4, profiles) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Unstable must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4, sigmas) })
+		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4, profiles) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: cluster size n must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4, sigmas) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4, profiles) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: layer count k must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0, sigmas) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0, profiles) })
 }
 
 // TestPhase2_AllSweepPoints_NoSetupErrors runs one sim of Healthy at
@@ -179,8 +180,8 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 		qbftadapter.Protocol{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
-	sigmas := []float64{0.1, 0.5, 0.9}
-	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, sigmas)
+	profiles := []string{"prod", "stage1", "stage2"}
+	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, profiles)
 	require.NotEmpty(t, sweeps, "DefaultSweeps must return at least one sweep")
 
 	totalPoints := 0

@@ -8,15 +8,16 @@ import (
 
 // SweepPoint is one axis-point of a Sweep — a labeled BatchConfig that
 // will produce one BatchReport when the Sweep runs. Label is shown in
-// reports as the axis-tick text (e.g., "n=7", "BTT=400ms", "p2p_delay=0.5").
+// reports as the axis-tick text (e.g., "n=7", "BTT=400ms",
+// "profile=prod").
 //
-// Fields carries the numeric axis values (K, BTT, p2p_delay, …) for the
-// point in a machine-readable form. Picker-driven UIs (the
-// stresstest-report's K/BTT/p2p_delay pickers in particular) consume
-// Fields to drive lookups by exact value, without parsing the
+// Fields carries the numeric axis values (K, BTT, p2p_profile, …) for
+// the point in a machine-readable form. Picker-driven UIs (the
+// stresstest-report's K / BTT / p2p_profile pickers in particular)
+// consume Fields to drive lookups by exact value, without parsing the
 // human-readable Label. Keys are uppercase per-axis names: "K", "BTT"
-// (ms), "p2p_delay" (LogNormal σ), "Loss", "BadLinkProb", "SlowOps" —
-// whichever the point varies.
+// (ms), "p2p_profile" (index into ct.P2PProfileNames), "Loss",
+// "BadLinkProb", "SlowOps" — whichever the point varies.
 type SweepPoint struct {
 	Label  string
 	Config BatchConfig
@@ -88,9 +89,10 @@ func (i Iterations) asBatchIterations() (int, map[string]int) {
 }
 
 // baselineBTTValues — the BTT axis that p2p_baseline sweeps. K and N
-// are passed per-run (one (n, k) combo per `make stresstest`); the σ
-// axis is controlled by the sigmas parameter to DefaultSweeps (driven
-// by P2P_DELAYS in the stress driver, default {0.1, 0.5, 0.7, 0.9}).
+// are passed per-run (one (n, k) combo per `make stresstest`); the
+// profile axis is controlled by the `profiles` parameter to
+// DefaultSweeps (driven by P2P_PROFILES in the stress driver, default
+// = all six entries of P2PProfileNames).
 var baselineBTTValues = []time.Duration{
 	100 * time.Millisecond,
 	200 * time.Millisecond,
@@ -100,31 +102,36 @@ var baselineBTTValues = []time.Duration{
 }
 
 // DefaultSweeps returns the curated set of comparison sweeps the stress
-// driver runs at a single (n, k) operating point. Every sweep models
-// per-message propagation with LogNormalDelay — the production-shaped
-// distribution — anchored at Median = BTT/2 (the spec's typical-mesh
-// P99 propagation per OBFT.md §Setting). Pure JitteredDelay is no
-// longer used.
+// driver runs at a single (n, k) operating point. Mesh-mode Healthy
+// uses calibrated LogNormalMixture profiles fitted to production /
+// staging SSV gossipsub telemetry; direct-mode uses the same profile
+// at n=4 (per-hop ≈ cluster-wide for SSV cluster sizes that fit inside
+// a single gossipsub mesh). BTT-axis and synthetic-degradation sweeps
+// retain their LogNormal anchors so the parameter axis stays meaningful.
 //
-//  1. p2p_baseline — BTT × σ × instability cross-product. BTT ∈
-//     {100, 200, 300, 400, 500} ms, σ from the sigmas parameter
-//     (default {0.1, 0.5, 0.7, 0.9} via P2P_DELAYS env var),
-//     instability ∈ {none, low, moderate, high, extreme}. Level=0
-//     emits the full catalog; Level>0 emits ONLY Baseline-group
-//     scenarios (non-Baseline rows are instability-invariant — see
-//     p2pBaselineSweep).
+//  1. p2p_baseline — BTT × profile × instability cross-product. BTT ∈
+//     {100, 200, 300, 400, 500} ms, profile from the `profiles`
+//     parameter (default {prod, stage1, stage2, slow, heavy_tail,
+//     slow_heavy_tail} via P2P_PROFILES env var), instability ∈
+//     {none, low, moderate, high, extreme}. Level=0 emits the full
+//     catalog; Level>0 emits ONLY Baseline-group scenarios.
 //  2. p2p_increasing_BTT — BTT ∈ {100, 200, 400, 600, 800, 1000} ms;
-//     per-point LogNormal{Median: BTT/2, σ: 0.5}.
-//  3. p2p_heavy_tail — σ ∈ {0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9} (7
-//     points); BTT=300ms, Median=BTT/2.
-//  4. p2p_packet_loss — LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20} at
+//     per-point LogNormal{Median: BTT/2, σ: 0.5} (synthetic
+//     BTT-scaling exploration).
+//  3. p2p_packet_loss — LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20} at
 //     fixed BTT=300ms, BurstFactor=5, σ=0.5.
-//  5. p2p_correlated_delays — BadLinkProb ∈ {0, 0.05, 0.10, 0.20};
+//  4. p2p_correlated_delays — BadLinkProb ∈ {0, 0.05, 0.10, 0.20};
 //     BadLinkMultiplier=3, BurstMessages=20, inner LogNormal σ=0.5.
-//  6. p2p_node_slowness — slow op count ∈ {0, 1, 2, 3}; ExtraDelay=3·BTT,
+//  5. p2p_node_slowness — slow op count ∈ {0, 1, 2, 3}; ExtraDelay=3·BTT,
 //     PersistP=0.8, inner LogNormal σ=0.5.
-//  7. p2p_instability — 5 levels (none/low/moderate/high/extreme);
+//  6. p2p_instability — 5 levels (none/low/moderate/high/extreme);
 //     fixed BTT=300ms σ=0.5; Healthy-only "production p2p" curve.
+//
+// (Note: a prior p2p_heavy_tail sweep — synthetic LogNormal-sigma axis
+// at fixed BTT — was removed once the empirical profiles landed. The
+// "heavy_tail" profile in p2p_baseline now covers that exploration on
+// calibrated data; the synthetic axis added no information beyond what
+// p2p_heavy_tail's profile point now expresses.)
 //
 // All sweeps run at the same (n, k), share the Iterations split, and
 // run over the same Scenarios / Protocols matrix; only the per-point
@@ -138,18 +145,19 @@ var baselineBTTValues = []time.Duration{
 // reporting.WriteReportData uses that tuple to dedup / append.
 //
 // Panics with a specific reason on invalid input (empty scenarios /
-// protocols / sigmas, non-positive iteration budgets, non-positive n or
-// k). These are programmer errors — the test driver should always pass
-// valid inputs; a panic surfaces the bug at the failure site rather
-// than collapsing to a confusing "expected N sweeps got 0" downstream.
-func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, sigmas []float64) []Sweep {
+// protocols / profiles, unknown profile names, non-positive iteration
+// budgets, non-positive n or k). These are programmer errors — the
+// test driver should always pass valid inputs; a panic surfaces the
+// bug at the failure site rather than collapsing to a confusing
+// "expected N sweeps got 0" downstream.
+func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string) []Sweep {
 	switch {
 	case len(scenarios) == 0:
 		panic("consensustest: DefaultSweeps called with empty scenarios")
 	case len(protocols) == 0:
 		panic("consensustest: DefaultSweeps called with empty protocols")
-	case len(sigmas) == 0:
-		panic("consensustest: DefaultSweeps called with empty sigmas")
+	case len(profiles) == 0:
+		panic("consensustest: DefaultSweeps called with empty profiles")
 	case iters.Baseline <= 0:
 		panic(fmt.Sprintf("consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got %d)", iters.Baseline))
 	case iters.Unstable <= 0:
@@ -159,10 +167,15 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 	case k <= 0:
 		panic(fmt.Sprintf("consensustest: DefaultSweeps: layer count k must be > 0 (got %d)", k))
 	}
+	// Validate profile names eagerly — a typo in P2P_PROFILES should
+	// fail at sweep construction, not silently when a sim panics
+	// inside P2PProfile.
+	for _, name := range profiles {
+		_ = P2PProfileIndex(name)
+	}
 	return []Sweep{
-		p2pBaselineSweep(scenarios, protocols, iters, n, k, sigmas),
+		p2pBaselineSweep(scenarios, protocols, iters, n, k, profiles),
 		p2pIncreasingBTTSweep(scenarios, protocols, iters, n, k),
-		p2pHeavyTailSweep(scenarios, protocols, iters, n, k),
 		p2pPacketLossSweep(scenarios, protocols, iters, n, k),
 		p2pCorrelatedDelaysSweep(scenarios, protocols, iters, n, k),
 		p2pNodeSlownessSweep(scenarios, protocols, iters, n, k),
@@ -180,18 +193,19 @@ func withClusterSize(cfg SimConfig, n int) SimConfig {
 }
 
 // productionLogNormal returns the production-shaped LogNormal delay
-// model (σ=0.5) used as the baseline by every stress sweep except
-// p2p_baseline and p2p_heavy_tail (which pick their own σ along the
-// axis). Median = BTT/2 mirrors the spec's typical-mesh P99
-// propagation per OBFT.md §Setting (BTT = P99_propagation + clock
-// skew δ).
+// model (σ=0.5) used as the baseline by every BTT-anchored stress
+// sweep (p2p_increasing_BTT, packet-loss / correlated-delay /
+// node-slowness wraps). p2p_baseline uses calibrated empirical
+// profiles instead (see P2PProfile). Median = BTT/2 mirrors the spec's
+// typical-mesh P99 propagation per OBFT.md §Setting (BTT = P99_propagation
+// + clock skew δ).
 func productionLogNormal(btt time.Duration) LogNormalDelay {
 	return LogNormalDelay{Median: btt / 2, Sigma: 0.5}
 }
 
-// p2pBaselineSweep enumerates the BTT × σ × instability cross-product
-// at (n, k) using the production-shaped LogNormal delay model
-// {Median: BTT/2, σ: σ}. The UI's conditions section picks one point
+// p2pBaselineSweep enumerates the BTT × profile × instability
+// cross-product at (n, k) using the empirically calibrated profile
+// from P2PProfile(name). The UI's conditions section picks one point
 // at a time via the N/K/BTT/σ/instability pickers; the heatmap cell
 // colors derive from whichever point is selected.
 //
@@ -202,23 +216,28 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 // level would just waste compute. The UI's per-row cell lookup falls
 // back to the Level=0 point for non-Baseline scenarios when the
 // picker is elsewhere.
-func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, sigmas []float64) Sweep {
+func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	baselineOnly := filterBaselineScenarios(scenarios)
-	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(sigmas)*len(InstabilityLevels))
+	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(profiles)*len(InstabilityLevels))
 	for _, btt := range baselineBTTValues {
-		for _, sigma := range sigmas {
+		for _, profile := range profiles {
+			profileIdx := P2PProfileIndex(profile)
 			for _, level := range InstabilityLevels {
 				base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 				base.K = k
-				base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
-				// Co-set Mesh.HopDelay so mesh-mode Healthy actually
-				// responds to the σ axis. Per-hop median = BTT/3 keeps
-				// the convolution over ~2 mesh hops landing near the
-				// direct-mode cluster-wide envelope (Mesh-as-realism
-				// calibration); Sigma matches the direct-mode sigma so
-				// the tail shape stays comparable.
-				base.Mesh.HopDelay = LogNormalDelay{Median: btt / 3, Sigma: sigma}
+				// Calibrated profile drives BOTH direct and mesh paths.
+				// At n=4 the cluster typically fits inside one
+				// gossipsub mesh, so per-hop ≈ cluster-wide for real
+				// prod; using the same profile for cfg.Network and
+				// cfg.Mesh.HopDelay keeps the report's direct and
+				// mesh columns anchored to the same empirical data
+				// instead of one being synthetic. Fresh per-point
+				// instances so stateful wrappers (loss / correlated /
+				// markov-slow added by Apply or instability wraps)
+				// compose on independent state per sim.
+				base.Network = P2PProfile(profile)
+				base.Mesh.HopDelay = P2PProfile(profile)
 				// At level=0 we run the full catalog (no wrap is a no-op
 				// for non-Baseline anyway, but emitting them here is what
 				// the heatmap reads for the bulk of scenarios). At
@@ -228,13 +247,13 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 					pointScenarios = baselineOnly
 				}
 				pts = append(pts, SweepPoint{
-					Label: fmt.Sprintf("n=%d K=%d BTT=%dms p2p_delay=%.1f instab=%s",
-						n, k, btt.Milliseconds(), sigma, level.Name),
+					Label: fmt.Sprintf("n=%d K=%d BTT=%dms profile=%s instab=%s",
+						n, k, btt.Milliseconds(), profile, level.Name),
 					Fields: map[string]float64{
 						"N":           float64(n),
 						"K":           float64(k),
 						"BTT":         float64(btt.Milliseconds()),
-						"p2p_delay":   sigma,
+						"p2p_profile": float64(profileIdx),
 						"Instability": float64(level.Level),
 					},
 					Config: BatchConfig{
@@ -251,7 +270,7 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	return Sweep{
 		Name:        "p2p_baseline",
 		Title:       "Baseline conditions",
-		Description: "Production-shaped LogNormal baseline across (n, K, BTT, σ, instability). The conditions section's pickers select the operating point; heatmap cell colors track the same selection. The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
+		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×4 / outlier frequency ×4 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
 		AxisLabel:   "", // multi-axis; UI picks one point at a time.
 		Points:      pts,
 	}
@@ -301,49 +320,6 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 		Params:      []string{"LogNormal σ=0.5"},
 		Description: "BTT-degradation envelope under production-shaped tail (σ=0.5). One (n, K) slice per `make stresstest` run; the chart filters by the currently-selected (n, K).",
 		AxisLabel:   "BTT",
-		Points:      pts,
-	}
-}
-
-func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
-	fallback, byGroup := iters.asBatchIterations()
-	sigmas := []float64{0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9}
-	pts := make([]SweepPoint, 0, len(sigmas))
-	for _, sigma := range sigmas {
-		base := withClusterSize(DefaultProposerDutyConfig(300*time.Millisecond), n)
-		base.K = k
-		// Heavy-tail propagation: log-normal centered at BTT/2 (= typical
-		// P50 propagation per spec §Setting), with Sigma controlling tail
-		// fatness. P99/P50 ratio = exp(Sigma · 2.326): 1.27× / 2.01× /
-		// 2.54× / 3.20× / 4.03× / 5.09× at the six sample points.
-		base.Network = LogNormalDelay{Median: base.BTT / 2, Sigma: sigma}
-		// Co-set Mesh.HopDelay so mesh-mode Healthy responds to the σ
-		// axis. Per-hop median = BTT/3 keeps calibration; sigma mirrors
-		// the cluster-wide value so the heavy-tail effect compounds
-		// through the mesh convolution.
-		base.Mesh.HopDelay = LogNormalDelay{Median: base.BTT / 3, Sigma: sigma}
-		pts = append(pts, SweepPoint{
-			Label: fmt.Sprintf("n=%d K=%d Sigma=%.2f", n, k, sigma),
-			Fields: map[string]float64{
-				"N":     float64(n),
-				"K":     float64(k),
-				"Sigma": sigma,
-			},
-			Config: BatchConfig{
-				Iterations:        fallback,
-				IterationsByGroup: byGroup,
-				Base:              base,
-				Scenarios:         scenarios,
-				Protocols:         protocols,
-			},
-		})
-	}
-	return Sweep{
-		Name:        "p2p_heavy_tail",
-		Title:       "Heavy-tail propagation",
-		Params:      []string{"LogNormalDelay", "BTT=300ms", "Median=BTT/2"},
-		Description: "Surfaces P99/P50-ratio effects on OBFT's hard B_k cutoff vs QBFT's round-change tolerance. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
-		AxisLabel:   "LogNormal sigma",
 		Points:      pts,
 	}
 }

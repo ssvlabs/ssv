@@ -28,8 +28,8 @@ func TestSweeps_HealthyStaysMesh(t *testing.T) {
 		twoabadapter.Protocol{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
-	sigmas := []float64{0.5}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, sigmas)
+	profiles := []string{"prod"}
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles)
 	for _, sw := range sweeps {
 		for ptIdx, pt := range sw.Points {
 			var healthy *ct.Scenario

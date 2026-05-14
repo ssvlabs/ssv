@@ -1,6 +1,7 @@
 package consensustest_test
 
 import (
+	"math"
 	mrand "math/rand"
 	"strconv"
 	"testing"
@@ -392,3 +393,135 @@ func TestLossyNetwork_PairIndependence(t *testing.T) {
 func formatFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', 2, 64)
 }
+
+// TestLogNormalMixture_ComponentSelectionWeights — the inverse-CDF
+// component picker should fire each component at its declared weight.
+// Big sample, tight tolerance.
+func TestLogNormalMixture_ComponentSelectionWeights(t *testing.T) {
+	mix := ct.NewLogNormalMixtureDelay([]ct.LogNormalComponent{
+		{Weight: 0.25, Median: 100 * time.Microsecond, Sigma: 0.01},
+		{Weight: 0.55, Median: 10000 * time.Microsecond, Sigma: 0.01},
+		{Weight: 0.20, Median: 1000000 * time.Microsecond, Sigma: 0.01},
+	})
+	// Components have order-of-magnitude separated medians and tiny σ so
+	// each sample's order of magnitude identifies its source component.
+	const N = 20000
+	rng := mrand.New(mrand.NewSource(42))
+	counts := [3]int{}
+	for i := 0; i < N; i++ {
+		d := mix.Delay(rng, 1, 2, ct.KindCommit)
+		switch {
+		case d < 1*time.Millisecond:
+			counts[0]++
+		case d < 100*time.Millisecond:
+			counts[1]++
+		default:
+			counts[2]++
+		}
+	}
+	expect := []float64{0.25, 0.55, 0.20}
+	for i, c := range counts {
+		observed := float64(c) / float64(N)
+		require.InDeltaf(t, expect[i], observed, 0.015,
+			"component %d weight: expected %v, got %v (count %d / %d)", i, expect[i], observed, c, N)
+	}
+}
+
+// TestLogNormalMixture_Slowed — Slowed(k) scales each component's
+// median by k while keeping σ. The mixture's overall median should
+// move by ~k as well (each component's median × k, weights unchanged).
+func TestLogNormalMixture_Slowed(t *testing.T) {
+	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture()
+	slowed := base.Slowed(4)
+	require.Len(t, slowed.Components, len(base.Components))
+	for i, c := range base.Components {
+		require.Equal(t, c.Sigma, slowed.Components[i].Sigma,
+			"component %d sigma must be unchanged", i)
+		require.Equal(t, c.Weight, slowed.Components[i].Weight,
+			"component %d weight must be unchanged", i)
+		require.InEpsilonf(t, float64(c.Median)*4, float64(slowed.Components[i].Median), 1e-9,
+			"component %d median must scale by factor", i)
+	}
+}
+
+// TestLogNormalMixture_HeavyTailed — HeavyTailed(k) scales each σ so
+// the probability of drawing above the original P99 grows by k. Verify
+// empirically on a single-component mixture (where the math is exact)
+// and structurally on the calibrated prod mixture.
+func TestLogNormalMixture_HeavyTailed(t *testing.T) {
+	// Single-component sanity test: P(X > original-P99) should be ~k%
+	// after HeavyTailed(k). Use a synthetic single-component mixture
+	// so component effects don't interfere with the measurement.
+	const (
+		mid   = 1000 * time.Microsecond
+		sigma = 0.5
+		k     = 4.0
+		N     = 50000
+	)
+	origP99 := time.Duration(float64(mid) * math.Exp(2.326*sigma))
+	heavy := ct.NewLogNormalMixtureDelay([]ct.LogNormalComponent{
+		{Weight: 1, Median: mid, Sigma: sigma},
+	}).HeavyTailed(k)
+	rng := mrand.New(mrand.NewSource(7))
+	exceed := 0
+	for i := 0; i < N; i++ {
+		d := heavy.Delay(rng, 1, 2, ct.KindCommit)
+		if d > origP99 {
+			exceed++
+		}
+	}
+	observed := float64(exceed) / float64(N)
+	// Expected ≈ 4% (1% × k). Tolerance ±0.6% absorbs P99-tail sampling
+	// noise at N=50_000.
+	require.InDeltaf(t, 0.04, observed, 0.006,
+		"P(X > original-P99) after HeavyTailed(%v): expected 0.04, got %v (%d/%d exceeded %v)",
+		k, observed, exceed, N, origP99)
+
+	// Structural test on the calibrated prod mixture: each component's
+	// σ must scale by the same factor; medians unchanged.
+	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture()
+	heavyProd := base.HeavyTailed(4)
+	require.Len(t, heavyProd.Components, len(base.Components))
+	// Exact: Φ^-1(0.99)/Φ^-1(0.96) at k=4. Computed inline from math.Erfinv
+	// so the assertion stays tight (epsilon = 1e-9) and the expected
+	// number doesn't drift if someone re-tunes the math constant.
+	z99 := math.Sqrt2 * math.Erfinv(2*0.99-1)
+	z96 := math.Sqrt2 * math.Erfinv(2*0.96-1)
+	expectScale := z99 / z96
+	for i, c := range base.Components {
+		require.Equal(t, c.Median, heavyProd.Components[i].Median,
+			"component %d median must be unchanged", i)
+		require.Equal(t, c.Weight, heavyProd.Components[i].Weight,
+			"component %d weight must be unchanged", i)
+		require.InEpsilonf(t, c.Sigma*expectScale, heavyProd.Components[i].Sigma, 1e-9,
+			"component %d sigma must scale by Φ^-1(0.99)/Φ^-1(0.96)=%v", i, expectScale)
+	}
+}
+
+// TestP2PProfile_AllNamesResolve — every name in P2PProfileNames must
+// resolve to a usable NetworkModel; P2PProfileIndex must round-trip
+// the name back to its index. Catches typos / mismatch between the
+// switch in P2PProfile and the names list.
+func TestP2PProfile_AllNamesResolve(t *testing.T) {
+	require.NotEmpty(t, ct.P2PProfileNames)
+	rng := mrand.New(mrand.NewSource(1))
+	for i, name := range ct.P2PProfileNames {
+		require.Equal(t, i, ct.P2PProfileIndex(name),
+			"P2PProfileIndex(%q) must return the slice index", name)
+		profile := ct.P2PProfile(name)
+		require.NotNil(t, profile, "P2PProfile(%q) returned nil", name)
+		// Sanity-sample to make sure Delay doesn't panic / return
+		// negative durations.
+		for j := 0; j < 100; j++ {
+			d := profile.Delay(rng, 1, 2, ct.KindCommit)
+			require.GreaterOrEqualf(t, d, time.Duration(0), "P2PProfile(%q): negative Delay %v", name, d)
+		}
+	}
+	require.Panicsf(t,
+		func() { ct.P2PProfile("nope-not-a-profile") },
+		"P2PProfile should panic on unknown name")
+	require.Panicsf(t,
+		func() { ct.P2PProfileIndex("nope-not-a-profile") },
+		"P2PProfileIndex should panic on unknown name")
+}
+

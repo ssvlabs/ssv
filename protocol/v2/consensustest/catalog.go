@@ -14,15 +14,16 @@ package consensustest
 // tier runs them with a different network model:
 //   - TestCorrectness uses CorrectnessProfile (ConstantDelay): outcomes
 //     are deterministic, the test asserts the declared outcome class.
-//   - TestStress runs the seven curated DefaultSweeps at a single
+//   - TestStress runs the six curated DefaultSweeps at a single
 //     (n, K) operating point across the OBFT, 2abOBFT, and QBFT
 //     protocol families (with BTT-multiplier variants — see
-//     stress_test.go for the full registered list). Every sweep uses
-//     LogNormalDelay as its propagation model (production-shaped per
-//     OBFT.md §Setting):
-//       p2p_baseline           (BTT × σ × instability cross-product)
-//       p2p_increasing_BTT     (BTT axis)
-//       p2p_heavy_tail         (σ axis)
+//     stress_test.go for the full registered list). p2p_baseline
+//     uses calibrated empirical mesh-hop profiles fitted to SSV
+//     prod / stage gossipsub telemetry; the synthetic-degradation
+//     sweeps retain LogNormal anchors so their parameter axis stays
+//     meaningful:
+//       p2p_baseline           (BTT × profile × instability cross-product)
+//       p2p_increasing_BTT     (BTT axis, LogNormal{Median: BTT/2, σ: 0.5})
 //       p2p_packet_loss        (LossyNetwork × LossRate axis)
 //       p2p_correlated_delays  (CorrelatedLinkDelay × BadLinkProb axis)
 //       p2p_node_slowness      (MarkovianSlownessDelay × slow-op count)

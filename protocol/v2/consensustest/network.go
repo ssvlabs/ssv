@@ -1,6 +1,7 @@
 package consensustest
 
 import (
+	"fmt"
 	"math"
 	mrand "math/rand"
 	"time"
@@ -270,6 +271,300 @@ func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.
 		d = time.Nanosecond
 	}
 	return d
+}
+
+// LogNormalMixtureDelay draws delays from a k-component lognormal mixture
+// — a strict generalization of LogNormalDelay that captures the heavier
+// upper tail seen in real SSV mainnet gossipsub data.
+//
+// Empirical fact (24h prod-mainnet cluster, COMMITTEE-1_2_3_4, 189,686
+// cross-op send→recv pairs, May 2026): a single lognormal under-fits the
+// tail dramatically — p99 by ~22%, p99.9 by ~73%, p99.99 by ~85%. A
+// 3-component lognormal mixture fits every quantile from p50 through
+// p99.9 within ~4%. See Prod_1_2_3_4_CalibratedLogNormalMixture /
+// Stage_53_54_55_56_CalibratedLogNormalMixture /
+// Stage_97_98_99_100_CalibratedLogNormalMixture for the fitted
+// parameters and tools/scout for the analysis used to derive them.
+//
+// Model:
+//   X ~ Σ_i π_i · LogNormal(μ_i, σ_i)     with Σ π_i = 1
+// Sampling: pick component i with probability π_i, then draw
+//   X = exp(μ_i + σ_i · Z),  Z ~ N(0, 1)
+//
+// Parameters per component:
+//   - Weight: π_i, the mixture weight. Must sum to 1 across components
+//     (the constructor normalizes; the Delay method assumes normalized).
+//   - Median: exp(μ_i), the per-component median.
+//   - Sigma:  σ_i, log-space stddev of component i.
+//
+// Stateless apart from the passed-in *math/rand.Rand; safe to share
+// across sims. Determinism preserved via the seeded rng. Like
+// LogNormalDelay, extreme-tail draws collapse to DroppedDelay rather
+// than overflowing time.Duration.
+type LogNormalMixtureDelay struct {
+	Components []LogNormalComponent
+	// cumWeights is built once by NewLogNormalMixtureDelay; reading it
+	// is data-race-free as long as no caller mutates Components after
+	// construction.
+	cumWeights []float64
+}
+
+type LogNormalComponent struct {
+	Weight float64       // π_i, mixture weight
+	Median time.Duration // exp(μ_i)
+	Sigma  float64       // σ_i, log-space stddev
+}
+
+// NewLogNormalMixtureDelay normalizes weights and precomputes the
+// cumulative weight table used for component selection. Panics if
+// no components are supplied (an empty mixture is not a valid model).
+func NewLogNormalMixtureDelay(components []LogNormalComponent) *LogNormalMixtureDelay {
+	if len(components) == 0 {
+		panic("LogNormalMixtureDelay requires at least one component")
+	}
+	var sum float64
+	for _, c := range components {
+		if c.Weight < 0 {
+			panic("LogNormalMixtureDelay: component weights must be non-negative")
+		}
+		sum += c.Weight
+	}
+	if sum <= 0 {
+		panic("LogNormalMixtureDelay: component weights sum to zero")
+	}
+	cum := make([]float64, len(components))
+	running := 0.0
+	for i, c := range components {
+		running += c.Weight / sum
+		cum[i] = running
+	}
+	// Guard against floating drift on the last entry.
+	cum[len(cum)-1] = 1.0
+	return &LogNormalMixtureDelay{Components: components, cumWeights: cum}
+}
+
+func (l *LogNormalMixtureDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Duration {
+	// Pick a component by inverse-CDF on the cumulative weights.
+	u := rng.Float64()
+	idx := 0
+	for i, c := range l.cumWeights {
+		if u <= c {
+			idx = i
+			break
+		}
+	}
+	c := l.Components[idx]
+	if c.Median <= 0 {
+		return time.Nanosecond
+	}
+	mu := math.Log(float64(c.Median))
+	z := rng.NormFloat64()
+	raw := math.Exp(mu + c.Sigma*z)
+	// Same overflow guard as LogNormalDelay: clamp extreme tail draws to
+	// DroppedDelay so time.Duration(+Inf) can't silently become a negative
+	// duration downstream.
+	if raw > float64(DroppedDelay) || math.IsNaN(raw) || math.IsInf(raw, 1) {
+		return DroppedDelay
+	}
+	d := time.Duration(raw)
+	if d < time.Nanosecond {
+		d = time.Nanosecond
+	}
+	return d
+}
+
+// Prod_1_2_3_4_CalibratedLogNormalMixture returns the 3-component lognormal
+// mixture fitted to 24h of SSV prod-mainnet `COMMITTEE-1_2_3_4` cross-op
+// QBFT propagation latency data (proposal+prepare+commit pooled,
+// n=189,686 sender→receiver pairs sampled 2026-05-12 11:00Z → 2026-05-13 11:00Z).
+//
+// Empirical quantile reproduction within: p50 +0.3%, p90 +1.0%, p95 +0.1%,
+// p99 +3.6%, p99.9 −2.1%, p99.99 +14% (well within tail-sampling noise
+// at this quantile).
+func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
+	// Medians are stored as integer microseconds (sub-µs precision is
+	// well below clock-skew noise floor; keeping ints removes any
+	// Duration-rounding ambiguity).
+	return NewLogNormalMixtureDelay([]LogNormalComponent{
+		{Weight: 0.7794, Median: 1303 * time.Microsecond, Sigma: 0.3774},
+		{Weight: 0.0805, Median: 1458 * time.Microsecond, Sigma: 1.4909},
+		{Weight: 0.1400, Median: 3457 * time.Microsecond, Sigma: 0.4140},
+	})
+}
+
+// Stage_53_54_55_56_CalibratedLogNormalMixture returns the 3-component lognormal mixture
+// fitted to 24h of SSV stage-hoodi `COMMITTEE-53_54_55_56` cross-op QBFT
+// propagation latency data (proposal+prepare+commit pooled, n=342,030
+// sender→receiver pairs sampled 2026-05-13 11:00Z → 2026-05-14 10:30Z).
+//
+// Empirical quantile reproduction within: p50 +1.4%, p90 +0.9%, p95 +1.2%,
+// p99 −0.05%, p99.9 +12%; p99.99 is under-predicted by ~65% because the
+// stage extreme tail is dominated by a handful of multi-second events
+// (likely QBFT round-change timeouts) that are not lognormal.
+func Stage_53_54_55_56_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
+	return NewLogNormalMixtureDelay([]LogNormalComponent{
+		{Weight: 0.0905, Median: 318 * time.Microsecond, Sigma: 1.6463},
+		{Weight: 0.3759, Median: 1084 * time.Microsecond, Sigma: 0.7824},
+		{Weight: 0.5337, Median: 2581 * time.Microsecond, Sigma: 0.4030},
+	})
+}
+
+// Stage_97_98_99_100_CalibratedLogNormalMixture is fit to 24h of stage-hoodi
+// `COMMITTEE-97_98_99_100` cross-op QBFT propagation latency (n=342,409
+// pairs sampled 2026-05-13 10:00Z → 2026-05-14 10:30Z).
+//
+// Empirical fit (3-component): p50 +1.9%, p90 −0.6%, p99 −10.5%,
+// p99.9 +86%, p99.99 +117%. The 3-component fit struggles above p99
+// on this cluster because the tail is composed of bandwidth-bound
+// proposer events (p99 = 40 ms) that exceed the lognormal-mixture
+// regime. If your scenario specifically cares about the p99–p99.9
+// region here, consider the 4-component refit logged in
+// tools/scout/analysis/output/stage-hoodi_97-100_mixture3_fit.json.
+func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
+	return NewLogNormalMixtureDelay([]LogNormalComponent{
+		{Weight: 0.1379, Median: 976 * time.Microsecond, Sigma: 1.9473},
+		{Weight: 0.4049, Median: 2261 * time.Microsecond, Sigma: 0.9452},
+		{Weight: 0.4573, Median: 3519 * time.Microsecond, Sigma: 0.3800},
+	})
+}
+
+// P2PProfileNames lists the calibrated mesh-hop-delay profiles exposed
+// to the stress driver and to the report UI. Order is load-bearing: the
+// index is what gets stored in the per-point Fields["p2p_profile"]
+// float64 (the payload's Fields map is float64-valued, so profile
+// identity is encoded as a stable index into this slice). Keep the
+// order stable across releases; new profiles append at the end.
+//
+// Six profiles:
+//   - prod / stage1 / stage2: the three empirically-fitted mixtures
+//     from Prod_1_2_3_4_*, Stage_53_54_55_56_*, Stage_97_98_99_100_*.
+//   - slow: prod with each component median ×4 (same shape, shifted
+//     right by 4× — models a uniformly slower-than-prod mesh).
+//   - heavy_tail: prod with each component σ scaled so the probability
+//     of drawing above the original P99 is 4× (medians unchanged —
+//     models prod with rarer events spiking higher / more often).
+//   - slow_heavy_tail: prod ∘ slow ∘ heavy_tail; uniformly slower mesh
+//     with bursty rare events on top.
+var P2PProfileNames = []string{
+	"prod",
+	"stage1",
+	"stage2",
+	"slow",
+	"heavy_tail",
+	"slow_heavy_tail",
+}
+
+// P2PProfile returns a fresh NetworkModel for the named profile. The
+// returned model is per-call (LossyNetwork / CorrelatedLinkDelay-style
+// stateful wrappers compose on top in sweep builders, so a fresh
+// instance per sim is required for determinism). Panics on unknown
+// names — names must match P2PProfileNames exactly.
+func P2PProfile(name string) NetworkModel {
+	switch name {
+	case "prod":
+		return Prod_1_2_3_4_CalibratedLogNormalMixture()
+	case "stage1":
+		return Stage_53_54_55_56_CalibratedLogNormalMixture()
+	case "stage2":
+		return Stage_97_98_99_100_CalibratedLogNormalMixture()
+	case "slow":
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(4)
+	case "heavy_tail":
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(4)
+	case "slow_heavy_tail":
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(4).HeavyTailed(4)
+	default:
+		panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
+	}
+}
+
+// P2PProfileIndex returns the index of `name` in P2PProfileNames. Used
+// by sweep builders to encode the profile selection as a float64 in
+// Fields["p2p_profile"] (the report payload's Fields map is float64-
+// valued; profile identity round-trips via the index). Panics on
+// unknown names so a typo in a sweep builder fails loudly rather than
+// producing a silent off-by-one in the report.
+func P2PProfileIndex(name string) int {
+	for i, n := range P2PProfileNames {
+		if n == name {
+			return i
+		}
+	}
+	panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
+}
+
+// Slowed returns a copy of `l` with each component's Median scaled by
+// `factor`. Sigma values are left unchanged, so the per-component shape
+// (P99/median ratio) is preserved — the whole distribution shifts right
+// in time by the same factor. Used by derived profiles like "slow"
+// (factor=4 over prod).
+//
+// Panics on factor ≤ 0 — a non-positive scaling factor would either
+// invert or collapse the distribution and almost certainly signals a
+// caller bug.
+func (l *LogNormalMixtureDelay) Slowed(factor float64) *LogNormalMixtureDelay {
+	if factor <= 0 {
+		panic(fmt.Sprintf("LogNormalMixtureDelay.Slowed: factor must be > 0, got %v", factor))
+	}
+	out := make([]LogNormalComponent, len(l.Components))
+	for i, c := range l.Components {
+		out[i] = LogNormalComponent{
+			Weight: c.Weight,
+			Median: time.Duration(float64(c.Median) * factor),
+			Sigma:  c.Sigma,
+		}
+	}
+	return NewLogNormalMixtureDelay(out)
+}
+
+// HeavyTailed returns a copy of `l` with each component's Sigma scaled
+// so the probability of drawing a value above the *original*
+// distribution's P99 increases by `outlierFreqMultiplier`. Per-component
+// median is left unchanged, so the mixture's overall median shifts by
+// only a few percent (re-weighting at constant component medians).
+// Used by derived profiles like "heavy_tail" (outlier-freq×4 over prod).
+//
+// Math: for one lognormal component with location μ = ln(median) and
+// scale σ, P(X > V) = 1 − Φ((ln V − μ)/σ). With V fixed at the original
+// P99 (so (ln V − μ)/σ_old = z_{0.99} ≈ 2.326), we want the new
+// distribution to satisfy 1 − Φ((ln V − μ)/σ_new) = outlierFreqMultiplier
+// × (1 − Φ(z_{0.99})). Solving: σ_new = σ_old × z_{0.99} / z_{1 − k·(1−q)},
+// with q=0.99 and k=outlierFreqMultiplier. At k=4 the scale factor is
+// 2.326/Φ^{-1}(0.96) ≈ 2.326/1.751 ≈ 1.328.
+//
+// Panics on k ≤ 0 (no meaningful "negative outlier frequency"); also
+// panics when k·(1−q) ≥ 1 (k ≥ 100 at q=0.99 — beyond that the
+// post-transformation P99-threshold falls inside the bulk of the
+// distribution and Φ^{-1} of a non-positive argument is undefined).
+func (l *LogNormalMixtureDelay) HeavyTailed(outlierFreqMultiplier float64) *LogNormalMixtureDelay {
+	if outlierFreqMultiplier <= 0 {
+		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: multiplier must be > 0, got %v", outlierFreqMultiplier))
+	}
+	const refQ = 0.99
+	newP := 1.0 - outlierFreqMultiplier*(1.0-refQ)
+	if newP <= 0 || newP >= 1 {
+		panic(fmt.Sprintf("LogNormalMixtureDelay.HeavyTailed: multiplier %v at q=%v drives target quantile out of (0, 1)", outlierFreqMultiplier, refQ))
+	}
+	scale := standardNormalQuantile(refQ) / standardNormalQuantile(newP)
+	out := make([]LogNormalComponent, len(l.Components))
+	for i, c := range l.Components {
+		out[i] = LogNormalComponent{
+			Weight: c.Weight,
+			Median: c.Median,
+			Sigma:  c.Sigma * scale,
+		}
+	}
+	return NewLogNormalMixtureDelay(out)
+}
+
+// standardNormalQuantile returns Φ^{-1}(p) — the inverse CDF of the
+// standard normal. Implemented as √2 · erfinv(2p − 1) since Go's stdlib
+// exposes Erfinv but not the inverse normal directly. Inputs outside
+// (0, 1) panic by way of math.Erfinv returning ±Inf, which propagates
+// to the caller's σ-scaling computation as an invalid factor — caught
+// upstream by HeavyTailed's range check.
+func standardNormalQuantile(p float64) float64 {
+	return math.Sqrt2 * math.Erfinv(2*p-1)
 }
 
 // LossyNetwork models bursty stochastic packet loss via a per-link two-state

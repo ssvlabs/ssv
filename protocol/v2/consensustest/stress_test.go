@@ -53,8 +53,10 @@ import (
 //
 //   - CLUSTER_SIZES_N — comma-separated cluster sizes ∈ {4, 7}. Default: 4.
 //   - LAYERS_K — comma-separated K values ∈ {2, 3, 4}. Default: 2,4.
-//   - P2P_DELAYS — comma-separated LogNormal σ values for the p2p_baseline
-//     sweep's jitter axis. Default: 0.1,0.5,0.7,0.9.
+//   - P2P_PROFILES — comma-separated calibrated mesh-hop profile names
+//     for the p2p_baseline sweep's profile axis. Valid values: prod,
+//     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
+//     six. See ct.P2PProfileNames / ct.P2PProfile.
 //
 // Usage:
 //
@@ -62,7 +64,7 @@ import (
 //
 // Or directly:
 //
-//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2,4 P2P_DELAYS=0.1,0.5,0.7,0.9 \
+//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2,4 P2P_PROFILES=prod,stage1,stage2 \
 //	    ITERATIONS_BASELINE_OPERATIONS=100 ITERATIONS_UNSTABLE_OPERATIONS=10 \
 //	    go test -timeout 30m -run TestStress ./protocol/v2/consensustest/
 //
@@ -119,25 +121,30 @@ func TestStress(t *testing.T) {
 	}
 	require.NotEmpty(t, layersK, "LAYERS_K is empty after parsing")
 
-	// P2P_DELAYS — comma-separated LogNormal σ values for the p2p_baseline
-	// sweep's jitter axis. Default: 0.1,0.5,0.7,0.9. Each value becomes
-	// one p2p_delay point in the BTT × p2p_delay × instability cross-product.
-	p2pDelaysRaw := os.Getenv("P2P_DELAYS")
-	if p2pDelaysRaw == "" {
-		p2pDelaysRaw = "0.1,0.5,0.7,0.9"
+	// P2P_PROFILES — comma-separated calibrated mesh-hop profile names
+	// for the p2p_baseline sweep's profile axis. Default: all six
+	// (prod, stage1, stage2, slow, heavy_tail, slow_heavy_tail) from
+	// ct.P2PProfileNames. Each name becomes one point in the
+	// BTT × profile × instability cross-product, with both cfg.Network
+	// and cfg.Mesh.HopDelay sourced from the named profile.
+	p2pProfilesRaw := os.Getenv("P2P_PROFILES")
+	if p2pProfilesRaw == "" {
+		p2pProfilesRaw = strings.Join(ct.P2PProfileNames, ",")
 	}
-	var sigmas []float64
-	for _, s := range strings.Split(p2pDelaysRaw, ",") {
+	var profiles []string
+	validProfileNames := make(map[string]bool, len(ct.P2PProfileNames))
+	for _, name := range ct.P2PProfileNames {
+		validProfileNames[name] = true
+	}
+	for _, s := range strings.Split(p2pProfilesRaw, ",") {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
-		v, err := strconv.ParseFloat(s, 64)
-		require.NoErrorf(t, err, "invalid P2P_DELAYS value %q", s)
-		require.GreaterOrEqualf(t, v, 0.0, "P2P_DELAYS value %g must be >= 0", v)
-		sigmas = append(sigmas, v)
+		require.Truef(t, validProfileNames[s], "invalid P2P_PROFILES value %q; valid: %v", s, ct.P2PProfileNames)
+		profiles = append(profiles, s)
 	}
-	require.NotEmpty(t, sigmas, "P2P_DELAYS is empty after parsing")
+	require.NotEmpty(t, profiles, "P2P_PROFILES is empty after parsing")
 
 	// Build (n, K) pairs: cross-product of clusterSizes × layersK,
 	// filtering out pairs where K < MinK(n) (below BFT-liveness floor).
@@ -213,7 +220,7 @@ func TestStress(t *testing.T) {
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
 	for pairIdx, pp := range pairs {
-		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, sigmas)
+		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		pairStart := time.Now()
 		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)
