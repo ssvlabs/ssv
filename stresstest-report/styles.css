@@ -63,7 +63,20 @@ section.heatmap {
 
 /* Shared grid template — every .hrow inside every card uses the same
  * column geometry so cells align vertically across cards and the
- * column-header bar. Both rules below stay in sync. */
+ * column-header bar. Both rules below stay in sync.
+ *
+ * Trailing trim (right inset) is needed so the rightmost cell sits at
+ * roughly the same distance from the section's right edge as the
+ * scenario-name TEXT sits from the section's left edge (.hname has
+ * 0.7em internal padding-left on top of the card's 1em padding-left,
+ * for a 1.7em total left text inset). Without it the rightmost cell
+ * stops at only 1em — visibly less padded than the left side.
+ *
+ * The split between .heatmap-cols (outside the card) and .hrow
+ * (inside the card, which itself has 1em right padding) reflects
+ * where the inset is sourced from: col headers absorb the full 1.7em
+ * in their own padding-right; data rows get only the 0.7em difference
+ * because the card's padding already contributes 1em. */
 .heatmap-cols, .hrow {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) repeat(var(--hcols), minmax(96px, 130px));
@@ -71,12 +84,22 @@ section.heatmap {
   align-items: center;
 }
 
-/* Column header bar — sits above the cards. Padded horizontally to
- * match the card interior so column positions line up. */
+/* Column header bar — sits above the cards. Padded 1em left (mirrors
+ * the card's padding-left) and 1.7em right (mirrors the card's
+ * padding-right plus the data-row right trim) so col positions line
+ * up with the rightmost data cell's right edge. */
 .heatmap-cols {
-  padding: 0 1em;
+  padding: 0 1.7em 0 1em;
   margin-bottom: 0.6em;
   font-variant-numeric: tabular-nums;
+}
+
+/* Data rows inside the card already inherit 1em right inset from
+ * .heatmap-group's padding-right; the extra 0.7em here brings the
+ * total right inset to 1.7em, matching the col header's right
+ * padding above and the scenario-name TEXT inset on the left. */
+.hrow {
+  padding-right: 0.7em;
 }
 .col-head {
   background: var(--surface-muted);
