@@ -11,6 +11,111 @@ import (
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
 )
 
+// TestMeshBandwidth_NoPhantomRelayOperator — in DeliveryMesh mode the
+// cluster's PerOperatorIn metric must not accumulate any bytes against
+// OperatorID(0). The sentinel-0 receiver was previously created by
+// charging relay-bound bytes through Emission, polluting the per-op
+// inbound histogram. Phase B's EmissionToRelay split fixed that;
+// pin the contract here.
+func TestMeshBandwidth_NoPhantomRelayOperator(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Delivery = ct.DeliveryMesh
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "mesh-mode healthy should decide")
+	require.Zero(t, out.Bandwidth.PerOperatorIn[0],
+		"PerOperatorIn[0] must stay zero — relay-bound bytes should not pollute the per-operator histogram")
+	// Sanity: cluster operators 1..N should have non-zero inbound.
+	for op := ct.OperatorID(1); op <= 4; op++ {
+		require.Positive(t, out.Bandwidth.PerOperatorIn[op],
+			"cluster operator %d expected non-zero PerOperatorIn", op)
+	}
+}
+
+// TestCalibration_MeshVsDirect_Healthy_OBFT validates Phase B's
+// calibration anchor: the default HopDelay = LogNormal{Median: BTT/3,
+// Sigma: 0.3} lands mesh-mode Healthy at the same OBFT outcome class
+// (decided at L_0) as direct-mode Healthy, with mesh-mode wire
+// bandwidth visibly larger (extra hops × relay reflood).
+//
+// Calibration target: bandwidth ratio ≥ 2× direct (mesh has D × hops
+// fanout vs direct's n-1). At n=4 with D=3 and ~2 hops, expect ~3-4×.
+// Success rate must match (both 100%) — OBFT's Phase 3 resolve fires
+// at a fixed schedule offset, so DecisionTime itself doesn't
+// differentiate the modes at Healthy.
+func TestCalibration_MeshVsDirect_Healthy_OBFT(t *testing.T) {
+	const iters = 20
+	btt := 200 * time.Millisecond
+	base := ct.DefaultProposerDutyConfig(btt)
+	// Match the stress matrix's production-shaped LogNormal default so
+	// the direct-mode anchor reflects what stress runs see.
+	base.Network = ct.LogNormalDelay{Median: btt / 2, Sigma: 0.5}
+
+	runMode := func(t *testing.T, delivery ct.DeliveryMode) (decided int, totalBytes int64) {
+		for i := 0; i < iters; i++ {
+			cfg := base
+			cfg.Seed = int64(i + 1)
+			cfg.Delivery = delivery
+			out, err := obftadapter.Protocol{}.Run(cfg)
+			require.NoError(t, err)
+			if out.Decided {
+				decided++
+			}
+			totalBytes += out.Bandwidth.TotalBytes
+		}
+		return
+	}
+	directDecided, directBW := runMode(t, ct.DeliveryDirect)
+	meshDecided, meshBW := runMode(t, ct.DeliveryMesh)
+	t.Logf("direct: %d/%d decided, total bandwidth %d B", directDecided, iters, directBW)
+	t.Logf("mesh:   %d/%d decided, total bandwidth %d B", meshDecided, iters, meshBW)
+
+	require.Equal(t, iters, directDecided, "direct healthy must decide every iter")
+	require.Equal(t, iters, meshDecided, "mesh healthy must decide every iter")
+	// Mesh bandwidth should be meaningfully larger than direct (extra
+	// hops × relay reflood). Conservative lower bound: 1.5× — well below
+	// the expected 3-4× but tolerant of per-seed variance and the
+	// publish-only outbound accounting (forwards from relays don't add
+	// to bandwidth; see emitMesh comment).
+	require.Greater(t, meshBW, int64(float64(directBW)*1.5),
+		"mesh bandwidth (%d B) should be at least 1.5× direct (%d B)", meshBW, directBW)
+}
+
+// TestAdapter_HealthyMesh_N4 runs the healthy path through the mesh
+// transport (4 cluster ops + 4 forward-only relays). Asserts the sim
+// decides at L_0 just like direct-mode healthy — the mesh transport is
+// transparent to the protocol layer, and Phase A's calibration target
+// is that mesh-mode Healthy lands roughly at the same outcome as direct
+// mode at n=4. Tight tolerance not required here; we just need to
+// confirm propagation works end-to-end through the mesh.
+func TestAdapter_HealthyMesh_N4(t *testing.T) {
+	btt := 200 * time.Millisecond
+	cfg := ct.SimConfig{
+		N:            4,
+		Operators:    ct.MakeOperators(4),
+		SlotDuration: 12 * time.Second,
+		RelayCutoff:  4 * time.Second,
+		BTT:          btt,
+		Byz:          ct.ByzPattern{Kind: ct.ByzNone},
+		Seed:         1,
+		Delivery:     ct.DeliveryMesh,
+		Mesh: ct.MeshConfig{
+			// Phase A picks BTT/3 as the working calibration anchor
+			// (mesh-as-realism: 2-hop typical at n=4 + 4 relays gives
+			// cluster-wide P99 ≈ direct-mode BTT). Phase B will tune.
+			HopDelay: ct.LogNormalDelay{Median: btt / 3, Sigma: 0.3},
+		},
+	}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "mesh-mode healthy should decide")
+	require.Equal(t, 0, out.DecidedRound, "mesh-mode healthy should decide at L_0 fastest path")
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+	t.Logf("mesh-mode healthy: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
+}
+
 // TestAdapter_HealthyAtClusterSizes verifies the adapter runs healthy at
 // every SSV-supported cluster size (n=4,7,10,13). Phase 1 plumbs cfg.K /
 // cfg.BroadcastBudget / cfg.FetchAt through the adapter; n != 4 was previously

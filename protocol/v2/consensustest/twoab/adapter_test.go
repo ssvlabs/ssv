@@ -11,6 +11,33 @@ import (
 	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
+// TestAdapter_HealthyMesh_N4 — 2abOBFT healthy through the mesh
+// transport. See the OBFT adapter's mesh smoke for the rationale.
+func TestAdapter_HealthyMesh_N4(t *testing.T) {
+	btt := 200 * time.Millisecond
+	cfg := ct.SimConfig{
+		N:            4,
+		Operators:    ct.MakeOperators(4),
+		SlotDuration: 12 * time.Second,
+		RelayCutoff:  4 * time.Second,
+		BTT:          btt,
+		Byz:          ct.ByzPattern{Kind: ct.ByzNone},
+		Seed:         1,
+		Delivery:     ct.DeliveryMesh,
+		Mesh: ct.MeshConfig{
+			HopDelay: ct.LogNormalDelay{Median: btt / 3, Sigma: 0.3},
+		},
+	}
+	out, err := twoabadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "mesh-mode healthy should decide")
+	require.Equal(t, 0, out.DecidedRound, "mesh-mode healthy should decide at L_0 fastest path")
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.SingleV, "SingleV: %s", rep)
+	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
+	t.Logf("mesh-mode healthy: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
+}
+
 // TestAdapter_HealthyAtClusterSizes verifies the adapter runs healthy at
 // every SSV-supported cluster size (n=4, 7, 10, 13). Mirrors the bare
 // OBFT adapter's TestAdapter_HealthyAtClusterSizes.

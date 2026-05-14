@@ -48,6 +48,93 @@ func (q *eventQueue) Pop() any {
 
 var _ heap.Interface = (*eventQueue)(nil)
 
+// ---- evtMeshArrival ----------------------------------------------------
+
+// evtMeshArrival is the mesh-transport delivery event. One per
+// (publisher, msgID, hop): scheduled by emitMesh for first-hop neighbors
+// of the publisher, and by its own handler for further hops via reflood.
+// The handler dedup's by (to, msgID); on first arrival, delivers to the
+// local protocol via builder (only when `to` is a cluster op, not a
+// relay) and schedules forwards to every other mesh neighbor.
+//
+// The protocol arrival event (evtPhase1Arrival / evtCommitArrival /
+// evtCertArrival) is constructed lazily via builder so we don't pay
+// cloneXxx() at every forward hop — only the cluster op that consumes
+// the message pays the clone cost. Layer / bytes are carried through
+// for future per-hop bandwidth accounting; today's accounting records
+// outbound at publish (in emitMesh) and at each forward (here).
+type evtMeshArrival struct {
+	from, to ct.MeshNode
+	msgID    ct.MsgID
+	kind     ct.MsgKind
+	layer    int
+	bytes    int64
+	builder  func(to obftbase.OperatorID) event
+}
+
+func (e *evtMeshArrival) describe() string {
+	return fmt.Sprintf("MeshArrival[from=%d to=%d msg=%d kind=%s]",
+		e.from, e.to, e.msgID, e.kind)
+}
+
+func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	// Dedup. Mesh.MarkSeen returns false on duplicate; libp2p drops the
+	// message at this point without forwarding (its dedup-cache hit
+	// short-circuits the propagation step).
+	if !mesh.MarkSeen(e.to, e.msgID) {
+		return nil
+	}
+	var out []scheduledEvent
+	// Deliver to local protocol when `to` is a cluster op. Relay peers
+	// only forward — they have no protocol state. Apply per-hop
+	// ValidateDelay between the wire-arrival and the protocol-state
+	// update; default 0 (mesh validation is modeled as fast).
+	if mesh.IsProtocol(e.to) {
+		recipientOp := obftbase.OperatorID(mesh.OperatorForNode(e.to))
+		out = append(out, scheduledEvent{
+			when: s.now + mesh.ValidateDelay(),
+			ev:   e.builder(recipientOp),
+		})
+	}
+	// Forward to every other mesh neighbor (skip the sender — basic
+	// loop prevention; the dedup cache catches longer cycles).
+	forwarderIsProto := mesh.IsProtocol(e.to)
+	fromOp := mesh.OperatorOrZero(e.to)
+	for _, neighbor := range mesh.Neighbors(e.to) {
+		if neighbor == e.from {
+			continue
+		}
+		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), e.kind)
+		// Outbound bandwidth at the forwarding peer. Mirrors libp2p's
+		// "every hop pushes D bytes outward" accounting; only counted
+		// when the forwarder is a cluster op (relay-side reflood is
+		// out of the cluster bandwidth metric by definition). The
+		// receiver-side accounting splits cluster (PerOperatorIn) vs
+		// relay (TotalBytes only) via Emission / EmissionToRelay.
+		if forwarderIsProto && s.cfg.Bandwidth != nil && e.bytes > 0 {
+			if mesh.IsProtocol(neighbor) {
+				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), e.kind, e.layer, e.bytes)
+			} else {
+				s.cfg.Bandwidth.EmissionToRelay(fromOp, e.kind, e.layer, e.bytes)
+			}
+		}
+		out = append(out, scheduledEvent{
+			when: s.now + mesh.ValidateDelay() + delay,
+			ev: &evtMeshArrival{
+				from:    e.to,
+				to:      neighbor,
+				msgID:   e.msgID,
+				kind:    e.kind,
+				layer:   e.layer,
+				bytes:   e.bytes,
+				builder: e.builder,
+			},
+		})
+	}
+	return out
+}
+
 // ---- evtLeaderFetch ----------------------------------------------------
 
 type evtLeaderFetch struct {
@@ -85,6 +172,22 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 		recipients := p.Recipients
 		if recipients == nil {
 			recipients = s.operators
+		}
+		bundleCap := bundle
+		layerCap := e.layer
+		build := func(to obftbase.OperatorID) event {
+			return &evtPhase1Arrival{from: leader, to: to, layer: layerCap, bundle: clonePhase1Bundle(bundleCap)}
+		}
+		if s.cfg.Mesh != nil {
+			// Mesh path: emitMesh schedules first-hop arrivals via
+			// s.schedule (out of band from this handle's return), then
+			// dedup'd reflood reaches every connected protocol peer in
+			// `recipients`. Note that mesh ignores the per-recipient
+			// Recipients filter past the first hop — re-flooding
+			// neighbors will deliver to suppressed receivers anyway;
+			// the documented mesh-vs-direct trade-off.
+			s.emitMesh(leader, ct.KindLeaderBroadcast, e.layer, bundleBytes, ownDelay, recipients, build)
+			continue
 		}
 		for _, to := range recipients {
 			if to == leader {
@@ -338,6 +441,23 @@ func resolveOpAndBroadcastCert(s *sim, op obftbase.OperatorID) []scheduledEvent 
 		return nil
 	}
 	certBytes := certSize(cert)
+	certCap := cert
+	opCap := op
+	build := func(to obftbase.OperatorID) event {
+		return &evtCertArrival{from: opCap, to: to, cert: cloneCertificate(certCap)}
+	}
+	// Cert is broadcast immediately after this op's local decision, not
+	// at evtResolve's fire time (which can be earlier when the per-layer
+	// walk cost shifted decisionTime past s.now). Express the shift as
+	// an extraDelay = (decisionTime − s.now) so the first-hop schedule
+	// reads `s.now + edgeDelay + extraDelay = decisionTime + edgeDelay`,
+	// matching the pre-refactor direct-mode behavior. Non-negative by
+	// construction (decisionTime = s.now + Layer·Epsilon3, Layer ≥ 0).
+	extraDelay := decisionTime - s.now
+	if s.cfg.Mesh != nil {
+		s.emitMesh(op, ct.KindCertificate, -1, certBytes, extraDelay, s.operators, build)
+		return nil
+	}
 	var out []scheduledEvent
 	for _, to := range s.operators {
 		if to == op {
@@ -354,9 +474,6 @@ func resolveOpAndBroadcastCert(s *sim, op obftbase.OperatorID) []scheduledEvent 
 			s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
 				ct.KindCertificate, -1, certBytes)
 		}
-		// Cert is broadcast immediately after this op's local decision,
-		// not at evtResolve's fire time. Important when the per-layer walk
-		// cost shifted decisionTime past s.now.
 		out = append(out, scheduledEvent{
 			when: decisionTime + delay,
 			ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},

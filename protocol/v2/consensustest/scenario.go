@@ -21,6 +21,15 @@ type Scenario struct {
 	// during the per-scenario audit (Phase 2 of the split plan).
 	Modes []Mode
 
+	// Delivery selects the transport model for this scenario. Default
+	// DeliveryDirect (full fanout); set DeliveryMesh on baseline /
+	// healthy scenarios that should run through the mesh transport.
+	// Adversarial / propagation / selective-broadcast scenarios should
+	// stay on DeliveryDirect — their per-(from, to) primitives lose
+	// meaning under mesh reflood. Applied to SimConfig.Delivery before
+	// Apply runs (see ApplyScenario).
+	Delivery DeliveryMode
+
 	Apply func(*SimConfig)
 	// Expect is keyed by Protocol.Name(). Use ExpectFor(name) for lookup
 	// rather than direct map access — it falls back from variant names

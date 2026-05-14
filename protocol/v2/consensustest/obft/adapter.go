@@ -156,6 +156,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		BLSKeys:    cfg.BLSKeys,
 		Aggregator: ct.NewOfflineAggregator(cfg.N),
 		Bandwidth:  &bw,
+		Mesh:       cfg.MakeMeshTopology(),
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -252,6 +253,10 @@ type desConfig struct {
 	BLSKeys         *ct.BLSKeys
 	Aggregator      *ct.OfflineAggregator
 	Bandwidth       *ct.BandwidthReport
+	// Mesh is nil when SimConfig.Delivery == DeliveryDirect (the default);
+	// non-nil when the scenario opted into mesh transport. The sim's
+	// publish/forward paths branch on Mesh != nil.
+	Mesh *ct.MeshTopology
 }
 
 // rawOutcome is the OBFT-internal outcome before translation to ct.Outcome.

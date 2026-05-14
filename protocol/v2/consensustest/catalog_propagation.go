@@ -260,10 +260,19 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 		// σV verdicts < qV. nr_pool also short. Walk fall-through hits same
 		// shape at deeper layers (slow ops persistent) → MISS cleanly.
 		"2abOBFT": ExpectMiss,
-		// QBFT: R1 PREPARE pool eventually reaches qV once slow ops'
-		// late PREPAREs arrive within R1's window (RT=2s). Succeeds at R1.
-		// The QBFT-vs-OBFT asymmetry on this exact spec configuration.
-		"QBFT": ExpectSuccessFastest,
+		// QBFT: outcome is timing-dependent now that the framework
+		// models post-consensus partial-sig aggregation explicitly.
+		// At n=4 the fast subset yields only N−f−1=2 partial sigs and
+		// the slow ops can't reach consensus + emit partials within
+		// the slot — cluster misses. At larger n (f+1 slow non-leaders
+		// is still a minority) the fast subset itself can hit 2f+1
+		// quickly enough, or some slow ops decide in time to push the
+		// quorum over. The previously-asserted "QBFT always succeeds
+		// here" expectation was an artifact of the fixed PhaseBudget
+		// approximation; with real partial-sig events the outcome
+		// genuinely depends on cluster size and propagation luck, so
+		// ExpectSuccessOrMiss is the honest catalog entry.
+		"QBFT": ExpectSuccessOrMiss,
 	},
-	Note: "OBFT.md §Liveness / §Failure modes — h_V=1-shape asymmetric propagation. (f+1) honest miss V at T_commit; σ-pool < qV and NR-pool < qEnc; chain stays sealed; OBFT misses. QBFT R1 PREPARE eventually reaches qV from late-arriving slow ops within RT, so R1 succeeds. Pure network-driven (no byz) — distinct from scenarioHV1SelectiveDelivery which is byz-engineered.",
+	Note: "OBFT.md §Liveness / §Failure modes — h_V=1-shape asymmetric propagation. (f+1) honest miss V at T_commit; σ-pool < qV and NR-pool < qEnc; chain stays sealed; OBFT misses. QBFT outcome is timing-dependent with Phase-C post-consensus modelling: at n=4 the fast subset is too small to hit 2f+1 partials in time and the cluster misses; at larger n the fast subset alone can reach quorum. Pure network-driven (no byz) — distinct from scenarioHV1SelectiveDelivery which is byz-engineered.",
 }

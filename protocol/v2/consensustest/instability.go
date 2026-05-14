@@ -136,10 +136,11 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 	}
 	inner := s
 	return Scenario{
-		Name:  s.Name,
-		Title: s.Title,
-		Group: s.Group,
-		Modes: s.Modes,
+		Name:     s.Name,
+		Title:    s.Title,
+		Group:    s.Group,
+		Modes:    s.Modes,
+		Delivery: s.Delivery,
 		Apply: func(cfg *SimConfig) {
 			if inner.Apply != nil {
 				inner.Apply(cfg)

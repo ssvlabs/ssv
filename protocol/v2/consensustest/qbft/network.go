@@ -2,12 +2,67 @@ package qbft
 
 import (
 	"fmt"
+	"slices"
+	"time"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 )
+
+// operatorsCT returns the sim's operator IDs in framework-typed form,
+// allocating once per call. Used by the mesh transport path to feed
+// recipient-set filters (which key off ct.OperatorID).
+func (s *sim) operatorsCT() []ct.OperatorID {
+	out := make([]ct.OperatorID, len(s.operators))
+	for i, op := range s.operators {
+		out[i] = ct.OperatorID(op)
+	}
+	return out
+}
+
+// emitMesh publishes via the per-sim MeshTopology. See the OBFT adapter's
+// emitMesh for the design rationale shared across the three protocol
+// families. QBFT-specific: the build closure constructs an evtMessageArrival
+// carrying the spec-qbft SignedSSVMessage; self-loopback (zero delay) is
+// handled by Broadcast directly, not here.
+func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+	mesh := s.cfg.Mesh
+	fromNode := mesh.NodeForOperator(from)
+	id := mesh.NewMsgID()
+	mesh.MarkSeen(fromNode, id)
+	for _, neighbor := range mesh.Neighbors(fromNode) {
+		isProto := mesh.IsProtocol(neighbor)
+		if isProto {
+			toOp := mesh.OperatorForNode(neighbor)
+			// Linear scan beats a map allocate at n ≤ 13.
+			if !slices.Contains(recipients, toOp) {
+				continue
+			}
+			if !s.byz.AllowDelivery(from, toOp, kind) {
+				continue
+			}
+		}
+		delay := mesh.SampleHopDelay(s.rng, from, mesh.OperatorOrZero(neighbor), kind)
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			if isProto {
+				s.cfg.Bandwidth.Emission(from, mesh.OperatorForNode(neighbor), kind, frameworkRound, bytes)
+			} else {
+				s.cfg.Bandwidth.EmissionToRelay(from, kind, frameworkRound, bytes)
+			}
+		}
+		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+			from:    fromNode,
+			to:      neighbor,
+			msgID:   id,
+			kind:    kind,
+			round:   frameworkRound,
+			bytes:   bytes,
+			builder: build,
+		})
+	}
+}
 
 // virtualNetwork implements specqbft.Network for one operator. Broadcast
 // queues a delivery event for every operator in the cluster (including self —
@@ -36,18 +91,29 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 		})
 	}
 	frameworkRound := frameworkRoundFor(round)
+	// Self-delivery (zero delay, no bandwidth) so the broadcaster's own
+	// container picks up the message synchronously with peers'. Independent
+	// of Direct vs Mesh — the self-feed is a model artifact for state
+	// propagation, not a wire event.
+	n.sim.schedule(n.sim.now, &evtMessageArrival{
+		from: from,
+		to:   from,
+		msg:  msg.DeepCopy(),
+	})
+	build := func(to ct.OperatorID) event {
+		return &evtMessageArrival{
+			from: from,
+			to:   to,
+			msg:  msg.DeepCopy(),
+		}
+	}
+	if n.sim.cfg.Mesh != nil {
+		n.sim.emitMesh(from, kind, frameworkRound, msgBytes, 0, n.sim.operatorsCT(), build)
+		return nil
+	}
 	for _, to := range n.sim.operators {
 		toCT := ct.OperatorID(to)
-		// Self-delivery (zero delay) so the broadcaster's own container
-		// picks up the message synchronously with peers'. NOT counted in
-		// bandwidth — production gossipsub doesn't loopback per-message;
-		// self-feed is a model artifact for state propagation.
 		if toCT == from {
-			n.sim.schedule(n.sim.now, &evtMessageArrival{
-				from: from,
-				to:   toCT,
-				msg:  msg.DeepCopy(),
-			})
 			continue
 		}
 		if !n.sim.byz.AllowDelivery(from, toCT, kind) {

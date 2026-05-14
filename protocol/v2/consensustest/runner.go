@@ -41,6 +41,9 @@ type Result struct {
 func RunScenarioOnProtocol(t *testing.T, p Protocol, s Scenario, base SimConfig) Result {
 	t.Helper()
 	cfg := base
+	// Mirror runOneSim: scenario Delivery first, Apply second (so an
+	// Apply that wants to override Delivery still can).
+	cfg.Delivery = s.Delivery
 	if s.Apply != nil {
 		s.Apply(&cfg)
 	}

@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	mrand "math/rand"
+	"slices"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -225,8 +226,30 @@ func (s *sim) honestLeaderValue(layer int) obftbase.Value {
 // patterns to push a specific operator's own-emission past a protocol
 // deadline (e.g. OverrideOwnCommitDispatchDelay for late KindCommit
 // scenarios).
+//
+// Transport dispatch:
+//   - cfg.Mesh == nil (DeliveryDirect): per-recipient fanout against
+//     cfg.Network with per-(from, to) byz checks. The catalog default.
+//   - cfg.Mesh != nil (DeliveryMesh): publish to `from`'s mesh neighbors
+//     (cluster ops + relays). Byz primitives (AllowDelivery, OverrideDelay)
+//     apply only at the publish step — re-flooding from neighbors still
+//     delivers to wire-suppressed receivers one hop later. Adversarial
+//     scenarios should stay on DeliveryDirect; see Scenario.Delivery.
 func (s *sim) emitToAll(from obftbase.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to obftbase.OperatorID) event) {
-	for _, to := range s.operators {
+	if s.cfg.Mesh != nil {
+		s.emitMesh(from, kind, layer, bytes, extraDelay, s.operators, build)
+		return
+	}
+	s.emitDirect(from, kind, layer, bytes, extraDelay, s.operators, build)
+}
+
+// emitDirect is the original full-fanout transport path, factored out so
+// evtLeaderFetch's selective-recipients loop and emitToAll share one
+// implementation. `recipients` filters the cluster down to a chosen subset
+// (used by byz patterns that emit to less than the full cluster); pass
+// s.operators for the "all cluster ops" default.
+func (s *sim) emitDirect(from obftbase.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []obftbase.OperatorID, build func(to obftbase.OperatorID) event) {
+	for _, to := range recipients {
 		if to == from {
 			continue
 		}
@@ -242,6 +265,65 @@ func (s *sim) emitToAll(from obftbase.OperatorID, kind ct.MsgKind, layer int, by
 		}
 		ev := build(to)
 		s.schedule(s.now+delay+extraDelay, ev)
+	}
+}
+
+// emitMesh publishes `from`'s message through the per-sim MeshTopology.
+// First-hop arrivals go to `from`'s mesh neighbors (cluster ops + relays);
+// each evtMeshArrival's handler dedup'd-forwards onward. `recipients` is
+// retained for parity with emitDirect's signature but is consulted only
+// to apply per-(from, to) byz primitives at the publish step (byz patterns
+// that target a specific subset of cluster ops still suppress emission to
+// those direct receivers — but a re-flooding neighbor will deliver a
+// hop later, which is the libp2p-true behavior).
+func (s *sim) emitMesh(from obftbase.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []obftbase.OperatorID, build func(to obftbase.OperatorID) event) {
+	mesh := s.cfg.Mesh
+	fromOp := ct.OperatorID(from)
+	fromNode := mesh.NodeForOperator(fromOp)
+	// Self-mark so a forwarded copy reflooding back to us is dedup'd
+	// rather than re-delivered.
+	id := mesh.NewMsgID()
+	mesh.MarkSeen(fromNode, id)
+	for _, neighbor := range mesh.Neighbors(fromNode) {
+		// Per-(from, to) byz primitives at publish only (relays escape
+		// these checks since they have no cluster identity).
+		isProto := mesh.IsProtocol(neighbor)
+		if isProto {
+			toOp := obftbase.OperatorID(mesh.OperatorForNode(neighbor))
+			// Linear scan of recipients (n ≤ 13 in SSV) beats the
+			// allocate-then-lookup of a hash set for this filter.
+			if !slices.Contains(recipients, toOp) {
+				continue
+			}
+			if !s.cfg.Byz.AllowDelivery(from, toOp, kind) {
+				continue
+			}
+		}
+		// Mesh hops use the mesh's HopDelay model, not the cluster-wide
+		// Network model — that's the calibration story. (OverrideDelay
+		// is byz-pattern-specific to direct fanout and does not apply.)
+		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), kind)
+		// Bandwidth: cluster-to-cluster goes through Emission (charges
+		// both endpoints); cluster-to-relay through EmissionToRelay
+		// (charges TotalBytes + outbound only — relays have no cluster
+		// identity, so charging them to a sentinel inbound would
+		// pollute PerOperatorIn).
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			if isProto {
+				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), kind, layer, bytes)
+			} else {
+				s.cfg.Bandwidth.EmissionToRelay(fromOp, kind, layer, bytes)
+			}
+		}
+		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+			from:    fromNode,
+			to:      neighbor,
+			msgID:   id,
+			kind:    kind,
+			layer:   layer,
+			bytes:   bytes,
+			builder: build,
+		})
 	}
 }
 

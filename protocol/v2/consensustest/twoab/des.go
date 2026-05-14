@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"fmt"
 	mrand "math/rand"
+	"slices"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -232,8 +233,24 @@ func (s *sim) honestLeaderValue(layer int) twoab.Value {
 // `extraDelay` is added on top of the per-pair network delay — used by byz
 // patterns to push a specific operator's own-emission past a protocol
 // deadline.
+//
+// Transport dispatch mirrors the OBFT adapter: DeliveryDirect (cfg.Mesh ==
+// nil) keeps the original full-fanout path; DeliveryMesh routes through
+// the per-sim MeshTopology with dedup + reflood. See OBFT emitToAll for
+// the byz-primitive caveats under mesh mode.
 func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to twoab.OperatorID) event) {
-	for _, to := range s.operators {
+	if s.cfg.Mesh != nil {
+		s.emitMesh(from, kind, layer, bytes, extraDelay, s.operators, build)
+		return
+	}
+	s.emitDirect(from, kind, layer, bytes, extraDelay, s.operators, build)
+}
+
+// emitDirect is the original full-fanout transport path, factored out so
+// evtLeaderFetch's selective-recipients loop and resolveOpAndBroadcastCert's
+// cert loop share one implementation with emitToAll.
+func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
+	for _, to := range recipients {
 		if to == from {
 			continue
 		}
@@ -249,6 +266,47 @@ func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes
 		}
 		ev := build(to)
 		s.schedule(s.now+delay+extraDelay, ev)
+	}
+}
+
+// emitMesh publishes via the per-sim MeshTopology. Behavior parallels the
+// OBFT adapter's emitMesh; see that file for the byz / bandwidth /
+// recipient-filter caveats.
+func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
+	mesh := s.cfg.Mesh
+	fromOp := ct.OperatorID(from)
+	fromNode := mesh.NodeForOperator(fromOp)
+	id := mesh.NewMsgID()
+	mesh.MarkSeen(fromNode, id)
+	for _, neighbor := range mesh.Neighbors(fromNode) {
+		isProto := mesh.IsProtocol(neighbor)
+		if isProto {
+			toOp := twoab.OperatorID(mesh.OperatorForNode(neighbor))
+			// Linear scan is faster than a hash-set allocate at n ≤ 13.
+			if !slices.Contains(recipients, toOp) {
+				continue
+			}
+			if !s.cfg.Byz.AllowDelivery(from, toOp, kind) {
+				continue
+			}
+		}
+		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), kind)
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			if isProto {
+				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), kind, layer, bytes)
+			} else {
+				s.cfg.Bandwidth.EmissionToRelay(fromOp, kind, layer, bytes)
+			}
+		}
+		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+			from:    fromNode,
+			to:      neighbor,
+			msgID:   id,
+			kind:    kind,
+			layer:   layer,
+			bytes:   bytes,
+			builder: build,
+		})
 	}
 }
 

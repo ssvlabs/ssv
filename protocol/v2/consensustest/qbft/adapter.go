@@ -141,6 +141,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Seed:         cfg.Seed,
 		TraceEnabled: cfg.TraceEnabled,
 		Bandwidth:    &bw,
+		Mesh:         cfg.MakeMeshTopology(),
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -174,6 +175,7 @@ type desConfig struct {
 	Seed         int64
 	TraceEnabled bool
 	Bandwidth    *ct.BandwidthReport
+	Mesh         *ct.MeshTopology // nil when DeliveryDirect
 }
 
 // rawOutcome is the QBFT-DES outcome before translation.

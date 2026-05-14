@@ -52,6 +52,16 @@ type sim struct {
 	byzProposalScheduled map[specqbft.Round]bool // dedup: one byz PROPOSE per round
 	byz                  internalByz
 	trace                []ct.TraceEntry
+
+	// Post-consensus partial-sig aggregation state. partials[receiver]
+	// [valueKey] is the set of signers whose partial sig the receiver
+	// has observed on that value. readyAt[receiver] is the earliest
+	// time the receiver's signer-set on its decided value first
+	// reached 2f+1 — "ready to submit" per the SSV proposer-duty
+	// model. Outcome.DecisionTime = min(readyAt) across operators that
+	// reached the quorum.
+	partials map[spectypes.OperatorID]map[string]map[spectypes.OperatorID]bool
+	readyAt  map[spectypes.OperatorID]time.Duration
 }
 
 type decidedRecord struct {
@@ -94,6 +104,8 @@ func newSim(cfg desConfig) (*sim, error) {
 		inflightRound:        make(map[spectypes.OperatorID]specqbft.Round, cfg.N),
 		byzProposalScheduled: make(map[specqbft.Round]bool),
 		byz:                  cfg.Byz,
+		partials:             make(map[spectypes.OperatorID]map[string]map[spectypes.OperatorID]bool, cfg.N),
+		readyAt:              make(map[spectypes.OperatorID]time.Duration, cfg.N),
 	}, nil
 }
 
@@ -207,35 +219,82 @@ func (s *sim) outcome() rawOutcome {
 		perOp:        make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
 		trace:        s.trace,
 	}
-	earliestT := time.Duration(-1)
+	// "Ready to submit" semantic: an op is considered Decided only when
+	// it has both (a) reached QBFT consensus locally AND (b) accumulated
+	// 2f+1 partial sigs on the decided value. Outcome.DecisionTime is
+	// the earliest "ready" time across the cluster, mirroring the
+	// OBFT-family earliest-decider rule. An op that hit (a) but not (b)
+	// is reported as not-decided with a "no postconsensus quorum"
+	// diagnostic; classifyMiss surfaces this via shortenErr's
+	// `no_postconsensus_quorum` label.
+	earliestReady := time.Duration(-1)
 	for _, op := range s.operators {
 		oo := rawOpOutcome{}
-		if rec, ok := s.decided[op]; ok {
+		rec, decidedLocally := s.decided[op]
+		ready, hasReady := s.readyAt[op]
+		if decidedLocally && hasReady {
 			oo.decided = true
 			oo.value = append([]byte(nil), rec.value...)
 			oo.round = int(rec.round)
-			oo.time = rec.at
-			if earliestT < 0 || rec.at < earliestT {
-				earliestT = rec.at
+			oo.time = ready
+			if earliestReady < 0 || ready < earliestReady {
+				earliestReady = ready
 				out.decided = true
 				out.decidedValue = append([]byte(nil), rec.value...)
 				out.decidedRound = int(rec.round)
-				out.decisionTime = rec.at
+				out.decisionTime = ready
 			}
-		}
-		if !oo.decided {
-			if s.byz.IsByz(ct.OperatorID(op)) {
-				// Byz operators don't run real Instances in this DES — the byz
-				// pattern fabricates messages from them directly. They never
-				// "decide", but it's not a failure either.
-				oo.err = "byzantine — no instance"
-			} else {
-				oo.err = "did not decide before sim end"
-			}
+		} else if decidedLocally {
+			// Consensus decided locally but no 2f+1 partial sigs landed
+			// in time. The value is preserved as diagnostic context
+			// (matches OBFT's ClipLateDecision: keep the decision body
+			// even when the cluster missed the submit window).
+			oo.value = append([]byte(nil), rec.value...)
+			oo.round = int(rec.round)
+			oo.err = "no postconsensus quorum"
+		} else if s.byz.IsByz(ct.OperatorID(op)) {
+			// Byz operators don't run real Instances in this DES — the byz
+			// pattern fabricates messages from them directly. They never
+			// "decide", but it's not a failure either.
+			oo.err = "byzantine — no instance"
+		} else {
+			oo.err = "did not decide before sim end"
 		}
 		out.perOp[ct.OperatorID(op)] = oo
 	}
 	return out
+}
+
+// quorum returns 2f+1 for the cluster size N (with f = (N-1)/3). Used
+// by the partial-sig aggregation path to detect "ready to submit".
+func (s *sim) quorum() int {
+	f := (s.cfg.N - 1) / 3
+	return 2*f + 1
+}
+
+// recordPartialSig records a partial-sig observation at `receiver` from
+// `signer` on `value`. Idempotent on duplicate (signer, value) at the
+// same receiver. Sets s.readyAt[receiver] = s.now the first time the
+// distinct-signer count for `value` reaches quorum (2f+1).
+func (s *sim) recordPartialSig(receiver, signer spectypes.OperatorID, value []byte) {
+	if _, ready := s.readyAt[receiver]; ready {
+		return
+	}
+	key := string(value)
+	bucket := s.partials[receiver]
+	if bucket == nil {
+		bucket = make(map[string]map[spectypes.OperatorID]bool)
+		s.partials[receiver] = bucket
+	}
+	sigs := bucket[key]
+	if sigs == nil {
+		sigs = make(map[spectypes.OperatorID]bool)
+		bucket[key] = sigs
+	}
+	sigs[signer] = true
+	if len(sigs) >= s.quorum() {
+		s.readyAt[receiver] = s.now
+	}
 }
 
 // canonValueForRound returns a per-round canonical value. Different per round

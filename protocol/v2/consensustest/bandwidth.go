@@ -44,6 +44,22 @@ func (b *BandwidthReport) Emission(from, to OperatorID, kind MsgKind, layer int,
 	b.PerOperatorIn[to] += bytes
 }
 
+// EmissionToRelay records `bytes` bytes emitted from cluster operator
+// `from` to a non-cluster mesh relay peer (DeliveryMesh mode). Mirrors
+// Emission for the cluster-wide totals (TotalBytes, PerKindBytes,
+// PerLayerBytes, PerOperatorOut[from]) but skips PerOperatorIn —
+// relays don't have cluster identity, so charging them to a sentinel
+// OperatorID would pollute the per-operator inbound histogram.
+// TotalBytes still includes relay-bound bytes because libp2p re-flood
+// genuinely puts those bytes on the wire (the cluster ops paid the
+// outbound cost), so they're load-bearing for capacity analysis.
+func (b *BandwidthReport) EmissionToRelay(from OperatorID, kind MsgKind, layer int, bytes int64) {
+	b.TotalBytes += bytes
+	b.PerKindBytes[kind.String()] += bytes
+	b.PerLayerBytes[layer] += bytes
+	b.PerOperatorOut[from] += bytes
+}
+
 // Rejection records `bytes` bytes dropped at the validation layer (byz
 // garbage that didn't reach the protocol). Counted separately from
 // successful emissions; not summed into TotalBytes. Construct the report

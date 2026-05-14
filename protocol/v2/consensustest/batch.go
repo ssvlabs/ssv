@@ -232,6 +232,12 @@ func runOneSim(cfg BatchConfig, sc Scenario, p Protocol, iter int) (oc iterOutco
 	}()
 	simCfg := cfg.Base
 	simCfg.Seed = seed
+	// Propagate scenario-level Delivery before Apply runs. Apply may
+	// still override (no scenario does today, but the field is on
+	// SimConfig so the option exists). Zero value (DeliveryDirect) is
+	// the back-compat path — preserves every adversarial scenario's
+	// per-(from, to) primitives.
+	simCfg.Delivery = sc.Delivery
 	if sc.Apply != nil {
 		sc.Apply(&simCfg)
 	}
@@ -513,6 +519,10 @@ func shortenErr(err string) string {
 		needle string
 		label  string
 	}{
+		// More specific patterns come first — "no postconsensus quorum"
+		// contains "no quorum" as a substring, so the broader rule
+		// would shadow it without this ordering.
+		{"no postconsensus quorum", "no_postconsensus_quorum"},
 		{"no quorum", "no_quorum"},
 		{"noquorum", "no_quorum"},
 		{"timed out", "timeout"},

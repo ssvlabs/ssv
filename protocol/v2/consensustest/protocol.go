@@ -92,6 +92,32 @@ type SimConfig struct {
 	// BLSKeys, when non-nil, switches the sim to real BLS for adapters that
 	// support it. Generate with GenerateBLSKeys; reuse across sims.
 	BLSKeys *BLSKeys
+
+	// Delivery selects the transport model. Default DeliveryDirect (full
+	// fanout, current behavior). DeliveryMesh routes every emit through
+	// a small-world mesh with dedup + reflood — opt-in per scenario via
+	// Scenario.Delivery, propagated here by Scenario.Apply or by the
+	// framework's Run path when scenarios trigger.
+	Delivery DeliveryMode
+
+	// Mesh is the per-sim mesh tunable bundle, consulted only when
+	// Delivery == DeliveryMesh. Adapters call MakeMeshTopology(cfg) at
+	// sim start to materialize the topology; an unset HopDelay there
+	// panics, surfacing miswired delivery configs at sim build rather
+	// than as a silent zero-delay mesh.
+	Mesh MeshConfig
+}
+
+// MakeMeshTopology constructs the per-sim MeshTopology for `c` if
+// Delivery == DeliveryMesh, returning nil otherwise. Adapters call this
+// once per sim (inside their Run) and store the result on their sim
+// state; the topology lives for the sim's lifetime. The returned
+// MeshTopology owns its dedup state — never share across sims.
+func (c *SimConfig) MakeMeshTopology() *MeshTopology {
+	if c.Delivery != DeliveryMesh {
+		return nil
+	}
+	return NewMeshTopology(c.Seed, c.Mesh, c.Operators)
 }
 
 // F returns the byzantine bound implied by N (F = (N-1)/3).
@@ -382,6 +408,16 @@ func (c *SimConfig) Validate() error {
 	if c.Host == nil {
 		c.Host = HostAllValid{}
 	}
+	// Mesh HopDelay default mirrors DefaultProposerDutyConfig's anchor
+	// (BTT/3 median, σ=0.3) so callers that wire Delivery=DeliveryMesh
+	// onto a SimConfig built without going through DefaultProposerDutyConfig
+	// — including the framework's own scenario-propagation path when a
+	// scenario opts into mesh — get a working mesh transport without
+	// having to remember the calibration anchor. Callers wanting a
+	// different HopDelay set it explicitly before Validate runs.
+	if c.Delivery == DeliveryMesh && c.Mesh.HopDelay == nil {
+		c.Mesh.HopDelay = LogNormalDelay{Median: c.BTT / 3, Sigma: 0.3}
+	}
 	return nil
 }
 
@@ -410,6 +446,18 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		Host: HostAllValid{},
 		Byz:  ByzPattern{Kind: ByzNone},
 		Seed: 1,
+		// Mesh: per-sim mesh tunables consumed when a scenario opts
+		// into DeliveryMesh (Healthy and its instability-wrapped
+		// variants do; every adversarial scenario stays direct).
+		// HopDelay's Median = BTT/3 is the mesh-as-realism calibration
+		// anchor — at n=4 with R=4 relays the typical hop count is ~2,
+		// so total propagation ≈ 2·BTT/3 lands roughly where direct-
+		// mode LogNormalDelay{Median: BTT/2} lands. Sigma is tighter
+		// per-hop (0.3) because the cluster-wide heavy tail emerges
+		// from the convolution rather than being baked into one draw.
+		Mesh: MeshConfig{
+			HopDelay: LogNormalDelay{Median: btt / 3, Sigma: 0.3},
+		},
 	}
 }
 

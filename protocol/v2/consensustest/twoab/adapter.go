@@ -184,6 +184,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		BLSKeys:    cfg.BLSKeys,
 		Aggregator: ct.NewOfflineAggregator(cfg.N),
 		Bandwidth:  &bw,
+		Mesh:       cfg.MakeMeshTopology(),
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -273,6 +274,7 @@ type desConfig struct {
 	BLSKeys         *ct.BLSKeys
 	Aggregator      *ct.OfflineAggregator
 	Bandwidth       *ct.BandwidthReport
+	Mesh            *ct.MeshTopology // nil when DeliveryDirect
 }
 
 // rawOutcome is the 2ab-internal outcome before translation to ct.Outcome.

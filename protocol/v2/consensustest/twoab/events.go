@@ -47,6 +47,70 @@ func (q *eventQueue) Pop() any {
 
 var _ heap.Interface = (*eventQueue)(nil)
 
+// ---- evtMeshArrival ----------------------------------------------------
+
+// evtMeshArrival mirrors the OBFT adapter's mesh delivery event. See
+// protocol/v2/consensustest/obft/events.go evtMeshArrival for the design
+// rationale (dedup → optional local-protocol delivery → forward to
+// neighbors). 2abOBFT shares the wiring shape; only the per-protocol
+// builder closure differs.
+type evtMeshArrival struct {
+	from, to ct.MeshNode
+	msgID    ct.MsgID
+	kind     ct.MsgKind
+	layer    int
+	bytes    int64
+	builder  func(to twoab.OperatorID) event
+}
+
+func (e *evtMeshArrival) describe() string {
+	return fmt.Sprintf("MeshArrival[from=%d to=%d msg=%d kind=%s]",
+		e.from, e.to, e.msgID, e.kind)
+}
+
+func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	if !mesh.MarkSeen(e.to, e.msgID) {
+		return nil
+	}
+	var out []scheduledEvent
+	if mesh.IsProtocol(e.to) {
+		recipientOp := twoab.OperatorID(mesh.OperatorForNode(e.to))
+		out = append(out, scheduledEvent{
+			when: s.now + mesh.ValidateDelay(),
+			ev:   e.builder(recipientOp),
+		})
+	}
+	forwarderIsProto := mesh.IsProtocol(e.to)
+	fromOp := mesh.OperatorOrZero(e.to)
+	for _, neighbor := range mesh.Neighbors(e.to) {
+		if neighbor == e.from {
+			continue
+		}
+		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), e.kind)
+		if forwarderIsProto && s.cfg.Bandwidth != nil && e.bytes > 0 {
+			if mesh.IsProtocol(neighbor) {
+				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), e.kind, e.layer, e.bytes)
+			} else {
+				s.cfg.Bandwidth.EmissionToRelay(fromOp, e.kind, e.layer, e.bytes)
+			}
+		}
+		out = append(out, scheduledEvent{
+			when: s.now + mesh.ValidateDelay() + delay,
+			ev: &evtMeshArrival{
+				from:    e.to,
+				to:      neighbor,
+				msgID:   e.msgID,
+				kind:    e.kind,
+				layer:   e.layer,
+				bytes:   e.bytes,
+				builder: e.builder,
+			},
+		})
+	}
+	return out
+}
+
 // ---- evtLeaderFetch ----------------------------------------------------
 
 type evtLeaderFetch struct {
@@ -89,6 +153,15 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 		recipients := p.Recipients
 		if recipients == nil {
 			recipients = s.operators
+		}
+		bundleCap := bundle
+		layerCap := e.layer
+		build := func(to twoab.OperatorID) event {
+			return &evtPhase1Arrival{from: leader, to: to, layer: layerCap, bundle: clonePhase1Bundle(bundleCap)}
+		}
+		if s.cfg.Mesh != nil {
+			s.emitMesh(leader, ct.KindLeaderBroadcast, e.layer, bundleBytes, ownDelay, recipients, build)
+			continue
 		}
 		for _, to := range recipients {
 			if to == leader {
@@ -350,6 +423,16 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 		return nil
 	}
 	certBytes := certSize(cert)
+	certCap := cert
+	opCap := op
+	build := func(to twoab.OperatorID) event {
+		return &evtCertArrival{from: opCap, to: to, cert: cloneCertificate(certCap)}
+	}
+	extraDelay := decisionTime - s.now
+	if s.cfg.Mesh != nil {
+		s.emitMesh(op, ct.KindCertificate, -1, certBytes, extraDelay, s.operators, build)
+		return nil
+	}
 	var out []scheduledEvent
 	for _, to := range s.operators {
 		if to == op {
