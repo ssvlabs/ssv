@@ -99,26 +99,18 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 	}
 	// Forward to every other mesh neighbor (skip the sender — basic
 	// loop prevention; the dedup cache catches longer cycles).
-	forwarderIsProto := mesh.IsProtocol(e.to)
-	fromOp := mesh.OperatorOrZero(e.to)
+	fromEP := mesh.EndpointFor(e.to)
 	for _, neighbor := range mesh.Neighbors(e.to) {
 		if neighbor == e.from {
 			continue
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), e.kind)
-		// Outbound bandwidth at the forwarding peer. Mirrors libp2p's
-		// "every hop pushes D bytes outward" accounting; only counted
-		// when the forwarder is a cluster op (relay-side reflood is
-		// out of the cluster bandwidth metric by definition). The
-		// receiver-side accounting splits cluster (PerOperatorIn) vs
-		// relay (TotalBytes only) via Emission / EmissionToRelay.
-		if forwarderIsProto && s.cfg.Bandwidth != nil && e.bytes > 0 {
-			if mesh.IsProtocol(neighbor) {
-				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), e.kind, e.layer, e.bytes)
-			} else {
-				s.cfg.Bandwidth.EmissionToRelay(fromOp, e.kind, e.layer, e.bytes)
-			}
-		}
+		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), e.kind)
+		// Bandwidth accounting: each hop's wire bytes count toward
+		// TotalBytes regardless of who's forwarding (libp2p re-flood
+		// puts the bytes on the wire whether the hop is cluster-side
+		// or relay-side). The four-way dispatch in RecordMeshHop
+		// keeps PerOperator* charged only to cluster ops.
+		mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, neighbor, e.kind, e.layer, e.bytes)
 		out = append(out, scheduledEvent{
 			when: s.now + mesh.ValidateDelay() + delay,
 			ev: &evtMeshArrival{

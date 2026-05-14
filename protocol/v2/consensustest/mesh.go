@@ -40,16 +40,28 @@ type MeshNode int
 type MeshConfig struct {
 	// HopDelay samples a per-hop propagation delay for one mesh edge.
 	// Calibration target ("mesh as realism"): the convolution over the
-	// average mesh diameter ≈ today's cluster-wide BTT envelope. The
-	// receiver-OperatorID input is set to 0 for relay-peer hops (which
-	// have no cluster identity); models that need per-pair structure
-	// should treat 0-receiver as "any relay" rather than a real op.
+	// average mesh diameter ≈ today's cluster-wide BTT envelope. Called
+	// with mesh-endpoint OperatorIDs — cluster ops use their real IDs,
+	// relay peers use synthetic IDs allocated from RelayEndpointBase
+	// onward (so stateful NetworkModel impls key per-link across the
+	// full mesh without collapsing relay endpoints to a sentinel).
 	HopDelay NetworkModel
 	// ValidateDelay is the per-hop dedup+validate cost — added on top of
 	// the HopDelay sample at each forwarding hop. Default 0 (mesh is
 	// modeled as fast-forwarding once a message clears dedup).
 	ValidateDelay time.Duration
 }
+
+// RelayEndpointBase is the first synthetic OperatorID allocated to a
+// mesh relay peer. Reserved high enough that it never collides with a
+// real cluster OperatorID (MakeOperators allocates 1..N; SSV-supported
+// cluster sizes top out at 13). Stateful NetworkModel implementations
+// keyed on (from, to) endpoint pairs (LossyNetwork's linkKey,
+// CorrelatedLinkDelay, MarkovianSlownessDelay) thus see distinct
+// per-relay-link keys when consulted from the mesh transport, instead
+// of the previous behavior where every relay endpoint mapped to a
+// shared sentinel-0 and collapsed link state across unrelated edges.
+const RelayEndpointBase OperatorID = 1_000_000
 
 // MeshTopology is the per-sim mesh state: peer-to-peer graph, per-node
 // seen-MsgID sets for dedup, hop-delay sampler, and the MsgID counter.
@@ -61,12 +73,19 @@ type MeshConfig struct {
 // on a dedicated goroutine (RunBatch.runOneSim) and MeshTopology is
 // per-sim, so single-goroutine access is the only supported pattern.
 type MeshTopology struct {
-	n         int            // cluster size
-	r         int            // relay count (= n by default)
-	cluster   []OperatorID   // index [0, n) → cluster op IDs (1..n typically)
+	n         int          // cluster size
+	r         int          // relay count (= n by default)
+	cluster   []OperatorID // index [0, n) → cluster op IDs (1..n typically)
 	opIndex   map[OperatorID]int
 	neighbors [][]MeshNode
 	isProto   []bool
+	// endpoints[node] is the OperatorID-typed identifier passed to
+	// NetworkModel.Delay for that node. For cluster nodes it equals
+	// cluster[i]; for relays it equals RelayEndpointBase + (i - n) so
+	// every relay has a distinct synthetic ID. This lets stateful
+	// network models key per-mesh-edge without collapsing all relay
+	// endpoints to the same sentinel.
+	endpoints []OperatorID
 	seen      []map[MsgID]struct{}
 	hopDelay  NetworkModel
 	valDelay  time.Duration
@@ -110,6 +129,7 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 		opIndex:   make(map[OperatorID]int, n),
 		neighbors: make([][]MeshNode, total),
 		isProto:   make([]bool, total),
+		endpoints: make([]OperatorID, total),
 		seen:      make([]map[MsgID]struct{}, total),
 		hopDelay:  cfg.HopDelay,
 		valDelay:  cfg.ValidateDelay,
@@ -117,6 +137,14 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 	for i, op := range cluster {
 		m.opIndex[op] = i
 		m.isProto[i] = true
+		m.endpoints[i] = op
+	}
+	// Allocate distinct synthetic endpoint IDs for the relays, packed
+	// contiguously from RelayEndpointBase. With base = 1_000_000 the
+	// relay range can never collide with a cluster OperatorID
+	// (MakeOperators returns 1..n with n ≤ 13 for SSV cluster sizes).
+	for i := 0; i < r; i++ {
+		m.endpoints[n+i] = RelayEndpointBase + OperatorID(i)
 	}
 	for i := 0; i < total; i++ {
 		m.seen[i] = make(map[MsgID]struct{})
@@ -315,20 +343,44 @@ func (m *MeshTopology) OperatorForNode(node MeshNode) OperatorID {
 // ValidateDelay returns the per-hop validate cost.
 func (m *MeshTopology) ValidateDelay() time.Duration { return m.valDelay }
 
-// SampleHopDelay draws one per-hop delay sample. (from, to) operator IDs
-// are passed through to the underlying NetworkModel for models that care
-// about per-pair structure (most don't, and pass-through with sentinel 0
-// for relay endpoints works fine).
-func (m *MeshTopology) SampleHopDelay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
-	return m.hopDelay.Delay(rng, from, to, kind)
+// SampleHopDelay draws one per-hop delay sample over the mesh edge
+// (`fromEP`, `toEP`). Endpoint IDs are framework-typed OperatorIDs:
+// cluster ops use their real IDs (1..N), relays use synthetic IDs
+// allocated from RelayEndpointBase. Stateful NetworkModel implementations
+// can key per-edge on these IDs without collapsing distinct relay edges.
+func (m *MeshTopology) SampleHopDelay(rng *mrand.Rand, fromEP, toEP OperatorID, kind MsgKind) time.Duration {
+	return m.hopDelay.Delay(rng, fromEP, toEP, kind)
 }
 
-// OperatorOrZero returns the cluster OperatorID for `node` if it's a
-// protocol peer, or 0 for a relay peer. Helper for bandwidth / delay
-// hooks that take an OperatorID argument.
-func (m *MeshTopology) OperatorOrZero(node MeshNode) OperatorID {
-	if m.IsProtocol(node) {
-		return m.cluster[node]
+// EndpointFor returns the OperatorID-typed endpoint identifier for
+// `node` used by SampleHopDelay and any other per-edge keying. Cluster
+// nodes resolve to their real OperatorID (1..N); relay nodes resolve to
+// a synthetic ID in [RelayEndpointBase, RelayEndpointBase + r).
+func (m *MeshTopology) EndpointFor(node MeshNode) OperatorID {
+	return m.endpoints[node]
+}
+
+// RecordMeshHop dispatches one mesh-edge bandwidth observation to the
+// correct BandwidthReport method based on whether each endpoint is a
+// cluster op or a relay. Centralizing the four-way branch (proto→proto,
+// proto→relay, relay→proto, relay→relay) keeps every adapter's emit
+// and forward paths consistent: cluster's PerOperator* metrics only
+// see cluster ops, while TotalBytes captures every wire hop including
+// relay-side reflood.
+func (m *MeshTopology) RecordMeshHop(b *BandwidthReport, from, to MeshNode, kind MsgKind, layer int, bytes int64) {
+	if b == nil || bytes == 0 {
+		return
 	}
-	return 0
+	fp := m.IsProtocol(from)
+	tp := m.IsProtocol(to)
+	switch {
+	case fp && tp:
+		b.Emission(m.cluster[from], m.cluster[to], kind, layer, bytes)
+	case fp:
+		b.EmissionToRelay(m.cluster[from], kind, layer, bytes)
+	case tp:
+		b.EmissionFromRelay(m.cluster[to], kind, layer, bytes)
+	default:
+		b.EmissionRelayToRelay(kind, layer, bytes)
+	}
 }

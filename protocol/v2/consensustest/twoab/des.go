@@ -278,6 +278,7 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 	fromNode := mesh.NodeForOperator(fromOp)
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
+	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		isProto := mesh.IsProtocol(neighbor)
 		if isProto {
@@ -290,14 +291,8 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 				continue
 			}
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), kind)
-		if s.cfg.Bandwidth != nil && bytes > 0 {
-			if isProto {
-				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), kind, layer, bytes)
-			} else {
-				s.cfg.Bandwidth.EmissionToRelay(fromOp, kind, layer, bytes)
-			}
-		}
+		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
+		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, layer, bytes)
 		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
 			from:    fromNode,
 			to:      neighbor,

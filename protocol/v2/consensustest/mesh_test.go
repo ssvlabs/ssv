@@ -208,7 +208,8 @@ func TestMesh_SampleHopDelay(t *testing.T) {
 	require.Equal(t, d, got)
 }
 
-// TestMesh_OperatorAccessors — round-trip OperatorID ↔ MeshNode.
+// TestMesh_OperatorAccessors — round-trip OperatorID ↔ MeshNode, and
+// EndpointFor coverage for both cluster and relay nodes.
 func TestMesh_OperatorAccessors(t *testing.T) {
 	cluster := []ct.OperatorID{1, 2, 3, 4}
 	m := ct.NewMeshTopology(1, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
@@ -216,12 +217,22 @@ func TestMesh_OperatorAccessors(t *testing.T) {
 		node := m.NodeForOperator(op)
 		require.True(t, m.IsProtocol(node))
 		require.Equal(t, op, m.OperatorForNode(node))
-		require.Equal(t, op, m.OperatorOrZero(node))
+		// Cluster endpoints equal the OperatorID.
+		require.Equal(t, op, m.EndpointFor(node))
 	}
-	// OperatorOrZero on a relay must return 0 (sentinel).
-	relayNode := ct.MeshNode(len(cluster)) // first relay
-	require.False(t, m.IsProtocol(relayNode))
-	require.Equal(t, ct.OperatorID(0), m.OperatorOrZero(relayNode))
+	// Relay nodes resolve to synthetic IDs ≥ RelayEndpointBase, distinct
+	// per relay so stateful NetworkModel impls key per-edge.
+	seen := make(map[ct.OperatorID]struct{})
+	for i := 0; i < len(cluster); i++ {
+		relayNode := ct.MeshNode(len(cluster) + i)
+		require.False(t, m.IsProtocol(relayNode))
+		ep := m.EndpointFor(relayNode)
+		require.GreaterOrEqual(t, ep, ct.RelayEndpointBase,
+			"relay endpoint must come from the reserved range")
+		_, dup := seen[ep]
+		require.False(t, dup, "relay endpoint %d duplicated across nodes", ep)
+		seen[ep] = struct{}{}
+	}
 }
 
 // TestMesh_ValidateDelay — passthrough accessor returning the configured

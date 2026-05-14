@@ -275,7 +275,23 @@ func (s *sim) quorum() int {
 // recordPartialSig records a partial-sig observation at `receiver` from
 // `signer` on `value`. Idempotent on duplicate (signer, value) at the
 // same receiver. Sets s.readyAt[receiver] = s.now the first time the
-// distinct-signer count for `value` reaches quorum (2f+1).
+// distinct-signer count for `value` reaches quorum (2f+1) AND `receiver`
+// has locally decided that same `value`.
+//
+// The decided+value gate matters under two conditions the framework can
+// produce: (a) partials may legitimately arrive before the receiver's
+// own consensus decision (mesh/direct delivery is concurrent with
+// recordDecided's dispatch), and (b) byz equivocation can flood
+// partials on a value the receiver did not decide. Without the gate,
+// readyAt would stamp the earlier-of-the-two times — under-counting
+// when partials race ahead of local decide, and outright wrong-attributing
+// when peer partials hit quorum on a value the receiver isn't going to
+// adopt.
+//
+// recordDecided's self-record path re-runs this function with
+// (receiver=op, signer=op, value=decidedValue) AFTER setting
+// s.decided[op], so any partials already buffered for the decided
+// value get re-evaluated and readyAt fires at that moment.
 func (s *sim) recordPartialSig(receiver, signer spectypes.OperatorID, value []byte) {
 	if _, ready := s.readyAt[receiver]; ready {
 		return
@@ -292,9 +308,20 @@ func (s *sim) recordPartialSig(receiver, signer spectypes.OperatorID, value []by
 		bucket[key] = sigs
 	}
 	sigs[signer] = true
-	if len(sigs) >= s.quorum() {
-		s.readyAt[receiver] = s.now
+	if len(sigs) < s.quorum() {
+		return
 	}
+	rec, decidedLocally := s.decided[receiver]
+	if !decidedLocally {
+		return
+	}
+	if string(rec.value) != key {
+		// Quorum on a value the receiver didn't decide (byz
+		// equivocation pool, or a legitimate value they rejected at
+		// PROPOSE/PREPARE). The receiver can't submit this cert.
+		return
+	}
+	s.readyAt[receiver] = s.now
 }
 
 // canonValueForRound returns a per-round canonical value. Different per round

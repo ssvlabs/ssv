@@ -81,20 +81,13 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 			ev:   e.builder(recipientOp),
 		})
 	}
-	forwarderIsProto := mesh.IsProtocol(e.to)
-	fromOp := mesh.OperatorOrZero(e.to)
+	fromEP := mesh.EndpointFor(e.to)
 	for _, neighbor := range mesh.Neighbors(e.to) {
 		if neighbor == e.from {
 			continue
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), e.kind)
-		if forwarderIsProto && s.cfg.Bandwidth != nil && e.bytes > 0 {
-			if mesh.IsProtocol(neighbor) {
-				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), e.kind, e.layer, e.bytes)
-			} else {
-				s.cfg.Bandwidth.EmissionToRelay(fromOp, e.kind, e.layer, e.bytes)
-			}
-		}
+		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), e.kind)
+		mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, neighbor, e.kind, e.layer, e.bytes)
 		out = append(out, scheduledEvent{
 			when: s.now + mesh.ValidateDelay() + delay,
 			ev: &evtMeshArrival{

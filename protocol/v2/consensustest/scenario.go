@@ -39,6 +39,30 @@ type Scenario struct {
 	Note   string // doc pointer (BFT-comparison.md row, OBFT.md section, ...)
 }
 
+// CloneScenarioWith returns a copy of `s` whose Apply runs `s.Apply`
+// (if non-nil) first and then `extra` (if non-nil). Every other field
+// — including Delivery — is carried through unchanged. Use this in
+// sweep builders that need to wrap a scenario's Apply with axis-specific
+// composition (loss model, correlated-link wrap, etc.) so the cloned
+// scenario can never silently drop a field; field-by-field struct
+// rebuilds were the source of a real regression where Healthy in
+// packet-loss / correlated-delay / node-slowness sweeps reverted from
+// DeliveryMesh to DeliveryDirect because the rebuild forgot the new
+// Delivery field.
+func CloneScenarioWith(s Scenario, extra func(*SimConfig)) Scenario {
+	inner := s
+	out := s
+	out.Apply = func(cfg *SimConfig) {
+		if inner.Apply != nil {
+			inner.Apply(cfg)
+		}
+		if extra != nil {
+			extra(cfg)
+		}
+	}
+	return out
+}
+
 // ExpectFor looks up the declared expectation for protocol name `pname`,
 // with variant fallback so family variants don't each need their own
 // Expect-map entry. Lookup order:

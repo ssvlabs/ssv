@@ -212,6 +212,13 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 				base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 				base.K = k
 				base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
+				// Co-set Mesh.HopDelay so mesh-mode Healthy actually
+				// responds to the σ axis. Per-hop median = BTT/3 keeps
+				// the convolution over ~2 mesh hops landing near the
+				// direct-mode cluster-wide envelope (Mesh-as-realism
+				// calibration); Sigma matches the direct-mode sigma so
+				// the tail shape stays comparable.
+				base.Mesh.HopDelay = LogNormalDelay{Median: btt / 3, Sigma: sigma}
 				// At level=0 we run the full catalog (no wrap is a no-op
 				// for non-Baseline anyway, but emitting them here is what
 				// the heatmap reads for the bulk of scenarios). At
@@ -267,6 +274,11 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 		// Median scales with BTT (per-point production tail shape preserved):
 		// only the configured BTT budget varies along the axis.
 		base.Network = productionLogNormal(btt)
+		// Co-set Mesh.HopDelay so mesh-mode Healthy responds to the
+		// BTT axis: per-hop median scales identically to cluster-wide
+		// median (BTT/3 vs BTT/2), preserving the calibration anchor
+		// across the axis.
+		base.Mesh.HopDelay = LogNormalDelay{Median: btt / 3, Sigma: 0.5}
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d BTT=%s", n, k, btt),
 			Fields: map[string]float64{
@@ -305,6 +317,11 @@ func p2pHeavyTailSweep(scenarios []Scenario, protocols []Protocol, iters Iterati
 		// fatness. P99/P50 ratio = exp(Sigma · 2.326): 1.27× / 2.01× /
 		// 2.54× / 3.20× / 4.03× / 5.09× at the six sample points.
 		base.Network = LogNormalDelay{Median: base.BTT / 2, Sigma: sigma}
+		// Co-set Mesh.HopDelay so mesh-mode Healthy responds to the σ
+		// axis. Per-hop median = BTT/3 keeps calibration; sigma mirrors
+		// the cluster-wide value so the heavy-tail effect compounds
+		// through the mesh convolution.
+		base.Mesh.HopDelay = LogNormalDelay{Median: base.BTT / 3, Sigma: sigma}
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d Sigma=%.2f", n, k, sigma),
 			Fields: map[string]float64{
@@ -343,33 +360,31 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 		// sims would cross-contaminate).
 		scenariosWithLoss := make([]Scenario, len(scenarios))
 		for i, s := range scenarios {
-			inner := s
-			scenariosWithLoss[i] = Scenario{
-				Name:  s.Name,
-				Title: s.Title,
-				Group: s.Group,
-				Modes: s.Modes,
-				Apply: func(cfg *SimConfig) {
-					if inner.Apply != nil {
-						inner.Apply(cfg)
-					}
-					if rate > 0 {
-						// Compose: wrap whatever Network the inner scenario
-						// configured (e.g. PerReceiverDelay for MeshFlakiness)
-						// so loss adds ON TOP of the inner model. cfg.Network
-						// may be nil if the inner scenario didn't set it; use
-						// ConstantDelay{D: BTT} as the equivalent of Validate's
-						// default.
-						base := cfg.Network
-						if base == nil {
-							base = ConstantDelay{D: cfg.BTT}
-						}
-						cfg.Network = NewLossyNetwork(base, rate, 5)
-					}
-				},
-				Expect: s.Expect,
-				Note:   s.Note,
-			}
+			scenariosWithLoss[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
+				if rate <= 0 {
+					return
+				}
+				// Compose: wrap whatever Network the inner scenario
+				// configured (e.g. PerReceiverDelay for MeshFlakiness)
+				// so loss adds ON TOP of the inner model. cfg.Network
+				// may be nil if the inner scenario didn't set it; use
+				// ConstantDelay{D: BTT} as the equivalent of Validate's
+				// default.
+				base := cfg.Network
+				if base == nil {
+					base = ConstantDelay{D: cfg.BTT}
+				}
+				cfg.Network = NewLossyNetwork(base, rate, 5)
+				// Mirror the loss wrap onto Mesh.HopDelay so mesh-mode
+				// Healthy responds to the loss axis. Keying is per
+				// mesh-endpoint (cluster + relay synthetic IDs), so the
+				// fresh LossyNetwork tracks state per mesh edge.
+				meshInner := cfg.Mesh.HopDelay
+				if meshInner == nil {
+					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
+				}
+				cfg.Mesh.HopDelay = NewLossyNetwork(meshInner, rate, 5)
+			})
 		}
 		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
@@ -429,27 +444,26 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 		// scenario, which is the intended interpretation for this sweep.
 		scenariosWithCorr := make([]Scenario, len(scenarios))
 		for i, s := range scenarios {
-			inner := s
-			scenariosWithCorr[i] = Scenario{
-				Name:  s.Name,
-				Title: s.Title,
-				Group: s.Group,
-				Modes: s.Modes,
-				Apply: func(cfg *SimConfig) {
-					if inner.Apply != nil {
-						inner.Apply(cfg)
-					}
-					if prob > 0 {
-						base := cfg.Network
-						if base == nil {
-							base = ConstantDelay{D: cfg.BTT}
-						}
-						cfg.Network = NewCorrelatedLinkDelay(base, prob, 3.0, 20)
-					}
-				},
-				Expect: s.Expect,
-				Note:   s.Note,
-			}
+			scenariosWithCorr[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
+				if prob <= 0 {
+					return
+				}
+				base := cfg.Network
+				if base == nil {
+					base = ConstantDelay{D: cfg.BTT}
+				}
+				cfg.Network = NewCorrelatedLinkDelay(base, prob, 3.0, 20)
+				// Mirror onto Mesh.HopDelay so mesh-mode Healthy
+				// responds to the BadLinkProb axis; per-edge state
+				// keys on mesh-endpoint OperatorIDs (cluster + relay
+				// synthetic), so distinct mesh edges track distinct
+				// chains.
+				meshInner := cfg.Mesh.HopDelay
+				if meshInner == nil {
+					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
+				}
+				cfg.Mesh.HopDelay = NewCorrelatedLinkDelay(meshInner, prob, 3.0, 20)
+			})
 		}
 		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
@@ -517,32 +531,31 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 		// is the intended interpretation for this sweep.
 		scenariosWithSlowness := make([]Scenario, len(scenarios))
 		for i, s := range scenarios {
-			inner := s
-			scenariosWithSlowness[i] = Scenario{
-				Name:  s.Name,
-				Title: s.Title,
-				Group: s.Group,
-				Modes: s.Modes,
-				Apply: func(cfg *SimConfig) {
-					if inner.Apply != nil {
-						inner.Apply(cfg)
-					}
-					if slowCount <= 0 {
-						return
-					}
-					slowOps := make([]OperatorID, 0, slowCount)
-					for j := 0; j < slowCount; j++ {
-						slowOps = append(slowOps, OperatorID(j+2))
-					}
-					base := cfg.Network
-					if base == nil {
-						base = ConstantDelay{D: cfg.BTT}
-					}
-					cfg.Network = NewMarkovianSlowness(base, slowOps, 3*cfg.BTT, persistP)
-				},
-				Expect: s.Expect,
-				Note:   s.Note,
-			}
+			scenariosWithSlowness[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
+				if slowCount <= 0 {
+					return
+				}
+				slowOps := make([]OperatorID, 0, slowCount)
+				for j := 0; j < slowCount; j++ {
+					slowOps = append(slowOps, OperatorID(j+2))
+				}
+				base := cfg.Network
+				if base == nil {
+					base = ConstantDelay{D: cfg.BTT}
+				}
+				cfg.Network = NewMarkovianSlowness(base, slowOps, 3*cfg.BTT, persistP)
+				// Mirror onto Mesh.HopDelay so mesh-mode Healthy
+				// responds to the slow-op axis. SlowOps are cluster
+				// OperatorIDs (op2..op{k+1}), which match the cluster
+				// endpoint IDs returned by MeshTopology.EndpointFor —
+				// so the markov chain keys on cluster-op participation
+				// in mesh edges just as it does in the direct path.
+				meshInner := cfg.Mesh.HopDelay
+				if meshInner == nil {
+					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
+				}
+				cfg.Mesh.HopDelay = NewMarkovianSlowness(meshInner, slowOps, 3*cfg.BTT, persistP)
+			})
 		}
 		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
@@ -593,6 +606,11 @@ func p2pInstabilitySweep(scenarios []Scenario, protocols []Protocol, iters Itera
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		base.K = k
 		base.Network = LogNormalDelay{Median: btt / 2, Sigma: sigma}
+		// Co-set Mesh.HopDelay; the instability wrap in
+		// WrapBaselineForInstability layers MarkovianSlowness +
+		// LossyNetwork on top of cfg.Mesh.HopDelay too, so mesh-mode
+		// Healthy responds to the instability axis.
+		base.Mesh.HopDelay = LogNormalDelay{Median: btt / 3, Sigma: sigma}
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d %s", n, k, level.Name),
 			Fields: map[string]float64{

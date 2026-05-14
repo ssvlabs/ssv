@@ -60,6 +60,33 @@ func (b *BandwidthReport) EmissionToRelay(from OperatorID, kind MsgKind, layer i
 	b.PerOperatorOut[from] += bytes
 }
 
+// EmissionFromRelay records `bytes` bytes delivered by a non-cluster
+// mesh relay peer to cluster operator `to`. The mirror of EmissionToRelay:
+// the receiving cluster op is charged on PerOperatorIn so its inbound
+// histogram captures relay-side reflood reaching the cluster, but
+// PerOperatorOut is left unchanged because the relay isn't a cluster
+// operator and isn't accounted in per-operator outbound metrics.
+// Contributes to TotalBytes — these bytes are real wire traffic.
+func (b *BandwidthReport) EmissionFromRelay(to OperatorID, kind MsgKind, layer int, bytes int64) {
+	b.TotalBytes += bytes
+	b.PerKindBytes[kind.String()] += bytes
+	b.PerLayerBytes[layer] += bytes
+	b.PerOperatorIn[to] += bytes
+}
+
+// EmissionRelayToRelay records `bytes` bytes for a mesh hop between
+// two non-cluster relay peers (libp2p re-flood through the subnet
+// outside the cluster). Charges TotalBytes / PerKindBytes /
+// PerLayerBytes — these bytes hit the wire — but leaves PerOperatorOut
+// and PerOperatorIn untouched, since neither endpoint is a cluster
+// operator and the cluster's per-op metrics shouldn't attribute relay-
+// to-relay flow to anyone.
+func (b *BandwidthReport) EmissionRelayToRelay(kind MsgKind, layer int, bytes int64) {
+	b.TotalBytes += bytes
+	b.PerKindBytes[kind.String()] += bytes
+	b.PerLayerBytes[layer] += bytes
+}
+
 // Rejection records `bytes` bytes dropped at the validation layer (byz
 // garbage that didn't reach the protocol). Counted separately from
 // successful emissions; not summed into TotalBytes. Construct the report

@@ -134,33 +134,35 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 	if !IsBaselineGroup(s) || level.Level == 0 {
 		return s
 	}
-	inner := s
-	return Scenario{
-		Name:     s.Name,
-		Title:    s.Title,
-		Group:    s.Group,
-		Modes:    s.Modes,
-		Delivery: s.Delivery,
-		Apply: func(cfg *SimConfig) {
-			if inner.Apply != nil {
-				inner.Apply(cfg)
-			}
-			slowCount := level.slowCountForN(cfg.N)
-			slowOps := make([]OperatorID, 0, slowCount)
-			for i := 0; i < slowCount; i++ {
-				slowOps = append(slowOps, OperatorID(i+2))
-			}
-			base := cfg.Network
-			if base == nil {
-				base = ConstantDelay{D: cfg.BTT}
-			}
-			withSlow := NewMarkovianSlowness(base, slowOps,
-				time.Duration(level.SlowMul*float64(cfg.BTT)), level.PersistP)
-			cfg.Network = NewLossyNetwork(withSlow, level.LossRate, level.BurstFactor)
-		},
-		Expect: s.Expect,
-		Note:   s.Note,
-	}
+	return CloneScenarioWith(s, func(cfg *SimConfig) {
+		slowCount := level.slowCountForN(cfg.N)
+		slowOps := make([]OperatorID, 0, slowCount)
+		for i := 0; i < slowCount; i++ {
+			slowOps = append(slowOps, OperatorID(i+2))
+		}
+		extraDelay := time.Duration(level.SlowMul * float64(cfg.BTT))
+		// Cluster-wide (direct path): wrap cfg.Network with markov-slow
+		// + bursty loss, both anchored to the current level's params.
+		base := cfg.Network
+		if base == nil {
+			base = ConstantDelay{D: cfg.BTT}
+		}
+		withSlow := NewMarkovianSlowness(base, slowOps, extraDelay, level.PersistP)
+		cfg.Network = NewLossyNetwork(withSlow, level.LossRate, level.BurstFactor)
+		// Mesh hop (mesh path): wrap cfg.Mesh.HopDelay with FRESH
+		// per-mesh-edge instances of the same markov-slow + lossy
+		// wrappers. The mesh transport feeds them mesh-endpoint
+		// OperatorIDs (cluster + relay synthetic IDs), so the chains
+		// key per mesh edge — relay-to-relay edges no longer collapse
+		// into shared state with op-to-relay edges. Healthy in
+		// mesh-mode now genuinely responds to the instability axis.
+		meshInner := cfg.Mesh.HopDelay
+		if meshInner == nil {
+			meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
+		}
+		meshWithSlow := NewMarkovianSlowness(meshInner, slowOps, extraDelay, level.PersistP)
+		cfg.Mesh.HopDelay = NewLossyNetwork(meshWithSlow, level.LossRate, level.BurstFactor)
+	})
 }
 
 // filterBaselineScenarios returns just the Baseline-group entries of

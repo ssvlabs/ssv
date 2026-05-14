@@ -284,6 +284,7 @@ func (s *sim) emitMesh(from obftbase.OperatorID, kind ct.MsgKind, layer int, byt
 	// rather than re-delivered.
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
+	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		// Per-(from, to) byz primitives at publish only (relays escape
 		// these checks since they have no cluster identity).
@@ -302,19 +303,11 @@ func (s *sim) emitMesh(from obftbase.OperatorID, kind ct.MsgKind, layer int, byt
 		// Mesh hops use the mesh's HopDelay model, not the cluster-wide
 		// Network model — that's the calibration story. (OverrideDelay
 		// is byz-pattern-specific to direct fanout and does not apply.)
-		delay := mesh.SampleHopDelay(s.rng, fromOp, mesh.OperatorOrZero(neighbor), kind)
-		// Bandwidth: cluster-to-cluster goes through Emission (charges
-		// both endpoints); cluster-to-relay through EmissionToRelay
-		// (charges TotalBytes + outbound only — relays have no cluster
-		// identity, so charging them to a sentinel inbound would
-		// pollute PerOperatorIn).
-		if s.cfg.Bandwidth != nil && bytes > 0 {
-			if isProto {
-				s.cfg.Bandwidth.Emission(fromOp, mesh.OperatorForNode(neighbor), kind, layer, bytes)
-			} else {
-				s.cfg.Bandwidth.EmissionToRelay(fromOp, kind, layer, bytes)
-			}
-		}
+		// Endpoint IDs from EndpointFor give stateful NetworkModel impls
+		// a unique key per mesh edge (relays get synthetic IDs ≥
+		// RelayEndpointBase, distinct from cluster ops 1..N).
+		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
+		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, layer, bytes)
 		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
 			from:    fromNode,
 			to:      neighbor,
