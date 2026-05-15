@@ -11,6 +11,7 @@ import (
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
+	psigsadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/psigs"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/consensustest/reporting"
 	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
@@ -212,6 +213,14 @@ func TestStress(t *testing.T) {
 		twoabadapter.Protocol{VariantName: "2abOBFTx3", BTTMultiplier: 3},
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
+		// PSigs is a baseline-cost reference: every honest op signs the
+		// pre-agreed V at SlotStart and broadcasts; the cluster decides at
+		// the qV-th partial-sig arrival. No consensus on V, no rounds,
+		// no encrypted onion — most adversarial catalog scenarios return
+		// ErrNotApplicable (rendered as n/a in the report). The cell row
+		// gives the network-only cost of partial-sig collection, against
+		// which OBFT/2abOBFT/QBFT's full consensus overhead is measured.
+		psigsadapter.Protocol{},
 	}
 	protocolNames := make([]string, len(protocols))
 	for i, p := range protocols {

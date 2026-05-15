@@ -25,7 +25,8 @@ var scenarioEquivocate111 = Scenario{
 		// to L_1 where the honest leader broadcasts → σ at L_1.
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: PREPARE pool fragments; R1 timeout → R2 with fresh V → success.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
 	Note: "BFT-comparison.md Table 3: QBFT recovers via R2 fresh-V; OBFT misses (R-invariant). 2ab recovers via NR-fall-through (verdict-pool fragmentation drives row 5 NR-quorum). Pattern emits N-1 distinct V's at any cluster size; the '1-1-1' name reflects f=1.",
 }
@@ -53,7 +54,8 @@ var scenarioEquivocateAllNR = Scenario{
 		// silently — no equivocation detection here, unlike OBFT's witness
 		// re-hydration). PREPARE pool fragments across V_a/V_b; R1 timeout
 		// → R2 with fresh V → success.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
 	Note: "Both recover at fall-through cost; OBFT in-round (cheap, equivocation-NR-driven), QBFT pays RT (expensive, PREPARE-pool-fragmentation-driven).",
 }
@@ -96,7 +98,8 @@ var scenarioEquivocateSigmaLockedSplit = Scenario{
 		// motivation for 2abOBFT.
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: PREPARE pool splits; R1 timeout → R2 fresh V → success.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
 	Note: "OBFT-family R-invariant slot-miss at any cluster size (generalized 1-1 → f-f); QBFT R2 recovers. 2ab recovers in-round via NR-quorum at L_0 (Phase-2a verdict pool fragmentation + row 5).",
 }
@@ -145,7 +148,8 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		// QBFT: PREPARE-pool on V_a = 2f honest (byz leader runs no real
 		// Instance, no PREPARE from leader); pool on V_b = 1. Both < quorum →
 		// R1 timeout → R2 honest leader proposes fresh V → succeeds.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
 	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452). 2ab loses OBFT's σ_V head-start (Variant C) so this fall-throughs to L_1 instead of L_0.",
 }

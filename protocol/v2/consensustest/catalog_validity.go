@@ -46,7 +46,8 @@ var scenarioValidityDivergenceAlgebraicLimit = Scenario{
 		// task 4.2). Jittered networks shift the timing tail and ~30% of
 		// seeds miss the relay deadline — those runs surface via sweep tests
 		// that don't assert per-cell Match.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "BFT-comparison.md Table 3 'Validity-divergence 2-2 split: ✗ algebraic limit'. Generalized to N-2f NV ops at any n; at f=1, n=4 this is the canonical 2-2 split (op3, op4 NV).",
 }
@@ -75,7 +76,8 @@ var scenarioValidityDivergence3_1 = Scenario{
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: 3 ops PREPARE on V (op4 doesn't, host says invalid) → quorum
 		// reached → COMMIT-quorum → R1 succeeds.
-		"QBFT": ExpectSuccessFastest,
+		"QBFT":  ExpectSuccessFastest,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "Minority NV at L_0 (1 of 4 honest dissents). σ-quorum still reaches at L_0 because 3 valid honest + leader's σ_L^V = 4 ≥ qV. Complement to ValidityDivergence_2_2 (miss) and 1_3 (fall-through).",
 }
@@ -118,7 +120,8 @@ var scenarioValidityDivergenceNRFallThrough = Scenario{
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE pool insufficient (#valid honest = f, < quorum=2f+1)
 		// → R1 timeout → R2 fresh V → succeeds.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "NR-quorum fall-through pattern (#NV = 2f+1 = qEnc). Generalized from the f=1, n=4 '1-3 split' (op2..op4 NV); scales to N-2f-1 valid + 2f+1 NV at any n. Complement to ValidityDivergence_AlgebraicLimit (miss) and ValidityDivergence_3_1 (success at L_0).",
 }
@@ -169,7 +172,8 @@ var scenarioValidityDivergence_PassiveByz_Silent_1NV = Scenario{
 		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE-quorum unreachable (op-NV+byz-silent); R2 fresh-V
 		// host-validates at layer 1 → succeeds.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #1. Passive byz widens deadlock zone — single NV honest is enough to miss when paired with f byz silent. Cryptographically unattributable (passive silence + host re-org are both legitimate behaviors).",
 }
@@ -212,7 +216,8 @@ var scenarioValidityDivergence_PassiveByz_Silent_2NV = Scenario{
 		// configuration.
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE-quorum unreachable; R2 fresh-V at layer 1 host-validates → succeeds.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #2. Worst-case all-NV non-leaders plus f byz silent — σ-pool collapses to leader-only, NR-pool capped below qEnc by byz silence. 2ab recovers via row-2 NR-quorum (honest NR emissions reach qEnc at honest receivers).",
 }
@@ -260,7 +265,8 @@ var scenarioValidityDivergence_PassiveByz_SigmaOnV_2NV = Scenario{
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: R1 PREPARE pool = leader + f byz = 1+f < quorum=2f+1; R1 timeout;
 		// R2 fresh-V at layer 1 host-validates → succeeds.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "OBFT.md §Failure modes / Validity-divergence deadlock #3. Byz emits σ on V (cryptographically unattributable — passive σ contribution is honest-equivalent message-wise) but consumes f-budget, so σ-pool still misses qV. The spec's spec-3 algebraic miss configuration.",
 }
@@ -282,7 +288,8 @@ var scenarioHostFlipMidSlot = Scenario{
 		// 2abOBFT: host valid at L_0; σV verdicts at L_0 reach qV → σ at L_0.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: round 1 PROPOSE host-validates; cluster decides at R1.
-		"QBFT": ExpectSuccessFastest,
+		"QBFT":  ExpectSuccessFastest,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "Host valid only at layer 0 / round 1. Healthy decision at fastest path; 'invalid' at deeper layers/rounds is moot under healthy propagation.",
 }
@@ -306,7 +313,8 @@ var scenarioHostInvalidUntilL1 = Scenario{
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: round 1 PROPOSE rejected → R1 timeout → R2 fresh-V validates
 		// (host valid at R2 = framework round 1) → decides at R2.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "Host invalid at layer 0 / round 1 only. Both protocols recover via fall-through to deeper layer / next round. Exercises round-aware host validation in QBFT.",
 }
@@ -378,7 +386,8 @@ var scenarioValidityDivergence_LeaderNV_PassiveByz = Scenario{
 		// QBFT: R1 PREPARE pool short (host-NV ops don't PREPARE; byz silent);
 		// R2 fresh-V at layer 1 host-validates → succeeds. (HostInvalidForOperators
 		// is layer-0-scoped; round 2 = layer 1 sees all-valid.)
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
 	},
 	Note: "OBFT.md §Failure modes — Validity-divergence deadlock, leader-NV symmetric variant. Validates the spec's σ_V-lock-despite-host-NV invariant: a Phase-1-σ-emitted leader stays σ-locked even when their host returns NV. Same algebraic miss outcome as the non-leader-NV passive-byz scenarios; the leader-NV-locked configuration is the additional spec coverage.",
 }

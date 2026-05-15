@@ -445,10 +445,10 @@ func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // Six profiles:
 //   - prod / stage1 / stage2: the three empirically-fitted mixtures
 //     from Prod_1_2_3_4_*, Stage_53_54_55_56_*, Stage_97_98_99_100_*.
-//   - slow: prod with each component median ×20 (same shape, shifted
-//     right by 20× — models a uniformly much-slower-than-prod mesh).
+//   - slow: prod with each component median ×80 (same shape, shifted
+//     right by 80× — models a uniformly much-slower-than-prod mesh).
 //   - heavy_tail: prod with each component σ scaled so the probability
-//     of drawing above the original P99 is 12× (medians unchanged —
+//     of drawing above the original P99 is 24× (medians unchanged —
 //     models prod with rarer events spiking much higher / more often).
 //   - slow_heavy_tail: prod ∘ slow ∘ heavy_tail; uniformly slower mesh
 //     with bursty rare events on top.
@@ -475,11 +475,11 @@ func P2PProfile(name string) NetworkModel {
 	case "stage2":
 		return Stage_97_98_99_100_CalibratedLogNormalMixture()
 	case "slow":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(20)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80)
 	case "heavy_tail":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(12)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(24)
 	case "slow_heavy_tail":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(20).HeavyTailed(12)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(24)
 	default:
 		panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
 	}
@@ -504,7 +504,7 @@ func P2PProfileIndex(name string) int {
 // `factor`. Sigma values are left unchanged, so the per-component shape
 // (P99/median ratio) is preserved — the whole distribution shifts right
 // in time by the same factor. Used by derived profiles like "slow"
-// (factor=20 over prod).
+// (factor=80 over prod).
 //
 // Panics on factor ≤ 0 — a non-positive scaling factor would either
 // invert or collapse the distribution and almost certainly signals a
@@ -529,7 +529,7 @@ func (l *LogNormalMixtureDelay) Slowed(factor float64) *LogNormalMixtureDelay {
 // of drawing a value above the original mixture's P99 grows by
 // `outlierFreqMultiplier`. Each component's median is left unchanged,
 // so the mixture's overall median shifts by only a few percent.
-// Used by derived profiles like "heavy_tail" (outlier-freq×12 over prod).
+// Used by derived profiles like "heavy_tail" (outlier-freq×24 over prod).
 //
 // For a single-component mixture, the math admits the closed-form
 // scale σ_new = σ_old · Φ^{-1}(0.99) / Φ^{-1}(1 − k·(1−0.99)). For

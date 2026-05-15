@@ -41,7 +41,8 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		// QBFT analog: byz R1 leader's PROPOSE reaches only f recipients →
 		// PREPARE-pool below qV → R1 round-changes → honest R2 leader
 		// (round-robin) succeeds with fresh V. Outcome class = fall-through.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader to selectively-deliver
 	},
 	Note: "OBFT-specific deadlock at L_0 (σ-pool=f+1 < qV, NR-pool=2f < qEnc → no L_1 fall-through). 2abOBFT recovers via NR-quorum at L_0. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
 }
@@ -67,7 +68,8 @@ var scenarioLateLeaderBroadcast = Scenario{
 		// QBFT analog: byz R1 leader's PROPOSE arrives past R1's timer
 		// (functionally equivalent to silent leader) → R1 round-changes →
 		// honest R2 leader succeeds with fresh V.
-		"QBFT": ExpectSuccessFallThrough,
+		"QBFT":  ExpectSuccessFallThrough,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader-broadcast phase
 	},
 	Note: "Class A spec test (asymmetric propagation past T_commit). OBFT-family falls through to a deeper layer via the per-layer absorption window; QBFT round-changes to an honest R2 leader.",
 }
@@ -152,8 +154,18 @@ var scenarioMeshFlakiness = Scenario{
 		// flakiness (PREPARE-pool quorum-by-arrival vs OBFT's hard T_commit
 		// cutoff with no late retention).
 		"QBFT": ExpectSuccessFastest,
+		// PSigs: byz σ-refusal removes one signer; flaky-receiver delays
+		// affect that op's inbound only — outbound partials from flaky
+		// ops still arrive at non-flaky receivers on time. N-1-f = 2f
+		// honest signers (excluding byz) each emit one partial; non-flaky
+		// receivers gather qV from on-time arrivals. Decides at L_0-
+		// equivalent (SlotStart + 1·BTT). PSigs has no σ-or-NR
+		// convergence rule, so the mesh-flakiness deadlock that traps
+		// OBFT-family doesn't apply — this cell makes that asymmetry
+		// visible on the heatmap.
+		"PSigs": ExpectSuccessFastest,
 	},
-	Note: "OBFT.md §Properties / Mesh-flakiness tolerance: flaky honest NR-emits incorrectly + byz σ-refusal → OBFT both quorums short → no fall-through (miss). QBFT recovers at R1 (PREPARE-pool reaches qV once delayed flaky PREPAREs arrive — no hard cutoff). Validates the spec's 'mesh-flaky honest = f-budget consumer' claim and the QBFT-vs-OBFT asymmetry.",
+	Note: "OBFT.md §Properties / Mesh-flakiness tolerance: flaky honest NR-emits incorrectly + byz σ-refusal → OBFT both quorums short → no fall-through (miss). QBFT recovers at R1 (PREPARE-pool reaches qV once delayed flaky PREPAREs arrive — no hard cutoff). PSigs decides naturally (no σ-or-NR split → no flakiness deadlock). Validates the spec's 'mesh-flaky honest = f-budget consumer' claim and the QBFT-vs-OBFT asymmetry.",
 }
 
 // ---- Asymmetric-propagation f-boundary (OBFT.md §Liveness) -----------
@@ -210,6 +222,11 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 		// 300+3·BTT=900ms; their PREPAREs arrive at others by 1100ms);
 		// PREPARE-quorum reaches at fast ops within R1 (RT=2s); R1 succeeds.
 		"QBFT": ExpectSuccessFastest,
+		// PSigs: V is pre-agreed, so receiver-side delays don't keep an
+		// op from signing. Slow ops still emit partials (their outbound
+		// path is not throttled); fast non-slow receivers reach qV at
+		// SlotStart + 1·BTT from on-time peer partials.
+		"PSigs": ExpectSuccessFastest,
 	},
 	Note: "OBFT.md §Liveness 'Adversary delays V to ≤ 1 honest past T_commit'. Pure network-driven (no byz). Cluster σ-pool reaches qV at L_0 from the (N-f) in-time operators. Complement to HV1SelectiveDelivery (which is byz-leader-driven at the SAME algebraic boundary).",
 }
@@ -273,6 +290,12 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 		// genuinely depends on cluster size and propagation luck, so
 		// ExpectSuccessOrMiss is the honest catalog entry.
 		"QBFT": ExpectSuccessOrMiss,
+		// PSigs: same intuition as the f-slow variant — V is pre-agreed
+		// so receiver-side delays don't gate signing. Slow ops' outbound
+		// partials still arrive at fast receivers on time; fast receivers
+		// reach qV at SlotStart + 1·BTT. The OBFT-family miss here
+		// depends on the σ-or-NR split which PSigs doesn't have.
+		"PSigs": ExpectSuccessFastest,
 	},
-	Note: "OBFT.md §Liveness / §Failure modes — h_V=1-shape asymmetric propagation. (f+1) honest miss V at T_commit; σ-pool < qV and NR-pool < qEnc; chain stays sealed; OBFT misses. QBFT outcome is timing-dependent with Phase-C post-consensus modelling: at n=4 the fast subset is too small to hit 2f+1 partials in time and the cluster misses; at larger n the fast subset alone can reach quorum. Pure network-driven (no byz) — distinct from scenarioHV1SelectiveDelivery which is byz-engineered.",
+	Note: "OBFT.md §Liveness / §Failure modes — h_V=1-shape asymmetric propagation. (f+1) honest miss V at T_commit; σ-pool < qV and NR-pool < qEnc; chain stays sealed; OBFT misses. QBFT outcome is timing-dependent with Phase-C post-consensus modelling: at n=4 the fast subset is too small to hit 2f+1 partials in time and the cluster misses; at larger n the fast subset alone can reach quorum. PSigs decides at SlotStart + 1·BTT (V pre-agreed → receiver delays don't gate signing). Pure network-driven (no byz) — distinct from scenarioHV1SelectiveDelivery which is byz-engineered.",
 }

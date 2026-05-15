@@ -14,6 +14,7 @@ var scenarioSilentLeaderL0 = Scenario{
 		"OBFT":    ExpectSuccessFallThrough, // V_0 silent → in-round to V_1
 		"2abOBFT": ExpectSuccessFallThrough, // same recovery shape as OBFT
 		"QBFT":    ExpectSuccessFallThrough, // R1 silent → R2 success
+		"PSigs":   ExpectNotApplicable,      // PSigs has no leader to silence
 	},
 	Note: "Primary leader silent. OBFT falls through K-layer in-round; QBFT round-changes to R2 (pays RT timeout).",
 }
@@ -52,7 +53,8 @@ var scenarioMultiSilent = Scenario{
 		//   K=4 → 3 timeouts → ~6s > 4s → MISS.
 		// ExpectSuccessOrMiss accepts the timing-dependent outcome across
 		// the sweep's K values.
-		"QBFT": ExpectSuccessOrMiss,
+		"QBFT":  ExpectSuccessOrMiss,
+		"PSigs": ExpectNotApplicable, // PSigs has no concept of K-leader silence
 	},
 	Note: "Top K-1 of K leaders silent; only the deepest is honest. OBFT's K-layer in-round fall-through is structurally faster than QBFT's serial round-changes, but the per-layer Phase-3 walk cost (ε_3) accumulates: at ε_3=50ms / RelayCutoff=4s the deepest-honest case fits within deadline only at K=2; at K ≥ 3 the decision lands past RelayCutoff − HeaderSubmitHeadroom and the slot misses. ExpectSuccessOrMiss for all three protocols reflects the K-dependent boundary.",
 }
@@ -76,6 +78,10 @@ var scenarioSigmaRefusal = Scenario{
 		// QBFT: byz never PREPAREs/COMMITs; 3 honest can still reach qV=3
 		// at R1 (3 PREPAREs and 3 COMMITs from honest). Healthy path holds.
 		"QBFT": ExpectSuccessFastest,
+		// PSigs: same intuition — 3 honest signers reach qV=3 partial-sigs
+		// (own + 2 peers each) at SlotStart + 1·BTT. Within f-bound, byz
+		// refusal is transparent to the cluster's collection threshold.
+		"PSigs": ExpectSuccessFastest,
 	},
 	Note: "Within f-bound, single byz silence doesn't disrupt either protocol's healthy path.",
 }
@@ -105,7 +111,8 @@ var scenarioWithholdLeaderDeepest = Scenario{
 		"2abOBFT": ExpectSuccessFastest, // same — L_0 succeeds regardless of deepest
 		// QBFT: byz only leads its own round (under round-robin from op1).
 		// R1 honest → byz round is never reached → fastest.
-		"QBFT": ExpectSuccessFastest,
+		"QBFT":  ExpectSuccessFastest,
+		"PSigs": ExpectNotApplicable, // PSigs has no leader-per-layer concept
 	},
 	Note: "Class A spec test: deepest-layer leader silenced. L_0 / R1 are healthy at any (n, K) → cluster decides at the first leader without needing the silent one.",
 }
@@ -124,6 +131,7 @@ var scenarioCertWithholding = Scenario{
 		"OBFT":    ExpectSuccessFastest, // honest ops reconstruct independently
 		"2abOBFT": ExpectSuccessFastest, // same — honest ops reconstruct independently
 		"QBFT":    ExpectNotApplicable,  // no chained-cert gossip in QBFT
+		"PSigs":   ExpectNotApplicable,  // no cert-gossip path in PSigs either
 	},
 	Note: "Byz refuses cert gossip; honest ops reconstruct independently → healthy path holds.",
 }
@@ -178,7 +186,8 @@ var scenarioMultiSilent_AllLayers = Scenario{
 		"2abOBFT": ExpectMiss,
 		// QBFT: K silent rounds consume the RT budget before any round
 		// can decide. R1 + R2 timeouts > 4s RelayCutoff → MISS.
-		"QBFT": ExpectMiss,
+		"QBFT":  ExpectMiss,
+		"PSigs": ExpectNotApplicable, // PSigs has no concept of per-layer leader silence
 	},
 	Note: "OBFT.md §Failure modes / Backup-leader cascade failure + Late deepest-layer leader broadcast. Complement to scenarioMultiSilent (K-1 silent → success at L_{K-1}): silencing ALL K layers exercises the deepest-layer miss path where OBFT walks every layer via NR-quorum and finds nothing. Both protocols miss cleanly; safety invariants hold.",
 }

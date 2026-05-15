@@ -8,6 +8,7 @@ import (
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
+	psigsadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/psigs"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
 	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
@@ -31,7 +32,12 @@ import (
 // See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestCorrectness(t *testing.T) {
 	profile := ct.CorrectnessProfile(200 * time.Millisecond)
-	protocols := []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.Protocol{}}
+	protocols := []ct.Protocol{
+		obftadapter.Protocol{},
+		twoabadapter.Protocol{},
+		qbftadapter.Protocol{},
+		psigsadapter.Protocol{},
+	}
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeCorrectness)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeCorrectness")
 

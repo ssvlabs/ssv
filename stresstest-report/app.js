@@ -36,6 +36,7 @@ const PROTOCOL_COLORS = {
   '2abOBFTx3':  '#a5f3fc', // very pale cyan — much-looser 2abOBFT (×3)
   QBFT:         '#e85a71', // light pink-red (computed-RT variant)
   'QBFT-SSV':   '#8b5cf6', // purple (production-RT variant)
+  PSigs:        '#10b981', // green (baseline partial-sig-only reference)
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
@@ -108,7 +109,7 @@ let activeProtocols = null;
 const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
 
 function loadActiveProtocols(allProtocols) {
-  const DEFAULT_ACTIVE = new Set(['OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV']);
+  const DEFAULT_ACTIVE = new Set(['OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV', 'PSigs']);
   const stored = localStorage.getItem(LS_KEY_PROTOCOLS);
   if (stored) {
     try {
@@ -1183,10 +1184,16 @@ function shiftCell(cell, slotStart) {
   // Prefix match so QBFT family variants (QBFT, QBFT-SSV, future QBFT-*)
   // all share the pipeline-shift semantic. Exact-equality match would
   // silently mis-shift QBFT-SSV cells with the OBFT-family branch.
-  const isQBFT = cell.protocol === 'QBFT' || cell.protocol.startsWith('QBFT-');
+  // PSigs is grouped with QBFT for the shift semantic: its broadcast
+  // schedule isn't pre-anchored to layer-specific times — the whole
+  // protocol runs at SlotStart, so a late-joining operator shifts the
+  // pipeline rightward exactly like QBFT.
+  const isPipelineShift = cell.protocol === 'QBFT' ||
+    cell.protocol.startsWith('QBFT-') ||
+    cell.protocol === 'PSigs';
   for (let i = 0; i < samples.length; i++) {
     const t = samples[i];
-    if (isQBFT) {
+    if (isPipelineShift) {
       const shifted = t + slotStart;
       if (shifted <= SLOT_END_MS) adjusted.push(shifted);
     } else {

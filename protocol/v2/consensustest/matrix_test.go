@@ -11,7 +11,9 @@ import (
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
+	psigsadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/psigs"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
 // TestCatalog_NoUnsafeByzKinds guards against accidentally adding a negative-
@@ -135,7 +137,9 @@ func TestComparison_Matrix(t *testing.T) {
 
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
+		twoabadapter.Protocol{},
 		qbftadapter.Protocol{},
+		psigsadapter.Protocol{},
 	}
 	protoNames := []string{}
 	for _, p := range protocols {
@@ -178,7 +182,9 @@ func TestComparison_BTTSweep(t *testing.T) {
 
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
+		twoabadapter.Protocol{},
 		qbftadapter.Protocol{},
+		psigsadapter.Protocol{},
 	}
 
 	for _, btt := range bttValues {
