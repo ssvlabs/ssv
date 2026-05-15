@@ -118,7 +118,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFollowDistance(0))
+	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
 	contractFilterer, err := client.Filterer()
@@ -128,6 +128,29 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 
 	logs := client.StreamLogs(ctx, 0)
+
+	// nextEventBlock mines FollowDistance empty blocks (so the previously
+	// committed event block clears the EL stream's follow-distance window) and
+	// then drains empty progression markers from the stream until it returns a
+	// block carrying logs. Tests use this in place of a raw `<-logs` read.
+	nextEventBlock := func() executionclient.BlockLogs {
+		for i := 0; i < executionclient.FollowDistance; i++ {
+			sim.Commit()
+		}
+		for {
+			select {
+			case b := <-logs:
+				if len(b.Logs) > 0 {
+					return b
+				}
+			case <-ctx.Done():
+				t.Fatalf("timed out waiting for next event block: %v", ctx.Err())
+			}
+		}
+	}
+	// blockAdvance is how far blockNum moves per event iteration: one block for
+	// the event commit itself plus FollowDistance dummies mined by nextEventBlock.
+	const blockAdvance = uint64(1) + executionclient.FollowDistance
 
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
@@ -163,8 +186,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -182,7 +204,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
+		blockNum += blockAdvance
 
 		// Check storage for the new operators
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -285,8 +307,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -298,7 +319,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
-		blockNum++
+		blockNum += blockAdvance
 
 		requireKeyManagerDataToExist(t, eh, 1, validatorData1)
 
@@ -336,8 +357,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -349,7 +369,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
+			blockNum += blockAdvance
 
 			requireKeyManagerDataToNotExist(t, eh, 1, validatorData2)
 
@@ -386,8 +406,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -399,7 +418,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
+			blockNum += blockAdvance
 
 			requireKeyManagerDataToExist(t, eh, 2, validatorData2)
 
@@ -441,8 +460,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -454,7 +472,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
+			blockNum += blockAdvance
 
 			requireKeyManagerDataToNotExist(t, eh, 2, validatorData3)
 
@@ -490,8 +508,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -503,7 +520,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
+			blockNum += blockAdvance
 
 			requireKeyManagerDataToExist(t, eh, 3, validatorData3)
 
@@ -540,8 +557,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -553,7 +569,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
+			blockNum += blockAdvance
 
 			requireKeyManagerDataToExist(t, eh, 4, validatorData4)
 
@@ -583,8 +599,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -596,7 +611,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 		})
 
 		t.Run("ValidatorExited incorrect owner address", func(t *testing.T) {
@@ -610,8 +625,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -623,7 +637,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 		})
 
 		// Receive event, unmarshall, parse, check parse event is not nil or with an error,
@@ -650,8 +664,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -663,7 +676,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// Check the validator is in the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
@@ -695,8 +708,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -708,7 +720,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
@@ -733,8 +745,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -746,7 +757,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
@@ -779,8 +790,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -792,7 +802,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
@@ -821,8 +831,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -842,7 +851,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
+		blockNum += blockAdvance
 
 		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 		require.True(t, exists)
@@ -882,8 +891,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -912,7 +920,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
-		blockNum++
+		blockNum += blockAdvance
 	})
 
 	// Liquidated event is far in the future
@@ -932,8 +940,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -945,7 +952,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
+		blockNum += blockAdvance
 	})
 
 	// Reactivate event
@@ -966,8 +973,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -1003,7 +1009,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.Greater(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
-		blockNum++
+		blockNum += blockAdvance
 
 		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 		require.True(t, exists)
@@ -1020,8 +1026,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
+		block := nextEventBlock()
 		require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
 
 		eventsCh := make(chan executionclient.BlockLogs)
@@ -1033,7 +1038,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
+		blockNum += blockAdvance
 		// Check if the fee recipient was updated
 		feeRecipient, err := eh.nodeStorage.GetFeeRecipient(testAddr)
 		require.NoError(t, err)
@@ -1069,8 +1074,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[1].Topics[0])
 
@@ -1084,7 +1088,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// #TODO: Fails until we fix the OperatorAdded: handlers.go #108
 			// Check storage for the new operators
@@ -1147,8 +1151,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[1].Topics[0])
 
@@ -1161,7 +1164,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.False(t, exists)
@@ -1211,8 +1214,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[1].Topics[0])
 
@@ -1225,7 +1227,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
@@ -1242,8 +1244,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -1261,7 +1262,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// Check if the operator wasn't removed successfully
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -1287,8 +1288,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			sim.Commit()
 
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
+			block := nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 			eventsCh := make(chan executionclient.BlockLogs)
@@ -1306,7 +1306,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 			// Check storage for the new operator
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
@@ -1318,8 +1318,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			sim.Commit()
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
+			block = nextEventBlock()
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 			eventsCh = make(chan executionclient.BlockLogs)
@@ -1336,7 +1335,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+			blockNum += blockAdvance
 
 			// List operators and check that the operator was removed
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
