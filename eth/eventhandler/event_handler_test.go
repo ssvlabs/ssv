@@ -14,6 +14,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -127,30 +128,28 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	err = client.Healthy(ctx)
 	require.NoError(t, err)
 
-	logs := client.StreamLogs(ctx, 0)
-
-	// nextEventBlock mines FollowDistance empty blocks (so the previously
-	// committed event block clears the EL stream's follow-distance window) and
-	// then drains empty progression markers from the stream until it returns a
-	// block carrying logs. Tests use this in place of a raw `<-logs` read.
+	// nextEventBlock returns the logs from the most recently committed block as
+	// a BlockLogs ready to feed into HandleBlockEventsStream. It bypasses the EL
+	// log stream (FollowDistance lag, websocket round-trips) — this test
+	// exercises the handler, not streaming, and the original WithFollowDistance(0)
+	// shortcut had the same effect. Going direct also keeps the test
+	// wall-clock tight so the slot-equality assertions further down don't race
+	// past slot boundaries.
 	nextEventBlock := func() executionclient.BlockLogs {
-		for i := 0; i < executionclient.FollowDistance; i++ {
-			sim.Commit()
-		}
-		for {
-			select {
-			case b := <-logs:
-				if len(b.Logs) > 0 {
-					return b
-				}
-			case <-ctx.Done():
-				t.Fatalf("timed out waiting for next event block: %v", ctx.Err())
-			}
+		header, err := client.HeaderByNumber(ctx, nil)
+		require.NoError(t, err)
+		blockNumber := header.Number.Uint64()
+		blockLogs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{contractAddr},
+			FromBlock: new(big.Int).SetUint64(blockNumber),
+			ToBlock:   new(big.Int).SetUint64(blockNumber),
+		})
+		require.NoError(t, err)
+		return executionclient.BlockLogs{
+			BlockNumber: blockNumber,
+			Logs:        blockLogs,
 		}
 	}
-	// blockAdvance is how far blockNum moves per event iteration: one block for
-	// the event commit itself plus FollowDistance dummies mined by nextEventBlock.
-	const blockAdvance = uint64(1) + executionclient.FollowDistance
 
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
 	require.NoError(t, err)
@@ -204,7 +203,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum += blockAdvance
+		blockNum++
 
 		// Check storage for the new operators
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -319,7 +318,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
-		blockNum += blockAdvance
+		blockNum++
 
 		requireKeyManagerDataToExist(t, eh, 1, validatorData1)
 
@@ -369,7 +368,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum += blockAdvance
+			blockNum++
 
 			requireKeyManagerDataToNotExist(t, eh, 1, validatorData2)
 
@@ -418,7 +417,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum += blockAdvance
+			blockNum++
 
 			requireKeyManagerDataToExist(t, eh, 2, validatorData2)
 
@@ -472,7 +471,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum += blockAdvance
+			blockNum++
 
 			requireKeyManagerDataToNotExist(t, eh, 2, validatorData3)
 
@@ -520,7 +519,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum += blockAdvance
+			blockNum++
 
 			requireKeyManagerDataToExist(t, eh, 3, validatorData3)
 
@@ -569,7 +568,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum += blockAdvance
+			blockNum++
 
 			requireKeyManagerDataToExist(t, eh, 4, validatorData4)
 
@@ -611,7 +610,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 		})
 
 		t.Run("ValidatorExited incorrect owner address", func(t *testing.T) {
@@ -637,7 +636,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 		})
 
 		// Receive event, unmarshall, parse, check parse event is not nil or with an error,
@@ -676,7 +675,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// Check the validator is in the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
@@ -720,7 +719,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
@@ -757,7 +756,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
@@ -802,7 +801,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
@@ -851,7 +850,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum += blockAdvance
+		blockNum++
 
 		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 		require.True(t, exists)
@@ -920,7 +919,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
-		blockNum += blockAdvance
+		blockNum++
 	})
 
 	// Liquidated event is far in the future
@@ -952,7 +951,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum += blockAdvance
+		blockNum++
 	})
 
 	// Reactivate event
@@ -1009,7 +1008,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.Greater(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
-		blockNum += blockAdvance
+		blockNum++
 
 		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 		require.True(t, exists)
@@ -1038,7 +1037,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum += blockAdvance
+		blockNum++
 		// Check if the fee recipient was updated
 		feeRecipient, err := eh.nodeStorage.GetFeeRecipient(testAddr)
 		require.NoError(t, err)
@@ -1088,7 +1087,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// #TODO: Fails until we fix the OperatorAdded: handlers.go #108
 			// Check storage for the new operators
@@ -1164,7 +1163,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.False(t, exists)
@@ -1227,7 +1226,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
@@ -1262,7 +1261,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// Check if the operator wasn't removed successfully
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -1306,7 +1305,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 			// Check storage for the new operator
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
@@ -1335,7 +1334,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			lastProcessedBlock, _, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum += blockAdvance
+			blockNum++
 
 			// List operators and check that the operator was removed
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
