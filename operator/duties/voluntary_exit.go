@@ -19,14 +19,26 @@ import (
 )
 
 const (
-	// voluntaryExitSchedulingSlack keeps a few slots of buffer after the execution-layer
-	// follow distance so the duty is still in the future when the event is finally observed
-	// and picked up on the next slot tick.
+	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
+	// exit event clears the execution-layer follow distance. Different operators
+	// observe the event at slightly different wall-clock times due to EL client
+	// differences, head-subscription latency, FilterLogs round-trip, and the
+	// phase of the local slot ticker relative to event delivery. The slack gives
+	// every operator enough time to compute the same dutySlot and have it still
+	// be in the future when their scheduler picks it up, so they all execute on
+	// the same target slot rather than firing on the next tick after receipt.
 	voluntaryExitSchedulingSlack = phase0.Slot(4)
 
-	// voluntaryExitSlotsToPostpone defines how many slots we want to wait out before
-	// executing voluntary exit duty.
-	voluntaryExitSlotsToPostpone = phase0.Slot(executionclient.DefaultFollowDistance) + voluntaryExitSchedulingSlack
+	// voluntaryExitSlotsToPostpone is the offset added to an exit event's block
+	// slot to derive the scheduled duty slot. It must exceed the EL streaming
+	// pipeline's worst-case latency from event production to handler delivery,
+	// which is dominated by executionclient.FollowDistance (the EL log stream
+	// only surfaces an event once the chain head reaches blockSlot+FollowDistance);
+	// the remainder is the slack above. If this value were smaller than any
+	// operator's effective EL streaming lag, that operator would schedule the
+	// duty in the past on receipt and fire immediately, defeating the cross-
+	// operator coordination that downstream pre-consensus signing depends on.
+	voluntaryExitSlotsToPostpone = phase0.Slot(executionclient.FollowDistance) + voluntaryExitSchedulingSlack
 )
 
 type ExitDescriptor struct {
@@ -93,10 +105,17 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
-			// slot value for this duty. Additionally, add voluntaryExitSlotsToPostpone slots on
-			// top to ensure the duty is scheduled with a slot number still in the future once the
-			// event clears the execution-layer follow distance and reaches this handler.
+			// Derive dutySlot deterministically from the EL event's block slot so
+			// every operator arrives at the same value regardless of when they
+			// personally received the event. This matters because the runner
+			// derives VoluntaryExit.Epoch from dutySlot (see
+			// VoluntaryExitRunner.calculateVoluntaryExit), and operators sign over
+			// the resulting VoluntaryExit object — divergent slots would produce
+			// different epochs near an epoch boundary, breaking BLS partial-
+			// signature aggregation and silently failing the exit.
+			//
+			// voluntaryExitSlotsToPostpone keeps that shared slot in the future
+			// for every operator: see its docstring for the breakdown.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(

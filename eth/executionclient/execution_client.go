@@ -55,10 +55,6 @@ type ExecutionClient struct {
 	reqTimeout    time.Duration
 	reqRetryDelay time.Duration
 
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-
 	syncDistanceTolerance uint64
 	// syncProgressFn is a struct-field so it can be overwritten for testing
 	syncProgressFn func(context.Context) (*ethereum.SyncProgress, error)
@@ -79,7 +75,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		logger:                     zap.NewNop(),
 		reqTimeout:                 DefaultReqTimeout,
 		reqRetryDelay:              DefaultReqRetryDelay,
-		followDistance:             DefaultFollowDistance,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		syncDistanceTolerance:      DefaultSyncDistanceTolerance,
 		closed:                     make(chan struct{}),
@@ -137,10 +132,10 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	if err != nil {
 		return nil, nil, ec.errSingleClient(fmt.Errorf("get current block: %w", err), "eth_blockNumber")
 	}
-	if currentBlock < ec.followDistance {
+	if currentBlock < FollowDistance {
 		return nil, nil, ErrNothingToSync
 	}
-	toBlock := currentBlock - ec.followDistance
+	toBlock := currentBlock - FollowDistance
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
@@ -500,10 +495,10 @@ func (ec *ExecutionClient) streamLogsToChan(
 			return lastBlock, progressed, fmt.Errorf("subscription error: %w", err)
 
 		case header := <-heads:
-			if header.Number.Uint64() < ec.followDistance {
+			if header.Number.Uint64() < FollowDistance {
 				continue
 			}
-			toBlock := header.Number.Uint64() - ec.followDistance
+			toBlock := header.Number.Uint64() - FollowDistance
 			if toBlock < fromBlock {
 				continue
 			}

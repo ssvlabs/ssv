@@ -178,7 +178,7 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 		ValidatorIndex: phase0.ValidatorIndex(3),
 		BlockNumber:    blockNumber,
 	}
-	lateObservationSlot := phase0.Slot(blockNumber) + phase0.Slot(executionclient.DefaultFollowDistance)
+	lateObservationSlot := phase0.Slot(blockNumber) + phase0.Slot(executionclient.FollowDistance)
 	expectedDuty := []*spectypes.ValidatorDuty{{
 		Type:           spectypes.BNRoleVoluntaryExit,
 		PubKey:         lateObservedExit.PubKey,
