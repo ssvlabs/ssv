@@ -12,14 +12,22 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-// voluntaryExitSlotsToPostpone defines how many slots we want to wait out before
-// executing voluntary exit duty.
-const voluntaryExitSlotsToPostpone = phase0.Slot(4)
+const (
+	// voluntaryExitSchedulingSlack keeps a few slots of buffer after the execution-layer
+	// follow distance so the duty is still in the future when the event is finally observed
+	// and picked up on the next slot tick.
+	voluntaryExitSchedulingSlack = phase0.Slot(4)
+
+	// voluntaryExitSlotsToPostpone defines how many slots we want to wait out before
+	// executing voluntary exit duty.
+	voluntaryExitSlotsToPostpone = phase0.Slot(executionclient.DefaultFollowDistance) + voluntaryExitSchedulingSlack
+)
 
 type ExitDescriptor struct {
 	OwnValidator   bool
@@ -86,9 +94,9 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			}
 
 			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
-			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
-			// top to ensure the duty is scheduled with a slot number never in the past since several slots
-			// might have passed by the time we are processing this event here.
+			// slot value for this duty. Additionally, add voluntaryExitSlotsToPostpone slots on
+			// top to ensure the duty is scheduled with a slot number still in the future once the
+			// event clears the execution-layer follow distance and reaches this handler.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(

@@ -14,6 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -147,6 +148,59 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		ticker.Send(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
 		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[3:4])
 		require.EqualValues(t, 4, blockByNumberCalls.Load())
+	})
+
+	cancel()
+	close(exitCh)
+	require.NoError(t, scheduler.Wait())
+	ticker.WaitShutdown()
+}
+
+func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistance(t *testing.T) {
+	t.Parallel()
+
+	exitCh := make(chan ExitDescriptor)
+	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+
+	scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+	require.NoError(t, scheduler.Start(ctx))
+
+	create1to1BlockSlotMapping(scheduler)
+
+	const blockNumber = uint64(1)
+
+	lateObservedExit := ExitDescriptor{
+		OwnValidator:   true,
+		PubKey:         phase0.BLSPubKey{7, 8, 9},
+		ValidatorIndex: phase0.ValidatorIndex(3),
+		BlockNumber:    blockNumber,
+	}
+	lateObservationSlot := phase0.Slot(blockNumber) + phase0.Slot(executionclient.DefaultFollowDistance)
+	expectedDuty := []*spectypes.ValidatorDuty{{
+		Type:           spectypes.BNRoleVoluntaryExit,
+		PubKey:         lateObservedExit.PubKey,
+		Slot:           phase0.Slot(blockNumber) + voluntaryExitSlotsToPostpone,
+		ValidatorIndex: lateObservedExit.ValidatorIndex,
+	}}
+
+	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+	setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
+	waitForSlotN(scheduler.beaconConfig, lateObservationSlot)
+	exitCh <- lateObservedExit
+
+	t.Run("slot = block + followDistance - no execution", func(t *testing.T) {
+		ticker.Send(lateObservationSlot)
+		waitForNoAction(t, nil, executeDutiesCall, noActionTimeout)
+	})
+
+	t.Run("slot = block + postponed exit slot - execute", func(t *testing.T) {
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(blockNumber)+voluntaryExitSlotsToPostpone)
+		ticker.Send(phase0.Slot(blockNumber) + voluntaryExitSlotsToPostpone)
+		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuty)
 	})
 
 	cancel()
