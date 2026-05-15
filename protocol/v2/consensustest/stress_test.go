@@ -58,6 +58,11 @@ import (
 //     for the p2p_baseline sweep's profile axis. Valid values: prod,
 //     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
 //     six. See ct.P2PProfileNames / ct.P2PProfile.
+//   - PROTOCOLS — comma-separated protocol names to include in the sweep
+//     (e.g. "OBFT,QBFT,PSigs"). Default (unset / empty): all registered
+//     protocols. Useful for partial regens — e.g. PROTOCOLS=PSigs runs
+//     only the baseline reference. Names must exactly match Protocol.Name()
+//     values from the `protocols` slice in this file.
 //
 // Usage:
 //
@@ -222,6 +227,42 @@ func TestStress(t *testing.T) {
 		// which OBFT/2abOBFT/QBFT's full consensus overhead is measured.
 		psigsadapter.Protocol{},
 	}
+
+	// PROTOCOLS — comma-separated allowlist; empty → all. Useful for
+	// partial regens (e.g. only PSigs, or only the canonical OBFT/QBFT
+	// pair without the multiplier / fixed-RT variants). Each requested
+	// name must exactly match a Protocol.Name() in the slice above;
+	// typos fail loudly so a partial regen doesn't silently produce a
+	// data.js missing the cells the caller expected.
+	if raw := os.Getenv("PROTOCOLS"); raw != "" {
+		requested := make(map[string]bool)
+		for _, name := range strings.Split(raw, ",") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			requested[name] = true
+		}
+		available := make([]string, len(protocols))
+		availableSet := make(map[string]bool, len(protocols))
+		for i, p := range protocols {
+			available[i] = p.Name()
+			availableSet[p.Name()] = true
+		}
+		for name := range requested {
+			require.Truef(t, availableSet[name],
+				"invalid PROTOCOLS value %q; valid: %v", name, available)
+		}
+		filtered := make([]ct.Protocol, 0, len(requested))
+		for _, p := range protocols {
+			if requested[p.Name()] {
+				filtered = append(filtered, p)
+			}
+		}
+		protocols = filtered
+		require.NotEmptyf(t, protocols, "PROTOCOLS=%q matched no protocols", raw)
+	}
+
 	protocolNames := make([]string, len(protocols))
 	for i, p := range protocols {
 		protocolNames[i] = p.Name()

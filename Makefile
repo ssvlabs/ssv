@@ -189,31 +189,35 @@ ITERATIONS_UNSTABLE_OPERATIONS ?= 100
 CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2,4
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
+# PROTOCOLS — comma-separated protocol names to include in the sweep (e.g.
+# `OBFT,QBFT,PSigs`). Empty (default) runs ALL registered protocols.
+# Names must exactly match Protocol.Name() values defined in stress_test.go.
+PROTOCOLS ?= OBFT,OBFTx3,2abOBFT,2abOBFTx2,QBFT,QBFT-SSV,PSigs
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
 		P2P_PROFILES=$(P2P_PROFILES) \
+		PROTOCOLS=$(PROTOCOLS) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \
 		$(if $(ITERATIONS),ITERATIONS=$(ITERATIONS)) \
 		go test -tags "blst_enabled lfs" -timeout=0 -run TestStress -v ./protocol/v2/consensustest/
 
-# stresstest-clean removes the generated data.js from REPORT_DIR,
-# leaving the static UI files (index.html, app.js, styles.css) intact.
-# Run this to start a fresh sweep rather than merging into existing data.
 # stresstest-all is a convenience alias for the full (n × K) matrix:
 # CLUSTER_SIZES_N=4,7 × LAYERS_K=2,3,4. Equivalent to:
 #   make stresstest CLUSTER_SIZES_N=4,7 LAYERS_K=2,3,4
 # All other variables (ITERATIONS_*, P2P_PROFILES, REPORT_DIR) use their
 # defaults or can be overridden on the command line.
 .PHONY: stresstest-all
-stresstest-all: CLUSTER_SIZES_N = 4,7
-stresstest-all: LAYERS_K = 2,3,4
-stresstest-all: stresstest
+stresstest-all:
+	@$(MAKE) stresstest CLUSTER_SIZES_N=4,7 LAYERS_K=2,3,4
 
+# stresstest-clean removes the generated data.js from REPORT_DIR,
+# leaving the static UI files (index.html, app.js, styles.css) intact.
+# Run this to start a fresh sweep rather than merging into existing data.
 .PHONY: stresstest-clean
 stresstest-clean:
 	@rm -f "$(abspath $(REPORT_DIR))/data.js" "$(abspath $(REPORT_DIR))/data.js.tmp"
