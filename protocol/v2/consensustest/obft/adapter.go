@@ -189,13 +189,13 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// adapter's deadline clip so the comparison is apples-to-apples.
 	ct.ClipLateDecision(&out, deadline)
 	if !out.Decided {
-		out.MissReason = classifyOBFTMiss(preClipDecided, preClipRound, preClipTime, deadline)
+		out.MissReason = classifyOBFTMiss(preClipDecided, preClipRound, preClipTime, deadline, rawOut.deadlockLayer)
 	}
 	return out, nil
 }
 
 // classifyOBFTMiss produces the friendly MissReason string for a non-
-// decided Outcome. Two regimes:
+// decided Outcome. Three regimes:
 //
 //   - Decided-but-clipped: the protocol internally σ-resolved
 //     (preClipDecided true) but at preClipTime > deadline. Label captures
@@ -204,14 +204,22 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 //     the DecisionTime distribution so the failure-breakdown row count
 //     stays bounded (one row per layer instead of one per unique
 //     millisecond of lateness).
-//   - Never decided: the σ-pool never reached qV at any layer (NR-quorum
-//     also short, or the walk exhausted K layers). Falls back to the
-//     coarse "Cluster never assembled a threshold signature at any
-//     layer" — the framework's per-op Err strings still carry
-//     obft.Resolve()'s ErrNoQuorum for the diagnostic-curious.
-func classifyOBFTMiss(preDecided bool, preRound int, preTime, deadline time.Duration) string {
+//   - Deadlock at layer X: at least one honest op's Resolve hit the
+//     σ-pool-short + NR-pool-short stuck pattern (i.e. the HV1-style
+//     OBFT-specific pathology that 2abOBFT recovers from via Phase-2a
+//     NR-quorum). `deadlockLayer` carries the deepest such layer seen
+//     across ops; the label surfaces it so operators can distinguish
+//     this from a fully-silent cluster (next regime).
+//   - Never decided / exhausted: every Resolve walked all K layers
+//     without σ-quorum and without hitting the mid-walk stuck pattern.
+//     Falls back to the coarse "Cluster never assembled a threshold
+//     signature at any layer".
+func classifyOBFTMiss(preDecided bool, preRound int, preTime, deadline time.Duration, deadlockLayer int) string {
 	if preDecided && preTime > deadline {
 		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
+	}
+	if deadlockLayer >= 0 {
+		return fmt.Sprintf("Cluster deadlocked at layer %d (σ-pool short, no NR-fallthrough)", deadlockLayer)
 	}
 	return "Cluster never assembled a threshold signature at any layer"
 }
@@ -305,6 +313,12 @@ type rawOutcome struct {
 	value        []byte
 	perOp        map[ct.OperatorID]rawOpOutcome
 	trace        []ct.TraceEntry
+	// deadlockLayer carries the deepest layer at which any non-decided
+	// op's Resolve hit the σ-pool-short + NR-pool-short stuck pattern
+	// (obftbase.ResolveFailureDeadlock). -1 when no op deadlocked
+	// (then classifyOBFTMiss falls back to the exhaustion label). Set
+	// in sim.outcome() by inspecting s.resolveErrs.
+	deadlockLayer int
 }
 
 type rawOpOutcome struct {

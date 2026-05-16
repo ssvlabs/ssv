@@ -73,12 +73,14 @@ func (i *Instance) Resolve() (*Output, error) {
 			return nil, fmt.Errorf("twoab: layer %d NR aggregation: %w", k, err)
 		}
 		if nextKey == nil {
-			// Neither σ-quorum at k nor NR-quorum to advance. Stuck.
-			return nil, ErrNoQuorum
+			// Neither σ-quorum at k nor NR-quorum to advance. Stuck;
+			// surface the layer so upstream classifiers can distinguish
+			// this from the walked-all-K-layers exhaustion case below.
+			return nil, &ResolveError{StoppedAtLayer: k, Reason: ResolveFailureDeadlock}
 		}
 		chainedKeys[k] = nextKey
 	}
-	return nil, ErrNoQuorum
+	return nil, &ResolveError{StoppedAtLayer: K - 1, Reason: ResolveFailureExhaustion}
 }
 
 // sigGroup holds σ partials grouped by the V they sign at a given

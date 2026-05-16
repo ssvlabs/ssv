@@ -39,6 +39,9 @@ import (
 // mutating Instance state, so observer-mode call sites pay no cost for
 // pre-quorum attempts.
 func (i *Instance) Resolve() (*Output, error) {
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	K := i.cfg.K()
 	// chainedKeys[j] is the aggregated NR-partials sig on nr_tag_j. To
 	// decrypt a layer-k onion entry, we apply chainedKeys[0..k-1] in order
@@ -64,12 +67,18 @@ func (i *Instance) Resolve() (*Output, error) {
 			return nil, fmt.Errorf("obft: layer %d NR aggregation: %w", k, err)
 		}
 		if nextKey == nil {
-			// Neither σ-quorum at k nor NR-quorum to advance. Stuck.
-			return nil, ErrNoQuorum
+			// Neither σ-quorum at k nor NR-quorum to advance. Stuck —
+			// the HV1-style deadlock pathology; surface the layer so
+			// upstream classifiers can distinguish it from the
+			// walked-all-K-layers exhaustion case below.
+			return nil, &ResolveError{StoppedAtLayer: k, Reason: ResolveFailureDeadlock}
 		}
 		chainedKeys[k] = nextKey
 	}
-	return nil, ErrNoQuorum
+	// Reached this point only by completing every layer's σ-attempt
+	// (and, for layers 0..K-2, every NR-fallthrough) without producing
+	// σ-quorum anywhere. Cluster never assembled a threshold signature.
+	return nil, &ResolveError{StoppedAtLayer: K - 1, Reason: ResolveFailureExhaustion}
 }
 
 // sigGroup holds σ partials grouped by the V they sign at a given layer.
@@ -278,6 +287,9 @@ func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 // Per spec, receivers SHOULD re-run host-application validity on Value before
 // submitting downstream — that's a host concern, not in this method's scope.
 func (i *Instance) ObserveCertificate(c *Certificate) error {
+	if i.ended {
+		return ErrInstanceEnded
+	}
 	if err := ValidateCertificate(c, i.cfg); err != nil {
 		return err
 	}

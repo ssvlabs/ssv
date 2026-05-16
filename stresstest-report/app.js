@@ -78,7 +78,11 @@ let selectedScenario = 'Healthy';
 // buttons indicate (n, K) combinations the user hasn't generated yet.
 let selectedN = 4;
 let selectedK = 4;
-let selectedBTT = 300;
+// BTT picker default. localStorage-backed (LS_KEY_BTT below) so the
+// user's choice survives reloads; persisted on every picker click.
+// First-load default = 100 (ms), matching the most commonly inspected
+// production operating point.
+let selectedBTT = 100;
 // selectedP2pProfile is the index into P2P_PROFILE_LABELS, matching the
 // Go-side ct.P2PProfileNames slice. Cells encode the profile choice as
 // Fields["p2p_profile"]=index; the UI translates back to a label when
@@ -107,6 +111,7 @@ let selectedInstability = 0;
 let activeProtocols = null;
 
 const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
+const LS_KEY_BTT = 'stresstest-selected-btt';
 
 function loadActiveProtocols(allProtocols) {
   const DEFAULT_ACTIVE = new Set(['OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV', 'PSigs']);
@@ -126,6 +131,24 @@ function loadActiveProtocols(allProtocols) {
 function saveActiveProtocols() {
   try {
     localStorage.setItem(LS_KEY_PROTOCOLS, JSON.stringify([...activeProtocols]));
+  } catch (_) { /* storage may be blocked in some contexts; safe to ignore */ }
+}
+
+// loadSelectedBTT reads the user's last BTT choice from localStorage.
+// Returns the parsed number on hit, null on miss / parse failure — the
+// caller (initBaselineSelections) snaps to the closest available value
+// in the data either way, so a stale persisted value that no longer
+// exists in the current data falls back gracefully to the nearest match.
+function loadSelectedBTT() {
+  const stored = localStorage.getItem(LS_KEY_BTT);
+  if (!stored) return null;
+  const n = Number(stored);
+  return Number.isFinite(n) ? n : null;
+}
+
+function saveSelectedBTT() {
+  try {
+    localStorage.setItem(LS_KEY_BTT, String(selectedBTT));
   } catch (_) { /* storage may be blocked in some contexts; safe to ignore */ }
 }
 
@@ -258,10 +281,18 @@ function main() {
 // to values actually present in p2p_baseline, so the conditions chart
 // can render on first load even when data was generated against a
 // different cross-product than the picker defaults expect.
+//
+// BTT specifically prefers the localStorage-persisted value (set on
+// every BTT picker click via saveSelectedBTT) over the module-level
+// default, so a user's choice survives reloads. The pickClosest snap
+// keeps the page stable when the persisted value is no longer in the
+// current data (e.g., after a make-stresstest regen at different BTTs).
 function initBaselineSelections(data) {
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep || sweep.points.length === 0) return;
   const dims = availableBaselineDimensions(data);
+  const persistedBTT = loadSelectedBTT();
+  if (persistedBTT !== null) selectedBTT = persistedBTT;
   // Snap each axis to the current selection if present (approximate
   // equality so float-rounded values match), else to the middle of the
   // set as a sensible default.
@@ -582,7 +613,7 @@ function renderConditionsSection(data) {
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
-      (v) => { selectedBTT = v; onConditionsChange(); },
+      (v) => { selectedBTT = v; saveSelectedBTT(); onConditionsChange(); },
       (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pProfile, selectedInstability)),
   );
   pickers.appendChild(
@@ -657,16 +688,99 @@ function renderConditionsSection(data) {
   return sec;
 }
 
+// canonicalizeMissReason maps a raw adapter-emitted MissReason string
+// into the canonical "row label" used by the failure-breakdown table.
+// Several adapter labels collapse onto the same shape — e.g. OBFT's
+// "ready at layer 0" and QBFT's "ready at round 1" describe the same
+// regime (first-attempt success that ran past the slot deadline), so
+// the UI merges them under one row to keep the table readable.
+//
+// Grouping rules (see report-doc / user spec):
+//   - PSigs's "Cluster ready to submit, ..." (no layer/round) +
+//     OBFT/2abOBFT "ready at layer 0" + QBFT "ready at round 1"
+//     → "Cluster ready to submit (at layer 0 / round 1), past the
+//        submit deadline"
+//   - OBFT/2abOBFT "ready at layer 1" + QBFT "ready at round 2"
+//     → "Cluster ready to submit (at layer 1 / round 2), past the
+//        submit deadline"
+//   - OBFT/2abOBFT "ready at layer ≥ 2" + QBFT "ready at round ≥ 3"
+//     → "Cluster ready to submit (at layer 2+ / round 3+), past the
+//        submit deadline"
+//
+// Any reason that doesn't match these patterns passes through unchanged
+// (e.g. "Cluster never assembled..." or "Cluster deadlocked at layer
+// X (...)" — those carry their own meaning and stay separate rows).
+const GROUP_READY_DEPTH_0 = 'Cluster ready to submit (at layer 0 / round 1), past the submit deadline';
+const GROUP_READY_DEPTH_1 = 'Cluster ready to submit (at layer 1 / round 2), past the submit deadline';
+const GROUP_READY_DEPTH_2P = 'Cluster ready to submit (at layer 2+ / round 3+), past the submit deadline';
+function canonicalizeMissReason(reason) {
+  if (reason === 'Cluster ready to submit, past the submit deadline') {
+    return GROUP_READY_DEPTH_0;
+  }
+  const layerMatch = reason.match(/^Cluster ready to submit at layer (\d+), past the submit deadline$/);
+  if (layerMatch) {
+    const n = parseInt(layerMatch[1], 10);
+    if (n === 0) return GROUP_READY_DEPTH_0;
+    if (n === 1) return GROUP_READY_DEPTH_1;
+    return GROUP_READY_DEPTH_2P;
+  }
+  const roundMatch = reason.match(/^Cluster ready to submit at round (\d+), past the submit deadline$/);
+  if (roundMatch) {
+    const r = parseInt(roundMatch[1], 10);
+    if (r === 1) return GROUP_READY_DEPTH_0;
+    if (r === 2) return GROUP_READY_DEPTH_1;
+    return GROUP_READY_DEPTH_2P;
+  }
+  return reason;
+}
+
+// MissReason rows render in a stable order: the three ready-to-submit
+// groups in ascending depth at the top; the three "never decided" /
+// "never reached" reasons in the user-specified order at the bottom;
+// anything else (e.g. configuration-out-of-envelope, deadlock-at-layer,
+// simulation-panic) sorts by total count desc between those two pinned
+// blocks.
+const FAILURE_TOP_ORDER = [
+  GROUP_READY_DEPTH_0,
+  GROUP_READY_DEPTH_1,
+  GROUP_READY_DEPTH_2P,
+];
+const FAILURE_BOTTOM_ORDER = [
+  'Cluster never reached consensus before slot end',
+  'Cluster agreed on a value, but never gathered enough post-consensus partial signatures',
+  'Cluster never assembled a threshold signature at any layer',
+];
+function sortFailureReasons(reasons, totals) {
+  const topIdx = (r) => FAILURE_TOP_ORDER.indexOf(r);
+  const bottomIdx = (r) => FAILURE_BOTTOM_ORDER.indexOf(r);
+  return reasons.slice().sort((a, b) => {
+    const ta = topIdx(a);
+    const tb = topIdx(b);
+    if (ta !== -1 && tb !== -1) return ta - tb;
+    if (ta !== -1) return -1;
+    if (tb !== -1) return 1;
+    const ba = bottomIdx(a);
+    const bb = bottomIdx(b);
+    if (ba !== -1 && bb !== -1) return ba - bb;
+    if (ba !== -1) return 1;
+    if (bb !== -1) return -1;
+    return (totals[b] || 0) - (totals[a] || 0);
+  });
+}
+
 // rebuildFailureBreakdown populates the failure-breakdown table beneath
 // the CDF chart. One row per distinct MissReason observed across the
 // active protocols at the current operating point; one column per
 // active protocol with the per-iteration count (and a percent-of-iters
-// secondary value). Rows sort by total count desc so the dominant
-// failure modes float to the top. Cells where the protocol had zero
-// failures of that reason render as "—" rather than "0" so the eye
-// catches active rows; cells where the protocol's cell is missing
-// entirely render as "n/a". Hidden when every active protocol has 100%
-// success at this point.
+// secondary value). Raw reasons are canonicalized via
+// canonicalizeMissReason so same-shape outcomes across adapters share
+// one row; the row sort goes through sortFailureReasons (pinned top
+// block, count-sorted middle, pinned bottom block).
+//
+// Cells where the protocol had zero failures of that reason render as
+// "—" rather than "0" so the eye catches active rows; cells where the
+// protocol's cell is missing entirely render as "n/a". Hidden when
+// every active protocol has 100% success at this point.
 function rebuildFailureBreakdown(data) {
   const host = document.getElementById('conditions-failures');
   if (!host) return;
@@ -684,25 +798,27 @@ function rebuildFailureBreakdown(data) {
     );
     if (cell) cellByProtocol[p] = cell;
   }
-  // Union of reasons + per-protocol counts.
-  const reasonTotals = {}; // reason -> total count across active protocols
-  const perCell = {};      // protocol -> reason -> count
+  // Union of canonicalized reasons + per-protocol counts. Multiple raw
+  // reasons may map to one canonical row (e.g. OBFT's "ready at layer
+  // 0" + QBFT's "ready at round 1" both → GROUP_READY_DEPTH_0); counts
+  // are summed under the canonical key per protocol.
+  const reasonTotals = {}; // canonical reason -> total count across active protocols
+  const perCell = {};      // protocol -> canonical reason -> count
   let anyFailure = false;
   for (const p of activeNames) {
     const cell = cellByProtocol[p];
     perCell[p] = {};
     if (!cell || !cell.missReasons) continue;
-    for (const [reason, count] of Object.entries(cell.missReasons)) {
+    for (const [rawReason, count] of Object.entries(cell.missReasons)) {
       if (count <= 0) continue;
       anyFailure = true;
-      perCell[p][reason] = count;
+      const reason = canonicalizeMissReason(rawReason);
+      perCell[p][reason] = (perCell[p][reason] || 0) + count;
       reasonTotals[reason] = (reasonTotals[reason] || 0) + count;
     }
   }
   if (!anyFailure) return; // hide entirely when no failures to show
-  const reasons = Object.keys(reasonTotals).sort(
-    (a, b) => reasonTotals[b] - reasonTotals[a],
-  );
+  const reasons = sortFailureReasons(Object.keys(reasonTotals), reasonTotals);
   // Table header.
   const title = h('h3', { class: 'conditions-failures-title' },
     'Failure breakdown');

@@ -2,6 +2,7 @@ package twoab
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 	mrand "math/rand"
 	"slices"
@@ -204,10 +205,11 @@ func (s *sim) schedule(when time.Duration, ev event) {
 
 func (s *sim) outcome() rawOutcome {
 	out := rawOutcome{
-		decided: false,
-		layer:   -1,
-		perOp:   make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
-		trace:   s.trace,
+		decided:       false,
+		layer:         -1,
+		perOp:         make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
+		trace:         s.trace,
+		deadlockLayer: -1,
 	}
 	earliestT := time.Duration(-1)
 	for _, op := range s.operators {
@@ -236,6 +238,16 @@ func (s *sim) outcome() rawOutcome {
 		}
 		if err, ok := s.resolveErrs[op]; ok {
 			o.err = err.Error()
+			// Track the deepest deadlock layer across non-decided ops
+			// for classifyTwoabMiss; mirrors the OBFT adapter's outcome().
+			if !o.decided {
+				var rerr *twoab.ResolveError
+				if errors.As(err, &rerr) && rerr.Reason == twoab.ResolveFailureDeadlock {
+					if rerr.StoppedAtLayer > out.deadlockLayer {
+						out.deadlockLayer = rerr.StoppedAtLayer
+					}
+				}
+			}
 		}
 		o.evidenceByRule = evidenceByRule(s.instances[op].Evidence())
 		out.perOp[ct.OperatorID(op)] = o

@@ -218,19 +218,26 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// either, so the comparison clips them to MISS.
 	ct.ClipLateDecision(&out, deadline)
 	if !out.Decided {
-		out.MissReason = classifyTwoabMiss(preClipDecided, preClipRound, preClipTime, deadline)
+		out.MissReason = classifyTwoabMiss(preClipDecided, preClipRound, preClipTime, deadline, rawOut.deadlockLayer)
 	}
 	return out, nil
 }
 
 // classifyTwoabMiss mirrors the OBFT classifier; structurally identical
-// (decided-but-clipped vs never-decided), since the 2ab Phase-3 walk
-// also halts at the deepest layer when σ-quorum can't form. See
-// classifyOBFTMiss in the obft adapter for the shared label-bounding
-// rationale.
-func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Duration) string {
+// (decided-but-clipped vs deadlocked-mid-walk vs exhausted-K-layers),
+// since the 2ab Phase-3 walk has the same two failure modes. See
+// classifyOBFTMiss in the obft adapter for the rationale on each
+// regime. 2abOBFT's Phase-2a verdict step makes the HV1-style
+// L_0 deadlock that bites OBFT recover via NR-quorum here, so in
+// practice ResolveFailureDeadlock should be rare for 2abOBFT — when
+// it appears it implies a different pathology than the OBFT case
+// (e.g. σ AND NR pools BOTH degraded at the same layer).
+func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Duration, deadlockLayer int) string {
 	if preDecided && preTime > deadline {
 		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
+	}
+	if deadlockLayer >= 0 {
+		return fmt.Sprintf("Cluster deadlocked at layer %d (σ-pool short, no NR-fallthrough)", deadlockLayer)
 	}
 	return "Cluster never assembled a threshold signature at any layer"
 }
@@ -311,6 +318,10 @@ type rawOutcome struct {
 	value        []byte
 	perOp        map[ct.OperatorID]rawOpOutcome
 	trace        []ct.TraceEntry
+	// deadlockLayer mirrors the OBFT adapter's: deepest layer at which
+	// any non-decided op hit ResolveFailureDeadlock. -1 when none.
+	// See protocol/v2/consensustest/obft/adapter.go for the rationale.
+	deadlockLayer int
 }
 
 type rawOpOutcome struct {

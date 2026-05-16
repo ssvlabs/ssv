@@ -2,6 +2,7 @@ package obft
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 	mrand "math/rand"
 	"slices"
@@ -196,10 +197,11 @@ func (s *sim) schedule(when time.Duration, ev event) {
 
 func (s *sim) outcome() rawOutcome {
 	out := rawOutcome{
-		decided: false,
-		layer:   -1,
-		perOp:   make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
-		trace:   s.trace,
+		decided:       false,
+		layer:         -1,
+		perOp:         make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
+		trace:         s.trace,
+		deadlockLayer: -1,
 	}
 	earliestT := time.Duration(-1)
 	for _, op := range s.operators {
@@ -230,6 +232,17 @@ func (s *sim) outcome() rawOutcome {
 		}
 		if err, ok := s.resolveErrs[op]; ok {
 			o.err = err.Error()
+			// Capture the deepest deadlock layer across non-decided
+			// ops. errors.As walks the Unwrap chain so the *ResolveError
+			// surfaces regardless of any future fmt.Errorf wrapping.
+			if !o.decided {
+				var rerr *obftbase.ResolveError
+				if errors.As(err, &rerr) && rerr.Reason == obftbase.ResolveFailureDeadlock {
+					if rerr.StoppedAtLayer > out.deadlockLayer {
+						out.deadlockLayer = rerr.StoppedAtLayer
+					}
+				}
+			}
 		}
 		o.evidenceByRule = evidenceByRule(s.instances[op].Evidence())
 		out.perOp[ct.OperatorID(op)] = o

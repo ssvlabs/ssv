@@ -1,6 +1,9 @@
 package twoab
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Protocol-specific errors. Additional errors will accrete as later
 // phases land.
@@ -45,5 +48,56 @@ var ErrOnion2bAlreadyEmitted = errors.New("twoab: Onion2b already emitted for th
 // ErrNoQuorum is returned by Resolve when the K-layer walk exhausts
 // without σ-quorum reaching at any layer AND without NR-quorum at the
 // previous layer to unlock decryption at the next. Per spec §Phase 3,
-// the slot misses cleanly in this case (no safety violation).
+// the slot misses cleanly in this case (no safety violation). Wrapped
+// by ResolveError on the failure paths in phase3.go; callers using
+// errors.Is(err, ErrNoQuorum) continue to match either flavor.
 var ErrNoQuorum = errors.New("twoab: no quorum (slot missed)")
+
+// ResolveFailureReason discriminates the two ways Resolve can fail
+// after walking the K-layer chain — same taxonomy as obft/base, so
+// upstream classifiers can apply uniform logic to both protocols. See
+// protocol/v2/obft/base/errors.go ResolveFailureReason for the
+// rationale.
+type ResolveFailureReason int
+
+const (
+	ResolveFailureUnknown ResolveFailureReason = iota
+	ResolveFailureDeadlock
+	ResolveFailureExhaustion
+)
+
+// String returns a stable telemetry name for the reason.
+func (r ResolveFailureReason) String() string {
+	switch r {
+	case ResolveFailureDeadlock:
+		return "deadlock"
+	case ResolveFailureExhaustion:
+		return "exhaustion"
+	default:
+		return "unknown"
+	}
+}
+
+// ResolveError describes a failed Resolve() walk in structured form.
+// Wraps ErrNoQuorum (via Unwrap) so existing errors.Is(err, ErrNoQuorum)
+// callers continue to match.
+type ResolveError struct {
+	StoppedAtLayer int
+	Reason         ResolveFailureReason
+}
+
+func (e *ResolveError) Error() string {
+	switch e.Reason {
+	case ResolveFailureDeadlock:
+		return fmt.Sprintf("twoab: deadlock at L_%d (σ-pool short, no NR-fallthrough)", e.StoppedAtLayer)
+	case ResolveFailureExhaustion:
+		return fmt.Sprintf("twoab: exhausted all %d layers without σ-quorum", e.StoppedAtLayer+1)
+	default:
+		return ErrNoQuorum.Error()
+	}
+}
+
+// Unwrap makes errors.Is(err, ErrNoQuorum) still match a *ResolveError.
+func (e *ResolveError) Unwrap() error {
+	return ErrNoQuorum
+}

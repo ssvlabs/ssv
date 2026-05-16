@@ -125,6 +125,38 @@ func TestMeshGossip_SlowMeshRescue_OBFT(t *testing.T) {
 		"with gossip enabled, IHAVE/IWANT on the fast direct path delivers messages in time")
 }
 
+// TestClassifyMiss_DeadlockOnHV1 pins the OBFT-specific deadlock
+// label. HV1SelectiveDelivery sends Phase-1 V to exactly f honest
+// operators, splitting the σ-pool at L_0 below qV; NR-pool at L_0
+// also stays below qEnc → no L_1 fall-through. The protocol gets
+// stuck at L_0. Before the deadlock-aware classifier this surfaced
+// as the coarse "Cluster never assembled..." label — that bucketed
+// the HV1 pathology together with hypothetical exhaustion outcomes
+// (different shape entirely). After the change it surfaces as
+// "Cluster deadlocked at layer 0 (σ-pool short, no NR-fallthrough)".
+func TestClassifyMiss_DeadlockOnHV1(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	// HV1SelectiveDelivery at n=4: byz leader (op1) delivers V to
+	// exactly f=1 honest (op2). The other two honest receive nothing
+	// from the leader. Same wire pattern catalog_propagation.go's
+	// scenarioHV1SelectiveDelivery.Apply produces, hand-rolled here so
+	// the test stays adapter-local without reaching into the catalog
+	// (which lives in package consensustest).
+	cfg.Byz = ct.ByzPattern{
+		Kind:         ct.ByzHV1SelectiveDelivery,
+		ByzOperators: []ct.OperatorID{1},
+		Recipients:   []ct.OperatorID{2},
+	}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.False(t, out.Decided, "HV1SelectiveDelivery should miss for OBFT")
+	require.Equal(t,
+		"Cluster deadlocked at layer 0 (σ-pool short, no NR-fallthrough)",
+		out.MissReason,
+		"OBFT HV1 deadlock should surface as the deadlock label, not the generic exhaustion bucket",
+	)
+}
+
 // TestMeshBandwidth_NoPhantomRelayOperator — in DeliveryMesh mode the
 // cluster's PerOperatorIn metric must not accumulate any bytes against
 // OperatorID(0). The sentinel-0 receiver was previously created by
