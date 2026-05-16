@@ -157,6 +157,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Aggregator:      ct.NewOfflineAggregator(cfg.N),
 		Bandwidth:       &bw,
 		Mesh:            cfg.MakeMeshTopology(),
+		RelayCutoff:     cfg.RelayCutoff,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -289,6 +290,11 @@ type desConfig struct {
 	// non-nil when the scenario opted into mesh transport. The sim's
 	// publish/forward paths branch on Mesh != nil.
 	Mesh *ct.MeshTopology
+	// RelayCutoff is the slot's hard submit deadline (carried over
+	// from SimConfig). Used by scheduleInitialHeartbeats to bound the
+	// gossip heartbeat sequence — no point firing heartbeats past the
+	// moment the slot's decision is moot.
+	RelayCutoff time.Duration
 }
 
 // rawOutcome is the OBFT-internal outcome before translation to ct.Outcome.

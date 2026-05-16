@@ -99,142 +99,126 @@ The OBFT test carries the canonical docstring; twoab / qbft / psigs reference ba
 
 # Phase B — lazy-push IHAVE/IWANT backstop (gap #1)
 
-The substantive change. Adds a heartbeat-driven gossip layer on top of the existing eager-push mesh.
+**Status: landed.**
 
-## Model summary
+Heartbeat-driven gossip layer on top of the existing eager-push mesh. Closes the gap where a mesh-only delivery failure (slow link, partial coverage) had no recovery within the slot.
 
-Each node (protocol + relay, both participate — SSV's actual mesh treats them as topic peers) maintains:
+## Model
 
-- an **mcache**: a bounded sliding window of `(MsgID → rebuildArrival)`, rotated every heartbeat. The rebuild closure is the opaque thing that, when invoked, schedules a fresh `evtMeshArrival` on the recipient. This keeps `mesh.go` adapter-agnostic — the adapter's `emitMesh` is the only thing that knows how to construct an arrival, and it stashes a closure into the mcache at emit time.
-- the existing per-node `seen map[MsgID]struct{}` ([mesh.go](../protocol/v2/consensustest/mesh.go)) as the dedup gate (unchanged).
+Each mesh node (protocol + relay alike — SSV's actual mesh treats relay nodes as topic peers) maintains:
+
+- An **mcache**: per-node sliding window of `(MsgID → reinject closure)`, rotated every heartbeat. The closure is opaque from `mesh.go`'s perspective — it captures the adapter-specific `evtMeshArrival` builder + payload and schedules a fresh arrival when invoked.
+- The existing per-node `seen` map as the dedup gate, unchanged.
 
 Every `HeartbeatInterval`, each node:
 
-1. Picks `max(Dlazy, GossipFactor × |non-mesh topic peers|)` random recipients from `(all_cluster_nodes − mesh_neighbors − self)`.
-2. Sends each one an `evtMeshIHave{from, to, mids}` over a single-hop direct path (using `cfg.Network.SampleBTT(from, to)`, NOT the mesh hop chain — IHAVE/IWANT rides direct connections in real libp2p too).
-3. The `mids` list is the union of mcache slot ids for the last `HistoryGossip` slots.
+1. Rotates its mcache (evicts the oldest slot).
+2. Collects mids from the last `HistoryGossip` slots.
+3. Picks `max(Dlazy, ceil(GossipFactor × |non-mesh peers|))` recipients from `(all_cluster_nodes − mesh_neighbors − self)`.
+4. Emits one `evtMeshIHave{from, to, mids}` per recipient via single-hop direct path (`cfg.Network.Delay`), not the mesh hop chain — matches real gossipsub's use of direct TCP connections for control RPCs.
 
 When a node receives `evtMeshIHave`:
-
-1. For each advertised mid: if `seen[mid]` is false, accumulate.
-2. If any unseen mids: schedule `evtMeshIWant{from: self, to: from, mids: unseen}` back to the sender (one-hop direct, same RTT path).
+- For each advertised mid where `!IsSeen(self, mid)`, accumulate.
+- If any unseen, schedule a single `evtMeshIWant` back to the IHAVE sender carrying the unseen list.
 
 When a node receives `evtMeshIWant`:
+- For each requested mid still in the mcache, invoke its reinject closure with `requester = e.from`. The closure schedules a fresh `evtMeshArrival` from this node to the requester, preserving the original publisher.
+- Mids no longer in mcache are silently dropped (the requester will hear about them via a later heartbeat from another peer).
 
-1. For each requested mid: if in mcache (i.e. within the last `HistoryLength` heartbeats), invoke the stashed rebuild closure to schedule a fresh `evtMeshArrival` back to the requester.
-2. If not in mcache: drop silently (the requester will hear IHAVE from another peer next heartbeat).
+The reinjected `evtMeshArrival` flows through the existing handler, gated on the requester's `seen` map — a body that arrived via the mesh between IHAVE-out and IWANT-back is correctly deduped.
 
-The reinjected `evtMeshArrival` flows through the existing handler, which gates on the requester's `seen` map (so a body that arrived via the mesh in the meantime is still deduped correctly).
+## Parameters (sim defaults = SSV's gossipsub overrides)
 
-## Parameters (sim defaults match SSV)
+`MeshGossipConfig.WithDefaults()` fills any zero field with SSV's [network/topics/params/gossipsub.go](../network/topics/params/gossipsub.go) values:
 
-These belong on `SimConfig` (or a `MeshGossipConfig` sub-struct) with the SSV-real defaults:
-
-| Param | Default | Source |
+| Field | Default | Source |
 | --- | --- | --- |
-| `HeartbeatInterval` | 700 ms | [network/topics/params/gossipsub.go:30](../network/topics/params/gossipsub.go:30) |
-| `HistoryLength` | 6 heartbeats (4.2 s) | [gossipsub.go:25 `gsMcacheLen`](../network/topics/params/gossipsub.go:25) |
-| `HistoryGossip` | 4 heartbeats (2.8 s) | [gossipsub.go:27 `gsMcacheGossip`](../network/topics/params/gossipsub.go:27) |
-| `Dlazy` | 6 | libp2p default; SSV does not override |
-| `GossipFactor` | 0.25 | libp2p default; SSV does not override |
+| `Enabled` | `false` | Opt-in; existing mesh tests don't pick up gossip implicitly |
+| `HeartbeatInterval` | 700 ms | SSV `HeartbeatInterval` |
+| `HistoryLength` | 6 slots (≈ 4.2 s mcache window) | SSV `gsMcacheLen` |
+| `HistoryGossip` | 4 slots (≈ 2.8 s IHAVE window) | SSV `gsMcacheGossip` |
+| `Dlazy` | 6 | libp2p default (SSV does not override) |
+| `GossipFactor` | 0.25 | libp2p default (SSV does not override) |
 
-## State + event additions in `mesh.go`
+`MeshTopology` snapshots the config at construction via `cfg.Gossip.WithDefaults()` and exposes it as `mesh.Gossip()` so adapters and event handlers read the same values without recomputing defaults.
 
-The mcache and heartbeat scheduling are protocol-agnostic and live in `mesh.go`:
+## What landed
 
-```go
-// per-node sliding-window of mids-with-rebuild
-type mcacheEntry struct {
-    insertedAtSlot int                  // heartbeat slot index when added
-    rebuild        func(to MeshNode) scheduledEvent  // re-injects evtMeshArrival on `to`
-}
+### Framework (`mesh.go`, `network.go`)
 
-type nodeMcache struct {
-    entries map[MsgID]mcacheEntry      // active entries
-    slots   [][]MsgID                  // ring buffer: most recent HistoryLength slots
-    head    int                        // current slot index modulo HistoryLength
-}
+- New `MsgKind` values: `KindGossipIHave`, `KindGossipIWant` (extends the existing `MsgKind` enum + `String()` switch).
+- `MeshGossipConfig` struct + `WithDefaults()`; embedded as `MeshConfig.Gossip`.
+- `MeshTopology.gossip` retained at construction time.
+- Per-node `nodeMcache` (entries map + slot ring buffer + head index); allocated lazily on first `MCacheInsert`.
+- Methods: `IsSeen`, `TotalNodes`, `Gossip`, `MCacheInsert`, `MCacheLookup`, `MCacheRotate`, `MCacheGossipMids`, `NonMeshPeers`, `PickGossipRecipients`.
+- Constants + helper: `GossipBaseBytes = 32`, `GossipPerMidBytes = 32`, `GossipRPCSize(numMids)`.
+- `MCacheReinjectFunc = func(requester MeshNode)` and `MCacheEntry` (kind, bytes, reinject closure).
 
-// On (*MeshTopology) when constructed:
-//   - allocate per-node mcache
-//   - schedule first evtMeshHeartbeat per node at SlotStart + node-phase-offset
-```
+### Per-adapter (OBFT / 2abOBFT / QBFT / PSigs)
 
-Three new event types (protocol-agnostic, defined in `mesh.go` and dispatched by a single shared handler):
+Identical pattern in each:
 
-| Event | Payload | Behavior |
-| --- | --- | --- |
-| `evtMeshHeartbeat` | `{node MeshNode, slot int}` | Rotate mcache (advance ring head); collect last `HistoryGossip` slots' mids; pick `max(Dlazy, GossipFactor × non_mesh_pool)` recipients; emit one `evtMeshIHave` per recipient; reschedule self for `now + HeartbeatInterval` |
-| `evtMeshIHave` | `{from, to MeshNode, mids []MsgID}` | For each mid where `!seen[to][mid]`, accumulate; emit one `evtMeshIWant` back with the accumulated list |
-| `evtMeshIWant` | `{from, to MeshNode, mids []MsgID}` | For each mid in `to`'s mcache, invoke the `rebuild` closure to schedule a fresh `evtMeshArrival` on `from` |
+- Three new event types in `events.go`: `evtMeshHeartbeat`, `evtMeshIHave`, `evtMeshIWant`, each with `describe()` + `handle()`. They are per-adapter because they need to implement the adapter's `event` interface; the bodies are nearly identical across the four.
+- `cacheArrivalForGossip` method on `*sim` (in `des.go` for OBFT/2abOBFT/PSigs, in `network.go` for QBFT): inserts an MCacheEntry whose reinject closure builds a fresh `evtMeshArrival` typed to that adapter's builder signature. No-op when gossip is disabled.
+- `scheduleInitialHeartbeats` method on `*sim`: pre-schedules a finite sequence of heartbeats per mesh node over `[0, RelayCutoff]`, staggered by `node × HeartbeatInterval / TotalNodes`. **Pre-scheduling rather than self-rescheduling inside the handler** is what guarantees the event queue is finite-by-construction.
+- `cacheArrivalForGossip` called from two sites: `emitMesh` (publisher inserts after self-MarkSeen) and `evtMeshArrival.handle` (receiver inserts after MarkSeen succeeds). Both stash a reinject closure preserving the original publisher.
+- `RelayCutoff time.Duration` added to each adapter's `desConfig`, plumbed from `cfg.RelayCutoff` at adapter Run time.
+- `scheduleInitialHeartbeats()` called at the end of each adapter's `sim.start()`.
 
-Single-hop delivery: scheduled with `cfg.Network.SampleBTT(from, to)`, mirroring `DeliveryDirect` semantics — IHAVE/IWANT does not multi-hop through the mesh.
+### Single-hop control delivery
 
-## Adapter wiring
+IHAVE / IWANT delays use `cfg.Network.Delay(rng, fromEP, toEP, KindGossipI...)`, not `cfg.Mesh.HopDelay`. Matches real gossipsub: control RPCs ride direct peer connections, not multi-hop through the mesh.
 
-Each adapter's `emitMesh` ([obft/des.go:301](../protocol/v2/consensustest/obft/des.go), [twoab/des.go:292](../protocol/v2/consensustest/twoab/des.go), [qbft/network.go:25](../protocol/v2/consensustest/qbft/network.go), [psigs/adapter.go](../protocol/v2/consensustest/psigs/adapter.go)) gains one line: stash a `rebuild` closure into `mesh.MCacheInsert(from, msgID, rebuildArrival)` after marking self seen. The closure is a method value capturing the arrival's builder (the same `e.builder(recipientOp)` pattern that already exists in `evtMeshArrival.handle`).
+### Bandwidth accounting
 
-Nothing else in the adapters changes — `evtMeshArrival` continues to handle arrivals identically whether the source was first-hop eager push or a re-injection from IWANT.
+Reuses the existing `RecordMeshHop` dispatch (Emission / EmissionToRelay / EmissionFromRelay / EmissionRelayToRelay) with the new `KindGossipIHave` / `KindGossipIWant` kinds. No new tracker methods or distribution buckets needed.
 
-## Determinism
+Body re-send on IWANT goes through `RecordMeshHop` with the original message's kind. Per-slot total bytes shift upward by the IHAVE / IWANT chatter when gossip is enabled; relative protocol comparisons are unaffected.
 
-Heartbeat-driven recipient selection RNG: per-call seed = `hash(cfg.Seed, node, heartbeatIdx)`. This matches the seed-salting pattern already in `NewMeshTopology` (`seed ^ 0x6d6573682d76310a`, [mesh.go:123](../protocol/v2/consensustest/mesh.go)). Each call uses its own deterministic source so heartbeats don't interleave RNG state with mesh construction or hop-delay sampling.
+### Determinism
 
-Per-node phase offset for the initial heartbeat: `node * HeartbeatInterval / |nodes|`, to avoid lockstep heartbeats hammering the event queue at identical times.
+Recipient selection uses the sim's existing RNG via `rng.Shuffle`. The event queue's `(when, seq)` tie-break ordering keeps per-iter trace byte-identical across runs at the same seed.
 
-## Bandwidth accounting
+### Byz behavior
 
-The existing `cfg.Bandwidth` tracker has per-kind buckets ([des.go in each adapter](../protocol/v2/consensustest/obft/des.go)). Add two new kinds:
+Adversarial scenarios use `DeliveryDirect` and never enter the mesh path, so byz primitives never reach IHAVE / IWANT under the current scenario catalog. The gossip layer is honest-only by design (no `AllowDelivery` / `OverrideDelay` checks on the gossip events). A future byz-on-mesh scenario would need to add byz hooks; flag as out-of-scope for now.
 
-- `Kind = "IHAVE"`: small constant per mid, e.g. 32 B base + 32 B per mid (covers msg-id + small RPC framing).
-- `Kind = "IWANT"`: same formula.
+### Relays
 
-Body re-send on IWANT uses the original message's kind (reusing the existing per-kind accounting unchanged).
-
-Per-slot bandwidth distributions in the report will shift upward by a small constant. Absolute byte counts in existing baseline reports may need refreshing; relative protocol comparisons are unaffected.
-
-## Byz behavior
-
-Adversarial scenarios use `DeliveryDirect` and never enter the mesh path ([catalog_baseline.go](../protocol/v2/consensustest/catalog_baseline.go)), so byz primitives never reach IHAVE/IWANT under the current scenario catalog. The plan does NOT add byz hooks for lazy push. If a future scenario wants byz-on-mesh (silent IHAVE, IHAVE spam, IWANT body withholding), that's a follow-up — document the assumption in `mesh.go`'s package docstring.
-
-## Relays
-
-Relays participate identically to protocol peers: tick heartbeats, IHAVE, answer IWANT. They have no protocol delivery (`mesh.IsProtocol(e.to)` gate in `evtMeshArrival.handle` is already correct), but they fully participate in gossip. This matches real libp2p, where all topic subscribers gossip regardless of whether they hold protocol state.
+Relays participate identically to protocol peers: tick heartbeats, advertise IHAVE, answer IWANT. They have no protocol-delivery side-effects (`mesh.IsProtocol` gate in `evtMeshArrival.handle` is unchanged) but they do fully participate in gossip, matching real libp2p.
 
 ## Tests
 
-A new `protocol/v2/consensustest/mesh_gossip_test.go` covering:
+Framework-level unit tests in [`mesh_gossip_test.go`](../protocol/v2/consensustest/mesh_gossip_test.go):
 
-1. **Smoke**: 4-op cluster, mesh enabled, large BTT on one specific edge such that one operator can't receive a Phase 1 message via mesh in time. Without gossip, decision misses; with gossip, IHAVE → IWANT delivers within ~`HeartbeatInterval + 2 × BTT`, decision lands. Assert decision-time delta.
-2. **Determinism**: same seed → same IHAVE recipients across runs.
-3. **mcache eviction**: a message that arrived `HistoryLength + 1` heartbeats ago is not advertised in IHAVE and not answerable from IWANT.
-4. **Dedup-on-reinject**: a message already received via mesh between IHAVE-out and IWANT-back is still deduped (recipient's seen map is consulted on the reinjected arrival).
-5. **Relay participation**: a message that reaches only a relay still gets IHAVE'd to its non-mesh neighbors; a protocol peer can receive it via IHAVE→IWANT through the relay.
+- `TestMeshGossipConfig_WithDefaults` — defaults match SSV values; partial overrides are preserved.
+- `TestMeshGossip_MCacheLifecycle` — insert → lookup, idempotence in msgID, rotate, eviction after HistoryLength rotations.
+- `TestMeshGossip_GossipMids_Window` — `MCacheGossipMids(window)` returns the union of the last `window` slots' mids; oversized window is clamped to HistoryLength.
+- `TestMeshGossip_NonMeshPeers` — pool excludes self + mesh neighbors at every node.
+- `TestMeshGossip_PickRecipients_DeterministicAndCapped` — same RNG seed → same selection; Dlazy > pool caps at pool size.
 
-Existing regressions to expect:
-- `TestPhase2_AllSweepPoints_NoSetupErrors` ([sweep_batch_test.go](../protocol/v2/consensustest/sweep_batch_test.go)): more events per sim, should still pass (no envelope changes).
-- Baseline Healthy CDFs in the stress-test report: tail should pull in (less pessimism). The 46-minute regen is necessary to update `stresstest-report/data.js`.
+Integration tests in [`obft/adapter_test.go`](../protocol/v2/consensustest/obft/adapter_test.go):
+
+- `TestMeshGossip_SmokeOBFT` — gossip enabled on healthy mesh, decision lands, trace contains both `MeshHeartbeat` and `MeshIHave` entries (46 heartbeats, 136 IHAVE events in the captured run).
+- `TestMeshGossip_SlowMeshRescue_OBFT` — proves the value-prop: `HopDelay = 5s` (mesh broken past the 4s deadline), `Network = 50ms` direct, `HeartbeatInterval = 100ms`. Without gossip the cluster misses; with gossip enabled the cluster decides at 3.59 s — recovered entirely through IHAVE / IWANT on the fast direct path.
+
+(Plan-list items "dedup-on-reinject" and "explicit relay-participation" are structurally guaranteed by the implementation — `MarkSeen` gates the reinjected arrival, and relays use the same code path as protocol nodes — and didn't need bespoke regression tests on top of the integration coverage.)
+
+Existing-test regressions: none. Full `consensustest/...` suite stays green.
 
 ## Files touched
 
-| File | Change |
-| --- | --- |
-| [`mesh.go`](../protocol/v2/consensustest/mesh.go) | mcache state, 3 event types + handlers, heartbeat scheduling, recipient-selection RNG, package docstring |
-| [`protocol.go`](../protocol/v2/consensustest/protocol.go) | `MeshGossipConfig` on `SimConfig`, defaults |
-| [`stats.go`](../protocol/v2/consensustest/stats.go) | new bandwidth kinds in distributions |
-| [`obft/des.go`](../protocol/v2/consensustest/obft/des.go) | `emitMesh` stashes rebuild closure |
-| [`obft/events.go`](../protocol/v2/consensustest/obft/events.go) | rebuild closure helper |
-| [`twoab/des.go`](../protocol/v2/consensustest/twoab/des.go) | same |
-| [`twoab/events.go`](../protocol/v2/consensustest/twoab/events.go) | same |
-| [`qbft/network.go`](../protocol/v2/consensustest/qbft/network.go) | same |
-| [`qbft/events.go`](../protocol/v2/consensustest/qbft/events.go) | same |
-| [`psigs/adapter.go`](../protocol/v2/consensustest/psigs/adapter.go) | same |
-| [`psigs/events.go`](../protocol/v2/consensustest/psigs/events.go) | same |
-| [`mesh_gossip_test.go`](../protocol/v2/consensustest/mesh_gossip_test.go) | new test file |
+- [`mesh.go`](../protocol/v2/consensustest/mesh.go) — `MeshGossipConfig`, `MCacheEntry`, `nodeMcache`, mcache + gossip methods, `KindGossipIHave/IWant` MsgKinds, `GossipRPCSize`.
+- [`network.go`](../protocol/v2/consensustest/network.go) — extended `MsgKind` enum + `String()`.
+- [`obft/events.go`](../protocol/v2/consensustest/obft/events.go), [`twoab/events.go`](../protocol/v2/consensustest/twoab/events.go), [`qbft/events.go`](../protocol/v2/consensustest/qbft/events.go), [`psigs/events.go`](../protocol/v2/consensustest/psigs/events.go) — three new event types per adapter; `evtMeshArrival.handle` calls `cacheArrivalForGossip` after MarkSeen succeeds.
+- [`obft/des.go`](../protocol/v2/consensustest/obft/des.go), [`twoab/des.go`](../protocol/v2/consensustest/twoab/des.go), [`psigs/des.go`](../protocol/v2/consensustest/psigs/des.go) — `cacheArrivalForGossip`, `scheduleInitialHeartbeats`, `emitMesh` mcache insert, `start()` heartbeat schedule.
+- [`qbft/network.go`](../protocol/v2/consensustest/qbft/network.go) — same as above (QBFT keeps its emit-side helpers there rather than in des.go).
+- [`obft/adapter.go`](../protocol/v2/consensustest/obft/adapter.go), [`twoab/adapter.go`](../protocol/v2/consensustest/twoab/adapter.go), [`qbft/adapter.go`](../protocol/v2/consensustest/qbft/adapter.go), [`psigs/adapter.go`](../protocol/v2/consensustest/psigs/adapter.go) — `RelayCutoff` field on `desConfig` + propagation at adapter Run.
+- [`mesh_gossip_test.go`](../protocol/v2/consensustest/mesh_gossip_test.go) — new framework-level tests (created).
 
 ## Size
 
-~900 LoC total: 200 in `mesh.go`, ~100/adapter × 4 = 400, ~200 in tests, ~80 in docstrings + comments. 1.5-2 days of careful work.
+≈ 950 LoC net: ~200 in `mesh.go` (state + 9 methods + 2 consts + helpers), ~150 per adapter × 4 ≈ 600 (events + helpers + adapter-level `RelayCutoff` plumbing), ~150 in tests.
 
 # Suggested execution order
 

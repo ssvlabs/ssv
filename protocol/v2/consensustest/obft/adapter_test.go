@@ -2,6 +2,7 @@ package obft_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,89 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 		checked++
 	}
 	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+}
+
+// TestMeshGossip_SmokeOBFT exercises the Phase B gossip layer on top
+// of the existing healthy-mesh path: gossip enabled with SSV defaults
+// (700ms heartbeat, 4-slot IHAVE window, etc.), TraceEnabled so the
+// gossip events show up in out.Trace, and we assert the run still
+// decides AND the trace contains MeshHeartbeat / MeshIHave entries.
+// (At Healthy the eager mesh is fast enough on its own — IWANT may or
+// may not fire depending on heartbeat phasing vs publish timing, so
+// we don't assert on it here.)
+func TestMeshGossip_SmokeOBFT(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Delivery = ct.DeliveryMesh
+	cfg.Mesh.Gossip = ct.MeshGossipConfig{Enabled: true}
+	cfg.TraceEnabled = true
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "gossip-enabled healthy mesh should decide")
+
+	var heartbeats, ihaves int
+	for _, e := range out.Trace {
+		switch {
+		case strings.HasPrefix(e.Event, "MeshHeartbeat["):
+			heartbeats++
+		case strings.HasPrefix(e.Event, "MeshIHave["):
+			ihaves++
+		}
+	}
+	require.Positive(t, heartbeats, "trace should contain heartbeats once gossip is enabled")
+	require.Positive(t, ihaves, "trace should contain IHAVE entries after publishers populate their mcaches")
+	t.Logf("gossip smoke: %d heartbeats, %d IHAVE events", heartbeats, ihaves)
+}
+
+// TestMeshGossip_SlowMeshRescue_OBFT demonstrates the value of the
+// lazy-push backstop: HopDelay is configured slow enough that the
+// eager mesh can't deliver Phase-1 / Commits before the OBFT decision
+// fires — without gossip, the cluster misses the slot. With gossip
+// enabled (Network direct delays << HopDelay; HeartbeatInterval short
+// enough to fit several ticks inside the slot), IHAVE/IWANT carries
+// messages on direct connections and the cluster decides in time.
+//
+// Calibration: HopDelay = 5s pushes every mesh hop past the 4s
+// RelayCutoff. Network = 50ms direct + HeartbeatInterval = 100ms
+// gives ~4 heartbeats inside the OBFT Phase-1 → Phase-3 window, so
+// gossip can cascade through the cluster within Δ_2. SSV-realistic
+// defaults (HopDelay ~BTT/3, HeartbeatInterval 700ms) don't expose
+// the gap nearly as cleanly — that's a tuning regime, not the
+// mechanism this test exercises.
+func TestMeshGossip_SlowMeshRescue_OBFT(t *testing.T) {
+	build := func(gossip bool) ct.SimConfig {
+		btt := 200 * time.Millisecond
+		cfg := ct.SimConfig{
+			N:            4,
+			Operators:    ct.MakeOperators(4),
+			SlotDuration: 12 * time.Second,
+			RelayCutoff:  4 * time.Second,
+			BTT:          btt,
+			Network:      ct.ConstantDelay{D: 50 * time.Millisecond},
+			Byz:          ct.ByzPattern{Kind: ct.ByzNone},
+			Seed:         1,
+			Delivery:     ct.DeliveryMesh,
+			Mesh: ct.MeshConfig{
+				HopDelay: ct.ConstantDelay{D: 5 * time.Second},
+				Gossip: ct.MeshGossipConfig{
+					Enabled:           gossip,
+					HeartbeatInterval: 100 * time.Millisecond,
+				},
+			},
+		}
+		return cfg
+	}
+	noGossip, err := obftadapter.Protocol{}.Run(build(false))
+	require.NoError(t, err)
+	withGossip, err := obftadapter.Protocol{}.Run(build(true))
+	require.NoError(t, err)
+
+	t.Logf("no-gossip: decided=%v at %v; with-gossip: decided=%v at %v",
+		noGossip.Decided, noGossip.DecisionTime, withGossip.Decided, withGossip.DecisionTime)
+
+	require.False(t, noGossip.Decided,
+		"without gossip, HopDelay=5s mesh can't deliver Phase-1/Commits before the clip deadline")
+	require.True(t, withGossip.Decided,
+		"with gossip enabled, IHAVE/IWANT on the fast direct path delivers messages in time")
 }
 
 // TestMeshBandwidth_NoPhantomRelayOperator — in DeliveryMesh mode the

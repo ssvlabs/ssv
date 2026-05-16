@@ -73,6 +73,7 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 	if !mesh.MarkSeen(e.to, e.msgID) {
 		return nil
 	}
+	s.cacheArrivalForGossip(e.to, e.publisher, e.msgID, e.kind, e.layer, e.bytes, e.builder)
 	var out []scheduledEvent
 	if mesh.IsProtocol(e.to) {
 		recipientOp := twoab.OperatorID(mesh.OperatorForNode(e.to))
@@ -103,6 +104,98 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 		})
 	}
 	return out
+}
+
+// ---- evtMeshHeartbeat / evtMeshIHave / evtMeshIWant --------------------
+//
+// Mirrors the OBFT adapter's gossip events; see protocol/v2/consensustest/
+// obft/events.go evtMeshHeartbeat for the design rationale. Differences
+// vs OBFT: the typed `builder` parameter uses twoab.OperatorID; otherwise
+// the heartbeat / IHAVE / IWANT machinery is identical.
+
+type evtMeshHeartbeat struct {
+	node ct.MeshNode
+}
+
+func (e *evtMeshHeartbeat) describe() string {
+	return fmt.Sprintf("MeshHeartbeat[node=%d]", e.node)
+}
+
+func (e *evtMeshHeartbeat) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	g := mesh.Gossip()
+	mesh.MCacheRotate(e.node)
+	mids := mesh.MCacheGossipMids(e.node, g.HistoryGossip)
+	if len(mids) == 0 {
+		return nil
+	}
+	var out []scheduledEvent
+	fromEP := mesh.EndpointFor(e.node)
+	for _, to := range mesh.PickGossipRecipients(s.rng, e.node, g.Dlazy, g.GossipFactor) {
+		toEP := mesh.EndpointFor(to)
+		delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIHave)
+		bytes := ct.GossipRPCSize(len(mids))
+		mesh.RecordMeshHop(s.cfg.Bandwidth, e.node, to, ct.KindGossipIHave, -1, bytes)
+		advertised := append([]ct.MsgID(nil), mids...)
+		out = append(out, scheduledEvent{
+			when: s.now + delay,
+			ev:   &evtMeshIHave{from: e.node, to: to, mids: advertised},
+		})
+	}
+	return out
+}
+
+type evtMeshIHave struct {
+	from, to ct.MeshNode
+	mids     []ct.MsgID
+}
+
+func (e *evtMeshIHave) describe() string {
+	return fmt.Sprintf("MeshIHave[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
+}
+
+func (e *evtMeshIHave) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	var want []ct.MsgID
+	for _, mid := range e.mids {
+		if mesh.IsSeen(e.to, mid) {
+			continue
+		}
+		want = append(want, mid)
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	fromEP := mesh.EndpointFor(e.to)
+	toEP := mesh.EndpointFor(e.from)
+	delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIWant)
+	bytes := ct.GossipRPCSize(len(want))
+	mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, e.from, ct.KindGossipIWant, -1, bytes)
+	return []scheduledEvent{{
+		when: s.now + delay,
+		ev:   &evtMeshIWant{from: e.to, to: e.from, mids: want},
+	}}
+}
+
+type evtMeshIWant struct {
+	from, to ct.MeshNode
+	mids     []ct.MsgID
+}
+
+func (e *evtMeshIWant) describe() string {
+	return fmt.Sprintf("MeshIWant[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
+}
+
+func (e *evtMeshIWant) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	for _, mid := range e.mids {
+		entry, ok := mesh.MCacheLookup(e.to, mid)
+		if !ok {
+			continue
+		}
+		entry.Reinject(e.from)
+	}
+	return nil
 }
 
 // ---- evtLeaderFetch ----------------------------------------------------

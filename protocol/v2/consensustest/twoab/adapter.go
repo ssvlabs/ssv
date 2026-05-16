@@ -185,6 +185,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Aggregator:      ct.NewOfflineAggregator(cfg.N),
 		Bandwidth:       &bw,
 		Mesh:            cfg.MakeMeshTopology(),
+		RelayCutoff:     cfg.RelayCutoff,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -297,6 +298,9 @@ type desConfig struct {
 	Aggregator      *ct.OfflineAggregator
 	Bandwidth       *ct.BandwidthReport
 	Mesh            *ct.MeshTopology // nil when DeliveryDirect
+	// RelayCutoff is the slot's hard submit deadline (carried over
+	// from SimConfig). Used to bound the gossip-heartbeat sequence.
+	RelayCutoff time.Duration
 }
 
 // rawOutcome is the 2ab-internal outcome before translation to ct.Outcome.

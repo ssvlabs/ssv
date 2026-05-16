@@ -91,6 +91,10 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 	if !mesh.MarkSeen(e.to, e.msgID) {
 		return nil
 	}
+	// Stash a reinject closure on this receiver's mcache so it can
+	// answer future IWANT requests for this body. No-op when gossip is
+	// disabled (s.cacheArrivalForGossip checks).
+	s.cacheArrivalForGossip(e.to, e.publisher, e.msgID, e.kind, e.layer, e.bytes, e.builder)
 	var out []scheduledEvent
 	// Deliver to local protocol when `to` is a cluster op. Relay peers
 	// only forward — they have no protocol state. Apply per-hop
@@ -135,6 +139,129 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 		})
 	}
 	return out
+}
+
+// ---- evtMeshHeartbeat / evtMeshIHave / evtMeshIWant --------------------
+//
+// Gossipsub lazy-push backstop layered on top of the eager-mesh
+// transport. See docs/CONSENSUSTEST-MESH-LAZY-PUSH-PLAN.md (Phase B)
+// for the model; in brief:
+//
+//   - Every cfg.Mesh.Gossip.HeartbeatInterval, each mesh node ticks.
+//     It rotates its mcache (evicting the oldest slot) and emits
+//     evtMeshIHave to a stable-random subset of its non-mesh peers,
+//     advertising the mids it cached in the last HistoryGossip slots.
+//   - An evtMeshIHave at a node where some advertised mids are unseen
+//     produces one evtMeshIWant back, listing the unseen mids.
+//   - An evtMeshIWant at a node looks each requested mid up in its
+//     mcache; for hits, the entry's reinject closure schedules a
+//     fresh evtMeshArrival from this node to the requester. The
+//     requester's MarkSeen gate de-dupes against a copy that arrived
+//     via mesh in the meantime.
+//
+// IHAVE / IWANT transit single direct hops, not the mesh chain — real
+// gossipsub rides direct TCP connections for control RPCs. Bandwidth
+// is accounted through mesh.RecordMeshHop with KindGossipIHave /
+// KindGossipIWant so the per-(from, to) histograms include gossip
+// traffic alongside eager-mesh hops.
+
+type evtMeshHeartbeat struct {
+	node ct.MeshNode
+}
+
+func (e *evtMeshHeartbeat) describe() string {
+	return fmt.Sprintf("MeshHeartbeat[node=%d]", e.node)
+}
+
+func (e *evtMeshHeartbeat) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	g := mesh.Gossip()
+	// Rotate first so the evicted slot is the OLDEST and the IHAVE
+	// window read picks up only mids still within the HistoryGossip
+	// retention budget.
+	mesh.MCacheRotate(e.node)
+	mids := mesh.MCacheGossipMids(e.node, g.HistoryGossip)
+	if len(mids) == 0 {
+		return nil
+	}
+	var out []scheduledEvent
+	fromEP := mesh.EndpointFor(e.node)
+	for _, to := range mesh.PickGossipRecipients(s.rng, e.node, g.Dlazy, g.GossipFactor) {
+		toEP := mesh.EndpointFor(to)
+		delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIHave)
+		bytes := ct.GossipRPCSize(len(mids))
+		mesh.RecordMeshHop(s.cfg.Bandwidth, e.node, to, ct.KindGossipIHave, -1, bytes)
+		// Defensive copy: PickGossipRecipients reuses the pool slice
+		// across iterations but MCacheGossipMids returns a fresh slice
+		// each call; we still copy so the event holds a stable view
+		// of what was advertised at heartbeat time.
+		advertised := append([]ct.MsgID(nil), mids...)
+		out = append(out, scheduledEvent{
+			when: s.now + delay,
+			ev:   &evtMeshIHave{from: e.node, to: to, mids: advertised},
+		})
+	}
+	return out
+}
+
+type evtMeshIHave struct {
+	from, to ct.MeshNode
+	mids     []ct.MsgID
+}
+
+func (e *evtMeshIHave) describe() string {
+	return fmt.Sprintf("MeshIHave[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
+}
+
+func (e *evtMeshIHave) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	var want []ct.MsgID
+	for _, mid := range e.mids {
+		if mesh.IsSeen(e.to, mid) {
+			continue
+		}
+		want = append(want, mid)
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	fromEP := mesh.EndpointFor(e.to)
+	toEP := mesh.EndpointFor(e.from)
+	delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIWant)
+	bytes := ct.GossipRPCSize(len(want))
+	mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, e.from, ct.KindGossipIWant, -1, bytes)
+	return []scheduledEvent{{
+		when: s.now + delay,
+		ev:   &evtMeshIWant{from: e.to, to: e.from, mids: want},
+	}}
+}
+
+type evtMeshIWant struct {
+	from, to ct.MeshNode
+	mids     []ct.MsgID
+}
+
+func (e *evtMeshIWant) describe() string {
+	return fmt.Sprintf("MeshIWant[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
+}
+
+func (e *evtMeshIWant) handle(s *sim) []scheduledEvent {
+	mesh := s.cfg.Mesh
+	for _, mid := range e.mids {
+		entry, ok := mesh.MCacheLookup(e.to, mid)
+		if !ok {
+			// Real gossipsub silently drops requests for missing mids
+			// (the requester will hear the mid from another peer next
+			// heartbeat). Mirror that — no penalty / no error.
+			continue
+		}
+		// The reinject closure schedules a fresh evtMeshArrival
+		// directly on s.queue (via the captured *sim). We return no
+		// scheduled events ourselves; the closure's effect lands in
+		// the queue the same way an emit-time s.schedule would.
+		entry.Reinject(e.from)
+	}
+	return nil
 }
 
 // ---- evtLeaderFetch ----------------------------------------------------

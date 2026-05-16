@@ -17,6 +17,8 @@ const (
 	KindRoundChange                    // QBFT-specific
 	KindCertificate                    // OBFT cert gossip / QBFT decided-msg
 	KindPostConsensus                  // QBFT partial-sig collection (OBFT folds this into Phase 3)
+	KindGossipIHave                    // gossipsub IHAVE control RPC (lazy-push advertise)
+	KindGossipIWant                    // gossipsub IWANT control RPC (lazy-push pull request)
 )
 
 // String returns a stable name suitable for telemetry / report keys.
@@ -32,6 +34,10 @@ func (k MsgKind) String() string {
 		return "Certificate"
 	case KindPostConsensus:
 		return "PostConsensus"
+	case KindGossipIHave:
+		return "GossipIHave"
+	case KindGossipIWant:
+		return "GossipIWant"
 	default:
 		return "Unknown"
 	}

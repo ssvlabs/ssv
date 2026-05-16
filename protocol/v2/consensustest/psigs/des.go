@@ -71,6 +71,7 @@ func (s *sim) start() {
 		}
 		s.schedule(s.cfg.SlotStart, &evtPSigSign{op: op})
 	}
+	s.scheduleInitialHeartbeats()
 }
 
 func (s *sim) runLoop() {
@@ -163,6 +164,7 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDe
 	fromNode := mesh.NodeForOperator(from)
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
+	s.cacheArrivalForGossip(fromNode, fromNode, id, kind, bytes, build)
 	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		isProto := mesh.IsProtocol(neighbor)
@@ -186,5 +188,70 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDe
 			bytes:     bytes,
 			builder:   build,
 		})
+	}
+}
+
+// cacheArrivalForGossip mirrors the OBFT helper of the same name. See
+// protocol/v2/consensustest/obft/des.go cacheArrivalForGossip for the
+// rationale. PSigs-specific: the kind doesn't have per-layer / per-
+// round metadata, so RecordMeshHop receives layer=-1 (and the helper
+// signature is correspondingly shorter than OBFT's).
+func (s *sim) cacheArrivalForGossip(
+	cacheOwner, publisher ct.MeshNode,
+	msgID ct.MsgID, kind ct.MsgKind, bytes int64,
+	builder func(to ct.OperatorID) event,
+) {
+	mesh := s.mesh
+	g := mesh.Gossip()
+	if !g.Enabled {
+		return
+	}
+	mesh.MCacheInsert(cacheOwner, msgID, ct.MCacheEntry{
+		Kind:  kind,
+		Bytes: bytes,
+		Reinject: func(requester ct.MeshNode) {
+			respEP := mesh.EndpointFor(cacheOwner)
+			reqEP := mesh.EndpointFor(requester)
+			delay := s.cfg.Network.Delay(s.rng, respEP, reqEP, kind)
+			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, -1, bytes)
+			s.schedule(s.now+delay, &evtMeshArrival{
+				from:      cacheOwner,
+				to:        requester,
+				publisher: publisher,
+				msgID:     msgID,
+				kind:      kind,
+				bytes:     bytes,
+				builder:   builder,
+			})
+		},
+	}, g.HistoryLength)
+}
+
+// scheduleInitialHeartbeats mirrors the OBFT helper. See
+// protocol/v2/consensustest/obft/des.go scheduleInitialHeartbeats for
+// the rationale; identical body modulo the typed event.
+func (s *sim) scheduleInitialHeartbeats() {
+	mesh := s.mesh
+	if mesh == nil {
+		return
+	}
+	g := mesh.Gossip()
+	if !g.Enabled {
+		return
+	}
+	total := mesh.TotalNodes()
+	if total <= 0 {
+		return
+	}
+	phase := g.HeartbeatInterval / time.Duration(total)
+	for i := 0; i < total; i++ {
+		nodeOffset := time.Duration(i) * phase
+		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
+			at := nodeOffset + tick
+			if at > s.cfg.RelayCutoff {
+				break
+			}
+			s.schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
+		}
 	}
 }

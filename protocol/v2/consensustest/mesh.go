@@ -2,6 +2,7 @@ package consensustest
 
 import (
 	"fmt"
+	"math"
 	mrand "math/rand"
 	"regexp"
 	"strconv"
@@ -52,6 +53,141 @@ type MeshConfig struct {
 	// the HopDelay sample at each forwarding hop. Default 0 (mesh is
 	// modeled as fast-forwarding once a message clears dedup).
 	ValidateDelay time.Duration
+	// Gossip configures the lazy-push IHAVE/IWANT backstop layered on
+	// top of the eager-push mesh. When Gossip.Enabled is false (default),
+	// no heartbeat ticks fire and mcache state is unused — mesh behaves
+	// purely as eager-push with no recovery for mesh misses (the
+	// pre-Phase-B behavior). Set Gossip.Enabled = true to model real
+	// libp2p's full gossip protocol; defaults match SSV's
+	// network/topics/params/gossipsub.go overrides.
+	Gossip MeshGossipConfig
+}
+
+// MeshGossipConfig parameterizes the lazy-push IHAVE/IWANT backstop.
+// Defaults match the SSV operator's libp2p configuration in
+// network/topics/params/gossipsub.go — heartbeat 700ms,
+// HistoryLength=6 (≈4.2s mcache window), HistoryGossip=4 (≈2.8s IHAVE
+// window). Dlazy / GossipFactor are unchanged from upstream gossipsub
+// defaults (SSV does not override them).
+//
+// The mid lifecycle:
+//
+//  1. Publisher inserts msgID into its own mcache at emit time.
+//  2. Each per-node heartbeat tick rotates its mcache (advances head,
+//     evicts oldest slot) and emits IHAVE(mids from last HistoryGossip
+//     slots) to Dlazy / GossipFactor random non-mesh peers.
+//  3. An IHAVE recipient that hasn't seen any of the advertised mids
+//     sends IWANT(unseen mids) back to the advertiser.
+//  4. The advertiser looks each requested mid up in its mcache; for
+//     hits, the entry's Reinject closure schedules a fresh
+//     evtMeshArrival from advertiser to requester carrying the body.
+//  5. The requester's MarkSeen gate de-dupes against any copy that
+//     arrived via mesh in the meantime; if first-time, the body is
+//     also inserted into the requester's mcache, propagating the
+//     gossip cascade.
+type MeshGossipConfig struct {
+	// Enabled gates the entire gossip layer. Default false — existing
+	// mesh-mode tests don't pick up gossip implicitly.
+	Enabled bool
+
+	// HeartbeatInterval between gossip ticks per node. Sim default
+	// matches SSV's `HeartbeatInterval` = 700ms.
+	HeartbeatInterval time.Duration
+
+	// HistoryLength is the per-node mcache slot count. A mid stays
+	// answerable to IWANT for HistoryLength × HeartbeatInterval. Sim
+	// default matches SSV's `gsMcacheLen` = 6 (≈4.2s window).
+	HistoryLength int
+
+	// HistoryGossip is the IHAVE advertise-window slot count (must be
+	// ≤ HistoryLength). Mids inserted within the last HistoryGossip
+	// heartbeats are advertised; older mids stay answerable to IWANT
+	// but aren't pre-advertised. Sim default matches SSV's
+	// `gsMcacheGossip` = 4 (≈2.8s window).
+	HistoryGossip int
+
+	// Dlazy is the minimum IHAVE recipient count per heartbeat.
+	// libp2p default; SSV does not override.
+	Dlazy int
+
+	// GossipFactor scales recipient count with the non-mesh peer pool:
+	// IHAVE goes to max(Dlazy, ceil(GossipFactor × |non-mesh peers|)).
+	// libp2p default; SSV does not override.
+	GossipFactor float64
+}
+
+// WithDefaults returns a copy of g with any zero fields filled in to
+// SSV-matched defaults. The full canonical numbers live here so a
+// caller that sets, say, only HeartbeatInterval gets the rest from
+// the SSV configuration baseline.
+func (g MeshGossipConfig) WithDefaults() MeshGossipConfig {
+	if g.HeartbeatInterval == 0 {
+		g.HeartbeatInterval = 700 * time.Millisecond
+	}
+	if g.HistoryLength == 0 {
+		g.HistoryLength = 6
+	}
+	if g.HistoryGossip == 0 {
+		g.HistoryGossip = 4
+	}
+	if g.Dlazy == 0 {
+		g.Dlazy = 6
+	}
+	if g.GossipFactor == 0 {
+		g.GossipFactor = 0.25
+	}
+	return g
+}
+
+// Gossip-RPC wire-byte constants. IHAVE / IWANT both carry an msgID
+// list; the body bytes are reused for the message itself when a peer
+// answers IWANT (no separate constant). 32 B per mid mirrors real
+// gossipsub's mid-as-hash framing; 32 B base covers the RPC envelope.
+const (
+	GossipBaseBytes   int64 = 32
+	GossipPerMidBytes int64 = 32
+)
+
+// GossipRPCSize is the wire-byte count for an IHAVE / IWANT carrying
+// `numMids` msg-IDs. Used by gossip event handlers for bandwidth
+// accounting.
+func GossipRPCSize(numMids int) int64 {
+	return GossipBaseBytes + GossipPerMidBytes*int64(numMids)
+}
+
+// MCacheReinjectFunc is the per-mid reschedule callback stored in an
+// MCacheEntry. Called by the IWANT handler when a peer's mcache hits
+// a requested mid: schedules a fresh evtMeshArrival from the
+// insertion node (= the cache owner) to `requester` (the IWANT
+// sender), preserving the original publisher and body. The insertion
+// node is captured by the closure at MCacheInsert time, so the
+// signature carries only the requester.
+//
+// mesh.go can't construct the adapter-specific event itself; each
+// adapter's emit-side and arrival-side close over the typed builder
+// + arrival struct and stash a typed reinject closure here.
+type MCacheReinjectFunc func(requester MeshNode)
+
+// MCacheEntry is one mid's mcache record — kept for HistoryLength
+// heartbeats after insert. Kind / Bytes are retained only for trace
+// and bandwidth-debug visibility; the Reinject closure carries the
+// rest of the payload internally.
+type MCacheEntry struct {
+	Kind     MsgKind
+	Bytes    int64
+	Reinject MCacheReinjectFunc
+}
+
+// nodeMcache is the per-node sliding-window cache used by the gossip
+// layer. Slots are heartbeat-indexed; head advances with each
+// MCacheRotate. The entries map is the lookup surface for IWANT
+// responses (faster than walking slots); the slots list is the
+// manifest used to evict on rotation and to enumerate the IHAVE
+// advertise window.
+type nodeMcache struct {
+	entries map[MsgID]MCacheEntry
+	slots   [][]MsgID
+	head    int
 }
 
 // RelayEndpointBase is the first synthetic OperatorID allocated to a
@@ -92,6 +228,18 @@ type MeshTopology struct {
 	hopDelay  NetworkModel
 	valDelay  time.Duration
 	nextMsgID MsgID
+	// gossip is the captured-at-construction MeshGossipConfig, snapshotted
+	// from MeshConfig.Gossip and run through WithDefaults so adapters and
+	// gossip-event handlers read the same canonical values without
+	// recomputing defaults on every access.
+	gossip MeshGossipConfig
+	// mcache is allocated lazily on first MCacheInsert call. Until then,
+	// the gossip layer is dormant (existing eager-mesh tests don't pay
+	// for unused memory). `mcacheHistory` records the HistoryLength
+	// chosen on first init; subsequent inserts ignore the requested
+	// history to keep per-node ring sizes uniform.
+	mcache        []nodeMcache
+	mcacheHistory int
 }
 
 // NewMeshTopology builds the per-sim mesh deterministically from `seed`.
@@ -135,6 +283,8 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 		seen:      make([]map[MsgID]struct{}, total),
 		hopDelay:  cfg.HopDelay,
 		valDelay:  cfg.ValidateDelay,
+		gossip:    cfg.Gossip.WithDefaults(),
+		mcache:    make([]nodeMcache, total),
 	}
 	for i, op := range cluster {
 		m.opIndex[op] = i
@@ -309,11 +459,31 @@ func (m *MeshTopology) MarkSeen(node MeshNode, id MsgID) bool {
 	return true
 }
 
+// IsSeen reports whether `node` has `id` in its seen-set, without
+// mutating state. Used by gossip IHAVE-receiver logic to decide
+// whether to send IWANT for a mid (must NOT consume the dedup slot
+// preemptively — a real-libp2p IHAVE doesn't mark, only the body
+// arrival does).
+func (m *MeshTopology) IsSeen(node MeshNode, id MsgID) bool {
+	_, ok := m.seen[node][id]
+	return ok
+}
+
 // Neighbors returns `node`'s mesh peers. Caller must NOT mutate the
 // returned slice — it aliases internal state.
 func (m *MeshTopology) Neighbors(node MeshNode) []MeshNode {
 	return m.neighbors[node]
 }
+
+// TotalNodes returns the mesh's node count (cluster ops + relays).
+// Used by the gossip layer to enumerate heartbeat targets and to
+// sample non-mesh peers.
+func (m *MeshTopology) TotalNodes() int { return m.n + m.r }
+
+// Gossip returns the (defaults-filled) gossip configuration captured
+// at construction time. Adapters consult this to decide whether to
+// schedule heartbeats and what cadence to use.
+func (m *MeshTopology) Gossip() MeshGossipConfig { return m.gossip }
 
 // IsProtocol reports whether `node` is a cluster operator (true) or a
 // forward-only relay peer (false).
@@ -385,6 +555,144 @@ func (m *MeshTopology) RecordMeshHop(b *BandwidthReport, from, to MeshNode, kind
 	default:
 		b.EmissionRelayToRelay(kind, layer, bytes)
 	}
+}
+
+// ---- Gossip-layer helpers (MeshGossipConfig path) -----------------------
+
+// initMcache lazily allocates per-node mcache rings the first time
+// MCacheInsert is called. Subsequent calls with a different history
+// length are silently ignored — the first writer wins, since changing
+// ring size mid-sim would corrupt slot indexing.
+func (m *MeshTopology) initMcache(history int) {
+	if m.mcacheHistory != 0 {
+		return
+	}
+	if history <= 0 {
+		return
+	}
+	m.mcacheHistory = history
+	for i := range m.mcache {
+		m.mcache[i].entries = make(map[MsgID]MCacheEntry)
+		m.mcache[i].slots = make([][]MsgID, history)
+	}
+}
+
+// MCacheInsert records (msgID, entry) in `node`'s current heartbeat
+// slot. Idempotent in msgID: a second insert at the same node is a
+// no-op, so emit-side + arrival-side inserts of the same message can
+// coexist (the first insert wins; subsequent reach the dedup early-
+// return). `history` selects the ring size on first call; subsequent
+// calls' values are ignored.
+func (m *MeshTopology) MCacheInsert(node MeshNode, msgID MsgID, entry MCacheEntry, history int) {
+	m.initMcache(history)
+	if m.mcacheHistory == 0 {
+		return
+	}
+	c := &m.mcache[node]
+	if _, ok := c.entries[msgID]; ok {
+		return
+	}
+	c.entries[msgID] = entry
+	c.slots[c.head] = append(c.slots[c.head], msgID)
+}
+
+// MCacheLookup returns `node`'s entry for `msgID` if still in cache
+// (within the last HistoryLength heartbeats). Used by the IWANT
+// handler to find the reinject closure for each requested mid.
+func (m *MeshTopology) MCacheLookup(node MeshNode, msgID MsgID) (MCacheEntry, bool) {
+	if m.mcacheHistory == 0 {
+		return MCacheEntry{}, false
+	}
+	e, ok := m.mcache[node].entries[msgID]
+	return e, ok
+}
+
+// MCacheRotate advances `node`'s head one slot forward, evicting the
+// mids in the new head (= oldest) slot from the entries map. Called
+// by the heartbeat handler before collecting the IHAVE window so that
+// rotation precedes the read.
+func (m *MeshTopology) MCacheRotate(node MeshNode) {
+	if m.mcacheHistory == 0 {
+		return
+	}
+	c := &m.mcache[node]
+	c.head = (c.head + 1) % m.mcacheHistory
+	for _, mid := range c.slots[c.head] {
+		delete(c.entries, mid)
+	}
+	c.slots[c.head] = c.slots[c.head][:0]
+}
+
+// MCacheGossipMids returns the union of mids in `node`'s last
+// `windowSlots` heartbeat slots (inclusive of the current head).
+// Caller may consume the returned slice freely — it's a freshly
+// allocated copy. Returns nil when the mcache hasn't been initialized
+// or when windowSlots ≤ 0. Larger windowSlots than HistoryLength is
+// clamped silently.
+func (m *MeshTopology) MCacheGossipMids(node MeshNode, windowSlots int) []MsgID {
+	if m.mcacheHistory == 0 || windowSlots <= 0 {
+		return nil
+	}
+	if windowSlots > m.mcacheHistory {
+		windowSlots = m.mcacheHistory
+	}
+	c := &m.mcache[node]
+	var mids []MsgID
+	for i := 0; i < windowSlots; i++ {
+		idx := (c.head - i + m.mcacheHistory) % m.mcacheHistory
+		mids = append(mids, c.slots[idx]...)
+	}
+	return mids
+}
+
+// NonMeshPeers returns the set of mesh nodes that are NOT direct
+// mesh-neighbors of `node` (and not `node` itself). Real gossipsub
+// gossips IHAVE to topic peers outside the eager-push mesh; this
+// helper bounds the recipient pool the same way. Result is freshly
+// allocated.
+func (m *MeshTopology) NonMeshPeers(node MeshNode) []MeshNode {
+	total := MeshNode(m.TotalNodes())
+	nbrs := m.neighbors[node]
+	nbrSet := make(map[MeshNode]struct{}, len(nbrs))
+	for _, nbr := range nbrs {
+		nbrSet[nbr] = struct{}{}
+	}
+	out := make([]MeshNode, 0, int(total)-len(nbrSet)-1)
+	for i := MeshNode(0); i < total; i++ {
+		if i == node {
+			continue
+		}
+		if _, isNbr := nbrSet[i]; isNbr {
+			continue
+		}
+		out = append(out, i)
+	}
+	return out
+}
+
+// PickGossipRecipients samples IHAVE recipients via real gossipsub's
+// formula: max(Dlazy, ceil(GossipFactor × |non-mesh peers|)) up to
+// the pool size. Returns a freshly allocated, partially shuffled
+// slice. Deterministic for a fixed (rng, node, Dlazy, factor).
+//
+// At small cluster sizes (n=4 → 7 non-mesh peers) Dlazy=6 will
+// usually saturate the pool; GossipFactor only kicks in for larger
+// non-mesh-peer counts (n=13 + relays). Per the real-libp2p formula
+// in handleGetGossipPeers.
+func (m *MeshTopology) PickGossipRecipients(rng *mrand.Rand, node MeshNode, dlazy int, factor float64) []MeshNode {
+	pool := m.NonMeshPeers(node)
+	if len(pool) == 0 {
+		return nil
+	}
+	want := dlazy
+	if scaled := int(math.Ceil(factor * float64(len(pool)))); scaled > want {
+		want = scaled
+	}
+	if want > len(pool) {
+		want = len(pool)
+	}
+	rng.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+	return pool[:want]
 }
 
 // FormatMeshArrival returns the canonical "MeshArrival[...]" string

@@ -80,6 +80,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		TraceEnabled: cfg.TraceEnabled,
 		Bandwidth:    &bw,
 		Mesh:         cfg.MakeMeshTopology(),
+		RelayCutoff:  cfg.RelayCutoff,
 	}
 
 	rawOut := runDES(desCfg)
@@ -125,6 +126,9 @@ type desConfig struct {
 	TraceEnabled bool
 	Bandwidth    *ct.BandwidthReport
 	Mesh         *ct.MeshTopology // nil when DeliveryDirect
+	// RelayCutoff is the slot's hard submit deadline (carried over
+	// from SimConfig). Used to bound the gossip-heartbeat sequence.
+	RelayCutoff time.Duration
 }
 
 // rawOutcome is the PSigs-DES outcome before translation to ct.Outcome.
