@@ -44,7 +44,7 @@ type LocalNet struct {
 
 // randomMdnsTag returns a unique mDNS service tag for a test LocalNet.
 func randomMdnsTag() string {
-	return fmt.Sprintf("ssv.test.%016x", rand.Uint64())
+	return fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
