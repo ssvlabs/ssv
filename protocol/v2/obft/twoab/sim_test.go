@@ -83,7 +83,7 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 		btt := 200 * time.Millisecond
 		tCommit := 2000 * time.Millisecond
 		tVerdictStart := tCommit - 400*time.Millisecond
-		budgets, err := DefaultBroadcastBudget(K, btt, tVerdictStart)
+		budgets, err := DefaultBroadcastBudget(K, btt, 0, tVerdictStart)
 		require.NoError(t, err)
 		for k := 0; k < n; k++ {
 			ops[k] = OperatorID(k + 1)

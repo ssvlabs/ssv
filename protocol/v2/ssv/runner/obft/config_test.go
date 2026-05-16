@@ -11,63 +11,78 @@ import (
 )
 
 // TestDefaultBroadcastBudgetSchedule_K3_TabulatedAtConfigA verifies the K=3
-// tabulated default at the production BTT — [1.0·BTT, 2.5·BTT, T_commit] =
-// [200, 500, 3400]ms at Config A.
+// tabulated default with RefloodDelay=DefaultRefloodDelay (700ms): shallow
+// layers = (k+2)·BTT + RefloodDelay = {1100, 1300}ms; deepest = T_commit.
 func TestDefaultBroadcastBudgetSchedule_K3_TabulatedAtConfigA(t *testing.T) {
-	got, err := DefaultBroadcastBudgetSchedule(3, DefaultBTT, DefaultTCommit)
+	got, err := DefaultBroadcastBudgetSchedule(3, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	want := []time.Duration{
-		200 * time.Millisecond,
-		500 * time.Millisecond,
+		1100 * time.Millisecond, // 2·BTT + RD = 400 + 700
+		1300 * time.Millisecond, // 3·BTT + RD = 600 + 700
 		DefaultTCommit,
 	}
 	require.Equal(t, want, got)
 }
 
 // TestDefaultBroadcastBudgetSchedule_K4_TabulatedAtConfigA verifies the K=4
-// tabulated default at the production BTT — [1·BTT, 1.5·BTT, 2.5·BTT,
-// T_commit] = [200, 300, 500, 3400]ms at Config A. This is the production
-// deployment's exact schedule.
+// tabulated default with RefloodDelay=DefaultRefloodDelay (700ms): shallow
+// layers = (k+2)·BTT + RefloodDelay = {1100, 1300, 1500}ms; deepest = T_commit.
+// This is the production deployment's exact schedule.
 func TestDefaultBroadcastBudgetSchedule_K4_TabulatedAtConfigA(t *testing.T) {
-	got, err := DefaultBroadcastBudgetSchedule(4, DefaultBTT, DefaultTCommit)
+	got, err := DefaultBroadcastBudgetSchedule(4, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	want := []time.Duration{
-		200 * time.Millisecond,
-		300 * time.Millisecond,
-		500 * time.Millisecond,
+		1100 * time.Millisecond, // 2·BTT + RD
+		1300 * time.Millisecond, // 3·BTT + RD
+		1500 * time.Millisecond, // 4·BTT + RD
+		DefaultTCommit,
+	}
+	require.Equal(t, want, got)
+}
+
+// TestDefaultBroadcastBudgetSchedule_K4_NoRefloodDelay verifies the
+// fully-meshed-cluster opt-out: at RefloodDelay=0 the schedule collapses to
+// {2, 3, 4}·BTT shallow.
+func TestDefaultBroadcastBudgetSchedule_K4_NoRefloodDelay(t *testing.T) {
+	got, err := DefaultBroadcastBudgetSchedule(4, DefaultBTT, 0, DefaultTCommit)
+	require.NoError(t, err)
+	want := []time.Duration{
+		400 * time.Millisecond, // 2·BTT
+		600 * time.Millisecond, // 3·BTT
+		800 * time.Millisecond, // 4·BTT
 		DefaultTCommit,
 	}
 	require.Equal(t, want, got)
 }
 
 // TestDefaultBroadcastBudgetSchedule_K4_ScalesWithBTT verifies the shallow
-// schedule scales linearly when BTT changes — at BTT=400ms the multipliers
-// [1.0, 1.5, 2.5] produce [400, 600, 1000]ms shallow; deepest stays anchored
-// at T_commit (not BTT-scaled).
+// schedule's BTT-multiplier portion scales linearly when BTT changes — at
+// BTT=400ms with RD=0 the multipliers [2, 3, 4] produce [800, 1200, 1600]ms
+// shallow; deepest stays anchored at T_commit (not BTT-scaled).
 func TestDefaultBroadcastBudgetSchedule_K4_ScalesWithBTT(t *testing.T) {
-	got, err := DefaultBroadcastBudgetSchedule(4, 400*time.Millisecond, DefaultTCommit)
+	got, err := DefaultBroadcastBudgetSchedule(4, 400*time.Millisecond, 0, DefaultTCommit)
 	require.NoError(t, err)
 	want := []time.Duration{
-		400 * time.Millisecond,
-		600 * time.Millisecond,
-		1000 * time.Millisecond,
+		800 * time.Millisecond,
+		1200 * time.Millisecond,
+		1600 * time.Millisecond,
 		DefaultTCommit,
 	}
 	require.Equal(t, want, got)
 }
 
 // TestDefaultBroadcastBudgetSchedule_K7_InterpolatesCleanly verifies the K=7
-// interpolation: first three shallow layers stay at [1·BTT, 1.5·BTT, 2.5·BTT]
-// = [200, 300, 500]ms; intermediate layers (k=3..K-2) interpolate from
-// 2.5·BTT (at L_2) to T_commit (at L_{K-1}) in duration space. Deepest is
+// interpolation: first three shallow layers stay at [2·BTT, 3·BTT, 4·BTT]
+// (+ RefloodDelay); intermediate layers (k=3..K-2) interpolate from
+// 4·BTT+RD (at L_2) to T_commit (at L_{K-1}) in duration space. Deepest is
 // T_commit exact.
 func TestDefaultBroadcastBudgetSchedule_K7_InterpolatesCleanly(t *testing.T) {
-	got, err := DefaultBroadcastBudgetSchedule(7, DefaultBTT, DefaultTCommit)
+	got, err := DefaultBroadcastBudgetSchedule(7, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	require.Len(t, got, 7)
-	require.Equal(t, 200*time.Millisecond, got[0], "L_0 = 1·BTT")
-	require.Equal(t, 300*time.Millisecond, got[1], "L_1 = 1.5·BTT")
-	require.Equal(t, 500*time.Millisecond, got[2], "L_2 = 2.5·BTT")
+	require.Equal(t, 1100*time.Millisecond, got[0], "L_0 = 2·BTT + RD")
+	require.Equal(t, 1300*time.Millisecond, got[1], "L_1 = 3·BTT + RD")
+	require.Equal(t, 1500*time.Millisecond, got[2], "L_2 = 4·BTT + RD")
 	require.Equal(t, DefaultTCommit, got[6], "L_K-1 = T_commit (earliest possible)")
 	// Verify non-decreasing. Strict-increasing holds at this operating
 	// point (none of the shallow multiples hit the T_commit cap) but the
@@ -83,10 +98,10 @@ func TestDefaultBroadcastBudgetSchedule_K7_InterpolatesCleanly(t *testing.T) {
 // TestDefaultBroadcastBudgetSchedule_K10_InterpolatesCleanly verifies the
 // K=10 interpolation path (n=10 cluster).
 func TestDefaultBroadcastBudgetSchedule_K10_InterpolatesCleanly(t *testing.T) {
-	got, err := DefaultBroadcastBudgetSchedule(10, DefaultBTT, DefaultTCommit)
+	got, err := DefaultBroadcastBudgetSchedule(10, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	require.Len(t, got, 10)
-	require.Equal(t, 200*time.Millisecond, got[0], "L_0 must be 1·BTT")
+	require.Equal(t, 1100*time.Millisecond, got[0], "L_0 must be 2·BTT + RD")
 	require.Equal(t, DefaultTCommit, got[9], "L_K-1 must be T_commit")
 
 	// Verify non-decreasing (relaxed from strict-increasing in Phase 2).
@@ -100,22 +115,30 @@ func TestDefaultBroadcastBudgetSchedule_K10_InterpolatesCleanly(t *testing.T) {
 // TestDefaultBroadcastBudgetSchedule_TCommitTooSmall_Caps verifies the
 // helper caps shallow B_k at T_commit at degraded operating points
 // (was an error pre-relaxation; now the helper returns a non-decreasing
-// schedule with multiple layers clamping at BFT_start at runtime).
+// schedule with multiple layers clamping at BFT_start at runtime). Uses
+// RefloodDelay=0 so the cap behavior is BTT-driven rather than
+// RefloodDelay-driven.
 func TestDefaultBroadcastBudgetSchedule_TCommitTooSmall_Caps(t *testing.T) {
-	// At BTT=400ms, T_commit=1000ms = 2.5·BTT. Pre-cap shallow values
-	// would be [400, 600, 1000, 1000]; the cap leaves them unchanged
-	// since out[2] = 2.5·BTT exactly equals T_commit. Pick an even
-	// tighter T_commit to force a real cap.
-	got, err := DefaultBroadcastBudgetSchedule(4, 400*time.Millisecond, 800*time.Millisecond)
+	// At BTT=300ms, T_commit=1000ms: shallow pre-cap = [600, 900, 1200];
+	// L_2 caps to 1000ms (= T_commit), L_0/L_1 fit.
+	got, err := DefaultBroadcastBudgetSchedule(4, 300*time.Millisecond, 0, 1000*time.Millisecond)
 	require.NoError(t, err)
 	require.Len(t, got, 4)
-	require.Equal(t, 400*time.Millisecond, got[0])
-	require.Equal(t, 600*time.Millisecond, got[1])
-	require.Equal(t, 800*time.Millisecond, got[2], "capped: was 2.5·BTT=1000ms, > T_commit=800ms")
-	require.Equal(t, 800*time.Millisecond, got[3], "deepest = T_commit")
+	require.Equal(t, 600*time.Millisecond, got[0])
+	require.Equal(t, 900*time.Millisecond, got[1])
+	require.Equal(t, 1000*time.Millisecond, got[2], "capped: was 4·BTT=1200ms, > T_commit=1000ms")
+	require.Equal(t, 1000*time.Millisecond, got[3], "deepest = T_commit")
 	for k := 1; k < len(got); k++ {
 		require.GreaterOrEqualf(t, got[k], got[k-1], "non-decreasing post-cap")
 	}
+}
+
+// TestDefaultBroadcastBudgetSchedule_NegativeRefloodDelay_Rejected guards
+// against accidental negative RefloodDelay values producing nonsensical
+// schedules.
+func TestDefaultBroadcastBudgetSchedule_NegativeRefloodDelay_Rejected(t *testing.T) {
+	_, err := DefaultBroadcastBudgetSchedule(4, DefaultBTT, -1*time.Millisecond, DefaultTCommit)
+	require.ErrorContains(t, err, "RefloodDelay")
 }
 
 // TestDefaultBroadcastBudgetSchedule_EndpointConstantMatchK4 guards against
@@ -168,7 +191,7 @@ func TestConfigForCluster_KDerivedFromClusterSize(t *testing.T) {
 			for i := range committee {
 				committee[i] = spectypes.OperatorID(i + 1)
 			}
-			budget, err := DefaultBroadcastBudgetSchedule(tc.k, DefaultBTT, DefaultTCommit)
+			budget, err := DefaultBroadcastBudgetSchedule(tc.k, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 			require.NoError(t, err)
 			overrides := &ConfigOverrides{
 				K:               tc.k,

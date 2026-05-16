@@ -63,7 +63,10 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 	// monotonically decreasing in k.
 	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
 	const tCommit = 1500 * time.Millisecond
-	budgets, err := DefaultBroadcastBudget(K, btt, tCommit)
+	// RefloodDelay=0 in sim tests: idealized eager-push delivery; mesh-reflood
+	// scenarios are exercised via test-specific schedules, not via the static
+	// reflood-absorption budget.
+	budgets, err := DefaultBroadcastBudget(K, btt, 0, tCommit)
 	require.NoError(t, err)
 	layers := make([]LayerSpec, K)
 	for k := 0; k < K; k++ {

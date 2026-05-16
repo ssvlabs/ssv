@@ -151,7 +151,11 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// runtime `T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k)`
 	// clamps those layers' broadcast targets at BFT_start. Errors here
 	// are only the K<1 / BTT≤0 programmer-error class.
-	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, bttEff, tVerdictStart)
+	// RefloodDelay=0: consensustest simulates idealized eager-push delivery;
+	// gossipsub-mesh reflood scenarios are exercised via DeliveryMesh +
+	// scenario machinery, not via the schedule's static reflood-absorption
+	// budget.
+	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, bttEff, 0, tVerdictStart)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)

@@ -10,7 +10,10 @@ import (
 func validBaseConfig() *Config {
 	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
 	const tCommit = 1500 * time.Millisecond
-	budgets, err := DefaultBroadcastBudget(4, btt, tCommit)
+	// RefloodDelay=0 in test fixtures: keeps the per-layer absorption budget
+	// at the lower bound ({2, 3, 4}·BTT shallow) so test-tCommit fits the
+	// schedule. Production tunes RefloodDelay via the SSV adapter override.
+	budgets, err := DefaultBroadcastBudget(4, btt, 0, tCommit)
 	if err != nil {
 		panic(err)
 	}

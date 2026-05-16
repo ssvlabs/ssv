@@ -515,20 +515,23 @@ func TestAdapter_MaxMEVFetch_HealthyAtBoundary(t *testing.T) {
 // boundary miss.
 func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	// Network left nil so cfg.Validate() inside Run defaults it to
-	// ConstantDelay{D: BTT}. That full-BTT propagation consumes the
-	// entire B_0 budget with zero margin — the spec pathology this
-	// test exercises.
+	// Override Network to 2·BTT propagation — under the reflood-aware schedule
+	// (B_0 = 2·BTT + RefloodDelay, default RD=0 in consensustest), this
+	// consumes the entire B_0 budget with zero margin. The spec pathology
+	// this test exercises: max-MEV fetch (zero broadcast offset) + propagation
+	// exactly at B_0 boundary → ordering between L_0 arrival and T_commit can
+	// flip the outcome from σ to NR.
+	cfg.Network = ct.ConstantDelay{D: 2 * cfg.BTT}
 
 	out, err := obftadapter.Protocol{MaxMEVFetch: true}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "should still decide via K-layer fall-through")
 	require.GreaterOrEqual(t, out.DecidedRound, 1,
-		"max-MEV + full-BTT propagation: L_0 should NOT decide (convergence buffer consumed)")
+		"max-MEV + B_0-boundary propagation: L_0 should NOT decide (convergence buffer consumed)")
 
 	rep := ct.ComputeSafetyReport(out)
 	require.True(t, rep.SingleV, "SingleV: %s", rep)
-	t.Logf("MaxMEVFetch + full-BTT propagation: fell through to L_%d at %v", out.DecidedRound, out.DecisionTime)
+	t.Logf("MaxMEVFetch + 2·BTT propagation: fell through to L_%d at %v", out.DecidedRound, out.DecisionTime)
 }
 
 // TestAdapter_ByzWithholdLeader verifies the deepest-layer leader silenced

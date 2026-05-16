@@ -49,6 +49,18 @@ const (
 	// K = n = 4 (every cluster member leads exactly one layer; max
 	// fall-through depth at f = 1).
 	DefaultK = 4
+
+	// DefaultRefloodDelay is the worst-case gossipsub-lazy-push latency
+	// before a retransmission cycle completes, defaulted to SSV's gossipsub
+	// HeartbeatInterval (network/topics/params/gossipsub.go). Used to size
+	// per-layer broadcast budgets B_k so that one full IHAVE/IWANT reflood
+	// cycle fits within a layer's absorption window for mesh-flaky receivers
+	// — without it, a missed eager-push at L_0 forecloses L_0 σ-quorum even
+	// under partial-synchrony assumptions. Deployments running on dense,
+	// fully-meshed clusters where eager-push reliably reaches all peers
+	// (typically n=4 fully connected) MAY override to a lower value (down
+	// to 0) to recover MEV-fetch headroom.
+	DefaultRefloodDelay = 700 * time.Millisecond
 )
 
 // Per-layer defaults for the asymmetric staggered schedule (spec §Setting,
@@ -105,19 +117,19 @@ const (
 // (the operator/deployment decides whether to use it instead of K ≥ f+2).
 var defaultLayerSchedules = map[int]struct {
 	fetchAt             []time.Duration
-	shallowBudgetBTT100 []int // BTT-hundredths for L_0 .. L_{K-2}; deepest is always T_commit
+	shallowBudgetBTT100 []int // BTT-hundredths for L_0 .. L_{K-2}; RefloodDelay is added on top; deepest is always T_commit
 }{
 	2: {
 		fetchAt:             []time.Duration{151 * time.Millisecond, 0},
-		shallowBudgetBTT100: []int{100}, // 1.0 BTT (L_0); deepest L_1 = T_commit
+		shallowBudgetBTT100: []int{200}, // 2.0 BTT (L_0) + RefloodDelay; deepest L_1 = T_commit
 	},
 	3: {
 		fetchAt:             []time.Duration{152 * time.Millisecond, 151 * time.Millisecond, 0},
-		shallowBudgetBTT100: []int{100, 250}, // 1.0, 2.5 BTT (L_0, L_1); deepest L_2 = T_commit
+		shallowBudgetBTT100: []int{200, 300}, // 2.0, 3.0 BTT (L_0, L_1) + RefloodDelay; deepest L_2 = T_commit
 	},
 	4: {
 		fetchAt:             []time.Duration{153 * time.Millisecond, 152 * time.Millisecond, 151 * time.Millisecond, 0},
-		shallowBudgetBTT100: []int{100, 150, 250}, // 1.0, 1.5, 2.5 BTT (L_0..L_2); deepest L_3 = T_commit
+		shallowBudgetBTT100: []int{200, 300, 400}, // 2.0, 3.0, 4.0 BTT (L_0..L_2) + RefloodDelay; deepest L_3 = T_commit
 	},
 }
 
@@ -134,7 +146,7 @@ var defaultLayerSchedules = map[int]struct {
 const (
 	primaryFetchDefault        = 153 * time.Millisecond
 	deepestFetchDefault        = 0
-	primaryBudgetDefaultBTT100 = 100 // 1.0 BTT
+	primaryBudgetDefaultBTT100 = 200 // 2.0 BTT — paired with +RefloodDelay added at compute time
 )
 
 // ConfigOverrides allows callers to override the default protocol timings
@@ -150,6 +162,18 @@ type ConfigOverrides struct {
 	BTT                  time.Duration // P99 + δ; spec §Setting unit propagation+skew budget
 	RelayCutoff          time.Duration // application hard deadline (e.g. 4s for proposer duty)
 	HeaderSubmitHeadroom time.Duration // reserved for cert broadcast + relay submit (absolute)
+
+	// RefloodDelay is the worst-case gossipsub-lazy-push latency before a
+	// retransmission cycle completes — bounded by the cluster's
+	// HeartbeatInterval. When zero, defaults to DefaultRefloodDelay (700ms,
+	// matching SSV's configured HeartbeatInterval). The per-layer B_k
+	// schedule adds RefloodDelay on top of the {2, 3, 4}·BTT shallow base so
+	// one full IHAVE/IWANT cycle fits in each shallow layer's absorption
+	// window. Deployments on fully-meshed clusters where eager-push reaches
+	// all peers reliably may use a tiny positive value (e.g. 1·time.Nanosecond)
+	// to opt out — Go's zero-means-default convention prevents passing 0
+	// explicitly.
+	RefloodDelay time.Duration
 
 	// TCommit, Delta2, Delta3, JitterBuffer — when zero, derive from the
 	// above per spec. Set explicitly only to deviate from the spec
@@ -207,6 +231,13 @@ func (o *ConfigOverrides) headerSubmitHeadroom() time.Duration {
 	return o.HeaderSubmitHeadroom
 }
 
+func (o *ConfigOverrides) refloodDelay() time.Duration {
+	if o == nil || o.RefloodDelay == 0 {
+		return DefaultRefloodDelay
+	}
+	return o.RefloodDelay
+}
+
 // delta3 derives from absolute ε_3 (doesn't scale with BTT per spec).
 func (o *ConfigOverrides) delta3() time.Duration {
 	if o == nil || o.Delta3 == 0 {
@@ -256,23 +287,25 @@ func interpolatedDurationSchedule(K int, l0, deepest time.Duration) []time.Durat
 }
 
 // interpolatedBudgetSchedule returns a length-K slice with the L_0 endpoint
-// expressed in BTT-hundredths (scaled to BTT internally) and the deepest
-// endpoint as an absolute duration (T_commit). Output is monotonically
-// increasing. Used as the K>4 fallback for BroadcastBudget.
+// expressed in BTT-hundredths (scaled to BTT internally, plus refloodDelay
+// added on top) and the deepest endpoint as an absolute duration (T_commit).
+// Output is monotonically increasing. Used as the K>4 fallback for
+// BroadcastBudget.
 //
-// The first three shallow layers stay at spec values (1·BTT, 1.5·BTT,
-// 2.5·BTT); intermediate layers (k = 3, ..., K-2) interpolate linearly in
-// duration space from 2.5·BTT (at L_2) to deepest (at L_{K-1}).
-func interpolatedBudgetSchedule(K int, l0BTT100 int, deepest, btt time.Duration) []time.Duration {
+// The first three shallow layers stay at spec values (2·BTT, 3·BTT, 4·BTT)
+// each PLUS refloodDelay; intermediate layers (k = 3, ..., K-2) interpolate
+// linearly in duration space from 4·BTT + refloodDelay (at L_2) to deepest
+// (at L_{K-1}).
+func interpolatedBudgetSchedule(K int, l0BTT100 int, refloodDelay, deepest, btt time.Duration) []time.Duration {
 	out := make([]time.Duration, K)
-	// Shallow spec values for k ∈ {0, 1, 2}.
-	out[0] = btt * time.Duration(l0BTT100) / 100
+	// Shallow spec values for k ∈ {0, 1, 2} — each = BTT-multiple + refloodDelay.
+	out[0] = btt*time.Duration(l0BTT100)/100 + refloodDelay
 	if K >= 2 {
 		out[K-1] = deepest
 	}
 	if K >= 3 {
-		out[1] = btt * 150 / 100 // 1.5 BTT
-		out[2] = btt * 250 / 100 // 2.5 BTT
+		out[1] = btt*300/100 + refloodDelay // 3 BTT + RefloodDelay
+		out[2] = btt*400/100 + refloodDelay // 4 BTT + RefloodDelay
 	}
 	// Intermediate layers between L_2 and L_{K-1} interpolate in duration
 	// space (the deepest is absolute T_commit, not a BTT multiple).
@@ -304,45 +337,57 @@ func defaultFetchSchedule(K int) []time.Duration {
 }
 
 // DefaultBroadcastBudgetSchedule returns the per-layer T_commit-anchored
-// absorption windows paired with defaultFetchSchedule. Mirrors the asymmetric
-// staggered design from spec §Setting line 45's recommended 1/1.5/2.5 BTT
-// shallow multipliers at K=4, with the deepest layer fixed at T_commit
-// ("earliest possible": deepest leader broadcasts at BFT_start).
+// absorption windows paired with defaultFetchSchedule. Implements the
+// reflood-aware staggered design from spec §Setting:
 //
-// For K=2 returns [1·BTT, T_commit] (BFT-liveness minimum at f=1). For K=3
-// returns [1·BTT, 2.5·BTT, T_commit]. For K=4 returns [1·BTT, 1.5·BTT,
-// 2.5·BTT, T_commit]. For K>4 the first three shallow layers stay at 1 /
-// 1.5 / 2.5 BTT and intermediate layers interpolate linearly in duration
-// space from 2.5·BTT to T_commit at L_{K-1}.
+//	B_k_shallow = (k+2)·BTT + RefloodDelay  for k ∈ [0, K-2]
+//	B_{K-1}     = T_commit                  (deepest broadcasts at BFT_start)
+//
+// where `RefloodDelay` is the worst-case gossipsub IHAVE/IWANT reflood
+// latency (bounded by HeartbeatInterval; defaults to 700ms for SSV
+// deployments). The base {2, 3, 4}·BTT multipliers absorb propagation +
+// the +1·BTT-per-layer jitter cushion that gives deeper layers more
+// headroom; the additive RefloodDelay accommodates one full reflood cycle
+// when initial eager-push fails to reach all honest peers.
+//
+// For K=2 returns [2·BTT+RD, T_commit] (BFT-liveness minimum at f=1).
+// For K=3 returns [2·BTT+RD, 3·BTT+RD, T_commit]. For K=4 returns
+// [2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit]. For K>4 the first three
+// shallow layers stay at 2 / 3 / 4 BTT (+ RefloodDelay) and intermediate
+// layers interpolate linearly in duration space from 4·BTT+RD to T_commit
+// at L_{K-1}.
 //
 // At degraded operating points where the canonical staggered shallow
-// multiples overshoot T_commit (e.g. T_commit ≤ 2.5·BTT at K≥3), shallow
+// multiples (or RefloodDelay-inflated values) overshoot T_commit, shallow
 // B_k entries are capped at T_commit so the schedule stays non-decreasing.
 // Capped layers share `T_broadcast_max_k = max(BFT_start, T_commit − B_k)
 // = BFT_start` — multiple layers may collide at BFT_start without safety
 // impact. Operators who want the canonical staggered shape preserved can
-// either widen T_commit (loosen Δ_2 / Δ_3 / header headroom) or supply
-// a custom schedule.
+// either widen T_commit (loosen Δ_2 / Δ_3 / header headroom), lower
+// RefloodDelay for denser meshes, or supply a custom schedule.
 //
-// Spec example values at BTT=200ms, T_commit=3400ms (Config A): K=4 →
-// [200, 300, 500, 3400]ms. At BTT=600ms, T_commit=2600ms (degraded mesh):
-// K=4 → [600, 900, 1500, 2600]ms.
-func DefaultBroadcastBudgetSchedule(K int, btt, tCommit time.Duration) ([]time.Duration, error) {
+// Spec example values at BTT=200ms, RefloodDelay=700ms, T_commit=3400ms
+// (Config A): K=4 → [1100, 1300, 1500, 3400]ms. At BTT=200ms,
+// RefloodDelay=0 (fully-meshed cluster): K=4 → [400, 600, 800, 3400]ms.
+func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule BTT=%v must be > 0", btt)
 	}
+	if refloodDelay < 0 {
+		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule RefloodDelay=%v must be >= 0", refloodDelay)
+	}
 	var out []time.Duration
 	if s, ok := defaultLayerSchedules[K]; ok {
 		out = make([]time.Duration, K)
 		for k, m := range s.shallowBudgetBTT100 {
-			out[k] = btt * time.Duration(m) / 100
+			out[k] = btt*time.Duration(m)/100 + refloodDelay
 		}
 		out[K-1] = tCommit
 	} else {
-		out = interpolatedBudgetSchedule(K, primaryBudgetDefaultBTT100, tCommit, btt)
+		out = interpolatedBudgetSchedule(K, primaryBudgetDefaultBTT100, refloodDelay, tCommit, btt)
 	}
 	// Cap each B_k at T_commit so the schedule stays non-decreasing even
 	// at degraded operating points where the shallow multiples overshoot.
@@ -416,7 +461,7 @@ func ConfigForCluster(
 	broadcastBudget := overrides.BroadcastBudget
 	if broadcastBudget == nil {
 		var err error
-		broadcastBudget, err = DefaultBroadcastBudgetSchedule(K, overrides.btt(), overrides.tCommit())
+		broadcastBudget, err = DefaultBroadcastBudgetSchedule(K, overrides.btt(), overrides.refloodDelay(), overrides.tCommit())
 		if err != nil {
 			return nil, fmt.Errorf("obft adapter: %w", err)
 		}

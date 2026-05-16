@@ -112,7 +112,16 @@ var scenarioMeshFlakiness = Scenario{
 	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
-		// f mesh-flaky ops at op2..op{f+1}: 2·BTT inbound delay.
+		// f mesh-flaky ops at op2..op{f+1}: 2·BTT inbound delay. Originally
+		// sized to exceed the pre-reflood-aware OBFT B_0 = 1·BTT (causing
+		// the OBFT mesh-flakiness deadlock the scenario was designed to
+		// document). Under the reflood-aware schedule (B_0 = 2·BTT shallow
+		// at RD=0 in consensustest), this delay is now ABSORBED by OBFT
+		// and 2abOBFT — the scenario now documents the *improvement* from
+		// the wider B_k schedule rather than the legacy deadlock. The
+		// QBFT/PSigs success expectations remain unchanged. To exercise
+		// the legacy deadlock pattern, use a deeper-flakiness scenario
+		// (delay > B_0 + Δ_2a + reflood-cycle).
 		flakyOverrides := make(map[OperatorID]time.Duration, f)
 		for i := 0; i < f; i++ {
 			flakyOverrides[OperatorID(i+2)] = 2 * cfg.BTT
@@ -138,13 +147,22 @@ var scenarioMeshFlakiness = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: σ-pool=f+1<qV=2f+1; NR-pool=f<qEnc=2f+1; both short → miss.
-		"OBFT": ExpectMiss,
-		// 2abOBFT: same algebraic shape — flaky honest can't retain V at
-		// L_0 by Phase-2a → NR verdicts; byz σ-refusal contributes nothing.
-		// nr_pool and σ-pool both short of quorum at L_0; walk fall-through
-		// hits same shape at deeper layers (flaky ops still slow). MISS
-		// cleanly. Same outcome as OBFT.
+		// OBFT: under reflood-aware B_0 = 2·BTT (consensustest RD=0),
+		// 2·BTT flaky-receiver delay is absorbed by L_0's window — flaky
+		// ops still receive V on time and σ-emit. σ-pool = N-f-byz_silent
+		// reaches qV at L_0. **Improvement** vs the pre-resize schedule
+		// where 2·BTT delay would have exceeded the old B_0 = 1·BTT and
+		// triggered the deadlock.
+		"OBFT": ExpectSuccessFastest,
+		// 2abOBFT: still misses, but via a different shape than under the
+		// pre-resize schedule. Flaky receivers DO observe V at L_0 (Phase-1
+		// bundle arrives within Phase-2a window at the new B_0), but peer
+		// VERDICTS arrive late at the flaky op too (2·BTT inbound delay
+		// applies to all messages). The flaky op computes Phase-2b
+		// convergence on a partial verdict-pool, hits σ-eligibility-
+		// quorum-short, and NR-flips per the convergence rule. Combined
+		// with byz σ-refusal, σ-pool stays short and NR-pool falls short
+		// of qEnc — slot misses at L_0 with no fall-through.
 		"2abOBFT": ExpectMiss,
 		// QBFT: flaky receivers see PROPOSE/PREPAREs with delay but non-flaky
 		// non-byz honest count (N-1-2f) PREPARE among themselves on time;

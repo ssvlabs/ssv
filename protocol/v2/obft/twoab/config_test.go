@@ -16,7 +16,7 @@ func healthyConfig() *Config {
 	btt := 200 * time.Millisecond
 	tCommit := 2000 * time.Millisecond
 	tVerdictStart := tCommit - 400*time.Millisecond // = 1600ms (= 2 BTT before TCommit)
-	budgets, err := DefaultBroadcastBudget(4, btt, tVerdictStart)
+	budgets, err := DefaultBroadcastBudget(4, btt, 0, tVerdictStart)
 	if err != nil {
 		panic(err)
 	}
@@ -236,9 +236,12 @@ func TestConfig_Validate_RejectsIncreasingFetchAt(t *testing.T) {
 	c := healthyConfig()
 	// Pure-increase in k (L_1 > L_0) violates non-increasing. Equal
 	// adjacent FetchAt entries are accepted (collide-at-BFT_start case);
-	// only a strict increase in k is rejected.
-	c.Layers[0].FetchAt = 1000 * time.Millisecond
-	c.Layers[1].FetchAt = 1100 * time.Millisecond
+	// only a strict increase in k is rejected. Values must stay below
+	// each layer's broadcast deadline (T_broadcast_max_k = T_verdict_start
+	// − B_k = 1200/1000/800/0ms under the default schedule) so the
+	// broadcast-deadline check doesn't fire first.
+	c.Layers[0].FetchAt = 800 * time.Millisecond
+	c.Layers[1].FetchAt = 900 * time.Millisecond
 	require.ErrorContains(t, c.Validate(), "non-increasing")
 }
 
@@ -296,33 +299,50 @@ func TestConfig_K(t *testing.T) {
 func TestDefaultBroadcastBudget_K4_AtConfigA(t *testing.T) {
 	btt := 200 * time.Millisecond
 	tVerdictStart := 1600 * time.Millisecond
-	out, err := DefaultBroadcastBudget(4, btt, tVerdictStart)
+	out, err := DefaultBroadcastBudget(4, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Len(t, out, 4)
-	require.Equal(t, 1*btt, out[0])
-	require.Equal(t, 150*btt/100, out[1])
-	require.Equal(t, 250*btt/100, out[2])
+	// {2, 3, 4}·BTT shallow schedule at RD=0.
+	require.Equal(t, 2*btt, out[0])
+	require.Equal(t, 3*btt, out[1])
+	require.Equal(t, 4*btt, out[2])
+	require.Equal(t, tVerdictStart, out[3])
+}
+
+func TestDefaultBroadcastBudget_K4_WithRefloodDelay(t *testing.T) {
+	btt := 200 * time.Millisecond
+	rd := 700 * time.Millisecond // SSV gossipsub HeartbeatInterval
+	tVerdictStart := 3000 * time.Millisecond
+	out, err := DefaultBroadcastBudget(4, btt, rd, tVerdictStart)
+	require.NoError(t, err)
+	require.Len(t, out, 4)
+	// Reflood-aware: B_k_shallow = (k+2)*BTT + RefloodDelay.
+	require.Equal(t, 2*btt+rd, out[0])
+	require.Equal(t, 3*btt+rd, out[1])
+	require.Equal(t, 4*btt+rd, out[2])
 	require.Equal(t, tVerdictStart, out[3])
 }
 
 func TestDefaultBroadcastBudget_K3(t *testing.T) {
 	btt := 200 * time.Millisecond
 	tVerdictStart := 1600 * time.Millisecond
-	out, err := DefaultBroadcastBudget(3, btt, tVerdictStart)
+	out, err := DefaultBroadcastBudget(3, btt, 0, tVerdictStart)
 	require.NoError(t, err)
-	require.Equal(t, []time.Duration{btt, 250 * btt / 100, tVerdictStart}, out)
+	// {2, 3}·BTT shallow + T_anchor.
+	require.Equal(t, []time.Duration{2 * btt, 3 * btt, tVerdictStart}, out)
 }
 
 func TestDefaultBroadcastBudget_K5_InterpolatesIntermediate(t *testing.T) {
 	btt := 200 * time.Millisecond
 	tVerdictStart := 2000 * time.Millisecond
-	out, err := DefaultBroadcastBudget(5, btt, tVerdictStart)
+	out, err := DefaultBroadcastBudget(5, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Len(t, out, 5)
-	require.Equal(t, btt, out[0])
-	require.Equal(t, 150*btt/100, out[1])
-	require.Equal(t, 250*btt/100, out[2])
-	// out[3] interpolates between out[2]=500ms and out[4]=2000ms (one step).
+	// First three shallow at {2, 3, 4}·BTT.
+	require.Equal(t, 2*btt, out[0])
+	require.Equal(t, 3*btt, out[1])
+	require.Equal(t, 4*btt, out[2])
+	// out[3] interpolates between out[2]=800ms and out[4]=2000ms (one step).
 	require.Equal(t, tVerdictStart, out[4])
 	require.Greater(t, out[3], out[2])
 	require.Less(t, out[3], out[4])
@@ -336,13 +356,15 @@ func TestDefaultBroadcastBudget_K5_InterpolatesIntermediate(t *testing.T) {
 // BFT_start).
 func TestDefaultBroadcastBudget_DegradedOperatingPoint(t *testing.T) {
 	btt := 200 * time.Millisecond
-	tVerdictStart := 400 * time.Millisecond // < 2.5·BTT
-	out, err := DefaultBroadcastBudget(4, btt, tVerdictStart)
+	// Under {2, 3, 4}·BTT schedule: shallow = [400, 600, 800]ms. Pick
+	// tVerdictStart = 700ms so L_2 caps but L_0/L_1 fit.
+	tVerdictStart := 700 * time.Millisecond
+	out, err := DefaultBroadcastBudget(4, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Len(t, out, 4)
-	require.Equal(t, btt, out[0])           // 200ms — fits
-	require.Equal(t, 150*btt/100, out[1])   // 300ms — fits
-	require.Equal(t, tVerdictStart, out[2]) // capped (was 500ms, now 400ms)
+	require.Equal(t, 2*btt, out[0])         // 400ms — fits
+	require.Equal(t, 3*btt, out[1])         // 600ms — fits
+	require.Equal(t, tVerdictStart, out[2]) // capped (was 800ms, now 700ms)
 	require.Equal(t, tVerdictStart, out[3]) // deepest = TVerdictStart
 	// Non-decreasing post-cap.
 	for k := 1; k < len(out); k++ {
@@ -353,7 +375,7 @@ func TestDefaultBroadcastBudget_DegradedOperatingPoint(t *testing.T) {
 func TestDefaultBroadcastBudget_K1(t *testing.T) {
 	btt := 200 * time.Millisecond
 	tVerdictStart := 1600 * time.Millisecond
-	out, err := DefaultBroadcastBudget(1, btt, tVerdictStart)
+	out, err := DefaultBroadcastBudget(1, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Equal(t, []time.Duration{tVerdictStart}, out,
 		"K=1: single layer = deepest = TVerdictStart")
@@ -367,7 +389,7 @@ func TestDefaultBroadcastBudget_K1(t *testing.T) {
 func TestDefaultBroadcastBudget_K1_LowTVerdictStart(t *testing.T) {
 	btt := 200 * time.Millisecond
 	tVerdictStart := 300 * time.Millisecond // < 2·BTT
-	out, err := DefaultBroadcastBudget(1, btt, tVerdictStart)
+	out, err := DefaultBroadcastBudget(1, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Equal(t, []time.Duration{tVerdictStart}, out)
 }
@@ -375,30 +397,35 @@ func TestDefaultBroadcastBudget_K1_LowTVerdictStart(t *testing.T) {
 func TestDefaultBroadcastBudget_K2(t *testing.T) {
 	btt := 200 * time.Millisecond
 	tVerdictStart := 1600 * time.Millisecond
-	out, err := DefaultBroadcastBudget(2, btt, tVerdictStart)
+	out, err := DefaultBroadcastBudget(2, btt, 0, tVerdictStart)
 	require.NoError(t, err)
-	require.Equal(t, []time.Duration{btt, tVerdictStart}, out,
-		"K=2: B_0 = 1 BTT, B_1 = TVerdictStart")
+	require.Equal(t, []time.Duration{2 * btt, tVerdictStart}, out,
+		"K=2: B_0 = 2 BTT (reflood-aware default at RD=0), B_1 = TVerdictStart")
 }
 
-// At K=2 with TVerdictStart < BTT, the helper caps B_0 at TVerdictStart
+// At K=2 with TVerdictStart < 2·BTT, the helper caps B_0 at TVerdictStart
 // so both layers tie at the anchor — non-decreasing holds.
 func TestDefaultBroadcastBudget_K2_LowTVerdictStart(t *testing.T) {
 	btt := 200 * time.Millisecond
-	tVerdictStart := 150 * time.Millisecond // < BTT
-	out, err := DefaultBroadcastBudget(2, btt, tVerdictStart)
+	tVerdictStart := 150 * time.Millisecond // < 2·BTT
+	out, err := DefaultBroadcastBudget(2, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Equal(t, []time.Duration{tVerdictStart, tVerdictStart}, out)
 }
 
 func TestDefaultBroadcastBudget_K0_Rejected(t *testing.T) {
-	_, err := DefaultBroadcastBudget(0, 200*time.Millisecond, 1600*time.Millisecond)
+	_, err := DefaultBroadcastBudget(0, 200*time.Millisecond, 0, 1600*time.Millisecond)
 	require.ErrorContains(t, err, "K=0")
 }
 
 func TestDefaultBroadcastBudget_NonPositiveBTT_Rejected(t *testing.T) {
-	_, err := DefaultBroadcastBudget(4, 0, 1600*time.Millisecond)
+	_, err := DefaultBroadcastBudget(4, 0, 0, 1600*time.Millisecond)
 	require.ErrorContains(t, err, "BTT")
+}
+
+func TestDefaultBroadcastBudget_NegativeRefloodDelay_Rejected(t *testing.T) {
+	_, err := DefaultBroadcastBudget(4, 200*time.Millisecond, -1*time.Millisecond, 1600*time.Millisecond)
+	require.ErrorContains(t, err, "RefloodDelay")
 }
 
 // --- NewInstance ---

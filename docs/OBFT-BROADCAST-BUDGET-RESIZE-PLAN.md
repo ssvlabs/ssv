@@ -1,6 +1,20 @@
 # OBFT / 2abOBFT broadcast-budget resize plan
 
-Resize the per-layer leader broadcast budget `B_k` from `{1, 1.5, 2.5}·BTT` to `{2, 3, 4}·BTT` (shallow layers) across both protocols, anchored on the existing T_anchor for the deepest layer. Captures every spec and impl site that touches the schedule, plus derived numbers that need refreshing.
+Resize the per-layer leader broadcast budget `B_k` from `{1, 1.5, 2.5}·BTT` to a **reflood-aware** schedule that accommodates one gossipsub IHAVE/IWANT reflood cycle when the initial eager-push fails to reach all honest peers.
+
+## RefloodDelay model
+
+Gossipsub's lazy-push reflood path uses periodic IHAVE digests followed by IWANT requests. Worst-case bundle delivery for a mesh-flaky receiver:
+
+```
+T_initial_propagation + RefloodDelay + T_IWANT_round_trip
+   = 1·BTT          + RefloodDelay + 1·BTT
+   = 2·BTT + RefloodDelay
+```
+
+where `RefloodDelay` is bounded by the cluster's gossipsub HeartbeatInterval. SSV configures `HeartbeatInterval = 700ms` ([network/topics/params/gossipsub.go:30](network/topics/params/gossipsub.go:30)), so the default RefloodDelay is **700ms** for SSV deployments.
+
+`RefloodDelay` is a Config field with default 700ms. Operators with denser meshes (n=4 default, fully-connected) where eager-push reliably reaches all peers may set it lower (down to 0); operators on sparser meshes (n=10, n=13) keep the default or higher.
 
 ## Target schedule
 
@@ -8,22 +22,22 @@ Per-K shape, anchored on T_anchor (= T_commit for OBFT, T_verdict_start for 2abO
 
 | K | Schedule (B_0, B_1, …, B_{K-1}) |
 |---|---|
-| 2 | `[2·BTT, T_anchor]` |
-| 3 | `[2·BTT, 3·BTT, T_anchor]` |
-| 4 | `[2·BTT, 3·BTT, 4·BTT, T_anchor]` |
-| K>4 | shallow `[2·BTT, 3·BTT, 4·BTT]`, then linear interpolation in duration space from `4·BTT` (at L_2) to `T_anchor` (at L_{K-1}) |
+| 2 | `[2·BTT + RefloodDelay, T_anchor]` |
+| 3 | `[2·BTT + RefloodDelay, 3·BTT + RefloodDelay, T_anchor]` |
+| 4 | `[2·BTT + RefloodDelay, 3·BTT + RefloodDelay, 4·BTT + RefloodDelay, T_anchor]` |
+| K>4 | shallow `[2·BTT+RD, 3·BTT+RD, 4·BTT+RD]`, then linear interpolation in duration space from `4·BTT + RefloodDelay` (at L_2) to `T_anchor` (at L_{K-1}) |
 | K=1 | `[T_anchor]` (unchanged) |
 
-Rationale for K=3 = `[2, 3]` (per user): keep the +1·BTT-per-layer shape rather than skip to 4·BTT at L_1.
+Rationale: `B_0 = 2·BTT + RefloodDelay` = one initial propagation + one full reflood cycle (heartbeat + IWANT round trip). Deeper layers `B_k = (k+2)·BTT + RefloodDelay` keep the +1·BTT-per-layer absorption-margin pattern from the without-RefloodDelay design — each deeper backup gets one more BTT of jitter cushion on top of the same reflood-cycle base.
 
-Concrete numbers at Config A (BTT=200ms):
+Edge case — RefloodDelay = 0 (fully-meshed deployments where eager push reaches all peers reliably): schedule collapses to `{2, 3, 4}·BTT`, matching the pre-RefloodDelay design.
 
-- **OBFT** K=4 (T_commit=3400ms): `B = [400, 600, 800, 3400]ms` → `T_broadcast_max = [3000, 2800, 2600, 0]ms`.
-- **2abOBFT** K=4 (T_verdict_start=1600ms): `B = [400, 600, 800, 1600]ms` → `T_broadcast_max = [1200, 1000, 800, 0]ms`.
+Concrete numbers at Config A (BTT=200ms, RefloodDelay=700ms → `B_0 = 1100ms = 5.5·BTT`):
 
-L_0 MEV-fetch budgets at Config A degrade by `1·BTT`:
-- OBFT V_0: `3050ms → 2850ms`.
-- 2abOBFT V_0: ~`2850ms` was the pre-mirror number; under the mirrored-then-resized schedule it becomes `~1050ms` (the spec text needs a careful refresh — see §Doc-text inconsistency below).
+- **OBFT** K=4 (T_commit=3400ms): `B = [1100, 1300, 1500, 3400]ms` → `T_broadcast_max = [2300, 2100, 1900, 0]ms`. L_0 MEV-fetch ≈ 2140ms (vs current 3050ms).
+- **2abOBFT** K=4 (T_verdict_start=1600ms): `B = [1100, 1300, 1500, 1600]ms` → `T_broadcast_max = [500, 300, 100, 0]ms`. L_0 MEV-fetch ≈ 340ms (tight; 2abOBFT's smaller pre-T_commit budget is fully consumed by reflood-absorbing B_k).
+
+The 2abOBFT L_0 MEV-fetch degradation is severe at the default RefloodDelay; operators running 2abOBFT on dense meshes (n=4) should configure RefloodDelay = 0 (or small) to keep V_0 MEV-fresh. This is one of the trade-offs documented in the §When to use comparison.
 
 ## Out of scope (per Q3)
 
