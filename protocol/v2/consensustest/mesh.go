@@ -758,19 +758,25 @@ func ParseMeshArrivalTrace(entry string) (from, to, publisher MeshNode, ok bool)
 // this interface naturally; per-adapter tests pass `t` directly.
 type FailingTester interface {
 	Helper()
-	Errorf(format string, args ...any)
+	Fatalf(format string, args ...any)
 }
 
-// AssertNoRefloodToPublisher walks the trace and fails the test if any
-// MeshArrival entry has to == publisher (the gossipsub publisher-
-// exclusion contract). Pins the OBFT/2abOBFT/QBFT/PSigs adapters'
-// regression test to one implementation — the four `evtMeshArrival`
-// structs are per-adapter, but the trace format is shared and the
-// assertion is identical, so the helper lives here.
+// AssertNoRefloodToPublisher walks the trace and fails the test on
+// the first MeshArrival entry whose `to == publisher` (the gossipsub
+// publisher-exclusion contract). Pins the OBFT/2abOBFT/QBFT/PSigs
+// adapters' regression test to one implementation — the four
+// `evtMeshArrival` structs are per-adapter, but the trace format is
+// shared and the assertion is identical, so the helper lives here.
 //
-// Also asserts at least one MeshArrival appears in the trace —
-// otherwise a test that silently skipped the mesh path would pass
-// trivially.
+// Fail-fast on the first violation: the original per-adapter tests
+// used require.NotEqualf (which calls t.Fatalf under the hood); we
+// preserve that behavior. A regression that breaks publisher exclusion
+// would otherwise generate one error per arrival from the offending
+// publisher, drowning the actual diagnostic.
+//
+// Also fails when 0 MeshArrival entries appear — a test that silently
+// skipped the mesh path (e.g. forgot DeliveryMesh + TraceEnabled)
+// would otherwise pass trivially.
 func AssertNoRefloodToPublisher(t FailingTester, trace []TraceEntry) {
 	t.Helper()
 	var checked int
@@ -780,11 +786,11 @@ func AssertNoRefloodToPublisher(t FailingTester, trace []TraceEntry) {
 			continue
 		}
 		if to == publisher {
-			t.Errorf("mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
+			t.Fatalf("mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
 		}
 		checked++
 	}
 	if checked == 0 {
-		t.Errorf("expected at least one MeshArrival in trace; got 0 — did the test forget DeliveryMesh + TraceEnabled?")
+		t.Fatalf("expected at least one MeshArrival in trace; got 0 — did the test forget DeliveryMesh + TraceEnabled?")
 	}
 }
