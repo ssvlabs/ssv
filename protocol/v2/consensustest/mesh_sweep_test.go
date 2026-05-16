@@ -145,3 +145,78 @@ func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 		"mesh-mode healthy should degrade with instability (none=%d, extreme=%d)",
 		noneDec, extremeDec)
 }
+
+// TestInstability_BTTInvariantUnderEmpiricalProfile pins the load-bearing
+// property of the SlowOpAnchor refactor: with fixed-RT QBFT (production
+// SSV variant) and fixed empirical p2p profile + instability level, the
+// success rate must NOT depend on cfg.BTT. Pre-refactor, the same setup
+// drifted ~10 pp across BTT ∈ {100, 500} ms because slow-op extra delay
+// scaled with BTT. Post-refactor, anchor is the network's SlowOpAnchor
+// (hand-tuned 250 ms for prod), so the wrap is BTT-independent on the
+// empirical-profile path.
+//
+// Uses `extreme` instability + DeliveryMesh — that's the regime where
+// the wrap produces enough disruption to surface miss-events at n=40
+// iterations. Moderate gives 100% success across the board under the
+// recalibrated anchors, so a regression that re-introduced BTT-coupling
+// would slip past a moderate-only test.
+//
+// Tolerance: ±15pp absolute success-rate variance across the three
+// BTT points. Binomial 95% CI half-width at p=0.5, n=40 is ~15pp;
+// genuine BTT-coupling produces spreads ≫ 15pp (the original screenshots
+// showed 99→89% at moderate, ~30pp at extreme), so this tolerance
+// catches the regression while staying noise-robust.
+func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
+	const iters = 40
+	btts := []time.Duration{
+		100 * time.Millisecond,
+		300 * time.Millisecond,
+		500 * time.Millisecond,
+	}
+	level := ct.InstabilityLevels[4] // "extreme"
+	require.Equal(t, "extreme", level.Name)
+
+	healthy := ct.Catalog[0]
+	require.Equal(t, "Healthy", healthy.Name)
+	wrapped := ct.WrapBaselineForInstability(healthy, level)
+
+	successRates := make([]float64, len(btts))
+	for bIdx, btt := range btts {
+		cfg := ct.DefaultProposerDutyConfig(btt)
+		cfg.Delivery = ct.DeliveryMesh // matches the heatmap's per-protocol view
+		cfg.Network = ct.P2PProfile("prod")
+		cfg.Mesh.HopDelay = ct.P2PProfile("prod")
+
+		decided := 0
+		for i := 0; i < iters; i++ {
+			c := cfg
+			c.Seed = int64(i + 1)
+			if wrapped.Apply != nil {
+				wrapped.Apply(&c)
+			}
+			out, err := qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true}.Run(c)
+			require.NoError(t, err)
+			if out.Decided {
+				decided++
+			}
+		}
+		successRates[bIdx] = float64(decided) / float64(iters)
+		t.Logf("BTT=%v: %d/%d decided (%.1f%%)", btt, decided, iters, 100*successRates[bIdx])
+	}
+
+	// Variance across the three BTT points must be small. Compute
+	// max - min absolute spread as the metric (more interpretable than
+	// stddev for a 3-point series).
+	lo, hi := successRates[0], successRates[0]
+	for _, r := range successRates[1:] {
+		if r < lo {
+			lo = r
+		}
+		if r > hi {
+			hi = r
+		}
+	}
+	require.LessOrEqualf(t, hi-lo, 0.15,
+		"QBFT-SSV at prod/extreme/mesh must be BTT-invariant; got spread %.1fpp across BTT ∈ {100, 300, 500}ms (%v)",
+		100*(hi-lo), successRates)
+}

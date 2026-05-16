@@ -47,8 +47,27 @@ func (k MsgKind) String() string {
 // (sender, receiver, kind) at emission time. Returning a delay > some large
 // constant simulates an effectively dropped message (propagation past
 // slot end).
+//
+// SlowOpAnchor returns the reference duration for slow-operator
+// disruption magnitude. The instability wrap computes
+// `extraDelay = SlowMul × Network.SlowOpAnchor()` so that "a slow op"
+// has a meaningful absolute disruption that scales with the operating
+// environment, not with the protocol-budget BTT. Per-impl:
+//   - ConstantDelay returns D — typically equal to BTT in synthetic
+//     sweeps, so the anchor scales with the BTT axis.
+//   - LogNormalDelay returns 2×Median — recovers BTT under the framework's
+//     convention productionLogNormal(btt) = LogNormalDelay{Median: btt/2}.
+//   - LogNormalMixtureDelay returns the hand-tuned anchor set via
+//     WithSlowOpAnchor (250-450ms for the empirical profiles, reflecting
+//     real-world CPU stall / GC pause / NIC contention magnitudes that
+//     are INDEPENDENT of the profile's median hop time). Falls back to
+//     2 × analytic median when unset, mirroring LogNormalDelay.
+//   - Wrappers (Lossy, Markovian, Partitioned, ClockSkewed, PerReceiver,
+//     Correlated) delegate to Inner — they layer disruption on top of a
+//     base model without changing its typical-hop magnitude.
 type NetworkModel interface {
 	Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration
+	SlowOpAnchor() time.Duration
 }
 
 // ConstantDelay returns D for every message.
@@ -57,6 +76,8 @@ type ConstantDelay struct{ D time.Duration }
 func (c ConstantDelay) Delay(_ *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Duration {
 	return c.D
 }
+
+func (c ConstantDelay) SlowOpAnchor() time.Duration { return c.D }
 
 // PerReceiverDelay applies per-receiver overrides on top of an inner model.
 // Used to simulate partitions where one or more receivers see V late.
@@ -71,6 +92,8 @@ func (p PerReceiverDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKi
 	}
 	return p.Inner.Delay(rng, from, to, kind)
 }
+
+func (p PerReceiverDelay) SlowOpAnchor() time.Duration { return p.Inner.SlowOpAnchor() }
 
 // MarkovianSlownessDelay models slow peer links via a per-link two-state
 // Markov chain (slow / fast). Each undirected link pair (from, to) involving
@@ -128,6 +151,8 @@ type markovSlownessState struct {
 	slow   bool
 }
 
+func (m MarkovianSlownessDelay) SlowOpAnchor() time.Duration { return m.Inner.SlowOpAnchor() }
+
 func (m MarkovianSlownessDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
 	if !m.SlowOps[from] && !m.SlowOps[to] {
 		return m.Inner.Delay(rng, from, to, kind)
@@ -181,6 +206,8 @@ func (p PartitionedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind Msg
 	return p.Inner.Delay(rng, from, to, kind)
 }
 
+func (p PartitionedNetwork) SlowOpAnchor() time.Duration { return p.Inner.SlowOpAnchor() }
+
 // ClockSkewedNetwork models per-operator clock skew as a RELATIVE-DELAY
 // proxy at the network layer. Each op has a virtual-clock offset Skew[op]
 // (positive = clock ahead, negative = behind). The effective propagation
@@ -230,6 +257,8 @@ func (c ClockSkewedNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind Msg
 	return delay
 }
 
+func (c ClockSkewedNetwork) SlowOpAnchor() time.Duration { return c.Inner.SlowOpAnchor() }
+
 // LogNormalDelay draws delays from a log-normal distribution — the
 // production-shaped propagation model used as the stress-tier baseline.
 // Real gossipsub propagation has a heavy right tail (P99/P50 ratio of
@@ -254,6 +283,12 @@ type LogNormalDelay struct {
 	Median time.Duration
 	Sigma  float64
 }
+
+// SlowOpAnchor returns 2 × Median, which approximates BTT in the
+// framework's synthetic sweep convention (productionLogNormal sets
+// Median = BTT/2). Keeps the BTT-coupling for synthetic sweeps where
+// BTT IS the network-speed axis.
+func (l LogNormalDelay) SlowOpAnchor() time.Duration { return 2 * l.Median }
 
 func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Duration {
 	if l.Median <= 0 {
@@ -320,6 +355,16 @@ type LogNormalMixtureDelay struct {
 	// is data-race-free as long as no caller mutates Components after
 	// construction.
 	cumWeights []float64
+	// slowOpAnchor is the hand-tuned reference duration returned by
+	// SlowOpAnchor(). Zero means "compute from mixture": fall back to
+	// 2 × analytic median (parallel to LogNormalDelay's convention).
+	// Empirical-profile constructors (Prod_/Stage_/...) set this
+	// explicitly; the synthetic generic constructor leaves it zero.
+	// Set via WithSlowOpAnchor; not propagated through Slowed/HeavyTailed
+	// because the anchor is a calibration about the operating environment
+	// (real-world slow-op magnitude), not the network speed — so derived
+	// profiles get their anchor set explicitly in P2PProfile.
+	slowOpAnchor time.Duration
 }
 
 type LogNormalComponent struct {
@@ -386,6 +431,58 @@ func (l *LogNormalMixtureDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKin
 	return d
 }
 
+// SlowOpAnchor returns the hand-tuned anchor set via WithSlowOpAnchor
+// for calibrated empirical profiles. Falls back to 2 × analytic median
+// when unset (mirrors LogNormalDelay's convention) so a freshly-built
+// mixture without an explicit anchor still works for synthetic use.
+func (l *LogNormalMixtureDelay) SlowOpAnchor() time.Duration {
+	if l.slowOpAnchor > 0 {
+		return l.slowOpAnchor
+	}
+	return 2 * time.Duration(l.mixtureQuantile(0.5))
+}
+
+// WithSlowOpAnchor sets the hand-tuned slow-op disruption anchor on this
+// mixture (mutates the receiver) and returns it for chaining. The
+// receiver-mutation is deliberate so the typical construction-time
+// pattern stays compact:
+//
+//	NewLogNormalMixtureDelay(...).WithSlowOpAnchor(d)
+//
+// Don't call WithSlowOpAnchor on a shared mixture instance — it changes
+// the anchor for every existing reference. In practice all callers
+// (the calibrated profile constructors, P2PProfile) chain off a freshly
+// constructed mixture so the shared-mutation footgun doesn't trigger.
+func (l *LogNormalMixtureDelay) WithSlowOpAnchor(d time.Duration) *LogNormalMixtureDelay {
+	l.slowOpAnchor = d
+	return l
+}
+
+// Per-profile SlowOpAnchor calibrations consumed by the calibrated
+// empirical profile constructors below and by P2PProfile's derived
+// profiles. Hand-tuned to represent the real-world magnitude of a "slow
+// operator" in each operating environment (CPU stall, GC pause, NIC
+// contention) — NOT derived from the profile's median hop time. The
+// instability wrap multiplies these by SlowMul (1.5 at low → 2.8 at
+// extreme), producing per-hop slow-op extra-delays in the
+// 375 ms (low/prod) → 1.26 s (extreme/slow_heavy_tail) range.
+//
+// Calibration rationale: real prod-mainnet slow operators exhibit
+// hundreds-of-ms response degradation under load, not the multi-second
+// tail that the previous `SlowMul × cfg.BTT` formula produced at
+// BTT=500ms. Anchors are deliberately on the low side (250-450ms vs an
+// earlier 500-900ms draft) because per-hop tax compounds across the
+// Markov chain's mean run length (~3.3 hops at PersistP=0.7): a 1s
+// per-hop tax × 3.3 hops dominates the 3.9s submit deadline.
+const (
+	prodSlowOpAnchor          = 250 * time.Millisecond
+	stage1SlowOpAnchor        = 250 * time.Millisecond
+	stage2SlowOpAnchor        = 250 * time.Millisecond
+	slowSlowOpAnchor          = 375 * time.Millisecond
+	heavyTailSlowOpAnchor     = 300 * time.Millisecond
+	slowHeavyTailSlowOpAnchor = 450 * time.Millisecond
+)
+
 // Prod_1_2_3_4_CalibratedLogNormalMixture returns the 3-component lognormal
 // mixture fitted to 24h of SSV prod-mainnet `COMMITTEE-1_2_3_4` cross-op
 // QBFT propagation latency data (proposal+prepare+commit pooled,
@@ -402,7 +499,7 @@ func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 		{Weight: 0.7794, Median: 1303 * time.Microsecond, Sigma: 0.3774},
 		{Weight: 0.0805, Median: 1458 * time.Microsecond, Sigma: 1.4909},
 		{Weight: 0.1400, Median: 3457 * time.Microsecond, Sigma: 0.4140},
-	})
+	}).WithSlowOpAnchor(prodSlowOpAnchor)
 }
 
 // Stage_53_54_55_56_CalibratedLogNormalMixture returns the 3-component lognormal mixture
@@ -419,7 +516,7 @@ func Stage_53_54_55_56_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 		{Weight: 0.0905, Median: 318 * time.Microsecond, Sigma: 1.6463},
 		{Weight: 0.3759, Median: 1084 * time.Microsecond, Sigma: 0.7824},
 		{Weight: 0.5337, Median: 2581 * time.Microsecond, Sigma: 0.4030},
-	})
+	}).WithSlowOpAnchor(stage1SlowOpAnchor)
 }
 
 // Stage_97_98_99_100_CalibratedLogNormalMixture is fit to 24h of stage-hoodi
@@ -438,7 +535,7 @@ func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 		{Weight: 0.1379, Median: 976 * time.Microsecond, Sigma: 1.9473},
 		{Weight: 0.4049, Median: 2261 * time.Microsecond, Sigma: 0.9452},
 		{Weight: 0.4573, Median: 3519 * time.Microsecond, Sigma: 0.3800},
-	})
+	}).WithSlowOpAnchor(stage2SlowOpAnchor)
 }
 
 // P2PProfileNames lists the calibrated mesh-hop-delay profiles exposed
@@ -481,11 +578,16 @@ func P2PProfile(name string) NetworkModel {
 	case "stage2":
 		return Stage_97_98_99_100_CalibratedLogNormalMixture()
 	case "slow":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80)
+		// Slowed/HeavyTailed produce fresh mixtures with zero
+		// slowOpAnchor (the prod constructor's anchor doesn't propagate
+		// through derivations — see the slowOpAnchor field doc). Set
+		// the per-profile anchor explicitly here so each derived profile
+		// gets its own calibrated slow-op magnitude.
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).WithSlowOpAnchor(slowSlowOpAnchor)
 	case "heavy_tail":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(24)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(24).WithSlowOpAnchor(heavyTailSlowOpAnchor)
 	case "slow_heavy_tail":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(24)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(24).WithSlowOpAnchor(slowHeavyTailSlowOpAnchor)
 	default:
 		panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
 	}
@@ -745,6 +847,8 @@ func NewLossyNetwork(inner NetworkModel, lossRate float64, burstFactor int) *Los
 // it as never-arrived.
 const DroppedDelay = time.Hour
 
+func (l *LossyNetwork) SlowOpAnchor() time.Duration { return l.Inner.SlowOpAnchor() }
+
 func (l *LossyNetwork) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
 	// Fast-path edge cases first (avoid wasting RNG draws).
 	if l.LossRate <= 0 {
@@ -863,6 +967,8 @@ func NewCorrelatedLinkDelay(inner NetworkModel, badLinkProb, badLinkMultiplier f
 		linkSeen:          make(map[linkKey]bool),
 	}
 }
+
+func (c *CorrelatedLinkDelay) SlowOpAnchor() time.Duration { return c.Inner.SlowOpAnchor() }
 
 func (c *CorrelatedLinkDelay) Delay(rng *mrand.Rand, from, to OperatorID, kind MsgKind) time.Duration {
 	pair := newLinkKey(from, to)

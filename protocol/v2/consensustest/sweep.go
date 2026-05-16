@@ -530,7 +530,15 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 				if base == nil {
 					base = ConstantDelay{D: cfg.BTT}
 				}
-				cfg.Network = NewMarkovianSlowness(base, slowOps, 3*cfg.BTT, persistP)
+				// ExtraDelay anchored to the network's SlowOpAnchor (per-
+				// impl; see NetworkModel interface comment). At this
+				// sweep's hardcoded BTT=300ms with productionLogNormal(btt)
+				// baseline (Median=BTT/2=150ms, anchor=2×Median=300ms),
+				// 3×anchor = 900ms — matches the old `3 × cfg.BTT`
+				// magnitude. Empirical-profile callers (if added later)
+				// would see the per-profile anchor.
+				directExtra := time.Duration(3 * float64(base.SlowOpAnchor()))
+				cfg.Network = NewMarkovianSlowness(base, slowOps, directExtra, persistP)
 				// Mirror onto Mesh.HopDelay so mesh-mode Healthy
 				// responds to the slow-op axis. SlowOps are cluster
 				// OperatorIDs (op2..op{k+1}), which match the cluster
@@ -541,7 +549,8 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 				if meshInner == nil {
 					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
 				}
-				cfg.Mesh.HopDelay = NewMarkovianSlowness(meshInner, slowOps, 3*cfg.BTT, persistP)
+				meshExtra := time.Duration(3 * float64(meshInner.SlowOpAnchor()))
+				cfg.Mesh.HopDelay = NewMarkovianSlowness(meshInner, slowOps, meshExtra, persistP)
 			})
 		}
 		btt := 300 * time.Millisecond
@@ -569,7 +578,7 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 		Title: "Correlated node slowness",
 		Params: []string{
 			"MarkovianSlownessDelay",
-			"ExtraDelay=3·BTT",
+			"ExtraDelay=3·Network.SlowOpAnchor",
 			"PersistP=0.8",
 			"direct: LogNormal{Median: BTT/2, σ: 0.5}",
 			"mesh per-hop: LogNormal{Median: BTT/3, σ: 0.3}",

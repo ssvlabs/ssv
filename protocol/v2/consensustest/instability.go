@@ -47,8 +47,15 @@ type InstabilityLevel struct {
 	// Cross-cluster comparison via the n-picker is one of the matrix
 	// mode's selling points, so scaling preserves that comparison.
 	SlowOpsFraction float64
-	SlowMul         float64 // slow op's ExtraDelay = SlowMul × cfg.BTT
-	PersistP        float64 // symmetric chain P(stay) in each state
+	// SlowMul scales the network's slow-op disruption reference:
+	// ExtraDelay = SlowMul × Network.SlowOpAnchor(). Anchored to the
+	// network model (not cfg.BTT) so empirical profiles get realistic
+	// per-environment slow-op magnitudes (hundreds-of-ms CPU stalls)
+	// regardless of the protocol-budget BTT axis. Synthetic models
+	// (ConstantDelay, LogNormalDelay) still produce BTT-coupled
+	// disruption — their SlowOpAnchor tracks the configured delay.
+	SlowMul  float64
+	PersistP float64 // symmetric chain P(stay) in each state
 }
 
 // slowCountForN returns the actual number of markov-slow operators
@@ -140,14 +147,21 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 		for i := 0; i < slowCount; i++ {
 			slowOps = append(slowOps, OperatorID(i+2))
 		}
-		extraDelay := time.Duration(level.SlowMul * float64(cfg.BTT))
 		// Cluster-wide (direct path): wrap cfg.Network with markov-slow
 		// + bursty loss, both anchored to the current level's params.
+		// ExtraDelay derives from the underlying NetworkModel's
+		// SlowOpAnchor (per-impl: D for ConstantDelay, 2×Median for
+		// LogNormalDelay, hand-tuned 250-450ms for the empirical
+		// profiles) so empirical profiles see realistic slow-op taxes
+		// independent of cfg.BTT, while synthetic models keep tracking
+		// the BTT axis. See the NetworkModel interface comment for
+		// per-impl details.
 		base := cfg.Network
 		if base == nil {
 			base = ConstantDelay{D: cfg.BTT}
 		}
-		withSlow := NewMarkovianSlowness(base, slowOps, extraDelay, level.PersistP)
+		directExtra := time.Duration(level.SlowMul * float64(base.SlowOpAnchor()))
+		withSlow := NewMarkovianSlowness(base, slowOps, directExtra, level.PersistP)
 		cfg.Network = NewLossyNetwork(withSlow, level.LossRate, level.BurstFactor)
 		// Mesh hop (mesh path): wrap cfg.Mesh.HopDelay with FRESH
 		// per-mesh-edge instances of the same markov-slow + lossy
@@ -156,11 +170,15 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 		// key per mesh edge — relay-to-relay edges no longer collapse
 		// into shared state with op-to-relay edges. Healthy in
 		// mesh-mode now genuinely responds to the instability axis.
+		// Per-hop anchor read separately (mesh hop model may differ
+		// from cfg.Network, e.g. mesh-mode uses BTT/3 LogNormal anchor
+		// while direct may use a calibrated mixture).
 		meshInner := cfg.Mesh.HopDelay
 		if meshInner == nil {
 			meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
 		}
-		meshWithSlow := NewMarkovianSlowness(meshInner, slowOps, extraDelay, level.PersistP)
+		meshExtra := time.Duration(level.SlowMul * float64(meshInner.SlowOpAnchor()))
+		meshWithSlow := NewMarkovianSlowness(meshInner, slowOps, meshExtra, level.PersistP)
 		cfg.Mesh.HopDelay = NewLossyNetwork(meshWithSlow, level.LossRate, level.BurstFactor)
 	})
 }

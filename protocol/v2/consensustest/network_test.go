@@ -558,3 +558,119 @@ func TestP2PProfile_AllNamesResolve(t *testing.T) {
 		func() { ct.P2PProfileIndex("nope-not-a-profile") },
 		"P2PProfileIndex should panic on unknown name")
 }
+
+// TestSlowOpAnchor_Synthetic — ConstantDelay returns D; LogNormalDelay
+// returns 2×Median. Both preserve BTT-coupling for synthetic-BTT sweeps
+// where the configured delay parameter IS the network-speed knob.
+func TestSlowOpAnchor_Synthetic(t *testing.T) {
+	require.Equal(t, 200*time.Millisecond,
+		ct.ConstantDelay{D: 200 * time.Millisecond}.SlowOpAnchor())
+	require.Equal(t, 300*time.Millisecond,
+		ct.LogNormalDelay{Median: 150 * time.Millisecond, Sigma: 0.5}.SlowOpAnchor())
+}
+
+// TestSlowOpAnchor_Wrappers — every stateful wrapper (PerReceiver,
+// Markovian, Partitioned, ClockSkewed, Lossy, Correlated) delegates to
+// its inner model. A nested chain of wrappers must surface the
+// innermost anchor unchanged. Catches a regression where any wrapper
+// silently substitutes its own value (e.g. drop-cost as anchor).
+func TestSlowOpAnchor_Wrappers(t *testing.T) {
+	inner := ct.ConstantDelay{D: 200 * time.Millisecond}
+	wrappers := []ct.NetworkModel{
+		ct.PerReceiverDelay{Inner: inner},
+		ct.NewMarkovianSlowness(inner, nil, 0, 0.5),
+		ct.PartitionedNetwork{Inner: inner},
+		ct.ClockSkewedNetwork{Inner: inner},
+		ct.NewLossyNetwork(inner, 0.1, 5),
+		ct.NewCorrelatedLinkDelay(inner, 0.1, 2, 5),
+	}
+	for i, w := range wrappers {
+		require.Equalf(t, 200*time.Millisecond, w.SlowOpAnchor(),
+			"wrapper[%d] (%T) must delegate SlowOpAnchor to inner", i, w)
+	}
+	// Doubly-nested: every layer should pass through.
+	nested := ct.NewLossyNetwork(
+		ct.NewMarkovianSlowness(
+			ct.PerReceiverDelay{Inner: inner}, nil, 0, 0.5),
+		0.1, 5)
+	require.Equal(t, 200*time.Millisecond, nested.SlowOpAnchor(),
+		"deeply-nested wrappers must still surface the innermost anchor")
+}
+
+// TestSlowOpAnchor_EmpiricalProfiles_PerProfileCalibration — each P2P
+// profile returns its hand-tuned anchor independent of mixture median.
+// Pinning the exact values here catches accidental anchor drift or
+// constructor-rewiring regressions; the instability heatmap calibration
+// depends on these specific numbers.
+func TestSlowOpAnchor_EmpiricalProfiles_PerProfileCalibration(t *testing.T) {
+	cases := []struct {
+		profile string
+		want    time.Duration
+	}{
+		{"prod", 250 * time.Millisecond},
+		{"stage1", 250 * time.Millisecond},
+		{"stage2", 250 * time.Millisecond},
+		{"slow", 375 * time.Millisecond},
+		{"heavy_tail", 300 * time.Millisecond},
+		{"slow_heavy_tail", 450 * time.Millisecond},
+	}
+	for _, c := range cases {
+		require.Equalf(t, c.want, ct.P2PProfile(c.profile).SlowOpAnchor(),
+			"profile %q SlowOpAnchor", c.profile)
+	}
+}
+
+// TestSlowOpAnchor_MixtureFallback — a freshly-constructed mixture
+// without an explicit anchor falls back to 2 × analytic median.
+// Confirms the synthetic-mode default works for users who construct
+// LogNormalMixtureDelay outside the calibrated empirical profiles.
+func TestSlowOpAnchor_MixtureFallback(t *testing.T) {
+	// Single-component mixture with median=10ms → expect anchor ≈ 20ms.
+	mix := ct.NewLogNormalMixtureDelay([]ct.LogNormalComponent{
+		{Weight: 1, Median: 10 * time.Millisecond, Sigma: 0.1},
+	})
+	got := mix.SlowOpAnchor()
+	// mixtureQuantile is bisection-based; allow a small relative tolerance
+	// rather than pinning the exact ns.
+	require.InEpsilonf(t, float64(20*time.Millisecond), float64(got), 0.01,
+		"single-component mixture: SlowOpAnchor ≈ 2×Median, got %v", got)
+}
+
+// TestSlowOpAnchor_MixtureOverride — WithSlowOpAnchor pins the value
+// regardless of the underlying distribution.
+func TestSlowOpAnchor_MixtureOverride(t *testing.T) {
+	mix := ct.NewLogNormalMixtureDelay([]ct.LogNormalComponent{
+		{Weight: 1, Median: 10 * time.Millisecond, Sigma: 0.1},
+	}).WithSlowOpAnchor(500 * time.Millisecond)
+	require.Equal(t, 500*time.Millisecond, mix.SlowOpAnchor(),
+		"WithSlowOpAnchor must override the 2×Median fallback")
+}
+
+// TestSlowOpAnchor_DerivedMixturesDropAnchor — Slowed/HeavyTailed
+// produce fresh mixtures with zero slowOpAnchor (the anchor is a
+// calibration about the operating environment, not the network speed,
+// so it doesn't propagate through scale transforms). P2PProfile is
+// expected to set per-derived-profile anchors explicitly.
+//
+// The strong assertion is that derived anchor != source anchor: a
+// regression that propagated the anchor through Slowed/HeavyTailed
+// would copy 250ms (prod's value) into the derived mixture; the
+// fallback path produces a different value (2 × analytic median of
+// the scaled distribution). Comparing the actual values catches both
+// the wrong-direction regression (propagation) and the wrong-fallback
+// regression (anchor zero but fallback misbehaves).
+func TestSlowOpAnchor_DerivedMixturesDropAnchor(t *testing.T) {
+	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture()
+	require.Equal(t, 250*time.Millisecond, base.SlowOpAnchor(),
+		"prod constructor sets anchor=250ms")
+
+	slowed := base.Slowed(80)
+	require.NotEqual(t, base.SlowOpAnchor(), slowed.SlowOpAnchor(),
+		"Slowed must NOT carry forward the source anchor (got %v == base %v)",
+		slowed.SlowOpAnchor(), base.SlowOpAnchor())
+
+	heavy := base.HeavyTailed(24)
+	require.NotEqual(t, base.SlowOpAnchor(), heavy.SlowOpAnchor(),
+		"HeavyTailed must NOT carry forward the source anchor (got %v == base %v)",
+		heavy.SlowOpAnchor(), base.SlowOpAnchor())
+}
