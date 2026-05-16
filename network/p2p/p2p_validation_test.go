@@ -19,6 +19,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -184,9 +185,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	err := broadcasters.Wait()
 	require.NoError(t, err)
 
-	// Let peer scores settle after broadcasts.
-	time.Sleep(8 * time.Second)
-
 	// Compute each broadcaster's fraction of rejected-role messages. A higher
 	// rate should drive that broadcaster's score lower on every observer.
 	rejectedRate := map[NodeIndex]float64{}
@@ -200,28 +198,92 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		rejectedRate[NodeIndex(nodeIdx)] = float64(rejected) / float64(len(roles))
 	}
 
-	// Assert the peer-score ordering invariant: for any two peers, the one with
-	// a lower rejected-rate must not be ranked below the one with a higher
-	// rate. Peers sharing a rate (e.g. nodes 0 and 1, both at 0) may appear in
-	// any relative order — their scores fluctuate within scoring noise.
-	for _, node := range vNet.Nodes {
-		type peerScore struct {
-			index NodeIndex
-			score float64
-		}
-		peerScoresPtr := node.PeerScores.Load()
-		require.NotNil(t, peerScoresPtr, "node %d: PeerScoreInspector never ran", node.Index)
-		peerScores := *peerScoresPtr
-		peers := make([]peerScore, 0, len(peerScores))
-		for index, snapshot := range peerScores {
-			peers = append(peers, peerScore{index, snapshot.Score})
-		}
-		sort.Slice(peers, func(i, j int) bool {
-			return peers[i].score > peers[j].score
-		})
+	type peerScore struct {
+		index NodeIndex
+		score float64
+	}
+	const (
+		acceptedOnlyIdx = NodeIndex(0)
+		ignoredOnlyIdx  = NodeIndex(1)
+		rejectedOnlyIdx = NodeIndex(2)
+	)
 
-		// Print a pretty table of each node's peers and their scores.
-		defer func() {
+	snapshotForNode := func(node *VirtualNode) []peerScore {
+		ptr := node.PeerScores.Load()
+		if ptr == nil {
+			return nil
+		}
+		peers := make([]peerScore, 0, len(*ptr))
+		for index, s := range *ptr {
+			peers = append(peers, peerScore{index, s.Score})
+		}
+		sort.Slice(peers, func(i, j int) bool { return peers[i].score > peers[j].score })
+		return peers
+	}
+
+	// rateInvariantViolation: for any two peers, the one with a lower
+	// rejected-rate must not be ranked below the one with a higher rate.
+	// Peers sharing a rate may appear in any relative order — scores fluctuate
+	// within noise. Returns "" if the invariant holds.
+	rateInvariantViolation := func(peers []peerScore, observer NodeIndex) string {
+		for i := 0; i < len(peers); i++ {
+			for j := i + 1; j < len(peers); j++ {
+				if rejectedRate[peers[i].index] > rejectedRate[peers[j].index] {
+					return fmt.Sprintf(
+						"observer %d: peer %d (rejected-rate=%.2f, score=%.2f) ranked above peer %d (rejected-rate=%.2f, score=%.2f)",
+						observer,
+						peers[i].index, rejectedRate[peers[i].index], peers[i].score,
+						peers[j].index, rejectedRate[peers[j].index], peers[j].score)
+				}
+			}
+		}
+		return ""
+	}
+
+	// bucketInvariantViolation: accepted-only ≥ ignored-only ≥ rejected-only.
+	// This guards regressions the rate check can't catch — nodes 0 and 1 both
+	// have rejected-rate=0, so a regression that stops rewarding accepts or
+	// starts rewarding ignores would otherwise slip through. Returns "" if
+	// the invariant holds.
+	bucketInvariantViolation := func(peers []peerScore, observer NodeIndex) string {
+		scoreByIdx := map[NodeIndex]float64{}
+		for _, p := range peers {
+			scoreByIdx[p.index] = p.score
+		}
+		check := func(higher, lower NodeIndex) string {
+			if observer == higher || observer == lower {
+				return ""
+			}
+			if scoreByIdx[higher] < scoreByIdx[lower] {
+				return fmt.Sprintf(
+					"observer %d: peer %d (score=%.2f) ranked below peer %d (score=%.2f)",
+					observer, higher, scoreByIdx[higher], lower, scoreByIdx[lower])
+			}
+			return ""
+		}
+		if msg := check(acceptedOnlyIdx, ignoredOnlyIdx); msg != "" {
+			return msg
+		}
+		return check(ignoredOnlyIdx, rejectedOnlyIdx)
+	}
+
+	// settled is the snapshot Eventually verified; falls back to the latest
+	// snapshot if Eventually times out so the diagnostic asserts and the
+	// table-printing cleanup still have something useful to show.
+	var settled map[NodeIndex][]peerScore
+
+	// Print a pretty table of each node's peers and their scores. Registered
+	// before the wait so it fires on failure too.
+	t.Cleanup(func() {
+		snapshots := settled
+		if snapshots == nil {
+			snapshots = make(map[NodeIndex][]peerScore, len(vNet.Nodes))
+			for _, node := range vNet.Nodes {
+				snapshots[node.Index] = snapshotForNode(node)
+			}
+		}
+		for _, node := range vNet.Nodes {
+			peers := snapshots[node.Index]
 			tbl := table.New(os.Stdout)
 			tbl.SetHeaders("Peer", "Score", "Accepted", "Ignored", "Rejected")
 			mtx.Lock()
@@ -238,47 +300,50 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			fmt.Println()
 			fmt.Printf("Peer Scores (Node %d)\n", node.Index)
 			tbl.Render()
-		}()
+		}
+	})
 
-		require.Equal(t, len(vNet.Nodes)-1, len(peers), "node %d", node.Index)
-		for i := 0; i < len(peers); i++ {
-			for j := i + 1; j < len(peers); j++ {
-				if rejectedRate[peers[i].index] > rejectedRate[peers[j].index] {
-					require.Failf(t, "invalid order",
-						"observer %d: peer %d (rejected-rate=%.2f, score=%.2f) ranked above peer %d (rejected-rate=%.2f, score=%.2f)",
-						node.Index,
-						peers[i].index, rejectedRate[peers[i].index], peers[i].score,
-						peers[j].index, rejectedRate[peers[j].index], peers[j].score,
-					)
-				}
+	// Wait for the rate + bucket invariants to hold on every observer in one
+	// consistent snapshot. Returns quickly on a fast machine; times out at
+	// 15s if scores never settle.
+	ok := assert.Eventually(t, func() bool {
+		snapshot := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
+		for _, node := range vNet.Nodes {
+			peers := snapshotForNode(node)
+			if peers == nil ||
+				rateInvariantViolation(peers, node.Index) != "" ||
+				bucketInvariantViolation(peers, node.Index) != "" {
+				return false
 			}
+			snapshot[node.Index] = peers
 		}
+		settled = snapshot
+		return true
+	}, 15*time.Second, 100*time.Millisecond, "peer scores never satisfied rate + bucket invariants")
 
-		// In addition to the rate check, assert the bucket invariant:
-		// accepted-only peer (node 0) ≥ ignored-only peer (node 1) ≥ rejected-only peer (node 2).
-		// Without this, a regression that stops rewarding accepts or starts rewarding ignores
-		// would slip through — both nodes 0 and 1 share rejected-rate=0 so the rate check
-		// alone treats them as interchangeable.
-		const (
-			acceptedOnlyIdx = NodeIndex(0)
-			ignoredOnlyIdx  = NodeIndex(1)
-			rejectedOnlyIdx = NodeIndex(2)
-		)
-		scoreByIdx := map[NodeIndex]float64{}
-		for _, p := range peers {
-			scoreByIdx[p.index] = p.score
+	if !ok {
+		// Eventually marked the test as failed but didn't FailNow (assert.*
+		// not require.*). Grab the latest snapshot so the diagnostic asserts
+		// below can surface which invariant on which observer failed.
+		settled = make(map[NodeIndex][]peerScore, len(vNet.Nodes))
+		for _, node := range vNet.Nodes {
+			settled[node.Index] = snapshotForNode(node)
 		}
-		assertBucketOrder := func(higher, lower NodeIndex) {
-			if node.Index == higher || node.Index == lower {
-				return
-			}
-			require.GreaterOrEqualf(t, scoreByIdx[higher], scoreByIdx[lower],
-				"observer %d: peer %d (score=%.2f) ranked below peer %d (score=%.2f)",
-				node.Index, higher, scoreByIdx[higher], lower, scoreByIdx[lower],
-			)
+	}
+
+	// settled was either verified by Eventually (happy path — these are
+	// redundant) or freshly grabbed (sad path — they surface specifics on
+	// top of Eventually's generic message).
+	for _, node := range vNet.Nodes {
+		peers := settled[node.Index]
+		require.NotNilf(t, peers, "node %d: PeerScoreInspector never ran", node.Index)
+		require.Equalf(t, len(vNet.Nodes)-1, len(peers), "node %d", node.Index)
+		if msg := rateInvariantViolation(peers, node.Index); msg != "" {
+			require.Failf(t, "invalid rate ordering", "%s", msg)
 		}
-		assertBucketOrder(acceptedOnlyIdx, ignoredOnlyIdx)
-		assertBucketOrder(ignoredOnlyIdx, rejectedOnlyIdx)
+		if msg := bucketInvariantViolation(peers, node.Index); msg != "" {
+			require.Failf(t, "invalid bucket ordering", "%s", msg)
+		}
 	}
 }
 
