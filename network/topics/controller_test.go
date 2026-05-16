@@ -359,7 +359,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
 	// Per-call random mDNS tag so concurrent test processes running the same
 	// test don't cross-discover each other's peers.
-	mdnsTag := fmt.Sprintf("ssv.test.%016x", rand.Uint64())
+	mdnsTag := fmt.Sprintf("ssv.test.%016x", rand.Uint64()) //nolint: gosec // G404 is acceptable here
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
 		peers[i] = newPeer(t, ctx, logger, mdnsTag, msgValidator, msgID, scoreInspector)
