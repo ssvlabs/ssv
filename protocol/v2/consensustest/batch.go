@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sort"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -199,10 +198,10 @@ type iterOutcome struct {
 }
 
 // errSimPanic is the sentinel returned by runOneSim's recover wrapper.
-// Treated as a per-iter miss by aggregateCellIters (recorded under
-// MissReasons["sim_panic"]) rather than collapsing the whole cell to n/a
-// — a single panicking seed in a 1000-iter baseline cell shouldn't hide
-// the other 999 sims' data.
+// Treated as a per-iter miss by aggregateCellIters (recorded under the
+// "Simulation panicked..." MissReasons bucket) rather than collapsing
+// the whole cell to n/a — a single panicking seed in a 1000-iter
+// baseline cell shouldn't hide the other 999 sims' data.
 var errSimPanic = fmt.Errorf("consensustest: sim panic")
 
 // runOneSim runs one iteration on its own goroutine and returns an
@@ -282,10 +281,11 @@ func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol P
 // BatchCell if the cell hit a uniform config-level error (ErrNotApplicable
 // or ErrConfigOutOfEnvelope). errSimPanic is NOT a special case here —
 // per-iter sim panics flow into aggregateCellIters and are recorded as
-// per-iter misses (MissReasons["sim_panic"]++), preserving every other
-// iter's data instead of collapsing the cell to n/a. Other unexpected
-// errors log and return an n/a cell. Returns (cell, true) when a
-// special-case applies; (zero, false) when the caller should aggregate.
+// per-iter misses under the "Simulation panicked..." MissReasons bucket,
+// preserving every other iter's data instead of collapsing the cell to
+// n/a. Other unexpected errors log and return an n/a cell. Returns
+// (cell, true) when a special-case applies; (zero, false) when the
+// caller should aggregate.
 //
 // Priority on mixed errors (an adapter bug, but defensive):
 //
@@ -347,7 +347,7 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 			Scenario:    scenario.Name,
 			Iterations:  cellIter,
 			SuccessRate: 0,
-			MissReasons: map[string]int{"config out of envelope": cellIter},
+			MissReasons: map[string]int{"Protocol cannot operate at this configuration": cellIter},
 		}, true
 	}
 	return BatchCell{}, false
@@ -359,7 +359,7 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 // RunScenarioOnProtocol contract — safety panics are intentional and
 // terminate the test before any further reduce work runs.
 //
-// Per-iter errSimPanic results contribute MissReasons["sim_panic"]++
+// Per-iter errSimPanic results contribute to the "Simulation panicked..." MissReasons bucket
 // (rather than collapsing the whole cell to n/a) so a single panicking
 // seed doesn't hide the other surviving iters' samples.
 func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) BatchCell {
@@ -383,7 +383,7 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 			// stack lives in r.err per runOneSim) so the failing seed can
 			// be reproduced from the log; subsequent panics in the same
 			// cell increment the counter without re-spamming the log.
-			cell.MissReasons["sim_panic"]++
+			cell.MissReasons["Simulation panicked (framework bug, not a protocol failure)"]++
 			if !loggedPanic {
 				t.Logf("RunBatch: %s", r.err)
 				loggedPanic = true
@@ -465,82 +465,17 @@ func padToIters(m map[string]Distribution, iters int) {
 	}
 }
 
-// classifyMiss returns a coarse string label for why an Outcome reported
-// !Decided. Used as the MissReasons map key. Free-form — renderers treat
-// it as an attribute, not an enum.
-//
-// Today's classifier checks the per-op Err strings against a few known
-// patterns. Future work can refine (e.g., distinguish "no σ-quorum +
-// no NR-quorum at L_0" from "no quorum at any layer") by inspecting
-// PerOp evidence or the Trace.
+// classifyMiss returns the MissReasons map key for an Outcome that
+// reported !Decided. Every active adapter sets Outcome.MissReason on
+// !Decided (see each protocol's classify*Miss helper), so this is
+// effectively a pass-through. The empty-MissReason branch is a safety
+// net for a hypothetical adapter that forgets the contract; in normal
+// operation it never fires.
 func classifyMiss(o Outcome) string {
-	// Aggregate per-op Err strings. If they cluster on a single class,
-	// label that; else "mixed".
-	classes := make(map[string]int)
-	for _, oo := range o.PerOp {
-		if oo.Decided {
-			continue
-		}
-		if oo.Err == "" {
-			classes["no_decision_no_error"]++
-		} else {
-			classes[shortenErr(oo.Err)]++
-		}
+	if o.MissReason == "" {
+		return "Unknown failure (adapter did not set MissReason)"
 	}
-	if len(classes) == 0 {
-		return "unknown"
-	}
-	// Iterate sorted keys so ties in the "+mixed" branch resolve deterministically
-	// (lex order). Without this, Go map iteration randomization makes the chosen
-	// "top" flip across runs when two classes have equal counts.
-	keys := make([]string, 0, len(classes))
-	for k := range classes {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	if len(keys) == 1 {
-		return keys[0]
-	}
-	top, topCount := "", 0
-	for _, k := range keys {
-		if c := classes[k]; c > topCount {
-			top = k
-			topCount = c
-		}
-	}
-	return top + "+mixed"
-}
-
-// shortenErr maps a verbose per-op error string to a coarse label.
-// Specific to the production OBFT / QBFT error messages this framework
-// observes; defaults to the first 32 chars if unrecognized.
-func shortenErr(err string) string {
-	lower := strings.ToLower(err)
-	known := []struct {
-		needle string
-		label  string
-	}{
-		// More specific patterns come first — "no postconsensus quorum"
-		// contains "no quorum" as a substring, so the broader rule
-		// would shadow it without this ordering.
-		{"no postconsensus quorum", "no_postconsensus_quorum"},
-		{"no quorum", "no_quorum"},
-		{"noquorum", "no_quorum"},
-		{"timed out", "timeout"},
-		{"timeout", "timeout"},
-		{"missed relay deadline", "deadline_miss"},
-		{"sim panic", "sim_panic"},
-		{"context", "context_cancel"},
-	}
-	for _, k := range known {
-		if strings.Contains(lower, k.needle) {
-			return k.label
-		}
-	}
-	if len(err) > 32 {
-		return err[:32]
-	}
-	return err
+	return o.MissReason
 }
 
 // SortedCellKeys returns the (Scenario, Protocol) pairs in stable order for

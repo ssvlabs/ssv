@@ -116,9 +116,9 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		// Phase-1 broadcast schedule collapses to BFT_start (FetchAt
 		// clamps `< 0` to 0) and no leader can meet its target; every
 		// sim fails to decide. Flag this band as OOE so it renders
-		// red `config out of envelope` rather than a stealth 0%
-		// success rate — the protocol genuinely can't operate at this
-		// (bttEff, RelayCutoff, K) point.
+		// red `Protocol cannot operate at this configuration` rather
+		// than a stealth 0% success rate — the protocol genuinely
+		// can't operate at this (bttEff, RelayCutoff, K) point.
 		//
 		// Boundary: let R = RelayCutoff − HeaderSubmitHeadroom −
 		// Phase3JitterBuffer − Epsilon3 (the "available phase-2
@@ -205,11 +205,33 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		}
 		out.DecidingBroadcastTime = bt
 	}
+	// Pre-clip snapshot so MissReason can reference the layer the protocol
+	// internally reached. See obft adapter's classifyOBFTMiss for the
+	// shared rationale.
+	preClipDecided := out.Decided
+	preClipRound := out.DecidedRound
+	preClipTime := out.DecisionTime
+	deadline := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom
 	// Match the OBFT/QBFT adapters: late-recovered decisions past
 	// RelayCutoff − HeaderSubmitHeadroom can't be submitted in production
 	// either, so the comparison clips them to MISS.
-	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
+	ct.ClipLateDecision(&out, deadline)
+	if !out.Decided {
+		out.MissReason = classifyTwoabMiss(preClipDecided, preClipRound, preClipTime, deadline)
+	}
 	return out, nil
+}
+
+// classifyTwoabMiss mirrors the OBFT classifier; structurally identical
+// (decided-but-clipped vs never-decided), since the 2ab Phase-3 walk
+// also halts at the deepest layer when σ-quorum can't form. See
+// classifyOBFTMiss in the obft adapter for the shared label-bounding
+// rationale.
+func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Duration) string {
+	if preDecided && preTime > deadline {
+		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
+	}
+	return "Cluster never assembled a threshold signature at any layer"
 }
 
 // computeAttestation populates Outcome.CommitAttestation from data already

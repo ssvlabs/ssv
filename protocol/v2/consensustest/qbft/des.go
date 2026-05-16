@@ -225,8 +225,9 @@ func (s *sim) outcome() rawOutcome {
 	// the earliest "ready" time across the cluster, mirroring the
 	// OBFT-family earliest-decider rule. An op that hit (a) but not (b)
 	// is reported as not-decided with a "no postconsensus quorum"
-	// diagnostic; classifyMiss surfaces this via shortenErr's
-	// `no_postconsensus_quorum` label.
+	// per-op diagnostic; classifyQBFTMiss inspects that diagnostic to
+	// produce the cluster-level "Cluster agreed on a value, but never
+	// gathered enough post-consensus partial signatures" MissReason.
 	earliestReady := time.Duration(-1)
 	for _, op := range s.operators {
 		oo := rawOpOutcome{}

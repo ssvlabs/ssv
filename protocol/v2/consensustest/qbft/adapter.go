@@ -150,14 +150,62 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Bandwidth)
 
+	// Pre-clip snapshot: ClipLateDecision resets DecidedRound to -1, so
+	// stash the round + time it actually reached for diagnostic labelling.
+	preClipDecided := out.Decided
+	preClipRound := out.DecidedRound
+	preClipTime := out.DecisionTime
+	deadline := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom
 	// The Instance runs round-changes regardless of wall time; the
 	// application's relay cutoff is what makes long chains a slot miss in
 	// practice. Clip post-deadline decisions to MISS so the outcome reflects
 	// deployed-protocol behavior. Shared with the OBFT/2abOBFT adapters via
 	// ct.ClipLateDecision so all three protocols honor the same submit
 	// deadline (RelayCutoff − HeaderSubmitHeadroom).
-	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
+	ct.ClipLateDecision(&out, deadline)
+	if !out.Decided {
+		out.MissReason = classifyQBFTMiss(out, preClipDecided, preClipRound, preClipTime, deadline)
+	}
 	return out, nil
+}
+
+// classifyQBFTMiss labels a non-decided QBFT outcome. Three regimes:
+//
+//   - Decided-but-clipped: at least one receiver reached the "ready to
+//     submit" state (consensus + 2f+1 partials) but at preClipTime >
+//     deadline. ClipLateDecision converted to MISS. Label:
+//     "Cluster ready to submit at round <N>, past the submit deadline".
+//   - Post-consensus quorum incomplete: some op(s) reached QBFT
+//     consensus internally (their PerOp.Err is "no postconsensus
+//     quorum" — set by the adapter's outcome() in des.go for the
+//     "decided locally but no 2f+1 partial-sigs aggregated at any
+//     receiver" case), but the cluster never hit "ready to submit".
+//     Label: "Cluster agreed on a value, but never gathered enough
+//     post-consensus partial signatures".
+//   - Rounds exhausted: no op reached internal QBFT consensus at all
+//     (all PerOp.Err are "did not decide before sim end" / byz). The
+//     round-change chain ran through MaxRounds without convergence.
+//     Label: "Cluster never reached consensus before slot end".
+//
+// QBFT rounds are 1-indexed in the spec, 0-indexed in the framework
+// (DecidedRound = qbftRound - 1). The label adds 1 back so operators
+// reading the report see the QBFT-spec round number.
+func classifyQBFTMiss(out ct.Outcome, preDecided bool, preRound int, preTime, deadline time.Duration) string {
+	if preDecided && preTime > deadline {
+		return fmt.Sprintf("Cluster ready to submit at round %d, past the submit deadline", preRound+1)
+	}
+	// !preDecided. Distinguish by inspecting PerOp.Err patterns set by
+	// the adapter's outcome() in des.go: "no postconsensus quorum" =>
+	// at least one op reached internal consensus but the partial-sig
+	// aggregation didn't quorum at any receiver. Anything else (the
+	// "did not decide before sim end" or byz markers) means consensus
+	// itself never reached.
+	for _, oo := range out.PerOp {
+		if oo.Err == "no postconsensus quorum" {
+			return "Cluster agreed on a value, but never gathered enough post-consensus partial signatures"
+		}
+	}
+	return "Cluster never reached consensus before slot end"
 }
 
 // desConfig is the QBFT-DES-internal configuration.

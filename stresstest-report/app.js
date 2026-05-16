@@ -637,11 +637,119 @@ function renderConditionsSection(data) {
   wrap.appendChild(canvas);
   sec.appendChild(wrap);
 
+  // Failure-breakdown table host — populated by rebuildFailureBreakdown
+  // after the section mounts. Mirrors the conditions-chart pattern
+  // (placeholder div in the DOM, build called on the next microtask)
+  // so picker re-renders update both together.
+  const failuresHost = h('div', {
+    class: 'conditions-failures',
+    id: 'conditions-failures',
+  });
+  sec.appendChild(failuresHost);
+
   // Chart.js needs the canvas in the live DOM with computed dimensions
   // before construction; defer to the next microtask after the caller
   // mounts the section.
-  Promise.resolve().then(() => rebuildConditionsChart(data));
+  Promise.resolve().then(() => {
+    rebuildConditionsChart(data);
+    rebuildFailureBreakdown(data);
+  });
   return sec;
+}
+
+// rebuildFailureBreakdown populates the failure-breakdown table beneath
+// the CDF chart. One row per distinct MissReason observed across the
+// active protocols at the current operating point; one column per
+// active protocol with the per-iteration count (and a percent-of-iters
+// secondary value). Rows sort by total count desc so the dominant
+// failure modes float to the top. Cells where the protocol had zero
+// failures of that reason render as "—" rather than "0" so the eye
+// catches active rows; cells where the protocol's cell is missing
+// entirely render as "n/a". Hidden when every active protocol has 100%
+// success at this point.
+function rebuildFailureBreakdown(data) {
+  const host = document.getElementById('conditions-failures');
+  if (!host) return;
+  host.innerHTML = '';
+  const scenario = data.scenarios.find((s) => s.name === selectedScenario);
+  if (!scenario) return;
+  const wantedInstab = scenario.group === 'Baseline' ? selectedInstability : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab);
+  if (!match) return;
+  const activeNames = filteredProtocols(data.protocols);
+  const cellByProtocol = {};
+  for (const p of activeNames) {
+    const cell = match.point.cells.find(
+      (c) => c.protocol === p && c.scenario === scenario.name,
+    );
+    if (cell) cellByProtocol[p] = cell;
+  }
+  // Union of reasons + per-protocol counts.
+  const reasonTotals = {}; // reason -> total count across active protocols
+  const perCell = {};      // protocol -> reason -> count
+  let anyFailure = false;
+  for (const p of activeNames) {
+    const cell = cellByProtocol[p];
+    perCell[p] = {};
+    if (!cell || !cell.missReasons) continue;
+    for (const [reason, count] of Object.entries(cell.missReasons)) {
+      if (count <= 0) continue;
+      anyFailure = true;
+      perCell[p][reason] = count;
+      reasonTotals[reason] = (reasonTotals[reason] || 0) + count;
+    }
+  }
+  if (!anyFailure) return; // hide entirely when no failures to show
+  const reasons = Object.keys(reasonTotals).sort(
+    (a, b) => reasonTotals[b] - reasonTotals[a],
+  );
+  // Table header.
+  const title = h('h3', { class: 'conditions-failures-title' },
+    'Failure breakdown');
+  host.appendChild(title);
+  const table = h('table', { class: 'conditions-failures-table' });
+  const thead = h('thead');
+  const headRow = h('tr');
+  headRow.appendChild(h('th', { class: 'reason' }, 'Reason'));
+  for (const p of activeNames) {
+    headRow.appendChild(h('th', { class: 'proto-col' }, p));
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = h('tbody');
+  for (const reason of reasons) {
+    const tr = h('tr');
+    tr.appendChild(h('td', { class: 'reason' }, reason));
+    for (const p of activeNames) {
+      const cell = cellByProtocol[p];
+      // Three states for the cell:
+      //   - missing or iterations==0 → protocol didn't run this scenario
+      //     (ErrNotApplicable / no data point yet). Render "n/a".
+      //   - iterations>0 but count==0 → protocol ran, zero failures of
+      //     this reason. Render "—" so the eye catches the non-zero
+      //     rows; "0" is harder to scan.
+      //   - count>0 → render the count + percent-of-iterations.
+      if (!cell || cell.iterations === 0) {
+        tr.appendChild(h('td', { class: 'count na' }, 'n/a'));
+        continue;
+      }
+      const count = perCell[p][reason] || 0;
+      if (count === 0) {
+        tr.appendChild(h('td', { class: 'count zero' }, '—'));
+      } else {
+        const pct = (count / cell.iterations) * 100;
+        const cellEl = h('td', { class: 'count' });
+        cellEl.appendChild(h('span', { class: 'count-n' }, String(count)));
+        cellEl.appendChild(
+          h('span', { class: 'count-pct' }, ' (' + pct.toFixed(2) + '%)'),
+        );
+        tr.appendChild(cellEl);
+      }
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap

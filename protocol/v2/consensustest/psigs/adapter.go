@@ -88,8 +88,29 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// Same submit-deadline semantic as OBFT / QBFT: a cluster that hasn't
 	// aggregated qV partials by RelayCutoff − HeaderSubmitHeadroom can't
 	// submit, regardless of how late the partials trickled in.
-	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
+	preClipDecided := out.Decided
+	preClipTime := out.DecisionTime
+	deadline := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom
+	ct.ClipLateDecision(&out, deadline)
+	if !out.Decided {
+		out.MissReason = classifyPSigsMiss(preClipDecided, preClipTime, deadline)
+	}
 	return out, nil
+}
+
+// classifyPSigsMiss labels a non-decided PSigs outcome. PSigs has a
+// single qV threshold and no rounds / layers, so the diagnostic space
+// is just two regimes: partials reached qV but past the submit deadline
+// (clipped), or qV was never reached within the slot (typically too
+// many byz refusers + slow propagation).
+func classifyPSigsMiss(preDecided bool, preTime, deadline time.Duration) string {
+	if preDecided && preTime > deadline {
+		// Single static label; the DecisionTime distribution carries
+		// the per-iter overshoot. Avoids exploding the failure-
+		// breakdown row count with per-ms granularity.
+		return "Cluster ready to submit, past the submit deadline"
+	}
+	return "Cluster never gathered enough partial signatures"
 }
 
 // desConfig is the PSigs-DES-internal configuration.

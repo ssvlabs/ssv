@@ -519,6 +519,54 @@ section.conditions .conditions-legend .sm-legend {
   row-gap: 0;
 }
 
+/* Failure-breakdown table — sits below the CDF chart. Hidden (host
+ * stays empty) when every active protocol has 100% success at the
+ * current operating point. */
+.conditions-failures {
+  margin-top: 1em;
+}
+.conditions-failures-title {
+  margin: 0 0 0.5em 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text);
+}
+.conditions-failures-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+.conditions-failures-table th,
+.conditions-failures-table td {
+  padding: 0.35em 0.7em;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.conditions-failures-table thead th {
+  font-weight: 600;
+  background: var(--surface-muted);
+  white-space: nowrap;
+}
+.conditions-failures-table th.proto-col,
+.conditions-failures-table td.count {
+  text-align: right;
+  white-space: nowrap;
+}
+.conditions-failures-table td.reason {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  word-break: break-word;
+}
+.conditions-failures-table td.count.zero,
+.conditions-failures-table td.count.na {
+  color: var(--na);
+}
+.conditions-failures-table .count-pct {
+  color: var(--text-faint);
+  font-size: 0.85em;
+}
+
 /* Collapsibles below the heatmap — one section per multi-point sweep,
  * collapsed by default. Header is a click target; body slides under
  * via display:none when collapsed (no animation — keeps the page

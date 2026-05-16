@@ -121,10 +121,11 @@ func (d Distribution) sorted() []float64 {
 // or "QBFT/equivocation"); each Distribution holds per-sim total counts
 // (one sample per sim, value = total fires across all operators in that sim).
 //
-// MissReasons aggregates per-sim deadlock causes — for now a simple
-// string→count map keyed by a coarse classification (e.g. "no_quorum",
-// "host_invalid", "asymmetric_propagation"). Free-form; renderer treats
-// it as an attribute table.
+// MissReasons aggregates per-sim deadlock causes — a string→count map
+// keyed by the adapter-set Outcome.MissReason (e.g. "Cluster ready to
+// submit at layer 2, past the submit deadline" or "Cluster never
+// reached consensus before slot end"). Free-form; renderer treats it
+// as an attribute table.
 //
 // Safety violations are NOT carried on this struct — aggregateCellIters
 // panics via SafetyPanic the moment ComputeSafetyReport flags a

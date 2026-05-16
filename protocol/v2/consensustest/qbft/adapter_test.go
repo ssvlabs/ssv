@@ -43,6 +43,14 @@ func TestAdapter_PostConsensusQuorumMiss(t *testing.T) {
 	require.Equal(t, "no postconsensus quorum", out.PerOp[4].Err, "op4 consensus-decided locally but lacked partial-sig quorum")
 	require.Equal(t, "did not decide before sim end", out.PerOp[2].Err, "op2 (slow) didn't reach consensus")
 	require.Equal(t, "did not decide before sim end", out.PerOp[3].Err, "op3 (slow) didn't reach consensus")
+	// Cluster-level MissReason should reflect the post-consensus branch
+	// (some ops reached internal consensus, but the partial-sig quorum
+	// didn't aggregate at any receiver) — NOT the rounds-exhausted
+	// branch ("Cluster never reached consensus before slot end") which
+	// is reserved for the case where no op reached internal consensus
+	// at all.
+	require.Equal(t, "Cluster agreed on a value, but never gathered enough post-consensus partial signatures", out.MissReason,
+		"MissReason should distinguish post-consensus quorum miss from rounds-exhausted miss")
 }
 
 // TestAdapter_HealthyMesh_N4 — QBFT healthy through the mesh transport.

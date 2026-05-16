@@ -173,14 +173,46 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
 		out.DecidingBroadcastTime = tCommit - broadcastBudget[out.DecidedRound]
 	}
+	// Capture pre-clip state so post-clip MissReason can reference the
+	// layer the protocol DID internally reach (DecidedRound is reset to
+	// -1 by ClipLateDecision; this snapshot preserves it for diagnostic).
+	preClipDecided := out.Decided
+	preClipRound := out.DecidedRound
+	preClipTime := out.DecisionTime
+	deadline := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom
 	// Clip late decisions to MISS so the outcome reflects deployed-protocol
 	// behavior. Phase 3's evtResolveRerun can recover from a late-arriving
 	// KindCommit past RoundEndOffset, but if the rebuilt decision lands past
 	// RelayCutoff − HeaderSubmitHeadroom, production would miss the slot too
 	// (no time left to broadcast the cert and submit). Mirrors the QBFT
 	// adapter's deadline clip so the comparison is apples-to-apples.
-	ct.ClipLateDecision(&out, cfg.RelayCutoff-cfg.HeaderSubmitHeadroom)
+	ct.ClipLateDecision(&out, deadline)
+	if !out.Decided {
+		out.MissReason = classifyOBFTMiss(preClipDecided, preClipRound, preClipTime, deadline)
+	}
 	return out, nil
+}
+
+// classifyOBFTMiss produces the friendly MissReason string for a non-
+// decided Outcome. Two regimes:
+//
+//   - Decided-but-clipped: the protocol internally σ-resolved
+//     (preClipDecided true) but at preClipTime > deadline. Label captures
+//     the layer reached. Example: "Cluster ready to submit at layer 2,
+//     past the submit deadline". The per-iter overshoot is preserved in
+//     the DecisionTime distribution so the failure-breakdown row count
+//     stays bounded (one row per layer instead of one per unique
+//     millisecond of lateness).
+//   - Never decided: the σ-pool never reached qV at any layer (NR-quorum
+//     also short, or the walk exhausted K layers). Falls back to the
+//     coarse "Cluster never assembled a threshold signature at any
+//     layer" — the framework's per-op Err strings still carry
+//     obft.Resolve()'s ErrNoQuorum for the diagnostic-curious.
+func classifyOBFTMiss(preDecided bool, preRound int, preTime, deadline time.Duration) string {
+	if preDecided && preTime > deadline {
+		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
+	}
+	return "Cluster never assembled a threshold signature at any layer"
 }
 
 // computeAttestation populates Outcome.CommitAttestation from data already

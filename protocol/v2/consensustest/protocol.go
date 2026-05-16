@@ -211,6 +211,21 @@ type Outcome struct {
 	DecidedValue []byte        // protocol-opaque
 	// DecidedRound is 0-indexed (OBFT layer or QBFT round-1); -1 if !Decided.
 	DecidedRound int
+	// MissReason is the adapter-set human-readable label for !Decided
+	// outcomes. Populated post-ClipLateDecision by each adapter using
+	// protocol-specific context (pre-clip round / layer, byz pattern,
+	// etc.) so the report can render rich categorization like
+	// "Cluster ready to submit at layer 2, past the submit deadline"
+	// or "Cluster never assembled a threshold signature at any layer".
+	// Labels are intentionally NOT parameterised on per-iter lateness
+	// in ms — the DecisionTime distribution carries that signal;
+	// grouping the failure-breakdown table by category keeps the row
+	// count bounded (≤ K rows for the "decided late" family per
+	// protocol). Setting MissReason on !Decided is part of the adapter
+	// contract; the framework's classifyMiss buckets a missing label
+	// under "Unknown failure (adapter did not set MissReason)" as a
+	// safety net. Empty when Decided=true.
+	MissReason string
 	// DecidingBroadcastTime is the slot-anchored T_broadcast_max_k for
 	// k=DecidedRound — i.e. the latest absolute slot time at which the
 	// deciding layer's primary broadcast could still fire. Used by the

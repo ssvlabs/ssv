@@ -148,7 +148,7 @@ func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 //     SafetyPanic fires on any safety-invariant violation, which would
 //     fail this test).
 //  2. At every p2p_baseline point, *at least one* protocol completes
-//     without falling into the "config out of envelope" path. Per-
+//     without falling into the "Protocol cannot operate at this configuration" path. Per-
 //     protocol envelope mismatches are valid data (e.g. 2abOBFT's
 //     4·BTT phase-2 tax pushes its deepest layer below BFT-min at
 //     BTT=500ms; the framework correctly renders that cell as 0%
@@ -203,7 +203,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 				if cell.Iterations == 0 {
 					continue // n/a (scenario doesn't apply to this protocol)
 				}
-				count, ok := cell.MissReasons["config out of envelope"]
+				count, ok := cell.MissReasons["Protocol cannot operate at this configuration"]
 				if !ok || count != cell.Iterations {
 					anyOK = true
 					break
