@@ -2,9 +2,8 @@ package p2pv1
 
 import (
 	"context"
-	cryptorand "crypto/rand"
-	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -38,8 +37,6 @@ type LocalNet struct {
 	Bootnode *discovery.Bootnode
 	Nodes    []network.P2PNetwork
 
-	udpRand testing.UDPPortsRandomizer
-
 	// mdnsTag is a per-LocalNet mDNS service tag so concurrently-running
 	// test processes don't discover each other's peers.
 	mdnsTag string
@@ -47,11 +44,7 @@ type LocalNet struct {
 
 // randomMdnsTag returns a unique mDNS service tag for a test LocalNet.
 func randomMdnsTag() string {
-	var buf [8]byte
-	if _, err := cryptorand.Read(buf[:]); err != nil {
-		panic(fmt.Sprintf("read random bytes: %v", err))
-	}
-	return "ssv.test." + hex.EncodeToString(buf[:])
+	return fmt.Sprintf("ssv.test.%016x", rand.Uint64())
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
@@ -166,9 +159,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	// Use TCP port 0 so the kernel picks a free port atomically at bind time. UDP port is unused for
-	// mDNS tests, leaving it randomized for the (currently unused) discv5 path.
-	cfg := NewNetConfig(keys, ln.Bootnode, 0, ln.udpRand.Next(13001, 13999), options.Nodes)
+	// Use TCP/UDP port 0 so the kernel picks free ports atomically at bind time.
+	cfg := NewNetConfig(keys, ln.Bootnode, 0, 0, options.Nodes)
 	cfg.Ctx = ctx
 	cfg.MdnsDiscoveryTag = ln.mdnsTag
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
@@ -242,7 +234,6 @@ type LocalNetOptions struct {
 // NewLocalNet creates a new mdns network
 func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
-	ln.udpRand = make(testing.UDPPortsRandomizer)
 	ln.mdnsTag = randomMdnsTag()
 	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))

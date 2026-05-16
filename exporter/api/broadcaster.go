@@ -45,12 +45,9 @@ func newBroadcaster(logger *zap.Logger) Broadcaster {
 	}
 }
 
-// FromFeed subscribes to the given feed synchronously so any subsequent Send
-// on the feed is guaranteed to reach this broadcaster, then spawns a pump
-// goroutine that runs Broadcast inline until ctx is canceled. Broadcast is
-// bounded-fast (marshal once + N non-blocking c.Send calls), so the feed
-// buffer drains in microseconds and synchronous publishers (e.g. decideds)
-// don't back-pressure on stream clients.
+// FromFeed subscribes to msgFeed and broadcasts incoming messages until ctx
+// is canceled. The subscribe is synchronous: any Send on msgFeed after
+// FromFeed returns is guaranteed to be delivered.
 func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) {
 	buffer := make(chan Message, 512)
 	sub := msgFeed.Subscribe(buffer)
