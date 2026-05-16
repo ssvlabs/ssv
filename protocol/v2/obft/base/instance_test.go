@@ -865,7 +865,7 @@ func TestObft_ClusterID_BlocksCrossClusterReplay(t *testing.T) {
 	clusterB.cfg.ClusterID = [32]byte{0x11, 0x22, 0x33}
 	// Re-create cluster B's instances with the new ClusterID so their cfg
 	// matches; we only test the validation gate, not full reconstruction.
-	bInst, err := NewInstance(clusterB.cfg, 2, NewStubSigner(clusterB.cfg.QV(), []byte{2}), nil, NewStubIBE(clusterB.cfg.QV()), nil, clusterB.pubKeyShares, nil, nil)
+	bInst, err := NewInstance(clusterB.cfg, 2, NewStubSigner(clusterB.cfg.QV(), []byte{2}), nil, NewStubIBE(clusterB.cfg.QV()), []byte{0xff}, clusterB.pubKeyShares, nil, nil)
 	require.NoError(t, err)
 
 	bundle, err := clusterA.instances[1].BuildPhase1Bundle(0, []byte("V"))
@@ -1058,6 +1058,67 @@ func TestObft_Finalize_Idempotent(t *testing.T) {
 	inst.Finalize()
 	require.True(t, inst.Ended(), "Ended() must remain true after second Finalize")
 	require.Len(t, inst.Evidence(), len(preEv), "second Finalize must not mutate Evidence")
+}
+
+// TestObft_Finalize_RefusesMutators — after Finalize, every state-mutating
+// Instance method returns ErrInstanceEnded without applying state changes.
+// Defense-in-depth: the Controller adapter already gates on Ended() under
+// instanceMu, but the Instance API itself must also honor the lifecycle so a
+// network goroutine that captured the Instance pointer pre-finalize cannot
+// add late evidence after operators consumed Evidence() for slashing handoff.
+func TestObft_Finalize_RefusesMutators(t *testing.T) {
+	s := newSim(t, 4)
+	receiver := s.instances[3]
+	leaderID := s.cfg.Layers[0].Leader
+	leaderInst := s.instances[leaderID]
+
+	// Build a peer's commit while the instance is still live so we can replay
+	// it after finalize. Source it from a non-receiver to avoid mutating
+	// receiver state during setup.
+	src := s.instances[2]
+	for k := 0; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], []OperatorID{2}, observedEarly, true)
+	}
+	peerCommit, err := src.BuildOwnCommit()
+	require.NoError(t, err)
+
+	// Snapshot receiver state pre-finalize for post-mutator-call equality.
+	preEv := append([]Evidence{}, receiver.Evidence()...)
+	preOnionLen := len(receiver.peerOnions[0])
+	preNRLen := len(receiver.peerNR[0])
+	preBundleLen := len(receiver.bundles[0][leaderID])
+	preHostLen := len(receiver.hostVerdict[0])
+	preCert := receiver.RetainedCertificate()
+
+	receiver.Finalize()
+	require.True(t, receiver.Ended())
+
+	// Each mutator must return ErrInstanceEnded.
+	bundle, err := leaderInst.BuildPhase1Bundle(0, s.candidates[0])
+	require.NoError(t, err, "leader bundle build for fixture")
+	require.ErrorIs(t, receiver.ObservePhase1Bundle(bundle, observedEarly), ErrInstanceEnded)
+	require.ErrorIs(t, receiver.ObserveCommit(peerCommit), ErrInstanceEnded)
+	require.ErrorIs(t, receiver.ApplyHostValidity(0, s.candidates[0], true), ErrInstanceEnded)
+	_, err = receiver.BuildPhase1Bundle(0, s.candidates[0])
+	require.ErrorIs(t, err, ErrInstanceEnded)
+	_, err = receiver.BuildOwnCommit()
+	require.ErrorIs(t, err, ErrInstanceEnded)
+	_, err = receiver.Resolve()
+	require.ErrorIs(t, err, ErrInstanceEnded)
+	require.ErrorIs(t, receiver.ObserveCertificate(&Certificate{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Value:     s.candidates[0],
+		Signature: []byte("any"),
+	}), ErrInstanceEnded)
+
+	// State must be untouched.
+	require.Equal(t, len(preEv), len(receiver.Evidence()), "Evidence must not change post-finalize")
+	require.Equal(t, preOnionLen, len(receiver.peerOnions[0]), "peerOnions[0] must not change")
+	require.Equal(t, preNRLen, len(receiver.peerNR[0]), "peerNR[0] must not change")
+	require.Equal(t, preBundleLen, len(receiver.bundles[0][leaderID]), "bundles[0][leader] must not change")
+	require.Equal(t, preHostLen, len(receiver.hostVerdict[0]), "hostVerdict[0] must not change")
+	require.Equal(t, preCert, receiver.RetainedCertificate(), "RetainedCertificate must not change")
 }
 
 // TestObft_Rule5_FiresOnMinorityEquivocationView — when a leader equivocates

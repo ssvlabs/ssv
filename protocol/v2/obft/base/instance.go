@@ -17,7 +17,30 @@ import (
 // cap, after which further distinct emissions are silently dropped to bound
 // memory under abuse — the operator is already flagged byzantine many times
 // over by then.
+//
+// Observability note: cap-reached drops are intentionally silent — no error
+// returned (the API contract is "nil = applied or no-op"), no observer fire
+// (the EvidenceObserver model is for byzantine attribution, not housekeeping).
+// Operators wanting to see this boundary can infer it from the EvidenceObserver
+// stream: ≥ MaxCommitHashesPerOp-1 Rule-3 cross-onion fires against the same
+// (op, slot) implies further variants are being silently dropped.
 const MaxCommitHashesPerOp = 8
+
+// MaxRetainedPerOpLayer caps the number of distinct entries retained per
+// (operator, layer) for inputs subject to retention bounds:
+//
+//   - Phase-1 bundles: bundles[layer][leader_id] — up to 2 distinct V's per
+//     (layer, leader). The first distinct second V fires Rule 2 leader
+//     equivocation evidence (spec §Phase 1 / Retention bounds).
+//   - σ-side commit onion: peerOnions[layer][op] — up to 2 distinct
+//     EncryptedLayer entries per (op, layer). The first distinct second
+//     fires Rule 3 cross-onion equivocation (spec §Slashing-evidence).
+//   - Wire-format witnesses: MaxWitnesses = MaxLayers × MaxRetainedPerOpLayer.
+//
+// Two is sufficient slashable evidence under f=1 byzantine assumption (one
+// witnessed pair pins the byzantine); further accumulation is pure memory
+// pressure with no attribution gain.
+const MaxRetainedPerOpLayer = 2
 
 // CommitState is one operator's per-layer commitment state in the three-state
 // model from spec §Phase 1 / Operator commitments. The σ / NR / NV states are
@@ -264,13 +287,19 @@ type Instance struct {
 	evidenceObserved map[evidenceObservedKey]bool
 
 	// ended is set by Finalize when the slot's instance is being torn down.
-	// Per-instance state-mutating methods (ObserveCommit, ObservePhase1Bundle,
-	// ApplyHostValidity, ...) check this flag after acquiring the instance
-	// mutex and refuse to mutate state on a finalized instance. Without the
-	// check, a network goroutine that captured the instance pointer before
-	// EndInstance ran could mutate state on an officially-ended slot — e.g.
-	// add a late cryptoFake Rule 5 candidate after operators have already
-	// consumed Evidence() for slashing handoff.
+	// State-mutating methods (ObserveCommit, ObservePhase1Bundle,
+	// ApplyHostValidity, BuildPhase1Bundle, BuildOwnCommit, ObserveCertificate,
+	// Resolve) refuse to apply changes on a finalized instance, returning
+	// ErrInstanceEnded. Without the check, a network goroutine that captured
+	// the instance pointer before EndInstance ran could mutate state on an
+	// officially-ended slot — e.g. add a late cryptoFake Rule 5 candidate
+	// after operators have already consumed Evidence() for slashing handoff.
+	//
+	// The Controller adapter (RunningInstance) is the authoritative
+	// serialization layer and additionally rejects mutator dispatches under
+	// its instanceMu so the check fires before the Instance call even begins;
+	// the per-mutator check below is defense-in-depth for any caller that
+	// bypasses the adapter (direct Instance use in tests / future plumbing).
 	ended bool
 }
 
@@ -314,6 +343,15 @@ func NewInstance(
 	}
 	if pubKeyShares == nil {
 		return nil, errors.New("obft: nil pubKeyShares (need at least an empty map)")
+	}
+	// clusterPubKey is the IBE trust anchor used by chainEncryptForLayer
+	// (Phase-2 σ-onion wrap at k > 0) and by ObserveCertificate's aggregate
+	// verify. A nil/empty value would silently pass against permissive stub
+	// signers in tests while a real BLS verifier would error opaquely deep in
+	// the call stack — surface the misconfiguration up-front so it's caught
+	// in test/setup paths.
+	if len(clusterPubKey) == 0 {
+		return nil, errors.New("obft: empty clusterPubKey (IBE trust anchor required)")
 	}
 	if !operatorInCluster(ownOperatorID, cfg) {
 		return nil, fmt.Errorf("obft: own operator id %d not in cluster", ownOperatorID)
@@ -391,7 +429,18 @@ func (i *Instance) LocalState(layer int) CommitState {
 	return i.localState[layer]
 }
 
-// Evidence returns the accumulated slashing-evidence entries (snapshot copy).
+// Evidence returns the accumulated slashing-evidence entries.
+//
+// The returned slice is a snapshot copy: appending to it or reordering its
+// elements does not affect internal state. However, each Evidence struct
+// carries a per-rule pointer (CrossSigning, LeaderEquivocation, ...) whose
+// payload is *shared* with internal state — mutating, e.g.,
+// `out[i].CrossSigning.SigmaPartial[0] = 0` would corrupt the Instance's
+// own copy. Callers MUST treat the returned entries as read-only.
+//
+// Deep-copying per-rule payloads on every call would be wasteful (slashing
+// handoff typically reads Evidence once at end-of-slot); the read-only
+// contract is the right trade-off.
 func (i *Instance) Evidence() []Evidence {
 	out := make([]Evidence, len(i.evidence))
 	copy(out, i.evidence)
@@ -563,6 +612,15 @@ func (i *Instance) transitionToNR(layer int, state CommitState) error {
 // surrounding model.
 type EvidenceObserver func(Evidence)
 
+// evidenceObservedKey is the dedup key for per-(rule, op, layer) observer
+// fires.
+//
+// Layer is int (not uint) because the canonical top-level Rule 3 / commit-
+// equivocation entry uses Layer = -1 as the "spans the whole commit, not
+// per-layer" sentinel (see phase2.go top-level dedup path). Honest per-layer
+// entries are always Layer ≥ 0; the -1 sentinel and ≥ 0 indices coexist in
+// the same key space without collision because -1 is reserved for the single
+// "whole-commit" cross-onion rule.
 type evidenceObservedKey struct {
 	rule  EvidenceRule
 	op    OperatorID

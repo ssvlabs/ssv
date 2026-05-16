@@ -19,6 +19,9 @@ import (
 // same (slot, layer) with V' ≠ V is rejected (single-σ-V invariant from
 // spec §Slashing-protection scope). Calling with the same V is idempotent.
 func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, error) {
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	if layer < 0 || layer >= i.cfg.K() {
 		return nil, fmt.Errorf("obft: layer %d out of range [0, %d)", layer, i.cfg.K())
 	}
@@ -91,6 +94,9 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 //     has not yet σ-locked on the first) commits NR at T_commit; the
 //     equivocation observation foreclose σ-emit at this layer.
 func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Duration) error {
+	if i.ended {
+		return ErrInstanceEnded
+	}
 	if err := ValidatePhase1Bundle(b, i.cfg); err != nil {
 		return err
 	}
@@ -141,10 +147,10 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 			b.OperatorID)
 	}
 
-	// Distinct value_root. Cap retention at 2 distinct.
-	if len(retained) >= 2 {
-		// Already have 2 distinct from this leader; drop the third
-		// (and beyond). The first two are sufficient evidence.
+	// Distinct value_root. Cap retention per the shared retention bound.
+	if len(retained) >= MaxRetainedPerOpLayer {
+		// Already have MaxRetainedPerOpLayer distinct from this leader; drop
+		// the third (and beyond). The first two are sufficient evidence.
 		return nil
 	}
 
@@ -396,6 +402,9 @@ func deepCopyCommit(c *Commit) *Commit {
 // layer under leader equivocation (though equivocation collapses to NR at
 // T_commit, regardless of validity verdicts on either V).
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
+	if i.ended {
+		return ErrInstanceEnded
+	}
 	if layer < 0 || layer >= i.cfg.K() {
 		return fmt.Errorf("obft: layer %d out of range", layer)
 	}

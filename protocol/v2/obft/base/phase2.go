@@ -23,6 +23,9 @@ import (
 // NR-emission locks nrLocked[layer]. Returns ErrAlreadyCommitted if called
 // more than once.
 func (i *Instance) BuildOwnCommit() (*Commit, error) {
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	if i.committed {
 		return nil, ErrAlreadyCommitted
 	}
@@ -199,6 +202,9 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 //   - flags a structurally-distinct second KindCommit from the same operator
 //     as cross-onion equivocation (top-level dedup via content hash).
 func (i *Instance) ObserveCommit(c *Commit) error {
+	if i.ended {
+		return ErrInstanceEnded
+	}
 	if err := ValidateCommit(c, i.cfg); err != nil {
 		return err
 	}
@@ -268,6 +274,19 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	// the top-level CommitEquivocationEvidence — slashing tools can derive
 	// per-layer details from the full Commit bodies.
 	//
+	// Note on slashing-contract precision: the top-level Rule 3 emission
+	// asserts "operator emitted two structurally-distinct KindCommits". When
+	// one of the two commits has malformed NR partials, the assertion is
+	// still literally true — both commits were authenticated by the operator
+	// (outer SSV signature) and their canonicalized content hashes differ.
+	// A third-party slashing verifier reproducing commitContentHash on both
+	// CommitA and CommitB will see distinct hashes; the verifier doesn't need
+	// either commit's NR partials to verify, only the operator's outer
+	// signature over each commit body. So malformed-NR-in-CommitB does not
+	// weaken the slashable contract — it just means honest peers also reject
+	// CommitB's inner content (no per-layer evidence from this body) while
+	// the top-level attribution stands.
+	//
 	// In production the validation layer's Verifier.VerifyCommitNRPartials
 	// rejects malformed NR before reaching this path; this is defense-in-
 	// depth for any path that bypasses validation (tests, future plumbing).
@@ -288,6 +307,19 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		existing := i.peerOnions[k][c.OperatorID]
 
 		// Find existing entry with the same value.
+		//
+		// First-Ciphertext-wins: dedup is keyed on Value only, not (Value,
+		// Ciphertext). A byzantine could emit two commits with the same V but
+		// different Ciphertext bytes (e.g., garbage Ciphertext first, valid
+		// Ciphertext second); the second is silently treated as a duplicate
+		// and only the first Ciphertext stays in peerOnions. This is
+		// byzantine-self-defeating — at L_0 the Rule 5 cryptoFake check
+		// removes a non-verifying Ciphertext from the pool, and at k > 0
+		// Rule 4 fires on decryption-time garbage. Either way the byzantine
+		// cannot recover the pool by retrying a corrected partial after a
+		// first bad emission. Safe to dedup by Value here; the second
+		// emission also triggers top-level Rule 3 (above) which carries the
+		// full distinct Commit body for slashing.
 		alreadyHaveValue := false
 		for _, e := range existing {
 			if bytes.Equal(e.Value, el.Value) {
@@ -318,7 +350,7 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// same byzantine fault. Per-layer at k > 0 is the cluster's
 		// finer-grained record; on-chain slashing relies on Layer=-1.
 		if len(existing) >= 1 {
-			if len(existing) >= 2 {
+			if len(existing) >= MaxRetainedPerOpLayer {
 				continue
 			}
 			i.recordEvidence(Evidence{
@@ -521,14 +553,35 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 // any V the receiver has observed locally for the witness's layer, then
 // retains the σ_V partial under (layer, value_root) for inclusion in the
 // σ-pool at Resolve time. Idempotent (first valid harvest wins).
+//
+// Drop categories — all silent (no error, no evidence record), each for a
+// distinct reason:
+//
+//  1. Out-of-range layer / leader-claim mismatch — defense-in-depth past the
+//     ValidateCommit structural check; an honest sender's outer wire
+//     verification would already have rejected such a witness.
+//  2. value_root not resolvable to V locally — the cross-commit-out-of-order
+//     coverage gap documented on Instance.witnessedLeaderSigma. The witness
+//     is plausibly honest; we just lack the V to verify against. Not
+//     evidence; no spec rule for "peer forwarded a witness we can't yet use".
+//  3. σ_V fails BLS verify against the leader's pubshare on the resolved V —
+//     a peer forwarding a fabricated witness. Spec defines no slashing rule
+//     for forwarding bad witnesses (the leader, not the forwarder, would be
+//     attributable for any actual σ-keypair compromise via Rule 2/3 paths);
+//     drop silently.
+//
+// All three are debug-level patterns at most. Operators wanting visibility
+// can infer (2) from observed σ-pool ratios at Resolve time vs the cluster's
+// witness count, and (3) from independent Rule 2/3 evidence against the
+// claimed leader.
 func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 	if w.Layer < 0 || w.Layer >= i.cfg.K() {
-		return
+		return // drop category 1
 	}
 	// Leader claim was verified structurally in ValidateCommit; defense in
 	// depth.
 	if w.Leader != i.cfg.Layers[w.Layer].Leader {
-		return
+		return // drop category 1
 	}
 	bucket := i.witnessedLeaderSigma[w.Layer]
 	if _, exists := bucket[w.ValueRoot]; exists {
@@ -538,17 +591,14 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 	// leader, OR any peerOnion entry at this layer carrying V plaintext.
 	v, ok := i.findVByRoot(w.Layer, w.ValueRoot)
 	if !ok {
-		// V isn't known locally yet — drop the witness. v1 doesn't pend
-		// for retroactive verification; see witnessedLeaderSigma comment
-		// in instance.go for the cross-commit-out-of-order coverage gap.
-		return
+		return // drop category 2 — cross-commit-out-of-order gap
 	}
 	pubShare, ok := i.pubKeyShares[w.Leader]
 	if !ok {
-		return
+		return // drop category 1 (unregistered leader pub-share)
 	}
 	if !i.signer.VerifyPartial(pubShare, v, w.SigmaV) {
-		return
+		return // drop category 3 — peer forwarded a fabricated witness
 	}
 	if bucket == nil {
 		bucket = make(map[[32]byte]witnessedSigma)
@@ -624,6 +674,26 @@ const (
 // fire path (ObserveCommit) and the retroactive fire path (reevaluateL0Sigmas
 // on bundle retention) only act on cryptoFake, leaving unknownV as a "we
 // can't tell from local view alone" deferral.
+//
+// V-source choice: this verdict consults only bundles[0] (the Phase-1
+// retention map), not peerOnions[0]. Asymmetric with findVByRoot (used by
+// harvestWitness) which walks both bundles and peerOnions. Rationale:
+//
+//   - The Phase-1 bundle is the canonical authoritative source for "V was
+//     proposed by the leader at L_0". A V appearing in peerOnions but not
+//     bundles is, by definition, a V that no honest receiver retained at
+//     Phase 1 from the leader — either the leader was silent and a non-leader
+//     fabricated it (cryptoFake territory at L_0, caught by VerifyPartial
+//     above) or the leader equivocated and a peer signed an equivocated V
+//     the local receiver missed (legitimate unknownV verdict).
+//   - Relaxing to peerOnions would let one byzantine "rescue" another:
+//     byzantine A emits onion with V'; byzantine B emits σ on V'; without
+//     L_0 retention of V', A's onion entry would let B's σ verdict promote
+//     from unknownV to verified. Keeping V-source = bundles only forecloses
+//     this collusion.
+//   - findVByRoot is for σ_V harvest at k ≥ 0, where Pigeonhole 2 already
+//     bounds reconstruction safety regardless of V source, so the more
+//     permissive walk is safe there.
 func (i *Instance) peerSigmaAtL0Verdict(op OperatorID, el EncryptedLayer) l0SigmaVerdict {
 	pubShare, ok := i.pubKeyShares[op]
 	if !ok {

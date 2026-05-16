@@ -1,8 +1,10 @@
 package base
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"sort"
 )
 
 // Wire-shaped message types carried between operators in the three OBFT
@@ -183,6 +185,15 @@ type Output struct {
 // commitContentHash returns a SHA-256 hash of c's content fields, used by
 // ObserveCommit to dedup identical re-broadcasts vs flag distinct second
 // emissions.
+//
+// NRPartials and Witnesses are hashed in canonicalized order (by Layer for
+// NRPartials, by (Layer, Leader, ValueRoot) for Witnesses) so a byzantine
+// can't manufacture a structurally-distinct-but-logically-identical Commit
+// by reordering these slices. Layers is positional (indexed by k) so its
+// natural order is already canonical. Without canonicalization, two reordered
+// commits would hash to different values and fire a spurious Rule 3
+// entry even though they carry the same logical content; the slashing
+// record stays clean by treating reorders as the duplicate they are.
 func commitContentHash(c *Commit) [32]byte {
 	h := sha256.New()
 	h.Write(c.ClusterID[:])
@@ -195,14 +206,28 @@ func commitContentHash(c *Commit) [32]byte {
 		binary.Write(h, binary.BigEndian, uint32(len(el.Ciphertext)))
 		h.Write(el.Ciphertext)
 	}
-	binary.Write(h, binary.BigEndian, uint32(len(c.NRPartials)))
-	for _, p := range c.NRPartials {
+	nr := make([]NRPartial, len(c.NRPartials))
+	copy(nr, c.NRPartials)
+	sort.Slice(nr, func(i, j int) bool { return nr[i].Layer < nr[j].Layer })
+	binary.Write(h, binary.BigEndian, uint32(len(nr)))
+	for _, p := range nr {
 		binary.Write(h, binary.BigEndian, uint32(p.Layer))
 		binary.Write(h, binary.BigEndian, uint32(len(p.PartialSig)))
 		h.Write(p.PartialSig)
 	}
-	binary.Write(h, binary.BigEndian, uint32(len(c.Witnesses)))
-	for _, w := range c.Witnesses {
+	ws := make([]LeaderSigmaWitness, len(c.Witnesses))
+	copy(ws, c.Witnesses)
+	sort.Slice(ws, func(i, j int) bool {
+		if ws[i].Layer != ws[j].Layer {
+			return ws[i].Layer < ws[j].Layer
+		}
+		if ws[i].Leader != ws[j].Leader {
+			return ws[i].Leader < ws[j].Leader
+		}
+		return bytes.Compare(ws[i].ValueRoot[:], ws[j].ValueRoot[:]) < 0
+	})
+	binary.Write(h, binary.BigEndian, uint32(len(ws)))
+	for _, w := range ws {
 		binary.Write(h, binary.BigEndian, uint32(w.Layer))
 		binary.Write(h, binary.BigEndian, uint64(w.Leader))
 		h.Write(w.ValueRoot[:])

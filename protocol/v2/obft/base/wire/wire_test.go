@@ -244,3 +244,92 @@ func TestEncodeCommit_RejectsTooManyLayers(t *testing.T) {
 	_, err := EncodeCommit(c)
 	require.ErrorContains(t, err, "max")
 }
+
+// ---- per-field length caps (MaxValueSize / MaxSignatureSize / MaxCiphertextSize) ----
+
+// TestEncodePhase1Bundle_RejectsOverlongValue confirms the encoder rejects a
+// Value larger than MaxValueSize (defense against unbounded allocation by a
+// malformed sender). MaxValueSize is the proposer-duty Value cap.
+func TestEncodePhase1Bundle_RejectsOverlongValue(t *testing.T) {
+	b := &base.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value:  make([]byte, MaxValueSize+1),
+		SigmaV: []byte("s"),
+	}
+	_, err := EncodePhase1Bundle(b)
+	require.ErrorContains(t, err, "too long")
+}
+
+// TestEncodePhase1Bundle_RejectsOverlongSigmaV confirms the encoder rejects a
+// SigmaV larger than MaxSignatureSize (signatures are tighter-capped than
+// values).
+func TestEncodePhase1Bundle_RejectsOverlongSigmaV(t *testing.T) {
+	b := &base.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value:  []byte("V"),
+		SigmaV: make([]byte, MaxSignatureSize+1),
+	}
+	_, err := EncodePhase1Bundle(b)
+	require.ErrorContains(t, err, "too long")
+}
+
+// TestEncodeCommit_RejectsOverlongCiphertext confirms ciphertext fields cap
+// at MaxCiphertextSize (chained-IBE wrapped signatures are tighter-capped
+// than full Values).
+func TestEncodeCommit_RejectsOverlongCiphertext(t *testing.T) {
+	c := &base.Commit{
+		Layers: []base.EncryptedLayer{{
+			Value:      []byte("V"),
+			Ciphertext: make([]byte, MaxCiphertextSize+1),
+		}},
+	}
+	_, err := EncodeCommit(c)
+	require.ErrorContains(t, err, "too long")
+}
+
+// TestEncodeCommit_RejectsOverlongNRPartialSig confirms NR-partial-sig fields
+// cap at MaxSignatureSize.
+func TestEncodeCommit_RejectsOverlongNRPartialSig(t *testing.T) {
+	c := &base.Commit{
+		NRPartials: []base.NRPartial{{
+			Layer:      0,
+			PartialSig: make([]byte, MaxSignatureSize+1),
+		}},
+	}
+	_, err := EncodeCommit(c)
+	require.ErrorContains(t, err, "too long")
+}
+
+// TestEncodeCommit_RejectsOverlongWitnessSigma confirms witness SigmaV fields
+// cap at MaxSignatureSize.
+func TestEncodeCommit_RejectsOverlongWitnessSigma(t *testing.T) {
+	c := &base.Commit{
+		Witnesses: []base.LeaderSigmaWitness{{
+			Layer:  0,
+			Leader: 1,
+			SigmaV: make([]byte, MaxSignatureSize+1),
+		}},
+	}
+	_, err := EncodeCommit(c)
+	require.ErrorContains(t, err, "too long")
+}
+
+// TestEncodeCertificate_RejectsOverlongFields exercises both cert-field caps.
+func TestEncodeCertificate_RejectsOverlongFields(t *testing.T) {
+	t.Run("value", func(t *testing.T) {
+		c := &base.Certificate{
+			Value:     make([]byte, MaxValueSize+1),
+			Signature: []byte("s"),
+		}
+		_, err := EncodeCertificate(c)
+		require.ErrorContains(t, err, "too long")
+	})
+	t.Run("signature", func(t *testing.T) {
+		c := &base.Certificate{
+			Value:     []byte("V"),
+			Signature: make([]byte, MaxSignatureSize+1),
+		}
+		_, err := EncodeCertificate(c)
+		require.ErrorContains(t, err, "too long")
+	})
+}

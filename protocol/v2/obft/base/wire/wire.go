@@ -46,11 +46,46 @@ const (
 // certainly malformed/malicious.
 const MaxLayers = 32
 
-// MaxFieldSize caps individual length-prefixed fields (values, ciphertexts,
-// signatures). 16 MiB is far above realistic SSV proposer-duty values
-// (~1 KB blinded blocks, ~96 B signatures) but still safe against unbounded
-// allocation from a malformed message.
-const MaxFieldSize = 16 * 1024 * 1024
+// Per-field length caps on length-prefixed payloads. Each cap is tight to
+// the realistic size of its field type, with a healthy multiplicative
+// margin for future protocol evolution. The wire decoder rejects any field
+// length exceeding its cap before allocating the slice, bounding the
+// unbounded-allocation surface a malformed message can exercise.
+//
+// Choosing per-field bounds (rather than one global MaxFieldSize) tightens
+// the realistic upper bound on a Commit body's retained size — relevant
+// because a single byzantine's FIRST distinct Commit is deep-copied into
+// peerFirstCommit until Rule 3 fires on the second distinct emission, and
+// the protocol layer retains up to MaxRetainedPerOpLayer × n × layers of
+// onion entries during a slot.
+const (
+	// MaxValueSize caps proposer-duty candidate values (Phase1Bundle.Value,
+	// EncryptedLayer.Value, Certificate.Value). Real beacon-block-V3 with
+	// EIP-4844 blob commitments lands ~1–2 KB; future scaling (PeerDAS,
+	// larger blocks) may grow this. 1 MiB gives ~500× margin while still
+	// bounding total commit retention to single-digit MB per byzantine.
+	MaxValueSize = 1 * 1024 * 1024
+
+	// MaxSignatureSize caps BLS partial / aggregate signatures
+	// (Phase1Bundle.SigmaV, NRPartial.PartialSig, LeaderSigmaWitness.SigmaV,
+	// Certificate.Signature). Real BLS12-381 signatures are 96 B and
+	// partial-sig aggregates the same. 1 KiB is 10× margin against any
+	// conceivable future signature scheme variant.
+	MaxSignatureSize = 1 * 1024
+
+	// MaxCiphertextSize caps IBE-wrapped σ partials in commit-layer onions
+	// (EncryptedLayer.Ciphertext). Inner plaintext is a ~96 B BLS partial;
+	// chained-IBE wrapping at layer k applies k encryptions, each adding
+	// constant overhead (~300 B for current IBE schemes). At K ≤ MaxLayers
+	// the worst case is ≈ 96 + 32 × 300 ≈ 10 KiB; 64 KiB gives ~6× margin.
+	MaxCiphertextSize = 64 * 1024
+)
+
+// MaxFieldSize is the coarse upper bound covering any single length-prefixed
+// field — equal to MaxValueSize because Value is the largest field type.
+// Retained for backward compatibility with external test helpers that use
+// it as a sanity ceiling on the realistic field space.
+const MaxFieldSize = MaxValueSize
 
 // EncodePhase1Bundle serializes a Phase-1 bundle.
 //
@@ -74,10 +109,10 @@ func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	if b.Layer < 0 {
 		return nil, fmt.Errorf("wire: phase-1 bundle has negative layer %d", b.Layer)
 	}
-	if len(b.Value) > MaxFieldSize {
+	if len(b.Value) > MaxValueSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle value too long (%d)", len(b.Value))
 	}
-	if len(b.SigmaV) > MaxFieldSize {
+	if len(b.SigmaV) > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle SigmaV too long (%d)", len(b.SigmaV))
 	}
 
@@ -138,7 +173,7 @@ func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	if valueLen > MaxFieldSize {
+	if valueLen > MaxValueSize {
 		return nil, fmt.Errorf("wire: phase-1 value too long (%d)", valueLen)
 	}
 	value, err := r.bytes(int(valueLen), "value")
@@ -149,7 +184,7 @@ func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	if sigLen > MaxFieldSize {
+	if sigLen > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: phase-1 sigmaV too long (%d)", sigLen)
 	}
 	sig, err := r.bytes(int(sigLen), "sigmaV")
@@ -170,9 +205,10 @@ func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 }
 
 // MaxWitnesses caps the number of leader-σ_L^V witnesses a Commit can carry.
-// The retention bound is 2 V's per (layer, leader); with K ≤ 32 layers that's
-// ≤ 64 witnesses per honest commit. Cap at MaxLayers*2 = 64.
-const MaxWitnesses = MaxLayers * 2
+// Derived from MaxLayers × base.MaxRetainedPerOpLayer: an honest commit
+// witnesses up to MaxRetainedPerOpLayer distinct V's per (layer, leader)
+// across MaxLayers layers.
+const MaxWitnesses = MaxLayers * base.MaxRetainedPerOpLayer
 
 // EncodeCommit serializes a Commit (KindCommit payload).
 //
@@ -238,10 +274,10 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 	out = appendUint64(out, uint64(c.Height))
 	out = appendUint16(out, uint16(len(c.Layers))) //nolint:gosec // MaxLayers <= uint16 max
 	for i, el := range c.Layers {
-		if len(el.Value) > MaxFieldSize {
+		if len(el.Value) > MaxValueSize {
 			return nil, fmt.Errorf("wire: commit layer %d value too long (%d)", i, len(el.Value))
 		}
-		if len(el.Ciphertext) > MaxFieldSize {
+		if len(el.Ciphertext) > MaxCiphertextSize {
 			return nil, fmt.Errorf("wire: commit layer %d ciphertext too long (%d)", i, len(el.Ciphertext))
 		}
 		out = appendUint32(out, uint32(len(el.Value)))      //nolint:gosec // bounds-checked
@@ -254,7 +290,7 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 		if p.Layer < 0 {
 			return nil, fmt.Errorf("wire: commit NR partial has negative layer %d", p.Layer)
 		}
-		if len(p.PartialSig) > MaxFieldSize {
+		if len(p.PartialSig) > MaxSignatureSize {
 			return nil, fmt.Errorf("wire: commit NR partial sig too long (%d)", len(p.PartialSig))
 		}
 		out = appendUint32(out, uint32(p.Layer))           //nolint:gosec // bounds-checked
@@ -266,7 +302,7 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 		if w.Layer < 0 {
 			return nil, fmt.Errorf("wire: commit witness %d has negative layer %d", i, w.Layer)
 		}
-		if len(w.SigmaV) > MaxFieldSize {
+		if len(w.SigmaV) > MaxSignatureSize {
 			return nil, fmt.Errorf("wire: commit witness %d sigmaV too long (%d)", i, len(w.SigmaV))
 		}
 		out = appendUint32(out, uint32(w.Layer))       //nolint:gosec // bounds-checked
@@ -319,7 +355,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		if valueLen > MaxFieldSize {
+		if valueLen > MaxValueSize {
 			return nil, fmt.Errorf("wire: layer %d value too long (%d)", i, valueLen)
 		}
 		value, err := r.bytes(int(valueLen), fmt.Sprintf("layer %d value", i))
@@ -330,7 +366,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		if ctLen > MaxFieldSize {
+		if ctLen > MaxCiphertextSize {
 			return nil, fmt.Errorf("wire: layer %d ciphertext too long (%d)", i, ctLen)
 		}
 		ct, err := r.bytes(int(ctLen), fmt.Sprintf("layer %d ciphertext", i))
@@ -362,7 +398,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		if sigLen > MaxFieldSize {
+		if sigLen > MaxSignatureSize {
 			return nil, fmt.Errorf("wire: NR partial %d sig too long (%d)", i, sigLen)
 		}
 		sig, err := r.bytes(int(sigLen), fmt.Sprintf("NR partial %d sig", i))
@@ -402,7 +438,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		if sigLen > MaxFieldSize {
+		if sigLen > MaxSignatureSize {
 			return nil, fmt.Errorf("wire: witness %d sigmaV too long (%d)", i, sigLen)
 		}
 		sig, err := r.bytes(int(sigLen), fmt.Sprintf("witness %d sigmaV", i))
@@ -448,10 +484,10 @@ func EncodeCertificate(c *base.Certificate) ([]byte, error) {
 	if c == nil {
 		return nil, errors.New("wire: nil certificate")
 	}
-	if len(c.Value) > MaxFieldSize {
+	if len(c.Value) > MaxValueSize {
 		return nil, fmt.Errorf("wire: certificate value too long (%d)", len(c.Value))
 	}
-	if len(c.Signature) > MaxFieldSize {
+	if len(c.Signature) > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: certificate signature too long (%d)", len(c.Signature))
 	}
 
@@ -497,7 +533,7 @@ func DecodeCertificate(data []byte) (*base.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	if valueLen > MaxFieldSize {
+	if valueLen > MaxValueSize {
 		return nil, fmt.Errorf("wire: certificate value too long (%d)", valueLen)
 	}
 	value, err := r.bytes(int(valueLen), "value")
@@ -508,7 +544,7 @@ func DecodeCertificate(data []byte) (*base.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	if sigLen > MaxFieldSize {
+	if sigLen > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: certificate signature too long (%d)", sigLen)
 	}
 	sig, err := r.bytes(int(sigLen), "signature")

@@ -39,6 +39,17 @@ import (
 const EnvelopeVersionV1 = sharedwire.EnvelopeVersionV1
 
 // MessageKind discriminates the body of an OBFT wire envelope.
+//
+// Envelope kinds (this type) are independent of the inner-kind constants in
+// wire.go (innerKindPhase1Bundle=0x01, innerKindCommit=0x02,
+// innerKindCertificate=0x03) — the inner kind protects the bytes covered by
+// the outer SSV signature against type-confusion attacks, the envelope kind
+// only dispatches to the right body decoder at Unwrap time. Deliberately
+// kept independent so each layer can evolve without coordinated version
+// bumps. The envelope-kind value for KindCertificate is 0x04 (skipping 0x03)
+// because 0x03 was historically reserved here for a hypothetical future
+// kind; the inner-kind side reused 0x03 freely since the two namespaces
+// don't collide.
 type MessageKind byte
 
 const (
@@ -50,7 +61,8 @@ const (
 	// (NR-side) in a single message emitted at T_commit.
 	KindCommit MessageKind = 0x02
 	// KindCertificate indicates the body is an EncodeCertificate-encoded
-	// *base.Certificate.
+	// *base.Certificate. Value 0x04 (not 0x03) — see the MessageKind type
+	// comment for the historical reason this skips 0x03.
 	KindCertificate MessageKind = 0x04
 )
 
