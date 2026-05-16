@@ -508,8 +508,10 @@ func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
 	return r.stateDelta
 }
 
-// BuildOwnCommit builds the local operator's KindCommit at T_commit. Single
-// emission per slot per spec §Phase 2.
+// BuildOwnCommit builds the local operator's KindCommit. Single emission per
+// slot per spec §Phase 2. Per spec §Phase 2 emission-timing, the caller fires
+// this at T_emit = min(L_0-observed-and-validated event, T_commit fallback);
+// see L0ReadyCh for the early-emit trigger.
 func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) {
 	r, err := c.lookup(slot)
 	if err != nil {
@@ -521,6 +523,29 @@ func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) 
 		return nil, ErrNoActiveInstance
 	}
 	return r.instance.BuildOwnCommit()
+}
+
+// L0ReadyCh returns the slot's instance L_0-ready channel (closed when the
+// operator has enough information at L_0 to commit early per spec §Phase 2
+// emission-timing). Callers select on this against the T_commit fallback to
+// decide when to invoke BuildOwnCommit. Returns a pre-closed channel if the
+// slot has no active instance (so callers don't block forever on a stale
+// slot).
+func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
+	r, err := c.lookup(slot)
+	if err != nil {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	r.instanceMu.Lock()
+	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	return r.instance.L0ReadyCh()
 }
 
 // Resolve runs the Phase-3 reconstruction walk and returns the decided

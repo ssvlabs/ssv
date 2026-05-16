@@ -156,6 +156,9 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		// First retention.
 		i.retainedBundles[b.Layer][b.OperatorID] = []*retainedBundle{newEntry}
 	}
+	if b.Layer == 0 {
+		i.maybeSignalL0VerdictReady()
+	}
 	return nil
 }
 

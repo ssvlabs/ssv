@@ -106,13 +106,24 @@ func RunProposerSlot(
 		}(layer)
 	}
 
-	// Phase 2 begins at TCommit. Each operator emits a single KindCommit
-	// carrying their per-layer σ partials and NR partials.
+	// Phase 2 emit: per spec §Phase 2 emission-timing, fire at T_emit =
+	// min(L_0-observed-and-validated, T_commit fallback). Healthy mesh hits
+	// the early trigger ~1·BTT before T_commit; silent-L_0 falls back to
+	// the T_commit deadline. Either path emits the operator's single
+	// KindCommit carrying per-layer σ/NR partials based on observations at
+	// emit time.
 	tCommit := slotStart.Add(cfg.TCommit)
-	if !sleepUntil(ctx, tCommit) {
+	l0Ready := ctrl.L0ReadyCh(slot)
+	tCommitTimer := time.NewTimer(time.Until(tCommit))
+	select {
+	case <-l0Ready:
+	case <-tCommitTimer.C:
+	case <-ctx.Done():
+		tCommitTimer.Stop()
 		fetchWG.Wait()
 		return ctx.Err()
 	}
+	tCommitTimer.Stop()
 	if _, err := sched.BuildAndBroadcastCommit(ctx, slot); err != nil {
 		fetchWG.Wait()
 		return fmt.Errorf("obft runner: phase-2 commit broadcast: %w", err)

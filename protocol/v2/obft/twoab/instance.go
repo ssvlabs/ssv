@@ -155,6 +155,20 @@ type Instance struct {
 	evidenceObserver EvidenceObserver
 	evidenceObserved map[evidenceObservedKey]bool
 
+	// l0VerdictReadyCh is closed when the operator can determine their L_0
+	// Phase-2a verdict — uniquely-retained host-validated V, OR host
+	// not-valid on the unique retained V, OR ≥ 2 retained V's (equivocation
+	// observed forcing NR), OR for an L_0 leader the moment they've built
+	// their own L_0 bundle. Closed at most once per slot. Phase-2a verdict
+	// emit selects on this against the T_verdict_max-ε_proc fallback.
+	l0VerdictReadyCh chan struct{}
+
+	// l0SigmaEligibilityCh is closed when the operator's local verdict-pool
+	// at L_0 has ≥ qV σV verdicts for some V (i.e., the convergence rule
+	// will yield a stable σ output at L_0). Closed at most once per slot.
+	// Phase-2b commit emit selects on this against the T_commit fallback.
+	l0SigmaEligibilityCh chan struct{}
+
 	ended bool
 }
 
@@ -274,9 +288,128 @@ func NewInstance(
 		rule3LeaderFired:   make(map[int]map[OperatorID]bool, K),
 		rule4Fired:         make(map[int]map[OperatorID]bool, K),
 		rule5Fired:         make(map[int]map[OperatorID]bool, K),
-		rule6bFired:        make(map[int]map[OperatorID]bool, K),
-		evidenceObserved:   make(map[evidenceObservedKey]bool),
+		rule6bFired:          make(map[int]map[OperatorID]bool, K),
+		evidenceObserved:     make(map[evidenceObservedKey]bool),
+		l0VerdictReadyCh:     make(chan struct{}),
+		l0SigmaEligibilityCh: make(chan struct{}),
 	}, nil
+}
+
+// L0VerdictReadyCh returns a channel closed when the operator can determine
+// their L_0 Phase-2a verdict per spec §Phase 2a / Verdict broadcast timing:
+//   - uniquely-retained Phase-1 bundle at L_0 (non-auth-only) AND host has
+//     returned a valid/not-valid verdict on it, OR
+//   - ≥ 2 distinct V's retained at L_0 (leader equivocation → NR), OR
+//   - operator is the L_0 leader and has built their own L_0 bundle.
+//
+// One-shot per slot. Callers select on this against the T_verdict_max-ε_proc
+// fallback ticker.
+func (i *Instance) L0VerdictReadyCh() <-chan struct{} { return i.l0VerdictReadyCh }
+
+// L0SigmaEligibilityCh returns a channel closed when the operator's local
+// verdict-pool at L_0 has ≥ qV σV verdicts for some V (the convergence rule
+// will yield a stable σ output at L_0). One-shot per slot. Callers select on
+// this against the T_commit+ε_proc fallback ticker for Phase-2b emit timing.
+func (i *Instance) L0SigmaEligibilityCh() <-chan struct{} { return i.l0SigmaEligibilityCh }
+
+// l0VerdictReady reports whether the operator's L_0 verdict is determinable.
+//
+// Unlike OBFT, 2abOBFT has no Phase-1 σ_V (Variant C) — the L_0 leader's
+// own-bundle case is handled via the standard retention+host-validity path:
+// the runner calls ObservePhase1Bundle on the leader's own bundle (which
+// retains it) and ApplyHostValidity on the leader's V (which records the
+// host verdict). Both fire maybeSignalL0VerdictReady; the predicate returns
+// true once both events have landed.
+func (i *Instance) l0VerdictReady() bool {
+	const layer = 0
+	leaderMap := i.retainedBundles[layer]
+	if len(leaderMap) == 0 {
+		return false
+	}
+	expectedLeader := i.cfg.Layers[layer].Leader
+	retained := leaderMap[expectedLeader]
+	if len(retained) >= 2 {
+		// Equivocation observed → forced NR per cross-phase exclusivity.
+		return true
+	}
+	if len(retained) != 1 {
+		return false
+	}
+	// Auth-only entries don't drive the operator's own verdict per spec
+	// §Phase 1 / "auth-only retention".
+	if retained[0].AuthOnly {
+		return false
+	}
+	verdicts := i.hostVerdict[layer]
+	if verdicts == nil {
+		return false
+	}
+	root := ValueRoot(retained[0].Bundle.Value)
+	_, recorded := verdicts[string(root[:])]
+	return recorded
+}
+
+// l0SigmaEligibilityReached reports whether the operator's local verdict-pool
+// at L_0 has ≥ qV `σV` verdicts on some single V (so the convergence rule
+// will yield a stable σ output at L_0 even without further verdict arrivals).
+func (i *Instance) l0SigmaEligibilityReached() bool {
+	const layer = 0
+	peer := i.peerVerdicts[layer]
+	own := i.ownVerdict[layer]
+	if len(peer) == 0 && own == nil {
+		return false
+	}
+	// Tally σV verdicts per value_root. Exclude operators who have been
+	// flagged as verdict-equivocators (treat-equivocator-as-null SHOULD
+	// rule, spec §Phase 2a).
+	equivocators := i.verdictEquivocator[layer]
+	counts := make(map[[32]byte]int)
+	if own != nil && own.Kind == VerdictSigmaV {
+		counts[own.ValueRoot]++
+	}
+	for op, v := range peer {
+		if equivocators[op] {
+			continue
+		}
+		if v.Kind != VerdictSigmaV {
+			continue
+		}
+		counts[v.ValueRoot]++
+	}
+	qV := 2*i.cfg.F + 1
+	for _, c := range counts {
+		if c >= qV {
+			return true
+		}
+	}
+	return false
+}
+
+// maybeSignalL0VerdictReady closes l0VerdictReadyCh if newly satisfied.
+// Safe to call repeatedly; subsequent calls are no-ops. Caller holds the
+// instance mutex.
+func (i *Instance) maybeSignalL0VerdictReady() {
+	select {
+	case <-i.l0VerdictReadyCh:
+		return
+	default:
+	}
+	if i.l0VerdictReady() {
+		close(i.l0VerdictReadyCh)
+	}
+}
+
+// maybeSignalL0SigmaEligibility closes l0SigmaEligibilityCh if newly
+// satisfied. Safe to call repeatedly. Caller holds the instance mutex.
+func (i *Instance) maybeSignalL0SigmaEligibility() {
+	select {
+	case <-i.l0SigmaEligibilityCh:
+		return
+	default:
+	}
+	if i.l0SigmaEligibilityReached() {
+		close(i.l0SigmaEligibilityCh)
+	}
 }
 
 // Config returns the instance's config (read-only).

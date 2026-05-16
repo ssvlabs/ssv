@@ -86,6 +86,10 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 		i.bundles[layer][i.ownOperatorID] = []*Phase1Bundle{deepCopyBundle(bundle)}
 	}
 
+	if layer == 0 {
+		i.maybeSignalL0Ready()
+	}
+
 	return bundle, nil
 }
 
@@ -229,6 +233,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	//     V differs from the retained bundle V — see reevaluateL0Sigmas.
 	if b.Layer == 0 {
 		i.reevaluateL0Sigmas()
+		i.maybeSignalL0Ready()
 	}
 
 	// Retroactive deeper-layer (k > 0) Rule 3 leader-vs-bundle cross-V check:
@@ -432,6 +437,9 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		return nil
 	}
 	i.hostVerdict[layer][key] = valid
+	if layer == 0 {
+		i.maybeSignalL0Ready()
+	}
 	return nil
 }
 

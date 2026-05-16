@@ -27,6 +27,9 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	}
 	root := ValueRoot(value)
 	i.hostVerdict[layer][string(root[:])] = valid
+	if layer == 0 {
+		i.maybeSignalL0VerdictReady()
+	}
 	return nil
 }
 
@@ -135,6 +138,9 @@ func (i *Instance) BuildVerdict(layer int) (*Verdict, error) {
 		ValueRoot:  root,
 	}
 	i.ownVerdict[layer] = v
+	if layer == 0 {
+		i.maybeSignalL0SigmaEligibility()
+	}
 	return v, nil
 }
 
@@ -182,6 +188,9 @@ func (i *Instance) ObserveVerdict(v *Verdict) error {
 	if !hasExisting {
 		// First-observed verdict from this op at this layer.
 		i.peerVerdicts[v.Layer][v.OperatorID] = deepCopyVerdict(v)
+		if v.Layer == 0 {
+			i.maybeSignalL0SigmaEligibility()
+		}
 		return nil
 	}
 

@@ -156,6 +156,13 @@ type Instance struct {
 	// One entry per (layer, V); may be absent if host hasn't been asked.
 	hostVerdict map[int]map[string]bool
 
+	// l0ReadyCh is closed when the operator has enough information at L_0 to
+	// commit early (per spec §Phase 2 emission-timing): a uniquely-retained
+	// host-validated V, OR a host not-valid verdict on the unique retained V,
+	// OR leader equivocation observed (≥ 2 distinct V's). Closed at most once
+	// per slot. Callers select on this against the T_commit fallback ticker.
+	l0ReadyCh chan struct{}
+
 	// peerOnions[layer][operator_id] = the σ-side onion entry seen from
 	// this operator at this layer (extracted from their KindCommit). A
 	// second distinct entry from the same (operator, layer) is cross-onion
@@ -423,7 +430,66 @@ func NewInstance(
 		rule2Fired:           make(map[int]map[OperatorID]bool, K),
 		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
 		evidenceObserved:     make(map[evidenceObservedKey]bool),
+		l0ReadyCh:            make(chan struct{}),
 	}, nil
+}
+
+// L0ReadyCh returns a channel closed when the operator has enough information
+// at L_0 to commit early per spec §Phase 2 emission-timing. Becomes ready when:
+//   - a uniquely-retained Phase-1 bundle at L_0 exists AND host has returned a
+//     valid/not-valid verdict on it, OR
+//   - ≥ 2 distinct V's are retained at L_0 (leader equivocation observed).
+//
+// The channel is closed at most once per slot. If L_0 never becomes ready
+// (silent leader or grossly-late bundle), the channel stays open and the
+// caller's T_commit ticker fires the fallback emit.
+func (i *Instance) L0ReadyCh() <-chan struct{} { return i.l0ReadyCh }
+
+// l0DecisionReady reports whether L_0 has a stable σ/NR decision available
+// (predicate underlying L0ReadyCh).
+func (i *Instance) l0DecisionReady() bool {
+	const layer = 0
+	// L_0 leader path: BuildPhase1Bundle emits the leader's Phase-1 σ_V which
+	// counts as their σ-side commitment at this layer (spec OBFT.md §Phase 2
+	// "The layer-k leader's Phase-1 σ_V counts as their σ-side commitment").
+	// sigmaLocked[0] is set on a successful transitionToSigma during build.
+	if i.sigmaLocked[layer] {
+		return true
+	}
+	// Non-leader path: depends on whether a Phase-1 bundle at L_0 has been
+	// observed and host-validated, or whether equivocation has been observed.
+	leaderMap := i.bundles[layer]
+	if len(leaderMap) == 0 {
+		return false
+	}
+	expectedLeader := i.cfg.Layers[layer].Leader
+	retained := leaderMap[expectedLeader]
+	if len(retained) >= 2 {
+		// Equivocation observed → forced NR per cross-phase exclusivity.
+		return true
+	}
+	if len(retained) != 1 {
+		return false
+	}
+	verdicts := i.hostVerdict[layer]
+	if verdicts == nil {
+		return false
+	}
+	_, recorded := verdicts[valueRootKey(retained[0].Value)]
+	return recorded
+}
+
+// maybeSignalL0Ready closes l0ReadyCh if the L_0 decision has just become
+// available. Safe to call repeatedly; subsequent calls are no-ops.
+func (i *Instance) maybeSignalL0Ready() {
+	select {
+	case <-i.l0ReadyCh:
+		return
+	default:
+	}
+	if i.l0DecisionReady() {
+		close(i.l0ReadyCh)
+	}
 }
 
 // Config returns the instance's config (read-only).
