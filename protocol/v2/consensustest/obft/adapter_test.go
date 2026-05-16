@@ -15,12 +15,12 @@ import (
 // TestMeshArrival_NoRefloodToPublisher pins the publisher-exclusion
 // contract: real go-libp2p-pubsub's Publish skips both the relay sender
 // and msg.GetFrom() (the original publisher) when forwarding through
-// the mesh. After Phase A of CONSENSUSTEST-MESH-LAZY-PUSH-PLAN.md, the
-// sim mirrors that — so no MeshArrival in the trace should be scheduled
-// with `to == publisher`, even on multi-hop reflood paths that loop
-// back toward the publisher's neighborhood. (The dedup cache used to
-// mask the bug by dropping the loop-back arrival at handle time, so a
-// scheduling-side assertion is the right level.)
+// the mesh — the sim mirrors that, so no MeshArrival in the trace
+// should be scheduled with `to == publisher`, even on multi-hop
+// reflood paths that loop back toward the publisher's neighborhood.
+// (The dedup cache used to mask the bug by dropping the loop-back
+// arrival at handle time, so a scheduling-side assertion is the right
+// level.)
 func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Delivery = ct.DeliveryMesh

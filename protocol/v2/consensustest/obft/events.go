@@ -144,8 +144,7 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 // ---- evtMeshHeartbeat / evtMeshIHave / evtMeshIWant --------------------
 //
 // Gossipsub lazy-push backstop layered on top of the eager-mesh
-// transport. See docs/CONSENSUSTEST-MESH-LAZY-PUSH-PLAN.md (Phase B)
-// for the model; in brief:
+// transport:
 //
 //   - Every cfg.Mesh.Gossip.HeartbeatInterval, each mesh node ticks.
 //     It rotates its mcache (evicting the oldest slot) and emits
