@@ -693,7 +693,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Round-change recovery | No — single-round design. Late re-flood within Phase-2a's absorption window is the only within-slot partition-recovery mechanism. |
 | Partial-synchrony absorption window | `Δ_2a + 1 BTT` (single round) — ≈ 600ms at Config A recommended. |
 | Healthy-path latency (post-`T_commit`) | ~450ms at Config A recommended (Δ_2b=2 BTT=400ms + Δ_3=ε_3=50ms). Post-`T_commit` here is "post-σ-or-NR commit"; Phase 2a is pre-`T_commit`. Identical to OBFT's post-`T_commit` budget under aligned semantics. |
-| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +600ms (= 3 BTT) at recommended sizing, end-to-end V_0-broadcast to consensus-complete: extra Phase 2a window 400ms + extra broadcast slack 200ms (2 BTT vs OBFT's `B_0 = 1 BTT`); Δ_3 identical to OBFT's at ε_3. Post-`T_commit` budget unchanged (both 450ms). |
+| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +400ms (= 2 BTT = Δ_2a) at recommended sizing, end-to-end V_0-broadcast to consensus-complete: extra Phase 2a window 400ms. Both protocols share the same reflood-aware B_k formula `(k+2)·BTT + RefloodDelay`, so the per-layer broadcast slack is identical at the same RefloodDelay setting; 2abOBFT's extra cost is purely the dedicated Phase-2a re-flood window. Δ_3 identical to OBFT's at ε_3. Post-`T_commit` budget unchanged (both 450ms). |
 | EKM complexity | Lowest in the OBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
 
 ## Application: SSV Ethereum proposer duty
@@ -716,7 +716,7 @@ For an SSV cluster proposing an Ethereum block, the SSV adapter's default 2abOBF
 | `V_{L_k}` for k ≥ 1 | safe early-fetched blocks from vanilla beacon-node payloads, refreshed on head changes |
 | `T_verdict_start` | Phase-1 / Phase-2a boundary — anchor: ≈ `slot_start + 1.60s` for the configurations below. Phase 2a verdict-broadcast window begins here. |
 | `T_commit` | σ-or-NR commit point (start of Phase 2b — the cryptographic point of no return) — anchor: ≈ `slot_start + 2.00s`. Aligned semantically with OBFT/OBFTR/QBFT `T_commit`. |
-| `T_broadcast_max_k` | per-layer leader broadcast target — `max(BFT_start, T_verdict_start − B_k)`; deeper layers broadcast earlier (wider `B_k`). Default K=4: B_0=1·BTT, B_1=1.5·BTT, B_2=2.5·BTT, B_3=T_verdict_start. Target, not hard runtime cap — see §Setting |
+| `T_broadcast_max_k` | per-layer leader broadcast target — `max(BFT_start, T_verdict_start − B_k)`; deeper layers broadcast earlier (wider `B_k`). Default K=4 (reflood-aware): `B_k_shallow = (k+2)·BTT + RefloodDelay`, `B_3 = T_verdict_start`. At Config A with default RD=700ms: B = [1100, 1300, 1500, T_verdict_start]ms. At RD=0 (opt-out): [400, 600, 800, T_verdict_start]ms. Target, not hard runtime cap — see §Setting |
 | `T_accept_max` | receiver acceptance horizon — `T_commit − 1 BTT`; bundles first-observed past this are auth-only-retained |
 | `T_verdict_max` | verdict broadcast horizon — coincident with `T_accept_max` (= `T_commit − 1 BTT`) |
 | `T_relay_cutoff` | slot's hard relay-submission deadline (`slot_start + 4.0s` for SSV proposer); reconstruction must complete with `T_submit ≈ 100ms` of slack to land (matches OBFT.md's `header_submit_headroom`) |
@@ -731,8 +731,8 @@ Common parameters: **P99 = 150ms (cluster gossipsub P99/P999), δ = 50ms, n = 4,
 
 | Window | Length | End time | Notes |
 |---|---|---|---|
-| Phase 1 fetch (per-layer effective) | varies | per-layer | Per-layer staggered broadcast targets `T_broadcast_max_k = max(BFT_start, T_verdict_start − B_k)`. Default K=4 schedule: L_3 = 0 (B_3 = T_verdict_start), L_2 = 1.10s (T_verdict_start − 2.5·BTT), L_1 = 1.30s, L_0 = 1.40s |
-| Phase-1 propagation slack | 200ms | slot_start + 1.60s = T_verdict_start | L_0's bundle (broadcast latest at 1.40s) propagates to all honest within `1 BTT` |
+| Phase 1 fetch (per-layer effective) | varies | per-layer | Per-layer staggered broadcast targets `T_broadcast_max_k = max(BFT_start, T_verdict_start − B_k)`. Default K=4 schedule at RD=700ms: L_3 = 0 (B_3 = T_verdict_start), L_2 = 0.10s (T_verdict_start − (4·BTT + RD) = 1.60s − 1.50s), L_1 = 0.30s, L_0 = 0.50s. At RD=0 (opt-out): L_3 = 0, L_2 = 0.80s, L_1 = 1.00s, L_0 = 1.20s. |
+| Phase-1 propagation slack | 200ms | slot_start + 1.60s = T_verdict_start | L_0's bundle (broadcast latest at 0.50s under default RD, 1.20s at RD=0) propagates to all honest within `1 BTT` plus the RD-sized reflood headroom |
 | Phase 2a | 400ms | slot_start + 2.00s = T_commit | `Δ_2a = 2 BTT`; verdict broadcast horizon = `T_commit − 1 BTT = 1.80s` (worst-case fallback). Under L_0-trigger early-emit (see [§Phase 2a / Verdict broadcast timing](#phase-2a)), healthy-mesh `T_emit_verdict ≈ T_verdict_start + ε_proc` — verdicts on the wire ~`1·BTT` earlier than the fallback. Late-bundle absorption via Phase-2a re-flood continues for any mesh-flaky operator that hits the fallback. |
 | Phase 2b | 400ms | slot_start + 2.40s | `Δ_2b = 2 BTT` (worst-case propagation budget for `T_commit`-fallback emit). Healthy-mesh `T_emit_2b ≈ T_commit − ε_proc` (operators emit on L_0 σ-eligibility reached locally), so σ-quorum forms ~`1·BTT` earlier than this row's worst-case bound. See [§Phase 2b](#phase-2b). |
 | Phase 3 | 50ms | slot_start + 2.45s | `Δ_3 = ε_3 = 50ms`; purely local reconstruction processing |
@@ -814,7 +814,7 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Operator commitment states | σ, NR, NV (3 states) | σ, NR, NV (3 states) |
 | σ-commit timing | Phase 1 (leader) or Phase 2 (others, at `T_commit`) | Phase 2b (uniform across all operators, after Phase-2a observation) |
 | Convergence mechanism | Per-operator local view (each operator commits at `T_commit` based on retained V's) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
-| Healthy-path latency (post-`T_commit`, recommended sizing) | ~450ms | ~450ms (Δ_2b + Δ_3 = 400 + 50 — identical to OBFT under aligned semantics). Phase 2a is pre-`T_commit`; combined with 2abOBFT's wider 2 BTT broadcast slack (vs OBFT's `B_0 = 1 BTT`), V_0 broadcasts 600ms earlier than in OBFT for the same `T_commit`. |
+| Healthy-path latency (post-`T_commit`, recommended sizing) | ~450ms | ~450ms (Δ_2b + Δ_3 = 400 + 50 — identical to OBFT under aligned semantics). Phase 2a is pre-`T_commit`; both protocols use the same reflood-aware B_k formula at the same RefloodDelay setting, so 2abOBFT's V_0 broadcasts exactly Δ_2a = 400ms earlier than OBFT V_0 for the same `T_commit` (cost of the Phase-2a window). |
 | Marginal h_V_honest=2 + byz silent | Slot misses (σ-pool short, NR-pool short) | Falls through to L_1 ✓ |
 | Equivocation 1-1-1 split | Slot misses | Falls through to L_1 ✓ |
 | Equivocation 2-1, byz cooperates | Succeeds at L_0 | Succeeds at L_0 (tie) |
