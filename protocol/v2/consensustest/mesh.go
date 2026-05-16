@@ -3,6 +3,8 @@ package consensustest
 import (
 	"fmt"
 	mrand "math/rand"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -383,4 +385,48 @@ func (m *MeshTopology) RecordMeshHop(b *BandwidthReport, from, to MeshNode, kind
 	default:
 		b.EmissionRelayToRelay(kind, layer, bytes)
 	}
+}
+
+// FormatMeshArrival returns the canonical "MeshArrival[...]" string
+// used by every adapter's evtMeshArrival.describe(). Single-sourcing
+// the format here keeps the producer side and ParseMeshArrivalTrace's
+// regex from drifting; any layout change is one edit + the regex
+// update right below.
+func FormatMeshArrival(from, to, publisher MeshNode, msgID MsgID, kind MsgKind) string {
+	return fmt.Sprintf("MeshArrival[from=%d to=%d publisher=%d msg=%d kind=%s]",
+		from, to, publisher, msgID, kind)
+}
+
+// meshArrivalRE matches the FormatMeshArrival output. Internal-by-
+// convention API for trace-consuming tests; kept package-private so
+// callers go through ParseMeshArrivalTrace instead of duplicating the
+// regex.
+var meshArrivalRE = regexp.MustCompile(
+	`^MeshArrival\[from=(\d+) to=(\d+) publisher=(\d+) msg=\d+ kind=\S+\]$`,
+)
+
+// ParseMeshArrivalTrace extracts (from, to, publisher) from one trace
+// entry's Event string. Returns ok=false if `entry` isn't a MeshArrival
+// line, so callers can scan a whole trace by filtering on the ok bool:
+//
+//	for _, e := range out.Trace {
+//	    from, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
+//	    if !ok { continue }
+//	    // ...
+//	}
+//
+// Used by the per-adapter TestMeshArrival_NoRefloodToPublisher
+// regression tests, which assert that no scheduled arrival has
+// to == publisher (the gossipsub publisher-exclusion contract).
+func ParseMeshArrivalTrace(entry string) (from, to, publisher MeshNode, ok bool) {
+	m := meshArrivalRE.FindStringSubmatch(entry)
+	if m == nil {
+		return 0, 0, 0, false
+	}
+	// Each capture group is `(\d+)`, so Atoi never fails on a match;
+	// the underscored errors are unreachable.
+	fromI, _ := strconv.Atoi(m[1])
+	toI, _ := strconv.Atoi(m[2])
+	pubI, _ := strconv.Atoi(m[3])
+	return MeshNode(fromI), MeshNode(toI), MeshNode(pubI), true
 }

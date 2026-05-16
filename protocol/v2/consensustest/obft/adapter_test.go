@@ -11,6 +11,36 @@ import (
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
 )
 
+// TestMeshArrival_NoRefloodToPublisher pins the publisher-exclusion
+// contract: real go-libp2p-pubsub's Publish skips both the relay sender
+// and msg.GetFrom() (the original publisher) when forwarding through
+// the mesh. After Phase A of CONSENSUSTEST-MESH-LAZY-PUSH-PLAN.md, the
+// sim mirrors that — so no MeshArrival in the trace should be scheduled
+// with `to == publisher`, even on multi-hop reflood paths that loop
+// back toward the publisher's neighborhood. (The dedup cache used to
+// mask the bug by dropping the loop-back arrival at handle time, so a
+// scheduling-side assertion is the right level.)
+func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Delivery = ct.DeliveryMesh
+	cfg.TraceEnabled = true
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "mesh-mode healthy should decide")
+
+	var checked int
+	for _, e := range out.Trace {
+		_, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
+		if !ok {
+			continue
+		}
+		require.NotEqualf(t, publisher, to,
+			"mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
+		checked++
+	}
+	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+}
+
 // TestMeshBandwidth_NoPhantomRelayOperator — in DeliveryMesh mode the
 // cluster's PerOperatorIn metric must not accumulate any bytes against
 // OperatorID(0). The sentinel-0 receiver was previously created by

@@ -10,6 +10,41 @@ import (
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
 )
 
+// TestMeshArrival_NoRefloodToPublisher mirrors the OBFT regression
+// test. See its docstring for the design rationale.
+func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
+	btt := 200 * time.Millisecond
+	cfg := ct.SimConfig{
+		N:            4,
+		Operators:    ct.MakeOperators(4),
+		SlotDuration: 12 * time.Second,
+		RelayCutoff:  4 * time.Second,
+		BTT:          btt,
+		Byz:          ct.ByzPattern{Kind: ct.ByzNone},
+		Seed:         1,
+		Delivery:     ct.DeliveryMesh,
+		Mesh: ct.MeshConfig{
+			HopDelay: ct.LogNormalDelay{Median: btt / 3, Sigma: 0.3},
+		},
+		TraceEnabled: true,
+	}
+	out, err := qbftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "mesh-mode healthy should decide")
+
+	var checked int
+	for _, e := range out.Trace {
+		_, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
+		if !ok {
+			continue
+		}
+		require.NotEqualf(t, publisher, to,
+			"mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
+		checked++
+	}
+	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+}
+
 // TestAdapter_PostConsensusQuorumMiss — Phase C regression test: at
 // n=4 with f+1=2 slow receivers (op2, op3 at 3·BTT inbound delay),
 // consensus on the fast subset (op1, op4) completes but the cluster

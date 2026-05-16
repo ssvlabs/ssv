@@ -3,6 +3,7 @@ package psigs
 import (
 	"container/heap"
 	mrand "math/rand"
+	"slices"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -120,4 +121,70 @@ func (s *sim) outcome() rawOutcome {
 		out.perOp[op] = o
 	}
 	return out
+}
+
+// ---- emit helpers: select Direct or Mesh per cfg.Mesh -----------------
+
+// emitToAll routes a single-broadcast message from `from` to every other
+// op in the cluster, honoring byz delivery / delay overrides. Transport:
+//   - cfg.Mesh == nil (DeliveryDirect): per-recipient fanout against
+//     cfg.Network with per-(from, to) byz checks.
+//   - cfg.Mesh != nil (DeliveryMesh): publish to `from`'s mesh neighbors
+//     and let evtMeshArrival re-flood downstream.
+func (s *sim) emitToAll(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, build func(to ct.OperatorID) event) {
+	if s.mesh != nil {
+		s.emitMesh(from, kind, bytes, extraDelay, s.operators, build)
+		return
+	}
+	s.emitDirect(from, kind, bytes, extraDelay, s.operators, build)
+}
+
+func (s *sim) emitDirect(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+	for _, to := range recipients {
+		if to == from {
+			continue
+		}
+		if !s.cfg.Byz.AllowDelivery(from, to, kind) {
+			continue
+		}
+		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, kind)
+		if delay < 0 {
+			delay = s.cfg.Network.Delay(s.rng, from, to, kind)
+		}
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			s.cfg.Bandwidth.Emission(from, to, kind, -1, bytes)
+		}
+		s.schedule(s.now+delay+extraDelay, build(to))
+	}
+}
+
+func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+	mesh := s.mesh
+	fromNode := mesh.NodeForOperator(from)
+	id := mesh.NewMsgID()
+	mesh.MarkSeen(fromNode, id)
+	fromEP := mesh.EndpointFor(fromNode)
+	for _, neighbor := range mesh.Neighbors(fromNode) {
+		isProto := mesh.IsProtocol(neighbor)
+		if isProto {
+			toOp := mesh.OperatorForNode(neighbor)
+			if !slices.Contains(recipients, toOp) {
+				continue
+			}
+			if !s.cfg.Byz.AllowDelivery(from, toOp, kind) {
+				continue
+			}
+		}
+		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
+		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, -1, bytes)
+		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+			from:      fromNode,
+			to:        neighbor,
+			publisher: fromNode,
+			msgID:     id,
+			kind:      kind,
+			bytes:     bytes,
+			builder:   build,
+		})
+	}
 }

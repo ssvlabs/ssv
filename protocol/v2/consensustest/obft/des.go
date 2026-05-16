@@ -331,13 +331,14 @@ func (s *sim) emitMesh(from obftbase.OperatorID, kind ct.MsgKind, layer int, byt
 		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, layer, bytes)
 		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
-			from:    fromNode,
-			to:      neighbor,
-			msgID:   id,
-			kind:    kind,
-			layer:   layer,
-			bytes:   bytes,
-			builder: build,
+			from:      fromNode,
+			to:        neighbor,
+			publisher: fromNode,
+			msgID:     id,
+			kind:      kind,
+			layer:     layer,
+			bytes:     bytes,
+			builder:   build,
 		})
 	}
 }

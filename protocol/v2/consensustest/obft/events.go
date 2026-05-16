@@ -63,18 +63,24 @@ var _ heap.Interface = (*eventQueue)(nil)
 // the message pays the clone cost. Layer / bytes are carried through
 // for future per-hop bandwidth accounting; today's accounting records
 // outbound at publish (in emitMesh) and at each forward (here).
+//
+// publisher is the MeshNode that originally emitted the message and is
+// preserved across every hop. The forward loop skips both the immediate
+// sender and the publisher, matching go-libp2p-pubsub's Publish (which
+// excludes msg.GetFrom() — the original publisher — in addition to the
+// relay sender).
 type evtMeshArrival struct {
-	from, to ct.MeshNode
-	msgID    ct.MsgID
-	kind     ct.MsgKind
-	layer    int
-	bytes    int64
-	builder  func(to obftbase.OperatorID) event
+	from, to  ct.MeshNode
+	publisher ct.MeshNode
+	msgID     ct.MsgID
+	kind      ct.MsgKind
+	layer     int
+	bytes     int64
+	builder   func(to obftbase.OperatorID) event
 }
 
 func (e *evtMeshArrival) describe() string {
-	return fmt.Sprintf("MeshArrival[from=%d to=%d msg=%d kind=%s]",
-		e.from, e.to, e.msgID, e.kind)
+	return ct.FormatMeshArrival(e.from, e.to, e.publisher, e.msgID, e.kind)
 }
 
 func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
@@ -97,11 +103,14 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 			ev:   e.builder(recipientOp),
 		})
 	}
-	// Forward to every other mesh neighbor (skip the sender — basic
-	// loop prevention; the dedup cache catches longer cycles).
+	// Forward to every other mesh neighbor, skipping (a) the immediate
+	// sender — basic loop prevention; and (b) the original publisher —
+	// matches go-libp2p-pubsub's Publish, which excludes msg.GetFrom()
+	// even when the relay sender differs. The dedup cache catches any
+	// remaining cycles.
 	fromEP := mesh.EndpointFor(e.to)
 	for _, neighbor := range mesh.Neighbors(e.to) {
-		if neighbor == e.from {
+		if neighbor == e.from || neighbor == e.publisher {
 			continue
 		}
 		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), e.kind)
@@ -114,13 +123,14 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 		out = append(out, scheduledEvent{
 			when: s.now + mesh.ValidateDelay() + delay,
 			ev: &evtMeshArrival{
-				from:    e.to,
-				to:      neighbor,
-				msgID:   e.msgID,
-				kind:    e.kind,
-				layer:   e.layer,
-				bytes:   e.bytes,
-				builder: e.builder,
+				from:      e.to,
+				to:        neighbor,
+				publisher: e.publisher,
+				msgID:     e.msgID,
+				kind:      e.kind,
+				layer:     e.layer,
+				bytes:     e.bytes,
+				builder:   e.builder,
 			},
 		})
 	}

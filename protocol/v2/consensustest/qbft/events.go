@@ -57,22 +57,23 @@ var _ heap.Interface = (*eventQueue)(nil)
 
 // evtMeshArrival mirrors the OBFT and 2abOBFT adapters' mesh delivery
 // event. See protocol/v2/consensustest/obft/events.go evtMeshArrival for
-// the design rationale. QBFT-specific note: the builder constructs an
-// evtMessageArrival; the self-loopback path (zero-delay delivery to the
-// publisher's own container) is handled in Broadcast directly and does
-// not flow through mesh.
+// the design rationale (including the publisher-skip in the forward
+// loop). QBFT-specific note: the builder constructs an evtMessageArrival;
+// the self-loopback path (zero-delay delivery to the publisher's own
+// container) is handled in Broadcast directly and does not flow through
+// mesh.
 type evtMeshArrival struct {
-	from, to ct.MeshNode
-	msgID    ct.MsgID
-	kind     ct.MsgKind
-	round    int
-	bytes    int64
-	builder  func(to ct.OperatorID) event
+	from, to  ct.MeshNode
+	publisher ct.MeshNode
+	msgID     ct.MsgID
+	kind      ct.MsgKind
+	round     int
+	bytes     int64
+	builder   func(to ct.OperatorID) event
 }
 
 func (e *evtMeshArrival) describe() string {
-	return fmt.Sprintf("MeshArrival[from=%d to=%d msg=%d kind=%s]",
-		e.from, e.to, e.msgID, e.kind)
+	return ct.FormatMeshArrival(e.from, e.to, e.publisher, e.msgID, e.kind)
 }
 
 func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
@@ -90,7 +91,7 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 	}
 	fromEP := mesh.EndpointFor(e.to)
 	for _, neighbor := range mesh.Neighbors(e.to) {
-		if neighbor == e.from {
+		if neighbor == e.from || neighbor == e.publisher {
 			continue
 		}
 		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), e.kind)
@@ -98,13 +99,14 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 		out = append(out, scheduledEvent{
 			when: s.now + mesh.ValidateDelay() + delay,
 			ev: &evtMeshArrival{
-				from:    e.to,
-				to:      neighbor,
-				msgID:   e.msgID,
-				kind:    e.kind,
-				round:   e.round,
-				bytes:   e.bytes,
-				builder: e.builder,
+				from:      e.to,
+				to:        neighbor,
+				publisher: e.publisher,
+				msgID:     e.msgID,
+				kind:      e.kind,
+				round:     e.round,
+				bytes:     e.bytes,
+				builder:   e.builder,
 			},
 		})
 	}
