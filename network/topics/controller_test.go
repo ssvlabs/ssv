@@ -366,17 +366,14 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
-	for ctx.Err() == nil {
-		done := 0
+	require.Eventually(t, func() bool {
 		for _, p := range peers {
-			if atomic.LoadUint64(&p.connsCount) >= th {
-				done++
+			if atomic.LoadUint64(&p.connsCount) < th {
+				return false
 			}
 		}
-		if done == len(peers) {
-			break
-		}
-	}
+		return true
+	}, 30*time.Second, 100*time.Millisecond, "peers never reached connection threshold %d", th)
 	t.Log("peers are connected")
 	return peers
 }
