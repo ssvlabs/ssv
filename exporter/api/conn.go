@@ -223,20 +223,22 @@ func (c *conn) pingLoop(ctx context.Context, logger *zap.Logger) {
 	}
 }
 
-// sendMsg sends the given message and returns the number of bytes that were written, plus the error
+// sendMsg sends the given message and returns the number of bytes that were written, plus the error.
+// w.Close is always called so the websocket frame is flushed even when Write fails;
+// the Write error wins over the Close error when both surface.
 func (c *conn) sendMsg(msg []byte) (int, error) {
-	_ = c.ws.SetWriteDeadline(time.Now().Add(pingTimeout))
+	_ = c.ws.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 	w, err := c.ws.NextWriter(websocket.TextMessage)
 	if err != nil {
 		return 0, fmt.Errorf("could not create ws writer: %w", err)
 	}
-	n, err := w.Write(msg)
-	if err != nil {
-		return 0, fmt.Errorf("could not write ws message: %w", err)
+	n, werr := w.Write(msg)
+	cerr := w.Close()
+	if werr != nil {
+		return n, fmt.Errorf("could not write ws message: %w", werr)
 	}
-	err = w.Close()
-	if err != nil {
-		return 0, fmt.Errorf("could not close writer: %w", err)
+	if cerr != nil {
+		return n, fmt.Errorf("could not close writer: %w", cerr)
 	}
 	return n, nil
 }
