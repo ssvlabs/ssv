@@ -310,8 +310,15 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		snapshot := make(map[NodeIndex][]peerScore, len(vNet.Nodes))
 		for _, node := range vNet.Nodes {
 			peers := snapshotForNode(node)
-			if peers == nil ||
-				rateInvariantViolation(peers, node.Index) != "" ||
+			// Require a fully-populated snapshot before evaluating the
+			// invariants — bucketInvariantViolation reads scoreByIdx[idx]
+			// which returns 0 for absent peers, so a partial snapshot can
+			// satisfy the bucket check spuriously (a positive accepted-only
+			// score "wins" against a missing rejected-only at score=0).
+			if peers == nil || len(peers) != len(vNet.Nodes)-1 {
+				return false
+			}
+			if rateInvariantViolation(peers, node.Index) != "" ||
 				bucketInvariantViolation(peers, node.Index) != "" {
 				return false
 			}
