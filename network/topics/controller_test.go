@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -356,9 +357,12 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 
 // TODO: use p2p/testing
 func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
+	// Per-call random mDNS tag so concurrent test processes running the same
+	// test don't cross-discover each other's peers.
+	mdnsTag := fmt.Sprintf("ssv.test.%016x", rand.Uint64())
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(t, ctx, logger, msgValidator, msgID, scoreInspector)
+		peers[i] = newPeer(t, ctx, logger, mdnsTag, msgValidator, msgID, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -377,10 +381,10 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag string, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, "ssv.test."+t.Name())
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, mdnsTag)
 	require.NoError(t, err)
 
 	var p *P

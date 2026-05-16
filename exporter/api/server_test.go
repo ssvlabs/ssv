@@ -74,7 +74,7 @@ func TestHandleStream(t *testing.T) {
 
 	// Wait until one stream client is connected and registered.
 	waitForCondition(t, 2*time.Second, func() bool {
-		b := ws.broadcaster.(*broadcaster)
+		b := ws.(*wsServer).broadcaster.(*broadcaster)
 		b.mut.Lock()
 		defer b.mut.Unlock()
 		return len(b.connections) == 1
@@ -87,18 +87,18 @@ func TestHandleStream(t *testing.T) {
 	}
 
 	// send 3 messages in the stream channel
-	ws.outFeed.Send(newTestMessage())
+	ws.BroadcastFeed().Send(newTestMessage())
 
 	msg2 := newTestMessage()
 	msg2.Data = []registrystorage.OperatorData{
 		{PublicKey: "pubkey-operator"},
 	}
-	ws.outFeed.Send(msg2)
+	ws.BroadcastFeed().Send(msg2)
 
 	msg3 := newTestMessage()
 	msg3.Type = TypeValidator
 	msg3.Data = map[string]string{"PublicKey": "pubkey3"}
-	ws.outFeed.Send(msg3)
+	ws.BroadcastFeed().Send(msg3)
 
 	waitForCondition(t, 2*time.Second, func() bool { return client.MessageCount() == 3 })
 

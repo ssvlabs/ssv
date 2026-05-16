@@ -209,7 +209,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peerScores := *node.PeerScores.Load()
+		peerScoresPtr := node.PeerScores.Load()
+		require.NotNil(t, peerScoresPtr, "node %d: PeerScoreInspector never ran", node.Index)
+		peerScores := *peerScoresPtr
 		peers := make([]peerScore, 0, len(peerScores))
 		for index, snapshot := range peerScores {
 			peers = append(peers, peerScore{index, snapshot.Score})

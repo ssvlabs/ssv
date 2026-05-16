@@ -51,7 +51,7 @@ type wsServer struct {
 }
 
 // NewWsServer creates a new instance.
-func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) *wsServer {
+func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
 	ws := wsServer{
 		ctx:         ctx,
 		logger:      logger.Named(log.NameWSServer),
