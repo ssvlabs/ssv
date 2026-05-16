@@ -202,10 +202,17 @@ type nodeMcache struct {
 const RelayEndpointBase OperatorID = 1_000_000
 
 // MeshTopology is the per-sim mesh state: peer-to-peer graph, per-node
-// seen-MsgID sets for dedup, hop-delay sampler, and the MsgID counter.
-// Built once at sim start via NewMeshTopology; the DES schedules
-// per-adapter evtMeshArrival events that consult MarkSeen + Neighbors +
-// HopDelaySample to forward.
+// seen-MsgID sets for dedup, per-node mcache for the lazy-push backstop,
+// hop-delay sampler, and the MsgID counter. Built once at sim start
+// via NewMeshTopology. The DES schedules:
+//
+//   - Per-adapter evtMeshArrival events for the eager mesh path — they
+//     consult MarkSeen + Neighbors + SampleHopDelay to forward.
+//   - Per-adapter evtMeshHeartbeat / evtMeshIHave / evtMeshIWant events
+//     for the gossip path (only when MeshGossipConfig.Enabled) — they
+//     consult MCacheInsert + MCacheGossipMids + PickGossipRecipients +
+//     MCacheLookup, and dispatch single-hop direct delays through the
+//     SimConfig.Network model (not the mesh hopDelay).
 //
 // Concurrency: not safe for parallel sims. The framework runs each sim
 // on a dedicated goroutine (RunBatch.runOneSim) and MeshTopology is

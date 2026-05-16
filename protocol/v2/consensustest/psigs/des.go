@@ -236,7 +236,7 @@ func (s *sim) scheduleInitialHeartbeats() {
 		return
 	}
 	g := mesh.Gossip()
-	if !g.Enabled {
+	if !g.Enabled || g.HeartbeatInterval <= 0 {
 		return
 	}
 	total := mesh.TotalNodes()

@@ -172,45 +172,6 @@ func (s *sim) start() error {
 	return nil
 }
 
-// scheduleInitialHeartbeats fires evtMeshHeartbeat events across every
-// mesh node when the gossip layer is enabled, anchored at sim time 0.
-// Per-node phase offset = (node × HeartbeatInterval / TotalNodes)
-// staggers the cluster's heartbeats so they don't all fire at
-// t = k·HeartbeatInterval. Ticks beyond RelayCutoff are not scheduled
-// — past the submit deadline, the slot's decision is moot, so further
-// gossip cadence buys nothing. No-op when gossip is disabled or
-// DeliveryDirect is in effect.
-//
-// Pre-scheduling (rather than self-rescheduling inside the handler)
-// keeps the event queue finite-by-construction: a misconfigured
-// scenario without a decision-triggering chain still terminates when
-// the queue drains.
-func (s *sim) scheduleInitialHeartbeats() {
-	mesh := s.cfg.Mesh
-	if mesh == nil {
-		return
-	}
-	g := mesh.Gossip()
-	if !g.Enabled {
-		return
-	}
-	total := mesh.TotalNodes()
-	if total <= 0 {
-		return
-	}
-	phase := g.HeartbeatInterval / time.Duration(total)
-	for i := 0; i < total; i++ {
-		nodeOffset := time.Duration(i) * phase
-		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
-			at := nodeOffset + tick
-			if at > s.cfg.RelayCutoff {
-				break
-			}
-			s.schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
-		}
-	}
-}
-
 func (s *sim) runLoop() {
 	for s.queue.Len() > 0 {
 		e := heap.Pop(&s.queue).(*queueItem)
@@ -430,4 +391,47 @@ func (s *sim) cacheArrivalForGossip(
 			})
 		},
 	}, g.HistoryLength)
+}
+
+// scheduleInitialHeartbeats fires evtMeshHeartbeat events across every
+// mesh node when the gossip layer is enabled, anchored at sim time 0.
+// Per-node phase offset = (node × HeartbeatInterval / TotalNodes)
+// staggers the cluster's heartbeats so they don't all fire at
+// t = k·HeartbeatInterval. Ticks beyond RelayCutoff are not scheduled
+// — past the submit deadline, the slot's decision is moot, so further
+// gossip cadence buys nothing. No-op when gossip is disabled or
+// DeliveryDirect is in effect.
+//
+// Pre-scheduling (rather than self-rescheduling inside the handler)
+// keeps the event queue finite-by-construction: a misconfigured
+// scenario without a decision-triggering chain still terminates when
+// the queue drains.
+func (s *sim) scheduleInitialHeartbeats() {
+	mesh := s.cfg.Mesh
+	if mesh == nil {
+		return
+	}
+	g := mesh.Gossip()
+	// HeartbeatInterval ≤ 0 is unreachable via the normal construction
+	// path (WithDefaults fills 0 → 700ms; MeshTopology snapshots that
+	// at build time), but guarding here makes the inner `tick +=`
+	// loop safe against a hand-mutated config that bypassed defaults.
+	if !g.Enabled || g.HeartbeatInterval <= 0 {
+		return
+	}
+	total := mesh.TotalNodes()
+	if total <= 0 {
+		return
+	}
+	phase := g.HeartbeatInterval / time.Duration(total)
+	for i := 0; i < total; i++ {
+		nodeOffset := time.Duration(i) * phase
+		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
+			at := nodeOffset + tick
+			if at > s.cfg.RelayCutoff {
+				break
+			}
+			s.schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
+		}
+	}
 }
