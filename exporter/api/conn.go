@@ -130,8 +130,6 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 	defer cancel()
 
 	if c.withPing {
-		t := time.NewTimer(pingInterval)
-		defer t.Stop()
 		go func() {
 			defer cancel()
 			c.pingLoop(ctx, logger)
