@@ -156,3 +156,46 @@ func TestVerifier_CommitWitnesses_StructuralOnly(t *testing.T) {
 	require.NoError(t, v.VerifyCommitWitnesses(c),
 		"structural-only verification should accept; protocol layer handles σ_V mismatch")
 }
+
+// TestVerifier_CommitWitnesses_RejectsBogusLeaderClaim — when LeaderForLayer
+// is wired, a witness whose Leader doesn't match the per-slot rotation is
+// rejected at validation time (rather than silently dropped at the protocol
+// layer after dispatch). Closes the bandwidth-only attack where a byzantine
+// could ship Commits with bogus witness sections that pass validation.
+func TestVerifier_CommitWitnesses_RejectsBogusLeaderClaim(t *testing.T) {
+	s := newSim(t, 4)
+	v := makeVerifier(t, s)
+	// Wire a leader-for-layer function matching the sim's rotation
+	// (sim_test.go: layers[k].Leader = operators[k%n]).
+	v.LeaderForLayer = func(height Height, layer int) OperatorID {
+		return s.cfg.Layers[layer].Leader
+	}
+
+	// Without LeaderForLayer the bogus claim would have passed (only
+	// PubKeyShares lookup, no per-layer leader check). Pick a real cluster
+	// op as the bogus claimant — has a pubshare but is the wrong leader
+	// at this layer.
+	expected := s.cfg.Layers[0].Leader
+	var bogus OperatorID
+	for _, op := range s.cfg.Operators {
+		if op != expected {
+			bogus = op
+			break
+		}
+	}
+	require.NotZero(t, bogus)
+
+	c := &Commit{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Witnesses: []LeaderSigmaWitness{
+			{Layer: 0, Leader: bogus, ValueRoot: ValueRoot([]byte("V")), SigmaV: []byte("any")},
+		},
+	}
+	err := v.VerifyCommitWitnesses(c)
+	require.ErrorContains(t, err, "rotation says")
+
+	// Sanity check: same commit with the correct leader passes.
+	c.Witnesses[0].Leader = expected
+	require.NoError(t, v.VerifyCommitWitnesses(c))
+}

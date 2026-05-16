@@ -18,6 +18,19 @@ import (
 // sigmaLocked[layer] to `value`. A second BuildPhase1Bundle call at the
 // same (slot, layer) with V' ≠ V is rejected (single-σ-V invariant from
 // spec §Slashing-protection scope). Calling with the same V is idempotent.
+//
+// σ-lock is independent of host-validity within the Instance: the host's
+// valid/not-valid verdict on V is recorded via ApplyHostValidity, which can
+// happen BEFORE or AFTER BuildPhase1Bundle. Resolve does not consult host
+// validity when assembling σ-pools — a leader who σ-locks via this method
+// and then receives ApplyHostValidity(layer, V, false) remains σ-locked,
+// and their σ_V contributes to V's σ-pool at Resolve time. This is a
+// footgun for future host-callback integrations: production
+// (Scheduler.processProposerSlot) hardcodes ApplyHostValidity(..., true)
+// for the leader's own V immediately after BuildPhase1Bundle, side-stepping
+// the issue. If you wire a real host validity check, ensure the host's
+// verdict is consulted BEFORE BuildPhase1Bundle to avoid σ-locking on a
+// host-invalid V.
 func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, error) {
 	if i.ended {
 		return nil, ErrInstanceEnded
@@ -154,34 +167,35 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		return nil
 	}
 
-	if len(retained) == 1 {
-		// Second distinct → Rule 2 (leader equivocation).
-		copyB := deepCopyBundle(b)
-		i.bundles[b.Layer][b.OperatorID] = append(retained, copyB)
+	// Rule 2 (leader equivocation) detection across all source combinations:
+	// the new bundle's V vs any existing distinct V from this leader, sourced
+	// from either a prior retained bundle (bundle-vs-bundle, the historical
+	// case) or witnessedLeaderSigma (bundle-vs-witness, when a peer's
+	// witness for an equivocated V arrived before the bundle for the other
+	// V did). Dedup'd via recordRule2 so the symmetric path in harvestWitness
+	// doesn't double-fire.
+	//
+	// Local-state effect of equivocation per spec §Phase 1 / Equivocation
+	// handling: at T_commit, an operator with ≥ 2 distinct V's retained
+	// emits NR (per the equivocation rule, no winner-picking under f=1
+	// byzantine). Pre-T_commit, leave the state alone — chosenVForLayer
+	// will return false (≥ 2 retained = no unique V) so BuildOwnCommit
+	// will commit NR for this layer at T_commit. If the operator already
+	// σ-locked on the first V (byzantine delivered it before observing
+	// equivocation), they stay σ-locked per cross-phase exclusivity.
+	copyB := deepCopyBundle(b)
+	if other := i.findExistingLeaderSigmaOnDistinctV(b.Layer, b.OperatorID, b.Value); other != nil && i.recordRule2(b.OperatorID, b.Layer) {
 		i.recordEvidence(Evidence{
 			Rule:       EvidenceLeaderEquivocation,
 			OperatorID: b.OperatorID,
 			Layer:      b.Layer,
 			LeaderEquivocation: &LeaderEquivocationEvidence{
-				BundleA: retained[0],
+				BundleA: other,
 				BundleB: copyB,
 			},
 		})
-		// Local-state effect of equivocation per spec §Phase 1 / Equivocation
-		// handling: at T_commit, an operator with ≥ 2 distinct V's retained
-		// emits NR (per the equivocation rule, no winner-picking under f=1
-		// byzantine). Pre-T_commit, leave the state alone — chosenVForLayer
-		// will return false (≥ 2 retained = no unique V) so BuildOwnCommit
-		// will commit NR for this layer at T_commit.
-		//
-		// If the operator already σ-locked on the first V (the byzantine
-		// delivered it before observing equivocation), they stay σ-locked
-		// per cross-phase exclusivity.
-	} else {
-		// First retention for this (layer, leader). Stash a defensive deep
-		// copy so retained bundle bytes are independent of caller-owned slices.
-		i.bundles[b.Layer][b.OperatorID] = []*Phase1Bundle{deepCopyBundle(b)}
 	}
+	i.bundles[b.Layer][b.OperatorID] = append(retained, copyB)
 
 	// Rule 1 (cross-signing) order-independence — leader-specific case.
 	// Spec §Cross-signing detection: "σ from Phase 1 + NR/NV from Phase 2"
@@ -215,6 +229,18 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	//     V differs from the retained bundle V — see reevaluateL0Sigmas.
 	if b.Layer == 0 {
 		i.reevaluateL0Sigmas()
+	}
+
+	// Retroactive deeper-layer (k > 0) Rule 3 leader-vs-bundle cross-V check:
+	// if the leader's own onion entry at this layer was already in peerOnions
+	// when the bundle arrived, the forward-order path in ObserveCommit hadn't
+	// yet seen the bundle so didn't fire. Now that the bundle is retained,
+	// check for cross-V. (L_0 is handled by reevaluateL0Sigmas above; this
+	// branch is the k > 0 twin.) Dedup via recordRule3Leader.
+	if b.Layer > 0 {
+		for _, el := range i.peerOnions[b.Layer][b.OperatorID] {
+			i.checkLeaderBundleCrossV(b.OperatorID, b.Layer, el.Value, el.Ciphertext)
+		}
 	}
 	return nil
 }
@@ -305,29 +331,10 @@ func (i *Instance) reevaluateL0Sigmas() {
 	// retained BEFORE the leader's L_0 onion arrived; this handles the
 	// reverse order (onion first, bundle now). Dedup via the per-(op, layer)
 	// Rule 3 fire-set so the order-flipped twin doesn't double-record.
-	if len(leaderEntries) > 0 {
-		for _, b := range i.bundles[0][leader] {
-			for _, el := range leaderEntries {
-				if bytes.Equal(b.Value, el.Value) {
-					continue
-				}
-				if !i.recordRule3Leader(leader, 0) {
-					return
-				}
-				i.recordEvidence(Evidence{
-					Rule:       EvidenceCrossOnionEquivocation,
-					OperatorID: leader,
-					Layer:      0,
-					CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
-						ValueA:   append(Value{}, b.Value...),
-						ValueB:   append(Value{}, el.Value...),
-						PartialA: append(Signature{}, b.SigmaV...),
-						PartialB: append(Signature{}, el.Ciphertext...),
-					},
-				})
-				return
-			}
-		}
+	// Shares checkLeaderBundleCrossV with the deeper-layer twin (k > 0)
+	// triggered from ObservePhase1Bundle.
+	for _, el := range leaderEntries {
+		i.checkLeaderBundleCrossV(leader, 0, el.Value, el.Ciphertext)
 	}
 }
 

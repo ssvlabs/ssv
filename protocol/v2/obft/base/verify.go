@@ -53,6 +53,18 @@ type Verifier struct {
 	PubKeyShares   map[OperatorID][]byte
 	NRPubKeyShares map[OperatorID][]byte // optional; nil → falls back to PubKeyShares (Option A)
 	ClusterPubKey  []byte
+
+	// LeaderForLayer returns the expected leader at (height, layer) under the
+	// cluster's per-slot leader rotation. When non-nil, VerifyCommitWitnesses
+	// uses it to reject witness sections claiming a Leader that doesn't match
+	// the rotation — a byzantine could otherwise ship a witness with
+	// `Leader = some_other_registered_op` and pass verification (it has a
+	// pubshare, just not for this layer). The protocol-layer harvestWitness
+	// catches the same fault and drops the witness silently, but the
+	// validation layer would have already accepted the whole Commit. Set this
+	// from the adapter to close the gap at validation time. Nil → skip the
+	// per-witness leader check (the protocol layer still catches it).
+	LeaderForLayer func(height Height, layer int) OperatorID
 }
 
 // VerifyPhase1Bundle checks σ_V against the bundle's claimed OperatorID's
@@ -138,6 +150,21 @@ func (v *Verifier) VerifyCommitWitnesses(c *Commit) error {
 	for i, w := range c.Witnesses {
 		if _, ok := v.PubKeyShares[w.Leader]; !ok {
 			return fmt.Errorf("obft: witness %d: no pub-key share for leader %d", i, w.Leader)
+		}
+		// If LeaderForLayer is wired, enforce the layer-leader claim at
+		// validation time. Without this gate, a byzantine could ship
+		// witnesses with bogus Leader IDs (registered ops, wrong layer)
+		// that pass validation only to be dropped at the Instance layer
+		// after consuming a slot in message buffers. With it, malformed
+		// witnesses are rejected on the validation hot path before reaching
+		// dispatch. See the LeaderForLayer field comment for the gap this
+		// closes.
+		if v.LeaderForLayer != nil {
+			expected := v.LeaderForLayer(c.Height, w.Layer)
+			if w.Leader != expected {
+				return fmt.Errorf("obft: witness %d: claims leader %d at layer %d but rotation says %d",
+					i, w.Leader, w.Layer, expected)
+			}
 		}
 	}
 	return nil

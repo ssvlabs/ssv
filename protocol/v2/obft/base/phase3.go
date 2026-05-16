@@ -123,6 +123,15 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 	//     adding the same leader's partial twice (once via bundle, once
 	//     via witness — byte-identical for honest leaders) collapses to
 	//     one partial in the pool.
+	//
+	//     Pigeonhole-2 invariant: under leader equivocation, both V_a and
+	//     V_b can have a leader-σ contribution locally (one entry each in
+	//     witnessedLeaderSigma); cluster-wide only one V reaches qV
+	//     because the leader's single partial counts toward exactly one
+	//     V's pool at any honest receiver. Local transient pre-quorum
+	//     states may show non-trivial counts in both groups; the lex-
+	//     tiebreak on Value below makes the eventual "winner" deterministic
+	//     across operators if both groups ever reach qV simultaneously.
 	for _, ws := range i.witnessedLeaderSigma[layer] {
 		addToGroup(&groups, ws.Value, leaderID, ws.SigmaV)
 	}

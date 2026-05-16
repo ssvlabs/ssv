@@ -699,25 +699,20 @@ func TestObft_Witness_RejectsBadLeaderClaim(t *testing.T) {
 	require.ErrorContains(t, err, "leader")
 }
 
-// TestObft_Witness_DoesNotTriggerRule2 — observing two witnesses with
-// distinct value_roots at same (layer, leader) does NOT trigger Rule 2
-// evidence at the receiver.
+// TestObft_Witness_DoesNotTriggerRule2_WhenVUnknown — observing two
+// witnesses with distinct value_roots at same (layer, leader) does NOT
+// trigger Rule 2 when neither V is locally retained.
 //
-// Per spec §Phase 2 wire format, witnesses ship value_root + σ_V (no full
-// V). Rule 2 evidence requires the BUNDLE pair (V_a/σ_V_a, V_b/σ_V_b) —
-// witnesses don't carry V, so they cannot independently introduce V's into
-// retention. Cluster-wide Rule 2 attribution requires either (a) at least
-// one honest receiver to have observed both V's via Phase-1 bundles
-// directly (gossipsub re-flood scenario), or (b) a future Appendix-style
-// ship-full-V witness variant. Per spec §Slashing evidence, the
-// honest-operator MUST-log requirement covers the per-operator detection
-// surface; out-of-band log aggregation across operators handles the
-// asymmetric-retention case at the cluster level.
+// Witnesses ship value_root + σ_V without the full V (spec §Phase 2 wire
+// format). When the receiver lacks V locally — no Phase-1 bundle retained,
+// no peer's σ-onion entry carrying V — findVByRoot returns false and
+// harvestWitness silently drops the witness without verifying it. With
+// nothing in witnessedLeaderSigma, Rule 2 cannot fire.
 //
-// The trade-off is documented: dropping full V from witnesses saves ~10×
-// bandwidth at the cost of losing cross-receiver Rule 2 attribution in
-// natural-recovery scenarios where each receiver only sees one V.
-func TestObft_Witness_DoesNotTriggerRule2(t *testing.T) {
+// The complementary V-known case (peer σ-onions carry V, both witnesses
+// resolve via findVByRoot, both verify, BOTH enter witnessedLeaderSigma)
+// IS Rule 2 evidence — see TestObft_Witness_TriggersRule2_WhenVsKnown.
+func TestObft_Witness_DoesNotTriggerRule2_WhenVUnknown(t *testing.T) {
 	s := newSim(t, 4)
 	signer := NewStubSigner(s.cfg.QV(), []byte{1})
 	vA := []byte("V-a")
@@ -728,7 +723,8 @@ func TestObft_Witness_DoesNotTriggerRule2(t *testing.T) {
 	require.NoError(t, err)
 
 	// Two commits from different ops, each carrying a witness for op1 at
-	// L_0 with a distinct value_root.
+	// L_0 with a distinct value_root. Layers are empty so peerOnions never
+	// gets V — the witnesses can't resolve via findVByRoot and are dropped.
 	c2 := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 2,
@@ -751,7 +747,269 @@ func TestObft_Witness_DoesNotTriggerRule2(t *testing.T) {
 	ev := receiver.Evidence()
 	for _, e := range ev {
 		require.NotEqualf(t, EvidenceLeaderEquivocation, e.Rule,
-			"witnesses must not trigger Rule 2 (receiver lacks V to make slashable evidence); got %+v", ev)
+			"witnesses must not trigger Rule 2 when V is unknown locally; got %+v", ev)
+	}
+}
+
+// TestObft_Witness_TriggersRule2_WhenVsKnown — under asymmetric retention,
+// when each of two peers retains a different V from an equivocating leader
+// and ships that V in their own σ-onion (so the receiver's peerOnions has
+// both V's), the receiver's harvestWitness resolves each witness via
+// findVByRoot and adds both σ_V pairs to witnessedLeaderSigma. The second
+// distinct addition fires Rule 2 with a synthesized Phase1Bundle pair.
+//
+// This is the closure of the gap from TestObft_Witness_DoesNotTriggerRule2_
+// WhenVUnknown: that test pins down the V-unknown branch (no Rule 2); this
+// one pins the V-known branch (Rule 2 fires).
+func TestObft_Witness_TriggersRule2_WhenVsKnown(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.cfg.Layers[0].Leader
+	leaderSigner := NewStubSigner(s.cfg.QV(), []byte{byte(leaderID)})
+	vA := []byte("V-a")
+	vB := []byte("V-b")
+	sigLeaderA, err := leaderSigner.SignPartial(vA)
+	require.NoError(t, err)
+	sigLeaderB, err := leaderSigner.SignPartial(vB)
+	require.NoError(t, err)
+
+	// Pick two peers that aren't the leader and aren't the receiver.
+	var p1, p2, receiverID OperatorID
+	for _, op := range s.cfg.Operators {
+		if op == leaderID {
+			continue
+		}
+		switch {
+		case p1 == 0:
+			p1 = op
+		case p2 == 0:
+			p2 = op
+		case receiverID == 0:
+			receiverID = op
+		}
+	}
+	require.NotZero(t, p1)
+	require.NotZero(t, p2)
+	require.NotZero(t, receiverID)
+
+	// p1 σ's on V_a, p2 σ's on V_b — both are honest peers having received
+	// different bundles from the equivocating leader. Each ships their own
+	// σ-onion at L_0 (plaintext) AND a witness for the leader's σ on the V
+	// they observed.
+	p1Signer := NewStubSigner(s.cfg.QV(), []byte{byte(p1)})
+	sigP1OnVA, err := p1Signer.SignPartial(vA)
+	require.NoError(t, err)
+	p2Signer := NewStubSigner(s.cfg.QV(), []byte{byte(p2)})
+	sigP2OnVB, err := p2Signer.SignPartial(vB)
+	require.NoError(t, err)
+
+	layersC1 := make([]EncryptedLayer, s.K)
+	layersC1[0] = EncryptedLayer{Value: vA, Ciphertext: sigP1OnVA}
+	c1 := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: p1,
+		Height:     s.cfg.Height,
+		Layers:     layersC1,
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: leaderID, ValueRoot: ValueRoot(vA), SigmaV: sigLeaderA}},
+	}
+	layersC2 := make([]EncryptedLayer, s.K)
+	layersC2[0] = EncryptedLayer{Value: vB, Ciphertext: sigP2OnVB}
+	c2 := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: p2,
+		Height:     s.cfg.Height,
+		Layers:     layersC2,
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: leaderID, ValueRoot: ValueRoot(vB), SigmaV: sigLeaderB}},
+	}
+
+	receiver := s.instances[receiverID]
+	require.NoError(t, receiver.ObserveCommit(c1))
+	require.NoError(t, receiver.ObserveCommit(c2))
+
+	// Rule 2 must fire — exactly once, against the leader at L_0.
+	var rule2 *Evidence
+	for i := range receiver.Evidence() {
+		e := receiver.Evidence()[i]
+		if e.Rule == EvidenceLeaderEquivocation && e.OperatorID == leaderID && e.Layer == 0 {
+			require.Nilf(t, rule2, "Rule 2 must fire exactly once; got duplicates: %+v / %+v", rule2, e)
+			rule2 = &receiver.Evidence()[i]
+		}
+	}
+	require.NotNil(t, rule2, "Rule 2 must fire when both equivocated V's are locally resolvable via peer σ-onions")
+	require.NotNil(t, rule2.LeaderEquivocation)
+	require.NotNil(t, rule2.LeaderEquivocation.BundleA)
+	require.NotNil(t, rule2.LeaderEquivocation.BundleB)
+	require.NotEqual(t, rule2.LeaderEquivocation.BundleA.Value, rule2.LeaderEquivocation.BundleB.Value,
+		"the two synthesized bundles must carry distinct V's")
+}
+
+// TestObft_Rule3_LeaderCrossV_FiresAtDeeperLayers — the leader at a layer
+// k > 0 emits bundle σ_V on V_a (Phase 1) and a Commit body with
+// Layers[k].Value = V_b (Phase 2). The receiver retains the bundle, then
+// observes the Commit; per spec §Slashing-evidence Rule 3 (cross-V
+// equivocation), the leader's single-σ-V-per-(slot, layer) invariant is
+// violated. After the round-2 fix lifting the k=0 gate, Rule 3 fires here.
+func TestObft_Rule3_LeaderCrossV_FiresAtDeeperLayers(t *testing.T) {
+	s := newSim(t, 4)
+	const targetLayer = 2
+	require.Less(t, targetLayer, s.K)
+	leaderID := s.cfg.Layers[targetLayer].Leader
+	leaderSigner := NewStubSigner(s.cfg.QV(), []byte{byte(leaderID)})
+	vA := []byte("V-a-at-layer-2")
+	vB := []byte("V-b-at-layer-2")
+	sigA, err := leaderSigner.SignPartial(vA)
+	require.NoError(t, err)
+	sigB, err := leaderSigner.SignPartial(vB)
+	require.NoError(t, err)
+
+	// Pick a receiver that isn't the leader.
+	var receiverID OperatorID
+	for _, op := range s.cfg.Operators {
+		if op != leaderID {
+			receiverID = op
+			break
+		}
+	}
+	require.NotZero(t, receiverID)
+	receiver := s.instances[receiverID]
+
+	// Bundle on V_a arrives first (retained).
+	bundle := &Phase1Bundle{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: leaderID,
+		Height:     s.cfg.Height,
+		Layer:      targetLayer,
+		Value:      vA,
+		SigmaV:     sigA,
+	}
+	require.NoError(t, receiver.ObservePhase1Bundle(bundle, observedEarly))
+
+	// Commit body carries Layers[targetLayer].Value = V_b. Ciphertext is the
+	// IBE-wrapped σ on V_b — we use sigB as a stand-in (the test's signer is
+	// a stub so the wrapping/unwrapping isn't exercised here; the forward-
+	// order Rule 3 check at this site doesn't decrypt).
+	layers := make([]EncryptedLayer, s.K)
+	layers[targetLayer] = EncryptedLayer{Value: vB, Ciphertext: sigB}
+	commit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: leaderID,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+	require.NoError(t, receiver.ObserveCommit(commit))
+
+	// Rule 3 (CrossOnionEquivocation) must fire at targetLayer against the
+	// leader, carrying V_a / V_b as the equivocated pair.
+	var rule3 *Evidence
+	for i := range receiver.Evidence() {
+		e := receiver.Evidence()[i]
+		if e.Rule == EvidenceCrossOnionEquivocation && e.OperatorID == leaderID && e.Layer == targetLayer {
+			require.Nilf(t, rule3, "Rule 3 leader cross-V must fire exactly once at this (op, layer); got duplicates")
+			rule3 = &receiver.Evidence()[i]
+		}
+	}
+	require.NotNil(t, rule3, "Rule 3 must fire on leader's cross-V (bundle vs onion) at k > 0 after the round-2 fix")
+	require.NotNil(t, rule3.CrossOnionEquivocation)
+	require.NotEqual(t, rule3.CrossOnionEquivocation.ValueA, rule3.CrossOnionEquivocation.ValueB)
+}
+
+// TestObft_Rule3_LeaderCrossV_RetroactiveAtDeeperLayers — same scenario as
+// TestObft_Rule3_LeaderCrossV_FiresAtDeeperLayers but with reversed arrival
+// order: the Commit (onion at deeper layer) arrives BEFORE the bundle. The
+// retroactive check in ObservePhase1Bundle (the k > 0 twin of
+// reevaluateL0Sigmas) catches the equivocation when the bundle finally lands.
+func TestObft_Rule3_LeaderCrossV_RetroactiveAtDeeperLayers(t *testing.T) {
+	s := newSim(t, 4)
+	const targetLayer = 2
+	require.Less(t, targetLayer, s.K)
+	leaderID := s.cfg.Layers[targetLayer].Leader
+	leaderSigner := NewStubSigner(s.cfg.QV(), []byte{byte(leaderID)})
+	vA := []byte("V-a-retro")
+	vB := []byte("V-b-retro")
+	sigA, err := leaderSigner.SignPartial(vA)
+	require.NoError(t, err)
+	sigB, err := leaderSigner.SignPartial(vB)
+	require.NoError(t, err)
+
+	var receiverID OperatorID
+	for _, op := range s.cfg.Operators {
+		if op != leaderID {
+			receiverID = op
+			break
+		}
+	}
+	receiver := s.instances[receiverID]
+
+	// Commit arrives FIRST — leader's onion at targetLayer carries V_b.
+	layers := make([]EncryptedLayer, s.K)
+	layers[targetLayer] = EncryptedLayer{Value: vB, Ciphertext: sigB}
+	commit := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: leaderID,
+		Height:     s.cfg.Height,
+		Layers:     layers,
+	}
+	require.NoError(t, receiver.ObserveCommit(commit))
+
+	// At this point Rule 3 has NOT fired (bundle not retained yet; the
+	// forward-order check in ObserveCommit found no bundles to compare).
+	for _, e := range receiver.Evidence() {
+		require.NotEqualf(t, EvidenceCrossOnionEquivocation, e.Rule,
+			"Rule 3 must not fire before the bundle arrives; got %+v", e)
+	}
+
+	// Bundle on V_a arrives — retroactive check at ObservePhase1Bundle fires.
+	bundle := &Phase1Bundle{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: leaderID,
+		Height:     s.cfg.Height,
+		Layer:      targetLayer,
+		Value:      vA,
+		SigmaV:     sigA,
+	}
+	require.NoError(t, receiver.ObservePhase1Bundle(bundle, observedEarly))
+
+	var rule3 *Evidence
+	for i := range receiver.Evidence() {
+		e := receiver.Evidence()[i]
+		if e.Rule == EvidenceCrossOnionEquivocation && e.OperatorID == leaderID && e.Layer == targetLayer {
+			rule3 = &receiver.Evidence()[i]
+			break
+		}
+	}
+	require.NotNil(t, rule3, "Rule 3 must fire retroactively on bundle arrival at k > 0")
+}
+
+// TestObft_BuildOwnCommit_WitnessesSorted — the witness section emitted by
+// BuildOwnCommit is in canonical (Layer, Leader, ValueRoot) order. Receivers
+// canonicalize before hashing in commitContentHash, so this is not load-
+// bearing for correctness, but it gives deterministic wire output for
+// debugging and fuzz reproducibility.
+func TestObft_BuildOwnCommit_WitnessesSorted(t *testing.T) {
+	s := newSim(t, 4)
+	// Deliver each layer's bundle to op 2 so it retains them and emits
+	// witnesses in BuildOwnCommit. K = 4, so we get K witnesses.
+	for k := 0; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], []OperatorID{2}, observedEarly, true)
+	}
+	c, err := s.instances[2].BuildOwnCommit()
+	require.NoError(t, err)
+	require.Len(t, c.Witnesses, s.K, "one witness per retained bundle")
+
+	// Witnesses must be in non-decreasing (Layer, Leader, ValueRoot) order.
+	for i := 1; i < len(c.Witnesses); i++ {
+		prev, cur := c.Witnesses[i-1], c.Witnesses[i]
+		if prev.Layer != cur.Layer {
+			require.Lessf(t, prev.Layer, cur.Layer,
+				"witnesses must be ordered by Layer; got %d then %d at index %d", prev.Layer, cur.Layer, i)
+			continue
+		}
+		if prev.Leader != cur.Leader {
+			require.Lessf(t, prev.Leader, cur.Leader,
+				"witnesses with same Layer must be ordered by Leader; got %d then %d", prev.Leader, cur.Leader)
+			continue
+		}
+		require.NotEqual(t, prev.ValueRoot, cur.ValueRoot,
+			"witnesses with same (Layer, Leader) must have distinct ValueRoots")
 	}
 }
 

@@ -181,6 +181,18 @@ type Instance struct {
 	// byte-identical (deterministic BLS partial), so the first valid one
 	// short-circuits subsequent harvest attempts.
 	//
+	// Bucket size bound: not capped at MaxRetainedPerOpLayer at the
+	// receiver, because under asymmetric retention (leader equivocates V_a,
+	// V_b, V_c; some peers retain (V_a, V_b), others (V_a, V_c), etc.) a
+	// single receiver may legitimately resolve > 2 distinct V's via
+	// findVByRoot across all peers' σ-onion entries. Per peer's wire-level
+	// cap (MaxWitnesses = MaxLayers × MaxRetainedPerOpLayer) and per-(slot,op)
+	// admission cap in message/validation, the bucket size is bounded by
+	// the leader's actual equivocation count — itself bounded by f-byzantine
+	// at the leader role plus honest peers' bundle retention caps. In
+	// practice the bucket holds 1 entry (no equivocation) or 2 entries
+	// (single-leader Rule 2 equivocation).
+	//
 	// Limitation (v1): witnesses are only verified at observation time
 	// against V that is already known (bundles[layer][leader].Value or any
 	// peerOnions[layer][*].Value matching the witness's value_root). A
@@ -271,6 +283,16 @@ type Instance struct {
 	// per-(op, layer, entry) granularity is preserved for code-touch
 	// minimization.
 	rule5UnknownVFired map[int]map[OperatorID]bool
+
+	// rule2Fired[layer][leader] = true once Rule 2 (LeaderEquivocation) has
+	// been recorded for that (leader, layer). Shared between the bundle-vs-
+	// bundle path (ObservePhase1Bundle, two distinct retained Phase-1 bundles
+	// from the same leader) and the witness path (harvestWitness, two
+	// distinct σ_V partials harvested for the same leader from peers'
+	// commit witness sections). Dedup prevents both paths from firing for
+	// the same logical fault when the leader's equivocation manifests both
+	// as direct bundle pairs and indirectly via witness-derived σ's.
+	rule2Fired map[int]map[OperatorID]bool
 
 	// evidenceObserver fires on FIRST recording per (Rule, OperatorID, Layer)
 	// tuple. Set at NewInstance construction; nil disables. Immutable post-
@@ -398,6 +420,7 @@ func NewInstance(
 		rule1Fired:           make(map[int]map[OperatorID]bool, K),
 		rule3LeaderFired:     make(map[int]map[OperatorID]bool, K),
 		rule5UnknownVFired:   make(map[int]map[OperatorID]bool, K),
+		rule2Fired:           make(map[int]map[OperatorID]bool, K),
 		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
 		evidenceObserved:     make(map[evidenceObservedKey]bool),
 	}, nil
@@ -711,6 +734,58 @@ func (i *Instance) recordRule5UnknownV(op OperatorID, layer int) bool {
 	}
 	bucket[op] = true
 	return true
+}
+
+// recordRule2 marks Rule 2 (LeaderEquivocation) as fired for (leader, layer).
+// Same pattern as recordRule3Leader — returns true on first observation,
+// false if already recorded. See rule2Fired field comment.
+func (i *Instance) recordRule2(leader OperatorID, layer int) bool {
+	bucket := i.rule2Fired[layer]
+	if bucket == nil {
+		bucket = make(map[OperatorID]bool)
+		i.rule2Fired[layer] = bucket
+	}
+	if bucket[leader] {
+		return false
+	}
+	bucket[leader] = true
+	return true
+}
+
+// findExistingLeaderSigmaOnDistinctV scans bundles[layer][leader] and
+// witnessedLeaderSigma[layer] for an entry whose Value differs from newV.
+// Returns a Phase1Bundle representing that existing entry: a real retained
+// bundle if available, otherwise a synthesized one from the witnessed σ
+// (carrying the witnessed V + σ_V, with this Instance's ClusterID/Height/
+// Layer/Leader filling the wire-shape fields).
+//
+// Used by both ObservePhase1Bundle and harvestWitness to detect Rule 2
+// (leader equivocation) across all source combinations: bundle vs bundle,
+// bundle vs witness, witness vs witness. Synthesized bundles are tagged
+// for slashing-layer consumption: their authenticity stands on the
+// receiver's local verification of σ_V (against the leader's pubshare)
+// plus the witnessing peer's SSV-signed Commit, rather than the leader's
+// own direct Phase1Bundle envelope. Out-of-band aggregation pairs synth
+// evidence with the corresponding peer Commit envelopes.
+func (i *Instance) findExistingLeaderSigmaOnDistinctV(layer int, leader OperatorID, newV Value) *Phase1Bundle {
+	for _, b := range i.bundles[layer][leader] {
+		if !bytes.Equal(b.Value, newV) {
+			return b
+		}
+	}
+	for _, ws := range i.witnessedLeaderSigma[layer] {
+		if !bytes.Equal(ws.Value, newV) {
+			return &Phase1Bundle{
+				ClusterID:  i.cfg.ClusterID,
+				OperatorID: leader,
+				Height:     i.cfg.Height,
+				Layer:      layer,
+				Value:      append(Value{}, ws.Value...),
+				SigmaV:     append(Signature{}, ws.SigmaV...),
+			}
+		}
+	}
+	return nil
 }
 
 // observedTimeOK reports whether `observedOffset` is within the receiver

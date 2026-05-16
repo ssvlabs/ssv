@@ -3,6 +3,7 @@ package base
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
@@ -164,6 +165,15 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 	// σ_V (~128 bytes); receivers cross-reference value_root against
 	// retained V's. V-drop receivers (no V retained for this layer/leader)
 	// recover via KindCertificate gossip per spec §Final-certificate gossip.
+	//
+	// Witnesses are emitted in canonical (Layer, Leader, ValueRoot) order.
+	// The map ranges below would otherwise produce a different slice
+	// permutation on each call (Go map iteration is randomized). Receivers
+	// canonicalize before hashing in commitContentHash, so the dedup is
+	// correct either way, but deterministic wire output is helpful for
+	// debugging, fuzz reproducibility, and bandwidth-stable benchmarks.
+	// Same applies to NRPartials below (already emitted in natural layer
+	// order from the σ/NR per-k loop above).
 	var witnesses []LeaderSigmaWitness
 	for layer, leaderMap := range i.bundles {
 		for leader, retained := range leaderMap {
@@ -177,6 +187,15 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 			}
 		}
 	}
+	sort.Slice(witnesses, func(a, b int) bool {
+		if witnesses[a].Layer != witnesses[b].Layer {
+			return witnesses[a].Layer < witnesses[b].Layer
+		}
+		if witnesses[a].Leader != witnesses[b].Leader {
+			return witnesses[a].Leader < witnesses[b].Leader
+		}
+		return bytes.Compare(witnesses[a].ValueRoot[:], witnesses[b].ValueRoot[:]) < 0
+	})
 
 	return &Commit{
 		ClusterID:  i.cfg.ClusterID,
@@ -230,14 +249,20 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 		if len(seen) >= MaxCommitHashesPerOp {
 			// Operator is already flagged byzantine via prior distinct hashes;
-			// drop this emission entirely (no per-content processing) to bound
-			// memory under abuse.
+			// drop this emission entirely (no per-content processing including
+			// per-layer Rule 1/3/5 paths below) to bound memory under abuse.
+			// The byzantine cannot use up the cap on cheap content variations
+			// and bury a fresh per-layer violation in emission MaxCommitHashesPerOp+1
+			// — they trade attribution for the dropped per-layer signal, but
+			// they're already attributed via the prior emissions' Rule 3 fires.
 			return nil
 		}
 		// Top-level Rule 3 fires once per (op, slot): the second distinct
-		// emission carries the slashable payload. Subsequent distinct
-		// emissions don't add attribution but their σ-side / NR-side content
-		// still flows through the per-layer paths below.
+		// emission carries the slashable payload. Distinct emissions 3 through
+		// MaxCommitHashesPerOp continue to flow through the per-layer paths
+		// below (collecting any new σ-side / NR-side content into peerOnions
+		// / peerNR / Rule 1/3/5 evidence). Emissions past the cap are dropped
+		// entirely by the branch above.
 		if first := i.peerFirstCommit[c.OperatorID]; first != nil {
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceCrossOnionEquivocation,
@@ -371,33 +396,16 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// Phase-1 bundle and σ_V on V_b via this Phase-2 onion — single-σ-V
 		// exclusivity violation that spans phases.
 		//
-		// Only fired at k=0: at deeper layers el.Ciphertext is the IBE-wrapped
-		// σ partial, not a verifiable plaintext sig, so a third-party slashing
-		// verifier cannot reproduce the check from the evidence alone (it
-		// would need this cluster's NR-quorum aggregates for layers 0..k-1).
-		// Self-contained slashable evidence (the spec's Rule 3 contract)
-		// requires plaintext partials.
-		if k == 0 && c.OperatorID == i.cfg.Layers[k].Leader {
-			for _, b := range i.bundles[k][c.OperatorID] {
-				if bytes.Equal(b.Value, el.Value) {
-					continue
-				}
-				if !i.recordRule3Leader(c.OperatorID, k) {
-					break
-				}
-				i.recordEvidence(Evidence{
-					Rule:       EvidenceCrossOnionEquivocation,
-					OperatorID: c.OperatorID,
-					Layer:      k,
-					CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
-						ValueA:   append(Value{}, b.Value...),
-						ValueB:   append(Value{}, el.Value...),
-						PartialA: append(Signature{}, b.SigmaV...),
-						PartialB: append(Signature{}, el.Ciphertext...),
-					},
-				})
-				break
-			}
+		// Fires at all k where the operator is this layer's leader. At k=0
+		// el.Ciphertext is plaintext σ, so the recorded evidence is third-
+		// party self-contained (a slashing verifier can re-verify both
+		// partials with public BLS key material alone). At k>0 el.Ciphertext
+		// is IBE-wrapped — the recorded evidence is within-cluster only
+		// (verifiers need the cluster's NR-quorum aggregates for layers
+		// 0..k-1 to unwrap), matching the peer-vs-peer cross-onion check
+		// at this same loop (lines above), and the spec MUST-log framing.
+		if c.OperatorID == i.cfg.Layers[k].Leader {
+			i.checkLeaderBundleCrossV(c.OperatorID, k, el.Value, el.Ciphertext)
 		}
 
 		// L_0 validity-gate: at L_0, σ partials are plaintext and verifiable
@@ -549,6 +557,47 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	return nil
 }
 
+// checkLeaderBundleCrossV records Rule 3 evidence if the leader's retained
+// Phase-1 σ on V_a at `layer` disagrees with `onionV` (the V claimed in the
+// leader's own σ-side onion entry at this layer). Three call sites:
+//
+//  1. Forward-order in ObserveCommit (per-layer σ loop): the onion entry
+//     arrives now, the bundle was previously retained.
+//  2. Retroactive at L_0 in reevaluateL0Sigmas: the onion arrived first,
+//     the bundle is being retained now.
+//  3. Retroactive at k > 0 in ObservePhase1Bundle: the deeper-layer twin
+//     of (2), gated by `b.Layer > 0` since L_0 is covered by (2).
+//
+// Dedup is via recordRule3Leader so the three paths can't double-fire on
+// the same (leader, layer).
+//
+// Fires at any k. At k=0 the onion partial is plaintext and the recorded
+// evidence is third-party-verifiable; at k>0 it's IBE-wrapped and the
+// evidence is within-cluster only — same semantics as the peer-vs-peer
+// cross-onion check elsewhere in ObserveCommit.
+func (i *Instance) checkLeaderBundleCrossV(leader OperatorID, layer int, onionV Value, onionCiphertext []byte) {
+	for _, b := range i.bundles[layer][leader] {
+		if bytes.Equal(b.Value, onionV) {
+			continue
+		}
+		if !i.recordRule3Leader(leader, layer) {
+			return
+		}
+		i.recordEvidence(Evidence{
+			Rule:       EvidenceCrossOnionEquivocation,
+			OperatorID: leader,
+			Layer:      layer,
+			CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
+				ValueA:   append(Value{}, b.Value...),
+				ValueB:   append(Value{}, onionV...),
+				PartialA: append(Signature{}, b.SigmaV...),
+				PartialB: append([]byte{}, onionCiphertext...),
+			},
+		})
+		return
+	}
+}
+
 // harvestWitness verifies a peer's witness against the leader's pubshare on
 // any V the receiver has observed locally for the witness's layer, then
 // retains the σ_V partial under (layer, value_root) for inclusion in the
@@ -600,6 +649,36 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 	if !i.signer.VerifyPartial(pubShare, v, w.SigmaV) {
 		return // drop category 3 — peer forwarded a fabricated witness
 	}
+
+	// Rule 2 (LeaderEquivocation) detection: if a distinct V is already
+	// known for this (layer, leader) — either via a retained bundle or via
+	// a previously-harvested witness — the new witness pair (v, w.SigmaV)
+	// together with the existing pair is leader-equivocation evidence.
+	// The σ_V's have been BLS-verified against the leader's pubshare on
+	// their respective V's; deterministic-BLS guarantees the leader must
+	// have signed both. Synthesizes a Phase1Bundle from the witness data
+	// for the slashing-evidence payload. Dedup'd via recordRule2 so the
+	// bundle-vs-bundle path in ObservePhase1Bundle doesn't double-fire.
+	if other := i.findExistingLeaderSigmaOnDistinctV(w.Layer, w.Leader, v); other != nil && i.recordRule2(w.Leader, w.Layer) {
+		newSynth := &Phase1Bundle{
+			ClusterID:  i.cfg.ClusterID,
+			OperatorID: w.Leader,
+			Height:     i.cfg.Height,
+			Layer:      w.Layer,
+			Value:      append(Value{}, v...),
+			SigmaV:     append(Signature{}, w.SigmaV...),
+		}
+		i.recordEvidence(Evidence{
+			Rule:       EvidenceLeaderEquivocation,
+			OperatorID: w.Leader,
+			Layer:      w.Layer,
+			LeaderEquivocation: &LeaderEquivocationEvidence{
+				BundleA: other,
+				BundleB: newSynth,
+			},
+		})
+	}
+
 	if bucket == nil {
 		bucket = make(map[[32]byte]witnessedSigma)
 		i.witnessedLeaderSigma[w.Layer] = bucket

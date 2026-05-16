@@ -42,11 +42,13 @@ func NewVerifierFromShare(
 	}
 
 	pubKeyShares := make(map[obftcore.OperatorID][]byte, len(share.Committee))
+	committee := make([]spectypes.OperatorID, 0, len(share.Committee))
 	for _, m := range share.Committee {
 		if m == nil || len(m.SharePubKey) == 0 {
 			return nil, errors.New("obft adapter: committee member with empty share pubkey")
 		}
 		pubKeyShares[obftcore.OperatorID(m.Signer)] = append([]byte(nil), m.SharePubKey...)
+		committee = append(committee, m.Signer)
 	}
 
 	var nrShares map[obftcore.OperatorID][]byte
@@ -68,5 +70,6 @@ func NewVerifierFromShare(
 		PubKeyShares:   pubKeyShares,
 		NRPubKeyShares: nrShares,
 		ClusterPubKey:  append([]byte(nil), share.ValidatorPubKey[:]...),
+		LeaderForLayer: LeaderForLayerFunc(committee),
 	}, nil
 }

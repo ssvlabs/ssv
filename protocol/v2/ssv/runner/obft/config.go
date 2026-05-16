@@ -428,9 +428,8 @@ func ConfigForCluster(
 
 	layers := make([]obftcore.LayerSpec, K)
 	for k := 0; k < K; k++ {
-		idx := (uint64(slot) + uint64(k)) % uint64(n) //nolint:gosec // small positive ints
 		layers[k] = obftcore.LayerSpec{
-			Leader:          obftcore.OperatorID(sorted[idx]),
+			Leader:          leaderForLayer(sorted, obftcore.Height(slot), k),
 			FetchAt:         fetchAt[k],
 			BroadcastBudget: broadcastBudget[k],
 		}
@@ -453,4 +452,32 @@ func ConfigForCluster(
 		BTT:       overrides.btt(),
 	}
 	return cfg, nil
+}
+
+// leaderForLayer applies the cluster leader-rotation rule to map (height,
+// layer) → expected leader. `sorted` is the cluster's operator IDs in
+// ascending order (the rotation's stable index). Public to the package so
+// other adapter code (validator-time witness checks) can derive expected
+// leaders without rebuilding a full *Config.
+func leaderForLayer(sorted []spectypes.OperatorID, height obftcore.Height, layer int) obftcore.OperatorID {
+	n := uint64(len(sorted))
+	if n == 0 {
+		return 0
+	}
+	idx := (uint64(height) + uint64(layer)) % n //nolint:gosec // small positive ints
+	return obftcore.OperatorID(sorted[idx])
+}
+
+// LeaderForLayerFunc returns a closure that maps (height, layer) → the
+// expected leader under the cluster's per-slot leader rotation. Used by
+// the validator-time Verifier (Verifier.LeaderForLayer) to reject witness
+// sections claiming a wrong-layer leader. `committee` is the cluster's
+// operator IDs (any order — sorted internally).
+func LeaderForLayerFunc(committee []spectypes.OperatorID) func(obftcore.Height, int) obftcore.OperatorID {
+	sorted := make([]spectypes.OperatorID, len(committee))
+	copy(sorted, committee)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	return func(height obftcore.Height, layer int) obftcore.OperatorID {
+		return leaderForLayer(sorted, height, layer)
+	}
 }
