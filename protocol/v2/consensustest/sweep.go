@@ -537,8 +537,7 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 				// 3×anchor = 900ms — matches the old `3 × cfg.BTT`
 				// magnitude. Empirical-profile callers (if added later)
 				// would see the per-profile anchor.
-				directExtra := time.Duration(3 * float64(base.SlowOpAnchor()))
-				cfg.Network = NewMarkovianSlowness(base, slowOps, directExtra, persistP)
+				cfg.Network = NewMarkovianSlowness(base, slowOps, slowOpExtraDelay(base, 3), persistP)
 				// Mirror onto Mesh.HopDelay so mesh-mode Healthy
 				// responds to the slow-op axis. SlowOps are cluster
 				// OperatorIDs (op2..op{k+1}), which match the cluster
@@ -549,8 +548,7 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 				if meshInner == nil {
 					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
 				}
-				meshExtra := time.Duration(3 * float64(meshInner.SlowOpAnchor()))
-				cfg.Mesh.HopDelay = NewMarkovianSlowness(meshInner, slowOps, meshExtra, persistP)
+				cfg.Mesh.HopDelay = NewMarkovianSlowness(meshInner, slowOps, slowOpExtraDelay(meshInner, 3), persistP)
 			})
 		}
 		btt := 300 * time.Millisecond

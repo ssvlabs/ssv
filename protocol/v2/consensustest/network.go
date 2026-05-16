@@ -357,7 +357,7 @@ type LogNormalMixtureDelay struct {
 	cumWeights []float64
 	// slowOpAnchor is the hand-tuned reference duration returned by
 	// SlowOpAnchor(). Zero means "compute from mixture": fall back to
-	// 2 × analytic median (parallel to LogNormalDelay's convention).
+	// analyticAnchor (parallel to LogNormalDelay's 2×Median convention).
 	// Empirical-profile constructors (Prod_/Stage_/...) set this
 	// explicitly; the synthetic generic constructor leaves it zero.
 	// Set via WithSlowOpAnchor; not propagated through Slowed/HeavyTailed
@@ -365,6 +365,13 @@ type LogNormalMixtureDelay struct {
 	// (real-world slow-op magnitude), not the network speed — so derived
 	// profiles get their anchor set explicitly in P2PProfile.
 	slowOpAnchor time.Duration
+	// analyticAnchor is 2 × the mixture's analytic median, precomputed
+	// once at construction so the SlowOpAnchor() fallback path is
+	// constant-time instead of running an 80-iter bisection on every
+	// call. The mixture is immutable post-construction (Components and
+	// cumWeights are never rewritten), so the analytic median is fixed
+	// at construction and caching it is safe.
+	analyticAnchor time.Duration
 }
 
 type LogNormalComponent struct {
@@ -398,7 +405,9 @@ func NewLogNormalMixtureDelay(components []LogNormalComponent) *LogNormalMixture
 	}
 	// Guard against floating drift on the last entry.
 	cum[len(cum)-1] = 1.0
-	return &LogNormalMixtureDelay{Components: components, cumWeights: cum}
+	l := &LogNormalMixtureDelay{Components: components, cumWeights: cum}
+	l.analyticAnchor = 2 * time.Duration(l.mixtureQuantile(0.5))
+	return l
 }
 
 func (l *LogNormalMixtureDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.Duration {
@@ -432,30 +441,31 @@ func (l *LogNormalMixtureDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKin
 }
 
 // SlowOpAnchor returns the hand-tuned anchor set via WithSlowOpAnchor
-// for calibrated empirical profiles. Falls back to 2 × analytic median
-// when unset (mirrors LogNormalDelay's convention) so a freshly-built
-// mixture without an explicit anchor still works for synthetic use.
+// for calibrated empirical profiles. Falls back to the precomputed
+// analyticAnchor (2 × analytic median, mirrors LogNormalDelay's
+// convention) when unset, so a freshly-built mixture without an
+// explicit anchor still works for synthetic use.
 func (l *LogNormalMixtureDelay) SlowOpAnchor() time.Duration {
 	if l.slowOpAnchor > 0 {
 		return l.slowOpAnchor
 	}
-	return 2 * time.Duration(l.mixtureQuantile(0.5))
+	return l.analyticAnchor
 }
 
-// WithSlowOpAnchor sets the hand-tuned slow-op disruption anchor on this
-// mixture (mutates the receiver) and returns it for chaining. The
-// receiver-mutation is deliberate so the typical construction-time
-// pattern stays compact:
+// WithSlowOpAnchor returns a shallow copy of `l` with the hand-tuned
+// slow-op disruption anchor set. The Components and cumWeights slices
+// are shared with the original (both are immutable post-construction
+// by convention), so the copy is cheap. Returning a copy rather than
+// mutating the receiver means it's safe to call on a shared mixture
+// — earlier references keep their original anchor.
+//
+// Typical construction-time pattern:
 //
 //	NewLogNormalMixtureDelay(...).WithSlowOpAnchor(d)
-//
-// Don't call WithSlowOpAnchor on a shared mixture instance — it changes
-// the anchor for every existing reference. In practice all callers
-// (the calibrated profile constructors, P2PProfile) chain off a freshly
-// constructed mixture so the shared-mutation footgun doesn't trigger.
 func (l *LogNormalMixtureDelay) WithSlowOpAnchor(d time.Duration) *LogNormalMixtureDelay {
-	l.slowOpAnchor = d
-	return l
+	cp := *l
+	cp.slowOpAnchor = d
+	return &cp
 }
 
 // Per-profile SlowOpAnchor calibrations consumed by the calibrated
@@ -472,15 +482,22 @@ func (l *LogNormalMixtureDelay) WithSlowOpAnchor(d time.Duration) *LogNormalMixt
 // tail that the previous `SlowMul × cfg.BTT` formula produced at
 // BTT=500ms. Anchors are deliberately on the low side (250-450ms vs an
 // earlier 500-900ms draft) because per-hop tax compounds across the
-// Markov chain's mean run length (~3.3 hops at PersistP=0.7): a 1s
-// per-hop tax × 3.3 hops dominates the 3.9s submit deadline.
+// Markov chain's mean run length. Worst case (extreme × slow_heavy_tail:
+// SlowMul=2.8, PersistP=0.60 → mean run ≈ 2.5 hops, anchor=450 ms):
+// cumulative tax 2.8 × 450 ms × 2.5 ≈ 3.15 s — within the 3.9 s submit
+// budget, but only just. The earlier 500-900 ms anchor draft would have
+// produced ~5-7 s cumulative, trivially dominating the deadline.
+//
+// The three empirical mixtures (prod, stage1, stage2) intentionally
+// share an anchor — they target the same "real-world mainnet slow-op
+// magnitude" regardless of which specific cluster the mixture is fit
+// to. The derived profiles (slow, heavy_tail, slow_heavy_tail) get
+// distinct anchors reflecting their stronger disruption regime.
 const (
-	prodSlowOpAnchor          = 250 * time.Millisecond
-	stage1SlowOpAnchor        = 250 * time.Millisecond
-	stage2SlowOpAnchor        = 250 * time.Millisecond
-	slowSlowOpAnchor          = 375 * time.Millisecond
-	heavyTailSlowOpAnchor     = 300 * time.Millisecond
-	slowHeavyTailSlowOpAnchor = 450 * time.Millisecond
+	calibratedEmpiricalSlowOpAnchor = 250 * time.Millisecond
+	slowSlowOpAnchor                = 375 * time.Millisecond
+	heavyTailSlowOpAnchor           = 300 * time.Millisecond
+	slowHeavyTailSlowOpAnchor       = 450 * time.Millisecond
 )
 
 // Prod_1_2_3_4_CalibratedLogNormalMixture returns the 3-component lognormal
@@ -499,7 +516,7 @@ func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 		{Weight: 0.7794, Median: 1303 * time.Microsecond, Sigma: 0.3774},
 		{Weight: 0.0805, Median: 1458 * time.Microsecond, Sigma: 1.4909},
 		{Weight: 0.1400, Median: 3457 * time.Microsecond, Sigma: 0.4140},
-	}).WithSlowOpAnchor(prodSlowOpAnchor)
+	}).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 }
 
 // Stage_53_54_55_56_CalibratedLogNormalMixture returns the 3-component lognormal mixture
@@ -516,7 +533,7 @@ func Stage_53_54_55_56_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 		{Weight: 0.0905, Median: 318 * time.Microsecond, Sigma: 1.6463},
 		{Weight: 0.3759, Median: 1084 * time.Microsecond, Sigma: 0.7824},
 		{Weight: 0.5337, Median: 2581 * time.Microsecond, Sigma: 0.4030},
-	}).WithSlowOpAnchor(stage1SlowOpAnchor)
+	}).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 }
 
 // Stage_97_98_99_100_CalibratedLogNormalMixture is fit to 24h of stage-hoodi
@@ -535,7 +552,7 @@ func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 		{Weight: 0.1379, Median: 976 * time.Microsecond, Sigma: 1.9473},
 		{Weight: 0.4049, Median: 2261 * time.Microsecond, Sigma: 0.9452},
 		{Weight: 0.4573, Median: 3519 * time.Microsecond, Sigma: 0.3800},
-	}).WithSlowOpAnchor(stage2SlowOpAnchor)
+	}).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 }
 
 // P2PProfileNames lists the calibrated mesh-hop-delay profiles exposed

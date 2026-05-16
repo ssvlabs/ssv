@@ -161,11 +161,15 @@ func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 // recalibrated anchors, so a regression that re-introduced BTT-coupling
 // would slip past a moderate-only test.
 //
-// Tolerance: ±15pp absolute success-rate variance across the three
-// BTT points. Binomial 95% CI half-width at p=0.5, n=40 is ~15pp;
-// genuine BTT-coupling produces spreads ≫ 15pp (the original screenshots
-// showed 99→89% at moderate, ~30pp at extreme), so this tolerance
-// catches the regression while staying noise-robust.
+// Tolerance: ±10pp absolute success-rate variance across the three
+// BTT points. Deterministic seeds make the test fully reproducible:
+// under the new code the observed spread is 0pp (39/40 decided at every
+// BTT), so 10pp leaves comfortable margin. The original BTT-coupling
+// regression produced spreads ≫ 15pp (screenshots: 99→89% at moderate,
+// ~30pp at extreme); the tighter tolerance catches a smaller regression
+// while staying robust to seed-noise-driven cross-BTT drift in the
+// proposer-duty config parameters (which are still BTT-derived even
+// though the slow-op anchor isn't).
 func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
 	const iters = 40
 	btts := []time.Duration{
@@ -216,7 +220,7 @@ func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
 			hi = r
 		}
 	}
-	require.LessOrEqualf(t, hi-lo, 0.15,
+	require.LessOrEqualf(t, hi-lo, 0.10,
 		"QBFT-SSV at prod/extreme/mesh must be BTT-invariant; got spread %.1fpp across BTT ∈ {100, 300, 500}ms (%v)",
 		100*(hi-lo), successRates)
 }

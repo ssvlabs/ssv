@@ -118,6 +118,19 @@ var InstabilityLevels = []InstabilityLevel{
 // later doesn't require touching the wrap logic.
 func IsBaselineGroup(s Scenario) bool { return s.Group == "Baseline" }
 
+// slowOpExtraDelay computes the per-hop slow-op tax for `model` at
+// multiplier `mul`: mul × model.SlowOpAnchor(), with the float ↔
+// Duration cast centralized. Used by both the cluster-wide (direct)
+// and mesh paths of WrapBaselineForInstability, and by the
+// p2pNodeSlownessSweep slow-ops wrap. The two paths read the anchor
+// from their respective underlying models (cfg.Network vs
+// cfg.Mesh.HopDelay) so a mismatched direct/mesh setup (e.g. mesh
+// uses BTT/3 LogNormal while direct uses a calibrated mixture) gets
+// each anchor independently.
+func slowOpExtraDelay(model NetworkModel, mul float64) time.Duration {
+	return time.Duration(mul * float64(model.SlowOpAnchor()))
+}
+
 // WrapBaselineForInstability returns a Scenario whose Apply composes
 // the original Apply with the per-level MarkovianSlowness + LossyNetwork
 // wrap when the scenario is in the Baseline group AND the level is
@@ -160,7 +173,7 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 		if base == nil {
 			base = ConstantDelay{D: cfg.BTT}
 		}
-		directExtra := time.Duration(level.SlowMul * float64(base.SlowOpAnchor()))
+		directExtra := slowOpExtraDelay(base, level.SlowMul)
 		withSlow := NewMarkovianSlowness(base, slowOps, directExtra, level.PersistP)
 		cfg.Network = NewLossyNetwork(withSlow, level.LossRate, level.BurstFactor)
 		// Mesh hop (mesh path): wrap cfg.Mesh.HopDelay with FRESH
@@ -177,7 +190,7 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 		if meshInner == nil {
 			meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
 		}
-		meshExtra := time.Duration(level.SlowMul * float64(meshInner.SlowOpAnchor()))
+		meshExtra := slowOpExtraDelay(meshInner, level.SlowMul)
 		meshWithSlow := NewMarkovianSlowness(meshInner, slowOps, meshExtra, level.PersistP)
 		cfg.Mesh.HopDelay = NewLossyNetwork(meshWithSlow, level.LossRate, level.BurstFactor)
 	})
