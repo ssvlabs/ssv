@@ -39,8 +39,9 @@ type wsServer struct {
 	logger *zap.Logger
 	ctx    context.Context
 
-	router  *http.ServeMux
-	handler QueryMessageHandler
+	router    *http.ServeMux
+	endpoints []string
+	handler   QueryMessageHandler
 
 	broadcaster Broadcaster
 	// outFeed is a subject for writing messages
@@ -89,7 +90,7 @@ func (ws *wsServer) Start(addr string) (string, <-chan error, error) {
 		WriteTimeout: timeout,
 	}
 
-	ws.logger.Info("starting", fields.Address(boundAddr), zap.Strings("endPoints", []string{"/query", "/stream"}))
+	ws.logger.Info("starting", fields.Address(boundAddr), zap.Strings("endPoints", ws.endpoints))
 
 	ws.broadcaster.FromFeed(ws.ctx, ws.outFeed)
 
@@ -134,6 +135,7 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *we
 
 	otelHandler := otelhttp.NewHandler(http.HandlerFunc(wrappedHandler), name)
 	ws.router.Handle(endPoint, otelHandler)
+	ws.endpoints = append(ws.endpoints, endPoint)
 }
 
 // handleQuery receives query message and respond async
