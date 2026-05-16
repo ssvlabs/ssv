@@ -91,9 +91,10 @@ func (c *conn) RemoteAddr() net.Addr {
 }
 
 // Close cancels the conn ctx (signaling WriteLoop and ReadLoop to exit)
-// and closes the underlying websocket. Idempotent: subsequent calls
-// hit ws.Close on an already-closed connection, which returns an error
-// that all callers ignore.
+// and closes the underlying websocket. Safe to call from multiple
+// goroutines concurrently and idempotent across repeated calls: cancelCtx
+// is a no-op after the first call, and ws.Close on an already-closed
+// connection returns an error that all callers ignore.
 func (c *conn) Close() error {
 	c.cancelCtx()
 	if c.ws == nil {
