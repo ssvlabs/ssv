@@ -202,15 +202,18 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 	}
 }
 
-// pingLoop sends ping messages according to configured interval
+// pingLoop sends ping messages according to configured interval. Exits
+// promptly on ctx cancel (instead of blocking up to pingInterval on a
+// quiet conn).
 func (c *conn) pingLoop(ctx context.Context, logger *zap.Logger) {
-	t := time.NewTimer(pingInterval)
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
 	for {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
 		}
-		t.Reset(pingInterval)
-		<-t.C
 		c.writeLock.Lock()
 		logger.Debug("sending ping message")
 		err := c.ws.WriteControl(websocket.PingMessage, pingMsg(c.ID()), time.Now().Add(c.writeTimeout))
