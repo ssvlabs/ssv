@@ -92,14 +92,14 @@ type LayerSpec struct {
 	// `B_{K-1} = T_commit` deliberately hits this clamp ("earliest
 	// possible" deepest broadcast).
 	//
-	// Spec K=4 Config A (BTT=200ms, T_commit=3400ms): B_k values are 1·BTT,
-	// 1.5·BTT, 2.5·BTT, T_commit (= 200/300/500/3400 ms). The deepest
-	// is "earliest possible" — leader's target broadcast clamps to slot
-	// start. Internally each shallow B_k decomposes as typical-mesh
-	// propagation + convergence buffer (spec §Setting quotes B_0 = 1
-	// BTT as ≈0.5 BTT propagation + 0.5 BTT convergence); the
-	// decomposition is informative-only — this field is the single
-	// T_commit-anchored value, NOT the propagation half alone.
+	// Spec K=4 Config A (BTT=200ms, T_commit=3600ms, RefloodDelay=700ms):
+	// B_k values are 2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit
+	// (= 1100/1300/1500/3600 ms). The deepest is "earliest possible" —
+	// leader's target broadcast clamps to slot start. Each shallow B_k
+	// decomposes as (k+2)·BTT (1·BTT P99 propagation + 1·BTT IWANT
+	// round-trip + (k)·BTT per-deeper-layer jitter cushion) + RefloodDelay
+	// (one full IHAVE/IWANT cycle), per spec §Setting. The decomposition
+	// is informative; this field is the single T_commit-anchored target.
 	//
 	// Required: must be > 0 on every layer. Config.Validate rejects
 	// zero/negative values and decreasing-in-k schedules (equal adjacent
@@ -136,14 +136,17 @@ type Config struct {
 	// stance based on what it observed by this offset.
 	TCommit time.Duration
 
-	// Delta2 is Δ_2 — the Phase 2 window length. Per spec §Phase 2, Delta2 ≥
-	// 1 BTT is the propagation budget for KindCommit messages emitted at
-	// T_commit to reach all honest peers before Phase 3. Recommended for
-	// production: Delta2 = 2 BTT (one full propagation cycle of slack on top
-	// of the P99 budget).
+	// Delta2 is Δ_2 — the Phase 2 window length. Per spec §Phase 2,
+	// `Delta2 = 1 BTT` is the recommended sizing: one propagation cycle
+	// for KindCommit messages emitted by T_commit (the synchronous
+	// fallback) to reach all honest peers before Phase 3. Reflood
+	// absorption is structurally provided by per-layer `B_k` via the
+	// reflood-aware schedule (`(k+2)·BTT + RefloodDelay`), so Delta2 no
+	// longer carries a reflood cushion. Sub-1·BTT sizings are sub-BFT
+	// (Phase-2 propagation can't complete within the budget).
 	Delta2 time.Duration
 
-	// Delta3 is Δ_3 — the Phase 3 window length. Per spec, Delta3 covers
+	// Eps3 is ε_3 — the Phase 3 window length. Per spec, Eps3 covers
 	// local reconstruction processing (BLS aggregation, IBE decryption walk,
 	// certificate construction). KindCommit propagation is already covered
 	// by Delta2. Absolute (does not scale with BTT); per OBFT.md §Phase 3 /
@@ -152,7 +155,7 @@ type Config struct {
 	// the IBE-decryption walk runs sequentially through each NR-quorum-
 	// unlocked layer, so end-to-end Phase 3 cost grows roughly linearly
 	// with the number of fall-throughs (~ε_3 × K at K layers walked).
-	Delta3 time.Duration
+	Eps3 time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
 	// §Setting: BTT = P99 + δ, where P99 is the cluster gossipsub propagation
@@ -229,7 +232,7 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 // T_commit − B_k)` clamps those layers' targets at BFT_start, so the
 // configuration remains valid (fall-through depth shrinks but the
 // cluster still operates). Callers that want the canonical staggered
-// shape preserved can either widen T_commit (loosen Δ_2 / Δ_3 / header
+// shape preserved can either widen T_commit (loosen Δ_2 / ε_3 / header
 // headroom), lower RefloodDelay for denser meshes, or supply their own
 // per-layer schedule.
 //
@@ -322,7 +325,7 @@ func (c *Config) PhaseTwoEndOffset() time.Duration {
 	return c.TCommit + c.Delta2
 }
 
-// RoundEndOffset returns T_commit + Delta2 + Delta3 — the SOFT per-operator
+// RoundEndOffset returns T_commit + Delta2 + Eps3 — the SOFT per-operator
 // target by which the local Phase-3 reconstruction walk is expected to
 // complete under nominal partial synchrony. Per spec §Phase 3, this is
 // NOT a hard deadline:
@@ -332,7 +335,7 @@ func (c *Config) PhaseTwoEndOffset() time.Duration {
 //     state). PhaseTwoEndOffset is the SOFT propagation target, not a
 //     Resolve-gating wall. The canonical implementation observes inbound
 //     KindCommit / KindCertificate arrivals and calls Resolve on each.
-//   - Reconstruction overrunning Delta3 can spill into the submission
+//   - Reconstruction overrunning Eps3 can spill into the submission
 //     slack; a faster peer's KindCertificate gossip can let an operator
 //     that hasn't completed local reconstruction submit (V, S) directly.
 //   - Late KindCommit arrivals past T_commit + Delta2 can be incorporated
@@ -344,7 +347,7 @@ func (c *Config) PhaseTwoEndOffset() time.Duration {
 // T_relay_cutoff − T_submit), enforced at the runner level via context
 // cancellation, not here.
 func (c *Config) RoundEndOffset() time.Duration {
-	return c.TCommit + c.Delta2 + c.Delta3
+	return c.TCommit + c.Delta2 + c.Eps3
 }
 
 // Validate checks the config for internal consistency. Bad configs are
@@ -381,8 +384,8 @@ func (c *Config) Validate() error {
 	if c.Delta2 <= 0 {
 		return errors.New("obft: Delta2 must be positive")
 	}
-	if c.Delta3 <= 0 {
-		return errors.New("obft: Delta3 must be positive")
+	if c.Eps3 <= 0 {
+		return errors.New("obft: Eps3 must be positive")
 	}
 	// Delta2 < 1 BTT and TCommit < 2 BTT are the BFT-liveness minimums for
 	// Phase 2 propagation and the broadcast deadline (spec §Setting). Below

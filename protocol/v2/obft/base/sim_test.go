@@ -89,7 +89,7 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 		Layers:    layers,
 		TCommit:   tCommit,
 		Delta2:    300 * time.Millisecond,
-		Delta3:    250 * time.Millisecond,
+		Eps3:      250 * time.Millisecond,
 		BTT:       btt,
 	}
 	require.NoError(t, cfg.Validate())

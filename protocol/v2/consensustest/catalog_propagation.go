@@ -202,9 +202,10 @@ var scenarioMeshFlakiness = Scenario{
 // leader + (N-1-f) on-time non-leaders = N-f = 2f+1 = qV. Quorum reaches.
 //
 // At n=4, f=1: 1 slow receiver (op2) at 3·BTT inbound delay. Phase-1
-// bundle for L_0 arrives at op2 at FetchAt[0] + 3·BTT = 3150 + 600 = 3750ms
-// > T_commit=3400ms → op2 rejects. σ-pool at L_0 = op1(leader) + op3 + op4
-// = 3 = qV. Cluster decides at L_0.
+// bundle for L_0 arrives at op2 late enough to land past T_commit at op2
+// (scenario fixture sized so op2's bundle misses its accept horizon while
+// the other 3 operators still observe in time). σ-pool at L_0 =
+// op1(leader) + op3 + op4 = 3 = qV. Cluster decides at L_0.
 var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 	Name:  "AsymmetricPropagation_FSlow_Success",
 	Title: "Asymmetric propagation: f slow receivers (success)",

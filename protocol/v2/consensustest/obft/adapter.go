@@ -95,8 +95,12 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// Derive every timing budget internally from bttEff = multiplier ·
 	// cfg.BTT. The framework no longer carries Delta2 / BroadcastBudget /
 	// FetchAt on SimConfig; OBFT family adapters own the spec's BTT-as-
-	// unit conventions (Delta2 = 2·BTT recommended; B_k staggered as
-	// 1·/1.5·/2.5·BTT; fetch buffer = BTT/4 default).
+	// unit conventions. The framework intentionally keeps `Delta2 = 2·BTT`
+	// for simulation conservatism — the production SSV adapter uses the
+	// tightened spec recommendation `Δ_2 = 1·BTT` (reflood lives in B_k);
+	// the framework's 2·BTT gives sims an extra propagation cushion so
+	// scenario expectations stay stable under network-model jitter without
+	// re-baselining every scenario when the spec recommendation tightens.
 	bttEff := p.effectiveBTT(cfg.BTT)
 	delta2 := 2 * bttEff
 	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
@@ -285,7 +289,7 @@ type desConfig struct {
 	Operators       []ct.OperatorID
 	TCommit         time.Duration
 	Delta2          time.Duration
-	Epsilon3        time.Duration // forwarded to obftbase.Config.Delta3 (= ε_3 per spec)
+	Epsilon3        time.Duration // forwarded to obftbase.Config.Eps3 (= ε_3 per spec)
 	BTT             time.Duration
 	FetchAt         []time.Duration
 	BroadcastBudget []time.Duration

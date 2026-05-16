@@ -152,8 +152,8 @@ func TestDefaultBroadcastBudgetSchedule_EndpointConstantMatchK4(t *testing.T) {
 }
 
 // TestDefaultTCommitDecomposition asserts the spec's §Application / Timing
-// budget decomposition at Config A: the post-T_commit window of 600ms = 3 BTT
-// splits as Δ_2 (400ms = 2 BTT) + Δ_3 (50ms = ε_3) + JitterBuffer (50ms) +
+// budget decomposition at Config A: the post-T_commit window of 400ms = 2 BTT
+// splits as Δ_2 (200ms = 1 BTT) + ε_3 (50ms) + JitterBuffer (50ms) +
 // TestConfigForCluster_NilOverrides — passing nil for the *ConfigOverrides
 // arg must not panic; the function normalizes nil to a zero-valued struct
 // so subsequent field reads (FetchAt, BroadcastBudget) are nil-safe. Spec
@@ -208,14 +208,14 @@ func TestConfigForCluster_KDerivedFromClusterSize(t *testing.T) {
 // Catches accidental drift between the spec's named components and the
 // derived T_commit value.
 func TestDefaultTCommitDecomposition(t *testing.T) {
-	require.Equal(t, 400*time.Millisecond, DefaultDelta2, "Δ_2 = 2 BTT at default")
-	require.Equal(t, 50*time.Millisecond, DefaultDelta3, "Δ_3 = ε_3 ≈ 50ms (spec)")
+	require.Equal(t, 200*time.Millisecond, DefaultDelta2, "Δ_2 = 1 BTT recommended (reflood lives in B_k)")
+	require.Equal(t, 50*time.Millisecond, DefaultEps3, "ε_3 ≈ 50ms (spec)")
 	require.Equal(t, 50*time.Millisecond, DefaultJitterBuffer, "JitterBuffer ≈ 50ms (spec)")
 	require.Equal(t, 100*time.Millisecond, DefaultHeaderSubmitHeadroom)
-	require.Equal(t, 3400*time.Millisecond, DefaultTCommit,
-		"T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − Δ_3 − Δ_2")
-	// Post-T_commit window sums to 600ms = 3 BTT exactly.
+	require.Equal(t, 3600*time.Millisecond, DefaultTCommit,
+		"T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − ε_3 − Δ_2")
+	// Post-T_commit window sums to 400ms = 2 BTT exactly.
 	post := DefaultRelayCutoff - DefaultTCommit
-	require.Equal(t, 600*time.Millisecond, post)
-	require.Equal(t, post, DefaultDelta2+DefaultDelta3+DefaultJitterBuffer+DefaultHeaderSubmitHeadroom)
+	require.Equal(t, 400*time.Millisecond, post)
+	require.Equal(t, post, DefaultDelta2+DefaultEps3+DefaultJitterBuffer+DefaultHeaderSubmitHeadroom)
 }

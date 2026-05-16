@@ -128,7 +128,7 @@ type witnessedSigma struct {
 //     can push σ-pool past qV at a layer that didn't reach on the
 //     initial walk, or push NR-pool past qEnc to unlock the next
 //     layer's chained decryption (Pigeonhole semantics still hold).
-//     RoundEndOffset (= TCommit + Delta2 + Delta3) is a soft per-
+//     RoundEndOffset (= TCommit + Delta2 + Eps3) is a soft per-
 //     operator target, not a hard cluster-wide deadline.
 //     b. On success: BuildCertificate(out) → broadcast.
 //     c. ObserveCertificate(c) for peers' certificates as a fallback

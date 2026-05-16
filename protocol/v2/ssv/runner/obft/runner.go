@@ -25,7 +25,7 @@ import (
 //     SubmitOutput), or the slot's submission deadline (ctx) is reached.
 //  5. EndInstance.
 //
-// Per spec §Phase 3: T_commit + Δ_2 + Δ_3 (= RoundEndOffset) is a SOFT
+// Per spec §Phase 3: T_commit + Δ_2 + ε_3 (= RoundEndOffset) is a SOFT
 // per-operator target, not a hard cluster-wide deadline; reconstruction
 // running past it can spill into the submission slack, and a faster peer's
 // Certificate gossip lets an operator that hasn't completed local

@@ -107,7 +107,7 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 			TCommit:   tCommit,
 			Delta2a:   400 * time.Millisecond,
 			Delta2b:   400 * time.Millisecond,
-			Delta3:    250 * time.Millisecond,
+			Eps3:      250 * time.Millisecond,
 			BTT:       btt,
 		}
 	}

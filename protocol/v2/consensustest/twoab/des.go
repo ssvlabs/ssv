@@ -127,7 +127,7 @@ func (s *sim) start() error {
 		TCommit:   s.cfg.TCommit,
 		Delta2a:   s.cfg.Delta2a,
 		Delta2b:   s.cfg.Delta2b,
-		Delta3:    s.cfg.Epsilon3,
+		Eps3:      s.cfg.Epsilon3,
 		BTT:       s.cfg.BTT,
 	}
 	if err := cfgTwoab.Validate(); err != nil {

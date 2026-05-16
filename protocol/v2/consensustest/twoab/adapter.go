@@ -296,7 +296,7 @@ type desConfig struct {
 	TCommit         time.Duration
 	Delta2a         time.Duration
 	Delta2b         time.Duration
-	Epsilon3        time.Duration // forwarded to twoab.Config.Delta3 (= ε_3 per spec)
+	Epsilon3        time.Duration // forwarded to twoab.Config.Eps3 (= ε_3 per spec)
 	BTT             time.Duration
 	FetchAt         []time.Duration
 	BroadcastBudget []time.Duration

@@ -211,17 +211,17 @@ func (s *Scheduler) FetchAndBroadcastBundle(ctx context.Context, slot phase0.Slo
 // Operational load (deployment-planning note): each poll triggers one
 // FetchCandidate call, which in production resolves to a beacon-node
 // produceBlock / GetBeaconBlock call (relay-best-bid lookup). At Config A
-// defaults (BTT=200ms, TCommit=3400ms, pollInterval=200ms) the per-slot
+// defaults (BTT=200ms, TCommit=3600ms, pollInterval=200ms) the per-slot
 // per-layer-leader poll count is bounded by (T_broadcast_max[k]-FetchAt[k])
 // / pollInterval, which resolves to:
 //
-//	L_0: window ≈ 3047ms → ~15 polls
-//	L_1: window ≈ 2948ms → ~14 polls
-//	L_2: window ≈ 2749ms → ~13 polls
-//	L_3: window ≈ 2150ms → ~10 polls
+//	L_0: window ≈ 2337ms → ~11 polls
+//	L_1: window ≈ 2138ms → ~10 polls
+//	L_2: window ≈ 1939ms → ~9 polls
+//	L_3: window ≈ 0ms (broadcasts at slot start; bounded by RANDAO_done in practice)
 //
 // At K=N=4 each operator leads exactly one layer per slot, so the upper
-// bound is ~15 beacon-node calls per slot-leader-layer (worst case = L_0).
+// bound is ~11 beacon-node calls per slot-leader-layer (worst case = L_0).
 // Cluster-wide, this is K times that number aggregated across operators per
 // slot. Tune via SetFetchTiming if relay/beacon-node QPS limits matter for
 // the deployment.
@@ -397,7 +397,7 @@ func (s *Scheduler) tryCertFastPath(ctx context.Context, slot phase0.Slot) bool 
 // V reconstructs cluster-wide regardless of timing), so re-running is safe.
 //
 // This is the production reconstruction path. RoundEndOffset (= T_commit +
-// Δ_2 + Δ_3) is a SOFT per-operator target — not a hard deadline; the hard
+// Δ_2 + ε_3) is a SOFT per-operator target — not a hard deadline; the hard
 // wall is ctx (the relay-submission deadline).
 func (s *Scheduler) ResolveAndSubmitOpportunistically(ctx context.Context, slot phase0.Slot) error {
 	// Acquire the state-delta channel BEFORE the optimistic attempt — any

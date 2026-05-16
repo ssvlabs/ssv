@@ -22,28 +22,32 @@ import (
 //
 // Spec Config A operating point (BTT = 200ms, RelayCutoff = 4000ms,
 // HeaderSubmitHeadroom = 100ms):
-//   - Δ_2 = 2 BTT = 400ms (recommended; KindCommit propagation + jitter)
-//   - Δ_3 = ε_3 ≈ 50ms (absolute; local CPU reconstruction)
+//   - Δ_2 = 1 BTT = 200ms (recommended; KindCommit propagation cycle).
+//     Reflood absorption lives in per-layer B_k via the reflood-aware
+//     schedule, so Δ_2 no longer carries a reflood cushion.
+//   - ε_3 ≈ 50ms (absolute; local CPU reconstruction)
 //   - JitterBuffer ≈ 50ms (absolute; residual slack between Phase-3
 //     completion and cert-broadcast / relay-submit start)
-//   - T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − Δ_3 − Δ_2 = 3400ms
+//   - T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − ε_3 − Δ_2 = 3600ms
 //
 // Adjusting BTT (deployment's P99+δ) re-derives the post-T_commit budget
-// while keeping Δ_3, JitterBuffer, and HeaderSubmitHeadroom absolute.
+// while keeping ε_3, JitterBuffer, and HeaderSubmitHeadroom absolute.
 // Override these via ConfigOverrides for non-default deployments.
 const (
 	DefaultBTT                  = 200 * time.Millisecond
 	DefaultHeaderSubmitHeadroom = 100 * time.Millisecond
-	DefaultDelta3               = 50 * time.Millisecond // ε_3, absolute (local CPU reconstruction)
+	DefaultEps3                 = 50 * time.Millisecond // ε_3, absolute (local CPU reconstruction)
 	DefaultJitterBuffer         = 50 * time.Millisecond // residual jitter between Phase-3-complete and cert/submit
 
-	// Δ_2 = 2 BTT recommended; defaultDelta2 derives from DefaultBTT.
-	DefaultDelta2 = 2 * DefaultBTT
+	// Δ_2 = 1 BTT recommended; defaultDelta2 derives from DefaultBTT.
+	// Reflood lives in B_k via RefloodDelay — Δ_2 only needs to cover
+	// the synchronous-fallback KindCommit propagation cycle.
+	DefaultDelta2 = 1 * DefaultBTT
 
-	// T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − Δ_3 − Δ_2.
-	// At Config A: 4000 − 100 − 50 − 50 − 400 = 3400ms.
+	// T_commit = RelayCutoff − HeaderSubmitHeadroom − JitterBuffer − ε_3 − Δ_2.
+	// At Config A: 4000 − 100 − 50 − 50 − 200 = 3600ms.
 	DefaultRelayCutoff = 4000 * time.Millisecond
-	DefaultTCommit     = DefaultRelayCutoff - DefaultHeaderSubmitHeadroom - DefaultJitterBuffer - DefaultDelta3 - DefaultDelta2
+	DefaultTCommit     = DefaultRelayCutoff - DefaultHeaderSubmitHeadroom - DefaultJitterBuffer - DefaultEps3 - DefaultDelta2
 
 	// DefaultK is the recommended layer count for SSV proposer duty:
 	// K = n = 4 (every cluster member leads exactly one layer; max
@@ -96,18 +100,19 @@ const (
 // budget[K-1] ≥ 2·BTT BFT-min (trivially satisfied since deepest = T_commit
 // and T_commit ≥ 2·BTT is independently enforced).
 //
-// At Config A (BTT = 200ms, TCommit = 3400ms) the K=4 schedule resolves to:
-//   - budget  = [1·BTT, 1.5·BTT, 2.5·BTT, T_commit] = [200, 300, 500, 3400]ms.
-//   - fetchAt = [153, 152, 151, 0]ms — shallow layers clustered at RANDAO_done
-//     with 1ms-per-layer staggering (a self-documenting hint that L_{k+1}
-//     fetches before L_k; obft.Config.Validate only requires non-increasing,
-//     so the tight stagger is convention not requirement). The deepest layer
-//     at 0 because B_{K-1} = T_commit clamps T_broadcast_max_{K-1} to
-//     BFT_start (iterative-fetch uses the full window per layer regardless
-//     of fetchAt order).
+// At Config A (BTT = 200ms, TCommit = 3600ms, RefloodDelay = 700ms)
+// the K=4 schedule resolves to:
+//   - budget  = [2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit] =
+//     [1100, 1300, 1500, 3600]ms.
+//   - fetchAt = [153, 152, 151, 0]ms — shallow layers clustered at
+//     RANDAO_done with 1ms-per-layer staggering (a self-documenting
+//     hint that L_{k+1} fetches before L_k; obft.Config.Validate only
+//     requires non-increasing, so the tight stagger is convention not
+//     requirement). The deepest layer at 0 because B_{K-1} = T_commit
+//     clamps T_broadcast_max_{K-1} to BFT_start (iterative-fetch uses
+//     the full window per layer regardless of fetchAt order).
 //   - V_0 MEV-fetch budget at iterative-fetch = T_broadcast_max[0] −
-//     fetchAt[0] − buildBuffer = 3200 − 153 − 10 = 3037ms (vs spec's 3050ms
-//     target — within 13ms).
+//     fetchAt[0] − buildBuffer = (3600 − 1100) − 153 − 10 = 2337ms.
 //
 // For K>4 (n=7, n=10, n=13 deployments) the first three shallow layers stay
 // at 1 / 1.5 / 2.5 BTT and intermediate layers interpolate linearly from
@@ -152,11 +157,11 @@ const (
 // ConfigOverrides allows callers to override the default protocol timings
 // and layer count. Zero values fall back to package defaults — and where
 // the spec defines a derivation (e.g. T_commit = RelayCutoff − headroom −
-// Δ_3 − Δ_2; Δ_2 = 2·BTT), zero-valued fields derive from the supplied
-// BTT / RelayCutoff / HeaderSubmitHeadroom rather than from the package
-// defaults. Per spec §Application: callers can configure (BTT,
-// HeaderSubmitHeadroom, RelayCutoff) and the post-T_commit timing falls
-// out automatically.
+// JitterBuffer − ε_3 − Δ_2; Δ_2 = 1·BTT), zero-valued fields derive from
+// the supplied BTT / RelayCutoff / HeaderSubmitHeadroom rather than from
+// the package defaults. Per spec §Application: callers can configure
+// (BTT, HeaderSubmitHeadroom, RelayCutoff) and the post-T_commit timing
+// falls out automatically.
 type ConfigOverrides struct {
 	K                    int
 	BTT                  time.Duration // P99 + δ; spec §Setting unit propagation+skew budget
@@ -175,14 +180,14 @@ type ConfigOverrides struct {
 	// explicitly.
 	RefloodDelay time.Duration
 
-	// TCommit, Delta2, Delta3, JitterBuffer — when zero, derive from the
+	// TCommit, Delta2, Eps3, JitterBuffer — when zero, derive from the
 	// above per spec. Set explicitly only to deviate from the spec
 	// derivation. JitterBuffer is the residual slack between Phase-3
 	// completion and cert-broadcast / relay-submit start (see spec
 	// §Application / Timing budget).
 	TCommit      time.Duration
 	Delta2       time.Duration
-	Delta3       time.Duration
+	Eps3         time.Duration
 	JitterBuffer time.Duration
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
@@ -238,12 +243,12 @@ func (o *ConfigOverrides) refloodDelay() time.Duration {
 	return o.RefloodDelay
 }
 
-// delta3 derives from absolute ε_3 (doesn't scale with BTT per spec).
-func (o *ConfigOverrides) delta3() time.Duration {
-	if o == nil || o.Delta3 == 0 {
-		return DefaultDelta3
+// eps3 derives from absolute ε_3 (doesn't scale with BTT per spec).
+func (o *ConfigOverrides) eps3() time.Duration {
+	if o == nil || o.Eps3 == 0 {
+		return DefaultEps3
 	}
-	return o.Delta3
+	return o.Eps3
 }
 
 // jitterBuffer derives from absolute residual jitter (doesn't scale with
@@ -255,22 +260,23 @@ func (o *ConfigOverrides) jitterBuffer() time.Duration {
 	return o.JitterBuffer
 }
 
-// delta2 derives as 2 BTT per spec §Phase 2 recommendation (KindCommit
-// propagation + jitter cushion). Override only to deviate.
+// delta2 derives as 1 BTT per spec §Phase 2 recommendation (KindCommit
+// synchronous-fallback propagation cycle). Reflood lives in B_k via
+// RefloodDelay. Override only to deviate.
 func (o *ConfigOverrides) delta2() time.Duration {
 	if o != nil && o.Delta2 != 0 {
 		return o.Delta2
 	}
-	return 2 * o.btt()
+	return 1 * o.btt()
 }
 
 // tCommit derives as RelayCutoff − HeaderSubmitHeadroom − JitterBuffer −
-// Δ_3 − Δ_2 per spec §Application / Timing budget.
+// ε_3 − Δ_2 per spec §Application / Timing budget.
 func (o *ConfigOverrides) tCommit() time.Duration {
 	if o != nil && o.TCommit != 0 {
 		return o.TCommit
 	}
-	return o.relayCutoff() - o.headerSubmitHeadroom() - o.jitterBuffer() - o.delta3() - o.delta2()
+	return o.relayCutoff() - o.headerSubmitHeadroom() - o.jitterBuffer() - o.eps3() - o.delta2()
 }
 
 // interpolatedDurationSchedule returns a length-K slice of durations running
@@ -363,12 +369,12 @@ func defaultFetchSchedule(K int) []time.Duration {
 // Capped layers share `T_broadcast_max_k = max(BFT_start, T_commit − B_k)
 // = BFT_start` — multiple layers may collide at BFT_start without safety
 // impact. Operators who want the canonical staggered shape preserved can
-// either widen T_commit (loosen Δ_2 / Δ_3 / header headroom), lower
+// either widen T_commit (loosen Δ_2 / ε_3 / header headroom), lower
 // RefloodDelay for denser meshes, or supply a custom schedule.
 //
-// Spec example values at BTT=200ms, RefloodDelay=700ms, T_commit=3400ms
-// (Config A): K=4 → [1100, 1300, 1500, 3400]ms. At BTT=200ms,
-// RefloodDelay=0 (fully-meshed cluster): K=4 → [400, 600, 800, 3400]ms.
+// Spec example values at BTT=200ms, RefloodDelay=700ms, T_commit=3600ms
+// (Config A): K=4 → [1100, 1300, 1500, 3600]ms. At BTT=200ms,
+// RefloodDelay=0 (fully-meshed cluster): K=4 → [400, 600, 800, 3600]ms.
 func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule K=%d must be ≥ 1", K)
@@ -493,7 +499,7 @@ func ConfigForCluster(
 		Layers:    layers,
 		TCommit:   overrides.tCommit(),
 		Delta2:    overrides.delta2(),
-		Delta3:    overrides.delta3(),
+		Eps3:      overrides.eps3(),
 		BTT:       overrides.btt(),
 	}
 	return cfg, nil

@@ -9,7 +9,7 @@ import (
 )
 
 // healthyConfig returns a spec-conforming Config at the default K=4, f=1,
-// n=4 deployment (Config A: BTT=200ms, Δ_2a=Δ_2b=400ms, Δ_3=250ms,
+// n=4 deployment (Config A: BTT=200ms, Δ_2a=Δ_2b=400ms, ε_3=250ms,
 // TCommit=2000ms). Tests mutate fields to check Validate rejects the
 // invalid input.
 func healthyConfig() *Config {
@@ -41,7 +41,7 @@ func healthyConfig() *Config {
 		TCommit: tCommit,
 		Delta2a: 400 * time.Millisecond,
 		Delta2b: 400 * time.Millisecond,
-		Delta3:  250 * time.Millisecond,
+		Eps3:    250 * time.Millisecond,
 		BTT:     btt,
 	}
 }
@@ -92,7 +92,7 @@ func TestConfig_Validate_AllowsKAtBFTLivenessMinimum(t *testing.T) {
 		TCommit: tCommit,
 		Delta2a: 400 * time.Millisecond,
 		Delta2b: 400 * time.Millisecond,
-		Delta3:  250 * time.Millisecond,
+		Eps3:    250 * time.Millisecond,
 		BTT:     btt,
 	}
 	require.NoError(t, c.Validate())
@@ -153,10 +153,10 @@ func TestConfig_Validate_RejectsDelta2bNonPositive(t *testing.T) {
 	require.ErrorContains(t, c.Validate(), "Delta2b must be positive")
 }
 
-func TestConfig_Validate_RejectsNonPositiveDelta3(t *testing.T) {
+func TestConfig_Validate_RejectsNonPositiveEps3(t *testing.T) {
 	c := healthyConfig()
-	c.Delta3 = 0
-	require.ErrorContains(t, c.Validate(), "Delta3 must be positive")
+	c.Eps3 = 0
+	require.ErrorContains(t, c.Validate(), "Eps3 must be positive")
 }
 
 func TestConfig_Validate_RejectsTCommitBelowDelta2a(t *testing.T) {
@@ -279,7 +279,7 @@ func TestConfig_DerivedOffsets_HealthyConfig(t *testing.T) {
 	require.Equal(t, c.TCommit, c.Phase2bStartOffset())
 	require.Equal(t, c.TCommit+c.Delta2b, c.Phase2bEndOffset())
 	require.Equal(t, c.TCommit+c.Delta2b, c.Phase3StartOffset())
-	require.Equal(t, c.TCommit+c.Delta2b+c.Delta3, c.RoundEndOffset())
+	require.Equal(t, c.TCommit+c.Delta2b+c.Eps3, c.RoundEndOffset())
 }
 
 func TestConfig_QV_QEnc_Quorum(t *testing.T) {

@@ -130,15 +130,22 @@ type Config struct {
 	Delta2a time.Duration
 
 	// Delta2b is Δ_2b — the Phase 2b (σ-or-NR commit) window length.
-	// Per spec, Δ_2b ≥ 1 BTT is the propagation budget for Phase-2b σ/NR
-	// partials to reach all honest peers before Phase 3. Recommended: 2 BTT.
+	// Per spec, `Delta2b ≥ 1 BTT + ε_proc` is the propagation budget for
+	// Phase-2b σ/NR partials (emitted after ε_proc convergence computation)
+	// to reach all honest peers before Phase 3. **Recommended sizing:
+	// `Delta2b = 1·BTT + ε_proc` (= 250ms at Config A with ε_proc ≈ 50ms)**
+	// — the minimum coherent value. Reflood absorption is structurally
+	// provided by per-layer `B_k` via the reflood-aware schedule, so
+	// Delta2b no longer carries a reflood cushion.
 	Delta2b time.Duration
 
-	// Delta3 is Δ_3 — the Phase 3 reconstruction window length.
-	// Per spec, Δ_3 ≥ 1 BTT + ε_3 covers (a) end-of-Phase-2b partial
-	// propagation and (b) local reconstruction processing (BLS aggregation,
-	// IBE decryption walk, certificate construction). ε_3 ≈ 50ms at Config A.
-	Delta3 time.Duration
+	// Eps3 is ε_3 — the Phase 3 reconstruction window length.
+	// Per spec, Eps3 covers local reconstruction processing (BLS
+	// aggregation, IBE decryption walk, certificate construction).
+	// Phase-2b emission propagation is already covered by Delta2b, so
+	// Eps3 is purely local-CPU. Absolute (does not scale with BTT);
+	// ε_3 ≈ 50ms at Config A.
+	Eps3 time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
 	// §Setting: BTT = P99 + δ. Used as the unit for time-budget formulas.
@@ -251,7 +258,7 @@ func (c *Config) Phase3StartOffset() time.Duration {
 	return c.TCommit + c.Delta2b
 }
 
-// RoundEndOffset returns TCommit + Delta2b + Delta3 — the SOFT per-operator
+// RoundEndOffset returns TCommit + Delta2b + Eps3 — the SOFT per-operator
 // target by which the local Phase-3 reconstruction walk is expected to
 // complete under nominal partial synchrony. Per spec §Phase 3, this is
 // NOT a hard deadline:
@@ -261,7 +268,7 @@ func (c *Config) Phase3StartOffset() time.Duration {
 //     state). Phase2bEndOffset is the SOFT propagation target, not a
 //     Resolve-gating wall. The canonical implementation observes inbound
 //     KindOnion2b / KindCertificate arrivals and calls Resolve on each.
-//   - Reconstruction overrunning Delta3 can spill into the submission
+//   - Reconstruction overrunning Eps3 can spill into the submission
 //     slack; a faster peer's KindCertificate gossip can let an operator
 //     that hasn't completed local reconstruction submit (V, S) directly.
 //   - Late KindOnion2b arrivals past Phase2bEndOffset can be incorporated
@@ -273,7 +280,7 @@ func (c *Config) Phase3StartOffset() time.Duration {
 // T_relay_cutoff − T_submit), enforced at the runner level via context
 // cancellation, not here.
 func (c *Config) RoundEndOffset() time.Duration {
-	return c.TCommit + c.Delta2b + c.Delta3
+	return c.TCommit + c.Delta2b + c.Eps3
 }
 
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
@@ -305,7 +312,7 @@ func (c *Config) RoundEndOffset() time.Duration {
 // layers' targets at BFT_start, so the configuration remains valid (the
 // fall-through depth shrinks but the cluster still operates). Callers
 // that want the canonical staggered shape preserved can either widen
-// TVerdictStart (loosen Δ_2a / Δ_2b / Δ_3 / header headroom), lower
+// TVerdictStart (loosen Δ_2a / Δ_2b / ε_3 / header headroom), lower
 // RefloodDelay for denser meshes, or supply their own per-layer schedule.
 func DefaultBroadcastBudget(K int, btt, refloodDelay, tVerdictStart time.Duration) ([]time.Duration, error) {
 	if K < 1 {
@@ -406,8 +413,8 @@ func (c *Config) Validate() error {
 	if c.Delta2b <= 0 {
 		return errors.New("twoab: Delta2b must be positive")
 	}
-	if c.Delta3 <= 0 {
-		return errors.New("twoab: Delta3 must be positive")
+	if c.Eps3 <= 0 {
+		return errors.New("twoab: Eps3 must be positive")
 	}
 	// Delta2b < 1 BTT is the BFT-liveness minimum for Phase-2b propagation
 	// (spec §Setting recommends Δ_2b ≥ 1 BTT so σ/NR partials reach all

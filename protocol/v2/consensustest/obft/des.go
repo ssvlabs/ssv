@@ -123,7 +123,7 @@ func (s *sim) start() error {
 		Layers:    layers,
 		TCommit:   s.cfg.TCommit,
 		Delta2:    s.cfg.Delta2,
-		Delta3:    s.cfg.Epsilon3, // production obftbase.Config.Delta3 is the pure ε_3 budget
+		Eps3:      s.cfg.Epsilon3, // production obftbase.Config.Eps3 is the pure ε_3 budget
 		BTT:       s.cfg.BTT,
 	}
 	if err := cfgObft.Validate(); err != nil {

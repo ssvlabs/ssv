@@ -34,7 +34,7 @@ func validBaseConfig() *Config {
 		},
 		TCommit: tCommit,
 		Delta2:  300 * time.Millisecond,
-		Delta3:  250 * time.Millisecond,
+		Eps3:    250 * time.Millisecond,
 		BTT:     btt,
 	}
 }
@@ -69,7 +69,7 @@ func TestConfig_Validate_AllowsKAtBFTLivenessMinimum(t *testing.T) {
 		},
 		TCommit: tCommit,
 		Delta2:  300 * time.Millisecond,
-		Delta3:  250 * time.Millisecond,
+		Eps3:    250 * time.Millisecond,
 		BTT:     btt,
 	}
 	require.NoError(t, cfg.Validate())
@@ -144,7 +144,7 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 	}
 	require.Equal(t, cfg.TCommit, cfg.PhaseTwoStartOffset())
 	require.Equal(t, cfg.TCommit+cfg.Delta2, cfg.PhaseTwoEndOffset())
-	require.Equal(t, cfg.TCommit+cfg.Delta2+cfg.Delta3, cfg.RoundEndOffset())
+	require.Equal(t, cfg.TCommit+cfg.Delta2+cfg.Eps3, cfg.RoundEndOffset())
 	require.Equal(t, 4, cfg.K())
 	require.Equal(t, 3, cfg.QV())
 	require.Equal(t, 3, cfg.QEnc())

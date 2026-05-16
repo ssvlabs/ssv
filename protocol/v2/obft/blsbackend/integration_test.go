@@ -78,7 +78,7 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 		Layers:    layers,
 		TCommit:   tCommit,
 		Delta2:    300 * time.Millisecond,
-		Delta3:    250 * time.Millisecond,
+		Eps3:      250 * time.Millisecond,
 		BTT:       btt, // P99=100 + δ=50 fixture
 	}
 	require.NoError(t, cfg.Validate())

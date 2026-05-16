@@ -165,21 +165,21 @@ Strict win-win: an operator with a flaky mesh fails to trigger the early-emit co
 
 Three changes, composable. Both protocols win on all three:
 
-| Change | OBFT | 2abOBFT | Healthy-case latency win |
+| Change | OBFT | 2abOBFT | T_commit shift / MEV-fetch win |
 |---|---|---|---|
-| Reflood-aware B_k widening | Yes (B_0 grows) | Yes (Δ_2a grows, or B_0) | None (defensive sizing) |
-| T_commit tighter (`T_round_end − 1·BTT`) | Yes (Δ_2 shrinks) | Yes (Δ_2b shrinks) | Submission headroom +400ms |
-| Early commit | Yes (~Δ_2 saved) | Yes (~Δ_2b saved via cascade) | OBFT: ~1·BTT; 2abOBFT: ~2·BTT |
+| Reflood-aware B_k widening | Yes (B_0 grows) | Yes (Δ_2a grows, or B_0) | None — defensive sizing only |
+| T_commit tighter (Δ_2 / Δ_2b shrink from 2·BTT to {1·BTT, 1·BTT + ε_proc}) | Yes (Δ_2: 2·BTT → 1·BTT) | Yes (Δ_2b: 2·BTT → 1·BTT + ε_proc) | OBFT: T_commit shifts +1·BTT later → MEV-fetch +200ms across all leaders. 2abOBFT (max-MEV anchor): T_commit shifts +150ms later → MEV-fetch +150ms |
+| Early commit | Yes (~Δ_2 saved on healthy path) | Yes (~Δ_2b saved via cascade) | OBFT healthy-path emit: ~1·BTT earlier; 2abOBFT: ~2·BTT earlier via cascade |
 
-The reflood-resize work is the precondition for the T_commit-tighten step (need reflood to fit in B_k / Δ_2a before taking it out of the post-T_commit budget). Early-commit is the precondition that recovers healthy-case latency after T_commit is tightened.
+The reflood-resize work is the precondition for the T_commit-tighten step (need reflood to fit in B_k / Δ_2a before taking it out of the post-T_commit budget). Early-commit composes with T_commit-tighten to keep healthy-case latency from regressing under the shorter Δ_2.
 
 ## §4. Execution order
 
 Three separate landings, in this order. Each is independently mergeable and reversible:
 
-1. **Reflood-aware B_k / Δ_2a widening** (the previous resize plan, with proper RefloodDelay sizing — still waiting on the SSV heartbeat measurement before sizing concretely).
-2. **Early-commit for OBFT + 2abOBFT** (this plan). OBFT is simpler; 2abOBFT lands in parallel with its cascading triggers.
-3. **T_commit-tighten** — composes both prior changes; recovers the post-T_commit budget that the first two changes don't need.
+1. **Reflood-aware B_k / Δ_2a widening** (landed).
+2. **Early-commit for OBFT + 2abOBFT** (landed).
+3. **T_commit-tighten** (landed). Composes both prior changes; recovers the post-T_commit budget that the first two changes don't need.
 
 Land order matters because (3) shrinks the safety margin assumed by today's protocol; without (1) and (2), (3) would degrade liveness. With them, (3) is just removing slack we no longer need.
 
@@ -192,11 +192,9 @@ None blocking. Resolved questions:
 - **Verdict-lock vs convergence-rule flip in 2abOBFT**: keep the flip. Safety is preserved either way (Pigeonhole 2 holds structurally at f=1 n=4), but verdict-lock would lose Case 3 (h_V=1) recovery. Spec keeps the flip; Rule 6b receiver heuristic absorbs the resulting verdict-vs-action mismatches.
 - **Rule 6b receiver heuristic** (§2.1): three-condition slashing-quality bar — no Rule 2 evidence (rules out Case A equivocation-driven flip) + verdict-pool wasn't σ-eligibility-quorum-short (rules out Case B convergence-driven flip) + multi-slot pattern. Cryptographic close deferred to Open Question #16 (`docs/2abOBFT-design-notes.md`).
 
-## §6. Follow-up cleanups (separate, post-early-commit)
+## §6. Follow-up cleanups (separate, post-early-commit) — DONE
 
-Two small notational cleanups to do after the main early-commit work lands:
+Two small notational cleanups landed alongside the T_commit-tighten step:
 
-1. **Drop `Δ_3` in favor of `ε_3` throughout.** `Δ_3` is defined as `≥ ε_3 ≈ 50ms` everywhere; the two-name pattern is purely a renaming that adds confusion ("`Δ_3 ≥ ε_3`" looks like there's slack but the inequality is degenerate). Single-name fix across all spec docs and impl `Config` fields (`Delta3` → `Epsilon3` or just `Eps3`).
-2. **Drop `Δ_1` (Phase-1 fetch window duration).** Barely referenced; per-layer fetch windows are typically expressed directly as `[T_k, T_broadcast_max_k]` without the named-duration abstraction.
-
-Both are small, contained, and can land as separate PRs after the main work — not blocking, not coupled to the early-commit semantics.
+1. **Dropped `Δ_3` in favor of `ε_3` throughout.** `Δ_3` was `≥ ε_3 ≈ 50ms` everywhere; the two-name pattern was purely a renaming. Single-name fix across all spec docs and impl `Config` fields (`Delta3` → `Eps3`).
+2. **Dropped `Δ_1` (Phase-1 fetch window duration).** Spec-only notational change — per-layer fetch windows now expressed directly as `[T_k, T_broadcast_max_k]` (OBFT spec already used this form; 2abOBFT.md and OBFTR.md updated to match).
