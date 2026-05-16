@@ -652,25 +652,38 @@ func TestSlowOpAnchor_MixtureOverride(t *testing.T) {
 // so it doesn't propagate through scale transforms). P2PProfile is
 // expected to set per-derived-profile anchors explicitly.
 //
-// The strong assertion is that derived anchor != source anchor: a
-// regression that propagated the anchor through Slowed/HeavyTailed
-// would copy 250ms (prod's value) into the derived mixture; the
-// fallback path produces a different value (2 × analytic median of
-// the scaled distribution). Comparing the actual values catches both
-// the wrong-direction regression (propagation) and the wrong-fallback
-// regression (anchor zero but fallback misbehaves).
+// Each derived mixture's SlowOpAnchor must equal the analytic fallback
+// (2 × mixture median of the scaled distribution), pinned with a
+// generous 1ms tolerance to absorb minor bisection / σ-search drift
+// while still catching regressions. The pinned values come from the
+// current Slowed/HeavyTailed algorithms; if either algorithm changes
+// (e.g., HeavyTailed targets a different tail mass), update the
+// expected numbers along with the algorithm change.
+//
+// Pinning catches three regression families:
+//  1. Anchor propagation through Slowed/HeavyTailed (derived value
+//     ≈ 250 ms — wildly outside either pinned target).
+//  2. Wrong-fallback returning zero (derived value = 0 — outside).
+//  3. Wrong-fallback returning some other value (would not match the
+//     pin even if it differs from the source).
 func TestSlowOpAnchor_DerivedMixturesDropAnchor(t *testing.T) {
 	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture()
 	require.Equal(t, 250*time.Millisecond, base.SlowOpAnchor(),
 		"prod constructor sets anchor=250ms")
 
+	// Slowed(80) scales every component median by 80; lognormal
+	// scaling preserves the mixture median shape, so the analytic
+	// fallback (2 × mixture median) ends up at ~226.69 ms — well below
+	// the 250 ms source anchor and far from 0.
 	slowed := base.Slowed(80)
-	require.NotEqual(t, base.SlowOpAnchor(), slowed.SlowOpAnchor(),
-		"Slowed must NOT carry forward the source anchor (got %v == base %v)",
-		slowed.SlowOpAnchor(), base.SlowOpAnchor())
+	require.InDeltaf(t, float64(226690754), float64(slowed.SlowOpAnchor()), float64(time.Millisecond),
+		"Slowed(80) fallback should match analytic 2×median ≈ 226.69ms, got %v", slowed.SlowOpAnchor())
 
+	// HeavyTailed(24) scales sigmas (uniform σ-scale ≈ 2.0 at prod);
+	// the mixture median shifts modestly because component medians are
+	// untouched but the CDF reshapes. Analytic fallback lands at
+	// ~2.98 ms — three orders of magnitude below the 250 ms source.
 	heavy := base.HeavyTailed(24)
-	require.NotEqual(t, base.SlowOpAnchor(), heavy.SlowOpAnchor(),
-		"HeavyTailed must NOT carry forward the source anchor (got %v == base %v)",
-		heavy.SlowOpAnchor(), base.SlowOpAnchor())
+	require.InDeltaf(t, float64(2981946), float64(heavy.SlowOpAnchor()), float64(time.Millisecond),
+		"HeavyTailed(24) fallback should match analytic 2×median ≈ 2.98ms, got %v", heavy.SlowOpAnchor())
 }

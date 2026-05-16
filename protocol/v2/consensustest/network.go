@@ -742,6 +742,12 @@ func (l *LogNormalMixtureDelay) mixtureCDF(x float64) float64 {
 // scaledMixtureCDF returns the mixture CDF at x after multiplying each
 // component's σ by `scale`. Single helper for both the quantile
 // derivation (scale=1) and the heavy-tail σ search (scale > 1).
+//
+// Components with Sigma <= 0 are treated as Dirac deltas at Median —
+// they contribute weight × Heaviside(x − Median) to the CDF. Delay()
+// already handles Sigma=0 correctly (always returns Median), so the
+// CDF needs matching support to keep SlowOpAnchor's analytic fallback
+// honest for deterministic mixture components.
 func (l *LogNormalMixtureDelay) scaledMixtureCDF(scale, x float64) float64 {
 	if x <= 0 {
 		return 0
@@ -749,11 +755,19 @@ func (l *LogNormalMixtureDelay) scaledMixtureCDF(scale, x float64) float64 {
 	var sumWeighted, totalWeight float64
 	lnX := math.Log(x)
 	for _, c := range l.Components {
-		if c.Median <= 0 || c.Sigma <= 0 || c.Weight <= 0 {
+		if c.Median <= 0 || c.Weight <= 0 {
 			continue
 		}
-		z := (lnX - math.Log(float64(c.Median))) / (c.Sigma * scale)
-		sumWeighted += c.Weight * standardNormalCDF(z)
+		var contrib float64
+		if c.Sigma <= 0 {
+			if x >= float64(c.Median) {
+				contrib = 1.0
+			}
+		} else {
+			z := (lnX - math.Log(float64(c.Median))) / (c.Sigma * scale)
+			contrib = standardNormalCDF(z)
+		}
+		sumWeighted += c.Weight * contrib
 		totalWeight += c.Weight
 	}
 	if totalWeight == 0 {

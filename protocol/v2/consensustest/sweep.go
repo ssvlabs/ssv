@@ -122,7 +122,7 @@ var baselineBTTValues = []time.Duration{
 //     fixed BTT=300ms, BurstFactor=5, σ=0.5.
 //  4. p2p_correlated_delays — BadLinkProb ∈ {0, 0.05, 0.10, 0.20};
 //     BadLinkMultiplier=3, BurstMessages=20, inner LogNormal σ=0.5.
-//  5. p2p_node_slowness — slow op count ∈ {0, 1, 2, 3}; ExtraDelay=3·BTT,
+//  5. p2p_node_slowness — slow op count ∈ {0, 1, 2, 3}; ExtraDelay=3·Network.SlowOpAnchor,
 //     PersistP=0.8, inner LogNormal σ=0.5.
 //  6. p2p_instability — 5 levels (none/low/moderate/high/extreme);
 //     fixed BTT=300ms σ=0.5; Healthy-only "production p2p" curve.
@@ -270,7 +270,7 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	return Sweep{
 		Name:        "p2p_baseline",
 		Title:       "Baseline conditions",
-		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×4 / outlier frequency ×4 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. Important: under empirical profiles, the BTT axis is a PROTOCOL-BUDGET axis, not a network-speed axis — the network model is the profile (≈ 1-10 ms in prod), while BTT (100-500 ms here) drives the protocol's internal timing budgets (OBFT Δ_2 = 2·BTT, QBFT phase budget = 2·BTT, etc.). The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
+		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×80 / outlier frequency ×24 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. Important: under empirical profiles, the BTT axis is a PROTOCOL-BUDGET axis, not a network-speed axis — the network model is the profile (≈ 1-10 ms in prod), while BTT (100-500 ms here) drives the protocol's internal timing budgets (OBFT Δ_2 = 2·BTT, QBFT phase budget = 2·BTT, etc.). The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
 		AxisLabel:   "", // multi-axis; UI picks one point at a time.
 		Points:      pts,
 	}
@@ -483,11 +483,17 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 }
 
 // p2pNodeSlownessSweep varies the number of operators flagged as
-// "markov-slow" — each flagged op's link returns ExtraDelay (= 3·BTT)
-// for the first message it touches (in either direction), and for each
-// subsequent touched message independently with probability PersistP
-// (= 0.8). Models correlated peer-link degradation: real-world latency /
-// congestion / GC pauses persist for stretches, not toggle per-packet.
+// "markov-slow" — each flagged op's link returns ExtraDelay (=
+// 3·Network.SlowOpAnchor) for the first message it touches (in either
+// direction), and for each subsequent touched message independently
+// with probability PersistP (= 0.8). With the sweep's productionLogNormal
+// direct baseline (Median=BTT/2 → anchor=BTT), the direct-path tax at
+// BTT=300ms is 900ms — matching the old fixed `3·BTT` magnitude. The
+// mesh-path fallback (LogNormal{Median: BTT/3}) has anchor=2·BTT/3, so
+// the mesh tax is 2·BTT (600ms at BTT=300ms), reflecting the smaller
+// per-hop magnitude that model encodes. Models correlated peer-link
+// degradation: real-world latency / congestion / GC pauses persist for
+// stretches, not toggle per-packet.
 //
 // Axis = slow-op count ∈ {0, 1, 2, 3}, with k slow ops at op2..op{k+1}
 // (leader op1 stays fast). k=0 is the no-degradation baseline; k=1
