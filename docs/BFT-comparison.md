@@ -50,17 +50,17 @@ All BTT counts use the uniform "2 BTT per emission cycle" recommended sizing —
 | Protocol | Round 1 healthy | Round 2 (recovery) | Total at R-round failure |
 |---|---|---|---|
 | Partial-sigs on pre-agreed V (baseline) | 2 BTT | n/a (no rounds) | n/a (no recovery — fails on any V-disagreement) |
-| OBFT | 3 BTT | n/a (single-round) | n/a (slot misses if R1 fails on adversarial pattern; K-layer fall-through is in-round, free) |
+| OBFT | 4 BTT + RefloodDelay | n/a (single-round) | n/a (slot misses if R1 fails on adversarial pattern; K-layer fall-through is in-round, free) |
 | OBFTR(R=2) | 6 BTT | 6 BTT | 12 BTT |
-| 2abOBFT | 6 BTT | n/a (single-round) | n/a (K-layer fall-through is in-round, free) |
+| 2abOBFT | 6 BTT + RefloodDelay | n/a (single-round) | n/a (K-layer fall-through is in-round, free) |
 | QBFT-SSV | 8 BTT | 10 BTT (RT) + 8 BTT = 18 BTT | 18 BTT |
 | QBFT-optimal | 8 BTT | 6 BTT (RT) + 8 BTT = 14 BTT | 20 BTT (R3 = +6 BTT RT + 8 BTT) |
 
 K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Phase 3 — no per-layer BTT cost. It recovers silent/late leaders within the same round.
 
-**Why OBFT 3 BTT < OBFTR 6 BTT per round.** OBFT's Phase-1 staggered model (see [OBFT.md §Setting](OBFT.md)) lets the primary L_0 broadcast at `T_commit − 1 BTT` (1 BTT slack, with K-layer fall-through structurally compensating for the narrower L_0 absorption); OBFTR uses uniform `T_commit_r − 2 BTT` broadcast slack at every round. OBFT also has no Phase 2.5 (L_C signaling) since it has no rounds to coordinate. Net: OBFT saves 3 BTT vs OBFTR per round at recommended sizing.
+**Why OBFT 4 BTT + RefloodDelay vs OBFTR 6 BTT per round.** OBFT's Phase-1 staggered model (see [OBFT.md §Setting](OBFT.md)) lets the primary L_0 broadcast at `T_commit − B_0` with `B_0 = 2·BTT + RefloodDelay` (the reflood-aware schedule — covers 1 BTT initial propagation + 1 BTT IWANT round-trip + one full RefloodDelay-sized lazy-push cycle for mesh-flaky receivers). OBFTR uses uniform `T_commit_r − 2 BTT` broadcast slack at every round and doesn't tie this to RefloodDelay (its multi-round retry absorbs reflood via cross-round retention instead). OBFT also has no Phase 2.5 (L_C signaling) since it has no rounds to coordinate. Net: OBFT saves 2 BTT vs OBFTR per round at recommended sizing (with RefloodDelay = 0 opt-out) or breaks even at default RefloodDelay = 700ms (RD ≈ 3.5 BTT vs OBFTR's structural 3-BTT R1 overhead).
 
-**Why QBFT 8 BTT > OBFT 3 BTT.** QBFT has 4 emission cycles per round (PROPOSE + PREPARE + COMMIT + post-consensus) vs OBFT's 1 emission cycle (Phase 2) plus broadcast slack. At 2 BTT per emission, QBFT's structural cost is 4 × 2 = 8 BTT; OBFT's is 1 × 2 + 1 broadcast = 3 BTT. The difference is fundamental to the protocol shape (3-phase cluster-wide consensus vs onion with chained encryption), not sizing.
+**Why QBFT 8 BTT > OBFT (4 BTT + RD).** QBFT has 4 emission cycles per round (PROPOSE + PREPARE + COMMIT + post-consensus) vs OBFT's 1 emission cycle (Phase 2) plus broadcast slack. At 2 BTT per emission, QBFT's structural cost is 4 × 2 = 8 BTT; OBFT's is 1 × 2 + (2 BTT + RefloodDelay) broadcast = 4 BTT + RefloodDelay. The OBFT structural difference (vs QBFT) is fundamental to the protocol shape (3-phase cluster-wide consensus vs onion with chained encryption); the +RefloodDelay term is OBFT's choice to absorb one gossipsub lazy-push cycle inside Phase 1 rather than fall through, which QBFT handles via its per-phase round-timer slack instead.
 
 **Phase 3 in OBFT family.** Counted as 0 BTT in this comparison — Phase 3 is sequential local IBE decryption + cert construction, processing-bound (`ε_3 ≈ 50ms ≈ 0.25 BTT` at Config A), not propagation-bound. Cross-protocol totals here use the "0 BTT for processing-only steps" convention; deployment-time accounting (in [OBFT.md §Application's timing table](OBFT.md#timing-budget)) lists `ε_3` as a separate ~50ms row putting "consensus complete" 0.25 BTT later than the BTT count suggests.
 
@@ -78,58 +78,58 @@ K-layer fall-through (OBFT, OBFTR, 2abOBFT) is sequential local decryption in Ph
 
 ## Table 1 — Success modes (healthy-path completion)
 
-Healthy completion = leader honest, all Phase-1 bundles propagate, σ-quorum reaches at L_0 in round 1. All counts at recommended sizing (2 BTT per emission); QBFT-SSV and QBFT-optimal share the same R1 healthy-path timing.
+Healthy completion = leader honest, all Phase-1 bundles propagate, σ-quorum reaches at L_0 in round 1. All counts at recommended sizing (2 BTT per emission); QBFT-SSV and QBFT-optimal share the same R1 healthy-path timing. **OBFT-family cells include `+RefloodDelay` (default 700ms = SSV's gossipsub HeartbeatInterval) per the reflood-aware schedule**: OBFT total = `4·BTT + RefloodDelay`, 2abOBFT total = `6·BTT + RefloodDelay`. For RD=0 (fully-meshed cluster opt-out), subtract 700ms from each OBFT/2abOBFT cell.
 
 ### Table 1a — BFT start = 0ms (immediate), budget = 3900ms
 
 | BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
 |---|---|---|---|---|---|
-| 200ms | 400ms ✓ | 600ms ✓ | 1200ms ✓ | 1200ms ✓ | 1600ms ✓ |
-| 600ms | 1200ms ✓ | 1800ms ✓ | 3600ms ✓ | 3600ms ✓ | **4800ms ✗** |
-| 1000ms | 2000ms ✓ | 3000ms ✓ | **6000ms ✗** | **6000ms ✗** | **8000ms ✗** |
+| 200ms | 400ms ✓ | 1500ms ✓ | 1200ms ✓ | 1900ms ✓ | 1600ms ✓ |
+| 600ms | 1200ms ✓ | 3100ms ✓ | 3600ms ✓ | **4300ms ✗** | **4800ms ✗** |
+| 1000ms | 2000ms ✓ | **4700ms ✗** | **6000ms ✗** | **6700ms ✗** | **8000ms ✗** |
 
 ### Table 1b — BFT start = 800ms, budget = 3100ms
 
 | BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
 |---|---|---|---|---|---|
-| 200ms | 400ms ✓ | 600ms ✓ | 1200ms ✓ | 1200ms ✓ | 1600ms ✓ |
-| 600ms | 1200ms ✓ | 1800ms ✓ | **3600ms ✗** | **3600ms ✗** | **4800ms ✗** |
-| 1000ms | 2000ms ✓ | 3000ms ✓ tight | **6000ms ✗** | **6000ms ✗** | **8000ms ✗** |
+| 200ms | 400ms ✓ | 1500ms ✓ | 1200ms ✓ | 1900ms ✓ | 1600ms ✓ |
+| 600ms | 1200ms ✓ | 3100ms ✓ tight | **3600ms ✗** | **4300ms ✗** | **4800ms ✗** |
+| 1000ms | 2000ms ✓ | **4700ms ✗** | **6000ms ✗** | **6700ms ✗** | **8000ms ✗** |
 
 ### Table 1c — BFT start = 1200ms, budget = 2700ms
 
 | BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
 |---|---|---|---|---|---|
-| 200ms | 400ms ✓ | 600ms ✓ | 1200ms ✓ | 1200ms ✓ | 1600ms ✓ |
-| 600ms | 1200ms ✓ | 1800ms ✓ | **3600ms ✗** | **3600ms ✗** | **4800ms ✗** |
-| 1000ms | 2000ms ✓ | **3000ms ✗** | **6000ms ✗** | **6000ms ✗** | **8000ms ✗** |
+| 200ms | 400ms ✓ | 1500ms ✓ | 1200ms ✓ | 1900ms ✓ | 1600ms ✓ |
+| 600ms | 1200ms ✓ | **3100ms ✗** | **3600ms ✗** | **4300ms ✗** | **4800ms ✗** |
+| 1000ms | 2000ms ✓ | **4700ms ✗** | **6000ms ✗** | **6700ms ✗** | **8000ms ✗** |
 
 ### Table 1d — BFT start = 1800ms, budget = 2100ms
 
 | BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
 |---|---|---|---|---|---|
-| 200ms | 400ms ✓ | 600ms ✓ | 1200ms ✓ | 1200ms ✓ | 1600ms ✓ |
-| 600ms | 1200ms ✓ | 1800ms ✓ | **3600ms ✗** | **3600ms ✗** | **4800ms ✗** |
-| 1000ms | 2000ms ✓ tight | **3000ms ✗** | **6000ms ✗** | **6000ms ✗** | **8000ms ✗** |
+| 200ms | 400ms ✓ | 1500ms ✓ | 1200ms ✓ | 1900ms ✓ | 1600ms ✓ |
+| 600ms | 1200ms ✓ | **3100ms ✗** | **3600ms ✗** | **4300ms ✗** | **4800ms ✗** |
+| 1000ms | 2000ms ✓ tight | **4700ms ✗** | **6000ms ✗** | **6700ms ✗** | **8000ms ✗** |
 
 ### Table 1e — BFT start = 2500ms (late MEV fetch), budget = 1400ms
 
 | BTT | Partial-sigs (1 emission) † | OBFT (single round, K-onion) | OBFTR R1 (1 of R rounds) | 2abOBFT (Phase 2a/2b split) | QBFT R1 (3-phase + post-cons.) |
 |---|---|---|---|---|---|
-| 200ms | 400ms ✓ | 600ms ✓ | 1200ms ✓ tight | 1200ms ✓ tight | **1600ms ✗** |
-| 600ms | 1200ms ✓ tight | **1800ms ✗** | **3600ms ✗** | **3600ms ✗** | **4800ms ✗** |
-| 1000ms | **2000ms ✗** | **3000ms ✗** | **6000ms ✗** | **6000ms ✗** | **8000ms ✗** |
+| 200ms | 400ms ✓ | **1500ms ✗** | 1200ms ✓ tight | **1900ms ✗** | **1600ms ✗** |
+| 600ms | 1200ms ✓ tight | **3100ms ✗** | **3600ms ✗** | **4300ms ✗** | **4800ms ✗** |
+| 1000ms | **2000ms ✗** | **4700ms ✗** | **6000ms ✗** | **6700ms ✗** | **8000ms ✗** |
 
 † **Partial-sigs only fits if V is pre-agreed.** For SSV proposer duty (V varies per operator due to MEV bundles), this isn't directly applicable — the cluster needs a BFT consensus protocol to resolve V-disagreement first. Shown here as the floor: what completion would look like if V were pre-agreed (e.g., for non-MEV duties like attestations).
 
-**Reading Tables 1a–1e:**
+**Reading Tables 1a–1e** (default RefloodDelay=700ms framing; at RD=0 the OBFT-family cells shift down by 700ms):
 
-- **Partial-sigs floor (V pre-agreed)**: 2 BTT fits at every BFT_start except (2500ms, 1000ms). Sets the absolute floor — BFT consensus protocols pay 1-6 BTT extra to resolve V-disagreement.
-- **BTT=200ms** (production-typical healthy mesh): OBFT, OBFTR R1, and 2abOBFT all fit every BFT_start. QBFT R1 (1600ms) fits BFT_start ≤ 1800ms; misses at 2500ms by 200ms.
-- **BTT=600ms** (degraded mesh): OBFT (1800ms) fits BFT_start ≤ 1800ms; misses at 2500ms by 400ms. OBFTR R1 (3600ms) and 2abOBFT (3600ms) fit only at BFT_start = 0; miss at 800ms by 500ms. QBFT R1 (4800ms) misses everywhere.
-- **BTT=1000ms** (severely degraded): only OBFT (3000ms, smallest BTT count due to staggered model + free Phase 3) fits at BFT_start ≤ 800ms (100ms margin at 800ms — tight). All other protocols miss everywhere.
-- **OBFT < OBFTR R1 < QBFT R1 in BTT count.** OBFT's staggered Phase-1 model (1 BTT broadcast slack vs OBFTR's uniform 2 BTT) and free Phase 3 give it 3 BTT vs OBFTR's 6 BTT. QBFT pays 4 emission cycles × 2 BTT vs OBFT's 1 emission cycle × 2 BTT + 1 BTT broadcast — that's structural to QBFT's 3-phase consensus shape, not a sizing artifact.
-- **Healthy-path ordering**: Partial-sigs (2 BTT) < OBFT (3 BTT) < OBFTR R1 = 2abOBFT (6 BTT) < QBFT R1 (8 BTT). At recommended sizing, QBFT R1 is the slowest in the family — 2.7× OBFT's healthy path.
+- **Partial-sigs floor (V pre-agreed)**: 2 BTT fits at every BFT_start except (2500ms, 1000ms). Sets the absolute floor — BFT consensus protocols pay 1-7 BTT extra to resolve V-disagreement (the OBFT-family additionally absorbs one gossipsub reflood cycle inside Phase 1, accounting for the +RefloodDelay term).
+- **BTT=200ms** (production-typical healthy mesh): OBFT (1500ms) and 2abOBFT (1900ms) fit BFT_start ≤ 1800ms; both miss at 2500ms. OBFTR R1 (1200ms) is uniquely tight-fit at 2500ms because it doesn't absorb RefloodDelay in Phase 1 (multi-round retry handles reflood via cross-round retention). QBFT R1 (1600ms) fits BFT_start ≤ 1800ms; misses at 2500ms.
+- **BTT=600ms** (degraded mesh): OBFT (3100ms) fits BFT_start = 0 only (tight at 800ms); 2abOBFT (4300ms) misses everywhere. OBFTR R1 (3600ms) fits at BFT_start = 0; misses at 800ms. QBFT R1 (4800ms) misses everywhere.
+- **BTT=1000ms** (severely degraded): OBFT (4700ms) misses everywhere. All other protocols also miss everywhere. Only the partial-sigs baseline fits any BFT_start at this BTT.
+- **OBFT < OBFTR R1 < QBFT R1 in BTT count at RD=0**; **OBFT ≈ OBFTR R1 < QBFT R1 at default RD** (RefloodDelay's +3.5·BTT shifts OBFT's BTT count toward OBFTR's). OBFT's staggered Phase-1 model (`B_0 = 2·BTT + RD` broadcast slack vs OBFTR's uniform 2 BTT) and free Phase 3 give it `4·BTT + RD` vs OBFTR's 6 BTT. QBFT pays 4 emission cycles × 2 BTT = 8 BTT, RefloodDelay-independent — structural to QBFT's 3-phase consensus shape.
+- **Healthy-path ordering at default RD**: Partial-sigs (2 BTT) < OBFTR R1 = 2abOBFT-without-RD (6 BTT) < OBFT (4·BTT + RD ≈ 7.5·BTT at default) < 2abOBFT (6·BTT + RD ≈ 9.5·BTT at default) < QBFT R1 (8 BTT). At RD=0: Partial-sigs (2) < OBFT (4) < OBFTR R1 = 2abOBFT (6) < QBFT R1 (8). OBFT regains its BTT-count lead at RD=0; the default-RD ordering reflects the cost of in-protocol reflood absorption.
 
 ## Table 2 — Failure-recovery modes
 
@@ -156,7 +156,7 @@ When round-1 / single-round fails (silent leader, partition, network jitter, but
 | BTT | Partial-sigs (no recovery) † | OBFT (K-layer fall-through) | OBFTR R1+R2 (re-flood retry) | 2abOBFT (K-layer fall-through) | QBFT-SSV R2 (round-change + fresh V) | QBFT-optimal R2 (round-change + fresh V) |
 |---|---|---|---|---|---|---|
 | 200ms | n/a | in-round (free) | 2400ms ✓ | in-round (free) | **3600ms ✗** | **2800ms ✗** |
-| 600ms | n/a | in-round (free) | **7200ms ✗** | n/a (R1 missed) | **10800ms ✗** | **8400ms ✗** |
+| 600ms | n/a | n/a (R1 missed at default RD) | **7200ms ✗** | n/a (R1 missed) | **10800ms ✗** | **8400ms ✗** |
 | 1000ms | n/a | n/a (R1 missed) | **12000ms ✗** | n/a (R1 missed) | **18000ms ✗** | **14000ms ✗** |
 
 ### Table 2d — BFT start = 1800ms, budget = 2100ms
@@ -164,14 +164,14 @@ When round-1 / single-round fails (silent leader, partition, network jitter, but
 | BTT | Partial-sigs (no recovery) † | OBFT (K-layer fall-through) | OBFTR R1+R2 (re-flood retry) | 2abOBFT (K-layer fall-through) | QBFT-SSV R2 (round-change + fresh V) | QBFT-optimal R2 (round-change + fresh V) |
 |---|---|---|---|---|---|---|
 | 200ms | n/a | in-round (free) | **2400ms ✗** | in-round (free) | **3600ms ✗** | **2800ms ✗** |
-| 600ms | n/a | in-round (free) | **7200ms ✗** | n/a (R1 missed) | **10800ms ✗** | **8400ms ✗** |
+| 600ms | n/a | n/a (R1 missed at default RD) | **7200ms ✗** | n/a (R1 missed) | **10800ms ✗** | **8400ms ✗** |
 | 1000ms | n/a | n/a (R1 missed) | **12000ms ✗** | n/a (R1 missed) | **18000ms ✗** | **14000ms ✗** |
 
 ### Table 2e — BFT start = 2500ms (late MEV fetch), budget = 1400ms
 
 | BTT | Partial-sigs (no recovery) † | OBFT (K-layer fall-through) | OBFTR R1+R2 (re-flood retry) | 2abOBFT (K-layer fall-through) | QBFT-SSV R2 (round-change + fresh V) | QBFT-optimal R2 (round-change + fresh V) |
 |---|---|---|---|---|---|---|
-| 200ms | n/a | in-round (free) | **2400ms ✗** | in-round (free) | **3600ms ✗** | **2800ms ✗** |
+| 200ms | n/a | n/a (R1 missed at default RD) | **2400ms ✗** | n/a (R1 missed) | **3600ms ✗** | **2800ms ✗** |
 | 600ms | n/a | n/a (R1 missed) | **7200ms ✗** | n/a (R1 missed) | **10800ms ✗** | **8400ms ✗** |
 | 1000ms | n/a | n/a (R1 missed) | **12000ms ✗** | n/a (R1 missed) | **18000ms ✗** | **14000ms ✗** |
 
