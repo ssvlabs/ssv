@@ -32,18 +32,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	out, err := twoabadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "mesh-mode healthy should decide")
-
-	var checked int
-	for _, e := range out.Trace {
-		_, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
-		if !ok {
-			continue
-		}
-		require.NotEqualf(t, publisher, to,
-			"mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
-		checked++
-	}
-	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+	ct.AssertNoRefloodToPublisher(t, out.Trace)
 }
 
 // TestAdapter_OpportunisticDecisionTime — Phase 1 of the
@@ -99,7 +88,6 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 	btt := 200 * time.Millisecond
 	for _, n := range ct.ClusterSizes {
-		n := n
 		t.Run(clusterName(n), func(t *testing.T) {
 			cfg := ct.SimConfig{
 				N:            n,
@@ -131,7 +119,6 @@ func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 func TestAdapter_CatalogRunsToCompletion(t *testing.T) {
 	profile := ct.CorrectnessProfile(200 * time.Millisecond)
 	for _, s := range ct.Catalog {
-		s := s
 		t.Run(s.Name, func(t *testing.T) {
 			cfg := profile.BaseConfig
 			s.Apply(&cfg)

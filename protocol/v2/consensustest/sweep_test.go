@@ -47,7 +47,6 @@ func baseSweepConfig(n int, btt time.Duration) ct.SimConfig {
 // holds at all n).
 func TestSweep_N(t *testing.T) {
 	for _, n := range ct.ClusterSizes {
-		n := n
 		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
 			t.Parallel()
 			cfg := baseSweepConfig(n, 200*time.Millisecond)
@@ -70,10 +69,8 @@ func TestSweep_N(t *testing.T) {
 // and minimum-K (boundary). Asserts Healthy decides at every K ≥ MinK(n).
 func TestSweep_K(t *testing.T) {
 	for _, n := range ct.ClusterSizes {
-		n := n
 		minK := ct.MinK(n)
 		for k := minK; k <= n; k++ {
-			k := k
 			t.Run(fmt.Sprintf("n=%d_K=%d", n, k), func(t *testing.T) {
 				t.Parallel()
 				cfg := baseSweepConfig(n, 200*time.Millisecond)
@@ -102,7 +99,6 @@ func TestSweep_BTT(t *testing.T) {
 	}
 
 	for _, btt := range bttValues {
-		btt := btt
 		t.Run("BTT="+btt.String(), func(t *testing.T) {
 			t.Parallel()
 			cfg := baseSweepConfig(4, btt)
@@ -157,7 +153,6 @@ func TestSweep_Asymmetric(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 
 	for _, slowN := range slowCounts {
-		slowN := slowN
 		t.Run(fmt.Sprintf("slowN=%d", slowN), func(t *testing.T) {
 			t.Parallel()
 			cfg := baseSweepConfig(4, btt)
@@ -233,7 +228,6 @@ func TestSweep_Partition(t *testing.T) {
 	partitionCounts := []int{0, 1, 2}
 
 	for _, partN := range partitionCounts {
-		partN := partN
 		t.Run(fmt.Sprintf("partN=%d", partN), func(t *testing.T) {
 			t.Parallel()
 			cfg := baseSweepConfig(4, btt)
@@ -373,7 +367,6 @@ func TestSweep_ClockSkew(t *testing.T) {
 	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 
 	for _, pat := range skewPatterns {
-		pat := pat
 		t.Run(pat.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := baseSweepConfig(4, btt)
@@ -513,9 +506,13 @@ func TestSweep_Seeds(t *testing.T) {
 	cfg := baseSweepConfig(4, 200*time.Millisecond)
 
 	for seed := int64(1); seed <= seedCount; seed++ {
-		seed := seed
 		t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
 			t.Parallel()
+			// Each subtest needs its own cfg copy — `cfg` is declared
+			// in the outer scope (line above the for-range loop) and
+			// would be shared across parallel goroutines without this
+			// shadow. Not a Go 1.22+ loopvar pattern; this is a true
+			// defensive copy.
 			cfg := cfg
 			cfg.Seed = seed
 			cfg.Network = ct.LogNormalDelay{Median: 100 * time.Millisecond, Sigma: 0.5}
@@ -551,6 +548,12 @@ func TestSweep_MultiByz_n7(t *testing.T) {
 		ByzOperators: []ct.OperatorID{1, 2},
 	}
 
+	// Variant note: OBFT uses bare Protocol{} (research-axis variant —
+	// observer-mode Resolve is the same in either variant, no
+	// timing-tuning analog to QBFT's UseFixedRT), while QBFT must use
+	// the SSV variant (UseFixedRT=true) because the assertion is
+	// calibrated against production RT=2s. Asymmetric on purpose; the
+	// QBFT branch comment explains its specific calibration.
 	t.Run("OBFT", func(t *testing.T) {
 		out, err := obftadapter.Protocol{}.Run(cfg)
 		require.NoError(t, err)
@@ -718,7 +721,6 @@ func TestSweep_FullCatalog_LargerN(t *testing.T) {
 		if n == 4 {
 			continue // n=4 is the matrix baseline; covered by TestComparison_Matrix
 		}
-		n := n
 		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
 			t.Parallel()
 			base := baseSweepConfig(n, btt)

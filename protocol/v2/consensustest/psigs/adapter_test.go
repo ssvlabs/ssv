@@ -19,18 +19,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	out, err := psigsadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "mesh-mode healthy should decide")
-
-	var checked int
-	for _, e := range out.Trace {
-		_, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
-		if !ok {
-			continue
-		}
-		require.NotEqualf(t, publisher, to,
-			"mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
-		checked++
-	}
-	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+	ct.AssertNoRefloodToPublisher(t, out.Trace)
 }
 
 // TestAdapter_Healthy — baseline: every honest operator signs at

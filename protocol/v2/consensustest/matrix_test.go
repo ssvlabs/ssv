@@ -16,11 +16,6 @@ import (
 	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
-// TestCatalog_NoUnsafeByzKinds guards against accidentally adding a negative-
-// test byz kind (one that deliberately produces a NoOfflineDoubleV violation)
-// to the catalog. RunScenarioOnProtocol panics on safety violations, so a
-// catalog scenario using these kinds would crash every matrix-style test.
-// Better to fail fast and pointed here than to debug a SafetyPanic stack.
 // TestScenario_ExpectForVariantFallback asserts ExpectFor falls back from a
 // "<base>-<suffix>" protocol name to the base name when no exact key is
 // present, and that an explicit override on the variant key wins.
@@ -46,6 +41,11 @@ func TestScenario_ExpectForVariantFallback(t *testing.T) {
 	}
 }
 
+// TestCatalog_NoUnsafeByzKinds guards against accidentally adding a negative-
+// test byz kind (one that deliberately produces a NoOfflineDoubleV violation)
+// to the catalog. RunScenarioOnProtocol panics on safety violations, so a
+// catalog scenario using these kinds would crash every matrix-style test.
+// Better to fail fast and pointed here than to debug a SafetyPanic stack.
 func TestCatalog_NoUnsafeByzKinds(t *testing.T) {
 	base := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	unsafeKinds := map[ct.ByzKind]string{
@@ -80,13 +80,12 @@ func TestCatalog_NoUnsafeByzKinds(t *testing.T) {
 // post-Apply SimConfig. Cheap (no DES execution); runs in <50ms total.
 func TestCatalog_AllScenariosGeneralized(t *testing.T) {
 	for _, n := range ct.ClusterSizes {
-		n := n
 		for _, s := range ct.Catalog {
-			s := s
 			t.Run(fmt.Sprintf("n=%d/%s", n, s.Name), func(t *testing.T) {
 				base := ct.SimConfig{
 					N:                    n,
 					Operators:            ct.MakeOperators(n),
+					K:                    ct.DefaultK(n),
 					SlotDuration:         12 * time.Second,
 					RelayCutoff:          4 * time.Second,
 					HeaderSubmitHeadroom: 100 * time.Millisecond,
@@ -118,6 +117,35 @@ func TestCatalog_AllScenariosGeneralized(t *testing.T) {
 					require.LessOrEqualf(t, int(op), n,
 						"n=%d %q: Recipients contains op=%d > N=%d (hardcoded n=4 value?)",
 						n, s.Name, op, n)
+				}
+				// Host validity targets must also scale by N. A scenario
+				// that hand-codes operator IDs in HostInvalidForOperators
+				// would silently no-op past n=4 if it stored op-id 4 in
+				// a 7-op cluster (4 is still in [1, N] but means the
+				// wrong "last honest" operator); we can only catch the
+				// strict out-of-range case here.
+				if h, ok := base.Host.(ct.HostInvalidForOperators); ok {
+					for op := range h.Operators {
+						require.GreaterOrEqualf(t, int(op), 1,
+							"n=%d %q: Host.Operators contains op=%d < 1", n, s.Name, op)
+						require.LessOrEqualf(t, int(op), n,
+							"n=%d %q: Host.Operators contains op=%d > N=%d (hardcoded value?)",
+							n, s.Name, op, n)
+					}
+					require.GreaterOrEqualf(t, h.Layer, 0,
+						"n=%d %q: Host.Layer %d < 0", n, s.Name, h.Layer)
+				}
+				// Byz.Layer targets must be within the cluster's K range.
+				// A scenario with Byz.Layer ≥ K would silently no-op
+				// (the layer is never visited) — a regression mode that
+				// presents as "scenario suddenly stops triggering" at
+				// larger N values where K may also grow. Skip when
+				// Layer == 0 because that's the default zero value and
+				// many scenarios don't use the layer field at all.
+				if base.Byz.Layer > 0 {
+					require.Lessf(t, base.Byz.Layer, base.K,
+						"n=%d %q: Byz.Layer %d ≥ K %d (would silently no-op)",
+						n, s.Name, base.Byz.Layer, base.K)
 				}
 			})
 		}
@@ -188,7 +216,6 @@ func TestComparison_BTTSweep(t *testing.T) {
 	}
 
 	for _, btt := range bttValues {
-		btt := btt
 		t.Run("BTT="+btt.String(), func(t *testing.T) {
 			t.Parallel()
 			base := ct.DefaultProposerDutyConfig(btt)
@@ -219,7 +246,7 @@ func renderCell(r ct.Result) string {
 		return "! mismatch"
 	}
 	if r.Outcome.Decided {
-		return durationOnly(r.Outcome.DecisionTime) + " L" + intStr(r.Outcome.DecidedRound)
+		return durationOnly(r.Outcome.DecisionTime) + " L" + strconv.Itoa(r.Outcome.DecidedRound)
 	}
 	return "✗ miss"
 }
@@ -227,26 +254,15 @@ func renderCell(r ct.Result) string {
 func formatRow(name string, cells []string, note string) string {
 	// 35 cols accommodate the longest current scenario name
 	// (PartialEquivocation_NaturalRecovery = 34).
-	out := padRight(name, 35) + " |"
+	out := fmt.Sprintf("%-35s |", name)
 	for _, c := range cells {
-		out += " " + padRight(c, 13) + " |"
+		out += fmt.Sprintf(" %-13s |", c)
 	}
 	if note != "" && len(note) > 60 {
 		note = note[:60] + "..."
 	}
 	out += " " + note + "\n"
 	return out
-}
-
-func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-len(s))
-}
-
-func intStr(i int) string {
-	return strconv.Itoa(i)
 }
 
 func durationOnly(d time.Duration) string {

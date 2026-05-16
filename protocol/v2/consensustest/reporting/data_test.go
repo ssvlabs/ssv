@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -241,27 +242,29 @@ func TestApplicable_ZeroIterationsIsFalse(t *testing.T) {
 // TestWriteReportData_MergesAcrossRuns — WriteReportData composes points
 // from multiple runs at different (n, K) operating points into one
 // data.js instead of overwriting. Run 1 contributes (n=4, K=4); run 2
-// contributes (n=4, K=2); run 3 re-runs (n=4, K=4) and the freshest
-// data replaces the original-K=4 point.
+// contributes (n=4, K=2); run 3 re-runs (n=4, K=4) at a different
+// iteration count and the freshest data replaces the original-K=4
+// point — we pin that by varying `iters` between runs and reading
+// back the iterations the K=4 point reports.
 func TestWriteReportData_MergesAcrossRuns(t *testing.T) {
 	scenarios := smallScenarios(t)
 	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	dir := t.TempDir()
 
-	build := func(n, k int) reporting.Comparison {
+	build := func(n, k, iters int) reporting.Comparison {
 		base := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 		base.N = n
 		base.Operators = ct.MakeOperators(n)
 		base.K = k
 		return reporting.Comparison{
 			Title:              "merge test",
-			BaselineIterations: 1,
-			UnstableIterations: 1,
+			BaselineIterations: iters,
+			UnstableIterations: iters,
 			Sweeps: []ct.SweepResult{runOneSweep(t, "p2p_baseline", "", "", []ct.SweepPoint{{
-				Label:  "n=" + itoa(n) + " K=" + itoa(k),
+				Label:  "n=" + strconv.Itoa(n) + " K=" + strconv.Itoa(k),
 				Fields: map[string]float64{"N": float64(n), "K": float64(k), "BTT": 300, "Sigma": 0.5},
 				Config: ct.BatchConfig{
-					Iterations: 1, SeedStart: 1,
+					Iterations: iters, SeedStart: 1,
 					Base:      base,
 					Scenarios: scenarios, Protocols: protos,
 				},
@@ -269,37 +272,54 @@ func TestWriteReportData_MergesAcrossRuns(t *testing.T) {
 		}
 	}
 
-	// Run 1: (n=4, K=4)
-	require.NoError(t, reporting.WriteReportData(build(4, 4), dir))
+	// pointByLabel finds a point by its Label field; returns nil if absent.
+	pointByLabel := func(pts []any, want string) map[string]any {
+		for _, p := range pts {
+			m := p.(map[string]any)
+			if m["label"] == want {
+				return m
+			}
+		}
+		return nil
+	}
+	// firstCellIters returns the cell iterations from a point (a stable
+	// run-distinguishing marker: increasing iters across runs is reflected
+	// here even though the cell's own scenario doesn't otherwise vary).
+	firstCellIters := func(pt map[string]any) float64 {
+		cells := pt["cells"].([]any)
+		return cells[0].(map[string]any)["iterations"].(float64)
+	}
+
+	// Run 1: (n=4, K=4) at iters=1.
+	require.NoError(t, reporting.WriteReportData(build(4, 4, 1), dir))
 	pl := parseDataJS(t, dir)
 	pts := pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
 	require.Len(t, pts, 1, "after run 1, one point")
 	require.Equal(t, "n=4 K=4", pts[0].(map[string]any)["label"])
+	require.Equal(t, float64(1), firstCellIters(pts[0].(map[string]any)),
+		"run 1 K=4 should carry iters=1")
 
 	// Run 2: (n=4, K=2) — appended, prior point preserved.
-	require.NoError(t, reporting.WriteReportData(build(4, 2), dir))
+	require.NoError(t, reporting.WriteReportData(build(4, 2, 1), dir))
 	pl = parseDataJS(t, dir)
 	pts = pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
 	require.Len(t, pts, 2, "after run 2, two points (one per (n, K))")
-	labels := []string{
-		pts[0].(map[string]any)["label"].(string),
-		pts[1].(map[string]any)["label"].(string),
-	}
-	require.Contains(t, labels, "n=4 K=4")
-	require.Contains(t, labels, "n=4 K=2")
+	require.NotNil(t, pointByLabel(pts, "n=4 K=4"), "K=4 point preserved across run 2")
+	require.NotNil(t, pointByLabel(pts, "n=4 K=2"), "K=2 point present after run 2")
 
-	// Run 3: (n=4, K=4) — replaces the original K=4 slice, point count unchanged.
-	require.NoError(t, reporting.WriteReportData(build(4, 4), dir))
+	// Run 3: (n=4, K=4) at iters=3 — replaces the original K=4 slice.
+	// The point count stays at 2, but the K=4 point now reports the
+	// fresh iterations count from run 3 (the replace-not-append
+	// semantic). A regression that accidentally appended instead of
+	// replacing would either yield Len=3 or leave iters=1 on the K=4
+	// point.
+	require.NoError(t, reporting.WriteReportData(build(4, 4, 3), dir))
 	pl = parseDataJS(t, dir)
 	pts = pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
 	require.Len(t, pts, 2, "after re-run, point count still 2")
+	k4 := pointByLabel(pts, "n=4 K=4")
+	require.NotNil(t, k4, "K=4 point still present after run 3")
+	require.Equal(t, float64(3), firstCellIters(k4),
+		"run 3 K=4 should overwrite run 1's iters=1 with iters=3")
 }
 
-// itoa is a tiny local helper so we don't pull strconv into the test
-// file just for label assembly above.
-func itoa(n int) string {
-	if n < 10 {
-		return string(rune('0' + n))
-	}
-	return string(rune('0'+n/10)) + string(rune('0'+n%10))
-}

@@ -28,18 +28,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "mesh-mode healthy should decide")
-
-	var checked int
-	for _, e := range out.Trace {
-		_, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
-		if !ok {
-			continue
-		}
-		require.NotEqualf(t, publisher, to,
-			"mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
-		checked++
-	}
-	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+	ct.AssertNoRefloodToPublisher(t, out.Trace)
 }
 
 // TestMeshGossip_SmokeOBFT exercises the Phase B gossip layer on top
@@ -335,7 +324,6 @@ func TestAdapter_OpportunisticDecisionTime_Fallthrough(t *testing.T) {
 func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 	btt := 200 * time.Millisecond
 	for _, n := range ct.ClusterSizes {
-		n := n
 		t.Run(clusterName(n), func(t *testing.T) {
 			cfg := ct.SimConfig{
 				N:            n,
@@ -733,7 +721,6 @@ func TestAdapter_ByzLateLeaderBroadcast(t *testing.T) {
 // to ensure ≥ qV partials on V_prime regardless of byz position.
 func TestAdapter_ByzAggregatorBypass_TriggersSafetyDetection(t *testing.T) {
 	for _, byzOp := range []ct.OperatorID{1, 2} {
-		byzOp := byzOp
 		t.Run(fmt.Sprintf("byz=op%d", byzOp), func(t *testing.T) {
 			cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 			cfg.Byz = ct.ByzPattern{Kind: ct.ByzAggregatorBypass, ByzOperators: []ct.OperatorID{byzOp}}
@@ -900,20 +887,7 @@ func TestAdapter_ByzWitnessForgery_TriggersSafetyDetection(t *testing.T) {
 	t.Logf("WitnessForgery: %s", out.OfflineAgg)
 }
 
-func clusterName(n int) string {
-	switch n {
-	case 4:
-		return "n=4"
-	case 7:
-		return "n=7"
-	case 10:
-		return "n=10"
-	case 13:
-		return "n=13"
-	default:
-		return "n=?"
-	}
-}
+func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }
 
 func operatorEvidence(perOp map[ct.OperatorID]ct.OperatorOutcome) map[ct.OperatorID]map[string]int {
 	out := make(map[ct.OperatorID]map[string]int, len(perOp))

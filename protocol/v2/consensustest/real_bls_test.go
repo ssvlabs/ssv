@@ -82,7 +82,6 @@ func realBLSConfig(t *testing.T, n int, btt time.Duration) ct.SimConfig {
 // real-BLS signing path end-to-end at n=4,7,10,13.
 func TestRealBLS_Healthy_AllClusterSizes(t *testing.T) {
 	for _, n := range ct.ClusterSizes {
-		n := n
 		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
 			cfg := realBLSConfig(t, n, 200*time.Millisecond)
 			out, err := obftadapter.Protocol{}.Run(cfg)
@@ -112,18 +111,22 @@ func TestRealBLS_Catalog_n4(t *testing.T) {
 	}
 }
 
-// TestRealBLS_Catalog_n7 — full catalog at n=7 (f=2). Tests next-step
-// cluster-size generalization with real crypto.
-func TestRealBLS_Catalog_n7(t *testing.T) {
+// TestRealBLS_Catalog_n7_Diagnostic walks the full catalog at n=7 (f=2)
+// with real BLS crypto. Per-scenario Expect values are calibrated for
+// n=4 and are *not* asserted here — outcome-class drift at n=7 is
+// expected and merely logged. The only hard-failure mode is a safety-
+// invariant violation, which RunScenarioOnProtocol panics on
+// regardless. Name is suffixed `_Diagnostic` so the lack of cell-level
+// assertions is clear at-a-glance; a regression that wants n=7 to be
+// strict should add a separate `TestRealBLS_Catalog_n7_Enforced` with
+// per-scenario expectations calibrated at the n=7 operating point.
+func TestRealBLS_Catalog_n7_Diagnostic(t *testing.T) {
 	cfg := realBLSConfig(t, 7, 200*time.Millisecond)
 	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
 		for _, s := range ct.Catalog {
 			r := ct.RunScenarioOnProtocol(t, p, s, cfg)
-			// Per-scenario expectations are calibrated for n=4 — log
-			// mismatches at n=7 as diagnostic, only assert safety invariants
-			// (which RunScenarioOnProtocol panics on if violated).
 			if !r.Match && !r.Skipped {
-				t.Logf("n=7 %s/%s: %s (canonical n=4 expectation)", p.Name(), s.Name, r.Why)
+				t.Logf("n=7 %s/%s: %s (canonical n=4 expectation; mismatch logged, not asserted)", p.Name(), s.Name, r.Why)
 			}
 		}
 	}
@@ -135,7 +138,6 @@ func TestRealBLS_Catalog_n7(t *testing.T) {
 func TestRealBLS_Seeds(t *testing.T) {
 	const seedCount = 10
 	for seed := int64(1); seed <= seedCount; seed++ {
-		seed := seed
 		t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
 			cfg := realBLSConfig(t, 4, 200*time.Millisecond)
 			cfg.Seed = seed
@@ -154,7 +156,6 @@ func TestRealBLS_Seeds(t *testing.T) {
 // Exercises the per-K BLS share count + per-layer IBE encryption depth.
 func TestRealBLS_KSweep_n7(t *testing.T) {
 	for k := ct.MinK(7); k <= 7; k++ {
-		k := k
 		t.Run(fmt.Sprintf("K=%d", k), func(t *testing.T) {
 			cfg := realBLSConfig(t, 7, 200*time.Millisecond)
 			cfg.K = k

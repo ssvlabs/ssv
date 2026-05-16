@@ -1,7 +1,9 @@
 package consensustest_test
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -317,4 +319,29 @@ func TestStress(t *testing.T) {
 	t.Logf("Report data written: %s/data.js", dir)
 	t.Logf("Open: %s/index.html", dir)
 	t.Logf("Total wallclock: %v", time.Since(totalStart))
+
+	// Final-output smoke. Guards against a regression where the
+	// writer silently produces a malformed / empty data.js (e.g. an
+	// adapter change accidentally drops a protocol from the matrix,
+	// or WriteReportData errors are swallowed somewhere upstream).
+	// Cheap (just stats + a small JSON read); fires after a real run.
+	dataJS := filepath.Join(dir, "data.js")
+	st, err := os.Stat(dataJS)
+	require.NoErrorf(t, err, "data.js should exist after WriteReportData runs")
+	require.Greaterf(t, st.Size(), int64(1<<10),
+		"data.js is suspiciously small (%d bytes); a writer bug may have produced an empty payload", st.Size())
+	body, err := os.ReadFile(dataJS)
+	require.NoError(t, err)
+	const prefix = "window.REPORT_DATA = "
+	trimmed := strings.TrimPrefix(string(body), prefix)
+	trimmed = strings.TrimSuffix(strings.TrimRight(trimmed, "\n"), ";")
+	var parsed map[string]any
+	require.NoErrorf(t, json.Unmarshal([]byte(trimmed), &parsed),
+		"data.js payload must be valid JSON")
+	gotSweeps, _ := parsed["sweeps"].([]any)
+	require.NotEmptyf(t, gotSweeps, "data.js should contain at least one sweep")
+	gotProtocols, _ := parsed["protocols"].([]any)
+	require.GreaterOrEqualf(t, len(gotProtocols), len(protocolNames),
+		"data.js protocols (%d) should cover the requested set (%d): %v",
+		len(gotProtocols), len(protocolNames), protocolNames)
 }

@@ -36,10 +36,12 @@ type MsgID uint64
 type MeshNode int
 
 // MeshConfig carries the per-sim mesh tunables. Wiring constants
-// (ProtocolMeshDegree=1, RelayMeshDegreePerOp=2, RelayPoolSize=N, plus the
-// relay-relay edge count chosen to give every node total degree 3) are
-// hard-coded in NewMeshTopology — not exposed because the user is not
-// expected to fiddle with them.
+// (ProtocolMeshDegree=1, RelayMeshDegreePerOp=2, RelayPoolSize=N, plus
+// the relay-relay topup that brings each relay's degree to at least 3)
+// are hard-coded in NewMeshTopology — not exposed because the user is
+// not expected to fiddle with them. Protocol peers always end at degree
+// 3 exactly; relays end at degree ≥ 3 (some absorb extra edges when
+// chosen as the topup partner for another relay).
 type MeshConfig struct {
 	// HopDelay samples a per-hop propagation delay for one mesh edge.
 	// Calibration target ("mesh as realism"): the convolution over the
@@ -251,14 +253,18 @@ type MeshTopology struct {
 
 // NewMeshTopology builds the per-sim mesh deterministically from `seed`.
 // Topology at n=4: 4 protocol peers paired as P_0↔P_1 and P_2↔P_3, plus
-// 4 relay peers. Each protocol peer has degree 3 (1 in-cluster + 2
-// relays); each relay has degree 3 (mix of protocol attachments + relay-
-// to-relay edges). For odd n, the unpaired protocol peer gets 3 relay
-// neighbors and 0 protocol neighbors (modeling "no co-cluster op in my
-// mesh today" — a real libp2p outcome at low cluster density). Generic
-// n uses the same pairing-by-index rule plus a deterministic relay
-// wiring; for n in {4, 7, 10, 13} (the SSV-supported set) this produces
-// a connected graph — assertion-enforced.
+// 4 relay peers. Each protocol peer has degree exactly 3 (1 in-cluster
+// + 2 relays); each relay has degree ≥ 3 — the relay-relay topup adds
+// edges until each relay reaches 3, but a relay can absorb additional
+// edges when picked as the partner for another still-under-degree
+// relay (typically yielding 1–2 relays per cluster with degree 4–6,
+// see TestMesh_BuildConnected_AllSSVClusterSizes). For odd n, the
+// unpaired protocol peer gets 3 relay neighbors and 0 protocol
+// neighbors (modeling "no co-cluster op in my mesh today" — a real
+// libp2p outcome at low cluster density). Generic n uses the same
+// pairing-by-index rule plus a deterministic relay wiring; for n in
+// {4, 7, 10, 13} (the SSV-supported set) this produces a connected
+// graph — assertion-enforced.
 //
 // Panics on disconnected graph: the constraints should always yield a
 // connected mesh given valid inputs (n ≥ 2, HopDelay set). A panic here
@@ -730,9 +736,9 @@ var meshArrivalRE = regexp.MustCompile(
 //	    // ...
 //	}
 //
-// Used by the per-adapter TestMeshArrival_NoRefloodToPublisher
-// regression tests, which assert that no scheduled arrival has
-// to == publisher (the gossipsub publisher-exclusion contract).
+// Most call sites should use AssertNoRefloodToPublisher instead — it
+// wraps the parser with the canonical per-adapter regression
+// assertion.
 func ParseMeshArrivalTrace(entry string) (from, to, publisher MeshNode, ok bool) {
 	m := meshArrivalRE.FindStringSubmatch(entry)
 	if m == nil {
@@ -744,4 +750,41 @@ func ParseMeshArrivalTrace(entry string) (from, to, publisher MeshNode, ok bool)
 	toI, _ := strconv.Atoi(m[2])
 	pubI, _ := strconv.Atoi(m[3])
 	return MeshNode(fromI), MeshNode(toI), MeshNode(pubI), true
+}
+
+// FailingTester is the test-helper subset of testing.T that
+// AssertNoRefloodToPublisher needs. Declared here so mesh.go stays free
+// of the "testing" import in production code — *testing.T satisfies
+// this interface naturally; per-adapter tests pass `t` directly.
+type FailingTester interface {
+	Helper()
+	Errorf(format string, args ...any)
+}
+
+// AssertNoRefloodToPublisher walks the trace and fails the test if any
+// MeshArrival entry has to == publisher (the gossipsub publisher-
+// exclusion contract). Pins the OBFT/2abOBFT/QBFT/PSigs adapters'
+// regression test to one implementation — the four `evtMeshArrival`
+// structs are per-adapter, but the trace format is shared and the
+// assertion is identical, so the helper lives here.
+//
+// Also asserts at least one MeshArrival appears in the trace —
+// otherwise a test that silently skipped the mesh path would pass
+// trivially.
+func AssertNoRefloodToPublisher(t FailingTester, trace []TraceEntry) {
+	t.Helper()
+	var checked int
+	for _, e := range trace {
+		_, to, publisher, ok := ParseMeshArrivalTrace(e.Event)
+		if !ok {
+			continue
+		}
+		if to == publisher {
+			t.Errorf("mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Errorf("expected at least one MeshArrival in trace; got 0 — did the test forget DeliveryMesh + TraceEnabled?")
+	}
 }

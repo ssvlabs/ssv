@@ -1,6 +1,7 @@
 package consensustest_test
 
 import (
+	"fmt"
 	mrand "math/rand"
 	"testing"
 	"time"
@@ -61,7 +62,6 @@ func TestMesh_BuildConnected_N4(t *testing.T) {
 // "no co-cluster op in my mesh today" case.
 func TestMesh_BuildConnected_AllSSVClusterSizes(t *testing.T) {
 	for _, n := range ct.ClusterSizes {
-		n := n
 		t.Run(clusterName(n), func(t *testing.T) {
 			cluster := ct.MakeOperators(n)
 			m := ct.NewMeshTopology(int64(n)*7+1, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
@@ -87,33 +87,27 @@ func TestMesh_BuildConnected_AllSSVClusterSizes(t *testing.T) {
 				require.Equal(t, 3-protoCount, relayCount,
 					"n=%d op=%d: relay count must fill remaining degree slots", n, op)
 			}
+			// Relay peers (indices [n, 2n)) must have degree ≥ 3. The
+			// topup loop in NewMeshTopology grows each relay until it
+			// hits 3 by adding relay-relay edges, but a relay can absorb
+			// additional edges when it's chosen as the "other" endpoint
+			// by a still-under-degree relay — so the invariant is `≥ 3`,
+			// not `= 3`. Without this assertion, a regression that
+			// stops the topup early would only be caught indirectly by
+			// the framework's "disconnected mesh" panic.
+			for i := n; i < m.TotalNodes(); i++ {
+				node := ct.MeshNode(i)
+				require.Falsef(t, m.IsProtocol(node),
+					"n=%d: index %d expected to be a relay (total=%d)", n, i, m.TotalNodes())
+				nbrs := m.Neighbors(node)
+				require.GreaterOrEqualf(t, len(nbrs), 3,
+					"n=%d relay node %d: expected degree ≥ 3, got %d", n, i, len(nbrs))
+			}
 		})
 	}
 }
 
-func clusterName(n int) string { return "n=" + intToA(n) }
-
-func intToA(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
-}
+func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }
 
 // TestMesh_BuildDeterministic — same seed → identical wiring. The
 // framework's per-sim determinism contract (cfg + seed → byte-identical

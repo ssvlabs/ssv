@@ -19,6 +19,16 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
+// Per-op rawOpOutcome.Err string constants. Named so the adapter's
+// classifyQBFTMiss + the adapter tests reference one symbol rather
+// than string-equating literals. A future refactor that changes the
+// human-readable phrasing now touches one place.
+const (
+	DiagNoPostConsensusQuorum    = "no postconsensus quorum"
+	DiagByzantineNoInstance      = "byzantine — no instance"
+	DiagDidNotDecideBeforeSimEnd = "did not decide before sim end"
+)
+
 // runDES executes one QBFT simulation under virtual time. Single-goroutine
 // event loop with priority queue ordered by (timestamp, sequence) for
 // determinism.
@@ -253,14 +263,14 @@ func (s *sim) outcome() rawOutcome {
 			// even when the cluster missed the submit window).
 			oo.value = append([]byte(nil), rec.value...)
 			oo.round = int(rec.round)
-			oo.err = "no postconsensus quorum"
+			oo.err = DiagNoPostConsensusQuorum
 		} else if s.byz.IsByz(ct.OperatorID(op)) {
 			// Byz operators don't run real Instances in this DES — the byz
 			// pattern fabricates messages from them directly. They never
 			// "decide", but it's not a failure either.
-			oo.err = "byzantine — no instance"
+			oo.err = DiagByzantineNoInstance
 		} else {
-			oo.err = "did not decide before sim end"
+			oo.err = DiagDidNotDecideBeforeSimEnd
 		}
 		out.perOp[ct.OperatorID(op)] = oo
 	}

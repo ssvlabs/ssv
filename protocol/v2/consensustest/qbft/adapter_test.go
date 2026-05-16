@@ -1,6 +1,7 @@
 package qbft_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -31,18 +32,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	out, err := qbftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "mesh-mode healthy should decide")
-
-	var checked int
-	for _, e := range out.Trace {
-		_, to, publisher, ok := ct.ParseMeshArrivalTrace(e.Event)
-		if !ok {
-			continue
-		}
-		require.NotEqualf(t, publisher, to,
-			"mesh arrival scheduled with to=publisher (loop-back): %q", e.Event)
-		checked++
-	}
-	require.Positive(t, checked, "expected at least one MeshArrival in trace")
+	ct.AssertNoRefloodToPublisher(t, out.Trace)
 }
 
 // TestAdapter_PostConsensusQuorumMiss — Phase C regression test: at
@@ -74,10 +64,10 @@ func TestAdapter_PostConsensusQuorumMiss(t *testing.T) {
 	out, err := qbftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.False(t, out.Decided, "cluster should miss without 2f+1 partial sigs")
-	require.Equal(t, "no postconsensus quorum", out.PerOp[1].Err, "op1 consensus-decided locally but lacked partial-sig quorum")
-	require.Equal(t, "no postconsensus quorum", out.PerOp[4].Err, "op4 consensus-decided locally but lacked partial-sig quorum")
-	require.Equal(t, "did not decide before sim end", out.PerOp[2].Err, "op2 (slow) didn't reach consensus")
-	require.Equal(t, "did not decide before sim end", out.PerOp[3].Err, "op3 (slow) didn't reach consensus")
+	require.Equal(t, qbftadapter.DiagNoPostConsensusQuorum, out.PerOp[1].Err, "op1 consensus-decided locally but lacked partial-sig quorum")
+	require.Equal(t, qbftadapter.DiagNoPostConsensusQuorum, out.PerOp[4].Err, "op4 consensus-decided locally but lacked partial-sig quorum")
+	require.Equal(t, qbftadapter.DiagDidNotDecideBeforeSimEnd, out.PerOp[2].Err, "op2 (slow) didn't reach consensus")
+	require.Equal(t, qbftadapter.DiagDidNotDecideBeforeSimEnd, out.PerOp[3].Err, "op3 (slow) didn't reach consensus")
 	// Cluster-level MissReason should reflect the post-consensus branch
 	// (some ops reached internal consensus, but the partial-sig quorum
 	// didn't aggregate at any receiver) — NOT the rounds-exhausted
@@ -120,7 +110,6 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 	btt := 200 * time.Millisecond
 	for _, n := range ct.ClusterSizes {
-		n := n
 		t.Run(clusterName(n), func(t *testing.T) {
 			cfg := ct.SimConfig{
 				N:            n,
@@ -192,17 +181,4 @@ func TestAdapter_DeterministicAcrossRuns(t *testing.T) {
 	}
 }
 
-func clusterName(n int) string {
-	switch n {
-	case 4:
-		return "n=4"
-	case 7:
-		return "n=7"
-	case 10:
-		return "n=10"
-	case 13:
-		return "n=13"
-	default:
-		return "n=?"
-	}
-}
+func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }

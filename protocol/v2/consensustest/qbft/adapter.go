@@ -202,7 +202,7 @@ func classifyQBFTMiss(out ct.Outcome, preDecided bool, preRound int, preTime, de
 	// "did not decide before sim end" or byz markers) means consensus
 	// itself never reached.
 	for _, oo := range out.PerOp {
-		if oo.Err == "no postconsensus quorum" {
+		if oo.Err == DiagNoPostConsensusQuorum {
 			return "Cluster agreed on a value, but never gathered enough post-consensus partial signatures"
 		}
 	}

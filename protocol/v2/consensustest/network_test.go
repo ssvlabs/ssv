@@ -40,7 +40,6 @@ func TestLogNormalDelay_Shape(t *testing.T) {
 	)
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run("sigma="+formatFloat(tc.sigma), func(t *testing.T) {
 			model := ct.LogNormalDelay{Median: median, Sigma: tc.sigma}
 			rng := mrand.New(mrand.NewSource(seed))
@@ -126,7 +125,6 @@ func TestLossyNetwork_LossRate(t *testing.T) {
 	)
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run("rate="+formatFloat(tc.lossRate)+"/burst="+strconv.Itoa(tc.burstFactor), func(t *testing.T) {
 			model := ct.NewLossyNetwork(ct.ConstantDelay{D: base}, tc.lossRate, tc.burstFactor)
 			rng := mrand.New(mrand.NewSource(seed))
@@ -236,11 +234,14 @@ func TestCorrelatedLinkDelay_PerPairFraction(t *testing.T) {
 		badProb       = 0.20
 		badMul        = 3.0
 		burstMessages = 10
-		pairs         = 12 // 12 directed visits per outer iter; 6 undirected pair-chains
 		callsPerPair  = 1000
 		seed          = int64(7)
 		base          = 200 * time.Millisecond
 	)
+	// 12 directed visits per outer iter (4 ops × 3 receivers excluding self =
+	// 12; 6 undirected pair-chains). Folded into the require.InDeltaf message
+	// below for diagnostic readability; the loop iterates the cross-product
+	// directly, no separate variable needed.
 
 	model := ct.NewCorrelatedLinkDelay(ct.ConstantDelay{D: base}, badProb, badMul, burstMessages)
 	rng := mrand.New(mrand.NewSource(seed))
@@ -261,7 +262,6 @@ func TestCorrelatedLinkDelay_PerPairFraction(t *testing.T) {
 			}
 		}
 	}
-	_ = pairs
 	observedFrac := float64(badCount) / float64(totalCount)
 	// Tolerance: per-pair Markov autocorrelation reduces effective N by
 	// ~BurstMessages per pair; pooling across 12 pairs and 1000 calls
@@ -475,7 +475,6 @@ func TestLogNormalMixture_HeavyTailed(t *testing.T) {
 		N = 200_000
 	)
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			origP99Empirical := sampleMixtureP99(tc.base, 100_000, 13)
 			heavy := tc.base.HeavyTailed(k)

@@ -193,3 +193,28 @@ func TestSafety_AttestationGatesOnDecided(t *testing.T) {
 	require.True(t, r.OBFTHostValidityRespect)
 	require.False(t, r.IsViolation())
 }
+
+// TestSafety_EquivocationDoesNotGateOnDecided pins the asymmetric
+// counterpart to TestSafety_AttestationGatesOnDecided: equivocation
+// MUST fire as a violation regardless of Decided. The reason is
+// safety-side: a byzantine that equivocates without the cluster
+// deciding is still a fundamental safety violation (the cluster could
+// have decided on either of the equivocated values had timing gone
+// differently), so the gate is on EquivocationChecked alone — not on
+// Decided. This test fails the moment someone adds an `if !decided`
+// short-circuit to the equivocation branch in ComputeSafetyReport.
+func TestSafety_EquivocationDoesNotGateOnDecided(t *testing.T) {
+	att := ct.CommitAttestation{
+		EquivocationChecked:   true,
+		EquivocationsAccepted: 1,
+	}
+	// Cluster did NOT decide — but the equivocation evidence is still
+	// a safety violation.
+	r := ct.ComputeSafetyReport(ct.Outcome{
+		Decided:           false,
+		PerOp:             map[ct.OperatorID]ct.OperatorOutcome{1: {Decided: false, Err: "miss"}},
+		CommitAttestation: att,
+	})
+	require.False(t, r.NoEquivocationAccepted, "equivocation evidence must fire even when undecided")
+	require.True(t, r.IsViolation(), "equivocation violation must be reported regardless of Decided")
+}

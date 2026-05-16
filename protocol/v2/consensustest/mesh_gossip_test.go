@@ -23,8 +23,13 @@ func TestMeshGossipConfig_WithDefaults(t *testing.T) {
 	require.Equal(t, 6, got.Dlazy, "default Dlazy is the libp2p default (SSV doesn't override)")
 	require.Equal(t, 0.25, got.GossipFactor)
 
-	partial := ct.MeshGossipConfig{HeartbeatInterval: 1 * time.Second, Dlazy: 12}.WithDefaults()
+	partial := ct.MeshGossipConfig{
+		HeartbeatInterval: 1 * time.Second,
+		HistoryGossip:     8,
+		Dlazy:             12,
+	}.WithDefaults()
 	require.Equal(t, 1*time.Second, partial.HeartbeatInterval, "non-zero HeartbeatInterval is preserved")
+	require.Equal(t, 8, partial.HistoryGossip, "non-zero HistoryGossip is preserved")
 	require.Equal(t, 12, partial.Dlazy, "non-zero Dlazy is preserved")
 	require.Equal(t, 6, partial.HistoryLength, "still-zero HistoryLength defaults")
 	require.Equal(t, 0.25, partial.GossipFactor, "still-zero GossipFactor defaults")
@@ -152,16 +157,12 @@ func TestMeshGossip_PickRecipients_DeterministicAndCapped(t *testing.T) {
 	a := mesh.PickGossipRecipients(mrand.New(mrand.NewSource(1)), node, 99, 0.25)
 	require.Len(t, a, len(pool), "Dlazy=99 caps at pool size")
 
-	// Same seed → same selection.
+	// Same seed → same selection. Reproducibility across calls is the
+	// load-bearing contract (heartbeats fire deterministically in the
+	// sim's event queue, so PickGossipRecipients output must be too).
 	b := mesh.PickGossipRecipients(mrand.New(mrand.NewSource(7)), node, 2, 0.25)
 	c := mesh.PickGossipRecipients(mrand.New(mrand.NewSource(7)), node, 2, 0.25)
 	require.Equal(t, b, c, "same seed reproduces selection")
-
-	// Different seed → likely different order or selection (probabilistic;
-	// at pool size 4 there's a small but non-zero chance of identical
-	// permutation, so we don't assert inequality — just that the test
-	// doesn't crash).
-	_ = mesh.PickGossipRecipients(mrand.New(mrand.NewSource(13)), node, 2, 0.25)
 }
 
 // newTestMesh builds a minimal MeshTopology for the unit tests above:
