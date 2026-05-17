@@ -209,10 +209,11 @@ func TestStress(t *testing.T) {
 	//     FetchAt fetch buffer, and 2ab's TAcceptMax / TVerdictMax
 	//     horizons) scales linearly with the multiplier; backup layers
 	//     L_1..L_{K-1} have B_k = T_commit and don't scale with the
-	//     multiplier. T_commit lands earlier as a result (Δ_2 = 2·m·BTT
-	//     for OBFT-m at framework conservatism; Δ_2a + Δ_2b = 4·m·BTT
-	//     for 2abOBFT-m) at the cost of MEV freshness. Network propagation
-	//     still happens at the sweep's actual BTT — the multiplier models
+	//     multiplier. T_commit lands earlier as a result (Δ_2 = 1·m·BTT
+	//     for OBFT-m at spec-aligned sizing; Δ_2a + Δ_2b = 3·m·BTT for
+	//     2abOBFT-m, of which Δ_2a = 2·m·BTT is the structural minimum)
+	//     at the cost of MEV freshness. Network propagation still
+	//     happens at the sweep's actual BTT — the multiplier models
 	//     operator-side pessimism only.
 	//   - QBFT ships in the research variant (computed RT = 6·PhaseBudget
 	//     = 6·bttEff at tightened per-emission PhaseBudget = 1·bttEff) and

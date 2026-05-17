@@ -45,8 +45,8 @@ type Protocol struct {
 	//
 	// CAVEAT — the multiplier affects the protocol's INTERNAL
 	// assumptions only; the simulated network still propagates at
-	// cfg.BTT. Multiplier > 1 ("loose") widens all four Phase-2 windows
-	// (Δ_2a + Δ_2b = 4·bttEff total, vs 4·BTT canonical) and pushes
+	// cfg.BTT. Multiplier > 1 ("loose") widens the Phase-2 windows
+	// (Δ_2a + Δ_2b = 3·bttEff total, vs 3·BTT canonical) and pushes
 	// T_commit earlier in the slot by 2·(bttEff − cfg.BTT). The CPU-
 	// side reserves (epsilon3, phase3JitterBuffer,
 	// cfg.HeaderSubmitHeadroom) do NOT scale.
@@ -91,23 +91,21 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// 2abOBFT splits Phase 2 into Phase 2a (verdict broadcast, Δ_2a ≥ 2·BTT
 	// per spec §Setting — structural minimum, mandatory) and Phase 2b
 	// (σ-or-NR propagation, spec-recommended Δ_2b = 1·BTT + ε_proc at
-	// tightened sizing). The framework intentionally keeps `Δ_2b = 2·BTT`
-	// for simulation conservatism — the production SSV adapter uses the
-	// tightened spec recommendation; the framework's 2·BTT gives sims an
-	// extra propagation cushion so scenario expectations stay stable
-	// under network-model jitter without re-baselining every scenario
-	// when the spec recommendation tightens. Resulting Phase-2 total =
-	// 4·bttEff in the framework; T_commit lands 2·bttEff earlier than
-	// OBFT's at the same RelayCutoff — the spec's "cost" for the
-	// validity-divergence safety story.
+	// tightened sizing — the framework rounds ε_proc into bttEff for
+	// simplicity, so Δ_2b = 1·bttEff). Resulting Phase-2 total = 3·bttEff
+	// (Δ_2a = 2·bttEff structural minimum + Δ_2b = 1·bttEff spec-aligned);
+	// T_commit lands 2·bttEff earlier than OBFT's at the same RelayCutoff
+	// — the spec's "cost" for the validity-divergence safety story
+	// (OBFT pays only Δ_2 = 1·bttEff post-tightening; 2abOBFT pays
+	// 3·bttEff = the extra Δ_2a structural minimum).
 	bttEff := p.effectiveBTT(cfg.BTT)
 	delta2a := 2 * bttEff
-	delta2b := 2 * bttEff
+	delta2b := bttEff
 	delta2 := delta2a + delta2b
 	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
 	if tCommit <= 0 {
 		// Operating-point-incompatible (bttEff too large for the 2ab
-		// 4·BTT Phase-2 tax to fit before RelayCutoff). Wrap as
+		// 3·BTT Phase-2 tax to fit before RelayCutoff). Wrap as
 		// ErrConfigOutOfEnvelope so the cell renders red 0% rather
 		// than as an unexpected error.
 		return ct.Outcome{}, fmt.Errorf(
@@ -136,11 +134,14 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		//   Δ_2a + Δ_2b  <  R  ≤  2·Δ_2a + Δ_2b
 		//
 		// where T_commit slips through positive but T_verdict_start is
-		// non-positive. Concrete examples at R = 4000−100−50−50 =
-		// 3800ms: 2abOBFTx3 at BTT=300 has Δ_2a = Δ_2b = 1800ms
-		// (T_commit=200, T_verdict_start=−1600); 2abOBFTx2 at BTT=400
-		// has Δ_2a = Δ_2b = 1600ms (T_commit=600, T_verdict_start=
-		// −1000).
+		// non-positive. At spec-aligned sizing (Δ_2a = 2·bttEff,
+		// Δ_2b = 1·bttEff): T_commit > 0 iff R > 3·bttEff (bttEff <
+		// R/3); T_verdict_start > 0 iff R > 5·bttEff (bttEff < R/5).
+		// Concrete examples at R = 4000−100−50−50 = 3800ms (so the band
+		// is 760ms < bttEff ≤ 1267ms): 2abOBFTx3 at BTT=300 has bttEff
+		// = 900ms (Δ_2a=1800, Δ_2b=900; T_commit=1100, T_verdict_start
+		// =−700); 2abOBFTx2 at BTT=400 has bttEff = 800ms (Δ_2a=1600,
+		// Δ_2b=800; T_commit=1400, T_verdict_start=−200).
 		return ct.Outcome{}, fmt.Errorf(
 			"%w: twoab adapter: derived T_verdict_start=%v non-positive (T_commit=%v Delta2a=%v bttEff=%v at BTTMultiplier=%v)",
 			ct.ErrConfigOutOfEnvelope, tVerdictStart, tCommit, delta2a, bttEff, p.BTTMultiplier)

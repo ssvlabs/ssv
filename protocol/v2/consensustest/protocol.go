@@ -72,11 +72,12 @@ type SimConfig struct {
 	// BTT (broadcast trip time) = network P99 one-way propagation + clock skew δ.
 	// The single network-side knob the sweep varies; each Protocol-family
 	// adapter scales BTT by its own BTTMultiplier (default 1.0) before
-	// deriving every internal timing budget. Framework-side sizing (post-
-	// tightening): OBFT Δ_2 = 2·bttEff (framework conservatism; spec
-	// recommends 1·BTT); 2abOBFT Δ_2a + Δ_2b = 4·bttEff total (framework
-	// conservatism on Δ_2b; spec recommends Δ_2b = 1·BTT + ε_proc);
-	// QBFT phase budget = 1·bttEff (tightened to match unified
+	// deriving every internal timing budget. Framework-side sizing
+	// (spec-aligned, post-tightening): OBFT Δ_2 = 1·bttEff (spec
+	// recommendation; reflood absorbed by B_0, not by Δ_2 — see
+	// RefloodDelay); 2abOBFT Δ_2a + Δ_2b = 3·bttEff total (Δ_2a =
+	// 2·bttEff structural minimum per 2abOBFT.md §Setting, Δ_2b =
+	// 1·bttEff spec-aligned); QBFT phase budget = 1·bttEff (unified
 	// per-emission convention; computed RT = 6×phaseBudget = 6·bttEff
 	// for operational margin).
 	BTT time.Duration

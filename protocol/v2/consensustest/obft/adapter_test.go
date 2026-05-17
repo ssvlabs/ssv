@@ -159,10 +159,11 @@ func TestRecovery_PeerVOnHV1(t *testing.T) {
 //
 // Recovery requires FetchAt[0]+2·BTT < T_commit so V-drop receivers
 // emit BEFORE the evtPhaseTwoStart T_commit fallback locks them into
-// NR. At BTT ≥ ~1000ms (with the framework's Δ_2 = 2·BTT conservatism)
-// T_commit shrinks below the propagation chain — outside the recovery
-// envelope. Production uses Δ_2 = 1·BTT, where the envelope reaches
-// further; the framework values bound the conservative case.
+// NR. At very high BTT the V-drop emit chain stretches past T_commit
+// and recovery fails — the test bound of 600ms BTT stays comfortably
+// inside the envelope. Framework now matches production sizing (Δ_2 =
+// 1·BTT spec-aligned), so the envelope here equals what production
+// sees — no framework-vs-production divergence.
 func TestRecovery_PeerVOnHV1_DegradedBTT(t *testing.T) {
 	// Operational SSV BTT envelope: 100ms (LAN-fast) to 600ms (degraded
 	// WAN). The §6 plan question explicitly calls out BTT=600ms.
@@ -301,9 +302,9 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 // driven commit emit framework upgrade. Asserts the observer-mode metric
 // is active AND that commits fire on L0Ready close (not at T_commit):
 // under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum at L_0
-// reaches at FetchAt[0] + 2·BTT = 3350ms (was 3600ms = T_commit + 1·BTT
+// reaches at FetchAt[0] + 2·BTT = 3550ms (was 3800ms = T_commit + 1·BTT
 // under the prior sync-at-T_commit emit; was 3850ms = RoundEndOffset
-// pre-observer-mode). Pinning this 500ms total saving catches both
+// pre-observer-mode). Pinning this 300ms total saving catches both
 // regressions: (a) vQuorumAt not being written by the commit-arrival
 // path, and (b) the framework's evtCommitEmit not being scheduled on
 // L0Ready close.
@@ -313,17 +314,18 @@ func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	// At BTT=200ms: T_commit=3400ms, B_0=2·BTT=400ms, fetchBuffer=BTT/4=50ms
-	// → FetchAt[0]=2950ms. L_0 leader emits Phase-1 (and its own early
-	// commit) at 2950ms; Phase-1 arrives at peers at 3150ms → ApplyHostValidity
-	// closes L0Ready on the σ-retention path → peers early-emit commits at
-	// 3150ms → arrivals at 3350ms. The qV-th σ-partial arrival hits σ-quorum
-	// at that moment; walk cost at L_0 is 0 (no fall-through). Total saving
-	// vs schedule-anchored 3850ms is 500ms (250ms vs sync-emit's 3600ms +
-	// another 250ms from the L0Ready-driven early-emit).
-	require.Equal(t, 3350*time.Millisecond, out.DecisionTime,
-		"observer-mode + L0Ready-driven emit should catch L_0 σ-quorum at FetchAt[0] + 2·BTT = 3350ms "+
-			"(was 3600ms under sync-at-T_commit emit; was schedule-anchored 3850ms pre-observer)")
+	// At BTT=200ms: T_commit=3600ms (Δ_2=1·BTT spec-aligned), B_0=2·BTT=400ms,
+	// fetchBuffer=BTT/4=50ms → FetchAt[0]=3150ms. L_0 leader emits Phase-1
+	// (and its own early commit) at 3150ms; Phase-1 arrives at peers at 3350ms
+	// → ApplyHostValidity closes L0Ready on the σ-retention path → peers
+	// early-emit commits at 3350ms → arrivals at 3550ms. The qV-th σ-partial
+	// arrival hits σ-quorum at that moment; walk cost at L_0 is 0 (no
+	// fall-through). Total saving vs schedule-anchored 3850ms is 300ms (50ms
+	// vs sync-emit's 3800ms + another 250ms from the L0Ready-driven early-
+	// emit).
+	require.Equal(t, 3550*time.Millisecond, out.DecisionTime,
+		"observer-mode + L0Ready-driven emit should catch L_0 σ-quorum at FetchAt[0] + 2·BTT = 3550ms "+
+			"(was 3800ms under sync-at-T_commit emit; was schedule-anchored 3850ms pre-observer)")
 }
 
 // TestAdapter_OpportunisticDecisionTime_Fallthrough is the OBFT-
@@ -363,11 +365,12 @@ func TestAdapter_OpportunisticDecisionTime_Fallthrough(t *testing.T) {
 	// (3 of 4 commits) brings σ-pool at L_1 to qV and NR-pool at L_0 to
 	// qEnc, satisfying the walk. Layer-walk cost is 1·Epsilon3 (one NR-
 	// advance from L_0 to L_1). At BTT=200ms (ConstantDelay), commits arrive
-	// at T_commit + 1·BTT = 3600ms; at Epsilon3 = 50ms (DefaultProposerDutyConfig
-	// leaves Epsilon3 unset → Validate() applies the default), the
-	// vQuorumAt write is 3600 + 50 = 3650ms.
-	require.Equal(t, 3650*time.Millisecond, out.DecisionTime,
-		"observer-mode fall-through should record vQuorumAt = T_commit + 1·BTT + 1·Epsilon3 = 3650ms "+
+	// at T_commit + 1·BTT = 3800ms (T_commit=3600ms at Δ_2=1·BTT spec-
+	// aligned); at Epsilon3 = 50ms (DefaultProposerDutyConfig leaves
+	// Epsilon3 unset → Validate() applies the default), the vQuorumAt write
+	// is 3800 + 50 = 3850ms.
+	require.Equal(t, 3850*time.Millisecond, out.DecisionTime,
+		"observer-mode fall-through should record vQuorumAt = T_commit + 1·BTT + 1·Epsilon3 = 3850ms "+
 			"(NOT the pre-instrumentation schedule-anchored RoundEndOffset + 1·Epsilon3 = 3900ms)")
 }
 
@@ -565,8 +568,13 @@ func TestAdapter_MaxMEVFetch_HealthyAtBoundary(t *testing.T) {
 //
 // Validates: (a) the spec's "convergence buffer in B_k" warning is observable
 // — at the exact boundary, max-MEV fetch is NOT guaranteed at L_0 under
-// full-BTT propagation, (b) the K-layer fall-through correctly handles the
-// boundary miss.
+// full-BTT propagation, (b) the K-layer fall-through MECHANISM reaches L_1
+// internally (visible in MissReason). Post Δ_2 tightening to spec-aligned
+// 1·BTT, the post-T_commit budget is too narrow (1·BTT + ε_3 = 250ms) to
+// also absorb the 2·BTT commit propagation that fall-through requires —
+// the cluster reaches L_1 σ-quorum past the relay submit deadline. The
+// MissReason exposes the fall-through outcome precisely. This test now
+// doubles as a regression guard against re-loosening Δ_2.
 func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	// Override Network to 2·BTT propagation — under the reflood-aware schedule
@@ -580,13 +588,23 @@ func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testin
 
 	out, err := obftadapter.Protocol{MaxMEVFetch: true}.Run(cfg)
 	require.NoError(t, err)
-	require.True(t, out.Decided, "should still decide via K-layer fall-through")
-	require.GreaterOrEqual(t, out.DecidedRound, 1,
-		"max-MEV + B_0-boundary propagation: L_0 should NOT decide (convergence buffer consumed)")
+	// At spec-aligned Δ_2 = 1·BTT, T_commit = 3600ms (was 3400ms at framework's
+	// prior 2·BTT conservatism). Commits go out at T_commit, arrive at T_commit
+	// + 2·BTT = 4000ms (Network = 2·BTT), L_1 σ-quorum + 1·ε_3 walk cost lands
+	// at 4050ms — past the relay submit deadline of 3900ms. Fall-through reaches
+	// L_1 correctly (visible in MissReason); the cluster just has no time to
+	// submit the cert.
+	require.False(t, out.Decided,
+		"max-MEV + 2·BTT propagation at spec-aligned Δ_2 = 1·BTT: fall-through reaches L_1 internally but past submit deadline; if this assertion starts passing, Δ_2 has been re-loosened")
+	require.Contains(t, out.MissReason, "layer 1",
+		"MissReason should expose K-layer fall-through reaching L_1 internally (mechanism (b) intact)")
+	require.Contains(t, out.MissReason, "past the submit deadline",
+		"MissReason should attribute the miss to the post-T_commit budget, not to fall-through machinery")
 
 	rep := ct.ComputeSafetyReport(out)
 	require.True(t, rep.SingleV, "SingleV: %s", rep)
-	t.Logf("MaxMEVFetch + 2·BTT propagation: fell through to L_%d at %v", out.DecidedRound, out.DecisionTime)
+	t.Logf("MaxMEVFetch + 2·BTT propagation: internally reached fall-through at %v but past submit deadline (%q)",
+		out.DecisionTime, out.MissReason)
 }
 
 // TestAdapter_ByzWithholdLeader verifies the deepest-layer leader silenced

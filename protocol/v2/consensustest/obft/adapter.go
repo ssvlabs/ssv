@@ -41,11 +41,11 @@ type Protocol struct {
 	// CAVEAT — the multiplier affects the protocol's INTERNAL assumptions
 	// only; the simulated network still propagates at cfg.BTT. Multiplier
 	// > 1 ("loose") means the protocol budgets more slack per BTT-multiple
-	// at the cost of an earlier T_commit (since Delta2 = 2·bttEff
-	// consumes more of RelayCutoff); multiplier < 1 ("tight") is the
-	// inverse trade. The CPU-side constants (epsilon3,
-	// phase3JitterBuffer, cfg.HeaderSubmitHeadroom) do NOT scale —
-	// they're operator-side reserves, not network propagation slack.
+	// at the cost of an earlier T_commit (since Delta2 = 1·bttEff
+	// consumes more of RelayCutoff under the scaled bttEff); multiplier
+	// < 1 ("tight") is the inverse trade. The CPU-side constants
+	// (epsilon3, phase3JitterBuffer, cfg.HeaderSubmitHeadroom) do NOT
+	// scale — they're operator-side reserves, not network propagation slack.
 	BTTMultiplier float64
 
 	// MaxMEVFetch removes the per-layer fetch buffer (the BTT/4 margin
@@ -96,14 +96,12 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// Derive every timing budget internally from bttEff = multiplier ·
 	// cfg.BTT. The framework no longer carries Delta2 / BroadcastBudget /
 	// FetchAt on SimConfig; OBFT family adapters own the spec's BTT-as-
-	// unit conventions. The framework intentionally keeps `Delta2 = 2·BTT`
-	// for simulation conservatism — the production SSV adapter uses the
-	// tightened spec recommendation `Δ_2 = 1·BTT` (reflood lives in B_k);
-	// the framework's 2·BTT gives sims an extra propagation cushion so
-	// scenario expectations stay stable under network-model jitter without
-	// re-baselining every scenario when the spec recommendation tightens.
+	// unit conventions. Δ_2 = 1·bttEff matches the spec recommendation —
+	// reflood lives in B_0 (per-scenario cfg.RefloodDelay folded into
+	// the primary-layer broadcast budget), not in Δ_2; see OBFT.md
+	// §Timing budget. Production SSV adapter uses the same sizing.
 	bttEff := p.effectiveBTT(cfg.BTT)
-	delta2 := 2 * bttEff
+	delta2 := bttEff
 	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
 	if tCommit <= 0 {
 		return ct.Outcome{}, fmt.Errorf(

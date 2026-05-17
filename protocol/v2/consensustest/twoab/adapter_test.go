@@ -42,17 +42,19 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 // observer path at T_commit + 1·BTT (vs pre-instrumentation
 // RoundEndOffset). 2abOBFT's T_commit is later than OBFT's because of
 // the Phase-2a Δ_2a budget: T_commit = RelayCutoff − HeaderSubmitHeadroom
-// − phase3JitterBuffer − ε_3 − Δ_2a − Δ_2b. At BTT=200ms, Δ_2a=Δ_2b=400ms,
-// so T_commit = 4000 − 100 − 50 − 50 − 400 − 400 = 3000ms; commits arrive
-// at 3000 + 200 = 3200ms — well before RoundEndOffset = 3450ms.
+// − phase3JitterBuffer − ε_3 − Δ_2a − Δ_2b. At BTT=200ms,
+// Δ_2a=2·BTT=400ms (structural minimum per 2abOBFT spec) and
+// Δ_2b=1·BTT=200ms (spec-aligned), so T_commit = 4000 − 100 − 50 − 50 −
+// 400 − 200 = 3200ms; commits arrive at 3200 + 200 = 3400ms — well
+// before RoundEndOffset = 3450ms.
 func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := twoabadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	require.Equal(t, 3200*time.Millisecond, out.DecisionTime,
-		"observer-mode Resolve should catch L_0 σ-quorum at T_commit + 1·BTT = 3200ms (was schedule-anchored 3450ms)")
+	require.Equal(t, 3400*time.Millisecond, out.DecisionTime,
+		"observer-mode Resolve should catch L_0 σ-quorum at T_commit + 1·BTT = 3400ms (was schedule-anchored 3450ms)")
 }
 
 // TestAdapter_HealthyMesh_N4 — 2abOBFT healthy through the mesh
