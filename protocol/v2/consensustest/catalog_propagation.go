@@ -32,6 +32,19 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		}
 	},
 	Expect: map[string]ExpectClass{
+		// OBFT: still ExpectMiss under the sync-emit consensustest framework.
+		// Per OBFT.md §Phase 2 / Peer-reflood V via early commit (§1 of
+		// docs/OBFT-L0-RELIABILITY-PLAN.md), bare OBFT's peer-reflood-V
+		// mechanism closes h_V=1 at L_0 in production: V-drop receivers
+		// harvest V from peer KindCommits and σ_i^V on it, pushing the
+		// σ-pool past qV. The mechanism requires early-emit ordering
+		// (V-holder emits before V-drop receivers commit) — exercised by
+		// protocol/v2/obft/base/early_commit_test.go's
+		// TestHV1SelectiveDelivery_PeerVRecovery. The consensustest
+		// framework's evtPhaseTwoStart calls BuildOwnCommit synchronously
+		// for all ops at T_commit, so peer commits arrive AFTER receivers
+		// have NR-locked. Flipping this expectation requires a framework
+		// upgrade to L0Ready-driven per-op commit emit.
 		"OBFT": ExpectMiss,
 		// 2abOBFT (key win): h_V=f selective delivery. f σV verdicts +
 		// (N-f-1) NR/NV verdicts at L_0. σ-pool < qV; nr_pool reaches qEnc
@@ -44,7 +57,7 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to selectively-deliver
 	},
-	Note: "OBFT-specific deadlock at L_0 (σ-pool=f+1 < qV, NR-pool=2f < qEnc → no L_1 fall-through). 2abOBFT recovers via NR-quorum at L_0. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
+	Note: "Pre-§1 OBFT deadlock at L_0 (σ-pool=f+1 < qV, NR-pool=2f < qEnc → no L_1 fall-through). 2abOBFT recovers via NR-quorum at L_0. QBFT round-changes from selective-delivery R1 failure to honest R2 leader. Post-§1 OBFT recovers in production via peer-reflood-V at L_0 (see plan + base/early_commit_test.go); consensustest framework limitation prevents exercising the recovery here.",
 }
 
 // ---- Late L_0 leader broadcast (Phase 3 — Class A spec) ---------------

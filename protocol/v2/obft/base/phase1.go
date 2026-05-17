@@ -444,25 +444,53 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 }
 
 // chosenVForLayer returns the operator's σ-target V at `layer` if uniquely
-// determined: there is exactly one retained Phase-1 bundle (across all
-// leaders, but in practice one leader per layer) AND the host validated it.
-// Returns (nil, false) if equivocation, no retained V, or host hasn't
-// validated.
+// determined.
+//
+// Primary path (Phase-1 retention): exactly one retained Phase-1 bundle at
+// the layer's designated leader AND host validated it.
+//
+// Peer-reflood-V path (spec §Phase 2 / Peer-reflood V via early commit):
+// no Phase-1 bundle retained locally, but a uniquely-observed V appears
+// across peer σ-onion entries at this layer (peerOnions[layer]) AND that
+// V has a verified leader σ_L^V (witnessedLeaderSigma[layer][ValueRoot(V)])
+// AND host validated it. The witnessed-σ_L^V gate is byz-safe: a peer
+// fabricating V_fake cannot trick honest receivers without a valid σ_L^V
+// from the leader on that V.
+//
+// Returns (nil, false) if equivocation (≥ 2 distinct V's in bundles),
+// no retained or peer-observed V, or host hasn't validated.
 func (i *Instance) chosenVForLayer(layer int) (Value, bool) {
 	leaderMap := i.bundles[layer]
-	if len(leaderMap) == 0 {
-		return nil, false
-	}
-	// In OBFT, only the layer's designated leader is allowed to broadcast
-	// Phase-1 bundles. ValidatePhase1Bundle enforces this. So at most one
-	// leader entry exists; check it.
 	expectedLeader := i.cfg.Layers[layer].Leader
 	retained := leaderMap[expectedLeader]
-	if len(retained) != 1 {
+
+	// Equivocation in retained bundles → no σ target (cross-phase
+	// exclusivity will route through NR).
+	if len(retained) >= 2 {
 		return nil, false
 	}
-	v := retained[0].Value
-	verdicts := i.hostVerdict[layer]
+
+	if len(retained) == 1 {
+		// Primary path: uniquely-retained Phase-1 bundle.
+		return checkHostValidV(i.hostVerdict[layer], retained[0].Value)
+	}
+
+	// Peer-reflood-V path: no retained bundle. Use a uniquely-observed
+	// peer-V provided it has a verified leader σ_L^V.
+	v, ok := i.uniquePeerV(layer)
+	if !ok {
+		return nil, false
+	}
+	if _, witnessed := i.witnessedLeaderSigma[layer][ValueRoot(v)]; !witnessed {
+		return nil, false
+	}
+	return checkHostValidV(i.hostVerdict[layer], v)
+}
+
+// checkHostValidV returns (v, true) if the host has recorded `v` as valid
+// at this layer's verdict map; (nil, false) otherwise (not-recorded or
+// recorded-not-valid).
+func checkHostValidV(verdicts map[string]bool, v Value) (Value, bool) {
 	if verdicts == nil {
 		return nil, false
 	}

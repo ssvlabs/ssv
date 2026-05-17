@@ -546,15 +546,52 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	// subject to chained encryption. Receivers who have observed V locally
 	// (via Phase-1 bundle retention or via any peer's σ-onion entry
 	// carrying V) can cross-reference value_root, verify σ_V against the
-	// leader's pubshare on V, and harvest into the σ-pool. Helps reach qV
-	// when the leader's bundle never reached the receiver but V is known
-	// via a different path. V-drop recovery (no V locally) still flows
-	// through KindCertificate gossip per spec §Final-certificate gossip.
+	// leader's pubshare on V, and harvest into the σ-pool.
 	for _, w := range c.Witnesses {
 		i.harvestWitness(w)
 	}
 
+	// Peer-reflood-V trigger: if the operator has no Phase-1 bundle at
+	// L_0 (V-drop receiver) but a peer's σ-onion entry just delivered V
+	// at L_0, request host validation. The verdict arrives later via
+	// ApplyHostValidity, which closes L0ReadyCh on the σ-via-peer-V
+	// branch and lets BuildOwnCommit emit σ_i^V on the peer-harvested V.
+	// Spec §Phase 2 / Peer-reflood V via early commit.
+	i.maybeRequestL0PeerVValidation()
+
+	// Signal L_0 readiness: equivocation observed across (bundles ∪
+	// peerOnions ∪ witnessedLeaderSigma) is a definite-NR signal that
+	// fires immediately; the σ-via-peer-V branch fires later via
+	// ApplyHostValidity once the runner returns the verdict.
+	i.maybeSignalL0Ready()
+
 	return nil
+}
+
+// maybeRequestL0PeerVValidation enqueues a host-validity request for a
+// peer-delivered V at L_0 if (a) the operator has no Phase-1 bundle locally
+// at L_0 (V-drop receiver), (b) a peer's σ-onion at L_0 carries a V whose
+// leader σ_L^V has been verified (witnessedLeaderSigma[0][V_root] exists),
+// and (c) the host hasn't yet recorded a verdict on V.
+//
+// Idempotent — Instance.requestHostValidation dedupes per (layer, V_root).
+// No-op when bundles[0] is non-empty (primary Phase-1 retention already
+// drives host validation through the existing ObservePhase1Bundle path).
+func (i *Instance) maybeRequestL0PeerVValidation() {
+	const layer = 0
+	// Only the peer-V path needs this trigger; the bundle path is already
+	// covered by ObservePhase1Bundle → ApplyHostValidity.
+	if len(i.bundles[layer][i.cfg.Layers[layer].Leader]) > 0 {
+		return
+	}
+	v, ok := i.uniquePeerV(layer)
+	if !ok {
+		return
+	}
+	if _, witnessed := i.witnessedLeaderSigma[layer][ValueRoot(v)]; !witnessed {
+		return
+	}
+	i.requestHostValidation(layer, v)
 }
 
 // checkLeaderBundleCrossV records Rule 3 evidence if the leader's retained
@@ -687,6 +724,41 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 		Value:  append(Value{}, v...),
 		SigmaV: append(Signature{}, w.SigmaV...),
 	}
+}
+
+// uniquePeerV returns (v, true) if all peer σ-onion entries at this layer
+// (peerOnions[layer][*]) carry the same V (no equivocation across peers).
+// Returns (nil, false) if no peer has an entry at this layer, or if peers
+// expose distinct V's.
+//
+// Used by chosenVForLayer's peer-reflood-V path (spec §Phase 2): a V-drop
+// receiver who has no Phase-1 bundle locally can σ-emit on a peer-V iff
+// the cluster's view of V at this layer is unambiguous. Equivocation across
+// peers → NR per cross-phase exclusivity (caller falls through to NR).
+//
+// Empty/zero-length Values are skipped (an empty σ-onion entry means the
+// emitting peer did NOT σ-emit at this layer; their Value contribution is
+// absent, not a distinct V).
+func (i *Instance) uniquePeerV(layer int) (Value, bool) {
+	var seen Value
+	for _, entries := range i.peerOnions[layer] {
+		for _, el := range entries {
+			if len(el.Value) == 0 {
+				continue
+			}
+			if seen == nil {
+				seen = el.Value
+				continue
+			}
+			if !bytes.Equal(seen, el.Value) {
+				return nil, false
+			}
+		}
+	}
+	if seen == nil {
+		return nil, false
+	}
+	return seen, true
 }
 
 // findVByRoot returns the V bytes at `layer` whose sha256 matches `root`,

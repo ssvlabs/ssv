@@ -85,18 +85,23 @@ type NRPartial struct {
 // Per spec §Phase 2 / Wire format and §Appendix C, every KindCommit carries
 // witnesses for every Phase-1 bundle the operator has retained at T_commit.
 //
-// Defense-in-depth: if gossipsub drops a Phase-1 bundle on some receiver P
-// but P sees a witness in another peer's KindCommit referring to the same V,
-// the witness identifies that V via ValueRoot. Receivers cross-reference
-// ValueRoot against any V they've retained from Phase-1 receipt; if they
-// have V, σ_V was already verified at Phase 1 (the witness adds nothing
-// new). If they lack V (V-drop), the witness is unusable — σ_V verifies
-// against V (via the Signer's signing target), and a receiver with only
-// ValueRoot cannot reproduce the verification.
+// **Primary V-drop recovery path (peer-reflood V via early commit, spec
+// §Phase 2):** a V-drop receiver P who hasn't received the leader's
+// Phase-1 bundle but observes a peer's KindCommit can recover both V (from
+// the peer's σ-side onion plaintext Value field at L_0) and σ_L^V (from
+// the peer's witness section here, via ValueRoot cross-reference against
+// V from the same peer's onion). Combined: P verifies σ_L^V against V,
+// then σ_i^V on V themselves in their own (later) KindCommit. Closes the
+// h_V=1 selective-Phase-1-delivery deadlock at L_0. See
+// Instance.harvestWitness / Instance.chosenVForLayer for the impl.
 //
-// V-drop recovery flows through KindCertificate gossip per spec
-// §Final-certificate gossip — a faster peer who reconstructed (V, S)
-// gossips it, and the V-drop receiver consumes the cert directly.
+// **Witness-alone (no V available anywhere):** unusable in isolation —
+// σ_V verifies against V (via the Signer's signing target), so a receiver
+// with only ValueRoot cannot reproduce the verification. The receiver
+// retains the witness in case V arrives later via another peer's onion;
+// if it never does, KindCertificate gossip (§Final-certificate gossip)
+// is the fallback recovery — a faster peer who reconstructed (V, S)
+// gossips the cert and the V-drop receiver consumes it directly.
 //
 // ValueRoot is sha256(V) — a wire identifier, NOT the σ_V signing target.
 // (σ_V is signed via the Signer interface, which for production proposer-
@@ -105,14 +110,15 @@ type NRPartial struct {
 // signing root for downstream compatibility; wire identifier = sha256(V)
 // for compact cross-referencing.)
 //
-// Wire savings: ~10× per witness vs shipping full V (32 bytes vs ~1 KB at
-// blinded-block size).
+// Wire savings vs shipping full V in the witness: ~10× per witness (32
+// bytes vs ~1 KB at blinded-block size). V plaintext is still on-wire in
+// the σ-side onion entry at L_0 (one copy per σ-emitting peer); the
+// witness section adds σ_L^V without duplicating V.
 //
-// Future Appendix-style "ship full V" extension would be additive (a
-// separate optional field), preserving wire compatibility with this lean
-// form. Current Verifier.VerifyCommitWitnesses is structural-only — full
-// σ_V verification happens at the protocol layer (Instance) where retained
-// V's are available for cross-reference.
+// Current Verifier.VerifyCommitWitnesses is structural-only — full σ_V
+// verification happens at the protocol layer (Instance) where retained
+// V's (bundles[layer][leader] or peerOnions[layer][*].Value) are
+// available for cross-reference.
 type LeaderSigmaWitness struct {
 	Layer     int        // layer the witnessed bundle is for; in [0, K)
 	Leader    OperatorID // claimed leader (must match cfg.Layers[Layer].Leader)

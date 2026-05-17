@@ -156,6 +156,21 @@ type Instance struct {
 	// One entry per (layer, V); may be absent if host hasn't been asked.
 	hostVerdict map[int]map[string]bool
 
+	// wantsHostValidationCh delivers (layer, value) pairs requesting the
+	// runner dispatch the host's validity check on V's first-observed via
+	// a peer's σ-onion entry (Phase-2 reflood path; see §Phase 2 / Peer-
+	// reflood V via early commit). The runner calls back through
+	// ApplyHostValidity with the verdict, which then drives
+	// l0DecisionReady on the σ-via-peer-V branch.
+	//
+	// Buffered (cap K) so ObserveCommit can enqueue without blocking under
+	// equivocation patterns that surface multiple V's at the same layer.
+	// pendingValidation tracks in-flight requests per (layer, value_root)
+	// to dedup — a second peer commit carrying the same V doesn't re-fire.
+	// Closed by Finalize.
+	wantsHostValidationCh chan ValidationRequest
+	pendingValidation     map[int]map[[32]byte]bool
+
 	// l0ReadyCh is closed when the operator has enough information at L_0 to
 	// commit early (per spec §Phase 2 emission-timing): a uniquely-retained
 	// host-validated V, OR a host not-valid verdict on the unique retained V,
@@ -429,9 +444,72 @@ func NewInstance(
 		rule5UnknownVFired:   make(map[int]map[OperatorID]bool, K),
 		rule2Fired:           make(map[int]map[OperatorID]bool, K),
 		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
-		evidenceObserved:     make(map[evidenceObservedKey]bool),
-		l0ReadyCh:            make(chan struct{}),
+		evidenceObserved:      make(map[evidenceObservedKey]bool),
+		l0ReadyCh:             make(chan struct{}),
+		wantsHostValidationCh: make(chan ValidationRequest, K),
+		pendingValidation:     make(map[int]map[[32]byte]bool, K),
 	}, nil
+}
+
+// ValidationRequest is a request from the Instance to its runner asking
+// for the host application to validate a V at a particular layer. Emitted
+// on Instance.WantsHostValidationCh when a V is first-observed via a peer's
+// σ-onion entry (Phase-2 peer-reflood path, see §Phase 2 / Peer-reflood V
+// via early commit) without an existing host verdict. The runner dispatches
+// validation against its host hook and calls ApplyHostValidity with the
+// result.
+type ValidationRequest struct {
+	Layer int
+	Value Value
+}
+
+// WantsHostValidationCh returns the channel on which the Instance delivers
+// host-validity requests for V's first-observed via peer commits. The runner
+// MUST drain this channel (typically via select alongside its other
+// per-slot signals) and dispatch validation through the host hook,
+// invoking ApplyHostValidity with the verdict.
+//
+// Buffered with capacity K; the Instance drops enqueue attempts if the
+// buffer is full (back-pressure: a slow runner that isn't draining means
+// the validation path is degraded, but the Instance never blocks). The
+// channel is closed by Finalize.
+func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
+	return i.wantsHostValidationCh
+}
+
+// requestHostValidation enqueues a host-validity request on the wants
+// channel if (a) host hasn't already validated this V at this layer, and
+// (b) no in-flight request exists for the same (layer, value_root).
+// Non-blocking: drops on full buffer.
+func (i *Instance) requestHostValidation(layer int, value Value) {
+	if layer < 0 || layer >= i.cfg.K() {
+		return
+	}
+	root := ValueRoot(value)
+	// Dedup: skip if already validated.
+	if verdicts := i.hostVerdict[layer]; verdicts != nil {
+		if _, recorded := verdicts[valueRootKey(value)]; recorded {
+			return
+		}
+	}
+	// Dedup: skip if request already in-flight for this (layer, V_root).
+	bucket := i.pendingValidation[layer]
+	if bucket == nil {
+		bucket = make(map[[32]byte]bool)
+		i.pendingValidation[layer] = bucket
+	}
+	if bucket[root] {
+		return
+	}
+	bucket[root] = true
+	select {
+	case i.wantsHostValidationCh <- ValidationRequest{Layer: layer, Value: append(Value{}, value...)}:
+	default:
+		// Buffer full — runner is not draining. Roll back the pending
+		// flag so a subsequent ObserveCommit can re-attempt; otherwise
+		// the request would never fire.
+		delete(bucket, root)
+	}
 }
 
 // L0ReadyCh returns a channel closed when the operator has enough information
@@ -447,36 +525,86 @@ func (i *Instance) L0ReadyCh() <-chan struct{} { return i.l0ReadyCh }
 
 // l0DecisionReady reports whether L_0 has a stable σ/NR decision available
 // (predicate underlying L0ReadyCh).
+//
+// Fires when any of:
+//   - L_0 leader path: this operator is the leader and has built their
+//     Phase-1 bundle (sigmaLocked[0] is set on transitionToSigma during
+//     BuildPhase1Bundle).
+//   - Equivocation observed: ≥ 2 distinct V's known at L_0 across any
+//     source — retained Phase-1 bundles (bundles[0][leader]) OR
+//     verified σ_L^V witnesses (witnessedLeaderSigma[0]). Forced NR per
+//     cross-phase exclusivity.
+//   - Primary σ path (Phase-1 retention): unique retained bundle at L_0
+//     AND host validity verdict recorded (any verdict: valid → σ, NV → NR
+//     equivalent; protocol commits the decision either way).
+//   - Peer-reflood-V σ path (spec §Phase 2 / Peer-reflood V via early
+//     commit): no retained bundle, but a uniquely-observed peer-V at L_0
+//     with a verified leader σ_L^V (witnessedLeaderSigma[0][ValueRoot(V)])
+//     AND host validity verdict recorded.
 func (i *Instance) l0DecisionReady() bool {
 	const layer = 0
 	// L_0 leader path: BuildPhase1Bundle emits the leader's Phase-1 σ_V which
 	// counts as their σ-side commitment at this layer (spec OBFT.md §Phase 2
 	// "The layer-k leader's Phase-1 σ_V counts as their σ-side commitment").
-	// sigmaLocked[0] is set on a successful transitionToSigma during build.
 	if i.sigmaLocked[layer] {
 		return true
 	}
-	// Non-leader path: depends on whether a Phase-1 bundle at L_0 has been
-	// observed and host-validated, or whether equivocation has been observed.
-	leaderMap := i.bundles[layer]
-	if len(leaderMap) == 0 {
-		return false
-	}
-	expectedLeader := i.cfg.Layers[layer].Leader
-	retained := leaderMap[expectedLeader]
-	if len(retained) >= 2 {
-		// Equivocation observed → forced NR per cross-phase exclusivity.
+	// Equivocation observed across (bundles ∪ witnessedLeaderSigma):
+	// ≥ 2 distinct V's known at L_0 → forced NR per cross-phase exclusivity.
+	if i.distinctL0VCount() >= 2 {
 		return true
 	}
-	if len(retained) != 1 {
-		return false
+	// Primary σ path: uniquely-retained bundle + host verdict recorded.
+	leaderMap := i.bundles[layer]
+	expectedLeader := i.cfg.Layers[layer].Leader
+	retained := leaderMap[expectedLeader]
+	if len(retained) == 1 {
+		verdicts := i.hostVerdict[layer]
+		if verdicts == nil {
+			return false
+		}
+		_, recorded := verdicts[valueRootKey(retained[0].Value)]
+		return recorded
 	}
-	verdicts := i.hostVerdict[layer]
-	if verdicts == nil {
-		return false
+	// Peer-reflood-V σ path: no bundle locally, but a uniquely-observed
+	// peer-V at L_0 with verified leader σ_L^V + host verdict recorded.
+	if v, ok := i.uniquePeerV(layer); ok {
+		if _, witnessed := i.witnessedLeaderSigma[layer][ValueRoot(v)]; !witnessed {
+			return false
+		}
+		verdicts := i.hostVerdict[layer]
+		if verdicts == nil {
+			return false
+		}
+		_, recorded := verdicts[valueRootKey(v)]
+		return recorded
 	}
-	_, recorded := verdicts[valueRootKey(retained[0].Value)]
-	return recorded
+	return false
+}
+
+// distinctL0VCount counts the number of distinct V's known at L_0 across
+// retained Phase-1 bundles, peer σ-onion entries, and verified leader
+// σ_L^V witnesses. Used by l0DecisionReady to detect cluster-observable
+// equivocation (≥ 2 → NR ready).
+func (i *Instance) distinctL0VCount() int {
+	const layer = 0
+	seen := make(map[[32]byte]bool)
+	expectedLeader := i.cfg.Layers[layer].Leader
+	for _, b := range i.bundles[layer][expectedLeader] {
+		seen[ValueRoot(b.Value)] = true
+	}
+	for _, entries := range i.peerOnions[layer] {
+		for _, el := range entries {
+			if len(el.Value) == 0 {
+				continue
+			}
+			seen[ValueRoot(el.Value)] = true
+		}
+	}
+	for root := range i.witnessedLeaderSigma[layer] {
+		seen[root] = true
+	}
+	return len(seen)
 }
 
 // maybeSignalL0Ready closes l0ReadyCh if the L_0 decision has just become
@@ -561,6 +689,10 @@ func (i *Instance) Finalize() {
 		return
 	}
 	i.ended = true
+	// Close the host-validation request channel so any runner blocking on
+	// a select case for it observes the close and unblocks. Safe to call
+	// once (ended-flag dedup above).
+	close(i.wantsHostValidationCh)
 }
 
 // Ended reports whether this Instance has been Finalize'd. Caller must hold

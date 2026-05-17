@@ -143,6 +143,274 @@ func TestL0Ready_L0Leader_BuildPhase1Bundle(t *testing.T) {
 	}
 }
 
+// Spec §Phase 2 / Peer-reflood V via early commit: a V-drop receiver
+// (no Phase-1 bundle locally at L_0) can early-emit σ_i^V on a V learned
+// from a peer's KindCommit when the leader's σ_L^V witness verifies
+// against that V. Closes the h_V=1 selective-delivery deadlock for bare
+// OBFT.
+//
+// Setup pattern across the peer-V tests:
+//   - L_0 leader builds + self-observes its Phase-1 bundle.
+//   - One honest non-leader observes the bundle directly (Phase-1 receipt)
+//     and host-validates, then builds + self-emits a KindCommit carrying
+//     V at L_0 plaintext + σ_L^V witness.
+//   - The V-drop receiver (didn't observe the Phase-1 bundle) receives
+//     that peer commit and drives the peer-reflood-V path.
+
+// TestL0Ready_PeerVOnly_TriggersReady — V-drop receiver gets V via peer
+// commit + host validates → L0ReadyCh fires.
+func TestL0Ready_PeerVOnly_TriggersReady(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.leaderAt(0) // op 1
+	// op 2 = honest forwarder (gets bundle directly).
+	// op 3 = V-drop receiver (we test this one).
+	const forwarder OperatorID = 2
+	const vDrop OperatorID = 3
+
+	// Leader builds + self-observes; forwarder observes + host-validates.
+	s.deliverPhase1(0, s.candidates[0], []OperatorID{leaderID, forwarder}, observedEarly, true)
+	// Make sure the leader and forwarder also have host validity on the
+	// other layers' bundles so BuildOwnCommit doesn't err on deeper layers.
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+
+	// V-drop receiver: no L_0 bundle locally, so L0ReadyCh stays open.
+	vDropInst := s.instances[vDrop]
+	select {
+	case <-vDropInst.L0ReadyCh():
+		t.Fatalf("V-drop receiver's L0ReadyCh closed before peer-V observation")
+	default:
+	}
+
+	// Forwarder builds + observes its own Commit so peerOnions[0][forwarder]
+	// has V_0 plaintext + Witnesses carries (L_0, leader, ValueRoot(V_0), σ_L^V).
+	forwarderCommit, err := s.instances[forwarder].BuildOwnCommit()
+	require.NoError(t, err)
+
+	// V-drop observes the peer commit.
+	require.NoError(t, vDropInst.ObserveCommit(forwarderCommit))
+
+	// V-drop's L0ReadyCh STILL stays open at this point — peer-V is observed
+	// but host hasn't validated yet. The Instance should have enqueued a
+	// validation request.
+	select {
+	case <-vDropInst.L0ReadyCh():
+		t.Fatalf("V-drop's L0ReadyCh closed before host-validity on peer-V")
+	default:
+	}
+	select {
+	case req := <-vDropInst.WantsHostValidationCh():
+		require.Equal(t, 0, req.Layer)
+		require.Equal(t, Value(s.candidates[0]), req.Value)
+	default:
+		t.Fatalf("V-drop didn't enqueue a host-validation request on peer-V")
+	}
+
+	// Runner-equivalent: apply host validity. Now L0ReadyCh fires on the
+	// σ-via-peer-V path.
+	require.NoError(t, vDropInst.ApplyHostValidity(0, s.candidates[0], true))
+	select {
+	case <-vDropInst.L0ReadyCh():
+	default:
+		t.Fatalf("V-drop's L0ReadyCh did not close after host-validates peer-V")
+	}
+}
+
+// TestL0Ready_PeerVMissingWitness_NoTrigger — peer commit carries V at
+// L_0 plaintext but no valid σ_L^V witness. V-drop receiver should NOT
+// trigger σ-via-peer-V (witness gate blocks byz-fabricated V).
+func TestL0Ready_PeerVMissingWitness_NoTrigger(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.leaderAt(0)
+	const forwarder OperatorID = 2
+	const vDrop OperatorID = 3
+
+	// Forwarder observes deeper layers' bundles + host-validates so they
+	// can BuildOwnCommit. Crucially we DON'T deliver the L_0 bundle to
+	// forwarder — so forwarder's commit has no L_0 σ-onion entry (NR-side)
+	// and no L_0 witness.
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+	// Leader self-builds L_0 (forwarder doesn't see it).
+	_, err := s.instances[leaderID].BuildPhase1Bundle(0, s.candidates[0])
+	require.NoError(t, err)
+
+	// Forwarder commits (NR on L_0 because no V observed; no L_0 witness
+	// because no L_0 bundle retained). Crucially the wire format will
+	// carry V from the LEADER's commit only — not from this forwarder's.
+	forwarderCommit, err := s.instances[forwarder].BuildOwnCommit()
+	require.NoError(t, err)
+	// Sanity-check the commit has no L_0 σ-entry (empty Value).
+	require.Equal(t, 0, len(forwarderCommit.Layers[0].Value),
+		"forwarder should have NR'd L_0 (no V observed)")
+
+	vDropInst := s.instances[vDrop]
+	require.NoError(t, vDropInst.ObserveCommit(forwarderCommit))
+	select {
+	case <-vDropInst.L0ReadyCh():
+		t.Fatalf("V-drop L0ReadyCh fired without any peer-V available")
+	default:
+	}
+	select {
+	case req := <-vDropInst.WantsHostValidationCh():
+		t.Fatalf("V-drop unexpectedly enqueued validation request: %+v", req)
+	default:
+	}
+}
+
+// TestL0Ready_PeerVEquivocation_ForcesReady — two peers send commits with
+// distinct V's at L_0 (leader equivocation). L0ReadyCh fires immediately
+// on the equivocation branch (forced NR).
+func TestL0Ready_PeerVEquivocation_ForcesReady(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.leaderAt(0) // op 1
+	vA := []byte("L_0 V_a")
+	vB := []byte("L_0 V_b")
+	// op 2 observes V_a; op 3 observes V_b. Both build commits.
+	// op 4 is the V-drop receiver.
+	const fA OperatorID = 2
+	const fB OperatorID = 3
+	const vDrop OperatorID = 4
+	s.deliverPhase1Equivocation(0, vA, vB,
+		[]OperatorID{leaderID, fA}, []OperatorID{fB},
+		observedEarly, true)
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+	commitA, err := s.instances[fA].BuildOwnCommit()
+	require.NoError(t, err)
+	commitB, err := s.instances[fB].BuildOwnCommit()
+	require.NoError(t, err)
+
+	vDropInst := s.instances[vDrop]
+	require.NoError(t, vDropInst.ObserveCommit(commitA))
+	require.NoError(t, vDropInst.ObserveCommit(commitB))
+
+	// Two distinct V's observable across peerOnions/witnesses →
+	// equivocation → NR ready.
+	select {
+	case <-vDropInst.L0ReadyCh():
+	default:
+		t.Fatalf("V-drop L0ReadyCh did not close on peer-V equivocation (NR ready)")
+	}
+}
+
+// TestHV1SelectiveDelivery_PeerVRecovery is the end-to-end demonstration
+// that §1's peer-reflood-V mechanism closes the h_V=1 selective-delivery
+// deadlock. Setup mirrors the consensustest HV1SelectiveDelivery scenario:
+// byz L_0 leader delivers V to exactly 1 honest non-leader (n=4 f=1).
+// Pre-§1 baseline: σ-pool at L_0 = 2 (leader σ_L^V + 1 honest σ_i^V) <
+// qV=3, NR-pool = 2 < qEnc=3, slot misses at L_0 with no fall-through.
+// Post-§1: V-drop receivers σ on peer-harvested V → σ-pool reaches qV.
+//
+// Drives the event ordering manually (the consensustest framework's
+// sync-emit model doesn't yet exercise early-emit + peer-V; that's a
+// follow-up framework enhancement).
+func TestHV1SelectiveDelivery_PeerVRecovery(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.leaderAt(0)       // op 1 = byz leader
+	const fwdID OperatorID = 2      // honest who got V
+	const drop3 OperatorID = 3      // V-drop receiver
+	const drop4 OperatorID = 4      // V-drop receiver
+	v0 := s.candidates[0]
+
+	// Leader builds + self-σ-V (Phase-1 σ_V is leader's σ commitment).
+	// Selective delivery: only fwd observes the Phase-1 bundle.
+	s.deliverPhase1(0, v0, []OperatorID{leaderID, fwdID}, observedEarly, true)
+	// Backups: deliver to all so deeper layers can build their commits
+	// (their σ on L_k for k>0 is orthogonal to the L_0 σ-pool).
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+
+	// Phase-2 emit ordering matching early-emit semantics: the L_0-V-holder
+	// (fwd) emits FIRST; V-drop receivers observe peer commit → drain
+	// validation request → emit later.
+	fwdCommit, err := s.instances[fwdID].BuildOwnCommit()
+	require.NoError(t, err)
+
+	// V-drops observe fwd's commit.
+	for _, drop := range []OperatorID{drop3, drop4} {
+		dropInst := s.instances[drop]
+		require.NoError(t, dropInst.ObserveCommit(fwdCommit))
+		// Drain the validation request and apply verdict (mirrors runner).
+		select {
+		case req := <-dropInst.WantsHostValidationCh():
+			require.Equal(t, 0, req.Layer)
+			require.NoError(t, dropInst.ApplyHostValidity(req.Layer, req.Value, true))
+		default:
+			t.Fatalf("op %d did not enqueue validation request on peer-V", drop)
+		}
+	}
+
+	// V-drops now build their commits. Per §1, they σ-emit on the
+	// peer-harvested V at L_0.
+	drop3Commit, err := s.instances[drop3].BuildOwnCommit()
+	require.NoError(t, err)
+	drop4Commit, err := s.instances[drop4].BuildOwnCommit()
+	require.NoError(t, err)
+	require.Equal(t, Value(v0), drop3Commit.Layers[0].Value, "drop3 should σ-emit on peer-V at L_0")
+	require.Equal(t, Value(v0), drop4Commit.Layers[0].Value, "drop4 should σ-emit on peer-V at L_0")
+
+	// Byz leader emits no commit (silent at L_0). Cross-observe the three
+	// honest commits.
+	allCommits := map[OperatorID]*Commit{fwdID: fwdCommit, drop3: drop3Commit, drop4: drop4Commit}
+	for receiver, inst := range s.instances {
+		for sender, c := range allCommits {
+			if sender == receiver {
+				continue
+			}
+			require.NoError(t, inst.ObserveCommit(c))
+		}
+	}
+
+	// Resolve at fwd (any of the three honest works). σ-pool at L_0 =
+	// leader σ_L^V (harvested via fwd's witness) + 3 honest σ_i^V = 4 ≥
+	// qV=3. Slot decides at L_0.
+	out, err := s.instances[fwdID].Resolve()
+	require.NoError(t, err, "h_V=1 should recover via peer-V at L_0")
+	require.Equal(t, 0, out.Layer, "decision should be at L_0 (peer-reflood-V recovery)")
+	require.Equal(t, Value(v0), out.Value)
+}
+
+// TestBuildOwnCommit_PeerVPath_EmitsSigma — full end-to-end path: V-drop
+// receiver harvests V from peer commit, host-validates, then BuildOwnCommit
+// emits σ_i^V at L_0 on the peer-harvested V.
+func TestBuildOwnCommit_PeerVPath_EmitsSigma(t *testing.T) {
+	s := newSim(t, 4)
+	leaderID := s.leaderAt(0) // op 1
+	const forwarder OperatorID = 2
+	const vDrop OperatorID = 3
+
+	s.deliverPhase1(0, s.candidates[0], []OperatorID{leaderID, forwarder}, observedEarly, true)
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+	forwarderCommit, err := s.instances[forwarder].BuildOwnCommit()
+	require.NoError(t, err)
+
+	vDropInst := s.instances[vDrop]
+	require.NoError(t, vDropInst.ObserveCommit(forwarderCommit))
+	// Drain the validation request (mirrors runner behavior).
+	select {
+	case req := <-vDropInst.WantsHostValidationCh():
+		require.NoError(t, vDropInst.ApplyHostValidity(req.Layer, req.Value, true))
+	default:
+		t.Fatalf("expected validation request on V-drop")
+	}
+
+	// V-drop BuildOwnCommit should include σ_i^V at L_0 (plaintext Value =
+	// the peer-harvested V).
+	vDropCommit, err := vDropInst.BuildOwnCommit()
+	require.NoError(t, err)
+	require.Equal(t, Value(s.candidates[0]), vDropCommit.Layers[0].Value,
+		"V-drop should σ-emit on the peer-harvested V at L_0")
+	require.NotEmpty(t, vDropCommit.Layers[0].Ciphertext,
+		"V-drop's L_0 σ-onion entry should have a partial-sig ciphertext")
+}
+
 func TestL0Ready_DeeperLayerObservation_NoTrigger(t *testing.T) {
 	s := newSim(t, 4)
 	// Deliver L_1 bundle to all — should NOT close L0ReadyCh on the L_1

@@ -548,6 +548,33 @@ func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
 	return r.instance.L0ReadyCh()
 }
 
+// WantsHostValidationCh returns the slot's instance host-validation
+// request channel. Per spec §Phase 2 / Peer-reflood V via early commit:
+// the Instance enqueues (layer, V) pairs when V is first-observed via a
+// peer's σ-onion entry without an existing host verdict. The runner is
+// expected to drain this channel in a dedicated goroutine, dispatch
+// HostValidate against the cluster's host hook, and call back through
+// ApplyHostValidity with the verdict.
+//
+// Returns a closed channel if the slot has no active instance (so a
+// runner-side goroutine exits cleanly via the channel-close branch).
+func (c *Controller) WantsHostValidationCh(slot phase0.Slot) <-chan obftcore.ValidationRequest {
+	r, err := c.lookup(slot)
+	if err != nil {
+		ch := make(chan obftcore.ValidationRequest)
+		close(ch)
+		return ch
+	}
+	r.instanceMu.Lock()
+	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		ch := make(chan obftcore.ValidationRequest)
+		close(ch)
+		return ch
+	}
+	return r.instance.WantsHostValidationCh()
+}
+
 // Resolve runs the Phase-3 reconstruction walk and returns the decided
 // Output (value + full reconstructed signature) or an error
 // (typically obftcore.ErrNoQuorum if the slot was missed).

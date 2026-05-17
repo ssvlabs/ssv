@@ -480,7 +480,24 @@ func (e *evtCommitArrival) describe() string {
 }
 
 func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
-	_ = s.instances[e.to].ObserveCommit(e.commit)
+	inst := s.instances[e.to]
+	_ = inst.ObserveCommit(e.commit)
+
+	// Spec §Phase 2 / Peer-reflood V via early commit: drain any
+	// host-validation requests the Instance enqueued (V's first-observed
+	// via this peer commit's σ-onion entry at L_0 without an existing
+	// host verdict). Mirrors the runner's drain-goroutine pattern in
+	// protocol/v2/ssv/runner/obft/runner.go drainHostValidationRequests.
+	for {
+		select {
+		case req := <-inst.WantsHostValidationCh():
+			valid := s.cfg.Host.Validate(ct.OperatorID(e.to), req.Layer, req.Value, ct.PhasePhase1Acceptance)
+			_ = inst.ApplyHostValidity(req.Layer, req.Value, valid)
+		default:
+			goto drained
+		}
+	}
+drained:
 
 	// Observer-mode quorum detection: probe Resolve at the receiver
 	// immediately on every commit arrival. First-success records

@@ -234,7 +234,7 @@ The peer-reflood-V analog for 2abOBFT would be **attaching V to KindVerdict** so
 Two separate landings:
 
 1. **§2 first (schedule simplification).** ✅ **Landed.** Schedule defaults changed; no wire change; no protocol-flow change.
-2. **§1 second (peer-reflood V).** Bigger scope. Touches host-validation flow, predicate, BuildOwnCommit logic, runner integration. Closes h_V=1 as a milestone.
+2. **§1 second (peer-reflood V).** ✅ **Landed.** Host-validation channel + predicate + BuildOwnCommit + runner integration. h_V=1 deadlock closed in-protocol (production); consensustest framework still uses sync-emit and doesn't yet exercise the recovery path — see §7.
 
 Both compose cleanly with each other and with the recent tighten work.
 
@@ -251,3 +251,4 @@ Both compose cleanly with each other and with the recent tighten work.
 - Defer state under the new schedule — same pending task.
 - 2abOBFT §2 analog (deepest broadcast schedule simplification for 2abOBFT) — separate proposal once §2 lands for OBFT.
 - OBFTR sizing changes — out of scope (no tighten / no peer-reflood-V proposed for OBFTR yet).
+- **Consensustest framework upgrade for L0Ready-driven per-op commit emit** — the current `evtPhaseTwoStart` calls `BuildOwnCommit` synchronously for all ops at T_commit, so peer commits arrive after all ops have NR-locked. The §1 peer-reflood-V recovery requires early-emit ordering: the L_0-V-holder emits first, V-drop receivers observe + drain validation + emit later. This is exercised by the focused unit test `TestHV1SelectiveDelivery_PeerVRecovery` in `protocol/v2/obft/base/early_commit_test.go`. A framework upgrade — schedule per-op `evtCommitEmit` events keyed on `L0ReadyCh` firing, with the T_commit fallback as the timeout — would let the consensustest `HV1SelectiveDelivery` scenario exercise the same recovery end-to-end and flip its OBFT expectation from `ExpectMiss` to `ExpectSuccess`. Tracked in the catalog scenario's note. Separate follow-up.

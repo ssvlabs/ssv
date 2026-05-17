@@ -64,6 +64,16 @@ func RunProposerSlot(
 	// existing subscribers).
 	sched.DrainPending(ctx, slot)
 
+	// Spec §Phase 2 / Peer-reflood V via early commit: the Instance enqueues
+	// host-validity requests on WantsHostValidationCh when V is first-
+	// observed via a peer's σ-onion entry at L_0 (V-drop receiver path).
+	// Spawn a per-slot drain goroutine that dispatches HostValidate and
+	// feeds the verdict back via ApplyHostValidity, which closes the
+	// L_0-ready channel on the peer-V σ branch and lets the V-drop
+	// receiver early-emit σ_i^V on the harvested V. The goroutine exits
+	// when the channel is closed (EndInstance → Finalize) or ctx fires.
+	go drainHostValidationRequests(ctx, sched, slot)
+
 	cfg := inst.Config
 
 	// Phase 1 — for each layer the local op leads, schedule a concurrent
@@ -142,6 +152,42 @@ func RunProposerSlot(
 	err = sched.ResolveAndSubmitOpportunistically(ctx, slot)
 	fetchWG.Wait()
 	return err
+}
+
+// drainHostValidationRequests is the per-slot goroutine that services the
+// Instance's WantsHostValidationCh per spec §Phase 2 / Peer-reflood V via
+// early commit. Each request asks the host to validate a V first-observed
+// via a peer's σ-onion entry at some layer; the verdict is fed back via
+// ApplyHostValidity, which drives L_0 readiness on the σ-via-peer-V branch.
+//
+// Exits when (a) the channel is closed by Finalize/EndInstance, or (b) ctx
+// fires. Per-request HostValidate failures are logged-and-skipped: a
+// transient host error doesn't poison subsequent requests. ApplyHostValidity
+// errors are similarly non-fatal at this layer — the worst case is the
+// operator misses the early-emit opportunity for this V and falls back to
+// the T_commit deadline (existing degraded path).
+func drainHostValidationRequests(ctx context.Context, sched *Scheduler, slot phase0.Slot) {
+	ctrl := sched.Controller()
+	ch := ctrl.WantsHostValidationCh(slot)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req, ok := <-ch:
+			if !ok {
+				return // channel closed via Finalize
+			}
+			valid, err := sched.hooks.HostValidate(ctx, slot, req.Layer, []byte(req.Value))
+			if err != nil {
+				// Transient host error; skip. The receiver will fall back
+				// to the T_commit deadline if this was the only V path.
+				continue
+			}
+			// Non-fatal at runner level: a stale slot or already-validated
+			// V both produce errors here that we don't need to surface.
+			_ = ctrl.ApplyHostValidity(slot, req.Layer, []byte(req.Value), valid)
+		}
+	}
 }
 
 // sleepUntil blocks until `t` or context cancellation. Returns true if it
