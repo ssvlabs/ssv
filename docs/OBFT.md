@@ -349,7 +349,7 @@ on KindCertificate observed:  if cert verifies, submit (V, S) directly
 otherwise:                    block (no idle wakeups) until next arrival or slot deadline
 ```
 
-This collapses the per-slot Δ_2 wait (typically 400ms at recommended sizing) into the propagation time the cluster actually needs — measured 1–3 ms median per mesh-hop at SSV's production cluster — so σ-quorum at L_0 typically forms within a few BTTs of `T_commit`, and the slot decides materially before `T_commit + Δ_2`. Late `KindCommit` messages arriving past `T_commit + Δ_2` are still incorporated by the same observer hook; the walk above is re-run, and:
+This collapses the per-slot Δ_2 wait (200ms at tightened sizing) into the propagation time the cluster actually needs — measured 1–3 ms median per mesh-hop at SSV's production cluster — so σ-quorum at L_0 typically forms within a few BTTs of `T_commit`, and the slot decides materially before `T_commit + Δ_2`. Late `KindCommit` messages arriving past `T_commit + Δ_2` are still incorporated by the same observer hook; the walk above is re-run, and:
 
 - A late σ partial pushes σ-pool past `qV` at some layer that didn't reach on prior calls → output `V` at that layer.
 - A late NR partial pushes NR-pool past `qEnc` at a layer that previously had NR-pool short of `qEnc` → derive the layer-`k` decryption key, unlock chained decryption for layer `k+1`'s σ partials, advance the walk past `k`.
@@ -878,7 +878,7 @@ OBFT is OBFTR with R fixed at 1 and the round-retry machinery stripped. They sha
 | Commitment states per layer | σ / NR / NV / Defer (Defer enables late-σ-emit recovery within Phase 2) | σ / NR / NV (3-state; no Defer) |
 | Wire format per operator | Separate `KindOnion` (σ-side, may emit multiple times) + `KindNR` (NR-side, end-of-window) | Single `KindCommit` emitted by `T_commit` (early on `T_L_0_observed`) carrying both σ and NR partials |
 | Partial-synchrony envelope (Phase-1 bundle propagation) | `R · P99` cross-round retention (e.g., `2·P99` at R=2 — bundles arriving in `(P99, R·P99]` get a fresh chance to be σ-emitted on in round 2) | primary-vs-backup `B_k`: `B_0 = 2·BTT + RefloodDelay` for the MEV-fresh primary; `B_1..B_{K-1} = T_commit` for all backups (full commit budget, backup leaders broadcast at BFT_start); cluster falls through to whichever layer's bundle arrived in time. No cross-round retention (single round) |
-| Partial-synchrony envelope (Phase-2 KindCommit propagation) | `Δ_2 ≥ 1 BTT` per round (recommended `Δ_2 = 2 BTT` for jitter absorption) | **`Δ_2 = 1 BTT` recommended** — reflood absorption is structurally provided by `B_k` (reflood-aware schedule), so Δ_2 only covers the synchronous-fallback propagation cycle |
+| Partial-synchrony envelope (Phase-2 KindCommit propagation) | `Δ_2 = 1 BTT` per round (tightened — mesh-jitter absorbed by OBFTR's structural cross-round retention rather than per-round Δ_2 cushion) | **`Δ_2 = 1 BTT` recommended** — reflood absorption is structurally provided by `B_k` (reflood-aware schedule), so Δ_2 only covers the synchronous-fallback propagation cycle |
 | MEV-fetch budget for primary leader (K=4, BTT=200ms, `header_submit_headroom = 100ms`) | ~1.45s (T_commit_1 = 2.00s constrained by R1+R2 fit within 4s slot) | **~2.35s** at default RefloodDelay=700ms (T_commit = 3.60s; B_0 = 2·BTT + RefloodDelay = 1100ms; single-round, no retry budget needed) — **+0.9s more MEV-fresh fetch**; at RefloodDelay=0 the budget widens to ~3.05s (+1.6s more) |
 | Submission headroom (`header_submit_headroom`) | 100ms | 100ms |
 | Consensus complete | slot_start + 3.90s | slot_start + 3.90s (same anchor; OBFT redirects the saved BTT-budget into the MEV-fetch window) |
@@ -1025,7 +1025,7 @@ Adds to OBFT's setting:
 
 - **K' = K + 1 layers**: L_Bid (top, bid-determined) + OBFT's rotation-determined L_0, L_1, ..., L_{K-1}.
 - **Bid data lives inside Phase-1 bundles**: there is no standalone `KindBid` wire message. Each rotation leader's Phase-1 bundle carries bid metadata for that same `V_{L_k}`. Only rotation-layer candidates are eligible for L_Bid; with `K = n` this still means every operator has one bid candidate, while with `K < n` L_Bid ranks only the selected `K` rotation leaders.
-- **Mini-consensus window** `Δ_minicon`: `Δ_minicon = T_commit − T_0_arrival`. Mini-consensus starts at `T_0_arrival`, ends at `T_commit`, and all L_Bid timing derives from that interval. `T_0_broadcast_max = T_0_arrival − B_0_LBid` is the L_Bid-side constraint; the actual broadcast time is `T_commit − max(Δ_minicon + B_0_LBid, B_0)` — the leader broadcasts at whichever is earlier between L_Bid's mini-consensus requirement and bare OBFT's L_0 reflood-absorption requirement (so the same bundle remains in-envelope for L_0 fall-through if L_Bid mini-consensus fails). L_Bid uses tighter per-layer budgets `B_k_LBid` (typical-mesh propagation only, no reflood-tail budget; e.g., `B_0_LBid = 0.5 BTT` at Config A vs bare OBFT's `B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay); the rationale is that L_Bid is opportunistic and doesn't need bare OBFT's reflood-absorption guarantee at the bid layer — reflood-tail bundles miss `bid_set_i` but the same bundle still arrives in time for L_0 σ-pool aggregation via bare OBFT's wider `B_0` (see [§L_Bid broadcast-deadline tightening](#l_bid-broadcast-deadline-tightening) below). The L_0..L_{K-1} broadcast deadlines shift earlier vs bare OBFT by `max(0, Δ_minicon − (B_0 − B_0_LBid))` (= `max(0, Δ_minicon − (1.5·BTT + RefloodDelay))`; zero at every named sizing under Config A default RefloodDelay). `T_commit` itself stays back-end-anchored to `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is unchanged from bare OBFT.
+- **Mini-consensus window** `Δ_minicon`: `Δ_minicon = T_commit − T_0_arrival`. Mini-consensus starts at `T_0_arrival`, ends at `T_commit`, and all L_Bid timing derives from that interval. `T_0_broadcast_max = T_0_arrival − B_0_LBid` is the L_Bid-side constraint; the actual broadcast time is `T_commit − max(Δ_minicon + B_0_LBid, B_0)` — the leader broadcasts at whichever is earlier between L_Bid's mini-consensus requirement and bare OBFT's L_0 reflood-absorption requirement (so the same bundle remains in-envelope for L_0 fall-through if L_Bid mini-consensus fails). L_Bid uses tighter per-layer budgets `B_k_LBid` (typical-mesh propagation only, no reflood-tail budget; e.g., `B_0_LBid = 0.5 BTT` at Config A vs bare OBFT's `B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay); the rationale is that L_Bid is opportunistic and doesn't need bare OBFT's reflood-absorption guarantee at the bid layer — reflood-tail bundles miss `bid_set_i` but the same bundle still arrives in time for L_0 σ-pool aggregation via bare OBFT's wider `B_0` (see [§L_Bid broadcast-deadline tightening](#l_bid-broadcast-deadline-tightening) below). The L_0..L_{K-1} broadcast deadlines shift earlier vs bare OBFT by `max(0, Δ_minicon − (B_0 − B_0_LBid))` (= `max(0, Δ_minicon − (1.5·BTT + RefloodDelay))`; zero at every named sizing under Config A default RefloodDelay). `T_commit` itself stays back-end-anchored to `T_relay_cutoff − submit_headroom − ε_3 − Δ_2` and is unchanged from bare OBFT.
 - **Verdict propagation budget** `Δ_verdict`: `0 < Δ_verdict ≤ Δ_minicon`, with `T_verdict = T_commit − Δ_verdict`. Operators compute and broadcast `KindBidVerdict` at `T_verdict`; those verdicts propagate until `T_commit`. The remaining `Δ_select = Δ_minicon − Δ_verdict` is the in-window bid-set settling budget after `T_0_arrival` and before verdict broadcast.
 - **L_Bid σ-eligibility**: determined cluster-wide by mini-consensus, not by per-operator local computation.
 - **Bid visibility threshold**: `qBid = K − f` L_Bid-eligible Phase-1 bundles. At `K = n`, `qBid = n − f = qV`; for `K < n`, L_Bid intentionally ranks a smaller candidate universe.
@@ -1048,7 +1048,7 @@ Phase 1 layers operate under bare OBFT's primary-vs-backup schedule (primary `B_
 | Phase 1 candidate broadcast | `[slot_start, T_0_arrival]` | Primary `L_0` rotation leader broadcasts by `T_broadcast_max_0 = T_0_arrival − B_0_LBid` (the L_Bid-side constraint); deeper rotation leaders (`L_k`, `k ≥ 1`) broadcast at BFT_start per §2's primary-vs-backup schedule. Each bundle carries its own bid metadata. Receivers continue accepting bundles first-observed in `[slot_start, T_commit]` per bare OBFT, but L_Bid verdict computation uses only bundles first-observed by `T_verdict`. |
 | Mini-consensus | `[T_0_arrival, T_commit]` | Operators compute predicted L_Bid (argmax over `bid_set_i` first-observed by `T_verdict = T_commit − Δ_verdict`) and broadcast `KindBidVerdict`; verdicts propagate by `T_commit`. |
 | Phase 2 | `[T_commit, T_commit + Δ_2]` | σ-or-NR commit at all K' layers (L_Bid + L_0..L_{K-1}). |
-| Phase 3 | (opportunistic from `T_commit` onward; SOFT target `T_commit + Δ_2 + Δ_3`) | K'-layer reconstruction walk; observer-on-arrival per main §Phase 3. |
+| Phase 3 | (opportunistic from `T_commit` onward; SOFT target `T_commit + Δ_2 + ε_3`) | K'-layer reconstruction walk; observer-on-arrival per main §Phase 3. |
 
 Sizing — `Δ_minicon` is the total mini-consensus interval; `Δ_verdict` is the portion reserved for verdict propagation; `Δ_select = Δ_minicon − Δ_verdict` is the bid-set settling buffer (post-`T_0_arrival` window during which late-arriving bundles still enter `bid_set_i`). Three named sizings, each step adding 0.5 BTT of robustness on top of the previous:
 
@@ -1062,9 +1062,9 @@ Sizing — `Δ_minicon` is the total mini-consensus interval; `Δ_verdict` is th
 - Conservative tolerates the widest tail on both. Standard tolerates a 0.5 BTT bundle-tail and a P99 verdict tail. Aggressive tolerates neither typical-mesh-tail bundles nor sub-P99 verdict jitter, and additionally exposes the cluster to all-honest partial-propagation deadlock at L_Bid (Class A).
 - When L_Bid mini-consensus fails to converge, the cluster falls through to L_0 cleanly — bare OBFT's recovery scope at L_0 is unchanged. So "lower L_Bid success rate" means "more slots fall through to L_0's vanilla payload instead of the bid-routed payload" — not slot-misses (except at aggressive sizing's Class A residual).
 
-`Δ_2`, `Δ_3`, and `B_k` (bundle propagation budgets) unchanged from bare OBFT.
+`Δ_2`, `ε_3`, and `B_k` (bundle propagation budgets) unchanged from bare OBFT.
 
-`T_commit` is back-end-anchored at `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` and is **the same value for bare OBFT and OBFT+L_Bid** (e.g., `3400ms` at §Application's max-MEV anchor with Config A, BTT=200ms, `Δ_2 = 2 BTT`, `Δ_3 = ε_3`, `header_submit_headroom = 100ms`, `T_relay_cutoff = 4000ms`).
+`T_commit` is back-end-anchored at `T_relay_cutoff − submit_headroom − ε_3 − Δ_2` and is **the same value for bare OBFT and OBFT+L_Bid** (e.g., `3600ms` at §Application's max-MEV anchor with Config A, BTT=200ms, tightened `Δ_2 = 1·BTT`, `ε_3 = 50ms`, `header_submit_headroom = 100ms`, `T_relay_cutoff = 4000ms`; with ~50ms residual jitter buffer).
 
 What L_Bid changes is the **L_0..L_{K-1} broadcast deadlines** and the **MEV-fetch budget**: the L_Bid-side constraint is `T_0_broadcast_max = T_0_arrival − B_0_LBid = T_commit − Δ_minicon − B_0_LBid` (with tighter `B_0_LBid = 0.5 BTT` at Config A vs bare OBFT's `B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay; L_Bid budgets only typical-mesh propagation at the bid layer, leaving the reflood-tail to L_0 fall-through). The bundle must ALSO remain in-envelope for L_0 σ-pool aggregation if mini-consensus fails — so the leader broadcasts at the EARLIER of L_Bid's deadline and bare OBFT's `T_commit − B_0` deadline. Net broadcast-deadline shift vs bare OBFT is `max(0, Δ_minicon − (B_0 − B_0_LBid))`: bare OBFT's reflood-buffer beyond typical-mesh (`B_0 − B_0_LBid = 1.5·BTT + RefloodDelay = 1000ms` at Config A default RefloodDelay; `1.5·BTT = 300ms` at RefloodDelay=0) is reused as mini-consensus headroom for free, and any excess of `Δ_minicon` over that buffer is the actual MEV-fetch cost L_Bid pays. At Config A with **default RefloodDelay = 700ms** the reflood-buffer is 1000ms — wide enough to absorb every named sizing free:
 
@@ -1283,14 +1283,14 @@ Candidate-withholding and candidate/bid-equivocation triggers require the byz to
 
 ### Slot timing
 
-Measured from `T_commit` (start of Phase 2 σ-emit; mini-consensus already complete). At Config A (P99=150ms, δ=50ms, `Δ_2 = 400ms` recommended, `Δ_3 = ε_3`). The same scenarios apply to L_Bid_New (Appendix F) with V_early replacing V_X at L_Bid and bid_1 replacing V_{L_0} at L_0; rotation-layer scenarios are unchanged since post-`T_commit` timing is identical across bare OBFT, current L_Bid, and L_Bid_New:
+Measured from `T_commit` (start of Phase 2 σ-emit; mini-consensus already complete). At Config A (P99=150ms, δ=50ms, tightened `Δ_2 = 200ms`, `ε_3 = 50ms`). The same scenarios apply to L_Bid_New (Appendix F) with V_early replacing V_X at L_Bid and bid_1 replacing V_{L_0} at L_0; rotation-layer scenarios are unchanged since post-`T_commit` timing is identical across bare OBFT, current L_Bid, and L_Bid_New:
 
 | Scenario | Time | Mechanism |
 |---|---|---|
 | L_Bid σ-quorum reaches early in Phase 2 (early-reconstruct path) | ~`1 BTT ≈ 200ms` | σ-emit propagation completes 1 RTT into Phase 2; operator reconstructs at L_Bid plaintext |
-| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_2 + Δ_3 ≈ 500ms` | Full Phase 2 + Phase 3 walk |
-| Mini-consensus failed at end of Phase 1 → fall-through to L_0 | ~`Δ_2 + Δ_3 ≈ 500ms` | NR-quorum at L_Bid (already determined pre-T_commit) + Phase-3 walk decrypts L_0; L_0 σ-quorum |
-| Multi-layer fall-through after L_Bid | ~`Δ_2 + Δ_3 ≈ 500ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
+| L_Bid σ-quorum reaches at end of Phase 2 (canonical) | ~`Δ_2 + ε_3 ≈ 250ms` | Full Phase 2 + Phase 3 walk |
+| Mini-consensus failed at end of Phase 1 → fall-through to L_0 | ~`Δ_2 + ε_3 ≈ 250ms` | NR-quorum at L_Bid (already determined pre-T_commit) + Phase-3 walk decrypts L_0; L_0 σ-quorum |
+| Multi-layer fall-through after L_Bid | ~`Δ_2 + ε_3 ≈ 250ms` | K'-layer walk in Phase 3 (sequential local decryption, no extra RTT per layer) |
 | L_Bid 2-1-byz-defect, verdict-equivocation, or partial-propagation deadlock | slot misses | Deadlock at L_Bid blocks fall-through |
 
 Post-`T_commit` timing **matches bare OBFT** since mini-consensus runs pre-`T_commit`. Under the reflood-aware schedule, L_Bid's pre-`T_commit` cost is `max(0, Δ_minicon − (B_0 − B_0_LBid))` of MEV-fetch budget — `Δ_minicon`'s overlap with bare OBFT's reflood buffer (`B_0 − B_0_LBid = 1.5·BTT + RefloodDelay`) doesn't cost extra; only the excess does. At Config A default RefloodDelay=700ms the reflood buffer is 1000ms wide — all three named sizings fit free, so the L_Bid extension is zero-cost on MEV-fetch under default RefloodDelay.
@@ -1299,33 +1299,33 @@ Post-`T_commit` timing **matches bare OBFT** since mini-consensus runs pre-`T_co
 
 `T_commit` is back-end-anchored and invariant across bare OBFT and OBFT+L_Bid. What L_Bid changes is the **L_0..L_{K-1} broadcast deadline**, which shifts earlier by `max(0, Δ_minicon − (B_0 − B_0_LBid))` = `max(0, Δ_minicon − (1.5·BTT + RefloodDelay))` to fit mini-consensus pre-`T_commit`. Under the reflood-aware schedule, the primary leader's MEV-fetch budget shrinks only by the excess of `Δ_minicon` over bare OBFT's reflood buffer — zero whenever `Δ_minicon ≤ 1.5·BTT + RefloodDelay`.
 
-The table below shows L_0 broadcast deadline (= MEV-fetch budget at `slot_start = 0`) across BTT regimes at **default RefloodDelay = 700ms** (`T_relay_cutoff = 4.0s`, `submit_headroom = 100ms`, `Δ_3 = ε_3 = 50ms`, `Δ_2 = 2 BTT`, `B_0 = 2·BTT + 700ms` for bare OBFT, `B_0_LBid = 0.5 BTT` for L_Bid). `T_commit` scales with BTT as `≈ 3800 − 2·BTT` (= `Relay_cutoff − Δ_2 − Δ_3 − submit_headroom − ~50ms jitter`); `T_broadcast_max_0` for bare OBFT = `T_commit − B_0 = 3800 − 4·BTT − RefloodDelay`. Bare OBFT row included for comparison:
+The table below shows L_0 broadcast deadline (= MEV-fetch budget at `slot_start = 0`) across BTT regimes at **default RefloodDelay = 700ms** (`T_relay_cutoff = 4.0s`, `submit_headroom = 100ms`, `ε_3 = 50ms`, tightened `Δ_2 = 1·BTT`, `B_0 = 2·BTT + 700ms` for bare OBFT, `B_0_LBid = 0.5 BTT` for L_Bid). `T_commit` scales with BTT as `≈ 3800 − BTT` (= `Relay_cutoff − Δ_2 − ε_3 − submit_headroom − ~50ms jitter`); `T_broadcast_max_0` for bare OBFT = `T_commit − B_0 = 3800 − 3·BTT − RefloodDelay`. Bare OBFT row included for comparison:
 
 | BTT | Bare OBFT | Δ_minicon=2 BTT (conservative) | Δ_minicon=1.5 BTT (standard) | Δ_minicon=0.5 BTT (aggressive) |
 |---|---|---|---|---|
-| 200ms | 2300ms ✓ | 2300ms ✓ | 2300ms ✓ | 2300ms ✓ |
-| 400ms | 1500ms ✓ | 1500ms ✓ | 1500ms ✓ | 1500ms ✓ |
-| 600ms | 700ms ✓ tight | 700ms ✓ tight | 700ms ✓ tight | 700ms ✓ tight |
-| 800ms | **−100ms ✗** | **−100ms ✗** | **−100ms ✗** | **−100ms ✗** |
-| 1000ms | **−900ms ✗** | **−900ms ✗** | **−900ms ✗** | **−900ms ✗** |
-| 1200ms | **−1700ms ✗** | **−1700ms ✗** | **−1700ms ✗** | **−1700ms ✗** |
+| 200ms | 2500ms ✓ | 2500ms ✓ | 2500ms ✓ | 2500ms ✓ |
+| 400ms | 1900ms ✓ | 1900ms ✓ | 1900ms ✓ | 1900ms ✓ |
+| 600ms | 1300ms ✓ | 1300ms ✓ | 1300ms ✓ | 1300ms ✓ |
+| 800ms | 700ms ✓ tight | 700ms ✓ tight | 700ms ✓ tight | 700ms ✓ tight |
+| 1000ms | 100ms ✓ tight | 100ms ✓ tight | 100ms ✓ tight | 100ms ✓ tight |
+| 1200ms | **−500ms ✗** | **−500ms ✗** | **−500ms ✗** | **−500ms ✗** |
 
-(At default RefloodDelay=700ms the reflood buffer `B_0 − B_0_LBid = 1.5·BTT + 700ms` exceeds every named `Δ_minicon` at every BTT in the table, so L_Bid's broadcast deadline matches bare OBFT V_0 exactly across the board — L_Bid imposes zero MEV-fetch cost under default RefloodDelay. Note that bare OBFT itself only fits at BTT ≤ 600ms under default RefloodDelay: the reflood-aware `B_0 = 2·BTT + 700ms` consumes a larger fraction of the pre-`T_commit` budget at higher BTT. Deployments at BTT ≥ 800ms must either use a lower RefloodDelay or accept that the slot doesn't fit.)
+(At default RefloodDelay=700ms the reflood buffer `B_0 − B_0_LBid = 1.5·BTT + 700ms` exceeds every named `Δ_minicon` at every BTT in the table, so L_Bid's broadcast deadline matches bare OBFT V_0 exactly across the board — L_Bid imposes zero MEV-fetch cost under default RefloodDelay. Bare OBFT itself fits up to BTT ≤ 1000ms under default RefloodDelay post-tighten — the unified 1·BTT-per-emission convention extends the envelope by 200ms at every BTT vs the older 2·BTT/emission framing. Deployments at BTT ≥ 1200ms must either use a lower RefloodDelay or accept that the slot doesn't fit.)
 
 **At RefloodDelay = 0** (fully-meshed opt-out) the reflood buffer collapses to `1.5·BTT`, so the L_Bid extension's MEV-fetch cost surfaces — most prominently at conservative sizing:
 
 | BTT | Bare OBFT | Δ_minicon=2 BTT (conservative) | Δ_minicon=1.5 BTT (standard) | Δ_minicon=0.5 BTT (aggressive) |
 |---|---|---|---|---|
-| 200ms | 3000ms ✓ | 2900ms ✓ | 3000ms ✓ | 3000ms ✓ |
-| 400ms | 2200ms ✓ | 2000ms ✓ | 2200ms ✓ | 2200ms ✓ |
-| 600ms | 1400ms ✓ | 1100ms ✓ | 1400ms ✓ | 1400ms ✓ |
-| 800ms | 600ms ✓ | 200ms ✓ tight | 600ms ✓ | 600ms ✓ |
-| 1000ms | **−200ms ✗** | **−700ms ✗** | **−200ms ✗** | **−200ms ✗** |
-| 1200ms | **−1000ms ✗** | **−1600ms ✗** | **−1000ms ✗** | **−1000ms ✗** |
+| 200ms | 3200ms ✓ | 3100ms ✓ | 3200ms ✓ | 3200ms ✓ |
+| 400ms | 2600ms ✓ | 2400ms ✓ | 2600ms ✓ | 2600ms ✓ |
+| 600ms | 2000ms ✓ | 1700ms ✓ | 2000ms ✓ | 2000ms ✓ |
+| 800ms | 1400ms ✓ | 1000ms ✓ | 1400ms ✓ | 1400ms ✓ |
+| 1000ms | 800ms ✓ | 300ms ✓ tight | 800ms ✓ | 800ms ✓ |
+| 1200ms | 200ms ✓ tight | **−400ms ✗** | 200ms ✓ tight | 200ms ✓ tight |
 
 (At RefloodDelay=0 the L_Bid loss vs bare OBFT = `max(0, Δ_minicon − 1.5·BTT)`. Only conservative `Δ_minicon = 2·BTT` overshoots the buffer by `0.5·BTT`. Negative MEV-fetch means L_0 broadcast deadline is before slot_start; the slot doesn't fit.)
 
-**Net for deployment selection.** At production-typical BTT (200-400ms) with default RefloodDelay, every L_Bid sizing matches bare OBFT V_0's MEV-fetch budget exactly — the trade reduces to "L_Bid success rate vs implementation complexity," not MEV-fetch. The reflood-buffer absorption means L_Bid is essentially free under default RefloodDelay; conservative gives the highest L_Bid success rate (1·BTT settling) at no MEV cost. Note that bare OBFT itself only fits up to BTT ≈ 600ms under default RefloodDelay — the reflood-aware `B_0 = 2·BTT + 700ms` consumes the slot budget aggressively; deployments running BTT ≥ 800ms must reduce RefloodDelay (the RefloodDelay=0 envelope reaches BTT ≤ 800ms). At RefloodDelay=0 (denser meshes / mesh-friendly deployments), conservative `Δ_minicon = 2·BTT` is the only sizing that pays MEV-fetch cost (0.5·BTT); standard and aggressive remain free. At BTT ≥ 1000ms with RefloodDelay=0, bare OBFT itself doesn't fit so the L_Bid question is moot. The L_Bid trade has two knobs: `Δ_minicon` controls L_Bid success rate (larger Δ_minicon → more bundle tail-absorption) and — only when it exceeds the reflood buffer — MEV-fetch budget; `Δ_verdict` controls verdict-propagation safety (≥ 1·BTT for P99 guarantees). Choose both from production telemetry. Bare OBFT (no `Δ_minicon`) remains available when the trade isn't favorable.
+**Net for deployment selection.** At production-typical BTT (200-400ms) with default RefloodDelay, every L_Bid sizing matches bare OBFT V_0's MEV-fetch budget exactly — the trade reduces to "L_Bid success rate vs implementation complexity," not MEV-fetch. The reflood-buffer absorption means L_Bid is essentially free under default RefloodDelay; conservative gives the highest L_Bid success rate (1·BTT settling) at no MEV cost. Under the tightened per-emission sizing, bare OBFT fits up to BTT ≤ 1000ms under default RefloodDelay — the reflood-aware `B_0 = 2·BTT + 700ms` consumes the slot budget but the tighter Δ_2 = 1·BTT recovers 200ms vs the older 2·BTT/emission framing; deployments running BTT ≥ 1200ms must reduce RefloodDelay (the RefloodDelay=0 envelope reaches BTT ≤ 1200ms tight). At RefloodDelay=0 (denser meshes / mesh-friendly deployments), conservative `Δ_minicon = 2·BTT` is the only sizing that pays MEV-fetch cost (0.5·BTT); standard and aggressive remain free. The L_Bid trade has two knobs: `Δ_minicon` controls L_Bid success rate (larger Δ_minicon → more bundle tail-absorption) and — only when it exceeds the reflood buffer — MEV-fetch budget; `Δ_verdict` controls verdict-propagation safety (≥ 1·BTT for P99 guarantees). Choose both from production telemetry. Bare OBFT (no `Δ_minicon`) remains available when the trade isn't favorable.
 
 ### Optional extension — relay/builder attestation verification
 
@@ -1360,13 +1360,13 @@ The protocol-level mitigation for [§Additional assumption — bid-value honesty
 | Layers | K (rotation-determined) | K' = K + 1 (L_Bid + K rotation-determined) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | `Phase1Bundle` gains bid metadata; + `KindBidVerdict` |
 | Slashing-evidence rules | 5 | 7 (+ Rule 7 bid-metadata equivocation, + Rule 8 verdict equivocation/verdict-vs-action) |
-| `T_commit` anchor | back-end: `T_relay_cutoff − submit_headroom − Δ_3 − Δ_2` | **Same** (`T_commit` invariant across bare OBFT and OBFT+L_Bid; cross-family T_commit anchors differ — see [BFT-comparison.md](BFT-comparison.md#scope-and-assumptions)) |
+| `T_commit` anchor | back-end: `T_relay_cutoff − submit_headroom − ε_3 − Δ_2` | **Same** (`T_commit` invariant across bare OBFT and OBFT+L_Bid; cross-family T_commit anchors differ — see [BFT-comparison.md](BFT-comparison.md#scope-and-assumptions)) |
 | Best-case latency post-`T_commit` (early reconstruct) | ~200ms (`1 BTT`) | **Same** (~200ms; mini-consensus runs pre-`T_commit`) |
-| Canonical latency post-`T_commit` (full Phase 2 + Phase 3) | ~500ms (`Δ_2 + Δ_3`) | **Same** (~500ms) |
-| Time-to-completion spread (best → canonical) | ~2.5× | **Same** |
+| Canonical latency post-`T_commit` (full Phase 2 + Phase 3) | ~250ms (`Δ_2 + ε_3` at tightened Δ_2 = 1·BTT) | **Same** (~250ms) |
+| Time-to-completion spread (best → canonical) | ~1.25× | **Same** |
 | Bandwidth (n=4, K=4 healthy; cluster-wide totals) | ~28 KB across 1 emission per operator (~7 KB/op × 4 ops) | Base bandwidth + K bid-metadata sections + n verdicts + 1 chained encryption layer (no standalone bid envelopes) — 2 emissions per operator (`KindCommit` + `KindBidVerdict`) |
-| L_0 broadcast deadline | `T_broadcast_max_0 = T_commit − B_0` (e.g., 2300ms at Config A max-MEV anchor with `B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay=700ms) | `T_0_broadcast_max = T_commit − max(Δ_minicon + B_0_LBid, B_0)` — at default RefloodDelay the L_0 constraint binds, so deadline coincides with bare OBFT V_0 (2300ms at Config A) for every named `Δ_minicon`. See [§L_Bid broadcast-deadline tightening](#l_bid-broadcast-deadline-tightening). |
-| MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~2150ms (V_0; T_commit = 3.40s) at default RefloodDelay; ~2850ms at RefloodDelay=0 | At default RefloodDelay: ~2150ms (V_X) at every named sizing (= bare OBFT V_0; reflood buffer fully absorbs `Δ_minicon`). At RefloodDelay=0: ~2750ms at conservative `Δ_minicon = 2·BTT` (vs bare OBFT 2850ms); ~2850ms at standard and aggressive (= bare OBFT V_0) |
+| L_0 broadcast deadline | `T_broadcast_max_0 = T_commit − B_0` (e.g., 2500ms at Config A with tightened Δ_2 = 1·BTT and `B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay=700ms) | `T_0_broadcast_max = T_commit − max(Δ_minicon + B_0_LBid, B_0)` — at default RefloodDelay the L_0 constraint binds, so deadline coincides with bare OBFT V_0 (2500ms at Config A) for every named `Δ_minicon`. See [§L_Bid broadcast-deadline tightening](#l_bid-broadcast-deadline-tightening). |
+| MEV-fetch budget (4s cutoff, `header_submit_headroom = 100ms`, §Application's max-MEV anchor) | ~2350ms (V_0; T_commit = 3.60s) at default RefloodDelay; ~3050ms at RefloodDelay=0 | At default RefloodDelay: ~2350ms (V_X) at every named sizing (= bare OBFT V_0; reflood buffer fully absorbs `Δ_minicon`). At RefloodDelay=0: ~2950ms at conservative `Δ_minicon = 2·BTT` (vs bare OBFT 3050ms); ~3050ms at standard and aggressive (= bare OBFT V_0) |
 | Cryptographic primitives | BLS threshold + threshold IBE/SWE | Same (no new primitives) |
 | **Safety** | Cryptographic via Pigeonholes 1, 2, 3 | **Same** |
 | Rotation-layer (L_0/.../L_{K-1}) liveness | OBFT base recovery scope | **Same** (mini-consensus failure falls through cleanly; rotation layers unchanged) |
@@ -1550,7 +1550,7 @@ Treat OBFT-replenish as a research direction worth specifying further if the lat
 
 ## Appendix E — Defer state (within-slot partition recovery)
 
-> **Note on values:** Concrete formulas in this appendix are stated against bare OBFT's reflood-aware schedule: `B_0 = 2·BTT + RefloodDelay` (= 1100ms at Config A with default RefloodDelay=700ms) and recommended `Δ_2 = 2·BTT`. The Defer extension's structural property (`T_broadcast_max_0` invariant under fixed `T_relay_cutoff`) is unchanged from earlier drafts; only the substituted constants shift under the wider `B_0`.
+> **Note on values:** Concrete formulas in this appendix are stated against bare OBFT's reflood-aware schedule: `B_0 = 2·BTT + RefloodDelay` (= 1100ms at Config A with default RefloodDelay=700ms) and tightened `Δ_2 = 1·BTT`. Earlier drafts used `Δ_2 = 2·BTT`; the Defer extension's structural property (`T_broadcast_max_0` invariant under fixed `T_relay_cutoff`) is unchanged across either sizing — only the substituted constants shift.
 
 This appendix describes a candidate enhancement to OBFT — **OBFT+Defer** — that adds a 4th per-(operator, layer) commitment state ("Defer") for receivers still waiting on V at `T_commit`. Defer enables late σ-emission within a `[T_commit, T_accept_max]` absorption window, recovering aggressive-marginal partition cases where a re-flooded bundle reaches some honest after `T_commit` but before `T_accept_max`.
 
@@ -1585,7 +1585,7 @@ Phase 3 reconstruction starts at `T_accept_max + Δ_2_bare` (after late emission
 - **Multi-emission wire format**: separate `KindOnion` (σ-side, possibly emitted at `T_commit` OR late within `[T_commit, T_accept_max]`) and `KindNR` (NR-side, emitted at `T_accept_max` for force-NR cases). Cannot be combined into a single `KindCommit` — receivers need an early-NR signal at `T_commit` to know whether to defer, and late σ-emits arrive after that decision is recorded.
 - **Auth-only-retention pre-state**: receivers track peer σ-claims observed in `[slot_start, T_commit]` separately from their own commitment state. Used to decide whether to NR-immediately (no peer σ observed → silent-leader rule) or Defer (peer σ observed → wait) at `T_commit`.
 - **Cross-phase exclusivity across Defer→σ transition**: an operator who Defer'd at `T_commit` and then σ-emitted at `T_commit + ε` must not have NR-emitted in between. EKM enforces — Defer is a distinct EKM state from "uncommitted/silent."
-- **Wider Phase-2 window**: `Δ_2 = W + Δ_2_bare` instead of bare OBFT's recommended `Δ_2_bare = 2·BTT`. Phase 3 starts at `T_accept_max + Δ_2_bare` instead of `T_commit + Δ_2_bare`.
+- **Wider Phase-2 window**: `Δ_2 = W + Δ_2_bare` instead of bare OBFT's tightened `Δ_2_bare = 1·BTT`. Phase 3 starts at `T_accept_max + Δ_2_bare` instead of `T_commit + Δ_2_bare`.
 
 ### Comparison with bare OBFT
 
@@ -1602,8 +1602,8 @@ Defer recovers cases where the propagation tail falls within `[T_commit, T_accep
 
 Under fixed `T_relay_cutoff` (relay submission deadline; reconstruction must complete by `T_relay_cutoff − T_submit`):
 
-- **Bare OBFT**: SOFT completion target `T_commit + Δ_2 + Δ_3`. Under the canonical observer-on-arrival pattern (see §Phase 3), Resolve runs opportunistically from `T_commit` onward and the average healthy slot decides well before this target — σ-quorum forms within propagation latency of the last needed `KindCommit`, typically a few BTTs after `T_commit` under partial synchrony.
-- **OBFT+Defer**: SOFT completion target `T_accept_max + Δ_2 + Δ_3 = T_commit + W + Δ_2 + Δ_3`. Defer's σ-pool also grows monotonically (Defer→σ transitions only add σ partials; Defer→NR only adds NR partials), so observer-on-arrival is *compatible* — but the standard Defer formulation predates the pattern and still describes a single Phase-3 attempt at the absorption-window's end. The expected-completion target is shifted by W either way because Defer's recovery scope inherently relies on late transitions landing before `T_accept_max`, regardless of polling discipline.
+- **Bare OBFT**: SOFT completion target `T_commit + Δ_2 + ε_3`. Under the canonical observer-on-arrival pattern (see §Phase 3), Resolve runs opportunistically from `T_commit` onward and the average healthy slot decides well before this target — σ-quorum forms within propagation latency of the last needed `KindCommit`, typically a few BTTs after `T_commit` under partial synchrony.
+- **OBFT+Defer**: SOFT completion target `T_accept_max + Δ_2 + ε_3 = T_commit + W + Δ_2 + ε_3`. Defer's σ-pool also grows monotonically (Defer→σ transitions only add σ partials; Defer→NR only adds NR partials), so observer-on-arrival is *compatible* — but the standard Defer formulation predates the pattern and still describes a single Phase-3 attempt at the absorption-window's end. The expected-completion target is shifted by W either way because Defer's recovery scope inherently relies on late transitions landing before `T_accept_max`, regardless of polling discipline.
 
 Both reach the same wall-clock completion target when `T_relay_cutoff` is fixed. The Defer model shifts `T_commit` earlier by W (to make room for the absorption window) but completion target vs the relay deadline is identical. Bare OBFT adopts observer-on-arrival as the canonical pattern; updating Defer's formulation to observer-mode is a mechanical follow-up if the variant is ever spec-fleshed-out for deployment.
 
@@ -1611,12 +1611,12 @@ Both reach the same wall-clock completion target when `T_relay_cutoff` is fixed.
 
 **Defer does not compress MEV.** Under fixed `T_relay_cutoff` and bare OBFT's primary-vs-backup broadcast model (`B_0 = 2·BTT + RefloodDelay` for the primary; `B_k = T_commit` for backups; see [§Setting](#setting)), L_0's deadline is what matters for MEV:
 
-- **Bare OBFT**: `T_broadcast_max_0 = T_commit − B_0 = T_commit − (2·BTT + RefloodDelay)`; reconstruction must complete by `T_relay_cutoff − T_submit ≥ T_commit + Δ_2 + Δ_3`, so `T_broadcast_max_0 ≤ T_relay_cutoff − T_submit − Δ_2 − Δ_3 − B_0 = T_relay_cutoff − T_submit − 2·BTT − (2·BTT + RefloodDelay) − Δ_3 = T_relay_cutoff − T_submit − 4·BTT − RefloodDelay − Δ_3` at recommended `Δ_2 = 2·BTT`. At Config A with default RefloodDelay=700ms: `T_broadcast_max_0 ≤ 4000 − 100 − 800 − 700 − 50 = 2350ms` (the spec's 2300ms anchor leaves a 50ms residual margin).
-- **OBFT+Defer**: `T_broadcast_max_0 = T_accept_max − B_0 = T_accept_max − (2·BTT + RefloodDelay)`; reconstruction must complete by `T_relay_cutoff − T_submit ≥ T_accept_max + Δ_2 + Δ_3`, so `T_broadcast_max_0 ≤ T_relay_cutoff − T_submit − 4·BTT − RefloodDelay − Δ_3` at recommended `Δ_2 = 2·BTT`.
+- **Bare OBFT**: `T_broadcast_max_0 = T_commit − B_0 = T_commit − (2·BTT + RefloodDelay)`; reconstruction must complete by `T_relay_cutoff − T_submit ≥ T_commit + Δ_2 + ε_3`, so `T_broadcast_max_0 ≤ T_relay_cutoff − T_submit − Δ_2 − ε_3 − B_0 = T_relay_cutoff − T_submit − 1·BTT − (2·BTT + RefloodDelay) − ε_3 = T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` at tightened `Δ_2 = 1·BTT`. At Config A with default RefloodDelay=700ms: `T_broadcast_max_0 ≤ 4000 − 100 − 600 − 700 − 50 = 2550ms` (the spec's 2500ms anchor leaves a 50ms residual margin).
+- **OBFT+Defer**: `T_broadcast_max_0 = T_accept_max − B_0 = T_accept_max − (2·BTT + RefloodDelay)`; reconstruction must complete by `T_relay_cutoff − T_submit ≥ T_accept_max + Δ_2 + ε_3`, so `T_broadcast_max_0 ≤ T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` at tightened `Δ_2 = 1·BTT`.
 
 Same `T_broadcast_max_0`. The `B_0 = 2·BTT + RefloodDelay` leader-broadcast budget for L_0 applies relative to `T_accept_max` instead of `T_commit` (in Defer), but `T_broadcast_max_0` relative to `T_relay_cutoff` is unchanged.
 
-The intuition that "Defer adds W to `T_broadcast_max_0 ↔ T_commit`" treats `T_commit` as the broadcast deadline. With Defer, `T_commit` is the early-signal point; `T_accept_max` is the broadcast deadline. With Defer, `T_commit` shifts earlier by W to fit the absorption window, but `T_broadcast_max_0` is anchored to `T_accept_max` (the late horizon), which is anchored to `T_relay_cutoff − T_submit − B_0 − Δ_3` either way (= `T_relay_cutoff − T_submit − 2·BTT − RefloodDelay − Δ_3`).
+The intuition that "Defer adds W to `T_broadcast_max_0 ↔ T_commit`" treats `T_commit` as the broadcast deadline. With Defer, `T_commit` is the early-signal point; `T_accept_max` is the broadcast deadline. With Defer, `T_commit` shifts earlier by W to fit the absorption window, but `T_broadcast_max_0` is anchored to `T_accept_max` (the late horizon), which is anchored to `T_relay_cutoff − T_submit − B_0 − Δ_2 − ε_3` either way (= `T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` at tightened `Δ_2 = 1·BTT`).
 
 #### Wire bandwidth
 
@@ -1651,14 +1651,14 @@ OBFT+Defer requires:
 - EKM signing-event boundaries for Defer→σ vs initial σ-commit, distinct schema rows.
 - Auth-only-retention pre-state for tracking peer σ-claims in `[slot_start, T_commit]` (used to gate the Defer-vs-NR-immediate decision).
 - Two separate Phase-2 emission timings (`T_commit`, `T_accept_max`) with cross-phase exclusivity enforcement spanning the window.
-- Larger Phase-2 window: `Δ_2 = W + 2·BTT` vs bare OBFT's recommended `Δ_2 = 2·BTT`.
+- Larger Phase-2 window: `Δ_2 = W + 1·BTT` vs bare OBFT's tightened `Δ_2 = 1·BTT`.
 
 Bare OBFT requires:
 
 - 3-state commitment lattice (σ, NR, NV).
 - Single signing event per (slot, layer) per operator.
 - Single emission point at `T_commit`.
-- `Δ_2 = 2·BTT` (recommended).
+- `Δ_2 = 1·BTT` (tightened).
 
 Defer adds materially to the spec/EKM surface and to the slashing-protection schema.
 
@@ -1680,7 +1680,7 @@ Defer adds materially to the spec/EKM surface and to the slashing-protection sch
 
 1. **Defer was removed from the current OBFT spec** in favor of a 3-state (σ, NR, NV) commitment lattice with a single `KindCommit` emission per operator per slot. **The primary motivation was spec/wire/EKM simplification** (3-state vs 4-state lattice, single emission vs multi-emission, no auth-only-retention pre-state, no transitional EKM events); closure of the withhold-then-fake-σ adversarial-byz attack is a structural side-effect of the same removal, not its motivating reason. The trade-off cost is loss of aggressive-marginal partition recovery (one specific pattern at the boundary of the `[T_commit, T_accept_max]` window).
 
-2. **The MEV cost intuition is a misread.** Defer doesn't compress `T_broadcast_max_0` (the primary leader's fetch deadline) — under the binding `T_broadcast_max_0 = T_relay_cutoff − T_submit − Δ_2 − Δ_3 − B_0 = T_relay_cutoff − T_submit − 4·BTT − RefloodDelay − Δ_3` equation (at recommended `Δ_2 = 2·BTT`, reflood-aware `B_0 = 2·BTT + RefloodDelay`), the leader fetch deadline is invariant to Defer. The `B_0` safety margin is anchored to `T_accept_max` (with Defer) or `T_commit` (without), but `T_relay_cutoff` minus that anchor is the same in both cases. What does shift is `T_commit` (W earlier with Defer, to make room for the absorption window before Phase 3 starts).
+2. **The MEV cost intuition is a misread.** Defer doesn't compress `T_broadcast_max_0` (the primary leader's fetch deadline) — under the binding `T_broadcast_max_0 = T_relay_cutoff − T_submit − Δ_2 − ε_3 − B_0 = T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` equation (at tightened `Δ_2 = 1·BTT`, reflood-aware `B_0 = 2·BTT + RefloodDelay`), the leader fetch deadline is invariant to Defer. The `B_0` safety margin is anchored to `T_accept_max` (with Defer) or `T_commit` (without), but `T_relay_cutoff` minus that anchor is the same in both cases. What does shift is `T_commit` (W earlier with Defer, to make room for the absorption window before Phase 3 starts).
 
 3. **The withhold-then-fake-σ attack requires deliberate byz** — three coordinated deliberate deviations (withhold, fake σ-claim, selective unicast). None happens under honest protocol operations. The attack does NOT fire incidentally. So Defer's adversarial-byz cost is conditional on facing an actively-malicious byz within the f-bound, with weaker rational-byz-deterrent punishment quality than Variant B (behavioral-pattern evidence, not cryptographically self-contained).
 
@@ -1872,7 +1872,7 @@ The two extensions are structurally distinct points in the L_Bid design space.
 | Onion priority | L_Bid plaintext OUTER (V_X); L_0..L_{K-1} chained INNER | L_Bid plaintext OUTER (V_early); L_0..L_{K-1} chained INNER (L_0 carries bid_1) |
 | Primary MEV-fetch budget | ~2750ms at conservative `Δ_minicon = 2 BTT`; ~2850ms at standard `Δ_minicon = 1.5 BTT`; ~3050ms at aggressive (= bare OBFT V_0; convergence buffer repurposed as `Δ_verdict`) | ~3050ms (= bare OBFT V_0; no `Δ_minicon` shift on primary at any sizing) |
 | Deep-layer MEV-fetch budget | Deep deadlines shift earlier by `max(0, Δ_minicon − 0.5 BTT)` | Same deep-deadline cost as current L_Bid for `L_1..L_{K-1}` |
-| Post-`T_commit` consensus budget | ~500ms (Δ_2 + Δ_3; mini-consensus is pre-`T_commit`) | ~500ms (Δ_2 + Δ_3) |
+| Post-`T_commit` consensus budget | ~250ms (Δ_2 + ε_3 at tightened Δ_2 = 1·BTT; mini-consensus is pre-`T_commit`) | ~250ms (Δ_2 + ε_3 at tightened Δ_2 = 1·BTT) |
 | Submission headroom (4s cutoff) | Same post-`T_commit` headroom as bare OBFT (primary MEV-fetch budget broken down in row above) | Same post-`T_commit` headroom as bare OBFT; primary MEV-fetch budget preserved at every sizing |
 | Bid_1 protection from asymmetric delivery | ✓ (mini-consensus convergence on bid_1) | ✗ (bid_1 exposed to bare-OBFT-style asymmetric attacks) |
 | Deep-bid protection from asymmetric delivery | Mini-consensus convergence applies | Mini-consensus convergence applies to deep bids only |
