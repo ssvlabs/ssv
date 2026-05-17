@@ -548,7 +548,7 @@ In all cases, Pigeonhole 2 ensures at most one V can reach qV cluster-wide regar
 
 ### Liveness comparison: OBFT vs OBFTR(R=2) vs QBFT
 
-The table below puts OBFT, OBFTR(R=2), and QBFT side-by-side per scenario at the standard SSV proposer-duty configuration (n=4, f=1, K=4, ~4s relay cutoff). Timing assumes the SSV proposer-duty operating point (`BTT = 200ms` = P99=150ms + δ=50ms; staggered K=4 with deepest budget `B_3 = T_commit = 3600ms` — see [Timing budget](#timing-budget)). All OBFT counts at the tightened recommended sizing (`Δ_2 = 1 BTT`); QBFT and OBFTR(R=2) counts at recommended `Δ_2 = 2 BTT` per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention). For QBFT-SSV, `RT = 2s = 10 BTT`; QBFT-optimal RT = 6 BTT.
+The table below puts OBFT, OBFTR(R=2), and QBFT side-by-side per scenario at the standard SSV proposer-duty configuration (n=4, f=1, K=4, ~4s relay cutoff). Timing assumes the SSV proposer-duty operating point (`BTT = 200ms` = P99=150ms + δ=50ms; staggered K=4 with deepest budget `B_3 = T_commit = 3600ms` — see [Timing budget](#timing-budget)). All counts at the unified tightened "1 BTT per emission" sizing (OBFT `Δ_2 = 1 BTT`; OBFTR per-round `Δ_2 = 1 BTT`; QBFT 4 BTT R1) — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention). For QBFT-SSV, `RT = 2s = 10 BTT`; QBFT-optimal RT = 6 BTT.
 
 | Scenario | OBFT outcome | OBFTR(R=2) outcome | QBFT-SSV outcome |
 |---|---|---|---|
@@ -559,7 +559,7 @@ The table below puts OBFT, OBFTR(R=2), and QBFT side-by-side per scenario at the
 | Byzantine leader equivocates, 2-1 split where one V already has 2 honest + leader-σ_L^V | σ-pool on the 2-honest-V = 2 + leader = 3 = qV; reaches naturally. ✓ in ~400ms. | Same. ✓ in ~1200ms. | Round 1: PREPARE-pool split; timeout. Round 2: new leader proposes; succeeds. ✓ in ~3.6s. |
 | Byzantine leader equivocates, σ-locked split pattern (1-1-1, etc.) | σ-pools split below qV; NR-pool below qEnc (σ-locked operators can't NR). **✗ slot misses at L_0;** no fall-through. Equivocation slashable. | Same exposure (R-invariant). ✗ slot misses. Equivocation slashable. | Round 1: PREPARE split; timeout. Round 2: new leader proposes a fresh V; honest converge; succeeds. ✓ in ~3.6s. **QBFT recovers what OBFT/OBFTR don't** via "new leader proposes fresh V" mode. |
 | Byzantine leader equivocates, all-honest-NR outcome (byz delivers V's early; re-flood spreads conflicts before T_commit) | All 3 honest retained ≥ 2 V's by T_commit → all NR per equivocation rule → NR-quorum at L_0 → fall-through to L_1 in Phase 3 walk; if L_1 honest, ✓ at L_1 in ~400ms. Equivocation slashable. | Same recovery via Round-R force-NR. ✓ in ~1200ms (round 1) or ~2.4s (round 2). | Same recovery as σ-locked split row: round-2 new leader proposes fresh V. ✓ in ~3.6s. |
-| Multi-failure fall-through (multiple silent leaders) | At K=4 with L_0, L_1, L_2 silent: NR-quorum reaches at each in Phase 2; Phase 3's walk decrypts down to L_3; σ-quorum at L_3 if honest. **All in single Phase 2 + Phase 3 windows** (Phase 3 ε_3 grows with K-layer decryption walks). ✓ in ~600ms (2 BTT consensus + ~200ms ε_3 × K). | Same. ✓ in ~1200ms. | Round 1: leader 1 silent → timeout (~2s). Round 2: leader 2 silent → timeout (~2s). Round 3: leader 3 silent → timeout (~2s). Round 4: succeeds in ~1.6s. ✓ in ~7.6s — past 4s cutoff. ✗ for proposer duty. **OBFT's K-layer parallel fall-through beats QBFT's serial round-change**. |
+| Multi-failure fall-through (multiple silent leaders) | At K=4 with L_0, L_1, L_2 silent: NR-quorum reaches at each in Phase 2; Phase 3's walk decrypts down to L_3; σ-quorum at L_3 if honest. **All in single Phase 2 + Phase 3 windows** (Phase 3 ε_3 grows with K-layer decryption walks). ✓ in ~800ms (3 BTT consensus + ~200ms ε_3 × K) at tightened per-emission sizing. | Same. ✓ in ~800ms (3·BTT R1 + ε_3·K at tightened sizing). | Round 1: leader 1 silent → timeout (~2s). Round 2: leader 2 silent → timeout (~2s). Round 3: leader 3 silent → timeout (~2s). Round 4: succeeds in ~0.8s. ✓ in ~6.8s — past 4s cutoff. ✗ for proposer duty. **OBFT's K-layer parallel fall-through beats QBFT's serial round-change**. |
 | Host-validity divergence (head-change mid-slot, strict host) | Out of scope (assumption 3 — host stabilizes verdict at Phase-1 acceptance). Same as OBFTR(R=2). | Same. | Round 1: validators with stale head don't PREPARE; timeout. Round 2: new leader fetches at moved head; if quorum agrees, succeeds. ✓ in ~3.6s. **QBFT recovers what OBFT-family doesn't** via fresh-V refetch on round-change. |
 | Adversarial scheduling — adversary delays V at all K layers beyond their respective per-layer absorption | **Out of envelope** (Class A). ✗ Slot misses. The deepest layer's `B_{K-1} = T_commit = 3600ms` at K=4 SSV operating point is the cluster-wide tolerance ceiling. | If delay ≤ OBFTR(R=2)'s cross-round retention (~1500ms at this operating point): in envelope at R=2; round 2 re-flood may resolve at L_0. ✓ in ~1.8s. Else: out of envelope. ✗ | Round 1: PREPARE delayed → timeout (~2s). Round 2: new leader; if adversary delays again → round 2 timeout. ✗ Within 4s, QBFT tolerates ≤ 1 round of adversarial delay. |
 | Sustained partition (real propagation > all layers' absorption) | OBFT deepest-layer absorption `B_{K-1} = T_commit ≈ 3600ms` at K=4 SSV operating point; exceeded → ✗ slot misses. Safety holds. | OBFTR(R=2) cross-round retention ~1500ms at this operating point (recovers at L_0 via re-flood, preserves MEV); exceeded → ✗ slot misses. Safety holds. | QBFT round-budget × RT exceeded; slot misses. ✗ Safety holds. |
@@ -567,7 +567,7 @@ The table below puts OBFT, OBFTR(R=2), and QBFT side-by-side per scenario at the
 
 **Summary of recovery-scope differences:**
 
-- **OBFT and OBFTR(R=2) differ in *where* they recover, not just how much they tolerate.** OBFT's primary-vs-backup budgets (`B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay; `B_1..B_{K-1} = T_commit = 3600ms` at K=4 SSV operating point) recover via K-layer fall-through — propagation up to the full slot budget is absorbed at any backup, but the slot succeeds at a backup (deepest-confirmed-parent V, no MEV freshness). OBFTR(R=2)'s ~1500ms cross-round retention recovers at L_0 specifically via round-2 re-flood (preserves MEV freshness) at the cost of an extra round of consensus.
+- **OBFT and OBFTR(R=2) differ in *where* they recover, not just how much they tolerate.** OBFT's primary-vs-backup budgets (`B_0 = 2·BTT + RefloodDelay = 1100ms` at default RefloodDelay; `B_1..B_{K-1} = T_commit = 3600ms` at K=4 SSV operating point) recover via K-layer fall-through — propagation up to the full slot budget is absorbed at any backup, but the slot succeeds at a backup (deepest-confirmed-parent V, no MEV freshness). OBFTR(R=2)'s ~1000ms cross-round retention (at tightened per-round Δ_2 = 1·BTT) recovers at L_0 specifically via round-2 re-flood (preserves MEV freshness) at the cost of an extra round of consensus.
 - **OBFTR(R=2) > OBFT for slots where MEV preservation matters during partition tail**: round-2 re-flood at L_0 gets the freshest MEV V even when L_0's broadcast didn't propagate in round 1. OBFT loses one layer's worth of MEV per fall-through.
 - **OBFT-family > QBFT in latency and multi-leader-failure**: OBFT's healthy path is ~400ms (vs ~1600ms QBFT-SSV at recommended sizing); K-layer parallel fall-through is in-round (vs QBFT's serial round-change at ~3.6s per round-change cycle, exceeding the 4s budget at K-1=3 silent leaders).
 - **QBFT > OBFT-family in 1-1-1 equivocation and host-validity divergence**: QBFT's "round-change with fresh-V" handles these structurally; OBFT-family relies on assumption 3 and assumption 4.
@@ -746,37 +746,37 @@ The 400ms after `T_commit` decomposes as: `Δ_2` (1 BTT = 200ms; **scales with B
 
 ### Comparison vs QBFT (RT = 2000ms, 2-round target)
 
-QBFT-SSV under SSV's production round-timeout (`RT = 2s = 10 BTT`) at the same operating point (`BTT = 200ms`, `Relay_cutoff = 4000ms`, `header_submit_headroom = 100ms`), at recommended sizing (2 BTT per emission cycle — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)):
+QBFT-SSV under SSV's production round-timeout (`RT = 2s = 10 BTT`) at the same operating point (`BTT = 200ms`, `Relay_cutoff = 4000ms`, `header_submit_headroom = 100ms`), at unified tightened sizing (1 BTT per emission — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention)):
 
 | t (ms) | Event | Notes |
 |---|---|---|
 | 0 | Slot start | |
 | 150 | `RANDAO` done | |
-| 300 | `PROPOSE_1` | Round-1 leader's MEV-fetch budget = **150ms** (RANDAO + fetch must fit before PROPOSE_1; tight under 2-round target with RT=2s) |
-| 1500 | Round-1 success target | `BFT_start_1 + 6 BTT` (3 phases × 2 BTT consensus) |
-| 1900 | Round-1 + post-consensus done | `+2 BTT` for partial-sig aggregation |
-| 2300 | `RT_1` fires | Round 1 timed out; round-change |
-| 2300 | `PROPOSE_2` | Round-2 leader's MEV-fetch budget = **2150ms** (re-fetch can run during R1 timeout window) |
-| 3500 | Round-2 consensus done | `BFT_start_2 + 6 BTT` |
-| 3900 | Post-consensus done | `+2 BTT` for σ aggregation |
+| 1100 | `PROPOSE_1` | Round-1 leader's MEV-fetch budget = **950ms** (RANDAO + fetch must fit before PROPOSE_1; R2 fit constraint loosens substantially vs older 2·BTT/emission framing) |
+| 1700 | Round-1 success target | `BFT_start_1 + 3 BTT` (3 phases × 1 BTT consensus) |
+| 1900 | Round-1 + post-consensus done | `+1 BTT` for partial-sig aggregation |
+| 3100 | `RT_1` fires | Round 1 timed out; round-change |
+| 3100 | `PROPOSE_2` | Round-2 leader's MEV-fetch budget = **2950ms** (re-fetch can run during R1 timeout window) |
+| 3700 | Round-2 consensus done | `BFT_start_2 + 3 BTT` |
+| 3900 | Post-consensus done | `+1 BTT` for σ aggregation |
 | 4000 | `Relay_cutoff` | Cert + submit fit in 100ms |
 
-**MEV-freshness ranking** at this operating point (incl. partial-sigs-on-pre-agreed-V baseline) at recommended sizing throughout. Default RefloodDelay=700ms is the production schedule; the RefloodDelay=0 column gives the fully-meshed-cluster opt-out for comparison.
+**MEV-freshness ranking** at this operating point (incl. partial-sigs-on-pre-agreed-V baseline) at tightened sizing throughout. Default RefloodDelay=700ms is the production schedule; the RefloodDelay=0 column gives the fully-meshed-cluster opt-out for comparison.
 
 | Rank | Leader | MEV-fetch (default RefloodDelay=700ms) | MEV-fetch (RefloodDelay=0 opt-out) | Notes |
 |---|---|---|---|---|
-| 1 † | Partial-sigs on pre-agreed V | **3350ms** | 3350ms | Floor; only available if V is pre-agreed (no MEV / no V-disagreement) — not directly applicable to SSV proposer duty |
-| 2 | OBFT V_0 | **~2350ms** | **3050ms** | The MEV-fresh primary; the only OBFT layer that competes on MEV-fetch |
-| 3 | QBFT R2 leader | 2150ms | 2150ms | (RT=2s; only after paying the R1-timeout gap) |
-| 4 | QBFT-optimal R1 leader | 950ms | 950ms | (RT = 6 BTT variant; tighter RT recovers some R1 fetch) |
-| 5 | QBFT-SSV R1 leader | 150ms | 150ms | RT=2s eats most of slot budget under 2-round target |
+| 1 † | Partial-sigs on pre-agreed V | **3550ms** | 3550ms | Floor; only available if V is pre-agreed (no MEV / no V-disagreement) — not directly applicable to SSV proposer duty |
+| 2 | QBFT R2 leader | 2950ms | 2950ms | (RT=2s; only after paying the R1-timeout gap; widens substantially vs older 2·BTT/emission framing) |
+| 3 | OBFT V_0 | **~2350ms** | **3050ms** | The MEV-fresh primary; the only OBFT layer that competes on MEV-fetch |
+| 4 | QBFT-optimal R1 leader | 1750ms | 1750ms | (RT = 6 BTT variant; tighter RT recovers more R1 fetch) |
+| 5 | QBFT-SSV R1 leader | 950ms | 950ms | RT=2s still eats slot budget but R1 fetch grows ~6× vs older framing |
 | 6 (last) | OBFT V_1, V_2, V_3 | ~0ms | ~0ms | Backups — broadcast at BFT_start with deepest-confirmed-parent fetch; no MEV-fetch budget by design (safety nets, not MEV-fresh alternatives) |
 
-† **Partial-sigs assumes V is pre-agreed across operators** — works for non-MEV duties (attestations, sync committee) where V is determined by beacon-spec computation, but not for proposer duty where V varies per operator. Listed as the no-consensus floor: BFT consensus protocols pay 300-3200ms over this baseline to resolve V-disagreement.
+† **Partial-sigs assumes V is pre-agreed across operators** — works for non-MEV duties (attestations, sync committee) where V is determined by beacon-spec computation, but not for proposer duty where V varies per operator. Listed as the no-consensus floor: BFT consensus protocols pay 500-2600ms over this baseline to resolve V-disagreement.
 
-**Comparison vs partial-sigs floor**: OBFT V_0 pays a **~1000ms BFT-consensus tax** at default RefloodDelay (3350 − ~2350ms = ~5 BTT), or a **~300ms tax** at RefloodDelay=0 (3350 − 3050 = 1.5 BTT). The tax decomposes as: **`B_0` + post-`T_commit` budget − partial-sigs post-fetch overhead** = `(2·BTT + RefloodDelay) + 2·BTT − 2.5·BTT` (per-leader broadcast slack + the 2·BTT slot tail OBFT reserves for KindCommit fan-out, less the 2.5·BTT the partial-sigs floor reserves for sign + agg + submit). At default RefloodDelay this evaluates to 1100 + 400 − 500 = 1000ms. RefloodDelay accounts for one full IHAVE/IWANT cycle for mesh-flaky receivers; the 2·BTT shallow base covers 1 BTT P99 leader-broadcast propagation + 1 BTT IWANT round-trip. QBFT-SSV R1 pays a **3200ms tax** (>3× larger even vs OBFT at default RefloodDelay), structurally constrained by needing PROPOSE_1 to fire early enough that consensus + post-consensus + R2 retry (with RT=2s) fit the slot.
+**Comparison vs partial-sigs floor**: OBFT V_0 pays a **~1200ms BFT-consensus tax** at default RefloodDelay (3550 − ~2350ms = ~6 BTT), or a **~500ms tax** at RefloodDelay=0 (3550 − 3050 = 2.5 BTT). The tax decomposes as: **`B_0` + Δ_2 − partial-sigs post-fetch overhead** = `(2·BTT + RefloodDelay) + 1·BTT − 1.5·BTT` (per-leader broadcast slack + the 1·BTT slot tail OBFT reserves for KindCommit fan-out, less the 1.5·BTT the partial-sigs floor reserves for emit + submit). At default RefloodDelay this evaluates to 1100 + 200 − 300 = 1000ms ≈ tax bound; the additional ~200ms reflects RANDAO timing. RefloodDelay accounts for one full IHAVE/IWANT cycle for mesh-flaky receivers; the 2·BTT shallow base covers 1 BTT P99 leader-broadcast propagation + 1 BTT IWANT round-trip. QBFT-SSV R1 pays a **2600ms tax** under tightened sizing — still meaningfully larger than OBFT at default RefloodDelay, but substantially smaller than the 3200ms tax under the older framing.
 
-**Comparison OBFT vs QBFT**: at default RefloodDelay=700ms, OBFT V_0's ~2350ms MEV-fetch budget beats QBFT R2's 2150ms by **200ms** — and OBFT V_0 is the *primary* leader (always tried first; no round-timeout gap), while QBFT R2 is only reachable after R1 fails (paying the ~2s round-change cost). At RefloodDelay=0 (fully-meshed opt-out), OBFT V_0 captures **900ms more** MEV-fresh fetch time than QBFT R2 (3050 vs 2150ms). OBFT's backups (V_1..V_3) trade all MEV-fetch for maximally-wide propagation absorption (B_k = T_commit) — they're not MEV-fresh alternatives but safety nets that catch the slot when L_0's bundle doesn't reach in time. The MEV-fetch asymmetry is structural: OBFT's K-layer fall-through avoids the round-timeout gap that gates QBFT's R2 fetch.
+**Comparison OBFT vs QBFT (post-tighten reranking)**: under the older 2·BTT/emission framing, OBFT V_0 led QBFT R2 (~2350ms vs 2150ms at default RefloodDelay). Under tightened 1·BTT/emission, QBFT R2 now beats OBFT V_0 at default RefloodDelay (2950ms vs ~2350ms = 600ms ahead) — but OBFT V_0 is the *primary* leader (always tried first; no round-timeout gap), while QBFT R2 is only reachable after R1 fails (paying the ~2s round-change cost). At RefloodDelay=0 (fully-meshed opt-out), QBFT R2 lead shrinks to 100ms (2950 vs 3050). OBFT's backups (V_1..V_3) trade all MEV-fetch for maximally-wide propagation absorption (B_k = T_commit) — they're not MEV-fresh alternatives but safety nets that catch the slot when L_0's bundle doesn't reach in time. The structural tradeoff is unchanged: OBFT's primary always tries first; QBFT's R2 is conditional on R1 failure.
 
 ### Head-change handling
 
@@ -955,7 +955,7 @@ For per-scenario liveness behavior (recovery scope, mechanism, outcome) see [Liv
 **Where OBFT wins:**
 
 - **Healthy-path latency.** ~400ms vs ~1600ms QBFT-SSV at recommended sizing.
-- **Multi-leader-failure recovery.** OBFT's K-layer parallel fall-through resolves K-1 silent layers within Phase 3's reconstruction walk (sequential local decryption, no per-layer RTT). For K=4 with 3 silent leaders, OBFT recovers in ~600ms (2·BTT consensus + ~200ms ε_3 × K); QBFT round-changes 3 times serially, exceeding the 4s budget.
+- **Multi-leader-failure recovery.** OBFT's K-layer parallel fall-through resolves K-1 silent layers within Phase 3's reconstruction walk (sequential local decryption, no per-layer RTT). For K=4 with 3 silent leaders, OBFT recovers in ~800ms (3·BTT consensus + ~200ms ε_3 × K at tightened per-emission sizing); QBFT round-changes 3 times serially, exceeding the 4s budget.
 - **All-honest-NR equivocation recovery.** When byz delivers V's early enough for re-flood to spread conflicts before T_commit, all 3 honest retain ≥ 2 V's and emit NR per the equivocation rule; NR-quorum at L_0 → fall-through to L_1. Same recovery as QBFT but in single round (~400ms vs ~3.6s).
 - **Spec/EKM simplicity vs OBFTR(R≥2).** No cross-round atomicity, no L_C consensus, no per-round widening — see [§A.1](#a1--comparison-with-obftr-r--2).
 

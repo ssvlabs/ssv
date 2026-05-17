@@ -642,11 +642,11 @@ func TestSweep_DocTable(t *testing.T) {
 		bttCount int // R1-healthy consensus length, BTT units, recommended sizing
 	}
 	protos := []protoSpec{
-		{"Partial-sigs", 2},
+		{"Partial-sigs", 1},
 		{"OBFT", 3},
-		{"OBFTR R1", 6},
-		{"2abOBFT", 6},
-		{"QBFT R1", 8},
+		{"OBFTR R1", 3},
+		{"2abOBFT", 5},
+		{"QBFT R1", 4},
 	}
 
 	var b strings.Builder

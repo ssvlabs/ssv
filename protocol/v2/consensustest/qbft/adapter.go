@@ -33,16 +33,22 @@ type Protocol struct {
 	VariantName string
 
 	// BTTMultiplier scales cfg.BTT internally before deriving PhaseBudget
-	// (= 2·bttEff), and — when UseFixedRT=false — the round timeout
-	// (RT = 3 × PhaseBudget = 6·bttEff). Zero → 1.0 (no scaling).
+	// (= bttEff), and — when UseFixedRT=false — the round timeout
+	// (RT = 6 × PhaseBudget = 6·bttEff). Zero → 1.0 (no scaling).
 	// Matches the OBFT/2abOBFT variant convention so the whole protocol
 	// family shares one "loose-vs-tight" knob.
 	BTTMultiplier float64
 
 	// UseFixedRT picks the round-timeout source:
-	//   false (default) — RT = 3 × PhaseBudget (= 6·bttEff). Matches the
-	//     OBFT-family budget convention where each phase is 2·BTT. Use
-	//     for the "QBFT" research variant.
+	//   false (default) — RT = 6 × PhaseBudget (= 6·bttEff). Matches the
+	//     OBFT-family budget convention where each phase is 1·BTT (P99
+	//     propagation only — tightened to match OBFT's Δ_2 = 1·BTT).
+	//     The 6×-multiplier (vs the 3·BTT minimum "sum of consensus
+	//     phases") leaves round-change operational margin: ROUND_CHANGE
+	//     quorum + new PROPOSE (~1·BTT) + 3-phase consensus (~3·BTT) =
+	//     4·BTT minimum before the next RT fires, plus 2·BTT jitter
+	//     cushion before triggering another premature round-change.
+	//     Use for the "QBFT" research variant.
 	//   true — RT = FixedRT (= 2s when zero). Matches production SSV
 	//     QBFT (QuickTimeout in roundtimer/timer.go). Use for the
 	//     "QBFT-SSV" variant. BTTMultiplier does NOT scale FixedRT —
@@ -89,12 +95,13 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// PhaseBudget = 2·bttEff mirrors OBFT's Δ_2 convention so the two
-	// protocols compare on equal-budget-per-phase footing under the
-	// computed-RT variant. Used both for RT (computed) and for the
-	// post-consensus margin in events.go.
+	// PhaseBudget = bttEff mirrors OBFT's tightened Δ_2 = 1·BTT convention
+	// so the two protocols compare on equal-budget-per-phase footing under
+	// the computed-RT variant. Mesh-jitter / reflood absorption lives in
+	// round-timer slack (RT − sum_of_phases) rather than per-emission
+	// cushion, matching how OBFT moved reflood from Δ_2 into B_k.
 	bttEff := p.effectiveBTT(cfg.BTT)
-	phaseBudget := 2 * bttEff
+	phaseBudget := bttEff
 
 	var rt time.Duration
 	if p.UseFixedRT {
@@ -103,11 +110,15 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 			rt = defaultFixedRT
 		}
 	} else {
-		// Computed RT = 3 phases × PhaseBudget. Phases are PROPOSE,
-		// PREPARE, COMMIT; ROUND_CHANGE is a separate post-timer phase
-		// not counted in RT. At BTT=300 with multiplier=1 this is
-		// 1800ms; at BTT=200 it's 1200ms.
-		rt = 3 * phaseBudget
+		// Computed RT = 6 × PhaseBudget. Decomposes as 3·BTT minimum
+		// consensus-phase budget (PROPOSE + PREPARE + COMMIT) + 1·BTT
+		// ROUND_CHANGE preamble for the next round to start + 2·BTT
+		// jitter / processing slack before triggering a premature
+		// round-change while the next round is mid-flight. ROUND_CHANGE
+		// itself is a separate post-timer phase not directly counted in
+		// RT but absorbed by the 2·BTT slack. At BTT=200 this is 1200ms;
+		// at BTT=300 it's 1800ms.
+		rt = 6 * phaseBudget
 	}
 	maxRounds := p.MaxRounds
 	if maxRounds == 0 {
@@ -215,7 +226,7 @@ type desConfig struct {
 	Operators    []ct.OperatorID
 	BTT          time.Duration
 	RT           time.Duration
-	PhaseBudget  time.Duration // per-phase budget (= 2·BTT default); used for post-cons margin
+	PhaseBudget  time.Duration // per-phase budget (= 1·BTT default at tightened sizing); used for post-cons margin
 	MaxRounds    int
 	BFTStart     time.Duration
 	Network      ct.NetworkModel
