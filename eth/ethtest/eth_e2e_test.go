@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -53,7 +54,6 @@ func TestEthExecLayer(t *testing.T) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
-	testEnv.SetDefaultFollowDistance()
 
 	defer testEnv.shutdown()
 	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
@@ -111,7 +111,7 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 
 			//check all the events were handled correctly and block number was increased
-			require.Equal(t, blockNum-*testEnv.followDistance, lastHandledBlockNum)
+			require.Equal(t, blockNum-executionclient.FollowDistance, lastHandledBlockNum)
 			fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
 
 			// Check that operators were successfully registered
