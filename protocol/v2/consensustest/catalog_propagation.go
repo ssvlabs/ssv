@@ -123,13 +123,17 @@ var scenarioMeshFlakiness = Scenario{
 		// sized to exceed the pre-reflood-aware OBFT B_0 = 1·BTT (causing
 		// the OBFT mesh-flakiness deadlock the scenario was designed to
 		// document). Under the reflood-aware primary-vs-backup schedule
-		// (B_0 = 2·BTT + RefloodDelay for the primary; in consensustest
-		// RefloodDelay=0 so B_0 = 2·BTT), this delay no longer exceeds
-		// the primary's absorption window — the scenario now documents the
-		// *improvement* from the wider primary B_0 rather than the legacy
-		// deadlock. The QBFT/PSigs success expectations remain unchanged.
-		// To exercise the legacy deadlock pattern, use a deeper-flakiness
-		// scenario (delay > B_0 + Δ_2a + reflood-cycle).
+		// (B_0 = 2·BTT + RefloodDelay for the primary; this scenario
+		// keeps the framework default RefloodDelay=0 since it runs on
+		// DeliveryDirect — its per-(from, to) primitives lose meaning
+		// under mesh-reflood, so the production-mesh opt-in only fires
+		// on Healthy), so B_0 = 2·BTT and this 2·BTT delay no longer
+		// exceeds the primary's absorption window — the scenario now
+		// documents the *improvement* from the wider primary B_0 rather
+		// than the legacy deadlock. The QBFT/PSigs success expectations
+		// remain unchanged. To exercise the legacy deadlock pattern,
+		// use a deeper-flakiness scenario (delay > B_0 + Δ_2a + reflood-
+		// cycle).
 		//
 		// PROFILE-INVARIANCE: the override is intentionally BTT-coupled,
 		// not anchored to cfg.Network.SlowOpAnchor(). The flakiness
@@ -168,12 +172,12 @@ var scenarioMeshFlakiness = Scenario{
 	},
 	Expect: map[string]ExpectClass{
 		// OBFT: under the reflood-aware primary B_0 = 2·BTT + RefloodDelay
-		// (in consensustest RefloodDelay=0 so B_0 = 2·BTT), 2·BTT
-		// flaky-receiver delay is absorbed by L_0's primary window — flaky
-		// ops still receive V on time and σ-emit. σ-pool = N-f-byz_silent
-		// reaches qV at L_0. **Improvement** vs the pre-resize schedule
-		// where 2·BTT delay would have exceeded the old B_0 = 1·BTT and
-		// triggered the deadlock.
+		// (this scenario keeps RefloodDelay=0 default, so B_0 = 2·BTT),
+		// 2·BTT flaky-receiver delay is absorbed by L_0's primary window
+		// — flaky ops still receive V on time and σ-emit. σ-pool =
+		// N-f-byz_silent reaches qV at L_0. **Improvement** vs the
+		// pre-resize schedule where 2·BTT delay would have exceeded the
+		// old B_0 = 1·BTT and triggered the deadlock.
 		"OBFT": ExpectSuccessFastest,
 		// 2abOBFT: still misses, but via a different shape than under the
 		// pre-resize schedule. Flaky receivers DO observe V at L_0 (Phase-1

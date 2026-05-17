@@ -101,6 +101,36 @@ func TestMeshHealthy_RespondsToSigma(t *testing.T) {
 		loDec, loMax, hiDec, hiMax)
 }
 
+// TestWrapBaselineForInstability_PreservesHealthyMeshSettings pins the
+// inheritance contract that the production-mesh scenario design relies
+// on: Healthy's Apply sets cfg.RefloodDelay = 700ms and
+// cfg.Mesh.Gossip.Enabled = true, and WrapBaselineForInstability must
+// preserve both across all instability levels. The wrap currently only
+// mutates cfg.Network and cfg.Mesh.HopDelay (sub-field writes); a
+// future rebuild that wholesale-reassigned cfg.Mesh or reset
+// cfg.RefloodDelay would silently strip Healthy's production-mesh
+// settings — exactly the class of regression that motivated
+// CloneScenarioWith. Direct field-level assertion locks this in.
+func TestWrapBaselineForInstability_PreservesHealthyMeshSettings(t *testing.T) {
+	healthy := ct.Catalog[0]
+	require.Equal(t, "Healthy", healthy.Name)
+	base := ct.DefaultProposerDutyConfig(300 * time.Millisecond)
+	for _, level := range ct.InstabilityLevels {
+		level := level
+		t.Run(level.Name, func(t *testing.T) {
+			wrapped := ct.WrapBaselineForInstability(healthy, level)
+			cfg := base
+			cfg.Delivery = wrapped.Delivery
+			require.NotNil(t, wrapped.Apply)
+			wrapped.Apply(&cfg)
+			require.Equal(t, 700*time.Millisecond, cfg.RefloodDelay,
+				"RefloodDelay must survive wrap at level=%s", level.Name)
+			require.True(t, cfg.Mesh.Gossip.Enabled,
+				"Mesh.Gossip.Enabled must survive wrap at level=%s", level.Name)
+		})
+	}
+}
+
 // TestMeshHealthy_RespondsToInstability — the instability wrap should
 // degrade mesh-mode Healthy as the level rises. Phase B/C's plan calls
 // for high → 10-30% drop and extreme → 0-30% success range. We assert a
@@ -108,6 +138,16 @@ func TestMeshHealthy_RespondsToSigma(t *testing.T) {
 // level=none) to avoid pinning specific tuning numbers, but a
 // regression where the wrap silently fails to apply to the mesh path
 // would still fail this test.
+//
+// Production-mesh isolation: Healthy's Apply enables two recovery
+// features that mask mesh-transport miss-events — gossip backstop
+// (cfg.Mesh.Gossip.Enabled = true) and a RefloodDelay-aware primary
+// broadcast budget (cfg.RefloodDelay = 700ms widens B_0 from 2·BTT to
+// 2·BTT + 700ms, absorbing the instability-induced arrival jitter). Both
+// are correct Healthy-scenario behavior but would let extreme
+// instability decide 100%, defeating this test's premise. Disable both
+// locally so the test stays focused on its narrow assertion (wrap
+// plumbing reaches the eager-mesh path).
 func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 	const iters = 20
 	btt := 300 * time.Millisecond
@@ -129,6 +169,9 @@ func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 			if wrapped.Apply != nil {
 				wrapped.Apply(&cfg)
 			}
+			// Disable gossip + RefloodDelay locally — see test doc on isolation.
+			cfg.Mesh.Gossip.Enabled = false
+			cfg.RefloodDelay = 0
 			out, err := obftadapter.Protocol{}.Run(cfg)
 			require.NoError(t, err)
 			if out.Decided {
@@ -170,6 +213,12 @@ func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 // while staying robust to seed-noise-driven cross-BTT drift in the
 // proposer-duty config parameters (which are still BTT-derived even
 // though the slow-op anchor isn't).
+//
+// Production-mesh isolation: Healthy's Apply enables the lazy-push
+// gossip backstop AND sets cfg.RefloodDelay=700ms (widening B_0 by
+// 700ms). Both would mask the instability-induced miss-events this
+// test relies on for non-trivial BTT-invariance assertions, so both
+// are disabled locally after Apply.
 func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
 	const iters = 40
 	btts := []time.Duration{
@@ -198,6 +247,9 @@ func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
 			if wrapped.Apply != nil {
 				wrapped.Apply(&c)
 			}
+			// Disable gossip + RefloodDelay locally — see test doc on isolation.
+			c.Mesh.Gossip.Enabled = false
+			c.RefloodDelay = 0
 			out, err := qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true}.Run(c)
 			require.NoError(t, err)
 			if out.Decided {
