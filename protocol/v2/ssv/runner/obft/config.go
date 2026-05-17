@@ -105,7 +105,6 @@ const (
 // (the operator/deployment decides whether to use it instead of K ≥ f+2).
 const (
 	primaryFetchDefault        = 153 * time.Millisecond
-	deepestFetchDefault        = 0
 	primaryBudgetDefaultBTT100 = 200 // 2.0 BTT — paired with +RefloodDelay added at compute time
 )
 
@@ -146,20 +145,23 @@ type ConfigOverrides struct {
 	JitterBuffer time.Duration
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
-	// defaults are used (tabulated in defaultLayerSchedules — see the
-	// per-K schedule for production values at the current operating
-	// point). Length must match K (or zero/nil to use defaults).
+	// defaults are used: L_0 fetches just past RANDAO_done
+	// (primaryFetchDefault = 153ms); backups L_1..L_{K-1} all fetch at
+	// slot start (FetchAt = 0). Length must match K (or zero/nil to use
+	// defaults).
 	FetchAt []time.Duration
 
 	// BroadcastBudget overrides the default per-layer absorption windows
 	// `B_k` (T_commit-anchored, per spec §Setting). When nil,
 	// ConfigForCluster substitutes DefaultBroadcastBudgetSchedule(K, BTT,
-	// T_commit) which produces a non-decreasing schedule conforming to
-	// spec (K=4 Config A: [1·BTT, 1.5·BTT, 2.5·BTT, T_commit]; capped
-	// at T_commit when shallow multiples overshoot at degraded BTT).
-	// obft.Config.Validate requires every layer's BroadcastBudget > 0
-	// — no all-zero fallback. When set, length must match K and values
-	// must be non-decreasing in layer index.
+	// RefloodDelay, T_commit) which produces a non-decreasing schedule
+	// conforming to spec (K=4 Config A: B_0 = 2·BTT + RefloodDelay =
+	// 1100ms; B_1..B_3 = T_commit = 3600ms — backups broadcast at
+	// BFT_start). At degraded operating points B_0 caps at T_commit so
+	// the schedule stays non-decreasing. obft.Config.Validate requires
+	// every layer's BroadcastBudget > 0 — no all-zero fallback. When
+	// set, length must match K and values must be non-decreasing in
+	// layer index.
 	BroadcastBudget []time.Duration
 }
 
