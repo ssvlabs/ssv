@@ -63,11 +63,11 @@ func NoQuorumTag(clusterID [32]byte, height obft.Height, layer int) []byte {
 // fetch their candidate value, and how much absorption budget the layer's
 // receivers are given.
 //
-// Per spec §Setting, fetch times are non-increasing in layer index:
-// Layers[0] is the primary L_0 (latest fetch — picks up MEV-late values),
-// Layers[K-1] is the deepest backup L_{K-1} (earliest fetch — fetches from
-// a deeper-confirmed parent). The asymmetric schedule is what gives backups
-// re-org resistance while primary leaders capture late MEV.
+// Per spec §Setting: Layers[0] is the primary L_0 (latest fetch — picks up
+// MEV-late values), Layers[1..K-1] are backups that all fetch from a
+// deepest-confirmed parent at slot start and broadcast at BFT_start. Only
+// L_0 carries MEV-fresh fetch; backups are last-resort safety nets that
+// trade MEV freshness for maximally-wide propagation absorption.
 type LayerSpec struct {
 	Leader  OperatorID
 	FetchAt time.Duration
@@ -77,10 +77,13 @@ type LayerSpec struct {
 	// Phase-1 bundle by `T_broadcast_max_k = max(0, T_commit − B_k)` so
 	// the bundle's first-observation at any honest receiver lands by
 	// `T_commit` under partial-synchrony assumptions for that layer's
-	// propagation budget. Per spec `B_0 < B_1 < ... < B_{K-1}` — deeper
-	// layers get larger budgets (wider absorption); the primary gets the
-	// smallest (max MEV-fetch headroom, willing to fall through to L_1+
-	// if propagation slips).
+	// propagation budget.
+	//
+	// Spec recommends `B_0 = 2·BTT + RefloodDelay` (primary, MEV-fresh)
+	// and `B_1..B_{K-1} = T_commit` (backups broadcast at BFT_start).
+	// `B_0 ≤ B_1 = ... = B_{K-1}` — backups all share the maximally-wide
+	// absorption budget; the primary has a tighter budget for MEV-fetch
+	// headroom and falls through to a backup if propagation slips.
 	//
 	// B_k is a *target*, not a hard runtime cap. The only runtime
 	// acceptance gate is `T_commit` (peers admit bundles first-observed
@@ -88,25 +91,22 @@ type LayerSpec struct {
 	// from). A leader that cannot meet `T_broadcast_max_k` broadcasts
 	// best-effort (broadcast as soon as the bundle is ready). When
 	// `B_k ≥ T_commit`, `T_broadcast_max_k` clamps at 0 — the leader's
-	// target broadcast time is slot start. The recommended deepest
-	// `B_{K-1} = T_commit` deliberately hits this clamp ("earliest
-	// possible" deepest broadcast).
+	// target broadcast time is slot start. `B_k = T_commit` for backups
+	// deliberately hits this clamp ("earliest possible" backup broadcast).
 	//
 	// Spec K=4 Config A (BTT=200ms, T_commit=3600ms, RefloodDelay=700ms):
-	// B_k values are 2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit
-	// (= 1100/1300/1500/3600 ms). The deepest is "earliest possible" —
-	// leader's target broadcast clamps to slot start. Each shallow B_k
-	// decomposes as (k+2)·BTT (1·BTT P99 propagation + 1·BTT IWANT
-	// round-trip + (k)·BTT per-deeper-layer jitter cushion) + RefloodDelay
-	// (one full IHAVE/IWANT cycle), per spec §Setting. The decomposition
-	// is informative; this field is the single T_commit-anchored target.
+	// B_k values are [1100, 3600, 3600, 3600]ms. The primary L_0 absorbs
+	// real propagation up to 2·BTT + RefloodDelay (one IWANT round-trip
+	// plus one IHAVE/IWANT reflood cycle for mesh-flaky receivers); the
+	// backups broadcast at slot start and absorb up to the entire commit
+	// budget.
 	//
 	// Required: must be > 0 on every layer. Config.Validate rejects
 	// zero/negative values and decreasing-in-k schedules (equal adjacent
-	// budgets are accepted — multiple layers may share the BFT_start
-	// clamp at degraded operating points; see spec §Setting). Use
-	// DefaultBroadcastBudget(K, BTT, T_commit) for the spec-recommended
-	// staggered schedule when constructing a Config manually.
+	// budgets are accepted — backups all tie at T_commit; see spec
+	// §Setting). Use DefaultBroadcastBudget(K, BTT, RefloodDelay,
+	// T_commit) for the spec-recommended schedule when constructing a
+	// Config manually.
 	BroadcastBudget time.Duration
 }
 
@@ -205,36 +205,32 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 	return 0
 }
 
-// DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
-// for K layers at the given BTT, RefloodDelay, and T_commit. Per spec
-// §Setting, B_k is sized to accommodate one gossipsub IHAVE/IWANT reflood
-// cycle when initial eager-push fails to reach all honest peers:
+// DefaultBroadcastBudget returns a spec-conforming B_k schedule for K layers
+// at the given BTT, RefloodDelay, and T_commit. Per spec §Setting, the
+// primary L_0's B_0 is sized to accommodate one gossipsub IHAVE/IWANT reflood
+// cycle when initial eager-push fails to reach all honest peers; backups
+// L_1..L_{K-1} all broadcast at BFT_start (B_k = T_commit) with the
+// deepest-confirmed-parent fetch strategy:
 //
-//	B_k_shallow = (k+2)·BTT + RefloodDelay  for k ∈ [0, K-2]
-//	B_{K-1}     = T_commit                  (deepest broadcasts at BFT_start)
+//	B_0           = 2·BTT + RefloodDelay  (primary, MEV-fresh)
+//	B_1..B_{K-1}  = T_commit              (backups broadcast at BFT_start)
 //
 // `RefloodDelay` is the worst-case gossipsub-lazy-push latency before a
 // retransmission cycle completes — bounded by the cluster's HeartbeatInterval.
-// At RefloodDelay = 0 the schedule collapses to {2, 3, 4}·BTT (the "fully-
+// At RefloodDelay = 0 the primary budget collapses to 2·BTT (the "fully-
 // meshed cluster, eager push reliable" assumption); production SSV
 // deployments use RefloodDelay = 700ms (SSV's gossipsub HeartbeatInterval).
 //
-// At K=4 returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit]. At K=3 returns
-// [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, T_commit]. At K=2 returns [2·BTT+RefloodDelay, T_commit]. For
-// K>4 the first three layers stay at 2 / 3 / 4 BTT + RefloodDelay and the intermediate
-// layers (k = 3, ..., K-2) interpolate linearly in duration space from
-// 4·BTT + RefloodDelay (at L_2) to T_commit (at L_{K-1}).
+// At K=4 returns [2·BTT+RefloodDelay, T_commit, T_commit, T_commit]. At K=3
+// returns [2·BTT+RefloodDelay, T_commit, T_commit]. At K=2 returns
+// [2·BTT+RefloodDelay, T_commit]. At K=1 returns [T_commit] (degenerate
+// single-layer case — L_0 IS the deepest).
 //
-// At extreme degraded operating points where T_commit shrinks below the
-// canonical shallow multiples (e.g. T_commit ≤ 4·BTT + RefloodDelay at K≥4),
-// the helper still returns a schedule — the shallow B_k values can exceed
-// T_commit. The protocol's runtime `T_broadcast_max_k = max(BFT_start,
-// T_commit − B_k)` clamps those layers' targets at BFT_start, so the
-// configuration remains valid (fall-through depth shrinks but the
-// cluster still operates). Callers that want the canonical staggered
-// shape preserved can either widen T_commit (loosen Δ_2 / ε_3 / header
-// headroom), lower RefloodDelay for denser meshes, or supply their own
-// per-layer schedule.
+// At extreme degraded operating points where T_commit shrinks below
+// 2·BTT + RefloodDelay, B_0 can exceed T_commit. The protocol's runtime
+// `T_broadcast_max_k = max(BFT_start, T_commit − B_k)` clamps the primary's
+// target at BFT_start, so the configuration remains valid (the primary
+// becomes a redundant peer of the backups; cluster still operates).
 //
 // Callers that need deployment-specific tunings (e.g. the SSV adapter's
 // FetchAt-paired schedule) should provide their own per-layer values; this
@@ -251,52 +247,20 @@ func DefaultBroadcastBudget(K int, btt, refloodDelay, tCommit time.Duration) ([]
 	if refloodDelay < 0 {
 		return nil, fmt.Errorf("obft: DefaultBroadcastBudget RefloodDelay=%v must be >= 0", refloodDelay)
 	}
-	// shallow returns (k+2)*BTT + RefloodDelay for shallow layer k.
-	shallow := func(k int) time.Duration {
-		return time.Duration(k+2)*btt + refloodDelay
-	}
 	out := make([]time.Duration, K)
-	switch K {
-	case 1:
+	if K == 1 {
 		out[0] = tCommit
-	case 2:
-		out[0] = shallow(0)
-		out[1] = tCommit
-	case 3:
-		out[0] = shallow(0)
-		out[1] = shallow(1)
-		out[2] = tCommit
-	case 4:
-		out[0] = shallow(0)
-		out[1] = shallow(1)
-		out[2] = shallow(2)
-		out[3] = tCommit
-	default:
-		// First three layers at 2 / 3 / 4 BTT + RefloodDelay; intermediate layers
-		// interpolate linearly in duration space from 4·BTT + RefloodDelay (at L_2)
-		// to T_commit (at L_{K-1}).
-		out[0] = shallow(0)
-		out[1] = shallow(1)
-		out[2] = shallow(2)
-		out[K-1] = tCommit
-		span := tCommit - out[2]
-		steps := K - 3
-		for k := 3; k < K-1; k++ {
-			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
-		}
+		return out, nil
 	}
-	// Cap each B_k at T_commit so the schedule stays non-decreasing even
-	// at degraded operating points where the canonical staggered shallow
-	// multiples (or RefloodDelay-inflated values) overshoot. Capped layers
-	// share `T_broadcast_max_k = max(BFT_start, T_commit − B_k) = BFT_start`
-	// — multiple layers may collide at BFT_start without safety impact.
-	// The deepest layer is already T_commit by construction; the cap turns
-	// degraded shallow layers into "broadcast at BFT_start" peers of the
-	// deepest.
-	for k := 0; k < K; k++ {
-		if out[k] > tCommit {
-			out[k] = tCommit
-		}
+	// L_0: primary with reflood-aware budget. Cap at T_commit (degraded case).
+	b0 := 2*btt + refloodDelay
+	if b0 > tCommit {
+		b0 = tCommit
+	}
+	out[0] = b0
+	// L_1..L_{K-1}: all backups broadcast at BFT_start (B_k = T_commit).
+	for k := 1; k < K; k++ {
+		out[k] = tCommit
 	}
 	return out, nil
 }

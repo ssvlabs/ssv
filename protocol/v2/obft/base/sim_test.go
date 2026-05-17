@@ -58,9 +58,10 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 		pubKeyShares[op] = []byte{byte(op)}
 	}
 
-	// Per-layer FetchAt: T_{K-1} earliest (= 0, deepest target clamps), T_0
-	// latest. Shallower layers use 50ms decrements so the schedule is
-	// monotonically decreasing in k.
+	// Per-layer FetchAt: L_0 (primary) latest = 500ms; L_1..L_{K-1} (backups)
+	// all fetch at slot start (FetchAt=0) per the simplified backup
+	// schedule — B_k = T_commit for backups clamps T_broadcast_max_k to
+	// BFT_start, so backup FetchAt must be 0.
 	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
 	const tCommit = 1500 * time.Millisecond
 	// RefloodDelay=0 in sim tests: idealized eager-push delivery; mesh-reflood
@@ -71,9 +72,9 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 	layers := make([]LayerSpec, K)
 	for k := 0; k < K; k++ {
 		var fetchAt time.Duration
-		if k < K-1 {
-			fetchAt = 500*time.Millisecond - time.Duration(k)*50*time.Millisecond
-		} // deepest leaves fetchAt = 0
+		if k == 0 {
+			fetchAt = 500 * time.Millisecond
+		} // backups (k>0) and degenerate K=1 case both leave fetchAt = 0
 		layers[k] = LayerSpec{
 			Leader:          operators[k%n],
 			FetchAt:         fetchAt,

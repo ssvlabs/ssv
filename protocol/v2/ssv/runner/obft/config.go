@@ -67,87 +67,42 @@ const (
 	DefaultRefloodDelay = 700 * time.Millisecond
 )
 
-// Per-layer defaults for the asymmetric staggered schedule (spec §Setting,
-// §Application / Timing budget at Config A):
+// Per-layer schedule defaults (spec §Setting, §Application / Timing budget
+// at Config A):
 //
-//   - fetchAt is when the leader's fetch goroutine wakes and starts the
-//     iterative-fetch poll loop (Scheduler.FetchAndBroadcastBundle). Spec
-//     §Application: leaders poll relay throughout [RANDAO_done,
-//     T_broadcast_max[k]] and broadcast the freshest at deadline. Default
-//     fetchAt values are clustered just past RANDAO_done (~150ms) with
-//     small per-layer staggering preserving the spec's "deeper layer
-//     fetches from deeper-confirmed parent" intuition (the choice of
-//     parent is a hook concern; fetchAt only sets when polling starts).
-//     The 1ms-per-layer staggering keeps the schedule strict-decreasing
-//     at typical operating points even though obft.Config.Validate only
-//     requires non-increasing — useful as a self-documenting hint that
-//     L_k+1 fetches earlier than L_k. FetchAt is RANDAO-anchored
-//     (absolute), not BTT-scaled.
-//   - budgetBTT100 holds the per-layer propagation budgets B_k for the
-//     *shallow* layers (k ∈ [0, K-2]) in BTT-hundredths (so 100 = 1 BTT,
-//     150 = 1.5 BTT, etc.); strictly increasing in k under typical
-//     operating points, capped at T_commit at degraded operating points.
-//     The deepest layer is *not* stored here — its budget is always
-//     T_commit ("earliest possible": deepest leader broadcasts at
-//     BFT_start). Stored as multipliers so the schedule scales with BTT
-//     — at BTT=200ms the K=4 shallow budgets resolve to 200/300/500ms;
-//     at BTT=400ms they'd be 400/600/1000ms. Per spec §Setting line 45's
-//     recommended 1/1.5/2.5 BTT for the shallow K-1 layers; deepest is
-//     `T_commit`.
+//   - L_0 (primary) is MEV-fresh: fetches from RANDAO_done onward (~150ms
+//     past slot start) and broadcasts by `T_broadcast_max_0 = T_commit −
+//     B_0` where `B_0 = 2·BTT + RefloodDelay` covers one IWANT round-trip
+//     plus one IHAVE/IWANT reflood cycle for mesh-flaky receivers.
+//   - L_1..L_{K-1} (backups) are last-resort safety nets: each fetches at
+//     slot start from a deepest-confirmed parent (FetchAt = 0) and
+//     broadcasts at BFT_start (B_k = T_commit clamps T_broadcast_max_k to
+//     BFT_start). They trade MEV-fresh fetch for the maximally-wide
+//     propagation absorption window — the entire commit budget.
+//
+// At Config A (BTT = 200ms, TCommit = 3600ms, RefloodDelay = 700ms) the
+// K=4 schedule resolves to:
+//   - budget  = [B_0=1100ms, T_commit=3600ms, T_commit, T_commit].
+//   - fetchAt = [153ms, 0, 0, 0]ms — L_0 fetches just past RANDAO_done;
+//     backups fetch at slot start.
+//   - V_0 MEV-fetch budget at iterative-fetch = T_broadcast_max[0] −
+//     fetchAt[0] − buildBuffer = (3600 − 1100) − 153 − 10 = 2337ms.
+//   - V_1..V_3 MEV-fetch ~ 0ms (deepest-confirmed-parent vanilla payloads).
+//
+// FetchAt is RANDAO-anchored (absolute), not BTT-scaled. The primary's
+// 153ms is a small staggering past RANDAO_done; backups fetch at 0 so
+// the fetch + broadcast both fit in [slot_start, BFT_start].
 //
 // Constraints: fetchAt[k] ≤ TCommit − budget[k] for every k (each leader's
 // poll window must fit before its T_broadcast_max — enforced by Validate);
-// budget[K-1] ≥ 2·BTT BFT-min (trivially satisfied since deepest = T_commit
+// budget[K-1] ≥ 2·BTT BFT-min (trivially satisfied since backups = T_commit
 // and T_commit ≥ 2·BTT is independently enforced).
 //
-// At Config A (BTT = 200ms, TCommit = 3600ms, RefloodDelay = 700ms)
-// the K=4 schedule resolves to:
-//   - budget  = [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit] =
-//     [1100, 1300, 1500, 3600]ms.
-//   - fetchAt = [153, 152, 151, 0]ms — shallow layers clustered at
-//     RANDAO_done with 1ms-per-layer staggering (a self-documenting
-//     hint that L_{k+1} fetches before L_k; obft.Config.Validate only
-//     requires non-increasing, so the tight stagger is convention not
-//     requirement). The deepest layer at 0 because B_{K-1} = T_commit
-//     clamps T_broadcast_max_{K-1} to BFT_start (iterative-fetch uses
-//     the full window per layer regardless of fetchAt order).
-//   - V_0 MEV-fetch budget at iterative-fetch = T_broadcast_max[0] −
-//     fetchAt[0] − buildBuffer = (3600 − 1100) − 153 − 10 = 2337ms.
-//
-// For K>4 (n=7, n=10, n=13 deployments) the first three shallow layers stay
-// at 1 / 1.5 / 2.5 BTT and intermediate layers interpolate linearly from
-// 2.5·BTT (at L_2) to T_commit (at L_{K-1}).
+// Generalizes to K>4 (n=7, n=10, n=13) without per-K tables: L_0 uses the
+// primary defaults; all backups use FetchAt=0 + B_k=T_commit.
 //
 // K=2 is the BFT-liveness minimum at f=1; per spec §Setting it is accepted
 // (the operator/deployment decides whether to use it instead of K ≥ f+2).
-var defaultLayerSchedules = map[int]struct {
-	fetchAt             []time.Duration
-	shallowBudgetBTT100 []int // BTT-hundredths for L_0 .. L_{K-2}; RefloodDelay is added on top; deepest is always T_commit
-}{
-	2: {
-		fetchAt:             []time.Duration{151 * time.Millisecond, 0},
-		shallowBudgetBTT100: []int{200}, // 2.0 BTT (L_0) + RefloodDelay; deepest L_1 = T_commit
-	},
-	3: {
-		fetchAt:             []time.Duration{152 * time.Millisecond, 151 * time.Millisecond, 0},
-		shallowBudgetBTT100: []int{200, 300}, // 2.0, 3.0 BTT (L_0, L_1) + RefloodDelay; deepest L_2 = T_commit
-	},
-	4: {
-		fetchAt:             []time.Duration{153 * time.Millisecond, 152 * time.Millisecond, 151 * time.Millisecond, 0},
-		shallowBudgetBTT100: []int{200, 300, 400}, // 2.0, 3.0, 4.0 BTT (L_0..L_2) + RefloodDelay; deepest L_3 = T_commit
-	},
-}
-
-// Endpoint defaults used for K>4 linear interpolation. Match the K=4 L_0
-// and deepest entries in defaultLayerSchedules. The deepest FetchAt is 0
-// because B_{K-1} = T_commit clamps T_broadcast_max_{K-1} to BFT_start;
-// shallow FetchAt endpoints are absolute (RANDAO-anchored). BroadcastBudget
-// L_0 endpoint is in BTT-hundredths so it scales with deployment BTT; the
-// deepest budget endpoint is always T_commit (not represented as a BTT
-// multiplier).
-//
-// Drift from defaultLayerSchedules[4] is guarded by
-// TestDefaultBroadcastBudgetSchedule_EndpointConstantMatchK4 in config_test.go.
 const (
 	primaryFetchDefault        = 153 * time.Millisecond
 	deepestFetchDefault        = 0
@@ -279,102 +234,52 @@ func (o *ConfigOverrides) tCommit() time.Duration {
 	return o.relayCutoff() - o.headerSubmitHeadroom() - o.jitterBuffer() - o.eps3() - o.delta2()
 }
 
-// interpolatedDurationSchedule returns a length-K slice of durations running
-// linearly between the L_0 endpoint (k=0) and the deepest endpoint (k=K-1).
-// Direction depends on the values: FetchAt is monotonically decreasing
-// (l0 > deepest). Used as the K>4 fallback for FetchAt.
-func interpolatedDurationSchedule(K int, l0, deepest time.Duration) []time.Duration {
-	out := make([]time.Duration, K)
-	step := (l0 - deepest) / time.Duration(K-1)
-	for k := 0; k < K; k++ {
-		out[k] = l0 - time.Duration(k)*step
-	}
-	return out
-}
-
-// interpolatedBudgetSchedule returns a length-K slice with the L_0 endpoint
-// expressed in BTT-hundredths (scaled to BTT internally, plus refloodDelay
-// added on top) and the deepest endpoint as an absolute duration (T_commit).
-// Output is monotonically increasing. Used as the K>4 fallback for
-// BroadcastBudget.
+// defaultFetchSchedule returns the K-tier per-layer FetchAt schedule per
+// spec §Setting / §Application: L_0 (primary) fetches just past
+// RANDAO_done; L_1..L_{K-1} (backups) all fetch at slot start from the
+// deepest-confirmed parent. FetchAt is RANDAO-anchored (absolute, not
+// BTT-scaled).
 //
-// The first three shallow layers stay at spec values (2·BTT, 3·BTT, 4·BTT)
-// each PLUS refloodDelay; intermediate layers (k = 3, ..., K-2) interpolate
-// linearly in duration space from 4·BTT + refloodDelay (at L_2) to deepest
-// (at L_{K-1}).
-func interpolatedBudgetSchedule(K int, l0BTT100 int, refloodDelay, deepest, btt time.Duration) []time.Duration {
-	out := make([]time.Duration, K)
-	// Shallow spec values for k ∈ {0, 1, 2} — each = BTT-multiple + refloodDelay.
-	out[0] = btt*time.Duration(l0BTT100)/100 + refloodDelay
-	if K >= 2 {
-		out[K-1] = deepest
-	}
-	if K >= 3 {
-		out[1] = btt*300/100 + refloodDelay // 3 BTT + RefloodDelay
-		out[2] = btt*400/100 + refloodDelay // 4 BTT + RefloodDelay
-	}
-	// Intermediate layers between L_2 and L_{K-1} interpolate in duration
-	// space (the deepest is absolute T_commit, not a BTT multiple).
-	if K > 4 {
-		span := deepest - out[2]
-		steps := K - 3
-		for k := 3; k < K-1; k++ {
-			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
-		}
-	}
-	return out
-}
-
-// defaultFetchSchedule returns the K-tier per-layer FetchAt schedule.
-// Strict-decreasing at typical operating points (1ms-per-layer staggering
-// as a self-documenting hint); the underlying obft.Config.Validate only
-// requires non-increasing.
-//
-// For K=2 (BFT-liveness minimum at f=1), K=3 and K=4, returns the tabulated
-// defaults. For K>4 (n=7, n=10, n=13 deployments), interpolates linearly
-// from primary to deepest.
-//
-// FetchAt is RANDAO-anchored (absolute, not BTT-scaled).
+// For K=1 returns [primaryFetchDefault] (degenerate single-layer case).
+// For K≥2 returns [primaryFetchDefault, 0, ..., 0].
 func defaultFetchSchedule(K int) []time.Duration {
-	if s, ok := defaultLayerSchedules[K]; ok {
-		return append([]time.Duration{}, s.fetchAt...)
-	}
-	return interpolatedDurationSchedule(K, primaryFetchDefault, deepestFetchDefault)
+	out := make([]time.Duration, K)
+	out[0] = primaryFetchDefault
+	// Backups all fetch at slot start (FetchAt = 0). No-op since make()
+	// already zero-initializes.
+	return out
 }
 
 // DefaultBroadcastBudgetSchedule returns the per-layer T_commit-anchored
 // absorption windows paired with defaultFetchSchedule. Implements the
-// reflood-aware staggered design from spec §Setting:
+// post-tighten spec §Setting design:
 //
-//	B_k_shallow = (k+2)·BTT + RefloodDelay  for k ∈ [0, K-2]
-//	B_{K-1}     = T_commit                  (deepest broadcasts at BFT_start)
+//	B_0           = 2·BTT + RefloodDelay  (primary, MEV-fresh)
+//	B_1..B_{K-1}  = T_commit              (backups broadcast at BFT_start)
 //
 // where `RefloodDelay` is the worst-case gossipsub IHAVE/IWANT reflood
 // latency (bounded by HeartbeatInterval; defaults to 700ms for SSV
-// deployments). The base {2, 3, 4}·BTT multipliers absorb propagation +
-// the +1·BTT-per-layer jitter cushion that gives deeper layers more
-// headroom; the additive RefloodDelay accommodates one full reflood cycle
-// when initial eager-push fails to reach all honest peers.
+// deployments). The primary's 2·BTT base absorbs propagation (1·BTT P99
+// + 1·BTT IWANT round-trip); the additive RefloodDelay accommodates one
+// full reflood cycle when initial eager-push fails to reach all honest
+// peers. Backups trade MEV-fresh fetch for the maximally-wide propagation
+// absorption window — the entire commit budget.
 //
-// For K=2 returns [2·BTT+RefloodDelay, T_commit] (BFT-liveness minimum at f=1).
-// For K=3 returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, T_commit]. For K=4 returns
-// [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit]. For K>4 the first three
-// shallow layers stay at 2 / 3 / 4 BTT (+ RefloodDelay) and intermediate
-// layers interpolate linearly in duration space from 4·BTT+RefloodDelay to T_commit
-// at L_{K-1}.
+// For K=1 returns [T_commit] (degenerate single-layer case — primary IS
+// deepest). For K≥2 returns [2·BTT+RefloodDelay, T_commit, ..., T_commit].
 //
-// At degraded operating points where the canonical staggered shallow
-// multiples (or RefloodDelay-inflated values) overshoot T_commit, shallow
-// B_k entries are capped at T_commit so the schedule stays non-decreasing.
-// Capped layers share `T_broadcast_max_k = max(BFT_start, T_commit − B_k)
-// = BFT_start` — multiple layers may collide at BFT_start without safety
-// impact. Operators who want the canonical staggered shape preserved can
-// either widen T_commit (loosen Δ_2 / ε_3 / header headroom), lower
-// RefloodDelay for denser meshes, or supply a custom schedule.
+// At extreme degraded operating points where T_commit shrinks below
+// 2·BTT + RefloodDelay, B_0 is capped at T_commit so the schedule stays
+// non-decreasing. The primary's target then clamps at BFT_start (same as
+// the backups), and the primary becomes a redundant peer of the backups
+// — cluster still operates. Operators who want the primary's MEV-fetch
+// headroom preserved can widen T_commit (loosen Δ_2 / ε_3 / header
+// headroom), lower RefloodDelay for denser meshes, or supply a custom
+// schedule.
 //
 // Spec example values at BTT=200ms, RefloodDelay=700ms, T_commit=3600ms
-// (Config A): K=4 → [1100, 1300, 1500, 3600]ms. At BTT=200ms,
-// RefloodDelay=0 (fully-meshed cluster): K=4 → [400, 600, 800, 3600]ms.
+// (Config A): K=4 → [1100, 3600, 3600, 3600]ms. At BTT=200ms,
+// RefloodDelay=0 (fully-meshed cluster): K=4 → [400, 3600, 3600, 3600]ms.
 func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule K=%d must be ≥ 1", K)
@@ -385,23 +290,20 @@ func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Durat
 	if refloodDelay < 0 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule RefloodDelay=%v must be >= 0", refloodDelay)
 	}
-	var out []time.Duration
-	if s, ok := defaultLayerSchedules[K]; ok {
-		out = make([]time.Duration, K)
-		for k, m := range s.shallowBudgetBTT100 {
-			out[k] = btt*time.Duration(m)/100 + refloodDelay
-		}
-		out[K-1] = tCommit
-	} else {
-		out = interpolatedBudgetSchedule(K, primaryBudgetDefaultBTT100, refloodDelay, tCommit, btt)
+	out := make([]time.Duration, K)
+	if K == 1 {
+		out[0] = tCommit
+		return out, nil
 	}
-	// Cap each B_k at T_commit so the schedule stays non-decreasing even
-	// at degraded operating points where the shallow multiples overshoot.
-	// Capped layers all clamp to BFT_start at runtime — see func doc.
-	for k := 0; k < K; k++ {
-		if out[k] > tCommit {
-			out[k] = tCommit
-		}
+	// L_0: primary with reflood-aware budget. Cap at T_commit (degraded case).
+	b0 := btt*time.Duration(primaryBudgetDefaultBTT100)/100 + refloodDelay
+	if b0 > tCommit {
+		b0 = tCommit
+	}
+	out[0] = b0
+	// L_1..L_{K-1}: all backups broadcast at BFT_start (B_k = T_commit).
+	for k := 1; k < K; k++ {
+		out[k] = tCommit
 	}
 	return out, nil
 }

@@ -26,8 +26,9 @@ import (
 
 // compressedTestSchedule returns the (BroadcastBudget, FetchAt) pair for the
 // compressed-timing test fixtures (TCommit=200ms / BTT=30ms) using the
-// spec-default budget schedule. Deepest B_3 = T_commit ("earliest possible"
-// per spec §Setting); FetchAt for the deepest layer is therefore 0.
+// spec-default budget schedule. Only L_0 has a tighter budget (B_0 = 2·BTT);
+// backups L_1..L_3 all = T_commit ("earliest possible" per spec §Setting);
+// FetchAt for backups is therefore 0.
 func compressedTestSchedule(t *testing.T) (broadcastBudget, fetchAt []time.Duration) {
 	t.Helper()
 	var err error
@@ -37,14 +38,14 @@ func compressedTestSchedule(t *testing.T) (broadcastBudget, fetchAt []time.Durat
 	// scale BTT and tCommit values.
 	broadcastBudget, err = DefaultBroadcastBudgetSchedule(4, 30*time.Millisecond, 0, 200*time.Millisecond)
 	require.NoError(t, err)
-	// Under {2, 3, 4}·BTT at BTT=30ms: budgets = [60, 90, 120, 200]ms;
-	// T_broadcast_max per layer = [140, 110, 80, 0]ms. FetchAt must stay
-	// ≤ T_broadcast_max for each layer.
+	// At BTT=30ms, RefloodDelay=0: budgets = [60, 200, 200, 200]ms;
+	// T_broadcast_max per layer = [140, 0, 0, 0]ms. Only L_0 has positive
+	// broadcast deadline; backups all clamp to BFT_start.
 	fetchAt = []time.Duration{
 		100 * time.Millisecond, // L_0 (≤ 140)
-		80 * time.Millisecond,  // L_1 (≤ 110)
-		60 * time.Millisecond,  // L_2 (≤ 80)
-		0,                      // L_3 deepest (B_3 = T_commit → T_broadcast_max_3 = 0)
+		0,                      // L_1 backup (T_broadcast_max_1 = 0)
+		0,                      // L_2 backup (T_broadcast_max_2 = 0)
+		0,                      // L_3 backup (T_broadcast_max_3 = 0)
 	}
 	return
 }

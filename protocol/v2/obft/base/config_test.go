@@ -17,10 +17,10 @@ func validBaseConfig() *Config {
 	if err != nil {
 		panic(err)
 	}
-	// Per-layer T_broadcast_max at this fixture: 1350 / 1275 / 1125 / 0ms.
-	// Deepest layer's target clamps to 0 ("earliest possible" per spec §Setting)
-	// because B_3 = T_commit by default. Shallower FetchAt values chosen well
-	// below their caps to leave headroom for tests that perturb FetchAt.
+	// Per-layer T_broadcast_max at this fixture: L_0 = 1350ms; L_1..L_3 = 0
+	// (backups all clamp to BFT_start since B_1..B_3 = T_commit). FetchAt
+	// for L_0 chosen well below its cap (1350ms) to leave headroom for
+	// tests that perturb FetchAt; backups must have FetchAt = 0.
 	return &Config{
 		Height:    1,
 		ClusterID: [32]byte{0x01},
@@ -28,8 +28,8 @@ func validBaseConfig() *Config {
 		F:         1,
 		Layers: []LayerSpec{
 			{Leader: 1, FetchAt: 500 * time.Millisecond, BroadcastBudget: budgets[0]},
-			{Leader: 2, FetchAt: 400 * time.Millisecond, BroadcastBudget: budgets[1]},
-			{Leader: 3, FetchAt: 300 * time.Millisecond, BroadcastBudget: budgets[2]},
+			{Leader: 2, FetchAt: 0, BroadcastBudget: budgets[1]},
+			{Leader: 3, FetchAt: 0, BroadcastBudget: budgets[2]},
 			{Leader: 4, FetchAt: 0, BroadcastBudget: budgets[3]},
 		},
 		TCommit: tCommit,
@@ -93,7 +93,12 @@ func TestConfig_Validate_RejectsDuplicateLeader(t *testing.T) {
 
 func TestConfig_Validate_RejectsNonMonotonicFetchAt(t *testing.T) {
 	cfg := validBaseConfig()
-	// Layer 1's FetchAt > layer 0's — violates T_{K-1} ≤ ... ≤ T_0.
+	// Custom backup schedule so L_1 has a positive broadcast deadline
+	// (without this, L_1's deadline = 0 under the simplified default and
+	// the "exceeds broadcast deadline" check fires before "non-increasing").
+	// Set L_1's B_1 = 500ms → T_broadcast_max_1 = TCommit−B_1 = 1000ms.
+	cfg.Layers[1].BroadcastBudget = 500 * time.Millisecond
+	// L_1's FetchAt > L_0's — violates T_{K-1} ≤ ... ≤ T_0.
 	// Non-increasing is allowed (ties at BFT_start when shallow targets
 	// clamp); strictly-increasing in k is still rejected.
 	cfg.Layers[1].FetchAt = cfg.Layers[0].FetchAt + 100*time.Millisecond

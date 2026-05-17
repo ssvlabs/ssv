@@ -54,16 +54,17 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 	budgets, err := obft.DefaultBroadcastBudget(K, btt, 0, tCommit)
 	require.NoError(t, err)
 	// FetchAt must satisfy non-increasing-in-k AND ≤ T_broadcast_max_k =
-	// max(BFT_start, T_commit − B_k). At BTT=150ms / K=4, budgets are
-	// [150, 225, 375, T_commit]ms; the deepest L_3's cap clamps to
-	// BFT_start ("earliest possible"). Shallower fetchAt values chosen
-	// well below their caps.
+	// max(BFT_start, T_commit − B_k). Under the simplified backup schedule,
+	// only L_0 has a positive broadcast deadline; L_1..L_{K-1} all =
+	// T_commit (backups broadcast at BFT_start with deepest-confirmed-
+	// parent fetch). FetchAt for L_0 chosen well below its cap; backups
+	// must have FetchAt = 0.
 	layers := make([]obft.LayerSpec, K)
 	for k := 0; k < K; k++ {
 		var fetchAt time.Duration
-		if k < K-1 {
-			fetchAt = 500*time.Millisecond - time.Duration(k)*50*time.Millisecond
-		} // deepest stays at 0 (B_{K-1} = T_commit → T_broadcast_max_{K-1} = 0)
+		if k == 0 {
+			fetchAt = 500 * time.Millisecond
+		} // backups stay at 0 (B_k = T_commit → T_broadcast_max_k = 0)
 		layers[k] = obft.LayerSpec{
 			Leader:          operators[k],
 			FetchAt:         fetchAt,
