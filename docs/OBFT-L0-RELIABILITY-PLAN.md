@@ -265,7 +265,7 @@ Test impact:
 
 ## §8. Out of scope for this plan
 
-- L_Bid extension under the new schedule — pending Appendix B re-derivation task (see `OBFT-EARLY-COMMIT-PLAN.md §6`).
+- L_Bid extension under the new schedule — pending Appendix B re-derivation task (numbers in [OBFT.md](OBFT.md) §L_Bid extension still reference the pre-§2 staggered backup schedule and need a sweep).
 - Defer state under the new schedule — same pending task.
 - 2abOBFT §2 analog (deepest broadcast schedule simplification for 2abOBFT) — separate proposal once §2 lands for OBFT.
 - OBFTR sizing changes — out of scope (no tighten / no peer-reflood-V proposed for OBFTR yet).
