@@ -93,7 +93,7 @@ type LayerSpec struct {
 	// possible" deepest broadcast).
 	//
 	// Spec K=4 Config A (BTT=200ms, T_commit=3600ms, RefloodDelay=700ms):
-	// B_k values are 2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit
+	// B_k values are 2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit
 	// (= 1100/1300/1500/3600 ms). The deepest is "earliest possible" —
 	// leader's target broadcast clamps to slot start. Each shallow B_k
 	// decomposes as (k+2)·BTT (1·BTT P99 propagation + 1·BTT IWANT
@@ -219,11 +219,11 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 // meshed cluster, eager push reliable" assumption); production SSV
 // deployments use RefloodDelay = 700ms (SSV's gossipsub HeartbeatInterval).
 //
-// At K=4 returns [2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit]. At K=3 returns
-// [2·BTT+RD, 3·BTT+RD, T_commit]. At K=2 returns [2·BTT+RD, T_commit]. For
-// K>4 the first three layers stay at 2 / 3 / 4 BTT + RD and the intermediate
+// At K=4 returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit]. At K=3 returns
+// [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, T_commit]. At K=2 returns [2·BTT+RefloodDelay, T_commit]. For
+// K>4 the first three layers stay at 2 / 3 / 4 BTT + RefloodDelay and the intermediate
 // layers (k = 3, ..., K-2) interpolate linearly in duration space from
-// 4·BTT + RD (at L_2) to T_commit (at L_{K-1}).
+// 4·BTT + RefloodDelay (at L_2) to T_commit (at L_{K-1}).
 //
 // At extreme degraded operating points where T_commit shrinks below the
 // canonical shallow multiples (e.g. T_commit ≤ 4·BTT + RefloodDelay at K≥4),
@@ -272,8 +272,8 @@ func DefaultBroadcastBudget(K int, btt, refloodDelay, tCommit time.Duration) ([]
 		out[2] = shallow(2)
 		out[3] = tCommit
 	default:
-		// First three layers at 2 / 3 / 4 BTT + RD; intermediate layers
-		// interpolate linearly in duration space from 4·BTT + RD (at L_2)
+		// First three layers at 2 / 3 / 4 BTT + RefloodDelay; intermediate layers
+		// interpolate linearly in duration space from 4·BTT + RefloodDelay (at L_2)
 		// to T_commit (at L_{K-1}).
 		out[0] = shallow(0)
 		out[1] = shallow(1)

@@ -297,11 +297,11 @@ func (c *Config) RoundEndOffset() time.Duration {
 // meshed cluster, eager push reliable" assumption); production SSV
 // deployments use RefloodDelay = 700ms (SSV's gossipsub HeartbeatInterval).
 //
-// At K=4 returns [2·BTT+RD, 3·BTT+RD, 4·BTT+RD, TVerdictStart]. At K=3
-// returns [2·BTT+RD, 3·BTT+RD, TVerdictStart]. At K=2 returns
-// [2·BTT+RD, TVerdictStart]. For K>4 the first three layers stay at
-// 2 / 3 / 4 BTT + RD and the intermediate layers (k = 3, ..., K-2)
-// interpolate linearly in duration space from 4·BTT + RD (at L_2) to
+// At K=4 returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, TVerdictStart]. At K=3
+// returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, TVerdictStart]. At K=2 returns
+// [2·BTT+RefloodDelay, TVerdictStart]. For K>4 the first three layers stay at
+// 2 / 3 / 4 BTT + RefloodDelay and the intermediate layers (k = 3, ..., K-2)
+// interpolate linearly in duration space from 4·BTT + RefloodDelay (at L_2) to
 // TVerdictStart (at L_{K-1}).
 //
 // At extreme degraded operating points where TVerdictStart shrinks below
@@ -345,8 +345,8 @@ func DefaultBroadcastBudget(K int, btt, refloodDelay, tVerdictStart time.Duratio
 		out[2] = shallow(2)
 		out[3] = tVerdictStart
 	default:
-		// First three layers at 2 / 3 / 4 BTT + RD; intermediate layers
-		// interpolate linearly in duration space from 4·BTT + RD (at L_2)
+		// First three layers at 2 / 3 / 4 BTT + RefloodDelay; intermediate layers
+		// interpolate linearly in duration space from 4·BTT + RefloodDelay (at L_2)
 		// to TVerdictStart (at L_{K-1}).
 		out[0] = shallow(0)
 		out[1] = shallow(1)

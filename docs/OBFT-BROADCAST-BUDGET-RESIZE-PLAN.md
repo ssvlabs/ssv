@@ -25,7 +25,7 @@ Per-K shape, anchored on T_anchor (= T_commit for OBFT, T_verdict_start for 2abO
 | 2 | `[2·BTT + RefloodDelay, T_anchor]` |
 | 3 | `[2·BTT + RefloodDelay, 3·BTT + RefloodDelay, T_anchor]` |
 | 4 | `[2·BTT + RefloodDelay, 3·BTT + RefloodDelay, 4·BTT + RefloodDelay, T_anchor]` |
-| K>4 | shallow `[2·BTT+RD, 3·BTT+RD, 4·BTT+RD]`, then linear interpolation in duration space from `4·BTT + RefloodDelay` (at L_2) to `T_anchor` (at L_{K-1}) |
+| K>4 | shallow `[2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay]`, then linear interpolation in duration space from `4·BTT + RefloodDelay` (at L_2) to `T_anchor` (at L_{K-1}) |
 | K=1 | `[T_anchor]` (unchanged) |
 
 Rationale: `B_0 = 2·BTT + RefloodDelay` = one initial propagation + one full reflood cycle (heartbeat + IWANT round trip). Deeper layers `B_k = (k+2)·BTT + RefloodDelay` keep the +1·BTT-per-layer absorption-margin pattern from the without-RefloodDelay design — each deeper backup gets one more BTT of jitter cushion on top of the same reflood-cycle base.

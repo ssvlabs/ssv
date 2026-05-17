@@ -116,7 +116,7 @@ var scenarioMeshFlakiness = Scenario{
 		// sized to exceed the pre-reflood-aware OBFT B_0 = 1·BTT (causing
 		// the OBFT mesh-flakiness deadlock the scenario was designed to
 		// document). Under the reflood-aware schedule (B_0 = 2·BTT shallow
-		// at RD=0 in consensustest), this delay is now ABSORBED by OBFT
+		// at RefloodDelay=0 in consensustest), this delay is now ABSORBED by OBFT
 		// and 2abOBFT — the scenario now documents the *improvement* from
 		// the wider B_k schedule rather than the legacy deadlock. The
 		// QBFT/PSigs success expectations remain unchanged. To exercise
@@ -147,7 +147,7 @@ var scenarioMeshFlakiness = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: under reflood-aware B_0 = 2·BTT (consensustest RD=0),
+		// OBFT: under reflood-aware B_0 = 2·BTT (consensustest RefloodDelay=0),
 		// 2·BTT flaky-receiver delay is absorbed by L_0's window — flaky
 		// ops still receive V on time and σ-emit. σ-pool = N-f-byz_silent
 		// reaches qV at L_0. **Improvement** vs the pre-resize schedule

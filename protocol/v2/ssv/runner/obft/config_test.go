@@ -17,8 +17,8 @@ func TestDefaultBroadcastBudgetSchedule_K3_TabulatedAtConfigA(t *testing.T) {
 	got, err := DefaultBroadcastBudgetSchedule(3, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	want := []time.Duration{
-		1100 * time.Millisecond, // 2·BTT + RD = 400 + 700
-		1300 * time.Millisecond, // 3·BTT + RD = 600 + 700
+		1100 * time.Millisecond, // 2·BTT + RefloodDelay = 400 + 700
+		1300 * time.Millisecond, // 3·BTT + RefloodDelay = 600 + 700
 		DefaultTCommit,
 	}
 	require.Equal(t, want, got)
@@ -32,9 +32,9 @@ func TestDefaultBroadcastBudgetSchedule_K4_TabulatedAtConfigA(t *testing.T) {
 	got, err := DefaultBroadcastBudgetSchedule(4, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	want := []time.Duration{
-		1100 * time.Millisecond, // 2·BTT + RD
-		1300 * time.Millisecond, // 3·BTT + RD
-		1500 * time.Millisecond, // 4·BTT + RD
+		1100 * time.Millisecond, // 2·BTT + RefloodDelay
+		1300 * time.Millisecond, // 3·BTT + RefloodDelay
+		1500 * time.Millisecond, // 4·BTT + RefloodDelay
 		DefaultTCommit,
 	}
 	require.Equal(t, want, got)
@@ -57,7 +57,7 @@ func TestDefaultBroadcastBudgetSchedule_K4_NoRefloodDelay(t *testing.T) {
 
 // TestDefaultBroadcastBudgetSchedule_K4_ScalesWithBTT verifies the shallow
 // schedule's BTT-multiplier portion scales linearly when BTT changes — at
-// BTT=400ms with RD=0 the multipliers [2, 3, 4] produce [800, 1200, 1600]ms
+// BTT=400ms with RefloodDelay=0 the multipliers [2, 3, 4] produce [800, 1200, 1600]ms
 // shallow; deepest stays anchored at T_commit (not BTT-scaled).
 func TestDefaultBroadcastBudgetSchedule_K4_ScalesWithBTT(t *testing.T) {
 	got, err := DefaultBroadcastBudgetSchedule(4, 400*time.Millisecond, 0, DefaultTCommit)
@@ -74,15 +74,15 @@ func TestDefaultBroadcastBudgetSchedule_K4_ScalesWithBTT(t *testing.T) {
 // TestDefaultBroadcastBudgetSchedule_K7_InterpolatesCleanly verifies the K=7
 // interpolation: first three shallow layers stay at [2·BTT, 3·BTT, 4·BTT]
 // (+ RefloodDelay); intermediate layers (k=3..K-2) interpolate from
-// 4·BTT+RD (at L_2) to T_commit (at L_{K-1}) in duration space. Deepest is
+// 4·BTT+RefloodDelay (at L_2) to T_commit (at L_{K-1}) in duration space. Deepest is
 // T_commit exact.
 func TestDefaultBroadcastBudgetSchedule_K7_InterpolatesCleanly(t *testing.T) {
 	got, err := DefaultBroadcastBudgetSchedule(7, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	require.Len(t, got, 7)
-	require.Equal(t, 1100*time.Millisecond, got[0], "L_0 = 2·BTT + RD")
-	require.Equal(t, 1300*time.Millisecond, got[1], "L_1 = 3·BTT + RD")
-	require.Equal(t, 1500*time.Millisecond, got[2], "L_2 = 4·BTT + RD")
+	require.Equal(t, 1100*time.Millisecond, got[0], "L_0 = 2·BTT + RefloodDelay")
+	require.Equal(t, 1300*time.Millisecond, got[1], "L_1 = 3·BTT + RefloodDelay")
+	require.Equal(t, 1500*time.Millisecond, got[2], "L_2 = 4·BTT + RefloodDelay")
 	require.Equal(t, DefaultTCommit, got[6], "L_K-1 = T_commit (earliest possible)")
 	// Verify non-decreasing. Strict-increasing holds at this operating
 	// point (none of the shallow multiples hit the T_commit cap) but the
@@ -101,7 +101,7 @@ func TestDefaultBroadcastBudgetSchedule_K10_InterpolatesCleanly(t *testing.T) {
 	got, err := DefaultBroadcastBudgetSchedule(10, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
 	require.Len(t, got, 10)
-	require.Equal(t, 1100*time.Millisecond, got[0], "L_0 must be 2·BTT + RD")
+	require.Equal(t, 1100*time.Millisecond, got[0], "L_0 must be 2·BTT + RefloodDelay")
 	require.Equal(t, DefaultTCommit, got[9], "L_K-1 must be T_commit")
 
 	// Verify non-decreasing (relaxed from strict-increasing in Phase 2).

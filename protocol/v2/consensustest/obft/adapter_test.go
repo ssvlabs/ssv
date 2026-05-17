@@ -516,7 +516,7 @@ func TestAdapter_MaxMEVFetch_HealthyAtBoundary(t *testing.T) {
 func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	// Override Network to 2·BTT propagation — under the reflood-aware schedule
-	// (B_0 = 2·BTT + RefloodDelay, default RD=0 in consensustest), this
+	// (B_0 = 2·BTT + RefloodDelay, default RefloodDelay=0 in consensustest), this
 	// consumes the entire B_0 budget with zero margin. The spec pathology
 	// this test exercises: max-MEV fetch (zero broadcast offset) + propagation
 	// exactly at B_0 boundary → ordering between L_0 arrival and T_commit can

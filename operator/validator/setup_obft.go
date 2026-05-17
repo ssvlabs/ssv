@@ -75,8 +75,8 @@ func buildOBFTControllerForProposer(
 	// Reflood-aware schedule: B_k_shallow = (k+2)·BTT + RefloodDelay; deepest
 	// = T_commit. At production defaults (BTT=200ms, RefloodDelay=700ms,
 	// T_commit=3400ms, K=4): [1100, 1300, 1500, 3400]ms. Larger K keeps the
-	// shallow [2·BTT, 3·BTT, 4·BTT]+RD head and interpolates intermediate
-	// layers between 4·BTT+RD and T_commit per
+	// shallow [2·BTT, 3·BTT, 4·BTT]+RefloodDelay head and interpolates intermediate
+	// layers between 4·BTT+RefloodDelay and T_commit per
 	// obftadapter.DefaultBroadcastBudgetSchedule.
 	n := len(ssvShare.Committee)
 	f := (n - 1) / 3

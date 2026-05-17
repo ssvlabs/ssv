@@ -302,7 +302,7 @@ func TestDefaultBroadcastBudget_K4_AtConfigA(t *testing.T) {
 	out, err := DefaultBroadcastBudget(4, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Len(t, out, 4)
-	// {2, 3, 4}·BTT shallow schedule at RD=0.
+	// {2, 3, 4}·BTT shallow schedule at RefloodDelay=0.
 	require.Equal(t, 2*btt, out[0])
 	require.Equal(t, 3*btt, out[1])
 	require.Equal(t, 4*btt, out[2])
@@ -400,7 +400,7 @@ func TestDefaultBroadcastBudget_K2(t *testing.T) {
 	out, err := DefaultBroadcastBudget(2, btt, 0, tVerdictStart)
 	require.NoError(t, err)
 	require.Equal(t, []time.Duration{2 * btt, tVerdictStart}, out,
-		"K=2: B_0 = 2 BTT (reflood-aware default at RD=0), B_1 = TVerdictStart")
+		"K=2: B_0 = 2 BTT (reflood-aware default at RefloodDelay=0), B_1 = TVerdictStart")
 }
 
 // At K=2 with TVerdictStart < 2·BTT, the helper caps B_0 at TVerdictStart

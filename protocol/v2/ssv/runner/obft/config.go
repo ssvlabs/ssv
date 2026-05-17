@@ -102,7 +102,7 @@ const (
 //
 // At Config A (BTT = 200ms, TCommit = 3600ms, RefloodDelay = 700ms)
 // the K=4 schedule resolves to:
-//   - budget  = [2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit] =
+//   - budget  = [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit] =
 //     [1100, 1300, 1500, 3600]ms.
 //   - fetchAt = [153, 152, 151, 0]ms — shallow layers clustered at
 //     RANDAO_done with 1ms-per-layer staggering (a self-documenting
@@ -356,11 +356,11 @@ func defaultFetchSchedule(K int) []time.Duration {
 // headroom; the additive RefloodDelay accommodates one full reflood cycle
 // when initial eager-push fails to reach all honest peers.
 //
-// For K=2 returns [2·BTT+RD, T_commit] (BFT-liveness minimum at f=1).
-// For K=3 returns [2·BTT+RD, 3·BTT+RD, T_commit]. For K=4 returns
-// [2·BTT+RD, 3·BTT+RD, 4·BTT+RD, T_commit]. For K>4 the first three
+// For K=2 returns [2·BTT+RefloodDelay, T_commit] (BFT-liveness minimum at f=1).
+// For K=3 returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, T_commit]. For K=4 returns
+// [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, T_commit]. For K>4 the first three
 // shallow layers stay at 2 / 3 / 4 BTT (+ RefloodDelay) and intermediate
-// layers interpolate linearly in duration space from 4·BTT+RD to T_commit
+// layers interpolate linearly in duration space from 4·BTT+RefloodDelay to T_commit
 // at L_{K-1}.
 //
 // At degraded operating points where the canonical staggered shallow
