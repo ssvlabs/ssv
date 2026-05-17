@@ -10,7 +10,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 **Suited for:**
 - SSV proposer duty under healthy-network partial synchrony (`P99` ≈ 150ms cluster gossipsub P99/P999) where the +1 RTT vs single-Phase-2 designs fits the slot budget.
-- Deployments operating under realistic adversarial conditions: small clusters, transient operators, weak governance, high-stake-to-grief-value ratios. The witness phase closes the σ-locked split equivocation, h_V=1 selective-delivery, and within-window validity-divergence patterns that single-Phase-2 designs leave as Class B / Class A failures.
+- Deployments operating under realistic adversarial conditions: small clusters, transient operators, weak governance, high-stake-to-grief-value ratios. The witness phase closes the σ-locked split equivocation and within-window validity-divergence patterns that single-Phase-2 designs leave as Class B / Class A failures. (Bare OBFT now closes h_V=1 selective-delivery in-protocol via the §1 peer-reflood-V mechanism — see [OBFT.md §Phase 2 / Peer-reflood V via early commit](OBFT.md); 2abOBFT's verdict pool achieves the same recovery via a different mechanism.)
 - High-P99 networks (`P99` ≈ 300–500ms) where multi-round protocols don't fit a 4s relay cutoff but a single round with the Phase-2 split still does.
 
 **Not suited for:**
@@ -45,7 +45,7 @@ The "2ab" in the name reflects this split — the protocol's defining feature re
 
 - **Three distinct deadlines** (do not conflate):
 
-  - **Per-layer leader broadcast targets** `T_broadcast_max_k = max(BFT_start, T_verdict_start − B_k)`. Each layer `L_k` aims to finish broadcasting its Phase-1 bundle by its per-layer target so all honest first-observe within `B_k` of broadcast under worst-case propagation. The leader's fetch window is `[T_k, T_broadcast_max_k]`. `B_k` is a *target* absorption budget, not a hard runtime cap; the only runtime acceptance gate is `T_accept_max` (below). When `B_k ≥ T_verdict_start` the target clamps to `BFT_start` — leader broadcasts at the BFT phase start, best effort. This is the *default* configuration for the deepest layer: `B_{K-1} = T_verdict_start` ("earliest possible"). **Default reflood-aware schedule** at K=4 (mirrors OBFT.md §Setting):
+  - **Per-layer leader broadcast targets** `T_broadcast_max_k = max(BFT_start, T_verdict_start − B_k)`. Each layer `L_k` aims to finish broadcasting its Phase-1 bundle by its per-layer target so all honest first-observe within `B_k` of broadcast under worst-case propagation. The leader's fetch window is `[T_k, T_broadcast_max_k]`. `B_k` is a *target* absorption budget, not a hard runtime cap; the only runtime acceptance gate is `T_accept_max` (below). When `B_k ≥ T_verdict_start` the target clamps to `BFT_start` — leader broadcasts at the BFT phase start, best effort. This is the *default* configuration for the deepest layer: `B_{K-1} = T_verdict_start` ("earliest possible"). **Default reflood-aware schedule** at K=4 (the K-layer staggered shape; OBFT.md §Setting moved to a primary-vs-backup shape post-§OBFT-L0-RELIABILITY-PLAN §2 — `B_0 = 2·BTT + RefloodDelay`, `B_1..B_{K-1} = T_commit` — trading per-layer MEV-fetch headroom for wider backup absorption. 2abOBFT retains the staggered schedule since its Phase-2a re-flood window already provides the equivalent backup absorption uniformly; a staggered→primary-vs-backup simplification for 2abOBFT is deferred — see [docs/OBFT-L0-RELIABILITY-PLAN.md §8](OBFT-L0-RELIABILITY-PLAN.md)):
 
     ```
     B_k_shallow = (k+2)·BTT + RefloodDelay     for k ∈ [0, K-2]
@@ -510,7 +510,7 @@ A, B have V (A is leader); C does not. D byz arbitrary. The byz strategy space i
   - D defects to σ on V.
   - σ-pool actual = {A, D} = 2 < qV; NR-pool actual = {B, C} = 2 < qEnc. **Slot misses at L_0 with no fall-through.** Cryptographic Rule-6a evidence (D's two distinct KindVerdict envelopes) is on the wire from any peer who eventually receives both via re-flood; D is slashable.
 
-The verdict-equivocation case is a **second Class B regression vs single-Phase-2 protocols** alongside 2-1-byz-defect, and a more general one — it triggers on every slot where h_V_honest = 2 (network jitter + byz mesh manipulation puts honest at this boundary, not only byz-leader slots). Bare OBFT here would fall to silent-leader-NR cleanly when D is silent (slot misses too — bare OBFT also fails this scenario at f=1 n=4 per its [Class B mesh-flakiness analysis](OBFT.md)), but does **not** have the verdict-equivocation surface (no verdicts to equivocate on). 2abOBFT trades the "no verdict surface" for the convergence-rule recovery of equivocation σ-locked splits, h_V=1, and validity-divergence majority — and pays this regression as a side-effect.
+The verdict-equivocation case is a **second Class B regression vs single-Phase-2 protocols** alongside 2-1-byz-defect, and a more general one — it triggers on every slot where h_V_honest = 2 (network jitter + byz mesh manipulation puts honest at this boundary, not only byz-leader slots). Bare OBFT here would fall to silent-leader-NR cleanly when D is silent (slot misses too — bare OBFT also fails this scenario at f=1 n=4 per its [Class B mesh-flakiness analysis](OBFT.md)), but does **not** have the verdict-equivocation surface (no verdicts to equivocate on). 2abOBFT trades the "no verdict surface" for the convergence-rule recovery of equivocation σ-locked splits and validity-divergence majority — and pays this regression as a side-effect. (h_V=1 is also recovered by 2abOBFT's convergence rule, but bare OBFT recovers the same case via the §Phase 2 peer-reflood-V mechanism without a verdict surface, so it's no longer a 2abOBFT-exclusive justification for the verdict surface.)
 
 ##### h_V_honest = 1 (only one honest has V)
 
@@ -518,7 +518,7 @@ A has V; B, C don't.
 - verdict_pool[V] = 1 + maybe-byz < qV. nr_pool = 2 + maybe-byz.
 - All sub-cases: A → NR (verdict-quorum short), B → NR, C → NR. NR-pool actual ≥ 3 = qEnc. **Fall through to L_1.**
 
-This is the h_V=1 "Class B byzantine selective-delivery deadlock" case from OBFT — recovered structurally in 2abOBFT.
+This is the h_V=1 byzantine selective-delivery deadlock case — recovered structurally in 2abOBFT via the convergence rule. (Bare OBFT also recovers this in-protocol via the peer-reflood-V mechanism — see [OBFT.md §Phase 2 / Peer-reflood V via early commit](OBFT.md). The two protocols close h_V=1 via different mechanisms: OBFT via V-drop receivers σ-ing on V harvested from a peer's early commit; 2abOBFT via Phase-2a verdict-pool σ-eligibility-quorum-short → all-NR → L_1 fall-through.)
 
 #### Equivocation σ-locked split
 
@@ -576,7 +576,7 @@ The recommended `Δ_2a ≥ 2 BTT` absorbs typical mesh-jitter (one full `1 BTT` 
 
 A side-by-side comparison of 2abOBFT's recovery scope against bare OBFT, OBFTR(R≥2), and QBFT — covering healthy path, byzantine-leader patterns, multi-leader silent, validity-divergence, sustained partition, and the residual surfaces unique to 2abOBFT (2-1-byz-defect, verdict-equivocation) — is in [§Appendix A.3 — Comparison with bare OBFT and QBFT](#a3--comparison-with-bare-obft-and-qbft). Apples-to-apples framing across protocols, the four-bucket recovery taxonomy (absorbable-by-waiting / OBFT-family-only / 2abOBFT-only / 2abOBFT-regressions), and per-failure-class outcomes are discussed there.
 
-The summary takeaway: at apples-to-apples T, pure all-honest network failures recover identically across all four protocols. The structural distinctions are at the byzantine-equivocation and validity-divergence axes, where 2abOBFT closes most of bare-OBFT/OBFTR's adversarial-byz exposure (σ-locked equivocation, h_V=1, validity-divergence-majority, mesh-flakiness) at the cost of two narrower regressions (2-1-byz-defect, verdict-equivocation) — both slashable, both R-invariant.
+The summary takeaway: at apples-to-apples T, pure all-honest network failures recover identically across all four protocols. The structural distinctions are at the byzantine-equivocation and validity-divergence axes, where 2abOBFT closes most of bare-OBFT/OBFTR's adversarial-byz exposure (σ-locked equivocation, validity-divergence-majority, mesh-flakiness) at the cost of two narrower regressions (2-1-byz-defect, verdict-equivocation) — both slashable, both R-invariant. (h_V=1 is closed in both bare OBFT and 2abOBFT in-protocol, via different mechanisms — peer-reflood-V at L_0 in bare OBFT, verdict-pool fall-through to L_1 in 2abOBFT — so it's no longer a 2abOBFT-vs-OBFT differentiator; remains closed by 2abOBFT and open in OBFTR.)
 
 ### Equivocation handling
 
@@ -693,7 +693,7 @@ The DKG for the V-signing keypair reuses SSV's existing operator-share setup. Th
 | Round-change recovery | No — single-round design. Late re-flood within Phase-2a's absorption window is the only within-slot partition-recovery mechanism. |
 | Partial-synchrony absorption window | `Δ_2a + 1 BTT` (single round) — ≈ 600ms at Config A recommended. |
 | Healthy-path latency (post-`T_commit`) | ~300ms at Config A recommended (Δ_2b = 1·BTT + ε_proc = 250ms + ε_3 = 50ms). Post-`T_commit` here is "post-σ-or-NR commit"; Phase 2a is pre-`T_commit`. OBFT's post-`T_commit` budget at aligned tightened sizing is ~250ms (Δ_2 = 1·BTT + ε_3); 2abOBFT pays an extra ε_proc for Phase-2b convergence computation. |
-| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +400ms (= 2 BTT = Δ_2a) at recommended sizing, end-to-end V_0-broadcast to consensus-complete: extra Phase 2a window 400ms. Both protocols share the same reflood-aware B_k formula `(k+2)·BTT + RefloodDelay`, so the per-layer broadcast slack is identical at the same RefloodDelay setting; 2abOBFT's extra cost is purely the dedicated Phase-2a re-flood window. ε_3 identical to OBFT's. Post-`T_commit` budget ~50ms larger in 2abOBFT (Δ_2b = 1·BTT + ε_proc vs OBFT's Δ_2 = 1·BTT) due to the Phase-2b convergence-computation overhead. |
+| Slot budget cost vs single-Phase-2 ([OBFT](OBFT.md)) | +400ms (= 2 BTT = Δ_2a) at recommended sizing, end-to-end V_0-broadcast to consensus-complete: extra Phase 2a window 400ms. Schedule shapes diverge post-OBFT-L0-RELIABILITY-PLAN §2: OBFT uses primary-vs-backup (`B_0 = 2·BTT + RefloodDelay`; `B_1..B_{K-1} = T_commit`); 2abOBFT retains the K-layer staggered (`B_k_shallow = (k+2)·BTT + RefloodDelay`) since Phase-2a re-flood already widens backup absorption uniformly. At the same RefloodDelay setting, OBFT's primary `B_0` matches 2abOBFT's `B_0`; OBFT's backups have wider per-layer slack than 2abOBFT's staggered backups, while 2abOBFT compensates via the Phase-2a window. ε_3 identical to OBFT's. Post-`T_commit` budget ~50ms larger in 2abOBFT (Δ_2b = 1·BTT + ε_proc vs OBFT's Δ_2 = 1·BTT) due to the Phase-2b convergence-computation overhead. |
 | EKM complexity | Lowest in the OBFT family — single signing event per (slot, layer) per operator, no Phase-1 σ_V to coordinate, no cross-round atomicity, no persistent partial-sig cache. |
 
 ## Application: SSV Ethereum proposer duty
@@ -814,14 +814,14 @@ OBFT is the closest sibling — same single-round structure, same K-layer fall-t
 | Operator commitment states | σ, NR, NV (3 states) | σ, NR, NV (3 states) |
 | σ-commit timing | Phase 1 (leader) or Phase 2 (others, at `T_commit`) | Phase 2b (uniform across all operators, after Phase-2a observation) |
 | Convergence mechanism | Per-operator local view (each operator commits at `T_commit` based on retained V's) | Cluster-wide verdict observation in Phase-2a, σ-quorum-eligibility check at Phase-2a end |
-| Healthy-path latency (post-`T_commit`, recommended sizing) | ~250ms (Δ_2 + ε_3 = 200 + 50) | ~300ms (Δ_2b + ε_3 = 250 + 50 — `Δ_2b = 1·BTT + ε_proc` covers Phase-2b convergence-computation overhead OBFT doesn't pay). Phase 2a is pre-`T_commit`; both protocols use the same reflood-aware B_k formula at the same RefloodDelay setting, so 2abOBFT's V_0 broadcasts exactly Δ_2a = 400ms earlier than OBFT V_0 for the same `T_commit` (cost of the Phase-2a window). |
+| Healthy-path latency (post-`T_commit`, recommended sizing) | ~250ms (Δ_2 + ε_3 = 200 + 50) | ~300ms (Δ_2b + ε_3 = 250 + 50 — `Δ_2b = 1·BTT + ε_proc` covers Phase-2b convergence-computation overhead OBFT doesn't pay). Phase 2a is pre-`T_commit`. At the same RefloodDelay setting, both protocols' L_0 broadcasts use `B_0 = 2·BTT + RefloodDelay`, so 2abOBFT's V_0 broadcasts exactly Δ_2a = 400ms earlier than OBFT V_0 for the same `T_commit` (cost of the Phase-2a window). Backup-layer broadcast targets differ: OBFT's L_1+ all broadcast at BFT_start (primary-vs-backup shape post-§OBFT-L0-RELIABILITY-PLAN §2); 2abOBFT retains the K-layer staggered shape. |
 | Marginal h_V_honest=2 + byz silent | Slot misses (σ-pool short, NR-pool short) | Falls through to L_1 ✓ |
 | Equivocation 1-1-1 split | Slot misses | Falls through to L_1 ✓ |
 | Equivocation 2-1, byz cooperates | Succeeds at L_0 | Succeeds at L_0 (tie) |
 | Equivocation 2-1, byz silent | Succeeds at L_0 (Phase-1 σ_V locked) | Falls through to L_1 (one extra layer) |
 | Equivocation 2-1, byz defects | Succeeds at L_0 (Phase-1 σ_V locked) | **Slot misses (regression)** — Rule 6b evidence under NR-emit; behavioral under silent abstention |
 | Non-leader verdict-equivocation at marginal h_V | n/a (no verdicts in OBFT) | **Slot misses (regression)** — Rule 6a evidence |
-| h_V=1 selective-delivery deadlock | Class B grief, not recovered in-protocol (algebraic deadlock at f=1, n=4: σ-pool=2 < qV; NR-pool=2 < qEnc); deterred via Assumption 4 across slots | Falls through to L_1 ✓ |
+| h_V=1 selective-delivery deadlock | Recovers at L_0 ✓ via peer-reflood-V — see [OBFT.md §Phase 2 / Peer-reflood V via early commit](OBFT.md). V-drop receivers harvest V from the in-time recipient's KindCommit σ-onion + σ_L^V witness, σ-emit on peer-V; σ-pool reaches qV at L_0. | Falls through to L_1 ✓ via verdict-pool σ-eligibility-quorum-short → all-NR. |
 | Validity-divergence at majority | Slot misses (Class A) | Recovered ✓ |
 | Validity-divergence at 2-2 boundary | Slot misses (Class A) | Slot misses (Class A — same algebraic limit) |
 | Late deepest-layer leader broadcast | Class A | Recovered (Phase-2a re-flood absorbs) ✓ |
@@ -876,11 +876,12 @@ These are patterns where bare OBFT's σ-emit-during-Phase-2 cross-phase exclusiv
 
 - **Mesh-flakiness coordinated with byz σ-refusal at byz-leader slots**: no Phase-1 σ_V from byz leader → bare OBFT's σ-pool is starved when 1 honest mesh-flakes incorrectly to NR; 2abOBFT routes to NR fall-through via convergence rule.
 - **σ-locked equivocation 1-1-1 split**: bare OBFT's σ partials split below qV; 2abOBFT's verdict pool short → all NR → fall-through.
-- **h_V=1 selective-delivery deadlock**: same algebraic shape — bare OBFT's σ-locked-on-V honest can't switch sides; 2abOBFT's deferred binding allows convergence-rule fall-through.
 - **Validity-divergence majority recovery (3-of-4 at f=1 n=4)**: bare OBFT's leader Phase-1 σ_V locks σ-side onto stale V at re-org; 2abOBFT's leader doesn't pre-lock (Variant C in [docs/2abOBFT-design-notes.md / Variants considered](2abOBFT-design-notes.md#variants-considered)) — Phase-2b binds against post-observation stabilized verdict pool.
 - **Late deepest-layer-leader broadcast within Phase-2a**: Phase 2a re-flood absorbs cleanly; bare OBFT needs widened Δ_2 with its own absorption-vs-validity-divergence-window trade-off.
 
 These all involve adversarial-byz patterns or application validity-divergence — **pure all-honest network failures fall in Bucket 1, not here.** Extending Δ_2 in bare OBFT (matching 2abOBFT's commit deadline) does not close these patterns; the cross-phase exclusivity is structural, not time-based.
+
+**h_V=1 selective-delivery — previously Bucket 3, now a tie.** Bare OBFT closes h_V=1 in-protocol via the peer-reflood-V mechanism (V-drop receivers σ on V harvested from the in-time recipient's KindCommit + σ_L^V witness; σ-pool reaches qV at L_0 — see [OBFT.md §Phase 2 / Peer-reflood V via early commit](OBFT.md)). 2abOBFT closes the same algebraic case via the convergence rule — verdict-pool σ-eligibility-quorum-short → all-NR → L_1 fall-through. Different mechanisms, both in-protocol; OBFT's recovery lands at L_0 (preserves MEV freshness), 2abOBFT's at L_1 (one-extra-layer cost but uses already-present machinery).
 
 **Bucket 4 — 2abOBFT regressions vs bare OBFT and/or QBFT** (regardless of T):
 
@@ -899,7 +900,7 @@ These are patterns 2abOBFT introduces or fails to recover, where bare OBFT and/o
 | Multi-leader silent K-1 ≥ 3 (Bucket 2) | ✓ in-round | ✓ in-round | ✗ exceeds budget at typical RT |
 | Mesh-flakiness + byz σ-refusal (Bucket 3) | ✗ | ✓ | ✓ |
 | σ-locked equivocation 1-1-1 (Bucket 3) | ✗ | ✓ | ✓ |
-| h_V=1 selective-delivery (Bucket 3) | ✗ | ✓ | ✓ |
+| h_V=1 selective-delivery (tied, both in-protocol) | ✓ at L_0 (peer-reflood-V, OBFT.md §Phase 2) | ✓ at L_1 (verdict-pool fall-through) | ✓ |
 | Validity-divergence majority 3-of-4 (Bucket 3) | ✗ (leader σ_V locks σ-side) | ✓ | ✓ |
 | Late deepest-layer broadcast (Bucket 3) | mitigated by K ≥ f+2 | ✓ | recoverable if round 2 fits |
 | 2-1-byz-defect equivocation (Bucket 4) | ✓ (Phase-1 σ_V crypto-locks σ-pool) | ✗ regression | ✓ (round 2 fresh V) |
@@ -927,7 +928,7 @@ All counts at the tightened recommended sizing (OBFT: `Δ_2 = 1 BTT`; 2abOBFT: `
 
 The production-T allocation reflects current deployment choices, which are **not** strictly apples-to-apples for failure-mode coverage — QBFT uses ~3.6s for 2-round consensus + ~0.4s for submission, while 2abOBFT uses ~1000ms for consensus + ~3.0s submission headroom. Comparing failure-mode coverage at production-T can read as "QBFT recovers more failure modes than 2abOBFT" but conflates two different effects:
 
-- **Time-conditional recoveries**: at small T, QBFT fits only 1 round and loses most of its multi-round-conditional recoveries (mesh-flakiness with byz leader, σ-locked equivocation, h_V=1, validity-majority — Bucket-3-equivalents). 2abOBFT recovers all of these at small T via single-round convergence rule. **At T = 1000ms apples-to-apples (2abOBFT's healthy budget at tightened sizing), 2abOBFT has a strictly larger deadlock-free set than QBFT.** At larger T, QBFT's round-2 access scales recovery and matches 2abOBFT on most Bucket-1 + Bucket-3 patterns — but only when the slot budget admits R2 (e.g., (0s, BTT=200ms) cell at recommended sizing for QBFT-SSV).
+- **Time-conditional recoveries**: at small T, QBFT fits only 1 round and loses most of its multi-round-conditional recoveries (mesh-flakiness with byz leader, σ-locked equivocation, validity-majority — Bucket-3-equivalents; bare OBFT also closes h_V=1 in single round via §Phase 2 peer-reflood-V). 2abOBFT recovers all of these at small T via single-round convergence rule. **At T = 1000ms apples-to-apples (2abOBFT's healthy budget at tightened sizing), 2abOBFT has a strictly larger deadlock-free set than QBFT.** At larger T, QBFT's round-2 access scales recovery and matches 2abOBFT on most Bucket-1 + Bucket-3 patterns — but only when the slot budget admits R2 (e.g., (0s, BTT=200ms) cell at recommended sizing for QBFT-SSV).
 - **Structural recoveries**: Bucket 2 (OBFT-family-only — multi-leader silent, crypto safety primitive) and Bucket 4 (2abOBFT regressions — 2-1-byz-defect, verdict-equivocation, validity-2-2-refetch) are independent of T. They reflect protocol structure, not budget.
 
 If you give 2abOBFT a 3s consensus budget (extending Δ_2a / Δ_2b), the recovery scope does not grow — single-round protocols don't add recoveries with more time, only wider absorption windows. If you compress QBFT to a 1000ms consensus budget (1 round only at recommended sizing — barely enough for R1's 8 BTT = 1.6s, requires further sizing compromise), QBFT's recovery scope shrinks to single-round failures only, losing all time-conditional Bucket-3-equivalent recoveries.
