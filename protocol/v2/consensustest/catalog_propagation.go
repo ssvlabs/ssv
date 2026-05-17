@@ -51,7 +51,7 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to selectively-deliver
 	},
-	Note: "OBFT closes the historical h_V=1 deadlock in-protocol via §Phase 2 peer-reflood-V (since the §1 landing of docs/OBFT-L0-RELIABILITY-PLAN.md + the L0Ready-driven evtCommitEmit framework upgrade). The 1 V-recipient early-emits with V+σ_L^V; V-drop receivers σ on peer-V. 2abOBFT recovers via NR-quorum at L_0 → fall-through to L_1. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
+	Note: "OBFT closes the historical h_V=1 deadlock in-protocol via OBFT.md §Phase 2 peer-reflood-V (V-drop receivers σ on V harvested from the in-time recipient's KindCommit σ-onion + σ_L^V witness) combined with the L0Ready-driven evtCommitEmit framework upgrade. The 1 V-recipient early-emits with V+σ_L^V; V-drop receivers σ on peer-V. 2abOBFT recovers via NR-quorum at L_0 → fall-through to L_1. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
 }
 
 // ---- Late L_0 leader broadcast (Phase 3 — Class A spec) ---------------

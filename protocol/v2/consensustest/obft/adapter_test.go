@@ -141,11 +141,13 @@ func TestRecovery_PeerVOnHV1(t *testing.T) {
 	require.Equal(t, 0, out.DecidedRound, "recovery happens at L_0, not via fall-through")
 }
 
-// TestRecovery_PeerVOnHV1_DegradedBTT pins the §1 peer-reflood-V
-// recovery across the SSV operational BTT envelope, closing the §6
-// open question in docs/OBFT-L0-RELIABILITY-PLAN.md ("confirm via test
-// that V-drop receiver's L0Ready fires comfortably before T_commit
-// fallback even at degraded BTT").
+// TestRecovery_PeerVOnHV1_DegradedBTT pins the peer-reflood-V recovery
+// (OBFT.md §Phase 2 / Peer-reflood V via early commit) across the SSV
+// operational BTT envelope. Pinned regression: V-drop receiver's
+// L0Ready must fire comfortably before T_commit fallback even at
+// degraded BTT (e.g., BTT=600ms), otherwise the receiver NR-locks
+// before harvesting V from the in-time recipient's commit and the
+// recovery doesn't fire.
 //
 // Timing chain at each BTT: L_0 leader emits Phase-1 at FetchAt[0];
 // V-recipient (op 2) receives Phase-1 at FetchAt[0]+BTT, L0Ready
