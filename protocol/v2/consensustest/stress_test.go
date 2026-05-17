@@ -202,15 +202,18 @@ func TestStress(t *testing.T) {
 	// Two flavor axes:
 	//   - OBFT and 2abOBFT each ship in a canonical (multiplier=1) form
 	//     plus "x2" and "x3" multiplier variants that scale bttEff
-	//     internally. Every BTT-derived budget (Δ_2, B_k shallow layers,
+	//     internally. Every BTT-derived budget (Δ_2, primary B_0 = 2·BTT,
 	//     FetchAt fetch buffer, and 2ab's TAcceptMax / TVerdictMax
-	//     horizons) scales linearly with the multiplier. T_commit lands
-	//     earlier as a result (Δ_2 = 2·m·BTT for OBFT-m; Δ_2a + Δ_2b =
-	//     4·m·BTT for 2abOBFT-m) at the cost of MEV freshness.
-	//     Network propagation still happens at the sweep's actual BTT —
-	//     the multiplier models operator-side pessimism only.
-	//   - QBFT ships in the research variant (computed RT = 3·PhaseBudget
-	//     = 6·bttEff) and the production SSV variant (fixed 2s RT).
+	//     horizons) scales linearly with the multiplier; backup layers
+	//     L_1..L_{K-1} have B_k = T_commit and don't scale with the
+	//     multiplier. T_commit lands earlier as a result (Δ_2 = 2·m·BTT
+	//     for OBFT-m at framework conservatism; Δ_2a + Δ_2b = 4·m·BTT
+	//     for 2abOBFT-m) at the cost of MEV freshness. Network propagation
+	//     still happens at the sweep's actual BTT — the multiplier models
+	//     operator-side pessimism only.
+	//   - QBFT ships in the research variant (computed RT = 6·PhaseBudget
+	//     = 6·bttEff at tightened per-emission PhaseBudget = 1·bttEff) and
+	//     the production SSV variant (fixed 2s RT).
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
 		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
