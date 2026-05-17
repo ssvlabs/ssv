@@ -114,23 +114,22 @@ func TestMeshGossip_SlowMeshRescue_OBFT(t *testing.T) {
 		"with gossip enabled, IHAVE/IWANT on the fast direct path delivers messages in time")
 }
 
-// TestClassifyMiss_DeadlockOnHV1 pins the OBFT-specific deadlock
-// label. HV1SelectiveDelivery sends Phase-1 V to exactly f honest
-// operators, splitting the σ-pool at L_0 below qV; NR-pool at L_0
-// also stays below qEnc → no L_1 fall-through. The protocol gets
-// stuck at L_0. Before the deadlock-aware classifier this surfaced
-// as the coarse "Cluster never assembled..." label — that bucketed
-// the HV1 pathology together with hypothetical exhaustion outcomes
-// (different shape entirely). After the change it surfaces as
-// "Cluster deadlocked at layer 0 (σ-pool short, no NR-fallthrough)".
-func TestClassifyMiss_DeadlockOnHV1(t *testing.T) {
+// TestRecovery_PeerVOnHV1 pins the §1 peer-reflood-V recovery at the
+// adapter level. HV1SelectiveDelivery sends Phase-1 V to exactly f
+// honest operators; pre-§1 this deadlocked at L_0 (σ-pool short of qV,
+// NR-pool short of qEnc → no L_1 fall-through). Under §1, V-drop
+// receivers harvest V from the in-time recipients' KindCommit σ-onion
+// at L_0, host-validate, and σ on it — closing the gap so σ-pool
+// reaches qV and the cluster decides at L_0.
+//
+// Classifier-label correctness (the prior assertion target) is
+// independently covered by classifyOBFTMiss in adapter_internal_test.go.
+func TestRecovery_PeerVOnHV1(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	// HV1SelectiveDelivery at n=4: byz leader (op1) delivers V to
 	// exactly f=1 honest (op2). The other two honest receive nothing
-	// from the leader. Same wire pattern catalog_propagation.go's
-	// scenarioHV1SelectiveDelivery.Apply produces, hand-rolled here so
-	// the test stays adapter-local without reaching into the catalog
-	// (which lives in package consensustest).
+	// from the leader's Phase-1 — they recover V from op2's KindCommit
+	// σ-onion entry at L_0 (§1 peer-reflood-V path).
 	cfg.Byz = ct.ByzPattern{
 		Kind:         ct.ByzHV1SelectiveDelivery,
 		ByzOperators: []ct.OperatorID{1},
@@ -138,12 +137,8 @@ func TestClassifyMiss_DeadlockOnHV1(t *testing.T) {
 	}
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
-	require.False(t, out.Decided, "HV1SelectiveDelivery should miss for OBFT")
-	require.Equal(t,
-		"Cluster deadlocked at layer 0 (σ-pool short, no NR-fallthrough)",
-		out.MissReason,
-		"OBFT HV1 deadlock should surface as the deadlock label, not the generic exhaustion bucket",
-	)
+	require.True(t, out.Decided, "HV1SelectiveDelivery should recover via §1 peer-reflood-V")
+	require.Equal(t, 0, out.DecidedRound, "recovery happens at L_0, not via fall-through")
 }
 
 // TestMeshBandwidth_NoPhantomRelayOperator — in DeliveryMesh mode the
@@ -252,24 +247,33 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 }
 
 // TestAdapter_OpportunisticDecisionTime — Phase 1 of the
-// OBFT-OPPORTUNISTIC-PHASE3 plan. Asserts the observer-mode metric is
-// active: under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum
-// at L_0 reaches at T_commit + 1·BTT = 3600ms (vs the pre-instrumentation
-// schedule-anchored 3850ms = RoundEndOffset). Pinning this 250ms saving
-// catches a regression where vQuorumAt isn't being written by the
-// commit-arrival path.
+// OBFT-OPPORTUNISTIC-PHASE3 plan, updated for the L0Ready-driven event-
+// driven commit emit framework upgrade. Asserts the observer-mode metric
+// is active AND that commits fire on L0Ready close (not at T_commit):
+// under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum at L_0
+// reaches at FetchAt[0] + 2·BTT = 3350ms (was 3600ms = T_commit + 1·BTT
+// under the prior sync-at-T_commit emit; was 3850ms = RoundEndOffset
+// pre-observer-mode). Pinning this 500ms total saving catches both
+// regressions: (a) vQuorumAt not being written by the commit-arrival
+// path, and (b) the framework's evtCommitEmit not being scheduled on
+// L0Ready close.
 func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	// At BTT=200ms, T_commit=3400ms, ConstantDelay propagation=200ms →
-	// commits arrive at peers at 3600ms; the (qV-1)th commit arrival
-	// hits σ-quorum at that moment. Walk cost at L_0 is 0 (no
-	// fall-through). Pre-instrumentation this was 3850ms (RoundEndOffset).
-	require.Equal(t, 3600*time.Millisecond, out.DecisionTime,
-		"observer-mode Resolve should catch L_0 σ-quorum at T_commit + 1·BTT = 3600ms (was schedule-anchored 3850ms)")
+	// At BTT=200ms: T_commit=3400ms, B_0=2·BTT=400ms, fetchBuffer=BTT/4=50ms
+	// → FetchAt[0]=2950ms. L_0 leader emits Phase-1 (and its own early
+	// commit) at 2950ms; Phase-1 arrives at peers at 3150ms → ApplyHostValidity
+	// closes L0Ready on the σ-retention path → peers early-emit commits at
+	// 3150ms → arrivals at 3350ms. The qV-th σ-partial arrival hits σ-quorum
+	// at that moment; walk cost at L_0 is 0 (no fall-through). Total saving
+	// vs schedule-anchored 3850ms is 500ms (250ms vs sync-emit's 3600ms +
+	// another 250ms from the L0Ready-driven early-emit).
+	require.Equal(t, 3350*time.Millisecond, out.DecisionTime,
+		"observer-mode + L0Ready-driven emit should catch L_0 σ-quorum at FetchAt[0] + 2·BTT = 3350ms "+
+			"(was 3600ms under sync-at-T_commit emit; was schedule-anchored 3850ms pre-observer)")
 }
 
 // TestAdapter_OpportunisticDecisionTime_Fallthrough is the OBFT-

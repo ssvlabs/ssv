@@ -52,9 +52,17 @@ type sim struct {
 	// what first produces quorum (since resolveOpAndBroadcastCert also
 	// writes here as a fallback). Read by outcome() as Outcome.DecisionTime.
 	// Plan: docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
-	vQuorumAt   map[obftbase.OperatorID]time.Duration
-	canonValues map[int]obftbase.Value
-	trace       []ct.TraceEntry
+	vQuorumAt map[obftbase.OperatorID]time.Duration
+	// commitEmitted[op] = true once op's KindCommit has been built and
+	// dispatched. Guard for the L0Ready-driven evtCommitEmit (fired early
+	// when an op's L_0 decision is determinable) vs the evtPhaseTwoStart
+	// T_commit fallback (fires for any op that hasn't triggered early).
+	// Without this dedup, the T_commit fallback would re-call
+	// BuildOwnCommit on an already-committed instance and produce
+	// ErrAlreadyCommitted.
+	commitEmitted map[obftbase.OperatorID]bool
+	canonValues   map[int]obftbase.Value
+	trace         []ct.TraceEntry
 }
 
 func newSim(cfg desConfig) (*sim, error) {
@@ -91,17 +99,18 @@ func newSim(cfg desConfig) (*sim, error) {
 	}
 
 	return &sim{
-		cfg:         cfg,
-		rng:         mrand.New(mrand.NewSource(cfg.Seed)),
-		operators:   operators,
-		pubShares:   pubShares,
-		clusterPub:  clusterPub,
-		canonValues: canonValues,
-		instances:   make(map[obftbase.OperatorID]*obftbase.Instance, N),
-		resolved:    make(map[obftbase.OperatorID]*obftbase.Output, N),
-		resolvedAt:  make(map[obftbase.OperatorID]time.Duration, N),
-		resolveErrs: make(map[obftbase.OperatorID]error, N),
-		vQuorumAt:   make(map[obftbase.OperatorID]time.Duration, N),
+		cfg:           cfg,
+		rng:           mrand.New(mrand.NewSource(cfg.Seed)),
+		operators:     operators,
+		pubShares:     pubShares,
+		clusterPub:    clusterPub,
+		canonValues:   canonValues,
+		instances:     make(map[obftbase.OperatorID]*obftbase.Instance, N),
+		resolved:      make(map[obftbase.OperatorID]*obftbase.Output, N),
+		resolvedAt:    make(map[obftbase.OperatorID]time.Duration, N),
+		resolveErrs:   make(map[obftbase.OperatorID]error, N),
+		vQuorumAt:     make(map[obftbase.OperatorID]time.Duration, N),
+		commitEmitted: make(map[obftbase.OperatorID]bool, N),
 	}, nil
 }
 

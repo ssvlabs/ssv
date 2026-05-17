@@ -335,6 +335,14 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			})
 		}
 	}
+	// Spec §Phase 2 emission-timing: the L_0 leader's BuildPhase1Bundle
+	// sets sigmaLocked[0], closing L0ReadyCh on the leader-σ_V branch.
+	// Fire the early commit emit for the leader so their KindCommit hits
+	// the wire alongside (or before) their Phase-1 bundle arrivals at
+	// peers — letting V-drop receivers exercise the peer-reflood-V path.
+	if e.layer == 0 {
+		out = append(out, maybeEarlyCommit(s, leader)...)
+	}
 	return out
 }
 
@@ -381,7 +389,10 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 	}
 	valid := s.cfg.Host.Validate(ct.OperatorID(e.to), e.layer, e.bundle.Value, ct.PhasePhase1Acceptance)
 	_ = inst.ApplyHostValidity(e.layer, e.bundle.Value, valid)
-	return nil
+	// Spec §Phase 2 emission-timing: ApplyHostValidity for L_0 may close
+	// L0ReadyCh on the Phase-1 retention σ path; if so, fire the early
+	// commit emit now rather than waiting for the T_commit fallback.
+	return maybeEarlyCommit(s, e.to)
 }
 
 // ---- evtPhaseTwoStart --------------------------------------------------
@@ -390,50 +401,122 @@ type evtPhaseTwoStart struct{}
 
 func (e *evtPhaseTwoStart) describe() string { return "PhaseTwoStart" }
 
+// evtPhaseTwoStart is the T_commit fallback that fires emitOwnCommit for
+// every op that hasn't already emitted via the L0Ready-driven early-commit
+// path (sim.commitEmitted guard). Operators whose L_0 decision became
+// determinable before T_commit (Phase-1 retention + host valid, leader's
+// own BuildPhase1Bundle, observed equivocation, or peer-reflood-V at L_0)
+// fire their commit at the moment L0Ready closes via maybeEarlyCommit
+// scheduled from evtPhase1Broadcast / evtPhase1Arrival / evtCommitArrival.
 func (e *evtPhaseTwoStart) handle(s *sim) []scheduledEvent {
 	for _, op := range s.operators {
-		if !s.cfg.Byz.AllowCommitBroadcast(op) {
-			continue
-		}
-		c, err := s.instances[op].BuildOwnCommit()
-		if err != nil || c == nil {
-			continue
-		}
-		c = s.cfg.Byz.OverrideCommit(s, op, c)
-		// OfflineAggregator: op's Commit hits the wire — record per-layer
-		// σ side (plaintext at L_0, encrypted-claim at L_k>0) and per-NR.
-		if s.cfg.Aggregator != nil {
-			recordCommitToAggregator(s.cfg.Aggregator, c)
-		}
-		// Byz patterns may delay their own KindCommit dispatch to land past
-		// RoundEndOffset, exercising the spec §Phase 3 late-arrival
-		// re-resolve recovery path.
-		extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, op)
-		s.emitToAll(op, ct.KindCommit, -1, commitSize(c), extraDelay, func(to obftbase.OperatorID) event {
-			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(c)}
-		})
-		// Byz patterns may add ADDITIONAL commits (e.g. cross-onion
-		// equivocation emits two structurally-distinct Commits).
-		for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
-			extra := extra
-			if s.cfg.Aggregator != nil {
-				recordCommitToAggregator(s.cfg.Aggregator, extra)
-			}
-			s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), extraDelay, func(to obftbase.OperatorID) event {
-				return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
-			})
-		}
-		// Observer-mode self-resolve probe: BuildOwnCommit self-observes
-		// the op's own σ/NR partials into its local pools, so an op that
-		// is itself the L_0 leader at f=0 (degenerate cluster size n=1,
-		// qV=1) can satisfy σ-quorum from its own self-observation alone.
-		// At realistic f≥1 the probe returns ErrNoQuorum (1 partial < qV)
-		// and is a no-op. Cheap insurance against future degenerate-fixture
-		// regressions; matches OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §OBFT
-		// instrumentation table.
-		tryOpportunisticResolve(s, op)
+		emitOwnCommit(s, op)
 	}
 	return nil
+}
+
+// ---- evtCommitEmit -----------------------------------------------------
+
+// evtCommitEmit fires for a single op at the moment their L_0 decision
+// becomes determinable — the spec §Phase 2 emission-timing early-emit
+// trigger. Scheduled by maybeEarlyCommit from evtPhase1Broadcast (L_0
+// leader's own bundle), evtPhase1Arrival (Phase-1 retention path), and
+// evtCommitArrival (peer-reflood-V path).
+type evtCommitEmit struct {
+	op obftbase.OperatorID
+}
+
+func (e *evtCommitEmit) describe() string {
+	return fmt.Sprintf("CommitEmit[op=%d]", e.op)
+}
+
+func (e *evtCommitEmit) handle(s *sim) []scheduledEvent {
+	emitOwnCommit(s, e.op)
+	return nil
+}
+
+// emitOwnCommit dispatches op's KindCommit if it hasn't been emitted yet
+// AND the byz pattern allows it. Idempotent via the commitEmitted guard:
+// later calls (e.g. evtPhaseTwoStart T_commit fallback for an op that
+// already early-emitted) are no-ops.
+func emitOwnCommit(s *sim, op obftbase.OperatorID) {
+	if s.commitEmitted[op] {
+		return
+	}
+	if !s.cfg.Byz.AllowCommitBroadcast(op) {
+		// Mark emitted to suppress future T_commit fallback attempts;
+		// the byz suppression is permanent for this slot.
+		s.commitEmitted[op] = true
+		return
+	}
+	c, err := s.instances[op].BuildOwnCommit()
+	if err != nil || c == nil {
+		// Most-common err here is ErrInstanceEnded for a stale-slot
+		// fallback — mark emitted so we don't retry.
+		s.commitEmitted[op] = true
+		return
+	}
+	s.commitEmitted[op] = true
+	c = s.cfg.Byz.OverrideCommit(s, op, c)
+	// OfflineAggregator: op's Commit hits the wire — record per-layer
+	// σ side (plaintext at L_0, encrypted-claim at L_k>0) and per-NR.
+	if s.cfg.Aggregator != nil {
+		recordCommitToAggregator(s.cfg.Aggregator, c)
+	}
+	// Byz patterns may delay their own KindCommit dispatch to land past
+	// RoundEndOffset, exercising the spec §Phase 3 late-arrival
+	// re-resolve recovery path.
+	extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, op)
+	s.emitToAll(op, ct.KindCommit, -1, commitSize(c), extraDelay, func(to obftbase.OperatorID) event {
+		return &evtCommitArrival{from: op, to: to, commit: cloneCommit(c)}
+	})
+	// Byz patterns may add ADDITIONAL commits (e.g. cross-onion
+	// equivocation emits two structurally-distinct Commits).
+	for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
+		extra := extra
+		if s.cfg.Aggregator != nil {
+			recordCommitToAggregator(s.cfg.Aggregator, extra)
+		}
+		s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), extraDelay, func(to obftbase.OperatorID) event {
+			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
+		})
+	}
+	// Observer-mode self-resolve probe: BuildOwnCommit self-observes
+	// the op's own σ/NR partials into its local pools, so an op that
+	// is itself the L_0 leader at f=0 (degenerate cluster size n=1,
+	// qV=1) can satisfy σ-quorum from its own self-observation alone.
+	// At realistic f≥1 the probe returns ErrNoQuorum (1 partial < qV)
+	// and is a no-op. Cheap insurance against future degenerate-fixture
+	// regressions; matches OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §OBFT
+	// instrumentation table.
+	tryOpportunisticResolve(s, op)
+}
+
+// maybeEarlyCommit checks whether op's L_0 decision is now determinable
+// (L0ReadyCh closed) and schedules an evtCommitEmit at the current sim
+// time if so. Spec §Phase 2 emission-timing.
+//
+// Called from event handlers that can close L0ReadyCh: evtLeaderFetch
+// (after BuildPhase1Bundle for the L_0 leader's own σ-lock), evtPhase1Arrival
+// (after ApplyHostValidity for L_0 via Phase-1 retention path), and
+// evtCommitArrival (after the host-validation drain for the peer-reflood-V
+// path).
+//
+// Idempotent: returns nil if op has already emitted or if L0Ready hasn't
+// closed yet.
+func maybeEarlyCommit(s *sim, op obftbase.OperatorID) []scheduledEvent {
+	if s.commitEmitted[op] {
+		return nil
+	}
+	select {
+	case <-s.instances[op].L0ReadyCh():
+		return []scheduledEvent{{
+			when: s.now,
+			ev:   &evtCommitEmit{op: op},
+		}}
+	default:
+		return nil
+	}
 }
 
 // recordCommitToAggregator extracts every σ / NR / encrypted-onion partial
@@ -498,6 +581,11 @@ drainLoop:
 			break drainLoop
 		}
 	}
+	// Spec §Phase 2 emission-timing: ObserveCommit + drained
+	// ApplyHostValidity may close L0ReadyCh on the peer-reflood-V σ path
+	// (V-drop receiver harvested V from this peer's σ-onion). If so,
+	// fire the early commit emit now.
+	earlyEmit := maybeEarlyCommit(s, e.to)
 
 	// Observer-mode quorum detection: probe Resolve at the receiver
 	// immediately on every commit arrival. First-success records
@@ -513,14 +601,14 @@ drainLoop:
 	// commit landed past RoundEndOffset, the receiver re-runs Resolve to
 	// incorporate the new partial. Skip if the receiver already decided.
 	if s.now <= s.cfgObft.RoundEndOffset() {
-		return nil
+		return earlyEmit
 	}
 	if _, already := s.resolved[e.to]; already {
-		return nil
+		return earlyEmit
 	}
 	// Schedule the re-resolve immediately at the current sim time so the new
 	// state is incorporated before any further events fire at this timestamp.
-	return []scheduledEvent{{when: s.now, ev: &evtResolveRerun{op: e.to}}}
+	return append(earlyEmit, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
 }
 
 // tryOpportunisticResolve probes Resolve at `op` and records the first
