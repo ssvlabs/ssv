@@ -488,16 +488,16 @@ func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
 	// via this peer commit's σ-onion entry at L_0 without an existing
 	// host verdict). Mirrors the runner's drain-goroutine pattern in
 	// protocol/v2/ssv/runner/obft/runner.go drainHostValidationRequests.
+drainLoop:
 	for {
 		select {
 		case req := <-inst.WantsHostValidationCh():
 			valid := s.cfg.Host.Validate(ct.OperatorID(e.to), req.Layer, req.Value, ct.PhasePhase1Acceptance)
 			_ = inst.ApplyHostValidity(req.Layer, req.Value, valid)
 		default:
-			goto drained
+			break drainLoop
 		}
 	}
-drained:
 
 	// Observer-mode quorum detection: probe Resolve at the receiver
 	// immediately on every commit arrival. First-success records

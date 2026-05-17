@@ -457,19 +457,23 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 // fabricating V_fake cannot trick honest receivers without a valid σ_L^V
 // from the leader on that V.
 //
-// Returns (nil, false) if equivocation (≥ 2 distinct V's in bundles),
-// no retained or peer-observed V, or host hasn't validated.
+// Returns (nil, false) if cluster-observable equivocation (≥ 2 distinct
+// V's across bundles ∪ peerOnions ∪ witnessedLeaderSigma → cross-phase
+// exclusivity routes through NR regardless of which source first exposed
+// the second V), no retained or peer-observed V, or host hasn't validated.
 func (i *Instance) chosenVForLayer(layer int) (Value, bool) {
-	leaderMap := i.bundles[layer]
-	expectedLeader := i.cfg.Layers[layer].Leader
-	retained := leaderMap[expectedLeader]
-
-	// Equivocation in retained bundles → no σ target (cross-phase
-	// exclusivity will route through NR).
-	if len(retained) >= 2 {
+	// Cross-phase-exclusivity equivocation gate: cluster-observable
+	// equivocation at this layer forces NR regardless of which source
+	// exposed each V. Without this, an operator with bundle V_a +
+	// peer-V V_b could σ on V_a despite the cluster having attributable
+	// Rule 2 evidence on the leader's equivocation.
+	if i.distinctVCountAtLayer(layer) >= 2 {
 		return nil, false
 	}
 
+	leaderMap := i.bundles[layer]
+	expectedLeader := i.cfg.Layers[layer].Leader
+	retained := leaderMap[expectedLeader]
 	if len(retained) == 1 {
 		// Primary path: uniquely-retained Phase-1 bundle.
 		return checkHostValidV(i.hostVerdict[layer], retained[0].Value)

@@ -260,6 +260,54 @@ func TestL0Ready_PeerVMissingWitness_NoTrigger(t *testing.T) {
 	}
 }
 
+// TestL0Ready_CrossSourceEquivocation_NoSigma — operator has Phase-1
+// bundle V_a locally retained + host-validated, AND observes a peer
+// commit with V_b at L_0 (via leader equivocation that reached different
+// honest operators). Cross-phase exclusivity forces NR even though
+// chosenVForLayer's primary path would otherwise return V_a — the
+// equivocation gate detects V_a + V_b across sources.
+func TestL0Ready_CrossSourceEquivocation_NoSigma(t *testing.T) {
+	s := newSim(t, 4)
+	vA := []byte("L_0 V_a")
+	vB := []byte("L_0 V_b")
+	leaderID := s.leaderAt(0)
+	// op 2 gets V_a (retains bundle); op 3 gets V_b (retains bundle).
+	// op 4 is our test subject: gets V_a directly + observes op 3's commit
+	// (which carries V_b at L_0 plaintext + σ_L^V_b witness).
+	const opA OperatorID = 2
+	const opB OperatorID = 3
+	const subject OperatorID = 4
+	s.deliverPhase1Equivocation(0, vA, vB,
+		[]OperatorID{leaderID, opA, subject}, []OperatorID{opB},
+		observedEarly, true)
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], s.allOperators(), observedEarly, true)
+	}
+	commitB, err := s.instances[opB].BuildOwnCommit()
+	require.NoError(t, err)
+
+	subjectInst := s.instances[subject]
+	require.NoError(t, subjectInst.ObserveCommit(commitB))
+
+	// Subject's bundles[0] has V_a (1 entry); peerOnions[0] has V_b from
+	// op_B; witnessedLeaderSigma[0] has V_b (harvested from op_B's commit
+	// witness, verified against the V_b plaintext in op_B's σ-onion). The
+	// local bundle's σ_V on V_a stays in bundles[0][leader] (not in
+	// witnessedLeaderSigma — that map only holds peer-harvested σ_L^V's).
+	// distinctVCountAtLayer counts {V_a, V_b} = 2 → equivocation gate
+	// fires in chosenVForLayer, forcing NR.
+	subjectCommit, err := subjectInst.BuildOwnCommit()
+	require.NoError(t, err)
+	require.Equal(t, 0, len(subjectCommit.Layers[0].Value),
+		"subject must NR on L_0 under cross-source equivocation, not σ on V_a")
+	// L0Ready also closes (equivocation predicate).
+	select {
+	case <-subjectInst.L0ReadyCh():
+	default:
+		t.Fatalf("L0Ready did not close on cross-source equivocation")
+	}
+}
+
 // TestL0Ready_PeerVEquivocation_ForcesReady — two peers send commits with
 // distinct V's at L_0 (leader equivocation). L0ReadyCh fires immediately
 // on the equivocation branch (forced NR).

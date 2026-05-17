@@ -514,9 +514,17 @@ func (i *Instance) requestHostValidation(layer int, value Value) {
 
 // L0ReadyCh returns a channel closed when the operator has enough information
 // at L_0 to commit early per spec §Phase 2 emission-timing. Becomes ready when:
+//   - the operator is the L_0 leader and has built their Phase-1 bundle
+//     (sigmaLocked[0] is set on transitionToSigma during BuildPhase1Bundle), OR
+//   - ≥ 2 distinct V's are observable at L_0 across (retained bundles ∪ peer
+//     onions ∪ verified σ_L^V witnesses) → forced NR per cross-phase
+//     exclusivity, OR
 //   - a uniquely-retained Phase-1 bundle at L_0 exists AND host has returned a
-//     valid/not-valid verdict on it, OR
-//   - ≥ 2 distinct V's are retained at L_0 (leader equivocation observed).
+//     valid/not-valid verdict on it (primary σ path), OR
+//   - no retained bundle but a uniquely-observed peer-V at L_0 with verified
+//     leader σ_L^V (witnessedLeaderSigma) AND host validity recorded
+//     (peer-reflood-V σ path, see spec §Phase 2 / Peer-reflood V via early
+//     commit).
 //
 // The channel is closed at most once per slot. If L_0 never becomes ready
 // (silent leader or grossly-late bundle), the channel stays open and the
@@ -549,9 +557,10 @@ func (i *Instance) l0DecisionReady() bool {
 	if i.sigmaLocked[layer] {
 		return true
 	}
-	// Equivocation observed across (bundles ∪ witnessedLeaderSigma):
-	// ≥ 2 distinct V's known at L_0 → forced NR per cross-phase exclusivity.
-	if i.distinctL0VCount() >= 2 {
+	// Equivocation observed across (bundles ∪ peerOnions ∪
+	// witnessedLeaderSigma): ≥ 2 distinct V's known at L_0 → forced NR
+	// per cross-phase exclusivity.
+	if i.distinctVCountAtLayer(layer) >= 2 {
 		return true
 	}
 	// Primary σ path: uniquely-retained bundle + host verdict recorded.
@@ -582,12 +591,16 @@ func (i *Instance) l0DecisionReady() bool {
 	return false
 }
 
-// distinctL0VCount counts the number of distinct V's known at L_0 across
-// retained Phase-1 bundles, peer σ-onion entries, and verified leader
-// σ_L^V witnesses. Used by l0DecisionReady to detect cluster-observable
-// equivocation (≥ 2 → NR ready).
-func (i *Instance) distinctL0VCount() int {
-	const layer = 0
+// distinctVCountAtLayer counts the number of distinct V's known at `layer`
+// across retained Phase-1 bundles, peer σ-onion entries, and verified
+// leader σ_L^V witnesses. ≥ 2 → cluster-observable equivocation; per
+// cross-phase exclusivity the operator must NR at this layer regardless
+// of which source first exposed the second V.
+//
+// Used by l0DecisionReady (signal the NR-ready predicate) and by
+// chosenVForLayer (gate σ-emission so the operator doesn't σ on V_a
+// when V_b is also observable via peer-V/witness).
+func (i *Instance) distinctVCountAtLayer(layer int) int {
 	seen := make(map[[32]byte]bool)
 	expectedLeader := i.cfg.Layers[layer].Leader
 	for _, b := range i.bundles[layer][expectedLeader] {
