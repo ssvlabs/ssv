@@ -88,12 +88,18 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// 2abOBFT splits Phase 2 into Phase 2a (verdict broadcast, Δ_2a ≥ 2 BTT
-	// per spec §Setting) and Phase 2b (σ-or-NR propagation, Δ_2b ≥ 1 BTT;
-	// recommended 2 BTT). Spec-recommended sizings (Δ_2a = Δ_2b = 2·bttEff)
-	// give the 2ab Phase-2 total = 4·bttEff. T_commit lands 2·bttEff
-	// earlier than OBFT's at the same RelayCutoff — the spec's "cost" for
-	// the validity-divergence safety story.
+	// 2abOBFT splits Phase 2 into Phase 2a (verdict broadcast, Δ_2a ≥ 2·BTT
+	// per spec §Setting — structural minimum, mandatory) and Phase 2b
+	// (σ-or-NR propagation, spec-recommended Δ_2b = 1·BTT + ε_proc at
+	// tightened sizing). The framework intentionally keeps `Δ_2b = 2·BTT`
+	// for simulation conservatism — the production SSV adapter uses the
+	// tightened spec recommendation; the framework's 2·BTT gives sims an
+	// extra propagation cushion so scenario expectations stay stable
+	// under network-model jitter without re-baselining every scenario
+	// when the spec recommendation tightens. Resulting Phase-2 total =
+	// 4·bttEff in the framework; T_commit lands 2·bttEff earlier than
+	// OBFT's at the same RelayCutoff — the spec's "cost" for the
+	// validity-divergence safety story.
 	bttEff := p.effectiveBTT(cfg.BTT)
 	delta2a := 2 * bttEff
 	delta2b := 2 * bttEff

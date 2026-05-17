@@ -141,9 +141,11 @@ type Config struct {
 	// for KindCommit messages emitted by T_commit (the synchronous
 	// fallback) to reach all honest peers before Phase 3. Reflood
 	// absorption is structurally provided by per-layer `B_k` via the
-	// reflood-aware schedule (`(k+2)·BTT + RefloodDelay`), so Delta2 no
-	// longer carries a reflood cushion. Sub-1·BTT sizings are sub-BFT
-	// (Phase-2 propagation can't complete within the budget).
+	// primary-vs-backup reflood-aware schedule (`B_0 = 2·BTT + RefloodDelay`
+	// for the MEV-fresh primary; `B_1..B_{K-1} = T_commit` for all backups
+	// broadcasting at BFT_start), so Delta2 no longer carries a reflood
+	// cushion. Sub-1·BTT sizings are sub-BFT (Phase-2 propagation can't
+	// complete within the budget).
 	Delta2 time.Duration
 
 	// Eps3 is ε_3 — the Phase 3 window length. Per spec, Eps3 covers
@@ -160,9 +162,10 @@ type Config struct {
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
 	// §Setting: BTT = P99 + δ, where P99 is the cluster gossipsub propagation
 	// at the deployment's chosen tail percentile and δ is the clock-skew
-	// bound. Used as the unit for time-budget formulas (e.g. Delta2 = 2 BTT
-	// recommended; B_k staggered as multiples of BTT). Concrete sizing at
-	// Config A: P99 = 150ms, δ = 50ms, BTT = 200ms.
+	// bound. Used as the unit for time-budget formulas (e.g. Delta2 = 1 BTT
+	// recommended at tightened sizing; B_0 = 2·BTT + RefloodDelay primary,
+	// B_1..B_{K-1} = T_commit backups). Concrete sizing at Config A:
+	// P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
 }
 
@@ -369,22 +372,24 @@ func (c *Config) Validate() error {
 	}
 
 	// Per-layer BroadcastBudget — required on every layer per spec §Setting.
-	// Callers can use DefaultBroadcastBudget(K, BTT, T_commit) for the spec-recommended
-	// staggered schedule, or supply their own per-layer values.
+	// Callers can use DefaultBroadcastBudget(K, BTT, RefloodDelay, T_commit)
+	// for the spec-recommended primary-vs-backup schedule (B_0 = 2·BTT +
+	// RefloodDelay; B_1..B_{K-1} = T_commit), or supply their own per-layer
+	// values.
 	for k, l := range c.Layers {
 		if l.BroadcastBudget <= 0 {
-			return fmt.Errorf("obft: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for a spec-conforming staggered schedule)", k)
+			return fmt.Errorf("obft: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for the spec-conforming primary-vs-backup schedule)", k)
 		}
 	}
 	// B_0 ≤ B_1 ≤ ... ≤ B_{K-1}: deeper layers get ≥ their predecessor's
 	// absorption / chain-decryption headroom (spec §Setting "B_k ≥
 	// B_{k-1}" verbatim). Equal adjacent budgets are tolerated: at
-	// degraded operating points multiple layers' broadcast targets clamp
-	// to BFT_start (the runtime `max(BFT_start, T_commit − B_k)` floor),
-	// and at extreme operating points the canonical staggered shallow
-	// budgets even exceed T_commit. Strict-increasing was historically
-	// enforced but rejected these degenerate-but-still-valid configs;
-	// non-decreasing keeps the staggering intent without blocking them.
+	// the spec-recommended primary-vs-backup schedule all backups share
+	// B_k = T_commit (multiple layers' broadcast targets clamp to BFT_start
+	// via the runtime `max(BFT_start, T_commit − B_k)` floor). Strict-
+	// increasing was historically enforced (when the schedule was staggered)
+	// but rejected the now-default primary-vs-backup configs; non-decreasing
+	// is the current convention.
 	for k := 1; k < len(c.Layers); k++ {
 		if c.Layers[k].BroadcastBudget < c.Layers[k-1].BroadcastBudget {
 			return errors.New("obft: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
@@ -423,9 +428,9 @@ func (c *Config) Validate() error {
 		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
 		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
 		// fetch asymmetry between primary and backups). Strict-
-		// decreasing was historically enforced; the non-increasing
-		// relaxation lets multiple layers' targets collide at BFT_start
-		// when the operating point pushes shallow targets past T_commit
+		// decreasing was historically enforced (when the schedule was
+		// staggered); the non-increasing relaxation lets all backups
+		// share FetchAt = 0 under the current primary-vs-backup schedule
 		// (matches the BroadcastBudget non-decreasing relaxation above).
 		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
 			return errors.New("obft: layer fetch times must be non-increasing in k")

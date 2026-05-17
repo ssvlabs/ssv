@@ -33,9 +33,10 @@ type Protocol struct {
 	VariantName string
 
 	// BTTMultiplier scales cfg.BTT internally before deriving any timing
-	// budget (Delta2, BroadcastBudget shallow layers, FetchAt fetch
-	// buffer, and the BTT field forwarded to obftbase.Config). Zero is
-	// treated as 1.0 (no scaling).
+	// budget (Delta2, primary B_0 = 2·BTT + RefloodDelay, FetchAt fetch
+	// buffer, and the BTT field forwarded to obftbase.Config). Backups
+	// L_1..L_{K-1} use B_k = T_commit and are unaffected by the
+	// multiplier. Zero is treated as 1.0 (no scaling).
 	//
 	// CAVEAT — the multiplier affects the protocol's INTERNAL assumptions
 	// only; the simulated network still propagates at cfg.BTT. Multiplier

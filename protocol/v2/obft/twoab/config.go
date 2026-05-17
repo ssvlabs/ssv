@@ -90,8 +90,9 @@ type LayerSpec struct {
 	// zero/negative values and decreasing-in-k schedules (equal adjacent
 	// budgets are accepted — multiple layers may share the BFT_start
 	// clamp at degraded operating points; see spec §Setting). Use
-	// DefaultBroadcastBudget(K, BTT, T_verdict_start) for the spec-
-	// recommended staggered schedule when constructing a Config manually.
+	// DefaultBroadcastBudget(K, BTT, RefloodDelay, T_verdict_start) for
+	// the spec-recommended staggered schedule when constructing a Config
+	// manually.
 	BroadcastBudget time.Duration
 }
 

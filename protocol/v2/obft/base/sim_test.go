@@ -120,8 +120,11 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 }
 
 // newSimWithStaggeredBudgets builds a cluster with per-layer BroadcastBudget
-// set to spec-recommended ratios (B_0=0.5·BTT, B_1=1·BTT, B_2=2·BTT,
-// B_3=5·BTT) — exercises the M3 staggered schedule end-to-end.
+// set to a custom staggered test fixture (B_0=0.5·BTT, B_1=1·BTT, B_2=2·BTT,
+// B_3=5·BTT) — exercises the per-layer-budget mechanism end-to-end. The
+// current spec schedule is primary-vs-backup (B_0 = 2·BTT + RefloodDelay;
+// B_1..B_{K-1} = T_commit per [docs/OBFT.md §Setting](OBFT.md)); these
+// staggered ratios are a non-canonical test fixture, not spec-recommended.
 func newSimWithStaggeredBudgets(t *testing.T, n int) *sim {
 	t.Helper()
 	s := newSim(t, n)

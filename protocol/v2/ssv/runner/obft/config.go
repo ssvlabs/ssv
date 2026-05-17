@@ -23,8 +23,9 @@ import (
 // Spec Config A operating point (BTT = 200ms, RelayCutoff = 4000ms,
 // HeaderSubmitHeadroom = 100ms):
 //   - Δ_2 = 1 BTT = 200ms (recommended; KindCommit propagation cycle).
-//     Reflood absorption lives in per-layer B_k via the reflood-aware
-//     schedule, so Δ_2 no longer carries a reflood cushion.
+//     Reflood absorption lives in the primary's B_0 = 2·BTT + RefloodDelay
+//     (backups L_1..L_{K-1} have B_k = T_commit), so Δ_2 no longer
+//     carries a reflood cushion.
 //   - ε_3 ≈ 50ms (absolute; local CPU reconstruction)
 //   - JitterBuffer ≈ 50ms (absolute; residual slack between Phase-3
 //     completion and cert-broadcast / relay-submit start)
@@ -57,13 +58,15 @@ const (
 	// DefaultRefloodDelay is the worst-case gossipsub-lazy-push latency
 	// before a retransmission cycle completes, defaulted to SSV's gossipsub
 	// HeartbeatInterval (network/topics/params/gossipsub.go). Used to size
-	// per-layer broadcast budgets B_k so that one full IHAVE/IWANT reflood
-	// cycle fits within a layer's absorption window for mesh-flaky receivers
-	// — without it, a missed eager-push at L_0 forecloses L_0 σ-quorum even
-	// under partial-synchrony assumptions. Deployments running on dense,
-	// fully-meshed clusters where eager-push reliably reaches all peers
-	// (typically n=4 fully connected) MAY override to a lower value (down
-	// to 0) to recover MEV-fetch headroom.
+	// the primary layer's broadcast budget B_0 = 2·BTT + RefloodDelay so
+	// that one full IHAVE/IWANT reflood cycle fits within the primary's
+	// absorption window for mesh-flaky receivers — without it, a missed
+	// eager-push at L_0 forecloses L_0 σ-quorum even under partial-
+	// synchrony assumptions. Backups L_1..L_{K-1} use B_k = T_commit and
+	// broadcast at BFT_start (RefloodDelay does not affect them). Deployments
+	// running on dense, fully-meshed clusters where eager-push reliably
+	// reaches all peers (typically n=4 fully connected) MAY override to a
+	// lower value (down to 0) to recover MEV-fetch headroom at L_0.
 	DefaultRefloodDelay = 700 * time.Millisecond
 )
 
@@ -125,13 +128,15 @@ type ConfigOverrides struct {
 	// RefloodDelay is the worst-case gossipsub-lazy-push latency before a
 	// retransmission cycle completes — bounded by the cluster's
 	// HeartbeatInterval. When zero, defaults to DefaultRefloodDelay (700ms,
-	// matching SSV's configured HeartbeatInterval). The per-layer B_k
-	// schedule adds RefloodDelay on top of the {2, 3, 4}·BTT shallow base so
-	// one full IHAVE/IWANT cycle fits in each shallow layer's absorption
-	// window. Deployments on fully-meshed clusters where eager-push reaches
-	// all peers reliably may use a tiny positive value (e.g. 1·time.Nanosecond)
-	// to opt out — Go's zero-means-default convention prevents passing 0
-	// explicitly.
+	// matching SSV's configured HeartbeatInterval). The primary L_0's
+	// B_0 = 2·BTT + RefloodDelay so one full IHAVE/IWANT cycle fits in the
+	// primary's absorption window for mesh-flaky receivers; backups
+	// L_1..L_{K-1} have B_k = T_commit and broadcast at BFT_start with
+	// deepest-confirmed-parent fetch (no MEV-fetch budget, maximally-wide
+	// absorption). Deployments on fully-meshed clusters where eager-push
+	// reaches all peers reliably may use a tiny positive value (e.g.
+	// 1·time.Nanosecond) to opt out — Go's zero-means-default convention
+	// prevents passing 0 explicitly.
 	RefloodDelay time.Duration
 
 	// TCommit, Delta2, Eps3, JitterBuffer — when zero, derive from the
