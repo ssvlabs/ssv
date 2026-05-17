@@ -157,11 +157,15 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// runtime `T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k)`
 	// clamps those layers' broadcast targets at BFT_start. Errors here
 	// are only the K<1 / BTT≤0 programmer-error class.
-	// RefloodDelay=0: consensustest simulates idealized eager-push delivery;
-	// gossipsub-mesh reflood scenarios are exercised via DeliveryMesh +
-	// scenario machinery, not via the schedule's static reflood-absorption
-	// budget.
-	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, bttEff, 0, tVerdictStart)
+	// cfg.RefloodDelay is the per-scenario opt-in for the spec's reflood-
+	// absorption budget (`B_0 = 2·BTT + RefloodDelay`). Default 0:
+	// adversarial scenarios and direct-delivery sims model idealized
+	// eager-push, no schedule-level reflood absorption. Production-
+	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
+	// to match libp2p heartbeat), mirroring the production SSV adapter's
+	// DefaultRefloodDelay. Anchor is tVerdictStart, not tCommit (Phase-1
+	// must complete before Phase-2a opens — structural to 2abOBFT).
+	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, bttEff, cfg.RefloodDelay, tVerdictStart)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)

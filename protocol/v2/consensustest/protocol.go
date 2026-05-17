@@ -81,6 +81,19 @@ type SimConfig struct {
 	// for operational margin).
 	BTT time.Duration
 
+	// RefloodDelay is the per-scenario reflood-absorption budget folded
+	// into the OBFT-family primary-layer broadcast schedule (`B_0 = 2·BTT
+	// + RefloodDelay`; backups unaffected). Default 0: adversarial scenarios
+	// and direct-delivery sims model idealized eager-push and don't pay
+	// schedule-level reflood absorption. Production-realistic-mesh
+	// scenarios opt in by setting cfg.RefloodDelay equal to the mesh's
+	// gossip heartbeat (700ms by default), matching the production SSV
+	// adapter's DefaultRefloodDelay. Does NOT scale with BTTMultiplier —
+	// reflood-cycle latency is a libp2p deployment constant (mirrors
+	// QBFT-SSV's FixedRT convention). Ignored by QBFT and PSigs adapters
+	// (no spec-level reflood-absorption concept).
+	RefloodDelay time.Duration
+
 	Network NetworkModel
 	Host    HostPattern
 
@@ -367,6 +380,9 @@ func (c *SimConfig) Validate() error {
 	}
 	if c.BTT <= 0 {
 		return fmt.Errorf("consensustest: BTT must be > 0")
+	}
+	if c.RefloodDelay < 0 {
+		return fmt.Errorf("consensustest: RefloodDelay must be >= 0")
 	}
 	if c.RelayCutoff <= 0 {
 		return fmt.Errorf("consensustest: RelayCutoff must be > 0")

@@ -112,10 +112,14 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 			phase3JitterBuffer, epsilon3, delta2, p.BTTMultiplier)
 	}
 
-	// RefloodDelay=0: consensustest simulates idealized eager-push delivery;
-	// gossipsub-mesh reflood scenarios are exercised via DeliveryMesh + scenario
-	// machinery, not via the schedule's static reflood-absorption budget.
-	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, bttEff, 0, tCommit)
+	// cfg.RefloodDelay is the per-scenario opt-in for the spec's reflood-
+	// absorption budget (`B_0 = 2·BTT + RefloodDelay`). Default 0:
+	// adversarial scenarios and direct-delivery sims model idealized
+	// eager-push, no schedule-level reflood absorption. Production-
+	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
+	// to match libp2p heartbeat), mirroring the production SSV adapter's
+	// DefaultRefloodDelay.
+	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, bttEff, cfg.RefloodDelay, tCommit)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: obft adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)
