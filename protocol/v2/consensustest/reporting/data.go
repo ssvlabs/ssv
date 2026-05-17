@@ -25,6 +25,7 @@ package reporting
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -111,9 +112,28 @@ func WriteReportData(c Comparison, dir string) error {
 	// and silently overwrite (losing every prior (n, K) slice). Rename
 	// is atomic on POSIX, so any reader either sees the old file or
 	// the fully-written new one.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+	//
+	// Per-process-unique temp suffix via os.CreateTemp so two parallel
+	// `make stresstest` invocations writing into the same REPORT_DIR
+	// don't race on a fixed "data.js.tmp" name and corrupt each
+	// other's mid-write payloads. (The Fields-tuple merge would still
+	// race at the read-then-write boundary, so concurrent runs into
+	// the same dir aren't a supported workflow — but a single fixed
+	// suffix would turn a soft "last write wins" race into a hard
+	// "torn write" failure, which is worth avoiding cheaply.)
+	tmpFile, err := os.CreateTemp(dir, "data.js.*.tmp")
+	if err != nil {
+		return fmt.Errorf("reporting: create tmp: %w", err)
+	}
+	tmp := tmpFile.Name()
+	if _, err := tmpFile.Write(out); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmp)
 		return fmt.Errorf("reporting: write tmp %s: %w", tmp, err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("reporting: close tmp %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		// Clean up the temp file on rename failure so we don't leave
@@ -225,7 +245,23 @@ func mergePayloads(prev, next reportPayload) reportPayload {
 // catalog order. The UI iterates this list to render heatmap rows;
 // preserving prev-only scenarios stops their old cells from being
 // silently hidden.
+//
+// Orphan-prev scenarios (in prev but not in next) get a one-line
+// stderr warning so a silent catalog rename doesn't show up as two
+// near-identical heatmap rows (old name with stale cells, new name
+// with fresh ones). Removals are legitimate but easy to mistake for
+// renames at the data.js layer — surfacing it lets the operator
+// decide.
 func mergeScenarios(prev, next []scenarioPayload) []scenarioPayload {
+	nextByName := make(map[string]bool, len(next))
+	for _, s := range next {
+		nextByName[s.Name] = true
+	}
+	for _, s := range prev {
+		if !nextByName[s.Name] {
+			log.Printf("reporting: merge: scenario %q present in existing data.js but not in this run's catalog — kept as orphan (rename suspected if the new catalog has a near-twin)", s.Name)
+		}
+	}
 	byName := make(map[string]int, len(prev)+len(next))
 	out := make([]scenarioPayload, 0, len(prev)+len(next))
 	for _, s := range prev {
@@ -268,6 +304,14 @@ func mergeProtocols(prev, next []string) []string {
 // Fields-tuple. next-side points replace prev-side points with the same
 // Fields (fresh data wins); new Fields combinations are appended.
 // next's sweep metadata (Title, Description, etc.) takes precedence.
+//
+// Merged Points are re-sorted by fieldsKey post-merge so axis order is a
+// deterministic function of the merged Fields-tuple set, independent of
+// the run-ordering that produced the file. Without this, alternating
+// runs at e.g. LAYERS_K=4 then LAYERS_K=2,3 leave Points in arrival
+// order ([K=4, K=2, K=3]), which is fine for the current UI (which
+// looks up by Fields rather than iterating Points in order) but a
+// latent footgun for any future sort assumption.
 func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
 	out := sweepPayload{
 		Name:        next.Name,
@@ -296,6 +340,9 @@ func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
 			out.Points = append(out.Points, npt)
 		}
 	}
+	sort.SliceStable(out.Points, func(i, j int) bool {
+		return fieldsKey(out.Points[i].Fields) < fieldsKey(out.Points[j].Fields)
+	})
 	return out
 }
 

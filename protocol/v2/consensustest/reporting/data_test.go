@@ -239,6 +239,42 @@ func TestApplicable_ZeroIterationsIsFalse(t *testing.T) {
 	require.True(t, reporting.Applicable(ct.BatchCell{Iterations: 1}))
 }
 
+// TestDefaultSweeps_FieldsKeyStable enforces the contract documented on
+// the reporting layer's fieldsKey helper: every Fields value emitted by
+// DefaultSweeps must round-trip through `%g` byte-identically so the
+// merge can dedup points by Fields-tuple across runs.
+//
+// Implemented as a black-box round-trip: format each emitted float with
+// %g, parse it back, re-format with %g, and assert the two strings are
+// byte-identical. Today every Fields value is a literal or an int-cast
+// float so the check passes trivially; the value of the test is to
+// catch a future sweep that ever computes a Fields value (e.g.
+// `BTT/3`) without rounding to canonical form — which would silently
+// split one logical point into two across runs.
+func TestDefaultSweeps_FieldsKeyStable(t *testing.T) {
+	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
+	require.NotEmpty(t, scenarios)
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	iters := ct.Iterations{Baseline: 1, Unstable: 1}
+	sweeps := ct.DefaultSweeps(scenarios, protos, iters, 4, 2, ct.P2PProfileNames)
+	require.NotEmpty(t, sweeps)
+
+	for _, sw := range sweeps {
+		for i, pt := range sw.Points {
+			for key, val := range pt.Fields {
+				formatted := strconv.FormatFloat(val, 'g', -1, 64)
+				parsed, err := strconv.ParseFloat(formatted, 64)
+				require.NoErrorf(t, err, "sweep=%q point=%d field=%q value=%v failed to parse back from %%g format",
+					sw.Name, i, key, val)
+				reformatted := strconv.FormatFloat(parsed, 'g', -1, 64)
+				require.Equalf(t, formatted, reformatted,
+					"sweep=%q point=%d field=%q value=%v: %%g format %q is not round-trip stable — would split into two logical points across merged runs",
+					sw.Name, i, key, val, formatted)
+			}
+		}
+	}
+}
+
 // TestWriteReportData_MergesAcrossRuns — WriteReportData composes points
 // from multiple runs at different (n, K) operating points into one
 // data.js instead of overwriting. Run 1 contributes (n=4, K=4); run 2

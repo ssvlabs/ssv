@@ -11,6 +11,36 @@ import (
 // load-bearing safety violation; the framework panics on any of:
 // SingleV, HonestAgreement, NoOfflineDoubleV, QuorumBackedDecision,
 // NoEquivocationAccepted, OBFTCommitKindValid, OBFTHostValidityRespect.
+//
+// COVERAGE — what is actually instrumented today:
+//
+//   - SingleV, HonestAgreement, NoOfflineDoubleV are computed by the
+//     framework from every Outcome's PerOp + OfflineAgg fields and
+//     ALWAYS fire on a violation, regardless of adapter.
+//   - NoEquivocationAccepted has EquivocationChecked=true in both
+//     OBFT and 2abOBFT adapters, but EquivocationsAccepted is hard-
+//     wired to 0 there because the adapters' internal Rule3 enforcement
+//     excludes equivocating partials from σ/NR quorums by construction.
+//     Any actually-accepted equivocation would manifest upstream as a
+//     NoOfflineDoubleV / SingleV violation; this invariant is a
+//     diagnostic on top of that catch.
+//   - QuorumBackedDecision, OBFTCommitKindValid, OBFTHostValidityRespect
+//     are advertised invariants whose *Checked gates are NOT set by any
+//     adapter today. They default to true and CANNOT fire on a
+//     violation under the current adapters. They are kept in the struct
+//     so a future adapter can opt in without a framework-side change,
+//     and so a regression that ever toggles a *Checked flag without
+//     also routing the predicate through still trips IsViolation. See
+//     each adapter's computeAttestation docstring for the "left
+//     uninstrumented" rationale and deferral notes.
+//
+// The defense-in-depth picture: a hypothetical adapter regression that
+// accepted an equivocation or a sub-quorum certificate would surface as
+// a SingleV / NoOfflineDoubleV violation upstream — those two are the
+// load-bearing universal checks. The five protocol-specific invariants
+// are layered diagnostics that distinguish "what went wrong" once the
+// universal checks fire (or that future-proof the report against
+// adapter changes).
 type SafetyReport struct {
 	// SingleV: at most one distinct Value is reconstructed cluster-wide
 	// (Pigeonhole claim: "at most one full V signature per slot"). Round
@@ -63,6 +93,13 @@ type SafetyReport struct {
 
 // IsViolation reports whether any load-bearing safety property is false.
 // Terminated is excluded (soft warning, see SafetyReport.Terminated).
+//
+// Today's effective coverage (per the SafetyReport doc): SingleV +
+// HonestAgreement + NoOfflineDoubleV are the ones that can actually
+// fire across the adapter set. The remaining four are kept here so a
+// future adapter that opts into the corresponding *Checked gate
+// participates in the panic path without a framework-side change; until
+// then they default to true and don't contribute violations.
 func (r SafetyReport) IsViolation() bool {
 	return !r.SingleV ||
 		!r.HonestAgreement ||

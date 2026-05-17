@@ -51,8 +51,9 @@ For larger `n` (10, 13), full TLC enumeration is intractable. We argue scalabili
 **Out of scope**:
 - Cluster sizes `n ∈ {10, 13}` (state-space explosion). We rely on a structural-symmetry argument: the protocol mechanics are uniform across cluster sizes; if the property holds at `n=4` and `n=7`, the algebraic floor (Lemma F.7 of OBFT.md) generalizes to higher `n` modulo verifiable reasoning. This is a justified extrapolation, not a strict formal proof.
 - Multi-slot dynamics (assumption 4's rational-byzantine deterrent operates across slots). We verify per-slot properties only.
-- The `Δ_minicon`, `Δ_2`, `Δ_3` specific values (formal verification is at the protocol-logic level, not at concrete timing).
+- The `Δ_minicon`, `Δ_2`, `ε_3` specific values (formal verification is at the protocol-logic level, not at concrete timing).
 - Cryptographic primitive correctness (we assume BLS threshold and IBE/SWE primitives work as specified).
+- [OBFTR](OBFTR.md) and [2abOBFT](2abOBFT.md). The verification effort here targets the canonical single-round OBFT plus its bid-routing extensions (L_Bid, L_Bid_New) — the structurally simplest protocol in the family and the one whose extensions are spec-defined. OBFTR adds R-round retry with cross-round commitment independence (a new state-machine dimension); 2abOBFT splits Phase 2 into Phase-2a verdict + Phase-2b σ-or-NR with a convergence rule (new emission classes + per-operator state). Verifying either would require a fresh TLA+ model — not a small extension of the bare-OBFT specification — and is planned future work rather than a covered scope here.
 
 **Verification confidence level**:
 - TLC at `n=4, f=1`: exhaustive within the encoded state space. **High confidence** that any property that holds is actually true at this `n` (modulo encoding bugs).

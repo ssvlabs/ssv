@@ -43,11 +43,13 @@ import (
 //   - ITERATIONS_BASELINE_OPERATIONS — used for scenarios with Group ==
 //     "Baseline" (currently just "Healthy"). Higher count keeps the
 //     healthy-path CDF tail well-sampled. Test-internal fallback when
-//     unset: 100. `make stresstest` sets this to 1000 (see Makefile).
+//     unset: 100. `make stresstest` sets this to 10000 (see Makefile).
 //   - ITERATIONS_UNSTABLE_OPERATIONS — used for every other scenario.
 //     Lower count, since rare-event behaviour reaches non-zero success
 //     rates at far fewer samples. Test-internal fallback when unset:
-//     10. `make stresstest` sets this to 100 (see Makefile).
+//     10. `make stresstest` sets this to 1 (single-sample probe — see
+//     the Makefile target's docstring for the rationale and how to
+//     override when adversarial CDFs matter).
 //
 // ITERATIONS (legacy single-knob) is honored as a backwards-compatible
 // override: if set, it overrides BOTH budgets.
@@ -55,7 +57,7 @@ import (
 // Operating-point env vars (all have Makefile defaults):
 //
 //   - CLUSTER_SIZES_N — comma-separated cluster sizes ∈ {4, 7}. Default: 4.
-//   - LAYERS_K — comma-separated K values ∈ {2, 3, 4}. Default: 2,4.
+//   - LAYERS_K — comma-separated K values ∈ {2, 3, 4}. Default: 2.
 //   - P2P_PROFILES — comma-separated calibrated mesh-hop profile names
 //     for the p2p_baseline sweep's profile axis. Valid values: prod,
 //     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
@@ -70,9 +72,10 @@ import (
 //
 //	make stresstest
 //
-// Or directly:
+// Or directly (test-internal fallbacks — see Makefile for higher
+// budgets that the `make stresstest` wrapper sets):
 //
-//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2,4 P2P_PROFILES=prod,stage1,stage2 \
+//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2 P2P_PROFILES=prod,stage1,stage2 \
 //	    ITERATIONS_BASELINE_OPERATIONS=100 ITERATIONS_UNSTABLE_OPERATIONS=10 \
 //	    go test -timeout 30m -run TestStress ./protocol/v2/consensustest/
 //

@@ -130,6 +130,18 @@ var scenarioMeshFlakiness = Scenario{
 		// deadlock. The QBFT/PSigs success expectations remain unchanged.
 		// To exercise the legacy deadlock pattern, use a deeper-flakiness
 		// scenario (delay > B_0 + Δ_2a + reflood-cycle).
+		//
+		// PROFILE-INVARIANCE: the override is intentionally BTT-coupled,
+		// not anchored to cfg.Network.SlowOpAnchor(). The flakiness
+		// boundary the scenario tests is a *protocol-budget* relation
+		// (flaky arrival vs T_commit, both BTT-derived); pinning the
+		// delay to 2·BTT keeps the algebraic boundary identical across
+		// every p2p_baseline profile at a given BTT. Consequence on the
+		// heatmap: this scenario's row is approximately constant across
+		// the profile axis at fixed BTT — the empirical-profile axis
+		// does NOT differentiate flakiness behaviour here, by design.
+		// Use the instability / loss / correlated-delay sweeps for
+		// profile-sensitive flakiness exploration.
 		flakyOverrides := make(map[OperatorID]time.Duration, f)
 		for i := 0; i < f; i++ {
 			flakyOverrides[OperatorID(i+2)] = 2 * cfg.BTT
@@ -225,6 +237,12 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 		// op2..op{f+1}: 3·BTT inbound delay. Pushes Phase-1 bundle arrival
 		// past T_commit at those ops; σ-pool retains the remaining
 		// (N-1-f) on-time honest non-leaders + leader's σ_L^V = N-f = qV.
+		//
+		// PROFILE-INVARIANCE: BTT-coupled by design — the scenario tests
+		// a protocol-budget boundary (flaky arrival vs T_commit, both
+		// BTT-derived), so the override magnitude is pinned to 3·BTT
+		// across every profile at fixed BTT to keep the algebraic
+		// boundary identical. See MeshFlakiness for the same note.
 		overrides := make(map[OperatorID]time.Duration, f)
 		for i := 0; i < f; i++ {
 			overrides[OperatorID(i+2)] = 3 * cfg.BTT
@@ -282,6 +300,10 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 	Apply: func(cfg *SimConfig) {
 		f := cfg.F()
 		// op2..op{f+2}: 3·BTT inbound delay. (f+1) honest slow.
+		//
+		// PROFILE-INVARIANCE: BTT-coupled by design (see MeshFlakiness
+		// and AsymmetricPropagation_FSlow_Success). The miss boundary is
+		// a protocol-budget relation, pinned identically across profiles.
 		overrides := make(map[OperatorID]time.Duration, f+1)
 		for i := 0; i < f+1; i++ {
 			overrides[OperatorID(i+2)] = 3 * cfg.BTT

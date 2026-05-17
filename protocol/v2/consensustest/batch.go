@@ -302,6 +302,7 @@ func reduceCellResults(t *testing.T, cellIter int, scenario Scenario, protocol P
 func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol Protocol, iters []iterOutcome) (BatchCell, bool) {
 	t.Helper()
 	hasNotApplicable, hasOutOfEnvelope, hasOtherErr := false, false, false
+	notApplicableCount, outOfEnvelopeCount := 0, 0
 	var firstOther error
 	for _, r := range iters {
 		if r.err == nil {
@@ -310,8 +311,10 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 		switch {
 		case errors.Is(r.err, ErrNotApplicable):
 			hasNotApplicable = true
+			notApplicableCount++
 		case errors.Is(r.err, ErrConfigOutOfEnvelope):
 			hasOutOfEnvelope = true
+			outOfEnvelopeCount++
 		case errors.Is(r.err, errSimPanic):
 			// per-iter; aggregate normally and record as a miss
 		default:
@@ -337,11 +340,32 @@ func classifyCellErrors(t *testing.T, cellIter int, scenario Scenario, protocol 
 		// remaining iters' OOE classifications are spurious noise
 		// from an adapter bug. Render as n/a (0 iters) rather than
 		// red 0%.
+		//
+		// Uniformity expected (per-cfg semantic dispatch); a partial
+		// hit is an adapter bug — surface it so we don't silently mask
+		// it under the n/a render.
+		if notApplicableCount > 0 && notApplicableCount < cellIter {
+			t.Logf("RunBatch: %s/%s ErrNotApplicable was non-uniform across iters (%d/%d) — adapter bug suspected; cell rendered as n/a",
+				protocol.Name(), scenario.Name, notApplicableCount, cellIter)
+		}
 		return BatchCell{Protocol: protocol.Name(), Scenario: scenario.Name, Iterations: 0}, true
 	case hasOutOfEnvelope:
 		// Protocol can't operate at this operating point — return a
 		// full-iter-count cell with no successful decisions so the UI
 		// renders it as a hard 0% (red) rather than n/a.
+		//
+		// OOE is derived deterministically from the SimConfig
+		// (cfg.Validate, T_commit ≤ 0, etc.) and does NOT vary with
+		// seed — a partial hit therefore indicates either an adapter
+		// bug or a sim-internal nondeterminism. Log it so the
+		// non-uniform case doesn't silently consume any otherwise-
+		// successful iters' samples (the cell still collapses to red
+		// 0% per the spec invariant — config-level errors trump per-
+		// iter outcomes).
+		if outOfEnvelopeCount > 0 && outOfEnvelopeCount < cellIter {
+			t.Logf("RunBatch: %s/%s ErrConfigOutOfEnvelope was non-uniform across iters (%d/%d) — adapter bug suspected; cell rendered as red 0%% and any successful iters' samples discarded",
+				protocol.Name(), scenario.Name, outOfEnvelopeCount, cellIter)
+		}
 		return BatchCell{
 			Protocol:    protocol.Name(),
 			Scenario:    scenario.Name,
