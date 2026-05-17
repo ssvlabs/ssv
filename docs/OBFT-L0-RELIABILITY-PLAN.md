@@ -231,24 +231,41 @@ The peer-reflood-V analog for 2abOBFT would be **attaching V to KindVerdict** so
 
 ## §5. Execution order
 
-Two separate landings:
+Three separate landings:
 
 1. **§2 first (schedule simplification).** ✅ **Landed.** Schedule defaults changed; no wire change; no protocol-flow change.
-2. **§1 second (peer-reflood V).** ✅ **Landed.** Host-validation channel + predicate + BuildOwnCommit + runner integration. h_V=1 deadlock closed in-protocol (production); consensustest framework still uses sync-emit and doesn't yet exercise the recovery path — see §7.
+2. **§1 second (peer-reflood V).** ✅ **Landed.** Host-validation channel + predicate + BuildOwnCommit + runner integration. h_V=1 deadlock closed in-protocol.
+3. **§7 third (consensustest framework upgrade).** ✅ **Landed.** L0Ready-driven per-op `evtCommitEmit` replaces sync-at-T_commit emit; `HV1SelectiveDelivery` consensustest scenario now exercises the §1 recovery end-to-end and asserts `ExpectSuccessFastest` for OBFT.
 
-Both compose cleanly with each other and with the recent tighten work.
+All three compose cleanly with each other and with the recent tighten work.
 
 ## §6. Open questions
 
-- **§1 host-validation trigger shape**: async channel-based (Instance → runner via `WantsHostValidationCh`) vs sync callback (host hook embedded in Instance config). Channel is more idiomatic for Instance (currently non-thread-safe; mutex at runner level), sync callback simpler to reason about. **Lean: channel** (matches existing L0ReadyCh / state-delta channel patterns).
-- **§1 cross-phase exclusivity timing**: confirm via test that V-drop receiver's L0Ready fires comfortably before T_commit fallback even at degraded BTT (e.g., BTT=600ms). At BTT=600ms, RD=700ms: L_0 broadcast at T_commit − (2·600 + 700) = T_commit − 1900ms. T_commit shifts proportionally (Δ_2 = 600ms post-tighten). Need to verify the timeline still fits.
-- **§2 opt-out flag**: agree skip the flag, custom `BroadcastBudget` override is enough. ✓
-- **§2 deepest-confirmed-parent fetch semantics for all backups**: should the host application understand that L_1..L_{K-1} all fetch from the same parent (deepest-confirmed), or can each backup fetch from a slightly different parent depth? Spec recommends "deepest" uniformly; host application chooses concrete parent depth. Defer to host config.
+- **§1 host-validation trigger shape**: ✓ Resolved — landed as `WantsHostValidationCh` channel (matches existing `L0ReadyCh` / state-delta channel patterns).
+- **§1 cross-phase exclusivity timing at degraded BTT**: ✓ Resolved via `TestRecovery_PeerVOnHV1_DegradedBTT` in `protocol/v2/consensustest/obft/adapter_test.go`. Recovery confirmed across the operational SSV BTT envelope (100ms / 200ms / 400ms / 600ms). At BTT=600ms the cluster decides at L_0 in 2450ms; the V-drop receivers' early-emit lands well before the framework's T_commit=2600ms fallback. Recovery breaks at BTT≈1000ms under the framework's conservative Δ_2 = 2·BTT (T_commit shrinks below propagation chain); production Δ_2 ≈ 1·BTT widens the envelope further.
+- **§2 opt-out flag**: ✓ Resolved — no flag; custom `BroadcastBudget` override is enough.
+- **§2 deepest-confirmed-parent fetch semantics for all backups**: ✓ Deferred to host config. Spec recommends "deepest" uniformly; host application chooses concrete parent depth.
 
-## §7. Out of scope for this plan
+## §7. Consensustest framework upgrade — L0Ready-driven per-op commit emit
+
+### Status: ✅ Landed
+
+The previous `evtPhaseTwoStart` called `BuildOwnCommit` synchronously for all operators at T_commit, so peer commits arrived after every operator had already NR-locked. The §1 peer-reflood-V recovery requires early-emit ordering: the L_0-V-holder emits first, V-drop receivers observe → drain validation → σ → emit later.
+
+Implementation:
+- New `evtCommitEmit{op}` event type fires for a single op at the moment their `L0ReadyCh` closes.
+- `maybeEarlyCommit` checks the channel and schedules `evtCommitEmit` at `s.now`; wired into `evtLeaderFetch` (L_0 leader's `BuildPhase1Bundle` σ-lock), `evtPhase1Arrival` (Phase-1 retention σ path), and `evtCommitArrival` (peer-reflood-V σ path after the host-validation drain).
+- `emitOwnCommit` helper factored from the old `evtPhaseTwoStart`; gated by a new `sim.commitEmitted[op]` dedup map.
+- `evtPhaseTwoStart` survives as the T_commit fallback for any op whose L_0 decision never became determinable (silent-leader Fallthrough path, etc.).
+
+Test impact:
+- `TestRecovery_PeerVOnHV1` (repurposed from `TestClassifyMiss_DeadlockOnHV1`): HV1SelectiveDelivery now asserts the cluster decides at L_0 via peer-reflood-V.
+- `TestAdapter_OpportunisticDecisionTime`: expectation updated to `FetchAt[0] + 2·BTT = 3350ms` (was `T_commit + 1·BTT = 3600ms` under sync-at-T_commit emit) — 500ms total saving vs the pre-observer schedule-anchored 3850ms.
+- `scenarioHV1SelectiveDelivery` OBFT expectation flipped from `ExpectMiss` to `ExpectSuccessFastest`.
+
+## §8. Out of scope for this plan
 
 - L_Bid extension under the new schedule — pending Appendix B re-derivation task (see `OBFT-EARLY-COMMIT-PLAN.md §6`).
 - Defer state under the new schedule — same pending task.
 - 2abOBFT §2 analog (deepest broadcast schedule simplification for 2abOBFT) — separate proposal once §2 lands for OBFT.
 - OBFTR sizing changes — out of scope (no tighten / no peer-reflood-V proposed for OBFTR yet).
-- **Consensustest framework upgrade for L0Ready-driven per-op commit emit** — the current `evtPhaseTwoStart` calls `BuildOwnCommit` synchronously for all ops at T_commit, so peer commits arrive after all ops have NR-locked. The §1 peer-reflood-V recovery requires early-emit ordering: the L_0-V-holder emits first, V-drop receivers observe + drain validation + emit later. This is exercised by the focused unit test `TestHV1SelectiveDelivery_PeerVRecovery` in `protocol/v2/obft/base/early_commit_test.go`. A framework upgrade — schedule per-op `evtCommitEmit` events keyed on `L0ReadyCh` firing, with the T_commit fallback as the timeout — would let the consensustest `HV1SelectiveDelivery` scenario exercise the same recovery end-to-end and flip its OBFT expectation from `ExpectMiss` to `ExpectSuccess`. Tracked in the catalog scenario's note. Separate follow-up.

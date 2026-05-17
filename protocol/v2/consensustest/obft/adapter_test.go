@@ -141,6 +141,54 @@ func TestRecovery_PeerVOnHV1(t *testing.T) {
 	require.Equal(t, 0, out.DecidedRound, "recovery happens at L_0, not via fall-through")
 }
 
+// TestRecovery_PeerVOnHV1_DegradedBTT pins the §1 peer-reflood-V
+// recovery across the SSV operational BTT envelope, closing the §6
+// open question in docs/OBFT-L0-RELIABILITY-PLAN.md ("confirm via test
+// that V-drop receiver's L0Ready fires comfortably before T_commit
+// fallback even at degraded BTT").
+//
+// Timing chain at each BTT: L_0 leader emits Phase-1 at FetchAt[0];
+// V-recipient (op 2) receives Phase-1 at FetchAt[0]+BTT, L0Ready
+// closes via Phase-1-retention σ path → emits commit at that moment;
+// V-drop receivers (op 3, op 4) receive op 2's commit at
+// FetchAt[0]+2·BTT, harvest V via the peer-V path, drain host
+// validation, L0Ready closes → emit commit at FetchAt[0]+2·BTT;
+// σ-quorum reaches when those reach the cluster at FetchAt[0]+3·BTT.
+//
+// Recovery requires FetchAt[0]+2·BTT < T_commit so V-drop receivers
+// emit BEFORE the evtPhaseTwoStart T_commit fallback locks them into
+// NR. At BTT ≥ ~1000ms (with the framework's Δ_2 = 2·BTT conservatism)
+// T_commit shrinks below the propagation chain — outside the recovery
+// envelope. Production uses Δ_2 = 1·BTT, where the envelope reaches
+// further; the framework values bound the conservative case.
+func TestRecovery_PeerVOnHV1_DegradedBTT(t *testing.T) {
+	// Operational SSV BTT envelope: 100ms (LAN-fast) to 600ms (degraded
+	// WAN). The §6 plan question explicitly calls out BTT=600ms.
+	for _, btt := range []time.Duration{
+		100 * time.Millisecond,
+		200 * time.Millisecond,
+		400 * time.Millisecond,
+		600 * time.Millisecond,
+	} {
+		t.Run(btt.String(), func(t *testing.T) {
+			cfg := ct.DefaultProposerDutyConfig(btt)
+			cfg.Byz = ct.ByzPattern{
+				Kind:         ct.ByzHV1SelectiveDelivery,
+				ByzOperators: []ct.OperatorID{1},
+				Recipients:   []ct.OperatorID{2},
+			}
+			out, err := obftadapter.Protocol{}.Run(cfg)
+			require.NoError(t, err)
+			require.True(t, out.Decided,
+				"BTT=%v: HV1 should recover via §1 peer-reflood-V; missReason=%q",
+				btt, out.MissReason)
+			require.Equal(t, 0, out.DecidedRound,
+				"BTT=%v: recovery should land at L_0, not via fall-through", btt)
+			t.Logf("BTT=%v: recovered at L_0 in %v", btt, out.DecisionTime)
+		})
+	}
+}
+
 // TestMeshBandwidth_NoPhantomRelayOperator — in DeliveryMesh mode the
 // cluster's PerOperatorIn metric must not accumulate any bytes against
 // OperatorID(0). The sentinel-0 receiver was previously created by
