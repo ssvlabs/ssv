@@ -11,15 +11,15 @@ If your PBS does not support timing games (mev-boost < v1.11, mev-boost without 
 To understand how MEV configuration interacts with SSV, here is the proposer-duty flow:
 - SSV nodes participate in the pre-consensus phase to build a RANDAO signature that will be used when requesting the block from the Beacon node (`RANDAOTime`).
 - The current round Leader requests the blinded block header from the Beacon node, which proxies the request to the PBS layer (mev-boost or commit-boost). The PBS in turn queries one or more relays (the *auction window*).
-- The PBS returns the chosen block header, and the SSV cluster runs QBFT consensus to sign it (`QBFTRound1Time`; if round 1 faults, `QBFTRound2Time` for the fallback round). Each round has a 2000ms timer, currently measured from round start rather than slot start (see [#2429](https://github.com/ssvlabs/ssv/issues/2429)).
+- The PBS returns the chosen block header, and the SSV cluster runs QBFT consensus to sign it (`QBFTRound1Time`; if round 1 faults, `QBFTRoundChange` for the round-change handshake and `QBFTRound2Time` for the fallback round). Each round has a 2000ms timer, currently measured from round start rather than slot start (see [#2429](https://github.com/ssvlabs/ssv/issues/2429)).
 - After consensus, operators reconstruct the validator BLS signature from partial signatures (`PostConsensusSigningTime`).
 - The leader submits the signed blinded block to the Beacon node; the relay reveals the actual execution payload, which propagates through the network (`BlockSubmissionTime`).
 
 For an SSV cluster to function reliably, the following must hold even in the worst case where round 1 fails and round 2 runs as fallback:
 ```
-RANDAOTime + (auction window) + QBFTRound1Time + QBFTRound2Time + PostConsensusSigningTime + BlockSubmissionTime < 4000ms
+RANDAOTime + (auction window) + QBFTRound1Time + QBFTRoundChange + QBFTRound2Time + PostConsensusSigningTime + BlockSubmissionTime < 4000ms
 ```
-`QBFTRound1Time` is the 2000ms round-1 timer (worst case: round 1 doesn't reach consensus and the timer expires); `QBFTRound2Time` is a typical successful round-2 time. You must budget for both — in the common case round 1 succeeds quickly and round 2 never runs, but the budget reserved by the equation cannot be reclaimed. If the equation doesn't hold, the validator risks missing its proposal slot whenever round 1 fails (the block must propagate within 4000ms after slot start).
+`QBFTRound1Time` is the 2000ms round-1 timer (worst case: round 1 doesn't reach consensus and the timer expires); `QBFTRoundChange` is the ROUND-CHANGE handshake (operators exchange round-change messages and elect a new leader); `QBFTRound2Time` is a typical successful round-2 time. You must budget for all three — in the common case round 1 succeeds quickly and round-change/round 2 never run, but the budget reserved by the equation cannot be reclaimed. If the equation doesn't hold, the validator risks missing its proposal slot whenever round 1 fails (the block must propagate within 4000ms after slot start).
 
 Where the auction window sits in the slot is what determines MEV capture — bid value grows as the slot ages, so later auction windows yield higher-value bids on average, subject to staying within this deadline.
 
@@ -113,7 +113,7 @@ SSV's `proposalSoftTimeout` (default 1800ms, defined in `beacon/goclient/options
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, and 1600ms — four chances per relay, with ~200ms RTT margin to the cutoff.
 
-Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms (Example A) to ~2150ms. The ~2150ms budget is below the ~2700ms required to fit the worst-case 2-round QBFT scenario (2000ms round-1 timer + ~350ms round 2 + ~150ms signing + ~200ms submission). Example B accepts that round 1 must succeed for the slot — if round 1 fails, the slot is missed. Use only after baselining your stack's round-1 success rate.
+Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms (Example A) to ~2150ms. The ~2150ms budget is below the ~2850ms required to fit the worst-case 2-round QBFT scenario (2000ms round-1 timer + ~150ms round change + ~350ms round 2 + ~150ms signing + ~200ms submission). Example B accepts that round 1 must succeed for the slot — if round 1 fails, the slot is missed. Use only after baselining your stack's round-1 success rate.
 
 **commit-boost** (TOML):
 ```toml
@@ -215,7 +215,7 @@ ProposerDelay: 300ms
 
 With `ProposerDelay` active, the slot-budget equation becomes:
 ```
-RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTRound1Time + QBFTRound2Time + PostConsensusSigningTime + BlockSubmissionTime < 4000ms
+RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTRound1Time + QBFTRoundChange + QBFTRound2Time + PostConsensusSigningTime + BlockSubmissionTime < 4000ms
 ```
 
 Plugging in realistic numbers (typical case where round 1 succeeds):
@@ -223,15 +223,16 @@ Plugging in realistic numbers (typical case where round 1 succeeds):
 RANDAOTime               ≈ 100ms
 MEVBoostRelayTimeout     ≈ 200ms
 QBFTRound1Time           ≈ 2000ms (worst case: round-1 timer expires)
+QBFTRoundChange          ≈ 150ms  (ROUND-CHANGE handshake after round 1 failure)
 QBFTRound2Time           ≈ 350ms  (round 2 succeeds after round 1 failure)
 PostConsensusSigningTime ≈ 150ms
 BlockSubmissionTime      ≈ 200ms
-ProposerDelay            = 4000ms − (sum above) ≈ 1000ms
+ProposerDelay            = 4000ms − (sum above) ≈ 850ms
 ```
 
 **Note:** the `MEVBoostRelayTimeout ≈ 200ms` figure above assumes the legacy single-shot PBS behavior, where mev-boost queries each relay once at the moment SSV asks. A timing-games-capable PBS uses a much larger budget here, in which case the SSV-side `ProposerDelay` lever isn't useful — see the PBS-side timing games section above.
 
-The 1000ms figure is the theoretical maximum assuming median latencies for every component and the worst-case 2-round QBFT scenario. In practice, round-2 consensus, signing, and submission latencies all have meaningful variance — an unlucky combination can easily add several hundred ms. We consider **~800ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet; the ~200ms of headroom is buffer against this variance. Going beyond risks missed block proposals whenever round 1 fails.
+The 850ms figure is the theoretical maximum assuming median latencies for every component and the worst-case 2-round QBFT scenario. In practice, round-change handshake, round-2 consensus, signing, and submission latencies all have meaningful variance — an unlucky combination can easily add several hundred ms. We consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet; the ~150ms of headroom is buffer against this variance. Going beyond risks missed block proposals whenever round 1 fails.
 
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 
