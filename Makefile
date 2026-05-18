@@ -156,9 +156,10 @@ consensustest-with-real-bls:
 # Operating-point env vars (all have defaults; override to scope runs):
 #   - CLUSTER_SIZES_N (default 4) — comma-separated cluster sizes ∈ {4, 7}.
 #     Multiple values → one run per size, all merging into the same data.js.
-#   - LAYERS_K        (default 2,4) — comma-separated K values ∈ {2, 3, 4}.
+#   - LAYERS_K        (default 2) — comma-separated K values ∈ {2, 3, 4}.
 #     Brackets the BFT-liveness floor (K=2 at n=4) and SSV's K=N convention.
-#     A K value is skipped for any n where K < MinK(n).
+#     A K value is skipped for any n where K < MinK(n). Override to e.g.
+#     `LAYERS_K=2,3,4` to fill in the matrix.
 #   - P2P_PROFILES    (default = all six) — comma-separated calibrated
 #     mesh-hop profile names. Valid: prod, stage1, stage2, slow,
 #     heavy_tail, slow_heavy_tail. Each name becomes one point in the
@@ -166,13 +167,19 @@ consensustest-with-real-bls:
 #     and cfg.Mesh.HopDelay sourced from the named profile.
 #
 # Iteration count split into two budgets:
-#   - ITERATIONS_BASELINE_OPERATIONS (default 1000) — high-confidence
+#   - ITERATIONS_BASELINE_OPERATIONS (default 10000) — high-confidence
 #     count for scenarios with Group == "Baseline" (currently just
 #     "Healthy"). Keeps the headline CDF tail well-sampled.
-#   - ITERATIONS_UNSTABLE_OPERATIONS (default 100) — lower count for
-#     every other scenario (adversarial / rare-event groups), where a
-#     smaller sample is enough to surface non-zero behaviour without
-#     paying the full baseline cost across dozens of cells.
+#   - ITERATIONS_UNSTABLE_OPERATIONS (default 1) — single-sample probe
+#     for every other scenario (adversarial / rare-event groups). At
+#     iter=1, per-cell SuccessRate is binary {0, 1} and percentile
+#     distributions collapse — adversarial cells become "did the
+#     deterministic path through seed=SeedStart succeed?" rather than
+#     a statistical estimate. The default trades adversarial signal for
+#     a ~100× shorter total wallclock so the Baseline tail can be
+#     sampled deeper; bump this (e.g. `make stresstest
+#     ITERATIONS_UNSTABLE_OPERATIONS=100`) when you need a real CDF on
+#     the adversarial rows.
 #
 # ITERATIONS (legacy single knob) overrides both — set it when you
 # want to bump every scenario to the same higher count (e.g.
@@ -184,15 +191,15 @@ consensustest-with-real-bls:
 # Driver docstring: protocol/v2/consensustest/stress_test.go TestStress.
 # Sweep definitions: protocol/v2/consensustest/sweep.go DefaultSweeps.
 REPORT_DIR ?= ./stresstest-report
-ITERATIONS_BASELINE_OPERATIONS ?= 1000
-ITERATIONS_UNSTABLE_OPERATIONS ?= 100
+ITERATIONS_BASELINE_OPERATIONS ?= 10000
+ITERATIONS_UNSTABLE_OPERATIONS ?= 1
 CLUSTER_SIZES_N ?= 4
-LAYERS_K ?= 2,4
+LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 # PROTOCOLS — comma-separated protocol names to include in the sweep (e.g.
 # `OBFT,QBFT,PSigs`). Empty (default) runs ALL registered protocols.
 # Names must exactly match Protocol.Name() values defined in stress_test.go.
-PROTOCOLS ?= OBFT,OBFTx3,2abOBFT,2abOBFTx2,QBFT,QBFT-SSV,PSigs
+PROTOCOLS ?= OBFT,2abOBFT,QBFT,QBFT-SSV
 .PHONY: stresstest
 stresstest:
 	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
@@ -218,9 +225,12 @@ stresstest-all:
 # stresstest-clean removes the generated data.js from REPORT_DIR,
 # leaving the static UI files (index.html, app.js, styles.css) intact.
 # Run this to start a fresh sweep rather than merging into existing data.
+# The `data.js.*.tmp` glob picks up debris from `os.CreateTemp` (atomic-
+# write tempfiles) — names include a per-process unique suffix so two
+# parallel runs don't race on a fixed name.
 .PHONY: stresstest-clean
 stresstest-clean:
-	@rm -f "$(abspath $(REPORT_DIR))/data.js" "$(abspath $(REPORT_DIR))/data.js.tmp"
+	@rm -f "$(abspath $(REPORT_DIR))/data.js" "$(abspath $(REPORT_DIR))"/data.js.*.tmp
 	@echo "Cleaned $(abspath $(REPORT_DIR))/data.js"
 
 .PHONY: docker-spec-test
