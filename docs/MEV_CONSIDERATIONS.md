@@ -166,10 +166,10 @@ Example A's ~1050ms cutoff is the recommended starting point — equivalent to l
 
 Before changing knobs, baseline these values:
 
-- **RANDAO completion time** — how long pre-consensus takes. Visible via `measurements.PreConsensusTime()`.
+- **RANDAO completion time** — how long pre-consensus takes, visible on Grafana charts.
 - **BN → PBS RTT** — typically same machine, well under 10ms.
 - **Per-relay RTT distribution (p50/p95/p99)** — PBSes log this.
-- **QBFT round-1 completion distribution** — via `measurements.ConsensusTime()`.
+- **QBFT round-1 completion distribution** — visible on Grafana charts.
 - **Submission round-trip** — includes the relay payload-reveal step.
 
 ### SSV telemetry
