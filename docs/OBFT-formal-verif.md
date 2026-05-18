@@ -239,8 +239,8 @@ ACTION emit_kindcommit(operator i):
     
     Include sigma_L_witnesses section: a list of (layer_k, value_root_k,
     σ_{L_k}^V) tuples for each layer k where i retained the Phase-1 σ_L^V
-    partial. Per-witness ≈ 145 bytes; cluster-wide bandwidth at K=4, n=4
-    ≈ 2.3 KB. See [OBFT.md §Phase 2 / Wire format](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2).
+    partial. Per-witness ≈ 145 bytes; cluster-wide bandwidth at K=2 n=4 default
+    ≈ 1.2 KB (K=4 up-tier ≈ 2.3 KB). See [OBFT.md §Phase 2 / Wire format](OBFT.md#phase-2--onion-broadcast-t_commit-t_commit--%CE%94_2).
     No new EKM event, no new signing obligation (operators forward bytes
     they already received from Phase 1).
     
@@ -523,7 +523,7 @@ For each variant V:
    LIVENESS_NON_GRIEF ≡
      □(assumptions_hold ∧ no_grief) ⇒ ◇ ∀ i ∈ Honest: output_set[i] = TRUE
    ```
-4. Run TLC with the temporal property at `n=4, f=1, K=4` and (where tractable) `n=7, f=2`.
+4. Run TLC with the temporal property at `n=4, f=1, K=4` (up-tier multi-layer fall-through configuration; K=2 SAFETY runs verified separately — see §7.1) and (where tractable) `n=7, f=2`.
 
 Expected result (per the OBFT spec's Class A list, [OBFT.md §Liveness](OBFT.md#liveness-synchrony-conditional)): TLC verifies for all three variants — no Class A leakage that the spec body fails to characterize. If a counterexample surfaces, treat it as a Class A failure mode that needs to be either documented (assumption refinement) or fixed (protocol change).
 
