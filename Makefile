@@ -181,10 +181,6 @@ consensustest-with-real-bls:
 #     ITERATIONS_UNSTABLE_OPERATIONS=100`) when you need a real CDF on
 #     the adversarial rows.
 #
-# ITERATIONS (legacy single knob) overrides both — set it when you
-# want to bump every scenario to the same higher count (e.g.
-# `ITERATIONS=10000 make stresstest` for rare-event tail stability).
-#
 # `$(abspath ...)` resolves the path before passing to `go test` so
 # reports land where the user expects regardless of `go test`'s package CWD.
 #
@@ -202,7 +198,7 @@ P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 PROTOCOLS ?= OBFT,2abOBFT,QBFT,QBFT-SSV
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS)$(if $(ITERATIONS), ITERATIONS=$(ITERATIONS) [override]))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
@@ -210,7 +206,6 @@ stresstest:
 		PROTOCOLS=$(PROTOCOLS) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \
-		$(if $(ITERATIONS),ITERATIONS=$(ITERATIONS)) \
 		go test -tags "blst_enabled lfs" -timeout=0 -run TestStress -v ./protocol/v2/consensustest/
 
 # stresstest-all is a convenience alias for the full (n × K) matrix:

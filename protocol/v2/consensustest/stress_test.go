@@ -51,9 +51,6 @@ import (
 //     the Makefile target's docstring for the rationale and how to
 //     override when adversarial CDFs matter).
 //
-// ITERATIONS (legacy single-knob) is honored as a backwards-compatible
-// override: if set, it overrides BOTH budgets.
-//
 // Operating-point env vars (all have Makefile defaults):
 //
 //   - CLUSTER_SIZES_N — comma-separated cluster sizes ∈ {4, 7}. Default: 4.
@@ -173,8 +170,7 @@ func TestStress(t *testing.T) {
 	}
 	require.NotEmptyf(t, pairs, "no valid (n, K) pairs after filtering; check CLUSTER_SIZES_N=%s × LAYERS_K=%s against MinK constraints", clusterSizesRaw, layersKRaw)
 
-	// Defaults: 100 baseline / 10 unstable. ITERATIONS (legacy) overrides
-	// both for callers that don't care about the split.
+	// Defaults: 100 baseline / 10 unstable.
 	iters := ct.Iterations{Baseline: 100, Unstable: 10}
 	if v := os.Getenv("ITERATIONS_BASELINE_OPERATIONS"); v != "" {
 		n, err := strconv.Atoi(v)
@@ -186,13 +182,6 @@ func TestStress(t *testing.T) {
 		n, err := strconv.Atoi(v)
 		require.NoErrorf(t, err, "invalid ITERATIONS_UNSTABLE_OPERATIONS=%q", v)
 		require.Greater(t, n, 0, "ITERATIONS_UNSTABLE_OPERATIONS must be > 0")
-		iters.Unstable = n
-	}
-	if v := os.Getenv("ITERATIONS"); v != "" {
-		n, err := strconv.Atoi(v)
-		require.NoErrorf(t, err, "invalid ITERATIONS=%q", v)
-		require.Greater(t, n, 0, "ITERATIONS must be > 0")
-		iters.Baseline = n
 		iters.Unstable = n
 	}
 
