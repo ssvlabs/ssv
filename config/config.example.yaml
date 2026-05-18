@@ -19,6 +19,23 @@ eth2:
   # HTTP URL of the Beacon node to connect to.
   BeaconNodeAddr: http://example.url:5052
 
+  # Block-fetch path tuning. The SSV node selects one of three paths at startup based on
+  # the settings below; see docs/MEV_CONSIDERATIONS.md for the full model.
+  #
+  # ProposalSoftDeadline opts the SSV node into the MEV-optimized path: SSV waits for all
+  # multi-BN responses until this slot-relative deadline (ms into slot) and returns the
+  # highest-value bid received, without early-exiting on the first MEV block. Match this
+  # to your PBS late_in_slot_time_ms + ~50ms BN→SSV transport. Valid range: [1000ms,
+  # 3600ms]; values above 1800ms emit a startup warning (round-2 QBFT fallback no longer
+  # fits within the slot). Cannot be combined with ProposerDelay or ProposalSoftTimeout.
+  # Leave unset to use the default safe path (early-exit on first MEV block, deadline 1000ms).
+  # ProposalSoftDeadline: 1100ms
+
+  # ProposalSoftTimeout (legacy): collection-period timeout for multi-BN proposal scoring
+  # in the legacy block-fetch path. Setting this (or ProposerDelay below) opts into the
+  # legacy path. New operators should leave this unset and use ProposalSoftDeadline above.
+  # ProposalSoftTimeout: 1800ms
+
   ValidatorOptions:
 
 eth1:

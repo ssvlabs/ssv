@@ -191,13 +191,42 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
+		// Determine the block-fetch path from operator-provided config before
+		// NewOptions applies any defaults. See docs/MEV_CONSIDERATIONS.md for the
+		// three-path model and docs/BLOCK_FETCH_PATHS_PLAN.md for the design.
+		blockFetchPath, err := goclient.DetermineBlockFetchPath(cfg.ConsensusClient, cfg.ProposerDelay)
+		if err != nil {
+			logger.Fatal("invalid block-fetch path configuration", zap.Error(err))
+		}
+
+		switch blockFetchPath {
+		case goclient.BlockFetchPathLegacy:
+			if err := validateProposerDelayConfig(logger); err != nil {
+				logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
+			}
+			logger.Warn("Using legacy MEV configuration path — there is a better way to opt into MEV, see docs/MEV_CONSIDERATIONS.md")
+		case goclient.BlockFetchPathMEVOptimized:
+			if err := goclient.ValidateProposalSoftDeadline(cfg.ConsensusClient.ProposalSoftDeadline); err != nil {
+				logger.Fatal("invalid ProposalSoftDeadline configuration", zap.Error(err))
+			}
+			if cfg.ConsensusClient.ProposalSoftDeadline > goclient.SafeMaxProposalSoftDeadline {
+				logger.Warn("ProposalSoftDeadline exceeds the safe upper bound — round-2 QBFT fallback will not fit within the slot deadline; slot is missed whenever round 1 fails",
+					zap.Int64("proposal_soft_deadline_ms", cfg.ConsensusClient.ProposalSoftDeadline.Milliseconds()),
+					zap.Int64("safe_max_ms", goclient.SafeMaxProposalSoftDeadline.Milliseconds()))
+			}
+		case goclient.BlockFetchPathSafe:
+			// No path-specific validation needed.
+		}
+
+		logger.Info("block-fetch path selected", zap.String("path", blockFetchPath.String()))
+
 		logger.Info("connecting CL(s)",
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr),
 			zap.Bool("with_weighted_attestation_data", cfg.ConsensusClient.WithWeightedAttestationData),
 			zap.Bool("with_parallel_submissions", cfg.ConsensusClient.WithParallelSubmissions),
 		)
 
-		cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay)
+		cliopt, err := goclient.NewOptions(cfg.ConsensusClient, cfg.ProposerDelay, blockFetchPath)
 		if err != nil {
 			logger.Fatal("failed to create beacon client options",
 				zap.Error(err),
@@ -222,10 +251,6 @@ var StartNodeCmd = &cobra.Command{
 			warnIfExporterSigningConfigProvided(logger)
 		} else {
 			usingSSVSigner, usingKeystore, usingPrivKey = assertSigningConfig(logger)
-		}
-
-		if err := validateProposerDelayConfig(logger); err != nil {
-			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
 		}
 
 		var operatorPrivKey keys.OperatorPrivateKey

@@ -512,7 +512,7 @@ func createClient(
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
-		}, 0)
+		}, 0, BlockFetchPathSafe)
 	if err != nil {
 		return nil, err
 	}
