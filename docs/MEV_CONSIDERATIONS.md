@@ -234,13 +234,13 @@ MEVBoostRelayTimeout     ≈ 200ms
 QBFTRound1Time           ≈ 350ms
 QBFTRound2Time           ≈ 0ms    (typically not needed)
 PostConsensusSigningTime ≈ 150ms
-BlockSubmissionTime      ≈ 1000ms
-ProposerDelay            = 4000ms − (sum above) ≈ 2200ms
+BlockSubmissionTime      ≈ 200ms
+ProposerDelay            = 4000ms − (sum above) ≈ 3000ms
 ```
 
 **Note:** the `MEVBoostRelayTimeout ≈ 200ms` figure above assumes the legacy single-shot PBS behavior, where mev-boost queries each relay once at the moment SSV asks. A timing-games-capable PBS uses a much larger budget here, in which case the SSV-side `ProposerDelay` lever isn't useful — see the PBS-side timing games section above.
 
-The 2200ms figure is the theoretical maximum assuming median latencies for every component. In practice, QBFT consensus, BN submission, and relay payload-reveal latencies all have meaningful variance — an unlucky combination can easily add several hundred ms. We consider **~1200ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet; the ~1000ms of headroom is buffer against this variance. Going beyond risks missed block proposals.
+The 3000ms figure is the theoretical maximum assuming median latencies for every component. In practice, QBFT consensus, BN submission, and relay payload-reveal latencies all have meaningful variance — an unlucky combination can easily add several hundred ms. We consider **~1200ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet; the ~1800ms of headroom is buffer against this variance. Going beyond risks missed block proposals.
 
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 
