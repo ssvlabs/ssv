@@ -116,9 +116,25 @@ type Options struct {
 // Must be called with raw operator-provided values (before NewOptions applies any defaults)
 // so that the "operator explicitly set" vs "defaulted" distinction is preserved.
 //
-// Returns an error when the config combines path-0 (legacy) knobs with the path-2
-// (MEV-optimized) ProposalSoftDeadline — operators must pick one.
+// Returns an error when:
+//   - any of the MEV-related duration knobs is negative; or
+//   - the config combines path-0 (legacy) knobs with the path-2 (MEV-optimized)
+//     ProposalSoftDeadline — operators must pick one.
 func DetermineBlockFetchPath(base Options, proposerDelay time.Duration) (BlockFetchPath, error) {
+	// Negative values are nonsensical for any of these and would silently be
+	// treated as "unset" by the `> 0` checks below — reject them upfront so the
+	// operator gets a clear startup error instead of a confusing late-firing
+	// soft-deadline or skipped path-0 selection.
+	if proposerDelay < 0 {
+		return 0, fmt.Errorf("ProposerDelay must be non-negative, got %v", proposerDelay)
+	}
+	if base.ProposalSoftTimeout < 0 {
+		return 0, fmt.Errorf("ProposalSoftTimeout must be non-negative, got %v", base.ProposalSoftTimeout)
+	}
+	if base.ProposalSoftDeadline < 0 {
+		return 0, fmt.Errorf("ProposalSoftDeadline must be non-negative, got %v", base.ProposalSoftDeadline)
+	}
+
 	legacySet := proposerDelay > 0 || base.ProposalSoftTimeout > 0
 	deadlineSet := base.ProposalSoftDeadline > 0
 

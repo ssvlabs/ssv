@@ -64,6 +64,24 @@ func TestDetermineBlockFetchPath(t *testing.T) {
 			proposerDelay: 300 * time.Millisecond,
 			wantErr:       "ProposalSoftDeadline conflicts with legacy",
 		},
+		{
+			name:          "negative ProposerDelay -> error",
+			options:       Options{},
+			proposerDelay: -100 * time.Millisecond,
+			wantErr:       "ProposerDelay must be non-negative",
+		},
+		{
+			name:          "negative ProposalSoftTimeout -> error",
+			options:       Options{ProposalSoftTimeout: -100 * time.Millisecond},
+			proposerDelay: 0,
+			wantErr:       "ProposalSoftTimeout must be non-negative",
+		},
+		{
+			name:          "negative ProposalSoftDeadline -> error (would otherwise silently fall to safe path)",
+			options:       Options{ProposalSoftDeadline: -100 * time.Millisecond},
+			proposerDelay: 0,
+			wantErr:       "ProposalSoftDeadline must be non-negative",
+		},
 	}
 
 	for _, tt := range tests {

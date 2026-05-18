@@ -128,8 +128,19 @@ func createProposalBeaconServer(t *testing.T, options beaconProposalServerOption
 	return server, serverGotRequests
 }
 
-// Create a safe proposal response using ssv-spec utilities (called once during server setup)
+// spectestingMu serializes mutations on the shared ssv-spec testing fixtures.
+// TestingBlindedBeaconBlockV / TestingBeaconBlockV return wrappers that point at
+// cached block structs; without this lock, concurrent test-server goroutines
+// (e.g., the multi-BN tests) racially mutate the same struct on `block.Slot` and
+// `block.Body.*.FeeRecipient`. The JSON marshaling happens inside the lock so
+// each call captures its own intended state before the next mutation begins.
+var spectestingMu sync.Mutex
+
+// Create a safe proposal response using ssv-spec utilities.
 func createProposalResponseSafe(slot phase0.Slot, feeRecipient bellatrix.ExecutionAddress, blinded bool) []byte {
+	spectestingMu.Lock()
+	defer spectestingMu.Unlock()
+
 	if blinded {
 		// Get a blinded block from ssv-spec testing utilities
 		versionedBlinded := spectestingutils.TestingBlindedBeaconBlockV(spec.DataVersionElectra)
