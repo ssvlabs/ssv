@@ -88,12 +88,14 @@ const REFLOOD_DELAY_HEALTHY_MS = 700;
 //   B_0 = 2·BTTeff + RefloodDelay
 //   BTTeff = BTT × multiplier (1/2/3 for canonical/x2/x3)
 //   RefloodDelay = 700ms (Healthy default) for all variants except
-//                  OBFT-RD0, which forces RefloodDelay=0 in its
-//                  broadcast budget. Skipping the variant-aware
-//                  RefloodDelay would silently under-approximate
-//                  OBFT-RD0's boundary by 700ms and force the UI
-//                  into exact-match lookups when the BFT_start=0
-//                  cell would have been correct.
+//                  `-RD0`-suffixed ones (OBFT-RD0 today; OBFTx2-RD0
+//                  / 2abOBFT-RD0 etc. should they ever be added),
+//                  which force RefloodDelay=0 in the broadcast
+//                  budget. Skipping the variant-aware RefloodDelay
+//                  would silently under-approximate those variants'
+//                  boundaries by 700ms and force the UI into
+//                  exact-match lookups when the BFT_start=0 cell
+//                  would have been correct.
 // where the 3800 = RelayCutoff − HeaderSubmitHeadroom − ε_3 − phase3JitterBuffer
 // constants live in obft/adapter.go.
 //
@@ -117,11 +119,17 @@ function obftFamilyApproxBoundaryMs(protocolName, btt) {
 // protocol variant name (OBFT/2abOBFT=1, OBFTx2/2abOBFTx2=2,
 // OBFTx3/2abOBFTx3=3). Mirrors the Go-side adapter's BTTMultiplier
 // field (set when registering the variant in stress_test.go).
-// Recognizes the `x<n>` token anywhere in the name (not just at
-// the end) so combo-variants like `OBFTx2-RD0` parse correctly.
+//
+// The regex requires `x<n>` to be at the suffix boundary — preceded
+// by an uppercase letter (the SSV naming convention has canonical
+// names ending in an uppercase letter, e.g. OBFT/2abOBFT/QBFT) and
+// followed by end-of-string or a hyphen. This catches the canonical
+// `OBFTx2` / `OBFTx2-RD0` cases without false-positives on hypothetical
+// names like `OBFT-Fix2` (lowercase `i` before `x`, fails the boundary
+// check) or `OBFT-x2y` (non-hyphen after `x2`, fails the suffix check).
 function bttMultiplierForVariant(protocolName) {
   if (typeof protocolName !== 'string') return 1;
-  const m = protocolName.match(/x(\d+)/);
+  const m = protocolName.match(/[A-Z]x(\d+)(?:$|-)/);
   return m ? parseInt(m[1], 10) : 1;
 }
 
