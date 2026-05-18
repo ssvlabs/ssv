@@ -210,7 +210,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ProposalSoftDeadline configuration", zap.Error(err))
 			}
 			if cfg.ConsensusClient.ProposalSoftDeadline > goclient.SafeMaxProposalSoftDeadline {
-				logger.Warn("ProposalSoftDeadline exceeds the safe upper bound — round-2 QBFT fallback will not fit within the slot deadline; slot is missed whenever round 1 fails",
+				logger.Warn("ProposalSoftDeadline exceeds the safe-max threshold for the worst-case 2-round QBFT scenario — round-2 fallback will not fit within the slot deadline. The slot will be missed whenever round 1 fails. This is an explicit 'round 1 must succeed' configuration.",
 					zap.Int64("proposal_soft_deadline_ms", cfg.ConsensusClient.ProposalSoftDeadline.Milliseconds()),
 					zap.Int64("safe_max_ms", goclient.SafeMaxProposalSoftDeadline.Milliseconds()))
 			}

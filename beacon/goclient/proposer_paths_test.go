@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -122,6 +123,45 @@ func TestGetBeaconBlock_MultiBN_Path2_NoEarlyExit(t *testing.T) {
 	// returning the best-scored proposal. The 400ms floor tolerates clock jitter.
 	assert.GreaterOrEqual(t, elapsed, 400*time.Millisecond,
 		"Path 2 should wait for the slower BN; took %v", elapsed)
+}
+
+// TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid verifies that
+// when the slot-relative soft deadline has already fired before any BN responds,
+// the parallel-fetch path falls through to waitForFirstValidProposal and returns
+// the first valid BN response. Uses a slot in the past so the deadline is past.
+func TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid(t *testing.T) {
+	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 200 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllOnes(),
+	})
+	defer bn1.Close()
+	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 500 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllTwos(),
+	})
+	defer bn2.Close()
+
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathSafe, 1000*time.Millisecond)
+
+	// Slot 1 is in the past (mainnet genesis is in 2020). The slot-relative
+	// deadline = slotStart + 1000ms is also in the past, so softCtx is already
+	// done when the collection loop starts.
+	pastSlot := phase0.Slot(1)
+
+	start := time.Now()
+	_, _, err := client.GetBeaconBlock(context.Background(), pastSlot, []byte("test"), getTestRANDAO())
+	elapsed := time.Since(start)
+	require.NoError(t, err, "fallback to first-valid should return successfully")
+
+	// Should return after BN1 responds (~200ms), not wait for BN2 (~500ms). This
+	// confirms waitForFirstValidProposal is invoked (returning the first valid
+	// response, bounded by the parent context's slot deadline).
+	assert.GreaterOrEqual(t, elapsed, 150*time.Millisecond,
+		"should have waited for first BN response (~200ms); took %v", elapsed)
+	assert.Less(t, elapsed, 400*time.Millisecond,
+		"should NOT have waited for the slowest BN (~500ms); took %v", elapsed)
 }
 
 // setupMultiBNClient builds a GoClient connected to two test BN servers via

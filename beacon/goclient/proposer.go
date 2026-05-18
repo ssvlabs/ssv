@@ -383,7 +383,9 @@ func (gc *GoClient) waitForFirstValidProposal(
 			)
 			return res.proposal, nil
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			// Preserve any accumulated BN failure context alongside the parent
+			// deadline error — operators need both to diagnose missed slots.
+			return nil, errors.Join(ctx.Err(), errs)
 		}
 	}
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)

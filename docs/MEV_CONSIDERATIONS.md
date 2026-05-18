@@ -4,7 +4,9 @@
 
 To get the most out of MEV opportunities, configure **timing games on the PBS layer** — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0`.
 
-If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--path-0-proposerdelay-legacy-approach). PBS-side timing games are preferred because they don't consume SSV's slot budget for the auction wait.
+If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--path-0-proposerdelay-legacy-approach). PBS-side timing games are preferred because they don't consume SSV's slot budget for the auction wait.
+
+If you run **multiple Beacon nodes** and want SSV to cross-compare bids across them rather than taking the first BN's response, opt into the MEV-optimized fetch path by setting `ProposalSoftDeadline` on the SSV side (see [Configuration paths](#configuration-paths)). Single-BN setups don't need this — they bypass the parallel-fetch logic entirely.
 
 ## Definitions and typical values
 
@@ -76,7 +78,7 @@ Two scenarios shown for both PBSes. The numbers are starting points for a health
 
 ### Example A — bid-sample equivalent of legacy `ProposerDelay ≈ 1000ms` (recommended starting point)
 
-Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline — same bid quality, but the header arrives at SSV at ~1100ms (1050ms PBS cutoff + ~50ms BN→SSV) instead of legacy's ~1500–2000ms, leaving more slot budget for QBFT and submission.
+Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline — same bid quality, but the header arrives at SSV at ~1100ms (1050ms PBS cutoff + ~50ms BN→SSV) instead of legacy's ~1300–2000ms (depending on relay response speed), leaving more slot budget for QBFT and submission.
 
 The polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 150`) fires polls at 700ms, 850ms, and 1000ms.
 
@@ -123,7 +125,7 @@ eth2:
 
 ### Example B — aggressive: PBS-side cutoff at 1800ms (round 1 must succeed)
 
-Pushes the PBS-side cutoff to `1800ms` — the latest practical value before the worst-case 2-round QBFT scenario stops fitting within the 4000ms slot deadline. Last relay poll at ~1600ms; header at SSV by ~1850ms.
+Pushes the PBS-side cutoff to `1800ms` — well past the ~1100ms threshold where round-2 QBFT fallback stops fitting within the slot. This explicitly accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth. Last relay poll at ~1600ms; header at SSV by ~1850ms.
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, 1600ms — four chances with ~200ms RTT margin.
 
@@ -164,7 +166,7 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (recommended for multi-BN setups; 1850ms triggers a startup warning since it exceeds 1800ms — see [Configuration paths](#configuration-paths)):
+**SSV-side** (recommended for multi-BN setups; 1850ms triggers a startup warning since it exceeds the ~1100ms safe-max for the worst-case 2-round QBFT scenario — see [Configuration paths](#configuration-paths)):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
@@ -184,11 +186,11 @@ Bid value grows through the slot, so the auction cutoff should be as late as pos
 
 ### What to measure first
 
-- **RANDAO completion time** — visible on Grafana charts.
-- **BN → PBS RTT** — typically same machine, well under 10ms.
-- **Per-relay RTT distribution (p50/p95/p99)** — PBSes log this.
-- **QBFT round-1 completion distribution** — visible on Grafana charts.
-- **Submission round-trip** — includes the relay payload-reveal step.
+- **RANDAO completion time** — `measurements.PreConsensusTime()` in `protocol/v2/ssv/runner/`. Visible on Grafana charts if exported.
+- **BN → PBS RTT** — typically same machine, well under 10ms. Visible in PBS logs.
+- **Per-relay RTT distribution (p50/p95/p99)** — PBSes log this on every `getHeader` call.
+- **QBFT round-1 completion distribution** — `measurements.ConsensusTime()` in `protocol/v2/ssv/runner/`. Visible on Grafana charts if exported.
+- **Submission round-trip** — from `SubmitBeaconBlock` in `beacon/goclient/proposer.go` through the relay payload-reveal step.
 
 ### SSV telemetry
 
@@ -238,7 +240,7 @@ Preserves the original `ProposerDelay` / `ProposalSoftTimeout` behavior bit-for-
 
 Same as Path 1 but **without** the early-exit on the first blinded response — SSV waits for all multi-BN responses until the slot-relative `ProposalSoftDeadline`, then returns the highest-scored bid across all BNs. Useful only when multiple BNs may produce meaningfully different bids worth cross-comparing.
 
-To enable, set `ProposalSoftDeadline` (`eth2:` block in YAML, or `WITH_PROPOSAL_SOFT_DEADLINE` env var) to match your PBS `late_in_slot_time_ms + ~50ms BN→SSV transport`. Valid range `[1000ms, 3600ms]`; values above 1800ms emit a startup warning because the worst-case 2-round QBFT scenario can no longer fit.
+To enable, set `ProposalSoftDeadline` (`eth2:` block in YAML, or `WITH_PROPOSAL_SOFT_DEADLINE` env var) to match your PBS `late_in_slot_time_ms + ~50ms BN→SSV transport`. Valid range `[1000ms, 3600ms]`; values above ~1100ms emit a startup warning because the worst-case 2-round QBFT scenario can no longer fit within the slot (round 1 must succeed for the slot).
 
 ## Appendix A — Path 0 (`ProposerDelay`, legacy approach)
 
@@ -258,6 +260,8 @@ RANDAO + ProposerDelay + MEVBoostRelayTimeout + QBFT + PostConsensusSigning + Bl
 ```
 
 Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (100 + 200 + 2500 + 150 + 200) = 850ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~150ms of headroom for variance.
+
+The safety guard at startup is the looser 1000ms cap ([Appendix B](#appendix-b--safety-limits)): values between ~700ms and 1000ms are permitted without `AllowDangerousProposerDelay` but should be considered risky and not recommended.
 
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 

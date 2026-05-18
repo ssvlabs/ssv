@@ -65,9 +65,14 @@ const (
 	MaxProposalSoftDeadline = 3600 * time.Millisecond
 
 	// SafeMaxProposalSoftDeadline is the threshold above which the worst-case 2-round QBFT
-	// scenario no longer fits within the slot deadline (round 1 must succeed). Values above
-	// this trigger a startup warning but are still permitted.
-	SafeMaxProposalSoftDeadline = 1800 * time.Millisecond
+	// scenario no longer fits within the slot deadline (round 1 must succeed for the slot).
+	// Derived from the typical values in docs/MEV_CONSIDERATIONS.md:
+	//   deadline + 50ms (BN→SSV transport) + 2500ms (QBFT worst-case 2-round) +
+	//   150ms (PostConsensusSigning) + 200ms (BlockSubmission) <= 4000ms
+	//   => deadline <= 1100ms
+	// Values above this trigger a startup warning but are still permitted (the operator
+	// is explicitly accepting "round 1 must succeed" — Example B is such a setup).
+	SafeMaxProposalSoftDeadline = 1100 * time.Millisecond
 )
 
 // Path 0 (legacy) constants — preserved for backward-compat.
