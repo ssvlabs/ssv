@@ -125,17 +125,15 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		maxRounds = 4
 	}
 
-	// BFT_start = 0 (slot start). Anchored to OBFT's earliest broadcast
-	// time (FetchAt[K-1] ≈ 0 in the default schedule — the deepest /
-	// lowest-MEV layer), which is the apples-to-apples reference point
-	// for QBFT: both protocols start their "lowest-MEV" path at slot
-	// start, then OBFT layer-walks toward L_0 while QBFT just runs R1.
-	//
-	// This also matches production SSV QBFT (proposer-role headStart=0
-	// in roundtimer/timer.go). The R2 fallback still fits: R2 success
-	// lands at RT + 4·BTT ≈ 3.2s at BTT=300ms, within the 3.9s
-	// effective deadline.
-	bftStart := time.Duration(0)
+	// BFTStart drives QBFT's PROPOSE-start anchor. Defaults to 0 (slot
+	// start), matching OBFT's earliest broadcast time (FetchAt[K-1] ≈ 0
+	// in the default OBFT schedule — the deepest / lowest-MEV layer) and
+	// production SSV QBFT (proposer-role headStart=0 in
+	// roundtimer/timer.go). The DES at qbft/des.go schedules
+	// evtStartInstance at this offset for every honest op. At BFTStart=0
+	// the R2 fallback still fits: R2 success lands at RT + 4·BTT ≈ 3.2s
+	// at BTT=300ms, within the 3.9s effective deadline.
+	bftStart := cfg.BFTStart
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{

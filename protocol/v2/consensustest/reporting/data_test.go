@@ -256,7 +256,7 @@ func TestDefaultSweeps_FieldsKeyStable(t *testing.T) {
 	require.NotEmpty(t, scenarios)
 	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
-	sweeps := ct.DefaultSweeps(scenarios, protos, iters, 4, 2, ct.P2PProfileNames)
+	sweeps := ct.DefaultSweeps(scenarios, protos, iters, 4, 2, ct.P2PProfileNames, ct.DefaultBaselineBFTStarts)
 	require.NotEmpty(t, sweeps)
 
 	for _, sw := range sweeps {

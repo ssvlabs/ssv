@@ -61,7 +61,7 @@ func newSim(cfg desConfig) *sim {
 	}
 }
 
-// start schedules one evtPSigSign per honest operator at SlotStart.
+// start schedules one evtPSigSign per honest operator at BFTStart.
 // Byz operators that the byz pattern marks as non-signing are excluded
 // from the initial schedule (they neither self-observe nor broadcast).
 func (s *sim) start() {
@@ -69,7 +69,7 @@ func (s *sim) start() {
 		if !s.cfg.Byz.AllowSign(op) {
 			continue
 		}
-		s.schedule(s.cfg.SlotStart, &evtPSigSign{op: op})
+		s.schedule(s.cfg.BFTStart, &evtPSigSign{op: op})
 	}
 	s.scheduleInitialHeartbeats()
 }

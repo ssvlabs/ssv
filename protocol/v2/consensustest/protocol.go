@@ -23,6 +23,7 @@ package consensustest
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -58,7 +59,15 @@ type SimConfig struct {
 	// ignore this. Must satisfy MinK(N) ≤ K ≤ N where MinK = f+1.
 	K int
 
-	SlotStart    time.Duration // virtual-time offset of slot start; usually 0
+	// BFTStart is the virtual-time offset at which the protocol's primary
+	// broadcast pipeline begins (= BFT_start in the spec). Pre-fetch and
+	// pre-consensus modeling are not in scope for the sim; this field
+	// captures BFT activity start directly. Defaults to 0 (BFT starts at
+	// slot start). The OBFT-family schedules apply the spec's runtime
+	// clamp `T_broadcast_max_k = max(BFTStart, T_commit − B_k)`; PSigs
+	// uses this as the time each op signs + broadcasts; QBFT uses it as
+	// the PROPOSE-start anchor.
+	BFTStart     time.Duration
 	SlotDuration time.Duration // 12s for Ethereum
 	RelayCutoff  time.Duration // application hard deadline (4s for proposer duty)
 
@@ -170,6 +179,23 @@ type Protocol interface {
 	Run(cfg SimConfig) (Outcome, error)
 }
 
+// IsPipelineShiftProtocol reports whether the UI uses post-hoc pipeline-shift
+// (decision_time + BFTStart) for this protocol — i.e. the protocol's whole
+// pipeline shifts wholesale with BFTStart and one BFTStart=0 sim is
+// equivalent to running at any BFTStart. Returns true for QBFT family and
+// PSigs; false for OBFT family (where per-layer broadcast schedules are
+// slot-anchored and BFTStart shifts only the lower bound of each layer's
+// broadcast deadline — requires a real per-BFTStart simulation, not a shift).
+//
+// Drives sweep-matrix protocol filtering: at BFTStart > 0 the sweep skips
+// pipeline-shift protocols (the BFTStart=0 cell + UI shift already covers
+// them) and only runs the OBFT-family ones for which BFTStart materially
+// changes the schedule.
+func IsPipelineShiftProtocol(p Protocol) bool {
+	name := p.Name()
+	return name == "QBFT" || name == "PSigs" || strings.HasPrefix(name, "QBFT-")
+}
+
 // ErrNotApplicable is returned by Run when a scenario doesn't translate to
 // this protocol (e.g. OBFT-specific h_V=1 on QBFT). The framework treats it
 // as "skip" rather than "fail" when comparing outcomes (renders as n/a).
@@ -246,17 +272,16 @@ type Outcome struct {
 	// safety net. Empty when Decided=true.
 	MissReason string
 	// DecidingBroadcastTime is the slot-anchored T_broadcast_max_k for
-	// k=DecidedRound — i.e. the latest absolute slot time at which the
-	// deciding layer's primary broadcast could still fire. Used by the
-	// reporting layer's slot_start adjustment: a late-joining operator
-	// (slot_start > 0) catches the deciding broadcast iff
-	// DecidingBroadcastTime ≥ slot_start; otherwise the broadcast fired
-	// before the operator joined and the slot is MEV-stale.
+	// k=DecidedRound — i.e. the absolute slot time at which the deciding
+	// layer's primary broadcast fired (= max(BFTStart, T_commit − B_k)
+	// per the spec's runtime clamp). Reported for diagnostic / UI use
+	// and per-sample timeline rendering.
 	//
 	// Set only by adapters with a slot-anchored Phase-1 schedule (OBFT
 	// family and 2abOBFT family). QBFT's pipeline shifts wholesale with
-	// slot_start, so the QBFT branch in the UI's shiftCell uses a
-	// different rule and leaves this field unread. Zero when !Decided.
+	// BFTStart so the field is meaningless there; the QBFT adapter
+	// leaves it zero and the UI's shiftCell pipeline-shift branch
+	// doesn't consult it. Zero when !Decided.
 	DecidingBroadcastTime time.Duration
 	PerOp                 map[OperatorID]OperatorOutcome
 	Trace                 []TraceEntry // non-nil iff cfg.TraceEnabled was set
@@ -385,6 +410,9 @@ func (c *SimConfig) Validate() error {
 	if c.RefloodDelay < 0 {
 		return fmt.Errorf("consensustest: RefloodDelay must be >= 0")
 	}
+	if c.BFTStart < 0 {
+		return fmt.Errorf("consensustest: BFTStart must be >= 0")
+	}
 	if c.RelayCutoff <= 0 {
 		return fmt.Errorf("consensustest: RelayCutoff must be > 0")
 	}
@@ -471,7 +499,7 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		N:                    4,
 		Operators:            operators,
 		K:                    0, // → DefaultK(N=4) = 4 (K = N convention)
-		SlotStart:            0,
+		BFTStart:             0,
 		SlotDuration:         12 * time.Second,
 		RelayCutoff:          4 * time.Second,
 		HeaderSubmitHeadroom: 100 * time.Millisecond,

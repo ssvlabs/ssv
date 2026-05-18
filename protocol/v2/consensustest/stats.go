@@ -142,7 +142,8 @@ type BatchCell struct {
 	// T_broadcast_max for the deciding layer of the i-th successful sim
 	// (zero when the protocol has no slot-anchored broadcast, e.g. QBFT).
 	// Reporting layer relies on the index alignment to emit parallel-sorted
-	// arrays for the UI's slot_start adjustment.
+	// arrays for the UI's BFT_start-aware cell lookup and the legacy
+	// pipeline-shift fallback.
 	DecisionTime          Distribution
 	DecidingBroadcastTime Distribution
 	ClusterBandwidth      Distribution

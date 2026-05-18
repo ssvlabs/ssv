@@ -29,7 +29,7 @@ func TestSweeps_HealthyStaysMesh(t *testing.T) {
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	profiles := []string{"prod"}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBFTStarts)
 	for _, sw := range sweeps {
 		for ptIdx, pt := range sw.Points {
 			var healthy *ct.Scenario

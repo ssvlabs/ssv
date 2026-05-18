@@ -171,12 +171,17 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)
 	}
+	// Apply the spec's runtime clamp `T_broadcast_max_k = max(BFTStart,
+	// TVerdictStart − B_k)` (2abOBFT.md §Phase 1 / Phase 2a sizing).
+	// BFTStart=0 preserves the legacy `if < 0` clamp bit-exactly.
+	bftStart := cfg.BFTStart
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
-		fetchAt[k] = tVerdictStart - broadcastBudget[k]
-		if fetchAt[k] < 0 {
-			fetchAt[k] = 0
+		fa := tVerdictStart - broadcastBudget[k]
+		if fa < bftStart {
+			fa = bftStart
 		}
+		fetchAt[k] = fa
 	}
 
 	bw := ct.NewBandwidthReport()
@@ -184,6 +189,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		N:               cfg.N,
 		K:               cfg.K,
 		Operators:       cfg.Operators,
+		BFTStart:        bftStart,
 		TCommit:         tCommit,
 		Delta2a:         delta2a,
 		Delta2b:         delta2b,
@@ -212,12 +218,13 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// Stamp the deciding-layer broadcast deadline (anchored at
 	// tVerdictStart, not tCommit, because the Phase-1 broadcast must
 	// complete before Phase-2a opens). Shallow layers whose B_k exceed
-	// tVerdictStart clamp to BFT_start, matching the runtime rule
-	// T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k).
+	// tVerdictStart clamp to BFTStart, matching the runtime rule
+	// T_broadcast_max_k = max(BFTStart, TVerdictStart − B_k). Mirrors the
+	// fetchAt[] clamp above.
 	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
 		bt := tVerdictStart - broadcastBudget[out.DecidedRound]
-		if bt < 0 {
-			bt = 0
+		if bt < bftStart {
+			bt = bftStart
 		}
 		out.DecidingBroadcastTime = bt
 	}
@@ -304,6 +311,7 @@ type desConfig struct {
 	N               int
 	K               int
 	Operators       []ct.OperatorID
+	BFTStart        time.Duration // forwarded to twoab.Config.BFTStart
 	TCommit         time.Duration
 	Delta2a         time.Duration
 	Delta2b         time.Duration

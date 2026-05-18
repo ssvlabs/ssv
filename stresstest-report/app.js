@@ -6,7 +6,7 @@
  *
  * Page structure (top → bottom):
  *   1. Conditions section — always-visible CDF for the selected
- *      scenario. Pickers (K, BTT, p2p_profile, slot_start) drive both
+ *      scenario. Pickers (K, BTT, p2p_profile, BFT_start) drive both
  *      this chart and the heatmap below; legend (per-protocol success
  *      rate) sits Y-aligned to the right of the pickers.
  *   2. Heatmap — scenario rows × protocol columns colored by the
@@ -14,7 +14,7 @@
  *      a row updates the Conditions chart above.
  *   3. Collapsibles — one per multi-point sweep (Increasing BTT,
  *      Stochastic loss, Correlated link delays, Correlated node
- *      slowness, P2P instability). Each has its own slot_start +
+ *      slowness, P2P instability). Each has its own BFT_start +
  *      y-axis pickers placed just above the chart.
  */
 
@@ -41,29 +41,87 @@ const PROTOCOL_COLORS = {
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
 // deadline). Right edge of the CDF x-axis, pinned regardless of
-// slot_start — the chart axis is absolute slot time.
+// BFT_start — the chart axis is absolute slot time.
 const SLOT_END_MS = 4000;
 
-// SLOT_STARTS is the set of "operator joins at" offsets the picker
-// offers. The chart x-axis is absolute slot time; cdfSlotStartPlugin
-// draws a dashed marker at slot_start showing where in the slot the
-// operator became available.
-//   QBFT: pipeline runs slot_start later, so sample x = decide_time +
-//     slot_start; sample fails when it overflows SLOT_END_MS.
-//   OBFT / 2abOBFT: broadcast schedule is slot-anchored, so sample x =
-//     T_k_broadcast (unchanged); sample fails when T_k_broadcast <
-//     slot_start (operator missed the deciding layer's broadcast).
-const SLOT_STARTS = [0, 400, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800];
+// BFT_STARTS is the set of "BFT pipeline begins at" offsets the picker
+// offers. The chart x-axis is absolute slot time; cdfBFTStartPlugin
+// draws a dashed marker at BFT_start showing where in the slot the
+// BFT actually starts (= end of pre-fetch / pre-consensus).
+//   QBFT / PSigs (pipeline-shift): cells are simulated at BFT_start=0
+//     and the UI shifts decision times by +BFT_start; sample fails
+//     when shifted time overflows SLOT_END_MS.
+//   OBFT / 2abOBFT (slot-anchored schedule): cells are pre-computed
+//     at the picker's BFT_start (per-BFT_start sim in p2p_baseline,
+//     see sweep.go). For picker values ≤ the per-cell approximation
+//     boundary (see obftFamilyApproxBoundaryMs), the OBFT-family
+//     schedule is functionally identical to BFT_start=0 (the spec's
+//     `T_broadcast_max_k = max(BFT_start, T_commit − B_k)` clamp
+//     doesn't engage), so the BFT_start=0 cell is reused as a
+//     close-to-ground-truth approximation. Above the per-cell
+//     boundary the exact cell is required.
+const BFT_STARTS = [0, 400, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800];
 
-// selectedSlotStart is the page-level slot_start used by the Conditions
-// chart at the top, the heatmap cell colors, and the cdfSlotStartPlugin's
-// dashed marker. The collapsibles use their own per-section slot_start
-// in collapsibleState[name].slotStart instead.
-let selectedSlotStart = 0;
+// SSV's gossipsub HeartbeatInterval — RefloodDelay used by all Healthy
+// p2p_baseline cells. Adversarial scenarios use RefloodDelay=0 but
+// the BFT_start picker is meaningful primarily for the Healthy row,
+// so this is the value the per-cell approximation boundary assumes.
+// Mirrors network/topics/params/gossipsub.go HeartbeatInterval.
+const REFLOOD_DELAY_HEALTHY_MS = 700;
+
+// obftFamilyApproxBoundaryMs computes the BFT_start picker value below
+// which an OBFT-family cell's broadcast schedule is bit-identical to
+// BFT_start=0 — i.e. the spec's `T_broadcast_max_0 = max(BFT_start,
+// T_commit − B_0)` clamp is dormant for the primary layer. Picker
+// values ≤ this boundary reuse the BFT_start=0 cell as the
+// close-to-ground-truth approximation; values > this boundary require
+// a real per-BFT_start pre-computed cell.
+//
+// Derived from the adapter sizing formulas (mirrors
+// protocol/v2/consensustest/{obft,twoab}/adapter.go and
+// protocol/v2/obft/{base,twoab}/Config.BroadcastMaxOffsetForLayer):
+//   OBFT-family       (anchor = T_commit       = 3800 − BTTeff)
+//   2abOBFT-family    (anchor = T_verdict_start = 3800 − 5·BTTeff)
+//   B_0 = 2·BTTeff + RefloodDelay
+//   BTTeff = BTT × multiplier (1/2/3 for canonical/x2/x3)
+// where the 3800 = RelayCutoff − HeaderSubmitHeadroom − ε_3 − phase3JitterBuffer
+// constants live in obft/adapter.go.
+//
+// Returns 0 when the formula yields ≤ 0 (the variant's primary clamp
+// engages at BFT_start = 0 already — i.e. the variant is structurally
+// at its budget envelope, e.g. 2abOBFTx2 at BTT ≥ 300ms). Pipeline-
+// shift protocols ignore this — they always pull from BFT_start=0.
+function obftFamilyApproxBoundaryMs(protocolName, btt) {
+  if (isPipelineShiftProtocol(protocolName)) return 0;
+  const mult = bttMultiplierForVariant(protocolName);
+  const bttEff = btt * mult;
+  const b0 = 2 * bttEff + REFLOOD_DELAY_HEALTHY_MS;
+  const anchor = protocolName.startsWith('2abOBFT')
+    ? 3800 - 5 * bttEff   // T_verdict_start
+    : 3800 - bttEff;      // T_commit
+  return Math.max(0, anchor - b0);
+}
+
+// bttMultiplierForVariant extracts the BTT multiplier from the
+// protocol variant name (OBFT/2abOBFT=1, OBFTx2/2abOBFTx2=2,
+// OBFTx3/2abOBFTx3=3). Mirrors the Go-side adapter's BTTMultiplier
+// field (set when registering the variant in stress_test.go).
+function bttMultiplierForVariant(protocolName) {
+  if (typeof protocolName !== 'string') return 1;
+  if (protocolName.endsWith('x3')) return 3;
+  if (protocolName.endsWith('x2')) return 2;
+  return 1;
+}
+
+// selectedBFTStart is the page-level BFT_start used by the Conditions
+// chart at the top, the heatmap cell colors, and the cdfBFTStartPlugin's
+// dashed marker. The collapsibles use their own per-section BFT_start
+// in collapsibleState[name].bftStart instead.
+let selectedBFTStart = 0;
 
 // selectedScenario drives the Conditions chart at the top of the page.
 // Heatmap row click updates this; the chart re-renders for the new
-// scenario at the picker-chosen (K, BTT, profile, slot_start). Not persisted
+// scenario at the picker-chosen (K, BTT, profile, BFT_start). Not persisted
 // across reloads on purpose — refresh resets back to "Healthy".
 //
 // Default is "Healthy" — the all-honest baseline whose Title is
@@ -165,7 +223,7 @@ function filteredProtocols(protocols) {
 // Mirrors InstabilityLevels.Name in the Go side.
 const INSTABILITY_NAMES = ['none', 'low', 'moderate', 'high', 'extreme'];
 
-// collapsibleState[sweepName] = { expanded: bool, metric: 'success'|'p99', slotStart: int }
+// collapsibleState[sweepName] = { expanded: bool, metric: 'success'|'p99', bftStart: int }
 // Per-section state for the collapsible sweep charts (Increasing BTT,
 // Stochastic loss, Correlated link delays, Correlated node slowness,
 // P2P instability). Each has its OWN pickers independent of the
@@ -201,18 +259,18 @@ const cdfZonesPlugin = {
   },
 };
 
-// cdfSlotStartPlugin shades the left-side band [0, slot_start] — time
+// cdfBFTStartPlugin shades the left-side band [0, BFT_start] — time
 // the operator wasn't present in the slot yet — and draws a dashed
-// vertical line at slot_start. No-op when slot_start = 0 (operator
+// vertical line at BFT_start. No-op when BFT_start = 0 (operator
 // joined at slot start, nothing to mark).
-const cdfSlotStartPlugin = {
-  id: 'cdfSlotStart',
+const cdfBFTStartPlugin = {
+  id: 'cdfBFTStart',
   beforeDatasetsDraw(chart) {
-    if (selectedSlotStart === 0) return;
+    if (selectedBFTStart === 0) return;
     const { ctx, chartArea, scales } = chart;
     const x = scales.x;
     if (!x) return;
-    const xStart = x.getPixelForValue(selectedSlotStart);
+    const xStart = x.getPixelForValue(selectedBFTStart);
     if (xStart <= chartArea.left) return;
     ctx.save();
     ctx.fillStyle = 'rgba(15, 23, 42, 0.05)';
@@ -250,25 +308,25 @@ function main() {
   activeProtocols = loadActiveProtocols(data.protocols);
   // Snap selectedK/selectedBTT/selectedP2pProfile to values actually present
   // in p2p_baseline (or stay at defaults if no baseline is loaded).
-  // Must run before precomputeSlotShifts since the latter warms the
+  // Must run before precomputeBFTShifts since the latter warms the
   // matched point's shifts.
   initBaselineSelections(data);
-  // One-time precompute of slot_start variants for the heatmap point.
-  // Cached on the cell itself as `cell.slotShifts[slotStart]` → shifted
+  // One-time precompute of BFT_start variants for the heatmap point.
+  // Cached on the cell itself as `cell.bftShifts[bftStart]` → shifted
   // cell view. Subsequent reads (heatmap render on slot change,
   // legend stats) are O(1) lookups.
-  precomputeSlotShifts(data);
+  precomputeBFTShifts(data);
   root.innerHTML = '';
   const mainEl = h('main');
   // Page layout (top → bottom):
   //   1. Conditions section — always-visible CDF for the selected
-  //      scenario. Pickers (K, BTT, profile, slot_start) drive both this
+  //      scenario. Pickers (K, BTT, profile, BFT_start) drive both this
   //      chart and the heatmap's cell colors.
   //   2. Heatmap — colored by the same pickers; row click updates the
   //      Conditions chart's selected scenario.
   //   3. Collapsibles — Increasing BTT, Stochastic loss, Correlated
   //      link delays, Correlated node slowness, P2P instability. Each
-  //      has its own local pickers (slot_start + y-axis) just above
+  //      has its own local pickers (BFT_start + y-axis) just above
   //      the chart.
   mainEl.appendChild(renderConditionsSection(data));
   mainEl.appendChild(renderHeatmap(data));
@@ -309,13 +367,15 @@ function initBaselineSelections(data) {
   selectedInstability = pickClosest(dims.Instabilities, selectedInstability);
 }
 
-// precomputeSlotShifts warms shiftedCell's cache for the heatmap's
-// source point so the first slot_start change doesn't trigger a burst
-// of shift computations under the click. Only the heatmap point is
-// warmed (collapsibles lazy-compute on first expansion + the
-// conditions chart picks a single point lazily). Cells with no samples
-// (n/a, 0%) are skipped — nothing to shift.
-function precomputeSlotShifts(data) {
+// precomputeBFTShifts warms shiftedCell's cache for the heatmap's
+// source point so the first BFT_start change doesn't trigger a burst
+// of shift computations under the click. Only pipeline-shift protocols
+// (PSigs / QBFT family) need warming — OBFT-family cells are looked up
+// per pre-computed BFT_start in sweep data, no post-hoc shift applies.
+// Only the heatmap point is warmed (collapsibles lazy-compute on first
+// expansion + the conditions chart picks a single point lazily).
+// Cells with no samples (n/a, 0%) are skipped — nothing to shift.
+function precomputeBFTShifts(data) {
   let point = null;
   const match = findBaselineSweepPoint(data);
   if (match) {
@@ -327,43 +387,82 @@ function precomputeSlotShifts(data) {
   if (!point) return;
   point.cells.forEach((cell) => {
     if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
-    for (let i = 1; i < SLOT_STARTS.length; i++) {
-      shiftedCell(cell, SLOT_STARTS[i]);
+    if (!isPipelineShiftProtocol(cell.protocol)) return;
+    for (let i = 1; i < BFT_STARTS.length; i++) {
+      shiftedCell(cell, BFT_STARTS[i]);
     }
   });
 }
 
-// shiftedCell returns a slot-start-adjusted view of `cell`, lazily
-// computing + caching the result on `cell.slotShifts`. Short-circuits
-// the slotStart=0 case and cells with nothing to shift.
-function shiftedCell(cell, slotStart) {
-  if (!cell || slotStart === 0) return cell;
-  if (!cell.decisionTimes || cell.decisionTimes.length === 0) return cell;
-  if (!cell.slotShifts) cell.slotShifts = {};
-  if (!cell.slotShifts[slotStart]) {
-    cell.slotShifts[slotStart] = shiftCell(cell, slotStart);
-  }
-  return cell.slotShifts[slotStart];
+// isPipelineShiftProtocol mirrors the Go-side ct.IsPipelineShiftProtocol:
+// PSigs and QBFT-family are sweep-skipped at BFT_start > 0 (one
+// BFT_start=0 sim covers them) and the UI shifts their decision times
+// post-hoc. OBFT-family protocols are simulated per-BFT_start in
+// p2p_baseline and their cells are looked up by Fields.BFT_start, not
+// shifted post-hoc.
+function isPipelineShiftProtocol(name) {
+  if (typeof name !== 'string') return false;
+  return name === 'QBFT' || name === 'PSigs' || name.startsWith('QBFT-');
 }
 
-// onSlotStartChange is the central handler for slot_start picker clicks
+// bftStartForProtocolLookup maps the UI picker value to the BFT_start
+// the OBFT-family sweep was actually run at — picker ≤ per-cell
+// approximation boundary (see obftFamilyApproxBoundaryMs) reuses the
+// BFT_start=0 cell (close-to-ground-truth approximation per
+// OBFT-BFT-START-SWEEP-PLAN.md Q2; the spec's runtime clamp
+// `max(BFT_start, T_commit − B_k)` is dormant at the primary layer
+// below the boundary). Above the boundary, the matching pre-computed
+// cell is required. Pipeline-shift protocols always look up the
+// BFT_start=0 cell (the UI's shiftCell applies the shift post-hoc).
+//
+// The boundary is per-cell, not global: OBFTx2/x3 at degraded BTT or
+// 2abOBFT-family at all but the smallest BTT values have a boundary
+// well below the picker's 1600ms midpoint — a global cutoff would
+// silently serve stale BFT_start=0 data for those cells.
+function bftStartForProtocolLookup(protocolName, btt, picker) {
+  if (isPipelineShiftProtocol(protocolName)) return 0;
+  const boundary = obftFamilyApproxBoundaryMs(protocolName, btt);
+  return picker <= boundary ? 0 : picker;
+}
+
+// shiftedCell returns a BFT_start-adjusted view of `cell`. For
+// pipeline-shift protocols (PSigs / QBFT family) it shifts decision
+// times by +BFT_start in place, lazily computing + caching on
+// `cell.bftShifts`. For OBFT-family cells it returns the cell as-is —
+// the caller is expected to have looked up the right cell at the right
+// BFT_start (via findBaselineCellForScenario or
+// findBaselinePointAtBFTStart). In non-baseline sweeps that don't
+// carry a BFT_start axis, OBFT-family cells fall through unchanged
+// (the close-to-ground-truth approximation extended to those contexts).
+function shiftedCell(cell, bftStart) {
+  if (!cell || bftStart === 0) return cell;
+  if (!cell.decisionTimes || cell.decisionTimes.length === 0) return cell;
+  if (!isPipelineShiftProtocol(cell.protocol)) return cell;
+  if (!cell.bftShifts) cell.bftShifts = {};
+  if (!cell.bftShifts[bftStart]) {
+    cell.bftShifts[bftStart] = shiftCell(cell, bftStart);
+  }
+  return cell.bftShifts[bftStart];
+}
+
+// onBFTStartChange is the central handler for BFT_start picker clicks
 // on the Conditions section. Updates state and re-renders every view
-// that derives from slot_start: heatmap cell colors + the Normal
-// operations chart. Per-collapsible slot_start pickers route through
-// their own state (collapsibleState[name].slotStart) and re-render
+// that derives from BFT_start: heatmap cell colors + the Normal
+// operations chart. Per-collapsible BFT_start pickers route through
+// their own state (collapsibleState[name].bftStart) and re-render
 // only their section.
-function onSlotStartChange(newSlot) {
-  if (newSlot === selectedSlotStart) return;
-  selectedSlotStart = newSlot;
+function onBFTStartChange(newBFTStart) {
+  if (newBFTStart === selectedBFTStart) return;
+  selectedBFTStart = newBFTStart;
   const data = window.REPORT_DATA;
   // Re-render heatmap section in place so cell colors reflect the new
-  // slot_start. The Conditions section's picker rebuilds via its own
+  // BFT_start. The Conditions section's picker rebuilds via its own
   // renderConditionsSection re-mount below.
   const oldOverview = document.getElementById('overview');
   if (oldOverview) {
     oldOverview.replaceWith(renderHeatmap(data));
   }
-  // Re-render Conditions section so the slot_start picker's active
+  // Re-render Conditions section so the BFT_start picker's active
   // button updates and the chart redraws.
   const oldCond = document.getElementById('conditions');
   if (oldCond) {
@@ -375,8 +474,8 @@ function onSlotStartChange(newSlot) {
 //
 // The Conditions section is the always-visible primary CDF chart at the
 // top of the page. It shows the currently-selected scenario's CDF at
-// the picker-chosen (K, BTT, profile, slot_start). Heatmap row click
-// updates the selected scenario; pickers update K/BTT/profile/slot_start.
+// the picker-chosen (K, BTT, profile, BFT_start). Heatmap row click
+// updates the selected scenario; pickers update K/BTT/profile/BFT_start.
 //
 // Data source: p2p_baseline (BTT × profile × instability cross-product),
 // looked up by (selectedK, selectedBTT, selectedP2pProfile) via
@@ -392,12 +491,12 @@ function findBaselineSweepPoint(data) {
   return findBaselinePointAtInstability(data, selectedInstability);
 }
 
-// findBaselinePointAtInstability looks up the p2p_baseline point at
-// the current (N, K, BTT, profile) and the requested instability level.
-// Returns null when no matching point exists (e.g. the level=high
-// slice hasn't been generated). Pulled out so non-Baseline-row cell
-// lookups can force-fall-back to level=0 regardless of the picker.
-function findBaselinePointAtInstability(data, instability) {
+// findBaselinePointAtBFTStart looks up the p2p_baseline point at the
+// current (N, K, BTT, profile) and the requested instability +
+// BFT_start. Returns null when no matching point exists. Points
+// emitted before the BFT_start axis was added carry no Fields.BFT_start
+// key; those default to BFT_start=0 for backward-compat.
+function findBaselinePointAtBFTStart(data, instability, bftStart) {
   if (!data) return null;
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep) return null;
@@ -409,7 +508,8 @@ function findBaselinePointAtInstability(data, instability) {
       f.K === selectedK &&
       f.BTT === selectedBTT &&
       f.p2p_profile === selectedP2pProfile &&
-      (f.Instability ?? 0) === instability
+      (f.Instability ?? 0) === instability &&
+      (f.BFT_start ?? 0) === bftStart
     ) {
       return { sweep, point: pt };
     }
@@ -417,17 +517,32 @@ function findBaselinePointAtInstability(data, instability) {
   return null;
 }
 
+// findBaselinePointAtInstability is the legacy BFT_start-naive lookup
+// (callers that don't need to vary BFT_start, e.g. heatmap legend
+// rendering). Forwards to findBaselinePointAtBFTStart with
+// BFT_start=0.
+function findBaselinePointAtInstability(data, instability) {
+  return findBaselinePointAtBFTStart(data, instability, 0);
+}
+
 // findBaselineCellForScenario looks up the cell for the given scenario
-// at the current (N, K, BTT, profile, instability). For Baseline-group
-// scenarios (Healthy) the cell is the per-level variant; for every
-// other scenario the cell falls back to the level=none point — those
-// scenarios are instability-invariant by construction, so generating
-// duplicate cells at every level would just waste compute (see
-// p2pBaselineSweep in sweep.go).
+// + protocol at the current (N, K, BTT, profile, instability,
+// BFT_start). For Baseline-group scenarios (Healthy) the cell is the
+// per-level variant; for every other scenario the cell falls back to
+// the level=none point — those scenarios are instability-invariant by
+// construction, so generating duplicate cells at every level would
+// just waste compute (see p2pBaselineSweep in sweep.go).
+//
+// BFT_start is resolved per-protocol via bftStartForProtocolLookup:
+// OBFT-family at picker > the per-cell approximation boundary pulls
+// from the matching pre-computed BFT_start cell; pipeline-shift
+// protocols always pull from the BFT_start=0 cell (the UI shifts
+// post-hoc via shiftedCell).
 function findBaselineCellForScenario(data, scenario, protocol) {
   const isBaseline = scenario && scenario.group === 'Baseline';
-  const wanted = isBaseline ? selectedInstability : 0;
-  const match = findBaselinePointAtInstability(data, wanted);
+  const wantInstab = isBaseline ? selectedInstability : 0;
+  const wantBFTStart = bftStartForProtocolLookup(protocol, selectedBTT, selectedBFTStart);
+  const match = findBaselinePointAtBFTStart(data, wantInstab, wantBFTStart);
   if (!match) return null;
   return findCell(match.point, scenario.name, protocol);
 }
@@ -513,7 +628,7 @@ function filterSweepByNK(sweep, n, k) {
 }
 
 // buildBaselinePicker renders a labeled button group for one picker
-// dimension (n, K, BTT, or profile index). Buttons mirror buildSlotPicker styling.
+// dimension (n, K, BTT, or profile index). Buttons mirror buildBFTStartPicker styling.
 // `disabledFor(v)` returns true when value `v` has no data for the
 // current selection in OTHER axes — the button gets a `.disabled` style
 // and a "no data here" title, but stays clickable (clicking just leaves
@@ -552,7 +667,7 @@ function buildBaselinePickerLabeled(label, values, labelFor, getValue, setValue,
 //   header  — scenario title on the left, "n=4" cluster-setup label
 //             on the right.
 //   desc    — scenario.note, full width below the header.
-//   bodyRow — two columns: left holds the K/BTT/profile/slot_start picker
+//   bodyRow — two columns: left holds the K/BTT/profile/BFT_start picker
 //             stack; right holds the per-protocol legend block
 //             (buildSweepLegend keeps swatch/name/chip/sep/p99 columns
 //             aligned across protocol rows). Both columns use grid
@@ -643,7 +758,7 @@ function renderConditionsSection(data) {
       (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, v),
     ),
   );
-  pickers.appendChild(buildSlotPicker());
+  pickers.appendChild(buildBFTStartPicker());
   bodyRow.appendChild(pickers);
 
   // Legend block — pass a synthetic single-point sweep so buildSweepLegend
@@ -656,8 +771,16 @@ function renderConditionsSection(data) {
     const onePtSweep = match
       ? { ...match.sweep, points: [match.point] }
       : { name: '', points: [] };
+    // Per-protocol BFT_start-aware lookup: OBFT-family at picker >
+    // the per-cell approximation boundary (see
+    // obftFamilyApproxBoundaryMs) pulls from a DIFFERENT pre-computed
+    // point than `match.point` (which is just the shape-anchor at
+    // BFT_start=0). Pipeline-shift protocols pull from BFT_start=0 and
+    // the UI shifts post-hoc via shiftedCell.
+    const baselineLookup = (_pt, _scName, protName) =>
+      findBaselineCellForScenario(data, scenario, protName);
     legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols,
-      () => onConditionsChange()));
+      () => onConditionsChange(), baselineLookup));
   }
   bodyRow.appendChild(legendWrap);
 
@@ -907,7 +1030,13 @@ function rebuildConditionsChart(data) {
   const match = findBaselinePointAtInstability(data, wantedInstab);
   if (!match || !scenario) return;
   const onePtSweep = { ...match.sweep, points: [match.point] };
-  currentChart = buildLatencyChart(canvas, onePtSweep, filteredProtocols(data.protocols), scenario);
+  // Per-protocol BFT_start-aware lookup (see renderConditionsSection
+  // legend block for the rationale). The chart and the legend MUST
+  // share this lookup so the chart's terminator squares line up with
+  // the legend's success-rate chips.
+  const baselineLookup = (_pt, _scName, protName) =>
+    findBaselineCellForScenario(data, scenario, protName);
+  currentChart = buildLatencyChart(canvas, onePtSweep, filteredProtocols(data.protocols), scenario, baselineLookup);
 }
 
 // renderCollapsibles builds the collapsible sections below the heatmap
@@ -932,14 +1061,14 @@ function renderCollapsibles(data) {
 }
 
 // renderCollapsible builds one collapsed-by-default chart section for
-// a multi-point sweep. State (expanded, metric, slot_start) lives in
+// a multi-point sweep. State (expanded, metric, BFT_start) lives in
 // collapsibleState[sweep.name] so each section is independent.
 function renderCollapsible(sweep, data) {
   if (!collapsibleState[sweep.name]) {
     collapsibleState[sweep.name] = {
       expanded: false,
       metric: 'success',
-      slotStart: 0,
+      bftStart: 0,
     };
   }
   const state = collapsibleState[sweep.name];
@@ -975,7 +1104,7 @@ function renderCollapsible(sweep, data) {
 }
 
 // renderCollapsibleBody fills a collapsible section. Vertical order:
-//   top strip (description left, legend right) → controls (slot_start
+//   top strip (description left, legend right) → controls (BFT_start
 //   + y-axis) → chart. Description + legend share one flex row so they
 //   read as a single header block; controls sit just above the chart
 //   so they're associated with it.
@@ -1004,8 +1133,8 @@ function renderCollapsibleBody(body, sweep, data, state) {
   if (top.children.length > 0) body.appendChild(top);
 
   // Section-local pickers — placed just above the chart so the user
-  // associates them with the chart, not the title. slot_start picker
-  // reuses the global selectedSlotStart for now.
+  // associates them with the chart, not the title. BFT_start picker
+  // reuses the global selectedBFTStart for now.
   const controls = h('div', { class: 'sm-controls collapsible-controls' });
   controls.appendChild(buildLocalSlotPicker(state, () => {
     renderCollapsibleBody(body, sweep, data, state);
@@ -1022,16 +1151,16 @@ function renderCollapsibleBody(body, sweep, data, state) {
   body.appendChild(wrap);
 
   if (scenario) {
-    // Each collapsible has its own slot_start. Temporarily swap the
-    // module-level selectedSlotStart so cdfSlotStartPlugin + shiftedCell
+    // Each collapsible has its own BFT_start. Temporarily swap the
+    // module-level selectedBFTStart so cdfBFTStartPlugin + shiftedCell
     // see the section-local value while the chart builds; metric is
     // passed through as an explicit param.
-    const savedSlot = selectedSlotStart;
-    selectedSlotStart = state.slotStart;
+    const savedSlot = selectedBFTStart;
+    selectedBFTStart = state.bftStart;
     try {
       buildTrendLineChart(canvas, filtered, filteredProtocols(data.protocols), scenario, state.metric);
     } finally {
-      selectedSlotStart = savedSlot;
+      selectedBFTStart = savedSlot;
     }
   }
 }
@@ -1040,17 +1169,17 @@ function renderCollapsibleBody(body, sweep, data, state) {
 // drive the per-collapsible state instead of the module-level globals.
 function buildLocalSlotPicker(state, onChange) {
   const picker = h('div', { class: 'sm-slot-picker' });
-  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'slot_start:'));
-  SLOT_STARTS.forEach((s) => {
-    const active = s === state.slotStart;
+  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'BFT_start:'));
+  BFT_STARTS.forEach((s) => {
+    const active = s === state.bftStart;
     const btn = h(
       'button',
       { type: 'button', class: 'sm-slot-btn' + (active ? ' active' : '') },
       `${s} ms`,
     );
     btn.addEventListener('click', () => {
-      if (state.slotStart === s) return;
-      state.slotStart = s;
+      if (state.bftStart === s) return;
+      state.bftStart = s;
       onChange();
     });
     picker.appendChild(btn);
@@ -1131,7 +1260,7 @@ function renderHeatmap(data) {
     const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
     if (!legacy || legacy.points.length === 0) {
       // Always return a section so callers that replace this element
-      // (renderConditionsSection's picker handlers, onSlotStartChange)
+      // (renderConditionsSection's picker handlers, onBFTStartChange)
       // get a real DOM node — returning null would have replaceWith
       // insert a literal "null" text node.
       const empty = h('section', { class: 'heatmap empty', id: 'overview' });
@@ -1299,7 +1428,7 @@ function relativeLuminance(h, s, l) {
 // renderHeatmapCell colors a single cell by success rate via rateToColor.
 // n/a cells (iterations=0) render grey. The row carries the click
 // handler; cells just visualize per-protocol values. successRate / p99
-// reflect the active slot_start via shiftedCell.
+// reflect the active BFT_start via shiftedCell.
 function renderHeatmapCell(cell, scenario) {
   if (!cell || cell.iterations === 0) {
     return h(
@@ -1311,7 +1440,7 @@ function renderHeatmapCell(cell, scenario) {
       'n/a',
     );
   }
-  const shifted = shiftedCell(cell, selectedSlotStart);
+  const shifted = shiftedCell(cell, selectedBFTStart);
   const rate = shifted.successRate;
   const { bg, fg } = rateToColor(rate);
   const pct = (rate * 100).toFixed(2);
@@ -1348,7 +1477,7 @@ function selectHeatmapRow(el) {
 
 // currentChart is the live Chart.js instance for the Conditions chart
 // at the top of the page. Tracked so we can destroy() it before
-// swapping scenarios or reconfiguring K/BTT/profile/slot_start.
+// swapping scenarios or reconfiguring K/BTT/profile/BFT_start.
 let currentChart = null;
 
 function destroyCurrentChart() {
@@ -1358,75 +1487,65 @@ function destroyCurrentChart() {
   }
 }
 
-// buildSlotPicker renders the page-level slot_start picker shown in the
-// Conditions section. Clicks route through onSlotStartChange, which
-// re-renders the heatmap (cell colors track slot_start) and the
+// buildBFTStartPicker renders the page-level BFT_start picker shown in
+// the Conditions section. Clicks route through onBFTStartChange, which
+// re-renders the heatmap (cell colors track BFT_start) and the
 // Conditions section (active button + chart).
-function buildSlotPicker() {
+//
+// The label carries a tooltip describing the per-cell approximation
+// behavior so users hover-discover why two adjacent picker values
+// (e.g. 400ms and 800ms) may yield identical legend rates for an
+// OBFT-family cell. See obftFamilyApproxBoundaryMs.
+function buildBFTStartPicker() {
   const picker = h('div', { class: 'sm-slot-picker' });
-  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'slot_start:'));
-  SLOT_STARTS.forEach((slotStart) => {
+  const label = h('span', {
+    class: 'sm-slot-picker-label',
+    title: 'BFT_start = time the protocol\'s primary broadcast pipeline begins (= end of pre-fetch / pre-consensus).\n' +
+      '\n' +
+      'OBFT-family: each picker value is served from a pre-computed cell run at that BFT_start, OR from the BFT_start=0 cell when the spec clamp `max(BFT_start, T_commit−B_0)` is still dormant for the variant + BTT (close-to-ground-truth approximation). Cells at picker values above the variant\'s clamp boundary that have no pre-computed cell render n/a.\n' +
+      '\n' +
+      'QBFT / PSigs: cells are pipeline-shifted post-hoc (sample t → t + BFT_start), dropped when shifted t exceeds the relay cutoff.',
+  }, 'BFT_start:');
+  picker.appendChild(label);
+  BFT_STARTS.forEach((bftStart) => {
     const btn = h(
       'button',
       {
         type: 'button',
-        class: 'sm-slot-btn' + (slotStart === selectedSlotStart ? ' active' : ''),
+        class: 'sm-slot-btn' + (bftStart === selectedBFTStart ? ' active' : ''),
       },
-      `${slotStart} ms`,
+      `${bftStart} ms`,
     );
-    btn.addEventListener('click', () => onSlotStartChange(slotStart));
+    btn.addEventListener('click', () => onBFTStartChange(bftStart));
     picker.appendChild(btn);
   });
   return picker;
 }
 
-// shiftCell returns a slot-start-adjusted view of `cell` in absolute
-// slot time (chart x = when in the slot the decision lands).
-// Protocol-aware:
-//   QBFT — pipeline runs slot_start later → sample plots at
-//     decide_time + slot_start. Sample fails when the shifted value
-//     overflows SLOT_END_MS.
-//   OBFT / 2abOBFT — broadcast schedule is slot-anchored → sample
-//     plots at decide_time unchanged. Sample fails when
-//     T_broadcast_max for the deciding layer < slot_start (the
-//     deciding broadcast had already fired by the time the operator
-//     joined, so the captured cert is MEV-stale even if the cluster
-//     reconstructs later via gossip). The deciding-layer broadcast
-//     deadline is sourced per-sample from cell.decidingBroadcastTimes
-//     (index-aligned with decisionTimes); pre-fix data without the
-//     field falls back to comparing against decision time, which is
-//     the legacy — and over-permissive — behavior.
+// shiftCell returns a pipeline-shifted view of `cell` in absolute slot
+// time (chart x = when in the slot the decision lands). PSigs / QBFT
+// family ONLY: those protocols' whole pipeline shifts with BFT_start
+// (one BFT_start=0 sim is equivalent to running at any BFT_start), so
+// the UI shifts post-hoc; the sample plots at decide_time + BFT_start
+// and fails when the shifted value overflows SLOT_END_MS. OBFT-family
+// cells are handled at the lookup layer (shiftedCell short-circuits
+// for them); calling shiftCell on an OBFT-family cell at BFT_start > 0
+// returns null — the lookup should have picked the right BFT_start
+// cell already, so reaching this branch is a programmer error and
+// returning null surfaces it instead of silently leaking unshifted
+// data.
+//
 // successRate, decisionTimes, and decisionTime are recomputed from
 // surviving samples; other fields (bandwidth, miss reasons) carry
 // through unchanged. Pure — never mutates the input.
-function shiftCell(cell, slotStart) {
-  if (!cell || cell.iterations === 0 || slotStart === 0) return cell;
+function shiftCell(cell, bftStart) {
+  if (!cell || cell.iterations === 0 || bftStart === 0) return cell;
+  if (!isPipelineShiftProtocol(cell.protocol)) return null;
   const samples = cell.decisionTimes || [];
-  const broadcasts = cell.decidingBroadcastTimes;
-  const hasBroadcasts = Array.isArray(broadcasts) && broadcasts.length === samples.length;
   const adjusted = [];
-  // Prefix match so QBFT family variants (QBFT, QBFT-SSV, future QBFT-*)
-  // all share the pipeline-shift semantic. Exact-equality match would
-  // silently mis-shift QBFT-SSV cells with the OBFT-family branch.
-  // PSigs is grouped with QBFT for the shift semantic: its broadcast
-  // schedule isn't pre-anchored to layer-specific times — the whole
-  // protocol runs at SlotStart, so a late-joining operator shifts the
-  // pipeline rightward exactly like QBFT.
-  const isPipelineShift = cell.protocol === 'QBFT' ||
-    cell.protocol.startsWith('QBFT-') ||
-    cell.protocol === 'PSigs';
   for (let i = 0; i < samples.length; i++) {
-    const t = samples[i];
-    if (isPipelineShift) {
-      const shifted = t + slotStart;
-      if (shifted <= SLOT_END_MS) adjusted.push(shifted);
-    } else {
-      // Filter on the deciding-layer broadcast deadline when available;
-      // fall back to decision time for legacy data (over-permissive,
-      // documented above) so older data.js files still render.
-      const cutoff = hasBroadcasts ? broadcasts[i] : t;
-      if (cutoff >= slotStart) adjusted.push(t);
-    }
+    const shifted = samples[i] + bftStart;
+    if (shifted <= SLOT_END_MS) adjusted.push(shifted);
   }
   let decisionTime = null;
   if (adjusted.length > 0) {
@@ -1466,10 +1585,17 @@ function percentileOf(sortedArr, p) {
 // the sweep's points, or null when the scenario doesn't apply at any
 // point. Used by buildSweepLegend to render the colored per-protocol
 // summary rows above each chart. Every sweep — single- or multi-point —
-// sees the slot_start-shifted view of each cell.
-function protocolStats(sweep, scenario, protocol) {
+// sees the BFT_start-adjusted view of each cell.
+//
+// `cellLookup(pt, scenarioName, protocolName)` overrides the default
+// findCell(pt, ...) lookup. The conditions section passes a per-protocol
+// BFT_start-aware lookup so OBFT-family cells come from the matching
+// pre-computed BFT_start point (not from `pt`, which is the sweep's
+// shape-anchor point at BFT_start=0).
+function protocolStats(sweep, scenario, protocol, cellLookup) {
+  const lookup = cellLookup || ((pt, scName, protName) => findCell(pt, scName, protName));
   const cells = sweep.points
-    .map((pt) => shiftedCell(findCell(pt, scenario.name, protocol), selectedSlotStart))
+    .map((pt) => shiftedCell(lookup(pt, scenario.name, protocol), selectedBFTStart))
     .filter((c) => c && c.iterations > 0);
   if (cells.length === 0) return null;
   const successes = cells.map((c) => c.successRate);
@@ -1507,7 +1633,7 @@ function protocolStats(sweep, scenario, protocol) {
 // p99) — or six when checkable (checkbox first) — so the parent grid
 // keeps columns aligned across rows; n/a rows emit empty placeholders
 // for the missing sep/p99 slots.
-function buildSweepLegend(sweep, scenario, protocols, onProtocolToggle) {
+function buildSweepLegend(sweep, scenario, protocols, onProtocolToggle, cellLookup) {
   const checkable = typeof onProtocolToggle === 'function';
   const legend = h('div', { class: checkable ? 'sm-legend sm-legend--checkable' : 'sm-legend' });
   protocols.forEach((p) => {
@@ -1534,7 +1660,7 @@ function buildSweepLegend(sweep, scenario, protocols, onProtocolToggle) {
       h('span', { class: 'sm-legend-swatch', style: `background: ${protocolColor(p)}` }),
     );
     row.appendChild(h('span', { class: 'sm-legend-name' }, p));
-    const stats = protocolStats(sweep, scenario, p);
+    const stats = protocolStats(sweep, scenario, p, cellLookup);
     if (!stats) {
       row.appendChild(h('span', { class: 'sm-legend-pct na' }, 'n/a'));
       row.appendChild(h('span', { class: 'sm-legend-sep' }));
@@ -1613,11 +1739,12 @@ function cdfPoints(sortedSamples, iterations) {
   return pts;
 }
 
-function cdfChartData(sweep, protocols, scenario) {
+function cdfChartData(sweep, protocols, scenario, cellLookup) {
   const point = sweep.points[0];
+  const lookup = cellLookup || ((pt, scName, protName) => findCell(pt, scName, protName));
   return {
     datasets: protocols.map((p) => {
-      const cell = shiftedCell(findCell(point, scenario.name, p), selectedSlotStart);
+      const cell = shiftedCell(lookup(point, scenario.name, p), selectedBFTStart);
       const samples = (cell && cell.decisionTimes) || [];
       const iters = cell ? cell.iterations : 0;
       const pts = cdfPoints(samples, iters);
@@ -1649,11 +1776,11 @@ function cdfChartData(sweep, protocols, scenario) {
   };
 }
 
-function buildLatencyChart(canvas, sweep, protocols, scenario) {
+function buildLatencyChart(canvas, sweep, protocols, scenario, cellLookup) {
   return new Chart(canvas, {
     type: 'line',
-    data: cdfChartData(sweep, protocols, scenario),
-    plugins: [cdfZonesPlugin, cdfSlotStartPlugin],
+    data: cdfChartData(sweep, protocols, scenario, cellLookup),
+    plugins: [cdfZonesPlugin, cdfBFTStartPlugin],
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1763,7 +1890,7 @@ function trendLineChartData(sweep, protocols, scenario, metric) {
     labels: sweep.points.map((pt) => pt.label),
     datasets: protocols.map((p) => {
       const data = sweep.points.map((pt) => {
-        const cell = shiftedCell(findCell(pt, scenario.name, p), selectedSlotStart);
+        const cell = shiftedCell(findCell(pt, scenario.name, p), selectedBFTStart);
         if (!cell || cell.iterations === 0) return null;
         if (isSuccess) return cell.successRate;
         return cell.decisionTime ? cell.decisionTime.p99 : null;

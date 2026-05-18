@@ -138,11 +138,18 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if p.MaxMEVFetch {
 		fetchBuffer = 0
 	}
+	// Apply the spec's runtime clamp `T_broadcast_max_k = max(BFTStart,
+	// T_commit − B_k)` (obft/base/types.go §B_k). BFTStart > T_commit − B_k
+	// shrinks the layer's effective B_k from above; BFTStart > T_commit
+	// makes the broadcast collide with T_commit itself and the cluster
+	// MISSes. Subsuming the legacy `if fa < 0` clamp — BFTStart=0
+	// preserves prior behavior bit-exactly.
+	bftStart := cfg.BFTStart
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
 		fa := tCommit - broadcastBudget[k] - fetchBuffer
-		if fa < 0 {
-			fa = 0
+		if fa < bftStart {
+			fa = bftStart
 		}
 		fetchAt[k] = fa
 	}
@@ -152,6 +159,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		N:               cfg.N,
 		K:               cfg.K,
 		Operators:       cfg.Operators,
+		BFTStart:        bftStart,
 		TCommit:         tCommit,
 		Delta2:          delta2,
 		Epsilon3:        epsilon3,
@@ -176,13 +184,20 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
-	// Stamp the deciding-layer broadcast deadline so the reporting
-	// layer's slot_start adjustment can model a late-joining operator
-	// catching (or missing) the live broadcast. broadcastBudget[k] is
-	// already clamped to ≤ tCommit upstream, so the subtraction never
-	// goes negative.
+	// Stamp the deciding-layer broadcast deadline (T_broadcast_max_k for
+	// k=DecidedRound). Mirrors the fetchAt[] clamp above:
+	// max(BFTStart, T_commit − B_k). The reporting layer surfaces this
+	// as `DecidingBroadcastTime` for the UI to label per-cell timing.
+	// broadcastBudget[k] is already clamped to ≤ tCommit upstream, so
+	// the subtraction never goes negative; the BFTStart floor matters
+	// when BFTStart > T_commit − B_k (the spec's "degraded broadcast
+	// schedule" boundary).
 	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
-		out.DecidingBroadcastTime = tCommit - broadcastBudget[out.DecidedRound]
+		bt := tCommit - broadcastBudget[out.DecidedRound]
+		if bt < bftStart {
+			bt = bftStart
+		}
+		out.DecidingBroadcastTime = bt
 	}
 	// Capture pre-clip state so post-clip MissReason can reference the
 	// layer the protocol DID internally reach (DecidedRound is reset to
@@ -290,6 +305,7 @@ type desConfig struct {
 	N               int
 	K               int
 	Operators       []ct.OperatorID
+	BFTStart        time.Duration // forwarded to obftbase.Config.BFTStart
 	TCommit         time.Duration
 	Delta2          time.Duration
 	Epsilon3        time.Duration // forwarded to obftbase.Config.Eps3 (= ε_3 per spec)

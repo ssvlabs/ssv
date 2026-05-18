@@ -129,6 +129,7 @@ func (s *sim) start() error {
 		Delta2b:   s.cfg.Delta2b,
 		Eps3:      s.cfg.Epsilon3,
 		BTT:       s.cfg.BTT,
+		BFTStart:  s.cfg.BFTStart,
 	}
 	if err := cfgTwoab.Validate(); err != nil {
 		// Validate failures at this point mean the SimConfig translates

@@ -54,9 +54,9 @@ var _ heap.Interface = (*eventQueue)(nil)
 // partial-sig wire footprint.
 const pSigBytes int64 = 96 + 160
 
-// ---- evtPSigSign: operator signs V at SlotStart and broadcasts --------
+// ---- evtPSigSign: operator signs V at BFTStart and broadcasts --------
 
-// evtPSigSign fires once per honest operator at SlotStart. The op self-
+// evtPSigSign fires once per honest operator at BFTStart. The op self-
 // observes (count = 1) and broadcasts the partial sig to every peer.
 // The local self-observation can already satisfy qV at f=0 (degenerate
 // n=1 single-op "cluster" where qV=1) — we record the decision time

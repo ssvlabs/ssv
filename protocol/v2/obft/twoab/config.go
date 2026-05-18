@@ -152,6 +152,15 @@ type Config struct {
 	// §Setting: BTT = P99 + δ. Used as the unit for time-budget formulas.
 	// Concrete sizing at Config A: P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
+
+	// BFTStart is BFT_start — the slot-relative offset at which the
+	// protocol's primary broadcast pipeline begins. Pre-fetch and
+	// pre-consensus sit in `[slot_start, BFTStart]`. Default 0. When
+	// BFTStart > TVerdictStart − B_k for some layer k, the spec's
+	// runtime clamp `T_broadcast_max_k = max(BFTStart, TVerdictStart − B_k)`
+	// floors that layer's broadcast deadline at BFTStart and the
+	// schedule degrades but stays valid.
+	BFTStart time.Duration
 }
 
 // K returns the number of layers (= len(Layers)).
@@ -201,17 +210,19 @@ func (c *Config) TVerdictMax() time.Duration {
 }
 
 // BroadcastMaxOffsetForLayer returns `T_broadcast_max_k =
-// max(0, TVerdictStart − B_k)` for layer k — the leader's target Phase-1
-// broadcast time per spec §Setting.
+// max(BFTStart, TVerdictStart − B_k)` for layer k — the leader's target
+// Phase-1 broadcast time per spec §Setting.
 //
-// B_k is a target, not a hard cap; the clamp at 0 handles the degraded
-// case where the layer's design-time budget overshoots TVerdictStart. In
-// that case the leader broadcasts best-effort from slot start.
+// B_k is a target, not a hard cap; the BFTStart floor (default 0) handles
+// the degraded case where the layer's design-time budget overshoots
+// TVerdictStart. In that case the leader broadcasts at BFTStart
+// best-effort, and the layer's effective absorption window contracts
+// accordingly.
 func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
-	if d := c.TVerdictStart() - c.Layers[k].BroadcastBudget; d > 0 {
+	if d := c.TVerdictStart() - c.Layers[k].BroadcastBudget; d > c.BFTStart {
 		return d
 	}
-	return 0
+	return c.BFTStart
 }
 
 // Phase2aStartOffset returns the start of Phase 2a = TVerdictStart.
@@ -482,8 +493,9 @@ func (c *Config) Validate() error {
 			return errors.New("twoab: layer FetchAt must be non-negative")
 		}
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
-			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (TVerdictStart−B_k = %v)",
-				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k), c.TVerdictStart()-c.Layers[k].BroadcastBudget)
+			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, TVerdictStart−B_k=%v))",
+				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k),
+				c.BFTStart, c.TVerdictStart()-c.Layers[k].BroadcastBudget)
 		}
 		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
 		// fetch ≤ their predecessor's offset (re-org resistance, MEV-

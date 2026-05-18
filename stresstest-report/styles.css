@@ -344,8 +344,8 @@ section.heatmap {
   white-space: nowrap;
 }
 
-/* Collapsible controls row — holds the slot_start picker and the
- * y-axis metric toggle. slot_start sits left, metric toggle gets pushed
+/* Collapsible controls row — holds the BFT_start picker and the
+ * y-axis metric toggle. BFT_start sits left, metric toggle gets pushed
  * right via margin-left:auto. flex-wrap lets the toggle drop to its own
  * row on narrow viewports. */
 .sm-controls {
@@ -362,7 +362,7 @@ section.heatmap {
   margin-left: auto;
 }
 
-/* slot_start / y-axis picker — one button group with a label. Used at
+/* BFT_start / y-axis picker — one button group with a label. Used at
  * the page level (drives heatmap + Conditions chart) and inside each
  * collapsible (drives only that section's chart). The container always
  * provides its own margin; this rule sets layout + sizing only. */
@@ -484,8 +484,8 @@ section.conditions .conditions-pickers-stack {
   display: grid;
   /* grid-auto-rows (not grid-template-rows) so the stack grows with
    * however many pickers the section currently renders. The page
-   * started at 4 pickers (K/BTT/profile/slot_start) but now ships 6
-   * (n/K/BTT/profile/p2p_instability/slot_start); hard-coded
+   * started at 4 pickers (K/BTT/profile/BFT_start) but now ships 6
+   * (n/K/BTT/profile/p2p_instability/BFT_start); hard-coded
    * `repeat(4, ...)` left the extra rows in `grid-auto-rows: auto`
    * and drifted out of row-height alignment with the legend on the
    * right. Use rem (not em) so the picker stack and legend below

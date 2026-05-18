@@ -79,7 +79,7 @@ var scenarioSigmaRefusal = Scenario{
 		// at R1 (3 PREPAREs and 3 COMMITs from honest). Healthy path holds.
 		"QBFT": ExpectSuccessFastest,
 		// PSigs: same intuition — 3 honest signers reach qV=3 partial-sigs
-		// (own + 2 peers each) at SlotStart + 1·BTT. Within f-bound, byz
+		// (own + 2 peers each) at BFTStart + 1·BTT. Within f-bound, byz
 		// refusal is transparent to the cluster's collection threshold.
 		"PSigs": ExpectSuccessFastest,
 	},

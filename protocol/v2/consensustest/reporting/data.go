@@ -437,13 +437,15 @@ type cellPayload struct {
 	// percentiles. omitted when no sim decided.
 	DecisionTimes []int `json:"decisionTimes,omitempty"`
 	// DecidingBroadcastTimes is index-aligned with DecisionTimes: entry
-	// i is T_broadcast_max (slot-anchored, in ms) for the deciding
-	// layer of the i-th decision sample. The UI's slot_start adjustment
-	// filters OBFT-family samples on this value (vs. comparing against
-	// decision time, which is much later than the broadcast deadline).
-	// Zero values for protocols with no slot-anchored broadcast (QBFT)
-	// — that branch in the UI uses a pipeline-shift rule that doesn't
-	// read this field. Omitted when no sim decided.
+	// i is T_broadcast_max (slot-anchored, in ms; = max(BFTStart,
+	// T_commit − B_k) per the spec's runtime clamp) for the deciding
+	// layer of the i-th decision sample. Reported for diagnostic /
+	// per-sample timeline rendering. The UI's BFT_start picker uses
+	// pre-computed cells (one per BFT_start sweep point) rather than
+	// post-hoc filtering on this array for OBFT-family. Zero values
+	// for protocols with no slot-anchored broadcast (QBFT family,
+	// PSigs) — those use pipeline-shift in the UI and don't consult
+	// this field. Omitted when no sim decided.
 	DecidingBroadcastTimes []int               `json:"decidingBroadcastTimes,omitempty"`
 	DecisionTime           *percentilesPayload `json:"decisionTime,omitempty"`
 	ClusterBandwidth       *percentilesPayload `json:"clusterBandwidth,omitempty"`
@@ -517,8 +519,10 @@ func buildCell(c ct.BatchCell) cellPayload {
 		// Sorted integer-ms samples for the UI CDF chart, paired with the
 		// per-sample deciding-layer broadcast deadline (T_broadcast_max
 		// for the sample's deciding layer). Both arrays are sorted by
-		// decision time jointly so the UI's slot_start filter can read
-		// the i-th broadcast deadline alongside the i-th decision time.
+		// decision time jointly so any UI consumer of the per-sample
+		// arrays (legacy pipeline-shift fallback, per-sample timeline
+		// rendering) can read the i-th broadcast deadline alongside
+		// the i-th decision time.
 		// One entry per successful sim; absent values (missed sims) are
 		// implicit via Iterations - len(DecisionTimes).
 		n := len(c.DecisionTime)

@@ -154,6 +154,33 @@ func TestStress(t *testing.T) {
 	}
 	require.NotEmpty(t, profiles, "P2P_PROFILES is empty after parsing")
 
+	// BFT_STARTS — comma-separated BFT_start values (ms) for the
+	// p2p_baseline sweep's BFT_start axis. Default: 0, 2000, 2400, 2800
+	// per DefaultBaselineBFTStarts — covers BFT_start=0 (used by the UI
+	// for picker values in [0, 1600]ms via the close-to-ground-truth
+	// approximation) plus the {2000, 2400, 2800} values where the
+	// OBFT-family broadcast schedule's L_0 clamp begins to bite (at
+	// BTT=100ms, T_commit − B_0 ≈ 2700ms). BFT_start > 0 only runs the
+	// OBFT-family protocols; pipeline-shift protocols (PSigs / QBFT)
+	// are covered by the UI's pipeline-shift from the BFT_start=0 cell.
+	bftStartsRaw := os.Getenv("BFT_STARTS")
+	var bftStarts []time.Duration
+	if bftStartsRaw == "" {
+		bftStarts = ct.DefaultBaselineBFTStarts
+	} else {
+		for _, s := range strings.Split(bftStartsRaw, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			ms, err := strconv.Atoi(s)
+			require.NoErrorf(t, err, "invalid BFT_STARTS value %q (want comma-separated ms integers)", s)
+			require.GreaterOrEqualf(t, ms, 0, "BFT_STARTS value %q must be >= 0", s)
+			bftStarts = append(bftStarts, time.Duration(ms)*time.Millisecond)
+		}
+		require.NotEmpty(t, bftStarts, "BFT_STARTS is empty after parsing")
+	}
+
 	// Build (n, K) pairs: cross-product of clusterSizes × layersK,
 	// filtering out pairs where K < MinK(n) (below BFT-liveness floor).
 	type runPair struct{ n, k int }
@@ -217,7 +244,7 @@ func TestStress(t *testing.T) {
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 		// PSigs is a baseline-cost reference: every honest op signs the
-		// pre-agreed V at SlotStart and broadcasts; the cluster decides at
+		// pre-agreed V at BFTStart and broadcasts; the cluster decides at
 		// the qV-th partial-sig arrival. No consensus on V, no rounds,
 		// no encrypted onion — most adversarial catalog scenarios return
 		// ErrNotApplicable (rendered as n/a in the report). The cell row
@@ -268,7 +295,7 @@ func TestStress(t *testing.T) {
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
 	for pairIdx, pp := range pairs {
-		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles)
+		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bftStarts)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		pairStart := time.Now()
 		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)

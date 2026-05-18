@@ -143,4 +143,80 @@ func TestAdapter_CatalogRunsToCompletion(t *testing.T) {
 	}
 }
 
+// TestAdapter_BFTStart_BoundaryBehavior mirrors the OBFT test of the
+// same name but anchors on `T_verdict_start = T_commit − Δ_2a` (the
+// 2abOBFT-specific spec anchor at twoab/config.go §Setting) instead
+// of T_commit directly. Three regimes:
+//
+//  1. BFTStart below the fetch-clamp boundary
+//     (`tVerdictStart − B_0`) — clamp dormant; schedule and decision
+//     time bit-identical to BFTStart=0.
+//  2. BFTStart above the fetch-clamp boundary but below tVerdictStart
+//     — clamp engages on L_0; primary's broadcast deadline floors at
+//     BFTStart. Cluster still decides when the residual Phase-1
+//     window fits propagation.
+//  3. BFTStart ≥ tVerdictStart — no room for Phase-1 broadcast before
+//     Phase-2a opens; cluster MISSes.
+//
+// 2abOBFT's anchor is earlier than OBFT's (tVerdictStart < tCommit by
+// Δ_2a = 2·BTT), so the boundaries are tighter.
+func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
+	baseCfg := func(bft time.Duration) ct.SimConfig {
+		c := ct.DefaultProposerDutyConfig(100 * time.Millisecond)
+		c.N = 4
+		c.Operators = ct.MakeOperators(4)
+		c.K = 4
+		c.Network = ct.P2PProfile("prod")
+		c.Mesh.HopDelay = ct.P2PProfile("prod")
+		c.BFTStart = bft
+		return c
+	}
+
+	// At BTT=100ms, K=4, RefloodDelay=0 (default), spec sizing:
+	// tCommit = 4000 − 100 − 50 − 50 − 300 = 3500ms; Δ_2a = 2·BTT = 200ms
+	// → tVerdictStart = 3500 − 200 = 3300ms; B_0 = 2·BTT = 200ms
+	// → fetch-clamp boundary = tVerdictStart − B_0 = 3100ms.
+	// DecidingBroadcastTime clamp engages at the same threshold (no
+	// fetchBuffer subtraction in 2abOBFT, unlike OBFT).
+
+	// Case 1: BFTStart well below the clamp boundary — bit-identical to BFT=0.
+	cfg0 := baseCfg(0)
+	out0, err := twoabadapter.Protocol{}.Run(cfg0)
+	require.NoError(t, err)
+	require.True(t, out0.Decided, "BFTStart=0 must decide at healthy mesh")
+
+	for _, bft := range []time.Duration{500, 1600, 2400, 3000} {
+		cfgLow := baseCfg(bft * time.Millisecond)
+		outLow, err := twoabadapter.Protocol{}.Run(cfgLow)
+		require.NoErrorf(t, err, "BFTStart=%dms run", bft)
+		require.Truef(t, outLow.Decided, "BFTStart=%dms (< clamp boundary) must decide", bft)
+		require.Equalf(t, out0.DecisionTime, outLow.DecisionTime,
+			"BFTStart=%dms < clamp boundary must produce bit-identical DecisionTime", bft)
+		require.Equalf(t, out0.DecidingBroadcastTime, outLow.DecidingBroadcastTime,
+			"BFTStart=%dms < clamp boundary must produce bit-identical DecidingBroadcastTime", bft)
+	}
+
+	// Case 2: BFTStart above L_0 fetch-clamp boundary but below
+	// tVerdictStart — clamp engages; DecidingBroadcastTime floors to
+	// BFTStart; cluster still decides because the residual Phase-1
+	// window (tVerdictStart − BFTStart) fits propagation.
+	cfgClamped := baseCfg(3200 * time.Millisecond)
+	outClamped, err := twoabadapter.Protocol{}.Run(cfgClamped)
+	require.NoError(t, err)
+	require.True(t, outClamped.Decided,
+		"BFTStart=3200ms (clamp engaged, 100ms residual Phase-1 window) must still decide on prod profile")
+	require.GreaterOrEqual(t, outClamped.DecidingBroadcastTime, 3200*time.Millisecond,
+		"BFTStart=3200ms must floor DecidingBroadcastTime to ≥ BFTStart per the spec clamp")
+
+	// Case 3: BFTStart ≥ tVerdictStart — no Phase-1 window left;
+	// cluster MISSes.
+	cfgPastVerdict := baseCfg(3400 * time.Millisecond)
+	outPastVerdict, err := twoabadapter.Protocol{}.Run(cfgPastVerdict)
+	require.NoError(t, err)
+	require.False(t, outPastVerdict.Decided,
+		"BFTStart=3400ms ≥ tVerdictStart must MISS (no Phase-1 window before verdict opens)")
+	require.NotEmpty(t, outPastVerdict.MissReason,
+		"miss must carry a reason for the failure-breakdown table")
+}
+
 func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }

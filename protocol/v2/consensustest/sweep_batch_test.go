@@ -81,19 +81,20 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	// derive from len(profiles).
 	profiles := ct.P2PProfileNames
 
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles)
+	bftStarts := ct.DefaultBaselineBFTStarts
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles, bftStarts)
 
 	// `expected` below double-counts as both the per-name shape check
 	// AND the total-count check: every entry must be matched, and
 	// `require.Truef` rejects any unexpected name. No magic number to
 	// keep in sync as sweeps are added or removed.
 	expected := map[string]int{
-		"p2p_baseline":          5 * len(profiles) * 5, // BTT × profile × instability
-		"p2p_increasing_BTT":    6,                     // BTT
-		"p2p_packet_loss":       5,                     // LossRate
-		"p2p_correlated_delays": 4,                     // BadLinkProb
-		"p2p_node_slowness":     4,                     // slow-op count
-		"p2p_instability":       5,                     // instability level
+		"p2p_baseline":          5 * len(profiles) * 5 * len(bftStarts), // BTT × profile × instability × BFT_start
+		"p2p_increasing_BTT":    6,                                      // BTT
+		"p2p_packet_loss":       5,                                      // LossRate
+		"p2p_correlated_delays": 4,                                      // BadLinkProb
+		"p2p_node_slowness":     4,                                      // slow-op count
+		"p2p_instability":       5,                                      // instability level
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]
@@ -124,20 +125,31 @@ func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 	scen := []ct.Scenario{ct.Catalog[0]}
 	good := ct.Iterations{Baseline: 10, Unstable: 10}
 	profiles := []string{"prod"}
+	bft := ct.DefaultBaselineBFTStarts
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty scenarios",
-		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4, profiles) })
+		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4, profiles, bft) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty protocols",
-		func() { ct.DefaultSweeps(scen, nil, good, 4, 4, profiles) })
+		func() { ct.DefaultSweeps(scen, nil, good, 4, 4, profiles, bft) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty profiles",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, nil) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, nil, bft) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty bftStarts",
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, nil) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4, profiles) })
+		func() {
+			ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4, profiles, bft)
+		})
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Unstable must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4, profiles) })
+		func() {
+			ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4, profiles, bft)
+		})
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: cluster size n must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4, profiles) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4, profiles, bft) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: layer count k must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0, profiles) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0, profiles, bft) })
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps: BFT_start -1ms must be >= 0",
+		func() {
+			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, []time.Duration{-1 * time.Millisecond})
+		})
 }
 
 // TestPhase2_AllSweepPoints_NoSetupErrors runs one sim of Healthy at
@@ -181,7 +193,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	profiles := []string{"prod", "stage1", "stage2"}
-	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, profiles)
+	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBFTStarts)
 	require.NotEmpty(t, sweeps, "DefaultSweeps must return at least one sweep")
 
 	totalPoints := 0

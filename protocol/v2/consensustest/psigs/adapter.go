@@ -73,7 +73,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		N:            cfg.N,
 		Operators:    cfg.Operators,
 		BTT:          cfg.BTT,
-		SlotStart:    cfg.SlotStart,
+		BFTStart:     cfg.BFTStart,
 		Network:      cfg.Network,
 		Byz:          internal,
 		Seed:         cfg.Seed,
@@ -119,7 +119,7 @@ type desConfig struct {
 	N            int
 	Operators    []ct.OperatorID
 	BTT          time.Duration
-	SlotStart    time.Duration // when each op signs + broadcasts; usually 0
+	BFTStart     time.Duration // when each op signs + broadcasts; usually 0
 	Network      ct.NetworkModel
 	Byz          internalByz
 	Seed         int64
