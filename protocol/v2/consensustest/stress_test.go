@@ -251,12 +251,13 @@ func TestStress(t *testing.T) {
 		iters.Unstable = n
 	}
 
-	// Filter the catalog to ModeStress opt-ins. Currently all 29 (Phase 2
-	// audit); the filter is defensive — future scenarios that opt out of
-	// stress (e.g. correctness-only behavioral checks) will be excluded
-	// from the report without a driver-side change.
+	// Filter the catalog to ModeStress opt-ins. The filter is defensive —
+	// future scenarios that opt out of stress (e.g. correctness-only
+	// behavioral checks) will be excluded from the report without a
+	// driver-side change. Logged below for visibility per run.
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
+	t.Logf("=== %d/%d catalog scenarios opted into ModeStress", len(scenarios), len(ct.Catalog))
 	// Three flavor axes:
 	//   - OBFT and 2abOBFT each ship in a canonical (multiplier=1) form
 	//     plus "x2" and "x3" multiplier variants that scale bttEff

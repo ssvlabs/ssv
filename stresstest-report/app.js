@@ -105,7 +105,7 @@ function obftFamilyApproxBoundaryMs(protocolName, btt) {
   if (isPipelineShiftProtocol(protocolName)) return 0;
   const mult = bttMultiplierForVariant(protocolName);
   const bttEff = btt * mult;
-  const refloodDelay = protocolName === 'OBFT-RD0' ? 0 : REFLOOD_DELAY_HEALTHY_MS;
+  const refloodDelay = variantHasNoRefloodDelay(protocolName) ? 0 : REFLOOD_DELAY_HEALTHY_MS;
   const b0 = 2 * bttEff + refloodDelay;
   const anchor = protocolName.startsWith('2abOBFT')
     ? 3800 - 5 * bttEff   // T_verdict_start
@@ -117,11 +117,23 @@ function obftFamilyApproxBoundaryMs(protocolName, btt) {
 // protocol variant name (OBFT/2abOBFT=1, OBFTx2/2abOBFTx2=2,
 // OBFTx3/2abOBFTx3=3). Mirrors the Go-side adapter's BTTMultiplier
 // field (set when registering the variant in stress_test.go).
+// Recognizes the `x<n>` token anywhere in the name (not just at
+// the end) so combo-variants like `OBFTx2-RD0` parse correctly.
 function bttMultiplierForVariant(protocolName) {
   if (typeof protocolName !== 'string') return 1;
-  if (protocolName.endsWith('x3')) return 3;
-  if (protocolName.endsWith('x2')) return 2;
-  return 1;
+  const m = protocolName.match(/x(\d+)/);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
+// variantHasNoRefloodDelay reports whether `protocolName` is a
+// "-RD0"-suffixed variant — i.e. the adapter's NoRefloodDelay flag is
+// set, forcing `B_0 = 2·BTT` (no RefloodDelay cushion) regardless of
+// cfg.RefloodDelay. Mirrors the Go-side
+// obft.Protocol.NoRefloodDelay convention via the variant name
+// suffix; covers OBFT-RD0 today and any future combo-variants
+// (OBFTx2-RD0, 2abOBFT-RD0, etc.) without needing per-name updates.
+function variantHasNoRefloodDelay(protocolName) {
+  return typeof protocolName === 'string' && protocolName.endsWith('-RD0');
 }
 
 // selectedBFTStart is the page-level BFT_start used by the Conditions
@@ -1915,11 +1927,9 @@ function trendLineChartData(sweep, protocols, scenario, metric) {
         label: p,
         borderColor: protocolColor(p),
         backgroundColor: protocolColor(p),
-        pointStyle: protocolPointStyle(p),
         spanGaps: true,
         fill: false,
         tension: 0.15,
-        borderDash: protocolDash(p),
         data,
       };
     }),
@@ -1998,20 +2008,5 @@ function sortProtocolsByFamily(protocols) {
   const out = [];
   families.forEach((fam) => out.push(...byFamily.get(fam)));
   return out;
-}
-
-function protocolDash(name) {
-  return name === 'OBFT' ? [] : [6, 4];
-}
-
-function protocolPointStyle(name) {
-  switch (name) {
-    case 'OBFT':
-      return 'circle';
-    case 'QBFT':
-      return 'triangle';
-    default:
-      return 'rect';
-  }
 }
 

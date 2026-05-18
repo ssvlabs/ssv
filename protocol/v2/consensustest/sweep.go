@@ -265,11 +265,13 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bftStarts, bttValues []time.Duration) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	baselineOnly := filterBaselineScenarios(scenarios)
-	// Partition protocols once: pipeline-shift protocols (PSigs / QBFT
-	// family) only run at BFT_start=0; the UI shifts their decision
-	// times post-hoc to model later BFT_start. OBFT-family protocols
-	// (slot-anchored broadcast schedules) need a real per-BFT_start
-	// simulation and run at every value in bftStarts.
+	// Pre-compute the OBFT-family-only subset once; the per-BFT_start
+	// loop below selects which protocol set to emit per iteration.
+	// Pipeline-shift protocols (PSigs / QBFT family) only run at
+	// BFT_start=0; the UI shifts their decision times post-hoc to
+	// model later BFT_start. OBFT-family protocols (slot-anchored
+	// broadcast schedules) need a real per-BFT_start simulation and
+	// run at every value in bftStarts.
 	obftFamily := make([]Protocol, 0, len(protocols))
 	for _, p := range protocols {
 		if !IsPipelineShiftProtocol(p) {
@@ -278,6 +280,9 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	}
 	pts := make([]SweepPoint, 0, len(bttValues)*len(profiles)*len(InstabilityLevels)*len(bftStarts))
 	for _, bftStart := range bftStarts {
+		// Per-BFT_start protocol set: full slice at BFT_start=0;
+		// obftFamily-only at BFT_start>0 (skip empty obftFamily to
+		// avoid emitting cell-less points).
 		pointProtocols := protocols
 		if bftStart > 0 {
 			pointProtocols = obftFamily
