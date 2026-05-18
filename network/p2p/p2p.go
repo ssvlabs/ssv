@@ -139,8 +139,9 @@ func New(
 	if peerObserver == nil {
 		var err error
 		peerObserver, err = peertrace.New(peertrace.Config{
-			Label: cfg.HighlightedPeerLabel,
-			Peers: cfg.HighlightedPeers,
+			Label:    cfg.HighlightedPeerLabel,
+			Peers:    cfg.HighlightedPeers,
+			PeerKeys: cfg.HighlightedPeerKeys,
 		})
 		if err != nil {
 			cancel()

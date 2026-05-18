@@ -448,8 +448,9 @@ var StartNodeCmd = &cobra.Command{
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		highlightedPeerObserver, err := peertrace.New(peertrace.Config{
-			Label: cfg.P2pNetworkConfig.HighlightedPeerLabel,
-			Peers: cfg.P2pNetworkConfig.HighlightedPeers,
+			Label:    cfg.P2pNetworkConfig.HighlightedPeerLabel,
+			Peers:    cfg.P2pNetworkConfig.HighlightedPeers,
+			PeerKeys: cfg.P2pNetworkConfig.HighlightedPeerKeys,
 		})
 		if err != nil {
 			logger.Fatal("failed to setup p2p highlighted peer observer", zap.Error(err))

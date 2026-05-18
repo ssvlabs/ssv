@@ -1,8 +1,10 @@
 package peertrace
 
 import (
+	"encoding/hex"
 	"testing"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -46,6 +48,36 @@ func TestNew_AcceptsMixedPeerList(t *testing.T) {
 	matched, ok := observer.Match(pid)
 	require.True(t, ok)
 	require.Equal(t, "peer_id", matched.Source)
+}
+
+func TestNew_AcceptsPeerKeyList(t *testing.T) {
+	_, pubKey, err := crypto.GenerateSecp256k1Key(nil)
+	require.NoError(t, err)
+	rawPubKey, err := pubKey.Raw()
+	require.NoError(t, err)
+	secondPeerKey := "0x" + hex.EncodeToString(rawPubKey)
+	secondPeerID, err := peer.IDFromPublicKey(pubKey)
+	require.NoError(t, err)
+
+	observer, err := New(Config{
+		PeerKeys: attackSimulatorPublicKey + "," + secondPeerKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, observer.Count())
+
+	matched, ok := observer.Match(secondPeerID)
+	require.True(t, ok)
+	require.Equal(t, "public_key", matched.Source)
+	require.Equal(t, secondPeerKey, matched.PublicKeyHex)
+}
+
+func TestNew_DeduplicatesPeerKeysAcrossConfigFields(t *testing.T) {
+	observer, err := New(Config{
+		Peers:    attackSimulatorPublicKey,
+		PeerKeys: attackSimulatorPublicKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, observer.Count())
 }
 
 func TestNew_EmptyConfigDisablesObserver(t *testing.T) {

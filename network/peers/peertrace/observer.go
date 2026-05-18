@@ -53,8 +53,12 @@ type Config struct {
 	// Label is attached to every log and metric for this observer.
 	Label string
 	// Peers is a comma, semicolon, or whitespace separated list of libp2p peer IDs
-	// or secp256k1 public keys encoded as hex.
+	// or secp256k1 public keys encoded as hex. Hex public keys are accepted here
+	// for backwards compatibility; prefer PeerKeys for new key-based configuration.
 	Peers string
+	// PeerKeys is a comma, semicolon, or whitespace separated list of secp256k1
+	// public identity keys encoded as hex.
+	PeerKeys string
 }
 
 type Peer struct {
@@ -69,7 +73,7 @@ type Observer struct {
 }
 
 func New(cfg Config) (*Observer, error) {
-	tokens := splitPeerList(cfg.Peers)
+	tokens := splitPeerList(strings.Join([]string{cfg.Peers, cfg.PeerKeys}, " "))
 	if len(tokens) == 0 {
 		return nil, nil
 	}
