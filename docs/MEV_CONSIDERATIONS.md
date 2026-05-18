@@ -182,15 +182,6 @@ Relevant logs and metrics already emitted by SSV:
 
 For multi-BN setups, per-BN scoring visibility comes from the parallel-fetch path in `beacon/goclient/proposer.go`.
 
-### Mainnet ground truth
-
-For quantifying MEV capture on mainnet, the relay data APIs are authoritative:
-
-- `/relay/v1/data/bidtraces/proposer_payload_delivered?proposer_pubkey=<pk>` — what bid was delivered to your validator, with timestamps.
-- `/relay/v1/data/bidtraces/builder_blocks_received?slot=<n>` — every bid the relay saw for a given slot.
-
-A useful capture-efficiency metric: `delivered_value / max_bid_at_T`, where T is your auction cutoff time. This lets you compare different configurations on equal footing.
-
 ### Mainnet vs testnet
 
 Testnet relays (Hoodi, Holesky, Sepolia) typically run reference or synthetic builders, and their bid distributions don't reflect mainnet economics. Use testnet for end-to-end plumbing validation only — proposer reliability, correct config parsing, no missed slots. For MEV-uplift quantification, use mainnet validator data + relay-data APIs.
