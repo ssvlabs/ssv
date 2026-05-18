@@ -33,6 +33,10 @@ p2p:
   # TcpPort: 13001
   # UdpPort: 12001
 
+  # Optionally highlight p2p traffic for selected libp2p peer IDs or secp256k1 public keys.
+  # HighlightedPeerLabel: attack-simulator
+  # HighlightedPeers: "0x02006c0a9a7e965cb22399987a5a748e90bcc4cb76c461b5d62643c2f2f112055e"
+
 # Note: Operator private key can be generated with the `generate-operator-keys` command.
 OperatorPrivateKey:
 

@@ -63,6 +63,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	ssvlog "github.com/ssvlabs/ssv/observability/log"
@@ -446,6 +447,15 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
+		highlightedPeerObserver, err := peertrace.New(peertrace.Config{
+			Label: cfg.P2pNetworkConfig.HighlightedPeerLabel,
+			Peers: cfg.P2pNetworkConfig.HighlightedPeers,
+		})
+		if err != nil {
+			logger.Fatal("failed to setup p2p highlighted peer observer", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.PeerObserver = highlightedPeerObserver
+
 		messageValidator := validation.New(
 			networkConfig,
 			nodeStorage.ValidatorStore(),
@@ -453,6 +463,7 @@ var StartNodeCmd = &cobra.Command{
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
+			validation.WithSSVValidationObserver(highlightedPeerObserver),
 		)
 
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator

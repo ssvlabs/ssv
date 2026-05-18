@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -57,6 +58,7 @@ type topicsCtrl struct {
 	msgValidator       messageValidator
 	msgHandler         PubsubMessageHandler
 	subFilter          SubFilter
+	peerObserver       *peertrace.Observer
 
 	container *topicsContainer
 }
@@ -70,6 +72,7 @@ func NewTopicsController(
 	subFilter SubFilter,
 	pubSub *pubsub.PubSub,
 	scoreParams func(string) *pubsub.TopicScoreParams,
+	peerObserver *peertrace.Observer,
 ) Controller {
 	ctrl := &topicsCtrl{
 		ctx:                ctx,
@@ -79,7 +82,8 @@ func NewTopicsController(
 		msgValidator:       msgValidator,
 		msgHandler:         msgHandler,
 
-		subFilter: subFilter,
+		subFilter:    subFilter,
+		peerObserver: peerObserver,
 	}
 
 	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic())
@@ -286,6 +290,11 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 				messageTopicAttribute(topicNameFull),
 				messageTypeAttribute(uint64(m.MsgType)),
 			))
+			ctrl.peerObserver.Observe(ctrl.ctx, logger, "pubsub_message_delivered", msg.ReceivedFrom,
+				zap.String("topic", topicNameFull),
+				zap.Uint64("message_type", uint64(m.MsgType)),
+				zap.Int("payload_size", len(msg.Data)),
+			)
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}
@@ -308,10 +317,33 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 
 		opts := []pubsub.ValidatorOpt{pubsub.WithValidatorTimeout(topicValidatorTimeout)}
 
-		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
+		validator := ctrl.msgValidator.ValidatorForTopic(name)
+		wrappedValidator := func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+			recordPubsubMessageReceived(ctx, name)
+			result := validator(ctx, p, pmsg)
+			ctrl.peerObserver.ObserveValidation(ctx, ctrl.logger, p, name, validationResultString(result), len(pmsg.Data),
+				zap.Int("validation_result_code", int(result)),
+			)
+			return result
+		}
+
+		err = ctrl.ps.RegisterTopicValidator(name, wrappedValidator, opts...)
 		if err != nil {
 			return fmt.Errorf("could not register topic validator: %w", err)
 		}
 	}
 	return nil
+}
+
+func validationResultString(result pubsub.ValidationResult) string {
+	switch result {
+	case pubsub.ValidationAccept:
+		return "accept"
+	case pubsub.ValidationReject:
+		return "reject"
+	case pubsub.ValidationIgnore:
+		return "ignore"
+	default:
+		return "unknown"
+	}
 }

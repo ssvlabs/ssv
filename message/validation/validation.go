@@ -55,6 +55,7 @@ type messageValidator struct {
 	dutyStore      *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	observer          SSVValidationObserver
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
 	// the same ID apply any state modifications (during message validation - which is not
@@ -140,7 +141,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 
 	pmsg.ValidatorData = decodedMessage
 
-	return mv.handleValidationSuccess(ctx, decodedMessage)
+	return mv.handleValidationSuccess(ctx, peerID, decodedMessage)
 }
 
 func messageRole(decodedMessage *queue.SSVMessage) spectypes.RunnerRole {

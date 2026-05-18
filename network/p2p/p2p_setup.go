@@ -184,7 +184,7 @@ func (n *p2pNetwork) SetupServices() error {
 }
 
 func (n *p2pNetwork) setupStreamCtrl() error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.Host(), n.cfg.RequestTimeout, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.Host(), n.cfg.RequestTimeout, n.cfg.RequestTimeout, n.peerObserver)
 	n.logger.Debug("stream controller is ready")
 	return nil
 }
@@ -250,7 +250,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	h.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool, n.peerObserver)
 	h.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
@@ -331,6 +331,7 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
 		DisableIPRateLimit:  n.cfg.DisableIPRateLimit,
 		GetValidatorStats:   n.cfg.GetValidatorStats,
+		PeerObserver:        n.peerObserver,
 	}
 
 	if n.cfg.PeerScoreInspector != nil && n.cfg.PeerScoreInspectorInterval > 0 {

@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/storage"
@@ -58,6 +59,12 @@ type Config struct {
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Enable pubsub debug tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Enable discovery debug tracing in logs"`
+	// HighlightedPeers is a list of libp2p peer IDs or secp256k1 public keys that should be highlighted in p2p logs and metrics.
+	HighlightedPeers string `yaml:"HighlightedPeers" env:"P2P_HIGHLIGHTED_PEERS" env-default:"" env-description:"Comma, semicolon, or whitespace-separated libp2p peer IDs or 0x-prefixed secp256k1 public keys to highlight in p2p logs and metrics"`
+	// HighlightedPeerLabel is attached to every highlighted peer log and metric.
+	HighlightedPeerLabel string `yaml:"HighlightedPeerLabel" env:"P2P_HIGHLIGHTED_PEER_LABEL" env-default:"highlighted-peer" env-description:"Label attached to highlighted peer logs and metrics"`
+	// PeerObserver observes traffic for highlighted peers. If unset, it is built from HighlightedPeers.
+	PeerObserver *peertrace.Observer `yaml:"-"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorDataStore contains own operator data including its ID

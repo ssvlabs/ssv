@@ -23,8 +23,8 @@ func TestStreamCtrl(t *testing.T) {
 
 	prot := protocol.ID("/test/protocol")
 
-	ctrl0 := NewStreamController(t.Context(), hosts[0], time.Second, time.Second)
-	ctrl1 := NewStreamController(t.Context(), hosts[1], time.Second, time.Second)
+	ctrl0 := NewStreamController(t.Context(), hosts[0], time.Second, time.Second, nil)
+	ctrl1 := NewStreamController(t.Context(), hosts[1], time.Second, time.Second, nil)
 
 	t.Run("handle request", func(t *testing.T) {
 		logger := zap.NewNop()

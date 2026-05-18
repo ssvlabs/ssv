@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
@@ -96,6 +97,7 @@ type p2pNetwork struct {
 	connHandler     connections.ConnHandler
 	connGater       connmgrcore.ConnectionGater
 	trustedPeers    []*peer.AddrInfo
+	peerObserver    *peertrace.Observer
 
 	state int32
 
@@ -133,6 +135,18 @@ func New(
 	cfg *Config,
 ) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
+	peerObserver := cfg.PeerObserver
+	if peerObserver == nil {
+		var err error
+		peerObserver, err = peertrace.New(peertrace.Config{
+			Label: cfg.HighlightedPeerLabel,
+			Peers: cfg.HighlightedPeers,
+		})
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("could not parse highlighted peers: %w", err)
+		}
+	}
 
 	n := &p2pNetwork{
 		parentCtx:            cfg.Ctx,
@@ -146,8 +160,12 @@ func New(
 		subscribedCommittees: hashmap.New[string, committeeSubscriptionStatus](),
 		nodeStorage:          cfg.NodeStorage,
 		operatorDataStore:    cfg.OperatorDataStore,
+		peerObserver:         peerObserver,
 		discoveredPeersPool:  ttl.New[peer.ID, discovery.DiscoveredPeer](ctx, 30*time.Minute, 3*time.Minute),
 		trimmedRecently:      ttl.New[peer.ID, struct{}](ctx, 30*time.Minute, 3*time.Minute),
+	}
+	if peerObserver.Enabled() {
+		n.logger.Info("p2p highlighted peer observer configured", zap.Int("peer_count", peerObserver.Count()))
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err

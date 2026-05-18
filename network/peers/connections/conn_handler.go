@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
@@ -35,6 +36,7 @@ type connHandler struct {
 	connIdx             peers.ConnectionIndex
 	peerInfos           peers.PeerInfoIndex
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
+	peerObserver        *peertrace.Observer
 }
 
 // NewConnHandler creates a new connection handler
@@ -47,7 +49,12 @@ func NewConnHandler(
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
+	peerObservers ...*peertrace.Observer,
 ) ConnHandler {
+	var peerObserver *peertrace.Observer
+	if len(peerObservers) > 0 {
+		peerObserver = peerObservers[0]
+	}
 	return &connHandler{
 		ctx:                 ctx,
 		logger:              logger,
@@ -57,6 +64,7 @@ func NewConnHandler(
 		connIdx:             connIdx,
 		peerInfos:           peerInfos,
 		discoveredPeersPool: discoveredPeersPool,
+		peerObserver:        peerObserver,
 	}
 }
 
@@ -67,6 +75,9 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
 			recordFiltered(ch.ctx, conn.Stat().Direction)
+			ch.peerObserver.Observe(ch.ctx, logger, "connection_filtered", id,
+				zap.String("conn_dir", conn.Stat().Direction.String()),
+			)
 		}
 	}
 
@@ -201,6 +212,10 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 				recordConnected(ch.ctx, conn.Stat().Direction)
 
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
+				ch.peerObserver.Observe(ch.ctx, logger, "connection_connected", conn.RemotePeer(),
+					zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+					zap.String("conn_dir", conn.Stat().Direction.String()),
+				)
 				logger.Debug("peer connected")
 
 				// if this connection is the one we found through discovery - remove it from discoveredPeersPool
@@ -227,6 +242,10 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 
 			logger := connLogger(conn)
+			ch.peerObserver.Observe(ch.ctx, logger, "connection_disconnected", conn.RemotePeer(),
+				zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+				zap.String("conn_dir", conn.Stat().Direction.String()),
+			)
 			logger.Debug("peer disconnected")
 		},
 	}

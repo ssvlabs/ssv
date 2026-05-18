@@ -1,6 +1,8 @@
 package topics
 
 import (
+	"context"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -12,6 +14,9 @@ import (
 const (
 	observabilityName      = "github.com/ssvlabs/ssv/network/topics"
 	observabilityNamespace = "ssv.p2p.messages"
+
+	pubsubObservabilityNamespace = "ssv.p2p.pubsub.messages"
+	pubsubTopicAttributeKey      = "ssv.p2p.pubsub.topic"
 )
 
 var (
@@ -29,12 +34,22 @@ var (
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of outbound(broadcasted) messages")))
 
+	pubsubMessagesReceivedCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(pubsubObservabilityNamespace, "received"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of messages received by the pubsub topic validator")))
+
 	msgIDHandlerBufferFallbackCounter = metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "msg_id_buffer_fallback"),
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of msg_id add operations processed synchronously because the async buffer was full")))
 )
+
+func pubsubTopicAttribute(value string) attribute.KeyValue {
+	return attribute.String(pubsubTopicAttributeKey, value)
+}
 
 func messageTopicAttribute(value string) attribute.KeyValue {
 	return attribute.String("ssv.p2p.message.topic", value)
@@ -45,4 +60,8 @@ func messageTypeAttribute(value uint64) attribute.KeyValue {
 		Key:   "ssv.p2p.message.type",
 		Value: observability.Uint64AttributeValue(value),
 	}
+}
+
+func recordPubsubMessageReceived(ctx context.Context, topic string) {
+	pubsubMessagesReceivedCounter.Add(ctx, 1, metric.WithAttributes(pubsubTopicAttribute(topic)))
 }

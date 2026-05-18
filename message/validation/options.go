@@ -13,3 +13,10 @@ func WithLogger(logger *zap.Logger) Option {
 		mv.logger = logger
 	}
 }
+
+// WithSSVValidationObserver sets an observer for SSV-level validation decisions.
+func WithSSVValidationObserver(observer SSVValidationObserver) Option {
+	return func(mv *messageValidator) {
+		mv.observer = observer
+	}
+}

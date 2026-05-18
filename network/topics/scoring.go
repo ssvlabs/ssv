@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -40,6 +42,7 @@ func scoreInspector(logger *zap.Logger,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
 	gossipScoreIndex peers.GossipScoreIndex,
+	peerObserver *peertrace.Observer,
 ) pubsub.ExtendedPeerScoreInspectFn {
 	inspections := 0
 
@@ -134,12 +137,6 @@ func scoreInspector(logger *zap.Logger,
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
 
-			if inspections%logFrequency != 0 {
-				// Don't log yet.
-				continue
-			}
-
-			// Log.
 			fields := []zap.Field{
 				fields.PeerID(pid),
 				fields.PeerScore(peerScores.Score),
@@ -160,6 +157,13 @@ func scoreInspector(logger *zap.Logger,
 			if peerScores.Score < -1000 {
 				fields = append(fields, zap.Bool("low_score", true))
 			}
+			peerObserver.Observe(context.Background(), logger, "pubsub_peer_score", pid, fields...)
+
+			if inspections%logFrequency != 0 {
+				// Don't log yet.
+				continue
+			}
+
 			logger.Debug("peer scores", fields...)
 
 			// err := scoreIdx.Score(pid, scores...)

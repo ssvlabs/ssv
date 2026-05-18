@@ -17,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -69,6 +70,7 @@ type PubSubConfig struct {
 	GetValidatorStats      network.GetValidatorStats
 	ScoreInspector         pubsub.ExtendedPeerScoreInspectFn
 	ScoreInspectorInterval time.Duration
+	PeerObserver           *peertrace.Observer
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -178,7 +180,7 @@ func NewPubSub(
 			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
 			}
-			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex)
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, peerConnected, peerScoreParams, topicScoreFactory, gossipScoreIndex, cfg.PeerObserver)
 		}
 		if inspectInterval == 0 {
 			inspectInterval = defaultScoreInspectInterval
@@ -197,8 +199,8 @@ func NewPubSub(
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))
 	}
 
-	if cfg.TraceLog {
-		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger)))
+	if cfg.TraceLog || cfg.PeerObserver.Enabled() {
+		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger, cfg.TraceLog, cfg.PeerObserver)))
 	}
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
@@ -206,7 +208,7 @@ func NewPubSub(
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidator, sf, ps, topicScoreFactory)
+	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidator, sf, ps, topicScoreFactory, cfg.PeerObserver)
 
 	return ps, ctrl, nil
 }
