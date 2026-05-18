@@ -120,14 +120,20 @@ const (
 	primaryBudgetDefaultBTT100 = 200 // 2.0 BTT — paired with +RefloodDelay added at compute time
 )
 
-// ConfigOverrides allows callers to override the default protocol timings
-// and layer count. Zero values fall back to package defaults — and where
-// the spec defines a derivation (e.g. T_commit = RelayCutoff − headroom −
-// JitterBuffer − ε_3 − Δ_2; Δ_2 = 1·BTT), zero-valued fields derive from
-// the supplied BTT / RelayCutoff / HeaderSubmitHeadroom rather than from
-// the package defaults. Per spec §Application: callers can configure
-// (BTT, HeaderSubmitHeadroom, RelayCutoff) and the post-T_commit timing
-// falls out automatically.
+// ConfigOverrides allows callers to override the default deployment-environment
+// parameters and per-duty layer config. Zero values fall back to package defaults.
+//
+// **Operator-facing surface (Q-I2 / spec docs/OBFT.md §Application):** operators
+// supply `BTT` (the deployment's P99 + δ unit) plus deployment-environment values
+// (`RelayCutoff`, `HeaderSubmitHeadroom`, `RefloodDelay`). All protocol timings —
+// `T_commit`, `Δ_2`, `ε_3`, JitterBuffer — derive deterministically from `BTT`
+// and the deployment-environment values via spec-recommended formulas, so all
+// operators in a cluster compute identical values. This prevents per-operator
+// drift from breaking consensus.
+//
+// The `*Override` fields below (`tCommitOverride`, `delta2Override`, etc.) are
+// unexported — they exist as test-only knobs for sim-stability fixtures that
+// need over-budgeted timings, and are not part of the operator-facing API.
 type ConfigOverrides struct {
 	K                    int
 	BTT                  time.Duration // P99 + δ; spec §Setting unit propagation+skew budget
@@ -148,15 +154,15 @@ type ConfigOverrides struct {
 	// prevents passing 0 explicitly.
 	RefloodDelay time.Duration
 
-	// TCommit, Delta2, Eps3, JitterBuffer — when zero, derive from the
-	// above per spec. Set explicitly only to deviate from the spec
-	// derivation. JitterBuffer is the residual slack between Phase-3
-	// completion and cert-broadcast / relay-submit start (see spec
-	// §Application / Timing budget).
-	TCommit      time.Duration
-	Delta2       time.Duration
-	Eps3         time.Duration
-	JitterBuffer time.Duration
+	// Test-only protocol-timing overrides. Production callers MUST NOT set
+	// these — operator-supplied `BTT` is the only protocol-timing input, and
+	// all other timings derive deterministically per spec (see type docstring
+	// for the principle). Unexported so external callers cannot construct
+	// these; settable from package-internal test fixtures only.
+	tCommitOverride      time.Duration
+	delta2Override       time.Duration
+	eps3Override         time.Duration
+	jitterBufferOverride time.Duration
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil,
 	// defaults are used: L_0 fetches just past RANDAO_done
@@ -215,37 +221,40 @@ func (o *ConfigOverrides) refloodDelay() time.Duration {
 }
 
 // eps3 derives from absolute ε_3 (doesn't scale with BTT per spec).
+// Test-only override via eps3Override field.
 func (o *ConfigOverrides) eps3() time.Duration {
-	if o == nil || o.Eps3 == 0 {
+	if o == nil || o.eps3Override == 0 {
 		return DefaultEps3
 	}
-	return o.Eps3
+	return o.eps3Override
 }
 
 // jitterBuffer derives from absolute residual jitter (doesn't scale with
-// BTT per spec §Application / Timing budget).
+// BTT per spec §Application / Timing budget). Test-only override via
+// jitterBufferOverride field.
 func (o *ConfigOverrides) jitterBuffer() time.Duration {
-	if o == nil || o.JitterBuffer == 0 {
+	if o == nil || o.jitterBufferOverride == 0 {
 		return DefaultJitterBuffer
 	}
-	return o.JitterBuffer
+	return o.jitterBufferOverride
 }
 
 // delta2 derives as 1 BTT per spec §Phase 2 recommendation (KindCommit
 // synchronous-fallback propagation cycle). Reflood lives in B_k via
-// RefloodDelay. Override only to deviate.
+// RefloodDelay. Test-only override via delta2Override field.
 func (o *ConfigOverrides) delta2() time.Duration {
-	if o != nil && o.Delta2 != 0 {
-		return o.Delta2
+	if o != nil && o.delta2Override != 0 {
+		return o.delta2Override
 	}
 	return 1 * o.btt()
 }
 
 // tCommit derives as RelayCutoff − HeaderSubmitHeadroom − JitterBuffer −
-// ε_3 − Δ_2 per spec §Application / Timing budget.
+// ε_3 − Δ_2 per spec §Application / Timing budget. Test-only override via
+// tCommitOverride field.
 func (o *ConfigOverrides) tCommit() time.Duration {
-	if o != nil && o.TCommit != 0 {
-		return o.TCommit
+	if o != nil && o.tCommitOverride != 0 {
+		return o.tCommitOverride
 	}
 	return o.relayCutoff() - o.headerSubmitHeadroom() - o.jitterBuffer() - o.eps3() - o.delta2()
 }

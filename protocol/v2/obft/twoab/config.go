@@ -99,6 +99,18 @@ type LayerSpec struct {
 // Config parameterizes one 2abOBFT consensus instance. Timing fields are
 // absolute offsets relative to slot start; see docs/2abOBFT.md §Setting and
 // §Timing budget for the constraints relating them.
+//
+// **Note on operator-facing API surface (Q-I2 / spec docs/2abOBFT.md §Setting):**
+// per the principle "operators supply BTT only; protocol timings derive
+// deterministically from BTT", the protocol-timing fields (`Delta2a`, `Delta2b`,
+// `Eps3`, `TCommit`) are NOT operator-tunable in production. 2abOBFT does not
+// yet have an SSV-runner-adapter (analog of `protocol/v2/ssv/runner/obft`); when
+// it's built, the adapter should expose `BTT` plus deployment-environment values
+// (`RelayCutoff`, `HeaderSubmitHeadroom`, `RefloodDelay`) and derive protocol
+// timings internally — mirroring the bare-OBFT runner-adapter's `ConfigOverrides`
+// pattern, where the override-fields for protocol timings are unexported and
+// test-only. Until the runner-adapter is built, callers (currently consensustest
+// only) construct this Config directly with explicit protocol timings.
 type Config struct {
 	// Height identifies this consensus instance (the slot, in SSV usage).
 	Height Height

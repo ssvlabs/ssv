@@ -72,9 +72,9 @@ func TestRunProposerSlot_Healthy_n4_K4(t *testing.T) {
 	budget, fetchAt := compressedTestSchedule(t)
 	overrides := &ConfigOverrides{
 		K:               4,
-		TCommit:         200 * time.Millisecond,
-		Delta2:          60 * time.Millisecond, // 2·BTT_test — fixture is intentionally over-budgeted vs spec-recommended 1·BTT for sim stability
-		Eps3:            60 * time.Millisecond,
+		tCommitOverride: 200 * time.Millisecond,
+		delta2Override:  60 * time.Millisecond, // 2·BTT_test — fixture is intentionally over-budgeted vs spec-recommended 1·BTT for sim stability
+		eps3Override:    60 * time.Millisecond,
 		BTT:             30 * time.Millisecond,
 		FetchAt:         fetchAt,
 		BroadcastBudget: budget,
@@ -138,9 +138,9 @@ func TestRunProposerSlot_OpportunisticTiming_NoDelta2Wait(t *testing.T) {
 	const delta2 = 60 * time.Millisecond // 2·BTT_test (over-budgeted vs spec); old wait endpoint = TCommit+Δ_2 = 260ms
 	overrides := &ConfigOverrides{
 		K:               4,
-		TCommit:         tCommit,
-		Delta2:          delta2,
-		Eps3:            60 * time.Millisecond,
+		tCommitOverride: tCommit,
+		delta2Override:  delta2,
+		eps3Override:    60 * time.Millisecond,
 		BTT:             30 * time.Millisecond,
 		FetchAt:         fetchAt,
 		BroadcastBudget: budget,
@@ -208,9 +208,9 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 	budget, fetchAt := compressedTestSchedule(t)
 	overrides := &ConfigOverrides{
 		K:               4,
-		TCommit:         200 * time.Millisecond,
-		Delta2:          60 * time.Millisecond, // 2·BTT_test (over-budgeted vs spec); RoundEndOffset = TCommit+Δ_2+ε_3 = 320ms
-		Eps3:            60 * time.Millisecond,
+		tCommitOverride: 200 * time.Millisecond,
+		delta2Override:  60 * time.Millisecond, // 2·BTT_test (over-budgeted vs spec); RoundEndOffset = TCommit+Δ_2+ε_3 = 320ms
+		eps3Override:    60 * time.Millisecond,
 		BTT:             30 * time.Millisecond,
 		FetchAt:         fetchAt,
 		BroadcastBudget: budget,
@@ -292,9 +292,9 @@ func TestScheduler_OpportunisticResolve_EndInstanceWhileWaiting(t *testing.T) {
 	budget, fetchAt := compressedTestSchedule(t)
 	overrides := &ConfigOverrides{
 		K:               4,
-		TCommit:         200 * time.Millisecond,
-		Delta2:          60 * time.Millisecond,
-		Eps3:            60 * time.Millisecond,
+		tCommitOverride: 200 * time.Millisecond,
+		delta2Override:  60 * time.Millisecond,
+		eps3Override:    60 * time.Millisecond,
 		BTT:             30 * time.Millisecond,
 		FetchAt:         fetchAt,
 		BroadcastBudget: budget,
@@ -551,9 +551,9 @@ func TestScheduler_IterativeFetch_PicksFreshest(t *testing.T) {
 	budget, fetchAt := compressedTestSchedule(t)
 	nodes := buildCluster(t, 4, &ConfigOverrides{
 		K:               4,
-		TCommit:         200 * time.Millisecond,
-		Delta2:          60 * time.Millisecond,
-		Eps3:            60 * time.Millisecond,
+		tCommitOverride: 200 * time.Millisecond,
+		delta2Override:  60 * time.Millisecond,
+		eps3Override:    60 * time.Millisecond,
 		BTT:             30 * time.Millisecond,
 		FetchAt:         fetchAt,
 		BroadcastBudget: budget,
@@ -598,9 +598,9 @@ func TestScheduler_IterativeFetch_DegradesToSingleShot(t *testing.T) {
 	budget, fetchAt := compressedTestSchedule(t)
 	nodes := buildCluster(t, 4, &ConfigOverrides{
 		K:               4,
-		TCommit:         200 * time.Millisecond,
-		Delta2:          60 * time.Millisecond,
-		Eps3:            60 * time.Millisecond,
+		tCommitOverride: 200 * time.Millisecond,
+		delta2Override:  60 * time.Millisecond,
+		eps3Override:    60 * time.Millisecond,
 		BTT:             30 * time.Millisecond,
 		FetchAt:         fetchAt,
 		BroadcastBudget: budget,
