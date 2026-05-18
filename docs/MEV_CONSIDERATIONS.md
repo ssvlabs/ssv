@@ -157,8 +157,9 @@ The example configs are starting points. Tuning these knobs in production requir
 ### Where the auction window should land
 
 Bid value grows through the slot: more transaction order flow becomes available, more arbitrage opportunities resolve, and builders accumulate higher-quality bundles. So the auction cutoff should be as late as possible, subject to:
-- `QBFT + post-consensus signing + submission < 4000ms − late_in_slot_time_ms − ~70ms` (the ~70ms covers BN→SSV transport and pre-QBFT blinding, both of which happen after the PBS cutoff and before QBFT can start). The block must propagate by 4000ms after slot start.
-- A safety margin for variance in QBFT consensus, signing, and submission latencies. An unlucky combination of slower-than-typical components can add several hundred ms to the budget; cutoffs much beyond ~2000ms tighten the slot enough that occasional spikes risk missing the deadline.
+- **Round-2 fallback must fit:** `QBFTRound1Time + QBFTRoundChange + QBFTRound2Time + post-consensus signing + submission < 4000ms − late_in_slot_time_ms − ~70ms` (the ~70ms covers BN→SSV transport and pre-QBFT blinding). Plugging in worst-case values (2000ms R1 timer + 150ms round change + 350ms R2 + 150ms signing + 200ms submission = 2850ms post-cutoff budget required), this resolves to `late_in_slot_time_ms ≲ ~1080ms` — the threshold above which a round-2 fallback can no longer complete within the 4000ms slot deadline.
+- **Cutoffs above ~1080ms** accept that round 1 must succeed for the slot — if round 1 fails, the slot is missed. Example B (1800ms) sits in this regime.
+- **Round-1-only variance buffer:** even in the round-1-must-succeed regime, cutoffs much beyond ~2500ms tighten the slot enough that occasional latency spikes in QBFT, signing, or submission risk missing the deadline even when round 1 succeeds.
 
 Example A's ~1050ms cutoff is the recommended starting point — equivalent to legacy `ProposerDelay = 1000ms` in terms of when relay bids are sampled, and fits the worst-case 2-round QBFT scenario. Example B's 1800ms cutoff is the aggressive upper end — fully uses SSV's allocated header-fetch budget for maximum MEV capture, but accepts that round 1 must succeed (the slot is missed if round 1 fails).
 
