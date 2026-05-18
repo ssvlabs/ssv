@@ -44,7 +44,7 @@ Both mev-boost and commit-boost expose the same five knobs with identical names:
 
 - `timeout_get_header_ms` — per-relay-request timeout for a single `getHeader` call.
 - `late_in_slot_time_ms` — slot-relative hard cutoff. The PBS returns to the caller no later than this point in the slot.
-- `enable_timing_games` (per-relay) — opt in to the multi-poll behavior for this relay.
+- `enable_timing_games` (per-relay) — opt in to the multi-poll behavior for this relay. Defaults to `false` in both PBSes; must be set per-relay.
 - `target_first_request_ms` — when the first poll for this relay fires, measured from slot start.
 - `frequency_get_header_ms` — interval between subsequent polls for this relay.
 
@@ -72,7 +72,7 @@ Two scenarios, each shown for both PBSes. The starting numbers below are reasona
 
 ### Example A — "block header at SSV by ~1500ms" (recommended safe default)
 
-Targets a PBS-side cutoff of `1450ms`; with ~50ms overhead between PBS → BN → SSV, the header arrives at SSV by ~1500ms. That leaves headroom for QBFT round 1 to complete before the 2000ms round-1 deadline in a healthy cluster, while still positioning the auction window late enough to capture a meaningful fraction of intra-slot bid growth.
+Targets a PBS-side cutoff of `1450ms`; with ~50ms overhead between PBS → BN → SSV, the header arrives at SSV by ~1500ms. (This assumes BN and PBS are co-located with SSV; a remote BN adds network RTT and the 50ms allowance should be widened accordingly.) That leaves headroom for QBFT round 1 to complete before the 2000ms round-1 deadline in a healthy cluster, while still positioning the auction window late enough to capture a meaningful fraction of intra-slot bid growth.
 
 The relay polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 200`) fires polls at 700ms, 900ms, 1100ms, and 1300ms — four chances per relay, with ~150ms RTT margin for the last poll to complete before the cutoff.
 
@@ -129,6 +129,12 @@ url = "https://<relay-pubkey>@relay-1.example"
 enable_timing_games = true
 target_first_request_ms = 700       # polls at 700ms, 850ms, 1000ms
 frequency_get_header_ms = 150
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-2.example"
+enable_timing_games = true
+target_first_request_ms = 700
+frequency_get_header_ms = 150
 ```
 
 **mev-boost**:
@@ -137,6 +143,10 @@ timeout_get_header_ms: 1050
 late_in_slot_time_ms: 1050
 relays:
   - url: https://<relay-pubkey>@relay-1.example
+    enable_timing_games: true
+    target_first_request_ms: 700
+    frequency_get_header_ms: 150
+  - url: https://<relay-pubkey>@relay-2.example
     enable_timing_games: true
     target_first_request_ms: 700
     frequency_get_header_ms: 150
@@ -233,6 +243,8 @@ The 2200ms figure is the absolute slot-deadline budget. The tighter QBFT round-1
 RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + MiscellaneousTime < 2000ms
 ```
 which gives `ProposerDelay ≤ ~1200ms` for round 1 to complete on time.
+
+**Note:** the `MEVBoostRelayTimeout ≈ 200ms` figure above assumes the legacy single-shot PBS behavior, where mev-boost queries each relay once at the moment SSV asks. A timing-games-capable PBS uses a much larger budget here, in which case the SSV-side `ProposerDelay` lever isn't useful — see the PBS-side timing games section above.
 
 We consider **~1200ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet. Going beyond risks missed block proposals.
 

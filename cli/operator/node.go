@@ -843,14 +843,14 @@ func validateProposerDelayConfig(logger *zap.Logger) error {
 
 	if cfg.ProposerDelay > maxSafeProposerDelay {
 		if !cfg.AllowDangerousProposerDelay {
-			return fmt.Errorf("ProposerDelay value %v exceeds maximum safe delay of %v. "+
+			return fmt.Errorf("ProposerDelay value %dms exceeds maximum safe delay of %dms. "+
 				"This may cause missed block proposals. "+
 				"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
-				cfg.ProposerDelay, maxSafeProposerDelay)
+				cfg.ProposerDelay.Milliseconds(), maxSafeProposerDelay.Milliseconds())
 		}
 		logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
-			zap.Duration("proposer_delay", cfg.ProposerDelay),
-			zap.Duration("max_safe_proposer_delay", maxSafeProposerDelay))
+			zap.Int64("proposer_delay_ms", cfg.ProposerDelay.Milliseconds()),
+			zap.Int64("max_safe_proposer_delay_ms", maxSafeProposerDelay.Milliseconds()))
 	}
 
 	return nil
