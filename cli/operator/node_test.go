@@ -459,10 +459,10 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 
 				// Check log fields
 				fields := logs[0].ContextMap()
-				require.Contains(t, fields, "proposer_delay")
-				require.Contains(t, fields, "max_safe_proposer_delay")
-				require.Equal(t, delay, fields["proposer_delay"])
-				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
+				require.Contains(t, fields, "proposer_delay_ms")
+				require.Contains(t, fields, "max_safe_proposer_delay_ms")
+				require.Equal(t, delay.Milliseconds(), fields["proposer_delay_ms"])
+				require.Equal(t, int64(1000), fields["max_safe_proposer_delay_ms"])
 			})
 		}
 	})
