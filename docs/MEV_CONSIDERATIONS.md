@@ -68,7 +68,7 @@ Two scenarios, each shown for both PBSes. The starting numbers below are reasona
 
 Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline: the relay bids you'll see are sampled at the same moment in the slot.
 
-This is **not** the same as legacy `ProposerDelay = 1000ms` in terms of when the header arrives at SSV — legacy would deliver the header to SSV anywhere from ~1500ms to ~2000ms (after mev-boost's `getHeaderTimeout` runs its course), whereas this configuration delivers it at ~1050ms. PBS-timing-games is strictly better at the same bid-sample time: same bid quality, more slot budget left for QBFT and submission.
+This is **not** the same as legacy `ProposerDelay = 1000ms` in terms of when the header arrives at SSV — legacy would deliver the header to SSV anywhere from ~1500ms to ~2000ms (after mev-boost's `getHeaderTimeout` runs its course), whereas this configuration delivers it at ~1100ms (1050ms PBS cutoff + ~50ms BN→SSV transport). PBS-timing-games is strictly better at the same bid-sample time: same bid quality, more slot budget left for QBFT and submission.
 
 The relay polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 150`) fires polls at 700ms, 850ms, and 1000ms — three chances per relay, with the last poll landing at the target bid-sample time.
 
@@ -113,7 +113,7 @@ SSV's `proposalSoftTimeout` (default 1800ms, defined in `beacon/goclient/options
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, and 1600ms — four chances per relay, with ~200ms RTT margin to the cutoff.
 
-Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2950ms (Example A) to ~2150ms. Workable for healthy clusters but leaves less buffer for latency variance — use only after baselining your stack's QBFT and submission timings.
+Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms (Example A) to ~2150ms. Workable for healthy clusters but leaves less buffer for latency variance — use only after baselining your stack's QBFT and submission timings.
 
 **commit-boost** (TOML):
 ```toml
