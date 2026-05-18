@@ -21,7 +21,7 @@
 | Equivocation σ-locked split recovery | None — slot-miss class | Recovered structurally — σ-quorum-eligibility short → all honest go NR → fall-through |
 | h_V=1 selective-delivery deadlock | Class B grief, not recovered in-protocol — algebraic deadlock at f=1, n=4 (σ-pool=2 < qV; NR-pool=2 < qEnc). Deterred via Assumption 4 across slots. | Recovered structurally |
 | Validity-divergence recovery | Out-of-scope (Class A) | In-scope at f=1 n=4 (recovered by NR-quorum fall-through); structural at higher n/f |
-| Slot timing | `T_commit + Δ_2 + Δ_3` ≈ 450ms post-T_commit (Config A) | `T_commit + Δ_2b + Δ_3` ≈ 650ms post-T_commit (Phase 2a is pre-T_commit under aligned naming; +200ms post-T_commit vs bare OBFT, with the +400ms Phase-2a window absorbed into pre-T_commit budget) |
+| Slot timing | `T_commit + Δ_2 + ε_3` ≈ 450ms post-T_commit (Config A) | `T_commit + Δ_2b + ε_3` ≈ 650ms post-T_commit (Phase 2a is pre-T_commit under aligned naming; +200ms post-T_commit vs bare OBFT, with the +400ms Phase-2a window absorbed into pre-T_commit budget) |
 | Wire kinds | `Phase1Bundle`, `KindCommit`, `KindCertificate` | + `KindVerdict` (Phase-2a, op-identity-signed verdict envelope); Phase-2b uses its own commit message |
 | Slashing-evidence rules | 5 rules | 5 rules + 1 (verdict-vs-action equivocation) |
 | Late-deepest-layer leader broadcast (Class A) | Mitigated by K ≥ f+2; class-A residual | Closed structurally — late bundle observed in Phase-2a is σ-emittable in Phase-2b |

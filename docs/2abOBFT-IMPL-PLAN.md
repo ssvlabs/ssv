@@ -163,7 +163,7 @@ All other types currently in top-level `protocol/v2/obft/` (Config, LayerSpec, P
 
 **Steps**:
 1. Create `protocol/v2/obft/twoab/` directory with `package twoab`.
-2. `twoab/config.go`: define `twoab.Config` from scratch — fields: `K`, `BTT`, `Delta_2a`, `Delta_2b`, `Delta_3`, `T_verdict_start`, `Layers []LayerSpec`, etc. Aligned with spec §Setting. **No embedding** of `obft.Config` — owned outright.
+2. `twoab/config.go`: define `twoab.Config` from scratch — fields: `K`, `BTT`, `Delta2a`, `Delta2b`, `Eps3`, `T_verdict_start`, `Layers []LayerSpec`, etc. Aligned with spec §Setting. **No embedding** of `obft.Config` — owned outright.
 3. `twoab.Config.Validate()` enforcing spec constraints: `K ≥ max(2, f+1)`, recommended `K ≥ f+2`, `Δ_2a ≥ 2 BTT` (broken-by-construction at minimum), `qV = qEnc = 2f+1`, etc.
 4. `twoab.LayerSpec` declared separately (same shape as `base.LayerSpec` but separately owned).
 5. `instance.go` stub with `Instance` struct (no fields filled in yet, just placeholder + `NewInstance` signature returning not-yet-implemented sentinel).
