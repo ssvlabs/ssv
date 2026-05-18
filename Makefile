@@ -165,6 +165,10 @@ consensustest-with-real-bls:
 #     heavy_tail, slow_heavy_tail. Each name becomes one point in the
 #     BTT × profile × instability cross-product, with both cfg.Network
 #     and cfg.Mesh.HopDelay sourced from the named profile.
+#   - BTT_VALUES_MS   (default 100,200,300,400) — comma-separated BTT
+#     values in ms. Shared by the p2p_baseline and p2p_increasing_BTT
+#     sweeps; drives the protocol's internal timing budgets (the network
+#     itself is the profile, ≈ 1-10 ms in prod).
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 10000) — high-confidence
@@ -192,17 +196,19 @@ ITERATIONS_UNSTABLE_OPERATIONS ?= 1
 CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
+BTT_VALUES_MS ?= 100,200,300,400
 # PROTOCOLS — comma-separated protocol names to include in the sweep (e.g.
 # `OBFT,QBFT,PSigs`). Empty (default) runs ALL registered protocols.
 # Names must exactly match Protocol.Name() values defined in stress_test.go.
 PROTOCOLS ?= OBFT,2abOBFT,QBFT,QBFT-SSV
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
 		P2P_PROFILES=$(P2P_PROFILES) \
+		BTT_VALUES_MS=$(BTT_VALUES_MS) \
 		PROTOCOLS=$(PROTOCOLS) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \

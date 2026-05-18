@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -64,6 +65,9 @@ import (
 //     protocols. Useful for partial regens — e.g. PROTOCOLS=PSigs runs
 //     only the baseline reference. Names must exactly match Protocol.Name()
 //     values from the `protocols` slice in this file.
+//   - BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
+//     p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
+//     300, 400 per ct.DefaultBaselineBTTValues.
 //
 // Usage:
 //
@@ -163,6 +167,7 @@ func TestStress(t *testing.T) {
 	// BTT=100ms, T_commit − B_0 ≈ 2700ms). BFT_start > 0 only runs the
 	// OBFT-family protocols; pipeline-shift protocols (PSigs / QBFT)
 	// are covered by the UI's pipeline-shift from the BFT_start=0 cell.
+	// Sorted ascending after parse for stable axis ordering.
 	bftStartsRaw := os.Getenv("BFT_STARTS")
 	var bftStarts []time.Duration
 	if bftStartsRaw == "" {
@@ -179,6 +184,31 @@ func TestStress(t *testing.T) {
 			bftStarts = append(bftStarts, time.Duration(ms)*time.Millisecond)
 		}
 		require.NotEmpty(t, bftStarts, "BFT_STARTS is empty after parsing")
+		slices.Sort(bftStarts)
+	}
+
+	// BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
+	// p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
+	// 300, 400 per DefaultBaselineBTTValues. Sorted ascending after
+	// parse so p2p_increasing_BTT's axis is monotonic regardless of
+	// user input order.
+	bttValuesRaw := os.Getenv("BTT_VALUES_MS")
+	var bttValues []time.Duration
+	if bttValuesRaw == "" {
+		bttValues = ct.DefaultBaselineBTTValues
+	} else {
+		for _, s := range strings.Split(bttValuesRaw, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			ms, err := strconv.Atoi(s)
+			require.NoErrorf(t, err, "invalid BTT_VALUES_MS value %q (want comma-separated ms integers)", s)
+			require.Greaterf(t, ms, 0, "BTT_VALUES_MS value %q must be > 0", s)
+			bttValues = append(bttValues, time.Duration(ms)*time.Millisecond)
+		}
+		require.NotEmpty(t, bttValues, "BTT_VALUES_MS is empty after parsing")
+		slices.Sort(bttValues)
 	}
 
 	// Build (n, K) pairs: cross-product of clusterSizes × layersK,
@@ -295,7 +325,7 @@ func TestStress(t *testing.T) {
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
 	for pairIdx, pp := range pairs {
-		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bftStarts)
+		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bftStarts, bttValues)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		pairStart := time.Now()
 		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)

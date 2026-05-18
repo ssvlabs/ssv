@@ -88,17 +88,17 @@ func (i Iterations) asBatchIterations() (int, map[string]int) {
 	return i.Unstable, map[string]int{"Baseline": i.Baseline}
 }
 
-// baselineBTTValues — the BTT axis that p2p_baseline sweeps. K and N
-// are passed per-run (one (n, k) combo per `make stresstest`); the
-// profile axis is controlled by the `profiles` parameter to
-// DefaultSweeps (driven by P2P_PROFILES in the stress driver, default
-// = all six entries of P2PProfileNames).
-var baselineBTTValues = []time.Duration{
+// DefaultBaselineBTTValues — the default BTT axis shared by the
+// p2p_baseline and p2p_increasing_BTT sweeps. Driver-overridable via
+// BTT_VALUES_MS env var. K and N are passed per-run (one (n, k) combo
+// per `make stresstest`); the profile axis is controlled by the
+// `profiles` parameter to DefaultSweeps (driven by P2P_PROFILES in the
+// stress driver, default = all six entries of P2PProfileNames).
+var DefaultBaselineBTTValues = []time.Duration{
 	100 * time.Millisecond,
 	200 * time.Millisecond,
 	300 * time.Millisecond,
 	400 * time.Millisecond,
-	500 * time.Millisecond,
 }
 
 // DefaultBaselineBFTStarts — the BFT_start axis the p2p_baseline sweep
@@ -124,18 +124,19 @@ var DefaultBaselineBFTStarts = []time.Duration{
 // retain their LogNormal anchors so the parameter axis stays meaningful.
 //
 //  1. p2p_baseline — BTT × profile × instability × BFT_start cross-product.
-//     BTT ∈ {100, 200, 300, 400, 500} ms, profile from the `profiles`
-//     parameter (default {prod, stage1, stage2, slow, heavy_tail,
-//     slow_heavy_tail} via P2P_PROFILES env var), instability ∈
-//     {none, low, moderate, high, extreme}, BFT_start from the
-//     `bftStarts` parameter (default {0, 2000, 2400, 2800} ms via
-//     BFT_STARTS env var). Level=0 emits the full catalog; Level>0
-//     emits ONLY Baseline-group scenarios. BFT_start > 0 emits only
-//     OBFT-family protocols (PSigs / QBFT use UI pipeline-shift from
-//     BFT_start=0 cells instead of a per-BFT_start sim).
-//  2. p2p_increasing_BTT — BTT ∈ {100, 200, 400, 600, 800, 1000} ms;
-//     per-point LogNormal{Median: BTT/2, σ: 0.5} (synthetic
-//     BTT-scaling exploration).
+//     BTT from the `bttValues` parameter (default {100, 200, 300, 400} ms
+//     via BTT_VALUES_MS env var), profile from the `profiles` parameter
+//     (default {prod, stage1, stage2, slow, heavy_tail, slow_heavy_tail}
+//     via P2P_PROFILES env var), instability ∈ {none, low, moderate,
+//     high, extreme}, BFT_start from the `bftStarts` parameter (default
+//     {0, 2000, 2400, 2800} ms via BFT_STARTS env var). Level=0 emits
+//     the full catalog; Level>0 emits ONLY Baseline-group scenarios.
+//     BFT_start > 0 emits only OBFT-family protocols (PSigs / QBFT use
+//     UI pipeline-shift from BFT_start=0 cells instead of a per-BFT_start
+//     sim).
+//  2. p2p_increasing_BTT — same BTT axis as p2p_baseline (via
+//     `bttValues`); per-point LogNormal{Median: BTT/2, σ: 0.5}
+//     (synthetic BTT-scaling exploration).
 //  3. p2p_packet_loss — LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20} at
 //     fixed BTT=300ms, BurstFactor=5, σ=0.5.
 //  4. p2p_correlated_delays — BadLinkProb ∈ {0, 0.05, 0.10, 0.20};
@@ -163,12 +164,12 @@ var DefaultBaselineBFTStarts = []time.Duration{
 // reporting.WriteReportData uses that tuple to dedup / append.
 //
 // Panics with a specific reason on invalid input (empty scenarios /
-// protocols / profiles, unknown profile names, non-positive iteration
-// budgets, non-positive n or k). These are programmer errors — the
-// test driver should always pass valid inputs; a panic surfaces the
-// bug at the failure site rather than collapsing to a confusing
-// "expected N sweeps got 0" downstream.
-func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bftStarts []time.Duration) []Sweep {
+// protocols / profiles / bftStarts / bttValues, unknown profile names,
+// non-positive iteration budgets, non-positive n or k). These are
+// programmer errors — the test driver should always pass valid inputs;
+// a panic surfaces the bug at the failure site rather than collapsing
+// to a confusing "expected N sweeps got 0" downstream.
+func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bftStarts, bttValues []time.Duration) []Sweep {
 	switch {
 	case len(scenarios) == 0:
 		panic("consensustest: DefaultSweeps called with empty scenarios")
@@ -178,6 +179,8 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 		panic("consensustest: DefaultSweeps called with empty profiles")
 	case len(bftStarts) == 0:
 		panic("consensustest: DefaultSweeps called with empty bftStarts")
+	case len(bttValues) == 0:
+		panic("consensustest: DefaultSweeps called with empty bttValues")
 	case iters.Baseline <= 0:
 		panic(fmt.Sprintf("consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got %d)", iters.Baseline))
 	case iters.Unstable <= 0:
@@ -198,9 +201,14 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 			panic(fmt.Sprintf("consensustest: DefaultSweeps: BFT_start %v must be >= 0", bs))
 		}
 	}
+	for _, btt := range bttValues {
+		if btt <= 0 {
+			panic(fmt.Sprintf("consensustest: DefaultSweeps: BTT %v must be > 0", btt))
+		}
+	}
 	return []Sweep{
-		p2pBaselineSweep(scenarios, protocols, iters, n, k, profiles, bftStarts),
-		p2pIncreasingBTTSweep(scenarios, protocols, iters, n, k),
+		p2pBaselineSweep(scenarios, protocols, iters, n, k, profiles, bftStarts, bttValues),
+		p2pIncreasingBTTSweep(scenarios, protocols, iters, n, k, bttValues),
 		p2pPacketLossSweep(scenarios, protocols, iters, n, k),
 		p2pCorrelatedDelaysSweep(scenarios, protocols, iters, n, k),
 		p2pNodeSlownessSweep(scenarios, protocols, iters, n, k),
@@ -248,7 +256,7 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 // duplicating their runs adds cost without information. The UI's
 // shiftedCell consults Fields.BFT_start for OBFT-family cells and
 // pipeline-shifts the BFT_start=0 cell for the others.
-func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bftStarts []time.Duration) Sweep {
+func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bftStarts, bttValues []time.Duration) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	baselineOnly := filterBaselineScenarios(scenarios)
 	// Partition protocols once: pipeline-shift protocols (PSigs / QBFT
@@ -262,7 +270,7 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 			obftFamily = append(obftFamily, p)
 		}
 	}
-	pts := make([]SweepPoint, 0, len(baselineBTTValues)*len(profiles)*len(InstabilityLevels)*len(bftStarts))
+	pts := make([]SweepPoint, 0, len(bttValues)*len(profiles)*len(InstabilityLevels)*len(bftStarts))
 	for _, bftStart := range bftStarts {
 		pointProtocols := protocols
 		if bftStart > 0 {
@@ -271,7 +279,7 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 				continue
 			}
 		}
-		for _, btt := range baselineBTTValues {
+		for _, btt := range bttValues {
 			for _, profile := range profiles {
 				profileIdx := P2PProfileIndex(profile)
 				for _, level := range InstabilityLevels {
@@ -324,24 +332,16 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	return Sweep{
 		Name:        "p2p_baseline",
 		Title:       "Baseline conditions",
-		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×80 / outlier frequency ×24 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. Important: under empirical profiles, the BTT axis is a PROTOCOL-BUDGET axis, not a network-speed axis — the network model is the profile (≈ 1-10 ms in prod), while BTT (100-500 ms here) drives the protocol's internal timing budgets. Framework-side budgets (spec-aligned, post-tightening): OBFT Δ_2 = 1·BTT (spec recommendation, reflood absorbed by B_0); OBFT primary B_0 = 2·BTT + scenario-set RefloodDelay (Healthy opts into 700ms, matching SSV's libp2p heartbeat; adversarial scenarios keep the default 0); QBFT computed-RT phase budget = 1·BTT (RT = 6×phaseBudget = 6·BTT); 2abOBFT Δ_2a = 2·BTT structural minimum, Δ_2b = 1·BTT spec-aligned (Phase-2 total 3·BTT). The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
+		Description: "Calibrated empirical baseline across (n, K, BTT, profile, instability, BFT_start). Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: `prod` / `stage1` / `stage2` are mainnet + staging clusters; `slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (latency ×80 / outlier frequency ×24 / both). Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. Important: under empirical profiles, the BTT axis is a PROTOCOL-BUDGET axis, not a network-speed axis — the network model is the profile (≈ 1-10 ms in prod), while BTT (driver-overridable via BTT_VALUES_MS) drives the protocol's internal timing budgets. Framework-side budgets (spec-aligned, post-tightening): OBFT Δ_2 = 1·BTT (spec recommendation, reflood absorbed by B_0); OBFT primary B_0 = 2·BTT + scenario-set RefloodDelay (Healthy opts into 700ms, matching SSV's libp2p heartbeat; adversarial scenarios keep the default 0); QBFT computed-RT phase budget = 1·BTT (RT = 6×phaseBudget = 6·BTT); 2abOBFT Δ_2a = 2·BTT structural minimum, Δ_2b = 1·BTT spec-aligned (Phase-2 total 3·BTT). The instability axis applies only to Baseline-group scenarios (Healthy); non-Baseline rows show their level=none stats regardless of picker. Each `make stresstest` run contributes one (n, K) slice; reruns compose into the same data.js.",
 		AxisLabel:   "", // multi-axis; UI picks one point at a time.
 		Points:      pts,
 	}
 }
 
-func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
+func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, bttValues []time.Duration) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
-	btts := []time.Duration{
-		100 * time.Millisecond,
-		200 * time.Millisecond,
-		400 * time.Millisecond,
-		600 * time.Millisecond,
-		800 * time.Millisecond,
-		1000 * time.Millisecond,
-	}
-	pts := make([]SweepPoint, 0, len(btts))
-	for _, btt := range btts {
+	pts := make([]SweepPoint, 0, len(bttValues))
+	for _, btt := range bttValues {
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		base.K = k
 		// Median scales with BTT (per-point production tail shape preserved):
