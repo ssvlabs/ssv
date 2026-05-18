@@ -193,7 +193,7 @@ var StartNodeCmd = &cobra.Command{
 
 		// Determine the block-fetch path from operator-provided config before
 		// NewOptions applies any defaults. See docs/MEV_CONSIDERATIONS.md for the
-		// three-path model and docs/BLOCK_FETCH_PATHS_PLAN.md for the design.
+		// three-path model.
 		blockFetchPath, err := goclient.DetermineBlockFetchPath(cfg.ConsensusClient, cfg.ProposerDelay)
 		if err != nil {
 			logger.Fatal("invalid block-fetch path configuration", zap.Error(err))
