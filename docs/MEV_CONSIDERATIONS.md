@@ -15,11 +15,11 @@ To understand how MEV configuration interacts with SSV, here is the proposer-dut
 - After consensus, operators reconstruct the validator BLS signature from partial signatures (`PostConsensusSigningTime`).
 - The leader submits the signed blinded block to the Beacon node; the relay reveals the actual execution payload, which propagates through the network (`BlockSubmissionTime`).
 
-For an SSV cluster to function reliably, the following must hold:
+For an SSV cluster to function reliably, the following must hold even in the worst case where round 1 fails and round 2 runs as fallback:
 ```
 RANDAOTime + (auction window) + QBFTRound1Time + QBFTRound2Time + PostConsensusSigningTime + BlockSubmissionTime < 4000ms
 ```
-In the typical case where round 1 succeeds, `QBFTRound2Time = 0` and the constraint has comfortable slack. If round 1 times out, round 2 starts; in the worst case where both rounds consume their full timer, the slot deadline is at risk. If the equation doesn't hold, the validator misses its proposal slot (the block must propagate within 4000ms after slot start).
+`QBFTRound1Time` is the 2000ms round-1 timer (worst case: round 1 doesn't reach consensus and the timer expires); `QBFTRound2Time` is a typical successful round-2 time. You must budget for both — in the common case round 1 succeeds quickly and round 2 never runs, but the budget reserved by the equation cannot be reclaimed. If the equation doesn't hold, the validator risks missing its proposal slot whenever round 1 fails (the block must propagate within 4000ms after slot start).
 
 Where the auction window sits in the slot is what determines MEV capture — bid value grows as the slot ages, so later auction windows yield higher-value bids on average, subject to staying within this deadline.
 
@@ -113,7 +113,7 @@ SSV's `proposalSoftTimeout` (default 1800ms, defined in `beacon/goclient/options
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, and 1600ms — four chances per relay, with ~200ms RTT margin to the cutoff.
 
-Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms (Example A) to ~2150ms. Workable for healthy clusters but leaves less buffer for latency variance — use only after baselining your stack's QBFT and submission timings.
+Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms (Example A) to ~2150ms. The ~2150ms budget is below the ~2700ms required to fit the worst-case 2-round QBFT scenario (2000ms round-1 timer + ~350ms round 2 + ~150ms signing + ~200ms submission). Example B accepts that round 1 must succeed for the slot — if round 1 fails, the slot is missed. Use only after baselining your stack's round-1 success rate.
 
 **commit-boost** (TOML):
 ```toml
@@ -160,7 +160,7 @@ Bid value grows through the slot: more transaction order flow becomes available,
 - `QBFT + post-consensus signing + submission < 4000ms − late_in_slot_time_ms − ~70ms` (the ~70ms covers BN→SSV transport and pre-QBFT blinding, both of which happen after the PBS cutoff and before QBFT can start). The block must propagate by 4000ms after slot start.
 - A safety margin for variance in QBFT consensus, signing, and submission latencies. An unlucky combination of slower-than-typical components can add several hundred ms to the budget; cutoffs much beyond ~2000ms tighten the slot enough that occasional spikes risk missing the deadline.
 
-Example A's ~1050ms cutoff is the recommended starting point — equivalent to legacy `ProposerDelay = 1000ms` in terms of when relay bids are sampled. Example B's 1800ms cutoff is the aggressive upper end — fully uses SSV's allocated header-fetch budget for maximum MEV capture, at the cost of less variance margin.
+Example A's ~1050ms cutoff is the recommended starting point — equivalent to legacy `ProposerDelay = 1000ms` in terms of when relay bids are sampled, and fits the worst-case 2-round QBFT scenario. Example B's 1800ms cutoff is the aggressive upper end — fully uses SSV's allocated header-fetch budget for maximum MEV capture, but accepts that round 1 must succeed (the slot is missed if round 1 fails).
 
 ### What to measure first
 
@@ -222,16 +222,16 @@ Plugging in realistic numbers (typical case where round 1 succeeds):
 ```
 RANDAOTime               ≈ 100ms
 MEVBoostRelayTimeout     ≈ 200ms
-QBFTRound1Time           ≈ 350ms
-QBFTRound2Time           ≈ 0ms    (typically not needed)
+QBFTRound1Time           ≈ 2000ms (worst case: round-1 timer expires)
+QBFTRound2Time           ≈ 350ms  (round 2 succeeds after round 1 failure)
 PostConsensusSigningTime ≈ 150ms
 BlockSubmissionTime      ≈ 200ms
-ProposerDelay            = 4000ms − (sum above) ≈ 3000ms
+ProposerDelay            = 4000ms − (sum above) ≈ 1000ms
 ```
 
 **Note:** the `MEVBoostRelayTimeout ≈ 200ms` figure above assumes the legacy single-shot PBS behavior, where mev-boost queries each relay once at the moment SSV asks. A timing-games-capable PBS uses a much larger budget here, in which case the SSV-side `ProposerDelay` lever isn't useful — see the PBS-side timing games section above.
 
-The 3000ms figure is the theoretical maximum assuming median latencies for every component. In practice, QBFT consensus, BN submission, and relay payload-reveal latencies all have meaningful variance — an unlucky combination can easily add several hundred ms. We consider **~1200ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet; the ~1800ms of headroom is buffer against this variance. Going beyond risks missed block proposals.
+The 1000ms figure is the theoretical maximum assuming median latencies for every component and the worst-case 2-round QBFT scenario. In practice, round-2 consensus, signing, and submission latencies all have meaningful variance — an unlucky combination can easily add several hundred ms. We consider **~800ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet; the ~200ms of headroom is buffer against this variance. Going beyond risks missed block proposals whenever round 1 fails.
 
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 
