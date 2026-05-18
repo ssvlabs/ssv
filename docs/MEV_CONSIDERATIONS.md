@@ -210,7 +210,7 @@ Testnet relays (Hoodi, Holesky, Sepolia) typically run reference or synthetic bu
 
 ### Multi-BN caveat
 
-The parallel-fetch logic in `beacon/goclient/proposer.go` exits as soon as one BN returns a blinded block, even if a slower BN would have returned a higher-scoring bid. With timing-games-capable PBSes on multiple BNs, the fastest BN's bid effectively wins regardless of score. Worth knowing if you're running redundant BN setups and expecting cross-BN bid scoring to matter.
+Under the default safe path (and the legacy path), the parallel-fetch logic in `beacon/goclient/proposer.go` exits as soon as one BN returns a blinded block, even if a slower BN would have returned a higher-scoring bid. With timing-games-capable PBSes on multiple BNs, the fastest BN's bid effectively wins regardless of score. To get true cross-BN bid scoring, opt into the MEV-optimized path by setting `ProposalSoftDeadline` — see [Configuration paths](#configuration-paths).
 
 ## Configuration paths
 
