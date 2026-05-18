@@ -55,6 +55,17 @@ type Protocol struct {
 	// for adapter-level unit tests exercising the spec's B_k decomposition
 	// boundary; the stress driver doesn't register this variant.
 	MaxMEVFetch bool
+
+	// NoRefloodDelay forces the broadcast budget to use RefloodDelay=0
+	// regardless of cfg.RefloodDelay. Models the "fully-meshed cluster,
+	// eager push reliable" assumption (OBFT.md §Setting `RefloodDelay=0`
+	// path) — same protocol, no schedule-level cushion for lazy-push
+	// recovery. Lets the stress driver run OBFT vs OBFT-with-RD=0 on
+	// identical scenarios, directly quantifying how much the
+	// HeartbeatInterval-sized cushion in `B_0 = 2·BTT + RefloodDelay`
+	// is worth under each operating point. Default false: variant
+	// respects cfg.RefloodDelay (Healthy: 700ms; adversarial: 0).
+	NoRefloodDelay bool
 }
 
 func (p Protocol) Name() string {
@@ -116,8 +127,14 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// eager-push, no schedule-level reflood absorption. Production-
 	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
 	// to match libp2p heartbeat), mirroring the production SSV adapter's
-	// DefaultRefloodDelay.
-	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, bttEff, cfg.RefloodDelay, tCommit)
+	// DefaultRefloodDelay. NoRefloodDelay (variant knob) forces 0
+	// regardless — used by the OBFT-RD0 variant to probe the
+	// cushion's value on otherwise-identical scenarios.
+	refloodDelay := cfg.RefloodDelay
+	if p.NoRefloodDelay {
+		refloodDelay = 0
+	}
+	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, bttEff, refloodDelay, tCommit)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: obft adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)

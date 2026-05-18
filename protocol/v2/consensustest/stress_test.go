@@ -265,6 +265,16 @@ func TestStress(t *testing.T) {
 	//     = 6·bttEff at tightened per-emission PhaseBudget = 1·bttEff) and
 	//     the production SSV variant (fixed 2s RT).
 	protocols := []ct.Protocol{
+		// OBFT-RD0 is the canonical OBFT with RefloodDelay forced to 0 —
+		// models the "fully-meshed cluster, eager push reliable" assumption
+		// (OBFT.md §Setting `RefloodDelay=0` path). Listed before bare OBFT
+		// so the report shows the no-cushion variant immediately above the
+		// with-cushion baseline, making the per-cell RefloodDelay-cost
+		// delta read directly. Identical to OBFT on adversarial scenarios
+		// (which already set cfg.RefloodDelay=0); the interesting cells
+		// are Healthy on a degraded p2p_profile, where bare OBFT's 700ms
+		// cushion in B_0 buys the lazy-push absorption that OBFT-RD0 lacks.
+		obftadapter.Protocol{VariantName: "OBFT-RD0", NoRefloodDelay: true},
 		obftadapter.Protocol{},
 		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
 		obftadapter.Protocol{VariantName: "OBFTx3", BTTMultiplier: 3},

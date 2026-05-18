@@ -1046,6 +1046,45 @@ func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 		"miss must carry a reason for the failure-breakdown table")
 }
 
+// TestAdapter_NoRefloodDelay_VariantBehavior pins the OBFT-RD0 variant
+// (NoRefloodDelay: true) against bare OBFT under healthy + on-budget
+// direct delivery — the regime where the schedule difference is a
+// clean, deterministic shift rather than a randomized hit-or-miss.
+//
+// The variant's only mechanism is `B_0 = 2·BTT` instead of
+// `2·BTT + RefloodDelay`. T_commit is back-derived from RelayCutoff
+// (not from B_0), so it's unchanged. The primary's broadcast deadline
+// `T_broadcast_max_0 = T_commit − B_0` lands exactly RefloodDelay
+// LATER under OBFT-RD0 — the MEV-fresh-fetch property the variant
+// buys. Under the early-emit rule the cluster's DecisionTime cascades
+// by the same gap (operators emit Phase-2 commits on L_0 observation,
+// so a later broadcast → later decision).
+//
+// The "OBFT-RD0 misses under degraded mesh" effect — where bare OBFT's
+// RefloodDelay cushion absorbs the lazy-push recovery RTT and OBFT-RD0
+// doesn't — is a STATISTICAL property visible in the stresstest
+// sweep's Healthy + slow / heavy_tail / slow_heavy_tail cells, not a
+// deterministic outcome of one calibration. The gap between the two
+// variants in those cells quantifies the cushion's value at the
+// chosen p2p_profile.
+func TestAdapter_NoRefloodDelay_VariantBehavior(t *testing.T) {
+	cfgHealthy := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfgHealthy.RefloodDelay = 700 * time.Millisecond // matches Healthy scenario default
+	cfgHealthy.Network = ct.ConstantDelay{D: 200 * time.Millisecond}
+
+	outOBFT, err := obftadapter.Protocol{}.Run(cfgHealthy)
+	require.NoError(t, err)
+	outRD0, err := obftadapter.Protocol{VariantName: "OBFT-RD0", NoRefloodDelay: true}.Run(cfgHealthy)
+	require.NoError(t, err)
+
+	require.True(t, outOBFT.Decided, "bare OBFT must decide on healthy on-budget mesh")
+	require.True(t, outRD0.Decided, "OBFT-RD0 must decide on healthy on-budget mesh — eager push reaches everyone, no RefloodDelay needed")
+	require.Equal(t, 700*time.Millisecond, outRD0.DecidingBroadcastTime-outOBFT.DecidingBroadcastTime,
+		"the broadcast-time gap should equal the RefloodDelay subtracted from B_0 exactly (T_commit − B_0 lands 700ms later for OBFT-RD0)")
+	require.Equal(t, 700*time.Millisecond, outRD0.DecisionTime-outOBFT.DecisionTime,
+		"DecisionTime gap equals the broadcast-time gap (early-emit fires on L_0 observation; cluster reaches quorum 700ms later for OBFT-RD0)")
+}
+
 func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }
 
 func operatorEvidence(perOp map[ct.OperatorID]ct.OperatorOutcome) map[ct.OperatorID]map[string]int {

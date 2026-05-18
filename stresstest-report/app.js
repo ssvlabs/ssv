@@ -26,8 +26,11 @@
 // "x<n>" multiplier variants share the family hue but with a noticeably
 // lighter / desaturated tint that gets paler as the multiplier grows,
 // so x2 reads as "slightly looser sibling of canonical" and x3 reads
-// as "even looser".
+// as "even looser". OBFT-RD0 uses a DARKER OBFT-hue tint (the
+// no-RefloodDelay variant is structurally tighter than canonical OBFT,
+// not looser).
 const PROTOCOL_COLORS = {
+  'OBFT-RD0':   '#c05621', // dark orange — tighter (no-RefloodDelay) OBFT
   OBFT:         '#ed8936', // light orange
   OBFTx2:       '#f6ad55', // paler orange — looser OBFT (×2)
   OBFTx3:       '#fbd38d', // very pale orange — much-looser OBFT (×3)
@@ -172,7 +175,7 @@ const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
 const LS_KEY_BTT = 'stresstest-selected-btt';
 
 function loadActiveProtocols(allProtocols) {
-  const DEFAULT_ACTIVE = new Set(['OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV', 'PSigs']);
+  const DEFAULT_ACTIVE = new Set(['OBFT-RD0', 'OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV', 'PSigs']);
   const stored = localStorage.getItem(LS_KEY_PROTOCOLS);
   if (stored) {
     try {
