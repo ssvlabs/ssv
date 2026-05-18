@@ -87,6 +87,13 @@ const REFLOOD_DELAY_HEALTHY_MS = 700;
 //   2abOBFT-family    (anchor = T_verdict_start = 3800 − 5·BTTeff)
 //   B_0 = 2·BTTeff + RefloodDelay
 //   BTTeff = BTT × multiplier (1/2/3 for canonical/x2/x3)
+//   RefloodDelay = 700ms (Healthy default) for all variants except
+//                  OBFT-RD0, which forces RefloodDelay=0 in its
+//                  broadcast budget. Skipping the variant-aware
+//                  RefloodDelay would silently under-approximate
+//                  OBFT-RD0's boundary by 700ms and force the UI
+//                  into exact-match lookups when the BFT_start=0
+//                  cell would have been correct.
 // where the 3800 = RelayCutoff − HeaderSubmitHeadroom − ε_3 − phase3JitterBuffer
 // constants live in obft/adapter.go.
 //
@@ -98,7 +105,8 @@ function obftFamilyApproxBoundaryMs(protocolName, btt) {
   if (isPipelineShiftProtocol(protocolName)) return 0;
   const mult = bttMultiplierForVariant(protocolName);
   const bttEff = btt * mult;
-  const b0 = 2 * bttEff + REFLOOD_DELAY_HEALTHY_MS;
+  const refloodDelay = protocolName === 'OBFT-RD0' ? 0 : REFLOOD_DELAY_HEALTHY_MS;
+  const b0 = 2 * bttEff + refloodDelay;
   const anchor = protocolName.startsWith('2abOBFT')
     ? 3800 - 5 * bttEff   // T_verdict_start
     : 3800 - bttEff;      // T_commit
@@ -1946,19 +1954,22 @@ function protocolColor(name) {
 }
 
 // sortProtocolsByFamily reorders the protocol list so variants sit next
-// to their canonical base — e.g.
-//   ["OBFT","2abOBFT","QBFT","QBFT-SSV","OBFTx2","OBFTx3"]
+// to their canonical base, preserving Go-side registration order
+// WITHIN each family. E.g.
+//   ["OBFT","2abOBFT","OBFTx2","QBFT","OBFTx3"]
 // becomes
-//   ["OBFT","OBFTx2","OBFTx3","2abOBFT","QBFT","QBFT-SSV"]
-// Variant suffixes follow two conventions: "x<n>" (multiplier variants
-// like OBFTx2) and "-<suffix>" (variant flavors like QBFT-SSV). Family
-// order itself is preserved from first-occurrence in the input so the
-// data-driven ordering (whichever protocol Go registered first) wins;
-// we just regroup variants under their parent.
+//   ["OBFT","OBFTx2","OBFTx3","2abOBFT","QBFT"]
+// Family identity is the canonical name minus an optional "x<n>"
+// (numeric multiplier suffix like OBFTx2) or "-<suffix>" (variant
+// flavor like QBFT-SSV / OBFT-RD0). Family order in the output is
+// first-occurrence in the input; within each family, variants appear
+// in input order.
 //
-// Within a family, sort order is: canonical (=== family) first, then
-// numeric "x<n>" multiplier variants in ascending n, then "-suffix"
-// variants in lexical order. Stable for input ties.
+// Trusting Go-side registration order matters: variant placement
+// communicates intent. E.g. OBFT-RD0 is registered before bare OBFT
+// in stress_test.go so the report shows the no-cushion variant
+// immediately above the with-cushion baseline. A within-family
+// re-sort here would silently override that intent — so we don't.
 function sortProtocolsByFamily(protocols) {
   if (!Array.isArray(protocols) || protocols.length <= 1) return protocols;
   const familyOf = (name) => {
@@ -1969,15 +1980,6 @@ function sortProtocolsByFamily(protocols) {
     const i = name.indexOf('-');
     return i < 0 ? name : name.slice(0, i);
   };
-  // Variant sort key: [canonical-rank, multiplier-or-0, suffix-string].
-  // Canonical=0 wins everything; x<n> variants sort by n; hyphenated
-  // variants sort lexically after numeric variants.
-  const variantKey = (name, fam) => {
-    if (name === fam) return [0, 0, ''];
-    const xm = name.match(/^.+?x(\d+)$/);
-    if (xm) return [1, parseInt(xm[1], 10), ''];
-    return [2, 0, name];
-  };
   const families = []; // first-occurrence order
   const byFamily = new Map();
   protocols.forEach((p) => {
@@ -1986,20 +1988,10 @@ function sortProtocolsByFamily(protocols) {
       families.push(fam);
       byFamily.set(fam, []);
     }
-    byFamily.get(fam).push(p);
+    byFamily.get(fam).push(p); // input order preserved within family
   });
   const out = [];
-  families.forEach((fam) => {
-    const group = byFamily.get(fam);
-    group.sort((a, b) => {
-      const ka = variantKey(a, fam);
-      const kb = variantKey(b, fam);
-      if (ka[0] !== kb[0]) return ka[0] - kb[0];
-      if (ka[1] !== kb[1]) return ka[1] - kb[1];
-      return ka[2] < kb[2] ? -1 : ka[2] > kb[2] ? 1 : 0;
-    });
-    out.push(...group);
-  });
+  families.forEach((fam) => out.push(...byFamily.get(fam)));
   return out;
 }
 

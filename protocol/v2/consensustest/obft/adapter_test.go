@@ -1083,6 +1083,31 @@ func TestAdapter_NoRefloodDelay_VariantBehavior(t *testing.T) {
 		"the broadcast-time gap should equal the RefloodDelay subtracted from B_0 exactly (T_commit − B_0 lands 700ms later for OBFT-RD0)")
 	require.Equal(t, 700*time.Millisecond, outRD0.DecisionTime-outOBFT.DecisionTime,
 		"DecisionTime gap equals the broadcast-time gap (early-emit fires on L_0 observation; cluster reaches quorum 700ms later for OBFT-RD0)")
+
+	// Adversarial-parity invariant: when cfg.RefloodDelay is already 0
+	// (the default for adversarial scenarios), the NoRefloodDelay flag
+	// is a no-op — OBFT-RD0 must produce a bit-identical outcome to
+	// bare OBFT. Pins that the variant only affects broadcastBudget[0]
+	// sizing via RefloodDelay; any future change that makes the flag
+	// touch other adapter paths would surface here.
+	cfgAdv := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfgAdv.Byz = ct.ByzPattern{Kind: ct.ByzSigmaRefusal, ByzOperators: []ct.OperatorID{4}}
+	// cfgAdv.RefloodDelay stays at the zero default — adversarial
+	// scenarios never opt into the Healthy 700ms cushion.
+
+	outOBFTAdv, err := obftadapter.Protocol{}.Run(cfgAdv)
+	require.NoError(t, err)
+	outRD0Adv, err := obftadapter.Protocol{VariantName: "OBFT-RD0", NoRefloodDelay: true}.Run(cfgAdv)
+	require.NoError(t, err)
+
+	require.Equal(t, outOBFTAdv.Decided, outRD0Adv.Decided,
+		"adversarial scenarios already use RefloodDelay=0 → NoRefloodDelay is a no-op; Decided must match")
+	require.Equal(t, outOBFTAdv.DecidedRound, outRD0Adv.DecidedRound,
+		"adversarial parity: DecidedRound must match between OBFT and OBFT-RD0")
+	require.Equal(t, outOBFTAdv.DecisionTime, outRD0Adv.DecisionTime,
+		"adversarial parity: DecisionTime must match between OBFT and OBFT-RD0")
+	require.Equal(t, outOBFTAdv.DecidingBroadcastTime, outRD0Adv.DecidingBroadcastTime,
+		"adversarial parity: DecidingBroadcastTime must match between OBFT and OBFT-RD0")
 }
 
 func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }
