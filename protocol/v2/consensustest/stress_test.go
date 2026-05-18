@@ -22,8 +22,9 @@ import (
 
 // TestStress is the stress-tier entry point per the catalog-split plan.
 // It runs DefaultSweeps over every catalog scenario opted into
-// ModeStress (currently all 29 — see Phase 2) for the three registered
-// protocols (OBFT / 2abOBFT / QBFT) and writes a `data.js` file
+// ModeStress for the registered protocol families (OBFT family incl.
+// OBFT-RD0 / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFTx2 / x3,
+// QBFT family incl. QBFT-SSV, and PSigs) and writes a `data.js` file
 // consumed by the static UI in `stresstest-report/` (index.html + app.js
 // + styles.css, all tracked in git). Refreshing index.html in a browser
 // re-renders from the new data.js without rerunning this test.
@@ -52,10 +53,13 @@ import (
 //     the Makefile target's docstring for the rationale and how to
 //     override when adversarial CDFs matter).
 //
-// Operating-point env vars (all have Makefile defaults):
+// Operating-point env vars (defaults listed are the test-internal
+// fallbacks for direct `go test` invocation; `make stresstest` sets
+// most of these to a more conservative value — see the Makefile target):
 //
 //   - CLUSTER_SIZES_N — comma-separated cluster sizes ∈ {4, 7}. Default: 4.
-//   - LAYERS_K — comma-separated K values ∈ {2, 3, 4}. Default: 2.
+//   - LAYERS_K — comma-separated K values ∈ {2, 3, 4}. Default: 2,4
+//     (brackets the BFT-liveness floor + SSV's K=N convention at n=4).
 //   - P2P_PROFILES — comma-separated calibrated mesh-hop profile names
 //     for the p2p_baseline sweep's profile axis. Valid values: prod,
 //     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
@@ -68,6 +72,11 @@ import (
 //   - BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
 //     p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
 //     300, 400 per ct.DefaultBaselineBTTValues.
+//   - BFT_STARTS — comma-separated BFT_start values (ms) for the
+//     p2p_baseline sweep's BFT_start axis. Default: 0, 2000, 2400,
+//     2800 per ct.DefaultBaselineBFTStarts. BFT_start > 0 points emit
+//     OBFT-family cells only; pipeline-shift protocols (PSigs / QBFT)
+//     are covered by the BFT_start=0 cell + UI pipeline-shift.
 //
 // Usage:
 //
@@ -248,7 +257,7 @@ func TestStress(t *testing.T) {
 	// from the report without a driver-side change.
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
-	// Two flavor axes:
+	// Three flavor axes:
 	//   - OBFT and 2abOBFT each ship in a canonical (multiplier=1) form
 	//     plus "x2" and "x3" multiplier variants that scale bttEff
 	//     internally. Every BTT-derived budget (Δ_2, primary B_0 = 2·BTT,
@@ -261,6 +270,13 @@ func TestStress(t *testing.T) {
 	//     at the cost of MEV freshness. Network propagation still
 	//     happens at the sweep's actual BTT — the multiplier models
 	//     operator-side pessimism only.
+	//   - OBFT ships an additional OBFT-RD0 variant that forces
+	//     RefloodDelay=0 in the broadcast budget (B_0 = 2·BTT instead
+	//     of 2·BTT + 700ms). Same protocol, no schedule-level cushion
+	//     for lazy-push recovery — the per-cell delta against bare
+	//     OBFT quantifies the RefloodDelay cushion's value at each
+	//     operating point. Listed first in the slice so the report
+	//     renders OBFT-RD0 immediately above bare OBFT.
 	//   - QBFT ships in the research variant (computed RT = 6·PhaseBudget
 	//     = 6·bttEff at tightened per-emission PhaseBudget = 1·bttEff) and
 	//     the production SSV variant (fixed 2s RT).

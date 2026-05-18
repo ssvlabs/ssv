@@ -30,7 +30,7 @@ package consensustest
 //     p2p_instability        (Healthy-only instability-level curve)
 //     Many iterations (baseline / unstable split); stats only. Cross-
 //     (n, K) comparison is done by re-running TestStress with different
-//     CLUSTER_SIZE_N / LAYERS_K values, not by a dedicated sweep.
+//     CLUSTER_SIZES_N / LAYERS_K values, not by a dedicated sweep.
 //
 // A scenario that needs a specific network shape (e.g. MeshFlakiness's
 // PerReceiverDelay, AsymmetricPropagation_*'s per-receiver overrides)

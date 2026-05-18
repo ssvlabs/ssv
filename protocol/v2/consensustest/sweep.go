@@ -11,13 +11,16 @@ import (
 // reports as the axis-tick text (e.g., "n=7", "BTT=400ms",
 // "profile=prod").
 //
-// Fields carries the numeric axis values (K, BTT, p2p_profile, …) for
-// the point in a machine-readable form. Picker-driven UIs (the
-// stresstest-report's K / BTT / p2p_profile pickers in particular)
-// consume Fields to drive lookups by exact value, without parsing the
-// human-readable Label. Keys are uppercase per-axis names: "K", "BTT"
-// (ms), "p2p_profile" (index into ct.P2PProfileNames), "Loss",
-// "BadLinkProb", "SlowOps" — whichever the point varies.
+// Fields carries the numeric axis values (N, K, BTT, p2p_profile, …)
+// for the point in a machine-readable form. Picker-driven UIs (the
+// stresstest-report's N / K / BTT / p2p_profile / p2p_instability /
+// BFT_start pickers in particular) consume Fields to drive lookups
+// by exact value, without parsing the human-readable Label. Keys are
+// the per-axis names — typically capitalized for the cluster-shape
+// axes ("N", "K", "Instability", "BFT_start", "Loss", "BadLinkProb",
+// "SlowOps") and lowercase for the picker-labeled axes ("BTT" (ms),
+// "p2p_profile" (index into ct.P2PProfileNames)) — whichever the
+// point varies. Case is load-bearing: the JS lookup matches exactly.
 type SweepPoint struct {
 	Label  string
 	Config BatchConfig
@@ -102,12 +105,15 @@ var DefaultBaselineBTTValues = []time.Duration{
 }
 
 // DefaultBaselineBFTStarts — the BFT_start axis the p2p_baseline sweep
-// adds for OBFT-family protocols. UI picker values in [0, 1600]ms reuse
-// the BFT_start=0 cell (BFTStart < T_commit − B_0 ≈ 2700ms at BTT=100ms
-// → no schedule change in that range); values ≥ 2000ms require a real
-// simulation. Driver-overridable via BFT_STARTS env var. PSigs and QBFT
-// are skipped at BFT_start > 0 (the UI's pipeline-shift covers them
-// from the BFT_start=0 cell).
+// adds for OBFT-family protocols. UI picker values that fall under
+// each cell's per-variant approximation boundary (computed in JS via
+// obftFamilyApproxBoundaryMs — for bare OBFT at BTT=100ms / Healthy
+// RefloodDelay=700ms, the boundary is `T_commit − B_0 ≈ 2800ms`)
+// reuse the BFT_start=0 cell as a close-to-ground-truth approximation;
+// picker values above the per-cell boundary require a matching
+// pre-computed cell or render n/a. Driver-overridable via BFT_STARTS
+// env var. PSigs and QBFT are skipped at BFT_start > 0 (the UI's
+// pipeline-shift covers them from the BFT_start=0 cell).
 var DefaultBaselineBFTStarts = []time.Duration{
 	0,
 	2000 * time.Millisecond,
@@ -156,7 +162,7 @@ var DefaultBaselineBFTStarts = []time.Duration{
 // run over the same Scenarios / Protocols matrix; only the per-point
 // Network / SimConfig (and the per-sweep axis) differ. To compare
 // across cluster sizes or layer counts, re-run the driver with
-// different CLUSTER_SIZE_N / LAYERS_K values; WriteReportData merges
+// different CLUSTER_SIZES_N / LAYERS_K values; WriteReportData merges
 // the new (n, k) slice into the existing data.js instead of overwriting.
 //
 // Every emitted SweepPoint.Fields carries N and K explicitly so points

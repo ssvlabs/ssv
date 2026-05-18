@@ -112,9 +112,9 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (7 curated sweeps × OBFT family + 2abOBFT family + QBFT family ×
-# per-scenario iterations) and writes / merges data.js into REPORT_DIR
-# (default ./stresstest-report)
+# (6 curated sweeps × OBFT family + 2abOBFT family + QBFT family +
+# PSigs × per-scenario iterations) and writes / merges data.js into
+# REPORT_DIR (default ./stresstest-report)
 # — consumed by the static UI (index.html + app.js + styles.css)
 # already in that folder.
 #
@@ -135,11 +135,15 @@ consensustest-with-real-bls:
 # fitted to real SSV gossipsub telemetry; the synthetic-axis sweeps
 # retain LogNormal anchors so the parameter axis stays meaningful.
 # See protocol/v2/consensustest/sweep.go for full docs):
-#   - p2p_baseline          (BTT × profile × instability = 5 × 6 × 5 =
-#                            150 points per run; heatmap source. The
-#                            instability axis applies only to the
-#                            Baseline-group scenario, Healthy — non-
-#                            Baseline rows are instability-invariant.)
+#   - p2p_baseline          (BTT × profile × instability × BFT_start;
+#                            heatmap source. The instability axis
+#                            applies only to the Baseline-group
+#                            scenario, Healthy — non-Baseline rows
+#                            are instability-invariant. BFT_start > 0
+#                            emits OBFT-family cells only; pipeline-
+#                            shift protocols (PSigs / QBFT) are
+#                            covered by the BFT_start=0 cell + UI
+#                            pipeline-shift.)
 #   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
 #   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
 #   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
@@ -157,18 +161,26 @@ consensustest-with-real-bls:
 #   - CLUSTER_SIZES_N (default 4) — comma-separated cluster sizes ∈ {4, 7}.
 #     Multiple values → one run per size, all merging into the same data.js.
 #   - LAYERS_K        (default 2) — comma-separated K values ∈ {2, 3, 4}.
-#     Brackets the BFT-liveness floor (K=2 at n=4) and SSV's K=N convention.
-#     A K value is skipped for any n where K < MinK(n). Override to e.g.
-#     `LAYERS_K=2,3,4` to fill in the matrix.
+#     Defaults to the BFT-liveness floor at n=4 (K=2 = f+1, per the
+#     repo's current default K convention). A K value is skipped for
+#     any n where K < MinK(n). Override to e.g. `LAYERS_K=2,3,4` to
+#     fill in the matrix.
 #   - P2P_PROFILES    (default = all six) — comma-separated calibrated
 #     mesh-hop profile names. Valid: prod, stage1, stage2, slow,
 #     heavy_tail, slow_heavy_tail. Each name becomes one point in the
-#     BTT × profile × instability cross-product, with both cfg.Network
-#     and cfg.Mesh.HopDelay sourced from the named profile.
+#     BTT × profile × instability × BFT_start cross-product, with both
+#     cfg.Network and cfg.Mesh.HopDelay sourced from the named profile.
 #   - BTT_VALUES_MS   (default 100,200,300,400) — comma-separated BTT
 #     values in ms. Shared by the p2p_baseline and p2p_increasing_BTT
 #     sweeps; drives the protocol's internal timing budgets (the network
 #     itself is the profile, ≈ 1-10 ms in prod).
+#   - BFT_STARTS      (default 0,2000,2400,2800) — comma-separated
+#     BFT_start values in ms for the p2p_baseline sweep's BFT_start
+#     axis. The UI picker exposes more values (0–2800ms in 11 steps)
+#     but values that don't match a sim point use the BFT_start=0 cell
+#     as a close-to-ground-truth approximation when the per-cell clamp
+#     boundary allows; outside that range the UI shows n/a. Pipeline-
+#     shift protocols always pull from BFT_start=0.
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 10000) — high-confidence
@@ -197,18 +209,20 @@ CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300,400
+BFT_STARTS ?=
 # PROTOCOLS — comma-separated protocol names to include in the sweep (e.g.
 # `OBFT,QBFT,PSigs`). Empty (default) runs ALL registered protocols.
 # Names must exactly match Protocol.Name() values defined in stress_test.go.
-PROTOCOLS ?= OBFT,2abOBFT,QBFT,QBFT-SSV
+PROTOCOLS ?= OBFT,OBFT-RD0,2abOBFT,QBFT,QBFT-SSV
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) BFT_STARTS=$(if $(BFT_STARTS),$(BFT_STARTS),<default>) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
 		P2P_PROFILES=$(P2P_PROFILES) \
 		BTT_VALUES_MS=$(BTT_VALUES_MS) \
+		BFT_STARTS=$(BFT_STARTS) \
 		PROTOCOLS=$(PROTOCOLS) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \

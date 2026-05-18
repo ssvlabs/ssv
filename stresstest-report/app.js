@@ -146,7 +146,12 @@ let selectedScenario = 'Healthy';
 // so the pickers may surface multiple values for both axes. Greyed-out
 // buttons indicate (n, K) combinations the user hasn't generated yet.
 let selectedN = 4;
-let selectedK = 4;
+// First-load K default. Matches `make stresstest`'s `LAYERS_K=2`
+// (BFT-liveness minimum at n=4 = f+1), so the page opens on the most
+// commonly-shipped operating point. `initBaselineSelections` snaps to
+// the nearest available value if the user's data.js was generated
+// with a different K set, so this default never blocks rendering.
+let selectedK = 2;
 // BTT picker default. localStorage-backed (LS_KEY_BTT below) so the
 // user's choice survives reloads; persisted on every picker click.
 // First-load default = 100 (ms), matching the most commonly inspected

@@ -60,7 +60,7 @@ func TestRunSweep_Smoke(t *testing.T) {
 	}
 }
 
-// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the seven
+// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the six
 // curated sweeps with the documented names and the expected point
 // counts. Each run is one (n, k) slice; reruns at different (n, k)
 // merge into the report. Doesn't actually RUN the sweeps (would take
@@ -230,8 +230,9 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 				}
 			}
 			require.Truef(t, anyOK,
-				"sweep %s pt %q: ALL protocols out of envelope at K=%v BTT=%v σ=%v — the UI has nothing to render at this baseline point",
-				sw.Name, pt.Label, pt.Fields["K"], pt.Fields["BTT"], pt.Fields["Sigma"])
+				"sweep %s pt %q: ALL protocols out of envelope at K=%v BTT=%v profile=%v instab=%v BFT_start=%v — the UI has nothing to render at this baseline point",
+				sw.Name, pt.Label, pt.Fields["K"], pt.Fields["BTT"],
+				pt.Fields["p2p_profile"], pt.Fields["Instability"], pt.Fields["BFT_start"])
 			totalPoints++
 		}
 	}
