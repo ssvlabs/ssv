@@ -67,6 +67,12 @@ func scoreInspector(logger *zap.Logger,
 
 		// Log score for each peer
 		for pid, peerScores := range scores {
+			_, highlightedPeer := peerObserver.Match(pid)
+			shouldLog := inspections%logFrequency == 0
+			if !highlightedPeer && !shouldLog {
+				continue
+			}
+
 			// Store topic snapshot for topics with invalid messages
 			filtered := []*topicScoreSnapshot{}
 			for topic, snapshot := range peerScores.Topics {
@@ -157,14 +163,13 @@ func scoreInspector(logger *zap.Logger,
 			if peerScores.Score < -1000 {
 				fields = append(fields, zap.Bool("low_score", true))
 			}
-			peerObserver.Observe(context.Background(), logger, "pubsub_peer_score", pid, fields...)
 
-			if inspections%logFrequency != 0 {
-				// Don't log yet.
-				continue
+			if highlightedPeer {
+				peerObserver.Observe(context.Background(), logger, "pubsub_peer_score", pid, fields...)
 			}
-
-			logger.Debug("peer scores", fields...)
+			if shouldLog {
+				logger.Debug("peer scores", fields...)
+			}
 
 			// err := scoreIdx.Score(pid, scores...)
 			// if err != nil {

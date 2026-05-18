@@ -5,6 +5,10 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	zapobserver "go.uber.org/zap/zaptest/observer"
+
+	ssvvalidation "github.com/ssvlabs/ssv/message/validation"
 )
 
 const attackSimulatorPublicKey = "0x02006c0a9a7e965cb22399987a5a748e90bcc4cb76c461b5d62643c2f2f112055e"
@@ -48,4 +52,55 @@ func TestNew_EmptyConfigDisablesObserver(t *testing.T) {
 	observer, err := New(Config{})
 	require.NoError(t, err)
 	require.Nil(t, observer)
+}
+
+func TestObserveValidation_LogsHighlightedPeerAndFields(t *testing.T) {
+	observer, err := New(Config{
+		Label: "attack-simulator",
+		Peers: attackSimulatorPublicKey,
+	})
+	require.NoError(t, err)
+
+	var pid peer.ID
+	for highlightedPeer := range observer.peers {
+		pid = highlightedPeer
+	}
+
+	core, logs := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(core)
+	observer.ObserveValidation(t.Context(), logger, pid, "ssv.v2.42", "reject", 128, zap.String("reason", "invalid role"))
+
+	require.Len(t, logs.All(), 1)
+	require.Equal(t, "p2p highlighted peer event", logs.All()[0].Message)
+	fields := logs.All()[0].ContextMap()
+	require.Equal(t, true, fields["p2p_highlight"])
+	require.Equal(t, "attack-simulator", fields["p2p_highlight_label"])
+	require.Equal(t, "pubsub_message_validated", fields["p2p_highlight_event"])
+	require.Equal(t, pid.String(), fields["peer_id"])
+	require.Equal(t, "ssv.v2.42", fields["topic"])
+	require.Equal(t, "reject", fields["validation_result"])
+	require.Equal(t, int64(128), fields["payload_size"])
+	require.Equal(t, "invalid role", fields["reason"])
+}
+
+func TestObserveSSVValidation_UsesProvidedLogger(t *testing.T) {
+	observer, err := New(Config{Peers: attackSimulatorPublicKey})
+	require.NoError(t, err)
+
+	var pid peer.ID
+	for highlightedPeer := range observer.peers {
+		pid = highlightedPeer
+	}
+
+	core, logs := zapobserver.New(zap.InfoLevel)
+	logger := zap.New(core)
+	observer.ObserveSSVValidation(t.Context(), logger, ssvvalidation.SSVValidationEvent{
+		PeerID:  pid,
+		Outcome: ssvvalidation.SSVValidationAccepted,
+		Reason:  "valid",
+	})
+
+	require.Len(t, logs.All(), 1)
+	require.Equal(t, "p2p highlighted peer ssv validation", logs.All()[0].Message)
+	require.Equal(t, ssvvalidation.SSVValidationAccepted, logs.All()[0].ContextMap()["ssv_validation_result"])
 }

@@ -49,12 +49,8 @@ func NewConnHandler(
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
-	peerObservers ...*peertrace.Observer,
+	peerObserver *peertrace.Observer,
 ) ConnHandler {
-	var peerObserver *peertrace.Observer
-	if len(peerObservers) > 0 {
-		peerObserver = peerObservers[0]
-	}
 	return &connHandler{
 		ctx:                 ctx,
 		logger:              logger,

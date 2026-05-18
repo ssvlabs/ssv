@@ -153,11 +153,12 @@ func (o *Observer) ObserveValidation(
 		return
 	}
 
-	validationFields := []zap.Field{
+	validationFields := make([]zap.Field, 0, 3+len(fields))
+	validationFields = append(validationFields,
 		zap.String("topic", topic),
 		zap.String("validation_result", outcome),
 		zap.Int("payload_size", payloadSize),
-	}
+	)
 	validationFields = append(validationFields, fields...)
 	o.Observe(ctx, logger, "pubsub_message_validated", pid, validationFields...)
 
@@ -169,10 +170,13 @@ func (o *Observer) ObserveValidation(
 	))
 }
 
-func (o *Observer) ObserveSSVValidation(ctx context.Context, event ssvvalidation.SSVValidationEvent) {
+func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger, event ssvvalidation.SSVValidationEvent) {
 	match, ok := o.Match(event.PeerID)
 	if !ok {
 		return
+	}
+	if logger == nil {
+		logger = zap.NewNop()
 	}
 
 	logFields := []zap.Field{
@@ -184,7 +188,7 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, event ssvvalidation
 		zap.String("ssv_validation_result", event.Outcome),
 		zap.String("ssv_validation_reason", event.Reason),
 		zap.String("role", event.Role.String()),
-		zap.Uint64("role_id", uint64(event.Role)),
+		zap.Int32("role_id", int32(event.Role)),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(event.SSVMessageType)),
 		zap.Uint64("slot", uint64(event.Slot)),
 		zap.String("duty_executor_id", hex.EncodeToString(event.DutyExecutorID)),
@@ -204,7 +208,7 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, event ssvvalidation
 	if event.Error != "" {
 		logFields = append(logFields, zap.String("ssv_validation_error", event.Error))
 	}
-	zap.L().Info("p2p highlighted peer ssv validation", logFields...)
+	logger.Info("p2p highlighted peer ssv validation", logFields...)
 
 	highlightedPeerSSVValidationsCounter.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("ssv.p2p.highlight.label", o.label),

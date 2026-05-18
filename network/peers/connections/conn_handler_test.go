@@ -33,6 +33,7 @@ func TestConnHandlerHandleOutboundConnection(t *testing.T) {
 		connIdx,
 		peerInfos,
 		discoveredPeers,
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -66,6 +67,7 @@ func TestConnHandlerHandleOutboundConnectionHandshakeFailureDisconnects(t *testi
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -99,6 +101,7 @@ func TestConnHandlerHandleOutboundConnectionRejectsAtLimit(t *testing.T) {
 		&mock.MockConnectionIndex{LimitValue: true},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -135,6 +138,7 @@ func TestConnHandlerHandleDeduplicatesConcurrentOutboundHandshakes(t *testing.T)
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -183,6 +187,7 @@ func TestConnHandlerHandleInboundConnectionWaitsForHandshake(t *testing.T) {
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -234,6 +239,7 @@ func TestConnHandlerHandleInboundConnectionRejectsPeerWithoutSharedSubnets(t *te
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -280,6 +286,7 @@ func TestConnHandlerDisconnectedF(t *testing.T) {
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 	bundle := handler.Handle()
 
@@ -313,6 +320,7 @@ func TestConnHandlerHandleIgnoresAlreadyConnectedPeer(t *testing.T) {
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()
@@ -345,6 +353,7 @@ func TestConnHandlerHandleIgnoresAlreadyConnectingPeer(t *testing.T) {
 		&mock.MockConnectionIndex{},
 		peerInfos,
 		ttl.New[peer.ID, discovery.DiscoveredPeer](t.Context(), time.Minute, time.Minute),
+		nil,
 	)
 
 	net := newTestNetwork()

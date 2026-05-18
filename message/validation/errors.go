@@ -227,5 +227,5 @@ func (mv *messageValidator) observeSSVValidation(
 	if err != nil {
 		event.Error = err.Error()
 	}
-	mv.observer.ObserveSSVValidation(ctx, event)
+	mv.observer.ObserveSSVValidation(ctx, mv.logger, event)
 }

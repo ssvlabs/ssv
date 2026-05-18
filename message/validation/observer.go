@@ -5,6 +5,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -32,5 +33,5 @@ type SSVValidationEvent struct {
 
 // SSVValidationObserver receives SSV-level validation decisions.
 type SSVValidationObserver interface {
-	ObserveSSVValidation(context.Context, SSVValidationEvent)
+	ObserveSSVValidation(context.Context, *zap.Logger, SSVValidationEvent)
 }
