@@ -37,13 +37,17 @@ p2p:
 OperatorPrivateKey:
 
 # MEV Configuration (Optional)
-# Duration to wait before requesting block proposal if this operator is proposer-duty Leader.
-# This allows extracting higher MEV by waiting for better bids. Default is 0 (no delay).
-# Recommended starting value: 300ms. See docs/MEV_CONSIDERATIONS.md for details.
+# Recommended approach: configure timing games on the PBS layer (mev-boost v1.11+ launched
+# with -config, or commit-boost). With PBS-side timing games configured, leave ProposerDelay
+# at its default value of 0. See docs/MEV_CONSIDERATIONS.md for details.
+#
+# ProposerDelay is the legacy SSV-side lever — a delay before requesting the block-proposal,
+# extracting higher MEV by waiting for better bids. Use this only when your PBS does not
+# support timing games. Default is 0 (no delay).
 # ProposerDelay: 300ms
 
-# Safety flag to allow ProposerDelay values higher than 1s.
-# WARNING: Values above 1s significantly increase the risk of missing block proposals!
+# Safety flag to allow ProposerDelay values higher than 1000ms.
+# WARNING: Values above 1000ms significantly increase the risk of missing block proposals!
 # Only set to true if you understand the risks and have carefully read the MEV documentation.
 # AllowDangerousProposerDelay: false
 
