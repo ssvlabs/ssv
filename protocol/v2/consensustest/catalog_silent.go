@@ -169,10 +169,13 @@ var scenarioMultiSilent_AllLayers = Scenario{
 	Group: "Silent operators",
 	Modes: []Mode{ModeCorrectness, ModeStress},
 	Apply: func(cfg *SimConfig) {
+		// Force K=N so "all K layers silent" silences every operator-leader
+		// (otherwise at the K=f+1 BFT-min default, only f+1 operators are
+		// leaders and QBFT can round-change to a non-leader operator that
+		// succeeds — defeating the "all silent" intent of this scenario).
+		// Use K=N for cross-protocol like-for-like comparison.
+		cfg.K = cfg.N
 		k := cfg.K
-		if k == 0 {
-			k = DefaultK(cfg.N)
-		}
 		// All K layers silent: K=cluster.K means OnlyHonestLayer=K, so the
 		// "layer < OnlyHonestLayer" check in byzMultiSilent.LeaderBroadcastPlan
 		// fires for every layer in [0, K), silencing every leader.

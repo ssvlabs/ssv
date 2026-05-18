@@ -24,9 +24,11 @@ func TestDefaultBroadcastBudgetSchedule_K3_AtConfigA(t *testing.T) {
 	require.Equal(t, want, got)
 }
 
-// TestDefaultBroadcastBudgetSchedule_K4_AtConfigA verifies the K=4 default
-// with RefloodDelay=DefaultRefloodDelay (700ms). L_0 = 2·BTT + RefloodDelay;
-// backups L_1..L_3 all = T_commit. Production deployment's exact schedule.
+// TestDefaultBroadcastBudgetSchedule_K4_AtConfigA verifies the K=4 up-tier
+// schedule with RefloodDelay=DefaultRefloodDelay (700ms). L_0 = 2·BTT +
+// RefloodDelay; backups L_1..L_3 all = T_commit. K=4 is the up-tier
+// deployment config (deeper fall-through); the post-flip default is K=2
+// (= f+1 BFT-min). This test exercises the K=4 schedule shape.
 func TestDefaultBroadcastBudgetSchedule_K4_AtConfigA(t *testing.T) {
 	got, err := DefaultBroadcastBudgetSchedule(4, DefaultBTT, DefaultRefloodDelay, DefaultTCommit)
 	require.NoError(t, err)
@@ -141,21 +143,21 @@ func TestConfigForCluster_NilOverrides(t *testing.T) {
 	require.Equal(t, DefaultK, cfg.K(), "nil overrides → DefaultK")
 }
 
-// TestConfigForCluster_KDerivedFromClusterSize — for n=10 (f=3) and
-// n=13 (f=4) the BFT-liveness floor (K ≥ f+1) exceeds DefaultK=4.
-// Production callers must set the K override; without it ConfigForCluster
-// rejects. This test confirms the n=10/n=13 paths work when K is set
-// correctly (validates the BroadcastBudget schedule's length-matches-K
-// invariant at those K values).
+// TestConfigForCluster_KDerivedFromClusterSize — for n ≥ 7 (f ≥ 2) the
+// BFT-liveness floor (K ≥ f+1) exceeds DefaultK=2. Production callers must
+// set the K override; without it ConfigForCluster rejects. This test
+// confirms the BFT-min paths work when K is set correctly at each cluster
+// size (validates the BroadcastBudget schedule's length-matches-K
+// invariant at the K=f+1 default values).
 func TestConfigForCluster_KDerivedFromClusterSize(t *testing.T) {
 	cases := []struct {
 		n int
 		k int
 	}{
-		{4, 4},  // f=1, DefaultK
-		{7, 4},  // f=2, K=f+2 (= 4)
-		{10, 5}, // f=3, K=f+2 (= 5)
-		{13, 6}, // f=4, K=f+2 (= 6)
+		{4, 2},  // f=1, K=f+1 default (= DefaultK)
+		{7, 3},  // f=2, K=f+1 BFT-min
+		{10, 4}, // f=3, K=f+1 BFT-min
+		{13, 5}, // f=4, K=f+1 BFT-min
 	}
 	for _, tc := range cases {
 		tc := tc

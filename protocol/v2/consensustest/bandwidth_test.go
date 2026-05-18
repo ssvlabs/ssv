@@ -23,8 +23,14 @@ import (
 // replication across σ-state layers — (K-1) × V bytes per commit in the
 // K=N=4 healthy path — makes Phase-2 the dominant cost; Certificate
 // gossip and Phase-1 bundle add 1 × V per peer-pair each.
+//
+// Forces K=N=4 (up-tier) regardless of the K=f+1 BFT-min default so the
+// bandwidth bands stay anchored to the V-replication-dominated cost
+// model documented above. A separate K=2 bandwidth test could validate
+// the smaller-onion default; this test guards the K=N upper-bound surface.
 func TestBandwidth_Healthy_OBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.K = cfg.N // up-tier — bandwidth bands are K=N-anchored
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided)

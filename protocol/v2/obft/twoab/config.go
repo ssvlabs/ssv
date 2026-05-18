@@ -125,9 +125,16 @@ type Config struct {
 	TCommit time.Duration
 
 	// Delta2a is Δ_2a — the Phase 2a (verdict broadcast) window length.
-	// Per spec §Setting, Δ_2a ≥ 2 BTT is the minimum coherent sizing
-	// (Δ_2a = 1 BTT is broken-by-construction with the late-broadcast
-	// schedule). Recommended for production: Δ_2a = 2 BTT.
+	// Per spec §Setting / §Phase 2a, Δ_2a ≥ 1·BTT + ε_proc is the strict
+	// structural minimum (sub-floor sizings are broken-by-construction
+	// with the late-broadcast schedule: the operator's verdict-broadcast
+	// time T_verdict_max − ε_proc would land before T_verdict_start).
+	// **Recommended for production: `Delta2a = 1·BTT + EpsProc`** (= 250ms
+	// at Config A with BTT=200ms, ε_proc≈50ms). Under the reflood-aware
+	// schedule, late-Phase-1-bundle absorption is provided by `B_0 = 2·BTT
+	// + RefloodDelay` pre-Phase-2a, so Delta2a no longer carries a separate
+	// reflood / late-bundle-absorption cushion — same philosophy as OBFT's
+	// tightened `Delta2 = 1·BTT`.
 	Delta2a time.Duration
 
 	// Delta2b is Δ_2b — the Phase 2b (σ-or-NR commit) window length.
@@ -414,13 +421,16 @@ func (c *Config) Validate() error {
 	if c.TCommit <= 0 {
 		return errors.New("twoab: TCommit must be positive")
 	}
-	// Per spec §Setting: Δ_2a ≥ 2 BTT is the minimum coherent sizing
-	// (Δ_2a = 1 BTT is broken-by-construction with the late-broadcast
-	// schedule — verdict broadcast at TVerdictMax − ε_proc would fall
-	// before Phase 2a begins). This is a structural coherency floor,
+	// Per spec §Setting / §Phase 2a / Verdict propagation budget:
+	// `Delta2a >= 1·BTT + ε_proc` is the strict structural minimum (sub-floor
+	// sizings are broken-by-construction with the late-broadcast schedule:
+	// the operator's verdict-broadcast time `T_verdict_max − ε_proc` would
+	// fall before Phase 2a begins). ε_proc ≈ 50ms per spec — propagation-
+	// independent, same as Eps3. This is a structural coherency floor,
 	// not a BFT-liveness floor — keep enforced.
-	if c.Delta2a < 2*c.BTT {
-		return errors.New("twoab: Delta2a must be >= 2 BTT (minimum coherent sizing per spec §Setting)")
+	const epsProc = 50 * time.Millisecond
+	if c.Delta2a < c.BTT+epsProc {
+		return fmt.Errorf("twoab: Delta2a must be >= 1·BTT + ε_proc = %v (strict structural minimum per spec §Phase 2a / Verdict propagation budget; sub-floor breaks the late-broadcast verdict schedule)", c.BTT+epsProc)
 	}
 	if c.Delta2b <= 0 {
 		return errors.New("twoab: Delta2b must be positive")

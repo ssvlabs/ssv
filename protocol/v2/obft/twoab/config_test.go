@@ -123,17 +123,19 @@ func TestConfig_Validate_RejectsNonPositiveTCommit(t *testing.T) {
 	require.ErrorContains(t, c.Validate(), "TCommit must be positive")
 }
 
-// Δ_2a = 1 BTT is broken-by-construction per spec §Setting — Validate
-// must reject it explicitly, not just "below minimum".
-func TestConfig_Validate_RejectsDelta2aBelowTwoBTT(t *testing.T) {
+// Δ_2a = 1 BTT (no ε_proc) is broken-by-construction per spec §Setting —
+// the late-broadcast time T_verdict_max − ε_proc falls before T_verdict_start.
+// Validate must reject it explicitly.
+func TestConfig_Validate_RejectsDelta2aBelowBTTPlusEpsProc(t *testing.T) {
 	c := healthyConfig()
-	c.Delta2a = c.BTT // = 1 BTT, broken-by-construction
-	require.ErrorContains(t, c.Validate(), "Delta2a must be >= 2 BTT")
+	c.Delta2a = c.BTT // = 1 BTT, below floor of 1·BTT + ε_proc
+	require.ErrorContains(t, c.Validate(), "Delta2a must be >= 1·BTT + ε_proc")
 }
 
-func TestConfig_Validate_AcceptsDelta2aAtTwoBTT(t *testing.T) {
+// Δ_2a = 1·BTT + ε_proc is the strict structural minimum — Validate accepts.
+func TestConfig_Validate_AcceptsDelta2aAtStructuralFloor(t *testing.T) {
 	c := healthyConfig()
-	c.Delta2a = 2 * c.BTT // = 2 BTT, minimum coherent sizing
+	c.Delta2a = c.BTT + 50*time.Millisecond // = 1·BTT + ε_proc, strict structural minimum
 	require.NoError(t, c.Validate())
 }
 

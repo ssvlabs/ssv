@@ -153,9 +153,14 @@ func (c *SimConfig) F() int {
 	return (c.N - 1) / 3
 }
 
-// DefaultK returns SSV's recommended K for cluster size n: K = n. Every
-// operator leads exactly one layer per slot. Mirrors production obft.DefaultK.
-func DefaultK(n int) int { return n }
+// DefaultK returns SSV's recommended K for cluster size n: K = f+1 (the
+// BFT-liveness minimum, where f = (n-1)/3). At n=4 (f=1) this is K=2; at
+// larger n it scales (n=7 → K=3, n=10 → K=4, n=13 → K=5). Mirrors
+// production obft.DefaultK + setup_obft.go's K = max(DefaultK, f+1) rule.
+// Motivated by spec docs/OBFT.md §K-tuning: production testing showed
+// K > f+1 doesn't materially improve outcomes once peer-reflood-V closes
+// the h_V=1 case at L_0.
+func DefaultK(n int) int { return (n-1)/3 + 1 }
 
 // MinK returns the BFT-liveness K floor for cluster size n: f+1 where
 // f = (n-1)/3. Pigeonhole over the f-byz bound guarantees ≥ 1 honest
@@ -498,7 +503,7 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 	return SimConfig{
 		N:                    4,
 		Operators:            operators,
-		K:                    0, // → DefaultK(N=4) = 4 (K = N convention)
+		K:                    0, // → DefaultK(N=4) = 2 (K = f+1 BFT-min)
 		BFTStart:             0,
 		SlotDuration:         12 * time.Second,
 		RelayCutoff:          4 * time.Second,

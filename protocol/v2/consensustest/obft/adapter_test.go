@@ -672,10 +672,16 @@ func TestAdapter_ByzCertWithholding(t *testing.T) {
 // TestAdapter_ByzCrossSigning verifies Rule 1 evidence fires when byz emits
 // BOTH σ AND NR at the same layer. The pattern auto-targets the byz's own
 // leader layer (where silent-leader behavior produces a real NR partial); the
-// adapter then injects a forged σ entry at that layer. At default rotation,
-// op2 leads L_1 — so byz=op2 yields Rule 1 evidence at L_1.
+// adapter then injects a forged σ entry at that layer. Rule 1 requires a
+// non-deepest, non-L_0 layer (L_0's σ is plaintext — fakery is caught by
+// Rule 5 instead; the deepest layer has no NR tag — cross-signing
+// unrepresentable). So this test forces K=4 (up-tier) to exercise an
+// intermediate layer (L_1 or L_2) where Rule 1 is the firing rule.
+// At default rotation height=0, K=4: op2 leads L_1 (intermediate) — byz=op2
+// yields Rule 1 evidence at L_1.
 func TestAdapter_ByzCrossSigning(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.K = 4 // up-tier — Rule 1 requires an intermediate non-deepest, non-L_0 layer
 	cfg.Byz = ct.ByzPattern{
 		Kind:         ct.ByzCrossSigning,
 		ByzOperators: []ct.OperatorID{2},

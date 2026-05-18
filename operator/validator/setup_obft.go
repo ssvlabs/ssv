@@ -63,25 +63,26 @@ func buildOBFTControllerForProposer(
 		committee = append(committee, m.Signer)
 	}
 
-	// Production proposer-duty config: enable per-layer staggered absorption
-	// per spec §Setting / §Application Config A (deeper layers tolerate wider
-	// propagation tails). The K-vs-f bound is max(DefaultK, f+2) where
-	// f = (n-1)/3 — late-leader-resilience requires K ≥ f+2 at each cluster
-	// size (spec §Setting / "Two distinct K bounds"). For n ∈ {4, 7} the
-	// default K=4 already satisfies the bound; n ∈ {10, 13} need K=5 / K=6
-	// respectively. BroadcastBudget must be built with the SAME K so its
-	// length matches ConfigForCluster's expectation.
+	// Production proposer-duty config: K = f+1 (BFT-liveness minimum) per
+	// spec §Setting / §Application — the recommended default post-K=f+1
+	// flip. At n=4 (f=1) this resolves to K=2 (matches DefaultK=2); at
+	// larger n it scales: n=7 → K=3, n=10 → K=4, n=13 → K=5. Trade-off:
+	// no late-leader-resilience backstop at L_{K-1} (a single late-broadcasting
+	// honest leader can foreclose the slot); deployments preferring deeper
+	// fall-through can override DefaultK or pass ConfigOverrides.K explicitly.
+	// BroadcastBudget must be built with the SAME K so its length matches
+	// ConfigForCluster's expectation.
 	//
-	// Reflood-aware schedule: B_k_shallow = (k+2)·BTT + RefloodDelay; deepest
-	// = T_commit. At production defaults (BTT=200ms, RefloodDelay=700ms,
-	// T_commit=3400ms, K=4): [1100, 1300, 1500, 3400]ms. Larger K keeps the
-	// shallow [2·BTT, 3·BTT, 4·BTT]+RefloodDelay head and interpolates intermediate
-	// layers between 4·BTT+RefloodDelay and T_commit per
-	// obftadapter.DefaultBroadcastBudgetSchedule.
+	// Primary-vs-backup schedule (spec §Setting): B_0 = 2·BTT + RefloodDelay
+	// for the MEV-fresh primary; B_1..B_{K-1} = T_commit for backups
+	// (broadcast at BFT_start with deepest-confirmed-parent fetch). At
+	// production defaults (BTT=200ms, RefloodDelay=700ms, T_commit=3400ms),
+	// K=2: [1100, 3400]ms. Larger K extends backups uniformly:
+	// K=3: [1100, 3400, 3400]ms; K=4: [1100, 3400, 3400, 3400]ms.
 	n := len(ssvShare.Committee)
 	f := (n - 1) / 3
 	K := obftadapter.DefaultK
-	if minK := f + 2; K < minK {
+	if minK := f + 1; K < minK {
 		K = minK
 	}
 	broadcastBudget, err := obftadapter.DefaultBroadcastBudgetSchedule(K, obftadapter.DefaultBTT, obftadapter.DefaultRefloodDelay, obftadapter.DefaultTCommit)

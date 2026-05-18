@@ -51,9 +51,16 @@ const (
 	DefaultTCommit     = DefaultRelayCutoff - DefaultHeaderSubmitHeadroom - DefaultJitterBuffer - DefaultEps3 - DefaultDelta2
 
 	// DefaultK is the recommended layer count for SSV proposer duty:
-	// K = n = 4 (every cluster member leads exactly one layer; max
-	// fall-through depth at f = 1).
-	DefaultK = 4
+	// K = f+1 = 2 at n=4 (the BFT-liveness minimum). Motivated by spec
+	// docs/OBFT.md §K-tuning: production testing showed K > f+1 doesn't
+	// materially improve outcomes once peer-reflood-V closes the h_V=1
+	// case at L_0. Trade-off: K=2 has only one fall-through layer (L_0
+	// → L_1), so the late-deepest-layer-leader-broadcast Class A failure
+	// mode at L_1 has no further backstop. Deployments preferring deeper
+	// fall-through can set K ∈ [f+2, n] (up to K=n=4 at n=4) via
+	// ConfigOverrides.K — see docs/OBFT.md §Setting for the K-bounds
+	// discussion.
+	DefaultK = 2
 
 	// DefaultRefloodDelay is the worst-case gossipsub-lazy-push latency
 	// before a retransmission cycle completes, defaulted to SSV's gossipsub
@@ -84,13 +91,17 @@ const (
 //     propagation absorption window — the entire commit budget.
 //
 // At Config A (BTT = 200ms, TCommit = 3600ms, RefloodDelay = 700ms) the
-// K=4 schedule resolves to:
-//   - budget  = [B_0=1100ms, T_commit=3600ms, T_commit, T_commit].
-//   - fetchAt = [153ms, 0, 0, 0]ms — L_0 fetches just past RANDAO_done;
-//     backups fetch at slot start.
+// K=2 default schedule resolves to:
+//   - budget  = [B_0=1100ms, T_commit=3600ms].
+//   - fetchAt = [153ms, 0]ms — L_0 fetches just past RANDAO_done;
+//     backup L_1 fetches at slot start.
 //   - V_0 MEV-fetch budget at iterative-fetch = T_broadcast_max[0] −
 //     fetchAt[0] − buildBuffer = (3600 − 1100) − 153 − 10 = 2337ms.
-//   - V_1..V_3 MEV-fetch ~ 0ms (deepest-confirmed-parent vanilla payloads).
+//   - V_1 MEV-fetch ~ 0ms (deepest-confirmed-parent vanilla payload).
+//
+// K=4 up-tier extends the backup pattern: budget = [1100, 3600, 3600,
+// 3600]ms, fetchAt = [153, 0, 0, 0]ms — all backups (V_1, V_2, V_3) fetch
+// at slot start with deepest-confirmed-parent.
 //
 // FetchAt is RANDAO-anchored (absolute), not BTT-scaled. The primary's
 // 153ms is a small staggering past RANDAO_done; backups fetch at 0 so
@@ -101,11 +112,9 @@ const (
 // budget[K-1] ≥ 2·BTT BFT-min (trivially satisfied since backups = T_commit
 // and T_commit ≥ 2·BTT is independently enforced).
 //
-// Generalizes to K>4 (n=7, n=10, n=13) without per-K tables: L_0 uses the
-// primary defaults; all backups use FetchAt=0 + B_k=T_commit.
-//
-// K=2 is the BFT-liveness minimum at f=1; per spec §Setting it is accepted
-// (the operator/deployment decides whether to use it instead of K ≥ f+2).
+// Generalizes to higher n (n=7 → K=3 default; n=10 → K=4 default;
+// n=13 → K=5 default) per K = f+1 BFT-min rule. L_0 uses the primary
+// defaults; all backups use FetchAt=0 + B_k=T_commit.
 const (
 	primaryFetchDefault        = 153 * time.Millisecond
 	primaryBudgetDefaultBTT100 = 200 // 2.0 BTT — paired with +RefloodDelay added at compute time
@@ -160,13 +169,13 @@ type ConfigOverrides struct {
 	// `B_k` (T_commit-anchored, per spec §Setting). When nil,
 	// ConfigForCluster substitutes DefaultBroadcastBudgetSchedule(K, BTT,
 	// RefloodDelay, T_commit) which produces a non-decreasing schedule
-	// conforming to spec (K=4 Config A: B_0 = 2·BTT + RefloodDelay =
-	// 1100ms; B_1..B_3 = T_commit = 3600ms — backups broadcast at
-	// BFT_start). At degraded operating points B_0 caps at T_commit so
-	// the schedule stays non-decreasing. obft.Config.Validate requires
-	// every layer's BroadcastBudget > 0 — no all-zero fallback. When
-	// set, length must match K and values must be non-decreasing in
-	// layer index.
+	// conforming to spec (K=2 default Config A: B_0 = 2·BTT + RefloodDelay =
+	// 1100ms; B_1 = T_commit = 3600ms. K=4 up-tier: B = [1100, 3600, 3600,
+	// 3600]ms). Backups broadcast at BFT_start in all cases. At degraded
+	// operating points B_0 caps at T_commit so the schedule stays
+	// non-decreasing. obft.Config.Validate requires every layer's
+	// BroadcastBudget > 0 — no all-zero fallback. When set, length must
+	// match K and values must be non-decreasing in layer index.
 	BroadcastBudget []time.Duration
 }
 
@@ -285,8 +294,9 @@ func defaultFetchSchedule(K int) []time.Duration {
 // schedule.
 //
 // Spec example values at BTT=200ms, RefloodDelay=700ms, T_commit=3600ms
-// (Config A): K=4 → [1100, 3600, 3600, 3600]ms. At BTT=200ms,
-// RefloodDelay=0 (fully-meshed cluster): K=4 → [400, 3600, 3600, 3600]ms.
+// (Config A): K=2 default → [1100, 3600]ms; K=4 up-tier → [1100, 3600,
+// 3600, 3600]ms. At BTT=200ms, RefloodDelay=0 (fully-meshed cluster):
+// K=2 → [400, 3600]ms; K=4 → [400, 3600, 3600, 3600]ms.
 func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule K=%d must be ≥ 1", K)
