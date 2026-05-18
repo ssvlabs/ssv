@@ -64,58 +64,19 @@ Upstream references:
 
 Two scenarios, each shown for both PBSes. The starting numbers below are reasonable defaults for a healthy mainnet cluster — operators should validate them against their own measured latencies before adopting (see [Tuning guidance](#tuning-guidance--measurement-methodology)).
 
-### Example A — "block header at SSV by ~1500ms" (recommended safe default)
+### Example A — bid-sample equivalent of legacy `ProposerDelay ≈ 1000ms` (recommended starting point)
 
-Targets a PBS-side cutoff of `1450ms`; with ~50ms overhead between PBS → BN → SSV, the header arrives at SSV by ~1500ms. (This assumes BN and PBS are co-located with SSV; a remote BN adds network RTT and the 50ms allowance should be widened accordingly.) That leaves comfortable budget for QBFT consensus, post-consensus signing, and block submission to complete within the 4000ms slot deadline, while still positioning the auction window late enough to capture a meaningful fraction of intra-slot bid growth.
+Lands the last relay poll at ~1000ms, matching when legacy `ProposerDelay = 1000ms` would have queried the relays. Useful as a migration baseline: the relay bids you'll see are sampled at the same moment in the slot.
 
-The relay polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 200`) fires polls at 700ms, 900ms, 1100ms, and 1300ms — four chances per relay, with ~150ms RTT margin for the last poll to complete before the cutoff.
+This is **not** the same as legacy `ProposerDelay = 1000ms` in terms of when the header arrives at SSV — legacy would deliver the header to SSV anywhere from ~1500ms to ~2000ms (after mev-boost's `getHeaderTimeout` runs its course), whereas this configuration delivers it at ~1050ms. PBS-timing-games is strictly better at the same bid-sample time: same bid quality, more slot budget left for QBFT and submission.
+
+The relay polling pattern (`target_first_request_ms = 700`, `frequency_get_header_ms = 150`) fires polls at 700ms, 850ms, and 1000ms — three chances per relay, with the last poll landing at the target bid-sample time.
 
 **commit-boost** (TOML):
 ```toml
 [pbs]
-late_in_slot_time_ms = 1450
-timeout_get_header_ms = 1430        # must be < late_in_slot_time_ms in commit-boost
-timeout_get_payload_ms = 4000
-
-[[relays]]
-url = "https://<relay-pubkey>@relay-1.example"
-enable_timing_games = true
-target_first_request_ms = 700       # polls at 700ms, 900ms, 1100ms, 1300ms
-frequency_get_header_ms = 200
-
-[[relays]]
-url = "https://<relay-pubkey>@relay-2.example"
-enable_timing_games = true
-target_first_request_ms = 700
-frequency_get_header_ms = 200
-```
-
-**mev-boost** (YAML):
-```yaml
-timeout_get_header_ms: 1450
-late_in_slot_time_ms: 1450          # mev-boost permits equality
-relays:
-  - url: https://<relay-pubkey>@relay-1.example
-    enable_timing_games: true
-    target_first_request_ms: 700
-    frequency_get_header_ms: 200
-  - url: https://<relay-pubkey>@relay-2.example
-    enable_timing_games: true
-    target_first_request_ms: 700
-    frequency_get_header_ms: 200
-```
-
-### Example B — "close equivalent of `ProposerDelay = 1000ms`"
-
-`ProposerDelay = 1000ms` on the legacy path causes SSV to wait 1000ms before asking the PBS, which then queries each relay once at t≈1000ms. The PBS-timing-games equivalent below lands the last poll at ~1000ms — same auction-window position — without burning SSV's slot budget. QBFT round 1 starts as soon as the header arrives (around 1050ms) instead of after a 1000ms idle wait.
-
-This is more conservative than Example A; useful for operators migrating from a legacy `ProposerDelay = 1000ms` configuration who want to swap to timing games with minimal behavioral change.
-
-**commit-boost**:
-```toml
-[pbs]
 late_in_slot_time_ms = 1050
-timeout_get_header_ms = 1030
+timeout_get_header_ms = 1030        # must be < late_in_slot_time_ms in commit-boost
 timeout_get_payload_ms = 4000
 
 [[relays]]
@@ -131,10 +92,10 @@ target_first_request_ms = 700
 frequency_get_header_ms = 150
 ```
 
-**mev-boost**:
+**mev-boost** (YAML):
 ```yaml
 timeout_get_header_ms: 1050
-late_in_slot_time_ms: 1050
+late_in_slot_time_ms: 1050          # mev-boost permits equality
 relays:
   - url: https://<relay-pubkey>@relay-1.example
     enable_timing_games: true
@@ -144,6 +105,49 @@ relays:
     enable_timing_games: true
     target_first_request_ms: 700
     frequency_get_header_ms: 150
+```
+
+### Example B — aggressive: fully use SSV's ~1800ms header-fetch buffer
+
+SSV's `proposalSoftTimeout` (default 1800ms, defined in `beacon/goclient/options.go`) sets the wall-clock budget SSV allocates for collecting block-header responses from BNs. This example targets that full budget: PBS-side cutoff at `1800ms`, last relay poll at ~1600ms, header at SSV by ~1850ms.
+
+The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, and 1600ms — four chances per relay, with ~200ms RTT margin to the cutoff.
+
+Trade-off vs Example A: bid-sample time shifts ~600ms later in the slot, capturing meaningfully more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2950ms (Example A) to ~2150ms. Workable for healthy clusters but leaves less buffer for latency variance — use only after baselining your stack's QBFT and submission timings.
+
+**commit-boost** (TOML):
+```toml
+[pbs]
+late_in_slot_time_ms = 1800
+timeout_get_header_ms = 1780        # must be < late_in_slot_time_ms in commit-boost
+timeout_get_payload_ms = 4000
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-1.example"
+enable_timing_games = true
+target_first_request_ms = 1000      # polls at 1000ms, 1200ms, 1400ms, 1600ms
+frequency_get_header_ms = 200
+
+[[relays]]
+url = "https://<relay-pubkey>@relay-2.example"
+enable_timing_games = true
+target_first_request_ms = 1000
+frequency_get_header_ms = 200
+```
+
+**mev-boost** (YAML):
+```yaml
+timeout_get_header_ms: 1800
+late_in_slot_time_ms: 1800          # mev-boost permits equality
+relays:
+  - url: https://<relay-pubkey>@relay-1.example
+    enable_timing_games: true
+    target_first_request_ms: 1000
+    frequency_get_header_ms: 200
+  - url: https://<relay-pubkey>@relay-2.example
+    enable_timing_games: true
+    target_first_request_ms: 1000
+    frequency_get_header_ms: 200
 ```
 
 ## Tuning guidance & measurement methodology
@@ -156,7 +160,7 @@ Bid value grows through the slot: more transaction order flow becomes available,
 - `QBFT + post-consensus signing + submission < 4000ms − cutoff`. The block must propagate by 4000ms after slot start.
 - A safety margin for variance in QBFT consensus, signing, and submission latencies. An unlucky combination of slower-than-typical components can add several hundred ms to the budget; cutoffs much beyond ~2000ms tighten the slot enough that occasional spikes risk missing the deadline.
 
-Example A's 1500ms is the recommended starting point. Example B's ~1050ms is more conservative — useful while you learn your stack's behavior under timing games.
+Example A's ~1050ms cutoff is the recommended starting point — equivalent to legacy `ProposerDelay = 1000ms` in terms of when relay bids are sampled. Example B's 1800ms cutoff is the aggressive upper end — fully uses SSV's allocated header-fetch budget for maximum MEV capture, at the cost of less variance margin.
 
 ### What to measure first
 
