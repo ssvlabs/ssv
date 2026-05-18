@@ -157,7 +157,7 @@ The example configs are starting points. Tuning these knobs in production requir
 ### Where the auction window should land
 
 Bid value grows through the slot: more transaction order flow becomes available, more arbitrage opportunities resolve, and builders accumulate higher-quality bundles. So the auction cutoff should be as late as possible, subject to:
-- `QBFT + post-consensus signing + submission < 4000ms − cutoff`. The block must propagate by 4000ms after slot start.
+- `QBFT + post-consensus signing + submission < 4000ms − late_in_slot_time_ms − ~70ms` (the ~70ms covers BN→SSV transport and pre-QBFT blinding, both of which happen after the PBS cutoff and before QBFT can start). The block must propagate by 4000ms after slot start.
 - A safety margin for variance in QBFT consensus, signing, and submission latencies. An unlucky combination of slower-than-typical components can add several hundred ms to the budget; cutoffs much beyond ~2000ms tighten the slot enough that occasional spikes risk missing the deadline.
 
 Example A's ~1050ms cutoff is the recommended starting point — equivalent to legacy `ProposerDelay = 1000ms` in terms of when relay bids are sampled. Example B's 1800ms cutoff is the aggressive upper end — fully uses SSV's allocated header-fetch budget for maximum MEV capture, at the cost of less variance margin.
