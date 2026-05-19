@@ -191,9 +191,8 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
-		// Determine the block-fetch path from operator-provided config before
-		// NewOptions applies any defaults. See docs/MEV_CONSIDERATIONS.md for the
-		// three-path model.
+		// Determine the block-fetch path from operator-provided config before NewOptions
+		// applies any defaults. See docs/MEV_CONSIDERATIONS.md.
 		blockFetchPath, err := goclient.DetermineBlockFetchPath(cfg.ConsensusClient, cfg.ProposerDelay)
 		if err != nil {
 			logger.Fatal("invalid block-fetch path configuration", zap.Error(err))
@@ -201,6 +200,9 @@ var StartNodeCmd = &cobra.Command{
 
 		switch blockFetchPath {
 		case goclient.BlockFetchPathLegacy:
+			// validateProposerDelayConfig is scoped to the legacy path because the
+			// dangerous-delay check is only meaningful when ProposerDelay > 0, and a
+			// non-zero ProposerDelay is precisely what selects this path.
 			if err := validateProposerDelayConfig(logger); err != nil {
 				logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
 			}
@@ -210,7 +212,11 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ProposalSoftDeadline configuration", zap.Error(err))
 			}
 			if cfg.ConsensusClient.ProposalSoftDeadline > goclient.SafeMaxProposalSoftDeadline {
-				logger.Warn("ProposalSoftDeadline exceeds the safe-max threshold for the worst-case 2-round QBFT scenario — round-2 fallback will not fit within the slot deadline. The slot will be missed whenever round 1 fails. This is an explicit 'round 1 must succeed' configuration.",
+				logger.Warn(
+					"ProposalSoftDeadline exceeds the safe-max threshold: "+
+						"round-2 QBFT fallback will not fit within the slot deadline, "+
+						"so the slot is missed whenever round 1 fails "+
+						"(this is an explicit 'round 1 must succeed' configuration).",
 					zap.Int64("proposal_soft_deadline_ms", cfg.ConsensusClient.ProposalSoftDeadline.Milliseconds()),
 					zap.Int64("safe_max_ms", goclient.SafeMaxProposalSoftDeadline.Milliseconds()))
 			}

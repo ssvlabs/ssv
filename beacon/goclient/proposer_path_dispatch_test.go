@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"math/big"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 // Tests for the block-fetch path dispatch (BlockFetchPathSafe / Legacy / MEVOptimized).
-// See docs/MEV_CONSIDERATIONS.md for the three-path model.
+// See docs/MEV_CONSIDERATIONS.md for path semantics.
 
 // TestNew_StoresBlockFetchPath verifies that the selected path and its associated
 // timing field (proposalSoftDeadline / proposalSoftTimeout) get propagated from
@@ -56,11 +57,11 @@ func TestNew_StoresBlockFetchPath(t *testing.T) {
 	}
 }
 
-// TestGetBeaconBlock_MultiBN_Path1_EarlyExitOnBlinded verifies the safe path's
+// TestGetBeaconBlock_MultiBN_SafePath_EarlyExitOnBlinded verifies the safe path's
 // early-exit-on-first-blinded behavior. With one fast and one slow BN both returning
 // blinded proposals, the safe path should return quickly after the fast BN responds,
 // without waiting for the slow one.
-func TestGetBeaconBlock_MultiBN_Path1_EarlyExitOnBlinded(t *testing.T) {
+func TestGetBeaconBlock_MultiBN_SafePath_EarlyExitOnBlinded(t *testing.T) {
 	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
 		ProposalResponseDuration: 10 * time.Millisecond,
 		BlindedProposal:          true,
@@ -86,17 +87,17 @@ func TestGetBeaconBlock_MultiBN_Path1_EarlyExitOnBlinded(t *testing.T) {
 	elapsed := time.Since(start)
 	require.NoError(t, err)
 
-	// Path 1 should early-exit on BN1's blinded response (~10ms) and NOT wait for
+	// Safe path should early-exit on BN1's blinded response (~10ms) and NOT wait for
 	// BN2 (~500ms). A generous 250ms ceiling tolerates HTTP / goroutine overhead.
 	assert.Less(t, elapsed, 250*time.Millisecond,
-		"Path 1 should early-exit on first blinded; took %v", elapsed)
+		"safe path should early-exit on first blinded; took %v", elapsed)
 }
 
-// TestGetBeaconBlock_MultiBN_Path2_NoEarlyExit verifies that the MEV-optimized
-// path does NOT early-exit on the first blinded response — it keeps collecting
-// until all BNs respond (or the soft deadline fires). With the same setup as the
-// safe-path test, path 2 should wait for the slow BN.
-func TestGetBeaconBlock_MultiBN_Path2_NoEarlyExit(t *testing.T) {
+// TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit verifies that the MEV-optimized
+// path does NOT early-exit on the first blinded response — it keeps collecting until all
+// BNs respond (or the soft deadline fires). With the same setup as the safe-path test,
+// the MEV-optimized path should wait for the slow BN.
+func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_NoEarlyExit(t *testing.T) {
 	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
 		ProposalResponseDuration: 10 * time.Millisecond,
 		BlindedProposal:          true,
@@ -119,10 +120,46 @@ func TestGetBeaconBlock_MultiBN_Path2_NoEarlyExit(t *testing.T) {
 	elapsed := time.Since(start)
 	require.NoError(t, err)
 
-	// Path 2 should NOT early-exit; it waits for BN2's response at ~500ms before
-	// returning the best-scored proposal. The 400ms floor tolerates clock jitter.
+	// MEV-optimized path should NOT early-exit; it waits for BN2's response at ~500ms
+	// before returning the best-scored proposal. The 400ms floor tolerates clock jitter.
 	assert.GreaterOrEqual(t, elapsed, 400*time.Millisecond,
-		"Path 2 should wait for the slower BN; took %v", elapsed)
+		"MEV-optimized path should wait for the slower BN; took %v", elapsed)
+}
+
+// TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins verifies that
+// when multiple BNs return blinded proposals within the collection window, the
+// MEV-optimized path selects the one with the highest scoreProposal value (sum of
+// ConsensusValue and ExecutionValue) rather than the first-arriving one. BN1 returns
+// a fast low-value blinded; BN2 returns a slow high-value blinded — the function must
+// return BN2's proposal.
+func TestGetBeaconBlock_MultiBN_MEVOptimizedPath_HighestScoringBlindedWins(t *testing.T) {
+	bn1, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 10 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllOnes(),
+		ExecutionValue:           big.NewInt(1_000_000), // low bid
+	})
+	defer bn1.Close()
+	bn2, _ := createProposalBeaconServer(t, beaconProposalServerOptions{
+		ProposalResponseDuration: 300 * time.Millisecond,
+		BlindedProposal:          true,
+		FeeRecipient:             feeRecipientAllTwos(),
+		ExecutionValue:           big.NewInt(5_000_000), // high bid (must win)
+	})
+	defer bn2.Close()
+
+	client := setupMultiBNClient(t, bn1.URL, bn2.URL, BlockFetchPathMEVOptimized, 1500*time.Millisecond)
+
+	slot := client.getBeaconConfig().EstimatedCurrentSlot() + 2
+
+	versionedProposal, _, err := client.GetBeaconBlock(context.Background(), slot, []byte("test"), getTestRANDAO())
+	require.NoError(t, err)
+	require.NotNil(t, versionedProposal)
+
+	actualFeeRecipient, err := versionedProposal.FeeRecipient()
+	require.NoError(t, err)
+	assert.Equal(t, feeRecipientAllTwos(), actualFeeRecipient,
+		"MEV-optimized path should select the higher-value blinded (BN2's), not the first-arriving (BN1's)")
 }
 
 // TestGetBeaconBlock_MultiBN_SoftDeadlineFires_FallsBackToFirstValid verifies that

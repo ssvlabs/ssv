@@ -107,16 +107,16 @@ func (gc *GoClient) GetBeaconBlock(
 		}
 	} else {
 		// For multiple clients, dispatch to the selected block-fetch path.
-		// See docs/MEV_CONSIDERATIONS.md for the three paths' semantics.
+		// See docs/MEV_CONSIDERATIONS.md for path semantics.
 		switch gc.blockFetchPath {
+		case BlockFetchPathSafe:
+			beaconBlock, err = gc.getProposalParallelSafe(ctx, logger, slot, sig, graffiti)
 		case BlockFetchPathLegacy:
 			beaconBlock, err = gc.getProposalParallelLegacy(ctx, logger, slot, sig, graffiti)
 		case BlockFetchPathMEVOptimized:
 			beaconBlock, err = gc.getProposalParallelMEVOptimized(ctx, logger, slot, sig, graffiti)
-		case BlockFetchPathSafe:
-			fallthrough
 		default:
-			beaconBlock, err = gc.getProposalParallelSafe(ctx, logger, slot, sig, graffiti)
+			return nil, nil, fmt.Errorf("unknown block-fetch path %d", gc.blockFetchPath)
 		}
 		if err != nil {
 			return nil, nil, err
@@ -165,9 +165,9 @@ func (gc *GoClient) GetBeaconBlock(
 	}
 }
 
-// getProposalParallelLegacy implements path 0 (legacy) — preserved bit-for-bit from
-// the pre-path-split code for backward-compat with operators using ProposerDelay /
-// ProposalSoftTimeout.
+// getProposalParallelLegacy implements the legacy block-fetch path — preserved
+// bit-for-bit from the pre-path-split code for backward-compat with operators using
+// ProposerDelay / ProposalSoftTimeout.
 //
 // Races all beacon nodes, collects proposals for a short relative-duration timeout
 // (gc.proposalSoftTimeout), and returns the best one according to our score function.
@@ -327,7 +327,7 @@ type proposalFetchResult struct {
 
 // spawnProposalFetchers starts a goroutine per beacon-node client; each goroutine
 // fetches a proposal and writes its result to the returned channel. Used by the
-// safe (path 1) and MEV-optimized (path 2) block-fetch implementations.
+// safe and MEV-optimized block-fetch implementations.
 //
 // The channel is buffered to `len(gc.clients)` so each goroutine can write without
 // blocking even if the consumer has already returned.
@@ -352,9 +352,9 @@ func (gc *GoClient) spawnProposalFetchers(
 }
 
 // waitForFirstValidProposal returns the first valid proposal received from the
-// remaining in-flight fetchers. Used by paths 1 and 2 as the fallback after the
-// soft-deadline collection window has elapsed without producing a usable best
-// proposal. Bounded by the parent context's slot deadline.
+// remaining in-flight fetchers. Used by the safe and MEV-optimized paths as the
+// fallback after the soft-deadline collection window has elapsed without producing
+// a usable best proposal. Bounded by the parent context's slot deadline.
 func (gc *GoClient) waitForFirstValidProposal(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -391,7 +391,7 @@ func (gc *GoClient) waitForFirstValidProposal(
 	return nil, fmt.Errorf("all %d clients failed to get proposal for slot %d, encountered errors: %w", len(gc.clients), slot, errs)
 }
 
-// getProposalParallelSafe implements path 1 (safe, default).
+// getProposalParallelSafe implements the safe (default) block-fetch path.
 //
 // Spawns a per-BN fetch in parallel; collects responses until the slot-relative
 // ProposalSoftDeadline fires (default 1000ms into slot). Early-exits on the first
@@ -479,7 +479,7 @@ collect:
 	return gc.waitForFirstValidProposal(ctx, logger, slot, startCollect, resultCh, pendingClients, errs)
 }
 
-// getProposalParallelMEVOptimized implements path 2 (MEV-optimized, opt-in).
+// getProposalParallelMEVOptimized implements the MEV-optimized (opt-in) block-fetch path.
 //
 // Spawns a per-BN fetch in parallel; collects responses until the slot-relative
 // ProposalSoftDeadline fires. **Does not** early-exit on the first blinded response;

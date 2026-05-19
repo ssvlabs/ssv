@@ -22,16 +22,15 @@ const (
 type BlockFetchPath int
 
 const (
-	// BlockFetchPathSafe — path 1 (default). Multi-BN parallel fetch with early-exit on
+	// BlockFetchPathSafe is the default. Multi-BN parallel fetch with early-exit on
 	// first blinded response; fallback at slot-relative ProposalSoftDeadline (default 1000ms).
 	BlockFetchPathSafe BlockFetchPath = iota
-	// BlockFetchPathLegacy — path 0. Preserves the original ProposerDelay /
-	// ProposalSoftTimeout behavior bit-for-bit; selected when an operator has set either
-	// of those legacy knobs.
+	// BlockFetchPathLegacy preserves the original ProposerDelay / ProposalSoftTimeout
+	// behavior bit-for-bit; selected when an operator has set either of those legacy knobs.
 	BlockFetchPathLegacy
-	// BlockFetchPathMEVOptimized — path 2 (opt-in). Multi-BN parallel fetch without
-	// early-exit, returns the best-scored response collected by ProposalSoftDeadline.
-	// Selected when an operator sets ProposalSoftDeadline explicitly.
+	// BlockFetchPathMEVOptimized is opt-in. Multi-BN parallel fetch without early-exit,
+	// returns the best-scored response collected by ProposalSoftDeadline. Selected when an
+	// operator sets ProposalSoftDeadline explicitly.
 	BlockFetchPathMEVOptimized
 )
 
@@ -61,7 +60,13 @@ const (
 	// MEV-optimized path (BNs won't have responded yet).
 	MinProposalSoftDeadline = DefaultProposalSoftDeadline
 
-	// MaxProposalSoftDeadline is the hard upper bound for operator-set ProposalSoftDeadline values.
+	// MaxProposalSoftDeadline is the hard upper bound for operator-set ProposalSoftDeadline
+	// values. Intentionally loose — past the SafeMax warning threshold, the operator has
+	// already opted into "round 1 must succeed". This cap exists to accommodate exceptionally
+	// performant clusters that can complete the entire post-header pipeline (QBFT round 1 +
+	// signing + submission) in well under 350ms and want to capture as much of the slot's
+	// bid growth as possible. Operators in this regime should baseline their own latencies
+	// (see docs/MEV_CONSIDERATIONS.md "Tuning guidance") before going anywhere near the cap.
 	MaxProposalSoftDeadline = 3600 * time.Millisecond
 
 	// SafeMaxProposalSoftDeadline is the threshold above which the worst-case 2-round QBFT
@@ -75,7 +80,7 @@ const (
 	SafeMaxProposalSoftDeadline = 1100 * time.Millisecond
 )
 
-// Path 0 (legacy) constants — preserved for backward-compat.
+// Legacy-path constants — preserved for backward-compat.
 const (
 	defaultProposalSoftTimeout = 1800 * time.Millisecond
 	minProposalSoftTimeout     = 500 * time.Millisecond
@@ -92,17 +97,17 @@ type Options struct {
 	CommonTimeout time.Duration `yaml:"CommonTimeout" env:"WITH_COMMON_TIMEOUT" env-description:"Specifies the common timeout for network operations"`
 	LongTimeout   time.Duration `yaml:"LongTimeout" env:"WITH_LONG_TIMEOUT" env-description:"Specifies the long timeout for network operations"`
 
-	// ProposalSoftTimeout is the legacy (path 0) collection-period timeout in multi-BN
-	// parallel fetch. Setting this (or ProposerDelay) selects BlockFetchPathLegacy.
-	// New operators should prefer ProposalSoftDeadline (path 1 / path 2). See
-	// docs/MEV_CONSIDERATIONS.md.
+	// ProposalSoftTimeout is the legacy collection-period timeout in multi-BN parallel
+	// fetch. Setting this (or ProposerDelay) selects BlockFetchPathLegacy. New operators
+	// should prefer ProposalSoftDeadline. See docs/MEV_CONSIDERATIONS.md.
 	ProposalSoftTimeout time.Duration `yaml:"ProposalSoftTimeout" env:"WITH_PROPOSAL_SOFT_TIMEOUT" env-description:"Legacy MEV configuration. Specifies the beacon proposal collection soft timeout (collection period for comparing proposals from multiple beacon nodes to select the most profitable one). Setting this opts the SSV node into the legacy block-fetch path; the recommended approach is to leave this unset and use ProposalSoftDeadline instead. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
 	// ProposalSoftDeadline is the slot-relative deadline (in ms-into-slot) for the
-	// multi-BN proposal-collection window used by paths 1 and 2.
-	//   - Unset (zero) -> path 1 (safe), default deadline 1000ms.
-	//   - Set explicitly -> path 2 (MEV-optimized), value must be in [1000ms, 3600ms].
-	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (path 0).
+	// multi-BN proposal-collection window used by the safe and MEV-optimized paths.
+	//   - Unset (zero) -> safe path, default deadline 1000ms.
+	//   - Set explicitly -> MEV-optimized path, value must be in [1000ms, 3600ms].
+	// Cannot be combined with ProposerDelay or ProposalSoftTimeout (which select the
+	// legacy path).
 	ProposalSoftDeadline time.Duration `yaml:"ProposalSoftDeadline" env:"WITH_PROPOSAL_SOFT_DEADLINE" env-description:"Slot-relative deadline (ms into slot) for the multi-BN proposal-collection window. Leave unset for the default safe path; set explicitly to opt into the MEV-optimized path (value must be in [1000ms, 3600ms]). Cannot be combined with ProposerDelay or ProposalSoftTimeout. See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md for details."`
 
 	// BlockFetchPath is set by NewOptions from the determined path; not directly

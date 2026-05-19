@@ -135,12 +135,12 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// proposalSoftTimeout is the legacy (path 0) collection-period timeout used by
+	// proposalSoftTimeout is the legacy collection-period timeout used by
 	// getProposalParallelLegacy. Other paths use proposalSoftDeadline instead.
 	proposalSoftTimeout time.Duration
 
-	// proposalSoftDeadline is the slot-relative deadline (ms into slot) for paths 1
-	// and 2. See docs/MEV_CONSIDERATIONS.md.
+	// proposalSoftDeadline is the slot-relative deadline (ms into slot) for the safe
+	// and MEV-optimized paths. See docs/MEV_CONSIDERATIONS.md.
 	proposalSoftDeadline time.Duration
 
 	// blockFetchPath selects which getProposalParallel* variant GetBeaconBlock
