@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"context"
 	"runtime"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/network/peers/peertrace"
 	"github.com/ssvlabs/ssv/observability/log"
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/utils/ttl"
@@ -23,6 +25,23 @@ const (
 	ipLimitRate   = 4
 	ipLimitBurst  = 8
 	ipLimitPeriod = 30 * time.Second
+
+	connectionGaterPhasePeerDial = "peer_dial"
+	connectionGaterPhaseAddrDial = "addr_dial"
+	connectionGaterPhaseAccept   = "accept"
+	connectionGaterPhaseSecured  = "secured"
+
+	connectionGaterDecisionAllow  = "allow"
+	connectionGaterDecisionReject = "reject"
+
+	connectionGaterReasonAllowed           = "allowed"
+	connectionGaterReasonDisabled          = "disabled"
+	connectionGaterReasonBadPeer           = "bad_peer"
+	connectionGaterReasonInboundLimit      = "inbound_limit"
+	connectionGaterReasonInvalidRemoteAddr = "invalid_remote_addr"
+	connectionGaterReasonIPRateLimit       = "ip_rate_limit"
+	connectionGaterReasonMaxPeersLimit     = "max_peers_limit"
+	connectionGaterReasonTrimmedRecently   = "trimmed_recently"
 )
 
 type IsBadPeerF func(peerID peer.ID) bool
@@ -31,6 +50,7 @@ type AtInboundLimitF func() bool
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
+	ctx             context.Context
 	logger          *zap.Logger // struct logger to implement connmgr.ConnectionGater
 	disable         bool
 	atMaxPeersLimit func() bool
@@ -38,18 +58,22 @@ type connGater struct {
 	isBadPeer       IsBadPeerF
 	atInboundLimit  AtInboundLimitF
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
+	peerObserver    *peertrace.Observer
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
 func NewConnectionGater(
+	ctx context.Context,
 	logger *zap.Logger,
 	disable bool,
 	atLimit func() bool,
 	isBadPeer IsBadPeerF,
 	atInboundLimit AtInboundLimitF,
 	trimmedRecently *ttl.Map[peer.ID, struct{}],
+	peerObserver *peertrace.Observer,
 ) connmgr.ConnectionGater {
 	return &connGater{
+		ctx:             ctx,
 		logger:          logger.Named(log.NameConnectionGater),
 		disable:         disable,
 		atMaxPeersLimit: atLimit,
@@ -57,6 +81,7 @@ func NewConnectionGater(
 		isBadPeer:       isBadPeer,
 		atInboundLimit:  atInboundLimit,
 		trimmedRecently: trimmedRecently,
+		peerObserver:    peerObserver,
 	}
 }
 
@@ -65,9 +90,11 @@ func NewConnectionGater(
 // at this stage is typical for blacklisting scenarios
 func (n *connGater) InterceptPeerDial(id peer.ID) (allow bool) {
 	if n.isBadPeer(id) {
+		n.observeDecision(connectionGaterPhasePeerDial, connectionGaterDecisionReject, connectionGaterReasonBadPeer, id, libp2pnetwork.DirOutbound)
 		n.logger.Debug("preventing outbound dial to bad peer", fields.PeerID(id))
 		return false
 	}
+	n.observeDecision(connectionGaterPhasePeerDial, connectionGaterDecisionAllow, connectionGaterReasonAllowed, id, libp2pnetwork.DirOutbound)
 	return true
 }
 
@@ -76,9 +103,15 @@ func (n *connGater) InterceptPeerDial(id peer.ID) (allow bool) {
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) (allow bool) {
 	if n.isBadPeer(id) {
+		n.observeDecision(connectionGaterPhaseAddrDial, connectionGaterDecisionReject, connectionGaterReasonBadPeer, id, libp2pnetwork.DirOutbound,
+			zap.String("remote_addr", multiaddr.String()),
+		)
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
+	n.observeDecision(connectionGaterPhaseAddrDial, connectionGaterDecisionAllow, connectionGaterReasonAllowed, id, libp2pnetwork.DirOutbound,
+		zap.String("remote_addr", multiaddr.String()),
+	)
 	return true
 }
 
@@ -88,31 +121,40 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) (allow
 // MUST call this method regardless, for correctness/consistency.
 func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) (allow bool) {
 	if n.disable {
+		n.observeDecision(connectionGaterPhaseAccept, connectionGaterDecisionAllow, connectionGaterReasonDisabled, "", libp2pnetwork.DirInbound)
 		return true
 	}
 
 	remoteAddr := multiaddrs.RemoteMultiaddr()
 
 	if n.atInboundLimit() {
+		n.observeDecision(connectionGaterPhaseAccept, connectionGaterDecisionReject, connectionGaterReasonInboundLimit, "", libp2pnetwork.DirInbound)
 		n.logger.Debug("connection rejected due to inbound limit",
 			zap.String("remote_addr", remoteAddr.String()),
 		)
 		return false
 	}
 
-	if !n.validateDial(remoteAddr) {
+	allowed, reason := n.validateDial(remoteAddr)
+	if !allowed {
 		// Yield this goroutine to allow others to run in-between connection attempts.
 		runtime.Gosched()
 
-		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
+		n.observeDecision(connectionGaterPhaseAccept, connectionGaterDecisionReject, reason, "", libp2pnetwork.DirInbound)
+		n.logger.Debug("connection rejected by connection gater",
+			zap.String("reason", reason),
+			zap.String("remote_addr", remoteAddr.String()),
+		)
 		return false
 	}
 	if n.atMaxPeersLimit() {
+		n.observeDecision(connectionGaterPhaseAccept, connectionGaterDecisionReject, connectionGaterReasonMaxPeersLimit, "", libp2pnetwork.DirInbound)
 		n.logger.Debug("connection rejected due to max peers limit",
 			zap.String("remote_addr", remoteAddr.String()),
 		)
 		return false
 	}
+	n.observeDecision(connectionGaterPhaseAccept, connectionGaterDecisionAllow, connectionGaterReasonAllowed, "", libp2pnetwork.DirInbound)
 	return true
 }
 
@@ -120,6 +162,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) (al
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) (allow bool) {
 	if n.trimmedRecently.Has(id) {
+		n.observeDecision(connectionGaterPhaseSecured, connectionGaterDecisionReject, connectionGaterReasonTrimmedRecently, id, direction)
 		n.logger.Debug(
 			"InterceptSecured: trying to connect a peer we've recently trimmed",
 			fields.PeerID(id),
@@ -129,10 +172,12 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 	}
 
 	if n.isBadPeer(id) {
+		n.observeDecision(connectionGaterPhaseSecured, connectionGaterDecisionReject, connectionGaterReasonBadPeer, id, direction)
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
 
+	n.observeDecision(connectionGaterPhaseSecured, connectionGaterDecisionAllow, connectionGaterReasonAllowed, id, direction)
 	return true
 }
 
@@ -143,15 +188,53 @@ func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (allow bool, reas
 	return true, 0
 }
 
-func (n *connGater) validateDial(addr ma.Multiaddr) bool {
+func (n *connGater) validateDial(addr ma.Multiaddr) (bool, string) {
 	ip, err := manet.ToIP(addr)
 	if err != nil {
-		return false
+		return false, connectionGaterReasonInvalidRemoteAddr
 	}
 	remaining := n.ipLimiter.Remaining(ip.String())
 	if remaining <= 0 {
-		return false
+		return false, connectionGaterReasonIPRateLimit
 	}
 	n.ipLimiter.Add(ip.String(), 1)
-	return true
+	return true, connectionGaterReasonAllowed
+}
+
+func (n *connGater) observeDecision(
+	phase string,
+	decision string,
+	reason string,
+	id peer.ID,
+	direction libp2pnetwork.Direction,
+	extraFields ...zap.Field,
+) {
+	ctx := n.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	_, highlighted := n.peerObserver.Match(id)
+	recordConnectionGaterDecision(ctx, phase, decision, reason, direction, highlighted)
+
+	if id == "" {
+		return
+	}
+
+	logFields := make([]zap.Field, 0, 4+len(extraFields))
+	logFields = append(logFields,
+		zap.String("connection_gater_phase", phase),
+		zap.String("connection_gater_decision", decision),
+		zap.String("connection_gater_reason", reason),
+		zap.String("conn_direction", direction.String()),
+	)
+	logFields = append(logFields, extraFields...)
+	n.peerObserver.Observe(ctx, n.loggerOrNop(), "connection_gater_decision", id, logFields...)
+}
+
+func (n *connGater) loggerOrNop() *zap.Logger {
+	if n.logger == nil {
+		return zap.NewNop()
+	}
+	return n.logger
 }

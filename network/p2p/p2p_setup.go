@@ -130,12 +130,14 @@ func (n *p2pNetwork) SetupHost() error {
 		return fmt.Errorf("could not create resource manager: %w", err)
 	}
 	n.connGater = connections.NewConnectionGater(
+		n.ctx,
 		n.logger,
 		n.cfg.DisableIPRateLimit,
 		n.connectionsAtLimit,
 		n.IsBadPeer,
 		n.atInboundLimit,
 		n.trimmedRecently,
+		n.peerObserver,
 	)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	h, err := libp2p.New(opts...)
