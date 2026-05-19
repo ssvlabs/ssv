@@ -209,7 +209,7 @@ SSV supports two mutually-exclusive approaches to multi-BN block-header fetch, s
 
 ### New approach (recommended)
 
-By default, the multi-BN fetch returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid. If no blinded response is received by the slot-relative `ProposalSoftDeadline` (default 1000ms), SSV returns the best non-blinded response collected so far, falling through to wait for the first valid response if nothing usable arrived.
+By default, the multi-BN fetch returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid. If no blinded response is received by the slot-relative `ProposalSoftDeadline` (default 1000ms), SSV returns the best non-blinded response collected so far, waiting for the first valid response if nothing usable arrived.
 
 Operators running multiple BNs who want SSV to compare bid *values* across BNs — instead of taking the first BN to respond with blinded — should set `ProposalSoftDeadline` explicitly. Setting it:
 - Disables the early-exit on first blinded; SSV waits for all multi-BN responses up to the deadline.
@@ -255,11 +255,7 @@ RANDAO + ProposerDelay + MEVBoostRelayTimeout + QBFT + PostConsensusSigning + Bl
 
 Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (100 + 200 + 2500 + 150 + 200) = 850ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~150ms of headroom for variance.
 
-The safety guard at startup is the looser 1000ms cap ([Appendix B](#appendix-b--safety-limits)): values between ~700ms and 1000ms are permitted without `AllowDangerousProposerDelay` but should be considered risky and not recommended.
-
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
-
-## Appendix B — Safety limits
 
 **The SSV node refuses to start if `ProposerDelay` is set higher than 1000ms without explicit confirmation.**
 
