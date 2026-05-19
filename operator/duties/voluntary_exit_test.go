@@ -94,58 +94,58 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
-	t.Run("slot = block + postpone - 1, block = 1 - no execution", func(t *testing.T) {
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone-1)
-		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone - 1)
+	t.Run("slot = block + executionPostpone - 1, block = 1 - no execution", func(t *testing.T) {
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber)+voluntaryExitExecutionSlotsToPostpone-1)
+		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitExecutionSlotsToPostpone - 1)
 		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
-	t.Run("slot = block + postpone, block = 1 - executing duty, fetching block number", func(t *testing.T) {
+	t.Run("slot = block + executionPostpone, block = 1 - executing duty, fetching block number", func(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitExecutionSlotsToPostpone)
 		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[:1])
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	exitCh <- sameBlockExit
 
-	t.Run("slot = block + postpone, block = 1 - executing another duty, no block number fetch", func(t *testing.T) {
+	t.Run("slot = block + executionPostpone, block = 1 - executing another duty, no block number fetch", func(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		ticker.Send(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		ticker.Send(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitExecutionSlotsToPostpone)
 		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[1:2])
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	exitCh <- newBlockExit
 
-	t.Run("slot = block + postpone, block = 2 - no execution", func(t *testing.T) {
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber)+voluntaryExitSlotsToPostpone)
-		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+	t.Run("slot = block + executionPostpone, block = 2 - no execution", func(t *testing.T) {
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(normalExit.BlockNumber)+voluntaryExitExecutionSlotsToPostpone)
+		ticker.Send(phase0.Slot(normalExit.BlockNumber) + voluntaryExitExecutionSlotsToPostpone)
 		waitForNoAction(t, nil, nil, noActionTimeout)
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
-	t.Run("slot = block + postpone, block = 2 - executing new duty, fetching block number", func(t *testing.T) {
+	t.Run("slot = block + executionPostpone, block = 2 - executing new duty, fetching block number", func(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		ticker.Send(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
+		ticker.Send(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitExecutionSlotsToPostpone)
 		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[2:3])
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
 	exitCh <- pastBlockExit
 
-	t.Run("slot = block + postpone + 1, block = 5 - executing past duty, fetching block number", func(t *testing.T) {
+	t.Run("slot = block + executionPostpone + 1, block = 5 - executing past duty, fetching block number", func(t *testing.T) {
 		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
-		ticker.Send(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
+		ticker.Send(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitExecutionSlotsToPostpone + 1)
 		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuties[3:4])
 		require.EqualValues(t, 4, blockByNumberCalls.Load())
 	})
@@ -179,10 +179,14 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 		BlockNumber:    blockNumber,
 	}
 	lateObservationSlot := phase0.Slot(blockNumber) + phase0.Slot(executionclient.FollowDistance)
+	// expectedDuty.Slot uses the wire slot — what gets signed and what peers
+	// (including pre-#2851 ones) use to validate. The execution gate (at
+	// blockNumber + voluntaryExitExecutionSlotsToPostpone) fires later but
+	// does not affect what's on the wire.
 	expectedDuty := []*spectypes.ValidatorDuty{{
 		Type:           spectypes.BNRoleVoluntaryExit,
 		PubKey:         lateObservedExit.PubKey,
-		Slot:           phase0.Slot(blockNumber) + voluntaryExitSlotsToPostpone,
+		Slot:           phase0.Slot(blockNumber) + voluntaryExitWireSlotsToPostpone,
 		ValidatorIndex: lateObservedExit.ValidatorIndex,
 	}}
 
@@ -197,9 +201,9 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 		waitForNoAction(t, nil, executeDutiesCall, noActionTimeout)
 	})
 
-	t.Run("slot = block + postponed exit slot - execute", func(t *testing.T) {
-		waitForSlotN(scheduler.beaconConfig, phase0.Slot(blockNumber)+voluntaryExitSlotsToPostpone)
-		ticker.Send(phase0.Slot(blockNumber) + voluntaryExitSlotsToPostpone)
+	t.Run("slot = block + executionPostpone - execute", func(t *testing.T) {
+		waitForSlotN(scheduler.beaconConfig, phase0.Slot(blockNumber)+voluntaryExitExecutionSlotsToPostpone)
+		ticker.Send(phase0.Slot(blockNumber) + voluntaryExitExecutionSlotsToPostpone)
 		waitForDutiesExecution(t, nil, executeDutiesCall, timeout, expectedDuty)
 	})
 
@@ -233,13 +237,17 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.EqualValues(t, blockNumber, slot)
 }
 
+// expectedExecutedVoluntaryExitDuties builds the duties we expect to see
+// dispatched for the given descriptors. Slot is the wire/duty slot — what
+// gets signed and what peers validate — which intentionally differs from the
+// (later) local execution slot at which we actually broadcast.
 func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.ValidatorDuty {
 	expectedDuties := make([]*spectypes.ValidatorDuty, 0, len(descriptors))
 	for _, d := range descriptors {
 		expectedDuties = append(expectedDuties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleVoluntaryExit,
 			PubKey:         d.PubKey,
-			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitSlotsToPostpone,
+			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitWireSlotsToPostpone,
 			ValidatorIndex: d.ValidatorIndex,
 		})
 	}

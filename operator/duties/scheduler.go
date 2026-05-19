@@ -476,17 +476,28 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
-			const eventMsg = "⚠️ late duty execution"
-			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
-			span.AddEvent(eventMsg, trace.WithAttributes(
-				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
-				observability.BeaconRoleAttribute(duty.Type),
-				observability.RunnerRoleAttribute(duty.RunnerRole())))
+		// duty.Slot represents the intended wall-clock firing slot for most
+		// duties, but for voluntary-exit it carries the wire/duty slot — a
+		// coordination point kept deliberately in the past relative to actual
+		// broadcast time (see voluntaryExitWireSlotsToPostpone vs
+		// voluntaryExitExecutionSlotsToPostpone). Measuring "lateness" relative
+		// to that slot is meaningless and would fire the warning + pollute the
+		// histogram on every exit, so we skip both for the voluntary-exit role
+		// while still incrementing the scheduled-duty counter.
+		if duty.RunnerRole() == spectypes.RoleVoluntaryExit {
+			recordDutyScheduledNoDelay(ctx, duty.RunnerRole())
+		} else {
+			slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+			if slotDelay >= 100*time.Millisecond {
+				const eventMsg = "⚠️ late duty execution"
+				logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
+				span.AddEvent(eventMsg, trace.WithAttributes(
+					attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
+					observability.BeaconRoleAttribute(duty.Type),
+					observability.RunnerRoleAttribute(duty.RunnerRole())))
+			}
+			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 		}
-
-		recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
 
 		s.backgroundTasks.Add(1)
 		go func() {

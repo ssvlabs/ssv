@@ -40,3 +40,14 @@ func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay t
 	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
 	slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
 }
+
+// recordDutyScheduledNoDelay increments the scheduled-duty counter without
+// touching the slot-delay histogram. Use this when the duty's Slot field does
+// not represent the intended firing time (e.g. voluntary-exit, where duty.Slot
+// is a wire/coordination slot kept deliberately in the past) — recording the
+// computed "delay" against such a slot would pollute the histogram with
+// values that don't reflect operator lateness.
+func recordDutyScheduledNoDelay(ctx context.Context, role types.RunnerRole) {
+	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
+	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
+}
