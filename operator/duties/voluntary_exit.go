@@ -40,6 +40,11 @@ const (
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// voluntaryExitExecutionSlotsToPostpone for that.
+	//
+	// Note: this constant happens to share its numeric value (4) with
+	// voluntaryExitSchedulingSlack below, but the two are independent — one
+	// governs the wire/coordination slot, the other the local execution
+	// timing budget. Do not assume they should track each other.
 	voluntaryExitWireSlotsToPostpone = phase0.Slot(4)
 
 	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
@@ -51,6 +56,9 @@ const (
 	// (at voluntaryExitExecutionSlotsToPostpone), every other operator has had
 	// time to receive the EL event and register the duty in its local dutyStore
 	// — which the inbound message-validation path checks via dutyCount.
+	//
+	// Independent of voluntaryExitWireSlotsToPostpone despite happening to
+	// share the same numeric value (4); see the note on that constant.
 	voluntaryExitSchedulingSlack = phase0.Slot(4)
 
 	// voluntaryExitExecutionSlotsToPostpone is the earliest slot, expressed as
@@ -213,8 +221,11 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 
-	var dutiesForExecution []*spectypes.ValidatorDuty
-	var pendingItems []*queuedExit
+	// Preallocate both with a non-nil, zero-length slice so that the queue
+	// retains the same "initialised, empty" shape as set up by the constructor
+	// even on ticks where every queued exit clears the gate.
+	dutiesForExecution := make([]*spectypes.ValidatorDuty, 0, len(h.dutyQueue))
+	pendingItems := make([]*queuedExit, 0, len(h.dutyQueue))
 
 	for _, item := range h.dutyQueue {
 		// Gate on earliestExecutionSlot, not duty.Slot: the duty's Slot is the
