@@ -18,6 +18,16 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
+// TestVoluntaryExitWireSlotPinned guards a wire-format invariant: pre-#2851
+// peers compute and validate against blockSlot + 4, so this operator must
+// emit the same value for cross-version interop. Bumping the constant is a
+// coordinated network-wide upgrade, not a code-cleanup change — this test
+// turns any literal change into a visible diff that PR review can catch.
+func TestVoluntaryExitWireSlotPinned(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, phase0.Slot(4), voluntaryExitWireSlotsToPostpone)
+}
+
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	t.Parallel()
 
