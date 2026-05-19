@@ -2,13 +2,13 @@
 
 ## TL;DR
 
-To get the most out of MEV opportunities, configure **timing games on the PBS layer** — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0`.
+To get the most out of MEV opportunities, configure **timing games on the PBS layer** — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0` - operators relying on `ProposerDelay` can't also opt into cross-BN bid scoring; see [Interaction](#interaction).
 
 If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
 If you run **multiple Beacon nodes** and want SSV to cross-compare bids across them rather than taking the first BN's response, set `ProposalSoftDeadline` on the SSV side to opt into cross-BN bid scoring (see [SSV-side block-fetch configuration](#ssv-side-block-fetch-configuration)). Single-BN setups don't need this — they bypass the parallel-fetch logic entirely.
 
-`ProposalSoftDeadline` and the legacy `ProposerDelay` / `ProposalSoftTimeout` select mutually-exclusive SSV-side block-fetch paths — combining them is rejected at startup. Operators relying on `ProposerDelay` can't also opt into cross-BN bid scoring; see [Interaction](#interaction).
+`ProposalSoftDeadline` and the legacy `ProposerDelay` / `ProposalSoftTimeout` select mutually-exclusive SSV-side block-fetch paths — combining them is rejected at startup.
 
 ## Definitions and typical values
 
