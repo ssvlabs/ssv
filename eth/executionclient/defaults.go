@@ -15,12 +15,14 @@ const (
 	// later-reorged block could lead to slashing).
 	//
 	// This value is a network-wide invariant rather than an operator-tunable
-	// knob: duty-scheduling logic in operator/duties derives slot offsets from
-	// it (see voluntaryExitSlotsToPostpone) so that operators agree on the same
-	// scheduled slot deterministically. If operators ran with different values,
-	// some would schedule duties in the past on receipt and broadcast pre-
-	// consensus messages with diverging slot/epoch values, breaking partial-
-	// signature aggregation.
+	// knob. It is load-bearing for the voluntary-exit broadcast gate in
+	// operator/duties (voluntaryExitExecutionSlotsToPostpone is derived from
+	// it): every operator uses it to size the worst-case EL-streaming lag
+	// before broadcasting their own partial-sig. If operators ran with
+	// different values, fast-EL operators with smaller FollowDistance would
+	// broadcast before slower peers had received the EL event, dropping the
+	// partial-sig at the receiver's dutyCount validation check and reopening
+	// the race that PR #2851 was meant to close.
 	FollowDistance = 8
 
 	DefaultHealthInvalidationInterval = 10 * time.Second

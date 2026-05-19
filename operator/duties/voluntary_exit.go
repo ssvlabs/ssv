@@ -221,9 +221,6 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 
-	// Preallocate both with a non-nil, zero-length slice so that the queue
-	// retains the same "initialized, empty" shape as set up by the constructor
-	// even on ticks where every queued exit clears the gate.
 	dutiesForExecution := make([]*spectypes.ValidatorDuty, 0, len(h.dutyQueue))
 	pendingItems := make([]*queuedExit, 0, len(h.dutyQueue))
 

@@ -476,14 +476,10 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		// duty.Slot represents the intended wall-clock firing slot for most
-		// duties, but for voluntary-exit it carries the wire/duty slot — a
-		// coordination point kept deliberately in the past relative to actual
-		// broadcast time (see voluntaryExitWireSlotsToPostpone vs
-		// voluntaryExitExecutionSlotsToPostpone). Measuring "lateness" relative
-		// to that slot is meaningless and would fire the warning + pollute the
-		// histogram on every exit, so we skip both for the voluntary-exit role
-		// while still incrementing the scheduled-duty counter.
+		// For voluntary-exit, duty.Slot is the wire/coordination slot, not the
+		// intended firing slot (see voluntaryExitWireSlotsToPostpone). Lateness
+		// metrics against it would be misleading, so skip them; the counter
+		// still ticks.
 		if duty.RunnerRole() == spectypes.RoleVoluntaryExit {
 			recordDutyScheduledNoDelay(ctx, duty.RunnerRole())
 		} else {
