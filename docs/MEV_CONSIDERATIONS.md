@@ -4,9 +4,11 @@
 
 To get the most out of MEV opportunities, configure **timing games on the PBS layer** — either mev-boost v1.11+ launched with `-config <path>` (and optionally `-watch-config` for hot reload), or commit-boost. With PBS-side timing games configured, SSV's `ProposerDelay` should stay at its default value of `0`.
 
-If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because they don't consume SSV's slot budget for the auction wait.
+If your PBS does not support timing games (mev-boost < v1.11, mev-boost without `-config <path>`, or any other PBS lacking the feature), SSV's `ProposerDelay` is still available — see [Appendix A](#appendix-a--legacy-proposerdelay-approach). PBS-side timing games are preferred because the PBS polls each relay multiple times within a precise slot-relative auction window — yielding higher-value bids than a single `getHeader` call after an SSV-side `ProposerDelay` sleep.
 
 If you run **multiple Beacon nodes** and want SSV to cross-compare bids across them rather than taking the first BN's response, set `ProposalSoftDeadline` on the SSV side to opt into cross-BN bid scoring (see [SSV-side block-fetch configuration](#ssv-side-block-fetch-configuration)). Single-BN setups don't need this — they bypass the parallel-fetch logic entirely.
+
+`ProposalSoftDeadline` and the legacy `ProposerDelay` / `ProposalSoftTimeout` select mutually-exclusive SSV-side block-fetch paths — combining them is rejected at startup. Operators relying on `ProposerDelay` can't also opt into cross-BN bid scoring; see [Interaction](#interaction).
 
 ## Definitions and typical values
 
@@ -17,7 +19,7 @@ The variables below name the stages of the SSV proposer-duty timeline. The value
 | `RANDAO` | ~100ms | Pre-consensus phase: SSV operators build the RANDAO signature used in the block-fetch request. |
 | `(auction window)` | varies | PBS-side relay polling. Configurable; see [PBS-side timing games](#pbs-side-timing-games-recommended). |
 | `MEVBoostRelayTimeout` | ~200ms | *Legacy path only:* mev-boost's single getHeader call when SSV asks for a block. Replaced by `(auction window)` in PBS-timing-games setups. |
-| `QBFT` | ~2500ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~150ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~350ms successful round 2). The round timer is currently round-relative rather than slot-relative ([#2429](https://github.com/ssvlabs/ssv/issues/2429)); round-2 budget must be reserved even when round 1 typically succeeds. |
+| `QBFT` | ~2500ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~150ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~350ms successful round 2). |
 | `PostConsensusSigning` | ~150ms | Operators reconstruct the validator BLS signature from partial signatures. |
 | `BlockSubmission` | ~200ms | Leader submits the signed blinded block to the BN; relay reveals the payload; block propagates. |
 
@@ -40,9 +42,10 @@ Where `(auction window)` sits in the slot is what determines MEV capture — bid
 The PBS layer implements "timing games" — proactively polling relays at intervals defined in its own config, decoupling *when* the auction happens from *when* SSV asks for the block. SSV asks once and receives whatever bid the PBS has selected by its slot-relative cutoff.
 
 Preferred over `ProposerDelay` because:
-- The SSV node doesn't sit idle during the auction wait — its slot clock doesn't advance, so QBFT round 1 isn't squeezed.
+- The PBS polls each relay multiple times within the auction window (`target_first_request_ms` + `frequency_get_header_ms`), capturing higher-value bids than a single `getHeader` per relay. `ProposerDelay` + single `getHeader` gets one bid per relay at one point in time; PBS-side timing games sample several and keep the best.
+- The auction cutoff is slot-relative (`late_in_slot_time_ms`), so QBFT round 1 starts at a predictable point in the slot. With `ProposerDelay`, QBFT starts at `ProposerDelay + variable relay-response time`, which makes the post-auction budget harder to size.
 - The PBS handles auction-timing risk internally. If all polls time out or no relay responds, the PBS falls back to a local block (vanilla), not a missed slot.
-- Configuration is concentrated in the PBS rather than coordinated across SSV-side and PBS-side knobs.
+- Configuration is concentrated in the PBS rather than split across SSV-side and PBS-side knobs.
 
 ### Configuration knobs
 
@@ -199,17 +202,6 @@ Relevant logs and metrics:
 - `"got beacon block proposal"` log with `took` duration, in `protocol/v2/ssv/runner/proposer.go`.
 - `"received proposal"` debug log with `score`, `latency`, `blinded`, `pending`, in `beacon/goclient/proposer.go`. Emitted per BN response in multi-BN setups.
 - `"successfully finished duty processing"` log with pre-consensus, consensus, and post-consensus splits.
-
-### Mainnet vs testnet
-
-Testnet relays (Hoodi, Holesky, Sepolia) typically run reference or synthetic builders; their bid distributions don't reflect mainnet economics. Use testnet for plumbing validation (reliability, config parsing, no missed slots). For MEV-uplift quantification, use mainnet validator data + relay-data APIs.
-
-### Iteration discipline
-
-- Start with PBS defaults; tighten `late_in_slot_time_ms` toward later values gradually.
-- Change one knob per iteration window.
-- Monitor miss rate alongside bid-value distribution; back off if miss rate degrades.
-- Allow enough observation time — proposals are sparse (roughly one per validator per month on mainnet), so small validator sets need long windows for statistical signal.
 
 ## SSV-side block-fetch configuration
 
