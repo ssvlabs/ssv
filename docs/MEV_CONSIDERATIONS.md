@@ -187,21 +187,22 @@ Bid value grows through the slot, so the auction cutoff should be as late as pos
 - **Cutoffs above ~1100ms** accept that round 1 must succeed — if round 1 fails, the slot may be missed (depending on your cluster's QBFT + submission latencies). Example B (1800ms) sits in this regime.
 - **Round-1-only variance buffer:** even in the round-1-must-succeed regime, cutoffs much beyond ~2500ms tighten the slot enough that occasional latency spikes risk missing the deadline even when round 1 succeeds.
 
-### What to measure first
+### What to measure
 
-- **RANDAO completion time** — `measurements.PreConsensusTime()` in `protocol/v2/ssv/runner/`. Visible on Grafana charts if exported.
-- **BN → PBS RTT** — typically same machine, well under 10ms. Visible in PBS logs.
-- **Per-relay RTT distribution (p50/p95/p99)** — PBSes log this on every `getHeader` call.
-- **QBFT round-1 completion distribution** — `measurements.ConsensusTime()` in `protocol/v2/ssv/runner/`. Visible on Grafana charts if exported.
-- **Submission round-trip** — from `SubmitBeaconBlock` in `beacon/goclient/proposer.go` through the relay payload-reveal step.
+Useful signals to baseline before tuning, by data source:
 
-### SSV telemetry
-
-Relevant logs and metrics:
-
-- `"got beacon block proposal"` log with `took` duration, in `protocol/v2/ssv/runner/proposer.go`.
-- `"received proposal"` debug log with `score`, `latency`, `blinded`, `pending`, in `beacon/goclient/proposer.go`. Emitted per BN response in multi-BN setups.
+**On the SSV side** — metrics on Grafana (if export is enabled) and structured logs:
+- **RANDAO completion time** — pre-consensus duration.
+- **QBFT round-1 completion distribution** — consensus duration.
+- `"got beacon block proposal"` log with `took` duration.
+- `"received proposal"` debug log with `score`, `latency`, `blinded`, `pending` fields — emitted per BN response in multi-BN setups.
 - `"successfully finished duty processing"` log with pre-consensus, consensus, and post-consensus splits.
+
+**On the PBS side** — PBS logs:
+- BN → PBS RTT — typically same machine, well under 10ms.
+- Per-relay RTT distribution (p50/p95/p99) — logged per `getHeader` call.
+
+**End-to-end** — submission round-trip from the signed block leaving SSV through the relay payload-reveal step (visible from PBS and relay logs).
 
 ## SSV-side block-fetch configuration
 
