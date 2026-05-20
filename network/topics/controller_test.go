@@ -385,7 +385,21 @@ func newPeer(t *testing.T, ctx context.Context, logger *zap.Logger, mdnsTag stri
 
 	ds, err := discovery.NewLocalDiscovery(ctx, logger, h, mdnsTag)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = ds.Close() })
+	t.Cleanup(func() {
+		// ds.Close → mdnsService.Close → zeroconf.Server.Shutdown blocks
+		// waiting to multicast an unregister, which on a broken mDNS
+		// environment doesn't return — and that's exactly the timeout
+		// case this cleanup is meant to keep diagnosable. Cap it so the
+		// real failure (e.g. the newPeers connection wait) surfaces
+		// cleanly instead of the test hitting -timeout.
+		done := make(chan struct{})
+		go func() { _ = ds.Close(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Log("ds.Close timed out; leaking mdns goroutines")
+		}
+	})
 
 	var p *P
 	var midHandler topics.MsgIDHandler
