@@ -75,15 +75,10 @@ type ExitDescriptor struct {
 	BlockNumber    uint64
 }
 
-// queuedExit holds an own-validator exit duty awaiting local broadcast.
-//
-// duty.Slot carries the deterministic shared duty slot (blockSlot +
-// voluntaryExitDutySlotsToPostpone) — used in the dutyStore, on the wire, and
-// to derive the signed VoluntaryExit.Epoch. earliestExecutionSlot is the
-// purely-local gate that defers our own partial-sig broadcast until peers'
-// EL streaming pipelines have plausibly caught up; see the docstrings of
-// voluntaryExitDutySlotsToPostpone and voluntaryExitExecutionSlotsToPostpone
-// for the breakdown.
+// queuedExit holds an own-validator exit duty awaiting its local execution
+// gate. duty.Slot is the shared duty slot (voluntaryExitDutySlotsToPostpone);
+// earliestExecutionSlot is when this operator may broadcast its partial-sig
+// (voluntaryExitExecutionSlotsToPostpone).
 type queuedExit struct {
 	duty                  *spectypes.ValidatorDuty
 	earliestExecutionSlot phase0.Slot
@@ -216,9 +211,6 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	pendingItems := make([]*queuedExit, 0, len(h.dutyQueue))
 
 	for _, item := range h.dutyQueue {
-		// Gate on earliestExecutionSlot, not duty.Slot: the duty's Slot is the
-		// shared duty slot (kept low for cross-version interop), while
-		// earliestExecutionSlot is the local-only "no earlier than" trigger.
 		if item.earliestExecutionSlot <= slot {
 			dutiesForExecution = append(dutiesForExecution, item.duty)
 		} else {
@@ -270,10 +262,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 }
 
 func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
-	// slot is the execution slot (the current ticker slot at dispatch), not
-	// duty.Slot — which for voluntary-exit is the shared duty slot held in the
-	// past for cross-operator coordination. 1 wall-clock slot from execution
-	// should be sufficient for this duty-type.
+	// 1 wall-clock slot from execution should be sufficient for this duty-type.
 	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
 	return dutyDeadline
 }
