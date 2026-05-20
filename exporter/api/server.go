@@ -119,9 +119,13 @@ func (ws *wsServer) BroadcastFeed() *event.Feed {
 	return ws.outFeed
 }
 
-// RegisterHandler registers an end point. Each handler is responsible
-// for closing the websocket it receives — handleStream via its conn
-// struct (which owns ws.Close via Close), handleQuery directly.
+// RegisterHandler registers an end point. Each handler closes the websocket
+// it receives — handleStream via its conn struct (which owns ws.Close via
+// Close), handleQuery directly — and the wrapper closes the websocket on
+// server ctx cancel so a handler blocked in a read/write unblocks during
+// shutdown (http.Server.Shutdown does not close upgraded websocket
+// connections, so without this an idle /query conn waiting in ReadJSON
+// would survive shutdown and leak the handler goroutine).
 func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *websocket.Conn)) {
 	wrappedHandler := func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, w.Header())
@@ -130,6 +134,17 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(conn *we
 			return
 		}
 		ws.logger.Debug("new websocket connection")
+
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-ws.ctx.Done():
+				_ = conn.Close()
+			case <-done:
+			}
+		}()
+
 		handler(conn)
 	}
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -53,6 +54,30 @@ func TestHandleQuery(t *testing.T) {
 
 	// make sure the connection got 2 responses
 	require.Equal(t, 2, client.MessageCount())
+}
+
+// TestHandleQuery_ServerCtxCancelClosesIdleConn pins the wrappedHandler ctx
+// watcher: an idle /query connection (blocked in ReadJSON server-side) must
+// be torn down when the server ctx is canceled, otherwise the handler
+// goroutine leaks past shutdown.
+func TestHandleQuery_ServerCtxCancelClosesIdleConn(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	mux := http.NewServeMux()
+	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {}, mux, false)
+	addr, _, err := ws.Start("127.0.0.1:0")
+	require.NoError(t, err)
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws://"+addr+"/query", nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	cancel()
+
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
+	_, _, err = conn.ReadMessage()
+	require.Error(t, err, "client read should fail once server ctx is canceled")
 }
 
 func TestHandleStream(t *testing.T) {
