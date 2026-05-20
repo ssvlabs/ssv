@@ -18,9 +18,10 @@ const (
 	// frequencyEpochs defines how frequently we want to submit validator-registrations.
 	frequencyEpochs = 10
 
-	// validatorRegistrationWireSlotsToPostpone is the offset added to an EL
+	// validatorRegistrationDutySlotsToPostpone is the offset added to an EL
 	// registration event's block slot to derive the *duty slot* — the slot
-	// that goes into the partial-sig envelope and feeds
+	// stored in duty.Slot and shared across the cluster regardless of code
+	// version. It goes into the partial-sig envelope and feeds
 	// NetworkConfig.EpochStartTime(EstimatedEpochAtSlot(...)) when constructing
 	// the BLS-signed ValidatorRegistration's Timestamp (see
 	// ValidatorRegistrationRunner.buildValidatorRegistration).
@@ -41,13 +42,13 @@ const (
 	// Note: shares its numeric value (4) with
 	// validatorRegistrationSchedulingSlack below by coincidence; the two are
 	// independent.
-	validatorRegistrationWireSlotsToPostpone = phase0.Slot(4)
+	validatorRegistrationDutySlotsToPostpone = phase0.Slot(4)
 
 	// validatorRegistrationSchedulingSlack absorbs per-operator timing
 	// variance once a registration event clears the EL follow distance — see
 	// voluntaryExitSchedulingSlack for the full rationale; the same race
 	// applies here on the runner-level ErrNoDutyAssigned check at the
-	// receiver side. Independent of validatorRegistrationWireSlotsToPostpone
+	// receiver side. Independent of validatorRegistrationDutySlotsToPostpone
 	// despite happening to share the same numeric value (4).
 	validatorRegistrationSchedulingSlack = phase0.Slot(4)
 
@@ -77,12 +78,12 @@ type RegistrationDescriptor struct {
 // queuedRegistration holds an event-driven validator-registration duty awaiting
 // local broadcast.
 //
-// duty.Slot carries the deterministic wire/duty slot (blockSlot +
-// validatorRegistrationWireSlotsToPostpone) — used in the partial-sig
+// duty.Slot carries the deterministic shared duty slot (blockSlot +
+// validatorRegistrationDutySlotsToPostpone) — used in the partial-sig
 // envelope and to derive the signed ValidatorRegistration.Timestamp.
 // earliestExecutionSlot is the purely-local gate that defers our own
 // broadcast until peers' EL streaming pipelines have plausibly caught up; see
-// the docstrings of validatorRegistrationWireSlotsToPostpone and
+// the docstrings of validatorRegistrationDutySlotsToPostpone and
 // validatorRegistrationExecutionSlotsToPostpone for the breakdown.
 type queuedRegistration struct {
 	duty                  *spectypes.ValidatorDuty
@@ -173,7 +174,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				)
 				continue
 			}
-			dutySlot := blockSlot + validatorRegistrationWireSlotsToPostpone
+			dutySlot := blockSlot + validatorRegistrationDutySlotsToPostpone
 			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
 
 			h.eventQueue = append(h.eventQueue, &queuedRegistration{
@@ -207,8 +208,8 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 
 	// Drain the event-driven queue: pick up registrations whose gate slot has
 	// been reached. Gate on earliestExecutionSlot, not duty.Slot — the duty's
-	// Slot is the wire slot (kept low for cross-version interop) and would
-	// fire immediately.
+	// Slot is the shared duty slot (kept low for cross-version interop) and
+	// would fire immediately.
 	pendingItems := make([]*queuedRegistration, 0, len(h.eventQueue))
 	for _, item := range h.eventQueue {
 		if item.earliestExecutionSlot <= slot {
@@ -293,9 +294,9 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 
 func (h *ValidatorRegistrationHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
 	// slot is the firing slot (the current ticker slot at dispatch), not
-	// duty.Slot — which for event-driven registrations is the wire slot held
-	// in the past. 1 wall-clock slot from firing should be sufficient for
-	// this duty-type.
+	// duty.Slot — which for event-driven registrations is the shared duty
+	// slot held in the past for cross-operator coordination. 1 wall-clock
+	// slot from firing should be sufficient for this duty-type.
 	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
 	return dutyDeadline
 }

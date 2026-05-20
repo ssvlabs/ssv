@@ -159,9 +159,9 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 					Type:           spectypes.BNRoleValidatorRegistration,
 					PubKey:         validatorPk,
 					ValidatorIndex: validatorIndex,
-					// Slot is the wire slot — what gets signed; intentionally
-					// lower than the execution-gate slot above.
-					Slot: slot + validatorRegistrationWireSlotsToPostpone,
+					// Slot is the shared duty slot — what gets signed;
+					// intentionally lower than the execution-gate slot above.
+					Slot: slot + validatorRegistrationDutySlotsToPostpone,
 				},
 			})
 			require.EqualValues(t, 2, blockByNumberCalls.Load())
@@ -212,7 +212,7 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 					Type:           spectypes.BNRoleValidatorRegistration,
 					PubKey:         validatorPk,
 					ValidatorIndex: validatorIndex,
-					Slot:           slot + validatorRegistrationWireSlotsToPostpone,
+					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
 				},
 			})
 
@@ -266,13 +266,13 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 					Type:           spectypes.BNRoleValidatorRegistration,
 					PubKey:         validatorPk1,
 					ValidatorIndex: validatorIndex1,
-					Slot:           slot + validatorRegistrationWireSlotsToPostpone,
+					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
 				},
 				{
 					Type:           spectypes.BNRoleValidatorRegistration,
 					PubKey:         validatorPk2,
 					ValidatorIndex: validatorIndex2,
-					Slot:           slot + validatorRegistrationWireSlotsToPostpone,
+					Slot:           slot + validatorRegistrationDutySlotsToPostpone,
 				},
 			})
 
@@ -283,13 +283,13 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 	})
 }
 
-// TestValidatorRegistrationWireSlotPinned guards a wire-format invariant:
+// TestValidatorRegistrationDutySlotPinned guards a wire-format invariant:
 // the value has been 4 since this constant was introduced, and every operator
 // in a cluster must compute the same signed Timestamp regardless of code
 // version. Bumping the constant is a coordinated network-wide upgrade, not a
 // code-cleanup change — this test turns any literal change into a visible
 // diff that PR review can catch.
-func TestValidatorRegistrationWireSlotPinned(t *testing.T) {
+func TestValidatorRegistrationDutySlotPinned(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, phase0.Slot(4), validatorRegistrationWireSlotsToPostpone)
+	require.Equal(t, phase0.Slot(4), validatorRegistrationDutySlotsToPostpone)
 }
