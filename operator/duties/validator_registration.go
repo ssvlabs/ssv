@@ -217,7 +217,19 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 			pendingItems = append(pendingItems, item)
 		}
 	}
+	eventDrivenDispatched := len(duties)
 	h.eventQueue = pendingItems
+
+	if eventDrivenDispatched > 0 {
+		// Mirrors the dispatch log on voluntary-exit's path so the
+		// deferred-broadcast flow is greppable in operator logs; the
+		// per-duty enqueue log ("🛠 scheduled validator registration duty
+		// for execution") already carries the descriptor details, this is
+		// the counterpart confirming dispatch at the gate.
+		h.logger.Debug("dispatched event-driven validator registration duties",
+			zap.Uint64("slot", uint64(slot)),
+			zap.Int("count", eventDrivenDispatched))
+	}
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
 	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
