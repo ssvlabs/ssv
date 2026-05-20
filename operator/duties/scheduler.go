@@ -476,24 +476,22 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		logger.Debug(eventMsg)
 		span.AddEvent(eventMsg)
 
-		// For voluntary-exit, duty.Slot is the wire/coordination slot, not the
-		// intended firing slot (see voluntaryExitWireSlotsToPostpone). Lateness
-		// metrics against it would be misleading, so skip them; the counter
-		// still ticks.
-		if duty.RunnerRole() == spectypes.RoleVoluntaryExit {
-			recordDutyScheduledNoDelay(ctx, duty.RunnerRole())
-		} else {
-			slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
-			if slotDelay >= 100*time.Millisecond {
-				const eventMsg = "⚠️ late duty execution"
-				logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
-				span.AddEvent(eventMsg, trace.WithAttributes(
-					attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
-					observability.BeaconRoleAttribute(duty.Type),
-					observability.RunnerRoleAttribute(duty.RunnerRole())))
-			}
-			recordDutyScheduled(ctx, duty.RunnerRole(), slotDelay)
+		role := duty.RunnerRole()
+		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
+
+		// For wire-slot roles (see usesWireSlot), duty.Slot is a
+		// coordination slot held in the past — slotDelay against it is
+		// meaningless. Skip the warning; recordDutyScheduled handles the
+		// histogram side. The counter still ticks for both kinds.
+		if !usesWireSlot(role) && slotDelay >= 100*time.Millisecond {
+			const eventMsg = "⚠️ late duty execution"
+			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
+				observability.BeaconRoleAttribute(duty.Type),
+				observability.RunnerRoleAttribute(role)))
 		}
+		recordDutyScheduled(ctx, role, slotDelay)
 
 		s.backgroundTasks.Add(1)
 		go func() {

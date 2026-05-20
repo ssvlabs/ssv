@@ -35,19 +35,24 @@ var (
 			metric.WithDescription("total number of duties scheduled for execution")))
 )
 
+// recordDutyScheduled bumps the per-role scheduled-duty counter and, when
+// meaningful, records a slot-delay histogram point. For wire-slot roles
+// (see usesWireSlot), the caller's slotDelay is intentionally large and
+// does not reflect operator lateness, so the histogram point is skipped;
+// the counter still ticks.
 func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay time.Duration) {
 	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
 	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
-	slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
+	if !usesWireSlot(role) {
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
+	}
 }
 
-// recordDutyScheduledNoDelay increments the scheduled-duty counter without
-// touching the slot-delay histogram. Use this when the duty's Slot field does
-// not represent the intended firing time (e.g. voluntary-exit, where duty.Slot
-// is a wire/coordination slot kept deliberately in the past) — recording the
-// computed "delay" against such a slot would pollute the histogram with
-// values that don't reflect operator lateness.
-func recordDutyScheduledNoDelay(ctx context.Context, role types.RunnerRole) {
-	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
-	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
+// usesWireSlot reports whether duty.Slot for the given role is a wire /
+// coordination slot intentionally kept in the past (rather than the
+// wall-clock firing slot). For such roles, "lateness" relative to duty.Slot
+// is meaningless — see voluntaryExitWireSlotsToPostpone for the canonical
+// rationale.
+func usesWireSlot(role types.RunnerRole) bool {
+	return role == types.RoleVoluntaryExit
 }
