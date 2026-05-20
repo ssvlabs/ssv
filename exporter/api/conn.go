@@ -178,7 +178,7 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 	}
 	for {
 		if c.ctx.Err() != nil {
-			logger.Error("read loop stopped by context")
+			logger.Debug("read loop stopped by context")
 			break
 		}
 		mt, msg, err := c.ws.ReadMessage()
