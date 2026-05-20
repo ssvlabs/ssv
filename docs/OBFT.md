@@ -912,7 +912,7 @@ A cluster could mix-and-match per duty: OBFT for proposer (where headroom matter
 | Phase 1 σ_V | Yes — leader signs σ_V at Phase 1 (cryptographic head-start) | **No** — leader broadcasts only `(V, σ^op)` at Phase 1; σ-commitment happens at Phase 2b alongside non-leaders |
 | Phase 2 split | Single Phase 2 (operators emit one `KindCommit` by `T_commit`, typically earlier on `T_L_0_observed`) | 2a (verdict broadcast / σ-eligibility observation) + 2b (σ-emit on cluster-converged V) |
 | Equivocation σ-locked split (1-1-1, etc.) | **Slot misses at L_0** — slashable but no in-slot recovery | **Recovered** via convergence rule (verdict-quorum-short → NR fall-through to L_1) |
-| h_V=1 selective-delivery deadlock | **Closed under healthy mesh via the §Phase 2 peer-reflood-V mechanism** (V-drop receivers σ on V harvested from the in-time recipient's KindCommit + σ_L^V witness; σ-pool reaches qV at L_0; degraded-mesh case remains a slot-miss pattern deterred via Assumption 4). Pre-§Phase 2 baseline was a Class B grief vector deterred via Assumption 4. Withhold-then-fake-σ variant remains closed as a side-effect of Defer removal (see Appendix E). | **Closed unconditionally** via Phase-2a verdict pool (different mechanism; recovers at L_1 via NR fall-through, vs OBFT's L_0 σ recovery) |
+| h_V=1 selective-delivery deadlock | **Closed under healthy mesh via the §Phase 2 peer-reflood-V mechanism** (V-drop receivers σ on V harvested from the in-time recipient's KindCommit + σ_L^V witness; σ-pool reaches qV at L_0; degraded-mesh case remains a slot-miss pattern deterred via Assumption 4). Pre-§Phase 2 baseline was a Class B grief vector deterred via Assumption 4. Withhold-then-fake-σ variant remains closed as a side-effect of the bare-OBFT 3-state lattice (σ / NR / NV with no Defer state — receivers without V at `T_commit` NR immediately rather than waiting on peer σ-claims). | **Closed unconditionally** via Phase-2a verdict pool (different mechanism; recovers at L_1 via NR fall-through, vs OBFT's L_0 σ recovery) |
 | Validity-divergence (re-org during acceptance) | **Out of scope** (assumption 3) — slot misses cleanly | **Recovered within f-bound** (3-of-4 majorities at f=1 n=4); 2-2 splits still slot-miss |
 | Mesh-flakiness deadlock | Slot misses (cross-phase exclusivity locks flaky NR) | **Recovered** (Phase-2a defers commitment past mesh outliers) |
 | New regression vs OBFT | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ at Phase-2b (NR-emit or silent). Slot misses; [Rule 6b](2abOBFT.md#slashing-evidence) (in 2abOBFT's numbering — verdict-vs-action equivocation) cryptographic only under NR-emit, behavioral under silent. Bare OBFT succeeded here via Phase-1 σ_V lock. |
@@ -1012,7 +1012,7 @@ This assumption is L_Bid-specific — bare OBFT does not depend on it. Deploymen
 
 ### Timing notation for L_Bid variants
 
-This appendix and Appendix F use three arrival anchors with distinct meanings:
+This appendix and Appendix E use three arrival anchors with distinct meanings:
 
 | Symbol | Meaning |
 |---|---|
@@ -1287,7 +1287,7 @@ Candidate-withholding and candidate/bid-equivocation triggers require the byz to
 
 ### Slot timing
 
-Measured from `T_commit` (start of Phase 2 σ-emit; mini-consensus already complete). At Config A (P99=150ms, δ=50ms, tightened `Δ_2 = 200ms`, `ε_3 = 50ms`). The same scenarios apply to L_Bid_New (Appendix F) with V_early replacing V_X at L_Bid and bid_1 replacing V_{L_0} at L_0; rotation-layer scenarios are unchanged since post-`T_commit` timing is identical across bare OBFT, current L_Bid, and L_Bid_New:
+Measured from `T_commit` (start of Phase 2 σ-emit; mini-consensus already complete). At Config A (P99=150ms, δ=50ms, tightened `Δ_2 = 200ms`, `ε_3 = 50ms`). The same scenarios apply to L_Bid_New (Appendix E) with V_early replacing V_X at L_Bid and bid_1 replacing V_{L_0} at L_0; rotation-layer scenarios are unchanged since post-`T_commit` timing is identical across bare OBFT, current L_Bid, and L_Bid_New:
 
 | Scenario | Time | Mechanism |
 |---|---|---|
@@ -1552,158 +1552,7 @@ OBFT-replenish's slot scheduling is closer to OBFTR's complexity than to bare OB
 
 Treat OBFT-replenish as a research direction worth specifying further if the late-MEV freshness motivation is significant for the target deployment. If the priority is simplicity and predictable behavior, bare OBFT (K configurable; K=2 default, K=4 up-tier) remains the cleaner choice. Replenishment is orthogonal to the structural changes that would be needed for adversarial-byz coverage.
 
-## Appendix E — Defer state (within-slot partition recovery)
-
-> **Note on values:** Concrete formulas in this appendix are stated against bare OBFT's reflood-aware schedule: `B_0 = 2·BTT + RefloodDelay` (= 1100ms at Config A with default RefloodDelay=700ms) and tightened `Δ_2 = 1·BTT`. Earlier drafts used `Δ_2 = 2·BTT`; the Defer extension's structural property (`T_broadcast_max_0` invariant under fixed `T_relay_cutoff`) is unchanged across either sizing — only the substituted constants shift.
-
-This appendix describes a candidate enhancement to OBFT — **OBFT+Defer** — that adds a 4th per-(operator, layer) commitment state ("Defer") for receivers still waiting on V at `T_commit`. Defer enables late σ-emission within a `[T_commit, T_accept_max]` absorption window, recovering aggressive-marginal partition cases where a re-flooded bundle reaches some honest after `T_commit` but before `T_accept_max`.
-
-OBFT+Defer is positioned as an **enhancement of OBFT** for partition tolerance — keeping OBFT's single-round, K-layer fall-through structure but trading spec/wire simplicity for a recovery mode that bare OBFT lacks. Defer was part of earlier OBFT-family designs and was removed from the current spec **primarily for spec/wire/EKM simplification** (see [§Where this came from](#where-this-came-from)); closure of the withhold-then-fake-σ adversarial-byz attack documented later in this appendix is a structural side-effect of that removal, not its motivating reason. This appendix documents the trade-offs so future spec revisions can re-evaluate whether the recovery scope is worth the costs in a given deployment.
-
-### Design idea
-
-Add a 4th commitment state, **Defer**, to the per-(operator, layer) commitment lattice. Each operator's per-layer state at `T_commit` is one of:
-
-- **σ** (sign-on-V) — observed and validated V; emit σ partial.
-- **NR** (no-receipt / silent-leader) — no V observed by deadline AND no peer σ-claims observed in the auth-only-retention window; emit NR partial.
-- **NV** (non-validity) — host returned `not valid`; emit NR partial (operationally identical to NR).
-- **Defer** *(new)* — no V observed by `T_commit` BUT peer σ-claims observed (cluster σ-side appears active); uncommitted, emit nothing yet.
-
-Phase 2 splits across two emission points:
-
-- **`T_commit`** (early signal): receivers with V emit σ; receivers without V either NR-immediately (silent-leader rule) if no peer σ-claims observed, or enter Defer if peer σ-claims observed.
-- **`T_accept_max = T_commit + W`** (late horizon): Defer-state operators transition Defer→σ if V arrived during the window, or force-NR if not.
-
-Phase 3 reconstruction starts at `T_accept_max + Δ_2_bare` (after late emissions propagate; `Δ_2_bare = 2·BTT` at recommended sizing). The cluster relies on K-layer fall-through if neither σ-quorum nor NR-quorum reaches at any layer.
-
-### Mechanics preserved from OBFT
-
-- **K-layer chained encryption**: identical. Defer affects per-operator commitment timing, not the cryptographic structure.
-- **Pigeonholes 1, 2, 3**: hold under Defer because Defer-state operators emit nothing (no σ, no NR), so they don't contribute to either pool until they transition.
-- **Slashing-evidence rules 1, 2, 3, 5**: unchanged. Rule 4 (fake encrypted-presence) timing unchanged.
-- **Reconstruction walk**: same per-layer σ-or-NR resolution; just runs after a wider Phase-2 window.
-
-### Mechanics added (vs bare OBFT)
-
-- **4th commitment state** with its own EKM signing-event boundary. Defer→σ transition logs a separate EKM event from initial σ-commit (same `value_root`, but different `(slot, layer, side, transition)` key). Defer→force-NR is the standard NR signing event.
-- **Multi-emission wire format**: separate `KindOnion` (σ-side, possibly emitted at `T_commit` OR late within `[T_commit, T_accept_max]`) and `KindNR` (NR-side, emitted at `T_accept_max` for force-NR cases). Cannot be combined into a single `KindCommit` — receivers need an early-NR signal at `T_commit` to know whether to defer, and late σ-emits arrive after that decision is recorded.
-- **Auth-only-retention pre-state**: receivers track peer σ-claims observed in `[slot_start, T_commit]` separately from their own commitment state. Used to decide whether to NR-immediately (no peer σ observed → silent-leader rule) or Defer (peer σ observed → wait) at `T_commit`.
-- **Cross-phase exclusivity across Defer→σ transition**: an operator who Defer'd at `T_commit` and then σ-emitted at `T_commit + ε` must not have NR-emitted in between. EKM enforces — Defer is a distinct EKM state from "uncommitted/silent."
-- **Wider Phase-2 window**: `Δ_2 = W + Δ_2_bare` instead of bare OBFT's tightened `Δ_2_bare = 1·BTT`. Phase 3 starts at `T_accept_max + Δ_2_bare` instead of `T_commit + Δ_2_bare`.
-
-### Comparison with bare OBFT
-
-#### Recovery scope
-
-Aggressive-marginal partition: 1-of-3 honest receives V by `T_commit`; 2 others receive V late but within `[T_commit, T_accept_max]`.
-
-- **Bare OBFT**: 1 honest σ-emits at `T_commit`; 2 honest NR-immediately (silent-leader rule). σ-pool = 1 + leader = 2 < qV; NR-pool = 2 < qEnc. **Slot misses at L_0**, fall-through to L_1 if L_1 honest.
-- **OBFT+Defer**: 1 honest σ-emits at `T_commit`; 2 honest enter Defer (observed peer σ-claim from operator 1). V arrives within W; both Defer→σ-transition. σ-pool = 3 + leader = 4 ≥ qV. **Slot succeeds at L_0**.
-
-Defer recovers cases where the propagation tail falls within `[T_commit, T_accept_max]` — strictly more than bare OBFT for that pattern at L_0. (Bare OBFT recovers via K-layer fall-through to L_1 instead, which works if L_1 honest and reachable, at the cost of one layer's worth of MEV opportunity.)
-
-#### Healthy-path latency
-
-Under fixed `T_relay_cutoff` (relay submission deadline; reconstruction must complete by `T_relay_cutoff − T_submit`):
-
-- **Bare OBFT**: SOFT completion target `T_commit + Δ_2 + ε_3`. Under the canonical observer-on-arrival pattern (see §Phase 3), Resolve runs opportunistically from `T_commit` onward and the average healthy slot decides well before this target — σ-quorum forms within propagation latency of the last needed `KindCommit`, typically a few BTTs after `T_commit` under partial synchrony.
-- **OBFT+Defer**: SOFT completion target `T_accept_max + Δ_2 + ε_3 = T_commit + W + Δ_2 + ε_3`. Defer's σ-pool also grows monotonically (Defer→σ transitions only add σ partials; Defer→NR only adds NR partials), so observer-on-arrival is *compatible* — but the standard Defer formulation predates the pattern and still describes a single Phase-3 attempt at the absorption-window's end. The expected-completion target is shifted by W either way because Defer's recovery scope inherently relies on late transitions landing before `T_accept_max`, regardless of polling discipline.
-
-Both reach the same wall-clock completion target when `T_relay_cutoff` is fixed. The Defer model shifts `T_commit` earlier by W (to make room for the absorption window) but completion target vs the relay deadline is identical. Bare OBFT adopts observer-on-arrival as the canonical pattern; updating Defer's formulation to observer-mode is a mechanical follow-up if the variant is ever spec-fleshed-out for deployment.
-
-#### MEV impact (`T_broadcast_max_0` — primary leader fetch deadline)
-
-**Defer does not compress MEV.** Under fixed `T_relay_cutoff` and bare OBFT's primary-vs-backup broadcast model (`B_0 = 2·BTT + RefloodDelay` for the primary; `B_k = T_commit` for backups; see [§Setting](#setting)), L_0's deadline is what matters for MEV:
-
-- **Bare OBFT**: `T_broadcast_max_0 = T_commit − B_0 = T_commit − (2·BTT + RefloodDelay)`; reconstruction must complete by `T_relay_cutoff − T_submit ≥ T_commit + Δ_2 + ε_3`, so `T_broadcast_max_0 ≤ T_relay_cutoff − T_submit − Δ_2 − ε_3 − B_0 = T_relay_cutoff − T_submit − 1·BTT − (2·BTT + RefloodDelay) − ε_3 = T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` at tightened `Δ_2 = 1·BTT`. At Config A with default RefloodDelay=700ms: `T_broadcast_max_0 ≤ 4000 − 100 − 600 − 700 − 50 = 2550ms` (the spec's 2500ms anchor leaves a 50ms residual margin).
-- **OBFT+Defer**: `T_broadcast_max_0 = T_accept_max − B_0 = T_accept_max − (2·BTT + RefloodDelay)`; reconstruction must complete by `T_relay_cutoff − T_submit ≥ T_accept_max + Δ_2 + ε_3`, so `T_broadcast_max_0 ≤ T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` at tightened `Δ_2 = 1·BTT`.
-
-Same `T_broadcast_max_0`. The `B_0 = 2·BTT + RefloodDelay` leader-broadcast budget for L_0 applies relative to `T_accept_max` instead of `T_commit` (in Defer), but `T_broadcast_max_0` relative to `T_relay_cutoff` is unchanged.
-
-The intuition that "Defer adds W to `T_broadcast_max_0 ↔ T_commit`" treats `T_commit` as the broadcast deadline. With Defer, `T_commit` is the early-signal point; `T_accept_max` is the broadcast deadline. With Defer, `T_commit` shifts earlier by W to fit the absorption window, but `T_broadcast_max_0` is anchored to `T_accept_max` (the late horizon), which is anchored to `T_relay_cutoff − T_submit − B_0 − Δ_2 − ε_3` either way (= `T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` at tightened `Δ_2 = 1·BTT`).
-
-#### Wire bandwidth
-
-OBFT+Defer requires multi-emission per operator:
-
-- KindOnion at `T_commit` (early σ-emits) + possible second KindOnion in `[T_commit, T_accept_max]` (late Defer→σ).
-- KindNR at `T_accept_max` (force-NR for operators still in Defer at end-of-window).
-
-vs bare OBFT's single KindCommit at `T_commit`. Per-operator wire footprint roughly **2× higher** in worst case (early σ-emit + late KindNR for force-NR; or auth-only-retention pre-emission + late σ).
-
-#### Adversarial-byz failure modes
-
-OBFT+Defer **opens the withhold-then-fake-σ h_V=1 attack** (Variant A — see [§Failure modes / Class B](#failure-modes)). The attack chain:
-
-1. Byzantine L_0 withholds Phase-1 from all honest peers in `[slot_start, T_accept_max − ε]`.
-2. Byzantine emits an auth-signed "I claim σ-side" envelope at `T_commit` (no V on the wire — a deliberate protocol-violation deviation from honest σ-emit, which is always a follow-on to a Phase-1 broadcast).
-3. Honest receivers without V observe the byz σ-claim → enter Defer (per the no-V fallback rule that triggers on observed peer σ-claims).
-4. At `T_accept_max − ε`, byzantine selectively unicasts Phase-1 to exactly one honest. That honest Defer→σ-transitions; the other two force-NR.
-5. Final pools: σ-pool = 1 honest + byz σ_V = 2 < qV; NR-pool = 2 < qEnc. **Deadlock at h_V=1**, slot misses at L_0 with no fall-through (NR-pool short of qEnc).
-
-All three byzantine actions are deliberate protocol-deviations — gossipsub broadcasts by default (withholding requires actively suppressing it), honest Phase-2 σ is a follow-on to Phase-1 broadcast (faking σ-claim with no V is a direct violation), gossipsub propagates broadcast-style (selective unicast requires bypassing it). **Under honest protocol operations the attack does not fire.**
-
-Bare OBFT closes Variant A by removing Defer: receivers without V at `T_commit` immediately NR (silent-leader rule, no peer-σ-claim fallback) → NR-quorum reaches → fall-through to L_1. Cost of closing Variant A: lose aggressive-marginal recovery within `[T_commit, T_accept_max]`.
-
-Variant B (selective Phase-1 delivery — byz broadcasts Phase-1 to exactly one honest, not withholding) is an algebraic limit at f=1, n=4 that neither Defer nor Defer-removal addresses at the σ-commitment-timing layer; it remains a Class B grief vector deterred via Assumption 4. So bare OBFT (Defer-removed) closes Variant A (via Defer removal) but **not** Variant B; the h_V=1 family is partially mitigated, not fully closed.
-
-#### Spec / EKM complexity
-
-OBFT+Defer requires:
-
-- 4-state commitment lattice (σ, NR, NV, Defer) with explicit transitions (Defer→σ, Defer→force-NR).
-- EKM signing-event boundaries for Defer→σ vs initial σ-commit, distinct schema rows.
-- Auth-only-retention pre-state for tracking peer σ-claims in `[slot_start, T_commit]` (used to gate the Defer-vs-NR-immediate decision).
-- Two separate Phase-2 emission timings (`T_commit`, `T_accept_max`) with cross-phase exclusivity enforcement spanning the window.
-- Larger Phase-2 window: `Δ_2 = W + 1·BTT` vs bare OBFT's tightened `Δ_2 = 1·BTT`.
-
-Bare OBFT requires:
-
-- 3-state commitment lattice (σ, NR, NV).
-- Single signing event per (slot, layer) per operator.
-- Single emission point at `T_commit`.
-- `Δ_2 = 1·BTT` (tightened).
-
-Defer adds materially to the spec/EKM surface and to the slashing-protection schema.
-
-### When OBFT+Defer is worth the complexity
-
-- **Sustained partial-synchrony deployments** where re-flood completion past `T_commit` is common (e.g., wide-area clusters with high `P99` variance, larger n where mesh is sparser). Defer's aggressive-marginal recovery scope materializes regularly.
-- **Higher-`f` deployments**: at f=1 n=4, K-layer fall-through to L_1 already covers most "no honest received V at L_0" cases. At higher f, fall-through depth is more constrained relative to byz patterns; Defer's within-layer recovery becomes more valuable.
-- **Trust assumption 4 (rational-byz deterrent) is strong**: deployments where Variant A's three coordinated deliberate deviations (withhold + fake σ-claim + selective unicast) are detectable as a behavioral signature across slots and the surviving operators can blacklist accordingly.
-- **MEV is not a primary driver**: since `T_broadcast_max_0` is invariant to Defer, MEV isn't the trade-off lever; the lever is recovery scope vs spec/wire complexity vs Variant A exposure.
-
-### When bare OBFT is preferable
-
-- **n=4 healthy-mesh SSV clusters**: aggressive-marginal partition is rare under fully-connected gossipsub; K-layer fall-through to L_1 covers the failure cases bare OBFT misses with adequate frequency.
-- **Adversarial-byz protection is the priority**: removing Defer closes Variant A, which is otherwise a reliable grief vector when byz is L_0 (~25% of slots at f=1 n=4 with uniform leader rotation). Variant A leaves *behavioral-pattern* evidence rather than cryptographically self-contained evidence, so the rational-byz deterrent's punishment quality is weak — making the attack particularly attractive to adversarial byz.
-- **Spec / wire / EKM simplicity is valuable**: bare OBFT's 3-state, single-emission, single-EKM-event-per-(slot, layer) shape is materially simpler to implement and audit. The single `KindCommit` envelope is a structural simplification that depends on Defer's absence.
-- **Production deployment under existing assumptions**: SSV's current proposer-duty deployment runs at n=4 with healthy gossipsub mesh and treats adversarial-byz as the dominant concern; the simpler 3-state model is the better fit.
-
-### Conclusions
-
-1. **Defer was removed from the current OBFT spec** in favor of a 3-state (σ, NR, NV) commitment lattice with a single `KindCommit` emission per operator per slot. **The primary motivation was spec/wire/EKM simplification** (3-state vs 4-state lattice, single emission vs multi-emission, no auth-only-retention pre-state, no transitional EKM events); closure of the withhold-then-fake-σ adversarial-byz attack is a structural side-effect of the same removal, not its motivating reason. The trade-off cost is loss of aggressive-marginal partition recovery (one specific pattern at the boundary of the `[T_commit, T_accept_max]` window).
-
-2. **The MEV cost intuition is a misread.** Defer doesn't compress `T_broadcast_max_0` (the primary leader's fetch deadline) — under the binding `T_broadcast_max_0 = T_relay_cutoff − T_submit − Δ_2 − ε_3 − B_0 = T_relay_cutoff − T_submit − 3·BTT − RefloodDelay − ε_3` equation (at tightened `Δ_2 = 1·BTT`, reflood-aware `B_0 = 2·BTT + RefloodDelay`), the leader fetch deadline is invariant to Defer. The `B_0` safety margin is anchored to `T_accept_max` (with Defer) or `T_commit` (without), but `T_relay_cutoff` minus that anchor is the same in both cases. What does shift is `T_commit` (W earlier with Defer, to make room for the absorption window before Phase 3 starts).
-
-3. **The withhold-then-fake-σ attack requires deliberate byz** — three coordinated deliberate deviations (withhold, fake σ-claim, selective unicast). None happens under honest protocol operations. The attack does NOT fire incidentally. So Defer's adversarial-byz cost is conditional on facing an actively-malicious byz within the f-bound, with weaker rational-byz-deterrent punishment quality than Variant B (behavioral-pattern evidence, not cryptographically self-contained).
-
-4. **The trade-off framing for keeping Defer**: gain aggressive-marginal partition recovery within `[T_commit, T_accept_max]`, expose deliberate-byz Variant A attack with weak punishment evidence quality, accept multi-emission wire format + 4-state commitment lattice + auth-only-retention pre-state + transitional EKM events. For SSV n=4 with healthy mesh, the latter ledger dominates.
-
-5. **OBFT+Defer vs bare OBFT trade summary**:
-   - **+** Aggressive-marginal partition recovery within `[T_commit, T_accept_max]` window.
-   - **+** Slightly wider partial-synchrony tolerance at L_0 (vs falling through to L_1 for the same pattern).
-   - **−** Reopens withhold-then-fake-σ adversarial-byz attack vector (Variant A).
-   - **−** Multi-emission wire format (no single-`KindCommit` simplification possible).
-   - **−** 4-state commitment lattice + auth-only-retention pre-state + transitional EKM events.
-   - **=** Same `T_broadcast_max_0` (primary leader MEV fetch deadline) under fixed `T_relay_cutoff`.
-   - **=** Same healthy-path completion time (= `T_relay_cutoff − T_submit`).
-   - **=** Same K-layer fall-through structure / chained encryption / Pigeonholes.
-   - **=** Same slashing-evidence rules (1, 2, 3, 5 unchanged; Rule 4 timing unchanged).
-
-Treat OBFT+Defer as a candidate enhancement worth re-evaluating if deployment conditions change — wider partial-synchrony, higher f, stronger rational-byz deterrent infrastructure, or production telemetry showing aggressive-marginal partition slot-misses at non-trivial rates. Under SSV's current n=4 healthy-mesh proposer-duty profile, bare OBFT (3-state, single-emission) is the cleaner trade.
-
-## Appendix F — OBFT + L_Bid_New (deep-bid mini-consensus)
+## Appendix E — OBFT + L_Bid_New (deep-bid mini-consensus)
 
 > **Note on current-schedule compatibility:** L_Bid_New was drafted against an earlier per-layer staggered backup schedule, where deep-layer leaders had positive `B_k` budgets that could be tightened (`T_broadcast_max_k = T_deep_arrival − B_k_LBid`) to fit a deep-layer mini-consensus window before `T_commit`. Under bare OBFT's current primary-vs-backup schedule (see [§Setting](#setting)), deep-layer leaders broadcast at BFT_start (`B_k = T_commit`) and have no MEV-fetch budget to preserve — so L_Bid_New's structural premise ("preserve primary L_0 MEV by tightening only deep-layer deadlines") loses its motivation: under the current schedule there's no MEV cost being saved at deep layers, since deep layers already fetch deepest-confirmed-parent. The design is preserved here as a candidate framing in case future spec revisions reintroduce per-deep-layer MEV-fetch budgets (e.g., a partial reversal of the primary-vs-backup shape for specific deployment profiles). A full L_Bid_New re-derivation under the current schedule is a follow-up if/when the extension is implemented; the formulas below reference `T_deep_arrival`, `T_broadcast_max_k = T_deep_arrival − B_k_LBid` for `k ≥ 1`, and `Δ_minicon` shifts on deep-layer deadlines that no longer make sense as written.
 >
@@ -1713,9 +1562,9 @@ This appendix specifies **L_Bid_New** as a candidate alternative to the L_Bid mi
 
 The structural trade vs current L_Bid: L_Bid_New preserves bare OBFT V_0's primary MEV-fetch budget (~3050ms) at every sizing by excluding bid_1 from mini-consensus, at the cost of exposing bid_1 to bare-OBFT-style asymmetric-delivery patterns at the bid layer (where current L_Bid uses mini-consensus to converge on bid_1's status). The primary-MEV-fetch gain vs current L_Bid is sizing-dependent: 300ms at conservative, 200ms at standard, **0 at aggressive** (where current L_Bid already matches bare OBFT V_0 because `Δ_minicon = 0.5 BTT`). Post-`T_commit` latency is the same order as current L_Bid because both variants run mini-consensus before `T_commit`. The timing distinction is pre-`T_commit`: current L_Bid starts mini-consensus at `T_0_arrival` and shifts every eligible rotation-layer deadline earlier; L_Bid_New starts mini-consensus at `T_deep_arrival` and shifts only deep-layer deadlines earlier.
 
-L_Bid_New is documented here as a candidate design point. Whether it is preferable to current L_Bid in production is deployment-dependent — see [§F.6 Comparison with current L_Bid](#f6--comparison-with-current-l_bid).
+L_Bid_New is documented here as a candidate design point. Whether it is preferable to current L_Bid in production is deployment-dependent — see [§E.6 Comparison with current L_Bid](#e6--comparison-with-current-l_bid).
 
-### F.1 — Setting
+### E.1 — Setting
 
 L_Bid_New extends OBFT's setting in the same way L_Bid does — bid metadata inside Phase-1 bundles, mini-consensus convergence on a bid winner — with these structural differences:
 
@@ -1727,7 +1576,7 @@ L_Bid_New extends OBFT's setting in the same way L_Bid does — bid metadata ins
 
 The key intuition: under L_Bid_New, the cluster outputs `argmax(V_early, bid_1)` via the chained-encryption fall-through structure rather than via a single mini-consensus over all K rotation-layer bids. Operators σ-emit on V_early at L_Bid when V_early ≥ bid_1 (in their local view); they NR at L_Bid otherwise (preferring fall-through to L_0 where bid_1's σ-pool aggregates). The chained encryption gates L_0 reconstruction on L_Bid NR-quorum — preserving the cluster's single-output guarantee (Pigeonhole 3).
 
-### F.2 — Wire kinds
+### E.2 — Wire kinds
 
 L_Bid_New uses the same wire framing as L_Bid ([Appendix B](#appendix-b--l_bid-mini-consensus-extension)):
 
@@ -1738,7 +1587,7 @@ L_Bid_New uses the same wire framing as L_Bid ([Appendix B](#appendix-b--l_bid-m
 
 The mini-consensus verdict (`KindBidVerdict`) carries a verdict on V_early specifically — not on the full argmax over all K rotation-layer bids. This is a semantic difference from L_Bid, which verdicts on V_X = argmax over the full eligible rotation-layer bid set.
 
-### F.3 — Per-layer windows and deadlines
+### E.3 — Per-layer windows and deadlines
 
 L_Bid_New's Phase 1 has two structural elements with different timing anchors:
 
@@ -1764,15 +1613,15 @@ Sizing — `Δ_minicon` is the total deep mini-consensus interval, `Δ_verdict` 
 
 `T_commit` is the same back-end anchor as bare OBFT (`Relay_cutoff − 2 BTT = 3600ms` at Config A post-tighten). L_Bid_New pays the `max(0, Δ_minicon − 0.5 BTT)` pre-`T_commit` cost only on deep-layer candidate deadlines; the primary L_0 MEV-fetch budget remains `T_broadcast_max_0^bare − slot_start` ≈ 3050ms at RefloodDelay=0 (= bare OBFT's primary budget; ≈ 2350ms at default RefloodDelay=700ms). Post-`T_commit` timing matches current L_Bid and bare OBFT.
 
-### F.4 — Protocol
+### E.4 — Protocol
 
-#### F.4.1 — Phase 1: Deep bids + primary bundle
+#### E.4.1 — Phase 1: Deep bids + primary bundle
 
 Each deep-layer rotation leader broadcasts its Phase-1 bundle with bid metadata by `T_broadcast_max_k = T_deep_arrival − B_k` for `k ≥ 1`. The primary additionally broadcasts its Phase-1 bundle (bid_1 + `σ_{L_0}^V` + op-auth) at `T_broadcast_max_0^bare` per bare OBFT.
 
 As in L_Bid, bid/bundle coherence is structural: each bid is the bid metadata carried by the same Phase-1 bundle whose V is signed by the layer leader. Deep bundles serve as mini-consensus candidates; the primary's bundle serves as bid_1 and as the L_0 candidate, but not as a mini-consensus input.
 
-#### F.4.2 — Mini-consensus: verdict on V_early
+#### E.4.2 — Mini-consensus: verdict on V_early
 
 Each operator `i`, by `T_verdict = T_commit − Δ_verdict`:
 
@@ -1787,7 +1636,7 @@ At mini-consensus end (`T_commit`):
 
 If `verdict_quorum_V_early` reaches on some V, that V is the cluster's V_early. Otherwise no V_early; cluster falls through L_Bid via NR-quorum.
 
-#### F.4.3 — Phase 2: σ-or-NR at K' = K + 1 layers
+#### E.4.3 — Phase 2: σ-or-NR at K' = K + 1 layers
 
 Each operator constructs a K'-layer onion. **L_Bid is the outermost plaintext layer; L_0 is encrypted under `nr_tag_LBid`** (encryption layout structurally same as current L_Bid; difference is content — V_early at L_Bid, bid_1 at L_0):
 
@@ -1805,14 +1654,14 @@ Honest σ-or-NR commitment per layer:
 
   The conjunction `(no bid_1 OR bid_1 ≤ V_early)` is the critical rule: operators σ on V_early when they're certain V_early is the cluster-preferred winner; NR otherwise. Operators without bid_1 default to σ on V_early (rather than NR-when-uncertain), since they cannot rule out V_early winning.
 
-  **Note**: An alternative rule is "NR-when-uncertain" (NR if no bid_1, regardless). The two rules differ in their failure modes — see [§F.5 Failure modes](#f5--failure-modes). The σ-when-uncertain variant is recommended; NR-when-uncertain has a complementary failure mode at a different honest-split configuration. Formal analysis of the choice is in `docs/OBFT-formal-verif.md`.
+  **Note**: An alternative rule is "NR-when-uncertain" (NR if no bid_1, regardless). The two rules differ in their failure modes — see [§E.5 Failure modes](#e5--failure-modes). The σ-when-uncertain variant is recommended; NR-when-uncertain has a complementary failure mode at a different honest-split configuration. Formal analysis of the choice is in `docs/OBFT-formal-verif.md`.
 
 - **L_0**: σ on bid_1 if received and host-valid (standard bare OBFT rule for L_0); NR otherwise. As the onion diagram above shows, L_0's σ partial is wrapped under `nr_tag_LBid` — so reconstructing at L_0 (whether σ-quorum on bid_1 or fall-through to L_1) requires L_Bid NR-quorum to unlock the chained encryption (same gating as current L_Bid; see [§Why L_Bid is the outermost chained-encryption gate](#why-l_bid-is-the-outermost-chained-encryption-gate)).
 - **L_k for k ≥ 1**: same as bare OBFT.
 
 Cross-phase exclusivity per `(slot, layer)` and single-σ-V per `(slot, layer)` per operator continue to hold across all K' layers; EKM enforces.
 
-#### F.4.4 — Phase 3: K'-layer reconstruction walk
+#### E.4.4 — Phase 3: K'-layer reconstruction walk
 
 ```
 1. L_Bid: σ-pool[V_early] plaintext. If ≥ qV: reconstruct (V_early, S); halt.
@@ -1824,11 +1673,11 @@ Cross-phase exclusivity per `(slot, layer)` and single-σ-V per `(slot, layer)` 
 
 If L_Bid reaches neither σ-quorum nor NR-quorum, the chained encryption to L_0 stays sealed; no fall-through; slot misses. Same structural property as current L_Bid (chained-encryption priority enforces single-V output).
 
-### F.5 — Failure modes
+### E.5 — Failure modes
 
 L_Bid_New's failure modes split into (a) modes inherited from bare OBFT at L_0 and below, and (b) modes specific to the L_Bid layer's σ-or-NR commitment under asymmetric bid_1 delivery or deep mini-consensus divergence.
 
-#### F.5.1 — Inherited from bare OBFT
+#### E.5.1 — Inherited from bare OBFT
 
 When L_Bid NR-quorums and falls through to L_0, L_0 behaves as bare OBFT's L_0 (with bid_1 as V_{L_0} and the primary's σ_{L_0}^V as the leader's contribution). Inherits all bare-OBFT L_0 failure modes:
 
@@ -1838,16 +1687,16 @@ When L_Bid NR-quorums and falls through to L_0, L_0 behaves as bare OBFT's L_0 (
 
 These are bare OBFT's failure modes restated; same Class A / Class B framing.
 
-#### F.5.2 — Specific to L_Bid_New's L_Bid layer
+#### E.5.2 — Specific to L_Bid_New's L_Bid layer
 
 The L_Bid layer's σ-or-NR commitment depends on each honest's local view of (V_early, bid_1, V_early-vs-bid_1), and on whether honest operators converge on the same V_early verdict set by `T_commit`. Asymmetric bid_1 delivery (one honest doesn't have bid_1) creates an honest-split at L_Bid:
 
 - **Asymmetric bid_1 delivery + V_early > bid_1**: honest with bid_1 σ on V_early (per the σ-when-uncertain rule's `bid_1 ≤ V_early` clause); honest without bid_1 σ on V_early (per the rule's `no bid_1` clause). All `n−f` honest σ at L_Bid → σ-pool[V_early] = n−f = 3 = qV at f=1, n=4 → σ-quorum reaches → output V_early. **No deadlock at f=1, n=4 under either non-grief or adversarial byz** (byz σ adds; byz NR or silence doesn't subtract from honest σ-pool). This case is exactly what σ-when-uncertain handles cleanly — the rule's purpose is to keep operators-without-bid_1 in the σ-camp on V_early. NR-when-uncertain would 2-1-split honest here (honest with bid_1 σ; honest without bid_1 NR) and produce the complementary residual.
 
-- **Asymmetric bid_1 delivery + bid_1 > V_early**: honest with bid_1 NR at L_Bid (prefer bid_1); honest without bid_1 σ on V_early (per the σ-when-uncertain rule). Mixed split. Under non-grief at f=1, n=4 with 2 honest having bid_1, 1 honest without: σ-pool = 1, NR-pool = 2. Neither reaches qV/qEnc=3. **In-assumption deadlock under σ-when-uncertain — Class A or B depending on the asymmetric-delivery cause** (network-tail propagation past `T_commit` → Class A; byzantine-crafted targeted delivery → Class B; the protocol cannot distinguish them). See [§F.5.3](#f53--comparison-which-asymmetric-delivery-deadlocks-are-class-a-vs-class-b) for the detailed split.
+- **Asymmetric bid_1 delivery + bid_1 > V_early**: honest with bid_1 NR at L_Bid (prefer bid_1); honest without bid_1 σ on V_early (per the σ-when-uncertain rule). Mixed split. Under non-grief at f=1, n=4 with 2 honest having bid_1, 1 honest without: σ-pool = 1, NR-pool = 2. Neither reaches qV/qEnc=3. **In-assumption deadlock under σ-when-uncertain — Class A or B depending on the asymmetric-delivery cause** (network-tail propagation past `T_commit` → Class A; byzantine-crafted targeted delivery → Class B; the protocol cannot distinguish them). See [§E.5.3](#e53--comparison-which-asymmetric-delivery-deadlocks-are-class-a-vs-class-b) for the detailed split.
 
   - Under the NR-when-uncertain rule, this case recovers cleanly (all 3 honest NR → NR-quorum at L_Bid → fall-through to L_0 → σ-pool[bid_1] = 2 + primary's σ_{L_0}^V = 3 = qV). NR-when-uncertain has its complementary residual at V_early > bid_1 (where it would 2-1-split honest at L_Bid).
-  - **The choice of σ-vs-NR-when-uncertain trades which asymmetric-delivery configuration deadlocks**. Neither rule eliminates the residual at f=1, n=4 (this is an algebraic limit per [§F.7](#f7--algebraic-floor)); the choice picks which corner case is the residual.
+  - **The choice of σ-vs-NR-when-uncertain trades which asymmetric-delivery configuration deadlocks**. Neither rule eliminates the residual at f=1, n=4 (this is an algebraic limit per [§E.7](#e7--algebraic-floor)); the choice picks which corner case is the residual.
 
 - **Verdict-equivocation by byz on V_early**: byz emits different verdicts to different honest peers; honest local-verdict-views diverge; some honest σ at L_Bid on V_early, others NR. Same algebraic deadlock pattern. Class B.
 
@@ -1855,7 +1704,7 @@ The L_Bid layer's σ-or-NR commitment depends on each honest's local view of (V_
 
 - **Partial verdict propagation under aggressive `Δ_verdict`**: if `Δ_verdict` is sized below the deployment's honest-message propagation bound, honest operators may not receive the same `KindBidVerdict` set by `T_commit`. This is the same Class A residual as current L_Bid's sub-1-BTT verdict-propagation mode, now over deep-bid verdicts only.
 
-#### F.5.3 — Comparison: which asymmetric-delivery deadlocks are Class A vs Class B
+#### E.5.3 — Comparison: which asymmetric-delivery deadlocks are Class A vs Class B
 
 Asymmetric bid_1 delivery can arise from:
 
@@ -1864,7 +1713,7 @@ Asymmetric bid_1 delivery can arise from:
 
 Per the threat model in `docs/OBFT-formal-verif.md`, selective delivery via standard gossipsub is treated as a network-level property (not byz grief); the protocol cannot distinguish byz-induced from network-induced asymmetry, and both are out of scope for the Class A closure property.
 
-### F.6 — Comparison with current L_Bid
+### E.6 — Comparison with current L_Bid
 
 The two extensions are structurally distinct points in the L_Bid design space.
 
@@ -1896,13 +1745,13 @@ The two extensions are structurally distinct points in the L_Bid design space.
 - Deployments with adversarial primary or unreliable primary mesh: current L_Bid favorable (mini-consensus convergence on bid_1 protects against more bid_1-asymmetry patterns).
 - Deployments at higher cluster sizes (n ≥ 7): bare OBFT's L_0-only Class B exposure decreases proportionally with `n`; current L_Bid's candidate-withholding/equivocation exposure scales with the selected K leaders (`K/n` under uniform selection, every slot at `K=n`), while verdict-equivocation remains every slot. The relative gain of L_Bid_New's MEV-fetch budget recovery is preserved at larger n.
 
-### F.7 — Algebraic floor
+### E.7 — Algebraic floor
 
 Both L_Bid and L_Bid_New are subject to the same algebraic deadlock floor at f=1, n=4: any non-unanimous honest commitment split at any layer is exploitable by adversarial byz to engineer a 2-2 deadlock (σ-pool ≤ 2, NR-pool ≤ 2, neither reaching qV = qEnc = 3). The floor scales uniformly across n ∈ {4, 7, 10, 13}: the deadlock condition is "(h_σ < qV) AND (h_NR < qEnc)" and adversarial byz can engineer this from any non-unanimous honest split.
 
 The protocols differ in *which* adversarial scenarios produce non-unanimous splits, not in whether the algebraic floor exists. Formal verification of this floor and per-protocol-variant exposure is the subject of `docs/OBFT-formal-verif.md`.
 
-### F.8 — When to use L_Bid_New vs L_Bid
+### E.8 — When to use L_Bid_New vs L_Bid
 
 **Use L_Bid_New** when:
 - Primary MEV-fetch budget is the binding constraint (high-MEV slots, late-discovery relay queries).

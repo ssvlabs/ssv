@@ -45,7 +45,7 @@ For larger `n` (10, 13), full TLC enumeration is intractable. We argue scalabili
 - `n ∈ {4, 7}`, `f ∈ {1, 2}` cluster sizes.
 - Bare OBFT (current spec, no extensions).
 - OBFT + L_Bid (current Appendix B extension).
-- OBFT + L_Bid_New (Appendix F extension).
+- OBFT + L_Bid_New (Appendix E extension).
 - Full Phase 1 / Phase 2 / Phase 3 protocol structure including EKM enforcement of slashing-protection rules.
 
 **Out of scope**:
@@ -350,7 +350,7 @@ ACTION emit_kindcommit (extended for L_Bid):
 
 ### 3.4 — OBFT + L_Bid_New extensions
 
-L_Bid_New differs from L_Bid in three places (per [Appendix F of OBFT.md](OBFT.md#appendix-f--obft--l_bid_new-deep-bid-mini-consensus)):
+L_Bid_New differs from L_Bid in three places (per [Appendix E of OBFT.md](OBFT.md#appendix-e--obft--l_bid_new-deep-bid-mini-consensus)):
 
 **Per-layer broadcast deadlines split by `T_deep_arrival` vs primary's bare-OBFT deadline:**
 
@@ -812,4 +812,4 @@ Items deferred from this verification effort:
 References:
 - [docs/OBFT.md](OBFT.md) — main protocol specification.
 - [docs/OBFT.md Appendix B](OBFT.md#appendix-b--l_bid-mini-consensus-extension) — current L_Bid design.
-- [docs/OBFT.md Appendix F](OBFT.md#appendix-f--obft--l_bid_new-deep-bid-mini-consensus) — L_Bid_New design.
+- [docs/OBFT.md Appendix E](OBFT.md#appendix-e--obft--l_bid_new-deep-bid-mini-consensus) — L_Bid_New design.
