@@ -231,19 +231,29 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		return peers
 	}
 
-	// rateInvariantViolation: for any two peers, the one with a lower
-	// rejected-rate must not be ranked below the one with a higher rate.
-	// Peers sharing a rate may appear in any relative order — scores fluctuate
-	// within noise. Returns "" if the invariant holds.
+	// rateInvariantViolation: for any two peers where one has a strictly
+	// lower rejected-rate than the other, the lower-rate peer's score
+	// must be >= the higher-rate peer's. Equal rates carry no ordering
+	// constraint; equal scores between different-rate peers are also fine
+	// (they're tied, neither is "above"). Comparing scores directly is
+	// what makes the latter true — the input peers slice is sorted by
+	// score for the diagnostic table, but sort.Slice is not stable, so
+	// slice position alone can't stand in for rank when scores tie.
+	// Returns "" if the invariant holds.
 	rateInvariantViolation := func(peers []peerScore, observer NodeIndex) string {
-		for i := 0; i < len(peers); i++ {
-			for j := i + 1; j < len(peers); j++ {
-				if rejectedRate[peers[i].index] > rejectedRate[peers[j].index] {
+		for i, a := range peers {
+			for j, b := range peers {
+				if i == j {
+					continue
+				}
+				rA := rejectedRate[a.index]
+				rB := rejectedRate[b.index]
+				if rA < rB && a.score < b.score {
 					return fmt.Sprintf(
-						"observer %d: peer %d (rejected-rate=%.2f, score=%.2f) ranked above peer %d (rejected-rate=%.2f, score=%.2f)",
+						"observer %d: peer %d (rejected-rate=%.2f, score=%.2f) scored below peer %d (rejected-rate=%.2f, score=%.2f) despite a lower rejected-rate",
 						observer,
-						peers[i].index, rejectedRate[peers[i].index], peers[i].score,
-						peers[j].index, rejectedRate[peers[j].index], peers[j].score)
+						a.index, rA, a.score,
+						b.index, rB, b.score)
 				}
 			}
 		}
