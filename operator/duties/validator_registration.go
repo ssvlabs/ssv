@@ -42,7 +42,7 @@ const (
 	// Note: shares its numeric value (4) with
 	// validatorRegistrationSchedulingSlack below by coincidence; the two are
 	// independent.
-	validatorRegistrationDutySlotsToPostpone = phase0.Slot(4)
+	validatorRegistrationDutySlotsToPostpone = 4
 
 	// validatorRegistrationSchedulingSlack absorbs per-operator timing
 	// variance once a registration event clears the EL follow distance — see
@@ -50,7 +50,7 @@ const (
 	// applies here on the runner-level ErrNoDutyAssigned check at the
 	// receiver side. Independent of validatorRegistrationDutySlotsToPostpone
 	// despite happening to share the same numeric value (4).
-	validatorRegistrationSchedulingSlack = phase0.Slot(4)
+	validatorRegistrationSchedulingSlack = 4
 
 	// validatorRegistrationExecutionSlotsToPostpone is the earliest slot,
 	// expressed as an offset from the registration event's block slot, at
@@ -65,7 +65,7 @@ const (
 	// message is dropped. The periodic VRSubmitter loop will eventually
 	// resubmit anyway — but the gate mirrors voluntary-exit's pattern for
 	// consistency and reduces the retry-window race for slow-EL peers.
-	validatorRegistrationExecutionSlotsToPostpone = phase0.Slot(executionclient.FollowDistance) + validatorRegistrationSchedulingSlack
+	validatorRegistrationExecutionSlotsToPostpone = executionclient.FollowDistance + validatorRegistrationSchedulingSlack
 )
 
 type RegistrationDescriptor struct {

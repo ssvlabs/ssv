@@ -291,5 +291,5 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 // diff that PR review can catch.
 func TestValidatorRegistrationDutySlotPinned(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, phase0.Slot(4), validatorRegistrationDutySlotsToPostpone)
+	require.EqualValues(t, 4, validatorRegistrationDutySlotsToPostpone)
 }
