@@ -20,31 +20,22 @@ import (
 
 const (
 	// voluntaryExitDutySlotsToPostpone is the offset added to an exit event's
-	// block slot to derive the *duty slot* — the slot stored in duty.Slot and
-	// shared across the cluster regardless of code version. It feeds three
-	// downstream uses:
-	//   1. The dutyStore key (AddDuty / GetDutyCount), used by inbound
-	//      message-validation's dutyCount check.
-	//   2. The Slot field of the outbound PartialSignatureMessages envelope,
-	//      which peers feed into step 1 against their own dutyStore.
-	//   3. The slot fed into NetworkConfig.EstimatedEpochAtSlot when
-	//      constructing the VoluntaryExit object that gets BLS-signed (see
-	//      VoluntaryExitRunner.calculateVoluntaryExit).
+	// block slot to derive duty.Slot — the shared coordination slot used as
+	// the dutyStore key (inbound dutyCount validation), as the outbound
+	// partial-sig envelope Slot, and as input to the signed VoluntaryExit.Epoch
+	// (see VoluntaryExitRunner.calculateVoluntaryExit). Every operator must
+	// compute the same value for partial-sigs to validate, route, and
+	// aggregate, so it's part of the wire format.
 	//
-	// Because items 1–3 must agree across every operator for partial-sigs to
-	// validate, route, and aggregate, the numeric value is part of the wire
-	// format. It is intentionally kept at 4 — the value used by operators
-	// running pre-#2851 code — so that nodes upgraded to the post-#2851
-	// scheduling logic remain backwards-compatible in mixed clusters. Do NOT
-	// change it without a coordinated network-wide upgrade.
+	// Kept at 4 — the value used by pre-#2851 operators — so upgraded nodes
+	// remain backwards-compatible in mixed clusters. Do NOT change it without
+	// a coordinated network-wide upgrade.
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// voluntaryExitExecutionSlotsToPostpone for that.
 	//
-	// Note: this constant happens to share its numeric value (4) with
-	// voluntaryExitSchedulingSlack below, but the two are independent — one
-	// defines the shared duty slot, the other the local execution timing
-	// budget. Do not assume they should track each other.
+	// Note: shares its numeric value (4) with voluntaryExitSchedulingSlack
+	// below by coincidence — the two are independent.
 	voluntaryExitDutySlotsToPostpone = 4
 
 	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an

@@ -481,8 +481,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 
 		// For roles where duty.Slot is a shared coordination point rather
 		// than the execution target (see dutySlotIsExecutionSlot), slotDelay
-		// against it is meaningless. Skip the warning; recordDutyScheduled
-		// handles the histogram side. The counter still ticks for both kinds.
+		// against it is meaningless.
 		if dutySlotIsExecutionSlot(role) && slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
