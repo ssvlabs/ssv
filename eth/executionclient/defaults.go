@@ -11,18 +11,15 @@ const (
 	// FollowDistance is the offset (in blocks) into the past from the chain head
 	// at which a block is considered very likely finalized. The EL log stream
 	// only surfaces events from blocks at this depth or deeper, trading some
-	// latency for reorg-safety (SSV cares strongly: surfacing an event from a
-	// later-reorged block could lead to slashing).
+	// latency for reorg-safety: surfacing an event from a block that the
+	// canonical chain may yet rewrite would let operators act on stale
+	// validator-share or cluster-membership state, corrupting slashing-
+	// protection records (see eth/eventhandler/handlers.go for the EKM bumping
+	// logic that this depth protects).
 	//
-	// This value is a network-wide invariant rather than an operator-tunable
-	// knob. It is load-bearing for the voluntary-exit broadcast gate in
-	// operator/duties (voluntaryExitExecutionSlotsToPostpone is derived from
-	// it): every operator uses it to size the worst-case EL-streaming lag
-	// before broadcasting their own partial-sig. If operators ran with
-	// different values, fast-EL operators with smaller FollowDistance would
-	// broadcast before slower peers had received the EL event, dropping the
-	// partial-sig at the receiver's dutyCount validation check and reopening
-	// the race that PR #2851 was meant to close.
+	// This is a network-wide invariant, not an operator-tunable knob —
+	// downstream duty-scheduling logic assumes every operator uses the same
+	// value. Treat any change as a coordinated network-wide upgrade.
 	FollowDistance = 8
 
 	DefaultHealthInvalidationInterval = 10 * time.Second
