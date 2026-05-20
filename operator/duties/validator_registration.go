@@ -19,29 +19,24 @@ const (
 	frequencyEpochs = 10
 
 	// validatorRegistrationDutySlotsToPostpone is the offset added to an EL
-	// registration event's block slot to derive the *duty slot* — the slot
-	// stored in duty.Slot and shared across the cluster regardless of code
-	// version. It goes into the partial-sig envelope and feeds
-	// NetworkConfig.EpochStartTime(EstimatedEpochAtSlot(...)) when constructing
-	// the BLS-signed ValidatorRegistration's Timestamp (see
-	// ValidatorRegistrationRunner.buildValidatorRegistration).
+	// registration event's block slot to derive duty.Slot — the shared
+	// coordination slot used as the outbound partial-sig envelope Slot and as
+	// input to the signed ValidatorRegistration.Timestamp's epoch (see
+	// ValidatorRegistrationRunner.buildValidatorRegistration). Every operator
+	// must compute the same value for partial-sigs to validate, route, and
+	// aggregate, so it's part of the wire format. Timestamp is epoch-granular,
+	// so divergence only matters across an epoch boundary — but the safe
+	// stance is identical.
 	//
-	// Because every operator must arrive at the same Timestamp regardless of
-	// when they personally observed the event (and regardless of code
-	// version), the numeric value is part of the wire format. It has been 4
-	// since the constant was introduced; changing it would shift the signed
-	// Timestamp's epoch on this operator relative to peers on prior code, so
-	// treat it as a network-wide invariant and change it only via a
-	// coordinated rollout. Even within a homogeneous cluster the Timestamp is
-	// epoch-granular, so this only matters across the slot's epoch boundary,
-	// but the safe stance is identical: do not change without coordination.
+	// Kept at 4 since the constant was introduced — changing it would shift
+	// the signed Timestamp's epoch relative to peers on prior code. Do NOT
+	// change it without a coordinated network-wide upgrade.
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// validatorRegistrationExecutionSlotsToPostpone for that.
 	//
-	// Note: shares its numeric value (4) with
-	// validatorRegistrationSchedulingSlack below by coincidence; the two are
-	// independent.
+	// Note: shares its numeric value (4) with validatorRegistrationSchedulingSlack
+	// below by coincidence — the two are independent.
 	validatorRegistrationDutySlotsToPostpone = 4
 
 	// validatorRegistrationSchedulingSlack absorbs per-operator timing
