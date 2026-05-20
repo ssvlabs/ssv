@@ -20,13 +20,14 @@ type Broadcaster interface {
 
 // broadcasted is the contract a connection must satisfy to be registered.
 //
-// Send MUST NOT block. The broadcaster fans out by calling Send synchronously
-// for every registered connection, so a blocking Send would back-pressure
-// every other client. Implementations are expected to drop or self-close on
-// their own queue overflow (see conn.Send for the canonical pattern: a
-// non-blocking select+default that cancels the conn ctx when the queue
-// fills, so the slow client reconnects with a fresh view rather than
-// silently missing messages).
+// Send MUST NOT block. Broadcast snapshots the connection set under the
+// lock and then fans out by calling Send synchronously per peer, so a
+// blocking Send delays delivery to every subsequent peer in the same
+// batch. Implementations are expected to drop or self-close on their own
+// queue overflow (see conn.Send for the canonical pattern: a non-blocking
+// select+default that cancels the conn ctx when the queue fills, so the
+// slow client reconnects with a fresh view rather than silently missing
+// messages).
 type broadcasted interface {
 	ID() string
 	Send([]byte)

@@ -166,9 +166,6 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	logger.Debug("handles query requests")
 
 	for {
-		if ws.ctx.Err() != nil {
-			logger.Debug("context was done")
-		}
 		var incoming Message
 		var networkMessage NetworkMessage
 		err := conn.ReadJSON(&incoming)
@@ -186,6 +183,9 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 		ws.handler(&networkMessage)
 
 		err = tasks.Retry(func() error {
+			if err := ws.ctx.Err(); err != nil {
+				return err
+			}
 			return conn.WriteJSON(&networkMessage.Msg)
 		}, 3)
 		if err != nil {
