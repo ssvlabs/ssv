@@ -70,16 +70,11 @@ type RegistrationDescriptor struct {
 	BlockNumber     uint64
 }
 
-// queuedRegistration holds an event-driven validator-registration duty awaiting
-// local broadcast.
-//
-// duty.Slot carries the deterministic shared duty slot (blockSlot +
-// validatorRegistrationDutySlotsToPostpone) — used in the partial-sig
-// envelope and to derive the signed ValidatorRegistration.Timestamp.
-// earliestExecutionSlot is the purely-local gate that defers our own
-// broadcast until peers' EL streaming pipelines have plausibly caught up; see
-// the docstrings of validatorRegistrationDutySlotsToPostpone and
-// validatorRegistrationExecutionSlotsToPostpone for the breakdown.
+// queuedRegistration holds an event-driven validator-registration duty
+// awaiting its local execution gate. duty.Slot is the shared duty slot
+// (validatorRegistrationDutySlotsToPostpone); earliestExecutionSlot is when
+// this operator may broadcast its partial-sig
+// (validatorRegistrationExecutionSlotsToPostpone).
 type queuedRegistration struct {
 	duty                  *spectypes.ValidatorDuty
 	earliestExecutionSlot phase0.Slot
@@ -201,10 +196,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue))
 
-	// Drain the event-driven queue: pick up registrations whose gate slot has
-	// been reached. Gate on earliestExecutionSlot, not duty.Slot — the duty's
-	// Slot is the shared duty slot (kept low for cross-version interop) and
-	// would fire immediately.
+	// Drain the event-driven queue.
 	pendingItems := make([]*queuedRegistration, 0, len(h.eventQueue))
 	for _, item := range h.eventQueue {
 		if item.earliestExecutionSlot <= slot {
@@ -288,10 +280,7 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 }
 
 func (h *ValidatorRegistrationHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
-	// slot is the execution slot (the current ticker slot at dispatch), not
-	// duty.Slot — which for event-driven registrations is the shared duty
-	// slot held in the past for cross-operator coordination. 1 wall-clock
-	// slot from execution should be sufficient for this duty-type.
+	// 1 wall-clock slot from execution should be sufficient for this duty-type.
 	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
 	return dutyDeadline
 }
