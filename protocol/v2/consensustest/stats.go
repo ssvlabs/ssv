@@ -117,10 +117,6 @@ func (d Distribution) sorted() []float64 {
 // declared a slot-miss, so bandwidth is observable. PerKindBandwidth
 // breaks ClusterBandwidth down by MsgKind for stacked-chart rendering.
 //
-// EvidenceCounts is keyed by EvidenceRule (e.g. "OBFT/Rule4/FakeEncryptedPresence"
-// or "QBFT/equivocation"); each Distribution holds per-sim total counts
-// (one sample per sim, value = total fires across all operators in that sim).
-//
 // MissReasons aggregates per-sim deadlock causes — a string→count map
 // keyed by the adapter-set Outcome.MissReason (e.g. "Cluster ready to
 // submit at layer 2, past the submit deadline" or "Cluster never
@@ -132,6 +128,12 @@ func (d Distribution) sorted() []float64 {
 // violation, so the batch run terminates immediately and the cell never
 // gets emitted. Post-batch readers therefore see only safe data; there
 // is no per-cell counter to consult.
+//
+// Per-rule EvidenceByRule counts are observable on Outcome.PerOp (set by
+// each adapter for slashing telemetry) but not aggregated at the cell
+// level — the reporting layer doesn't consume them, so the aggregation
+// was dead work. Re-add a per-rule distribution here if a future UI
+// surfaces it.
 type BatchCell struct {
 	Protocol    string
 	Scenario    string
@@ -148,7 +150,6 @@ type BatchCell struct {
 	DecidingBroadcastTime Distribution
 	ClusterBandwidth      Distribution
 	PerKindBandwidth      map[string]Distribution
-	EvidenceCounts        map[string]Distribution
 	MissReasons           map[string]int
 }
 

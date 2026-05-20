@@ -168,18 +168,36 @@ var scenarioMultiSilent_AllLayers = Scenario{
 	Title: "All K leaders silent (cascade miss)",
 	Group: "Silent operators",
 	Modes: []Mode{ModeCorrectness, ModeStress},
+	// Stress-tier gate: applicable only when the sweep's K equals N.
+	// Silencing all K leaders is only meaningful when every operator-
+	// leader is included — at K<N some operators never lead, and QBFT
+	// can round-change to a non-leader operator that succeeds, defeating
+	// the "all silent" intent. Apply BELOW forces K=N internally so the
+	// scenario stays meaningful in any caller path, but the stress sweep
+	// builds one cell per Fields-tuple; without this gate the cell would
+	// be recorded under the sweep's (smaller) Fields["K"] while the sim
+	// ran at K=N, mis-attributing the data. Skipping at K<N renders the
+	// cell as n/a — truthful.
+	//
+	// runner.RunScenarioOnProtocol (correctness tier) does NOT consult
+	// Applies — it always runs Apply, which forces K=N. That preserves
+	// the scenario's original correctness coverage (one K=N run) while
+	// fixing the stress-side Fields["K"] mis-attribution.
+	Applies: func(cfg SimConfig) bool { return cfg.K == cfg.N },
 	Apply: func(cfg *SimConfig) {
-		// Force K=N so "all K layers silent" silences every operator-leader
-		// (otherwise at the K=f+1 BFT-min default, only f+1 operators are
-		// leaders and QBFT can round-change to a non-leader operator that
-		// succeeds — defeating the "all silent" intent of this scenario).
-		// Use K=N for cross-protocol like-for-like comparison.
+		// Force K=N so "all K layers silent" silences every operator-leader.
+		// At the K=f+1 BFT-min default, only f+1 operators are leaders and
+		// QBFT can round-change to a non-leader operator that succeeds —
+		// defeating the "all silent" intent of this scenario. Used in the
+		// correctness path where cfg.K may be the BaseConfig zero (Validate
+		// would default to DefaultK(N), which is less than N). Stress callers
+		// have already passed the Applies gate at this point, so K==N here
+		// is also guaranteed (the assignment is a no-op for them).
 		cfg.K = cfg.N
-		k := cfg.K
 		// All K layers silent: K=cluster.K means OnlyHonestLayer=K, so the
 		// "layer < OnlyHonestLayer" check in byzMultiSilent.LeaderBroadcastPlan
 		// fires for every layer in [0, K), silencing every leader.
-		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: k}
+		cfg.Byz = ByzPattern{Kind: ByzMultiSilent, K: cfg.K}
 	},
 	Expect: map[string]ExpectClass{
 		// OBFT: walks all K layers via NR-quorum; deepest layer has no σ;

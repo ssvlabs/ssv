@@ -12,13 +12,26 @@ import (
 type MsgKind int
 
 const (
-	KindLeaderBroadcast MsgKind = iota // OBFT Phase1Bundle / QBFT PROPOSE
-	KindCommit                         // OBFT Commit / QBFT PREPARE+COMMIT (same mesh)
+	KindLeaderBroadcast MsgKind = iota // OBFT Phase1Bundle / 2abOBFT Phase1Bundle / QBFT PROPOSE
+	KindCommit                         // OBFT Phase-2 Commit / 2abOBFT Phase-2b Onion2b / QBFT COMMIT
 	KindRoundChange                    // QBFT-specific
-	KindCertificate                    // OBFT cert gossip / QBFT decided-msg
+	KindCertificate                    // OBFT cert gossip / 2abOBFT cert gossip / QBFT decided-msg
 	KindPostConsensus                  // QBFT partial-sig collection (OBFT folds this into Phase 3)
 	KindGossipIHave                    // gossipsub IHAVE control RPC (lazy-push advertise)
 	KindGossipIWant                    // gossipsub IWANT control RPC (lazy-push pull request)
+	// KindVerdict is 2abOBFT-specific: the Phase-2a verdict envelope each
+	// op broadcasts before Phase-2b's Onion2b. Split out of KindCommit so
+	// the per-kind bandwidth chart compares apples-to-apples across the
+	// protocol family (bare OBFT has no verdict; 2abOBFT verdict bytes
+	// used to be folded into KindCommit alongside Onion2b, overcounting
+	// "commit-like" traffic relative to bare OBFT).
+	KindVerdict
+	// KindPrepare is QBFT-specific: the Phase-2 PREPARE message. Split
+	// out of KindCommit so the per-kind bandwidth chart distinguishes
+	// PREPARE bytes from COMMIT bytes (they used to share the KindCommit
+	// bucket, conflating the QBFT 2-phase commit's two distinct emissions
+	// under one label).
+	KindPrepare
 )
 
 // String returns a stable name suitable for telemetry / report keys.
@@ -38,6 +51,10 @@ func (k MsgKind) String() string {
 		return "GossipIHave"
 	case KindGossipIWant:
 		return "GossipIWant"
+	case KindVerdict:
+		return "Verdict"
+	case KindPrepare:
+		return "Prepare"
 	default:
 		return "Unknown"
 	}

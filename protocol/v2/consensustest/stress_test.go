@@ -98,13 +98,16 @@ func TestStress(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	// CLUSTER_SIZES_N — comma-separated cluster sizes, each ∈ {4, 7}
-	// (the two SSV-relevant sizes: f=1 and f=2). Default: 4.
+	// (the two SSV-relevant sizes: f=1 and f=2). Default: 4. Duplicates
+	// are deduped + sorted ascending so e.g. `CLUSTER_SIZES_N=7,4,4` runs
+	// the (n=4, n=7) pair exactly once each, in canonical order.
 	const validClusterSizesDesc = "{4, 7}"
 	validClusterSizes := map[int]bool{4: true, 7: true}
 	clusterSizesRaw := os.Getenv("CLUSTER_SIZES_N")
 	if clusterSizesRaw == "" {
 		clusterSizesRaw = "4"
 	}
+	seenClusterSizes := make(map[int]bool)
 	var clusterSizes []int
 	for _, s := range strings.Split(clusterSizesRaw, ",") {
 		s = strings.TrimSpace(s)
@@ -114,21 +117,28 @@ func TestStress(t *testing.T) {
 		n, err := strconv.Atoi(s)
 		require.NoErrorf(t, err, "invalid CLUSTER_SIZES_N value %q", s)
 		require.Truef(t, validClusterSizes[n], "CLUSTER_SIZES_N value %d not in %s", n, validClusterSizesDesc)
+		if seenClusterSizes[n] {
+			continue
+		}
+		seenClusterSizes[n] = true
 		clusterSizes = append(clusterSizes, n)
 	}
 	require.NotEmpty(t, clusterSizes, "CLUSTER_SIZES_N is empty after parsing")
+	slices.Sort(clusterSizes)
 
 	// LAYERS_K — comma-separated K values, each ∈ {2, 3, 4}. Default: 2,4
 	// (brackets the BFT-liveness floor and SSV's K=N convention for n=4).
 	// A K value is skipped for a given n when K < MinK(n) — below the
 	// BFT-liveness floor for that cluster size. For example, K=2 is
-	// skipped for n=7 (MinK(7)=3).
+	// skipped for n=7 (MinK(7)=3). Duplicates are deduped + sorted
+	// ascending for canonical run order.
 	const validLayersKDesc = "{2, 3, 4}"
 	validLayersKSet := map[int]bool{2: true, 3: true, 4: true}
 	layersKRaw := os.Getenv("LAYERS_K")
 	if layersKRaw == "" {
 		layersKRaw = "2,4"
 	}
+	seenLayersK := make(map[int]bool)
 	var layersK []int
 	for _, s := range strings.Split(layersKRaw, ",") {
 		s = strings.TrimSpace(s)
@@ -138,9 +148,14 @@ func TestStress(t *testing.T) {
 		k, err := strconv.Atoi(s)
 		require.NoErrorf(t, err, "invalid LAYERS_K value %q", s)
 		require.Truef(t, validLayersKSet[k], "LAYERS_K value %d not in %s", k, validLayersKDesc)
+		if seenLayersK[k] {
+			continue
+		}
+		seenLayersK[k] = true
 		layersK = append(layersK, k)
 	}
 	require.NotEmpty(t, layersK, "LAYERS_K is empty after parsing")
+	slices.Sort(layersK)
 
 	// P2P_PROFILES — comma-separated calibrated mesh-hop profile names
 	// for the p2p_baseline sweep's profile axis. Default: all six

@@ -359,3 +359,74 @@ func TestWriteReportData_MergesAcrossRuns(t *testing.T) {
 		"run 3 K=4 should overwrite run 1's iters=1 with iters=3")
 }
 
+// TestWriteReportData_PartialRegen — partial-regen workflow at a matching
+// Fields-tuple must merge cells by (Scenario, Protocol) rather than
+// replacing the entire cell slice. Run 1 writes a 2-protocol payload
+// (OBFT + QBFT); Run 2 re-runs only QBFT at the SAME Fields-tuple — the
+// merged point must retain OBFT's cells (one per scenario) AND carry the
+// fresh QBFT cells. The Makefile docstring advertises this composition
+// for arbitrary axes (PROTOCOLS=PSigs partial regen, etc.); a regression
+// to whole-point replacement would silently drop sibling protocols at
+// every matching point.
+func TestWriteReportData_PartialRegen(t *testing.T) {
+	scenarios := smallScenarios(t)
+	dir := t.TempDir()
+	build := func(protocols []ct.Protocol, iters int) reporting.Comparison {
+		base := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+		return reporting.Comparison{
+			Title:              "partial-regen test",
+			BaselineIterations: iters,
+			UnstableIterations: iters,
+			Sweeps: []ct.SweepResult{runOneSweep(t, "p2p_baseline", "", "", []ct.SweepPoint{{
+				Label:  "n=4 K=2",
+				Fields: map[string]float64{"N": 4, "K": 2, "BTT": 300},
+				Config: ct.BatchConfig{
+					Iterations: iters, SeedStart: 1,
+					Base:      base,
+					Scenarios: scenarios, Protocols: protocols,
+				},
+			}})},
+		}
+	}
+	hasProtocol := func(cells []any, want string) map[string]any {
+		for _, c := range cells {
+			m := c.(map[string]any)
+			if m["protocol"] == want {
+				return m
+			}
+		}
+		return nil
+	}
+
+	// Run 1: both protocols at iters=1.
+	require.NoError(t, reporting.WriteReportData(
+		build([]ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}, 1), dir))
+	pl := parseDataJS(t, dir)
+	pts := pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
+	require.Len(t, pts, 1)
+	cells := pts[0].(map[string]any)["cells"].([]any)
+	// 3 scenarios × 2 protocols = 6 cells.
+	require.Len(t, cells, 6, "run 1 should write 3 scenarios × 2 protocols")
+	obftCell := hasProtocol(cells, "OBFT")
+	require.NotNil(t, obftCell, "OBFT cell present after run 1")
+	require.Equal(t, float64(1), obftCell["iterations"], "run 1 OBFT iters=1")
+
+	// Run 2: QBFT-only regen at iters=5 (same Fields-tuple). OBFT cells
+	// MUST carry forward; QBFT cells MUST be replaced with iters=5.
+	require.NoError(t, reporting.WriteReportData(
+		build([]ct.Protocol{qbftadapter.Protocol{}}, 5), dir))
+	pl = parseDataJS(t, dir)
+	pts = pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
+	require.Len(t, pts, 1, "still one point after partial regen")
+	cells = pts[0].(map[string]any)["cells"].([]any)
+	require.Len(t, cells, 6, "after partial regen, OBFT cells preserved + QBFT cells refreshed = 6 total")
+	obftCell = hasProtocol(cells, "OBFT")
+	require.NotNil(t, obftCell, "OBFT cells survived QBFT-only regen")
+	require.Equal(t, float64(1), obftCell["iterations"],
+		"OBFT cells should still carry run 1's iters=1, not be wiped")
+	qbftCell := hasProtocol(cells, "QBFT")
+	require.NotNil(t, qbftCell, "QBFT cells present after regen")
+	require.Equal(t, float64(5), qbftCell["iterations"],
+		"QBFT cells should carry run 2's iters=5 (replaced, not preserved)")
+}
+

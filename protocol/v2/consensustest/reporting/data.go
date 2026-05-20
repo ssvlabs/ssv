@@ -300,18 +300,26 @@ func mergeProtocols(prev, next []string) []string {
 	return out
 }
 
-// mergeSweepPoints merges next's points into prev's points by
-// Fields-tuple. next-side points replace prev-side points with the same
-// Fields (fresh data wins); new Fields combinations are appended.
-// next's sweep metadata (Title, Description, etc.) takes precedence.
+// mergeSweepPoints merges next's points into prev's points by Fields-
+// tuple. On Fields-tuple match the points' CELLS are merged by
+// (Scenario, Protocol) key — next's cell replaces prev's on collision,
+// prev-only cells (e.g. protocols the next run didn't cover) carry
+// forward. This lets a partial-regen workflow
 //
-// Merged Points are re-sorted by fieldsKey post-merge so axis order is a
-// deterministic function of the merged Fields-tuple set, independent of
-// the run-ordering that produced the file. Without this, alternating
-// runs at e.g. LAYERS_K=4 then LAYERS_K=2,3 leave Points in arrival
-// order ([K=4, K=2, K=3]), which is fine for the current UI (which
-// looks up by Fields rather than iterating Points in order) but a
-// latent footgun for any future sort assumption.
+//	make stresstest                  # full set of protocols
+//	make stresstest PROTOCOLS=PSigs  # PSigs-only regen at same (n, K, ...)
+//
+// compose cleanly: the second run refreshes PSigs cells without dropping
+// the other protocols' cells at the same operating point. New Fields-
+// tuple combinations are appended; next's sweep metadata (Title,
+// Description, ...) takes precedence on the merged sweep envelope.
+//
+// Cell ordering within a merged point is normalized by (Scenario,
+// Protocol) sort post-merge so a run history of mixed protocol subsets
+// produces a deterministic cell order. Output Points slice is sorted by
+// fieldsKey for the same determinism reason — alternating runs at e.g.
+// LAYERS_K=4 then LAYERS_K=2,3 produce points in canonical order
+// regardless of input.
 func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
 	out := sweepPayload{
 		Name:        next.Name,
@@ -329,7 +337,7 @@ func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
 	for _, ppt := range prev.Points {
 		key := fieldsKey(ppt.Fields)
 		if ni, ok := nextKeys[key]; ok {
-			out.Points = append(out.Points, next.Points[ni])
+			out.Points = append(out.Points, mergePointCells(ppt, next.Points[ni]))
 			usedNext[ni] = true
 		} else {
 			out.Points = append(out.Points, ppt)
@@ -342,6 +350,44 @@ func mergeSweepPoints(prev, next sweepPayload) sweepPayload {
 	}
 	sort.SliceStable(out.Points, func(i, j int) bool {
 		return fieldsKey(out.Points[i].Fields) < fieldsKey(out.Points[j].Fields)
+	})
+	return out
+}
+
+// mergePointCells merges next's cells into prev's cells by (Scenario,
+// Protocol) key. next-side cells replace prev-side cells on key match
+// (fresh data wins); prev-only cells (a protocol that ran in the prior
+// run but not in this one — typical partial-regen case) carry forward
+// unchanged. Output is sorted by (Scenario, Protocol) for deterministic
+// ordering independent of run history.
+//
+// Non-cell point metadata (Label, Fields) comes from next — they're
+// Fields-tuple-equal by construction (the caller only invokes this on
+// fieldsKey match) but next's Label is the freshest and may differ
+// stylistically if the sweep builder's Label format changed between
+// runs.
+func mergePointCells(prev, next pointPayload) pointPayload {
+	type cellKey struct{ scenario, protocol string }
+	merged := make(map[cellKey]cellPayload, len(prev.Cells)+len(next.Cells))
+	for _, c := range prev.Cells {
+		merged[cellKey{c.Scenario, c.Protocol}] = c
+	}
+	for _, c := range next.Cells {
+		merged[cellKey{c.Scenario, c.Protocol}] = c
+	}
+	out := pointPayload{
+		Label:  next.Label,
+		Fields: next.Fields,
+		Cells:  make([]cellPayload, 0, len(merged)),
+	}
+	for _, c := range merged {
+		out.Cells = append(out.Cells, c)
+	}
+	sort.SliceStable(out.Cells, func(i, j int) bool {
+		if out.Cells[i].Scenario != out.Cells[j].Scenario {
+			return out.Cells[i].Scenario < out.Cells[j].Scenario
+		}
+		return out.Cells[i].Protocol < out.Cells[j].Protocol
 	})
 	return out
 }
@@ -449,8 +495,32 @@ type cellPayload struct {
 	DecidingBroadcastTimes []int               `json:"decidingBroadcastTimes,omitempty"`
 	DecisionTime           *percentilesPayload `json:"decisionTime,omitempty"`
 	ClusterBandwidth       *percentilesPayload `json:"clusterBandwidth,omitempty"`
-	PerKindBandwidth       map[string]float64  `json:"perKindBandwidth,omitempty"`
-	MissReasons            map[string]int      `json:"missReasons,omitempty"`
+	// PerKindBandwidth carries the per-MsgKind median bytes (was a flat
+	// median-only map before). Kept for backwards-compat with existing
+	// data.js readers that consume single-value-per-kind summaries.
+	PerKindBandwidth map[string]float64 `json:"perKindBandwidth,omitempty"`
+	// PerKindBandwidthStats carries richer per-kind stats: P50 (median),
+	// P99 (tail), and the fire-count (number of sims that emitted ≥1
+	// byte of this kind). Median alone is misleading for low-frequency
+	// kinds — a kind that fires on 5/1000 iters publishes Median=0
+	// because padToIters zero-fills the 995 no-fire iters, but the 5
+	// firing iters carry real bytes. Surfacing fireCount + P99 lets the
+	// UI label that situation correctly ("5 outliers averaging Y bytes"
+	// vs "0 bytes typical").
+	PerKindBandwidthStats map[string]perKindStatsPayload `json:"perKindBandwidthStats,omitempty"`
+	MissReasons           map[string]int                 `json:"missReasons,omitempty"`
+}
+
+// perKindStatsPayload describes one MsgKind's per-cell bandwidth profile.
+// P50 / P99 are over the cell.Iterations samples (zero-padded for iters
+// where the kind didn't fire — see batch.padToIters). FireCount is the
+// number of samples that contributed a non-zero byte count, so the UI
+// can distinguish "all iters emit this kind" from "a handful of outliers
+// at this kind".
+type perKindStatsPayload struct {
+	P50       float64 `json:"p50"`
+	P99       float64 `json:"p99"`
+	FireCount int     `json:"fireCount"`
 }
 
 type percentilesPayload struct {
@@ -558,19 +628,34 @@ func buildCell(c ct.BatchCell) cellPayload {
 		}
 	}
 	if len(c.PerKindBandwidth) > 0 {
-		// Emit median per kind. Sorted keys for deterministic output.
+		// Emit median per kind (backwards-compat) plus a richer per-kind
+		// stats block (P50 + P99 + fire-count) so the UI can correctly
+		// label low-frequency kinds where median alone misleads. Sorted
+		// keys for deterministic output.
 		kinds := make([]string, 0, len(c.PerKindBandwidth))
 		for k := range c.PerKindBandwidth {
 			kinds = append(kinds, k)
 		}
 		sort.Strings(kinds)
 		out.PerKindBandwidth = make(map[string]float64, len(kinds))
+		out.PerKindBandwidthStats = make(map[string]perKindStatsPayload, len(kinds))
 		for _, k := range kinds {
 			d := c.PerKindBandwidth[k]
 			if d.Len() == 0 {
 				continue
 			}
 			out.PerKindBandwidth[k] = d.Median()
+			fire := 0
+			for _, v := range d {
+				if v > 0 {
+					fire++
+				}
+			}
+			out.PerKindBandwidthStats[k] = perKindStatsPayload{
+				P50:       d.Percentile(50),
+				P99:       d.Percentile(99),
+				FireCount: fire,
+			}
 		}
 	}
 	if len(c.MissReasons) > 0 {

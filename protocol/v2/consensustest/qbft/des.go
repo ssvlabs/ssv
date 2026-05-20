@@ -72,6 +72,16 @@ type sim struct {
 	// reached the quorum.
 	partials map[spectypes.OperatorID]map[string]map[spectypes.OperatorID]bool
 	readyAt  map[spectypes.OperatorID]time.Duration
+
+	// equivocationsObserved counts byz leader equivocation events the
+	// sim has actually emitted: per byz round, the number of DISTINCT
+	// PROPOSE values dispatched minus one (a single-V plan adds zero;
+	// a 2-V split adds one; a 3-V 1-1-1 split adds two). Summed across
+	// every byz round that fires. Exposed via Outcome.CommitAttestation
+	// so the framework can distinguish "vacuous safe" runs (==0) from
+	// "tested safe" runs (>0) for equivocation-class scenarios — same
+	// pattern OBFT uses with its Rule 2 / Rule 3 evidence counts.
+	equivocationsObserved int
 }
 
 type decidedRecord struct {
@@ -225,10 +235,11 @@ func (s *sim) schedule(when time.Duration, ev event) {
 
 func (s *sim) outcome() rawOutcome {
 	out := rawOutcome{
-		decided:      false,
-		decidedRound: -1,
-		perOp:        make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
-		trace:        s.trace,
+		decided:               false,
+		decidedRound:          -1,
+		perOp:                 make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
+		trace:                 s.trace,
+		equivocationsObserved: s.equivocationsObserved,
 	}
 	// "Ready to submit" semantic: an op is considered Decided only when
 	// it has both (a) reached QBFT consensus locally AND (b) accumulated

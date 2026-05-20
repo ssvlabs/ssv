@@ -114,8 +114,14 @@ func TestBandwidth_Healthy_QBFT(t *testing.T) {
 	require.Greater(t, out.Bandwidth.TotalBytes, int64(0),
 		"healthy QBFT must record non-zero bandwidth")
 
-	// PROPOSE = LeaderBroadcast; PREPARE+COMMIT = Commit kind (mesh-shared).
+	// PROPOSE = LeaderBroadcast; PREPARE = Prepare; COMMIT = Commit
+	// (the three QBFT consensus phases live in distinct buckets so the
+	// per-kind chart doesn't conflate Phase-2 PREPARE with Phase-3
+	// COMMIT bytes — see consensustest/network.go MsgKind for the split
+	// rationale).
 	require.Greater(t, out.Bandwidth.PerKindBytes["LeaderBroadcast"], int64(0))
+	require.Greater(t, out.Bandwidth.PerKindBytes["Prepare"], int64(0),
+		"healthy QBFT should dispatch PREPARE under its own bucket")
 	require.Greater(t, out.Bandwidth.PerKindBytes["Commit"], int64(0))
 	// SSV's QBFT-then-post-consensus model: each honest decided op
 	// broadcasts one PartialSignatureMessage. At n=4, expect 4 × 3 × ~233 B

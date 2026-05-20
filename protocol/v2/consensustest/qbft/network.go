@@ -255,7 +255,9 @@ func decodeKindAndRound(m *spectypes.SignedSSVMessage) (ct.MsgKind, int) {
 	switch pm.QBFTMessage.MsgType {
 	case specqbft.ProposalMsgType:
 		return ct.KindLeaderBroadcast, round
-	case specqbft.PrepareMsgType, specqbft.CommitMsgType:
+	case specqbft.PrepareMsgType:
+		return ct.KindPrepare, round
+	case specqbft.CommitMsgType:
 		return ct.KindCommit, round
 	case specqbft.RoundChangeMsgType:
 		return ct.KindRoundChange, round

@@ -420,6 +420,21 @@ func (e *evtByzProposal) describe() string {
 
 func (e *evtByzProposal) handle(s *sim) []scheduledEvent {
 	plans := s.byz.ProposalPlanForRound(s, ct.OperatorID(e.leader), int(e.round), s.canonValueForRound(e.round))
+	// Equivocation observation: count distinct V's the byz leader emits
+	// at this (leader, round). A 1-plan call adds zero; a 2-V split adds
+	// one; a 1-1-1 split adds two. scheduleByzProposal already dedups
+	// one evtByzProposal per round (see des.go scheduleByzProposal), so
+	// the sum across rounds matches "total equivocation events emitted
+	// in this sim".
+	if len(plans) > 1 {
+		distinctV := make(map[string]struct{}, len(plans))
+		for _, p := range plans {
+			distinctV[string(p.V)] = struct{}{}
+		}
+		if len(distinctV) > 1 {
+			s.equivocationsObserved += len(distinctV) - 1
+		}
+	}
 	leaderKey := s.keys.OperatorKeys[e.leader]
 	from := ct.OperatorID(e.leader)
 	frameworkRound := frameworkRoundFor(int(e.round))

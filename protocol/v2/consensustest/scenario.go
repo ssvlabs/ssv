@@ -31,6 +31,21 @@ type Scenario struct {
 	Delivery DeliveryMode
 
 	Apply func(*SimConfig)
+
+	// Applies, when non-nil, is consulted by the runner BEFORE Apply runs.
+	// Returning false causes the sim to be skipped with ErrNotApplicable
+	// — the cell renders as n/a, no Apply / Run is invoked, and Fields-
+	// tuple attribution remains truthful (the cell isn't attributed
+	// data from a different operating point). Use this for scenarios
+	// that are only meaningful at a subset of the sweep's (n, K, ...)
+	// matrix, e.g. MultiSilent_AllLayers requires K==N to silence every
+	// operator-leader; at K<N the scenario would internally override
+	// cfg.K=N and the cell's recorded Fields["K"] would lie.
+	//
+	// The check sees cfg PRE-Apply (sweep-supplied), so Applies can read
+	// whatever the sweep selected without surprises from Apply mutations.
+	Applies func(SimConfig) bool
+
 	// Expect is keyed by Protocol.Name(). Use ExpectFor(name) for lookup
 	// rather than direct map access — it falls back from variant names
 	// (e.g. "QBFT-SSV") to the base name (e.g. "QBFT") so variants don't

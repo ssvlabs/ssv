@@ -321,7 +321,11 @@ func (e *evtVerdictBroadcastStart) handle(s *sim) []scheduledEvent {
 			}
 			v = s.cfg.Byz.OverrideVerdict(s, op, k, v)
 			vBytes := verdictSize(v)
-			s.emitToAll(op, ct.KindCommit, k, vBytes, 0, func(to twoab.OperatorID) event {
+			// Verdict bytes use KindVerdict (Phase-2a) — distinct from
+			// Phase-2b's Onion2b under KindCommit. Splitting these keeps
+			// the per-kind bandwidth chart apples-to-apples against bare
+			// OBFT, where there is no verdict emission at all.
+			s.emitToAll(op, ct.KindVerdict, k, vBytes, 0, func(to twoab.OperatorID) event {
 				return &evtVerdictArrival{from: op, to: to, verdict: cloneVerdict(v)}
 			})
 			// Byz Rule 6a equivocation: emit ADDITIONAL distinct verdicts
@@ -330,7 +334,7 @@ func (e *evtVerdictBroadcastStart) handle(s *sim) []scheduledEvent {
 			for _, extra := range s.cfg.Byz.BuildExtraVerdicts(s, op, k, v) {
 				extra := extra
 				exBytes := verdictSize(extra)
-				s.emitToAll(op, ct.KindCommit, k, exBytes, 0, func(to twoab.OperatorID) event {
+				s.emitToAll(op, ct.KindVerdict, k, exBytes, 0, func(to twoab.OperatorID) event {
 					return &evtVerdictArrival{from: op, to: to, verdict: cloneVerdict(extra)}
 				})
 			}

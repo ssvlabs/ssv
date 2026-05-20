@@ -141,7 +141,6 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Operators:    cfg.Operators,
 		BTT:          bttEff,
 		RT:           rt,
-		PhaseBudget:  phaseBudget,
 		MaxRounds:    maxRounds,
 		BFTStart:     bftStart,
 		Network:      cfg.Network,
@@ -159,6 +158,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 	out := rawOut.toCT(desCfg.Bandwidth)
+	out.CommitAttestation = computeAttestation(rawOut)
 
 	// Pre-clip snapshot: ClipLateDecision resets DecidedRound to -1, so
 	// stash the round + time it actually reached for diagnostic labelling.
@@ -177,6 +177,38 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		out.MissReason = classifyQBFTMiss(out, preClipDecided, preClipRound, preClipTime, deadline)
 	}
 	return out, nil
+}
+
+// computeAttestation populates Outcome.CommitAttestation from data the
+// QBFT DES already exposes. Mirrors the OBFT / 2abOBFT adapters' pattern:
+// each *Checked flag is set only when this adapter actually performs the
+// corresponding cross-check; the framework treats unset flags as
+// "uninstrumented, no violation reportable".
+//
+// Currently instrumented:
+//   - Equivocation: counts distinct byz-leader PROPOSE values per round
+//     (minus one per round) into EquivocationsObserved. The actual safety
+//     check — that no honest op commits on an equivocated value without
+//     also breaking agreement — is enforced upstream by the framework's
+//     universal SingleV / HonestAgreement checks computed from PerOp. So
+//     EquivocationsAccepted stays at 0 here; spec-QBFT's validation rules
+//     reject equivocating proposals at the receiver, and any breach that
+//     slipped through to a commit would manifest as a SingleV / HonestAgreement
+//     violation upstream. EquivocationsObserved is diagnostic, distinguishing
+//     vacuous-safe runs (==0) from tested-safe runs (>0). Mirrors the OBFT
+//     adapter's diagnostic-only equivocation counter.
+//
+// Left uninstrumented (need spec-QBFT internals or extra plumbing — deferred):
+//   - Quorum: would require plumbing the partial-signature count out of
+//     the partials map (s.partials[receiver]); spec-qbft's Instance
+//     internally enforces 2f+1 distinct partials before reporting decided.
+//   - OBFTCommitKind / OBFTHostValidityRespect: OBFT-specific, not applicable
+//     to QBFT (no σ-vs-NR cert dichotomy, no per-layer host re-validation).
+func computeAttestation(raw rawOutcome) ct.CommitAttestation {
+	return ct.CommitAttestation{
+		EquivocationChecked:   true,
+		EquivocationsObserved: raw.equivocationsObserved,
+	}
 }
 
 // classifyQBFTMiss labels a non-decided QBFT outcome. Three regimes:
@@ -224,7 +256,6 @@ type desConfig struct {
 	Operators    []ct.OperatorID
 	BTT          time.Duration
 	RT           time.Duration
-	PhaseBudget  time.Duration // per-phase budget (= 1·BTT default at tightened sizing); used for post-cons margin
 	MaxRounds    int
 	BFTStart     time.Duration
 	Network      ct.NetworkModel
@@ -247,6 +278,13 @@ type rawOutcome struct {
 	decisionTime time.Duration
 	perOp        map[ct.OperatorID]rawOpOutcome
 	trace        []ct.TraceEntry
+	// equivocationsObserved is the sim-side count of byz leader equivocation
+	// events (distinct PROPOSE values emitted at the same round, minus one
+	// per round). Set by sim.outcome() from s.equivocationsObserved. The
+	// adapter exposes this via Outcome.CommitAttestation.EquivocationsObserved
+	// so the framework can distinguish vacuous-pass from tested-pass for
+	// equivocation-class scenarios.
+	equivocationsObserved int
 }
 
 type rawOpOutcome struct {

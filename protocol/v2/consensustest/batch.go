@@ -238,6 +238,14 @@ func runOneSim(cfg BatchConfig, sc Scenario, p Protocol, iter int) (oc iterOutco
 	// the back-compat path — preserves every adversarial scenario's
 	// per-(from, to) primitives.
 	simCfg.Delivery = sc.Delivery
+	// Sweep-level applicability check. Scenarios that aren't meaningful
+	// at this (n, K, ...) operating point return false here and the cell
+	// is recorded with ErrNotApplicable, mirroring the per-protocol
+	// translateByz dispatch. Runs before Apply so Applies sees the
+	// sweep-supplied cfg without scenario-internal mutations.
+	if sc.Applies != nil && !sc.Applies(simCfg) {
+		return iterOutcome{err: ErrNotApplicable, seed: seed}
+	}
 	if sc.Apply != nil {
 		sc.Apply(&simCfg)
 	}
@@ -396,7 +404,6 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 		DecidingBroadcastTime: make(Distribution, 0, cellIter),
 		ClusterBandwidth:      make(Distribution, 0, cellIter),
 		PerKindBandwidth:      make(map[string]Distribution),
-		EvidenceCounts:        make(map[string]Distribution),
 		MissReasons:           make(map[string]int),
 	}
 	successCount := 0
@@ -414,10 +421,10 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 			}
 			// Record a 0-byte ClusterBandwidth sample for the panicked iter
 			// so cell.ClusterBandwidth.Len() == cellIter, matching the
-			// PerKindBandwidth / EvidenceCounts series after padToIters.
-			// Without this, cluster-total medians sit over (cellIter -
-			// panicCount) samples while per-kind medians sit over cellIter
-			// (with phantom zeros), and the two disagree.
+			// PerKindBandwidth series after padToIters. Without this,
+			// cluster-total medians sit over (cellIter - panicCount)
+			// samples while per-kind medians sit over cellIter (with
+			// phantom zeros), and the two disagree.
 			cell.ClusterBandwidth = append(cell.ClusterBandwidth, 0)
 			continue
 		}
@@ -437,26 +444,13 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 			ensureLen(cell.PerKindBandwidth, kind, i)
 			cell.PerKindBandwidth[kind] = append(cell.PerKindBandwidth[kind], float64(bytes))
 		}
-		// One evidence sample per sim per rule (value = sum of fires across
-		// all operators in this sim).
-		perSimEvidence := make(map[string]int)
-		for _, oo := range r.out.PerOp {
-			for rule, count := range oo.EvidenceByRule {
-				perSimEvidence[rule] += count
-			}
-		}
-		for rule, count := range perSimEvidence {
-			ensureLen(cell.EvidenceCounts, rule, i)
-			cell.EvidenceCounts[rule] = append(cell.EvidenceCounts[rule], float64(count))
-		}
 	}
-	// Right-pad every kind / rule slice with zeros so its length matches
-	// cell.Iterations. Without this, kinds / rules that only fire on some
-	// iters publish a Median computed over the subset where they fired,
-	// biasing reported per-kind / per-rule percentiles upward and silently
-	// disagreeing with cell.ClusterBandwidth.Len() / cell.Iterations.
+	// Right-pad every kind slice with zeros so its length matches
+	// cell.Iterations. Without this, kinds that only fire on some iters
+	// publish a Median computed over the subset where they fired, biasing
+	// reported per-kind percentiles upward and silently disagreeing with
+	// cell.ClusterBandwidth.Len() / cell.Iterations.
 	padToIters(cell.PerKindBandwidth, len(iters))
-	padToIters(cell.EvidenceCounts, len(iters))
 	cell.SuccessRate = float64(successCount) / float64(cellIter)
 	return cell
 }
@@ -467,8 +461,8 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 // the EFFECT from the caller's perspective is to back-fill the
 // "missing" iter slots before iterIdx with zeros, so the resulting
 // series is aligned with the iter axis.) Used by aggregateCellIters
-// to handle kinds / rules that didn't appear in r.out.Bandwidth.
-// PerKindBytes or r.out.PerOp's EvidenceByRule on prior iterations.
+// to handle kinds that didn't appear in r.out.Bandwidth.PerKindBytes
+// on prior iterations.
 func ensureLen(m map[string]Distribution, key string, iterIdx int) {
 	d := m[key]
 	for len(d) < iterIdx {
@@ -478,8 +472,8 @@ func ensureLen(m map[string]Distribution, key string, iterIdx int) {
 }
 
 // padToIters extends every map value to length `iters` by right-padding
-// with zeros. Mirrors ensureLen for kinds / rules whose final iteration
-// was a no-op.
+// with zeros. Mirrors ensureLen for kinds whose final iteration was a
+// no-op.
 func padToIters(m map[string]Distribution, iters int) {
 	for key, d := range m {
 		for len(d) < iters {
