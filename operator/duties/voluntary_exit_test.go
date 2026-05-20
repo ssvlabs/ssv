@@ -191,7 +191,7 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 	lateObservationSlot := phase0.Slot(blockNumber) + phase0.Slot(executionclient.FollowDistance)
 	// expectedDuty.Slot uses the shared duty slot — what gets signed and what
 	// peers (including pre-#2851 ones) use to validate. The execution gate
-	// (at blockNumber + voluntaryExitExecutionSlotsToPostpone) fires later
+	// (at blockNumber + voluntaryExitExecutionSlotsToPostpone) trips later
 	// but does not affect what's on the wire.
 	expectedDuty := []*spectypes.ValidatorDuty{{
 		Type:           spectypes.BNRoleVoluntaryExit,

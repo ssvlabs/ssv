@@ -37,23 +37,23 @@ var (
 
 // recordDutyScheduled bumps the per-role scheduled-duty counter and, when
 // meaningful, records a slot-delay histogram point. For roles where
-// duty.Slot is not the intended firing slot (see dutySlotIsFiringSlot), the
-// caller's slotDelay does not reflect operator lateness, so the histogram
+// duty.Slot is not the intended execution slot (see dutySlotIsExecutionSlot),
+// the caller's slotDelay does not reflect operator lateness, so the histogram
 // point is skipped; the counter still ticks.
 func recordDutyScheduled(ctx context.Context, role types.RunnerRole, slotDelay time.Duration) {
 	runnerRoleAttr := metric.WithAttributes(observability.RunnerRoleAttribute(role))
 	dutiesScheduledCounter.Add(ctx, 1, runnerRoleAttr)
-	if dutySlotIsFiringSlot(role) {
+	if dutySlotIsExecutionSlot(role) {
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds(), runnerRoleAttr)
 	}
 }
 
-// dutySlotIsFiringSlot reports whether duty.Slot for the given role
-// represents the wall-clock slot at which this operator intends to fire its
-// duty. True for most roles (attester, proposer, etc.); false for roles where
-// duty.Slot is a shared coordination point intentionally held in the past
-// (the operator fires later than duty.Slot) — see
+// dutySlotIsExecutionSlot reports whether duty.Slot for the given role
+// represents the wall-clock slot at which this operator intends to execute
+// its duty. True for most roles (attester, proposer, etc.); false for roles
+// where duty.Slot is a shared coordination point intentionally held in the
+// past (the operator executes later than duty.Slot) — see
 // voluntaryExitDutySlotsToPostpone for the canonical rationale.
-func dutySlotIsFiringSlot(role types.RunnerRole) bool {
+func dutySlotIsExecutionSlot(role types.RunnerRole) bool {
 	return role != types.RoleVoluntaryExit
 }

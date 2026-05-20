@@ -279,9 +279,9 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 }
 
 func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
-	// slot is the firing slot (the current ticker slot at dispatch), not
+	// slot is the execution slot (the current ticker slot at dispatch), not
 	// duty.Slot — which for voluntary-exit is the shared duty slot held in the
-	// past for cross-operator coordination. 1 wall-clock slot from firing
+	// past for cross-operator coordination. 1 wall-clock slot from execution
 	// should be sufficient for this duty-type.
 	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
 	return dutyDeadline
