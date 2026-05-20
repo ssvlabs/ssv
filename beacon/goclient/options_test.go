@@ -106,7 +106,8 @@ func TestValidateProposalSoftDeadline(t *testing.T) {
 	}{
 		{name: "at minimum (1000ms) -> ok", value: 1000 * time.Millisecond, wantErr: false},
 		{name: "below minimum (999ms) -> error", value: 999 * time.Millisecond, wantErr: true},
-		{name: "at safe max (1100ms) -> ok (warn handled externally)", value: 1100 * time.Millisecond, wantErr: false},
+		{name: "below safe max (1100ms) -> ok", value: 1100 * time.Millisecond, wantErr: false},
+		{name: "at safe max (1450ms) -> ok (warn handled externally)", value: 1450 * time.Millisecond, wantErr: false},
 		{name: "above safe max but below hard max (2500ms) -> ok", value: 2500 * time.Millisecond, wantErr: false},
 		{name: "at hard max (3600ms) -> ok", value: 3600 * time.Millisecond, wantErr: false},
 		{name: "above hard max (3601ms) -> error", value: 3601 * time.Millisecond, wantErr: true},
@@ -128,7 +129,7 @@ func TestValidateProposalSoftDeadline(t *testing.T) {
 }
 
 func TestNewOptions_PathDefaulting(t *testing.T) {
-	t.Run("safe path defaults ProposalSoftDeadline to 1000ms", func(t *testing.T) {
+	t.Run("safe path defaults ProposalSoftDeadline to the largest safest value", func(t *testing.T) {
 		base := Options{BeaconNodeAddr: "http://localhost:5052"}
 		opts, err := NewOptions(base, 0, BlockFetchPathSafe)
 		require.NoError(t, err)

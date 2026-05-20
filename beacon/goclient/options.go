@@ -50,15 +50,19 @@ func (p BlockFetchPath) String() string {
 
 // ProposalSoftDeadline bounds and defaults. Values are slot-relative (measured from slot start).
 const (
-	// DefaultProposalSoftDeadline is the default deadline for the safe path. Picked so
-	// the worst-case 2-round QBFT scenario still fits within the 4000ms slot deadline:
-	//   1000ms (deadline) + 2500ms (QBFT worst-case 2-round) + 150ms (signing) + 200ms (submission) = 3850ms
-	DefaultProposalSoftDeadline = 1000 * time.Millisecond
+	// DefaultProposalSoftDeadline is the default deadline used by the safe path when the
+	// operator hasn't set ProposalSoftDeadline. It's the largest value that still fits
+	// the worst-case 2-round QBFT scenario within the 4000ms slot deadline for clusters
+	// with typical latencies — equal to SafeMaxProposalSoftDeadline. See its derivation
+	// below.
+	DefaultProposalSoftDeadline = SafeMaxProposalSoftDeadline
 
-	// MinProposalSoftDeadline is the lower bound for operator-set ProposalSoftDeadline values.
-	// Matches DefaultProposalSoftDeadline — going lower defeats the purpose of opting into the
-	// MEV-optimized path (BNs won't have responded yet).
-	MinProposalSoftDeadline = DefaultProposalSoftDeadline
+	// MinProposalSoftDeadline is the lower bound for operator-set ProposalSoftDeadline
+	// values. Decoupled from DefaultProposalSoftDeadline so operators can opt into the
+	// MEV-optimized path with a tighter window than the safe-path default if they want
+	// (e.g., to match an early PBS cutoff). Set at 1000ms — below this, the BN response
+	// window becomes too tight for meaningful bid collection across BNs.
+	MinProposalSoftDeadline = 1000 * time.Millisecond
 
 	// MaxProposalSoftDeadline is the hard upper bound for operator-set ProposalSoftDeadline
 	// values. Intentionally loose — past the SafeMax warning threshold, the operator has
@@ -73,13 +77,13 @@ const (
 	// scenario may no longer fit within the slot deadline for clusters with typical
 	// latencies (round 1 effectively has to succeed). Derived from the typical values in
 	// docs/MEV_CONSIDERATIONS.md:
-	//   deadline + 50ms (BN→SSV transport) + 2500ms (QBFT worst-case 2-round) +
-	//   150ms (PostConsensusSigning) + 200ms (BlockSubmission) <= 4000ms
-	//   => deadline <= 1100ms
+	//   deadline + 50ms (BN→SSV transport) + 2350ms (QBFT worst-case 2-round) +
+	//   50ms (PostConsensusSigning) + 100ms (BlockSubmission) <= 4000ms
+	//   => deadline <= 1450ms
 	// Values above this trigger a startup warning but are still permitted — the operator
 	// is accepting that round 1 must succeed (Example B is such a setup). Clusters with
 	// measurably faster QBFT + submission may still leave room for round 2.
-	SafeMaxProposalSoftDeadline = 1100 * time.Millisecond
+	SafeMaxProposalSoftDeadline = 1450 * time.Millisecond
 )
 
 // Legacy-path constants — preserved for backward-compat.

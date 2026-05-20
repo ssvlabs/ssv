@@ -16,12 +16,12 @@ The variables below name the stages of the SSV proposer-duty timeline. The value
 
 | Variable | Typical | Description |
 |---|---|---|
-| `RANDAO` | ~100ms | Pre-consensus phase: SSV operators build the RANDAO signature used in the block-fetch request. |
+| `RANDAO` | ~50ms | Pre-consensus phase: SSV operators build the RANDAO signature used in the block-fetch request. |
 | `(auction window)` | varies | PBS-side relay polling. Configurable; see [PBS-side timing games](#pbs-side-timing-games-recommended). |
 | `MEVBoostRelayTimeout` | ~200ms | *Legacy path only:* mev-boost's single getHeader call when SSV asks for a block. Replaced by `(auction window)` in PBS-timing-games setups. |
-| `QBFT` | ~2500ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~150ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~350ms successful round 2). |
-| `PostConsensusSigning` | ~150ms | Operators reconstruct the validator BLS signature from partial signatures. |
-| `BlockSubmission` | ~200ms | Leader submits the signed blinded block to the BN; relay reveals the payload; block propagates. |
+| `QBFT` | ~2350ms worst case | QBFT consensus over the blinded block. Worst-case decomposes into `QBFTRound1Time` (~2000ms round-1 timer, fires if round 1 fails) + `QBFTRoundChange` (~100ms ROUND-CHANGE handshake) + `QBFTRound2Time` (~250ms successful round 2). |
+| `PostConsensusSigning` | ~50ms | Operators reconstruct the validator BLS signature from partial signatures. |
+| `BlockSubmission` | ~100ms | Leader submits the signed blinded block to the BN; relay reveals the payload; block propagates. |
 
 The Ethereum slot-propagation deadline is **4000ms** after slot start.
 
@@ -128,11 +128,11 @@ eth2:
 
 ### Example B — aggressive: PBS-side cutoff at 1800ms (round 1 must succeed)
 
-Pushes the PBS-side cutoff to `1800ms` — well past the ~1100ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1850ms.
+Pushes the PBS-side cutoff to `1800ms` — past the ~1450ms threshold where round-2 QBFT fallback may no longer fit within the slot for typical clusters. This accepts "round 1 must succeed" in exchange for capturing more intra-slot bid growth (clusters with measurably faster QBFT + submission may still leave room for round 2). Last relay poll at ~1600ms; header at SSV by ~1850ms.
 
 The polling pattern (`target_first_request_ms = 1000`, `frequency_get_header_ms = 200`) fires polls at 1000ms, 1200ms, 1400ms, 1600ms — four chances with ~200ms RTT margin.
 
-Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms to ~2150ms — below the ~2850ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
+Trade-off vs Example A: bid-sample time shifts ~600ms later, capturing more intra-slot bid growth, but the remaining slot budget for QBFT and submission shrinks from ~2900ms to ~2150ms — below the ~2500ms typically needed for the worst-case 2-round QBFT scenario. Example B accepts that round 1 must succeed; if round 1 fails, the slot may be missed (whether it's actually missed depends on your cluster's QBFT + submission latencies). Use only after baselining your stack's round-1 success rate.
 
 **commit-boost** (TOML):
 ```toml
@@ -169,7 +169,7 @@ relays:
     frequency_get_header_ms: 200
 ```
 
-**SSV-side** (multi-BN setups only — 1850ms triggers the safe-max startup warning since it exceeds the ~1100ms threshold; see [Multi-BN setup](#multi-bn-setup); single-BN operators skip this):
+**SSV-side** (multi-BN setups only — 1850ms triggers the safe-max startup warning since it exceeds the ~1450ms threshold; see [Multi-BN setup](#multi-bn-setup); single-BN operators skip this):
 ```yaml
 eth2:
   ProposalSoftDeadline: 1850ms   # = PBS late_in_slot_time_ms (1800ms) + ~50ms BN→SSV transport
@@ -183,8 +183,8 @@ The example configs are starting points. Production tuning requires measuring yo
 
 Bid value grows through the slot, so the auction cutoff should be as late as possible, subject to:
 
-- **Round-2 fallback should fit:** `QBFT + PostConsensusSigning + BlockSubmission < 4000ms − late_in_slot_time_ms − ~50ms` (the ~50ms covers BN→SSV transport between the PBS cutoff and SSV receiving the header). Using the typical values from [Definitions](#definitions-and-typical-values), the post-cutoff budget needed is ~2850ms, resolving to `late_in_slot_time_ms ≲ ~1100ms`. Above this threshold, a round-2 fallback may no longer complete within the slot deadline for typical clusters.
-- **Cutoffs above ~1100ms** accept that round 1 must succeed — if round 1 fails, the slot may be missed (depending on your cluster's QBFT + submission latencies). Example B (1800ms) sits in this regime.
+- **Round-2 fallback should fit:** `QBFT + PostConsensusSigning + BlockSubmission < 4000ms − late_in_slot_time_ms − ~50ms` (the ~50ms covers BN→SSV transport between the PBS cutoff and SSV receiving the header). Using the typical values from [Definitions](#definitions-and-typical-values), the post-cutoff budget needed is ~2500ms, resolving to `late_in_slot_time_ms ≲ ~1450ms`. Above this threshold, a round-2 fallback may no longer complete within the slot deadline for typical clusters.
+- **Cutoffs above ~1450ms** accept that round 1 must succeed — if round 1 fails, the slot may be missed (depending on your cluster's QBFT + submission latencies). Example B (1800ms) sits in this regime.
 - **Round-1-only variance buffer:** even in the round-1-must-succeed regime, cutoffs much beyond ~2500ms tighten the slot enough that occasional latency spikes risk missing the deadline even when round 1 succeeds.
 
 ### What to measure
@@ -215,7 +215,7 @@ eth2:
   ProposalSoftDeadline: <your PBS late_in_slot_time_ms + ~50ms BN→SSV transport>
 ```
 
-This makes SSV wait for all BN responses up to that slot-relative deadline and return the highest-scored bid. Valid range `[1000ms, 3600ms]`; values above ~1100ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed.
+This makes SSV wait for all BN responses up to that slot-relative deadline and return the highest-scored bid. Valid range `[1000ms, 3600ms]`; values above ~1450ms emit a startup warning — for typical clusters, the worst-case 2-round QBFT scenario may no longer fit within the slot, so round 1 effectively has to succeed.
 
 ### Default behavior (if you don't set `ProposalSoftDeadline`)
 
@@ -259,7 +259,7 @@ With `ProposerDelay` active, the slot-budget equation becomes:
 RANDAO + ProposerDelay + MEVBoostRelayTimeout + QBFT + PostConsensusSigning + BlockSubmission < 4000ms
 ```
 
-Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (100 + 200 + 2500 + 150 + 200) = 850ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~150ms of headroom for variance.
+Using the typical values from [Definitions](#definitions-and-typical-values), `ProposerDelay ≤ 4000ms − (50 + 200 + 2350 + 50 + 100) = 1250ms` is the theoretical maximum. In practice, latency variance can easily add several hundred ms — we consider **~700ms** the maximum reasonable value for `ProposerDelay` on Ethereum mainnet, leaving ~550ms of headroom for variance.
 
 We recommend starting with a small value such as 300ms and increasing gradually while monitoring miss rate.
 

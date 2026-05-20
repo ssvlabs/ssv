@@ -27,7 +27,7 @@ eth2:
   # multi-BN responses until this slot-relative deadline (ms into slot) and returns the
   # highest-value bid received, without early-exiting on the first MEV block. Match this
   # to your PBS late_in_slot_time_ms + ~50ms BN→SSV transport. Valid range: [1000ms,
-  # 3600ms]; values above 1100ms emit a startup warning (round-2 QBFT fallback may not
+  # 3600ms]; values above 1450ms emit a startup warning (round-2 QBFT fallback may not
   # fit within the slot for typical clusters). Cannot be combined with ProposerDelay or
   # ProposalSoftTimeout.
   # Leave unset to use the default safe path (early-exit on first MEV block, deadline 1000ms).
