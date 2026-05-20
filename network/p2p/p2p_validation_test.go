@@ -202,11 +202,21 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		index NodeIndex
 		score float64
 	}
-	const (
-		acceptedOnlyIdx = NodeIndex(0)
-		ignoredOnlyIdx  = NodeIndex(1)
-		rejectedOnlyIdx = NodeIndex(2)
-	)
+
+	// Derive the single-role node indices from messageTypesByNodeIndex so
+	// reordering the map can't silently desync the bucket invariant below.
+	indexByRole := map[spectypes.RunnerRole]NodeIndex{}
+	for nodeIdx, roles := range messageTypesByNodeIndex {
+		if len(roles) == 1 {
+			indexByRole[roles[0]] = NodeIndex(nodeIdx)
+		}
+	}
+	require.Contains(t, indexByRole, acceptedRole)
+	require.Contains(t, indexByRole, ignoredRole)
+	require.Contains(t, indexByRole, rejectedRole)
+	acceptedOnlyIdx := indexByRole[acceptedRole]
+	ignoredOnlyIdx := indexByRole[ignoredRole]
+	rejectedOnlyIdx := indexByRole[rejectedRole]
 
 	snapshotForNode := func(node *VirtualNode) []peerScore {
 		ptr := node.PeerScores.Load()
