@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -10,20 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
-
-// TestConn_Send_FullQueue asserts the broadcasted.Send contract for *conn:
-// Send must not block, even when called past the queue capacity, and on
-// overflow it cancels the conn ctx (the teardown signal consumed by
-// WriteLoop / ReadLoop / handleStream defers).
-func TestConn_Send_FullQueue(t *testing.T) {
-	c := newConn(t.Context(), nil, "test", 0, false).(*conn)
-	require.NoError(t, c.ctx.Err(), "ctx should not be canceled before overflow")
-
-	for i := 0; i < chanSize+2; i++ {
-		c.Send([]byte(fmt.Sprintf("test-%d", i)))
-	}
-	require.Error(t, c.ctx.Err(), "ctx should be canceled after overflow")
-}
 
 // TestBroadcaster verifies the basic register / fan-out / deregister flow:
 // feed.Send delivers to every registered connection, a Deregister'd

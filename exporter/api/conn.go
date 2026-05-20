@@ -97,9 +97,6 @@ func (c *conn) RemoteAddr() net.Addr {
 // connection returns an error that all callers ignore.
 func (c *conn) Close() error {
 	c.cancelCtx()
-	if c.ws == nil {
-		return nil
-	}
 	return c.ws.Close()
 }
 
