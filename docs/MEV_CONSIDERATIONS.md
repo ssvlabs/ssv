@@ -185,7 +185,7 @@ Bid value grows through the slot, so the auction cutoff should be as late as pos
 
 - **Round-2 fallback should fit:** `QBFT + PostConsensusSigning + BlockSubmission < 4000ms − late_in_slot_time_ms − ~50ms` (the ~50ms covers BN→SSV transport between the PBS cutoff and SSV receiving the header). Using the typical values from [Definitions](#definitions-and-typical-values), the post-cutoff budget needed is ~2500ms, resolving to `late_in_slot_time_ms ≲ ~1450ms`. Above this threshold, a round-2 fallback may no longer complete within the slot deadline for typical clusters.
 - **Cutoffs above ~1450ms** accept that round 1 must succeed — if round 1 fails, the slot may be missed (depending on your cluster's QBFT + submission latencies). Example B (1800ms) sits in this regime.
-- **Round-1-only variance buffer:** even in the round-1-must-succeed regime, cutoffs much beyond ~2500ms tighten the slot enough that occasional latency spikes risk missing the deadline even when round 1 succeeds.
+- **Round-1-only variance buffer:** even in the round-1-must-succeed regime, cutoffs much beyond ~3000ms tighten the slot enough that occasional latency spikes risk missing the deadline even when round 1 succeeds.
 
 ### What to measure
 
@@ -219,7 +219,7 @@ This makes SSV wait for all BN responses up to that slot-relative deadline and r
 
 ### Default behavior (if you don't set `ProposalSoftDeadline`)
 
-SSV returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid. If no blinded response arrives by the default slot-relative deadline (1000ms), SSV returns the best non-blinded response collected so far, waiting for the first valid response if nothing usable arrived.
+SSV returns as soon as one BN delivers a blinded (MEV) block — treating the first blinded response as the chosen MEV bid. If no blinded response arrives by the default slot-relative deadline (1450ms — the largest safest deadline for typical clusters; see [Tuning guidance](#tuning-guidance--measurement-methodology)), SSV returns the best non-blinded response collected so far, waiting for the first valid response if nothing usable arrived.
 
 This default is faster but doesn't compare bid *values* across BNs — the first BN to return blinded wins regardless of bid quality. Fine for multi-BN setups run primarily for redundancy.
 
