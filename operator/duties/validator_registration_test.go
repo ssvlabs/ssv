@@ -135,6 +135,11 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			validatorIndex := phase0.ValidatorIndex(1)
 			validatorPk := phase0.BLSPubKey{1, 2, 3}
 
+			// processExecution iterates SelfValidators for the periodic path.
+			// Return nil so periodic produces no duties and the assertion below
+			// observes only the event-driven duty.
+			scheduler.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(nil).AnyTimes()
+
 			executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
 			setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
 
@@ -144,12 +149,19 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 				BlockNumber:     uint64(slot),
 			}
 
+			// Event-driven registrations are now gated on
+			// validatorRegistrationExecutionSlotsToPostpone — advance the
+			// ticker past the gate so processExecution drains the queue.
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
+
 			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
 				{
 					Type:           spectypes.BNRoleValidatorRegistration,
 					PubKey:         validatorPk,
 					ValidatorIndex: validatorIndex,
-					Slot:           slot + validatorRegistrationSlotsToPostpone,
+					// Slot is the wire slot — what gets signed; intentionally
+					// lower than the execution-gate slot above.
+					Slot: slot + validatorRegistrationWireSlotsToPostpone,
 				},
 			})
 			require.EqualValues(t, 2, blockByNumberCalls.Load())
@@ -158,4 +170,65 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			ticker.WaitShutdown()
 		})
 	})
+
+	t.Run("event-driven duty deferred until execution gate", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			regCh := make(chan RegistrationDescriptor)
+			handler := NewValidatorRegistrationHandler(regCh)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+			defer cancel()
+
+			scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+			require.NoError(t, scheduler.Start(ctx))
+
+			create1to1BlockSlotMapping(scheduler)
+
+			const slot = phase0.Slot(1)
+			validatorIndex := phase0.ValidatorIndex(1)
+			validatorPk := phase0.BLSPubKey{1, 2, 3}
+
+			scheduler.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(nil).AnyTimes()
+
+			executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+			setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
+			regCh <- RegistrationDescriptor{
+				ValidatorPubkey: validatorPk,
+				ValidatorIndex:  validatorIndex,
+				BlockNumber:     uint64(slot),
+			}
+
+			// Tick one slot before the execution gate — handler should keep
+			// the duty pending.
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone - 1)
+			waitForNoAction(t, nil, executeDutiesCall, noActionTimeout)
+
+			// Tick at the gate — handler should drain the queue.
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
+			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
+				{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					PubKey:         validatorPk,
+					ValidatorIndex: validatorIndex,
+					Slot:           slot + validatorRegistrationWireSlotsToPostpone,
+				},
+			})
+
+			close(regCh)
+			require.NoError(t, scheduler.Wait())
+			ticker.WaitShutdown()
+		})
+	})
+}
+
+// TestValidatorRegistrationWireSlotPinned guards a wire-format invariant:
+// pre-#2851 peers compute and validate against blockSlot+4, so this operator
+// must emit the same value for cross-version interop. Bumping the constant
+// is a coordinated network-wide upgrade, not a code-cleanup change — this
+// test turns any literal change into a visible diff that PR review can catch.
+func TestValidatorRegistrationWireSlotPinned(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, phase0.Slot(4), validatorRegistrationWireSlotsToPostpone)
 }

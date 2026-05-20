@@ -10,15 +10,57 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/eth/executionclient"
 )
 
 const (
 	// frequencyEpochs defines how frequently we want to submit validator-registrations.
 	frequencyEpochs = 10
 
-	// validatorRegistrationSlotsToPostpone defines how many slots we want to wait out before
-	// executing validator registration duty.
-	validatorRegistrationSlotsToPostpone = phase0.Slot(4)
+	// validatorRegistrationWireSlotsToPostpone is the offset added to an EL
+	// registration event's block slot to derive the *duty slot* — the slot
+	// that goes into the partial-sig envelope and feeds
+	// NetworkConfig.EpochStartTime(EstimatedEpochAtSlot(...)) when constructing
+	// the BLS-signed ValidatorRegistration's Timestamp (see
+	// ValidatorRegistrationRunner.buildValidatorRegistration).
+	//
+	// Because every operator must arrive at the same Timestamp regardless of
+	// when they personally observed the event (and regardless of code
+	// version), the numeric value is part of the wire format. It is kept at 4
+	// to remain interoperable with pre-#2851 operators in mixed clusters. Do
+	// NOT change it without a coordinated network-wide upgrade.
+	//
+	// This is NOT when this operator broadcasts its own partial-sig; see
+	// validatorRegistrationExecutionSlotsToPostpone for that.
+	//
+	// Note: shares its numeric value (4) with
+	// validatorRegistrationSchedulingSlack below by coincidence; the two are
+	// independent.
+	validatorRegistrationWireSlotsToPostpone = phase0.Slot(4)
+
+	// validatorRegistrationSchedulingSlack absorbs per-operator timing
+	// variance once a registration event clears the EL follow distance — see
+	// voluntaryExitSchedulingSlack for the full rationale; the same race
+	// applies here on the runner-level ErrNoDutyAssigned check at the
+	// receiver side. Independent of validatorRegistrationWireSlotsToPostpone
+	// despite happening to share the same numeric value (4).
+	validatorRegistrationSchedulingSlack = phase0.Slot(4)
+
+	// validatorRegistrationExecutionSlotsToPostpone is the earliest slot,
+	// expressed as an offset from the registration event's block slot, at
+	// which this operator may broadcast its own partial-sig for an
+	// event-driven registration. It is a *local-only* scheduling decision and
+	// does not appear on the wire.
+	//
+	// Unlike voluntary-exit, validator-registration's inbound validation does
+	// not lock to a per-slot dutyStore key (the dutyLimit is a constant 2);
+	// the failure mode if we broadcast too early is the receiver's runner
+	// returning ErrNoDutyAssigned, which is retryable for ~1 slot before the
+	// message is dropped. The periodic VRSubmitter loop will eventually
+	// resubmit anyway — but the gate mirrors voluntary-exit's pattern for
+	// consistency and reduces the retry-window race for slow-EL peers.
+	validatorRegistrationExecutionSlotsToPostpone = phase0.Slot(executionclient.FollowDistance) + validatorRegistrationSchedulingSlack
 )
 
 type RegistrationDescriptor struct {
@@ -28,16 +70,37 @@ type RegistrationDescriptor struct {
 	BlockNumber     uint64
 }
 
+// queuedRegistration holds an event-driven validator-registration duty awaiting
+// local broadcast.
+//
+// duty.Slot carries the deterministic wire/duty slot (blockSlot +
+// validatorRegistrationWireSlotsToPostpone) — used in the partial-sig
+// envelope and to derive the signed ValidatorRegistration.Timestamp.
+// earliestExecutionSlot is the purely-local gate that defers our own
+// broadcast until peers' EL streaming pipelines have plausibly caught up; see
+// the docstrings of validatorRegistrationWireSlotsToPostpone and
+// validatorRegistrationExecutionSlotsToPostpone for the breakdown.
+type queuedRegistration struct {
+	duty                  *spectypes.ValidatorDuty
+	earliestExecutionSlot phase0.Slot
+}
+
 type ValidatorRegistrationHandler struct {
 	baseHandler
 	validatorRegCh <-chan RegistrationDescriptor
 	blockSlots     map[uint64]phase0.Slot
+	// eventQueue holds event-driven registrations awaiting their per-event
+	// execution gate. Periodic registrations bypass this queue and fire
+	// directly on the originating ticker, since their slot is the current
+	// slot and there's no race to defer past.
+	eventQueue []*queuedRegistration
 }
 
 func NewValidatorRegistrationHandler(validatorRegistrationCh <-chan RegistrationDescriptor) *ValidatorRegistrationHandler {
 	return &ValidatorRegistrationHandler{
 		validatorRegCh: validatorRegistrationCh,
 		blockSlots:     map[uint64]phase0.Slot{},
+		eventQueue:     make([]*queuedRegistration, 0),
 	}
 }
 
@@ -85,10 +148,20 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
-			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
-			// top to ensure the duty is scheduled with a slot number never in the past since several slots
-			// might have passed by the time we are processing this event here.
+			// Derive dutySlot deterministically from the EL event's block slot
+			// so every operator arrives at the same value regardless of when
+			// they personally received the event, and regardless of code
+			// version. dutySlot feeds the outbound partial-sig envelope and
+			// the signed ValidatorRegistration.Timestamp (via Epoch). The
+			// Timestamp is epoch-granular so small slot divergences within an
+			// epoch are tolerated, but cross-version drift across an epoch
+			// boundary would break BLS aggregation; the wire constant pinned
+			// at 4 keeps all operators (including pre-#2851 ones) on the same
+			// epoch.
+			//
+			// earliestExecutionSlot is a separate, local-only gate that defers
+			// our own broadcast until peers' EL streaming pipelines have
+			// plausibly caught up — see the two constants' docstrings.
 			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -97,18 +170,22 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				)
 				continue
 			}
-			dutySlot := blockSlot + validatorRegistrationSlotsToPostpone
+			dutySlot := blockSlot + validatorRegistrationWireSlotsToPostpone
+			earliestExecutionSlot := blockSlot + validatorRegistrationExecutionSlotsToPostpone
 
-			// Kick off validator registration duty to notify various Ethereum actors (e.g. Relays)
-			// about fee recipient change as soon as possible.
-			h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
-				Type:           spectypes.BNRoleValidatorRegistration,
-				ValidatorIndex: regDescriptor.ValidatorIndex,
-				PubKey:         regDescriptor.ValidatorPubkey,
-				Slot:           dutySlot,
-			}}, h.dutyExecutionDeadline(dutySlot))
-			h.logger.Debug("validator registration duty sent",
-				zap.Uint64("slot", uint64(dutySlot)),
+			h.eventQueue = append(h.eventQueue, &queuedRegistration{
+				duty: &spectypes.ValidatorDuty{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					ValidatorIndex: regDescriptor.ValidatorIndex,
+					PubKey:         regDescriptor.ValidatorPubkey,
+					Slot:           dutySlot,
+				},
+				earliestExecutionSlot: earliestExecutionSlot,
+			})
+			h.logger.Debug("🛠 scheduled validator registration duty for execution",
+				zap.Uint64("block_slot", uint64(blockSlot)),
+				zap.Uint64("duty_slot", uint64(dutySlot)),
+				zap.Uint64("earliest_execution_slot", uint64(earliestExecutionSlot)),
 				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
 				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
 				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient)))
@@ -123,11 +200,26 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue))
+
+	// Drain the event-driven queue: pick up registrations whose gate slot has
+	// been reached. Gate on earliestExecutionSlot, not duty.Slot — the duty's
+	// Slot is the wire slot (kept low for cross-version interop) and would
+	// fire immediately.
+	pendingItems := make([]*queuedRegistration, 0, len(h.eventQueue))
+	for _, item := range h.eventQueue {
+		if item.earliestExecutionSlot <= slot {
+			duties = append(duties, item.duty)
+		} else {
+			pendingItems = append(pendingItems, item)
+		}
+	}
+	h.eventQueue = pendingItems
+
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
 	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
 
 	shares := h.validatorProvider.SelfValidators()
-	duties := make([]*spectypes.ValidatorDuty, 0, len(shares))
 	for _, share := range shares {
 		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 			// Only attesting validators are eligible for registration duties.
@@ -157,7 +249,7 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.
 // It caches the result to avoid calling execution client multiple times when there are several
-// validator exit events present in the same block.
+// validator registration events present in the same block.
 func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
 	blockSlot, ok := h.blockSlots[blockNumber]
 	if ok {
