@@ -46,6 +46,7 @@ type Conn interface {
 	WriteLoop(logger *zap.Logger)
 	ReadLoop(logger *zap.Logger)
 	Close() error
+	Cancel()
 	RemoteAddr() net.Addr
 }
 
@@ -90,14 +91,25 @@ func (c *conn) RemoteAddr() net.Addr {
 	return c.ws.RemoteAddr()
 }
 
-// Close cancels the conn ctx (signaling WriteLoop and ReadLoop to exit)
-// and closes the underlying websocket. Safe to call from multiple
-// goroutines concurrently and idempotent across repeated calls: cancelCtx
-// is a no-op after the first call, and ws.Close on an already-closed
-// connection returns an error that all callers ignore.
+// Close cancels the conn ctx and closes the underlying websocket. Used
+// by Send-overflow and the ReadLoop/WriteLoop self-defers — the loops
+// that own the conn's I/O need ws.Close to unblock the other one
+// (ReadLoop is parked in ReadMessage, which only returns on a ws-level
+// event). Safe to call from multiple goroutines and idempotent across
+// repeated calls.
+//
+// External callers that don't own ws lifecycle (e.g. handleStream, since
+// wsServer's wrappedHandler closes ws on its own return) should use
+// Cancel instead.
 func (c *conn) Close() error {
 	c.cancelCtx()
 	return c.ws.Close()
+}
+
+// Cancel signals ReadLoop / WriteLoop to wind down by canceling the
+// conn's ctx, without touching the underlying websocket. Idempotent.
+func (c *conn) Cancel() {
+	c.cancelCtx()
 }
 
 // ReadNext reads the next message

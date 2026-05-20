@@ -128,10 +128,12 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(*websock
 			return
 		}
 		ws.logger.Debug("new websocket connection")
+		defer conn.Close()
 
-		// http.Server.Shutdown doesn't close upgraded websockets, so we
-		// do it on ctx cancel ourselves — unblocking any read/write
-		// pending in the handler so it can return.
+		// http.Server.Shutdown doesn't close upgraded websockets, so on
+		// server ctx cancel we close ours up-front — unblocking any
+		// read/write pending in the handler so the deferred close above
+		// gets to run.
 		stop := context.AfterFunc(ws.ctx, func() { _ = conn.Close() })
 		defer stop()
 
@@ -143,9 +145,9 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(*websock
 	ws.endpoints = append(ws.endpoints, endPoint)
 }
 
-// handleQuery receives query message and respond async
+// handleQuery receives query message and respond async. The websocket
+// is closed by wsServer.RegisterHandler's wrapper on return.
 func (ws *wsServer) handleQuery(conn *websocket.Conn) {
-	defer func() { _ = conn.Close() }()
 	if ws.handler == nil {
 		return
 	}
@@ -185,7 +187,10 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	}
 }
 
-// handleStream registers the connection for broadcasting of stream messages
+// handleStream registers the connection for broadcasting of stream
+// messages. The websocket is closed by wsServer.RegisterHandler's
+// wrapper on return; handleStream only releases what it owns: the
+// *conn wrapper's ctx and the broadcaster registration.
 func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	cid := ConnectionID(wsc)
 	logger := ws.logger.
@@ -194,7 +199,7 @@ func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	defer logger.Debug("stream handler done")
 
 	c := newConn(ws.ctx, wsc, cid, sendTimeout, ws.withPing)
-	defer func() { _ = c.Close() }()
+	defer c.Cancel()
 
 	if !ws.broadcaster.Register(c) {
 		logger.Warn("known connection")
