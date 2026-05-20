@@ -67,8 +67,10 @@ func (b *broadcaster) FromFeed(ctx context.Context, msgFeed *event.Feed) {
 }
 
 // Broadcast marshals msg once and hands it to every registered connection
-// via broadcasted.Send. Send is required to be non-blocking (see the
-// broadcasted contract), so the lock-held fan-out is bounded fast.
+// via broadcasted.Send. Connections are snapshotted under the lock and the
+// fan-out runs outside it, so the lock-hold time is bounded by the
+// map-copy and a misbehaving Send can't block Register/Deregister or the
+// next Broadcast.
 func (b *broadcaster) Broadcast(msg Message) error {
 	data, err := json.Marshal(&msg)
 	if err != nil {
@@ -76,8 +78,13 @@ func (b *broadcaster) Broadcast(msg Message) error {
 	}
 
 	b.mut.Lock()
-	defer b.mut.Unlock()
+	conns := make([]broadcasted, 0, len(b.connections))
 	for _, c := range b.connections {
+		conns = append(conns, c)
+	}
+	b.mut.Unlock()
+
+	for _, c := range conns {
 		c.Send(data)
 	}
 	return nil
