@@ -361,13 +361,18 @@ func (i *Instance) l0SigmaEligibilityReached() bool {
 	}
 	// Tally σV verdicts per value_root. Exclude operators who have been
 	// flagged as verdict-equivocators (treat-equivocator-as-null SHOULD
-	// rule, spec §Phase 2a).
+	// rule, spec §Phase 2a). Skip the local op's own entry in the peer map
+	// — own's σV is already tallied via `own` above; a runner that
+	// self-observes its own verdict would otherwise double-count it.
 	equivocators := i.verdictEquivocator[layer]
 	counts := make(map[[32]byte]int)
 	if own != nil && own.Kind == VerdictSigmaV {
 		counts[own.ValueRoot]++
 	}
 	for op, v := range peer {
+		if op == i.ownOperatorID {
+			continue
+		}
 		if equivocators[op] {
 			continue
 		}

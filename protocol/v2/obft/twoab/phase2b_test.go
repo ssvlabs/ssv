@@ -198,6 +198,114 @@ func TestConvergence_EquivocatorExcluded(t *testing.T) {
 		"equivocator's σV contribution excluded → quorum-short → NR")
 }
 
+// Self-observation regression: if a runner chooses to ObserveVerdict its
+// own verdict (mirroring the spec's "first-observed" semantics uniformly
+// across own and peer), the convergence pool must NOT count own's verdict
+// twice. Same property as Phase 3's tryReconstructLayer self-skip.
+func TestConvergence_SelfObservedVerdictNotDoubleCounted(t *testing.T) {
+	s := newSim(t, 4)
+	// h_V = 2 honest only: op2 is among the σ-eligible. Without the
+	// self-skip, op2 self-observing its own σV verdict would inflate
+	// verdict_pool[V0] from 2 → 3 and incorrectly trigger σ-eligibility.
+	s.deliverPhase1(0, Value("V0"), []OperatorID{1, 2}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{1, 2}, 0, Value("V0"), true)
+
+	// op1 + op2 build verdicts; deliver op1's verdict to op2.
+	v1, err := s.instances[1].BuildVerdict(0)
+	require.NoError(t, err)
+	require.NoError(t, s.instances[2].ObserveVerdict(v1))
+	v2, err := s.instances[2].BuildVerdict(0)
+	require.NoError(t, err)
+	require.Equal(t, VerdictSigmaV, v2.Kind)
+	// op2 self-observes its own verdict.
+	require.NoError(t, s.instances[2].ObserveVerdict(v2))
+
+	// op2's verdict_pool[V0] = {op1, op2} = 2 (NOT 3). qV = 3 → row 5 → NR.
+	choice, _, err := s.instances[2].ConvergenceDecision(0)
+	require.NoError(t, err)
+	require.Equal(t, CommitChoiceNR, choice,
+		"self-observed own verdict must not be double-counted (2 < qV → row 5 NR)")
+}
+
+// Self-observation regression for the L_0 σ-eligibility channel: if a
+// runner self-observes its own σV verdict at L_0, the channel must NOT
+// fire on the inflated count.
+func TestL0SigmaEligibility_SelfObservedVerdictNotDoubleCounted(t *testing.T) {
+	s := newSim(t, 4)
+	// h_V = 2: op1, op2 retain V0 + valid. Only op1 delivers to op2.
+	s.deliverPhase1(0, Value("V0"), []OperatorID{1, 2}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{1, 2}, 0, Value("V0"), true)
+
+	v1, err := s.instances[1].BuildVerdict(0)
+	require.NoError(t, err)
+	require.NoError(t, s.instances[2].ObserveVerdict(v1))
+	v2, err := s.instances[2].BuildVerdict(0)
+	require.NoError(t, err)
+	// op2 self-observes own σV.
+	require.NoError(t, s.instances[2].ObserveVerdict(v2))
+
+	// Without the self-skip, the L_0 σ-eligibility tally for V0 would be
+	// {op1, own (via own), own (via peerVerdicts)} = 3 ≥ qV → channel
+	// closes spuriously. With the skip, count is 2 < qV and the channel
+	// stays open.
+	select {
+	case <-s.instances[2].L0SigmaEligibilityCh():
+		t.Fatalf("L0SigmaEligibilityCh closed at h_V=2: own self-observed verdict was double-counted")
+	default:
+	}
+}
+
+// Self-observation regression for Rule 6b: own's verdict-vs-action
+// mismatch (the Case B convergence-rule σ-eligibility-quorum-short flip
+// — own σV verdict followed by NR action) is the expected honest path
+// and must not record evidence against self even when the runner
+// self-observes its own Onion2b.
+func TestRule6b_SkippedForOwnOnion(t *testing.T) {
+	s := newSim(t, 4)
+	// h_V = 2 honest at L_0: op1, op2 retain V0; op3, op4 don't. op2 will
+	// verdict σV(V0); cluster verdict_pool[V0] = 2 < qV → row 5 → op2
+	// emits NR at Phase-2b. Own verdict (σV) and own action (NR) mismatch
+	// — the honest Case B flip.
+	s.deliverPhase1(0, Value("V0"), []OperatorID{1, 2}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{1, 2}, 0, Value("V0"), true)
+	// Deeper layers: ensure no σ eligibility there either.
+	for k := 1; k < s.K; k++ {
+		s.deliverPhase1(k, s.candidates[k], []OperatorID{2}, observedEarly)
+		s.applyHostValidityFor([]OperatorID{2}, k, s.candidates[k], true)
+	}
+
+	// op1 verdicts σV(V0); op2 verdicts σV(V0). op3/op4 don't deliver
+	// anything (silent).
+	for _, op := range []OperatorID{1, 2} {
+		v, err := s.instances[op].BuildVerdict(0)
+		require.NoError(t, err)
+		require.Equal(t, VerdictSigmaV, v.Kind)
+		for _, peer := range s.allOperators() {
+			if peer == op {
+				continue
+			}
+			require.NoError(t, s.instances[peer].ObserveVerdict(v))
+		}
+	}
+	// op2 self-observes its own verdict at L_0.
+	v2, _ := s.instances[2].OwnVerdict(0)
+	require.NoError(t, s.instances[2].ObserveVerdict(v2))
+
+	// op2 builds its onion — row 5 → NR at L_0 (verdict-quorum short).
+	o, err := s.instances[2].BuildOwnOnion2b()
+	require.NoError(t, err)
+	require.Empty(t, o.Layers[0].Value, "L_0 should be NR (no σ entry)")
+	// op2 self-observes its own onion.
+	require.NoError(t, s.instances[2].ObserveOnion2b(o))
+
+	// No Rule 6b evidence against op2 itself.
+	for _, e := range s.instances[2].Evidence() {
+		if e.Rule == EvidenceVerdictAction && e.OperatorID == 2 {
+			t.Fatalf("Rule 6b fired against own self on Case B honest convergence flip: %+v", e)
+		}
+	}
+}
+
 // ---------- BuildOwnOnion2b — happy paths ----------
 
 func TestBuildOwnOnion2b_HealthyClusterSigmaAtL0(t *testing.T) {

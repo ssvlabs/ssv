@@ -114,10 +114,14 @@ func (i *Instance) ComputeLocalVerdict(layer int) (VerdictKind, [32]byte, error)
 // the broadcast schedule (T_verdict_max − ε_proc); calling BuildVerdict
 // before host validity is applied for the retained V returns an error.
 //
-// The constructed Verdict is NOT self-observed — the caller is expected
-// to gossip the bundle and have all peers (including the local operator)
-// call ObserveVerdict explicitly. This mirrors Phase-E's BuildPhase1Bundle
-// pattern.
+// The constructed Verdict is NOT self-observed. The caller broadcasts it
+// to peers; the local op's own contribution to convergence comes from
+// ownVerdict (cached here), not from peerVerdicts. Self-observation via
+// ObserveVerdict is permitted but unnecessary — buildConvergencePools /
+// l0SigmaEligibilityReached skip the local op's entry in peerVerdicts to
+// avoid double-counting if a runner does choose to self-observe (the
+// same defensive pattern as Phase 3's tryReconstructLayer). Mirrors
+// Phase-E's BuildPhase1Bundle pattern.
 func (i *Instance) BuildVerdict(layer int) (*Verdict, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")

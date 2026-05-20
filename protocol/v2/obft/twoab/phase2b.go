@@ -22,10 +22,15 @@ import (
 //     (or σ on two different V's) is caught by transitionToSigma /
 //     transitionToNR before any wire bytes leave this method.
 //
-// The constructed Onion2b is NOT self-observed — the caller is expected
-// to broadcast it and explicitly call ObserveOnion2b at every receiver
-// (including the local operator). This mirrors Phase-E's
-// BuildPhase1Bundle / Phase-F's BuildVerdict patterns.
+// The constructed Onion2b is NOT self-observed. The caller broadcasts
+// it to peers; the local op's own σ / NR contributions to Phase 3 come
+// from ownPartials / ownOnion2b (cached here), not from peerOnions /
+// peerNR. Self-observation via ObserveOnion2b is permitted but
+// unnecessary — Phase 3's tryReconstructLayer / tryDeriveNextLayerKey
+// skip the local op's entry in those peer maps, and checkRule6b skips
+// own's onion entirely (own's verdict-vs-action mismatch under Case B
+// convergence-flip is the expected honest path, not evidence). Mirrors
+// Phase-E's BuildPhase1Bundle / Phase-F's BuildVerdict patterns.
 func (i *Instance) BuildOwnOnion2b() (*Onion2b, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
@@ -351,7 +356,15 @@ func (i *Instance) ObserveOnion2b(o *Onion2b) error {
 // second verdict). Flagging Rule 6b against the first verdict would be
 // spurious — the byzantine could have broadcast {σV, NR} and emitted
 // either; whichever they emit "contradicts" the other verdict.
+//
+// The local op's own onion (when a runner self-observes its own emission)
+// is also skipped: own's verdict-vs-action mismatch under Case B
+// (convergence-rule σ-eligibility-quorum-short flip) is the expected
+// honest path, not evidence against self.
 func (i *Instance) checkRule6b(o *Onion2b) {
+	if o.OperatorID == i.ownOperatorID {
+		return
+	}
 	for k := range o.Layers {
 		if i.IsEquivocator(k, o.OperatorID) {
 			continue // Rule 6a subsumes; Rule 6b against first-observed verdict would be spurious

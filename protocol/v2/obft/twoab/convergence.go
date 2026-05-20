@@ -167,8 +167,16 @@ func (i *Instance) buildConvergencePools(layer int) (map[[32]byte][]OperatorID, 
 		addToPool(i.ownOperatorID, own)
 	}
 
-	// Include peer verdicts, excluding equivocators.
+	// Include peer verdicts, excluding equivocators. Skip the local op's
+	// own entry: a runner that calls ObserveVerdict on every emission
+	// (including its own) would otherwise double-count own's verdict — once
+	// via ownVerdict above, once via peerVerdicts here. Mirrors the
+	// defensive self-skip in Phase 3's tryReconstructLayer /
+	// tryDeriveNextLayerKey.
 	for op, v := range i.peerVerdicts[layer] {
+		if op == i.ownOperatorID {
+			continue
+		}
 		if i.IsEquivocator(layer, op) {
 			continue
 		}
