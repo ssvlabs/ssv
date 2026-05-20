@@ -221,13 +221,74 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 			ticker.WaitShutdown()
 		})
 	})
+
+	t.Run("multiple event-driven duties drained together", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			regCh := make(chan RegistrationDescriptor)
+			handler := NewValidatorRegistrationHandler(regCh)
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+			defer cancel()
+
+			scheduler, ticker := setupSchedulerAndMocksWithParams(ctx, t, []dutyHandler{handler}, time.Unix(0, 0), time.Second)
+
+			require.NoError(t, scheduler.Start(ctx))
+
+			create1to1BlockSlotMapping(scheduler)
+
+			const slot = phase0.Slot(1)
+			validatorIndex1 := phase0.ValidatorIndex(1)
+			validatorPk1 := phase0.BLSPubKey{1, 2, 3}
+			validatorIndex2 := phase0.ValidatorIndex(2)
+			validatorPk2 := phase0.BLSPubKey{4, 5, 6}
+
+			scheduler.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(nil).AnyTimes()
+
+			executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+			setExecuteDutyFunc(scheduler, executeDutiesCall, 2)
+
+			// Two registrations from the same block — both should end up in
+			// the queue and drain together when the gate is reached.
+			regCh <- RegistrationDescriptor{
+				ValidatorPubkey: validatorPk1,
+				ValidatorIndex:  validatorIndex1,
+				BlockNumber:     uint64(slot),
+			}
+			regCh <- RegistrationDescriptor{
+				ValidatorPubkey: validatorPk2,
+				ValidatorIndex:  validatorIndex2,
+				BlockNumber:     uint64(slot),
+			}
+
+			ticker.Send(slot + validatorRegistrationExecutionSlotsToPostpone)
+			waitForDutiesExecution(t, nil, executeDutiesCall, timeout, []*spectypes.ValidatorDuty{
+				{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					PubKey:         validatorPk1,
+					ValidatorIndex: validatorIndex1,
+					Slot:           slot + validatorRegistrationWireSlotsToPostpone,
+				},
+				{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					PubKey:         validatorPk2,
+					ValidatorIndex: validatorIndex2,
+					Slot:           slot + validatorRegistrationWireSlotsToPostpone,
+				},
+			})
+
+			close(regCh)
+			require.NoError(t, scheduler.Wait())
+			ticker.WaitShutdown()
+		})
+	})
 }
 
 // TestValidatorRegistrationWireSlotPinned guards a wire-format invariant:
-// pre-#2851 peers compute and validate against blockSlot+4, so this operator
-// must emit the same value for cross-version interop. Bumping the constant
-// is a coordinated network-wide upgrade, not a code-cleanup change — this
-// test turns any literal change into a visible diff that PR review can catch.
+// the value has been 4 since this constant was introduced, and every operator
+// in a cluster must compute the same signed Timestamp regardless of code
+// version. Bumping the constant is a coordinated network-wide upgrade, not a
+// code-cleanup change — this test turns any literal change into a visible
+// diff that PR review can catch.
 func TestValidatorRegistrationWireSlotPinned(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, phase0.Slot(4), validatorRegistrationWireSlotsToPostpone)

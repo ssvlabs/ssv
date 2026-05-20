@@ -27,9 +27,13 @@ const (
 	//
 	// Because every operator must arrive at the same Timestamp regardless of
 	// when they personally observed the event (and regardless of code
-	// version), the numeric value is part of the wire format. It is kept at 4
-	// to remain interoperable with pre-#2851 operators in mixed clusters. Do
-	// NOT change it without a coordinated network-wide upgrade.
+	// version), the numeric value is part of the wire format. It has been 4
+	// since the constant was introduced; changing it would shift the signed
+	// Timestamp's epoch on this operator relative to peers on prior code, so
+	// treat it as a network-wide invariant and change it only via a
+	// coordinated rollout. Even within a homogeneous cluster the Timestamp is
+	// epoch-granular, so this only matters across the slot's epoch boundary,
+	// but the safe stance is identical: do not change without coordination.
 	//
 	// This is NOT when this operator broadcasts its own partial-sig; see
 	// validatorRegistrationExecutionSlotsToPostpone for that.
@@ -154,10 +158,9 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			// version. dutySlot feeds the outbound partial-sig envelope and
 			// the signed ValidatorRegistration.Timestamp (via Epoch). The
 			// Timestamp is epoch-granular so small slot divergences within an
-			// epoch are tolerated, but cross-version drift across an epoch
-			// boundary would break BLS aggregation; the wire constant pinned
-			// at 4 keeps all operators (including pre-#2851 ones) on the same
-			// epoch.
+			// epoch are tolerated, but a divergence across an epoch boundary
+			// would break BLS aggregation; the wire constant being a network
+			// invariant keeps all operators on the same epoch.
 			//
 			// earliestExecutionSlot is a separate, local-only gate that defers
 			// our own broadcast until peers' EL streaming pipelines have
@@ -277,7 +280,10 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 }
 
 func (h *ValidatorRegistrationHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
-	// 1 slot of time since the target slot should be sufficient for this duty-type.
+	// slot is the firing slot (the current ticker slot at dispatch), not
+	// duty.Slot — which for event-driven registrations is the wire slot held
+	// in the past. 1 wall-clock slot from firing should be sufficient for
+	// this duty-type.
 	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
 	return dutyDeadline
 }
