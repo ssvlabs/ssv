@@ -25,7 +25,7 @@ import (
 // turns any literal change into a visible diff that PR review can catch.
 func TestVoluntaryExitDutySlotPinned(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, phase0.Slot(4), voluntaryExitDutySlotsToPostpone)
+	require.EqualValues(t, 4, voluntaryExitDutySlotsToPostpone)
 }
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {

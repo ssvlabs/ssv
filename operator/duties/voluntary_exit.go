@@ -45,7 +45,7 @@ const (
 	// voluntaryExitSchedulingSlack below, but the two are independent — one
 	// defines the shared duty slot, the other the local execution timing
 	// budget. Do not assume they should track each other.
-	voluntaryExitDutySlotsToPostpone = phase0.Slot(4)
+	voluntaryExitDutySlotsToPostpone = 4
 
 	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
 	// exit event clears the execution-layer follow distance. Different operators
@@ -59,7 +59,7 @@ const (
 	//
 	// Independent of voluntaryExitDutySlotsToPostpone despite happening to
 	// share the same numeric value (4); see the note on that constant.
-	voluntaryExitSchedulingSlack = phase0.Slot(4)
+	voluntaryExitSchedulingSlack = 4
 
 	// voluntaryExitExecutionSlotsToPostpone is the earliest slot, expressed as
 	// an offset from the exit event's block slot, at which this operator may
@@ -74,7 +74,7 @@ const (
 	// peers whose EL streaming pipeline hasn't yet delivered the event: their
 	// dutyStore returns 0 for the (slot, pk) key, so the dutyCount check fails
 	// and our message is dropped (ValidationIgnore on ErrTooManyDutiesPerEpoch).
-	voluntaryExitExecutionSlotsToPostpone = phase0.Slot(executionclient.FollowDistance) + voluntaryExitSchedulingSlack
+	voluntaryExitExecutionSlotsToPostpone = executionclient.FollowDistance + voluntaryExitSchedulingSlack
 )
 
 type ExitDescriptor struct {
