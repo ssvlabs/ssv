@@ -479,11 +479,11 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 		role := duty.RunnerRole()
 		slotDelay := time.Since(s.beaconConfig.SlotStartTime(duty.Slot))
 
-		// For wire-slot roles (see usesWireSlot), duty.Slot is a
-		// coordination slot held in the past — slotDelay against it is
-		// meaningless. Skip the warning; recordDutyScheduled handles the
-		// histogram side. The counter still ticks for both kinds.
-		if !usesWireSlot(role) && slotDelay >= 100*time.Millisecond {
+		// For roles where duty.Slot is a shared coordination point rather
+		// than the firing target (see dutySlotIsFiringSlot), slotDelay
+		// against it is meaningless. Skip the warning; recordDutyScheduled
+		// handles the histogram side. The counter still ticks for both kinds.
+		if dutySlotIsFiringSlot(role) && slotDelay >= 100*time.Millisecond {
 			const eventMsg = "⚠️ late duty execution"
 			logger.Warn(eventMsg, zap.Duration("slot_delay", slotDelay))
 			span.AddEvent(eventMsg, trace.WithAttributes(

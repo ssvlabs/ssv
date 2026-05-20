@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	// voluntaryExitWireSlotsToPostpone is the offset added to an exit event's
-	// block slot to derive the *duty slot* — the slot that every operator in
-	// the cluster must agree on regardless of code version. It feeds three
-	// things on the wire:
+	// voluntaryExitDutySlotsToPostpone is the offset added to an exit event's
+	// block slot to derive the *duty slot* — the slot stored in duty.Slot and
+	// shared across the cluster regardless of code version. It feeds three
+	// downstream uses:
 	//   1. The dutyStore key (AddDuty / GetDutyCount), used by inbound
 	//      message-validation's dutyCount check.
 	//   2. The Slot field of the outbound PartialSignatureMessages envelope,
@@ -43,9 +43,9 @@ const (
 	//
 	// Note: this constant happens to share its numeric value (4) with
 	// voluntaryExitSchedulingSlack below, but the two are independent — one
-	// governs the wire/coordination slot, the other the local execution
-	// timing budget. Do not assume they should track each other.
-	voluntaryExitWireSlotsToPostpone = phase0.Slot(4)
+	// defines the shared duty slot, the other the local execution timing
+	// budget. Do not assume they should track each other.
+	voluntaryExitDutySlotsToPostpone = phase0.Slot(4)
 
 	// voluntaryExitSchedulingSlack absorbs per-operator timing variance once an
 	// exit event clears the execution-layer follow distance. Different operators
@@ -57,7 +57,7 @@ const (
 	// time to receive the EL event and register the duty in its local dutyStore
 	// — which the inbound message-validation path checks via dutyCount.
 	//
-	// Independent of voluntaryExitWireSlotsToPostpone despite happening to
+	// Independent of voluntaryExitDutySlotsToPostpone despite happening to
 	// share the same numeric value (4); see the note on that constant.
 	voluntaryExitSchedulingSlack = phase0.Slot(4)
 
@@ -86,12 +86,12 @@ type ExitDescriptor struct {
 
 // queuedExit holds an own-validator exit duty awaiting local broadcast.
 //
-// duty.Slot carries the deterministic wire/duty slot (blockSlot +
-// voluntaryExitWireSlotsToPostpone) — used in the dutyStore, on the wire, and
+// duty.Slot carries the deterministic shared duty slot (blockSlot +
+// voluntaryExitDutySlotsToPostpone) — used in the dutyStore, on the wire, and
 // to derive the signed VoluntaryExit.Epoch. earliestExecutionSlot is the
 // purely-local gate that defers our own partial-sig broadcast until peers'
 // EL streaming pipelines have plausibly caught up; see the docstrings of
-// voluntaryExitWireSlotsToPostpone and voluntaryExitExecutionSlotsToPostpone
+// voluntaryExitDutySlotsToPostpone and voluntaryExitExecutionSlotsToPostpone
 // for the breakdown.
 type queuedExit struct {
 	duty                  *spectypes.ValidatorDuty
@@ -179,7 +179,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				)
 				continue
 			}
-			dutySlot := blockSlot + voluntaryExitWireSlotsToPostpone
+			dutySlot := blockSlot + voluntaryExitDutySlotsToPostpone
 			earliestExecutionSlot := blockSlot + voluntaryExitExecutionSlotsToPostpone
 
 			duty := &spectypes.ValidatorDuty{
@@ -226,7 +226,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 
 	for _, item := range h.dutyQueue {
 		// Gate on earliestExecutionSlot, not duty.Slot: the duty's Slot is the
-		// wire/duty slot (kept low for cross-version interop), while
+		// shared duty slot (kept low for cross-version interop), while
 		// earliestExecutionSlot is the local-only "no earlier than" trigger.
 		if item.earliestExecutionSlot <= slot {
 			dutiesForExecution = append(dutiesForExecution, item.duty)
@@ -280,9 +280,9 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 func (h *VoluntaryExitHandler) dutyExecutionDeadline(slot phase0.Slot) time.Time {
 	// slot is the firing slot (the current ticker slot at dispatch), not
-	// duty.Slot — which for voluntary-exit is the wire/coordination slot held
-	// in the past. 1 wall-clock slot from firing should be sufficient for
-	// this duty-type.
+	// duty.Slot — which for voluntary-exit is the shared duty slot held in the
+	// past for cross-operator coordination. 1 wall-clock slot from firing
+	// should be sufficient for this duty-type.
 	dutyDeadline := h.beaconConfig.SlotStartTime(slot + 1)
 	return dutyDeadline
 }

@@ -18,14 +18,14 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-// TestVoluntaryExitWireSlotPinned guards a wire-format invariant: pre-#2851
+// TestVoluntaryExitDutySlotPinned guards a wire-format invariant: pre-#2851
 // peers compute and validate against blockSlot + 4, so this operator must
 // emit the same value for cross-version interop. Bumping the constant is a
 // coordinated network-wide upgrade, not a code-cleanup change — this test
 // turns any literal change into a visible diff that PR review can catch.
-func TestVoluntaryExitWireSlotPinned(t *testing.T) {
+func TestVoluntaryExitDutySlotPinned(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, phase0.Slot(4), voluntaryExitWireSlotsToPostpone)
+	require.Equal(t, phase0.Slot(4), voluntaryExitDutySlotsToPostpone)
 }
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
@@ -189,14 +189,14 @@ func TestVoluntaryExitHandler_HandleDuties_LateObservedExitWaitsPastFollowDistan
 		BlockNumber:    blockNumber,
 	}
 	lateObservationSlot := phase0.Slot(blockNumber) + phase0.Slot(executionclient.FollowDistance)
-	// expectedDuty.Slot uses the wire slot — what gets signed and what peers
-	// (including pre-#2851 ones) use to validate. The execution gate (at
-	// blockNumber + voluntaryExitExecutionSlotsToPostpone) fires later but
-	// does not affect what's on the wire.
+	// expectedDuty.Slot uses the shared duty slot — what gets signed and what
+	// peers (including pre-#2851 ones) use to validate. The execution gate
+	// (at blockNumber + voluntaryExitExecutionSlotsToPostpone) fires later
+	// but does not affect what's on the wire.
 	expectedDuty := []*spectypes.ValidatorDuty{{
 		Type:           spectypes.BNRoleVoluntaryExit,
 		PubKey:         lateObservedExit.PubKey,
-		Slot:           phase0.Slot(blockNumber) + voluntaryExitWireSlotsToPostpone,
+		Slot:           phase0.Slot(blockNumber) + voluntaryExitDutySlotsToPostpone,
 		ValidatorIndex: lateObservedExit.ValidatorIndex,
 	}}
 
@@ -248,7 +248,7 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 }
 
 // expectedExecutedVoluntaryExitDuties builds the duties we expect to see
-// dispatched for the given descriptors. Slot is the wire/duty slot — what
+// dispatched for the given descriptors. Slot is the shared duty slot — what
 // gets signed and what peers validate — which intentionally differs from the
 // (later) local execution slot at which we actually broadcast.
 func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.ValidatorDuty {
@@ -257,7 +257,7 @@ func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*specty
 		expectedDuties = append(expectedDuties, &spectypes.ValidatorDuty{
 			Type:           spectypes.BNRoleVoluntaryExit,
 			PubKey:         d.PubKey,
-			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitWireSlotsToPostpone,
+			Slot:           phase0.Slot(d.BlockNumber) + voluntaryExitDutySlotsToPostpone,
 			ValidatorIndex: d.ValidatorIndex,
 		})
 	}
