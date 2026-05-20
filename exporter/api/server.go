@@ -199,7 +199,7 @@ func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	defer logger.Debug("stream handler done")
 
 	c := newConn(ws.ctx, wsc, cid, sendTimeout, ws.withPing)
-	defer c.Cancel()
+	defer c.Close()
 
 	if !ws.broadcaster.Register(c) {
 		logger.Warn("known connection")

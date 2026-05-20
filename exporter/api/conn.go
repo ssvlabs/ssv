@@ -45,8 +45,7 @@ type Conn interface {
 	Send(msg []byte)
 	WriteLoop(logger *zap.Logger)
 	ReadLoop(logger *zap.Logger)
-	Close() error
-	Cancel()
+	Close()
 	RemoteAddr() net.Addr
 }
 
@@ -91,24 +90,17 @@ func (c *conn) RemoteAddr() net.Addr {
 	return c.ws.RemoteAddr()
 }
 
-// Close cancels the conn ctx and closes the underlying websocket. Used
-// by Send-overflow and the ReadLoop/WriteLoop self-defers — the loops
-// that own the conn's I/O need ws.Close to unblock the other one
-// (ReadLoop is parked in ReadMessage, which only returns on a ws-level
-// event). Safe to call from multiple goroutines and idempotent across
-// repeated calls.
+// Close releases this conn's own resources: it cancels its ctx, which
+// signals WriteLoop and ReadLoop to wind down. The underlying websocket
+// is intentionally NOT touched — that lifecycle belongs to whoever
+// passed ws into newConn (wsServer's wrappedHandler, which closes ws
+// from its own defer). As a consequence, a ReadLoop parked in
+// ReadMessage stays parked until ws is closed externally; it then exits
+// cleanly on the next scheduling, which may briefly outlive the caller
+// that triggered Close.
 //
-// External callers that don't own ws lifecycle (e.g. handleStream, since
-// wsServer's wrappedHandler closes ws on its own return) should use
-// Cancel instead.
-func (c *conn) Close() error {
-	c.cancelCtx()
-	return c.ws.Close()
-}
-
-// Cancel signals ReadLoop / WriteLoop to wind down by canceling the
-// conn's ctx, without touching the underlying websocket. Idempotent.
-func (c *conn) Cancel() {
+// Safe from any goroutine; idempotent.
+func (c *conn) Close() {
 	c.cancelCtx()
 }
 
@@ -125,15 +117,16 @@ func (c *conn) Send(msg []byte) {
 	select {
 	case c.send <- msg:
 	default:
-		_ = c.Close()
+		c.Close()
 	}
 }
 
 // WriteLoop a loop to activate writes on the socket. Always tears down
-// on exit via c.Close so a write error reaches ReadLoop (via ctx +
-// ws.Close) without waiting for handleStream's defer.
+// on exit via c.Close, propagating ctx-cancel so ReadLoop notices on
+// the next scheduling (ws stays open until wsServer's wrappedHandler
+// closes it, which then unblocks ReadLoop's ReadMessage).
 func (c *conn) WriteLoop(logger *zap.Logger) {
-	defer func() { _ = c.Close() }()
+	defer c.Close()
 
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
@@ -150,8 +143,8 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 		case <-ctx.Done():
 			c.writeLock.Lock()
 			logger.Debug("context done, sending close message")
-			// Best-effort graceful close-message; ws may already be
-			// closed (c.Close cancels ctx and closes ws together), so
+			// Best-effort graceful close-message; if ws is already
+			// closed (e.g. wrappedHandler beat us to it on shutdown),
 			// failure here is expected and not actionable.
 			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
 			c.writeLock.Unlock()
@@ -177,7 +170,7 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 // to fail). Without this, a client disconnect on an idle conn would
 // leak the WriteLoop goroutine.
 func (c *conn) ReadLoop(logger *zap.Logger) {
-	defer func() { _ = c.Close() }()
+	defer c.Close()
 	c.ws.SetReadLimit(maxMessageSize)
 	// ping helps to keep the connection alive from our POV
 	if c.withPing {
