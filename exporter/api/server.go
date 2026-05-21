@@ -128,7 +128,7 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(*websock
 			return
 		}
 		ws.logger.Debug("new websocket connection")
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// http.Server.Shutdown doesn't close upgraded websockets, so on
 		// server ctx cancel we close ours up-front — unblocking any
