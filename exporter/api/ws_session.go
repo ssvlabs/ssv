@@ -34,7 +34,13 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type conn struct {
+// wsSession is the server-side state for one /stream client: a buffered
+// send queue drained by WriteLoop, a ReadLoop that drives the protocol
+// from the read side, and a ctx that ties them together. Paired with
+// wsServer in the same way one session pairs with the multiplexing
+// server that accepted it. Does not own the underlying *websocket.Conn
+// lifecycle — wsServer's wrappedHandler closes ws on return.
+type wsSession struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
 	id        string
@@ -49,9 +55,9 @@ type conn struct {
 	withPing bool
 }
 
-func newConn(parent context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) *conn {
+func newWSSession(parent context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) *wsSession {
 	ctx, cancel := context.WithCancel(parent)
-	return &conn{
+	return &wsSession{
 		ctx:          ctx,
 		cancelCtx:    cancel,
 		id:           id,
@@ -63,77 +69,77 @@ func newConn(parent context.Context, ws *websocket.Conn, id string, writeTimeout
 	}
 }
 
-// ID returns the connection id
-func (c *conn) ID() string {
-	return c.id
+// ID returns the session id (derived from the underlying ws remote addr).
+func (s *wsSession) ID() string {
+	return s.id
 }
 
 // RemoteAddr returns the remote address of the socket
-func (c *conn) RemoteAddr() net.Addr {
-	return c.ws.RemoteAddr()
+func (s *wsSession) RemoteAddr() net.Addr {
+	return s.ws.RemoteAddr()
 }
 
-// Close releases this conn's own resources: it cancels its ctx, which
+// Close releases this session's own resources: it cancels its ctx, which
 // signals WriteLoop and ReadLoop to wind down. The underlying websocket
 // is intentionally NOT touched — that lifecycle belongs to whoever
-// passed ws into newConn (wsServer's wrappedHandler, which closes ws
-// from its own defer). As a consequence, a ReadLoop parked in
+// passed ws into newWSSession (wsServer's wrappedHandler, which closes
+// ws from its own defer). As a consequence, a ReadLoop parked in
 // ReadMessage stays parked until ws is closed externally; it then exits
 // cleanly on the next scheduling, which may briefly outlive the caller
 // that triggered Close.
 //
 // Safe from any goroutine; idempotent.
-func (c *conn) Close() {
-	c.cancelCtx()
+func (s *wsSession) Close() {
+	s.cancelCtx()
 }
 
-// Send queues msg for the WriteLoop. Non-blocking: if the queue is full the
-// client cannot keep up, so we tear the conn down via Close — a silent
-// gap in this stream is undetectable client-side, so reconnecting (with
-// a fresh, consistent view) is the kindest outcome.
-func (c *conn) Send(msg []byte) {
+// Send queues msg for the WriteLoop. Non-blocking: if the queue is full
+// the client cannot keep up, so we tear the session down via Close — a
+// silent gap in this stream is undetectable client-side, so reconnecting
+// (with a fresh, consistent view) is the kindest outcome.
+func (s *wsSession) Send(msg []byte) {
 	select {
-	case c.send <- msg:
+	case s.send <- msg:
 	default:
-		c.Close()
+		s.Close()
 	}
 }
 
 // WriteLoop a loop to activate writes on the socket. Always tears down
-// on exit via c.Close, propagating ctx-cancel so ReadLoop notices on
+// on exit via s.Close, propagating ctx-cancel so ReadLoop notices on
 // the next scheduling (ws stays open until wsServer's wrappedHandler
 // closes it, which then unblocks ReadLoop's ReadMessage).
-func (c *conn) WriteLoop(logger *zap.Logger) {
-	defer c.Close()
+func (s *wsSession) WriteLoop(logger *zap.Logger) {
+	defer s.Close()
 
-	ctx, cancel := context.WithCancel(c.ctx)
+	ctx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
 
-	if c.withPing {
+	if s.withPing {
 		go func() {
 			defer cancel()
-			c.pingLoop(ctx, logger)
+			s.pingLoop(ctx, logger)
 		}()
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			c.writeLock.Lock()
+			s.writeLock.Lock()
 			logger.Debug("context done, sending close message")
 			// Best-effort graceful close-message; if ws is already
 			// closed (e.g. wrappedHandler beat us to it on shutdown),
 			// failure here is expected and not actionable.
-			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
-			c.writeLock.Unlock()
+			err := s.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(s.writeTimeout))
+			s.writeLock.Unlock()
 			if err != nil {
 				logger.Debug("could not send close message", zap.Error(err))
 			}
 			return
-		case message := <-c.send:
-			c.writeLock.Lock()
-			_, err := c.sendMsg(message)
-			c.writeLock.Unlock()
+		case message := <-s.send:
+			s.writeLock.Lock()
+			_, err := s.sendMsg(message)
+			s.writeLock.Unlock()
 			if err != nil {
 				logger.Warn("failed to send message", zap.Error(err))
 				return
@@ -144,31 +150,31 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 
 // ReadLoop drives the read side of the websocket so the pong handler
 // fires and a peer disconnect surfaces as a ReadMessage error. Inbound
-// data frames are discarded — *conn is push-only; the broadcaster
+// data frames are discarded — *wsSession is push-only; the broadcaster
 // never reads from this side.
 //
-// Tearing down via c.Close on exit is essential: it cancels ctx, which
-// is the only thing that unblocks WriteLoop's select on a quiet conn
+// Tearing down via s.Close on exit is essential: it cancels ctx, which
+// is the only thing that unblocks WriteLoop's select on a quiet session
 // (no in-flight writes to fail). Without this, a client disconnect on
-// an idle conn would leak the WriteLoop goroutine.
-func (c *conn) ReadLoop(logger *zap.Logger) {
-	defer c.Close()
-	c.ws.SetReadLimit(maxMessageSize)
+// an idle session would leak the WriteLoop goroutine.
+func (s *wsSession) ReadLoop(logger *zap.Logger) {
+	defer s.Close()
+	s.ws.SetReadLimit(maxMessageSize)
 	// ping helps to keep the connection alive from our POV
-	if c.withPing {
+	if s.withPing {
 		// set deadline so ping messages won't exceed timeout
-		_ = c.ws.SetReadDeadline(time.Now().Add(pingTimeout))
+		_ = s.ws.SetReadDeadline(time.Now().Add(pingTimeout))
 		// extend the deadline on every pong message
-		c.ws.SetPongHandler(func(string) error {
-			return c.ws.SetReadDeadline(time.Now().Add(pingTimeout))
+		s.ws.SetPongHandler(func(string) error {
+			return s.ws.SetReadDeadline(time.Now().Add(pingTimeout))
 		})
 	}
 	for {
-		if c.ctx.Err() != nil {
+		if s.ctx.Err() != nil {
 			logger.Debug("read loop stopped by context")
 			break
 		}
-		if _, _, err := c.ws.ReadMessage(); err != nil {
+		if _, _, err := s.ws.ReadMessage(); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				logger.Error("unexpected close error", zap.Error(err))
 			} else if isCloseError(err) {
@@ -183,8 +189,8 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 
 // pingLoop sends ping messages according to configured interval. Exits
 // promptly on ctx cancel (instead of blocking up to pingInterval on a
-// quiet conn).
-func (c *conn) pingLoop(ctx context.Context, logger *zap.Logger) {
+// quiet session).
+func (s *wsSession) pingLoop(ctx context.Context, logger *zap.Logger) {
 	ticker := time.NewTicker(pingInterval)
 	defer ticker.Stop()
 	for {
@@ -193,10 +199,10 @@ func (c *conn) pingLoop(ctx context.Context, logger *zap.Logger) {
 			return
 		case <-ticker.C:
 		}
-		c.writeLock.Lock()
+		s.writeLock.Lock()
 		logger.Debug("sending ping message")
-		err := c.ws.WriteControl(websocket.PingMessage, pingMsg(c.ID()), time.Now().Add(c.writeTimeout))
-		c.writeLock.Unlock()
+		err := s.ws.WriteControl(websocket.PingMessage, pingMsg(s.ID()), time.Now().Add(s.writeTimeout))
+		s.writeLock.Unlock()
 		if err != nil {
 			logger.Error("could not send ping message", zap.Error(err))
 			return
@@ -207,9 +213,9 @@ func (c *conn) pingLoop(ctx context.Context, logger *zap.Logger) {
 // sendMsg sends the given message and returns the number of bytes that were written, plus the error.
 // w.Close is always called so the websocket frame is flushed even when Write fails;
 // the Write error wins over the Close error when both surface.
-func (c *conn) sendMsg(msg []byte) (int, error) {
-	_ = c.ws.SetWriteDeadline(time.Now().Add(c.writeTimeout))
-	w, err := c.ws.NextWriter(websocket.TextMessage)
+func (s *wsSession) sendMsg(msg []byte) (int, error) {
+	_ = s.ws.SetWriteDeadline(time.Now().Add(s.writeTimeout))
+	w, err := s.ws.NextWriter(websocket.TextMessage)
 	if err != nil {
 		return 0, fmt.Errorf("could not create ws writer: %w", err)
 	}

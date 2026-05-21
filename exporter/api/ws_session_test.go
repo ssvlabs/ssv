@@ -11,19 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestConn_Send_FullQueue asserts the broadcasted.Send contract for *conn:
-// Send must not block, even when called past the queue capacity, and on
-// overflow it cancels the conn ctx (the teardown signal consumed by
-// WriteLoop / ReadLoop / handleStream defers).
-func TestConn_Send_FullQueue(t *testing.T) {
+// TestWSSession_Send_FullQueue asserts the broadcasted.Send contract for
+// *wsSession: Send must not block, even when called past the queue
+// capacity, and on overflow it cancels the session's ctx (the teardown
+// signal consumed by WriteLoop / ReadLoop / handleStream defers).
+func TestWSSession_Send_FullQueue(t *testing.T) {
 	ws := dialTestWebsocket(t)
-	c := newConn(t.Context(), ws, "test", 0, false)
-	require.NoError(t, c.ctx.Err(), "ctx should not be canceled before overflow")
+	sess := newWSSession(t.Context(), ws, "test", 0, false)
+	require.NoError(t, sess.ctx.Err(), "ctx should not be canceled before overflow")
 
 	for i := 0; i < chanSize+2; i++ {
-		c.Send([]byte(fmt.Sprintf("test-%d", i)))
+		sess.Send([]byte(fmt.Sprintf("test-%d", i)))
 	}
-	require.Error(t, c.ctx.Err(), "ctx should be canceled after overflow")
+	require.Error(t, sess.ctx.Err(), "ctx should be canceled after overflow")
 }
 
 // dialTestWebsocket spins up an httptest server that upgrades and then idles,

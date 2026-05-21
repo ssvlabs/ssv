@@ -190,7 +190,7 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 // handleStream registers the connection for broadcasting of stream
 // messages. The websocket is closed by wsServer.RegisterHandler's
 // wrapper on return; handleStream only releases what it owns: the
-// *conn wrapper's ctx and the broadcaster registration.
+// *wsSession's ctx and the broadcaster registration.
 func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	cid := ConnectionID(wsc)
 	logger := ws.logger.
@@ -198,16 +198,16 @@ func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 		With(zap.String("remote addr", wsc.RemoteAddr().String()))
 	defer logger.Debug("stream handler done")
 
-	c := newConn(ws.ctx, wsc, cid, sendTimeout, ws.withPing)
-	defer c.Close()
+	sess := newWSSession(ws.ctx, wsc, cid, sendTimeout, ws.withPing)
+	defer sess.Close()
 
-	if !ws.broadcaster.Register(c) {
+	if !ws.broadcaster.Register(sess) {
 		logger.Warn("known connection")
 		return
 	}
-	defer ws.broadcaster.Deregister(c)
+	defer ws.broadcaster.Deregister(sess)
 
-	go c.ReadLoop(logger)
+	go sess.ReadLoop(logger)
 
-	c.WriteLoop(logger)
+	sess.WriteLoop(logger)
 }
