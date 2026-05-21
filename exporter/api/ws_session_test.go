@@ -15,7 +15,7 @@ import (
 // *wsSession: Send must not block, even when called past the queue
 // capacity, and on overflow it cancels the session's ctx (the teardown
 // signal consumed by WriteLoop / ReadLoop / handleStream defers). It
-// also pins the post-cancel-no-op behaviour: once the session is
+// also pins the post-cancel-no-op behavior: once the session is
 // torn down, further Sends must not enqueue, even if buffer slots are
 // available — otherwise WriteLoop's randomized select could drain a
 // few more messages to the wire before exiting.

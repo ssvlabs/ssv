@@ -88,18 +88,14 @@ func (s *wsSession) Close() {
 }
 
 // Send queues msg for the WriteLoop. Non-blocking. Three outcomes:
-//   - session already canceled: drop msg, no-op. We've decided to drop
-//     this client; further queueing would just be drained-and-delivered
-//     before WriteLoop noticed and exited (Go's select is randomized,
-//     not priority-ordered).
+//   - session canceled: drop, no-op. The ctx pre-check is TOCTOU-racy
+//     with concurrent cancel, but bounds the leak to a handful —
+//     without it, WriteLoop's randomized select would keep draining
+//     queued messages past cancel.
 //   - queue has room: enqueue.
-//   - queue full: tear the session down via Close. A silent gap in
-//     this stream is undetectable client-side, so reconnecting (with a
-//     fresh, consistent view) is the kindest outcome.
-//
-// The ctx-check is TOCTOU-racy with concurrent cancel, but the window
-// is narrow — at worst a handful of messages queue right after cancel,
-// versus the unbounded draining the broadcaster would otherwise feed.
+//   - queue full: tear the session down via Close. A silent gap here
+//     is undetectable client-side, so reconnecting with a fresh view
+//     is the kindest outcome.
 func (s *wsSession) Send(msg []byte) {
 	if s.ctx.Err() != nil {
 		return
@@ -111,16 +107,13 @@ func (s *wsSession) Send(msg []byte) {
 	}
 }
 
-// WriteLoop a loop to activate writes on the socket. Always tears down
-// on exit via s.Close, propagating ctx-cancel so ReadLoop notices on
-// the next scheduling (ws stays open until wsServer's wrappedHandler
-// closes it, which then unblocks ReadLoop's ReadMessage).
+// WriteLoop drives the write side of the websocket. Tears down via
+// s.Close on exit, propagating ctx-cancel — ReadLoop notices on the
+// next scheduling once wrappedHandler closes ws.
 //
-// The pre-check on ctx at the top of each iteration is load-bearing:
-// Go's select picks randomly among ready cases, so without it, queued
-// messages would still drain to the wire after Send-overflow canceled
-// the session — defeating the prompt-shutdown intent of dropping a
-// slow client.
+// The for-condition is load-bearing: Go's select randomizes among
+// ready cases, so without it, messages queued before Send-overflow
+// would still drain to the wire after cancel.
 func (s *wsSession) WriteLoop(logger *zap.Logger) {
 	defer s.Close()
 
@@ -134,14 +127,9 @@ func (s *wsSession) WriteLoop(logger *zap.Logger) {
 		}()
 	}
 
-drain:
-	for {
-		if ctx.Err() != nil {
-			break drain
-		}
+	for ctx.Err() == nil {
 		select {
 		case <-ctx.Done():
-			break drain
 		case message := <-s.send:
 			s.writeLock.Lock()
 			_, err := s.sendMsg(message)
