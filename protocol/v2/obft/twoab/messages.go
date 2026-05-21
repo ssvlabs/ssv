@@ -1,6 +1,7 @@
 package twoab
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"hash"
@@ -353,6 +354,33 @@ func commitContentHash(c *Commit) [32]byte {
 	var out [32]byte
 	copy(out[:], h.Sum(nil))
 	return out
+}
+
+// layerEntriesEqual reports whether two LayerEntries slices have
+// byte-identical content. Used by ObserveValueMsg / ObserveNoValueMsg
+// to enforce the spec's "L_k>0 entries identical across the
+// KindNoValue → upgrade KindValue pair" requirement
+// (§Phase 2a-late upgrade in docs/2abOBFT-REDESIGN-PLAN.md).
+// Mismatched entries from same op across the pair are Rule 6a-slashable.
+func layerEntriesEqual(a, b []LayerEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Layer != b[i].Layer {
+			return false
+		}
+		if a[i].Kind != b[i].Kind {
+			return false
+		}
+		if !bytes.Equal(a[i].V, b[i].V) {
+			return false
+		}
+		if !bytes.Equal(a[i].Payload, b[i].Payload) {
+			return false
+		}
+	}
+	return true
 }
 
 // hashLayerEntries appends LayerEntries content to a hasher. Entries are

@@ -225,6 +225,155 @@ func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) 
 	require.True(t, foundRule6a)
 }
 
+// TestObserveValueMsg_A1UpgradeMismatchedLayerEntriesFiresRule6a: a byz
+// emits KindNoValue with one set of L_k>0 entries and then an "upgrade"
+// KindValue with DIFFERENT L_k>0 entries. Per spec §Phase 2a-late
+// upgrade, the L_k entries MUST be identical across the pair. The
+// mismatch fires Rule 6a; the upgrade's entries are NOT processed (the
+// prior NoValueMsg's pool contributions stand, preventing cross-pool
+// injection).
+func TestObserveValueMsg_A1UpgradeMismatchedLayerEntriesFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// Prior KindNoValue from op1 with L_1 = NRPlaintext.
+	nv := &NoValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntryEmpty},
+		},
+	}
+	require.NoError(t, op2.ObserveNoValueMsg(nv))
+	// Crafted "upgrade" KindValue with L_1 = SigmaChained (mismatch).
+	vm := &ValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		V:          Value("V0"),
+		ValueRoot:  ValueRoot(Value("V0")),
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
+		},
+	}
+	require.NoError(t, op2.ObserveValueMsg(vm))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a, "mismatched L_k entries between NoValue and upgrade Value should fire Rule 6a")
+}
+
+// TestObserveNoValueMsg_ReorderMismatchedLayerEntriesFiresRule6a: same
+// as above, but observation order is reversed (Value first, then
+// NoValue arrives late with mismatched entries).
+func TestObserveNoValueMsg_ReorderMismatchedLayerEntriesFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// Upgrade KindValue arrives first.
+	vm := &ValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		V:          Value("V0"),
+		ValueRoot:  ValueRoot(Value("V0")),
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
+		},
+	}
+	require.NoError(t, op2.ObserveValueMsg(vm))
+	// Then a mismatched KindNoValue arrives late.
+	nv := &NoValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntryEmpty},
+		},
+	}
+	require.NoError(t, op2.ObserveNoValueMsg(nv))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a, "reorder with mismatched L_k entries should also fire Rule 6a")
+}
+
+// TestObserveCommit_SignedCrossVAfterValueMsgFiresRule6a: byz emits
+// KindValue(V_a), then KindCommit-Signed(V_b) with V_b ≠ V_a. Per A2,
+// the σ-eligibility commit MUST be on the V the op claimed σ-eligibility
+// on; cross-V is an unauthorized A1-A8 sequence. Should fire Rule 6a.
+func TestObserveCommit_SignedCrossVAfterValueMsgFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	vm := &ValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		V:          Value("V_a"),
+		ValueRoot:  ValueRoot(Value("V_a")),
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntryEmpty},
+		},
+	}
+	require.NoError(t, op2.ObserveValueMsg(vm))
+	c := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Side:       CommitSideSigned,
+		L0Value:    Value("V_b"), // ≠ V_a
+		L0Partial:  Signature("partial"),
+	}
+	require.NoError(t, op2.ObserveCommit(c))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a, "KindValue(V_a) → Commit-Signed(V_b) should fire Rule 6a")
+}
+
+// TestObserveValueMsg_PostCommitSignedCrossVFiresRule6a: same as above
+// but reverse order — Commit-Signed(V_b) arrives first, then ValueMsg(V_a)
+// where V_a ≠ V_b. Symmetric Rule 6a fire from the ObserveValueMsg side.
+func TestObserveValueMsg_PostCommitSignedCrossVFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	c := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Side:       CommitSideSigned,
+		L0Value:    Value("V_b"),
+		L0Partial:  Signature("partial"),
+	}
+	require.NoError(t, op2.ObserveCommit(c))
+	vm := &ValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		V:          Value("V_a"), // ≠ V_b
+		ValueRoot:  ValueRoot(Value("V_a")),
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntryEmpty},
+		},
+	}
+	require.NoError(t, op2.ObserveValueMsg(vm))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a, "Commit-Signed(V_b) → ValueMsg(V_a) should fire Rule 6a")
+}
+
 // TestObserveCommit_FakePlaintextSigmaFiresRule5: a peer Commit-Signed
 // carrying an L_0 σ partial that doesn't verify against the op's
 // pubshare on the claimed V triggers Rule 5 (fake plaintext sigma at

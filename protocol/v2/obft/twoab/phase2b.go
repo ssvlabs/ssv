@@ -299,6 +299,26 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		}
 	}
 
+	// Per spec §A2 (KindValue → KindCommit-Signed), the σ-eligibility
+	// commit is on the SAME V as the prior KindValue claim ("op has
+	// V_local" implies V_local matches the eligible V). A `KindValue(V_a)
+	// → KindCommit-Signed(V_b)` sequence with V_a ≠ V_b is structurally
+	// outside A1-A8 — slashable per Rule 6a.
+	if c.Side == CommitSideSigned && hadValue != nil &&
+		!bytes.Equal(hadValue.V, c.L0Value) {
+		if i.recordRule6a(op) {
+			i.recordEvidence(Evidence{
+				Rule:       EvidencePhase2Equivocation,
+				OperatorID: op,
+				Layer:      layer,
+				Phase2Equivocation: &Phase2EquivocationEvidence{
+					ValueA:  hadValue,
+					CommitB: deepCopyCommit(c),
+				},
+			})
+		}
+	}
+
 	i.peerCommit[op] = deepCopyCommit(c)
 
 	switch c.Side {

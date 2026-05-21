@@ -1,6 +1,7 @@
 package twoab
 
 import (
+	"bytes"
 	"fmt"
 )
 
@@ -502,15 +503,56 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	}
 	// Fresh ValueMsg, A1 upgrade (prior NoValueMsg), or reorder of a
 	// Commit-{Signed,NR} sequence — all authorized. Pool-update.
-	i.peerValueMsg[op] = deepCopyValueMsg(v)
 	if hadNoValue {
 		// A1 upgrade: move op from noValuePool[0] to valuePool[0].
-		// Skip processObservedLayerEntries — per spec §Phase 2a-late
-		// upgrade, the L_k>0 entries are identical to those in the
-		// prior NoValueMsg (already processed when it was observed).
+		// Per spec §Phase 2a-late upgrade, the L_k>0 entries MUST be
+		// identical to those in the prior NoValueMsg. A byz emitting an
+		// upgrade with mismatched L_k entries would attempt to inject
+		// inconsistent pool memberships at L_k>0 — slashable per Rule 6a.
+		priorNoValue := i.peerNoValueMsg[op]
+		if !layerEntriesEqual(priorNoValue.LayerEntries, v.LayerEntries) {
+			if i.recordRule6a(op) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidencePhase2Equivocation,
+					OperatorID: op,
+					Layer:      layer,
+					Phase2Equivocation: &Phase2EquivocationEvidence{
+						NoValueA: priorNoValue,
+						ValueB:   deepCopyValueMsg(v),
+					},
+				})
+			}
+			// Don't process the upgrade's mismatched L_k entries — the
+			// prior NoValueMsg's contributions stand. L_0 move still
+			// happens (the upgrade itself is a valid L_0 claim).
+		}
+		i.peerValueMsg[op] = deepCopyValueMsg(v)
 		i.removeFromNoValuePool(layer, op)
 		i.addToValuePool(layer, v.ValueRoot, op)
+	} else if hadCommit != nil && hadCommit.Side == CommitSideSigned {
+		// Reorder of A2 (KindValue → KindCommit-Signed) — Commit-Signed
+		// arrived first. Per spec §A2, the σ-eligibility commit is on
+		// the SAME V as the prior KindValue claim. If V differs between
+		// the two, that's an unauthorized cross-V sequence (V_a in
+		// KindValue, V_b in Commit-Signed).
+		if !bytes.Equal(hadCommit.L0Value, v.V) {
+			if i.recordRule6a(op) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidencePhase2Equivocation,
+					OperatorID: op,
+					Layer:      layer,
+					Phase2Equivocation: &Phase2EquivocationEvidence{
+						CommitA: hadCommit,
+						ValueB:  deepCopyValueMsg(v),
+					},
+				})
+			}
+		}
+		i.peerValueMsg[op] = deepCopyValueMsg(v)
+		i.addToValuePool(layer, v.ValueRoot, op)
+		i.processObservedLayerEntries(op, v.LayerEntries)
 	} else {
+		i.peerValueMsg[op] = deepCopyValueMsg(v)
 		i.addToValuePool(layer, v.ValueRoot, op)
 		// L_k>0 entries contribute to deeper-layer pools per inference rules.
 		i.processObservedLayerEntries(op, v.LayerEntries)
@@ -590,16 +632,36 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 	if hadValue != nil {
 		// A1 upgrade reorder: op emitted KindNoValue at Phase 2a then
 		// upgraded to KindValue (already observed). The current NoValueMsg
-		// is the original Phase-2a emission arriving late. NOT slashable.
-		// Pool semantics: op is in valuePool[0][V_root] (from the prior
-		// KindValue); do NOT add to noValuePool — the upgrade superseded
-		// the NoValue contribution.
+		// is the original Phase-2a emission arriving late. NOT slashable
+		// at the pair level (per §Receiver ordering tolerance).
+		//
+		// However: per spec §Phase 2a-late upgrade, the L_k>0 entries MUST
+		// be identical across the pair. If they differ, the byz crafted
+		// inconsistent entries — Rule 6a fires, and we DON'T re-process
+		// the NoValueMsg's L_k entries (the upgrade's contributions stand;
+		// the byz's late-arriving mismatch is discarded to prevent
+		// cross-pool injection at L_k>0).
 		i.peerNoValueMsg[op] = deepCopyNoValueMsg(nv)
-		// L_k>0 entries from this NoValueMsg are identical to those in
-		// the upgrade KindValue (per spec — upgrade carries over the
-		// L_k>0 entries). Process them defensively — pool updates are
-		// idempotent so this is a no-op if the upgrade was already processed.
-		i.processObservedLayerEntries(op, nv.LayerEntries)
+		if !layerEntriesEqual(hadValue.LayerEntries, nv.LayerEntries) {
+			if i.recordRule6a(op) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidencePhase2Equivocation,
+					OperatorID: op,
+					Layer:      layer,
+					Phase2Equivocation: &Phase2EquivocationEvidence{
+						ValueA:   hadValue,
+						NoValueB: deepCopyNoValueMsg(nv),
+					},
+				})
+			}
+			// Don't re-process — the upgrade's L_k entries already
+			// populated the pools when ObserveValueMsg ran.
+		} else {
+			// L_k>0 entries from this NoValueMsg are identical to those
+			// in the upgrade KindValue — re-process defensively (pool
+			// updates are idempotent).
+			i.processObservedLayerEntries(op, nv.LayerEntries)
+		}
 		i.afterStateDelta()
 		return nil
 	}
@@ -683,4 +745,3 @@ func cloneLayerEntries(entries []LayerEntry) []LayerEntry {
 	}
 	return out
 }
-
