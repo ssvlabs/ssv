@@ -156,11 +156,11 @@ type Instance struct {
 
 	// Per-rule dedup buckets — ensure one Evidence entry per logical
 	// fault even when multiple detection paths fire.
-	rule1Fired                 map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
-	rule3Fired                 map[int]map[OperatorID]bool // Rule 3 per (layer, op)
-	rule4Fired                 map[int]map[OperatorID]bool // Rule 4 fake encrypted-presence per (layer, op)
-	rule5Fired                 map[int]map[OperatorID]bool // Rule 5 (cryptoFake or unknownV) per (layer, op)
-	rule6aFired map[OperatorID]bool // Rule 6a Phase-2 equivocation per op (slot-wide)
+	rule1Fired  map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
+	rule3Fired  map[int]map[OperatorID]bool // Rule 3 per (layer, op)
+	rule4Fired  map[int]map[OperatorID]bool // Rule 4 fake encrypted-presence per (layer, op)
+	rule5Fired  map[int]map[OperatorID]bool // Rule 5 (cryptoFake or unknownV) per (layer, op)
+	rule6aFired map[OperatorID]bool         // Rule 6a Phase-2 equivocation per op (slot-wide)
 
 	// receivedCertificate is the FIRST peer-broadcast Certificate
 	// observed via ObserveCertificate at this Instance. Per spec
@@ -245,32 +245,32 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:                    cfg,
-		ownOperatorID:          ownOperatorID,
-		signer:                 signer,
-		tagSigner:              tagSigner,
-		ibe:                    ibe,
-		clusterPubKey:          clusterPubKey,
-		pubKeyShares:           pubKeyShares,
-		ibePubKeyShares:        ibePubKeyShares,
-		evidenceObserver:       evidenceObserver,
-		retainedBundles:        make(map[int]map[OperatorID][]*retainedBundle, K),
-		hostVerdict:            make(map[int]map[string]bool, K),
-		peerValueMsg:           make(map[OperatorID]*ValueMsg, len(cfg.Operators)),
-		peerNoValueMsg:         make(map[OperatorID]*NoValueMsg, len(cfg.Operators)),
-		peerCommit:             make(map[OperatorID]*Commit, len(cfg.Operators)),
-		valuePool:              make(map[int]map[[32]byte]map[OperatorID]bool, K),
-		noValuePool:            make(map[int]map[OperatorID]bool, K),
-		sigmaPool:              make(map[int]map[[32]byte]map[OperatorID]Signature, K),
-		nrTagPool:              make(map[int]map[OperatorID]Signature, K),
-		sigmaLocked:            make([]bool, K),
-		sigmaLockedV:           make([]Value, K),
-		nrLocked:               make([]bool, K),
-		ownPartials:            make(map[int]Signature, K),
-		rule1Fired:             make(map[int]map[OperatorID]bool, K),
-		rule3Fired:             make(map[int]map[OperatorID]bool, K),
-		rule4Fired:             make(map[int]map[OperatorID]bool, K),
-		rule5Fired:             make(map[int]map[OperatorID]bool, K),
+		cfg:              cfg,
+		ownOperatorID:    ownOperatorID,
+		signer:           signer,
+		tagSigner:        tagSigner,
+		ibe:              ibe,
+		clusterPubKey:    clusterPubKey,
+		pubKeyShares:     pubKeyShares,
+		ibePubKeyShares:  ibePubKeyShares,
+		evidenceObserver: evidenceObserver,
+		retainedBundles:  make(map[int]map[OperatorID][]*retainedBundle, K),
+		hostVerdict:      make(map[int]map[string]bool, K),
+		peerValueMsg:     make(map[OperatorID]*ValueMsg, len(cfg.Operators)),
+		peerNoValueMsg:   make(map[OperatorID]*NoValueMsg, len(cfg.Operators)),
+		peerCommit:       make(map[OperatorID]*Commit, len(cfg.Operators)),
+		valuePool:        make(map[int]map[[32]byte]map[OperatorID]bool, K),
+		noValuePool:      make(map[int]map[OperatorID]bool, K),
+		sigmaPool:        make(map[int]map[[32]byte]map[OperatorID]Signature, K),
+		nrTagPool:        make(map[int]map[OperatorID]Signature, K),
+		sigmaLocked:      make([]bool, K),
+		sigmaLockedV:     make([]Value, K),
+		nrLocked:         make([]bool, K),
+		ownPartials:      make(map[int]Signature, K),
+		rule1Fired:       make(map[int]map[OperatorID]bool, K),
+		rule3Fired:       make(map[int]map[OperatorID]bool, K),
+		rule4Fired:       make(map[int]map[OperatorID]bool, K),
+		rule5Fired:       make(map[int]map[OperatorID]bool, K),
 		rule6aFired:      make(map[OperatorID]bool, len(cfg.Operators)),
 		evidenceObserved: make(map[evidenceObservedKey]bool),
 	}, nil
@@ -511,21 +511,6 @@ func (i *Instance) addToValuePool(layer int, vRoot [32]byte, op OperatorID) {
 		i.valuePool[layer][vRoot] = make(map[OperatorID]bool)
 	}
 	i.valuePool[layer][vRoot][op] = true
-}
-
-// removeFromValuePool removes `op` from valuePool[layer][vRoot]. Used by
-// the upgrade-detection path to undo a previous noValuePool entry when
-// observing a KindValue from the same op (per §Pool aggregation rules /
-// Receiver-side robustness — the upgrade KindValue replaces the prior
-// KindNoValue's noValuePool contribution).
-//
-// Note: this function operates on valuePool, but the upgrade path
-// actually removes from noValuePool — exposed for symmetry / debugging.
-func (i *Instance) removeFromValuePool(layer int, vRoot [32]byte, op OperatorID) {
-	if i.valuePool[layer] == nil || i.valuePool[layer][vRoot] == nil {
-		return
-	}
-	delete(i.valuePool[layer][vRoot], op)
 }
 
 // addToNoValuePool adds `op` to noValuePool[layer]. Idempotent.

@@ -173,14 +173,27 @@ type FakePlaintextSigmaEvidence struct {
 
 // Phase2EquivocationEvidence (Rule 6a) — Operator OperatorID emitted a
 // Phase-2 sequence not in the authorized A1-A8 set. The evidence carries
-// the offending message pair (or triple); receivers MAY act on a single
-// observed sequence (cluster-wide consensus on the evidence is not required).
+// the offending message pair; receivers MAY act on a single observed
+// pair (cluster-wide consensus on the evidence is not required).
 //
-// Exactly one of the {ValueA, NoValueA, CommitA} is set (the first
-// observed Phase-2 emission from the op at this layer); similarly for
-// {ValueB, NoValueB, CommitB} (the offending second emission). The
-// triple-message case (e.g. KindNoValue → KindCommit-NR → KindValue) sets
-// the third in {ValueC, NoValueC, CommitC}.
+// Exactly one of {ValueA, NoValueA, CommitA} is set (the first observed
+// Phase-2 emission from the op); similarly for {ValueB, NoValueB,
+// CommitB} (the offending second emission). The detection paths in
+// ObserveValueMsg / ObserveNoValueMsg / ObserveCommit populate these.
+//
+// Triple-message sequences (e.g. KindNoValue → KindCommit-NR → KindValue
+// listed as slashable in the redesign plan) are NOT detected here:
+// from a receiver's observation set alone, that triple is
+// indistinguishable from the authorized A7 sequence (KindNoValue →
+// KindValue → KindCommit-NR) — both produce the same set of observed
+// messages, and gossipsub doesn't provide wire-level emission-order
+// metadata. Per §Receiver ordering tolerance, the receiver defaults to
+// the authorized interpretation; the slashable variant is unenforceable
+// from a single observer's view. Honest ops are gated against producing
+// the triple at the build path (MaybeBuildAndBroadcastUpgrade rejects
+// once ownCommit is set), so this affects only byz behavior — and
+// receivers conservatively accept rather than slash on ambiguous
+// evidence.
 type Phase2EquivocationEvidence struct {
 	ValueA   *ValueMsg
 	NoValueA *NoValueMsg
@@ -189,10 +202,6 @@ type Phase2EquivocationEvidence struct {
 	ValueB   *ValueMsg
 	NoValueB *NoValueMsg
 	CommitB  *Commit
-
-	ValueC   *ValueMsg
-	NoValueC *NoValueMsg
-	CommitC  *Commit
 }
 
 // EvidenceObserver fires on the FIRST recording per (Rule, OperatorID,

@@ -176,6 +176,32 @@ type Phase1Bundle struct {
 // A ValueMsg emission also doubles as the upgrade path A1: a NoValueMsg-
 // path op who later receives V_0 + host valid emits a ValueMsg envelope
 // with the same wire shape (per spec §Authorized Phase-2 emission pairs A1).
+//
+// **V_0 binding to leader**: the redesign-plan earlier had a leader-auth-sig
+// field embedded in ValueMsg, intended to let receivers verify that V_0
+// came from the layer's leader before propagating it as retention (the
+// "peer-reflood-V" path). That field is not in this implementation — the
+// leader-binding closure is achieved via:
+//
+//  1. The outer SignedSSVMessage envelope, which op-identity-signs the
+//     broadcaster (not the leader directly).
+//  2. The upgrade path's requirement that V_0 must be in
+//     retainedBundles[layer][leaderID] — populated only by
+//     ObservePhase1Bundle, which validates the bundle's leader-auth at
+//     ValidatePhase1Bundle structural-shape time and at the outer
+//     envelope-signature verification done by the SSV adapter before
+//     reaching this package.
+//
+// Consequence: receivers do NOT propagate V_0 from observed ValueMsg into
+// retention (the "peer-reflood-V via KindValue" propagation vector in the
+// plan's worked cases). V_0 retention enters only via Phase-1 bundle
+// gossipsub reflood. Byz operators can spam ValueMsg envelopes claiming
+// arbitrary fake V_0' values, inflating value_pool[V_0'_fake] membership
+// claims, but honest receivers won't have V_0'_fake retained — so their
+// commit-side decision never produces a σ partial on V_0'_fake, and the
+// σ-pool semantics (threshold partials only, not inferred claims) keep
+// the cluster from converging on fake V's. At f=1 n=4 the byz alone
+// can't push value_pool[V_0'_fake] past qV=3.
 type ValueMsg struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
@@ -285,9 +311,9 @@ func ValueRoot(v Value) [32]byte {
 func valueMsgContentHash(v *ValueMsg) [32]byte {
 	h := sha256.New()
 	h.Write(v.ClusterID[:])
-	binary.Write(h, binary.BigEndian, uint64(v.OperatorID))
-	binary.Write(h, binary.BigEndian, uint64(v.Height))
-	binary.Write(h, binary.BigEndian, uint32(len(v.V)))
+	writeUint64(h, uint64(v.OperatorID))
+	writeUint64(h, uint64(v.Height))
+	writeUint32(h, uint32(len(v.V)))
 	h.Write(v.V)
 	h.Write(v.ValueRoot[:])
 	hashLayerEntries(h, v.LayerEntries)
@@ -302,8 +328,8 @@ func valueMsgContentHash(v *ValueMsg) [32]byte {
 func noValueMsgContentHash(nv *NoValueMsg) [32]byte {
 	h := sha256.New()
 	h.Write(nv.ClusterID[:])
-	binary.Write(h, binary.BigEndian, uint64(nv.OperatorID))
-	binary.Write(h, binary.BigEndian, uint64(nv.Height))
+	writeUint64(h, uint64(nv.OperatorID))
+	writeUint64(h, uint64(nv.Height))
 	hashLayerEntries(h, nv.LayerEntries)
 	var out [32]byte
 	copy(out[:], h.Sum(nil))
@@ -316,12 +342,12 @@ func noValueMsgContentHash(nv *NoValueMsg) [32]byte {
 func commitContentHash(c *Commit) [32]byte {
 	h := sha256.New()
 	h.Write(c.ClusterID[:])
-	binary.Write(h, binary.BigEndian, uint64(c.OperatorID))
-	binary.Write(h, binary.BigEndian, uint64(c.Height))
+	writeUint64(h, uint64(c.OperatorID))
+	writeUint64(h, uint64(c.Height))
 	h.Write([]byte{byte(c.Side)})
-	binary.Write(h, binary.BigEndian, uint32(len(c.L0Value)))
+	writeUint32(h, uint32(len(c.L0Value)))
 	h.Write(c.L0Value)
-	binary.Write(h, binary.BigEndian, uint32(len(c.L0Partial)))
+	writeUint32(h, uint32(len(c.L0Partial)))
 	h.Write(c.L0Partial)
 	hashLayerEntries(h, c.LayerEntries)
 	var out [32]byte
@@ -334,13 +360,31 @@ func commitContentHash(c *Commit) [32]byte {
 // range or duplicate-layer entries, so honest emissions produce a canonical
 // ordering and identical re-broadcasts hash identically.
 func hashLayerEntries(h hash.Hash, entries []LayerEntry) {
-	binary.Write(h, binary.BigEndian, uint32(len(entries)))
+	writeUint32(h, uint32(len(entries)))
 	for _, e := range entries {
-		binary.Write(h, binary.BigEndian, uint32(e.Layer))
+		writeUint32(h, uint32(e.Layer))
 		h.Write([]byte{byte(e.Kind)})
-		binary.Write(h, binary.BigEndian, uint32(len(e.V)))
+		writeUint32(h, uint32(len(e.V)))
 		h.Write(e.V)
-		binary.Write(h, binary.BigEndian, uint32(len(e.Payload)))
+		writeUint32(h, uint32(len(e.Payload)))
 		h.Write(e.Payload)
 	}
+}
+
+// writeUint32 / writeUint64 append a big-endian fixed-width integer to
+// a hash.Hash. These helpers replace `binary.Write(h, ...)` to avoid
+// the brittle discarded-error pattern — hash.Hash.Write is documented
+// to never return an error, but the discarded error from binary.Write
+// is a lint magnet. Using explicit byte slicing makes the intent
+// obvious and removes the error return entirely.
+func writeUint32(h hash.Hash, v uint32) {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], v)
+	h.Write(buf[:])
+}
+
+func writeUint64(h hash.Hash, v uint64) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], v)
+	h.Write(buf[:])
 }
