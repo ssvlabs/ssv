@@ -40,11 +40,16 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		// honest σ = 4 ≥ qV=3. Slot succeeds at L_0. Closes the historical
 		// h_V=1 deadlock that pre-§1 OBFT had no in-protocol recovery for.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT (key win): h_V=f selective delivery. f σV verdicts +
-		// (N-f-1) NR/NV verdicts at L_0. σ-pool < qV; nr_pool reaches qEnc
-		// (since N-1-f honest emit NR via row 5) → NR-quorum at L_0 →
-		// advance to L_1 → σ at L_1.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: f honest get V (σ-eligible at L_0); N-1-f V-drops emit
+		// KindNoValue. At n=4 f=1: 1 σ-honest + 2 V-drops. noValuePool = 2
+		// < qEnc=3 from honest V-drops alone — byz silent at Phase 2 doesn't
+		// contribute. NR-eligibility doesn't fire. σ-honest's cannot-σ gate
+		// fails (V_local + host valid) so they don't fire NR. With no
+		// T_commit hard wall, ops wait until slot deadline → MISS.
+		// Recovery requires gossipsub reflood: leader's V (carried fulltext
+		// in KindValue) reaches V-drops, who upgrade via A1 → cluster
+		// reaches σ-quorum at L_0. Not modeled in direct-delivery catalog.
+		"2abOBFT": ExpectMiss,
 		// QBFT analog: byz R1 leader's PROPOSE reaches only f recipients →
 		// PREPARE-pool below qV → R1 round-changes → honest R2 leader
 		// (round-robin) succeeds with fresh V. Outcome class = fall-through.

@@ -20,10 +20,17 @@ var scenarioEquivocate111 = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pools split below qV; no NR-quorum; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT: each receiver retains one of the N-1 distinct V's; verdict
-		// pool fragments below qV; row 5 → all NR; NR-quorum at L_0 → advance
-		// to L_1 where the honest leader broadcasts → σ at L_1.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: each honest retains one of the N-1 distinct V's
+		// (1 each, no equivocation observed locally). Each emits KindValue
+		// on their own V. value_pool fragments — no V reaches qV. The
+		// cannot-σ gate on NR-eligibility blocks σ-eligible ops (V_local +
+		// host valid) from defaulting to NR. With no T_commit hard wall in
+		// the new protocol, ops wait indefinitely until the slot deadline →
+		// MISS. The redesign plan's recovery path (line 784) requires
+		// gossipsub reflood to deliver the alternative V's to each honest
+		// so the equivocation trigger fires; the direct-delivery catalog
+		// test doesn't model reflood, so the recovery doesn't materialize.
+		"2abOBFT": ExpectMiss,
 		// QBFT: PREPARE pool fragments; R1 timeout → R2 with fresh V → success.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
@@ -91,12 +98,15 @@ var scenarioEquivocateSigmaLockedSplit = Scenario{
 		// OBFT: σ-pool on each V = f+1 < qV=2f+1; NR-pool from silent rest = f
 		// < qEnc=2f+1; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (key win): receivers split across V_a/V_b at L_0; verdict
-		// pool fragments — no V reaches qV → row 5 → all NR → NR-quorum at
-		// L_0 → advance to L_1 where the honest leader broadcasts → σ at L_1.
-		// Recovery via Phase-2a verdict convergence is the spec's headline
-		// motivation for 2abOBFT.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: f honest σ-lock on V_a, f honest σ-lock on V_b, no
+		// equivocation observed locally by any (each side sees just their
+		// own V). value_pool[V_a] = f and value_pool[V_b] = f cluster-wide
+		// — neither reaches qV=2f+1. The cannot-σ gate blocks NR-default
+		// for σ-locked honest. With no T_commit hard wall, ops wait until
+		// slot deadline → MISS. Recovery requires gossipsub reflood to
+		// deliver the alternative V to each side (so the equivocation
+		// trigger fires) — not modeled in direct-delivery catalog.
+		"2abOBFT": ExpectMiss,
 		// QBFT: PREPARE pool splits; R1 timeout → R2 fresh V → success.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
@@ -139,12 +149,15 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		// at L_0 with V_a even though leader equivocated. Equivocation evidence
 		// still gossipable — success doesn't suppress slashing.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT: Variant C removes Phase-1 σ_V, so V_a's verdict pool =
-		// 2f σV verdicts (the 2f recipients) — short of qV=2f+1 (the leader
-		// didn't pre-fetch a σ_V partial to add). Row 5 → NR → NR-quorum at
-		// L_0 → fall-through. Slot succeeds at L_1. Distinct from OBFT's L_0
-		// success — 2ab pays one layer for removing the Phase-1 σ_V head-start.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: 2f honest σ-lock on V_a, 1 honest σ-locks on V_b — no
+		// equivocation observed locally. value_pool[V_a] = 2f (short of
+		// qV=2f+1 since the protocol has no Phase-1 σ_V head-start); the
+		// cannot-σ gate blocks σ-locked honest from NR-defaulting. With no
+		// T_commit hard wall, ops wait until slot deadline → MISS.
+		// Recovery requires gossipsub reflood to make each honest observe
+		// the alternative V (firing the equivocation trigger) — not modeled
+		// in direct-delivery catalog.
+		"2abOBFT": ExpectMiss,
 		// QBFT: PREPARE-pool on V_a = 2f honest (byz leader runs no real
 		// Instance, no PREPARE from leader); pool on V_b = 1. Both < quorum →
 		// R1 timeout → R2 honest leader proposes fresh V → succeeds.

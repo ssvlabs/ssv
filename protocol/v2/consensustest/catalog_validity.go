@@ -34,11 +34,16 @@ var scenarioValidityDivergenceAlgebraicLimit = Scenario{
 		// OBFT: σ-pool=2f < qV=2f+1; NR-pool=f+1 < qEnc=2f+1; chained
 		// decryption blocked → slot misses (algebraic limit).
 		"OBFT": ExpectMiss,
-		// 2abOBFT (key win): same algebraic split at L_0, but row 5 NR drives
-		// all 4 ops to NR-emit → NR-quorum at L_0 (= 4 ≥ qEnc=3) → advance
-		// to L_1 where host-valid retention restores σ-quorum. Spec's
-		// validity-divergence-recovery story made testable.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: 2 σ-eligible honest + 2 NV honest at L_0. value_pool = 2
+		// < qV=3; noValuePool = 2 < qEnc=3. σ-eligibility doesn't fire;
+		// NR-eligibility doesn't fire either (the noValuePool gate is
+		// satisfied only by NV honest, and only 2 of them exist). σ-eligible
+		// honest's cannot-σ gate fails (V_local + host valid). With no
+		// T_commit hard wall, ops wait until slot deadline → MISS. This is
+		// the spec's assumption-3-boundary algebraic limit (redesign plan
+		// §Liveness worked cases line 787): v1's row 5 NR-default at
+		// T_commit attempted L_1 fall-through, v4 does not.
+		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE pool insufficient (host-NV non-leaders don't
 		// PREPARE); R1 timeout; R2 leader proposes fresh V which validates
 		// at layer 1 (host-NV is layer-0-scoped); decides at R2. Deterministic
@@ -207,14 +212,15 @@ var scenarioValidityDivergence_PassiveByz_Silent_2NV = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pool=1<qV; NR-pool=2f<qEnc; both quorums short; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (key win at this configuration): host-NV non-leaders emit
-		// NV verdicts at L_0; nr_pool view at honest receivers > qEnc once
-		// the byz are excluded as non-emitters. Row 2 NR-quorum drives all
-		// honest to NR; NR-quorum at L_0 (= 3 honest NR emissions) ≥ qEnc=3
-		// → advance to L_1 where retention is healthy → σ at L_1.
-		// Concrete recovery 2ab provides over base OBFT on this spec
-		// configuration.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: leader is σ-eligible (V_local + host valid); 2f NV
+		// non-leaders emit KindNoValue (V_local but host NV — cannot σ at
+		// L_0); f byz silent at Phase 2. noValuePool = 2f < qEnc=2f+1 →
+		// NR-eligibility doesn't fire for NV honest. Leader's cannot-σ
+		// gate fails (V_local + host valid) → NR-eligibility doesn't fire
+		// for leader either. With no T_commit hard wall, ops wait until
+		// slot deadline → MISS. v1's row 2 NR-quorum required all-honest
+		// NR-default at T_commit, which v4 doesn't do.
+		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE-quorum unreachable; R2 fresh-V at layer 1 host-validates → succeeds.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no host-validity model
@@ -260,9 +266,13 @@ var scenarioValidityDivergence_PassiveByz_SigmaOnV_2NV = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pool=1+f<qV=2f+1 (for f≥1); NR-pool=2f<qEnc=2f+1; miss.
 		"OBFT": ExpectMiss,
-		// 2abOBFT: row 5 → all-NR at L_0 → NR-quorum (honest NRs reach
-		// qEnc) → advance to L_1 → σ at L_1. Recovery via NR-fall-through.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: leader σ-eligible; 2f NV honest emit KindNoValue;
+		// f byz σ-on-V act honestly message-wise (emit KindValue). value_pool
+		// = leader + f byz = 1 + f < qV=2f+1; noValuePool = 2f < qEnc=2f+1.
+		// σ-eligibility doesn't fire (no V reaches qV); NR-eligibility
+		// doesn't fire either. σ-eligible honest's cannot-σ gate fails.
+		// With no T_commit hard wall, ops wait until slot deadline → MISS.
+		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE pool = leader + f byz = 1+f < quorum=2f+1; R1 timeout;
 		// R2 fresh-V at layer 1 host-validates → succeeds.
 		"QBFT":  ExpectSuccessFallThrough,
@@ -377,12 +387,14 @@ var scenarioValidityDivergence_LeaderNV_PassiveByz = Scenario{
 		// leader's NR despite host-NV. σ-pool=leader+(2f-1 honest)=2f<qV;
 		// NR-pool=1<qEnc; both short; miss.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (key win): Variant C has no Phase-1 σ_V, so the leader
-		// isn't σ-locked despite their Phase-1 broadcast. At Phase 2a the
-		// leader emits NV (host-NV at L_0); cluster verdict pool has NV
-		// verdicts from leader + op{2f+1} → row 5 → NR-quorum drives
-		// advance to L_1 → σ at L_1.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT: leader is host-NV at L_0 (cannot σ); op{2f+1} also NV;
+		// f byz silent. The leader and the NV non-leader both emit
+		// KindNoValue (they have V_local but host says NV). noValuePool =
+		// 2 (leader + op{2f+1}) < qEnc=2f+1=3 → NR-eligibility doesn't
+		// fire. Remaining honest are σ-eligible — their cannot-σ gate
+		// fails so NR-eligibility doesn't fire for them either. With no
+		// T_commit hard wall, ops wait until slot deadline → MISS.
+		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE pool short (host-NV ops don't PREPARE; byz silent);
 		// R2 fresh-V at layer 1 host-validates → succeeds. (HostInvalidForOperators
 		// is layer-0-scoped; round 2 = layer 1 sees all-valid.)
