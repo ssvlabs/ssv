@@ -22,7 +22,9 @@ const (
 	sendTimeout = 3 * time.Second
 )
 
-// WebSocketServer is responsible for managing all
+// WebSocketServer accepts /query and /stream websocket connections,
+// dispatches query messages to the registered handler, and broadcasts
+// stream messages from BroadcastFeed to every connected /stream client.
 type WebSocketServer interface {
 	// Start binds a listener on addr and begins serving in the background.
 	// It returns the bound address (useful when addr has a :0 port) once the

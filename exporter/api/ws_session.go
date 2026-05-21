@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -72,11 +71,6 @@ func newWSSession(parent context.Context, ws *websocket.Conn, id string, writeTi
 // ID returns the session id (derived from the underlying ws remote addr).
 func (s *wsSession) ID() string {
 	return s.id
-}
-
-// RemoteAddr returns the remote address of the socket
-func (s *wsSession) RemoteAddr() net.Addr {
-	return s.ws.RemoteAddr()
 }
 
 // Close releases this session's own resources: it cancels its ctx, which

@@ -24,10 +24,10 @@ type Broadcaster interface {
 // lock and then fans out by calling Send synchronously per peer, so a
 // blocking Send delays delivery to every subsequent peer in the same
 // batch. Implementations are expected to drop or self-close on their own
-// queue overflow (see conn.Send for the canonical pattern: a non-blocking
-// select+default that cancels the conn ctx when the queue fills, so the
-// slow client reconnects with a fresh view rather than silently missing
-// messages).
+// queue overflow (see wsSession.Send for the canonical pattern: a
+// non-blocking select+default that cancels the session ctx when the
+// queue fills, so the slow client reconnects with a fresh view rather
+// than silently missing messages).
 type broadcasted interface {
 	ID() string
 	Send([]byte)
