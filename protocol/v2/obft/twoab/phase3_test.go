@@ -119,6 +119,33 @@ func TestRetainedCertificate_NilBeforeObserve(t *testing.T) {
 	require.Nil(t, s.instances[OperatorID(1)].RetainedCertificate())
 }
 
+// TestResolve_K3_MultiLayerFallThrough: at K=3 with no L_0 or L_1
+// retention (only L_2 has a healthy leader broadcast), the cluster
+// walks Phase 3 through TWO consecutive NR-quorum unlocks (L_0 →
+// L_1 → L_2) before reaching σ-quorum at L_2. This exercises the
+// chain-decryption walk: nr_tag_0-pool unlocks L_1; nr_tag_1-pool
+// (from Phase-2a L_1 NRPlaintext entries) unlocks L_2; L_2
+// SigmaChained entries decrypt and aggregate to σ-quorum.
+func TestResolve_K3_MultiLayerFallThrough(t *testing.T) {
+	s := newSimWithK(t, 4, 3)
+	// Only L_2 leader broadcasts. Apply host validity for V_2 on all ops.
+	v2 := s.candidates[2]
+	s.deliverPhase1(2, v2, s.allOperators(), observedEarly)
+	s.applyHostValidityAll(2, v2, true)
+	// L_0 and L_1 have no retention — all ops will emit KindNoValue at
+	// Phase 2a with L_1 NRPlaintext (no V_1) + L_2 SigmaChained (V_2 +
+	// host valid).
+	s.firePhase2aAll()
+	// Resolve at each op should walk all three layers and decide at L_2.
+	outputs, errs := s.resolveAll()
+	for op, err := range errs {
+		require.NoError(t, err, "op %d Resolve", op)
+	}
+	out := requireAllAgree(t, outputs)
+	require.Equal(t, 2, out.Layer, "σ-quorum reaches at L_2 via two consecutive NR-quorum unlocks")
+	require.Equal(t, v2, out.Value)
+}
+
 // TestResolve_FakeEncryptedPresenceFiresRule4: at L_k>0, a peer's
 // SigmaChained LayerEntry whose Payload doesn't decrypt to a valid σ
 // partial fires Rule 4. We trigger this by:
