@@ -93,4 +93,6 @@ var Catalog = []Scenario{
 	scenarioCrossOnionEquivocationRule3,
 	scenarioFakeEncryptedPresence,
 	scenarioFakePlaintextSigmaRule5,
+	scenarioPhase2EquivocateCrossV_Rule6a,
+	scenarioPhase2DowngradeValueNoValue_Rule6a,
 }

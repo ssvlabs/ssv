@@ -115,7 +115,8 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 
 	copyB := deepCopyBundle(b)
 	newEntry := &retainedBundle{
-		Bundle: copyB,
+		Bundle:                 copyB,
+		RetentionEstablishedAt: observedOffset,
 	}
 
 	if len(retained) == 1 {

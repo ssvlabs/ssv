@@ -213,7 +213,14 @@ func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Dur
 		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
 	}
 	if deadlockLayer >= 0 {
-		return fmt.Sprintf("Cluster deadlocked at layer %d (σ-pool short, no NR-fallthrough)", deadlockLayer)
+		// Under v4: both pools short at this layer + cannot-σ gate blocks
+		// σ-eligible ops from defaulting to NR + no T_commit hard wall →
+		// cluster waits indefinitely until slot deadline. This shape is
+		// distinct from OBFT's classic "σ-pool short, NR-pool failed to
+		// reach qEnc" deadlock — in v4 it's "neither pool reaches its
+		// threshold, gate prevents NR-default" — though both manifest
+		// as the same per-layer stuck state.
+		return fmt.Sprintf("Cluster deadlocked at layer %d (neither σ-quorum nor NR-quorum reaches; cannot-σ gate prevents NR-default)", deadlockLayer)
 	}
 	return "Cluster never assembled a threshold signature at any layer"
 }
@@ -242,7 +249,7 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 		for rule, n := range oo.EvidenceByRule {
 			if rule == RuleLeaderEquivocation ||
 				rule == RuleCrossOnionEquivocation ||
-				rule == RuleVerdictEquivocation {
+				rule == RulePhase2Equivocation {
 				att.EquivocationsObserved += n
 			}
 		}
@@ -375,7 +382,7 @@ const (
 	RuleCrossOnionEquivocation = "2abOBFT/Rule3/CrossCommitEquivocation"
 	RuleFakeEncryptedPresence  = "2abOBFT/Rule4/FakeEncryptedPresence"
 	RuleFakePlaintextSigma     = "2abOBFT/Rule5/FakePlaintextSigma"
-	RuleVerdictEquivocation    = "2abOBFT/Rule6a/Phase2Equivocation"
+	RulePhase2Equivocation     = "2abOBFT/Rule6a/Phase2Equivocation"
 	RuleUnknown                = "2abOBFT/Unknown"
 )
 
@@ -392,7 +399,7 @@ func ruleKey(e twoab.Evidence) string {
 	case twoab.EvidenceFakePlaintextSigma:
 		return RuleFakePlaintextSigma
 	case twoab.EvidencePhase2Equivocation:
-		return RuleVerdictEquivocation
+		return RulePhase2Equivocation
 	default:
 		return RuleUnknown
 	}

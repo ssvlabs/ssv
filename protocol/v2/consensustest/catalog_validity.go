@@ -215,11 +215,8 @@ var scenarioValidityDivergence_PassiveByz_Silent_2NV = Scenario{
 		// 2abOBFT: leader is σ-eligible (V_local + host valid); 2f NV
 		// non-leaders emit KindNoValue (V_local but host NV — cannot σ at
 		// L_0); f byz silent at Phase 2. noValuePool = 2f < qEnc=2f+1 →
-		// NR-eligibility doesn't fire for NV honest. Leader's cannot-σ
-		// gate fails (V_local + host valid) → NR-eligibility doesn't fire
-		// for leader either. With no T_commit hard wall, ops wait until
-		// slot deadline → MISS. v1's row 2 NR-quorum required all-honest
-		// NR-default at T_commit, which v4 doesn't do.
+		// NR-eligibility doesn't fire. With no T_commit hard wall, ops
+		// wait until slot deadline → MISS.
 		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE-quorum unreachable; R2 fresh-V at layer 1 host-validates → succeeds.
 		"QBFT":  ExpectSuccessFallThrough,

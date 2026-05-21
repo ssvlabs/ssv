@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
@@ -162,6 +163,19 @@ type Instance struct {
 	rule5Fired  map[int]map[OperatorID]bool // Rule 5 (cryptoFake or unknownV) per (layer, op)
 	rule6aFired map[OperatorID]bool         // Rule 6a Phase-2 equivocation per op (slot-wide)
 
+	// cascadeErrors accumulates errors returned by
+	// MaybeBuildAndBroadcastUpgrade / MaybeBuildAndBroadcastCommit during
+	// afterStateDelta cascades. These are otherwise-silent failures —
+	// e.g. signer infra issues during commit/upgrade build that prevent
+	// an emission from firing. Surfaced via CascadeErrors() so callers
+	// can detect a silent BLS hiccup eating the cascade (otherwise
+	// invisible until the slot misses for unclear reason).
+	//
+	// ErrUpgradeNotAvailable from MaybeBuildAndBroadcastUpgrade is the
+	// no-op sentinel (preconditions not met) and is NOT recorded here;
+	// only genuine signer/EKM failures accumulate.
+	cascadeErrors []error
+
 	// receivedCertificate is the FIRST peer-broadcast Certificate
 	// observed via ObserveCertificate at this Instance. Per spec
 	// §Final-certificate gossip, surviving peers' certificates allow an
@@ -189,6 +203,13 @@ type retainedBundle struct {
 	// Bundle is a deep copy of the retained bundle (defensive against
 	// caller-owned slice mutation post-Observe).
 	Bundle *Phase1Bundle
+
+	// RetentionEstablishedAt is the offset (from slot_start) at which
+	// this retention entry was first observed. Diagnostic / telemetry
+	// only — the protocol's behavior doesn't depend on it (v4 has no
+	// T_commit acceptance horizon). Useful for runner-level latency
+	// metrics and post-mortem analysis of mesh-tail recovery.
+	RetentionEstablishedAt time.Duration
 }
 
 // NewInstance constructs a 2abOBFT Instance. Validates the config and
@@ -285,6 +306,10 @@ func (i *Instance) OwnOperatorID() OperatorID { return i.ownOperatorID }
 // LeaderAtLayers returns the layer indices where the local operator is
 // the designated leader. Empty if the operator is not a leader at any
 // layer in this slot.
+//
+// Used by the SSV runner adapter (Phase L) at slot-start to enumerate
+// which layers the local op needs to fetch + broadcast Phase-1 bundles
+// for. Mirror of the equivalent helper in `protocol/v2/obft/base`.
 func (i *Instance) LeaderAtLayers() []int {
 	var out []int
 	for k, l := range i.cfg.Layers {
@@ -292,6 +317,20 @@ func (i *Instance) LeaderAtLayers() []int {
 			out = append(out, k)
 		}
 	}
+	return out
+}
+
+// CascadeErrors returns a snapshot of errors accumulated during
+// afterStateDelta cascades — silent failures of the cascade-driven
+// MaybeBuildAndBroadcastUpgrade / MaybeBuildAndBroadcastCommit paths.
+// Typically empty; non-empty indicates a signer/EKM infra failure that
+// prevented an emission from firing.
+//
+// The ErrUpgradeNotAvailable sentinel is filtered out (it's the
+// preconditions-not-met no-op, not a genuine failure).
+func (i *Instance) CascadeErrors() []error {
+	out := make([]error, len(i.cascadeErrors))
+	copy(out, i.cascadeErrors)
 	return out
 }
 
@@ -305,6 +344,10 @@ func (i *Instance) LeaderAtLayers() []int {
 // internal state.
 func (i *Instance) Evidence() []Evidence {
 	out := make([]Evidence, len(i.evidence))
+	// Shallow copy: Evidence is a value type but its typed-payload fields
+	// (CrossSigning, CrossOnion, etc.) are pointers shared with the
+	// Instance's internal slice. Deep-copying every payload on every read
+	// is wasteful; the read-only contract above keeps this safe.
 	copy(out, i.evidence)
 	return out
 }
@@ -409,6 +452,35 @@ func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
 	return inner, nil
 }
 
+// verifyNRTagPartial returns true if `partial` is a valid threshold
+// signature share on nr_tag_layer for op. Used by ObserveCommit (NR /
+// NRDirect L0Partial) and processObservedLayerEntries (L_k>0 NRPlaintext
+// payloads) to gate NR contributions before they pollute the threshold
+// pools. Without this verification, a byz could spam garbage NR
+// partials, causing Phase-3 chain-decryption aggregation to either fail
+// (StubSigner.AggregatePartials returns error) or produce a wrong
+// derivation key (real-BLS Lagrange interpolation on garbage shares).
+//
+// IBE shares fallback (Option A vs Option B): when ibePubKeyShares is
+// nil, falls back to pubKeyShares — the Option A integration where the
+// validator's V-keypair shares double as IBE shares via DST separation
+// in the BLS primitive. Option B (separate IBE-DKG) sets
+// ibePubKeyShares to the IBE-derived shares; this code path then
+// verifies against those instead. Mirrors base/phase2.go's
+// verifyCommitNRPartials helper.
+func (i *Instance) verifyNRTagPartial(op OperatorID, layer int, partial Signature) bool {
+	nrShares := i.ibePubKeyShares
+	if nrShares == nil {
+		nrShares = i.pubKeyShares
+	}
+	pubShare, ok := nrShares[op]
+	if !ok || len(pubShare) == 0 {
+		return false
+	}
+	tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, layer)
+	return i.tagSigner.VerifyPartial(pubShare, tag, partial)
+}
+
 // chainDecryptForLayer decrypts a layer-`k` ciphertext using
 // `decryptionKeys` where decryptionKeys[j] is the aggregated NR-partials
 // signature on nr_tag_j. Used by Phase 3 (reconstruction).
@@ -435,57 +507,49 @@ func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys
 
 // ---------- Per-rule dedup helpers ----------
 
+// recordRulePerLayer is the shared template for per-(op, layer) evidence
+// rules (Rules 1, 3, 4, 5 — all keyed by layer × op). Lazily initializes
+// the inner per-op map at `table[layer]`, then marks (op, layer) as
+// fired. Returns true on first observation, false if the rule had already
+// been recorded for this (op, layer) pair.
+//
+// Rule 6a is intentionally NOT routed through this helper — it is
+// slot-wide (per-op, not per-layer) and uses a flat map[OperatorID]bool;
+// see recordRule6a.
+func (i *Instance) recordRulePerLayer(table map[int]map[OperatorID]bool, op OperatorID, layer int) bool {
+	if table[layer] == nil {
+		table[layer] = make(map[OperatorID]bool)
+	}
+	if table[layer][op] {
+		return false
+	}
+	table[layer][op] = true
+	return true
+}
+
 // recordRule1 marks Rule 1 (CrossSigning) as fired for (op, layer).
 // Returns true if this is the first observation; false if Rule 1 was
 // already recorded.
 func (i *Instance) recordRule1(op OperatorID, layer int) bool {
-	if i.rule1Fired[layer] == nil {
-		i.rule1Fired[layer] = make(map[OperatorID]bool)
-	}
-	if i.rule1Fired[layer][op] {
-		return false
-	}
-	i.rule1Fired[layer][op] = true
-	return true
+	return i.recordRulePerLayer(i.rule1Fired, op, layer)
 }
 
 // recordRule3 marks Rule 3 (cross-commit equivocation) as fired for
 // (op, layer). Returns true if this is the first observation.
 func (i *Instance) recordRule3(op OperatorID, layer int) bool {
-	if i.rule3Fired[layer] == nil {
-		i.rule3Fired[layer] = make(map[OperatorID]bool)
-	}
-	if i.rule3Fired[layer][op] {
-		return false
-	}
-	i.rule3Fired[layer][op] = true
-	return true
+	return i.recordRulePerLayer(i.rule3Fired, op, layer)
 }
 
 // recordRule4 marks Rule 4 (fake encrypted-presence at k > 0) as fired
 // for (op, layer). Returns true if this is the first observation.
 func (i *Instance) recordRule4(op OperatorID, layer int) bool {
-	if i.rule4Fired[layer] == nil {
-		i.rule4Fired[layer] = make(map[OperatorID]bool)
-	}
-	if i.rule4Fired[layer][op] {
-		return false
-	}
-	i.rule4Fired[layer][op] = true
-	return true
+	return i.recordRulePerLayer(i.rule4Fired, op, layer)
 }
 
-// recordRule5Fired marks Rule 5 (fake plaintext σ at L_0) as fired for
+// recordRule5 marks Rule 5 (fake plaintext σ at L_0) as fired for
 // (op, layer). Returns true if this is the first observation.
-func (i *Instance) recordRule5Fired(op OperatorID, layer int) bool {
-	if i.rule5Fired[layer] == nil {
-		i.rule5Fired[layer] = make(map[OperatorID]bool)
-	}
-	if i.rule5Fired[layer][op] {
-		return false
-	}
-	i.rule5Fired[layer][op] = true
-	return true
+func (i *Instance) recordRule5(op OperatorID, layer int) bool {
+	return i.recordRulePerLayer(i.rule5Fired, op, layer)
 }
 
 // recordRule6a marks Rule 6a (Phase-2 equivocation) as fired for op.
@@ -578,15 +642,26 @@ func (i *Instance) noValuePoolSize(layer int) int {
 //
 // At n = 3f+1 (the SSV BFT-tight bound), at most one V can have
 // `|valuePool[V]| ≥ qV` per Pigeonhole 2 — so the "max V" is unambiguous
-// at quorum. Below quorum, the max V is informational only.
+// at quorum. Below quorum, the max V is informational only. Ties on
+// count are broken lexicographically on V_root for determinism across
+// ops (Go map iteration is unordered; without the tiebreak, equal-count
+// V's at sub-qV could flap between calls — irrelevant for trigger
+// firing but cheap insurance for diagnostics / future n > 3f+1 use).
 func (i *Instance) valuePoolMaxV(layer int) (vRoot [32]byte, count int) {
 	if i.valuePool[layer] == nil {
 		return [32]byte{}, 0
 	}
+	// Invariant: addToValuePool never inserts an empty inner ops map,
+	// and there's no removal path that empties one. So len(ops) ≥ 1 for
+	// every entry we iterate. The `count > 0` guard on the tiebreak is
+	// a defensive belt-and-suspenders that costs nothing.
 	for v, ops := range i.valuePool[layer] {
-		if len(ops) > count {
+		switch {
+		case len(ops) > count:
 			vRoot = v
 			count = len(ops)
+		case len(ops) == count && count > 0 && bytes.Compare(v[:], vRoot[:]) < 0:
+			vRoot = v
 		}
 	}
 	return vRoot, count

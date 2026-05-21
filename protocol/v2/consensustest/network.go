@@ -19,12 +19,21 @@ const (
 	KindPostConsensus                  // QBFT partial-sig collection (OBFT folds this into Phase 3)
 	KindGossipIHave                    // gossipsub IHAVE control RPC (lazy-push advertise)
 	KindGossipIWant                    // gossipsub IWANT control RPC (lazy-push pull request)
-	// KindVerdict is 2abOBFT-specific: the Phase-2a verdict envelope each
-	// op broadcasts before Phase-2b's Onion2b. Split out of KindCommit so
-	// the per-kind bandwidth chart compares apples-to-apples across the
-	// protocol family (bare OBFT has no verdict; 2abOBFT verdict bytes
-	// used to be folded into KindCommit alongside Onion2b, overcounting
-	// "commit-like" traffic relative to bare OBFT).
+	// KindVerdict is 2abOBFT-specific: the Phase-2a coordination envelope
+	// each op broadcasts before Phase-2b's Onion2b commit. Both kinds
+	// of Phase-2a wire message — KindValue (V_0 fulltext) and KindNoValue
+	// (V-drop / NV claim) — share this MsgKind bucket; the names "verdict"
+	// and "Verdict" are legacy from v1's binary verdict-kind enum and
+	// kept here because (1) bandwidth accounting groups both into one
+	// Phase-2a-coordination row, (2) network delay model has identical
+	// shape for both (~equal-size coordination broadcasts), and (3)
+	// splitting into KindValue/KindNoValue would force every byz pattern
+	// and aggregator path to fork on two MsgKinds with no behavioral
+	// distinction. Split out of KindCommit so the per-kind bandwidth chart
+	// compares apples-to-apples across the protocol family (bare OBFT has
+	// no Phase-2a coordination; 2abOBFT bytes used to be folded into
+	// KindCommit alongside Onion2b, overcounting "commit-like" traffic
+	// relative to bare OBFT).
 	KindVerdict
 	// KindPrepare is QBFT-specific: the Phase-2 PREPARE message. Split
 	// out of KindCommit so the per-kind bandwidth chart distinguishes

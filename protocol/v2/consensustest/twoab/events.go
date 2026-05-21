@@ -337,23 +337,30 @@ func (e *evtPhase2aFire) handle(s *sim) []scheduledEvent {
 			vm = s.cfg.Byz.OverrideValueMsg(s, op, vm)
 			s.markValueMsgEmitted(op)
 			out = append(out, scheduleValueMsg(s, op, vm)...)
-			for _, extra := range s.cfg.Byz.BuildExtraValueMsgs(s, op, vm) {
-				out = append(out, scheduleValueMsg(s, op, extra)...)
-			}
 		case nv != nil:
 			nv = s.cfg.Byz.OverrideNoValueMsg(s, op, nv)
 			s.markNoValueMsgEmitted(op)
 			out = append(out, scheduleNoValueMsg(s, op, nv)...)
-			for _, extra := range s.cfg.Byz.BuildExtraNoValueMsgs(s, op, nv) {
-				out = append(out, scheduleNoValueMsg(s, op, extra)...)
-			}
 		case c != nil:
 			c = s.cfg.Byz.OverrideCommit(s, op, c)
 			s.markCommitEmitted(op)
 			out = append(out, scheduleCommit(s, op, c)...)
-			for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
-				out = append(out, scheduleCommit(s, op, extra)...)
-			}
+		}
+		// Universal BuildExtra* hooks: byz patterns may inject extras of
+		// ANY Phase-2a kind regardless of which natural-kind fired —
+		// enables A1/A2/A8 Rule-6a violation scenarios that mix kinds
+		// (e.g., natural KindValue + extra KindNoValue downgrade). Each
+		// hook receives the natural emission for the matching kind, or
+		// nil for the other kinds. Honest defaults return nil; byz
+		// patterns MUST nil-guard the natural-emission parameter.
+		for _, extra := range s.cfg.Byz.BuildExtraValueMsgs(s, op, vm) {
+			out = append(out, scheduleValueMsg(s, op, extra)...)
+		}
+		for _, extra := range s.cfg.Byz.BuildExtraNoValueMsgs(s, op, nv) {
+			out = append(out, scheduleNoValueMsg(s, op, extra)...)
+		}
+		for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
+			out = append(out, scheduleCommit(s, op, extra)...)
 		}
 		// Phase 2a fire may have cascaded into a Phase-2b Commit
 		// emission (e.g., σ-eligibility trigger already satisfied at fire
@@ -558,6 +565,13 @@ func captureCascadeEmissions(s *sim, op twoab.OperatorID) []scheduledEvent {
 // per byz delivery rules. Records aggregator observations for σ-chained
 // LayerEntries. Returns scheduled events for direct-delivery mode;
 // mesh-mode dispatches via s.emitMesh.
+//
+// Wire-kind: KindVerdict (shared with scheduleNoValueMsg) — see
+// ct.KindVerdict comment in network.go for why both Phase-2a coordination
+// kinds share one MsgKind bucket. Per-message byz overrides (delay,
+// delivery filter) cannot distinguish ValueMsg from NoValueMsg via the
+// MsgKind axis alone; patterns that need that distinction subclass the
+// adapter-internal hook (Override{Value,NoValue}Msg + Build{Value,NoValue}Extra*).
 func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []scheduledEvent {
 	if vm == nil {
 		return nil
@@ -598,7 +612,9 @@ func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []sched
 	return out
 }
 
-// scheduleNoValueMsg broadcasts a NoValueMsg from `from` to every other peer.
+// scheduleNoValueMsg broadcasts a NoValueMsg from `from` to every other
+// peer. Wire-kind: KindVerdict (shared with scheduleValueMsg) — see
+// scheduleValueMsg's comment for the rationale.
 func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []scheduledEvent {
 	if nv == nil {
 		return nil

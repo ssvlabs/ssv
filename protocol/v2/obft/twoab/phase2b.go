@@ -2,6 +2,7 @@ package twoab
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 )
 
@@ -47,9 +48,19 @@ import (
 //
 // afterStateDelta is idempotent and safe to call repeatedly. After the
 // op has emitted its single Commit, subsequent calls are no-ops.
+//
+// Errors from the cascade helpers (genuine signer/EKM failures, not the
+// preconditions-not-met ErrUpgradeNotAvailable sentinel) are stashed on
+// the Instance and surfaced via CascadeErrors(). Without this, a silent
+// BLS hiccup eating the cascade would be invisible until the slot
+// misses for unclear reasons.
 func (i *Instance) afterStateDelta() {
-	_, _ = i.MaybeBuildAndBroadcastUpgrade()
-	_, _ = i.MaybeBuildAndBroadcastCommit()
+	if _, err := i.MaybeBuildAndBroadcastUpgrade(); err != nil && !errors.Is(err, ErrUpgradeNotAvailable) {
+		i.cascadeErrors = append(i.cascadeErrors, err)
+	}
+	if _, err := i.MaybeBuildAndBroadcastCommit(); err != nil {
+		i.cascadeErrors = append(i.cascadeErrors, err)
+	}
 }
 
 // MaybeBuildAndBroadcastCommit evaluates the three Phase-2b commit
@@ -69,6 +80,14 @@ func (i *Instance) afterStateDelta() {
 //   - (nil, nil) if no trigger fires (silent wait — the slot's relay-
 //     submission deadline at the runner level is the only hard wall).
 //   - (nil, err) on internal build failure.
+//
+// Return-shape convention vs MaybeBuildAndBroadcastUpgrade: Commit returns
+// (nil, nil) for "no eligibility right now" because three independent
+// triggers feed this method and the no-trigger state is the silent default
+// of partial-synchrony waiting. Upgrade, by contrast, returns the explicit
+// ErrUpgradeNotAvailable sentinel because it has a single precondition
+// cluster that callers may want to distinguish from "succeeded silently".
+// See MaybeBuildAndBroadcastUpgrade's docstring for the full rationale.
 func (i *Instance) MaybeBuildAndBroadcastCommit() (*Commit, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
@@ -329,7 +348,7 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		// Threshold pool: add the verified σ partial.
 		if i.verifyL0SigmaPartial(op, c.L0Value, c.L0Partial) {
 			i.addToSigmaPool(layer, ValueRoot(c.L0Value), op, c.L0Partial)
-		} else if i.recordRule5Fired(op, layer) {
+		} else if i.recordRule5(op, layer) {
 			// Rule 5: fake plaintext σ at L_0.
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceFakePlaintextSigma,
@@ -343,14 +362,26 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 			})
 		}
 	case CommitSideNR:
-		// NR-direction at L_0.
-		i.addToNoValuePool(layer, op)
-		i.addToNrTagPool(layer, op, c.L0Partial)
+		// NR-direction at L_0. Verify the nr_tag_0 partial before
+		// adding to the threshold pool — a byz spamming garbage NR
+		// partials would otherwise pollute nr_tag_0-pool and cause
+		// Phase-3 chain-decryption aggregation to fail or compute a
+		// wrong key.
+		if i.verifyNRTagPartial(op, layer, c.L0Partial) {
+			i.addToNoValuePool(layer, op)
+			i.addToNrTagPool(layer, op, c.L0Partial)
+		}
+		// On verify failure: claim-pool (noValuePool) is also skipped —
+		// without a valid partial the op didn't actually NR-commit
+		// cryptographically; the L_0 claim has no signature to back it.
+		// Receivers ignore the bogus commit entirely.
 	case CommitSideNRDirect:
 		// Phase-2a NRDirect: same L_0 NR semantics, plus the L_k>0
 		// LayerEntries contribute to deeper-layer pools.
-		i.addToNoValuePool(layer, op)
-		i.addToNrTagPool(layer, op, c.L0Partial)
+		if i.verifyNRTagPartial(op, layer, c.L0Partial) {
+			i.addToNoValuePool(layer, op)
+			i.addToNrTagPool(layer, op, c.L0Partial)
+		}
 		i.processObservedLayerEntries(op, c.LayerEntries)
 	}
 

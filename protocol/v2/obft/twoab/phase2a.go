@@ -247,7 +247,11 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("twoab: build LayerEntries: %w", err)
 	}
-	i.phase2aFired = true
+	// Note: phase2aFired is set AFTER each branch's irreversible side-
+	// effects complete, not before. A failure mid-branch (e.g. signer
+	// error) returns an error AND leaves the flag false so the caller
+	// can retry. Setting too early would silently wedge the slot — the
+	// fast-path at line 242 would return (nil, nil, nil, nil) on retry.
 	switch state {
 	case localValueStateValue:
 		const layer = 0
@@ -263,6 +267,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 			LayerEntries: entries,
 		}
 		i.addToValuePool(layer, root, i.ownOperatorID)
+		i.phase2aFired = true
 		// The σ partial at L_0 will be signed at Commit-Signed emission
 		// time, not here — ValueMsg is op-id-signed coordination only.
 		// Phase 2a fire is a state delta — run the per-tick cascade so
@@ -279,6 +284,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 			LayerEntries: entries,
 		}
 		i.addToNoValuePool(0, i.ownOperatorID)
+		i.phase2aFired = true
 		i.afterStateDelta()
 		return nil, i.ownNoValueMsg, nil, nil
 	case localValueStateNRDirect:
@@ -304,6 +310,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 		}
 		i.addToNoValuePool(0, i.ownOperatorID)
 		i.addToNrTagPool(0, i.ownOperatorID, sig)
+		i.phase2aFired = true
 		// No afterStateDelta cascade here: NRDirect IS the commit, no
 		// further emission to fire.
 		return nil, nil, i.ownCommit, nil
@@ -334,6 +341,18 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 //   - (*ValueMsg, nil) on successful upgrade (caller broadcasts).
 //   - (nil, ErrUpgradeNotAvailable) if preconditions not met.
 //   - (nil, err) on internal failure.
+//
+// Return-shape convention vs MaybeBuildAndBroadcastCommit: Upgrade uses
+// an explicit `ErrUpgradeNotAvailable` sentinel for "no eligibility right
+// now" because Upgrade has a SINGLE precondition cluster (op on KindNoValue
+// path + has V_0 + host valid + not yet committed), and callers that
+// explicitly invoke this path want to distinguish "tried but blocked" from
+// "succeeded silently". Commit, by contrast, returns (nil, nil) for the
+// no-trigger case because it has THREE independent triggers in priority
+// order and the no-trigger state is the silent default (the slot's
+// runner-level relay-submission deadline is the hard wall, not a per-call
+// error). The cascade-driven afterStateDelta filters Upgrade's sentinel
+// out via errors.Is so it doesn't pollute CascadeErrors().
 //
 // Idempotent across upgrade attempts: a second call after the upgrade
 // has already fired returns the cached ownValueMsg + nil. After the op
@@ -526,6 +545,28 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 			// prior NoValueMsg's contributions stand. L_0 move still
 			// happens (the upgrade itself is a valid L_0 claim).
 		}
+		// Additionally check cross-V against any prior KindCommit-Signed
+		// from the same op: the byz sequence
+		// `KindNoValue → KindCommit-Signed(V_b) → KindValue(V_a≠V_b)` is
+		// structurally outside A1-A8. The hadCommit branch below covers
+		// the Commit-first-then-Value reorder cross-V case; this nested
+		// check handles the three-message case where NoValue arrived
+		// first (so we take the A1 branch) but Commit-Signed had already
+		// landed.
+		if hadCommit != nil && hadCommit.Side == CommitSideSigned &&
+			!bytes.Equal(hadCommit.L0Value, v.V) {
+			if i.recordRule6a(op) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidencePhase2Equivocation,
+					OperatorID: op,
+					Layer:      layer,
+					Phase2Equivocation: &Phase2EquivocationEvidence{
+						CommitA: hadCommit,
+						ValueB:  deepCopyValueMsg(v),
+					},
+				})
+			}
+		}
 		i.peerValueMsg[op] = deepCopyValueMsg(v)
 		i.removeFromNoValuePool(layer, op)
 		i.addToValuePool(layer, v.ValueRoot, op)
@@ -690,9 +731,11 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 //     plaintext partial gets added to sigmaPool[k] only later, during
 //     Resolve()'s chain-decryption walk once enough nr_tag partials at
 //     prior layers have aggregated to unlock the layer.
-//   - NRPlaintext entry at layer k → add op to noValuePool[k] AND to
-//     nrTagPool[k] (the partial is plaintext on the wire, immediately
-//     usable for Phase 3 unlock-chain aggregation).
+//   - NRPlaintext entry at layer k → if the partial verifies against op's
+//     nr_tag share, add op to noValuePool[k] AND to nrTagPool[k] (the
+//     partial is plaintext on the wire, immediately usable for Phase 3
+//     unlock-chain aggregation). Without verification, a byz could spam
+//     garbage partials and poison the nr_tag_k threshold pool.
 //   - Empty entry → no pool update.
 func (i *Instance) processObservedLayerEntries(op OperatorID, entries []LayerEntry) {
 	for _, e := range entries {
@@ -700,8 +743,13 @@ func (i *Instance) processObservedLayerEntries(op OperatorID, entries []LayerEnt
 		case LayerEntrySigmaChained:
 			i.addToValuePool(e.Layer, ValueRoot(e.V), op)
 		case LayerEntryNRPlaintext:
-			i.addToNoValuePool(e.Layer, op)
-			i.addToNrTagPool(e.Layer, op, Signature(e.Payload))
+			if i.verifyNRTagPartial(op, e.Layer, Signature(e.Payload)) {
+				i.addToNoValuePool(e.Layer, op)
+				i.addToNrTagPool(e.Layer, op, Signature(e.Payload))
+			}
+			// On verify failure: skip the entry. The byz's bogus NR
+			// claim at this layer doesn't poison the threshold pool.
+			// The rest of the message's entries continue to be processed.
 		case LayerEntryEmpty:
 			// no-op
 		}

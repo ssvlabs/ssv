@@ -25,6 +25,25 @@ import (
 // captureCascadeEmissions; OverrideCommit / BuildExtraCommits apply
 // regardless of whether the commit fired at the Phase-2a-NRDirect
 // fire-instant or via the cascade.
+//
+// Cross-kind extras (BuildExtraValueMsgs / BuildExtraNoValueMsgs /
+// BuildExtraCommits): events.go calls all three hooks UNCONDITIONALLY
+// at the Phase-2a-fire instant, passing the natural-kind emission for
+// the matching hook and nil for the other two. Honest defaults return
+// nil regardless. Byz patterns that want to inject MORE of the same
+// kind do so on the matching hook; patterns that want to inject a
+// DIFFERENT kind from the natural emission (e.g., natural KindValue +
+// extra KindNoValue for Rule-6a downgrade testing) gate on the natural-
+// kind parameter being nil (or non-nil for same-kind extras). MUST
+// nil-guard the natural-emission parameter — events.go passes nil for
+// kinds the natural path didn't fire.
+//
+// At the cascade path (captureCascadeEmissions), only BuildExtraCommits
+// fires; cascade-driven upgrade-ValueMsgs go through
+// OverrideUpgradeValueMsg only, no extras. This asymmetry is
+// intentional — the cascade fires at most once per op per kind, and
+// per-fire-instant equivocation is sufficient for the Rule-6a-style
+// scenarios catalog needs.
 type internalByz interface {
 	// Phase 1
 	LeaderBroadcastPlan(s *sim, leader twoab.OperatorID, layer int, honestV twoab.Value) []broadcastPlan
@@ -170,6 +189,10 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 		}, nil
 	case ct.ByzDelayedCommit:
 		return byzDelayedCommit{ByzSet: bs}, nil
+	case ct.ByzPhase2EquivocateCrossV:
+		return byzPhase2EquivocateCrossV{ByzSet: bs}, nil
+	case ct.ByzPhase2DowngradeValueNoValue:
+		return byzPhase2DowngradeValueNoValue{ByzSet: bs}, nil
 	case ct.ByzAggregatorBypass:
 		return byzAggregatorBypass{ByzSet: bs}, nil
 	case ct.ByzWitnessForgery:
@@ -654,7 +677,12 @@ func (b byzCrossOnionEquivocation) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorI
 }
 
 func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
-	if !b.ByzSet.Contains(op) {
+	// Nil-guard: events.go calls BuildExtraCommits universally — c is nil
+	// when the natural Phase-2a kind was ValueMsg or NoValueMsg. This
+	// pattern only injects when a natural Commit exists (either Phase-2a
+	// NRDirect equivocation OR Phase-2b cascade-emitted Signed/NR commit —
+	// both funnel through BuildExtraCommits).
+	if c == nil || !b.ByzSet.Contains(op) {
 		return nil
 	}
 	primeV := []byte("byz-V-prime")
@@ -691,6 +719,146 @@ func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op twoab.OperatorID
 	}
 }
 
+// ---- byzPhase2EquivocateCrossV (Rule 6a, 2abOBFT-specific) -----------
+
+// The byz operator emits its natural Phase-2a KindValue on V AND injects
+// an EXTRA KindValue on a distinct V_b ≠ V. Each honest receiver
+// observes TWO ValueMsgs from the same op with different V_0 fields →
+// ObserveValueMsg's cross-V check fires Rule 6a (Phase2Equivocation) on
+// the second observation. (Per spec §Authorized Phase-2 emission pairs,
+// the same byz behavior would also be classified as cross-σ-V — but the
+// receiver-side rule key in v4 is unified under Rule 6a.)
+//
+// LeaderBroadcastPlan unchanged (the byz, even if also the leader at
+// some layer, broadcasts honestV in Phase 1). The deviation is purely
+// at Phase 2a emission time, isolating the Phase-2-equivocation path
+// from any L_0-leader equivocation. Catalog scenario uses op2 (a
+// non-leader at L_0 by default rotation) to keep the test focused on
+// the Phase-2 equivocation receiver-side detection.
+//
+// Cluster outcome: at n=4 f=1, the 3 honest ops (op1, op3, op4) all
+// contribute to value_pool[V] → qV=3 reached trivially without needing
+// the byz's contribution. σ-eligibility triggers → SuccessFastest at
+// L_0. The cross-V extra ValueMsg is rejected at the cross-V check
+// before the pool update; evidence is recorded but the cluster decides
+// cleanly. The byz's natural KindValue on V also pools (it arrives
+// either first or second relative to the cross-V extra; whichever wins
+// the race is what pools).
+//
+// Assumption on byz natural-kind: BuildExtraValueMsgs returns nil
+// unless natural Phase-2a was KindValue (v != nil). In CorrectnessProfile
+// (deterministic delivery, honest leader, host valid), the byz always
+// lands on KindValue at Phase 2a. Under stress sweeps with byz V-drop
+// or host-flip, the byz could land on KindNoValue/NRDirect — in that
+// case the cross-V extra is suppressed and Rule 6a doesn't fire that
+// slot. The catalog Expect (SuccessFastest) still holds via the honest
+// majority; the adapter tests (TestAdapter_Phase2EquivocateCrossV_*)
+// pin CorrectnessProfile so KindValue path is guaranteed.
+//
+// Note on byz self-observation: the cross-V extra ValueMsg goes onto
+// the wire alongside the natural one. The byz's own Instance has its
+// pool already updated with its natural V from MaybeFirePhase2a; the
+// extra is not self-observed (self-observation dedup short-circuits
+// peer-arrival from own op). Rule 6a evidence is strictly receiver-
+// side detection.
+type byzPhase2EquivocateCrossV struct {
+	honestDefaults
+	ByzSet byzSet
+}
+
+func (b byzPhase2EquivocateCrossV) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ int, honestV twoab.Value) []broadcastPlan {
+	return []broadcastPlan{{V: honestV}}
+}
+
+func (b byzPhase2EquivocateCrossV) BuildExtraValueMsgs(_ *sim, op twoab.OperatorID, v *twoab.ValueMsg) []*twoab.ValueMsg {
+	// Nil-guard: events.go calls BuildExtraValueMsgs universally — v is
+	// nil if the natural Phase-2a kind was NoValueMsg or Commit. This
+	// pattern requires a natural ValueMsg to clone L_k entries from.
+	if v == nil || !b.ByzSet.Contains(op) {
+		return nil
+	}
+	// Inject an extra KindValue on a distinct V_b. The L_k>0 entries
+	// are copied from the natural emission so the only divergence is
+	// the L_0 V field — this isolates the cross-V Rule-6a detection
+	// path (vs the L_k>0 mismatched-entries path).
+	extra := cloneValueMsg(v)
+	extra.V = append(twoab.Value{}, "byz-cross-V"...)
+	extra.ValueRoot = twoab.ValueRoot(extra.V)
+	return []*twoab.ValueMsg{extra}
+}
+
+// ---- byzPhase2DowngradeValueNoValue (Rule 6a, 2abOBFT-specific) ------
+
+// The byz operator emits its natural Phase-2a KindValue on V AND ALSO
+// injects an extra KindNoValue from the same op via the cross-kind
+// BuildExtraNoValueMsgs hook. The sequence "KindValue → KindNoValue" is
+// NOT in the authorized A1-A8 set per spec (only the reverse — A1's
+// KindNoValue → KindValue upgrade — is allowed). Per spec §Receiver
+// ordering tolerance, a KindValue+KindNoValue pair gets interpreted as
+// an A1 upgrade reorder PROVIDED the L_k entries match between the two
+// messages. We force a mismatch by injecting an all-Empty NoValueMsg
+// alongside the natural ValueMsg, whose own L_k entries are SigmaChained
+// at non-Empty layers (the natural emission's entries are derived from
+// the op's actual retention state — at minimum, the L_{K-1} entry for
+// any op that retains the K-1 leader's bundle is SigmaChained when
+// host-valid). The L_k-mismatch trips ObserveNoValueMsg's check at the
+// A1-reorder branch (or ObserveValueMsg's symmetric branch, depending
+// on arrival order) and fires Rule 6a.
+//
+// Cluster outcome (n=4 f=1): leader broadcast is honest; 3 honest +
+// 1 byz emit KindValue on V; byz also emits extra KindNoValue. The 3
+// honest contributions to value_pool[V] reach qV=3 → σ-eligibility →
+// SuccessFastest at L_0 regardless of byz's contribution. Rule 6a
+// evidence accumulates at each honest receiver.
+//
+// LayerEntries shape: the injected KindNoValue carries all-Empty
+// entries (K-1 of them). This is structurally valid per validation.go
+// and doesn't accidentally trigger other rules (e.g., Rule 4 on garbage
+// payloads); the violation is exactly the unauthorized cross-kind
+// sequence, isolated for Rule 6a.
+//
+// Assumption: BuildExtraNoValueMsgs returns nil unless natural Phase-2a
+// kind was KindValue (nv == nil AND vm exists). The current nil-guard
+// is `nv != nil` only — which means an NRDirect natural emission
+// (Commit; both vm and nv are nil) would ALSO trigger the extra
+// injection. That's intentional: the resulting KindCommit-NRDirect +
+// extra-KindNoValue sequence is still NOT in A1-A8 and still fires
+// Rule 6a (per spec §Slashable Phase-2 equivocation: "KindCommit-NR-
+// direct followed by any other emission"). Under CorrectnessProfile
+// at n=4 healthy, the byz lands on KindValue path → cross-kind
+// downgrade case is exercised; under stress sweeps with byz on
+// NRDirect, the cross-kind post-NRDirect case fires instead. Both
+// produce Rule 6a evidence.
+type byzPhase2DowngradeValueNoValue struct {
+	honestDefaults
+	ByzSet byzSet
+}
+
+func (b byzPhase2DowngradeValueNoValue) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ int, honestV twoab.Value) []broadcastPlan {
+	return []broadcastPlan{{V: honestV}}
+}
+
+func (b byzPhase2DowngradeValueNoValue) BuildExtraNoValueMsgs(s *sim, op twoab.OperatorID, nv *twoab.NoValueMsg) []*twoab.NoValueMsg {
+	// Cross-kind injection: fires when natural Phase-2a kind was ValueMsg
+	// (nv is nil — that's the trigger condition). When the natural kind
+	// was already NoValueMsg, the byz is honest-on-this-emission and we
+	// return nil — the byz can't "double up" by emitting two KindNoValues
+	// since the natural one already covers that.
+	if nv != nil || !b.ByzSet.Contains(op) {
+		return nil
+	}
+	entries := make([]twoab.LayerEntry, 0, s.cfg.K-1)
+	for k := 1; k < s.cfg.K; k++ {
+		entries = append(entries, twoab.LayerEntry{Layer: k, Kind: twoab.LayerEntryEmpty})
+	}
+	return []*twoab.NoValueMsg{{
+		ClusterID:    s.cfgTwoab.ClusterID,
+		OperatorID:   op,
+		Height:       s.cfgTwoab.Height,
+		LayerEntries: entries,
+	}}
+}
+
 // ---- byzLateLeaderBroadcast --------------------------------------------
 
 // Byz leader broadcasts so late that first-observation at honest receivers
@@ -710,6 +878,24 @@ func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, 
 	return []broadcastPlan{{V: honestV}}
 }
 
+// OverrideOwnPhase1Delay returns the byz leader's Phase-1 bundle dispatch
+// delay relative to its scheduled fetch instant. The 6·BTT magnitude is
+// inherited from the bare-OBFT adapter's analogous helper so cross-
+// protocol comparison at the same byz parameter holds. In 2abOBFT
+// terms:
+//   - At BTT=200ms with the default RelayCutoff=4s, t0Broadcast is around
+//     3.5s ≈ 17·BTT; Phase-2a fire is at ~3.6s ≈ 18·BTT. A 6·BTT (1.2s)
+//     delay applied to the leader's scheduled broadcast pushes first
+//     observation at every honest receiver well past 18·BTT, even after
+//     subtracting per-hop network delay savings.
+//   - Concretely: byz scheduled to broadcast at t0Broadcast → actual
+//     broadcast at t0Broadcast + 6·BTT → first arrival at receivers ≈
+//     t0Broadcast + 6·BTT + 1·BTT (network) = t0Broadcast + 7·BTT,
+//     which lands past Phase 2a fire-time.
+//   - Result: every honest op fires KindNoValue at Phase 2a (no V
+//     retained at fire-time). The subsequent A1 upgrade path fires only
+//     if the bundle arrives in time relative to the cluster's trigger
+//     evaluation.
 func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader twoab.OperatorID) time.Duration {
 	if !b.ByzSet.Contains(leader) {
 		return 0
@@ -747,7 +933,11 @@ func (b byzAggregatorBypass) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ i
 }
 
 func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
-	if !b.ByzSet.Contains(op) {
+	// Nil-guard: events.go calls BuildExtraCommits universally — c is nil
+	// when the natural Phase-2a kind was ValueMsg/NoValueMsg. The forged-
+	// identity bypass only makes sense paired with a natural σ-direction
+	// Commit.
+	if c == nil || !b.ByzSet.Contains(op) {
 		return nil
 	}
 	if c.Side != twoab.CommitSideSigned {

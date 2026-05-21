@@ -284,9 +284,64 @@ func TestObserveCommit_IdenticalRebroadcastIsSilentDedup(t *testing.T) {
 
 // TestObserveCommit_KindCommitNRPopulatesNoValuePool: per inference rules,
 // KindCommit-NR observation adds the op to noValuePool[L_0] AND to
-// nrTagPool[L_0] (the partial is extracted). This is the NR-side
-// counterpart to TestObserveCommit_KindCommitSignedInfersKindValue.
+// nrTagPool[L_0] (the partial is extracted), gated by NR partial
+// verification. This is the NR-side counterpart to
+// TestObserveCommit_KindCommitSignedInfersKindValue.
 func TestObserveCommit_KindCommitNRPopulatesNoValuePool(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// Build a properly-signed NR partial on nr_tag_0 from op 1's tagSigner.
+	tag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	op1TagSigner := NewStubSigner(s.cfg.QV(), s.pubShares[OperatorID(1)])
+	sig, err := op1TagSigner.SignPartial(tag)
+	require.NoError(t, err)
+	c := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Side:       CommitSideNR,
+		L0Partial:  sig,
+	}
+	require.NoError(t, op2.ObserveCommit(c))
+	require.True(t, op2.noValuePool[0][OperatorID(1)],
+		"KindCommit-NR observation should add op to noValuePool[L_0]")
+	require.NotNil(t, op2.nrTagPool[0][OperatorID(1)],
+		"KindCommit-NR observation should add op to nrTagPool[L_0]")
+}
+
+// TestProcessObservedLayerEntries_GarbageNRPlaintextIsSkipped: an L_k>0
+// NRPlaintext entry with a payload that fails nr_tag_k verification is
+// skipped — the byz contribution doesn't poison nrTagPool[k] or
+// noValuePool[k]. Companion to the L_0 NR partial verification: closes
+// the pool-poisoning vector at deeper layers.
+func TestProcessObservedLayerEntries_GarbageNRPlaintextIsSkipped(t *testing.T) {
+	// K=3: L_1 is a middle layer where NRPlaintext is structurally valid
+	// (NRPlaintext at the deepest layer L_{K-1} is rejected by message
+	// validation, so we need K ≥ 3 to exercise the verification gate).
+	s := newSimWithK(t, 4, 3)
+	op2 := s.instances[OperatorID(2)]
+	nv := &NoValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		LayerEntries: []LayerEntry{
+			{Layer: 1, Kind: LayerEntryNRPlaintext, Payload: []byte("garbage")},
+			{Layer: 2, Kind: LayerEntryEmpty},
+		},
+	}
+	require.NoError(t, op2.ObserveNoValueMsg(nv))
+	require.False(t, op2.noValuePool[1][OperatorID(1)],
+		"garbage NRPlaintext at L_1 should be skipped — no noValuePool entry")
+	require.Nil(t, op2.nrTagPool[1][OperatorID(1)],
+		"garbage NRPlaintext at L_1 should not poison nrTagPool")
+}
+
+// TestObserveCommit_KindCommitNRWithGarbagePartialIsRejected: byz crafted
+// NR partial that doesn't verify against op's IBE share → ObserveCommit
+// silently skips the pool update (the L_0 claim has no valid signature
+// backing it). Closes the pool-poisoning vector for nr_tag_0 partials
+// that the previous unconditional addToNrTagPool allowed.
+func TestObserveCommit_KindCommitNRWithGarbagePartialIsRejected(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
 	c := &Commit{
@@ -294,13 +349,13 @@ func TestObserveCommit_KindCommitNRPopulatesNoValuePool(t *testing.T) {
 		OperatorID: 1,
 		Height:     s.cfg.Height,
 		Side:       CommitSideNR,
-		L0Partial:  Signature{0x01, 0x02},
+		L0Partial:  Signature("garbage-not-a-valid-nr-partial"),
 	}
 	require.NoError(t, op2.ObserveCommit(c))
-	require.True(t, op2.noValuePool[0][OperatorID(1)],
-		"KindCommit-NR observation should add op to noValuePool[L_0]")
-	require.NotNil(t, op2.nrTagPool[0][OperatorID(1)],
-		"KindCommit-NR observation should add op to nrTagPool[L_0]")
+	require.False(t, op2.noValuePool[0][OperatorID(1)],
+		"garbage NR partial should be rejected; op should not be in noValuePool")
+	require.Nil(t, op2.nrTagPool[0][OperatorID(1)],
+		"garbage NR partial should not poison nrTagPool")
 }
 
 // TestEKM_TransitionToSigma_RejectsCrossV: at the same layer, a second
@@ -339,6 +394,45 @@ func TestEKM_TransitionToNR_RejectsAfterSigmaLock(t *testing.T) {
 	require.NoError(t, inst.transitionToSigma(0, Value("V_a")))
 	err := inst.transitionToNR(0)
 	require.ErrorIs(t, err, ErrSigmaLocked)
+}
+
+// TestCascadeErrors_HappyPathIsEmpty: in the typical no-error flow, no
+// errors accumulate in cascadeErrors. Sanity check that the
+// ErrUpgradeNotAvailable sentinel is correctly filtered out (it's the
+// preconditions-not-met no-op, not a genuine failure).
+func TestCascadeErrors_HappyPathIsEmpty(t *testing.T) {
+	s := newSim(t, 4)
+	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
+	s.applyHostValidityAll(0, Value("V0"), true)
+	s.firePhase2aAll()
+	for _, op := range s.allOperators() {
+		require.Empty(t, s.instances[op].CascadeErrors(),
+			"op %d: healthy path should produce no cascade errors", op)
+	}
+}
+
+// TestCascadeErrors_NoValueFlowIsEmpty exercises the ErrUpgradeNotAvailable
+// filter path explicitly. With no V delivered to anyone, every op fires
+// KindNoValue at Phase 2a. The cascade then attempts
+// MaybeBuildAndBroadcastUpgrade for each op — which returns
+// ErrUpgradeNotAvailable (no V_0 retained at L_0). The filter MUST
+// recognize this sentinel and skip accumulating it; if the filter
+// regressed to always-record, this test would flag a non-empty
+// CascadeErrors despite no genuine signer failure occurring.
+func TestCascadeErrors_NoValueFlowIsEmpty(t *testing.T) {
+	s := newSim(t, 4)
+	// Do NOT call deliverPhase1 → no V retained at L_0 anywhere.
+	// host-validity not applied either → ops can't σ-eligibility-fire
+	// even if V arrived. Phase-2a fire produces KindNoValue for all
+	// (no V_local).
+	s.firePhase2aAll()
+	for _, op := range s.allOperators() {
+		require.Empty(t, s.instances[op].CascadeErrors(),
+			"op %d: NoValue path with no signer failure should produce no cascade errors (ErrUpgradeNotAvailable must be filtered)", op)
+		_, hadNV := s.instances[op].OwnNoValueMsg()
+		require.True(t, hadNV,
+			"op %d: should have fired KindNoValue at Phase 2a (sanity)", op)
+	}
 }
 
 // TestEKM_LockingIsPerLayer: EKM locks at one layer don't affect other

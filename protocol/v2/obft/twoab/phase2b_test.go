@@ -225,6 +225,56 @@ func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) 
 	require.True(t, foundRule6a)
 }
 
+// TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a:
+// covers the three-message byz sequence
+// `KindNoValue → KindCommit-Signed(V_b) → KindValue(V_a≠V_b)` where the
+// upgrade arrives in-order (after both prior messages were observed).
+// The hadNoValue branch handles A1 upgrade processing; an additional
+// nested check fires Rule 6a when the upgrade's V_a disagrees with the
+// prior Commit-Signed's V_b.
+func TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// Prior KindNoValue from op 1.
+	nv := &NoValueMsg{
+		ClusterID:    s.cfg.ClusterID,
+		OperatorID:   1,
+		Height:       s.cfg.Height,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, op2.ObserveNoValueMsg(nv))
+	// Prior KindCommit-Signed on V_b from same op (unauthorized
+	// "post-NoValue Commit-Signed without upgrade KindValue" — the
+	// inference layer silently accepts this since A6 might be in flight).
+	cSigned := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Side:       CommitSideSigned,
+		L0Value:    Value("V_b"),
+		L0Partial:  Signature{0x01}, // unverified — Rule 5 will fire but doesn't block pool inference
+	}
+	require.NoError(t, op2.ObserveCommit(cSigned))
+	// Now the "upgrade" KindValue arrives with V_a ≠ V_b — slashable
+	// triple-message cross-V sequence.
+	vm := &ValueMsg{
+		ClusterID:    s.cfg.ClusterID,
+		OperatorID:   1,
+		Height:       s.cfg.Height,
+		V:            Value("V_a"),
+		ValueRoot:    ValueRoot(Value("V_a")),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, op2.ObserveValueMsg(vm))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a, "three-message NoValue → CommitSigned(V_b) → Value(V_a) should fire Rule 6a")
+}
+
 // TestMaybeBuildAndBroadcastCommit_EquivocationPriorityOverSigmaEligibility:
 // when equivocation AND σ-eligibility are both eligible to fire on the
 // same state delta, equivocation wins per spec §Trigger rules priority

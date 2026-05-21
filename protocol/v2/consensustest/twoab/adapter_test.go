@@ -237,3 +237,55 @@ func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 }
 
 func clusterName(n int) string { return fmt.Sprintf("n=%d", n) }
+
+// TestAdapter_Phase2EquivocateCrossV_FiresRule6a confirms that the new
+// Phase-2 cross-V equivocation byz pattern actually drives the receiver-
+// side Rule-6a detection path at the adapter / cluster level (not just at
+// the unit-level Instance test). Verifies:
+//   - Cluster decides (honest n-1 ops contribute to σ-quorum on V via
+//     leader's broadcast and natural Phase-2a KindValue).
+//   - At least one honest op records a Phase2Equivocation evidence fire
+//     against the byz operator. Order tolerance: each honest receiver
+//     might or might not see both ValueMsgs before its own decision (the
+//     extra is scheduled with the same delay model as the natural one;
+//     receivers fire Rule 6a on whichever arrives second).
+func TestAdapter_Phase2EquivocateCrossV_FiresRule6a(t *testing.T) {
+	profile := ct.CorrectnessProfile(200 * time.Millisecond)
+	cfg := profile.BaseConfig
+	cfg.Byz = ct.ByzPattern{
+		Kind:         ct.ByzPhase2EquivocateCrossV,
+		ByzOperators: []ct.OperatorID{2},
+	}
+	out, err := twoabadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "honest majority should still decide at L_0")
+	var totalRule6a int
+	for _, oo := range out.PerOp {
+		totalRule6a += oo.EvidenceByRule[twoabadapter.RulePhase2Equivocation]
+	}
+	require.Greater(t, totalRule6a, 0,
+		"at least one honest op should detect Rule 6a (Phase-2 equivocation) on the byz's cross-V double-emission")
+}
+
+// TestAdapter_Phase2DowngradeValueNoValue_FiresRule6a confirms the cross-
+// KIND Phase-2 equivocation byz pattern actually drives the receiver-
+// side Rule-6a detection path. Companion to the cross-V test; exercises
+// the new universal-BuildExtra-hook path that allows the byz to inject
+// extras of a kind different from the natural Phase-2a emission.
+func TestAdapter_Phase2DowngradeValueNoValue_FiresRule6a(t *testing.T) {
+	profile := ct.CorrectnessProfile(200 * time.Millisecond)
+	cfg := profile.BaseConfig
+	cfg.Byz = ct.ByzPattern{
+		Kind:         ct.ByzPhase2DowngradeValueNoValue,
+		ByzOperators: []ct.OperatorID{2},
+	}
+	out, err := twoabadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "honest majority should still decide at L_0")
+	var totalRule6a int
+	for _, oo := range out.PerOp {
+		totalRule6a += oo.EvidenceByRule[twoabadapter.RulePhase2Equivocation]
+	}
+	require.Greater(t, totalRule6a, 0,
+		"at least one honest op should detect Rule 6a (Phase-2 equivocation) on the byz's cross-kind downgrade sequence")
+}

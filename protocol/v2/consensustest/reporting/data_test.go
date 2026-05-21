@@ -429,4 +429,3 @@ func TestWriteReportData_PartialRegen(t *testing.T) {
 	require.Equal(t, float64(5), qbftCell["iterations"],
 		"QBFT cells should carry run 2's iters=5 (replaced, not preserved)")
 }
-

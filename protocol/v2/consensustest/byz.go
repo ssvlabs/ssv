@@ -102,6 +102,28 @@ const (
 	ByzWitnessForgery // (negative) byz forges Witnesses[] entries crediting honest leaders with σ on V_prime at deeper layers; sibling to ByzAggregatorBypass exercising the recordCommitToAggregator Witnesses path. do NOT add to Catalog
 
 	ByzDelayedCommit // byz operator emits Phase-2 KindCommit on time per protocol state but with extra dispatch delay so arrival lands past RoundEndOffset. Exercises OBFT.md §Phase 3 "Re-running on late KindCommit arrivals" recovery path (always-on in the framework). Per-op behavior is otherwise honest (Phase-1 broadcasts on time, host-validates V normally).
+
+	// 2abOBFT-specific: Phase-2 equivocation (Rule 6a) at the receiver-side.
+	// A non-leader byz operator emits its natural Phase-2a KindValue on V
+	// PLUS an extra KindValue on a distinct V_b ≠ V. Receivers fire Rule 6a
+	// (Phase2Equivocation) on the cross-V second emission; the cluster's
+	// honest majority still reaches σ-quorum on V at L_0. Other protocols
+	// have no analog (OBFT has no Phase-2a coordination layer; QBFT's
+	// PREPARE pool runs a different equivocation-detection scheme; PSigs
+	// has no leader broadcast). All non-twoab adapters return
+	// ErrNotApplicable for this kind.
+	ByzPhase2EquivocateCrossV
+
+	// 2abOBFT-specific: Phase-2 "downgrade" equivocation (Rule 6a). A byz
+	// operator emits its natural KindValue on V at Phase 2a AND ALSO emits
+	// a KindNoValue from the same op. The sequence "KindValue → KindNoValue"
+	// is not in the authorized A1-A8 set per spec — downgrade is unauthorized
+	// (only the reverse direction, KindNoValue → KindValue upgrade, is A1).
+	// Receivers fire Rule 6a on the cross-kind second observation. Cluster
+	// still decides via honest majority at L_0. Exercises the cross-kind
+	// BuildExtra hook path in the twoab adapter; other protocols have no
+	// analog. All non-twoab adapters return ErrNotApplicable.
+	ByzPhase2DowngradeValueNoValue
 )
 
 // String returns a stable human-readable name for telemetry.
@@ -151,6 +173,10 @@ func (k ByzKind) String() string {
 		return "WitnessForgery"
 	case ByzDelayedCommit:
 		return "DelayedCommit"
+	case ByzPhase2EquivocateCrossV:
+		return "Phase2EquivocateCrossV"
+	case ByzPhase2DowngradeValueNoValue:
+		return "Phase2DowngradeValueNoValue"
 	default:
 		return "Unknown"
 	}

@@ -174,6 +174,11 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 		return byzWitnessForgery{ByzSet: bs}, nil
 	case ct.ByzDelayedCommit:
 		return byzDelayedCommit{ByzSet: bs}, nil
+	case ct.ByzPhase2EquivocateCrossV, ct.ByzPhase2DowngradeValueNoValue:
+		// 2abOBFT-specific: bare OBFT has no Phase-2a coordination layer
+		// (KindValue / KindNoValue) and therefore no Rule-6a-equivalent
+		// Phase-2-equivocation detection path.
+		return nil, ct.ErrNotApplicable
 	case ct.ByzGarbageMessages, ct.ByzExceedsRateLimit, ct.ByzOfflineDoubleVAttempt:
 		// Reserved enum values — covered at other layers, not via the
 		// scenario catalog. See ByzKind enum comments in
