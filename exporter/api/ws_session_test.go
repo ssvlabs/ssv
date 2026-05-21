@@ -14,7 +14,11 @@ import (
 // TestWSSession_Send_FullQueue asserts the broadcasted.Send contract for
 // *wsSession: Send must not block, even when called past the queue
 // capacity, and on overflow it cancels the session's ctx (the teardown
-// signal consumed by WriteLoop / ReadLoop / handleStream defers).
+// signal consumed by WriteLoop / ReadLoop / handleStream defers). It
+// also pins the post-cancel-no-op behaviour: once the session is
+// torn down, further Sends must not enqueue, even if buffer slots are
+// available — otherwise WriteLoop's randomized select could drain a
+// few more messages to the wire before exiting.
 func TestWSSession_Send_FullQueue(t *testing.T) {
 	ws := dialTestWebsocket(t)
 	sess := newWSSession(t.Context(), ws, "test", 0, false)
@@ -24,6 +28,12 @@ func TestWSSession_Send_FullQueue(t *testing.T) {
 		sess.Send([]byte(fmt.Sprintf("test-%d", i)))
 	}
 	require.Error(t, sess.ctx.Err(), "ctx should be canceled after overflow")
+
+	// Drain a slot so the buffer has room, then verify a post-cancel
+	// Send refuses to enqueue.
+	<-sess.send
+	sess.Send([]byte("post-cancel"))
+	require.Equal(t, chanSize-1, len(sess.send), "Send after cancel must not enqueue")
 }
 
 // dialTestWebsocket spins up an httptest server that upgrades and then idles,

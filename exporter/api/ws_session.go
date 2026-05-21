@@ -93,11 +93,23 @@ func (s *wsSession) Close() {
 	s.cancelCtx()
 }
 
-// Send queues msg for the WriteLoop. Non-blocking: if the queue is full
-// the client cannot keep up, so we tear the session down via Close — a
-// silent gap in this stream is undetectable client-side, so reconnecting
-// (with a fresh, consistent view) is the kindest outcome.
+// Send queues msg for the WriteLoop. Non-blocking. Three outcomes:
+//   - session already canceled: drop msg, no-op. We've decided to drop
+//     this client; further queueing would just be drained-and-delivered
+//     before WriteLoop noticed and exited (Go's select is randomized,
+//     not priority-ordered).
+//   - queue has room: enqueue.
+//   - queue full: tear the session down via Close. A silent gap in
+//     this stream is undetectable client-side, so reconnecting (with a
+//     fresh, consistent view) is the kindest outcome.
+//
+// The ctx-check is TOCTOU-racy with concurrent cancel, but the window
+// is narrow — at worst a handful of messages queue right after cancel,
+// versus the unbounded draining the broadcaster would otherwise feed.
 func (s *wsSession) Send(msg []byte) {
+	if s.ctx.Err() != nil {
+		return
+	}
 	select {
 	case s.send <- msg:
 	default:
@@ -109,6 +121,12 @@ func (s *wsSession) Send(msg []byte) {
 // on exit via s.Close, propagating ctx-cancel so ReadLoop notices on
 // the next scheduling (ws stays open until wsServer's wrappedHandler
 // closes it, which then unblocks ReadLoop's ReadMessage).
+//
+// The pre-check on ctx at the top of each iteration is load-bearing:
+// Go's select picks randomly among ready cases, so without it, queued
+// messages would still drain to the wire after Send-overflow canceled
+// the session — defeating the prompt-shutdown intent of dropping a
+// slow client.
 func (s *wsSession) WriteLoop(logger *zap.Logger) {
 	defer s.Close()
 
@@ -122,29 +140,36 @@ func (s *wsSession) WriteLoop(logger *zap.Logger) {
 		}()
 	}
 
+drain:
 	for {
+		if ctx.Err() != nil {
+			break drain
+		}
 		select {
 		case <-ctx.Done():
-			s.writeLock.Lock()
-			logger.Debug("context done, sending close message")
-			// Best-effort graceful close-message; if ws is already
-			// closed (e.g. wrappedHandler beat us to it on shutdown),
-			// failure here is expected and not actionable.
-			err := s.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(s.writeTimeout))
-			s.writeLock.Unlock()
-			if err != nil {
-				logger.Debug("could not send close message", zap.Error(err))
-			}
-			return
+			break drain
 		case message := <-s.send:
 			s.writeLock.Lock()
 			_, err := s.sendMsg(message)
 			s.writeLock.Unlock()
 			if err != nil {
+				// Write error: bail out without the graceful close
+				// frame — the next write would just fail too.
 				logger.Warn("failed to send message", zap.Error(err))
 				return
 			}
 		}
+	}
+
+	s.writeLock.Lock()
+	logger.Debug("context done, sending close message")
+	// Best-effort graceful close-message; if ws is already closed
+	// (e.g. wrappedHandler beat us to it on shutdown), failure here
+	// is expected and not actionable.
+	err := s.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(s.writeTimeout))
+	s.writeLock.Unlock()
+	if err != nil {
+		logger.Debug("could not send close message", zap.Error(err))
 	}
 }
 
