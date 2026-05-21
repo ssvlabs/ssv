@@ -42,18 +42,13 @@ import (
 // Upgrade-first ensures the A1 sequence is preserved (A6: KindNoValue →
 // KindValue → KindCommit-Signed) when a NoValueMsg-path op observes
 // cluster σ-eligibility while simultaneously receiving V_0 via reflood.
+// Each helper is independently idempotent: returns early when conditions
+// aren't met or when the relevant emission has already fired.
 //
 // afterStateDelta is idempotent and safe to call repeatedly. After the
 // op has emitted its single Commit, subsequent calls are no-ops.
 func (i *Instance) afterStateDelta() {
-	// Step 1: upgrade-first.
-	if _, err := i.MaybeBuildAndBroadcastUpgrade(); err == nil {
-		// Upgrade fired — pools were updated in the upgrade build path.
-		// Fall through to step 2 (the upgrade may now have unlocked
-		// σ-eligibility for the L_0 commit decision).
-		_ = err
-	}
-	// Step 2: commit trigger evaluation.
+	_, _ = i.MaybeBuildAndBroadcastUpgrade()
 	_, _ = i.MaybeBuildAndBroadcastCommit()
 }
 

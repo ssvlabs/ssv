@@ -160,6 +160,11 @@ func TestObserveCommit_CrossSideFiresRule1(t *testing.T) {
 }
 
 // TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a.
+//
+// Per A8 (KindCommit-NRDirect is sole-emission per slot), any other
+// Phase-2 emission from the same op is slashable. This holds regardless
+// of gossipsub arrival order — the receiver detects the unauthorized
+// pair on whichever message arrives second.
 func TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
@@ -178,6 +183,67 @@ func TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a(t *testing.T) {
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a)
+}
+
+// TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a covers
+// the gossipsub-reorder companion to PostNRDirect: KindValue observed
+// FIRST, then NRDirect from the same op. Same slashable sequence (A8
+// violation), different observation order. The detection lives in
+// ObserveCommit's `Side==NRDirect && (hadValue != nil || hadNoValue !=
+// nil)` branch.
+func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// KindValue first.
+	vm := &ValueMsg{
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, op2.ObserveValueMsg(vm))
+	// Then NRDirect from same op — slashable per A8.
+	cNRDirect := &Commit{
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		Side:         CommitSideNRDirect,
+		L0Partial:    Signature{0x01},
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, op2.ObserveCommit(cNRDirect))
+	var foundRule6a bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidencePhase2Equivocation {
+			foundRule6a = true
+		}
+	}
+	require.True(t, foundRule6a)
+}
+
+// TestObserveCommit_PreNRDirectNoValueMsgThenNRDirectFiresRule6a is the
+// NoValueMsg variant of the above — KindNoValue first, then NRDirect.
+func TestObserveCommit_PreNRDirectNoValueMsgThenNRDirectFiresRule6a(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// KindNoValue first.
+	nv := &NoValueMsg{
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, op2.ObserveNoValueMsg(nv))
+	// Then NRDirect from same op — slashable per A8.
+	cNRDirect := &Commit{
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		Side:         CommitSideNRDirect,
+		L0Partial:    Signature{0x01},
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, op2.ObserveCommit(cNRDirect))
 	var foundRule6a bool
 	for _, e := range op2.Evidence() {
 		if e.Rule == EvidencePhase2Equivocation {

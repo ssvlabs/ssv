@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
@@ -183,24 +182,13 @@ type Instance struct {
 	ended bool
 }
 
-// retainedBundle wraps a Phase-1 bundle with the metadata Phase E needs
-// to track retention semantics. In 2abOBFT there is no auth-only vs
-// regular distinction — the AuthOnly field is dropped relative to the
-// previous design.
+// retainedBundle wraps a Phase-1 bundle. In 2abOBFT there is no
+// auth-only vs regular retention distinction — all in-slot bundles
+// are retained equivalently (no T_commit hard wall).
 type retainedBundle struct {
 	// Bundle is a deep copy of the retained bundle (defensive against
 	// caller-owned slice mutation post-Observe).
 	Bundle *Phase1Bundle
-
-	// RetentionEstablishedAt is the offset (from slot_start) at which
-	// this retention entry took its current status:
-	//
-	//   - First observation of a previously-unseen V → set to that
-	//     observation's offset.
-	//   - Identical re-broadcast (silent dedup) → NOT updated.
-	//
-	// Useful for tests + diagnostics.
-	RetentionEstablishedAt time.Duration
 }
 
 // NewInstance constructs a 2abOBFT Instance. Validates the config and

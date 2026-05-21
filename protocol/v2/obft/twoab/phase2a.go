@@ -505,11 +505,16 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	i.peerValueMsg[op] = deepCopyValueMsg(v)
 	if hadNoValue {
 		// A1 upgrade: move op from noValuePool[0] to valuePool[0].
+		// Skip processObservedLayerEntries — per spec §Phase 2a-late
+		// upgrade, the L_k>0 entries are identical to those in the
+		// prior NoValueMsg (already processed when it was observed).
 		i.removeFromNoValuePool(layer, op)
+		i.addToValuePool(layer, v.ValueRoot, op)
+	} else {
+		i.addToValuePool(layer, v.ValueRoot, op)
+		// L_k>0 entries contribute to deeper-layer pools per inference rules.
+		i.processObservedLayerEntries(op, v.LayerEntries)
 	}
-	i.addToValuePool(layer, v.ValueRoot, op)
-	// L_k>0 entries contribute to deeper-layer pools per inference rules.
-	i.processObservedLayerEntries(op, v.LayerEntries)
 	i.afterStateDelta()
 	return nil
 }
