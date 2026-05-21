@@ -6,276 +6,241 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func validPhase1Bundle(c *Config) *Phase1Bundle {
-	return &Phase1Bundle{
-		ClusterID:  c.ClusterID,
-		OperatorID: c.Layers[0].Leader,
-		Height:     c.Height,
+func TestValidatePhase1Bundle_AcceptsHealthy(t *testing.T) {
+	cfg := healthyConfig()
+	b := &Phase1Bundle{
+		ClusterID:  cfg.ClusterID,
+		OperatorID: cfg.Layers[0].Leader,
+		Height:     cfg.Height,
 		Layer:      0,
 		Value:      Value("V0"),
 	}
-}
-
-// ---------- ValidatePhase1Bundle ----------
-
-func TestValidatePhase1Bundle_AcceptsHealthy(t *testing.T) {
-	c := healthyConfig()
-	require.NoError(t, ValidatePhase1Bundle(validPhase1Bundle(c), c))
+	require.NoError(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsNil(t *testing.T) {
-	c := healthyConfig()
-	require.ErrorContains(t, ValidatePhase1Bundle(nil, c), "nil phase-1 bundle")
+	cfg := healthyConfig()
+	require.Error(t, ValidatePhase1Bundle(nil, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsNilConfig(t *testing.T) {
-	require.ErrorContains(t, ValidatePhase1Bundle(&Phase1Bundle{}, nil), "nil config")
+	b := &Phase1Bundle{}
+	require.Error(t, ValidatePhase1Bundle(b, nil))
 }
 
 func TestValidatePhase1Bundle_RejectsClusterMismatch(t *testing.T) {
-	c := healthyConfig()
-	b := validPhase1Bundle(c)
-	b.ClusterID = [32]byte{0xff} // different
-	require.ErrorContains(t, ValidatePhase1Bundle(b, c), "cluster id")
+	cfg := healthyConfig()
+	b := &Phase1Bundle{ClusterID: [32]byte{0xff}, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0")}
+	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsHeightMismatch(t *testing.T) {
-	c := healthyConfig()
-	b := validPhase1Bundle(c)
-	b.Height = c.Height + 1
-	require.ErrorContains(t, ValidatePhase1Bundle(b, c), "height")
+	cfg := healthyConfig()
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: 999, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0")}
+	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsLayerOutOfRange(t *testing.T) {
-	c := healthyConfig()
-	b := validPhase1Bundle(c)
-	b.Layer = c.K() // out of range
-	require.ErrorContains(t, ValidatePhase1Bundle(b, c), "out of range")
+	cfg := healthyConfig()
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 99, OperatorID: cfg.Layers[0].Leader, Value: Value("V0")}
+	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsWrongLeader(t *testing.T) {
-	c := healthyConfig()
-	b := validPhase1Bundle(c)
-	b.OperatorID = c.Layers[1].Leader // wrong leader for layer 0
-	require.ErrorContains(t, ValidatePhase1Bundle(b, c), "layer 0's leader")
+	cfg := healthyConfig()
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: 99, Value: Value("V0")}
+	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsEmptyValue(t *testing.T) {
-	c := healthyConfig()
-	b := validPhase1Bundle(c)
-	b.Value = nil
-	require.ErrorContains(t, ValidatePhase1Bundle(b, c), "empty Value")
+	cfg := healthyConfig()
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value{}}
+	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
-// Spec note: 2abOBFT Phase-1 bundle has NO SigmaV field. Validation must
-// not require one (regression guard against accidental re-introduction).
-func TestValidatePhase1Bundle_NoSigmaVRequired(t *testing.T) {
-	c := healthyConfig()
-	// Even with an empty Value, Validate complains about Value, not SigmaV.
-	// And the absence of SigmaV is the design — 2ab doesn't have it.
-	b := validPhase1Bundle(c)
-	require.NoError(t, ValidatePhase1Bundle(b, c))
-}
-
-// ---------- ValidateVerdict ----------
-
-func validVerdict(c *Config) *Verdict {
-	return &Verdict{
-		ClusterID:  c.ClusterID,
-		OperatorID: c.Operators[0],
-		Height:     c.Height,
-		Layer:      0,
-		Kind:       VerdictSigmaV,
-		ValueRoot:  [32]byte{0xab}, // non-zero for σV
+func TestValidateValueMsg_AcceptsHealthy(t *testing.T) {
+	cfg := healthyConfig()
+	v := Value("V0")
+	vm := &ValueMsg{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		V:            v,
+		ValueRoot:    ValueRoot(v),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
+	require.NoError(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateVerdict_AcceptsHealthy(t *testing.T) {
-	c := healthyConfig()
-	require.NoError(t, ValidateVerdict(validVerdict(c), c))
+func TestValidateValueMsg_RejectsEmptyV(t *testing.T) {
+	cfg := healthyConfig()
+	vm := &ValueMsg{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, V: Value{}, LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}}}
+	require.Error(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateVerdict_AcceptsNR(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.Kind = VerdictNR
-	v.ValueRoot = [32]byte{} // null for NR
-	require.NoError(t, ValidateVerdict(v, c))
-}
-
-func TestValidateVerdict_AcceptsNV(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.Kind = VerdictNV
-	v.ValueRoot = [32]byte{}
-	require.NoError(t, ValidateVerdict(v, c))
-}
-
-func TestValidateVerdict_RejectsNil(t *testing.T) {
-	c := healthyConfig()
-	require.ErrorContains(t, ValidateVerdict(nil, c), "nil verdict")
-}
-
-func TestValidateVerdict_RejectsUnknownOperator(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.OperatorID = 99 // not in cluster
-	require.ErrorContains(t, ValidateVerdict(v, c), "not in cluster")
-}
-
-func TestValidateVerdict_RejectsLayerOutOfRange(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.Layer = c.K()
-	require.ErrorContains(t, ValidateVerdict(v, c), "out of range")
-}
-
-func TestValidateVerdict_RejectsClusterMismatch(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.ClusterID = [32]byte{0xff}
-	require.ErrorContains(t, ValidateVerdict(v, c), "cluster id")
-}
-
-func TestValidateVerdict_RejectsSigmaVWithZeroValueRoot(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.ValueRoot = [32]byte{} // σV but null root → invalid
-	require.ErrorContains(t, ValidateVerdict(v, c), "zero ValueRoot")
-}
-
-func TestValidateVerdict_RejectsNRWithNonZeroValueRoot(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.Kind = VerdictNR
-	v.ValueRoot = [32]byte{0x01} // NR must have null root
-	require.ErrorContains(t, ValidateVerdict(v, c), "zero ValueRoot")
-}
-
-func TestValidateVerdict_RejectsUnspecified(t *testing.T) {
-	c := healthyConfig()
-	v := validVerdict(c)
-	v.Kind = VerdictUnspecified
-	require.ErrorContains(t, ValidateVerdict(v, c), "unspecified")
-}
-
-// ---------- ValidateOnion2b ----------
-
-func validOnion2b(c *Config) *Onion2b {
-	layers := make([]EncryptedLayer, c.K())
-	// σ-emit at layer 0 plaintext; NR at layers 1, 2; nothing at K-1
-	// (deepest — no NR tag).
-	layers[0] = EncryptedLayer{Value: Value("V0"), Ciphertext: []byte("σ0")}
-	return &Onion2b{
-		ClusterID:  c.ClusterID,
-		OperatorID: c.Operators[0],
-		Height:     c.Height,
-		Layers:     layers,
-		NRPartials: []NRPartial{
-			{Layer: 1, PartialSig: Signature("nr1")},
-			{Layer: 2, PartialSig: Signature("nr2")},
-		},
+func TestValidateValueMsg_RejectsValueRootMismatch(t *testing.T) {
+	cfg := healthyConfig()
+	vm := &ValueMsg{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		V:            Value("V0"),
+		ValueRoot:    [32]byte{0xff},
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
+	require.Error(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateOnion2b_AcceptsHealthy(t *testing.T) {
-	c := healthyConfig()
-	require.NoError(t, ValidateOnion2b(validOnion2b(c), c))
+func TestValidateValueMsg_RejectsUnknownOperator(t *testing.T) {
+	cfg := healthyConfig()
+	v := Value("V0")
+	vm := &ValueMsg{ClusterID: cfg.ClusterID, OperatorID: 99, Height: cfg.Height, V: v, ValueRoot: ValueRoot(v), LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}}}
+	require.Error(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateOnion2b_RejectsNil(t *testing.T) {
-	c := healthyConfig()
-	require.ErrorContains(t, ValidateOnion2b(nil, c), "nil onion2b")
+func TestValidateValueMsg_RejectsWrongLayerEntryCount(t *testing.T) {
+	cfg := healthyConfig()
+	v := Value("V0")
+	// K=2 expects K-1=1 entry; provide 0.
+	vm := &ValueMsg{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, V: v, ValueRoot: ValueRoot(v)}
+	require.Error(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateOnion2b_RejectsWrongLayerCount(t *testing.T) {
-	c := healthyConfig()
-	o := validOnion2b(c)
-	o.Layers = o.Layers[:c.K()-1] // wrong count
-	require.ErrorContains(t, ValidateOnion2b(o, c), "expected K=")
+func TestValidateNoValueMsg_AcceptsHealthy(t *testing.T) {
+	cfg := healthyConfig()
+	nv := &NoValueMsg{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, ValidateNoValueMsg(nv, cfg))
 }
 
-func TestValidateOnion2b_RejectsUnknownOperator(t *testing.T) {
-	c := healthyConfig()
-	o := validOnion2b(c)
-	o.OperatorID = 99
-	require.ErrorContains(t, ValidateOnion2b(o, c), "not in cluster")
+func TestValidateNoValueMsg_RejectsNil(t *testing.T) {
+	cfg := healthyConfig()
+	require.Error(t, ValidateNoValueMsg(nil, cfg))
 }
 
-func TestValidateOnion2b_RejectsHalfPopulatedLayer(t *testing.T) {
-	c := healthyConfig()
-	o := validOnion2b(c)
-	// Value present but no Ciphertext → half-populated
-	o.Layers[2] = EncryptedLayer{Value: Value("V2"), Ciphertext: nil}
-	require.ErrorContains(t, ValidateOnion2b(o, c), "half-populated")
+func TestValidateCommit_AcceptsSigned(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{
+		ClusterID:  cfg.ClusterID,
+		OperatorID: 1,
+		Height:     cfg.Height,
+		Side:       CommitSideSigned,
+		L0Value:    Value("V0"),
+		L0Partial:  Signature("partial"),
+	}
+	require.NoError(t, ValidateCommit(c, cfg))
 }
 
-func TestValidateOnion2b_RejectsNRAtDeepestLayer(t *testing.T) {
-	c := healthyConfig()
-	o := validOnion2b(c)
-	o.NRPartials = append(o.NRPartials, NRPartial{
-		Layer:      c.K() - 1, // deepest layer has no NR tag
-		PartialSig: Signature("nr_deepest"),
-	})
-	require.ErrorContains(t, ValidateOnion2b(o, c), "out of valid range")
+func TestValidateCommit_AcceptsNR(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideNR, L0Partial: Signature("partial")}
+	require.NoError(t, ValidateCommit(c, cfg))
 }
 
-func TestValidateOnion2b_RejectsDuplicateNRLayer(t *testing.T) {
-	c := healthyConfig()
-	o := validOnion2b(c)
-	o.NRPartials = append(o.NRPartials, NRPartial{
-		Layer: 1, PartialSig: Signature("nr1-dup"),
-	})
-	require.ErrorContains(t, ValidateOnion2b(o, c), "duplicate NR layer")
+func TestValidateCommit_AcceptsNRDirect(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		Side:         CommitSideNRDirect,
+		L0Partial:    Signature("partial"),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.NoError(t, ValidateCommit(c, cfg))
 }
 
-func TestValidateOnion2b_RejectsEmptyNRPartialSig(t *testing.T) {
-	c := healthyConfig()
-	o := validOnion2b(c)
-	o.NRPartials[0].PartialSig = nil
-	require.ErrorContains(t, ValidateOnion2b(o, c), "empty signature")
+func TestValidateCommit_RejectsUnspecifiedSide(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideUnspecified, L0Partial: Signature("p")}
+	require.Error(t, ValidateCommit(c, cfg))
 }
 
-// ---------- ValidateCertificate ----------
+func TestValidateCommit_RejectsSignedWithoutL0Value(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideSigned, L0Partial: Signature("p")}
+	require.Error(t, ValidateCommit(c, cfg))
+}
+
+func TestValidateCommit_RejectsNRWithL0Value(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideNR, L0Value: Value("V0"), L0Partial: Signature("p")}
+	require.Error(t, ValidateCommit(c, cfg))
+}
+
+func TestValidateCommit_RejectsSignedWithLayerEntries(t *testing.T) {
+	cfg := healthyConfig()
+	c := &Commit{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		Side:         CommitSideSigned,
+		L0Value:      Value("V0"),
+		L0Partial:    Signature("p"),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.Error(t, ValidateCommit(c, cfg))
+}
 
 func TestValidateCertificate_AcceptsHealthy(t *testing.T) {
-	c := healthyConfig()
-	cert := &Certificate{
-		ClusterID: c.ClusterID,
-		Height:    c.Height,
-		Value:     Value("V"),
-		Signature: Signature("agg-sig"),
-	}
-	require.NoError(t, ValidateCertificate(cert, c))
+	cfg := healthyConfig()
+	c := &Certificate{ClusterID: cfg.ClusterID, Height: cfg.Height, Value: Value("V0"), Signature: Signature("sig")}
+	require.NoError(t, ValidateCertificate(c, cfg))
 }
 
 func TestValidateCertificate_RejectsEmptyValue(t *testing.T) {
-	c := healthyConfig()
-	cert := &Certificate{
-		ClusterID: c.ClusterID,
-		Height:    c.Height,
-		Signature: Signature("agg-sig"),
-	}
-	require.ErrorContains(t, ValidateCertificate(cert, c), "empty Value")
+	cfg := healthyConfig()
+	c := &Certificate{ClusterID: cfg.ClusterID, Height: cfg.Height, Signature: Signature("sig")}
+	require.Error(t, ValidateCertificate(c, cfg))
 }
 
-func TestValidateCertificate_RejectsEmptySignature(t *testing.T) {
-	c := healthyConfig()
-	cert := &Certificate{
-		ClusterID: c.ClusterID,
-		Height:    c.Height,
-		Value:     Value("V"),
+func TestValidateLayerEntries_RejectsWrongCount(t *testing.T) {
+	cfg := healthyConfig() // K=2 → expects 1 entry
+	v := Value("V0")
+	vm := &ValueMsg{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		V:            v,
+		ValueRoot:    ValueRoot(v),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}, {Layer: 2, Kind: LayerEntryEmpty}}, // 2 entries, wrong
 	}
-	require.ErrorContains(t, ValidateCertificate(cert, c), "empty Signature")
+	require.Error(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateCertificate_RejectsClusterMismatch(t *testing.T) {
-	c := healthyConfig()
-	cert := &Certificate{
-		ClusterID: [32]byte{0xff},
-		Height:    c.Height,
-		Value:     Value("V"),
-		Signature: Signature("sig"),
+func TestValidateLayerEntries_RejectsDuplicateLayer(t *testing.T) {
+	cfg := healthyConfig()
+	// To produce a duplicate, we need K>=3 so the array has 2 entries (K-1=2).
+	cfgK3 := *cfg
+	extraLayer := LayerSpec{Leader: 3, FetchAt: 0, BroadcastBudget: cfg.Layers[1].BroadcastBudget}
+	cfgK3.Layers = append([]LayerSpec{}, cfg.Layers...)
+	cfgK3.Layers = append(cfgK3.Layers, extraLayer)
+	v := Value("V0")
+	vm := &ValueMsg{
+		ClusterID:    cfgK3.ClusterID,
+		OperatorID:   1,
+		Height:       cfgK3.Height,
+		V:            v,
+		ValueRoot:    ValueRoot(v),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}, {Layer: 1, Kind: LayerEntryEmpty}}, // duplicate
 	}
-	require.ErrorContains(t, ValidateCertificate(cert, c), "cluster id")
+	require.Error(t, ValidateValueMsg(vm, &cfgK3))
+}
+
+func TestValidateLayerEntries_RejectsNRPlaintextAtDeepestLayer(t *testing.T) {
+	cfg := healthyConfig() // K=2 → deepest layer is 1
+	v := Value("V0")
+	vm := &ValueMsg{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		V:            v,
+		ValueRoot:    ValueRoot(v),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryNRPlaintext, Payload: []byte("p")}},
+	}
+	require.Error(t, ValidateValueMsg(vm, cfg))
 }

@@ -23,7 +23,7 @@ import (
 // TestStress is the stress-tier entry point per the catalog-split plan.
 // It runs DefaultSweeps over every catalog scenario opted into
 // ModeStress for the registered protocol families (OBFT family incl.
-// OBFT-RD0 / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFTx2 / x3,
+// OBFT-RD0 / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFT-tight / 2abOBFT-lean,
 // QBFT family incl. QBFT-SSV, and PSigs) and writes a `data.js` file
 // consumed by the static UI in `stresstest-report/` (index.html + app.js
 // + styles.css, all tracked in git). Refreshing index.html in a browser
@@ -311,8 +311,15 @@ func TestStress(t *testing.T) {
 		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
 		obftadapter.Protocol{VariantName: "OBFTx3", BTTMultiplier: 3},
 		twoabadapter.Protocol{},
-		twoabadapter.Protocol{VariantName: "2abOBFTx2", BTTMultiplier: 2},
-		twoabadapter.Protocol{VariantName: "2abOBFTx3", BTTMultiplier: 3},
+		// 2abOBFT-tight / 2abOBFT-lean exercise the SafetyBuffer knob
+		// specific to 2abOBFT (the protocol-level mesh-tolerance
+		// configurable; default is cfg.RefloodDelay). Lower SafetyBuffer
+		// reclaims MEV-fetch headroom at the cost of mesh-tail tolerance
+		// — useful for stresstest variants that probe the tightness band
+		// where the protocol commits to slot-miss rather than waiting
+		// for IHAVE/IWANT recovery.
+		twoabadapter.Protocol{VariantName: "2abOBFT-tight", SafetyBufferOverride: durPtr(500 * time.Millisecond)},
+		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
 		qbftadapter.Protocol{},
 		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
 		// PSigs is a baseline-cost reference: every honest op signs the
@@ -440,3 +447,7 @@ func TestStress(t *testing.T) {
 		"data.js protocols (%d) should cover the requested set (%d): %v",
 		len(gotProtocols), len(protocolNames), protocolNames)
 }
+
+// durPtr returns a pointer to a time.Duration — used to populate optional
+// duration override fields like Protocol.SafetyBufferOverride.
+func durPtr(d time.Duration) *time.Duration { return &d }

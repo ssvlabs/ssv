@@ -10,10 +10,10 @@ import (
 // The local operator must be the layer's leader; otherwise returns
 // ErrNotLeader.
 //
-// Per spec §Phase 1 (Variant C), the bundle pairs the candidate value
-// with the leader-auth signature at the envelope layer (not at this
-// protocol layer — the SSV adapter wraps the returned bundle bytes in
-// a SignedSSVMessage at the wire layer). No σ_V threshold partial is
+// Per spec §Phase 1, the bundle pairs the candidate value with the
+// leader-auth signature at the envelope layer (not at this protocol
+// layer — the SSV adapter wraps the returned bundle bytes in a
+// SignedSSVMessage at the wire layer). No σ_V threshold partial is
 // produced here; the leader emits σ at Phase 2b uniformly with all
 // other operators.
 //
@@ -60,27 +60,17 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 //     error; the caller's SSV adapter has already done the outer-
 //     envelope auth check by this point.
 //
-//   - Observation time gates the retention mode:
-//
-//   - observedOffset ≤ T_accept_max: regular retention. The bundle
-//     drives the operator's own Phase-2a verdict at this layer (Phase F).
-//
-//   - T_accept_max < observedOffset ≤ T_commit: auth-only retention.
-//     The bundle's auth signature is retained for cross-verifying peer
-//     re-flooded V claims, but does NOT drive the operator's own
-//     verdict. Spec §Phase 1: "Auth-only retention does *not* allow
-//     the operator to issue a KindVerdict based on this bundle (which
-//     would re-open timing-fragmentation grief surfaces)."
-//
-//   - observedOffset > T_commit: rejected with ErrLatePhase1Bundle.
-//     Phase 2a is over; retention is pointless.
+//   - In 2abOBFT there is no auth-only / regular retention distinction
+//     (no T_commit hard wall — only the runner-level slot deadline at
+//     the SSV adapter caps acceptance). All in-slot bundles are retained
+//     equivalently. `observedOffset` is recorded for diagnostics only.
 //
 //   - Up to 2 distinct value_roots are retained per (slot, layer,
-//     leader_id), regardless of auth-only/regular split. Per spec
-//     §Phase 1 / Retention bounds: "Further auth-valid bundles for the
-//     same (slot, layer, leader_id) are dropped silently." The 2-distinct
-//     cap is sufficient for Rule-2 leader-equivocation evidence; the
-//     third bundle wouldn't add slashable information.
+//     leader_id). Per spec §Phase 1 / Retention bounds, "Further auth-
+//     valid bundles for the same (slot, layer, leader_id) are dropped
+//     silently." The 2-distinct cap is sufficient for Rule-2 leader-
+//     equivocation evidence; the third bundle wouldn't add slashable
+//     information.
 //
 //   - Second distinct value_root → Rule 2 (leader equivocation)
 //     evidence. The pair `(BundleA, BundleB)` is self-contained
@@ -89,13 +79,13 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 //
 //   - Identical re-broadcasts (same Value, observed multiple times via
 //     gossipsub mesh paths) are deduplicated and silently dropped after
-//     the first retention. Re-broadcasts that promote auth-only ->
-//     regular (a previously-auth-only bundle is observed again within
-//     the accept window) DO upgrade the retention flag, since the first
-//     auth-only observation didn't constitute a verdict-eligible event;
-//     the later in-window observation does. (This codifies the spec's
-//     intent that gossipsub re-flood within Phase 2a is the auth-only
-//     escape hatch.)
+//     the first retention.
+//
+//   - On L_0 bundle observation, the Instance runs the per-tick
+//     processing cascade (upgrade-check + commit-trigger-check) so a
+//     KindNoValue-path op that just received V_0 can immediately emit
+//     the A1 upgrade and the σ-eligibility trigger gets a chance to
+//     fire on the resulting state.
 func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Duration) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
@@ -103,26 +93,16 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	if err := ValidatePhase1Bundle(b, i.cfg); err != nil {
 		return err
 	}
-	if observedOffset > i.cfg.TCommit {
-		return ErrLatePhase1Bundle
-	}
-	authOnly := observedOffset > i.cfg.TAcceptMax()
 
 	if i.retainedBundles[b.Layer] == nil {
 		i.retainedBundles[b.Layer] = make(map[OperatorID][]*retainedBundle)
 	}
 	retained := i.retainedBundles[b.Layer][b.OperatorID]
 
-	// Dedup against already-retained value_roots. If the same V is seen
-	// again with a "better" retention mode (auth-only → regular), promote.
-	// Otherwise the second observation is a silent no-op.
+	// Dedup against already-retained value_roots.
 	for _, r := range retained {
 		if bytes.Equal(r.Bundle.Value, b.Value) {
-			if r.AuthOnly && !authOnly {
-				// Upgrade auth-only → regular retention.
-				r.AuthOnly = false
-				r.RetentionEstablishedAt = observedOffset
-			}
+			// Identical re-broadcast — silent dedup.
 			return nil
 		}
 	}
@@ -136,7 +116,6 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	copyB := deepCopyBundle(b)
 	newEntry := &retainedBundle{
 		Bundle:                 copyB,
-		AuthOnly:               authOnly,
 		RetentionEstablishedAt: observedOffset,
 	}
 
@@ -156,9 +135,14 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		// First retention.
 		i.retainedBundles[b.Layer][b.OperatorID] = []*retainedBundle{newEntry}
 	}
-	if b.Layer == 0 {
-		i.maybeSignalL0VerdictReady()
-	}
+
+	// Per-tick processing cascade: a Phase-1 bundle arrival can unlock
+	// the A1 upgrade path (if this is V_0 arriving at a NoValue-path op
+	// and host re-validates valid), which may in turn unlock σ-eligibility
+	// or change the equivocation-trigger state. Run upgrade-first then
+	// commit-trigger evaluation per §Emission ordering.
+	i.afterStateDelta()
+
 	return nil
 }
 

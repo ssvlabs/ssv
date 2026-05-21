@@ -15,8 +15,9 @@ import (
 // decoders accept only versions they understand.
 const (
 	Phase1BundleVersionV1 byte = 0x01
-	VerdictVersionV1      byte = 0x01
-	Onion2bVersionV1      byte = 0x01
+	ValueMsgVersionV1     byte = 0x01
+	NoValueMsgVersionV1   byte = 0x01
+	CommitVersionV1       byte = 0x01
 	CertificateVersionV1  byte = 0x01
 )
 
@@ -25,17 +26,17 @@ const (
 // mismatching tag.
 //
 // Per spec §Phase 1 / §Phase 2a / §Phase 2b auth envelope: protocol_tag
-// = "2abOBFT-v1". Padded to 16 bytes with NULs to fit a fixed-size field
-// (the spec string is 10 chars; bare OBFT uses an 8-byte tag, but 2ab's
+// = "2abOBFT". Padded to 16 bytes with NULs to fit a fixed-size field
+// (the spec string is 7 chars; bare OBFT uses an 8-byte tag, but 2ab's
 // name doesn't fit 8 bytes, so we use 16 — also more headroom for future
-// versions like "2abOBFT-v2\0\0\0\0\0\0").
+// protocol identifiers).
 //
 // This is the load-bearing domain separation against bare-OBFT envelopes
 // — a base-encoded message decoded with twoab/wire.Unwrap fails at the
 // ProtocolTag check.
 var ProtocolTag = [16]byte{
-	'2', 'a', 'b', 'O', 'B', 'F', 'T', '-', 'v', '1',
-	0, 0, 0, 0, 0, 0,
+	'2', 'a', 'b', 'O', 'B', 'F', 'T',
+	0, 0, 0, 0, 0, 0, 0, 0, 0,
 }
 
 // Inner-kind tag: each message type stamps its own one-byte kind into the
@@ -43,30 +44,21 @@ var ProtocolTag = [16]byte{
 // byte). Mismatch with the decoder's expected kind is a structural error.
 const (
 	innerKindPhase1Bundle byte = 0x01
-	innerKindVerdict      byte = 0x02
-	innerKindOnion2b      byte = 0x03
-	innerKindCertificate  byte = 0x04
+	innerKindValueMsg     byte = 0x02
+	innerKindNoValueMsg   byte = 0x03
+	innerKindCommit       byte = 0x04
+	innerKindCertificate  byte = 0x05
 )
 
-// MaxLayers caps the number of layers an Onion2b can declare on the wire.
-// Real 2abOBFT configs use K ≤ n ≤ 13 in SSV; anything past 32 is almost
-// certainly malformed/malicious.
+// MaxLayers caps the number of layers a Commit / Phase-2a emission can
+// declare on the wire. Real 2abOBFT configs use K ≤ n ≤ 13 in SSV;
+// anything past 32 is almost certainly malformed/malicious.
 const MaxLayers = 32
 
 // MaxFieldSize caps individual length-prefixed fields (values, ciphertexts,
 // signatures). 16 MiB is conservative — realistic 2abOBFT messages are far
-// smaller:
-//
-//   - Phase1Bundle: ~1 KB (ClusterID + IDs + ~1 KB blinded block)
-//   - Verdict: ~100 bytes (no value, just a 32-byte ValueRoot for σV)
-//   - Onion2b: ~4-5 KB at K=4 (K layers × ~1 KB V + ~50 byte ciphertext, plus
-//     up to K-1 NR partials × ~100 bytes); ~10 KB headroom for K=13 high-end
-//   - Certificate: ~1.5 KB (value + aggregate signature)
-//
-// The 16 MiB cap matches base/wire's choice so the same shared
+// smaller. The 16 MiB cap matches base/wire's choice so the same shared
 // SignedSSVMessage envelope sizing applies uniformly across protocols.
-// Anything past this size is malformed/malicious; the cap prevents
-// unbounded allocation during DecodeXxx.
 const MaxFieldSize = 16 * 1024 * 1024
 
 // ---------- Phase1Bundle ----------
@@ -76,7 +68,7 @@ const MaxFieldSize = 16 * 1024 * 1024
 // Format (version 0x01):
 //
 //	[1]  version
-//	[16] ProtocolTag    "2abOBFT-v1" + 6 NULs
+//	[16] ProtocolTag    "2abOBFT" + 9 NULs
 //	[1]  inner kind     = innerKindPhase1Bundle
 //	[32] ClusterID
 //	[8]  OperatorID     (uint64 big-endian)
@@ -84,8 +76,6 @@ const MaxFieldSize = 16 * 1024 * 1024
 //	[4]  Layer          (uint32 big-endian)
 //	[4]  Value length   (uint32 big-endian)
 //	[Value bytes]
-//
-// No σ_V partial — 2abOBFT Variant C; spec §Phase 1.
 func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	if b == nil {
 		return nil, errors.New("wire: nil phase-1 bundle")
@@ -158,259 +148,276 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 	}, nil
 }
 
-// ---------- Verdict ----------
+// ---------- ValueMsg ----------
 
-// EncodeVerdict serializes a Phase-2a Verdict envelope.
+// EncodeValueMsg serializes a Phase-2a ValueMsg envelope.
 //
 // Format (version 0x01):
 //
 //	[1]  version
 //	[16] ProtocolTag
-//	[1]  inner kind   = innerKindVerdict
+//	[1]  inner kind     = innerKindValueMsg
 //	[32] ClusterID
 //	[8]  OperatorID
 //	[8]  Height
-//	[4]  Layer
-//	[1]  VerdictKind
-//	[32] ValueRoot (sha256(V) for σV; zero bytes for NR / NV)
-func EncodeVerdict(v *twoab.Verdict) ([]byte, error) {
+//	[4]  V length
+//	[V bytes]
+//	[32] ValueRoot
+//	[LayerEntries block — see encodeLayerEntries]
+func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if v == nil {
-		return nil, errors.New("wire: nil verdict")
+		return nil, errors.New("wire: nil ValueMsg")
 	}
-	if v.Layer < 0 {
-		return nil, fmt.Errorf("wire: verdict has negative layer %d", v.Layer)
+	if len(v.V) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: ValueMsg V too long (%d)", len(v.V))
 	}
-	if v.Kind == twoab.VerdictUnspecified {
-		return nil, errors.New("wire: verdict kind is unspecified")
+	if err := preflightLayerEntries(v.LayerEntries, "ValueMsg"); err != nil {
+		return nil, err
 	}
 
-	size := 1 + 16 + 1 + 32 + 8 + 8 + 4 + 1 + 32
-	out := make([]byte, 0, size)
-	out = append(out, VerdictVersionV1)
+	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4)
+	out = append(out, ValueMsgVersionV1)
 	out = append(out, ProtocolTag[:]...)
-	out = append(out, innerKindVerdict)
+	out = append(out, innerKindValueMsg)
 	out = append(out, v.ClusterID[:]...)
 	out = appendUint64(out, uint64(v.OperatorID))
 	out = appendUint64(out, uint64(v.Height))
-	out = appendUint32(out, uint32(v.Layer)) //nolint:gosec // bounds-checked above
-	out = append(out, byte(v.Kind))
+	out = appendUint32(out, uint32(len(v.V))) //nolint:gosec // bounds-checked
+	out = append(out, v.V...)
 	out = append(out, v.ValueRoot[:]...)
+	out = encodeLayerEntries(out, v.LayerEntries)
 	return out, nil
 }
 
-// DecodeVerdict parses bytes produced by EncodeVerdict.
-func DecodeVerdict(data []byte) (*twoab.Verdict, error) {
+// DecodeValueMsg parses bytes produced by EncodeValueMsg.
+func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	r := newReader(data)
-	if err := readVersion(r, VerdictVersionV1, "verdict"); err != nil {
+	if err := readVersion(r, ValueMsgVersionV1, "ValueMsg"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindVerdict, "verdict"); err != nil {
+	if err := readInnerKind(r, innerKindValueMsg, "ValueMsg"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
 	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: verdict cluster_id: %w", err)
+		return nil, fmt.Errorf("wire: ValueMsg cluster_id: %w", err)
 	}
 	opID, err := r.readUint64()
 	if err != nil {
-		return nil, fmt.Errorf("wire: verdict operator_id: %w", err)
+		return nil, fmt.Errorf("wire: ValueMsg operator_id: %w", err)
 	}
 	height, err := r.readUint64()
 	if err != nil {
-		return nil, fmt.Errorf("wire: verdict height: %w", err)
+		return nil, fmt.Errorf("wire: ValueMsg height: %w", err)
 	}
-	layer, err := r.readUint32()
+	v, err := r.readLengthPrefixed("ValueMsg V")
 	if err != nil {
-		return nil, fmt.Errorf("wire: verdict layer: %w", err)
-	}
-	if layer > MaxLayers {
-		return nil, fmt.Errorf("wire: verdict layer %d exceeds MaxLayers %d", layer, MaxLayers)
-	}
-	kindByte, err := r.readByte()
-	if err != nil {
-		return nil, fmt.Errorf("wire: verdict kind: %w", err)
-	}
-	kind := twoab.VerdictKind(kindByte)
-	if kind == twoab.VerdictUnspecified {
-		return nil, errors.New("wire: verdict kind is unspecified")
-	}
-	if kind != twoab.VerdictSigmaV && kind != twoab.VerdictNR && kind != twoab.VerdictNV {
-		return nil, fmt.Errorf("wire: verdict kind 0x%02x is invalid", kindByte)
+		return nil, err
 	}
 	var valueRoot [32]byte
 	if err := r.readBytes(valueRoot[:]); err != nil {
-		return nil, fmt.Errorf("wire: verdict value_root: %w", err)
+		return nil, fmt.Errorf("wire: ValueMsg value_root: %w", err)
 	}
-	if err := r.requireEOF("verdict"); err != nil {
+	entries, err := decodeLayerEntries(r, "ValueMsg")
+	if err != nil {
 		return nil, err
 	}
-	return &twoab.Verdict{
-		ClusterID:  clusterID,
-		OperatorID: twoab.OperatorID(opID),
-		Height:     twoab.Height(height),
-		Layer:      int(layer), //nolint:gosec // bounds-checked above
-		Kind:       kind,
-		ValueRoot:  valueRoot,
+	if err := r.requireEOF("ValueMsg"); err != nil {
+		return nil, err
+	}
+	return &twoab.ValueMsg{
+		ClusterID:    clusterID,
+		OperatorID:   twoab.OperatorID(opID),
+		Height:       twoab.Height(height),
+		V:            twoab.Value(v),
+		ValueRoot:    valueRoot,
+		LayerEntries: entries,
 	}, nil
 }
 
-// ---------- Onion2b ----------
+// ---------- NoValueMsg ----------
 
-// EncodeOnion2b serializes a Phase-2b commit message.
+// EncodeNoValueMsg serializes a Phase-2a NoValueMsg envelope.
 //
 // Format (version 0x01):
 //
 //	[1]  version
 //	[16] ProtocolTag
-//	[1]  inner kind         = innerKindOnion2b
+//	[1]  inner kind     = innerKindNoValueMsg
 //	[32] ClusterID
 //	[8]  OperatorID
 //	[8]  Height
-//	[4]  NumLayers          (uint32)
-//	for each layer in Layers:
-//	    [4] Value length
-//	    [Value bytes]
-//	    [4] Ciphertext length
-//	    [Ciphertext bytes]
-//	[4]  NumNRPartials      (uint32)
-//	for each NR partial:
-//	    [4] Layer (uint32)
-//	    [4] PartialSig length
-//	    [PartialSig bytes]
-func EncodeOnion2b(o *twoab.Onion2b) ([]byte, error) {
-	if o == nil {
-		return nil, errors.New("wire: nil onion2b")
+//	[LayerEntries block]
+func EncodeNoValueMsg(nv *twoab.NoValueMsg) ([]byte, error) {
+	if nv == nil {
+		return nil, errors.New("wire: nil NoValueMsg")
 	}
-	if len(o.Layers) > MaxLayers {
-		return nil, fmt.Errorf("wire: onion2b has %d layers, max %d", len(o.Layers), MaxLayers)
-	}
-	if len(o.NRPartials) > MaxLayers {
-		return nil, fmt.Errorf("wire: onion2b has %d NR partials, max %d", len(o.NRPartials), MaxLayers)
-	}
-	// Pre-flight field-size check
-	for i, el := range o.Layers {
-		if len(el.Value) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: onion2b layer %d value too long (%d)", i, len(el.Value))
-		}
-		if len(el.Ciphertext) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: onion2b layer %d ciphertext too long (%d)", i, len(el.Ciphertext))
-		}
-	}
-	for i, p := range o.NRPartials {
-		if p.Layer < 0 {
-			return nil, fmt.Errorf("wire: onion2b NR partial %d has negative layer", i)
-		}
-		if len(p.PartialSig) > MaxFieldSize {
-			return nil, fmt.Errorf("wire: onion2b NR partial %d sig too long (%d)", i, len(p.PartialSig))
-		}
+	if err := preflightLayerEntries(nv.LayerEntries, "NoValueMsg"); err != nil {
+		return nil, err
 	}
 
-	out := make([]byte, 0, 1+16+1+32+8+8+4+4)
-	out = append(out, Onion2bVersionV1)
+	out := make([]byte, 0, 1+16+1+32+8+8+4)
+	out = append(out, NoValueMsgVersionV1)
 	out = append(out, ProtocolTag[:]...)
-	out = append(out, innerKindOnion2b)
-	out = append(out, o.ClusterID[:]...)
-	out = appendUint64(out, uint64(o.OperatorID))
-	out = appendUint64(out, uint64(o.Height))
-	out = appendUint32(out, uint32(len(o.Layers))) //nolint:gosec // bounds-checked above
-	for _, el := range o.Layers {
-		out = appendUint32(out, uint32(len(el.Value))) //nolint:gosec // bounds-checked
-		out = append(out, el.Value...)
-		out = appendUint32(out, uint32(len(el.Ciphertext))) //nolint:gosec // bounds-checked
-		out = append(out, el.Ciphertext...)
-	}
-	out = appendUint32(out, uint32(len(o.NRPartials))) //nolint:gosec // bounds-checked above
-	for _, p := range o.NRPartials {
-		out = appendUint32(out, uint32(p.Layer))           //nolint:gosec // bounds-checked above
-		out = appendUint32(out, uint32(len(p.PartialSig))) //nolint:gosec // bounds-checked
-		out = append(out, p.PartialSig...)
-	}
+	out = append(out, innerKindNoValueMsg)
+	out = append(out, nv.ClusterID[:]...)
+	out = appendUint64(out, uint64(nv.OperatorID))
+	out = appendUint64(out, uint64(nv.Height))
+	out = encodeLayerEntries(out, nv.LayerEntries)
 	return out, nil
 }
 
-// DecodeOnion2b parses bytes produced by EncodeOnion2b.
-func DecodeOnion2b(data []byte) (*twoab.Onion2b, error) {
+// DecodeNoValueMsg parses bytes produced by EncodeNoValueMsg.
+func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
 	r := newReader(data)
-	if err := readVersion(r, Onion2bVersionV1, "onion2b"); err != nil {
+	if err := readVersion(r, NoValueMsgVersionV1, "NoValueMsg"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindOnion2b, "onion2b"); err != nil {
+	if err := readInnerKind(r, innerKindNoValueMsg, "NoValueMsg"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
 	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: onion2b cluster_id: %w", err)
+		return nil, fmt.Errorf("wire: NoValueMsg cluster_id: %w", err)
 	}
 	opID, err := r.readUint64()
 	if err != nil {
-		return nil, fmt.Errorf("wire: onion2b operator_id: %w", err)
+		return nil, fmt.Errorf("wire: NoValueMsg operator_id: %w", err)
 	}
 	height, err := r.readUint64()
 	if err != nil {
-		return nil, fmt.Errorf("wire: onion2b height: %w", err)
+		return nil, fmt.Errorf("wire: NoValueMsg height: %w", err)
 	}
-	numLayers, err := r.readUint32()
+	entries, err := decodeLayerEntries(r, "NoValueMsg")
 	if err != nil {
-		return nil, fmt.Errorf("wire: onion2b layer count: %w", err)
-	}
-	if numLayers > MaxLayers {
-		return nil, fmt.Errorf("wire: onion2b layer count %d exceeds MaxLayers %d", numLayers, MaxLayers)
-	}
-	layers := make([]twoab.EncryptedLayer, numLayers)
-	for i := uint32(0); i < numLayers; i++ {
-		value, err := r.readLengthPrefixed(fmt.Sprintf("onion2b layer %d value", i))
-		if err != nil {
-			return nil, err
-		}
-		ciphertext, err := r.readLengthPrefixed(fmt.Sprintf("onion2b layer %d ciphertext", i))
-		if err != nil {
-			return nil, err
-		}
-		layers[i] = twoab.EncryptedLayer{
-			Value:      twoab.Value(value),
-			Ciphertext: ciphertext,
-		}
-	}
-	numNR, err := r.readUint32()
-	if err != nil {
-		return nil, fmt.Errorf("wire: onion2b NR partial count: %w", err)
-	}
-	if numNR > MaxLayers {
-		return nil, fmt.Errorf("wire: onion2b NR partial count %d exceeds MaxLayers %d", numNR, MaxLayers)
-	}
-	nrPartials := make([]twoab.NRPartial, numNR)
-	for i := uint32(0); i < numNR; i++ {
-		layer, err := r.readUint32()
-		if err != nil {
-			return nil, fmt.Errorf("wire: onion2b NR partial %d layer: %w", i, err)
-		}
-		if layer > MaxLayers {
-			return nil, fmt.Errorf("wire: onion2b NR partial %d layer %d exceeds MaxLayers %d", i, layer, MaxLayers)
-		}
-		sig, err := r.readLengthPrefixed(fmt.Sprintf("onion2b NR partial %d sig", i))
-		if err != nil {
-			return nil, err
-		}
-		nrPartials[i] = twoab.NRPartial{
-			Layer:      int(layer), //nolint:gosec // bounds-checked above
-			PartialSig: twoab.Signature(sig),
-		}
-	}
-	if err := r.requireEOF("onion2b"); err != nil {
 		return nil, err
 	}
-	return &twoab.Onion2b{
-		ClusterID:  clusterID,
-		OperatorID: twoab.OperatorID(opID),
-		Height:     twoab.Height(height),
-		Layers:     layers,
-		NRPartials: nrPartials,
+	if err := r.requireEOF("NoValueMsg"); err != nil {
+		return nil, err
+	}
+	return &twoab.NoValueMsg{
+		ClusterID:    clusterID,
+		OperatorID:   twoab.OperatorID(opID),
+		Height:       twoab.Height(height),
+		LayerEntries: entries,
+	}, nil
+}
+
+// ---------- Commit ----------
+
+// EncodeCommit serializes a Phase-2b (or Phase-2a NRDirect) Commit envelope.
+//
+// Format (version 0x01):
+//
+//	[1]  version
+//	[16] ProtocolTag
+//	[1]  inner kind     = innerKindCommit
+//	[32] ClusterID
+//	[8]  OperatorID
+//	[8]  Height
+//	[1]  Side
+//	[4]  L0Value length
+//	[L0Value bytes]
+//	[4]  L0Partial length
+//	[L0Partial bytes]
+//	[LayerEntries block — empty (count=0) for Side != NRDirect]
+func EncodeCommit(c *twoab.Commit) ([]byte, error) {
+	if c == nil {
+		return nil, errors.New("wire: nil Commit")
+	}
+	if c.Side == twoab.CommitSideUnspecified {
+		return nil, errors.New("wire: Commit Side is unspecified")
+	}
+	if len(c.L0Value) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: Commit L0Value too long (%d)", len(c.L0Value))
+	}
+	if len(c.L0Partial) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: Commit L0Partial too long (%d)", len(c.L0Partial))
+	}
+	if err := preflightLayerEntries(c.LayerEntries, "Commit"); err != nil {
+		return nil, err
+	}
+
+	out := make([]byte, 0, 1+16+1+32+8+8+1+4+len(c.L0Value)+4+len(c.L0Partial)+4)
+	out = append(out, CommitVersionV1)
+	out = append(out, ProtocolTag[:]...)
+	out = append(out, innerKindCommit)
+	out = append(out, c.ClusterID[:]...)
+	out = appendUint64(out, uint64(c.OperatorID))
+	out = appendUint64(out, uint64(c.Height))
+	out = append(out, byte(c.Side))
+	out = appendUint32(out, uint32(len(c.L0Value))) //nolint:gosec // bounds-checked
+	out = append(out, c.L0Value...)
+	out = appendUint32(out, uint32(len(c.L0Partial))) //nolint:gosec // bounds-checked
+	out = append(out, c.L0Partial...)
+	out = encodeLayerEntries(out, c.LayerEntries)
+	return out, nil
+}
+
+// DecodeCommit parses bytes produced by EncodeCommit.
+func DecodeCommit(data []byte) (*twoab.Commit, error) {
+	r := newReader(data)
+	if err := readVersion(r, CommitVersionV1, "Commit"); err != nil {
+		return nil, err
+	}
+	if err := readProtocolTag(r); err != nil {
+		return nil, err
+	}
+	if err := readInnerKind(r, innerKindCommit, "Commit"); err != nil {
+		return nil, err
+	}
+	var clusterID [32]byte
+	if err := r.readBytes(clusterID[:]); err != nil {
+		return nil, fmt.Errorf("wire: Commit cluster_id: %w", err)
+	}
+	opID, err := r.readUint64()
+	if err != nil {
+		return nil, fmt.Errorf("wire: Commit operator_id: %w", err)
+	}
+	height, err := r.readUint64()
+	if err != nil {
+		return nil, fmt.Errorf("wire: Commit height: %w", err)
+	}
+	sideByte, err := r.readByte()
+	if err != nil {
+		return nil, fmt.Errorf("wire: Commit side: %w", err)
+	}
+	side := twoab.CommitSide(sideByte)
+	switch side {
+	case twoab.CommitSideSigned, twoab.CommitSideNR, twoab.CommitSideNRDirect:
+		// valid
+	default:
+		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid", sideByte)
+	}
+	l0Value, err := r.readLengthPrefixed("Commit L0Value")
+	if err != nil {
+		return nil, err
+	}
+	l0Partial, err := r.readLengthPrefixed("Commit L0Partial")
+	if err != nil {
+		return nil, err
+	}
+	entries, err := decodeLayerEntries(r, "Commit")
+	if err != nil {
+		return nil, err
+	}
+	if err := r.requireEOF("Commit"); err != nil {
+		return nil, err
+	}
+	return &twoab.Commit{
+		ClusterID:    clusterID,
+		OperatorID:   twoab.OperatorID(opID),
+		Height:       twoab.Height(height),
+		Side:         side,
+		L0Value:      twoab.Value(l0Value),
+		L0Partial:    twoab.Signature(l0Partial),
+		LayerEntries: entries,
 	}, nil
 }
 
@@ -422,7 +429,7 @@ func DecodeOnion2b(data []byte) (*twoab.Onion2b, error) {
 //
 //	[1]  version
 //	[16] ProtocolTag
-//	[1]  inner kind         = innerKindCertificate
+//	[1]  inner kind     = innerKindCertificate
 //	[32] ClusterID
 //	[8]  Height
 //	[4]  Value length
@@ -491,6 +498,100 @@ func DecodeCertificate(data []byte) (*twoab.Certificate, error) {
 		Value:     twoab.Value(value),
 		Signature: twoab.Signature(sig),
 	}, nil
+}
+
+// ---------- LayerEntries block ----------
+
+// LayerEntries block encoding (shared by ValueMsg, NoValueMsg, and Commit
+// when Side=NRDirect):
+//
+//	[4]  Count (uint32)
+//	for each entry:
+//	    [4] Layer (uint32)
+//	    [1] Kind
+//	    [4] V length
+//	    [V bytes]
+//	    [4] Payload length
+//	    [Payload bytes]
+
+func preflightLayerEntries(entries []twoab.LayerEntry, kindLabel string) error {
+	if len(entries) > MaxLayers {
+		return fmt.Errorf("wire: %s has %d LayerEntries, max %d", kindLabel, len(entries), MaxLayers)
+	}
+	for i, e := range entries {
+		if e.Layer < 0 {
+			return fmt.Errorf("wire: %s LayerEntries[%d] has negative Layer %d", kindLabel, i, e.Layer)
+		}
+		if len(e.V) > MaxFieldSize {
+			return fmt.Errorf("wire: %s LayerEntries[%d] V too long (%d)", kindLabel, i, len(e.V))
+		}
+		if len(e.Payload) > MaxFieldSize {
+			return fmt.Errorf("wire: %s LayerEntries[%d] Payload too long (%d)", kindLabel, i, len(e.Payload))
+		}
+	}
+	return nil
+}
+
+func encodeLayerEntries(out []byte, entries []twoab.LayerEntry) []byte {
+	out = appendUint32(out, uint32(len(entries))) //nolint:gosec // bounds-checked by preflight
+	for _, e := range entries {
+		out = appendUint32(out, uint32(e.Layer)) //nolint:gosec // bounds-checked by preflight
+		out = append(out, byte(e.Kind))
+		out = appendUint32(out, uint32(len(e.V))) //nolint:gosec // bounds-checked by preflight
+		out = append(out, e.V...)
+		out = appendUint32(out, uint32(len(e.Payload))) //nolint:gosec // bounds-checked by preflight
+		out = append(out, e.Payload...)
+	}
+	return out
+}
+
+func decodeLayerEntries(r *reader, kindLabel string) ([]twoab.LayerEntry, error) {
+	count, err := r.readUint32()
+	if err != nil {
+		return nil, fmt.Errorf("wire: %s LayerEntries count: %w", kindLabel, err)
+	}
+	if count > MaxLayers {
+		return nil, fmt.Errorf("wire: %s LayerEntries count %d exceeds MaxLayers %d",
+			kindLabel, count, MaxLayers)
+	}
+	entries := make([]twoab.LayerEntry, count)
+	for i := uint32(0); i < count; i++ {
+		layer, err := r.readUint32()
+		if err != nil {
+			return nil, fmt.Errorf("wire: %s LayerEntries[%d] layer: %w", kindLabel, i, err)
+		}
+		if layer > MaxLayers {
+			return nil, fmt.Errorf("wire: %s LayerEntries[%d] layer %d exceeds MaxLayers %d",
+				kindLabel, i, layer, MaxLayers)
+		}
+		kindByte, err := r.readByte()
+		if err != nil {
+			return nil, fmt.Errorf("wire: %s LayerEntries[%d] kind: %w", kindLabel, i, err)
+		}
+		kind := twoab.LayerEntryKind(kindByte)
+		switch kind {
+		case twoab.LayerEntryEmpty, twoab.LayerEntrySigmaChained, twoab.LayerEntryNRPlaintext:
+			// valid
+		default:
+			return nil, fmt.Errorf("wire: %s LayerEntries[%d] kind 0x%02x is invalid",
+				kindLabel, i, kindByte)
+		}
+		v, err := r.readLengthPrefixed(fmt.Sprintf("%s LayerEntries[%d] V", kindLabel, i))
+		if err != nil {
+			return nil, err
+		}
+		payload, err := r.readLengthPrefixed(fmt.Sprintf("%s LayerEntries[%d] Payload", kindLabel, i))
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = twoab.LayerEntry{
+			Layer:   int(layer), //nolint:gosec // bounds-checked above
+			Kind:    kind,
+			V:       twoab.Value(v),
+			Payload: payload,
+		}
+	}
+	return entries, nil
 }
 
 // ---------- Helpers ----------

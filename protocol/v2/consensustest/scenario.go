@@ -107,9 +107,10 @@ func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
 
 // variantBase returns the canonical family name for a protocol-variant
 // name. Strips the two suffix conventions the framework uses:
-//   - "xN" multiplier suffix (e.g. "OBFTx2" → "OBFT", "2abOBFTx3" →
-//     "2abOBFT") where N is one or more trailing digits preceded by 'x'
-//   - "-suffix" variant flavor (e.g. "QBFT-SSV" → "QBFT")
+//   - "xN" multiplier suffix (e.g. "OBFTx2" → "OBFT") where N is one or
+//     more trailing digits preceded by 'x'
+//   - "-suffix" variant flavor (e.g. "QBFT-SSV" → "QBFT", "2abOBFT-tight"
+//     → "2abOBFT", "2abOBFT-lean" → "2abOBFT")
 //
 // Returns the input unchanged when neither suffix is present.
 func variantBase(name string) string {

@@ -5,12 +5,12 @@
 //
 // Structurally mirrors protocol/v2/consensustest/obft/ (the bare OBFT
 // adapter) — same DES shape, same per-recipient cloning discipline,
-// same evidence-rule-name convention. The 2ab-specific delta vs base
-// is the Phase-2a verdict broadcast window: evtVerdictBroadcastStart
-// fires at T_verdict_max - ε_proc and produces evtVerdictArrival events
-// (replacing nothing in base — Phase-2a doesn't exist in bare OBFT),
-// followed by evtOnion2bArrival at T_commit + propagation (replacing
-// base's evtCommitArrival).
+// same evidence-rule-name convention. The 2ab-specific delta vs base is
+// the Phase-2a coordination broadcast (every operator emits one of
+// {KindValue, KindNoValue, KindCommit-NRDirect} at the Phase-2a
+// fire-instant) and Phase 2b being dynamic — commits fire via the
+// protocol's per-tick afterStateDelta cascade rather than at a fixed
+// Phase-2b-start event.
 package twoab
 
 import (
@@ -23,34 +23,31 @@ import (
 
 // Adapter-internal constants. Mirrors the OBFT adapter — these are
 // operator-side reserves (BLS aggregation / IBE walk CPU cost, residual
-// scheduling jitter), so they don't scale with BTTMultiplier.
+// scheduling jitter).
 const (
 	epsilon3           = 50 * time.Millisecond
 	phase3JitterBuffer = 50 * time.Millisecond
 )
 
 // Protocol is the 2abOBFT adapter. Use as `twoab.Protocol{}` for the
-// canonical variant, or with BTTMultiplier > 1 to model a "loose"
-// deployment that over-budgets its internal timing assumptions relative
-// to the network's actual BTT (see CAVEAT below).
+// canonical variant (SafetyBuffer = cfg.RefloodDelay, matching bare OBFT's
+// structural budget), or with `SafetyBufferOverride` to model a tighter
+// or looser deployment.
 type Protocol struct {
 	// VariantName overrides the reported protocol name. Empty → "2abOBFT".
 	VariantName string
 
-	// BTTMultiplier scales cfg.BTT internally before deriving every
-	// timing budget (Delta2a, Delta2b, BroadcastBudget shallow layers,
-	// and the BTT field forwarded to twoab.Config — which 2ab uses to
-	// compute its TAcceptMax = TCommit − 1·BTT receiver horizon). Zero
-	// is treated as 1.0.
+	// SafetyBufferOverride, when non-nil, sets the SafetyBuffer used in
+	// the per-layer broadcast-budget formula `B_k_shallow = (k+2)·BTT +
+	// SafetyBuffer`. Default (nil) uses cfg.RefloodDelay (which matches
+	// bare OBFT's structural budget so the two protocols have the same
+	// MEV-fetch headroom at default).
 	//
-	// CAVEAT — the multiplier affects the protocol's INTERNAL
-	// assumptions only; the simulated network still propagates at
-	// cfg.BTT. Multiplier > 1 ("loose") widens the Phase-2 windows
-	// (Δ_2a + Δ_2b = 3·bttEff total, vs 3·BTT canonical) and pushes
-	// T_commit earlier in the slot by 2·(bttEff − cfg.BTT). The CPU-
-	// side reserves (epsilon3, phase3JitterBuffer,
-	// cfg.HeaderSubmitHeadroom) do NOT scale.
-	BTTMultiplier float64
+	// Lower SafetyBuffer (e.g. 300ms / 500ms) reclaims MEV-fetch headroom
+	// at the cost of mesh-tail tolerance: the cluster commits to slot-
+	// miss rather than wait for IHAVE/IWANT recovery when initial
+	// propagation slips.
+	SafetyBufferOverride *time.Duration
 }
 
 func (p Protocol) Name() string {
@@ -60,19 +57,14 @@ func (p Protocol) Name() string {
 	return "2abOBFT"
 }
 
-// effectiveBTT applies the BTTMultiplier to cfg.BTT, clamped to ≥ 1ns.
-// Zero multiplier is treated as 1.0 so zero-value Protocol{} behaves
-// identically to the canonical 2abOBFT.
-func (p Protocol) effectiveBTT(btt time.Duration) time.Duration {
-	mul := p.BTTMultiplier
-	if mul <= 0 {
-		mul = 1
+// safetyBuffer returns the SafetyBuffer for this variant: the override
+// if set, otherwise cfg.RefloodDelay (the spec default that matches bare
+// OBFT's structural budget).
+func (p Protocol) safetyBuffer(cfg ct.SimConfig) time.Duration {
+	if p.SafetyBufferOverride != nil {
+		return *p.SafetyBufferOverride
 	}
-	out := time.Duration(float64(btt) * mul)
-	if out < time.Nanosecond {
-		out = time.Nanosecond
-	}
-	return out
+	return cfg.RefloodDelay
 }
 
 func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
@@ -88,96 +80,60 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// 2abOBFT splits Phase 2 into Phase 2a (verdict broadcast, Δ_2a ≥ 2·BTT
-	// per spec §Setting — structural minimum, mandatory) and Phase 2b
-	// (σ-or-NR propagation, spec-recommended Δ_2b = 1·BTT + ε_proc at
-	// tightened sizing — the framework rounds ε_proc into bttEff for
-	// simplicity, so Δ_2b = 1·bttEff). Resulting Phase-2 total = 3·bttEff
-	// (Δ_2a = 2·bttEff structural minimum + Δ_2b = 1·bttEff spec-aligned);
-	// T_commit lands 2·bttEff earlier than OBFT's at the same RelayCutoff
-	// — the spec's "cost" for the validity-divergence safety story
-	// (OBFT pays only Δ_2 = 1·bttEff post-tightening; 2abOBFT pays
-	// 3·bttEff = the extra Δ_2a structural minimum).
-	bttEff := p.effectiveBTT(cfg.BTT)
-	delta2a := 2 * bttEff
-	delta2b := bttEff
-	delta2 := delta2a + delta2b
-	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
-	if tCommit <= 0 {
-		// Operating-point-incompatible (bttEff too large for the 2ab
-		// 3·BTT Phase-2 tax to fit before RelayCutoff). Wrap as
-		// ErrConfigOutOfEnvelope so the cell renders red 0% rather
-		// than as an unexpected error.
-		return ct.Outcome{}, fmt.Errorf(
-			"%w: twoab adapter: derived T_commit=%v non-positive (RelayCutoff=%v bttEff=%v at BTTMultiplier=%v)",
-			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, bttEff, p.BTTMultiplier)
-	}
-	tVerdictStart := tCommit - delta2a
-	if tVerdictStart <= 0 {
-		// Even with T_commit positive, T_verdict_start can land before
-		// slot 0 when Δ_2a > T_commit — i.e. the Phase-2a verdict
-		// window would need to start before the slot exists. The
-		// Phase-1 broadcast schedule collapses to BFT_start (FetchAt
-		// clamps `< 0` to 0) and no leader can meet its target; every
-		// sim fails to decide. Flag this band as OOE so it renders
-		// red `Protocol cannot operate at this configuration` rather
-		// than a stealth 0% success rate — the protocol genuinely
-		// can't operate at this (bttEff, RelayCutoff, K) point.
-		//
-		// Boundary: let R = RelayCutoff − HeaderSubmitHeadroom −
-		// Phase3JitterBuffer − Epsilon3 (the "available phase-2
-		// budget", everything before Δ_2 is subtracted). Then
-		// T_commit = R − (Δ_2a + Δ_2b) > 0 iff Δ_2a + Δ_2b < R, and
-		// T_verdict_start = R − (2·Δ_2a + Δ_2b) > 0 iff 2·Δ_2a + Δ_2b
-		// < R. This guard catches the narrow band
-		//
-		//   Δ_2a + Δ_2b  <  R  ≤  2·Δ_2a + Δ_2b
-		//
-		// where T_commit slips through positive but T_verdict_start is
-		// non-positive. At spec-aligned sizing (Δ_2a = 2·bttEff,
-		// Δ_2b = 1·bttEff): T_commit > 0 iff R > 3·bttEff (bttEff <
-		// R/3); T_verdict_start > 0 iff R > 5·bttEff (bttEff < R/5).
-		// Concrete examples at R = 4000−100−50−50 = 3800ms (so the band
-		// is 760ms < bttEff ≤ 1267ms): 2abOBFTx3 at BTT=300 has bttEff
-		// = 900ms (Δ_2a=1800, Δ_2b=900; T_commit=1100, T_verdict_start
-		// =−700); 2abOBFTx2 at BTT=400 has bttEff = 800ms (Δ_2a=1600,
-		// Δ_2b=800; T_commit=1400, T_verdict_start=−200).
-		return ct.Outcome{}, fmt.Errorf(
-			"%w: twoab adapter: derived T_verdict_start=%v non-positive (T_commit=%v Delta2a=%v bttEff=%v at BTTMultiplier=%v)",
-			ct.ErrConfigOutOfEnvelope, tVerdictStart, tCommit, delta2a, bttEff, p.BTTMultiplier)
-	}
-
-	// 2ab anchors B_k at TVerdictStart (= TCommit − Δ_2a), not TCommit —
-	// the Phase-1 broadcast must complete before the Phase-2a verdict
-	// window starts, not before TCommit. The DefaultBroadcastBudget
-	// helper from the production package gives the spec's staggered
-	// schedule against that anchor.
+	// 2abOBFT timing model (spec §Setting):
+	//   - TPhase2a is the Phase-2a fire-instant; every op emits one of
+	//     {KindValue, KindNoValue, KindCommit-NRDirect} at this offset.
+	//   - T0Broadcast = TPhase2a − BTT is the L_0 leader's broadcast
+	//     time target — V_0 has 1·BTT to propagate before Phase 2a fires.
+	//   - SafetyBuffer parameterizes the per-layer shallow B_k:
+	//     B_k_shallow = (k+2)·BTT + SafetyBuffer. Default sizing uses
+	//     SafetyBuffer = RefloodDelay so 2abOBFT and bare OBFT have the
+	//     same total structural budget.
 	//
-	// At extreme degraded operating points the helper returns a schedule
-	// with shallow B_k values exceeding TVerdictStart; the per-layer
-	// runtime `T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k)`
-	// clamps those layers' broadcast targets at BFT_start. Errors here
-	// are only the K<1 / BTT≤0 programmer-error class.
-	// cfg.RefloodDelay is the per-scenario opt-in for the spec's reflood-
-	// absorption budget (`B_0 = 2·BTT + RefloodDelay`). Default 0:
-	// adversarial scenarios and direct-delivery sims model idealized
-	// eager-push, no schedule-level reflood absorption. Production-
-	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
-	// to match libp2p heartbeat), mirroring the production SSV adapter's
-	// DefaultRefloodDelay. Anchor is tVerdictStart, not tCommit (Phase-1
-	// must complete before Phase-2a opens — structural to 2abOBFT).
-	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, bttEff, cfg.RefloodDelay, tVerdictStart)
+	// We pick TPhase2a to fit within the slot's submit pipeline: the
+	// runner-level deadline is RelayCutoff − HeaderSubmitHeadroom; the
+	// adapter reserves phase3JitterBuffer + epsilon3 for Phase 3 + cert
+	// dispatch. Phase 2b is dynamic (no scheduled deadline), so we don't
+	// need a Δ_2b reserve — commits fire opportunistically through the
+	// cascade. The slot deadline pool's lower bound is just the
+	// fire-time + a few BTTs for the cascade to converge through
+	// state-delta-driven Commit emissions; that's also where the
+	// schedule-anchored final Resolve sweep lands.
+	btt := cfg.BTT
+	// Phase-2a fire-instant: enough room after fire for at least one
+	// Phase-2a propagation cycle plus a Phase-2b cascade settle window
+	// (Commit emissions cascade as op-state-delta-triggered; bound by
+	// ~2·BTT for the typical Value → Commit-Signed sequence).
+	resolveBudget := btt*2 + epsilon3 + phase3JitterBuffer + cfg.HeaderSubmitHeadroom
+	tPhase2a := cfg.RelayCutoff - resolveBudget
+	if tPhase2a <= btt {
+		// TPhase2a must be > BTT so T0Broadcast = TPhase2a − BTT is
+		// positive (the Phase-1 broadcast time must land within the
+		// slot). At extreme operating points (BTT too large for the
+		// available slot budget) the configuration is out of envelope.
+		return ct.Outcome{}, fmt.Errorf(
+			"%w: twoab adapter: derived TPhase2a=%v non-positive or <= BTT=%v (RelayCutoff=%v)",
+			ct.ErrConfigOutOfEnvelope, tPhase2a, btt, cfg.RelayCutoff)
+	}
+	t0Broadcast := tPhase2a - btt
+
+	// SafetyBuffer: default = cfg.RefloodDelay (matches bare OBFT's
+	// structural budget); the SafetyBufferOverride variant field lets
+	// stresstest variants exercise tighter / looser configurations.
+	safetyBuffer := p.safetyBuffer(cfg)
+
+	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, btt, safetyBuffer, t0Broadcast)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)
 	}
 	// Apply the spec's runtime clamp `T_broadcast_max_k = max(BFTStart,
-	// TVerdictStart − B_k)` (2abOBFT.md §Phase 1 / Phase 2a sizing).
-	// BFTStart=0 preserves the legacy `if < 0` clamp bit-exactly.
+	// T0Broadcast − B_k)`. BFTStart=0 preserves the legacy `if < 0`
+	// clamp bit-exactly.
 	bftStart := cfg.BFTStart
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
-		fa := tVerdictStart - broadcastBudget[k]
+		fa := t0Broadcast - broadcastBudget[k]
 		if fa < bftStart {
 			fa = bftStart
 		}
@@ -186,27 +142,27 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
-		N:               cfg.N,
-		K:               cfg.K,
-		Operators:       cfg.Operators,
-		BFTStart:        bftStart,
-		TCommit:         tCommit,
-		Delta2a:         delta2a,
-		Delta2b:         delta2b,
-		Epsilon3:        epsilon3,
-		BTT:             bttEff,
-		FetchAt:         fetchAt,
-		BroadcastBudget: broadcastBudget,
-		Network:         cfg.Network,
-		Host:            cfg.Host,
-		Byz:             internal,
-		Seed:            cfg.Seed,
-		TraceEnabled:    cfg.TraceEnabled,
-		BLSKeys:         cfg.BLSKeys,
-		Aggregator:      ct.NewOfflineAggregator(cfg.N),
-		Bandwidth:       &bw,
-		Mesh:            cfg.MakeMeshTopology(),
-		RelayCutoff:     cfg.RelayCutoff,
+		N:                    cfg.N,
+		K:                    cfg.K,
+		Operators:            cfg.Operators,
+		BFTStart:             bftStart,
+		TPhase2a:             tPhase2a,
+		SafetyBuffer:         safetyBuffer,
+		Epsilon3:             epsilon3,
+		BTT:                  btt,
+		HeaderSubmitHeadroom: cfg.HeaderSubmitHeadroom,
+		FetchAt:              fetchAt,
+		BroadcastBudget:      broadcastBudget,
+		Network:              cfg.Network,
+		Host:                 cfg.Host,
+		Byz:                  internal,
+		Seed:                 cfg.Seed,
+		TraceEnabled:         cfg.TraceEnabled,
+		BLSKeys:              cfg.BLSKeys,
+		Aggregator:           ct.NewOfflineAggregator(cfg.N),
+		Bandwidth:            &bw,
+		Mesh:                 cfg.MakeMeshTopology(),
+		RelayCutoff:          cfg.RelayCutoff,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -216,13 +172,11 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
 	// Stamp the deciding-layer broadcast deadline (anchored at
-	// tVerdictStart, not tCommit, because the Phase-1 broadcast must
-	// complete before Phase-2a opens). Shallow layers whose B_k exceed
-	// tVerdictStart clamp to BFTStart, matching the runtime rule
-	// T_broadcast_max_k = max(BFTStart, TVerdictStart − B_k). Mirrors the
-	// fetchAt[] clamp above.
+	// t0Broadcast, per 2abOBFT's spec anchor). Shallow layers whose B_k
+	// exceed t0Broadcast clamp to BFTStart, matching the runtime rule
+	// T_broadcast_max_k = max(BFTStart, T0Broadcast − B_k).
 	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
-		bt := tVerdictStart - broadcastBudget[out.DecidedRound]
+		bt := t0Broadcast - broadcastBudget[out.DecidedRound]
 		if bt < bftStart {
 			bt = bftStart
 		}
@@ -249,7 +203,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 // (decided-but-clipped vs deadlocked-mid-walk vs exhausted-K-layers),
 // since the 2ab Phase-3 walk has the same two failure modes. See
 // classifyOBFTMiss in the obft adapter for the rationale on each
-// regime. 2abOBFT's Phase-2a verdict step makes the HV1-style
+// regime. 2abOBFT's Phase-2a coordination broadcast makes the HV1-style
 // L_0 deadlock that bites OBFT recover via NR-quorum here, so in
 // practice ResolveFailureDeadlock should be rare for 2abOBFT — when
 // it appears it implies a different pathology than the OBFT case
@@ -265,15 +219,9 @@ func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Dur
 }
 
 // computeAttestation populates Outcome.CommitAttestation from data already
-// visible at the adapter boundary. Mirrors base's instrumentation: equivocation
-// is counted from Rule 2 (LeaderEquivocation) + Rule 3 (per-layer
-// CrossOnionEquivocation + top-level OnionEquivocation) + Rule 6a
-// (VerdictEquivocation, 2ab-specific) evidence fires.
-//
-// Rule 6b (VerdictAction) is NOT counted as equivocation: per Rule 6b's
-// boundary-conditional nature (honest revision is permitted), a fire there
-// doesn't imply byzantine equivocation. It is observable separately via
-// EvidenceByRule for tests that want to assert on it directly.
+// visible at the adapter boundary. Equivocation is counted from Rule 2
+// (LeaderEquivocation) + Rule 3 (CrossCommitEquivocation, per-layer) +
+// Rule 6a (Phase2Equivocation, 2ab-specific) evidence fires.
 //
 // Left uninstrumented (same as base; would require deeper Instance
 // introspection):
@@ -294,7 +242,6 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 		for rule, n := range oo.EvidenceByRule {
 			if rule == RuleLeaderEquivocation ||
 				rule == RuleCrossOnionEquivocation ||
-				rule == RuleOnionEquivocation ||
 				rule == RuleVerdictEquivocation {
 				att.EquivocationsObserved += n
 			}
@@ -304,30 +251,28 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 	return att
 }
 
-// desConfig is the 2ab-DES-internal configuration, built by Run. Carries
-// the 2ab-spec-shaped Phase-2 split (Delta2a + Delta2b) separately from
-// the framework's single-window cfg.Delta2.
+// desConfig is the 2ab-DES-internal configuration, built by Run.
 type desConfig struct {
-	N               int
-	K               int
-	Operators       []ct.OperatorID
-	BFTStart        time.Duration // forwarded to twoab.Config.BFTStart
-	TCommit         time.Duration
-	Delta2a         time.Duration
-	Delta2b         time.Duration
-	Epsilon3        time.Duration // forwarded to twoab.Config.Eps3 (= ε_3 per spec)
-	BTT             time.Duration
-	FetchAt         []time.Duration
-	BroadcastBudget []time.Duration
-	Network         ct.NetworkModel
-	Host            ct.HostPattern
-	Byz             internalByz
-	Seed            int64
-	TraceEnabled    bool
-	BLSKeys         *ct.BLSKeys
-	Aggregator      *ct.OfflineAggregator
-	Bandwidth       *ct.BandwidthReport
-	Mesh            *ct.MeshTopology // nil when DeliveryDirect
+	N                    int
+	K                    int
+	Operators            []ct.OperatorID
+	BFTStart             time.Duration // forwarded to twoab.Config.BFTStart
+	TPhase2a             time.Duration // forwarded to twoab.Config.TPhase2a
+	SafetyBuffer         time.Duration // forwarded to twoab.Config.SafetyBuffer
+	Epsilon3             time.Duration // Phase-3 walk per-layer cost
+	BTT                  time.Duration
+	HeaderSubmitHeadroom time.Duration
+	FetchAt              []time.Duration
+	BroadcastBudget      []time.Duration
+	Network              ct.NetworkModel
+	Host                 ct.HostPattern
+	Byz                  internalByz
+	Seed                 int64
+	TraceEnabled         bool
+	BLSKeys              *ct.BLSKeys
+	Aggregator           *ct.OfflineAggregator
+	Bandwidth            *ct.BandwidthReport
+	Mesh                 *ct.MeshTopology // nil when DeliveryDirect
 	// RelayCutoff is the slot's hard submit deadline (carried over
 	// from SimConfig). Used to bound the gossip-heartbeat sequence.
 	RelayCutoff time.Duration
@@ -343,7 +288,6 @@ type rawOutcome struct {
 	trace        []ct.TraceEntry
 	// deadlockLayer mirrors the OBFT adapter's: deepest layer at which
 	// any non-decided op hit ResolveFailureDeadlock. -1 when none.
-	// See protocol/v2/consensustest/obft/adapter.go for the rationale.
 	deadlockLayer int
 }
 
@@ -428,12 +372,10 @@ func evidenceByRule(evs []twoab.Evidence) map[string]int {
 const (
 	RuleCrossSigning           = "2abOBFT/Rule1/CrossSigning"
 	RuleLeaderEquivocation     = "2abOBFT/Rule2/LeaderEquivocation"
-	RuleCrossOnionEquivocation = "2abOBFT/Rule3/CrossOnionEquivocation"
-	RuleOnionEquivocation      = "2abOBFT/Rule3/OnionEquivocation" // top-level (Layer == -1)
+	RuleCrossOnionEquivocation = "2abOBFT/Rule3/CrossCommitEquivocation"
 	RuleFakeEncryptedPresence  = "2abOBFT/Rule4/FakeEncryptedPresence"
 	RuleFakePlaintextSigma     = "2abOBFT/Rule5/FakePlaintextSigma"
-	RuleVerdictEquivocation    = "2abOBFT/Rule6a/VerdictEquivocation"
-	RuleVerdictAction          = "2abOBFT/Rule6b/VerdictAction"
+	RuleVerdictEquivocation    = "2abOBFT/Rule6a/Phase2Equivocation"
 	RuleUnknown                = "2abOBFT/Unknown"
 )
 
@@ -443,23 +385,14 @@ func ruleKey(e twoab.Evidence) string {
 		return RuleCrossSigning
 	case twoab.EvidenceLeaderEquivocation:
 		return RuleLeaderEquivocation
-	case twoab.EvidenceCrossOnionEquivocation:
-		// Layer == -1 indicates the top-level OnionEquivocation variant
-		// (full Onion2b bodies); per-layer Layer ≥ 0 indicates the per-V σ
-		// variant. Slashing layer treats them as the same fault but per-rule
-		// telemetry distinguishes them.
-		if e.Layer < 0 {
-			return RuleOnionEquivocation
-		}
+	case twoab.EvidenceCrossCommitEquivocation:
 		return RuleCrossOnionEquivocation
 	case twoab.EvidenceFakeEncryptedPresence:
 		return RuleFakeEncryptedPresence
 	case twoab.EvidenceFakePlaintextSigma:
 		return RuleFakePlaintextSigma
-	case twoab.EvidenceVerdictEquivocation:
+	case twoab.EvidencePhase2Equivocation:
 		return RuleVerdictEquivocation
-	case twoab.EvidenceVerdictAction:
-		return RuleVerdictAction
 	default:
 		return RuleUnknown
 	}

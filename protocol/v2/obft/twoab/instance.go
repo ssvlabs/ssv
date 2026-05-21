@@ -13,39 +13,50 @@ import (
 //
 // Lifecycle (per docs/2abOBFT.md §Slot structure):
 //
-//  1. Phase 1 — [slot_start, T_verdict_start]:
+//  1. Phase 1 — [slot_start, T_0_broadcast]:
 //     a. If local operator is a layer leader: BuildPhase1Bundle(layer, V)
-//     to construct a bundle and broadcast it. NO σ_V partial (Variant C).
-//     b. ObservePhase1Bundle(b, observedOffset) for every retained peer
-//     bundle, with auth-only retention for bundles past T_accept_max.
+//     constructs a bundle and broadcasts it. NO σ_V partial (2abOBFT
+//     emits σ at Phase 2b uniformly with all operators).
+//     b. ObservePhase1Bundle(b) for every retained peer bundle.
 //
-//  2. Phase 2a — [T_verdict_start, T_commit]:
-//     a. BuildVerdict(layer) at T_verdict_max − ε_proc per layer.
-//     (Phase F — not yet implemented.)
-//     b. ObserveVerdict(v) for peer verdicts. (Phase F.)
+//  2. Phase 2a — fire-instant at T_phase_2a:
+//     a. MaybeFirePhase2a() — every operator emits exactly one of
+//     {KindValue, KindNoValue, KindCommit-NRDirect} per their local state
+//     (retention + host validity + L_0 equivocation observation).
+//     b. ObserveValueMsg / ObserveNoValueMsg / ObserveCommit for peers.
 //
-//  3. Phase 2b — at T_commit:
-//     a. BuildOwnOnion2b() — emit a single KindOnion2b message carrying
-//     σ-or-NR partials per layer based on the convergence-rule
-//     decision over the observed Phase-2a verdict pool.
-//     (Phase G.)
-//     b. ObserveOnion2b(o) for peers. (Phase G.)
+//  3. Phase 2a-late — opportunistic upgrade window [T_phase_2a, slot deadline]:
+//     a. MaybeBuildAndBroadcastUpgrade() — KindNoValue-path ops who have
+//     received V_0 + host valid emit an upgrade KindValue (A1 sequence).
 //
-//  4. Phase 3 — from T_commit + Delta2b onward:
-//     a. Resolve() → Output (success) or ErrNoQuorum. (Phase H.)
-//     b. On success: BuildCertificate(out) → broadcast. (Phase H.)
-//     c. ObserveCertificate(c) — fallback submission path. (Phase H.)
+//  4. Phase 2b — dynamic, no protocol-level deadline:
+//     a. MaybeBuildAndBroadcastCommit() — each op evaluates the three
+//     triggers (equivocation > σ-eligibility > NR-eligibility with cannot-σ
+//     gate); fires at most one KindCommit per slot.
+//     b. ObserveCommit(c) for peers (Side ∈ {Signed, NR, NRDirect}).
+//
+//  5. Phase 3 — observer-on-arrival from Phase-2a onward:
+//     a. Resolve() walks layers 0..K-1 checking σ-quorum / NR-quorum;
+//     returns Output (success) or ErrNoQuorum.
+//     b. On success: BuildCertificate(out) → broadcast for downstream peers.
+//     c. ObserveCertificate(c) — fallback submission path.
 //
 // Instance is NOT thread-safe; callers must serialize access. The
-// expected SSV adapter runs each Instance behind its own mutex (Phase L).
+// expected SSV adapter runs each Instance behind its own mutex.
+//
+// Per spec §Emission ordering, on every state delta (after each Observe*)
+// the Instance internally invokes:
+//  1. MaybeBuildAndBroadcastUpgrade — upgrade check first.
+//  2. MaybeBuildAndBroadcastCommit — then trigger evaluation.
+//
+// Callers don't invoke these directly during the slot; the Instance does
+// it automatically. Manual invocation (e.g., on a timer-driven slot
+// deadline) is permitted but not required.
 type Instance struct {
 	cfg           *Config
 	ownOperatorID OperatorID
 
 	// Cryptographic dependencies — declared at construction time.
-	// Bundle observation (Phase E) doesn't need signer or ibe (bundles
-	// have no threshold partials in 2ab Variant C); these fields are
-	// populated for the later phases (G/H) that consume them.
 	signer          obft.Signer
 	tagSigner       obft.Signer
 	ibe             obft.ThresholdIBE
@@ -55,48 +66,80 @@ type Instance struct {
 
 	// retainedBundles[layer][leader_id] = bundles retained for this
 	// (layer, leader). Capped at 2 distinct value_roots per spec §Phase 1
-	// / Retention bounds. Each entry carries an AuthOnly flag indicating
-	// whether the bundle was first-observed past T_accept_max (auth-only
-	// retention; not verdict-eligible) or in-window (regular retention).
-	//
-	// Phase F's verdict computation reads this state; auth-only entries
-	// don't drive the operator's own verdict but DO let the receiver
-	// verify peer-re-flooded V claims at the wire layer.
+	// Retention bounds. In 2abOBFT there is no auth-only vs regular
+	// retention distinction — all in-slot bundles are retained equivalently
+	// (no T_commit hard wall; the slot deadline at the runner level is the
+	// only hard cutoff).
 	retainedBundles map[int]map[OperatorID][]*retainedBundle
 
 	// hostVerdict[layer][string(value_root)] = host application's
 	// valid/not-valid verdict on the V identified by value_root at this
 	// layer. Populated via ApplyHostValidity; consumed by
-	// ComputeLocalVerdict at Phase-2a verdict-broadcast time. Per spec
-	// §Phase 2a, the host is re-consulted at verdict-broadcast time
-	// (potentially with a more recent head snapshot than at Phase-1
-	// acceptance — narrows the divergence window structurally).
+	// ComputeLocalValueState (at Phase-2a fire-time) and by the σ-eligibility
+	// trigger's side decision (at Commit emission time, for host re-check).
 	hostVerdict map[int]map[string]bool
 
-	// ownVerdict[layer] = the local operator's broadcast Verdict at this
-	// layer, cached after BuildVerdict. Subsequent BuildVerdict calls at
-	// the same layer return the cached entry (idempotent). Per spec
-	// §Phase 2a, each operator emits exactly one Verdict per (slot,
-	// layer); a second distinct Verdict from this operator would be
-	// Rule-6a self-equivocation.
-	ownVerdict map[int]*Verdict
+	// Phase-2a own emissions. ownNoValueMsg is set if the op emitted
+	// NoValue at Phase 2a; ownValueMsg is set if the op emitted Value at
+	// Phase 2a OR as a Phase-2a-late A1 upgrade from a prior NoValue. Both
+	// non-nil indicates the upgrade happened (A1 sequence). Phase-2a
+	// NRDirect emitters set ownCommit directly (Side=NRDirect) and leave
+	// ownValueMsg / ownNoValueMsg nil.
+	ownValueMsg   *ValueMsg
+	ownNoValueMsg *NoValueMsg
 
-	// peerVerdicts[layer][op] = the first-observed Verdict from op at
-	// this layer. Per spec §Phase 2a, honest receivers count the
-	// first-observed verdict for convergence purposes; subsequent
-	// distinct verdicts are dropped from convergence input but recorded
-	// as Rule-6a evidence.
-	peerVerdicts map[int]map[OperatorID]*Verdict
+	// Phase-2b own emission. At most one Commit per slot per operator,
+	// per spec §Phase 2b. Set by MaybeBuildAndBroadcastCommit OR by
+	// MaybeFirePhase2a (when ComputeLocalValueState returns NRDirect).
+	ownCommit *Commit
 
-	// verdictEquivocator[layer][op] = true if op has been observed
-	// broadcasting two distinct verdicts at this layer. Per spec
-	// §Phase 2a "Treat-equivocator-as-null (SHOULD)": receivers SHOULD
-	// treat operator i's contribution as null in the convergence count
-	// once a second distinct KindVerdict from i for the same (slot,
-	// layer) has been observed before convergence-rule evaluation at
-	// Phase-2b start. Phase G's convergence rule reads this map and
-	// excludes flagged operators from both verdict_pool and nr_pool.
-	verdictEquivocator map[int]map[OperatorID]bool
+	// Peer Phase-2 emissions — first-observed retained per (slot, op).
+	// Used for:
+	//   - Inference (KindCommit-Signed implies KindValue existed per A2/A6).
+	//   - Duplicate / equivocation detection (second distinct emission =
+	//     Phase-2 equivocation per Rule 6a, unless authorized by A1/A2/.../A8).
+	//   - Pool aggregation per §Pool aggregation rules.
+	peerValueMsg   map[OperatorID]*ValueMsg
+	peerNoValueMsg map[OperatorID]*NoValueMsg
+	peerCommit     map[OperatorID]*Commit
+
+	// Claim pools per §Pool aggregation rules. Maintained incrementally on
+	// every Observe* call. The pools are layer-indexed to support Phase 3
+	// reconstruction at deeper layers (though Phase 2b Commit emission is
+	// L_0-only; L_k>0 commitments are captured at Phase 2a inside
+	// LayerEntries).
+	//
+	//   - valuePool[layer][V_root] = set of operators claiming σ-direction
+	//     on V at this layer.
+	//   - noValuePool[layer] = set of operators claiming NR-direction at
+	//     this layer.
+	//
+	// Pool membership is per the inference rules: an op's KindValue at L_0
+	// adds them to valuePool[0][ValueRoot]; their L_k>0 SigmaChained entry
+	// adds them to valuePool[k][V_root]; their KindNoValue adds them to
+	// noValuePool[0]; etc. KindCommit-Signed implies an earlier KindValue
+	// (per A2/A6) and adds the op to valuePool[0][ValueRoot] via inference.
+	valuePool   map[int]map[[32]byte]map[OperatorID]bool
+	noValuePool map[int]map[OperatorID]bool
+
+	// Threshold pools (the actual σ and NR partials used for Phase 3
+	// reconstruction). Distinct from claim pools — these only contain
+	// extractable partial signatures, not inferred-claim memberships.
+	//
+	//   - sigmaPool[layer][V_root][op] = the op's σ partial on V at this
+	//     layer. At L_0: extracted from KindCommit-Signed. At L_k>0:
+	//     decrypted from Phase-2a LayerEntry (SigmaChained, peeled via
+	//     accumulated nr_tag keys).
+	//   - nrTagPool[layer][op] = the op's nr_tag_k partial at this layer.
+	//     At L_0: extracted from KindCommit-NR / KindCommit-NRDirect. At
+	//     L_k>0: extracted from Phase-2a LayerEntry (NRPlaintext).
+	//
+	// Threshold pools are populated lazily as the Phase 3 walk needs them
+	// (L_0 sigmaPool is populated on KindCommit-Signed observation; L_k>0
+	// is populated during Resolve()'s chain-decryption walk once enough
+	// nr_tag partials have aggregated to unlock the layer).
+	sigmaPool map[int]map[[32]byte]map[OperatorID]Signature
+	nrTagPool map[int]map[OperatorID]Signature
 
 	// Phase-2b local commitment state — per-layer σ/NR lock + cached σ
 	// partials. EKM enforces single-σ-V and σ-XOR-NR per (slot, layer)
@@ -106,37 +149,19 @@ type Instance struct {
 	nrLocked     []bool
 	ownPartials  map[int]Signature // cached σ partials per layer
 
-	// ownOnion2b is the cached local Phase-2b emission. Set once by
-	// BuildOwnOnion2b; subsequent calls return the same instance per
-	// spec §Phase 2b (single emission per slot per operator).
-	ownOnion2b *Onion2b
-
-	// peerOnions[layer][op] = the σ-side onion entries seen from this
-	// operator at this layer (one per Onion2b they emitted). Multiple
-	// distinct entries means cross-onion equivocation (Rule 3).
-	peerOnions map[int]map[OperatorID][]EncryptedLayer
-
-	// peerNR[layer][op] = the operator's NR partial for this layer (one
-	// per Onion2b they emitted).
-	peerNR map[int]map[OperatorID]Signature
-
-	// peerOnion2bHashes[op] = set of content hashes observed from op.
-	// Identical re-broadcasts are no-ops; the first distinct second hash
-	// is top-level Rule-3 cross-onion equivocation.
-	peerOnion2bHashes map[OperatorID]map[[32]byte]struct{}
-
-	// peerFirstOnion2b retains a deep copy of the FIRST Onion2b observed
-	// from each operator so the second distinct emission can package
-	// both bodies into Rule-3 evidence at Layer=-1.
-	peerFirstOnion2b map[OperatorID]*Onion2b
+	// State flags. phase2aFired ensures MaybeFirePhase2a fires at most
+	// once per slot. (Per-tick processing — MaybeBuildAndBroadcastUpgrade
+	// + MaybeBuildAndBroadcastCommit — is idempotent and may be re-invoked
+	// on every state delta.)
+	phase2aFired bool
 
 	// Per-rule dedup buckets — ensure one Evidence entry per logical
 	// fault even when multiple detection paths fire.
-	rule1Fired       map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
-	rule3LeaderFired map[int]map[OperatorID]bool // Rule 3 per (layer, op) at L_0
-	rule4Fired       map[int]map[OperatorID]bool // Rule 4 fake encrypted-presence per (layer, op)
-	rule5Fired       map[int]map[OperatorID]bool // Rule 5 (cryptoFake or unknownV) per (layer, op)
-	rule6bFired      map[int]map[OperatorID]bool // Rule 6b per (layer, op)
+	rule1Fired                 map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
+	rule3Fired                 map[int]map[OperatorID]bool // Rule 3 per (layer, op)
+	rule4Fired                 map[int]map[OperatorID]bool // Rule 4 fake encrypted-presence per (layer, op)
+	rule5Fired                 map[int]map[OperatorID]bool // Rule 5 (cryptoFake or unknownV) per (layer, op)
+	rule6aFired map[OperatorID]bool // Rule 6a Phase-2 equivocation per op (slot-wide)
 
 	// receivedCertificate is the FIRST peer-broadcast Certificate
 	// observed via ObserveCertificate at this Instance. Per spec
@@ -155,56 +180,31 @@ type Instance struct {
 	evidenceObserver EvidenceObserver
 	evidenceObserved map[evidenceObservedKey]bool
 
-	// l0VerdictReadyCh is closed when the operator can determine their L_0
-	// Phase-2a verdict — uniquely-retained host-validated V, OR host
-	// not-valid on the unique retained V, OR ≥ 2 retained V's (equivocation
-	// observed forcing NR), OR for an L_0 leader the moment they've built
-	// their own L_0 bundle. Closed at most once per slot. Phase-2a verdict
-	// emit selects on this against the T_verdict_max-ε_proc fallback.
-	l0VerdictReadyCh chan struct{}
-
-	// l0SigmaEligibilityCh is closed when the operator's local verdict-pool
-	// at L_0 has ≥ qV σV verdicts for some V (i.e., the convergence rule
-	// will yield a stable σ output at L_0). Closed at most once per slot.
-	// Phase-2b commit emit selects on this against the T_commit fallback.
-	l0SigmaEligibilityCh chan struct{}
-
 	ended bool
 }
 
 // retainedBundle wraps a Phase-1 bundle with the metadata Phase E needs
-// to track retention semantics.
+// to track retention semantics. In 2abOBFT there is no auth-only vs
+// regular distinction — the AuthOnly field is dropped relative to the
+// previous design.
 type retainedBundle struct {
 	// Bundle is a deep copy of the retained bundle (defensive against
 	// caller-owned slice mutation post-Observe).
 	Bundle *Phase1Bundle
 
-	// AuthOnly is true if the bundle was first-observed past T_accept_max
-	// (= T_commit − 1 BTT). Auth-only-retained bundles satisfy spec
-	// §Phase 1 / "auth-only retention": the leader's auth signature is
-	// retained for the slot (usable for verifying peer-re-flooded V's
-	// during Phase-2a), but the bundle does NOT drive the receiving
-	// operator's own Phase-2a verdict.
-	AuthOnly bool
-
 	// RetentionEstablishedAt is the offset (from slot_start) at which
-	// this retention entry took its current (AuthOnly) status:
+	// this retention entry took its current status:
 	//
-	//   - First observation of a previously-unseen V at any retention
-	//     mode → set to that observation's offset.
-	//   - Auth-only → regular promotion (a previously auth-only-retained
-	//     V is re-observed within the accept window) → updated to the
-	//     promotion observation's offset.
-	//   - Identical re-broadcast within the same retention mode (silent
-	//     dedup) → NOT updated.
+	//   - First observation of a previously-unseen V → set to that
+	//     observation's offset.
+	//   - Identical re-broadcast (silent dedup) → NOT updated.
 	//
 	// Useful for tests + diagnostics.
 	RetentionEstablishedAt time.Duration
 }
 
 // NewInstance constructs a 2abOBFT Instance. Validates the config and
-// pubKeyShares at construction; the constructor signature mirrors
-// base.NewInstance for cross-protocol consistency.
+// pubKeyShares at construction.
 //
 // `signer` is the operator's V-keypair share signer. `tagSigner` is the
 // operator's IBE-keypair share signer used for NR partials (may equal
@@ -246,11 +246,6 @@ func NewInstance(
 	if !operatorInCluster(ownOperatorID, cfg) {
 		return nil, fmt.Errorf("twoab: own operator id %d not in cluster", ownOperatorID)
 	}
-	// Every cluster member must have a registered pub-key share — leaders
-	// need it for Phase-3 reconstruction; non-leader peers need it so
-	// Phase-2b σ-verification paths work against their share. Missing
-	// shares are surfaced upfront so the misconfiguration is caught in
-	// test/setup rather than degrading evidence detection later.
 	for _, op := range cfg.Operators {
 		if share, ok := pubKeyShares[op]; !ok || len(share) == 0 {
 			return nil, fmt.Errorf("twoab: operator %d has no pub-key share", op)
@@ -262,159 +257,35 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:                cfg,
-		ownOperatorID:      ownOperatorID,
-		signer:             signer,
-		tagSigner:          tagSigner,
-		ibe:                ibe,
-		clusterPubKey:      clusterPubKey,
-		pubKeyShares:       pubKeyShares,
-		ibePubKeyShares:    ibePubKeyShares,
-		evidenceObserver:   evidenceObserver,
-		retainedBundles:    make(map[int]map[OperatorID][]*retainedBundle, K),
-		hostVerdict:        make(map[int]map[string]bool, K),
-		ownVerdict:         make(map[int]*Verdict, K),
-		peerVerdicts:       make(map[int]map[OperatorID]*Verdict, K),
-		verdictEquivocator: make(map[int]map[OperatorID]bool, K),
-		sigmaLocked:        make([]bool, K),
-		sigmaLockedV:       make([]Value, K),
-		nrLocked:           make([]bool, K),
-		ownPartials:        make(map[int]Signature, K),
-		peerOnions:         make(map[int]map[OperatorID][]EncryptedLayer, K),
-		peerNR:             make(map[int]map[OperatorID]Signature, K),
-		peerOnion2bHashes:  make(map[OperatorID]map[[32]byte]struct{}),
-		peerFirstOnion2b:   make(map[OperatorID]*Onion2b),
-		rule1Fired:         make(map[int]map[OperatorID]bool, K),
-		rule3LeaderFired:   make(map[int]map[OperatorID]bool, K),
-		rule4Fired:         make(map[int]map[OperatorID]bool, K),
-		rule5Fired:         make(map[int]map[OperatorID]bool, K),
-		rule6bFired:          make(map[int]map[OperatorID]bool, K),
-		evidenceObserved:     make(map[evidenceObservedKey]bool),
-		l0VerdictReadyCh:     make(chan struct{}),
-		l0SigmaEligibilityCh: make(chan struct{}),
+		cfg:                    cfg,
+		ownOperatorID:          ownOperatorID,
+		signer:                 signer,
+		tagSigner:              tagSigner,
+		ibe:                    ibe,
+		clusterPubKey:          clusterPubKey,
+		pubKeyShares:           pubKeyShares,
+		ibePubKeyShares:        ibePubKeyShares,
+		evidenceObserver:       evidenceObserver,
+		retainedBundles:        make(map[int]map[OperatorID][]*retainedBundle, K),
+		hostVerdict:            make(map[int]map[string]bool, K),
+		peerValueMsg:           make(map[OperatorID]*ValueMsg, len(cfg.Operators)),
+		peerNoValueMsg:         make(map[OperatorID]*NoValueMsg, len(cfg.Operators)),
+		peerCommit:             make(map[OperatorID]*Commit, len(cfg.Operators)),
+		valuePool:              make(map[int]map[[32]byte]map[OperatorID]bool, K),
+		noValuePool:            make(map[int]map[OperatorID]bool, K),
+		sigmaPool:              make(map[int]map[[32]byte]map[OperatorID]Signature, K),
+		nrTagPool:              make(map[int]map[OperatorID]Signature, K),
+		sigmaLocked:            make([]bool, K),
+		sigmaLockedV:           make([]Value, K),
+		nrLocked:               make([]bool, K),
+		ownPartials:            make(map[int]Signature, K),
+		rule1Fired:             make(map[int]map[OperatorID]bool, K),
+		rule3Fired:             make(map[int]map[OperatorID]bool, K),
+		rule4Fired:             make(map[int]map[OperatorID]bool, K),
+		rule5Fired:             make(map[int]map[OperatorID]bool, K),
+		rule6aFired:      make(map[OperatorID]bool, len(cfg.Operators)),
+		evidenceObserved: make(map[evidenceObservedKey]bool),
 	}, nil
-}
-
-// L0VerdictReadyCh returns a channel closed when the operator can determine
-// their L_0 Phase-2a verdict per spec §Phase 2a / Verdict broadcast timing:
-//   - uniquely-retained Phase-1 bundle at L_0 (non-auth-only) AND host has
-//     returned a valid/not-valid verdict on it, OR
-//   - ≥ 2 distinct V's retained at L_0 (leader equivocation → NR), OR
-//   - operator is the L_0 leader and has built their own L_0 bundle.
-//
-// One-shot per slot. Callers select on this against the T_verdict_max-ε_proc
-// fallback ticker.
-func (i *Instance) L0VerdictReadyCh() <-chan struct{} { return i.l0VerdictReadyCh }
-
-// L0SigmaEligibilityCh returns a channel closed when the operator's local
-// verdict-pool at L_0 has ≥ qV σV verdicts for some V (the convergence rule
-// will yield a stable σ output at L_0). One-shot per slot. Callers select on
-// this against the T_commit+ε_proc fallback ticker for Phase-2b emit timing.
-func (i *Instance) L0SigmaEligibilityCh() <-chan struct{} { return i.l0SigmaEligibilityCh }
-
-// l0VerdictReady reports whether the operator's L_0 verdict is determinable.
-//
-// Unlike OBFT, 2abOBFT has no Phase-1 σ_V (Variant C) — the L_0 leader's
-// own-bundle case is handled via the standard retention+host-validity path:
-// the runner calls ObservePhase1Bundle on the leader's own bundle (which
-// retains it) and ApplyHostValidity on the leader's V (which records the
-// host verdict). Both fire maybeSignalL0VerdictReady; the predicate returns
-// true once both events have landed.
-func (i *Instance) l0VerdictReady() bool {
-	const layer = 0
-	leaderMap := i.retainedBundles[layer]
-	if len(leaderMap) == 0 {
-		return false
-	}
-	expectedLeader := i.cfg.Layers[layer].Leader
-	retained := leaderMap[expectedLeader]
-	if len(retained) >= 2 {
-		// Equivocation observed → forced NR per cross-phase exclusivity.
-		return true
-	}
-	if len(retained) != 1 {
-		return false
-	}
-	// Auth-only entries don't drive the operator's own verdict per spec
-	// §Phase 1 / "auth-only retention".
-	if retained[0].AuthOnly {
-		return false
-	}
-	verdicts := i.hostVerdict[layer]
-	if verdicts == nil {
-		return false
-	}
-	root := ValueRoot(retained[0].Bundle.Value)
-	_, recorded := verdicts[string(root[:])]
-	return recorded
-}
-
-// l0SigmaEligibilityReached reports whether the operator's local verdict-pool
-// at L_0 has ≥ qV `σV` verdicts on some single V (so the convergence rule
-// will yield a stable σ output at L_0 even without further verdict arrivals).
-func (i *Instance) l0SigmaEligibilityReached() bool {
-	const layer = 0
-	peer := i.peerVerdicts[layer]
-	own := i.ownVerdict[layer]
-	if len(peer) == 0 && own == nil {
-		return false
-	}
-	// Tally σV verdicts per value_root. Exclude operators who have been
-	// flagged as verdict-equivocators (treat-equivocator-as-null SHOULD
-	// rule, spec §Phase 2a). Skip the local op's own entry in the peer map
-	// — own's σV is already tallied via `own` above; a runner that
-	// self-observes its own verdict would otherwise double-count it.
-	equivocators := i.verdictEquivocator[layer]
-	counts := make(map[[32]byte]int)
-	if own != nil && own.Kind == VerdictSigmaV {
-		counts[own.ValueRoot]++
-	}
-	for op, v := range peer {
-		if op == i.ownOperatorID {
-			continue
-		}
-		if equivocators[op] {
-			continue
-		}
-		if v.Kind != VerdictSigmaV {
-			continue
-		}
-		counts[v.ValueRoot]++
-	}
-	qV := 2*i.cfg.F + 1
-	for _, c := range counts {
-		if c >= qV {
-			return true
-		}
-	}
-	return false
-}
-
-// maybeSignalL0VerdictReady closes l0VerdictReadyCh if newly satisfied.
-// Safe to call repeatedly; subsequent calls are no-ops. Caller holds the
-// instance mutex.
-func (i *Instance) maybeSignalL0VerdictReady() {
-	select {
-	case <-i.l0VerdictReadyCh:
-		return
-	default:
-	}
-	if i.l0VerdictReady() {
-		close(i.l0VerdictReadyCh)
-	}
-}
-
-// maybeSignalL0SigmaEligibility closes l0SigmaEligibilityCh if newly
-// satisfied. Safe to call repeatedly. Caller holds the instance mutex.
-func (i *Instance) maybeSignalL0SigmaEligibility() {
-	select {
-	case <-i.l0SigmaEligibilityCh:
-		return
-	default:
-	}
-	if i.l0SigmaEligibilityReached() {
-		close(i.l0SigmaEligibilityCh)
-	}
 }
 
 // Config returns the instance's config (read-only).
@@ -440,15 +311,10 @@ func (i *Instance) LeaderAtLayers() []int {
 // entries. Order is insertion order.
 //
 // SHALLOW: the slice itself is freshly allocated, but each Evidence's
-// typed-payload pointer fields (CrossSigning, LeaderEquivocation, ...)
-// alias the same backing structs stored inside the Instance. Callers
-// MUST treat the returned entries (and their payloads) as read-only;
-// mutating a payload field corrupts internal state. Loggers/persisters
-// should read-only-marshal the entries; if a mutable copy is needed,
-// the caller deep-copies after snapshot.
-//
-// Safe to call concurrently with the Instance only if the caller
-// serializes access.
+// typed-payload pointer fields alias the same backing structs stored
+// inside the Instance. Callers MUST treat the returned entries (and
+// their payloads) as read-only; mutating a payload field corrupts
+// internal state.
 func (i *Instance) Evidence() []Evidence {
 	out := make([]Evidence, len(i.evidence))
 	copy(out, i.evidence)
@@ -456,8 +322,8 @@ func (i *Instance) Evidence() []Evidence {
 }
 
 // RetainedBundles returns the bundles retained at (layer, leader_id) at
-// the moment of the call. Includes both regular and auth-only retentions.
-// Returns nil if no bundles are retained for this key.
+// the moment of the call. Returns nil if no bundles are retained for
+// this key.
 //
 // Returned slice is a snapshot copy — caller can iterate without
 // affecting Instance state. The pointed-to *Phase1Bundle structs are
@@ -479,8 +345,7 @@ func (i *Instance) RetainedBundles(layer int, leaderID OperatorID) []*retainedBu
 // Ended reports whether the instance has been Finalized.
 func (i *Instance) Ended() bool { return i.ended }
 
-// Finalize closes the Instance. Phase-E stub — Phases F-H add cleanup
-// hooks. Idempotent.
+// Finalize closes the Instance. Idempotent.
 func (i *Instance) Finalize() {
 	i.ended = true
 }
@@ -501,7 +366,7 @@ func (i *Instance) recordEvidence(e Evidence) {
 	i.evidenceObserver(e)
 }
 
-// ---------- Phase-2b EKM coordination ----------
+// ---------- EKM coordination ----------
 
 // transitionToSigma applies the σ-emit EKM lock for `layer` on `value`.
 // Returns ErrSigmaLocked if already locked on a different V (single-σ-V
@@ -534,7 +399,7 @@ func (i *Instance) transitionToNR(layer int) error {
 }
 
 // chainEncryptForLayer encrypts `partial` for layer `k` using the
-// chained-IBE construction from spec §Phase 2b emission:
+// chained-IBE construction from spec §Phase 2a / §Wire format:
 //
 //	layer k:  E_{nr_tag_0}( ... E_{nr_tag_{k-1}}( σ_partial ) ... )
 //
@@ -558,8 +423,7 @@ func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
 
 // chainDecryptForLayer decrypts a layer-`k` ciphertext using
 // `decryptionKeys` where decryptionKeys[j] is the aggregated NR-partials
-// signature on nr_tag_j. Used by Phase H (reconstruction); included here
-// for completeness alongside chainEncryptForLayer.
+// signature on nr_tag_j. Used by Phase 3 (reconstruction).
 //
 // Decryption applies keys outermost-first.
 func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys [][]byte) ([]byte, error) {
@@ -581,6 +445,8 @@ func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys
 	return outer, nil
 }
 
+// ---------- Per-rule dedup helpers ----------
+
 // recordRule1 marks Rule 1 (CrossSigning) as fired for (op, layer).
 // Returns true if this is the first observation; false if Rule 1 was
 // already recorded.
@@ -595,25 +461,21 @@ func (i *Instance) recordRule1(op OperatorID, layer int) bool {
 	return true
 }
 
-// recordRule3Leader marks Rule 3 leader-extension as fired for (op, layer).
-// Used by ObserveOnion2b's σ-side branch at L_0 when a leader's onion σ
-// differs from their retained Phase-1 V — though in 2ab the bundle has
-// no σ_V, this check fires when the onion's claimed V differs from any
-// retained V from the same leader at L_0 (the bare-OBFT analog).
-func (i *Instance) recordRule3Leader(op OperatorID, layer int) bool {
-	if i.rule3LeaderFired[layer] == nil {
-		i.rule3LeaderFired[layer] = make(map[OperatorID]bool)
+// recordRule3 marks Rule 3 (cross-commit equivocation) as fired for
+// (op, layer). Returns true if this is the first observation.
+func (i *Instance) recordRule3(op OperatorID, layer int) bool {
+	if i.rule3Fired[layer] == nil {
+		i.rule3Fired[layer] = make(map[OperatorID]bool)
 	}
-	if i.rule3LeaderFired[layer][op] {
+	if i.rule3Fired[layer][op] {
 		return false
 	}
-	i.rule3LeaderFired[layer][op] = true
+	i.rule3Fired[layer][op] = true
 	return true
 }
 
 // recordRule4 marks Rule 4 (fake encrypted-presence at k > 0) as fired
-// for (op, layer). Returns true if this is the first observation; false
-// if Rule 4 was already recorded.
+// for (op, layer). Returns true if this is the first observation.
 func (i *Instance) recordRule4(op OperatorID, layer int) bool {
 	if i.rule4Fired[layer] == nil {
 		i.rule4Fired[layer] = make(map[OperatorID]bool)
@@ -625,9 +487,8 @@ func (i *Instance) recordRule4(op OperatorID, layer int) bool {
 	return true
 }
 
-// recordRule5Fired marks Rule 5 (fake plaintext σ at L_0 — either
-// cryptoFake or unknownV) as fired for (op, layer). Returns true if this
-// is the first observation; false if Rule 5 was already recorded.
+// recordRule5Fired marks Rule 5 (fake plaintext σ at L_0) as fired for
+// (op, layer). Returns true if this is the first observation.
 func (i *Instance) recordRule5Fired(op OperatorID, layer int) bool {
 	if i.rule5Fired[layer] == nil {
 		i.rule5Fired[layer] = make(map[OperatorID]bool)
@@ -639,14 +500,121 @@ func (i *Instance) recordRule5Fired(op OperatorID, layer int) bool {
 	return true
 }
 
-// recordRule6b marks Rule 6b verdict-vs-action as fired for (op, layer).
-func (i *Instance) recordRule6b(op OperatorID, layer int) bool {
-	if i.rule6bFired[layer] == nil {
-		i.rule6bFired[layer] = make(map[OperatorID]bool)
-	}
-	if i.rule6bFired[layer][op] {
+// recordRule6a marks Rule 6a (Phase-2 equivocation) as fired for op.
+// Rule 6a is slot-wide (not per-layer) — the offending sequence is a
+// pair (or triple) of Phase-2 emissions from the same op within the
+// slot. Returns true if this is the first observation.
+func (i *Instance) recordRule6a(op OperatorID) bool {
+	if i.rule6aFired[op] {
 		return false
 	}
-	i.rule6bFired[layer][op] = true
+	i.rule6aFired[op] = true
 	return true
+}
+
+// ---------- Pool maintenance helpers ----------
+
+// addToValuePool adds `op` to valuePool[layer][vRoot]. Idempotent.
+func (i *Instance) addToValuePool(layer int, vRoot [32]byte, op OperatorID) {
+	if i.valuePool[layer] == nil {
+		i.valuePool[layer] = make(map[[32]byte]map[OperatorID]bool)
+	}
+	if i.valuePool[layer][vRoot] == nil {
+		i.valuePool[layer][vRoot] = make(map[OperatorID]bool)
+	}
+	i.valuePool[layer][vRoot][op] = true
+}
+
+// removeFromValuePool removes `op` from valuePool[layer][vRoot]. Used by
+// the upgrade-detection path to undo a previous noValuePool entry when
+// observing a KindValue from the same op (per §Pool aggregation rules /
+// Receiver-side robustness — the upgrade KindValue replaces the prior
+// KindNoValue's noValuePool contribution).
+//
+// Note: this function operates on valuePool, but the upgrade path
+// actually removes from noValuePool — exposed for symmetry / debugging.
+func (i *Instance) removeFromValuePool(layer int, vRoot [32]byte, op OperatorID) {
+	if i.valuePool[layer] == nil || i.valuePool[layer][vRoot] == nil {
+		return
+	}
+	delete(i.valuePool[layer][vRoot], op)
+}
+
+// addToNoValuePool adds `op` to noValuePool[layer]. Idempotent.
+func (i *Instance) addToNoValuePool(layer int, op OperatorID) {
+	if i.noValuePool[layer] == nil {
+		i.noValuePool[layer] = make(map[OperatorID]bool)
+	}
+	i.noValuePool[layer][op] = true
+}
+
+// removeFromNoValuePool removes `op` from noValuePool[layer]. Used by
+// the upgrade-detection path (per §Pool aggregation rules / Receiver-
+// side robustness): when ObserveValueMsg sees that the same op had
+// previously emitted KindNoValue, the KindNoValue's noValuePool
+// contribution is replaced by the upgrade KindValue's valuePool
+// contribution.
+func (i *Instance) removeFromNoValuePool(layer int, op OperatorID) {
+	if i.noValuePool[layer] == nil {
+		return
+	}
+	delete(i.noValuePool[layer], op)
+}
+
+// addToSigmaPool records the σ partial from op at (layer, vRoot).
+// Idempotent on (layer, vRoot, op); the cached partial is overwritten if
+// a different one is observed (defensive — Pigeonhole 2 + EKM make this
+// not happen in honest paths).
+func (i *Instance) addToSigmaPool(layer int, vRoot [32]byte, op OperatorID, partial Signature) {
+	if i.sigmaPool[layer] == nil {
+		i.sigmaPool[layer] = make(map[[32]byte]map[OperatorID]Signature)
+	}
+	if i.sigmaPool[layer][vRoot] == nil {
+		i.sigmaPool[layer][vRoot] = make(map[OperatorID]Signature)
+	}
+	i.sigmaPool[layer][vRoot][op] = append(Signature{}, partial...)
+}
+
+// addToNrTagPool records the nr_tag_layer partial from op at this layer.
+// Idempotent on (layer, op).
+func (i *Instance) addToNrTagPool(layer int, op OperatorID, partial Signature) {
+	if i.nrTagPool[layer] == nil {
+		i.nrTagPool[layer] = make(map[OperatorID]Signature)
+	}
+	i.nrTagPool[layer][op] = append(Signature{}, partial...)
+}
+
+// valuePoolSize returns the number of distinct operators in
+// valuePool[layer][vRoot].
+func (i *Instance) valuePoolSize(layer int, vRoot [32]byte) int {
+	if i.valuePool[layer] == nil {
+		return 0
+	}
+	return len(i.valuePool[layer][vRoot])
+}
+
+// noValuePoolSize returns the number of distinct operators in
+// noValuePool[layer].
+func (i *Instance) noValuePoolSize(layer int) int {
+	return len(i.noValuePool[layer])
+}
+
+// valuePoolMaxV returns the (V_root, count) for the V at this layer with
+// the most operators in its valuePool. Used by the σ-eligibility trigger
+// to determine which V (if any) the cluster has converged on.
+//
+// At n = 3f+1 (the SSV BFT-tight bound), at most one V can have
+// `|valuePool[V]| ≥ qV` per Pigeonhole 2 — so the "max V" is unambiguous
+// at quorum. Below quorum, the max V is informational only.
+func (i *Instance) valuePoolMaxV(layer int) (vRoot [32]byte, count int) {
+	if i.valuePool[layer] == nil {
+		return [32]byte{}, 0
+	}
+	for v, ops := range i.valuePool[layer] {
+		if len(ops) > count {
+			vRoot = v
+			count = len(ops)
+		}
+	}
+	return vRoot, count
 }

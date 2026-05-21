@@ -10,27 +10,38 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
 )
 
-// internalByz is the 2ab-specific byz interface. Mirrors the bare OBFT
-// adapter's internalByz, plus three Phase-2a hooks (AllowVerdictBroadcast /
-// OverrideVerdict / BuildExtraVerdicts) for verdict-broadcast suppression
-// and equivocation patterns.
+// internalByz is the 2ab-specific byz interface. Each method has an
+// honest default; concrete patterns selectively override.
 //
-// Each method has an honest default; concrete patterns selectively override.
+// Phase 2a now produces ONE of {ValueMsg, NoValueMsg, Commit-NRDirect}
+// per op via MaybeFirePhase2a. We expose a coarse AllowPhase2aEmission
+// gate (suppress all Phase-2a wire traffic from an op) plus per-message
+// override / inject hooks for adversarial scenarios. The protocol-level
+// "verdict-flip" attack (old σV ↔ NR) is obsolete: Phase 2a has no
+// direction field — direction is derived from each op's local state.
+//
+// Phase 2b is now dynamic — Commits fire via the protocol's per-tick
+// afterStateDelta cascade. The adapter captures these emissions via
+// captureCascadeEmissions; OverrideCommit / BuildExtraCommits apply
+// regardless of whether the commit fired at the Phase-2a-NRDirect
+// fire-instant or via the cascade.
 type internalByz interface {
 	// Phase 1
 	LeaderBroadcastPlan(s *sim, leader twoab.OperatorID, layer int, honestV twoab.Value) []broadcastPlan
 	OverrideOwnPhase1Delay(s *sim, leader twoab.OperatorID) time.Duration
 
-	// Phase 2a (verdict broadcast — new in 2ab)
-	AllowVerdictBroadcast(op twoab.OperatorID, layer int) bool
-	OverrideVerdict(s *sim, op twoab.OperatorID, layer int, v *twoab.Verdict) *twoab.Verdict
-	BuildExtraVerdicts(s *sim, op twoab.OperatorID, layer int, v *twoab.Verdict) []*twoab.Verdict
+	// Phase 2a (coordination broadcast — new in 2abOBFT)
+	AllowPhase2aEmission(op twoab.OperatorID) bool
+	OverrideValueMsg(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg
+	OverrideUpgradeValueMsg(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg
+	OverrideNoValueMsg(s *sim, op twoab.OperatorID, nv *twoab.NoValueMsg) *twoab.NoValueMsg
+	BuildExtraValueMsgs(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) []*twoab.ValueMsg
+	BuildExtraNoValueMsgs(s *sim, op twoab.OperatorID, nv *twoab.NoValueMsg) []*twoab.NoValueMsg
 
-	// Phase 2b (onion2b — replaces base's Commit)
-	AllowOnion2bBroadcast(op twoab.OperatorID) bool
-	OverrideOnion2b(s *sim, op twoab.OperatorID, o *twoab.Onion2b) *twoab.Onion2b
-	BuildExtraOnion2bs(s *sim, op twoab.OperatorID, o *twoab.Onion2b) []*twoab.Onion2b
-	OverrideOwnOnion2bDispatchDelay(s *sim, op twoab.OperatorID) time.Duration
+	// Phase 2b (binding commit emission — dynamic in 2abOBFT)
+	OverrideCommit(s *sim, op twoab.OperatorID, c *twoab.Commit) *twoab.Commit
+	BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit
+	OverrideOwnCommitDispatchDelay(s *sim, op twoab.OperatorID) time.Duration
 
 	// Phase 3
 	AllowCertificateBroadcast(op twoab.OperatorID) bool
@@ -65,11 +76,9 @@ func newByzSet(ops []ct.OperatorID) byzSet {
 func (s byzSet) Contains(op twoab.OperatorID) bool { return s.Lookup[op] }
 
 // translateByz maps an abstract consensustest.ByzPattern to a 2ab-internal
-// impl. Most catalog kinds translate faithfully; 2ab-specific extensions
-// (verdict-equivocation / verdict-vs-action) are deferred to a follow-up
-// Phase (the existing ByzKind enum doesn't yet name them; adding new
-// abstract kinds requires touching every adapter and is split from this
-// adapter-introduction commit).
+// impl. Most catalog kinds translate faithfully; old verdict-flip /
+// verdict-withhold patterns are gone (Phase 2a has no direction field
+// to flip), and 2ab-specific extensions are deferred.
 func translateByz(p ct.ByzPattern) (internalByz, error) {
 	bs := newByzSet(p.ByzOperators)
 	switch p.Kind {
@@ -160,13 +169,14 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 			RecipientsB: recipientsB,
 		}, nil
 	case ct.ByzDelayedCommit:
-		return byzDelayedOnion2b{ByzSet: bs}, nil
+		return byzDelayedCommit{ByzSet: bs}, nil
 	case ct.ByzAggregatorBypass:
 		return byzAggregatorBypass{ByzSet: bs}, nil
 	case ct.ByzWitnessForgery:
-		// 2ab has no Witnesses array (no Phase-1 σ_V exists). Rule-3
-		// equivalent is exercised via ByzCrossOnionEquivocation. Surface
-		// as ErrNotApplicable so the matrix skip-not-fail propagates.
+		// 2abOBFT has no Witnesses array — the Phase-1 σ_V leader partial
+		// was removed entirely. Rule-3 equivalent is exercised via
+		// ByzCrossOnionEquivocation. Surface as ErrNotApplicable so the
+		// matrix skip-not-fail propagates.
 		return nil, ct.ErrNotApplicable
 	case ct.ByzGarbageMessages, ct.ByzExceedsRateLimit, ct.ByzOfflineDoubleVAttempt:
 		// Reserved enum values — covered at other layers, not via the
@@ -181,14 +191,28 @@ func translateByz(p ct.ByzPattern) (internalByz, error) {
 
 type honestDefaults struct{}
 
-func (honestDefaults) AllowVerdictBroadcast(twoab.OperatorID, int) bool { return true }
-func (honestDefaults) OverrideVerdict(_ *sim, _ twoab.OperatorID, _ int, v *twoab.Verdict) *twoab.Verdict {
+func (honestDefaults) AllowPhase2aEmission(twoab.OperatorID) bool { return true }
+func (honestDefaults) OverrideValueMsg(_ *sim, _ twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
 	return v
 }
-func (honestDefaults) BuildExtraVerdicts(_ *sim, _ twoab.OperatorID, _ int, _ *twoab.Verdict) []*twoab.Verdict {
+func (honestDefaults) OverrideUpgradeValueMsg(_ *sim, _ twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
+	return v
+}
+func (honestDefaults) OverrideNoValueMsg(_ *sim, _ twoab.OperatorID, nv *twoab.NoValueMsg) *twoab.NoValueMsg {
+	return nv
+}
+func (honestDefaults) BuildExtraValueMsgs(_ *sim, _ twoab.OperatorID, _ *twoab.ValueMsg) []*twoab.ValueMsg {
 	return nil
 }
-func (honestDefaults) AllowOnion2bBroadcast(twoab.OperatorID) bool     { return true }
+func (honestDefaults) BuildExtraNoValueMsgs(_ *sim, _ twoab.OperatorID, _ *twoab.NoValueMsg) []*twoab.NoValueMsg {
+	return nil
+}
+func (honestDefaults) OverrideCommit(_ *sim, _ twoab.OperatorID, c *twoab.Commit) *twoab.Commit {
+	return c
+}
+func (honestDefaults) BuildExtraCommits(_ *sim, _ twoab.OperatorID, _ *twoab.Commit) []*twoab.Commit {
+	return nil
+}
 func (honestDefaults) AllowCertificateBroadcast(twoab.OperatorID) bool { return true }
 func (honestDefaults) AllowDelivery(_, _ twoab.OperatorID, _ ct.MsgKind) bool {
 	return true
@@ -196,16 +220,10 @@ func (honestDefaults) AllowDelivery(_, _ twoab.OperatorID, _ ct.MsgKind) bool {
 func (honestDefaults) OverrideDelay(_ *mrand.Rand, _, _ twoab.OperatorID, _ ct.MsgKind) time.Duration {
 	return -1
 }
-func (honestDefaults) OverrideOnion2b(_ *sim, _ twoab.OperatorID, o *twoab.Onion2b) *twoab.Onion2b {
-	return o
-}
-func (honestDefaults) BuildExtraOnion2bs(_ *sim, _ twoab.OperatorID, _ *twoab.Onion2b) []*twoab.Onion2b {
-	return nil
-}
 func (honestDefaults) OverrideOwnPhase1Delay(_ *sim, _ twoab.OperatorID) time.Duration {
 	return 0
 }
-func (honestDefaults) OverrideOwnOnion2bDispatchDelay(_ *sim, _ twoab.OperatorID) time.Duration {
+func (honestDefaults) OverrideOwnCommitDispatchDelay(_ *sim, _ twoab.OperatorID) time.Duration {
 	return 0
 }
 
@@ -290,14 +308,13 @@ func (b byzEquivocAllNR) LeaderBroadcastPlan(s *sim, leader twoab.OperatorID, la
 
 // ---- byzEquivocSigmaLockedSplit ----------------------------------------
 
-// σ-locked split equivocation: in 2ab, the same scenario that misses
+// σ-locked split equivocation: in 2abOBFT, the same scenario that misses
 // under bare OBFT (each receiver retains 1 V; σ-pool < qV; bare OBFT
 // reaches no σ-quorum AND no NR-quorum at L_0 — slot miss) recovers via
-// 2ab's NR-fall-through. Phase-2a verdict pool is split f-f across V_a /
-// V_b (1-1 at f=1 / n=4); the byz leader self-observes both bundles and
-// row-1 NRs in their own verdict; the silent rest also NR. Neither V
-// reaches qV; row 5 → all-NR → NR-quorum at L_0 → advance to L_1 where
-// the honest non-byz leader broadcasts in time → σ at L_1.
+// 2abOBFT's NR-fallthrough. The Phase-2a coordination broadcast surfaces
+// the cluster's σ-eligibility verdict before any cryptographic commit
+// fires; with f-f split, neither V reaches qV at value_pool, but
+// noValuePool covers the rest of the cluster and NR-quorum unlocks L_1.
 type byzEquivocSigmaLockedSplit struct {
 	honestDefaults
 	ByzSet      byzSet
@@ -320,21 +337,16 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader twoab.Ope
 // ---- byzPartialEquivocation -------------------------------------------
 
 // Natural-recovery equivocation: byz leader at L_0 emits V_a to RecipientsA
-// (size 2f) and V_b to RecipientsB (size 1). In bare OBFT the leader's
-// own Phase-1 σ_V partial pushes V_a's σ-pool to 2f+1 = qV → SUCCESS at
-// L_0 with V_a.
-//
-// In 2ab (Variant C — no Phase-1 σ_V):
+// (size 2f) and V_b to RecipientsB (size 1). In 2abOBFT:
 //   - The byz leader self-observes BOTH bundles via the adapter's leader
 //     self-observation path → 2 distinct V's retained at the leader →
-//     row 1 NR verdict (equivocation observed).
-//   - 2f recipients of V_a issue σV(V_a); the V_b recipient issues
-//     σV(V_b). verdict_pool[V_a] = 2f < qV = 2f+1; verdict_pool[V_b] = 1
-//     < qV. nr_pool = {leader} = 1 < qEnc.
-//   - Row 5 → all NR → NR-quorum at L_0 → advance to L_1 → σ at L_1.
-//
-// 2ab pays one layer for removing the Phase-1 σ_V head-start; Pigeonhole
-// 2 still holds (at most one V reaches qV cluster-wide).
+//     Phase-2a NRDirect (equivocation observed).
+//   - 2f recipients of V_a issue ValueMsg(V_a); the V_b recipient issues
+//     ValueMsg(V_b). value_pool[V_a] = 2f < qV = 2f+1; value_pool[V_b] = 1
+//     < qV. noValue_pool = {leader's NRDirect} = 1 < qEnc.
+//   - At cluster σ-eligibility check: no V reaches qV; NR-eligibility
+//     across the cluster's noValuePool entries advances to L_1; honest
+//     L_1 leader's bundle propagates on time → σ at L_1.
 type byzPartialEquivocation struct {
 	honestDefaults
 	ByzSet      byzSet
@@ -373,6 +385,9 @@ func (b byzHV1Selective) LeaderBroadcastPlan(_ *sim, leader twoab.OperatorID, la
 
 // ---- byzFakeEncryptedPresence ------------------------------------------
 
+// Byz silences at SilentLayer (L_0) and injects garbage into the L_k>0
+// LayerEntry at GarbageLayer. Rule 4 fires at receivers when Phase 3's
+// chain-decryption walk decrypts the entry into non-verifying bytes.
 type byzFakeEncryptedPresence struct {
 	honestDefaults
 	ByzSet       byzSet
@@ -387,24 +402,73 @@ func (b byzFakeEncryptedPresence) LeaderBroadcastPlan(_ *sim, leader twoab.Opera
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzFakeEncryptedPresence) OverrideOnion2b(_ *sim, op twoab.OperatorID, o *twoab.Onion2b) *twoab.Onion2b {
+// patchLayerEntries replaces the entry at GarbageLayer with a forged
+// SigmaChained entry. Returns a new slice (defensive copy).
+func (b byzFakeEncryptedPresence) patchLayerEntries(op twoab.OperatorID, entries []twoab.LayerEntry) []twoab.LayerEntry {
+	out := make([]twoab.LayerEntry, len(entries))
+	for i, e := range entries {
+		out[i] = twoab.LayerEntry{
+			Layer:   e.Layer,
+			Kind:    e.Kind,
+			V:       append(twoab.Value(nil), e.V...),
+			Payload: append([]byte(nil), e.Payload...),
+		}
+	}
+	for i, e := range out {
+		if e.Layer != b.GarbageLayer {
+			continue
+		}
+		out[i] = twoab.LayerEntry{
+			Layer:   b.GarbageLayer,
+			Kind:    twoab.LayerEntrySigmaChained,
+			V:       append(twoab.Value{}, "byz-fake-V-at-deeper-layer"...),
+			Payload: forgeSigmaPartialBytes(op, b.GarbageLayer, []byte("byz-fake-V-at-deeper-layer")),
+		}
+		break
+	}
+	return out
+}
+
+func (b byzFakeEncryptedPresence) OverrideValueMsg(_ *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
 	if !b.ByzSet.Contains(op) {
-		return o
+		return v
 	}
-	if b.GarbageLayer < 0 || b.GarbageLayer >= len(o.Layers) {
-		return o
+	cp := cloneValueMsg(v)
+	cp.LayerEntries = b.patchLayerEntries(op, cp.LayerEntries)
+	return cp
+}
+
+func (b byzFakeEncryptedPresence) OverrideUpgradeValueMsg(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
+	return b.OverrideValueMsg(s, op, v)
+}
+
+func (b byzFakeEncryptedPresence) OverrideNoValueMsg(_ *sim, op twoab.OperatorID, nv *twoab.NoValueMsg) *twoab.NoValueMsg {
+	if !b.ByzSet.Contains(op) {
+		return nv
 	}
-	cp := cloneOnion2b(o)
-	cp.Layers[b.GarbageLayer] = twoab.EncryptedLayer{
-		Value:      append(twoab.Value{}, "byz-fake-V-at-deeper-layer"...),
-		Ciphertext: []byte("garbage-bytes-not-a-valid-ibe-ciphertext"),
+	cp := cloneNoValueMsg(nv)
+	cp.LayerEntries = b.patchLayerEntries(op, cp.LayerEntries)
+	return cp
+}
+
+func (b byzFakeEncryptedPresence) OverrideCommit(_ *sim, op twoab.OperatorID, c *twoab.Commit) *twoab.Commit {
+	if !b.ByzSet.Contains(op) {
+		return c
 	}
+	if c.Side != twoab.CommitSideNRDirect {
+		// L_k>0 commitments live in Phase-2a LayerEntries, not in
+		// Phase-2b Signed/NR commits.
+		return c
+	}
+	cp := cloneCommit(c)
+	cp.LayerEntries = b.patchLayerEntries(op, cp.LayerEntries)
 	return cp
 }
 
 // ---- byzSigmaRefusal ---------------------------------------------------
 
-// All byz never broadcast Onion2b (and thus contribute no σ partials).
+// All byz never broadcast their Phase-2a coordination message OR their
+// commit (they contribute no σ partials at any layer).
 type byzSigmaRefusal struct {
 	honestDefaults
 	ByzSet byzSet
@@ -413,8 +477,18 @@ type byzSigmaRefusal struct {
 func (b byzSigmaRefusal) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ int, honestV twoab.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
-func (b byzSigmaRefusal) AllowOnion2bBroadcast(op twoab.OperatorID) bool {
+func (b byzSigmaRefusal) AllowPhase2aEmission(op twoab.OperatorID) bool {
 	return !b.ByzSet.Contains(op)
+}
+
+// byzSigmaRefusal also suppresses cascade-emitted Phase-2b commits by
+// dropping every outbound KindCommit at the AllowDelivery gate. This
+// mirrors the OBFT pattern of suppressing the Commit broadcast entirely.
+func (b byzSigmaRefusal) AllowDelivery(from, _ twoab.OperatorID, kind ct.MsgKind) bool {
+	if b.ByzSet.Contains(from) && kind == ct.KindCommit {
+		return false
+	}
+	return true
 }
 
 // ---- byzWithholdLeader -------------------------------------------------
@@ -447,8 +521,9 @@ func (b byzCertWithholding) AllowCertificateBroadcast(op twoab.OperatorID) bool 
 
 // ---- byzCrossSigning (Rule 1) ------------------------------------------
 
-// Byz silences their own leader-layer (naturally NR-emits there), then
-// OverrideOnion2b injects a forged σ entry at the same layer. Rule 1 must
+// Byz silences their own leader-layer (naturally NR-emits there via
+// Phase-2a NRPlaintext entry), then injects a forged σ entry at the same
+// layer inside their ValueMsg / NoValueMsg LayerEntries. Rule 1 must
 // target a layer < K-1 (no NR-tag at deepest layer).
 type byzCrossSigning struct {
 	honestDefaults
@@ -462,10 +537,7 @@ func (b byzCrossSigning) LeaderBroadcastPlan(_ *sim, leader twoab.OperatorID, _ 
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzCrossSigning) OverrideOnion2b(s *sim, op twoab.OperatorID, o *twoab.Onion2b) *twoab.Onion2b {
-	if !b.ByzSet.Contains(op) {
-		return o
-	}
+func (b byzCrossSigning) injectForgedSigmaIntoEntries(s *sim, op twoab.OperatorID, entries []twoab.LayerEntry) []twoab.LayerEntry {
 	leaderLayer := -1
 	for k := 0; k < s.cfg.K; k++ {
 		if s.operators[k%s.cfg.N] == op {
@@ -474,18 +546,73 @@ func (b byzCrossSigning) OverrideOnion2b(s *sim, op twoab.OperatorID, o *twoab.O
 		}
 	}
 	if leaderLayer < 0 || leaderLayer >= s.cfg.K-1 {
-		return o
+		return entries
 	}
-	cp := cloneOnion2b(o)
-	cp.Layers[leaderLayer] = twoab.EncryptedLayer{
-		Value:      append(twoab.Value{}, s.canonValues[leaderLayer]...),
-		Ciphertext: forgeSigmaPartialBytes(op, leaderLayer, s.canonValues[leaderLayer]),
+	out := make([]twoab.LayerEntry, len(entries))
+	for i, e := range entries {
+		out[i] = twoab.LayerEntry{
+			Layer:   e.Layer,
+			Kind:    e.Kind,
+			V:       append(twoab.Value(nil), e.V...),
+			Payload: append([]byte(nil), e.Payload...),
+		}
 	}
+	for i, e := range out {
+		if e.Layer != leaderLayer {
+			continue
+		}
+		out[i] = twoab.LayerEntry{
+			Layer:   leaderLayer,
+			Kind:    twoab.LayerEntrySigmaChained,
+			V:       append(twoab.Value{}, s.canonValues[leaderLayer]...),
+			Payload: forgeSigmaPartialBytes(op, leaderLayer, s.canonValues[leaderLayer]),
+		}
+		break
+	}
+	return out
+}
+
+func (b byzCrossSigning) OverrideValueMsg(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
+	if !b.ByzSet.Contains(op) {
+		return v
+	}
+	cp := cloneValueMsg(v)
+	cp.LayerEntries = b.injectForgedSigmaIntoEntries(s, op, cp.LayerEntries)
+	return cp
+}
+
+func (b byzCrossSigning) OverrideUpgradeValueMsg(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
+	return b.OverrideValueMsg(s, op, v)
+}
+
+func (b byzCrossSigning) OverrideNoValueMsg(s *sim, op twoab.OperatorID, nv *twoab.NoValueMsg) *twoab.NoValueMsg {
+	if !b.ByzSet.Contains(op) {
+		return nv
+	}
+	cp := cloneNoValueMsg(nv)
+	cp.LayerEntries = b.injectForgedSigmaIntoEntries(s, op, cp.LayerEntries)
+	return cp
+}
+
+func (b byzCrossSigning) OverrideCommit(s *sim, op twoab.OperatorID, c *twoab.Commit) *twoab.Commit {
+	if !b.ByzSet.Contains(op) {
+		return c
+	}
+	if c.Side != twoab.CommitSideNRDirect {
+		return c
+	}
+	cp := cloneCommit(c)
+	cp.LayerEntries = b.injectForgedSigmaIntoEntries(s, op, cp.LayerEntries)
 	return cp
 }
 
 // ---- byzFakePlaintextSigma (Rule 5) -----------------------------------
 
+// Byz emits a Commit-Signed with a plaintext σ partial at L_0 on a V no
+// leader broadcast. Rule 5 fires at receivers when the partial doesn't
+// verify against any retained V at L_0. The dynamic Commit emission
+// fires through the afterStateDelta cascade; we patch it via
+// OverrideCommit.
 type byzFakePlaintextSigma struct {
 	honestDefaults
 	ByzSet byzSet
@@ -495,23 +622,27 @@ func (b byzFakePlaintextSigma) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzFakePlaintextSigma) OverrideOnion2b(_ *sim, op twoab.OperatorID, o *twoab.Onion2b) *twoab.Onion2b {
+func (b byzFakePlaintextSigma) OverrideCommit(_ *sim, op twoab.OperatorID, c *twoab.Commit) *twoab.Commit {
 	if !b.ByzSet.Contains(op) {
-		return o
+		return c
 	}
-	if len(o.Layers) == 0 {
-		return o
+	// Inject a fake plaintext σ at L_0: only meaningful for Side=Signed
+	// (where L0Value + L0Partial carry σ-direction-on-V_0).
+	if c.Side != twoab.CommitSideSigned {
+		return c
 	}
-	cp := cloneOnion2b(o)
-	cp.Layers[0] = twoab.EncryptedLayer{
-		Value:      append(twoab.Value{}, "byz-fake-V-at-L_0"...),
-		Ciphertext: forgeSigmaPartialBytes(op, 0, []byte("byz-fake-V-at-L_0")),
-	}
+	cp := cloneCommit(c)
+	cp.L0Value = append(twoab.Value{}, "byz-fake-V-at-L_0"...)
+	cp.L0Partial = forgeSigmaPartialBytes(op, 0, []byte("byz-fake-V-at-L_0"))
 	return cp
 }
 
 // ---- byzCrossOnionEquivocation (Rule 3) -------------------------------
 
+// Byz emits an additional Commit with a different L_0 σ-direction-on-V'
+// (or a different SigmaChained entry at Layer). Each is delivered to the
+// cluster; receivers fire Rule 3 (CrossCommitEquivocation) on the second
+// observation.
 type byzCrossOnionEquivocation struct {
 	honestDefaults
 	ByzSet byzSet
@@ -522,28 +653,54 @@ func (b byzCrossOnionEquivocation) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorI
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzCrossOnionEquivocation) BuildExtraOnion2bs(s *sim, op twoab.OperatorID, o *twoab.Onion2b) []*twoab.Onion2b {
+func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
 	if !b.ByzSet.Contains(op) {
 		return nil
 	}
-	if b.Layer < 0 || b.Layer >= len(o.Layers) {
+	primeV := []byte("byz-V-prime")
+	switch {
+	case b.Layer == 0 && c.Side == twoab.CommitSideSigned:
+		// Inject a distinct Signed commit on V' at L_0 — directly
+		// detectable by ObserveCommit's cross-V check.
+		cp := cloneCommit(c)
+		cp.L0Value = append(twoab.Value{}, primeV...)
+		cp.L0Partial = forgeSigmaPartialBytes(op, 0, primeV)
+		return []*twoab.Commit{cp}
+	case b.Layer > 0 && c.Side == twoab.CommitSideNRDirect:
+		// L_k>0 cross-σ-V equivocation can only land via NRDirect's
+		// LayerEntries — Signed and NR commits carry no L_k>0 entries.
+		if b.Layer < 0 || b.Layer >= len(c.LayerEntries)+1 {
+			return nil
+		}
+		cp := cloneCommit(c)
+		for i := range cp.LayerEntries {
+			if cp.LayerEntries[i].Layer != b.Layer {
+				continue
+			}
+			cp.LayerEntries[i] = twoab.LayerEntry{
+				Layer:   b.Layer,
+				Kind:    twoab.LayerEntrySigmaChained,
+				V:       append(twoab.Value{}, primeV...),
+				Payload: forgeSigmaPartialBytes(op, b.Layer, primeV),
+			}
+			break
+		}
+		return []*twoab.Commit{cp}
+	default:
 		return nil
 	}
-	cp := cloneOnion2b(o)
-	primeV := []byte("byz-V-prime")
-	cp.Layers[b.Layer] = twoab.EncryptedLayer{
-		Value:      append(twoab.Value{}, primeV...),
-		Ciphertext: forgeSigmaPartialBytes(op, b.Layer, primeV),
-	}
-	return []*twoab.Onion2b{cp}
 }
 
 // ---- byzLateLeaderBroadcast --------------------------------------------
 
 // Byz leader broadcasts so late that first-observation at honest receivers
-// lands past T_commit. Honest receivers reject the bundle (ErrLatePhase1Bundle)
-// — auth-only retention does not apply past T_commit. The cluster falls
-// through to L_1 via NR-quorum.
+// lands well past the Phase-2a fire-instant. Per spec there is no T_commit
+// hard wall in 2abOBFT — bundles are accepted at any in-slot offset — so
+// honest receivers still retain the bundle. However, the bundle arrives
+// AFTER each honest op's Phase-2a fire-time, so each op fires NoValue at
+// Phase 2a. The A1 upgrade path (NoValue → Value) fires for any honest op
+// that subsequently receives V_0 + host valid; cluster σ-eligibility may
+// or may not reach depending on f-byz and timing.
 type byzLateLeaderBroadcast struct {
 	honestDefaults
 	ByzSet byzSet
@@ -560,18 +717,18 @@ func (b byzLateLeaderBroadcast) OverrideOwnPhase1Delay(s *sim, leader twoab.Oper
 	return 6 * s.cfg.BTT
 }
 
-// ---- byzDelayedOnion2b -------------------------------------------------
+// ---- byzDelayedCommit --------------------------------------------------
 
-type byzDelayedOnion2b struct {
+type byzDelayedCommit struct {
 	honestDefaults
 	ByzSet byzSet
 }
 
-func (b byzDelayedOnion2b) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ int, honestV twoab.Value) []broadcastPlan {
+func (b byzDelayedCommit) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ int, honestV twoab.Value) []broadcastPlan {
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzDelayedOnion2b) OverrideOwnOnion2bDispatchDelay(s *sim, op twoab.OperatorID) time.Duration {
+func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op twoab.OperatorID) time.Duration {
 	if !b.ByzSet.Contains(op) {
 		return 0
 	}
@@ -589,26 +746,28 @@ func (b byzAggregatorBypass) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ i
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzAggregatorBypass) BuildExtraOnion2bs(s *sim, op twoab.OperatorID, o *twoab.Onion2b) []*twoab.Onion2b {
+func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
 	if !b.ByzSet.Contains(op) {
 		return nil
 	}
+	if c.Side != twoab.CommitSideSigned {
+		// Forged-identity bypass only meaningful when we can pose as a
+		// σ-signing peer on V_prime. NR / NRDirect commits don't
+		// contribute to the aggregator's σ-pool.
+		return nil
+	}
 	primeV := []byte("byz-bypass-V-prime")
-	forged := make([]*twoab.Onion2b, 0, len(s.operators)-1)
+	forged := make([]*twoab.Commit, 0, len(s.operators)-1)
 	for _, other := range s.operators {
 		if other == op {
 			continue
 		}
-		cp := cloneOnion2b(o)
+		cp := cloneCommit(c)
 		cp.OperatorID = other
-		cp.Layers[0] = twoab.EncryptedLayer{
-			Value:      append(twoab.Value{}, primeV...),
-			Ciphertext: forgeSigmaPartialBytes(other, 0, primeV),
-		}
-		for k := 1; k < len(cp.Layers); k++ {
-			cp.Layers[k] = twoab.EncryptedLayer{}
-		}
-		cp.NRPartials = nil
+		cp.Side = twoab.CommitSideSigned
+		cp.L0Value = append(twoab.Value{}, primeV...)
+		cp.L0Partial = forgeSigmaPartialBytes(other, 0, primeV)
+		cp.LayerEntries = nil
 		forged = append(forged, cp)
 	}
 	return forged
@@ -622,32 +781,41 @@ func clonePhase1Bundle(b *twoab.Phase1Bundle) *twoab.Phase1Bundle {
 	return &cp
 }
 
-func cloneVerdict(v *twoab.Verdict) *twoab.Verdict {
+func cloneValueMsg(v *twoab.ValueMsg) *twoab.ValueMsg {
 	cp := *v
+	cp.V = append(twoab.Value(nil), v.V...)
+	cp.LayerEntries = cloneLayerEntries(v.LayerEntries)
 	return &cp
 }
 
-func cloneOnion2b(o *twoab.Onion2b) *twoab.Onion2b {
-	cp := &twoab.Onion2b{
-		ClusterID:  o.ClusterID,
-		OperatorID: o.OperatorID,
-		Height:     o.Height,
-		Layers:     make([]twoab.EncryptedLayer, len(o.Layers)),
-		NRPartials: make([]twoab.NRPartial, len(o.NRPartials)),
+func cloneNoValueMsg(nv *twoab.NoValueMsg) *twoab.NoValueMsg {
+	cp := *nv
+	cp.LayerEntries = cloneLayerEntries(nv.LayerEntries)
+	return &cp
+}
+
+func cloneCommit(c *twoab.Commit) *twoab.Commit {
+	cp := *c
+	cp.L0Value = append(twoab.Value(nil), c.L0Value...)
+	cp.L0Partial = append(twoab.Signature(nil), c.L0Partial...)
+	cp.LayerEntries = cloneLayerEntries(c.LayerEntries)
+	return &cp
+}
+
+func cloneLayerEntries(entries []twoab.LayerEntry) []twoab.LayerEntry {
+	if entries == nil {
+		return nil
 	}
-	for i, el := range o.Layers {
-		cp.Layers[i] = twoab.EncryptedLayer{
-			Value:      append(twoab.Value(nil), el.Value...),
-			Ciphertext: append([]byte(nil), el.Ciphertext...),
+	out := make([]twoab.LayerEntry, len(entries))
+	for i, e := range entries {
+		out[i] = twoab.LayerEntry{
+			Layer:   e.Layer,
+			Kind:    e.Kind,
+			V:       append(twoab.Value(nil), e.V...),
+			Payload: append([]byte(nil), e.Payload...),
 		}
 	}
-	for i, nr := range o.NRPartials {
-		cp.NRPartials[i] = twoab.NRPartial{
-			Layer:      nr.Layer,
-			PartialSig: append(twoab.Signature(nil), nr.PartialSig...),
-		}
-	}
-	return cp
+	return out
 }
 
 func cloneCertificate(c *twoab.Certificate) *twoab.Certificate {

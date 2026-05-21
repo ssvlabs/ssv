@@ -13,16 +13,11 @@ import (
 //     for the next layer; walk advances.
 //   - Neither reaches → walk terminates without an output (slot misses).
 //
-// At layer 0, σ partials are plaintext. At layers k > 0, σ partials
-// are chained-encrypted under nr_tag_0..nr_tag_{k-1}; the accumulated
-// NR-quorum aggregates from prior layers serve as decryption keys
-// (outermost-first).
-//
-// 2abOBFT differs from bare OBFT in two structural ways for Phase 3:
-//   - No Phase-1 σ_V partials (Variant C); the σ-pool at every layer
-//     is built entirely from peer Onion2b contributions + the local
-//     operator's own σ partial (cached after BuildOwnOnion2b).
-//   - No LeaderSigmaWitness array; no witness-harvest branch.
+// At layer 0, σ partials are plaintext in KindCommit-Signed messages. At
+// layers k > 0, σ partials are chained-encrypted inside Phase-2a emissions
+// (ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries with Kind=SigmaChained);
+// the accumulated NR-quorum aggregates from prior layers serve as
+// decryption keys (outermost-first).
 //
 // Returns:
 //   - (*Output, nil) — σ-quorum reached at some layer.
@@ -32,20 +27,17 @@ import (
 //   - (nil, error) — internal error (crypto failure on aggregation).
 //
 // As a side effect, Rule-4 evidence (fake encrypted-presence at k > 0)
-// is recorded for any peer whose Onion2b entry decrypts to garbage or
-// fails to decrypt. Rule 4 is per-(op, layer) deduped — multiple
-// distinct entries from the same byzantine at the same layer surface
-// once.
+// is recorded for any peer whose Phase-2a LayerEntry decrypts to garbage
+// or fails to decrypt. Rule 4 is per-(op, layer) deduped — multiple
+// distinct entries from the same byzantine at the same layer surface once.
 //
-// Resolve is stateless / idempotent — re-running on late KindOnion2b
-// arrivals incorporates additional contributions without contradicting
-// prior outcomes (Pigeonhole semantics still hold). The canonical
-// implementation calls Resolve opportunistically on every state delta
-// (KindOnion2b / KindCertificate observation) starting at TCommit, not
-// once at TCommit + Δ_2b — Δ_2b is the propagation budget, not a Resolve
-// gate. ErrNoQuorum on incomplete state is returned cleanly without
-// mutating Instance state, so observer-mode call sites pay no cost for
-// pre-quorum attempts.
+// Resolve is stateless / idempotent — re-running on late Commit arrivals
+// incorporates additional contributions without contradicting prior
+// outcomes (Pigeonhole semantics still hold). The canonical implementation
+// calls Resolve opportunistically on every state delta starting at the
+// Phase-2a fire-time; ErrNoQuorum on incomplete state is returned cleanly
+// without mutating Instance state, so observer-mode call sites pay no
+// cost for pre-quorum attempts.
 func (i *Instance) Resolve() (*Output, error) {
 	K := i.cfg.K()
 	// chainedKeys[j] is the aggregated NR-partials sig on nr_tag_j.
@@ -83,100 +75,58 @@ func (i *Instance) Resolve() (*Output, error) {
 	return nil, &ResolveError{StoppedAtLayer: K - 1, Reason: ResolveFailureExhaustion}
 }
 
-// sigGroup holds σ partials grouped by the V they sign at a given
-// layer. Multiple groups indicate cross-onion equivocation across
-// distinct V's at the same layer; each group is counted independently
-// per Pigeonhole 2 (at most one V reaches qV cluster-wide).
-type sigGroup struct {
-	value    Value
-	partials map[OperatorID]Signature
-}
-
 // tryReconstructLayer attempts σ-quorum reconstruction at `layer`.
 //
 // Returns:
 //   - (*Output, nil) — σ-quorum reached, output produced.
 //   - (nil, nil) — no σ-quorum (caller should attempt NR-advance).
 //   - (nil, error) — internal error (e.g., aggregation crypto failure).
+//
+// At L_0: σ partials come from sigmaPool[0] (populated on Commit-Signed
+// observation in phase2b.go). Build groups by V_root (typically one
+// group, but cross-σ-V equivocation could produce more).
+//
+// At L_k > 0: σ partials come from Phase-2a SigmaChained entries inside
+// peerValueMsg / peerNoValueMsg / peerCommit (Side=NRDirect). The
+// ciphertext payloads are decrypted via chainedKeys (outermost-first).
+// On decryption failure or post-decryption verification failure, Rule 4
+// fires.
 func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output, error) {
-	groups := make([]*sigGroup, 0, 1)
+	groups := make(map[[32]byte]*sigGroup)
 
-	// 1) Local operator's own σ contribution at this layer (from
-	//    BuildOwnOnion2b's cache). Only present if the local op decided
-	//    σ at this layer per the convergence rule.
-	if i.sigmaLocked[layer] {
-		if partial, ok := i.ownPartials[layer]; ok {
-			v := i.sigmaLockedV[layer]
-			addToGroup(&groups, v, i.ownOperatorID, partial)
+	// 1) σ-pool entries already populated for this layer.
+	if pools, ok := i.sigmaPool[layer]; ok {
+		for vRoot, opPartials := range pools {
+			for op, partial := range opPartials {
+				g := groups[vRoot]
+				if g == nil {
+					// Reconstruct V from peer messages; we have the root
+					// but need the bytes. For L_0 sigmaPool, the V is in
+					// ownCommit.L0Value or peerCommit[op].L0Value. For
+					// L_k>0 sigmaPool, the V is in the original LayerEntry.
+					// Locate it via the helper.
+					v, ok := i.recoverV(layer, vRoot)
+					if !ok {
+						// Shouldn't happen if sigmaPool entries were
+						// populated correctly. Skip defensively.
+						continue
+					}
+					g = &sigGroup{value: append(Value{}, v...), partials: map[OperatorID]Signature{}}
+					groups[vRoot] = g
+				}
+				g.partials[op] = partial
+			}
 		}
 	}
 
-	// 2) Peer Onion2b contributions. Decrypt at layers > 0 using the
-	//    accumulated chained keys.
-	for opID, entries := range i.peerOnions[layer] {
-		if opID == i.ownOperatorID {
-			// Already counted above via ownPartials. Skip to avoid double-
-			// counting if a peer-echoed self-observed onion has been
-			// recorded.
-			continue
-		}
-		for _, el := range entries {
-			var partial Signature
-			if layer == 0 {
-				partial = Signature(el.Ciphertext)
-			} else {
-				pt, err := i.chainDecryptForLayer(layer, el.Ciphertext, chainedKeys)
-				if err != nil {
-					// Decryption failure at k > 0 is Rule-4 evidence.
-					if i.recordRule4(opID, layer) {
-						i.recordEvidence(Evidence{
-							Rule:       EvidenceFakeEncryptedPresence,
-							OperatorID: opID,
-							Layer:      layer,
-							FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
-								Ciphertext:   append([]byte{}, el.Ciphertext...),
-								DecryptError: err.Error(),
-							},
-						})
-					}
-					continue
-				}
-				partial = Signature(pt)
-			}
-
-			pubShare, ok := i.pubKeyShares[opID]
-			if !ok || len(pubShare) == 0 {
-				continue
-			}
-			if !i.signer.VerifyPartial(pubShare, el.Value, partial) {
-				if layer > 0 {
-					// Decrypted bytes are not a valid σ partial on the
-					// claimed V — Rule 4 (post-decryption garbage).
-					if i.recordRule4(opID, layer) {
-						i.recordEvidence(Evidence{
-							Rule:       EvidenceFakeEncryptedPresence,
-							OperatorID: opID,
-							Layer:      layer,
-							FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
-								Ciphertext:     append([]byte{}, el.Ciphertext...),
-								DecryptedBytes: append([]byte{}, partial...),
-							},
-						})
-					}
-				}
-				// At L_0, this would have been Rule 5 (handled at
-				// ObserveOnion2b time, not here).
-				continue
-			}
-			addToGroup(&groups, el.Value, opID, partial)
-		}
+	// 2) At L_k>0: walk the peer messages, decrypt SigmaChained entries,
+	//    and add to groups.
+	if layer > 0 {
+		i.aggregatePeerLayerEntries(layer, chainedKeys, groups)
 	}
 
-	// 3) Pick the group with the most partials; check qV. Lexicographic
-	//    V tiebreak makes the winner deterministic across operators
-	//    even when transient pre-quorum states show two V's at equal
-	//    counts (Pigeonhole 2 ensures only one ultimately reaches qV).
-	winning := selectWinning(groups)
+	// 3) Pick the group with the most partials; check qV.
+	winning := selectWinningGroup(groups)
 	if winning == nil || len(winning.partials) < i.cfg.QV() {
 		return nil, nil
 	}
@@ -192,35 +142,95 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 	}, nil
 }
 
+// sigGroup holds σ partials grouped by the V they sign at a given layer.
+type sigGroup struct {
+	value    Value
+	partials map[OperatorID]Signature
+}
+
+// aggregatePeerLayerEntries walks all peer Phase-2a emissions and
+// extracts σ partials at `layer` (decrypting via chainedKeys), adding
+// them to `groups` keyed by V_root. Fires Rule 4 evidence on decryption
+// failure or post-decryption verification failure.
+func (i *Instance) aggregatePeerLayerEntries(layer int, chainedKeys [][]byte, groups map[[32]byte]*sigGroup) {
+	// Iterate peer ValueMsgs.
+	for op, vm := range i.peerValueMsg {
+		i.extractSigmaFromEntries(op, layer, vm.LayerEntries, chainedKeys, groups)
+	}
+	// Iterate peer NoValueMsgs.
+	for op, nv := range i.peerNoValueMsg {
+		i.extractSigmaFromEntries(op, layer, nv.LayerEntries, chainedKeys, groups)
+	}
+	// Iterate peer Commits with Side=NRDirect (they carry LayerEntries).
+	for op, c := range i.peerCommit {
+		if c.Side != CommitSideNRDirect {
+			continue
+		}
+		i.extractSigmaFromEntries(op, layer, c.LayerEntries, chainedKeys, groups)
+	}
+}
+
+// extractSigmaFromEntries decrypts the SigmaChained entry at `layer` (if
+// present) in `entries` and adds the resulting partial to `groups` (if
+// it verifies).
+func (i *Instance) extractSigmaFromEntries(op OperatorID, layer int, entries []LayerEntry,
+	chainedKeys [][]byte, groups map[[32]byte]*sigGroup) {
+	for _, e := range entries {
+		if e.Layer != layer || e.Kind != LayerEntrySigmaChained {
+			continue
+		}
+		// Decrypt the chained payload.
+		pt, err := i.chainDecryptForLayer(layer, e.Payload, chainedKeys)
+		if err != nil {
+			if i.recordRule4(op, layer) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceFakeEncryptedPresence,
+					OperatorID: op,
+					Layer:      layer,
+					FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
+						Ciphertext:   append([]byte{}, e.Payload...),
+						DecryptError: err.Error(),
+					},
+				})
+			}
+			continue
+		}
+		// Verify the decrypted partial against op's pubshare on V.
+		opPub, ok := i.pubKeyShares[op]
+		if !ok || len(opPub) == 0 {
+			continue
+		}
+		if !i.signer.VerifyPartial(opPub, e.V, Signature(pt)) {
+			if i.recordRule4(op, layer) {
+				i.recordEvidence(Evidence{
+					Rule:       EvidenceFakeEncryptedPresence,
+					OperatorID: op,
+					Layer:      layer,
+					FakeEncryptedPresence: &FakeEncryptedPresenceEvidence{
+						Ciphertext:     append([]byte{}, e.Payload...),
+						DecryptedBytes: append([]byte{}, pt...),
+					},
+				})
+			}
+			continue
+		}
+		// Add to groups.
+		vRoot := ValueRoot(e.V)
+		g := groups[vRoot]
+		if g == nil {
+			g = &sigGroup{value: append(Value{}, e.V...), partials: map[OperatorID]Signature{}}
+			groups[vRoot] = g
+		}
+		g.partials[op] = append(Signature{}, pt...)
+		return // only one SigmaChained entry per (op, layer) by construction
+	}
+}
+
 // tryDeriveNextLayerKey aggregates ≥ qEnc NR partials on nr_tag_layer.
 // Returns the aggregated full signature (= chained-decryption key for
 // layer+1's outermost wrap), or nil if NR-quorum did not reach.
-//
-// Includes the local operator's own NR partial at this layer (cached
-// in ownOnion2b.NRPartials) alongside peer NR partials from peerNR.
 func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
-	partials := make(map[OperatorID]Signature, len(i.peerNR[layer])+1)
-
-	// Own NR partial at this layer, if Phase-2b emitted one.
-	if i.nrLocked[layer] && i.ownOnion2b != nil {
-		for _, p := range i.ownOnion2b.NRPartials {
-			if p.Layer == layer {
-				partials[i.ownOperatorID] = append(Signature{}, p.PartialSig...)
-				break
-			}
-		}
-	}
-
-	// Peer NR partials.
-	for op, sig := range i.peerNR[layer] {
-		if op == i.ownOperatorID {
-			// Already added above via ownOnion2b; skip to avoid
-			// double-counting if a peer echoed our self-observation.
-			continue
-		}
-		partials[op] = sig
-	}
-
+	partials := i.nrTagPool[layer]
 	if len(partials) < i.cfg.QEnc() {
 		return nil, nil
 	}
@@ -231,23 +241,84 @@ func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 	return []byte(full), nil
 }
 
-func addToGroup(groups *[]*sigGroup, value Value, opID OperatorID, partial Signature) {
-	for _, g := range *groups {
-		if bytes.Equal(g.value, value) {
-			g.partials[opID] = partial
-			return
+// recoverV locates the V bytes corresponding to a given (layer, vRoot).
+// Used by tryReconstructLayer to populate sigGroup.value from sigmaPool
+// entries (which key by vRoot, not V bytes).
+//
+// At L_0: V comes from ownCommit (Side=Signed) or any peerCommit
+// (Side=Signed) matching the root.
+//
+// At L_k>0: V comes from any peer SigmaChained LayerEntry at this layer
+// matching the root.
+func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
+	if layer == 0 {
+		if i.ownCommit != nil && i.ownCommit.Side == CommitSideSigned &&
+			ValueRoot(i.ownCommit.L0Value) == vRoot {
+			return i.ownCommit.L0Value, true
+		}
+		for _, c := range i.peerCommit {
+			if c.Side == CommitSideSigned && ValueRoot(c.L0Value) == vRoot {
+				return c.L0Value, true
+			}
+		}
+		return nil, false
+	}
+	// L_k>0: search own Phase-2a emission (which contains the L_k>0
+	// SigmaChained entry the local op may have signed at fire-time).
+	// Own Phase-2a emission is one of {ownValueMsg, ownNoValueMsg,
+	// ownCommit(NRDirect)} — all three can carry LayerEntries; check
+	// whichever is set.
+	if i.ownValueMsg != nil {
+		for _, e := range i.ownValueMsg.LayerEntries {
+			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
+				return e.V, true
+			}
 		}
 	}
-	g := &sigGroup{
-		value:    append(Value{}, value...),
-		partials: map[OperatorID]Signature{opID: partial},
+	if i.ownNoValueMsg != nil {
+		for _, e := range i.ownNoValueMsg.LayerEntries {
+			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
+				return e.V, true
+			}
+		}
 	}
-	*groups = append(*groups, g)
+	if i.ownCommit != nil && i.ownCommit.Side == CommitSideNRDirect {
+		for _, e := range i.ownCommit.LayerEntries {
+			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
+				return e.V, true
+			}
+		}
+	}
+	for _, vm := range i.peerValueMsg {
+		for _, e := range vm.LayerEntries {
+			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
+				return e.V, true
+			}
+		}
+	}
+	for _, nv := range i.peerNoValueMsg {
+		for _, e := range nv.LayerEntries {
+			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
+				return e.V, true
+			}
+		}
+	}
+	for _, c := range i.peerCommit {
+		if c.Side != CommitSideNRDirect {
+			continue
+		}
+		for _, e := range c.LayerEntries {
+			if e.Layer == layer && e.Kind == LayerEntrySigmaChained && ValueRoot(e.V) == vRoot {
+				return e.V, true
+			}
+		}
+	}
+	return nil, false
 }
 
-// selectWinning picks the group with the most partials; lexicographic V
-// tiebreak for determinism across operators.
-func selectWinning(groups []*sigGroup) *sigGroup {
+// selectWinningGroup picks the group with the most partials;
+// lexicographic V tiebreak for determinism across operators.
+func selectWinningGroup(groups map[[32]byte]*sigGroup) *sigGroup {
 	var winning *sigGroup
 	for _, g := range groups {
 		if winning == nil {
@@ -266,10 +337,6 @@ func selectWinning(groups []*sigGroup) *sigGroup {
 
 // BuildCertificate produces the final-certificate gossip message after
 // a successful Resolve.
-//
-// Per spec §Final-certificate gossip, an operator that reconstructed
-// (V, S) gossips this certificate so receivers without local
-// reconstruction can submit (V, S) downstream.
 func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 	if out == nil {
 		return nil, fmt.Errorf("twoab: nil output")
@@ -285,19 +352,7 @@ func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 	}, nil
 }
 
-// ObserveCertificate records a peer's Certificate. The signature is
-// verified against the cluster's V-keypair pubkey on Value; valid
-// certificates are stored for the runner to use as an alternative
-// submission path (RetainedCertificate accessor).
-//
-// First-wins semantics: subsequent calls after a valid Certificate is
-// retained are silent dedup no-ops. (All honest peers' Certificates
-// carry the same (Value, Signature) per Pigeonhole 2; the first one
-// retained is sufficient.)
-//
-// Per spec, receivers SHOULD re-run host-application validity on Value
-// before submitting downstream — that's a host concern, not in this
-// method's scope.
+// ObserveCertificate records a peer's Certificate.
 func (i *Instance) ObserveCertificate(c *Certificate) error {
 	if err := ValidateCertificate(c, i.cfg); err != nil {
 		return err
@@ -306,8 +361,6 @@ func (i *Instance) ObserveCertificate(c *Certificate) error {
 		return fmt.Errorf("twoab: certificate signature does not verify against cluster pubkey")
 	}
 	if i.receivedCertificate == nil {
-		// Deep copy so retention is robust against caller-owned slice
-		// mutation post-Observe.
 		i.receivedCertificate = &Certificate{
 			ClusterID: c.ClusterID,
 			Height:    c.Height,
@@ -319,8 +372,7 @@ func (i *Instance) ObserveCertificate(c *Certificate) error {
 }
 
 // RetainedCertificate returns a deep copy of the peer-broadcast
-// Certificate previously observed via ObserveCertificate, or nil if
-// none.
+// Certificate previously observed via ObserveCertificate, or nil if none.
 func (i *Instance) RetainedCertificate() *Certificate {
 	if i.receivedCertificate == nil {
 		return nil

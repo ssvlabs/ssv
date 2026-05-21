@@ -1,22 +1,28 @@
 // Package twoab implements the 2abOBFT protocol — a single-round agreement
-// protocol for SSV clusters with a two-window Phase-2 split (Phase 2a verdict
-// broadcast + Phase 2b σ-or-NR commit).
+// protocol for SSV clusters with a split Phase 2 (Phase 2a coordination
+// broadcast + Phase 2b dynamic σ-or-NR commit).
 //
 // The protocol is described in docs/2abOBFT.md. 2abOBFT extends bare OBFT
-// (docs/OBFT.md) by inserting a verdict-broadcast phase between Phase 1
-// and Phase 2, enabling cluster-wide convergence on σ-eligibility before
-// any operator cryptographically commits at Phase 2b.
+// (docs/OBFT.md) by inserting a Phase-2a coordination broadcast between
+// Phase 1 and Phase 2b. Each operator broadcasts a `KindValue` (has V_0 +
+// host valid) or `KindNoValue` (otherwise) at the Phase-2a fire-instant
+// `T_phase_2a = T_0_broadcast + 1·BTT`, enabling cluster-wide convergence
+// on σ-eligibility before any operator cryptographically commits. Phase 2b
+// is dynamic: each operator emits exactly one `KindCommit` (Signed / NR /
+// NR-direct) when one of three triggers fires locally on the observed
+// pool — there is NO protocol-level Phase-2b deadline. The slot's relay-
+// submission cutoff is the only hard wall (runner-level).
 //
 // Shared cryptography primitives (Signer, ThresholdIBE, NoQuorumTag, bare
 // type aliases) live in the parent obft package; this package re-exports
-// the type aliases for callers' convenience and owns all 2ab-specific
+// the type aliases for callers' convenience and owns all 2abOBFT-specific
 // data structures, state machine, wire format, evidence types, and EKM
 // coordinator. The bare-OBFT implementation lives in the parallel
 // sub-package protocol/v2/obft/base.
 //
 // This package is intentionally independent of github.com/ssvlabs/ssv-spec.
-// SSV-specific integration lives in protocol/v2/ssv/runner/obft/twoab (once
-// Phase L of the impl plan lands).
+// SSV-specific integration lives in a future runner adapter (analog of
+// protocol/v2/ssv/runner/obft).
 package twoab
 
 import (
@@ -66,32 +72,34 @@ func NoQuorumTag(clusterID [32]byte, height obft.Height, layer int) []byte {
 // fetch earlier from deeper-confirmed parents), and per-layer broadcast
 // budgets are staggered so deeper layers absorb more propagation tail.
 //
-// In 2abOBFT the broadcast deadline is anchored on T_verdict_start (the
-// Phase-1 cutoff / Phase-2a start), not T_commit — under the spec's
-// aligned T_commit semantics (= σ-or-NR commit point), T_commit is Δ_2a
-// later than the Phase-1 cutoff.
+// In 2abOBFT the broadcast deadline is anchored on T_0_broadcast, i.e. the
+// pre-Phase-2a anchor at `T_phase_2a − 1·BTT`: the leader broadcasts their
+// Phase-1 bundle so V_0 has 1·BTT to propagate before Phase 2a fires.
 type LayerSpec struct {
 	Leader  OperatorID
 	FetchAt time.Duration
 
-	// BroadcastBudget is the layer's T_verdict_start-anchored absorption
+	// BroadcastBudget is the layer's T_0_broadcast-anchored absorption
 	// target `B_k` per spec §Setting: the leader aims to broadcast their
-	// Phase-1 bundle by `T_broadcast_max_k = max(0, T_verdict_start − B_k)`.
+	// Phase-1 bundle by `T_broadcast_max_k = max(BFTStart, T_0_broadcast − B_k)`.
 	// Per spec, `B_0 < B_1 < ... < B_{K-1}` — deeper layers get larger
 	// budgets (wider absorption); the primary gets the smallest (max
 	// MEV-fetch headroom, willing to fall through to L_1+ if propagation
 	// slips).
 	//
-	// B_k is a target, not a hard runtime cap. The only runtime acceptance
-	// gate is `T_accept_max = T_commit − 1 BTT` at receivers; bundles
-	// first-observed past that are auth-only-retained.
+	// B_k is a target, not a hard runtime cap. The only protocol-level
+	// "acceptance gate" in 2abOBFT is the Phase-2a fire-instant: bundles
+	// observed at or before `T_phase_2a` drive the operator's Phase-2a
+	// emission decision; bundles observed later still contribute (via
+	// the Phase-2a-late upgrade path for KindNoValue-path ops), bounded
+	// only by the slot's relay-submission deadline at the runner level.
 	//
 	// Required: must be > 0 on every layer. Config.Validate rejects
 	// zero/negative values and decreasing-in-k schedules (equal adjacent
 	// budgets are accepted — multiple layers may share the BFT_start
 	// clamp at degraded operating points; see spec §Setting). Use
-	// DefaultBroadcastBudget(K, BTT, RefloodDelay, T_verdict_start) for
-	// the spec-recommended staggered schedule when constructing a Config
+	// DefaultBroadcastBudget(K, BTT, SafetyBuffer, T_0_broadcast) for the
+	// spec-recommended staggered schedule when constructing a Config
 	// manually.
 	BroadcastBudget time.Duration
 }
@@ -100,17 +108,16 @@ type LayerSpec struct {
 // absolute offsets relative to slot start; see docs/2abOBFT.md §Setting and
 // §Timing budget for the constraints relating them.
 //
-// **Note on operator-facing API surface (Q-I2 / spec docs/2abOBFT.md §Setting):**
-// per the principle "operators supply BTT only; protocol timings derive
-// deterministically from BTT", the protocol-timing fields (`Delta2a`, `Delta2b`,
-// `Eps3`, `TCommit`) are NOT operator-tunable in production. 2abOBFT does not
-// yet have an SSV-runner-adapter (analog of `protocol/v2/ssv/runner/obft`); when
-// it's built, the adapter should expose `BTT` plus deployment-environment values
-// (`RelayCutoff`, `HeaderSubmitHeadroom`, `RefloodDelay`) and derive protocol
-// timings internally — mirroring the bare-OBFT runner-adapter's `ConfigOverrides`
-// pattern, where the override-fields for protocol timings are unexported and
-// test-only. Until the runner-adapter is built, callers (currently consensustest
-// only) construct this Config directly with explicit protocol timings.
+// **Note on operator-facing API surface:** per the principle "operators
+// supply BTT only; protocol timings derive deterministically from BTT",
+// the protocol-timing fields (`TPhase2a`, `SafetyBuffer`) are NOT
+// operator-tunable in production. 2abOBFT does not yet have an SSV-runner
+// adapter; when it's built, the adapter should expose `BTT` plus
+// deployment-environment values (`RelayCutoff`, `HeaderSubmitHeadroom`,
+// `RefloodDelay` — used as the default for `SafetyBuffer`) and derive
+// protocol timings internally. Until the runner-adapter is built, callers
+// (currently consensustest only) construct this Config directly with
+// explicit protocol timings.
 type Config struct {
 	// Height identifies this consensus instance (the slot, in SSV usage).
 	Height Height
@@ -130,42 +137,36 @@ type Config struct {
 	// backups. Each layer's leader must be a distinct cluster member.
 	Layers []LayerSpec
 
-	// TCommit is T_commit — the σ-or-NR commit point (start of Phase 2b).
-	// Aligned semantically with bare OBFT and QBFT T_commit: this is the
-	// "point of no return" where each operator cryptographically binds
-	// their per-layer choice. Phase 2a runs in [TCommit−Delta2a, TCommit].
-	TCommit time.Duration
+	// TPhase2a is the Phase-2a fire-instant: the slot-relative offset at
+	// which every operator emits exactly one of {KindValue, KindNoValue,
+	// KindCommit-NRDirect} per their local state.
+	//
+	// Per spec §Setting: `TPhase2a = T_0_broadcast + 1·BTT`, where
+	// T_0_broadcast is the primary leader's broadcast time. The 1·BTT
+	// gap gives V_0 one propagation cycle to reach honest peers before
+	// Phase 2a fires.
+	TPhase2a time.Duration
 
-	// Delta2a is Δ_2a — the Phase 2a (verdict broadcast) window length.
-	// Per spec §Setting / §Phase 2a, Δ_2a ≥ 1·BTT + ε_proc is the strict
-	// structural minimum (sub-floor sizings are broken-by-construction
-	// with the late-broadcast schedule: the operator's verdict-broadcast
-	// time T_verdict_max − ε_proc would land before T_verdict_start).
-	// **Recommended for production: `Delta2a = 1·BTT + EpsProc`** (= 250ms
-	// at Config A with BTT=200ms, ε_proc≈50ms). Under the reflood-aware
-	// schedule, late-Phase-1-bundle absorption is provided by `B_0 = 2·BTT
-	// + RefloodDelay` pre-Phase-2a, so Delta2a no longer carries a separate
-	// reflood / late-bundle-absorption cushion — same philosophy as OBFT's
-	// tightened `Delta2 = 1·BTT`.
-	Delta2a time.Duration
-
-	// Delta2b is Δ_2b — the Phase 2b (σ-or-NR commit) window length.
-	// Per spec, `Delta2b ≥ 1 BTT + ε_proc` is the propagation budget for
-	// Phase-2b σ/NR partials (emitted after ε_proc convergence computation)
-	// to reach all honest peers before Phase 3. **Recommended sizing:
-	// `Delta2b = 1·BTT + ε_proc` (= 250ms at Config A with ε_proc ≈ 50ms)**
-	// — the minimum coherent value. Reflood absorption is structurally
-	// provided by per-layer `B_k` via the reflood-aware schedule, so
-	// Delta2b no longer carries a reflood cushion.
-	Delta2b time.Duration
-
-	// Eps3 is ε_3 — the Phase 3 reconstruction window length.
-	// Per spec, Eps3 covers local reconstruction processing (BLS
-	// aggregation, IBE decryption walk, certificate construction).
-	// Phase-2b emission propagation is already covered by Delta2b, so
-	// Eps3 is purely local-CPU. Absolute (does not scale with BTT);
-	// ε_3 ≈ 50ms at Config A.
-	Eps3 time.Duration
+	// SafetyBuffer is the protocol-level mesh-tail tolerance configurable.
+	// Per spec §Setting, `SafetyBuffer` parameterizes the per-layer
+	// broadcast budget `B_k_shallow = (k+2)·BTT + SafetyBuffer` (k ∈ [0, K-2]),
+	// giving the cluster a configurable absorption window for gossipsub
+	// IHAVE/IWANT reflood after initial eager-push slips.
+	//
+	// Default sizing: `SafetyBuffer = RefloodDelay` (the cluster's
+	// gossipsub HeartbeatInterval — typically 700ms in SSV deployments).
+	// At this default, 2abOBFT and bare OBFT have the same total
+	// post-broadcast structural budget and the same MEV-fetch headroom.
+	//
+	// Lower SafetyBuffer (e.g. 300ms / 500ms) reclaims MEV-fetch headroom
+	// at the cost of mesh-tail tolerance: the cluster commits to slot-miss
+	// rather than wait for IHAVE/IWANT recovery when initial propagation
+	// slips. Higher SafetyBuffer (e.g. 1·BTT + RefloodDelay) widens the
+	// tolerance at the cost of MEV-fetch headroom. SafetyBuffer is
+	// decoupled from the network's HeartbeatInterval (the gossipsub
+	// constant); SafetyBuffer is a protocol-level configurable, not a
+	// network parameter.
+	SafetyBuffer time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
 	// §Setting: BTT = P99 + δ. Used as the unit for time-budget formulas.
@@ -175,8 +176,8 @@ type Config struct {
 	// BFTStart is BFT_start — the slot-relative offset at which the
 	// protocol's primary broadcast pipeline begins. Pre-fetch and
 	// pre-consensus sit in `[slot_start, BFTStart]`. Default 0. When
-	// BFTStart > TVerdictStart − B_k for some layer k, the spec's
-	// runtime clamp `T_broadcast_max_k = max(BFTStart, TVerdictStart − B_k)`
+	// BFTStart > T_0_broadcast − B_k for some layer k, the spec's
+	// runtime clamp `T_broadcast_max_k = max(BFTStart, T_0_broadcast − B_k)`
 	// floors that layer's broadcast deadline at BFTStart and the
 	// schedule degrades but stays valid.
 	BFTStart time.Duration
@@ -206,200 +207,116 @@ func (c *Config) Quorum() int {
 	return c.QV()
 }
 
-// TVerdictStart returns the start of Phase 2a (= end of Phase 1, also
-// known as the Phase-1 broadcast cutoff) — `TCommit − Delta2a`.
-func (c *Config) TVerdictStart() time.Duration {
-	return c.TCommit - c.Delta2a
-}
-
-// TAcceptMax returns the receiver acceptance horizon — `TCommit − 1 BTT`
-// per spec §Setting. Phase-1 bundles first-observed in
-// `[slot_start, TAcceptMax]` are verdict-eligible; later ones are
-// auth-only-retained.
-func (c *Config) TAcceptMax() time.Duration {
-	return c.TCommit - c.BTT
-}
-
-// TVerdictMax returns the verdict broadcast horizon — coincident with
-// TAcceptMax by construction (`TCommit − 1 BTT`). Operators must emit
-// their Phase-2a verdict envelope by this time so it propagates to all
-// honest peers before Phase-2a end.
-func (c *Config) TVerdictMax() time.Duration {
-	return c.TCommit - c.BTT
+// T0Broadcast returns the primary leader's broadcast time anchor: the
+// offset by which V_0 must enter the gossipsub mesh so it has 1·BTT to
+// propagate before Phase 2a fires. `T0Broadcast = TPhase2a − BTT`.
+func (c *Config) T0Broadcast() time.Duration {
+	return c.TPhase2a - c.BTT
 }
 
 // BroadcastMaxOffsetForLayer returns `T_broadcast_max_k =
-// max(BFTStart, TVerdictStart − B_k)` for layer k — the leader's target
+// max(BFTStart, T_0_broadcast − B_k)` for layer k — the leader's target
 // Phase-1 broadcast time per spec §Setting.
 //
 // B_k is a target, not a hard cap; the BFTStart floor (default 0) handles
 // the degraded case where the layer's design-time budget overshoots
-// TVerdictStart. In that case the leader broadcasts at BFTStart
+// T_0_broadcast. In that case the leader broadcasts at BFTStart
 // best-effort, and the layer's effective absorption window contracts
 // accordingly.
 func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
-	if d := c.TVerdictStart() - c.Layers[k].BroadcastBudget; d > c.BFTStart {
+	if d := c.T0Broadcast() - c.Layers[k].BroadcastBudget; d > c.BFTStart {
 		return d
 	}
 	return c.BFTStart
 }
 
-// Phase2aStartOffset returns the start of Phase 2a = TVerdictStart.
-// Bundles first-observed past TAcceptMax at any honest receiver enter
-// auth-only retention.
-func (c *Config) Phase2aStartOffset() time.Duration {
-	return c.TVerdictStart()
-}
-
-// Phase2aEndOffset returns the end of Phase 2a (= TCommit). At this
-// moment each operator computes its convergence decision per layer
-// from the observed Phase-2a verdict pool.
-func (c *Config) Phase2aEndOffset() time.Duration {
-	return c.TCommit
-}
-
-// Phase2bStartOffset returns the start of Phase 2b (= TCommit). Each
-// operator emits its σ-or-NR partials per layer.
-func (c *Config) Phase2bStartOffset() time.Duration {
-	return c.TCommit
-}
-
-// Phase2bEndOffset returns the end of the Phase-2b propagation budget —
-// `TCommit + Delta2b`. By this offset, all honest peers' σ/NR partials are
-// expected to be observable cluster-wide under nominal partial synchrony.
-//
-// This is the SOFT target for "Phase-2b inputs are complete enough for
-// σ-quorum to form", not a hard gate on Phase-3 Resolve. Resolve is
-// idempotent (re-running on incomplete state returns ErrNoQuorum without
-// mutation), so the canonical implementation is observer-mode: Resolve is
-// invoked opportunistically from TCommit onward on every KindOnion2b /
-// KindCertificate arrival, and the average healthy slot decides well
-// before this offset.
-func (c *Config) Phase2bEndOffset() time.Duration {
-	return c.TCommit + c.Delta2b
-}
-
-// Phase3StartOffset returns the SOFT target by which Phase-3 reconstruction
-// is expected to *complete the propagation-budget portion* — coincident
-// with Phase2bEndOffset. Operators MAY (and the production runner DOES)
-// invoke Resolve opportunistically from TCommit onward; this offset marks
-// the moment by which σ-quorum should form under partial synchrony, not a
-// gate on attempting reconstruction.
-func (c *Config) Phase3StartOffset() time.Duration {
-	return c.TCommit + c.Delta2b
-}
-
-// RoundEndOffset returns TCommit + Delta2b + Eps3 — the SOFT per-operator
-// target by which the local Phase-3 reconstruction walk is expected to
-// complete under nominal partial synchrony. Per spec §Phase 3, this is
-// NOT a hard deadline:
-//
-//   - Phase 3 may be attempted opportunistically from TCommit onward
-//     (Resolve is idempotent and returns ErrNoQuorum cleanly on incomplete
-//     state). Phase2bEndOffset is the SOFT propagation target, not a
-//     Resolve-gating wall. The canonical implementation observes inbound
-//     KindOnion2b / KindCertificate arrivals and calls Resolve on each.
-//   - Reconstruction overrunning Eps3 can spill into the submission
-//     slack; a faster peer's KindCertificate gossip can let an operator
-//     that hasn't completed local reconstruction submit (V, S) directly.
-//   - Late KindOnion2b arrivals past Phase2bEndOffset can be incorporated
-//     by re-running the reconstruction walk; Pigeonhole semantics still
-//     hold (at most one V can reconstruct cluster-wide regardless of
-//     timing).
-//
-// The hard wall for the slot is the relay-submission deadline (typically
-// T_relay_cutoff − T_submit), enforced at the runner level via context
-// cancellation, not here.
-func (c *Config) RoundEndOffset() time.Duration {
-	return c.TCommit + c.Delta2b + c.Eps3
-}
-
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
-// for K layers at the given BTT, RefloodDelay, and TVerdictStart. Per spec
+// for K layers at the given BTT, SafetyBuffer, and T0Broadcast. Per spec
 // §Setting, B_k is sized to accommodate one gossipsub IHAVE/IWANT reflood
 // cycle when initial eager-push fails to reach all honest peers:
 //
-//	B_k_shallow = (k+2)·BTT + RefloodDelay  for k ∈ [0, K-2]
-//	B_{K-1}     = TVerdictStart             (deepest broadcasts at BFT_start)
+//	B_k_shallow = (k+2)·BTT + SafetyBuffer  for k ∈ [0, K-2]
+//	B_{K-1}     = T0Broadcast               (deepest broadcasts at BFT_start)
 //
-// `RefloodDelay` is the worst-case gossipsub-lazy-push latency before a
-// retransmission cycle completes — bounded by the cluster's HeartbeatInterval.
-// At RefloodDelay = 0 the schedule collapses to {2, 3, 4}·BTT (the "fully-
-// meshed cluster, eager push reliable" assumption); production SSV
-// deployments use RefloodDelay = 700ms (SSV's gossipsub HeartbeatInterval).
+// `SafetyBuffer` is the protocol-level configurable for mesh-tolerance
+// budget (distinct from the gossipsub network's HeartbeatInterval, which
+// is `RefloodDelay`). Default `SafetyBuffer = RefloodDelay` matches
+// bare-OBFT's structural budget; lower values reclaim MEV-fetch headroom
+// at the cost of mesh-tail tolerance.
 //
-// At K=4 returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, 4·BTT+RefloodDelay, TVerdictStart]. At K=3
-// returns [2·BTT+RefloodDelay, 3·BTT+RefloodDelay, TVerdictStart]. At K=2 returns
-// [2·BTT+RefloodDelay, TVerdictStart]. For K>4 the first three layers stay at
-// 2 / 3 / 4 BTT + RefloodDelay and the intermediate layers (k = 3, ..., K-2)
-// interpolate linearly in duration space from 4·BTT + RefloodDelay (at L_2) to
-// TVerdictStart (at L_{K-1}).
+// At K=4 returns [2·BTT+SafetyBuffer, 3·BTT+SafetyBuffer, 4·BTT+SafetyBuffer, T0Broadcast]. At K=3
+// returns [2·BTT+SafetyBuffer, 3·BTT+SafetyBuffer, T0Broadcast]. At K=2 returns
+// [2·BTT+SafetyBuffer, T0Broadcast]. For K>4 the first three layers stay at
+// 2 / 3 / 4 BTT + SafetyBuffer and the intermediate layers (k = 3, ..., K-2)
+// interpolate linearly in duration space from 4·BTT + SafetyBuffer (at L_2) to
+// T0Broadcast (at L_{K-1}).
 //
-// At extreme degraded operating points where TVerdictStart shrinks below
-// the canonical shallow multiples (e.g. TVerdictStart ≤ 4·BTT + RefloodDelay
+// At extreme degraded operating points where T0Broadcast shrinks below
+// the canonical shallow multiples (e.g. T0Broadcast ≤ 4·BTT + SafetyBuffer
 // at K≥4), the helper still returns a schedule — the shallow B_k values
-// can exceed TVerdictStart. The protocol's runtime
-// `T_broadcast_max_k = max(BFT_start, TVerdictStart − B_k)` clamps those
+// can exceed T0Broadcast. The protocol's runtime
+// `T_broadcast_max_k = max(BFT_start, T0Broadcast − B_k)` clamps those
 // layers' targets at BFT_start, so the configuration remains valid (the
 // fall-through depth shrinks but the cluster still operates). Callers
 // that want the canonical staggered shape preserved can either widen
-// TVerdictStart (loosen Δ_2a / Δ_2b / ε_3 / header headroom), lower
-// RefloodDelay for denser meshes, or supply their own per-layer schedule.
-func DefaultBroadcastBudget(K int, btt, refloodDelay, tVerdictStart time.Duration) ([]time.Duration, error) {
+// T0Broadcast (loosen the post-Phase-2a budget / header headroom),
+// lower SafetyBuffer for denser meshes, or supply their own per-layer
+// schedule.
+func DefaultBroadcastBudget(K int, btt, safetyBuffer, t0Broadcast time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget BTT=%v must be > 0", btt)
 	}
-	if refloodDelay < 0 {
-		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget RefloodDelay=%v must be >= 0", refloodDelay)
+	if safetyBuffer < 0 {
+		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget SafetyBuffer=%v must be >= 0", safetyBuffer)
 	}
-	// shallow returns (k+2)*BTT + RefloodDelay for shallow layer k.
+	// shallow returns (k+2)*BTT + SafetyBuffer for shallow layer k.
 	shallow := func(k int) time.Duration {
-		return time.Duration(k+2)*btt + refloodDelay
+		return time.Duration(k+2)*btt + safetyBuffer
 	}
 	out := make([]time.Duration, K)
 	switch K {
 	case 1:
-		out[0] = tVerdictStart
+		out[0] = t0Broadcast
 	case 2:
 		out[0] = shallow(0)
-		out[1] = tVerdictStart
+		out[1] = t0Broadcast
 	case 3:
 		out[0] = shallow(0)
 		out[1] = shallow(1)
-		out[2] = tVerdictStart
+		out[2] = t0Broadcast
 	case 4:
 		out[0] = shallow(0)
 		out[1] = shallow(1)
 		out[2] = shallow(2)
-		out[3] = tVerdictStart
+		out[3] = t0Broadcast
 	default:
-		// First three layers at 2 / 3 / 4 BTT + RefloodDelay; intermediate layers
-		// interpolate linearly in duration space from 4·BTT + RefloodDelay (at L_2)
-		// to TVerdictStart (at L_{K-1}).
+		// First three layers at 2 / 3 / 4 BTT + SafetyBuffer; intermediate layers
+		// interpolate linearly in duration space from 4·BTT + SafetyBuffer (at L_2)
+		// to T0Broadcast (at L_{K-1}).
 		out[0] = shallow(0)
 		out[1] = shallow(1)
 		out[2] = shallow(2)
-		out[K-1] = tVerdictStart
-		span := tVerdictStart - out[2]
+		out[K-1] = t0Broadcast
+		span := t0Broadcast - out[2]
 		steps := K - 3
 		for k := 3; k < K-1; k++ {
 			out[k] = out[2] + span*time.Duration(k-2)/time.Duration(steps)
 		}
 	}
-	// Cap each B_k at TVerdictStart so the schedule stays non-decreasing
+	// Cap each B_k at T0Broadcast so the schedule stays non-decreasing
 	// even at degraded operating points where the canonical staggered
-	// shallow multiples (or RefloodDelay-inflated values) overshoot.
+	// shallow multiples (or SafetyBuffer-inflated values) overshoot.
 	// Capped layers share `T_broadcast_max_k = max(BFT_start,
-	// TVerdictStart − B_k) = BFT_start` — multiple layers may collide at
+	// T0Broadcast − B_k) = BFT_start` — multiple layers may collide at
 	// BFT_start without safety impact. The deepest layer is already
-	// TVerdictStart by construction; the cap turns degraded shallow layers
+	// T0Broadcast by construction; the cap turns degraded shallow layers
 	// into "broadcast at BFT_start" peers of the deepest.
 	for k := 0; k < K; k++ {
-		if out[k] > tVerdictStart {
-			out[k] = tVerdictStart
+		if out[k] > t0Broadcast {
+			out[k] = t0Broadcast
 		}
 	}
 	return out, nil
@@ -430,37 +347,16 @@ func (c *Config) Validate() error {
 	if c.BTT <= 0 {
 		return errors.New("twoab: BTT must be positive")
 	}
-	if c.TCommit <= 0 {
-		return errors.New("twoab: TCommit must be positive")
+	if c.TPhase2a <= 0 {
+		return errors.New("twoab: TPhase2a must be positive")
 	}
-	// Per spec §Setting / §Phase 2a / Verdict propagation budget:
-	// `Delta2a >= 1·BTT + ε_proc` is the strict structural minimum (sub-floor
-	// sizings are broken-by-construction with the late-broadcast schedule:
-	// the operator's verdict-broadcast time `T_verdict_max − ε_proc` would
-	// fall before Phase 2a begins). ε_proc ≈ 50ms per spec — propagation-
-	// independent, same as Eps3. This is a structural coherency floor,
-	// not a BFT-liveness floor — keep enforced.
-	const epsProc = 50 * time.Millisecond
-	if c.Delta2a < c.BTT+epsProc {
-		return fmt.Errorf("twoab: Delta2a must be >= 1·BTT + ε_proc = %v (strict structural minimum per spec §Phase 2a / Verdict propagation budget; sub-floor breaks the late-broadcast verdict schedule)", c.BTT+epsProc)
+	if c.SafetyBuffer < 0 {
+		return errors.New("twoab: SafetyBuffer must be >= 0")
 	}
-	if c.Delta2b <= 0 {
-		return errors.New("twoab: Delta2b must be positive")
-	}
-	if c.Eps3 <= 0 {
-		return errors.New("twoab: Eps3 must be positive")
-	}
-	// Delta2b < 1 BTT is the BFT-liveness minimum for Phase-2b propagation
-	// (spec §Setting recommends Δ_2b ≥ 1 BTT so σ/NR partials reach all
-	// honest before Phase 3 starts). Below that the cluster systematically
-	// misses; Validate does not enforce — operator choice.
-	//
-	// TCommit must accommodate the Phase-1 broadcast budget (TVerdictStart
-	// = TCommit − Delta2a > 0) plus the deepest-layer broadcast cushion.
-	// This is a basic-feasibility floor (the protocol can't run with
-	// non-positive TVerdictStart) — keep enforced.
-	if c.TCommit <= c.Delta2a {
-		return errors.New("twoab: TCommit must be > Delta2a so TVerdictStart is positive")
+	// TPhase2a must accommodate T_0_broadcast = TPhase2a − BTT being
+	// positive (the Phase-1 broadcast time must land within the slot).
+	if c.TPhase2a <= c.BTT {
+		return errors.New("twoab: TPhase2a must be > BTT so T0Broadcast is positive")
 	}
 
 	members := make(map[OperatorID]bool, len(c.Operators))
@@ -481,9 +377,9 @@ func (c *Config) Validate() error {
 	// absorption / chain-decryption headroom (spec §Setting "B_k ≥
 	// B_{k-1}" verbatim). Equal adjacent budgets are tolerated: at
 	// degraded operating points multiple layers' broadcast targets clamp
-	// to BFT_start (the runtime `max(BFT_start, TVerdictStart − B_k)`
+	// to BFT_start (the runtime `max(BFT_start, T0Broadcast − B_k)`
 	// floor), and at extreme operating points the canonical staggered
-	// shallow budgets even exceed TVerdictStart. Strict-increasing was
+	// shallow budgets even exceed T0Broadcast. Strict-increasing was
 	// historically enforced but rejected these degenerate-but-still-valid
 	// configs; non-decreasing keeps the staggering intent without
 	// blocking them.
@@ -492,15 +388,6 @@ func (c *Config) Validate() error {
 			return errors.New("twoab: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
 		}
 	}
-	// The deepest layer's budget is the cluster's worst-case liveness
-	// guarantee. Spec §Setting recommends `B_{K-1} ≥ 2·BTT` for the
-	// cluster to have a liveness guarantee at any layer; below that the
-	// deepest leader's bundle can't both propagate and reach Phase-2b
-	// quorum before commit, so the cluster systematically misses. The
-	// floor is *informational* — Validate does not enforce it. Operators
-	// who want to study (or knowingly run) at extreme operating points
-	// where no layer has a liveness guarantee can; the simulator and
-	// production stack still execute.
 
 	seenLeaders := make(map[OperatorID]bool, len(c.Layers))
 	for k, layer := range c.Layers {
@@ -515,16 +402,16 @@ func (c *Config) Validate() error {
 			return errors.New("twoab: layer FetchAt must be non-negative")
 		}
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
-			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, TVerdictStart−B_k=%v))",
+			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, T0Broadcast−B_k=%v))",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k),
-				c.BFTStart, c.TVerdictStart()-c.Layers[k].BroadcastBudget)
+				c.BFTStart, c.T0Broadcast()-c.Layers[k].BroadcastBudget)
 		}
 		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
 		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
 		// fetch asymmetry). Strict-decreasing was historically enforced;
 		// the non-increasing relaxation lets multiple layers' targets
 		// collide at BFT_start when the operating point pushes shallow
-		// targets past TVerdictStart (matches the BroadcastBudget
+		// targets past T0Broadcast (matches the BroadcastBudget
 		// non-decreasing relaxation above).
 		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
 			return errors.New("twoab: layer fetch times must be non-increasing in k")

@@ -3,69 +3,145 @@ package twoab
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"hash"
 )
 
-// Wire-shaped message types carried between operators in the four 2abOBFT
-// envelope kinds (KindPhase1Bundle, KindVerdict, KindOnion2b,
+// Wire-shaped message types carried between operators in the five 2abOBFT
+// envelope kinds (KindPhase1Bundle, KindValue, KindNoValue, KindCommit,
 // KindCertificate).
+//
+// Naming note: the protocol-message struct for KindValue is `ValueMsg` (not
+// `Value`) because `Value` is already a type alias for `obft.Value` (the
+// candidate-value `[]byte`). For symmetry with `ValueMsg`, the KindNoValue
+// struct is `NoValueMsg`. `Commit` is unambiguous and follows the bare-OBFT
+// `base/messages.go` naming convention.
 //
 // Sender authentication is provided by the outer SignedSSVMessage envelope
 // in production (the same model as bare OBFT). The OperatorID fields below
 // are claimed-by-sender values that the outer layer's signature verification
 // ties to the actual operator's identity key.
 
-// VerdictKind discriminates the three possible Phase-2a verdicts an
-// operator can broadcast per spec §Phase 2a / "Compute local verdict at
-// layer k":
+// LayerEntryKind discriminates the per-layer commitment direction carried
+// inside Phase-2a emissions' LayerEntries (one entry per layer k ∈ [1, K-1]):
 //
-//   - σV: operator retained exactly 1 V at this layer and the host returned
-//     valid at verdict-broadcast time. Counts toward verdict_pool[V].
-//   - NV: operator retained exactly 1 V but the host returned not-valid.
-//     Counts toward nr_pool.
-//   - NR: operator retained 0 V's OR ≥ 2 distinct V's (equivocation observed).
-//     Counts toward nr_pool. (Wire-identical to NV; the distinction is
-//     local-diagnostic only — see spec §Operator commitment states.)
-type VerdictKind byte
+//   - LayerEntryEmpty: the operator does not commit to either side at this
+//     layer. Used at the deepest layer L_{K-1} when the operator is NR-side
+//     (no nr_tag_{K-1} exists), and as a defensive default.
+//   - LayerEntrySigmaChained: the operator commits σ-direction on V at this
+//     layer. Payload is the σ partial, chained-IBE-encrypted under
+//     nr_tag_0..nr_tag_{k-1} (k levels of encryption). V field is set.
+//   - LayerEntryNRPlaintext: the operator commits NR-direction at this layer.
+//     Payload is the plaintext nr_tag_k IBE partial. V field is empty. Only
+//     valid for k ∈ [0, K-2] — there is no nr_tag at the deepest layer.
+type LayerEntryKind byte
 
 const (
-	// VerdictUnspecified is the zero value; never valid on the wire.
-	VerdictUnspecified VerdictKind = 0x00
-	// VerdictSigmaV means the operator declares σ-eligibility on a specific V.
-	VerdictSigmaV VerdictKind = 0x01
-	// VerdictNR means "no V retained" or "equivocation observed". value_root
-	// is null (zero bytes) for both NR and NV.
-	VerdictNR VerdictKind = 0x02
-	// VerdictNV means "host returned not-valid on the single retained V".
-	// Wire-identical to NR for convergence-rule purposes (both count toward
-	// nr_pool); distinguished only for local diagnostic.
-	VerdictNV VerdictKind = 0x03
+	LayerEntryEmpty        LayerEntryKind = 0x00
+	LayerEntrySigmaChained LayerEntryKind = 0x01
+	LayerEntryNRPlaintext  LayerEntryKind = 0x02
 )
 
 // String returns a human-readable label for telemetry/logging.
-func (k VerdictKind) String() string {
+func (k LayerEntryKind) String() string {
 	switch k {
-	case VerdictSigmaV:
-		return "sigmaV"
-	case VerdictNR:
-		return "NR"
-	case VerdictNV:
-		return "NV"
+	case LayerEntryEmpty:
+		return "empty"
+	case LayerEntrySigmaChained:
+		return "sigma-chained"
+	case LayerEntryNRPlaintext:
+		return "nr-plaintext"
 	default:
 		return "unspecified"
 	}
 }
 
-// IsNoSigmaSide returns true for verdicts that count toward nr_pool (NR or
-// NV). Convergence-rule input.
-func (k VerdictKind) IsNoSigmaSide() bool {
-	return k == VerdictNR || k == VerdictNV
+// LayerEntry is one operator's per-layer commitment carried inside a
+// Phase-2a emission (ValueMsg, NoValueMsg, or Commit with Side=NRDirect).
+// Each Phase-2a emission carries K-1 entries: one for each layer k ∈ [1, K-1].
+//
+// L_0 is NOT carried in LayerEntries — the L_0 commitment is in the wire-
+// envelope kind itself (ValueMsg ⇒ σ-direction-claim with V_0 fulltext;
+// NoValueMsg ⇒ NR-direction-claim or pending; Commit at Phase 2b carries
+// the actual L_0 partial).
+//
+// Per spec §Wire format, the encoder represents Empty entries with a kind
+// byte only (no payload); SigmaChained carries V + chained ciphertext;
+// NRPlaintext carries the IBE partial bytes only (no V).
+type LayerEntry struct {
+	// Layer is the layer index this entry corresponds to, k ∈ [1, K-1].
+	// Carried explicitly so receivers can detect missing / duplicate layers
+	// even under malformed encodings; structural validation rejects out-of-
+	// range or duplicate-layer entries.
+	Layer int
+
+	// Kind discriminates the entry shape.
+	Kind LayerEntryKind
+
+	// V is the candidate value at this layer for SigmaChained entries;
+	// empty for Empty and NRPlaintext.
+	V Value
+
+	// Payload is:
+	//   - empty for Empty
+	//   - the chained-IBE-encrypted σ partial (encrypted under nr_tag_0
+	//     ... nr_tag_{k-1}, k levels) for SigmaChained
+	//   - the plaintext nr_tag_k IBE partial for NRPlaintext
+	Payload []byte
+}
+
+// CommitSide discriminates the L_0 direction of a Phase-2b Commit emission.
+// Phase 2a emissions (ValueMsg / NoValueMsg) carry no L_0 partial — they
+// are op-identity-signed coordination only. Commit at Phase 2b carries the
+// L_0 threshold partial in one of three sides:
+//
+//   - CommitSideSigned: σ-direction at L_0. Carries plaintext σ partial on
+//     V_0 (the L0Partial field) plus the L0Value (the V_0 being signed).
+//   - CommitSideNR: NR-direction at L_0 (Phase-2b emission). Carries the
+//     plaintext nr_tag_0 IBE partial in L0Partial; L0Value is empty.
+//   - CommitSideNRDirect: NR-direction at L_0 (Phase-2a emission, equivocation
+//     observed). Same wire shape as CommitSideNR for L_0, but additionally
+//     carries the full K-1 LayerEntries set (since the op skips ValueMsg /
+//     NoValueMsg entirely and the L_k>0 entries must travel with this
+//     emission to reach Phase-3 reconstruction).
+//
+// CommitSideSigned and CommitSideNR emissions at Phase 2b reference the op's
+// earlier ValueMsg / NoValueMsg for the L_k>0 partials (already on the
+// wire from Phase 2a). CommitSideNRDirect carries its own L_k>0 entries.
+type CommitSide byte
+
+const (
+	// CommitSideUnspecified is the zero value; never valid on the wire.
+	CommitSideUnspecified CommitSide = 0x00
+	CommitSideSigned      CommitSide = 0x01
+	CommitSideNR          CommitSide = 0x02
+	CommitSideNRDirect    CommitSide = 0x03
+)
+
+// String returns a human-readable label for telemetry/logging.
+func (s CommitSide) String() string {
+	switch s {
+	case CommitSideSigned:
+		return "signed"
+	case CommitSideNR:
+		return "nr"
+	case CommitSideNRDirect:
+		return "nr-direct"
+	default:
+		return "unspecified"
+	}
+}
+
+// IsNR reports whether the commit side is NR-direction (either Phase-2b NR
+// or Phase-2a NRDirect). σ-XOR-NR per layer at L_0.
+func (s CommitSide) IsNR() bool {
+	return s == CommitSideNR || s == CommitSideNRDirect
 }
 
 // Phase1Bundle is the Phase-1 message a layer's leader sends to distribute
-// their fetched candidate value. Per spec §Phase 1 Variant C: 2abOBFT
-// removes the Phase-1 σ_V partial entirely (leader emits σ at Phase 2b
-// uniformly with all other operators), so the bundle carries only the value
-// and authentication context.
+// their fetched candidate value. Per spec §Phase 1: 2abOBFT removes the
+// Phase-1 σ_V partial entirely (leader emits σ at Phase 2b uniformly with
+// all other operators), so the bundle carries only the value and
+// authentication context.
 //
 // Authentication: the outer envelope is op-identity-signed at construction
 // time; the inner bundle bytes (encoded by EncodePhase1Bundle) are what the
@@ -85,75 +161,92 @@ type Phase1Bundle struct {
 	Value Value
 }
 
-// Verdict is the Phase-2a verdict envelope an operator broadcasts to declare
-// their σ-eligibility per layer. Per spec §Phase 2a, every operator emits
-// exactly one Verdict per (slot, layer); a second distinct verdict is Rule-6a
-// slashable.
+// ValueMsg is the Phase-2a coordination envelope for an operator who has
+// V_0 retained AND host re-validates V_0 as valid at the Phase-2a fire-
+// instant. Carries V_0 (fulltext) plus K-1 LayerEntries for the deeper
+// layers.
 //
-// Verdicts are op-identity-signed at the envelope layer (NOT threshold
-// partials — they bind no σ-pool / nr_pool entry directly). They only
-// influence other operators' convergence-rule evaluation at Phase-2b start.
-type Verdict struct {
+// Per spec §Phase 2a: ValueMsg envelopes are op-identity-signed at the
+// wire layer (NOT threshold partials at L_0 — they only carry a
+// σ-direction-claim at L_0). They contribute to value_pool[V_0] in
+// receivers' views; receivers use the inference rules in §Pool aggregation
+// rules to combine ValueMsg / NoValueMsg / Commit observations into the
+// cluster-wide pool view.
+//
+// A ValueMsg emission also doubles as the upgrade path A1: a NoValueMsg-
+// path op who later receives V_0 + host valid emits a ValueMsg envelope
+// with the same wire shape (per spec §Authorized Phase-2 emission pairs A1).
+type ValueMsg struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
 	Height     Height
-	Layer      int
-	Kind       VerdictKind
-	// ValueRoot is sha256(V) for σV verdicts; zero ([32]byte{}) for NR / NV
-	// per spec §Phase 2a (value_root = null when verdict is NR or NV).
+	// V is the candidate value the operator claims σ-direction on at L_0.
+	V Value
+	// ValueRoot is sha256(V), included for receiver-side caching/dedup.
 	ValueRoot [32]byte
+	// LayerEntries carries the operator's L_1..L_{K-1} per-layer
+	// commitments. Length K-1; index 0 → layer 1, ..., index K-2 → layer K-1.
+	// Each entry is one of {Empty, SigmaChained, NRPlaintext}.
+	LayerEntries []LayerEntry
 }
 
-// EncryptedLayer is one layer of a Phase-2b onion's σ-side per-layer
-// contribution: a candidate value plus the σ partial signature on it
-// (encrypted under the chained NR-tag stack at layers > 0; plaintext at
-// layer 0).
+// NoValueMsg is the Phase-2a coordination envelope for an operator who
+// either does not have V_0 retained OR has V_0 but host says not-valid at
+// the Phase-2a fire-instant. Carries K-1 LayerEntries; no L_0 payload.
 //
-// Per spec §Phase 2b emission, chained encryption at layer k uses tags
-// nr_tag_0, ..., nr_tag_{k-1} nested with nr_tag_0 outermost. Decryption
-// requires NR-quorum at every prior layer (Pigeonhole 3 sealing).
-//
-// An empty EncryptedLayer (zero-length Value and Ciphertext) means the
-// emitting operator did not σ-emit at this layer (they emitted NR or NV
-// at this layer, or it is the deepest layer L_{K-1} where no NR tag
-// exists so a "force-NR" produces no on-wire emission — per spec
-// §Convergence rule "Deepest-layer NR has no on-wire emission").
-type EncryptedLayer struct {
-	Value      Value
-	Ciphertext []byte
+// NoValueMsg envelopes contribute to novalue_pool[L_0]. Per spec §Pool
+// aggregation rules, NoValueMsg membership is provisional — if the same
+// op later emits a ValueMsg upgrade (A1 sequence), the receiver moves
+// that op from novalue_pool to value_pool.
+type NoValueMsg struct {
+	ClusterID    [32]byte
+	OperatorID   OperatorID
+	Height       Height
+	LayerEntries []LayerEntry
 }
 
-// NRPartial is one operator's partial NR signature for a specific layer.
-type NRPartial struct {
-	// Layer in [0, K-1) — there is no NR tag for the deepest layer.
-	Layer int
-	// PartialSig is the operator's IBE-keypair partial signature on
-	// NoQuorumTag(ClusterID, Height, Layer). Aggregating qEnc of these
-	// at the same Layer yields the chained-decryption key for nr_tag_Layer.
-	PartialSig Signature
-}
-
-// Onion2b is the wire payload carried in a single KindOnion2b message at
-// Phase-2b emission time. It bundles the operator's σ-side per-layer
-// contributions (the K-layer onion: plaintext at L_0, chained-encrypted at
-// deeper layers) plus their NR-side per-layer contributions (IBE partials
-// on layers committed NR-side).
+// Commit is the Phase-2b binding envelope. Each operator emits at most one
+// Commit per (slot) — the Side flag distinguishes the L_0 σ vs NR direction;
+// at L_k>0 the per-layer commitment is already on the wire from Phase 2a
+// (in ValueMsg/NoValueMsg/Commit-NRDirect LayerEntries).
 //
-// Per spec §Phase 2b emission, each operator emits exactly one Onion2b per
-// (slot, operator), based on their convergence-rule decision at Phase-2a
-// end. Per-layer commitment is exclusive (σ entry in Layers[k] OR an entry
-// in NRPartials for layer k, never both). Unlike bare-OBFT Commit, there
-// is no LeaderSigmaWitness array (no Phase-1 σ_V exists in 2ab).
-type Onion2b struct {
+// Per spec §Wire format:
+//
+//   - Side=Signed: plaintext σ partial on V_0 at L_0. L0Value carries V_0;
+//     L0Partial carries the σ partial. LayerEntries is empty (Phase 2a
+//     emission carried the L_k>0 σ-chained entries).
+//   - Side=NR: plaintext nr_tag_0 IBE partial at L_0. L0Value is empty;
+//     L0Partial carries the partial. LayerEntries is empty (Phase 2a
+//     emission carried the L_k>0 entries; this is a Phase-2b NR commit
+//     following an earlier ValueMsg or NoValueMsg from the same op).
+//   - Side=NRDirect: same L_0 shape as NR (nr_tag_0 partial in L0Partial),
+//     but additionally carries the K-1 LayerEntries since the operator
+//     skipped ValueMsg/NoValueMsg at Phase 2a (equivocation observed).
+//     This is the only Commit kind that carries LayerEntries.
+//
+// EKM enforces single-σ-V at L_0 (only one V can have σ partials cluster-
+// wide per Pigeonhole 2) and σ-XOR-NR per (slot, layer) at the V-share /
+// IBE-share level. A bug that requested σ-then-NR at the same layer is
+// caught by transitionToSigma / transitionToNR in the Instance before any
+// wire bytes leave the build path.
+type Commit struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
 	Height     Height
-	// Layers has length K; layer k carries this operator's σ contribution
-	// at layer k (or empty if the operator did not σ-emit at that layer).
-	Layers []EncryptedLayer
-	// NRPartials carries this operator's IBE partials for layers committed
-	// NR-side. Per spec only layers in [0, K-1) have NR tags.
-	NRPartials []NRPartial
+	// Side discriminates the L_0 commitment shape.
+	Side CommitSide
+	// L0Value is the V_0 being σ-signed (Side=Signed only); empty for
+	// NR / NRDirect.
+	L0Value Value
+	// L0Partial is the L_0 threshold partial:
+	//   - Side=Signed: plaintext σ partial on L0Value
+	//   - Side=NR / NRDirect: plaintext nr_tag_0 IBE partial
+	L0Partial Signature
+	// LayerEntries carries L_1..L_{K-1} per-layer commitments. Populated
+	// only for Side=NRDirect (Phase-2a NR-direct emitter who skipped
+	// ValueMsg/NoValueMsg); empty for Side=Signed and Side=NR (those
+	// reference the op's earlier Phase-2a emission for L_k>0 entries).
+	LayerEntries []LayerEntry
 }
 
 // Certificate is the final-certificate wire payload (KindCertificate). Per
@@ -179,51 +272,75 @@ type Output struct {
 }
 
 // ValueRoot returns the 32-byte identifier (sha256) used to refer to a
-// Phase-1 V on the wire (in Verdict envelopes) without retransmitting the
-// full bytes. Cluster-wide stable: every honest operator computes the same
-// value_root for the same V.
+// Phase-1 V on the wire without retransmitting the full bytes. Cluster-
+// wide stable: every honest operator computes the same value_root for the
+// same V.
 func ValueRoot(v Value) [32]byte {
 	return sha256.Sum256(v)
 }
 
-// verdictContentHash returns a SHA-256 hash of v's content fields. Used by
-// ObserveVerdict to dedup identical re-broadcasts vs flag distinct second
-// emissions (Rule 6a — verdict-vs-verdict equivocation).
-func verdictContentHash(v *Verdict) [32]byte {
+// valueMsgContentHash returns a SHA-256 hash of v's content fields. Used
+// by ObserveValue to dedup identical re-broadcasts vs flag distinct second
+// emissions (Phase-2 equivocation evidence).
+func valueMsgContentHash(v *ValueMsg) [32]byte {
 	h := sha256.New()
 	h.Write(v.ClusterID[:])
 	binary.Write(h, binary.BigEndian, uint64(v.OperatorID))
 	binary.Write(h, binary.BigEndian, uint64(v.Height))
-	binary.Write(h, binary.BigEndian, uint32(v.Layer))
-	h.Write([]byte{byte(v.Kind)})
+	binary.Write(h, binary.BigEndian, uint32(len(v.V)))
+	h.Write(v.V)
 	h.Write(v.ValueRoot[:])
+	hashLayerEntries(h, v.LayerEntries)
 	var out [32]byte
 	copy(out[:], h.Sum(nil))
 	return out
 }
 
-// onion2bContentHash returns a SHA-256 hash of o's content fields. Used by
-// ObserveOnion2b to dedup identical re-broadcasts vs flag distinct second
-// emissions (cross-onion equivocation evidence).
-func onion2bContentHash(o *Onion2b) [32]byte {
+// noValueMsgContentHash returns a SHA-256 hash of nv's content fields.
+// Used by ObserveNoValue to dedup identical re-broadcasts vs flag distinct
+// second emissions.
+func noValueMsgContentHash(nv *NoValueMsg) [32]byte {
 	h := sha256.New()
-	h.Write(o.ClusterID[:])
-	binary.Write(h, binary.BigEndian, uint64(o.OperatorID))
-	binary.Write(h, binary.BigEndian, uint64(o.Height))
-	binary.Write(h, binary.BigEndian, uint32(len(o.Layers)))
-	for _, el := range o.Layers {
-		binary.Write(h, binary.BigEndian, uint32(len(el.Value)))
-		h.Write(el.Value)
-		binary.Write(h, binary.BigEndian, uint32(len(el.Ciphertext)))
-		h.Write(el.Ciphertext)
-	}
-	binary.Write(h, binary.BigEndian, uint32(len(o.NRPartials)))
-	for _, p := range o.NRPartials {
-		binary.Write(h, binary.BigEndian, uint32(p.Layer))
-		binary.Write(h, binary.BigEndian, uint32(len(p.PartialSig)))
-		h.Write(p.PartialSig)
-	}
+	h.Write(nv.ClusterID[:])
+	binary.Write(h, binary.BigEndian, uint64(nv.OperatorID))
+	binary.Write(h, binary.BigEndian, uint64(nv.Height))
+	hashLayerEntries(h, nv.LayerEntries)
 	var out [32]byte
 	copy(out[:], h.Sum(nil))
 	return out
+}
+
+// commitContentHash returns a SHA-256 hash of c's content fields. Used by
+// ObserveCommit to dedup identical re-broadcasts vs flag distinct second
+// emissions (cross-side / cross-V equivocation evidence).
+func commitContentHash(c *Commit) [32]byte {
+	h := sha256.New()
+	h.Write(c.ClusterID[:])
+	binary.Write(h, binary.BigEndian, uint64(c.OperatorID))
+	binary.Write(h, binary.BigEndian, uint64(c.Height))
+	h.Write([]byte{byte(c.Side)})
+	binary.Write(h, binary.BigEndian, uint32(len(c.L0Value)))
+	h.Write(c.L0Value)
+	binary.Write(h, binary.BigEndian, uint32(len(c.L0Partial)))
+	h.Write(c.L0Partial)
+	hashLayerEntries(h, c.LayerEntries)
+	var out [32]byte
+	copy(out[:], h.Sum(nil))
+	return out
+}
+
+// hashLayerEntries appends LayerEntries content to a hasher. Entries are
+// hashed in the order they appear on the wire — validation rejects out-of-
+// range or duplicate-layer entries, so honest emissions produce a canonical
+// ordering and identical re-broadcasts hash identically.
+func hashLayerEntries(h hash.Hash, entries []LayerEntry) {
+	binary.Write(h, binary.BigEndian, uint32(len(entries)))
+	for _, e := range entries {
+		binary.Write(h, binary.BigEndian, uint32(e.Layer))
+		h.Write([]byte{byte(e.Kind)})
+		binary.Write(h, binary.BigEndian, uint32(len(e.V)))
+		h.Write(e.V)
+		binary.Write(h, binary.BigEndian, uint32(len(e.Payload)))
+		h.Write(e.Payload)
+	}
 }

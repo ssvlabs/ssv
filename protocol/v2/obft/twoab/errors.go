@@ -5,18 +5,10 @@ import (
 	"fmt"
 )
 
-// Protocol-specific errors. Additional errors will accrete as later
-// phases land.
+// Protocol-specific errors.
 
 // ErrNilConfig is returned by NewInstance when called with a nil Config.
 var ErrNilConfig = errors.New("twoab: nil config")
-
-// ErrLatePhase1Bundle is returned by ObservePhase1Bundle when the
-// bundle's first-observation offset is past the Phase-2a end (T_commit).
-// Per spec §Phase 1, bundles observed past T_accept_max but before
-// T_commit go into auth-only retention; past T_commit, retention is
-// pointless — Phase 2a is over and the bundle can no longer be used.
-var ErrLatePhase1Bundle = errors.New("twoab: phase-1 bundle observed past T_commit")
 
 // ErrNotLeader is returned by BuildPhase1Bundle when called on an
 // operator who is not the layer's designated leader.
@@ -26,8 +18,7 @@ var ErrNotLeader = errors.New("twoab: not leader at this layer")
 // empty Value.
 var ErrEmptyValue = errors.New("twoab: empty value")
 
-// ErrLayerOutOfRange is returned when a layer index is outside
-// [0, K).
+// ErrLayerOutOfRange is returned when a layer index is outside [0, K).
 var ErrLayerOutOfRange = errors.New("twoab: layer out of range")
 
 // ErrSigmaLocked is returned when the EKM detects an attempt to σ-commit
@@ -40,10 +31,29 @@ var ErrSigmaLocked = errors.New("twoab: σ already locked at this layer (single-
 // a layer where NR is already locked (σ-XOR-NR invariant).
 var ErrNRLocked = errors.New("twoab: NR already locked at this layer (σ-XOR-NR violation)")
 
-// ErrOnion2bAlreadyEmitted is returned by BuildOwnOnion2b on a second
-// call within the same slot. Per spec §Phase 2b emission, each operator
-// emits exactly one Onion2b per (slot, operator).
-var ErrOnion2bAlreadyEmitted = errors.New("twoab: Onion2b already emitted for this slot")
+// ErrPhase2aAlreadyFired is returned by MaybeFirePhase2a on a second
+// call within the same slot. Per spec §Phase 2a, each operator fires
+// Phase 2a exactly once at T_phase_2a; subsequent calls are silent no-ops
+// at the API surface (the cached emission is returned).
+var ErrPhase2aAlreadyFired = errors.New("twoab: Phase 2a already fired for this slot")
+
+// ErrCommitAlreadyEmitted is returned by MaybeBuildAndBroadcastCommit on
+// a second call after an emission already fired at this layer. Per spec
+// §Phase 2b, each operator emits exactly one Commit per (slot, layer).
+var ErrCommitAlreadyEmitted = errors.New("twoab: Commit already emitted at this layer")
+
+// ErrUpgradeNotAvailable is returned by MaybeBuildAndBroadcastUpgrade when
+// the upgrade preconditions are not met (op is not on KindNoValue path, or
+// has no V_0, or host re-validates as NV, or op has already emitted
+// KindCommit at L_0 — the post-commit upgrade is not authorized per A1).
+var ErrUpgradeNotAvailable = errors.New("twoab: upgrade KindValue not available")
+
+// ErrUnauthorizedEmissionSequence is returned when an internal call site
+// attempts to construct an emission whose resulting sequence is not in
+// the authorized A1-A8 set (defense-in-depth — the builders enforce the
+// invariant). Receiver-side detection of unauthorized sequences from peers
+// goes through evidence.go (Rule 6a), not this error.
+var ErrUnauthorizedEmissionSequence = errors.New("twoab: emission would produce unauthorized Phase-2 sequence")
 
 // ErrNoQuorum is returned by Resolve when the K-layer walk exhausts
 // without σ-quorum reaching at any layer AND without NR-quorum at the

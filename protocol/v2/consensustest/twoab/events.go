@@ -224,17 +224,26 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			}
 		} else {
 			// Leader self-observes their own bundle so their own retention
-			// state reflects V at this layer. 2ab Variant C has no Phase-1
-			// σ_V partial (and thus no LeaderSigmaWitness array in Phase 2
-			// that would rehydrate the leader's σ_V cluster-wide); without
-			// self-observation the leader contributes nothing to their own
-			// Phase-2a verdict pool, breaking the all-honest healthy path.
+			// state reflects V at this layer. 2abOBFT has no Phase-1 σ_V
+			// partial (the leader emits σ at Phase 2b uniformly with all other
+			// operators); without self-observation the leader's L_0
+			// retention would be empty and they'd take the NoValue path at
+			// their own Phase-2a fire-time.
 			_ = s.instances[leader].ObservePhase1Bundle(bundle, s.observedOffset())
 			leaderValid := s.cfg.Host.Validate(ct.OperatorID(leader), e.layer, p.V, ct.PhasePhase1Acceptance)
 			_ = s.instances[leader].ApplyHostValidity(e.layer, p.V, leaderValid)
+			// ApplyHostValidity's afterStateDelta cascade may have produced
+			// an upgrade KindValue or a Phase-2b Commit at the leader
+			// already (rare for a leader at Phase-1 time, but possible if
+			// they had previously emitted KindNoValue from a different
+			// layer's perspective via cluster-wide cascading state). Capture
+			// any cascade emissions.
+			out = append(out, captureCascadeEmissions(s, leader)...)
 		}
-		// 2ab Phase 1 carries no σ_V — no offline-aggregator ObserveSigma at
-		// leader-fetch time. σ partials are credited later via Onion2b.
+		// 2abOBFT Phase 1 carries no σ_V partial — no offline-aggregator
+		// ObserveSigma at leader-fetch time. σ partials are credited later
+		// via Phase-2b Commits (Side=Signed) and Phase-2a LayerEntries
+		// (SigmaChained, at L_k>0).
 		bundleBytes := phase1BundleSize(bundle)
 		ownDelay := s.cfg.Byz.OverrideOwnPhase1Delay(s, leader)
 		recipients := p.Recipients
@@ -286,205 +295,151 @@ func (e *evtPhase1Arrival) describe() string {
 
 func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 	inst := s.instances[e.to]
+	// Per spec §Phase 1, 2abOBFT has no T_commit hard wall — bundles
+	// are accepted at any in-slot offset. ObservePhase1Bundle returns
+	// nil even for late bundles, modulo structural validation; the
+	// only hard cutoff is the runner-level RelayCutoff.
 	if err := inst.ObservePhase1Bundle(e.bundle, s.observedOffset()); err != nil {
 		return nil
 	}
 	valid := s.cfg.Host.Validate(ct.OperatorID(e.to), e.layer, e.bundle.Value, ct.PhasePhase1Acceptance)
 	_ = inst.ApplyHostValidity(e.layer, e.bundle.Value, valid)
-	return nil
+	// Both ObservePhase1Bundle and ApplyHostValidity run the afterStateDelta
+	// cascade internally (per spec §Emission ordering). Capture any
+	// emissions the cascade produced (A1 upgrade ValueMsg or Phase-2b
+	// Commit) and schedule per-recipient arrivals.
+	return captureCascadeEmissions(s, e.to)
 }
 
-// ---- evtVerdictBroadcastStart ------------------------------------------
+// ---- evtPhase2aFire ----------------------------------------------------
 
-// evtVerdictBroadcastStart fires at T_verdict_max - ε_proc per spec
-// §Phase 2a. Each non-suppressed operator computes their per-layer verdict
-// + broadcasts the envelope to all peers; byz patterns can selectively
-// suppress verdict emission, override the verdict body, or inject
-// additional distinct verdicts (Rule 6a equivocation).
-//
-// Receivers' verdicts arrive at evtVerdictArrival and feed into the
-// receiver's verdict pool for convergence-rule input at Phase 2b sign time.
-type evtVerdictBroadcastStart struct{}
+// evtPhase2aFire fires at cfg.TPhase2a. Every operator calls
+// MaybeFirePhase2a, which returns one of {ValueMsg, NoValueMsg,
+// Commit-NRDirect} per spec §Phase 2a. After firing, the
+// afterStateDelta cascade inside MaybeFirePhase2a may have produced
+// further emissions (Phase-2b Commit, A1 upgrade) — capture them all.
+type evtPhase2aFire struct{}
 
-func (e *evtVerdictBroadcastStart) describe() string { return "VerdictBroadcastStart" }
+func (e *evtPhase2aFire) describe() string { return "Phase2aFire" }
 
-func (e *evtVerdictBroadcastStart) handle(s *sim) []scheduledEvent {
-	K := s.cfg.K
+func (e *evtPhase2aFire) handle(s *sim) []scheduledEvent {
+	var out []scheduledEvent
 	for _, op := range s.operators {
-		for k := 0; k < K; k++ {
-			if !s.cfg.Byz.AllowVerdictBroadcast(op, k) {
-				continue
-			}
-			v, err := s.instances[op].BuildVerdict(k)
-			if err != nil || v == nil {
-				continue
-			}
-			v = s.cfg.Byz.OverrideVerdict(s, op, k, v)
-			vBytes := verdictSize(v)
-			// Verdict bytes use KindVerdict (Phase-2a) — distinct from
-			// Phase-2b's Onion2b under KindCommit. Splitting these keeps
-			// the per-kind bandwidth chart apples-to-apples against bare
-			// OBFT, where there is no verdict emission at all.
-			s.emitToAll(op, ct.KindVerdict, k, vBytes, 0, func(to twoab.OperatorID) event {
-				return &evtVerdictArrival{from: op, to: to, verdict: cloneVerdict(v)}
-			})
-			// Byz Rule 6a equivocation: emit ADDITIONAL distinct verdicts
-			// at the same (op, layer). Each is delivered cluster-wide so
-			// every honest receiver sees the equivocation.
-			for _, extra := range s.cfg.Byz.BuildExtraVerdicts(s, op, k, v) {
-				extra := extra
-				exBytes := verdictSize(extra)
-				s.emitToAll(op, ct.KindVerdict, k, exBytes, 0, func(to twoab.OperatorID) event {
-					return &evtVerdictArrival{from: op, to: to, verdict: cloneVerdict(extra)}
-				})
-			}
-		}
-	}
-	// emitToAll schedules directly via s.schedule; nothing to return.
-	return nil
-}
-
-// ---- evtVerdictArrival -------------------------------------------------
-
-type evtVerdictArrival struct {
-	from, to twoab.OperatorID
-	verdict  *twoab.Verdict
-}
-
-func (e *evtVerdictArrival) describe() string {
-	return fmt.Sprintf("VerdictArrival[from=%d to=%d layer=%d kind=%s]",
-		e.from, e.to, e.verdict.Layer, e.verdict.Kind)
-}
-
-func (e *evtVerdictArrival) handle(s *sim) []scheduledEvent {
-	_ = s.instances[e.to].ObserveVerdict(e.verdict)
-	return nil
-}
-
-// ---- evtPhaseTwoBStart -------------------------------------------------
-
-// evtPhaseTwoBStart fires at T_commit. Each non-suppressed operator
-// builds their Onion2b and broadcasts; byz patterns can suppress,
-// override, or inject extra Onion2b messages (Rule 3 top-level cross-onion
-// equivocation).
-type evtPhaseTwoBStart struct{}
-
-func (e *evtPhaseTwoBStart) describe() string { return "PhaseTwoBStart" }
-
-func (e *evtPhaseTwoBStart) handle(s *sim) []scheduledEvent {
-	for _, op := range s.operators {
-		if !s.cfg.Byz.AllowOnion2bBroadcast(op) {
+		if !s.cfg.Byz.AllowPhase2aEmission(op) {
 			continue
 		}
-		o, err := s.instances[op].BuildOwnOnion2b()
-		if err != nil || o == nil {
+		vm, nv, c, err := s.instances[op].MaybeFirePhase2a()
+		if err != nil {
 			continue
 		}
-		o = s.cfg.Byz.OverrideOnion2b(s, op, o)
-		// OfflineAggregator: record per-layer σ / NR / encrypted-claim partials.
-		if s.cfg.Aggregator != nil {
-			recordOnion2bToAggregator(s.cfg.Aggregator, o)
-		}
-		extraDelay := s.cfg.Byz.OverrideOwnOnion2bDispatchDelay(s, op)
-		s.emitToAll(op, ct.KindCommit, -1, onion2bSize(o), extraDelay, func(to twoab.OperatorID) event {
-			return &evtOnion2bArrival{from: op, to: to, onion: cloneOnion2b(o)}
-		})
-		for _, extra := range s.cfg.Byz.BuildExtraOnion2bs(s, op, o) {
-			extra := extra
-			if s.cfg.Aggregator != nil {
-				recordOnion2bToAggregator(s.cfg.Aggregator, extra)
+		switch {
+		case vm != nil:
+			vm = s.cfg.Byz.OverrideValueMsg(s, op, vm)
+			s.markValueMsgEmitted(op)
+			out = append(out, scheduleValueMsg(s, op, vm)...)
+			for _, extra := range s.cfg.Byz.BuildExtraValueMsgs(s, op, vm) {
+				out = append(out, scheduleValueMsg(s, op, extra)...)
 			}
-			s.emitToAll(op, ct.KindCommit, -1, onion2bSize(extra), extraDelay, func(to twoab.OperatorID) event {
-				return &evtOnion2bArrival{from: op, to: to, onion: cloneOnion2b(extra)}
-			})
+		case nv != nil:
+			nv = s.cfg.Byz.OverrideNoValueMsg(s, op, nv)
+			s.markNoValueMsgEmitted(op)
+			out = append(out, scheduleNoValueMsg(s, op, nv)...)
+			for _, extra := range s.cfg.Byz.BuildExtraNoValueMsgs(s, op, nv) {
+				out = append(out, scheduleNoValueMsg(s, op, extra)...)
+			}
+		case c != nil:
+			c = s.cfg.Byz.OverrideCommit(s, op, c)
+			s.markCommitEmitted(op)
+			out = append(out, scheduleCommit(s, op, c)...)
+			for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
+				out = append(out, scheduleCommit(s, op, extra)...)
+			}
 		}
-		// Observer-mode self-resolve probe: BuildOwnOnion2b self-observes
-		// the op's own σ/NR partials into its local pools, so an op at
-		// f=0 (qV=1) can satisfy σ-quorum from its own self-observation
-		// alone. At realistic f≥1 the probe returns ErrNoQuorum (1 partial
-		// < qV) and is a no-op. Mirrors OBFT's evtPhaseTwoStart probe per
-		// OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §2abOBFT instrumentation table.
+		// Phase 2a fire may have cascaded into a Phase-2b Commit
+		// emission (e.g., σ-eligibility trigger already satisfied at fire
+		// time by earlier-cascading peer state). The Value/NoValue case
+		// above hasn't yet marked the commit as emitted; capture it
+		// here.
+		out = append(out, captureCascadeEmissions(s, op)...)
 		tryOpportunisticResolve(s, op)
 	}
-	return nil
+	return out
 }
 
-// recordOnion2bToAggregator extracts every σ / NR / encrypted-onion partial
-// from o and records it in the aggregator. Mirrors base's
-// recordCommitToAggregator: credits o.OperatorID (the claimed sender on
-// the wire), NOT the actual emitter. The 2ab adapter has no Witnesses
-// array (no Phase-1 σ_V exists), so this is simpler than the base
-// adapter's equivalent.
-//
-// At L_0 the EncryptedLayer.Ciphertext holds the plaintext σ partial bytes
-// directly (no IBE wrapping); deeper layers carry chained-IBE ciphertext.
-func recordOnion2bToAggregator(agg *ct.OfflineAggregator, o *twoab.Onion2b) {
-	from := ct.OperatorID(o.OperatorID)
-	for layer, el := range o.Layers {
-		if len(el.Value) == 0 {
-			continue
-		}
-		if layer == 0 {
-			agg.ObserveSigma(from, layer, el.Value)
-		} else {
-			agg.ObserveEncryptedClaim(from, layer, el.Value)
-		}
-	}
-	for _, nr := range o.NRPartials {
-		agg.ObserveNR(from, nr.Layer)
-	}
-}
+// ---- evtValueMsgArrival ------------------------------------------------
 
-// ---- evtOnion2bArrival -------------------------------------------------
-
-type evtOnion2bArrival struct {
+type evtValueMsgArrival struct {
 	from, to twoab.OperatorID
-	onion    *twoab.Onion2b
+	msg      *twoab.ValueMsg
 }
 
-func (e *evtOnion2bArrival) describe() string {
-	return fmt.Sprintf("Onion2bArrival[from=%d to=%d]", e.from, e.to)
+func (e *evtValueMsgArrival) describe() string {
+	return fmt.Sprintf("ValueMsgArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtOnion2bArrival) handle(s *sim) []scheduledEvent {
-	_ = s.instances[e.to].ObserveOnion2b(e.onion)
-
-	// Observer-mode quorum detection: probe Resolve immediately on every
-	// onion arrival. First-success records vQuorumAt[e.to] = s.now —
-	// the earliest moment this op holds a submittable σ-cert. Resolve
-	// is stateless / idempotent (spec §Phase 3) so probing on every
-	// arrival is safe. The Outcome layer reads vQuorumAt as the
-	// BTT-sensitive DecisionTime. See docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+func (e *evtValueMsgArrival) handle(s *sim) []scheduledEvent {
+	inst := s.instances[e.to]
+	_ = inst.ObserveValueMsg(e.msg)
 	tryOpportunisticResolve(s, e.to)
-
-	// Spec §Phase 3 "Re-running on late KindOnion2b arrivals": if this
-	// onion landed past RoundEndOffset, the receiver re-runs Resolve to
-	// incorporate the new partial. Skip if the receiver already decided.
-	if s.now <= s.cfgTwoab.RoundEndOffset() {
-		return nil
+	// ObserveValueMsg ran the afterStateDelta cascade — capture any
+	// emissions that just fired (A1 upgrade or Phase-2b Commit).
+	out := captureCascadeEmissions(s, e.to)
+	// Spec-aligned late-arrival re-resolve: if past the slot cutoff and
+	// not yet decided, retry Resolve.
+	if s.now > s.resolveDeadline {
+		if _, already := s.resolved[e.to]; !already {
+			out = append(out, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
+		}
 	}
-	if _, already := s.resolved[e.to]; already {
-		return nil
-	}
-	return []scheduledEvent{{when: s.now, ev: &evtResolveRerun{op: e.to}}}
+	return out
 }
 
-// tryOpportunisticResolve mirrors the OBFT adapter's helper of the
-// same name. See protocol/v2/consensustest/obft/events.go for the
-// design rationale. 2abOBFT differs only in the trigger event
-// (evtOnion2bArrival here vs evtCommitArrival in base) and the
-// concrete Resolve impl walks the chained-NR ladder via Onion2b
-// contributions instead of Commit. The dedup-and-record step delegates
-// to the framework-level RecordFirstOpportunisticQuorum helper.
-func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
-	if _, already := s.vQuorumAt[op]; already {
-		return
+// ---- evtNoValueMsgArrival ----------------------------------------------
+
+type evtNoValueMsgArrival struct {
+	from, to twoab.OperatorID
+	msg      *twoab.NoValueMsg
+}
+
+func (e *evtNoValueMsgArrival) describe() string {
+	return fmt.Sprintf("NoValueMsgArrival[from=%d to=%d]", e.from, e.to)
+}
+
+func (e *evtNoValueMsgArrival) handle(s *sim) []scheduledEvent {
+	inst := s.instances[e.to]
+	_ = inst.ObserveNoValueMsg(e.msg)
+	tryOpportunisticResolve(s, e.to)
+	out := captureCascadeEmissions(s, e.to)
+	if s.now > s.resolveDeadline {
+		if _, already := s.resolved[e.to]; !already {
+			out = append(out, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
+		}
 	}
-	res, err := s.instances[op].Resolve()
-	if err != nil {
-		return
+	return out
+}
+
+// ---- evtCommitArrival --------------------------------------------------
+
+type evtCommitArrival struct {
+	from, to twoab.OperatorID
+	commit   *twoab.Commit
+}
+
+func (e *evtCommitArrival) describe() string {
+	return fmt.Sprintf("CommitArrival[from=%d to=%d]", e.from, e.to)
+}
+
+func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
+	inst := s.instances[e.to]
+	_ = inst.ObserveCommit(e.commit)
+	tryOpportunisticResolve(s, e.to)
+	out := captureCascadeEmissions(s, e.to)
+	if s.now > s.resolveDeadline {
+		if _, already := s.resolved[e.to]; !already {
+			out = append(out, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
+		}
 	}
-	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
+	return out
 }
 
 // ---- evtResolve --------------------------------------------------------
@@ -518,6 +473,292 @@ func (e *evtResolveRerun) handle(s *sim) []scheduledEvent {
 	return resolveOpAndBroadcastCert(s, e.op)
 }
 
+// ---- evtCertArrival ----------------------------------------------------
+
+type evtCertArrival struct {
+	from, to twoab.OperatorID
+	cert     *twoab.Certificate
+}
+
+func (e *evtCertArrival) describe() string {
+	return fmt.Sprintf("CertArrival[from=%d to=%d]", e.from, e.to)
+}
+
+func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
+	inst := s.instances[e.to]
+	if err := inst.ObserveCertificate(e.cert); err != nil {
+		return nil
+	}
+	if _, already := s.resolved[e.to]; already {
+		return nil
+	}
+	s.resolved[e.to] = &twoab.Output{
+		Layer:     -1,
+		Value:     append(twoab.Value{}, e.cert.Value...),
+		Signature: append(twoab.Signature{}, e.cert.Signature...),
+	}
+	s.resolvedAt[e.to] = s.now
+	// Cert receipt is itself the earliest "submittable" moment for this
+	// op. Layer is unknown for cert-decided outputs; pass 0 so the
+	// recorded time is exactly s.now (no walk cost).
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, e.to, 0, s.now, s.cfg.Epsilon3)
+	delete(s.resolveErrs, e.to)
+	return nil
+}
+
+// ---- cascade-emission tracking ----------------------------------------
+
+// captureCascadeEmissions detects new emissions produced by an op's
+// afterStateDelta cascade (run automatically inside every Observe*,
+// MaybeFirePhase2a, and ApplyHostValidity call). For each detected
+// emission, schedules per-recipient arrival events and records the
+// emission's bytes in the bandwidth accumulator.
+//
+// Mechanism: track per-op flags (valueMsgEmitted / noValueMsgEmitted /
+// commitEmitted) for the OWN-emission status. The Instance exposes
+// OwnValueMsg() / OwnNoValueMsg() / OwnCommit() accessors; on every
+// state-delta-triggering event handler, compare the current accessor
+// status to the cached flag and schedule arrivals for any newly-flipped
+// emission. The Instance enforces single-emission discipline internally;
+// the adapter's tracking handles the propagation side.
+func captureCascadeEmissions(s *sim, op twoab.OperatorID) []scheduledEvent {
+	var out []scheduledEvent
+	inst := s.instances[op]
+
+	if vm, ok := inst.OwnValueMsg(); ok && !s.valueMsgEmitted[op] {
+		// Pure Phase-2a-late A1 upgrade vs Phase-2a fire-time
+		// emission: at fire-time, MaybeFirePhase2a applies the byz
+		// override path explicitly. An upgrade fired from the cascade
+		// here is the A1 path — apply the byz upgrade-override hook.
+		vm = s.cfg.Byz.OverrideUpgradeValueMsg(s, op, vm)
+		s.markValueMsgEmitted(op)
+		out = append(out, scheduleValueMsg(s, op, vm)...)
+	}
+	if nv, ok := inst.OwnNoValueMsg(); ok && !s.noValueMsgEmitted[op] {
+		s.markNoValueMsgEmitted(op)
+		out = append(out, scheduleNoValueMsg(s, op, nv)...)
+	}
+	if c, ok := inst.OwnCommit(); ok && !s.commitEmitted[op] {
+		// Phase-2b Commits emitted via the cascade also get the byz
+		// override hook so adversarial scenarios can re-shape them
+		// (e.g., inject forged plaintext σ partials for Rule 5).
+		if c.Side != twoab.CommitSideNRDirect {
+			c = s.cfg.Byz.OverrideCommit(s, op, c)
+		}
+		s.markCommitEmitted(op)
+		out = append(out, scheduleCommit(s, op, c)...)
+		for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
+			out = append(out, scheduleCommit(s, op, extra)...)
+		}
+	}
+	return out
+}
+
+// scheduleValueMsg broadcasts a ValueMsg from `from` to every other peer
+// per byz delivery rules. Records aggregator observations for σ-chained
+// LayerEntries. Returns scheduled events for direct-delivery mode;
+// mesh-mode dispatches via s.emitMesh.
+func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []scheduledEvent {
+	if vm == nil {
+		return nil
+	}
+	if s.cfg.Aggregator != nil {
+		recordValueMsgToAggregator(s.cfg.Aggregator, vm)
+	}
+	bytes := valueMsgSize(vm)
+	vmCap := vm
+	fromCap := from
+	build := func(to twoab.OperatorID) event {
+		return &evtValueMsgArrival{from: fromCap, to: to, msg: cloneValueMsg(vmCap)}
+	}
+	if s.cfg.Mesh != nil {
+		s.emitMesh(from, ct.KindVerdict, -1, bytes, 0, s.operators, build)
+		return nil
+	}
+	var out []scheduledEvent
+	for _, to := range s.operators {
+		if to == from {
+			continue
+		}
+		if !s.cfg.Byz.AllowDelivery(from, to, ct.KindVerdict) {
+			continue
+		}
+		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, ct.KindVerdict)
+		if delay < 0 {
+			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict)
+		}
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict, -1, bytes)
+		}
+		out = append(out, scheduledEvent{
+			when: s.now + delay,
+			ev:   &evtValueMsgArrival{from: from, to: to, msg: cloneValueMsg(vm)},
+		})
+	}
+	return out
+}
+
+// scheduleNoValueMsg broadcasts a NoValueMsg from `from` to every other peer.
+func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []scheduledEvent {
+	if nv == nil {
+		return nil
+	}
+	if s.cfg.Aggregator != nil {
+		recordNoValueMsgToAggregator(s.cfg.Aggregator, nv)
+	}
+	bytes := noValueMsgSize(nv)
+	nvCap := nv
+	fromCap := from
+	build := func(to twoab.OperatorID) event {
+		return &evtNoValueMsgArrival{from: fromCap, to: to, msg: cloneNoValueMsg(nvCap)}
+	}
+	if s.cfg.Mesh != nil {
+		s.emitMesh(from, ct.KindVerdict, -1, bytes, 0, s.operators, build)
+		return nil
+	}
+	var out []scheduledEvent
+	for _, to := range s.operators {
+		if to == from {
+			continue
+		}
+		if !s.cfg.Byz.AllowDelivery(from, to, ct.KindVerdict) {
+			continue
+		}
+		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, ct.KindVerdict)
+		if delay < 0 {
+			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict)
+		}
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict, -1, bytes)
+		}
+		out = append(out, scheduledEvent{
+			when: s.now + delay,
+			ev:   &evtNoValueMsgArrival{from: from, to: to, msg: cloneNoValueMsg(nv)},
+		})
+	}
+	return out
+}
+
+// scheduleCommit broadcasts a Commit from `from` to every other peer.
+func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledEvent {
+	if c == nil {
+		return nil
+	}
+	if s.cfg.Aggregator != nil {
+		recordCommitToAggregator(s.cfg.Aggregator, c)
+	}
+	bytes := commitSize(c)
+	cCap := c
+	fromCap := from
+	build := func(to twoab.OperatorID) event {
+		return &evtCommitArrival{from: fromCap, to: to, commit: cloneCommit(cCap)}
+	}
+	extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, from)
+	if s.cfg.Mesh != nil {
+		s.emitMesh(from, ct.KindCommit, -1, bytes, extraDelay, s.operators, build)
+		return nil
+	}
+	var out []scheduledEvent
+	for _, to := range s.operators {
+		if to == from {
+			continue
+		}
+		if !s.cfg.Byz.AllowDelivery(from, to, ct.KindCommit) {
+			continue
+		}
+		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, ct.KindCommit)
+		if delay < 0 {
+			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), ct.KindCommit)
+		}
+		if s.cfg.Bandwidth != nil && bytes > 0 {
+			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), ct.KindCommit, -1, bytes)
+		}
+		out = append(out, scheduledEvent{
+			when: s.now + delay + extraDelay,
+			ev:   &evtCommitArrival{from: from, to: to, commit: cloneCommit(c)},
+		})
+	}
+	return out
+}
+
+// recordValueMsgToAggregator records per-layer σ / encrypted-claim partials
+// from a ValueMsg into the offline aggregator. ValueMsg carries no L_0
+// σ partial (that's in the later Commit-Signed); only L_k>0 SigmaChained
+// LayerEntries contribute (as encrypted claims). Credits the claimed
+// sender's OperatorID, matching the byz-observer model from base OBFT.
+func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
+	from := ct.OperatorID(vm.OperatorID)
+	for _, e := range vm.LayerEntries {
+		switch e.Kind {
+		case twoab.LayerEntrySigmaChained:
+			agg.ObserveEncryptedClaim(from, e.Layer, e.Payload)
+		case twoab.LayerEntryNRPlaintext:
+			agg.ObserveNR(from, e.Layer)
+		}
+	}
+}
+
+// recordNoValueMsgToAggregator records per-layer σ / NR partials from a
+// NoValueMsg into the offline aggregator. NoValueMsg has the same K-1
+// LayerEntries shape as ValueMsg.
+func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, nv *twoab.NoValueMsg) {
+	from := ct.OperatorID(nv.OperatorID)
+	for _, e := range nv.LayerEntries {
+		switch e.Kind {
+		case twoab.LayerEntrySigmaChained:
+			agg.ObserveEncryptedClaim(from, e.Layer, e.Payload)
+		case twoab.LayerEntryNRPlaintext:
+			agg.ObserveNR(from, e.Layer)
+		}
+	}
+}
+
+// recordCommitToAggregator records per-layer σ / NR partials from a
+// Commit into the offline aggregator. At L_0:
+//   - Side=Signed: plaintext σ partial on L0Value → ObserveSigma at L_0.
+//   - Side=NR or Side=NRDirect: NR tag partial at L_0 → ObserveNR at L_0.
+//
+// For Side=NRDirect only: LayerEntries are also recorded (mirroring the
+// ValueMsg/NoValueMsg path) since the NRDirect emission bundles the K-1
+// L_k>0 commitments with the L_0 emission.
+func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
+	from := ct.OperatorID(c.OperatorID)
+	switch c.Side {
+	case twoab.CommitSideSigned:
+		agg.ObserveSigma(from, 0, c.L0Value)
+	case twoab.CommitSideNR:
+		agg.ObserveNR(from, 0)
+	case twoab.CommitSideNRDirect:
+		agg.ObserveNR(from, 0)
+		for _, e := range c.LayerEntries {
+			switch e.Kind {
+			case twoab.LayerEntrySigmaChained:
+				agg.ObserveEncryptedClaim(from, e.Layer, e.Payload)
+			case twoab.LayerEntryNRPlaintext:
+				agg.ObserveNR(from, e.Layer)
+			}
+		}
+	}
+}
+
+// tryOpportunisticResolve mirrors the OBFT adapter's helper of the
+// same name. See protocol/v2/consensustest/obft/events.go for the
+// design rationale. 2abOBFT differs only in trigger events (Phase-2a
+// emissions + Commits; not just Commits as in base) and the concrete
+// Resolve impl walks the chained-NR ladder using both L_0 σ-pool entries
+// (from Commit-Signed) and L_k>0 σ-chained entries (from ValueMsg /
+// NoValueMsg / Commit-NRDirect LayerEntries).
+func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
+	if _, already := s.vQuorumAt[op]; already {
+		return
+	}
+	res, err := s.instances[op].Resolve()
+	if err != nil {
+		return
+	}
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
+}
+
 // resolveOpAndBroadcastCert runs Resolve for `op`, records the outcome in
 // the sim's resolved/resolveErrs maps, and (on success) schedules cert
 // broadcast to peers.
@@ -537,10 +778,6 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 	// Mirror the OBFT adapter's per-layer ε_3 accrual.
 	decisionTime := s.now + time.Duration(res.Layer)*s.cfg.Epsilon3
 	s.resolvedAt[op] = decisionTime
-	// Schedule-anchored fallback for the observer-mode metric: if no
-	// prior onion/cert arrival already set vQuorumAt, capture the
-	// schedule-anchored decision time here so outcome() reads
-	// uniformly from vQuorumAt.
 	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
 	delete(s.resolveErrs, op)
 
@@ -584,38 +821,4 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 		})
 	}
 	return out
-}
-
-// ---- evtCertArrival ----------------------------------------------------
-
-type evtCertArrival struct {
-	from, to twoab.OperatorID
-	cert     *twoab.Certificate
-}
-
-func (e *evtCertArrival) describe() string {
-	return fmt.Sprintf("CertArrival[from=%d to=%d]", e.from, e.to)
-}
-
-func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
-	inst := s.instances[e.to]
-	if err := inst.ObserveCertificate(e.cert); err != nil {
-		return nil
-	}
-	if _, already := s.resolved[e.to]; already {
-		return nil
-	}
-	s.resolved[e.to] = &twoab.Output{
-		Layer:     -1,
-		Value:     append(twoab.Value{}, e.cert.Value...),
-		Signature: append(twoab.Signature{}, e.cert.Signature...),
-	}
-	s.resolvedAt[e.to] = s.now
-	// Cert receipt is itself the earliest "submittable" moment for this
-	// op — mirror OBFT's evtCertArrival. Layer is unknown for cert-decided
-	// outputs; pass 0 so the recorded time is exactly s.now (no walk
-	// cost).
-	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, e.to, 0, s.now, s.cfg.Epsilon3)
-	delete(s.resolveErrs, e.to)
-	return nil
 }

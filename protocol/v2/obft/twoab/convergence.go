@@ -1,205 +1,75 @@
 package twoab
 
-import "fmt"
-
-// CommitChoice represents the per-layer Phase-2b convergence-rule
-// decision: σ on a specific V, or NR.
-type CommitChoice int
-
-const (
-	// CommitChoiceSigma — the operator commits σ on the layer's V.
-	// `value` from ConvergenceDecision is non-nil; the runner builds a
-	// σ partial on that V (plaintext at L_0; chained-IBE-encrypted at
-	// deeper layers).
-	CommitChoiceSigma CommitChoice = iota
-
-	// CommitChoiceNR — the operator commits NR at this layer. For
-	// layers in [0, K-1) this produces an `σ_i^{IBE}(nr_tag_k)` partial
-	// on the wire. At layer K-1 (deepest) there is no NR tag, so NR
-	// produces no on-wire emission per spec §Convergence rule
-	// "Deepest-layer NR has no on-wire emission".
-	CommitChoiceNR
-)
-
-// String returns a label for telemetry/logging.
-func (c CommitChoice) String() string {
-	switch c {
-	case CommitChoiceSigma:
-		return "sigma"
-	case CommitChoiceNR:
-		return "NR"
-	default:
-		return "unknown"
-	}
-}
-
-// ConvergenceDecision applies the 5-row decision table from spec §Phase 2b
-// "Convergence rule" at the given layer. Returns the commit choice and,
-// for σ-side, the V to sign over.
+// Convergence-related helpers shared between Phase 2a (LayerEntry direction
+// choice) and Phase 2b (commit-trigger gate evaluation).
 //
-// The decision is computed at Phase-2b sign time using:
-//   - The operator's local retention state at this layer (V_local).
-//   - The cluster-wide Phase-2a verdict pool, with equivocators excluded
-//     per the treat-as-null SHOULD rule (Phase F's verdictEquivocator).
-//   - The host's re-validation of V_local at Phase-2b sign time (host
-//     may have flipped from valid to not-valid since Phase 2a — narrows
-//     the validity-divergence window).
+// Note: the bulk of the per-layer claim-pool / threshold-pool tracking and
+// the three trigger predicates (σ-eligibility, NR-eligibility, equivocation)
+// live elsewhere — pools incrementally maintained inside the Observe* paths
+// (phase1.go, phase2a.go, phase2b.go), trigger predicates in phase2b.go.
+// This file holds only the cross-phase utility helpers.
+
+// canSigmaAtLayer reports whether the local operator could currently emit
+// a σ partial at the given layer. Used:
 //
-// Rows evaluated in order — first match wins:
+//   - At Phase 2a fire-time: to decide between σ-chained / NR-plaintext
+//     LayerEntries for L_k>0.
+//   - At Phase 2b commit-trigger evaluation: as the gate condition on the
+//     NR-eligibility trigger (per spec §Trigger rules / "Why NR-eligibility
+//     has the cannot-σ gate"). A σ-eligible op observing novalue_pool ≥
+//     qEnc before its own σ-eligibility view crosses qV must NOT emit
+//     KindCommit-NR via NR-eligibility — the gate routes it to wait for
+//     the σ-eligibility trigger instead.
 //
-//  1. Equivocation observed (≥ 2 distinct V's retained at this layer
-//     by this operator) → NR (NR-due-to-equivocation; V_local undefined).
-//  2. nr_eligibility_quorum reached (|nr_pool| ≥ qEnc) → NR (honest
-//     defers to the cluster's NR-side decision regardless of own
-//     verdict).
-//  3. σ_eligibility_quorum reached on V (∃V: |verdict_pool[V]| ≥ qV)
-//     AND operator has V_local = V AND host re-validates V as valid at
-//     Phase-2b sign time → σ on V.
-//  4. σ_eligibility_quorum reached on V AND operator doesn't have
-//     V_local = V (or host re-validation says NV) → NR.
-//  5. Neither quorum reached → NR (verdict-quorum short; cluster
-//     didn't converge on V; honest defaults to NR).
+// Returns true if all of:
+//   - The layer's leader has exactly 1 retained Phase-1 bundle (no
+//     equivocation observed).
+//   - The retained V is host-validated as valid.
 //
-// At n = 3f+1 (the SSV BFT bound) rows 2 and 3 cannot both fire — see
-// spec §Phase 2b "NR-vs-σ tightness at n = 3f+1". At higher n,
-// nr_eligibility_quorum overrides per row 2's ordering.
-//
-// Returns ErrLayerOutOfRange if `layer` is outside [0, K). Otherwise
-// always returns (choice, value, nil) — host-validity-missing for the
-// retained V is treated as "host hasn't re-validated yet" and routes
-// through row 4 → NR; no error.
-func (i *Instance) ConvergenceDecision(layer int) (CommitChoice, Value, error) {
+// Returns false otherwise (no retention, ≥ 2 retained / equivocation,
+// or host says NV / host not yet consulted).
+func (i *Instance) canSigmaAtLayer(layer int) bool {
 	if layer < 0 || layer >= i.cfg.K() {
-		return CommitChoiceNR, nil, fmt.Errorf("twoab: %w: layer %d outside [0, %d)",
-			ErrLayerOutOfRange, layer, i.cfg.K())
+		return false
 	}
-
 	leaderID := i.cfg.Layers[layer].Leader
 	retained := i.retainedBundles[layer][leaderID]
-
-	// Row 1: Equivocation observed (≥ 2 distinct V's retained at this
-	// layer; counts both regular and auth-only retention).
-	if len(retained) >= 2 {
-		return CommitChoiceNR, nil, nil
+	if len(retained) != 1 {
+		return false
 	}
-
-	// V_local: the operator's single regular-retention V at this layer
-	// (or none, if 0 retained or only auth-only retention exists).
-	var vLocal Value
-	hasVLocal := false
-	if len(retained) == 1 && !retained[0].AuthOnly {
-		vLocal = retained[0].Bundle.Value
-		hasVLocal = true
-	}
-
-	qV := i.cfg.QV()
-	qEnc := i.cfg.QEnc()
-
-	// Build the convergence pools with treat-as-null applied.
-	// peerVerdicts holds the FIRST-observed verdict per peer; ownVerdict
-	// holds the local op's broadcast verdict (Phase F).
-	verdictPool, nrPool := i.buildConvergencePools(layer)
-
-	// Row 2: nr_eligibility_quorum.
-	if len(nrPool) >= qEnc {
-		return CommitChoiceNR, nil, nil
-	}
-
-	// Row 3/4: σ_eligibility_quorum?
-	for vRoot, ops := range verdictPool {
-		if len(ops) < qV {
-			continue
-		}
-		// σ-eligibility met on this V_root.
-		// At n = 3f+1, at most one V can have qV (Pigeonhole bound per
-		// spec §Phase 2b "Tie-break note"); we still iterate cleanly.
-		if !hasVLocal {
-			return CommitChoiceNR, nil, nil // Row 4
-		}
-		localRoot := ValueRoot(vLocal)
-		if localRoot != vRoot {
-			return CommitChoiceNR, nil, nil // Row 4 — different V
-		}
-		// Local V matches the σ-eligible V — re-validate against host.
-		valid, recorded := i.HostValidity(layer, vLocal)
-		if !recorded || !valid {
-			return CommitChoiceNR, nil, nil // Row 4 — host says NV at sign time
-		}
-		return CommitChoiceSigma, append(Value{}, vLocal...), nil // Row 3
-	}
-
-	// Row 5: Neither quorum reached.
-	return CommitChoiceNR, nil, nil
+	valid, recorded := i.HostValidity(layer, retained[0].Bundle.Value)
+	return recorded && valid
 }
 
-// buildConvergencePools returns (verdict_pool[V] → ops, nr_pool → ops)
-// for the given layer, including the local op's own verdict and
-// excluding any operator flagged as a verdict equivocator (treat-as-null
-// SHOULD rule from spec §Phase 2a).
+// vLocalAtLayer returns the operator's local V at the given layer (the
+// single regularly-retained V from the layer's leader), or (nil, false)
+// if the op has no V_local at this layer (0 retained, ≥ 2 retained /
+// equivocation, or the retention exists but host hasn't been consulted).
 //
-// Note: σV verdicts contribute to verdict_pool[V] keyed by ValueRoot;
-// NR/NV verdicts contribute to nr_pool. VerdictUnspecified (or any
-// unknown kind) is treated as no contribution (defensive against
-// malformed peer state).
-func (i *Instance) buildConvergencePools(layer int) (map[[32]byte][]OperatorID, []OperatorID) {
-	verdictPool := make(map[[32]byte][]OperatorID)
-	var nrPool []OperatorID
-
-	// Helper to add a verdict to the appropriate pool. Equivocators are
-	// excluded via treat-as-null at the call site.
-	addToPool := func(op OperatorID, v *Verdict) {
-		if v == nil {
-			return
-		}
-		switch v.Kind {
-		case VerdictSigmaV:
-			verdictPool[v.ValueRoot] = append(verdictPool[v.ValueRoot], op)
-		case VerdictNR, VerdictNV:
-			nrPool = append(nrPool, op)
-		}
+// Used by Phase 2b's σ-eligibility-trigger side decision: when the
+// trigger fires on V_k cluster-wide, each op compares their V_local to
+// V_k to decide whether to emit KindCommit-Signed (matching V) or
+// KindCommit-NR (non-matching V or host NV — A3 host-flip pivot).
+func (i *Instance) vLocalAtLayer(layer int) (Value, bool) {
+	if layer < 0 || layer >= i.cfg.K() {
+		return nil, false
 	}
-
-	// Include the local op's own verdict.
-	if own, ok := i.ownVerdict[layer]; ok {
-		// If the local op's own verdict came back as σV, the equivocator
-		// flag wouldn't apply (we can't equivocate against ourselves —
-		// BuildVerdict is idempotent). Skip the IsEquivocator check.
-		addToPool(i.ownOperatorID, own)
-	}
-
-	// Include peer verdicts, excluding equivocators. Skip the local op's
-	// own entry: a runner that calls ObserveVerdict on every emission
-	// (including its own) would otherwise double-count own's verdict — once
-	// via ownVerdict above, once via peerVerdicts here. Mirrors the
-	// defensive self-skip in Phase 3's tryReconstructLayer /
-	// tryDeriveNextLayerKey.
-	for op, v := range i.peerVerdicts[layer] {
-		if op == i.ownOperatorID {
-			continue
-		}
-		if i.IsEquivocator(layer, op) {
-			continue
-		}
-		addToPool(op, v)
-	}
-
-	return verdictPool, nrPool
-}
-
-// chosenVAtLayer returns the operator's single regularly-retained V at
-// the layer, or (nil, false) if the operator has no V_local (0 retained
-// or only auth-only retention or equivocation observed).
-//
-// Helper for tests; the convergence rule duplicates this logic inline
-// for efficiency.
-func (i *Instance) chosenVAtLayer(layer int) (Value, bool) {
 	leaderID := i.cfg.Layers[layer].Leader
 	retained := i.retainedBundles[layer][leaderID]
 	if len(retained) != 1 {
 		return nil, false
 	}
-	if retained[0].AuthOnly {
-		return nil, false
-	}
 	return append(Value{}, retained[0].Bundle.Value...), true
+}
+
+// equivocationObservedAtLayer reports whether ≥ 2 distinct V's are
+// retained from the layer's leader. Used by the equivocation trigger
+// at Phase 2b and by Phase 2a fire-time's NRDirect routing.
+func (i *Instance) equivocationObservedAtLayer(layer int) bool {
+	if layer < 0 || layer >= i.cfg.K() {
+		return false
+	}
+	leaderID := i.cfg.Layers[layer].Leader
+	retained := i.retainedBundles[layer][leaderID]
+	return len(retained) >= 2
 }

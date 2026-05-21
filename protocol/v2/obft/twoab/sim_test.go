@@ -7,29 +7,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test scaffolding shared across twoab/ unit tests. Mirrors base/sim_test.go
-// in shape; the simulator will grow as Phases F-H land (BuildVerdict /
-// ObserveVerdict / BuildOnion2b / ObserveOnion2b / Resolve hooks).
-//
-// At Phase E, the sim helper builds a fully-wired Instance per operator
-// using the StubSigner / StubIBE stubs so tests run without real BLS
-// machinery. Cryptographic correctness is exercised separately in
-// blsbackend tests.
+// Test scaffolding shared across twoab/ unit tests. Each test sets up a
+// 4-op (or 7-op) cluster with stub signers / IBE, drives the protocol
+// through Phase 1 → Phase 2a → Phase 2b → Phase 3, and asserts the
+// expected outcome.
 
 // observedEarly is a Phase-1-bundle first-observation offset comfortably
-// within the accept-eligible window (well before T_accept_max).
-// Healthy-config T_verdict_start = 1.6s, T_accept_max = 1.8s, T_commit = 2.0s.
-const observedEarly = 1200 * time.Millisecond
+// within the slot (well before T_phase_2a). Healthy-config TPhase2a = 1000ms.
+const observedEarly = 600 * time.Millisecond
 
-// observedAuthOnly is past T_accept_max (1.8s) but before T_commit (2.0s)
-// — bundle goes into auth-only retention.
-const observedAuthOnly = 1900 * time.Millisecond
+// observedAfterPhase2a is past TPhase2a but well within the slot —
+// models a late-arriving bundle that may still drive an A1 upgrade.
+const observedAfterPhase2a = 1500 * time.Millisecond
 
-// observedLate is past T_commit — bundle is rejected with
-// ErrLatePhase1Bundle.
-const observedLate = 2100 * time.Millisecond
-
-// sim is a minimal multi-operator harness for protocol-level tests.
+// sim is a multi-operator harness for protocol-level tests.
 type sim struct {
 	t         *testing.T
 	n, f, K   int
@@ -41,29 +32,13 @@ type sim struct {
 	candidates map[int]Value
 }
 
-// newSim builds an n-operator cluster at f=1, K=min(4, n) with stub
-// signers + IBE wired into every Instance. Layer leaders rotate by op ID
-// (L_0 leader = op1, L_1 = op2, ..., L_{K-1} = op_K), modeling the
-// simplest layer assignment.
+// newSim builds an n-operator cluster at f=1, K=2 (BFT-liveness minimum
+// at n=4 — the recommended SSV default) with stub signers + IBE.
 func newSim(t *testing.T, n int) *sim {
-	return newSimWithF(t, n, 1)
-}
-
-// newSimWithF is the F-parameterized variant of newSim, used by Phase-J
-// n=7/f=2 scenarios that exercise the validity-divergence majority claim
-// at larger cluster sizes. Uses the SSV proposer-duty default K=min(4, n)
-// (capped at n for small clusters); for K=f+1 BFT-liveness-minimum tests
-// at f=1, see newSimWithK.
-func newSimWithF(t *testing.T, n, f int) *sim {
-	K := 4
-	if n < K {
-		K = n
-	}
-	return newSimWithFK(t, n, f, K)
+	return newSimWithFK(t, n, 1, 2)
 }
 
 // newSimWithK builds an f=1 sim with the caller-chosen K (≥ f+1 = 2).
-// Use for K=2 (BFT-liveness minimum) tests at the default n=4.
 func newSimWithK(t *testing.T, n, K int) *sim {
 	return newSimWithFK(t, n, 1, K)
 }
@@ -75,47 +50,45 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 	require.GreaterOrEqual(t, K, f+1, "sim requires K >= f+1 (BFT-liveness minimum)")
 	require.LessOrEqual(t, K, n, "sim requires K <= n")
 
-	c := healthyConfig()
-	// Adjust the cluster shape if it differs from healthyConfig (n=4, f=1, K=4).
-	if n != 4 || f != 1 || K != 4 {
-		ops := make([]OperatorID, n)
-		layers := make([]LayerSpec, K)
-		btt := 200 * time.Millisecond
-		tCommit := 2000 * time.Millisecond
-		tVerdictStart := tCommit - 400*time.Millisecond
-		budgets, err := DefaultBroadcastBudget(K, btt, 0, tVerdictStart)
-		require.NoError(t, err)
-		for k := 0; k < n; k++ {
-			ops[k] = OperatorID(k + 1)
+	const (
+		btt          = 200 * time.Millisecond
+		tPhase2a     = 1000 * time.Millisecond
+		safetyBuffer = 0 // direct-delivery tests don't need reflood cushion
+	)
+	t0Broadcast := tPhase2a - btt
+
+	ops := make([]OperatorID, n)
+	for k := 0; k < n; k++ {
+		ops[k] = OperatorID(k + 1)
+	}
+	budgets, err := DefaultBroadcastBudget(K, btt, safetyBuffer, t0Broadcast)
+	require.NoError(t, err)
+
+	layers := make([]LayerSpec, K)
+	for k := 0; k < K; k++ {
+		fetchAt := t0Broadcast - budgets[k]
+		if fetchAt < 0 {
+			fetchAt = 0
 		}
-		for k := 0; k < K; k++ {
-			layers[k] = LayerSpec{
-				Leader:          ops[k],
-				FetchAt:         tVerdictStart - budgets[k],
-				BroadcastBudget: budgets[k],
-			}
-			if k == K-1 {
-				layers[k].FetchAt = 0
-			}
+		layers[k] = LayerSpec{
+			Leader:          ops[k],
+			FetchAt:         fetchAt,
+			BroadcastBudget: budgets[k],
 		}
-		c = &Config{
-			Height:    c.Height,
-			ClusterID: c.ClusterID,
-			Operators: ops,
-			F:         f,
-			Layers:    layers,
-			TCommit:   tCommit,
-			Delta2a:   400 * time.Millisecond,
-			Delta2b:   400 * time.Millisecond,
-			Eps3:      250 * time.Millisecond,
-			BTT:       btt,
-		}
+	}
+	c := &Config{
+		Height:       1,
+		ClusterID:    [32]byte{0xaa, 0xbb, 0xcc},
+		Operators:    ops,
+		F:            f,
+		Layers:       layers,
+		TPhase2a:     tPhase2a,
+		SafetyBuffer: safetyBuffer,
+		BTT:          btt,
+		BFTStart:     0,
 	}
 	require.NoError(t, c.Validate())
 
-	// Build a stub-signer-friendly pubkey-share map: one share per
-	// operator, where the share is derived deterministically from the
-	// operator's ID (so verification works against a known shared key).
 	pubShares := make(map[OperatorID][]byte, n)
 	for _, op := range c.Operators {
 		pubShares[op] = []byte{byte(op)}
@@ -136,7 +109,6 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 		instances:  make(map[OperatorID]*Instance, n),
 		candidates: candidates,
 	}
-
 	for _, op := range c.Operators {
 		inst, err := NewInstance(
 			c, op,
@@ -183,8 +155,7 @@ func (s *sim) deliverPhase1(layer int, value Value, recipients []OperatorID, obs
 
 // deliverPhase1Equivocation has the (presumed-byzantine) leader build
 // TWO distinct bundles V_a and V_b and selectively deliver them to
-// different subsets of recipients. Returns both built bundles for
-// further use.
+// different subsets of recipients.
 func (s *sim) deliverPhase1Equivocation(
 	layer int,
 	vA, vB Value,
@@ -208,8 +179,7 @@ func (s *sim) deliverPhase1Equivocation(
 }
 
 // applyHostValidityAll applies the host's valid/not-valid verdict for V
-// at layer across every Instance in the sim. Used in Phase F tests to
-// set up the "host says valid/not-valid" branch of ComputeLocalVerdict.
+// at layer across every Instance in the sim.
 func (s *sim) applyHostValidityAll(layer int, value Value, valid bool) {
 	s.t.Helper()
 	for _, op := range s.allOperators() {
@@ -218,8 +188,7 @@ func (s *sim) applyHostValidityAll(layer int, value Value, valid bool) {
 }
 
 // applyHostValidityFor applies the host's verdict on only the listed
-// operators (modeling validity-divergence: some honest see V as valid,
-// others don't).
+// operators (modeling validity-divergence).
 func (s *sim) applyHostValidityFor(ops []OperatorID, layer int, value Value, valid bool) {
 	s.t.Helper()
 	for _, op := range ops {
@@ -227,110 +196,107 @@ func (s *sim) applyHostValidityFor(ops []OperatorID, layer int, value Value, val
 	}
 }
 
-// deliverVerdict has `from` build a Verdict at layer and deliver it to
-// every recipient via ObserveVerdict. Returns the built verdict.
-func (s *sim) deliverVerdict(from OperatorID, layer int, recipients []OperatorID) *Verdict {
+// firePhase2aAll fires Phase 2a on every operator and cross-broadcasts
+// the resulting emissions (ValueMsg / NoValueMsg / Commit-NRDirect) to
+// every other operator. The post-fire afterStateDelta cascade inside
+// each Observe* method automatically drives commit-trigger evaluation
+// and upgrade-check propagation, so this single call advances the
+// cluster through Phase 2a + Phase 2b.
+func (s *sim) firePhase2aAll() {
 	s.t.Helper()
-	v, err := s.instances[from].BuildVerdict(layer)
-	require.NoError(s.t, err, "op %d BuildVerdict at layer %d", from, layer)
-	for _, op := range recipients {
-		require.NoError(s.t, s.instances[op].ObserveVerdict(v),
-			"op %d ObserveVerdict from %d at layer %d", op, from, layer)
+	// First pass: fire Phase 2a on every op. Collect emissions.
+	type emission struct {
+		op OperatorID
+		vm *ValueMsg
+		nv *NoValueMsg
+		c  *Commit
 	}
-	return v
-}
-
-// deliverVerdictEquivocation has a byzantine operator broadcast TWO
-// distinct verdicts at the same layer (different Kinds or different
-// ValueRoots), selectively delivering each to different subsets of
-// recipients. Useful for Rule-6a / treat-as-null tests.
-//
-// Both verdicts are constructed directly (bypassing BuildVerdict's
-// idempotent cache) since this models a byzantine that doesn't honor
-// the single-emission rule.
-func (s *sim) deliverVerdictEquivocation(
-	from OperatorID,
-	layer int,
-	vA, vB *Verdict,
-	recipientsA, recipientsB []OperatorID,
-) {
-	s.t.Helper()
-	for _, op := range recipientsA {
-		require.NoError(s.t, s.instances[op].ObserveVerdict(vA),
-			"op %d ObserveVerdict A from %d at layer %d", op, from, layer)
-	}
-	for _, op := range recipientsB {
-		require.NoError(s.t, s.instances[op].ObserveVerdict(vB),
-			"op %d ObserveVerdict B from %d at layer %d", op, from, layer)
-	}
-}
-
-// runPhase2aCanonical has every operator BuildVerdict + broadcast at
-// each layer in [0, K). Returns a slice of all broadcast verdicts so
-// tests can inspect them.
-func (s *sim) runPhase2aCanonical() []*Verdict {
-	s.t.Helper()
-	var out []*Verdict
-	for k := 0; k < s.K; k++ {
-		for _, op := range s.allOperators() {
-			v, err := s.instances[op].BuildVerdict(k)
-			require.NoError(s.t, err, "op %d BuildVerdict layer %d", op, k)
-			out = append(out, v)
-			for _, peer := range s.allOperators() {
-				if peer == op {
-					continue
-				}
-				require.NoError(s.t, s.instances[peer].ObserveVerdict(v))
-			}
-		}
-	}
-	return out
-}
-
-// runPhase2bCanonical has every operator BuildOwnOnion2b and broadcasts
-// to every other operator. Returns the slice of all built onions in
-// operator-ID order.
-func (s *sim) runPhase2bCanonical() []*Onion2b {
-	s.t.Helper()
-	var out []*Onion2b
+	emissions := make([]emission, 0, len(s.instances))
 	for _, op := range s.allOperators() {
-		o, err := s.instances[op].BuildOwnOnion2b()
-		require.NoError(s.t, err, "op %d BuildOwnOnion2b", op)
-		out = append(out, o)
+		vm, nv, c, err := s.instances[op].MaybeFirePhase2a()
+		require.NoError(s.t, err, "op %d MaybeFirePhase2a", op)
+		emissions = append(emissions, emission{op: op, vm: vm, nv: nv, c: c})
+	}
+	// Cross-broadcast each emission to all peers.
+	for _, e := range emissions {
 		for _, peer := range s.allOperators() {
-			if peer == op {
+			if peer == e.op {
 				continue
 			}
-			require.NoError(s.t, s.instances[peer].ObserveOnion2b(o),
-				"op %d ObserveOnion2b from %d", peer, op)
+			switch {
+			case e.vm != nil:
+				require.NoError(s.t, s.instances[peer].ObserveValueMsg(e.vm),
+					"op %d ObserveValueMsg from %d", peer, e.op)
+			case e.nv != nil:
+				require.NoError(s.t, s.instances[peer].ObserveNoValueMsg(e.nv),
+					"op %d ObserveNoValueMsg from %d", peer, e.op)
+			case e.c != nil:
+				require.NoError(s.t, s.instances[peer].ObserveCommit(e.c),
+					"op %d ObserveCommit from %d (NRDirect)", peer, e.op)
+			}
 		}
 	}
-	return out
+	// Second pass: collect any Phase-2b Commits or Phase-2a-late upgrade
+	// KindValues that the cascade emitted, and cross-broadcast those too.
+	s.propagatePostPhase2aEmissions()
 }
 
-// withObserver replaces s.instances[op] with a fresh Instance wired to
-// the supplied EvidenceObserver. The replacement Instance shares the
-// sim's config + pub-share map but starts with empty state, so callers
-// should call withObserver before any Observe* / Apply* on that op.
-//
-// Used by Phase-I evidence-observer tests to assert one-fire-per-
-// (Rule, OperatorID, Layer) semantics without rebuilding the cluster.
-func (s *sim) withObserver(op OperatorID, observer EvidenceObserver) {
+// propagatePostPhase2aEmissions cross-broadcasts any post-Phase-2a
+// emissions (upgrade KindValues, Phase-2b Commits) that the afterStateDelta
+// cascade produced during firePhase2aAll. Repeats until no new emissions
+// fire (since each cross-broadcast may trigger further cascading).
+func (s *sim) propagatePostPhase2aEmissions() {
 	s.t.Helper()
-	inst, err := NewInstance(
-		s.cfg, op,
-		NewStubSigner(s.cfg.QV(), s.pubShares[op]),
-		NewStubSigner(s.cfg.QV(), s.pubShares[op]),
-		NewStubIBE(s.cfg.QEnc()),
-		nil, s.pubShares, nil, observer,
-	)
-	require.NoError(s.t, err)
-	s.instances[op] = inst
+	// Track which emissions we've already broadcast (by op).
+	upgraded := make(map[OperatorID]bool)
+	committed := make(map[OperatorID]bool)
+	const maxRounds = 16 // defensive — convergence is finite
+	for round := 0; round < maxRounds; round++ {
+		progress := false
+		for _, op := range s.allOperators() {
+			inst := s.instances[op]
+			// Check for new upgrade KindValue.
+			if vm, ok := inst.OwnValueMsg(); ok && !upgraded[op] {
+				// Only an upgrade if op also has ownNoValueMsg (A1 path).
+				if _, hadNV := inst.OwnNoValueMsg(); hadNV {
+					upgraded[op] = true
+					progress = true
+					for _, peer := range s.allOperators() {
+						if peer == op {
+							continue
+						}
+						require.NoError(s.t, s.instances[peer].ObserveValueMsg(vm),
+							"op %d ObserveValueMsg upgrade from %d", peer, op)
+					}
+				}
+			}
+			// Check for new Phase-2b Commit (Side=Signed or NR, not NRDirect
+			// — NRDirect was already broadcast in firePhase2aAll).
+			if c, ok := inst.OwnCommit(); ok && !committed[op] && c.Side != CommitSideNRDirect {
+				committed[op] = true
+				progress = true
+				for _, peer := range s.allOperators() {
+					if peer == op {
+						continue
+					}
+					require.NoError(s.t, s.instances[peer].ObserveCommit(c),
+						"op %d ObserveCommit from %d", peer, op)
+				}
+			}
+			// NRDirect emissions were captured during firePhase2aAll;
+			// mark them committed here so we don't re-broadcast.
+			if c, ok := inst.OwnCommit(); ok && !committed[op] && c.Side == CommitSideNRDirect {
+				committed[op] = true
+			}
+		}
+		if !progress {
+			return
+		}
+	}
 }
 
 // resolveAll calls Resolve on every Instance in the sim and returns
-// per-op outputs. Errors are returned in the second map; tests assert
-// against either the output map or the error map as appropriate.
+// per-op outputs.
 func (s *sim) resolveAll() (map[OperatorID]*Output, map[OperatorID]error) {
 	s.t.Helper()
 	outputs := make(map[OperatorID]*Output, len(s.cfg.Operators))
@@ -344,8 +310,7 @@ func (s *sim) resolveAll() (map[OperatorID]*Output, map[OperatorID]error) {
 }
 
 // requireAllAgree asserts that every (non-nil) output across operators
-// agrees on the same (Layer, Value) pair. Returns the canonical output
-// for the test to assert against.
+// agrees on the same (Layer, Value) pair. Returns the canonical output.
 func requireAllAgree(t *testing.T, outputs map[OperatorID]*Output) *Output {
 	t.Helper()
 	var first *Output

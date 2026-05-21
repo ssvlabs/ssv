@@ -19,9 +19,11 @@ import (
 // with a priority queue ordered by (timestamp, sequence) for tie-break
 // determinism.
 //
-// Mirrors the bare OBFT adapter's DES shape (consensustest/obft/des.go);
-// the 2ab-specific delta is the Phase-2a verdict-broadcast event pair
-// scheduled between leader-fetch and Phase-2b emission.
+// Phase 2b is dynamic in 2abOBFT: commits fire via the per-tick
+// afterStateDelta cascade inside Observe* / MaybeFirePhase2a /
+// ApplyHostValidity, NOT at a scheduled phase-2b-start event. The DES
+// captures these cascade emissions on every event boundary via
+// captureCascadeEmissions and schedules per-recipient arrivals dynamically.
 func runDES(cfg desConfig) (rawOutcome, error) {
 	s, err := newSim(cfg)
 	if err != nil {
@@ -48,16 +50,37 @@ type sim struct {
 	resolved    map[twoab.OperatorID]*twoab.Output
 	resolvedAt  map[twoab.OperatorID]time.Duration
 	resolveErrs map[twoab.OperatorID]error
+
 	// vQuorumAt[op] records the FIRST moment Resolve succeeded at op —
 	// the earliest moment that op holds a submittable σ-cert. Driven by
 	// opportunistic Resolve calls on every state-delta event
-	// (evtOnion2bArrival, evtCertArrival), mirroring an observer-mode
-	// production runner. Falls back to the schedule-anchored resolvedAt
-	// time when the schedule-anchored evtResolve at RoundEndOffset is
-	// what first produces quorum (resolveOpAndBroadcastCert also writes
-	// here as a fallback). Read by outcome() as Outcome.DecisionTime.
-	// Plan: docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
-	vQuorumAt   map[twoab.OperatorID]time.Duration
+	// (Phase2aFire, ValueMsgArrival, NoValueMsgArrival, CommitArrival,
+	// CertArrival), mirroring an observer-mode production runner. Falls
+	// back to the schedule-anchored resolvedAt time when the
+	// schedule-anchored evtResolve at slot deadline is what first
+	// produces quorum (resolveOpAndBroadcastCert also writes here as a
+	// fallback). Read by outcome() as Outcome.DecisionTime. Plan:
+	// docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	vQuorumAt map[twoab.OperatorID]time.Duration
+
+	// Per-op flags tracking which emissions have already been observed
+	// by the DES (and thus already scheduled to peers). These flip from
+	// false → true the FIRST time captureCascadeEmissions detects the
+	// corresponding OwnXxx accessor returning a non-nil value. The
+	// Instance internally enforces single-emission discipline per
+	// emission kind per slot; these flags mirror that on the DES side
+	// for arrival scheduling.
+	valueMsgEmitted   map[twoab.OperatorID]bool
+	noValueMsgEmitted map[twoab.OperatorID]bool
+	commitEmitted     map[twoab.OperatorID]bool
+
+	// resolveDeadline is the slot offset past which late-arriving
+	// emissions trigger an evtResolveRerun on the receiver (analog of
+	// OBFT's "re-running on late KindCommit arrivals"). Set to the
+	// scheduled evtResolve time at start; subsequent events use this to
+	// gate the late re-resolve path.
+	resolveDeadline time.Duration
+
 	canonValues map[int]twoab.Value
 	trace       []ct.TraceEntry
 }
@@ -94,17 +117,20 @@ func newSim(cfg desConfig) (*sim, error) {
 	}
 
 	return &sim{
-		cfg:         cfg,
-		rng:         mrand.New(mrand.NewSource(cfg.Seed)),
-		operators:   operators,
-		pubShares:   pubShares,
-		clusterPub:  clusterPub,
-		canonValues: canonValues,
-		instances:   make(map[twoab.OperatorID]*twoab.Instance, N),
-		resolved:    make(map[twoab.OperatorID]*twoab.Output, N),
-		resolvedAt:  make(map[twoab.OperatorID]time.Duration, N),
-		resolveErrs: make(map[twoab.OperatorID]error, N),
-		vQuorumAt:   make(map[twoab.OperatorID]time.Duration, N),
+		cfg:               cfg,
+		rng:               mrand.New(mrand.NewSource(cfg.Seed)),
+		operators:         operators,
+		pubShares:         pubShares,
+		clusterPub:        clusterPub,
+		canonValues:       canonValues,
+		instances:         make(map[twoab.OperatorID]*twoab.Instance, N),
+		resolved:          make(map[twoab.OperatorID]*twoab.Output, N),
+		resolvedAt:        make(map[twoab.OperatorID]time.Duration, N),
+		resolveErrs:       make(map[twoab.OperatorID]error, N),
+		vQuorumAt:         make(map[twoab.OperatorID]time.Duration, N),
+		valueMsgEmitted:   make(map[twoab.OperatorID]bool, N),
+		noValueMsgEmitted: make(map[twoab.OperatorID]bool, N),
+		commitEmitted:     make(map[twoab.OperatorID]bool, N),
 	}, nil
 }
 
@@ -119,21 +145,19 @@ func (s *sim) start() error {
 		}
 	}
 	cfgTwoab := &twoab.Config{
-		Height:    1,
-		ClusterID: [32]byte{0x01, 0x02, 0x03},
-		Operators: s.operators,
-		F:         (s.cfg.N - 1) / 3,
-		Layers:    layers,
-		TCommit:   s.cfg.TCommit,
-		Delta2a:   s.cfg.Delta2a,
-		Delta2b:   s.cfg.Delta2b,
-		Eps3:      s.cfg.Epsilon3,
-		BTT:       s.cfg.BTT,
-		BFTStart:  s.cfg.BFTStart,
+		Height:       1,
+		ClusterID:    [32]byte{0x01, 0x02, 0x03},
+		Operators:    s.operators,
+		F:            (s.cfg.N - 1) / 3,
+		Layers:       layers,
+		TPhase2a:     s.cfg.TPhase2a,
+		SafetyBuffer: s.cfg.SafetyBuffer,
+		BTT:          s.cfg.BTT,
+		BFTStart:     s.cfg.BFTStart,
 	}
 	if err := cfgTwoab.Validate(); err != nil {
 		// Validate failures at this point mean the SimConfig translates
-		// to an operating-point-incompatible twoab.Config (e.g. TCommit
+		// to an operating-point-incompatible twoab.Config (e.g. TPhase2a
 		// non-positive at high BTT, deepest B_{K-1} below BFT-min).
 		// Wrap with ErrConfigOutOfEnvelope so the framework renders the
 		// cell as red 0% rather than logging an unexpected-error warning.
@@ -168,16 +192,41 @@ func (s *sim) start() error {
 		s.instances[op] = inst
 	}
 
+	// Slot-deadline for the schedule-anchored final Resolve sweep. In
+	// 2abOBFT there is no RoundEndOffset() — Phase 2b is dynamic and the
+	// only hard wall is the runner-level RelayCutoff. The adapter
+	// schedules a final Resolve sweep AFTER the typical Phase-2b
+	// settle window:
+	//
+	//   Phase 2a fires at TPhase2a → ValueMsg arrivals at TPhase2a + BTT
+	//   → cascade Commit emissions at TPhase2a + BTT → Commit arrivals
+	//   at TPhase2a + 2·BTT. The Resolve sweep needs to land AFTER the
+	//   2·BTT settle window for the schedule-anchored backstop to see
+	//   the cluster's commit pool. ε_3 buffer matches OBFT's RoundEndOffset
+	//   semantic (T_commit + Δ_2 + ε_3).
+	s.resolveDeadline = s.cfg.TPhase2a + 2*s.cfg.BTT + s.cfg.Epsilon3
+	// Clamp to before the runner-level deadline so the resolve still
+	// has time to broadcast a cert and have it land before
+	// RelayCutoff − HeaderSubmitHeadroom.
+	maxDeadline := s.cfg.RelayCutoff - s.cfg.HeaderSubmitHeadroom - phase3JitterBuffer
+	if s.resolveDeadline > maxDeadline {
+		s.resolveDeadline = maxDeadline
+	}
+	if s.resolveDeadline <= 0 {
+		s.resolveDeadline = s.cfg.RelayCutoff
+	}
+
 	for k := 0; k < K; k++ {
 		s.schedule(s.cfg.FetchAt[k], &evtLeaderFetch{layer: k})
 	}
-	// Phase-2a verdict-broadcast window starts at T_verdict_start; each
-	// honest op emits their verdict at T_verdict_max - ε_proc per spec
-	// §Phase 2a. ε_proc is small (a few ms); we use Epsilon3 as a stand-in
-	// here (same scale).
-	s.schedule(cfgTwoab.TVerdictMax()-s.cfg.Epsilon3, &evtVerdictBroadcastStart{})
-	s.schedule(cfgTwoab.TCommit, &evtPhaseTwoBStart{})
-	s.schedule(cfgTwoab.RoundEndOffset(), &evtResolve{})
+	// Phase-2a fire-instant: every op simultaneously calls
+	// MaybeFirePhase2a per spec §Phase 2a. (Per-op offset is not used in
+	// the protocol — fire-time is a single cluster-wide slot offset.)
+	s.schedule(cfgTwoab.TPhase2a, &evtPhase2aFire{})
+	// Final schedule-anchored Resolve sweep. Captures any op that
+	// hasn't yet decided through the dynamic Phase-2b cascade (e.g.,
+	// late-arriving cluster state).
+	s.schedule(s.resolveDeadline, &evtResolve{})
 	s.scheduleInitialHeartbeats()
 	return nil
 }
@@ -219,11 +268,6 @@ func (s *sim) outcome() rawOutcome {
 			o.decided = true
 			o.layer = res.Layer
 			o.value = append([]byte{}, res.Value...)
-			// Prefer the observer-mode vQuorumAt time (recorded on the
-			// first state-delta that produces σ-quorum at op,
-			// BTT-sensitive); resolveOpAndBroadcastCert writes vQuorumAt
-			// as a fallback for the schedule-anchored path, so this
-			// reads uniformly.
 			if t, ok := s.vQuorumAt[op]; ok {
 				o.time = t
 			} else {
@@ -239,8 +283,6 @@ func (s *sim) outcome() rawOutcome {
 		}
 		if err, ok := s.resolveErrs[op]; ok {
 			o.err = err.Error()
-			// Track the deepest deadlock layer across non-decided ops
-			// for classifyTwoabMiss; mirrors the OBFT adapter's outcome().
 			if !o.decided {
 				var rerr *twoab.ResolveError
 				if errors.As(err, &rerr) && rerr.Reason == twoab.ResolveFailureDeadlock {
@@ -270,8 +312,7 @@ func (s *sim) honestLeaderValue(layer int) twoab.Value {
 //
 // Transport dispatch mirrors the OBFT adapter: DeliveryDirect (cfg.Mesh ==
 // nil) keeps the original full-fanout path; DeliveryMesh routes through
-// the per-sim MeshTopology with dedup + reflood. See OBFT emitToAll for
-// the byz-primitive caveats under mesh mode.
+// the per-sim MeshTopology with dedup + reflood.
 func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to twoab.OperatorID) event) {
 	if s.cfg.Mesh != nil {
 		s.emitMesh(from, kind, layer, bytes, extraDelay, s.operators, build)
@@ -280,9 +321,7 @@ func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes
 	s.emitDirect(from, kind, layer, bytes, extraDelay, s.operators, build)
 }
 
-// emitDirect is the original full-fanout transport path, factored out so
-// evtLeaderFetch's selective-recipients loop and resolveOpAndBroadcastCert's
-// cert loop share one implementation with emitToAll.
+// emitDirect is the full-fanout transport path.
 func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
 	for _, to := range recipients {
 		if to == from {
@@ -304,8 +343,7 @@ func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, byte
 }
 
 // emitMesh publishes via the per-sim MeshTopology. Behavior parallels the
-// OBFT adapter's emitMesh; see that file for the byz / bandwidth /
-// recipient-filter caveats.
+// OBFT adapter's emitMesh.
 func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
 	mesh := s.cfg.Mesh
 	fromOp := ct.OperatorID(from)
@@ -318,7 +356,6 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 		isProto := mesh.IsProtocol(neighbor)
 		if isProto {
 			toOp := twoab.OperatorID(mesh.OperatorForNode(neighbor))
-			// Linear scan is faster than a hash-set allocate at n ≤ 13.
 			if !slices.Contains(recipients, toOp) {
 				continue
 			}
@@ -343,10 +380,26 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 
 func (s *sim) observedOffset() time.Duration { return s.now }
 
-// cacheArrivalForGossip mirrors the OBFT helper of the same name. See
-// protocol/v2/consensustest/obft/des.go cacheArrivalForGossip for the
-// rationale; this copy differs only in the builder's typed
-// twoab.OperatorID parameter.
+// markValueMsgEmitted marks `op` as having broadcast its ValueMsg
+// (either Phase-2a fire-time or A1 upgrade). Subsequent
+// captureCascadeEmissions calls skip the ValueMsg re-broadcast path
+// for this op.
+func (s *sim) markValueMsgEmitted(op twoab.OperatorID) {
+	s.valueMsgEmitted[op] = true
+}
+
+// markNoValueMsgEmitted marks `op` as having broadcast its NoValueMsg.
+func (s *sim) markNoValueMsgEmitted(op twoab.OperatorID) {
+	s.noValueMsgEmitted[op] = true
+}
+
+// markCommitEmitted marks `op` as having broadcast its Commit (whether
+// Phase-2a NRDirect or Phase-2b Signed/NR).
+func (s *sim) markCommitEmitted(op twoab.OperatorID) {
+	s.commitEmitted[op] = true
+}
+
+// cacheArrivalForGossip mirrors the OBFT helper of the same name.
 func (s *sim) cacheArrivalForGossip(
 	cacheOwner, publisher ct.MeshNode,
 	msgID ct.MsgID, kind ct.MsgKind, layer int, bytes int64,
@@ -380,8 +433,6 @@ func (s *sim) cacheArrivalForGossip(
 }
 
 // scheduleInitialHeartbeats mirrors the OBFT helper of the same name.
-// See protocol/v2/consensustest/obft/des.go scheduleInitialHeartbeats
-// for the design rationale; identical body modulo the typed event.
 func (s *sim) scheduleInitialHeartbeats() {
 	mesh := s.cfg.Mesh
 	if mesh == nil {

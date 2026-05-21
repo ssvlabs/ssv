@@ -38,23 +38,32 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 // TestAdapter_OpportunisticDecisionTime — Phase 1 of the
 // OBFT-OPPORTUNISTIC-PHASE3 plan, mirrored for 2abOBFT. Asserts the
 // observer-mode metric is active: under DeliveryDirect at BTT=200ms
-// (ConstantDelay), σ-quorum at L_0 reaches via the Onion2b-arrival
-// observer path at T_commit + 1·BTT (vs pre-instrumentation
-// RoundEndOffset). 2abOBFT's T_commit is later than OBFT's because of
-// the Phase-2a Δ_2a budget: T_commit = RelayCutoff − HeaderSubmitHeadroom
-// − phase3JitterBuffer − ε_3 − Δ_2a − Δ_2b. At BTT=200ms,
-// Δ_2a=2·BTT=400ms (structural minimum per 2abOBFT spec) and
-// Δ_2b=1·BTT=200ms (spec-aligned), so T_commit = 4000 − 100 − 50 − 50 −
-// 400 − 200 = 3200ms; commits arrive at 3200 + 200 = 3400ms — well
-// before RoundEndOffset = 3450ms.
+// (ConstantDelay), σ-quorum at L_0 reaches via the Commit-arrival
+// observer path at TPhase2a + 2·BTT.
+//
+// Per the rewritten 2abOBFT protocol, Phase 2b is dynamic — Commits fire
+// via the per-tick afterStateDelta cascade after ValueMsg arrivals,
+// rather than at a fixed Phase-2b-start event. Adapter derives:
+//
+//	resolveBudget = 2·BTT + ε_3 + jitter + HeaderSubmitHeadroom
+//	              = 400 + 50 + 50 + 100 = 600ms
+//	TPhase2a      = RelayCutoff − resolveBudget = 4000 − 600 = 3400ms
+//
+// Fastest path: TPhase2a fires at 3400ms → ValueMsg arrivals at
+// TPhase2a + BTT = 3600ms → cascade emits Commits → Commit arrivals at
+// TPhase2a + 2·BTT = 3800ms. tryOpportunisticResolve records vQuorumAt
+// at the first Commit arrival, but the actual `s.resolved` flip
+// happens at the schedule-anchored Resolve sweep that fires at
+// TPhase2a + 2·BTT + ε_3 = 3850ms. Reported DecisionTime preferentially
+// reads vQuorumAt → 3800ms.
 func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := twoabadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	require.Equal(t, 3400*time.Millisecond, out.DecisionTime,
-		"observer-mode Resolve should catch L_0 σ-quorum at T_commit + 1·BTT = 3400ms (was schedule-anchored 3450ms)")
+	require.Equal(t, 3800*time.Millisecond, out.DecisionTime,
+		"observer-mode Resolve should catch L_0 σ-quorum at TPhase2a + 2·BTT = 3800ms")
 }
 
 // TestAdapter_HealthyMesh_N4 — 2abOBFT healthy through the mesh
@@ -144,22 +153,25 @@ func TestAdapter_CatalogRunsToCompletion(t *testing.T) {
 }
 
 // TestAdapter_BFTStart_BoundaryBehavior mirrors the OBFT test of the
-// same name but anchors on `T_verdict_start = T_commit − Δ_2a` (the
-// 2abOBFT-specific spec anchor at twoab/config.go §Setting) instead
-// of T_commit directly. Three regimes:
+// same name but anchors on `t0Broadcast = TPhase2a − BTT` (the
+// 2abOBFT-specific spec anchor at twoab/config.go §Setting), the
+// L_0 leader's Phase-1 broadcast time target. Three regimes:
 //
 //  1. BFTStart below the fetch-clamp boundary
-//     (`tVerdictStart − B_0`) — clamp dormant; schedule and decision
+//     (`t0Broadcast − B_0`) — clamp dormant; schedule and decision
 //     time bit-identical to BFTStart=0.
-//  2. BFTStart above the fetch-clamp boundary but below tVerdictStart
-//     — clamp engages on L_0; primary's broadcast deadline floors at
-//     BFTStart. Cluster still decides when the residual Phase-1
-//     window fits propagation.
-//  3. BFTStart ≥ tVerdictStart — no room for Phase-1 broadcast before
-//     Phase-2a opens; cluster MISSes.
+//  2. BFTStart above the fetch-clamp boundary but Phase-1 propagation
+//     + the A1 upgrade cascade still completes before the runner's
+//     submit deadline — cluster still decides via the dynamic
+//     Phase-2b cascade (Phase-2a NoValueMsg → upgrade ValueMsg on
+//     Phase-1 arrival → cascade-emitted Commit-Signed).
+//  3. BFTStart so late that the upgrade + commit cascade can't
+//     complete within the slot — cluster MISSes.
 //
-// 2abOBFT's anchor is earlier than OBFT's (tVerdictStart < tCommit by
-// Δ_2a = 2·BTT), so the boundaries are tighter.
+// Note: 2abOBFT's A1 upgrade path makes the "BFTStart > t0Broadcast"
+// regime more graceful than in bare OBFT or the old 2abOBFT design.
+// The protocol naturally recovers via NoValueMsg → upgrade ValueMsg
+// as long as enough wall-clock time remains for the cascade.
 func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 	baseCfg := func(bft time.Duration) ct.SimConfig {
 		c := ct.DefaultProposerDutyConfig(100 * time.Millisecond)
@@ -173,11 +185,12 @@ func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 	}
 
 	// At BTT=100ms, K=4, RefloodDelay=0 (default), spec sizing:
-	// tCommit = 4000 − 100 − 50 − 50 − 300 = 3500ms; Δ_2a = 2·BTT = 200ms
-	// → tVerdictStart = 3500 − 200 = 3300ms; B_0 = 2·BTT = 200ms
-	// → fetch-clamp boundary = tVerdictStart − B_0 = 3100ms.
-	// DecidingBroadcastTime clamp engages at the same threshold (no
-	// fetchBuffer subtraction in 2abOBFT, unlike OBFT).
+	//   resolveBudget = 2·BTT + ε_3 + jitter + HeaderSubmitHeadroom
+	//                 = 200 + 50 + 50 + 100 = 400ms
+	//   TPhase2a      = RelayCutoff − resolveBudget = 4000 − 400 = 3600ms
+	//   t0Broadcast   = TPhase2a − BTT = 3500ms
+	//   B_0           = 2·BTT + SafetyBuffer(=0) = 200ms
+	//   fetch-clamp boundary = t0Broadcast − B_0 = 3300ms
 
 	// Case 1: BFTStart well below the clamp boundary — bit-identical to BFT=0.
 	cfg0 := baseCfg(0)
@@ -196,26 +209,30 @@ func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 			"BFTStart=%dms < clamp boundary must produce bit-identical DecidingBroadcastTime", bft)
 	}
 
-	// Case 2: BFTStart above L_0 fetch-clamp boundary but below
-	// tVerdictStart — clamp engages; DecidingBroadcastTime floors to
-	// BFTStart; cluster still decides because the residual Phase-1
-	// window (tVerdictStart − BFTStart) fits propagation.
-	cfgClamped := baseCfg(3200 * time.Millisecond)
+	// Case 2: BFTStart above L_0 fetch-clamp boundary (3300ms) but
+	// upgrade cascade still completes inside slot. DecidingBroadcastTime
+	// floors to BFTStart; cluster still decides because the residual
+	// Phase-1 window fits propagation.
+	cfgClamped := baseCfg(3400 * time.Millisecond)
 	outClamped, err := twoabadapter.Protocol{}.Run(cfgClamped)
 	require.NoError(t, err)
 	require.True(t, outClamped.Decided,
-		"BFTStart=3200ms (clamp engaged, 100ms residual Phase-1 window) must still decide on prod profile")
-	require.GreaterOrEqual(t, outClamped.DecidingBroadcastTime, 3200*time.Millisecond,
-		"BFTStart=3200ms must floor DecidingBroadcastTime to ≥ BFTStart per the spec clamp")
+		"BFTStart=3400ms (clamp engaged, upgrade-cascade fits) must still decide on prod profile")
+	require.GreaterOrEqual(t, outClamped.DecidingBroadcastTime, 3400*time.Millisecond,
+		"BFTStart=3400ms must floor DecidingBroadcastTime to ≥ BFTStart per the spec clamp")
 
-	// Case 3: BFTStart ≥ tVerdictStart — no Phase-1 window left;
-	// cluster MISSes.
-	cfgPastVerdict := baseCfg(3400 * time.Millisecond)
-	outPastVerdict, err := twoabadapter.Protocol{}.Run(cfgPastVerdict)
+	// Case 3: BFTStart so late that the upgrade cascade can't complete
+	// before the schedule-anchored Resolve sweep at TPhase2a + 2·BTT
+	// + ε_3 = 3850ms. At BFTStart=3700ms the Phase-1 bundle reaches
+	// peers ~3701ms (Phase2aFire already at 3600ms with no V → all
+	// NoValue), upgrade cascade fires but the σ-eligibility-triggered
+	// commits arrive too late for Resolve.
+	cfgPastFire := baseCfg(3700 * time.Millisecond)
+	outPastFire, err := twoabadapter.Protocol{}.Run(cfgPastFire)
 	require.NoError(t, err)
-	require.False(t, outPastVerdict.Decided,
-		"BFTStart=3400ms ≥ tVerdictStart must MISS (no Phase-1 window before verdict opens)")
-	require.NotEmpty(t, outPastVerdict.MissReason,
+	require.False(t, outPastFire.Decided,
+		"BFTStart=3700ms must MISS (Phase-1 arrives past Phase2a fire-time AND upgrade cascade can't complete by Resolve deadline)")
+	require.NotEmpty(t, outPastFire.MissReason,
 		"miss must carry a reason for the failure-breakdown table")
 }
 

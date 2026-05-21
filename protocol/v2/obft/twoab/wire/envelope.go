@@ -26,18 +26,23 @@ type MessageKind byte
 
 const (
 	// KindPhase1Bundle indicates the body is an EncodePhase1Bundle-encoded
-	// *twoab.Phase1Bundle. Per spec Variant C, the bundle does NOT carry a
-	// σ_V threshold partial.
+	// *twoab.Phase1Bundle. The bundle does NOT carry a σ_V threshold partial.
 	KindPhase1Bundle MessageKind = 0x01
-	// KindVerdict indicates the body is an EncodeVerdict-encoded
-	// *twoab.Verdict — Phase-2a op-identity-signed verdict envelope.
-	KindVerdict MessageKind = 0x02
-	// KindOnion2b indicates the body is an EncodeOnion2b-encoded
-	// *twoab.Onion2b — Phase-2b σ-or-NR commit (per-layer onion + NR partials).
-	KindOnion2b MessageKind = 0x03
+	// KindValue indicates the body is an EncodeValueMsg-encoded
+	// *twoab.ValueMsg — Phase-2a coordination envelope, op has V_0 + host
+	// valid (or A1 upgrade from prior KindNoValue).
+	KindValue MessageKind = 0x02
+	// KindNoValue indicates the body is an EncodeNoValueMsg-encoded
+	// *twoab.NoValueMsg — Phase-2a coordination envelope, op has no V_0
+	// or host says not-valid.
+	KindNoValue MessageKind = 0x03
+	// KindCommit indicates the body is an EncodeCommit-encoded
+	// *twoab.Commit — Phase-2b binding envelope (Side=Signed or NR) OR
+	// Phase-2a NR-direct emission (Side=NRDirect, with L_k>0 LayerEntries).
+	KindCommit MessageKind = 0x04
 	// KindCertificate indicates the body is an EncodeCertificate-encoded
 	// *twoab.Certificate — final-certificate gossip per spec §Phase 3.
-	KindCertificate MessageKind = 0x04
+	KindCertificate MessageKind = 0x05
 )
 
 // String returns a human-readable label for telemetry/logging.
@@ -45,10 +50,12 @@ func (k MessageKind) String() string {
 	switch k {
 	case KindPhase1Bundle:
 		return "phase1-bundle"
-	case KindVerdict:
-		return "phase2a-verdict"
-	case KindOnion2b:
-		return "phase2b-onion"
+	case KindValue:
+		return "phase2a-value"
+	case KindNoValue:
+		return "phase2a-novalue"
+	case KindCommit:
+		return "commit"
 	case KindCertificate:
 		return "certificate"
 	default:
@@ -61,8 +68,9 @@ func (k MessageKind) String() string {
 type Envelope struct {
 	Kind         MessageKind
 	Phase1Bundle *twoab.Phase1Bundle
-	Verdict      *twoab.Verdict
-	Onion2b      *twoab.Onion2b
+	ValueMsg     *twoab.ValueMsg
+	NoValueMsg   *twoab.NoValueMsg
+	Commit       *twoab.Commit
 	Certificate  *twoab.Certificate
 }
 
@@ -76,22 +84,32 @@ func WrapPhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	return wrap(KindPhase1Bundle, body), nil
 }
 
-// WrapVerdict encodes a Verdict and wraps it in a 2abOBFT wire envelope.
-func WrapVerdict(v *twoab.Verdict) ([]byte, error) {
-	body, err := EncodeVerdict(v)
+// WrapValueMsg encodes a ValueMsg and wraps it in a 2abOBFT wire envelope.
+func WrapValueMsg(v *twoab.ValueMsg) ([]byte, error) {
+	body, err := EncodeValueMsg(v)
 	if err != nil {
-		return nil, fmt.Errorf("wire: encode verdict: %w", err)
+		return nil, fmt.Errorf("wire: encode ValueMsg: %w", err)
 	}
-	return wrap(KindVerdict, body), nil
+	return wrap(KindValue, body), nil
 }
 
-// WrapOnion2b encodes an Onion2b and wraps it in a 2abOBFT wire envelope.
-func WrapOnion2b(o *twoab.Onion2b) ([]byte, error) {
-	body, err := EncodeOnion2b(o)
+// WrapNoValueMsg encodes a NoValueMsg and wraps it in a 2abOBFT wire
+// envelope.
+func WrapNoValueMsg(nv *twoab.NoValueMsg) ([]byte, error) {
+	body, err := EncodeNoValueMsg(nv)
 	if err != nil {
-		return nil, fmt.Errorf("wire: encode onion2b: %w", err)
+		return nil, fmt.Errorf("wire: encode NoValueMsg: %w", err)
 	}
-	return wrap(KindOnion2b, body), nil
+	return wrap(KindNoValue, body), nil
+}
+
+// WrapCommit encodes a Commit and wraps it in a 2abOBFT wire envelope.
+func WrapCommit(c *twoab.Commit) ([]byte, error) {
+	body, err := EncodeCommit(c)
+	if err != nil {
+		return nil, fmt.Errorf("wire: encode Commit: %w", err)
+	}
+	return wrap(KindCommit, body), nil
 }
 
 // WrapCertificate encodes a Certificate and wraps it in a 2abOBFT wire
@@ -122,18 +140,24 @@ func Unwrap(data []byte) (*Envelope, error) {
 			return nil, fmt.Errorf("wire: decode phase-1 bundle body: %w", err)
 		}
 		out.Phase1Bundle = b
-	case KindVerdict:
-		v, err := DecodeVerdict(body)
+	case KindValue:
+		v, err := DecodeValueMsg(body)
 		if err != nil {
-			return nil, fmt.Errorf("wire: decode verdict body: %w", err)
+			return nil, fmt.Errorf("wire: decode ValueMsg body: %w", err)
 		}
-		out.Verdict = v
-	case KindOnion2b:
-		o, err := DecodeOnion2b(body)
+		out.ValueMsg = v
+	case KindNoValue:
+		nv, err := DecodeNoValueMsg(body)
 		if err != nil {
-			return nil, fmt.Errorf("wire: decode onion2b body: %w", err)
+			return nil, fmt.Errorf("wire: decode NoValueMsg body: %w", err)
 		}
-		out.Onion2b = o
+		out.NoValueMsg = nv
+	case KindCommit:
+		c, err := DecodeCommit(body)
+		if err != nil {
+			return nil, fmt.Errorf("wire: decode Commit body: %w", err)
+		}
+		out.Commit = c
 	case KindCertificate:
 		c, err := DecodeCertificate(body)
 		if err != nil {

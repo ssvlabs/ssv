@@ -1,21 +1,27 @@
 package twoab
 
 // Slashing-evidence types. Per spec §Slashing evidence, 2abOBFT surfaces
-// seven rules of byzantine-fault evidence: Rules 1-5 inherited from bare
-// OBFT and Rules 6a/6b new to 2ab's Phase-2a verdict surface. None is
-// load-bearing for safety; they exist so the surviving operators can
-// blacklist misbehaving operators (planned protocol extension) and so
-// stakers can migrate validators away from underperforming clusters.
+// six rules of byzantine-fault evidence: Rules 1-5 inherited from bare OBFT
+// (with slight wire-shape adjustments for 2abOBFT's message kinds) and
+// Rule 6a for Phase-2 equivocation. (Rule 6b "verdict-vs-action" from the
+// previous 2abOBFT design was dropped: KindValue is coordination-only — no
+// threshold partial on the wire — so the pivot KindValue → KindCommit-NR is
+// legitimate when authorized per §Authorized Phase-2 emission pairs A3/A4.)
+//
+// None of these rules is load-bearing for safety; they exist so the
+// surviving operators can blacklist misbehaving operators (planned
+// protocol extension) and so stakers can migrate validators away from
+// underperforming clusters.
 //
 // The protocol layer surfaces evidence as inner-message contradictions;
 // the adapter layer pairs each piece of evidence with the SignedSSVMessage
 // envelopes that authenticate it. Per spec §Slashing evidence, honest
 // operators MUST log observed evidence per-rule for out-of-band
 // aggregation. There is no dedicated on-wire evidence gossip — underlying
-// signed messages (bundles, verdicts, onions) already propagate via
-// normal protocol message flow.
+// signed messages (bundles, ValueMsg/NoValueMsg/Commit, certificates)
+// already propagate via normal protocol message flow.
 
-// EvidenceRule names the seven rules from spec §Slashing evidence.
+// EvidenceRule names the six rules from spec §Slashing evidence.
 type EvidenceRule int
 
 const (
@@ -30,39 +36,52 @@ const (
 	// identity-signed at the envelope layer; the pair is unambiguous).
 	EvidenceLeaderEquivocation EvidenceRule = 2
 
-	// EvidenceCrossOnionEquivocation — Rule 3: an operator emitted σ_i^V
+	// EvidenceCrossCommitEquivocation — Rule 3: an operator emitted σ_i^V
 	// on V and σ_i^V on V' at the same layer (across one or multiple
-	// Onion2b messages). Single-σ-V exclusivity is EKM-enforced.
-	EvidenceCrossOnionEquivocation EvidenceRule = 3
+	// Commit-Signed / ValueMsg LayerEntries). Single-σ-V exclusivity is
+	// EKM-enforced.
+	EvidenceCrossCommitEquivocation EvidenceRule = 3
 
 	// EvidenceFakeEncryptedPresence — Rule 4: at layer k > 0, an
-	// operator's auth-signed Onion2b entry decrypts (post-NR-quorum at
-	// prior layers) to garbage rather than a valid σ partial. Detection
-	// is delayed and conditional on slot progression unlocking the
-	// layer's chained encryption.
+	// operator's Phase-2a LayerEntry (carried inside ValueMsg / NoValueMsg
+	// / Commit-NRDirect) decrypts (post-NR-quorum at prior layers) to
+	// garbage rather than a valid σ partial. Detection is delayed and
+	// conditional on slot progression unlocking the layer's chained
+	// encryption.
 	EvidenceFakeEncryptedPresence EvidenceRule = 4
 
-	// EvidenceFakePlaintextSigma — Rule 5: at L_0, an operator's auth-
-	// signed Onion2b carries a plaintext σ partial that does not verify
+	// EvidenceFakePlaintextSigma — Rule 5: at L_0, an operator's
+	// Commit-Signed carries a plaintext σ partial that does not verify
 	// against any retained leader-broadcast V. Detection requires the
-	// receiver to have retained-or-auth-only-retained V at L_0.
+	// receiver to have retained V at L_0.
 	EvidenceFakePlaintextSigma EvidenceRule = 5
 
-	// EvidenceVerdictEquivocation — Rule 6a (2ab-specific): an operator
-	// broadcast two distinct KindVerdict envelopes for the same
-	// (slot, layer). Cryptographic, self-contained — both envelopes are
-	// op-identity-signed by the offender. Receivers MAY act on a single
-	// observed pair; cluster-wide consensus on the evidence is not
-	// required.
-	EvidenceVerdictEquivocation EvidenceRule = 6
-
-	// EvidenceVerdictAction — Rule 6b (2ab-specific): an operator
-	// broadcast a verdict and then emitted a Phase-2b action that
-	// contradicts it (e.g., σV verdict followed by NR partial emission).
-	// Cryptographic but boundary-conditional — distinguishing honest
-	// revision from byzantine equivocation requires cross-referencing
-	// the cluster verdict view.
-	EvidenceVerdictAction EvidenceRule = 7
+	// EvidencePhase2Equivocation — Rule 6a (2abOBFT-specific): an operator
+	// emitted a Phase-2 sequence not in the authorized A1-A8 set (see
+	// §Authorized Phase-2 emission pairs). Cryptographic, self-contained
+	// — all envelopes are op-identity-signed by the offender; the offending
+	// sequence is unambiguous from a single observer's view.
+	//
+	// Authorized (NOT slashable):
+	//   A1: KindNoValue → KindValue (upgrade)
+	//   A2: KindValue → KindCommit-Signed
+	//   A3: KindValue → KindCommit-NR (host-flip pivot — sequence-only check)
+	//   A4: KindValue → KindCommit-NR (equivocation pivot — sequence-only check)
+	//   A5: KindNoValue → KindCommit-NR
+	//   A6: KindNoValue → KindValue → KindCommit-Signed
+	//   A7: KindNoValue → KindValue → KindCommit-NR
+	//   A8: KindCommit-NRDirect (alone)
+	//
+	// Slashable (NOT in A1-A8):
+	//   - Two KindValue on different V_0 (also Rule 3, cross-σ-V)
+	//   - KindValue → KindNoValue (downgrade)
+	//   - KindCommit-Signed → KindCommit-NR (or vice versa; cross-side)
+	//   - Two KindCommit-Signed on different V_0
+	//   - KindCommit-NRDirect followed by any other emission
+	//   - KindNoValue → KindCommit-Signed (missing upgrade KindValue per A6)
+	//   - KindNoValue → KindCommit-NR → KindValue (post-commit upgrade)
+	//   - Any other 3+ message sequence not matching A6 or A7
+	EvidencePhase2Equivocation EvidenceRule = 6
 )
 
 // String returns the rule name for telemetry/logging.
@@ -72,22 +91,20 @@ func (r EvidenceRule) String() string {
 		return "cross-signing"
 	case EvidenceLeaderEquivocation:
 		return "leader-equivocation"
-	case EvidenceCrossOnionEquivocation:
-		return "cross-onion-equivocation"
+	case EvidenceCrossCommitEquivocation:
+		return "cross-commit-equivocation"
 	case EvidenceFakeEncryptedPresence:
 		return "fake-encrypted-presence"
 	case EvidenceFakePlaintextSigma:
 		return "fake-plaintext-sigma-at-L0"
-	case EvidenceVerdictEquivocation:
-		return "verdict-equivocation"
-	case EvidenceVerdictAction:
-		return "verdict-vs-action"
+	case EvidencePhase2Equivocation:
+		return "phase2-equivocation"
 	default:
 		return "unknown"
 	}
 }
 
-// Evidence is a discriminated union of the seven evidence types. Exactly
+// Evidence is a discriminated union of the six evidence types. Exactly
 // one of the typed payload fields is set, matching Rule.
 type Evidence struct {
 	Rule       EvidenceRule
@@ -96,18 +113,16 @@ type Evidence struct {
 
 	// Per-rule payloads. Only one is populated.
 
-	CrossSigning           *CrossSigningEvidence
-	LeaderEquivocation     *LeaderEquivocationEvidence
-	CrossOnionEquivocation *CrossOnionEquivocationEvidence
-	OnionEquivocation      *OnionEquivocationEvidence
-	FakeEncryptedPresence  *FakeEncryptedPresenceEvidence
-	FakePlaintextSigma     *FakePlaintextSigmaEvidence
-	VerdictEquivocation    *VerdictEquivocationEvidence
-	VerdictAction          *VerdictActionEvidence
+	CrossSigning            *CrossSigningEvidence
+	LeaderEquivocation      *LeaderEquivocationEvidence
+	CrossCommitEquivocation *CrossCommitEquivocationEvidence
+	FakeEncryptedPresence   *FakeEncryptedPresenceEvidence
+	FakePlaintextSigma      *FakePlaintextSigmaEvidence
+	Phase2Equivocation      *Phase2EquivocationEvidence
 }
 
 // CrossSigningEvidence (Rule 1) — Operator OperatorID emitted both σ at
-// Layer and NR at Layer.
+// Layer and NR at Layer (across two distinct Phase-2 emissions).
 type CrossSigningEvidence struct {
 	SigmaPartial Signature
 	SigmaValue   Value
@@ -121,28 +136,22 @@ type LeaderEquivocationEvidence struct {
 	BundleB *Phase1Bundle
 }
 
-// CrossOnionEquivocationEvidence (Rule 3, per-layer) — Operator
-// OperatorID has σ partials on two distinct V's at the same layer.
-type CrossOnionEquivocationEvidence struct {
+// CrossCommitEquivocationEvidence (Rule 3) — Operator OperatorID has σ
+// partials on two distinct V's at the same layer. The two partials may
+// come from any combination of:
+//   - L_0: Commit-Signed (the L_0 σ partial)
+//   - L_k>0: ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries with
+//     Kind=SigmaChained
+type CrossCommitEquivocationEvidence struct {
 	ValueA   Value
 	ValueB   Value
 	PartialA Signature
 	PartialB Signature
 }
 
-// OnionEquivocationEvidence (Rule 3, top-level, Layer == -1) — Operator
-// OperatorID emitted two structurally-distinct Onion2b messages at the
-// same (slot). Carries the full Onion2b bodies so a third-party slashing
-// verifier can recompute their content hashes and confirm the structural
-// distinction.
-type OnionEquivocationEvidence struct {
-	OnionA *Onion2b
-	OnionB *Onion2b
-}
-
-// FakeEncryptedPresenceEvidence (Rule 4) — Operator OperatorID's Onion2b
-// entry at Layer (k > 0) decrypted to garbage rather than a valid σ
-// partial. `Ciphertext` is the offending entry's ciphertext;
+// FakeEncryptedPresenceEvidence (Rule 4) — Operator OperatorID's Phase-2a
+// LayerEntry at Layer (k > 0) decrypted to garbage rather than a valid
+// σ partial. `Ciphertext` is the offending entry's payload;
 // `DecryptedBytes` is what it produced; `DecryptError` is set if
 // decryption itself failed.
 type FakeEncryptedPresenceEvidence struct {
@@ -151,9 +160,9 @@ type FakeEncryptedPresenceEvidence struct {
 	DecryptError   string
 }
 
-// FakePlaintextSigmaEvidence (Rule 5) — Operator OperatorID's L_0
-// Onion2b entry carries a plaintext σ partial that doesn't verify
-// against any retained Phase-1 V at L_0.
+// FakePlaintextSigmaEvidence (Rule 5) — Operator OperatorID's Commit-Signed
+// at L_0 carries a plaintext σ partial that doesn't verify against any
+// retained Phase-1 V at L_0.
 type FakePlaintextSigmaEvidence struct {
 	OnionPartial Signature
 	OnionValue   Value
@@ -162,36 +171,28 @@ type FakePlaintextSigmaEvidence struct {
 	RetainedValueHashes [][]byte
 }
 
-// VerdictEquivocationEvidence (Rule 6a) — Operator OperatorID broadcast
-// two distinct KindVerdict envelopes for the same (slot, layer). Self-
-// contained cryptographic evidence — both envelopes are op-identity-
-// signed by the offender; the pair is unambiguous from a single
-// observer's view.
-type VerdictEquivocationEvidence struct {
-	VerdictA *Verdict
-	VerdictB *Verdict
-}
+// Phase2EquivocationEvidence (Rule 6a) — Operator OperatorID emitted a
+// Phase-2 sequence not in the authorized A1-A8 set. The evidence carries
+// the offending message pair (or triple); receivers MAY act on a single
+// observed sequence (cluster-wide consensus on the evidence is not required).
+//
+// Exactly one of the {ValueA, NoValueA, CommitA} is set (the first
+// observed Phase-2 emission from the op at this layer); similarly for
+// {ValueB, NoValueB, CommitB} (the offending second emission). The
+// triple-message case (e.g. KindNoValue → KindCommit-NR → KindValue) sets
+// the third in {ValueC, NoValueC, CommitC}.
+type Phase2EquivocationEvidence struct {
+	ValueA   *ValueMsg
+	NoValueA *NoValueMsg
+	CommitA  *Commit
 
-// VerdictActionEvidence (Rule 6b) — Operator OperatorID's broadcast
-// verdict at (slot, layer) contradicts their Phase-2b action at the same
-// layer.
-//
-// Higher false-positive risk than Rule 6a — honest revision (e.g., σV
-// verdict at Phase-2a, then bundle-equivocation observed mid-Phase-2a,
-// NR action at Phase-2b) is permitted. The distinguishing condition
-// requires cross-referencing the cluster verdict view; receivers should
-// log Rule-6b observations and aggregate out-of-band before acting.
-//
-// Exactly one of the (SigmaValue+SigmaPartial) or NRPartial sides is
-// populated, disambiguating which side of the verdict-vs-action mismatch
-// fired: σ-action is `len(SigmaPartial) > 0`; NR-action is
-// `len(NRPartial) > 0`. Verdict carries the (σV / NR / NV) declaration
-// being contradicted.
-type VerdictActionEvidence struct {
-	Verdict      *Verdict
-	SigmaValue   Value     // populated when the contradicting action was σ
-	SigmaPartial Signature // populated when the contradicting action was σ
-	NRPartial    Signature // populated when the contradicting action was NR
+	ValueB   *ValueMsg
+	NoValueB *NoValueMsg
+	CommitB  *Commit
+
+	ValueC   *ValueMsg
+	NoValueC *NoValueMsg
+	CommitC  *Commit
 }
 
 // EvidenceObserver fires on the FIRST recording per (Rule, OperatorID,
