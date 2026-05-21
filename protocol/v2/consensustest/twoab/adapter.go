@@ -37,16 +37,26 @@ type Protocol struct {
 	// VariantName overrides the reported protocol name. Empty → "2abOBFT".
 	VariantName string
 
-	// SafetyBufferOverride, when non-nil, sets the SafetyBuffer used in
-	// the per-layer broadcast-budget formula `B_k_shallow = (k+2)·BTT +
-	// SafetyBuffer`. Default (nil) uses cfg.RefloodDelay (which matches
-	// bare OBFT's structural budget so the two protocols have the same
-	// MEV-fetch headroom at default).
+	// SafetyBufferOverride, when non-nil, sets the SafetyBuffer used to
+	// widen the post-Phase-2a cascade window. Default (nil) uses
+	// cfg.RefloodDelay so 2abOBFT matches bare OBFT's total post-broadcast
+	// structural budget at default. Lower SafetyBuffer (e.g. 300ms /
+	// 500ms) reclaims MEV-fetch headroom at the cost of cascade-window
+	// tolerance: the cluster commits to slot-miss rather than wait for
+	// late peer ValueMsg / Commit arrivals when the network's actual
+	// per-hop latency exceeds 1·BTT.
 	//
-	// Lower SafetyBuffer (e.g. 300ms / 500ms) reclaims MEV-fetch headroom
-	// at the cost of mesh-tail tolerance: the cluster commits to slot-
-	// miss rather than wait for IHAVE/IWANT recovery when initial
-	// propagation slips.
+	// Cascade-window semantics (post-tightening from the v4-initial spec):
+	// SafetyBuffer shifts `TPhase2a` earlier in the slot, widening the
+	// post-TPhase2a window for the two-hop cascade (peer KindValue →
+	// peer KindCommit-Signed). This differs from OBFT's RefloodDelay
+	// analog (which only widens the leader's broadcast budget B_0)
+	// because 2abOBFT's critical path post-bundle-arrival is TWO hops,
+	// not one — so structural mesh-tail tolerance lives in the cascade,
+	// not in B_0. The leader's pre-Phase-2a window (`B_0 = 2·BTT`)
+	// stays at the structural minimum; widening it would only help if
+	// V failed to reach all peers within 1·BTT of fetchAt, which is
+	// rare under realistic mesh profiles.
 	SafetyBufferOverride *time.Duration
 }
 
@@ -80,49 +90,56 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// 2abOBFT timing model (spec §Setting):
+	// 2abOBFT timing model (spec §Setting, with the cascade-window-
+	// SafetyBuffer correction):
 	//   - TPhase2a is the Phase-2a fire-instant; every op emits one of
 	//     {KindValue, KindNoValue, KindCommit-NRDirect} at this offset.
 	//   - T0Broadcast = TPhase2a − BTT is the L_0 leader's broadcast
 	//     time target — V_0 has 1·BTT to propagate before Phase 2a fires.
-	//   - SafetyBuffer parameterizes the per-layer shallow B_k:
-	//     B_k_shallow = (k+2)·BTT + SafetyBuffer. Default sizing uses
+	//   - SafetyBuffer shifts TPhase2a earlier in the slot, widening the
+	//     post-TPhase2a cascade window where the two-hop peer-KindValue →
+	//     peer-Commit-Signed sequence must complete. Default sizing uses
 	//     SafetyBuffer = RefloodDelay so 2abOBFT and bare OBFT have the
-	//     same total structural budget.
+	//     same total post-broadcast structural budget. See Protocol.
+	//     SafetyBufferOverride for the rationale on why SafetyBuffer
+	//     lives in the cascade (not B_0) under 2abOBFT's two-phase
+	//     coordination + commit design.
 	//
 	// We pick TPhase2a to fit within the slot's submit pipeline: the
 	// runner-level deadline is RelayCutoff − HeaderSubmitHeadroom; the
 	// adapter reserves phase3JitterBuffer + epsilon3 for Phase 3 + cert
-	// dispatch. Phase 2b is dynamic (no scheduled deadline), so we don't
-	// need a Δ_2b reserve — commits fire opportunistically through the
-	// cascade. The slot deadline pool's lower bound is just the
-	// fire-time + a few BTTs for the cascade to converge through
-	// state-delta-driven Commit emissions; that's also where the
-	// schedule-anchored final Resolve sweep lands.
+	// dispatch, plus 2·BTT + SafetyBuffer for the post-Phase-2a cascade.
+	// Phase 2b is dynamic (no scheduled deadline), so we don't need a
+	// Δ_2b reserve — commits fire opportunistically through the cascade
+	// and either land before the scheduled Resolve sweep at
+	// TPhase2a + 2·BTT + SafetyBuffer + ε_3 or trigger evtResolveRerun
+	// on late arrival.
 	btt := cfg.BTT
-	// Phase-2a fire-instant: enough room after fire for at least one
-	// Phase-2a propagation cycle plus a Phase-2b cascade settle window
-	// (Commit emissions cascade as op-state-delta-triggered; bound by
-	// ~2·BTT for the typical Value → Commit-Signed sequence).
-	resolveBudget := btt*2 + epsilon3 + phase3JitterBuffer + cfg.HeaderSubmitHeadroom
-	tPhase2a := cfg.RelayCutoff - resolveBudget
-	if tPhase2a <= btt {
-		// TPhase2a must be > BTT so T0Broadcast = TPhase2a − BTT is
-		// positive (the Phase-1 broadcast time must land within the
-		// slot). At extreme operating points (BTT too large for the
-		// available slot budget) the configuration is out of envelope.
-		return ct.Outcome{}, fmt.Errorf(
-			"%w: twoab adapter: derived TPhase2a=%v non-positive or <= BTT=%v (RelayCutoff=%v)",
-			ct.ErrConfigOutOfEnvelope, tPhase2a, btt, cfg.RelayCutoff)
-	}
-	t0Broadcast := tPhase2a - btt
-
 	// SafetyBuffer: default = cfg.RefloodDelay (matches bare OBFT's
 	// structural budget); the SafetyBufferOverride variant field lets
 	// stresstest variants exercise tighter / looser configurations.
 	safetyBuffer := p.safetyBuffer(cfg)
 
-	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, btt, safetyBuffer, t0Broadcast)
+	resolveBudget := btt*2 + safetyBuffer + epsilon3 + phase3JitterBuffer + cfg.HeaderSubmitHeadroom
+	tPhase2a := cfg.RelayCutoff - resolveBudget
+	if tPhase2a <= btt {
+		// TPhase2a must be > BTT so T0Broadcast = TPhase2a − BTT is
+		// positive (the Phase-1 broadcast time must land within the
+		// slot). At extreme operating points (BTT too large for the
+		// available slot budget, or SafetyBuffer set too aggressively)
+		// the configuration is out of envelope.
+		return ct.Outcome{}, fmt.Errorf(
+			"%w: twoab adapter: derived TPhase2a=%v non-positive or <= BTT=%v (RelayCutoff=%v SafetyBuffer=%v)",
+			ct.ErrConfigOutOfEnvelope, tPhase2a, btt, cfg.RelayCutoff, safetyBuffer)
+	}
+	t0Broadcast := tPhase2a - btt
+
+	// Per-layer broadcast budgets follow the spec's staggered shallow
+	// schedule `B_k_shallow = (k+2)·BTT` (no SafetyBuffer term — the
+	// SafetyBuffer instead widens the post-TPhase2a cascade via the
+	// TPhase2a shift above, which transitively shifts every fetchAt[k]
+	// earlier by the same amount).
+	broadcastBudget, err := twoab.DefaultBroadcastBudget(cfg.K, btt, t0Broadcast)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)

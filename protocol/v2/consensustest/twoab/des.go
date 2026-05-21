@@ -204,7 +204,15 @@ func (s *sim) start() error {
 	//   2·BTT settle window for the schedule-anchored backstop to see
 	//   the cluster's commit pool. ε_3 buffer matches OBFT's RoundEndOffset
 	//   semantic (T_commit + Δ_2 + ε_3).
-	s.resolveDeadline = s.cfg.TPhase2a + 2*s.cfg.BTT + s.cfg.Epsilon3
+	//
+	// SafetyBuffer extends the cascade-window structurally — when set,
+	// the scheduled Resolve waits SafetyBuffer extra wall-clock for
+	// late peer ValueMsg / Commit-Signed arrivals (per Config.
+	// SafetyBuffer's cascade-window-not-B_0 semantics). The TPhase2a
+	// shift in the adapter compensates so the wall-clock Resolve time
+	// stays at RelayCutoff − HeaderSubmit − phase3JitterBuffer (the
+	// maxDeadline clamp below).
+	s.resolveDeadline = s.cfg.TPhase2a + 2*s.cfg.BTT + s.cfg.SafetyBuffer + s.cfg.Epsilon3
 	// Clamp to before the runner-level deadline so the resolve still
 	// has time to broadcast a cert and have it land before
 	// RelayCutoff − HeaderSubmitHeadroom.

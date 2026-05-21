@@ -53,7 +53,7 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 	const (
 		btt          = 200 * time.Millisecond
 		tPhase2a     = 1000 * time.Millisecond
-		safetyBuffer = 0 // direct-delivery tests don't need reflood cushion
+		safetyBuffer = 0 // direct-delivery tests don't need cascade cushion
 	)
 	t0Broadcast := tPhase2a - btt
 
@@ -61,7 +61,7 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 	for k := 0; k < n; k++ {
 		ops[k] = OperatorID(k + 1)
 	}
-	budgets, err := DefaultBroadcastBudget(K, btt, safetyBuffer, t0Broadcast)
+	budgets, err := DefaultBroadcastBudget(K, btt, t0Broadcast)
 	require.NoError(t, err)
 
 	layers := make([]LayerSpec, K)

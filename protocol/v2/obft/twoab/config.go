@@ -98,9 +98,10 @@ type LayerSpec struct {
 	// zero/negative values and decreasing-in-k schedules (equal adjacent
 	// budgets are accepted — multiple layers may share the BFT_start
 	// clamp at degraded operating points; see spec §Setting). Use
-	// DefaultBroadcastBudget(K, BTT, SafetyBuffer, T_0_broadcast) for the
-	// spec-recommended staggered schedule when constructing a Config
-	// manually.
+	// DefaultBroadcastBudget(K, BTT, T_0_broadcast) for the spec-
+	// recommended staggered schedule when constructing a Config
+	// manually. Mesh-tail tolerance lives in Config.SafetyBuffer (which
+	// shifts TPhase2a and transitively T_0_broadcast), not in B_k.
 	BroadcastBudget time.Duration
 }
 
@@ -148,10 +149,21 @@ type Config struct {
 	TPhase2a time.Duration
 
 	// SafetyBuffer is the protocol-level mesh-tail tolerance configurable.
-	// Per spec §Setting, `SafetyBuffer` parameterizes the per-layer
-	// broadcast budget `B_k_shallow = (k+2)·BTT + SafetyBuffer` (k ∈ [0, K-2]),
-	// giving the cluster a configurable absorption window for gossipsub
-	// IHAVE/IWANT reflood after initial eager-push slips.
+	// Per spec §Setting (post-v4-tightening): SafetyBuffer widens the
+	// post-Phase-2a CASCADE window — the wall-clock between TPhase2a
+	// and the scheduled Resolve sweep, during which the two-hop cascade
+	// (peer-KindValue → peer-KindCommit-Signed) must complete:
+	//
+	//	cascadeWindow = 2·BTT + SafetyBuffer + ε_3
+	//
+	// The runner / adapter shifts TPhase2a earlier by SafetyBuffer
+	// (relative to the runner-level RelayCutoff) so the cascade has
+	// SafetyBuffer extra wall-clock to absorb slow / jittery peer hops.
+	// Each fetchAt[k] correspondingly shifts earlier by SafetyBuffer
+	// (since t0Broadcast = TPhase2a − BTT and fetchAt[k] = t0Broadcast −
+	// B_k), preserving the leader's structural broadcast budget at the
+	// minimum `B_k = (k+2)·BTT` while keeping the wall-clock pre-
+	// broadcast headroom unchanged at default SafetyBuffer.
 	//
 	// Default sizing: `SafetyBuffer = RefloodDelay` (the cluster's
 	// gossipsub HeartbeatInterval — typically 700ms in SSV deployments).
@@ -159,13 +171,23 @@ type Config struct {
 	// post-broadcast structural budget and the same MEV-fetch headroom.
 	//
 	// Lower SafetyBuffer (e.g. 300ms / 500ms) reclaims MEV-fetch headroom
-	// at the cost of mesh-tail tolerance: the cluster commits to slot-miss
-	// rather than wait for IHAVE/IWANT recovery when initial propagation
-	// slips. Higher SafetyBuffer (e.g. 1·BTT + RefloodDelay) widens the
+	// at the cost of cascade-window tolerance: the cluster commits to
+	// slot-miss rather than wait for late peer ValueMsg / Commit-Signed
+	// arrivals when the network's actual per-hop latency exceeds 1·BTT.
+	// Higher SafetyBuffer (e.g. 1·BTT + RefloodDelay) widens the
 	// tolerance at the cost of MEV-fetch headroom. SafetyBuffer is
 	// decoupled from the network's HeartbeatInterval (the gossipsub
 	// constant); SafetyBuffer is a protocol-level configurable, not a
 	// network parameter.
+	//
+	// Why SafetyBuffer goes into the cascade and not B_0 (vs OBFT's
+	// RefloodDelay which lives in B_0): OBFT's critical path post-
+	// bundle-arrival is one hop (early-commit fires immediately on
+	// L0Ready close, then propagates). 2abOBFT's critical path is
+	// TWO hops (peer ValueMsg propagates, then σ-eligibility cascade
+	// fires Commit-Signed, then that propagates). The structural
+	// mesh-tail-sensitive window in 2abOBFT is the cascade, not B_0
+	// — so the configurable tolerance budget belongs there.
 	SafetyBuffer time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
@@ -231,50 +253,46 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 }
 
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
-// for K layers at the given BTT, SafetyBuffer, and T0Broadcast. Per spec
-// §Setting, B_k is sized to accommodate one gossipsub IHAVE/IWANT reflood
-// cycle when initial eager-push fails to reach all honest peers:
+// for K layers at the given BTT and T0Broadcast. Per spec §Setting,
+// B_k is sized at the structural minimum for one Phase-1 propagation
+// cycle per layer:
 //
-//	B_k_shallow = (k+2)·BTT + SafetyBuffer  for k ∈ [0, K-2]
-//	B_{K-1}     = T0Broadcast               (deepest broadcasts at BFT_start)
+//	B_k_shallow = (k+2)·BTT     for k ∈ [0, K-2]
+//	B_{K-1}     = T0Broadcast   (deepest broadcasts at BFT_start)
 //
-// `SafetyBuffer` is the protocol-level configurable for mesh-tolerance
-// budget (distinct from the gossipsub network's HeartbeatInterval, which
-// is `RefloodDelay`). Default `SafetyBuffer = RefloodDelay` matches
-// bare-OBFT's structural budget; lower values reclaim MEV-fetch headroom
-// at the cost of mesh-tail tolerance.
+// Mesh-tail / IHAVE-IWANT-recovery slack lives in the SafetyBuffer
+// configurable (on Config.SafetyBuffer), which structurally shifts
+// `TPhase2a` earlier to widen the post-Phase-2a cascade window —
+// `B_k` itself stays at the structural minimum. See Config.SafetyBuffer
+// for the cascade-window-vs-B_0 rationale on why the spec post-tighten
+// puts SafetyBuffer in the cascade rather than in B_k.
 //
-// At K=4 returns [2·BTT+SafetyBuffer, 3·BTT+SafetyBuffer, 4·BTT+SafetyBuffer, T0Broadcast]. At K=3
-// returns [2·BTT+SafetyBuffer, 3·BTT+SafetyBuffer, T0Broadcast]. At K=2 returns
-// [2·BTT+SafetyBuffer, T0Broadcast]. For K>4 the first three layers stay at
-// 2 / 3 / 4 BTT + SafetyBuffer and the intermediate layers (k = 3, ..., K-2)
-// interpolate linearly in duration space from 4·BTT + SafetyBuffer (at L_2) to
-// T0Broadcast (at L_{K-1}).
+// At K=4 returns [2·BTT, 3·BTT, 4·BTT, T0Broadcast]. At K=3 returns
+// [2·BTT, 3·BTT, T0Broadcast]. At K=2 returns [2·BTT, T0Broadcast].
+// For K>4 the first three layers stay at 2 / 3 / 4 BTT and the
+// intermediate layers (k = 3, ..., K-2) interpolate linearly in
+// duration space from 4·BTT (at L_2) to T0Broadcast (at L_{K-1}).
 //
 // At extreme degraded operating points where T0Broadcast shrinks below
-// the canonical shallow multiples (e.g. T0Broadcast ≤ 4·BTT + SafetyBuffer
-// at K≥4), the helper still returns a schedule — the shallow B_k values
-// can exceed T0Broadcast. The protocol's runtime
-// `T_broadcast_max_k = max(BFT_start, T0Broadcast − B_k)` clamps those
-// layers' targets at BFT_start, so the configuration remains valid (the
-// fall-through depth shrinks but the cluster still operates). Callers
-// that want the canonical staggered shape preserved can either widen
-// T0Broadcast (loosen the post-Phase-2a budget / header headroom),
-// lower SafetyBuffer for denser meshes, or supply their own per-layer
-// schedule.
-func DefaultBroadcastBudget(K int, btt, safetyBuffer, t0Broadcast time.Duration) ([]time.Duration, error) {
+// the canonical shallow multiples (e.g. T0Broadcast ≤ 4·BTT at K≥4),
+// the helper still returns a schedule — the shallow B_k values can
+// exceed T0Broadcast. The protocol's runtime `T_broadcast_max_k =
+// max(BFT_start, T0Broadcast − B_k)` clamps those layers' targets at
+// BFT_start, so the configuration remains valid (the fall-through
+// depth shrinks but the cluster still operates). Callers that want
+// the canonical staggered shape preserved can widen T0Broadcast
+// (loosen the post-Phase-2a budget / header headroom) or supply their
+// own per-layer schedule.
+func DefaultBroadcastBudget(K int, btt, t0Broadcast time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget BTT=%v must be > 0", btt)
 	}
-	if safetyBuffer < 0 {
-		return nil, fmt.Errorf("twoab: DefaultBroadcastBudget SafetyBuffer=%v must be >= 0", safetyBuffer)
-	}
-	// shallow returns (k+2)*BTT + SafetyBuffer for shallow layer k.
+	// shallow returns (k+2)*BTT for shallow layer k.
 	shallow := func(k int) time.Duration {
-		return time.Duration(k+2)*btt + safetyBuffer
+		return time.Duration(k+2) * btt
 	}
 	out := make([]time.Duration, K)
 	switch K {
@@ -308,7 +326,7 @@ func DefaultBroadcastBudget(K int, btt, safetyBuffer, t0Broadcast time.Duration)
 	}
 	// Cap each B_k at T0Broadcast so the schedule stays non-decreasing
 	// even at degraded operating points where the canonical staggered
-	// shallow multiples (or SafetyBuffer-inflated values) overshoot.
+	// shallow multiples overshoot.
 	// Capped layers share `T_broadcast_max_k = max(BFT_start,
 	// T0Broadcast − B_k) = BFT_start` — multiple layers may collide at
 	// BFT_start without safety impact. The deepest layer is already
