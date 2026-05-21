@@ -51,6 +51,8 @@ The protocol description below targets `n = 4` (`f = 1`) as the running example,
 
   `RefloodDelay` is the worst-case gossipsub-lazy-push latency before a retransmission cycle completes — bounded by the cluster's HeartbeatInterval (SSV's default = 700ms at [network/topics/params/gossipsub.go](../network/topics/params/gossipsub.go)). The primary's `2·BTT` base decomposes as 1·BTT P99 initial propagation + 1·BTT IWANT round-trip = minimum reflood-cycle coverage at L_0; the additive RefloodDelay accommodates one full IHAVE/IWANT cycle when initial eager-push fails to reach mesh-flaky receivers. Deployments on fully-meshed clusters (typically n=4) where eager-push reliably reaches all peers may opt out by setting `RefloodDelay = 0` (or near-zero); the primary budget collapses to 2·BTT and recovers MEV-fetch headroom.
 
+  > **Cross-protocol note**: 2abOBFT introduces a separate protocol-level configurable named `SafetyBuffer` that plays the analogous role in its own `B_k` formula (`B_k_shallow = (k+2)·BTT + SafetyBuffer` in 2abOBFT). Where OBFT's `RefloodDelay` is the gossipsub network primitive (bounded by HeartbeatInterval), 2abOBFT's `SafetyBuffer` is a deployment-tunable protocol parameter decoupled from the network constant — default `SafetyBuffer = RefloodDelay` produces equivalent structural budgets across the two protocols. See [docs/2abOBFT-REDESIGN-PLAN.md §Decisions](2abOBFT-REDESIGN-PLAN.md) for the cross-protocol naming rationale.
+
   **Why backups all broadcast at BFT_start.** Backups L_1..L_{K-1} are last-resort safety nets — the primary L_0 carries the slot's MEV in the vast majority of slots. Trading L_1+ MEV-fetch (small expected value under the rational-byzantine deterrent) for L_1+ absorption width = T_commit substantially improves fall-through reliability under Class A partition tails and degraded mesh. Backups all fetch from a deepest-confirmed parent at slot start (re-org resistant by construction) and broadcast immediately, giving the cluster the entire commit budget for that bundle's propagation.
 
   `Δ_2 = 1·BTT` recommended — one synchronous-fallback `KindCommit` propagation cycle; reflood absorption is structurally provided by `B_0` via RefloodDelay, so `Δ_2` no longer carries a reflood cushion. See §Phase 2.
@@ -1603,7 +1605,7 @@ The mini-consensus runs over deep-layer bids only during `[T_deep_arrival, T_com
 | Mini-consensus (deep bids) | `[T_deep_arrival, T_commit]` | Operators compute V_early = argmax over `bid_set_i_deep` first-observed by `T_verdict = T_commit − Δ_verdict` and broadcast `KindBidVerdict`; verdicts propagate by `T_commit`. |
 | Phase 1 (primary) | `[T_broadcast_max_0^bare, T_commit]` | Primary broadcasts Phase-1 bundle (bid_1 + `σ_{L_0}^V`); broadcast happens at the bare-OBFT primary deadline and overlaps the deep mini-consensus. |
 | Phase 2 | `[T_commit, T_commit + Δ_2]` | σ-or-NR commit at K' layers (L_Bid + L_0..L_{K-1}). |
-| Phase 3 | `[T_commit + Δ_2, T_round_end]` | K'-layer reconstruction walk. |
+| Phase 3 | `[T_commit + Δ_2, T_soft_end]` | K'-layer reconstruction walk. (`T_soft_end = T_commit + Δ_2 + ε_3` — the soft per-operator target for reconstruction completion; the slot's relay-submission cutoff at `T_relay_cutoff − T_submit` is the only hard wall.) |
 
 Sizing — `Δ_minicon` is the total deep mini-consensus interval, `Δ_verdict` is the portion reserved for verdict propagation, and `Δ_select = Δ_minicon − Δ_verdict` is the deep-bid settling buffer. Same shape and meaning as in current L_Bid, applied only to deep bids:
 

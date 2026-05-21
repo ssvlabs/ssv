@@ -196,6 +196,68 @@ func TestDefaultBroadcastBudget_K4_AtConfigA(t *testing.T) {
 	require.Equal(t, 2000*time.Millisecond, budgets[3])
 }
 
+func TestDefaultBroadcastBudget_K1(t *testing.T) {
+	// K=1: only the deepest layer; B_0 = T0Broadcast (anchor only).
+	budgets, err := DefaultBroadcastBudget(1, 200*time.Millisecond, 700*time.Millisecond, 2*time.Second)
+	require.NoError(t, err)
+	require.Len(t, budgets, 1)
+	require.Equal(t, 2*time.Second, budgets[0])
+}
+
+func TestDefaultBroadcastBudget_K3(t *testing.T) {
+	// K=3: B_0 = 2·BTT + SB, B_1 = 3·BTT + SB, B_2 = T0Broadcast.
+	budgets, err := DefaultBroadcastBudget(3, 200*time.Millisecond, 700*time.Millisecond, 2000*time.Millisecond)
+	require.NoError(t, err)
+	require.Len(t, budgets, 3)
+	require.Equal(t, 2*200*time.Millisecond+700*time.Millisecond, budgets[0])
+	require.Equal(t, 3*200*time.Millisecond+700*time.Millisecond, budgets[1])
+	require.Equal(t, 2000*time.Millisecond, budgets[2])
+}
+
+func TestDefaultBroadcastBudget_K5_InterpolatesIntermediate(t *testing.T) {
+	// K=5 exercises the K>4 default branch: shallow layers 0,1,2 at
+	// (k+2)·BTT + SafetyBuffer; deepest at T0Broadcast; intermediate
+	// layers (k=3 here, since K-2=3) interpolate linearly in duration
+	// space from layer-2's value to T0Broadcast.
+	const (
+		btt          = 200 * time.Millisecond
+		safetyBuffer = 700 * time.Millisecond
+		t0Broadcast  = 4 * time.Second
+	)
+	budgets, err := DefaultBroadcastBudget(5, btt, safetyBuffer, t0Broadcast)
+	require.NoError(t, err)
+	require.Len(t, budgets, 5)
+	require.Equal(t, 2*btt+safetyBuffer, budgets[0]) // 1.1s
+	require.Equal(t, 3*btt+safetyBuffer, budgets[1]) // 1.3s
+	require.Equal(t, 4*btt+safetyBuffer, budgets[2]) // 1.5s
+	// Interpolated layer (k=3): out[2] + span * (k-2) / steps
+	// out[2] = 1.5s; span = 4s - 1.5s = 2.5s; steps = K-3 = 2; k-2 = 1
+	// → out[3] = 1.5s + 2.5s * 1/2 = 1.5s + 1.25s = 2.75s.
+	require.Equal(t, 2750*time.Millisecond, budgets[3])
+	require.Equal(t, t0Broadcast, budgets[4])
+	// Non-decreasing
+	for k := 1; k < 5; k++ {
+		require.GreaterOrEqual(t, budgets[k], budgets[k-1], "B_%d should be >= B_%d", k, k-1)
+	}
+}
+
+func TestDefaultBroadcastBudget_K6_InterpolatesTwoIntermediate(t *testing.T) {
+	// K=6: two intermediate layers (k=3 and k=4) interpolate between
+	// shallow layer 2 and deepest layer K-1=5.
+	const (
+		btt          = 200 * time.Millisecond
+		safetyBuffer = 700 * time.Millisecond
+		t0Broadcast  = 5 * time.Second
+	)
+	budgets, err := DefaultBroadcastBudget(6, btt, safetyBuffer, t0Broadcast)
+	require.NoError(t, err)
+	require.Len(t, budgets, 6)
+	// Both intermediate layers strictly between shallow-2 and deepest.
+	require.Greater(t, budgets[3], budgets[2])
+	require.Greater(t, budgets[4], budgets[3])
+	require.Equal(t, t0Broadcast, budgets[5])
+}
+
 func TestDefaultBroadcastBudget_RejectsK0(t *testing.T) {
 	_, err := DefaultBroadcastBudget(0, 200*time.Millisecond, 700*time.Millisecond, 2*time.Second)
 	require.Error(t, err)

@@ -225,6 +225,36 @@ func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) 
 	require.True(t, foundRule6a)
 }
 
+// TestObserveCommit_FakePlaintextSigmaFiresRule5: a peer Commit-Signed
+// carrying an L_0 σ partial that doesn't verify against the op's
+// pubshare on the claimed V triggers Rule 5 (fake plaintext sigma at
+// L_0). The op is still added to value_pool via inference (KindCommit-
+// Signed implies a prior KindValue existed), but NOT to sigma-pool —
+// the fake partial can't contribute to σ-quorum reconstruction.
+func TestObserveCommit_FakePlaintextSigmaFiresRule5(t *testing.T) {
+	s := newSim(t, 4)
+	op2 := s.instances[OperatorID(2)]
+	// Craft a Commit-Signed from op 1 with garbage L0Partial.
+	c := &Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1,
+		Height:     s.cfg.Height,
+		Side:       CommitSideSigned,
+		L0Value:    Value("V0"),
+		L0Partial:  Signature("garbage-not-a-valid-partial"),
+	}
+	require.NoError(t, op2.ObserveCommit(c))
+	var foundRule5 bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma {
+			foundRule5 = true
+			require.NotNil(t, e.FakePlaintextSigma)
+			require.Equal(t, Value("V0"), e.FakePlaintextSigma.OnionValue)
+		}
+	}
+	require.True(t, foundRule5, "fake L_0 σ partial should fire Rule 5")
+}
+
 // TestObserveCommit_PreNRDirectNoValueMsgThenNRDirectFiresRule6a is the
 // NoValueMsg variant of the above — KindNoValue first, then NRDirect.
 func TestObserveCommit_PreNRDirectNoValueMsgThenNRDirectFiresRule6a(t *testing.T) {

@@ -118,3 +118,77 @@ func TestRetainedCertificate_NilBeforeObserve(t *testing.T) {
 	s := newSim(t, 4)
 	require.Nil(t, s.instances[OperatorID(1)].RetainedCertificate())
 }
+
+// TestResolve_FakeEncryptedPresenceFiresRule4: at L_k>0, a peer's
+// SigmaChained LayerEntry whose Payload doesn't decrypt to a valid σ
+// partial fires Rule 4. We trigger this by:
+//  1. Engineering an h_V_honest=0 fall-through at L_0 (no L_0 V delivery
+//     → all honest emit KindCommit-NR → nr_tag_0-pool reaches qEnc →
+//     chain unlocks for L_1 decryption).
+//  2. Injecting a peer KindNoValue with a SigmaChained L_1 entry whose
+//     Payload is malformed bytes (not a valid stub-IBE ciphertext).
+//  3. Driving Resolve, which derives nr_tag_0 and attempts to decrypt
+//     the malformed L_1 entry → stub IBE Decrypt returns an error →
+//     Rule 4 fires.
+func TestResolve_FakeEncryptedPresenceFiresRule4(t *testing.T) {
+	s := newSim(t, 4)
+	// "byz" op1 stays silent at Phase 2a but injects a fake KindNoValue
+	// (with a malformed L_1 SigmaChained entry) directly into op2's view.
+	op2 := s.instances[OperatorID(2)]
+	fake := &NoValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 1, // claim it's from op1
+		Height:     s.cfg.Height,
+		LayerEntries: []LayerEntry{
+			{
+				Layer:   1,
+				Kind:    LayerEntrySigmaChained,
+				V:       Value("fake-V1"),
+				Payload: []byte("garbage-not-a-valid-ibe-ciphertext-bytes"),
+			},
+		},
+	}
+	require.NoError(t, op2.ObserveNoValueMsg(fake))
+	// Ops 2, 3, 4 fire Phase 2a → KindNoValue (none has V_0).
+	for _, op := range []OperatorID{2, 3, 4} {
+		_, _, _, err := s.instances[op].MaybeFirePhase2a()
+		require.NoError(t, err)
+	}
+	// Cross-broadcast NoValues among ops 2, 3, 4 (op1 is silent). After
+	// each Observe*, the cascade may fire NR-eligibility for the receiver
+	// once their noValuePool reaches qEnc=3.
+	honest := []OperatorID{2, 3, 4}
+	for _, op := range honest {
+		nv, ok := s.instances[op].OwnNoValueMsg()
+		require.True(t, ok)
+		for _, peer := range honest {
+			if peer == op {
+				continue
+			}
+			require.NoError(t, s.instances[peer].ObserveNoValueMsg(nv))
+		}
+	}
+	// Now each of ops 2, 3, 4 has noValuePool with their own + 2 peers + 1
+	// fake (op2 only) = 3-4 entries, ≥ qEnc. NR-eligibility fired and each
+	// emitted KindCommit-NR. Cross-broadcast commits from ops 3, 4 to op2
+	// so op2's nr_tag_0-pool collects ≥ qEnc partials.
+	for _, op := range []OperatorID{3, 4} {
+		c, ok := s.instances[op].OwnCommit()
+		require.True(t, ok, "op %d should have emitted Commit-NR via cascade", op)
+		require.Equal(t, CommitSideNR, c.Side)
+		require.NoError(t, op2.ObserveCommit(c))
+	}
+	// Now op2 has nr_tag_0-pool with {op2 (self), op3, op4} = 3 = qEnc.
+	// Resolve walks L_0 (σ-pool empty, NR-aggregates), then L_1: tries to
+	// decrypt the fake's malformed SigmaChained payload → fails → Rule 4.
+	_, err := op2.Resolve()
+	require.Error(t, err, "no σ-quorum at any layer; expect ErrNoQuorum")
+	var foundRule4 bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidenceFakeEncryptedPresence {
+			foundRule4 = true
+			require.NotNil(t, e.FakeEncryptedPresence)
+		}
+	}
+	require.True(t, foundRule4, "malformed L_1 SigmaChained should fire Rule 4 during Resolve")
+}
