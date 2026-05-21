@@ -170,10 +170,6 @@ func (s *wsSession) ReadLoop(logger *zap.Logger) {
 		})
 	}
 	for {
-		if s.ctx.Err() != nil {
-			logger.Debug("read loop stopped by context")
-			break
-		}
 		if _, _, err := s.ws.ReadMessage(); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				logger.Error("unexpected close error", zap.Error(err))
