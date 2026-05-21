@@ -34,16 +34,6 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Conn is a wrapper interface for websocket connections
-type Conn interface {
-	ID() string
-	Send(msg []byte)
-	WriteLoop(logger *zap.Logger)
-	ReadLoop(logger *zap.Logger)
-	Close()
-	RemoteAddr() net.Addr
-}
-
 type conn struct {
 	ctx       context.Context
 	cancelCtx context.CancelFunc
@@ -59,7 +49,7 @@ type conn struct {
 	withPing bool
 }
 
-func newConn(parent context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
+func newConn(parent context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) *conn {
 	ctx, cancel := context.WithCancel(parent)
 	return &conn{
 		ctx:          ctx,

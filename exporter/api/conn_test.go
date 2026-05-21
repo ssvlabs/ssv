@@ -17,7 +17,7 @@ import (
 // WriteLoop / ReadLoop / handleStream defers).
 func TestConn_Send_FullQueue(t *testing.T) {
 	ws := dialTestWebsocket(t)
-	c := newConn(t.Context(), ws, "test", 0, false).(*conn)
+	c := newConn(t.Context(), ws, "test", 0, false)
 	require.NoError(t, c.ctx.Err(), "ctx should not be canceled before overflow")
 
 	for i := 0; i < chanSize+2; i++ {
