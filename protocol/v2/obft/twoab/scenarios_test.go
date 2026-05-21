@@ -153,6 +153,126 @@ func TestScenario_LeaderEquivocationFallsThrough(t *testing.T) {
 	require.Equal(t, 1, out.Layer)
 }
 
+// Non-uniform mesh-tail at L_0: 3 honest have V_0 + host valid, 1 honest
+// is a V-drop. A specific peer's KindValue is delayed in delivery to one
+// "slow-view" op (modeling a mesh-tail latency outlier). Under v1's
+// T_commit hard wall this would force the slow-view op to NR-default at
+// the wall; v4 waits (no protocol-level Phase-2b deadline) and recovers
+// once the delayed KindValue arrives — σ-eligibility trigger fires, the
+// slow-view op emits KindCommit-Signed, L_0 σ-quorum reaches.
+//
+// This is the headline case for v4's "closes the non-uniform mesh-tail
+// boundary" claim from the redesign plan §Liveness worked cases
+// (line 783): the protocol absorbs slow-edge propagation up to the slot
+// deadline without forcing premature NR-default. The test orchestrates
+// delayed delivery manually rather than porting gossipsub mesh machinery
+// into the unit-test sim — the underlying protocol behavior (wait for
+// pool to reach qV; fire commit when it does) is independent of how
+// messages get delayed/refloded at the transport layer.
+func TestScenario_NonUniformMeshTailRecovery(t *testing.T) {
+	s := newSim(t, 4)
+	// Ops 1, 2, 3 have V_0 + host valid. Op 4 is a V-drop (no V_0).
+	s.deliverPhase1(0, Value("V0"), []OperatorID{1, 2, 3}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{1, 2, 3}, 0, Value("V0"), true)
+
+	// All 4 ops fire Phase 2a. Ops 1/2/3 → KindValue; op 4 → KindNoValue.
+	for _, op := range s.allOperators() {
+		_, _, _, err := s.instances[op].MaybeFirePhase2a()
+		require.NoError(t, err)
+	}
+	vmA, _ := s.instances[OperatorID(1)].OwnValueMsg()
+	vmB, _ := s.instances[OperatorID(2)].OwnValueMsg()
+	vmC, _ := s.instances[OperatorID(3)].OwnValueMsg()
+	nvD, _ := s.instances[OperatorID(4)].OwnNoValueMsg()
+	require.NotNil(t, vmA)
+	require.NotNil(t, vmB)
+	require.NotNil(t, vmC)
+	require.NotNil(t, nvD)
+
+	// Initial propagation: op 1 (the slow-view op) misses op 3's KindValue.
+	// All others see everyone's full Phase-2a set.
+	for _, op := range s.allOperators() {
+		for _, msg := range []struct {
+			from OperatorID
+			vm   *ValueMsg
+			nv   *NoValueMsg
+		}{
+			{1, vmA, nil}, {2, vmB, nil}, {3, vmC, nil}, {4, nil, nvD},
+		} {
+			if msg.from == op {
+				continue
+			}
+			// Delay op 3's KindValue to op 1 specifically (mesh-tail).
+			if op == OperatorID(1) && msg.from == OperatorID(3) {
+				continue
+			}
+			if msg.vm != nil {
+				require.NoError(t, s.instances[op].ObserveValueMsg(msg.vm))
+			}
+			if msg.nv != nil {
+				require.NoError(t, s.instances[op].ObserveNoValueMsg(msg.nv))
+			}
+		}
+	}
+
+	// At this point op 1's value_pool[V_0] = {op1, op2} = 2 < qV=3.
+	// noValuePool = {op4} = 1 < qEnc=3. The cannot-σ gate on NR-eligibility
+	// blocks op 1 from defaulting to NR (op 1 has V_local + host valid).
+	// Op 1 has NOT yet emitted a commit — it's waiting for the slow message.
+	_, op1HasCommit := s.instances[OperatorID(1)].OwnCommit()
+	require.False(t, op1HasCommit, "slow-view op 1 should be waiting, not yet committed")
+
+	// Meanwhile, ops 2 and 3 saw the full set (op 1's + 2's + 3's = 3
+	// KindValues ≥ qV); σ-eligibility fired for them. They've emitted
+	// KindCommit-Signed via the cascade.
+	for _, op := range []OperatorID{2, 3} {
+		c, ok := s.instances[op].OwnCommit()
+		require.True(t, ok, "op %d (full-view) should have emitted Commit-Signed", op)
+		require.Equal(t, CommitSideSigned, c.Side)
+	}
+
+	// Now simulate the mesh-tail recovery: op 3's KindValue finally
+	// arrives at op 1 (e.g., via gossipsub IHAVE/IWANT after the lazy-
+	// push HeartbeatInterval). The afterStateDelta cascade fires
+	// σ-eligibility and op 1 emits KindCommit-Signed.
+	require.NoError(t, s.instances[OperatorID(1)].ObserveValueMsg(vmC))
+	c, ok := s.instances[OperatorID(1)].OwnCommit()
+	require.True(t, ok, "op 1 should have committed once the slow KindValue arrived")
+	require.Equal(t, CommitSideSigned, c.Side, "op 1 should be σ-side (has V_local + host valid)")
+
+	// Cross-broadcast all Commits so the cluster can reach σ-quorum.
+	for _, op := range []OperatorID{1, 2, 3} {
+		c, ok := s.instances[op].OwnCommit()
+		require.True(t, ok)
+		for _, peer := range s.allOperators() {
+			if peer == op {
+				continue
+			}
+			require.NoError(t, s.instances[peer].ObserveCommit(c))
+		}
+	}
+	// Op 4 (V-drop) cascade-fires NR-eligibility once it sees the cluster's
+	// noValuePool fail to inflate while valuePool reaches qV elsewhere.
+	// Actually at op 4: value_pool grows to qV=3 once it observes the
+	// three KindValues → σ-eligibility fires → side decision: op 4 has
+	// no V_local → emits KindCommit-NR. Already happened during cross-
+	// broadcast. Just broadcast it.
+	if cNR, ok := s.instances[OperatorID(4)].OwnCommit(); ok {
+		for _, peer := range []OperatorID{1, 2, 3} {
+			require.NoError(t, s.instances[peer].ObserveCommit(cNR))
+		}
+	}
+
+	// Resolve. L_0 σ-pool[V_0] should have {1, 2, 3} = 3 = qV.
+	outputs, errs := s.resolveAll()
+	for op, err := range errs {
+		require.NoError(t, err, "op %d Resolve", op)
+	}
+	out := requireAllAgree(t, outputs)
+	require.Equal(t, 0, out.Layer, "L_0 σ-quorum via mesh-tail recovery")
+	require.Equal(t, Value("V0"), out.Value)
+}
+
 // Validity-divergence: 3-σV vs 1-NV. 3 ops host-valid on V_0, 1 op
 // host-NV. σ-eligibility fires with valuePool=3 ≥ qV. NV-side op's
 // side-decision routes to NR (host re-check says NV). 3 σ + 1 NR =
