@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,9 +24,6 @@ var (
 	maxMessageSize = int64(1024)
 
 	chanSize = 256
-
-	newline = []byte{'\n'}
-	space   = []byte{' '}
 )
 
 var upgrader = websocket.Upgrader{
@@ -41,7 +37,6 @@ var upgrader = websocket.Upgrader{
 // Conn is a wrapper interface for websocket connections
 type Conn interface {
 	ID() string
-	ReadNext() []byte
 	Send(msg []byte)
 	WriteLoop(logger *zap.Logger)
 	ReadLoop(logger *zap.Logger)
@@ -57,7 +52,6 @@ type conn struct {
 
 	writeTimeout time.Duration
 
-	read chan []byte
 	send chan []byte
 
 	writeLock sync.Locker
@@ -73,7 +67,6 @@ func newConn(parent context.Context, ws *websocket.Conn, id string, writeTimeout
 		id:           id,
 		ws:           ws,
 		writeTimeout: writeTimeout,
-		read:         make(chan []byte, chanSize),
 		send:         make(chan []byte, chanSize),
 		writeLock:    &sync.Mutex{},
 		withPing:     withPing,
@@ -102,11 +95,6 @@ func (c *conn) RemoteAddr() net.Addr {
 // Safe from any goroutine; idempotent.
 func (c *conn) Close() {
 	c.cancelCtx()
-}
-
-// ReadNext reads the next message
-func (c *conn) ReadNext() []byte {
-	return <-c.read
 }
 
 // Send queues msg for the WriteLoop. Non-blocking: if the queue is full the
@@ -164,11 +152,15 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 	}
 }
 
-// ReadLoop is a loop to read messages from the socket. Tearing down via
-// c.Close on exit is essential: it cancels ctx, which is the only thing
-// that unblocks WriteLoop's select on a quiet conn (no in-flight writes
-// to fail). Without this, a client disconnect on an idle conn would
-// leak the WriteLoop goroutine.
+// ReadLoop drives the read side of the websocket so the pong handler
+// fires and a peer disconnect surfaces as a ReadMessage error. Inbound
+// data frames are discarded — *conn is push-only; the broadcaster
+// never reads from this side.
+//
+// Tearing down via c.Close on exit is essential: it cancels ctx, which
+// is the only thing that unblocks WriteLoop's select on a quiet conn
+// (no in-flight writes to fail). Without this, a client disconnect on
+// an idle conn would leak the WriteLoop goroutine.
 func (c *conn) ReadLoop(logger *zap.Logger) {
 	defer c.Close()
 	c.ws.SetReadLimit(maxMessageSize)
@@ -186,8 +178,7 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 			logger.Debug("read loop stopped by context")
 			break
 		}
-		mt, msg, err := c.ws.ReadMessage()
-		if err != nil {
+		if _, _, err := c.ws.ReadMessage(); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				logger.Error("unexpected close error", zap.Error(err))
 			} else if isCloseError(err) {
@@ -196,10 +187,6 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 				logger.Error("could not read message", zap.Error(err))
 			}
 			break
-		}
-		if mt == websocket.TextMessage {
-			msg = bytes.TrimSpace(bytes.ReplaceAll(msg, newline, space))
-			c.read <- msg
 		}
 	}
 }
