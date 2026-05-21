@@ -1092,7 +1092,7 @@ This section captures the concrete plan we agreed for the implementation rewrite
 - **Drop helpers:** `TVerdictStart`, `TAcceptMax`, `TVerdictMax`, `Phase2aStartOffset` / `Phase2aEndOffset`, `Phase2bStartOffset` / `Phase2bEndOffset`, `Phase3StartOffset`, `RoundEndOffset`.
 - **Add fields:** `TPhase2a time.Duration` (Phase-2a fire-instant), `SafetyBuffer time.Duration` (protocol-level mesh-tail tolerance — replaces `RefloodDelay` in the broadcast-budget formula).
 - **Add helpers:** `T0Broadcast()` returns `TPhase2a − BTT`.
-- **Update `DefaultBroadcastBudget`** signature: `func DefaultBroadcastBudget(K int, btt, safetyBuffer, t0Broadcast time.Duration)`. Anchor at `t0Broadcast` (not `tVerdictStart`); formula `B_k_shallow = (k+2)·BTT + SafetyBuffer` for `k ∈ [0, K-2]`, `B_{K-1} = t0Broadcast`.
+- **Update `DefaultBroadcastBudget`** signature: `func DefaultBroadcastBudget(K int, btt, t0Broadcast time.Duration)`. Anchor at `t0Broadcast` (not `tVerdictStart`); formula `B_k_shallow = (k+2)·BTT` for `k ∈ [0, K-2]`, `B_{K-1} = t0Broadcast`. **SafetyBuffer is NOT in this formula** — it lives in the post-Phase-2a cascade window (TPhase2a shift), not in `B_k`. See §Setting "Where SafetyBuffer lives in the timing budget" for the rationale.
 - **Update `Validate()`**: drop Delta2a/Delta2b/TCommit/Eps3 checks. Add positivity check on TPhase2a; SafetyBuffer ≥ 0; non-decreasing BroadcastBudget unchanged.
 
 #### `messages.go` — wire-shape redesign

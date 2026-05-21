@@ -184,12 +184,12 @@ func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 		return c
 	}
 
-	// At BTT=100ms, K=4, RefloodDelay=0 (default), spec sizing:
-	//   resolveBudget = 2·BTT + ε_3 + jitter + HeaderSubmitHeadroom
-	//                 = 200 + 50 + 50 + 100 = 400ms
+	// At BTT=100ms, K=4, RefloodDelay=0 (default → SafetyBuffer=0), spec sizing:
+	//   resolveBudget = 2·BTT + SafetyBuffer + ε_3 + jitter + HeaderSubmitHeadroom
+	//                 = 200 + 0 + 50 + 50 + 100 = 400ms
 	//   TPhase2a      = RelayCutoff − resolveBudget = 4000 − 400 = 3600ms
 	//   t0Broadcast   = TPhase2a − BTT = 3500ms
-	//   B_0           = 2·BTT + SafetyBuffer(=0) = 200ms
+	//   B_0           = 2·BTT = 200ms  (SafetyBuffer is NOT in B_0 — see Config.SafetyBuffer)
 	//   fetch-clamp boundary = t0Broadcast − B_0 = 3300ms
 
 	// Case 1: BFTStart well below the clamp boundary — bit-identical to BFT=0.
@@ -289,3 +289,104 @@ func TestAdapter_Phase2DowngradeValueNoValue_FiresRule6a(t *testing.T) {
 	require.Greater(t, totalRule6a, 0,
 		"at least one honest op should detect Rule 6a (Phase-2 equivocation) on the byz's cross-kind downgrade sequence")
 }
+
+// TestAdapter_SafetyBuffer_WidensCascadeWindow locks in the variant-(b)
+// SafetyBuffer semantics: SafetyBuffer shifts TPhase2a earlier in the slot
+// and widens the post-TPhase2a cascade window (where peer KindValue and
+// cascade-fired Commit-Signed must both propagate). The structural mesh-
+// tail-sensitive window is the cascade, NOT B_0.
+//
+// Regression test design: a constant-delay network with per-hop delay D
+// greater than BTT but less than `2·BTT + SafetyBuffer` is a configuration
+// where:
+//   - At SafetyBuffer=0, the cascade window is just `2·BTT + ε_3`. With
+//     D > BTT, the two-hop cascade (peer KindValue → cascade Commit-Signed)
+//     exceeds this window → slot MISSes (or relies on evtResolveRerun
+//     between resolveDeadline and clipDeadline).
+//   - At sufficient SafetyBuffer > 0, the cascade window grows to
+//     `2·BTT + SafetyBuffer + ε_3`, comfortably absorbing 2·D → slot DECIDES.
+//
+// If the impl regressed to variant (a) (SafetyBuffer in B_0 only), both
+// SB=0 and SB>0 would have the same cascade window and the test would
+// show identical outcomes — the test would fail.
+//
+// The fixed-delay (ConstantDelay) network is critical: variance would make
+// the per-run outcome non-deterministic. CorrectnessProfile uses
+// ConstantDelay{D: BTT}; here we override with D > BTT.
+func TestAdapter_SafetyBuffer_WidensCascadeWindow(t *testing.T) {
+	// BTT=100ms, per-hop delay D=150ms (> BTT, so cascade two-hop = 300ms
+	// > the SB=0 cascade window of 250ms).
+	const (
+		btt      = 100 * time.Millisecond
+		hopDelay = 150 * time.Millisecond
+		bigSB    = 700 * time.Millisecond // recovers cascade window to 950ms
+		zeroSB   = 0 * time.Millisecond
+	)
+	baseCfg := func() ct.SimConfig {
+		c := ct.DefaultProposerDutyConfig(btt)
+		c.N = 4
+		c.Operators = ct.MakeOperators(4)
+		c.K = 2
+		// Override CorrectnessProfile's ConstantDelay{D: BTT} with our
+		// slower per-hop delay to make the cascade window the bottleneck.
+		// Default Delivery is DeliveryDirect (no mesh), so per-hop delay
+		// applies uniformly to every message.
+		c.Network = ct.ConstantDelay{D: hopDelay}
+		return c
+	}
+
+	// At SB=0: cascade window = 2·BTT + ε_3 = 250ms. Cascade requires
+	// ~2·hopDelay = 300ms minimum. Scheduled Resolve at TPhase2a + 250ms
+	// fires BEFORE the second cascade hop completes. evtResolveRerun
+	// then triggers on the late commit arrival (~TPhase2a + 300ms),
+	// successfully resolving — under variant (b), the wider cascade
+	// window at SB>0 means the SCHEDULED Resolve catches the cascade
+	// without needing the rerun.
+	cfgZeroSB := baseCfg()
+	outZero, err := twoabadapter.Protocol{
+		SafetyBufferOverride: ptrDur(zeroSB),
+	}.Run(cfgZeroSB)
+	require.NoError(t, err)
+
+	// At SB=700ms: cascade window = 2·BTT + 700 + ε_3 = 950ms. The two-
+	// hop cascade fits comfortably. SCHEDULED Resolve catches everything
+	// without needing rerun.
+	cfgBigSB := baseCfg()
+	outBig, err := twoabadapter.Protocol{
+		SafetyBufferOverride: ptrDur(bigSB),
+	}.Run(cfgBigSB)
+	require.NoError(t, err)
+
+	// Both should decide (since the cluster is healthy and hopDelay isn't
+	// catastrophic). The interesting invariant is the *decision time*:
+	// SB=0 relies on evtResolveRerun firing late; SB=700ms scheduled-
+	// resolves earlier. So decision time at SB=700 should be <= SB=0.
+	require.True(t, outZero.Decided, "SB=0: slot still decides via evtResolveRerun (cascade window too tight for SCHEDULED Resolve, but late arrival rerun catches it)")
+	require.True(t, outBig.Decided, "SB=700ms: slot decides via scheduled Resolve (cascade window widened sufficient for two hops)")
+
+	// Key variant-(b) invariant: at SB=0, the decision time falls AT OR
+	// AFTER TPhase2a + 2·hopDelay + ε_3 ≈ 3950ms (because the scheduled
+	// Resolve at 3850ms can't see commits arriving at ~3900ms, so
+	// evtResolveRerun runs at the late commit arrival time).
+	//
+	// At SB=700, TPhase2a shifts back to 2900ms and resolveDeadline is
+	// still at the maxDeadline=3850ms. The cascade completes by ~3200ms
+	// (2900 + 2·150 = 3200), and scheduled Resolve at 3850ms picks it up.
+	//
+	// Net: SB=700 should decide noticeably earlier than SB=0 in this
+	// configuration.
+	require.Less(t, outBig.DecisionTime, outZero.DecisionTime,
+		"variant-(b) invariant: SB>0 widens cascade window, allowing SCHEDULED Resolve to catch commits earlier than late-arrival rerun (got SB=700 decision=%v, SB=0 decision=%v)",
+		outBig.DecisionTime, outZero.DecisionTime)
+	t.Logf("SB=0 decided at %v; SB=%v decided at %v (variant-(b) gain: %v earlier)",
+		outZero.DecisionTime, bigSB, outBig.DecisionTime, outZero.DecisionTime-outBig.DecisionTime)
+
+	// Variant-(a) regression check: if the impl reverted to SafetyBuffer-
+	// in-B_0, the two cascade windows would be identical (both 250ms),
+	// and the late-arrival rerun path would be hit in both → decision
+	// times would be equal. The strict-Less assertion above catches that.
+}
+
+// ptrDur returns a pointer to a time.Duration. Local helper for fields
+// that take *time.Duration (e.g. Protocol.SafetyBufferOverride).
+func ptrDur(d time.Duration) *time.Duration { return &d }

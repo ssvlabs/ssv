@@ -53,10 +53,15 @@ type Protocol struct {
 	// analog (which only widens the leader's broadcast budget B_0)
 	// because 2abOBFT's critical path post-bundle-arrival is TWO hops,
 	// not one — so structural mesh-tail tolerance lives in the cascade,
-	// not in B_0. The leader's pre-Phase-2a window (`B_0 = 2·BTT`)
-	// stays at the structural minimum; widening it would only help if
-	// V failed to reach all peers within 1·BTT of fetchAt, which is
-	// rare under realistic mesh profiles.
+	// not in B_0. The leader's pre-Phase-2a window (`B_0 = 2·BTT`) stays
+	// at the structural minimum; under degraded p2p profiles where V
+	// would fail to reach some peers within 1·BTT of fetchAt, the
+	// affected ops naturally enter the KindNoValue path at Phase 2a and
+	// recover via A1 upgrade once the bundle arrives — that A1 cascade
+	// hop ALSO lives in the post-Phase-2a window, so widening the
+	// cascade is exactly what helps it complete in time. Widening B_0
+	// instead would only buy back the pre-Phase-2a delivery cycle that
+	// the A1 upgrade path already handles.
 	SafetyBufferOverride *time.Duration
 }
 
