@@ -80,8 +80,9 @@ type Instance struct {
 	// hostVerdict[layer][string(value_root)] = host application's
 	// valid/not-valid verdict on the V identified by value_root at this
 	// layer. Populated via ApplyHostValidity; consumed by
-	// ComputeLocalValueState (at Phase-2a fire-time) and by the σ-eligibility
-	// trigger's side decision (at Commit emission time, for host re-check).
+	// computeLocalValueState (Phase-2a fire-time emission decision),
+	// canSigmaAtLayer (post-Op5 σ-eligibility self-gate), and
+	// MaybeBuildAndBroadcastUpgrade (A1 upgrade preconditions).
 	hostVerdict map[int]map[string]bool
 
 	// Phase-2a own emissions. ownNoValueMsg is set if the op emitted
@@ -184,6 +185,12 @@ type Instance struct {
 	// only genuine signer/EKM failures accumulate.
 	cascadeErrors []error
 
+	// cascadeErrorsCapped is set true when recordCascadeError hit the
+	// cap and dropped at least one error. Surfaced via Stats() so
+	// callers can detect a runaway-signer pathological case (otherwise
+	// the silent truncation would mask the failure-rate signal).
+	cascadeErrorsCapped bool
+
 	// wantsHostValidationCh delivers (layer, value) pairs requesting the
 	// runner-side host hook to validate a V the Instance harvested from a
 	// peer KindValue (Op11 peer-reflood-V path). Buffered with capacity K;
@@ -239,26 +246,28 @@ type Instance struct {
 }
 
 // RetentionSource discriminates how a retained Phase-1 bundle reached
-// the Instance. Load-bearing for slashing-evidence routing: bundles
-// retained via Op11 harvest have no leader envelope signature (only the
-// L0Witness is cryptographically leader-bound), so downstream slashing
-// consumers re-verifying envelopes need to know to skip envelope
-// re-verification and rely on L0Witness instead.
+// the Instance. Informational hint for slashing-evidence routing: the
+// L0Witness BLS partial is sufficient cryptographic leader-binding in
+// all cases (the Instance verifies it before retention), so envelope
+// re-verification by downstream consumers is OPTIONAL — useful as a
+// belt-and-suspenders check when available, skippable when not.
+// Source surfaces availability rather than necessity.
 type RetentionSource int
 
 const (
 	// RetentionDirect: the bundle reached the Instance via a direct
 	// ObservePhase1Bundle call. The leader's envelope signature is
-	// available at the wire layer; downstream consumers can re-verify
-	// the envelope against the leader's pubkey.
+	// available at the wire layer (in the runner's mcache); downstream
+	// consumers MAY re-verify the envelope against the leader's pubkey
+	// as a belt-and-suspenders check on top of L0Witness verification.
 	RetentionDirect RetentionSource = iota
 	// RetentionHarvest: the bundle was synthesized from a peer's
-	// KindValue (Op11 peer-reflood-V harvest). The synth bundle has no
-	// leader envelope signature — the only leader binding is the
-	// L0Witness BLS partial inside, verified by the Instance against
-	// the leader's pubkey before retention. Downstream slashing
-	// consumers MUST NOT re-verify envelope; cryptographic leader-
-	// attribution lives entirely in the L0Witness.
+	// KindValue (Op11 peer-reflood-V harvest). No leader envelope
+	// signature exists for this bundle; the L0Witness BLS partial
+	// inside is the sole leader-binding artifact (verified by the
+	// Instance against the leader's pubkey before retention).
+	// Downstream consumers should skip envelope re-verification (none
+	// to re-verify) and rely on L0Witness alone.
 	RetentionHarvest
 )
 
@@ -420,11 +429,15 @@ func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
 //
 // Post-Finalize guard: sending on a closed channel panics even via
 // `select` with default. The Instance's Observe* methods (ObserveValueMsg,
-// ObservePhase1Bundle, etc.) intentionally have no `ended` guards (calls
-// after Finalize are silent no-ops at the protocol-state level), so a
-// late event arriving past Finalize can still reach the harvest path and
-// call into us. Gate on `i.ended` here to prevent the resulting
-// send-on-closed-channel panic.
+// ObservePhase1Bundle, etc.) intentionally have no `ended` guards —
+// they will still mutate Instance state (peer pools, retentions, σ-pool,
+// EKM locks, etc.) on calls after Finalize, but the runner's contract
+// is to take its snapshot at Finalize and treat post-Finalize state
+// changes as inert externally. The guard here is specifically for the
+// send-on-closed-channel panic risk, NOT for state-mutation
+// containment — late events arriving past Finalize can still reach the
+// harvest path and call into us, and the channel close happens in
+// Finalize itself.
 func (i *Instance) requestHostValidation(layer int, value Value) {
 	if i.ended {
 		return
@@ -487,6 +500,63 @@ func (i *Instance) LeaderAtLayers() []int {
 		}
 	}
 	return out
+}
+
+// InstanceStats is an introspection snapshot of internal counters that
+// are otherwise unobservable through the public API. Stable across
+// versions: fields are additive (new counters appended, never removed
+// or renamed). Intended for tests, telemetry, and diagnostic tooling.
+type InstanceStats struct {
+	// PendingValidationCount is the total number of (layer, V_root)
+	// pairs currently waiting on host-validation reply via
+	// wantsHostValidationCh. Summed across all layers.
+	PendingValidationCount int
+
+	// VerifiedWitnessesCount is the total number of (layer, V_root)
+	// entries cached in verifiedL0Witnesses (positive cache only —
+	// every entry represents a successful BLS L0Witness verify that
+	// subsequent harvests short-circuit).
+	VerifiedWitnessesCount int
+
+	// CascadeErrorsCapped is true if recordCascadeError dropped at
+	// least one error due to hitting cascadeErrorsCap. Indicates a
+	// pathological signer scenario.
+	CascadeErrorsCapped bool
+
+	// CascadeErrorsCount is the current accumulator length (≤ cap).
+	CascadeErrorsCount int
+
+	// EvidenceCount is the current evidence accumulator length.
+	EvidenceCount int
+
+	// Ended reflects whether Finalize has been called.
+	Ended bool
+}
+
+// Stats returns an introspection snapshot of the Instance's internal
+// counters. Read-only — callers receive a value-typed struct that's
+// safe to inspect after the call returns. Stable additive contract:
+// new fields may be appended; existing fields are not removed or
+// renamed. Used by tests and telemetry to observe behavior that the
+// per-method API doesn't surface (e.g., the buffer-full rollback's
+// pendingValidation cleanup, the L0Witness verify-cost dedup cache).
+func (i *Instance) Stats() InstanceStats {
+	pending := 0
+	for _, bucket := range i.pendingValidation {
+		pending += len(bucket)
+	}
+	verified := 0
+	for _, bucket := range i.verifiedL0Witnesses {
+		verified += len(bucket)
+	}
+	return InstanceStats{
+		PendingValidationCount: pending,
+		VerifiedWitnessesCount: verified,
+		CascadeErrorsCapped:    i.cascadeErrorsCapped,
+		CascadeErrorsCount:     len(i.cascadeErrors),
+		EvidenceCount:          len(i.evidence),
+		Ended:                  i.ended,
+	}
 }
 
 // CascadeErrors returns a snapshot of errors accumulated during

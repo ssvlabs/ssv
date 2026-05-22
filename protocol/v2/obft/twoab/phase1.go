@@ -148,8 +148,9 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 //   - On L_0 bundle observation, the Instance runs the per-tick
 //     processing cascade (upgrade-check + commit-trigger-check) so a
 //     KindNoValue-path op that just received V_0 can immediately emit
-//     the A1 upgrade and the σ-eligibility trigger gets a chance to
-//     fire on the resulting state.
+//     the A1 upgrade. Under Op5 the upgrade KindValue carries the
+//     emitter's σ partial inline, so the upgrade IS the σ-side
+//     terminal emission — no separate σ-eligibility trigger follows.
 func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Duration) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
@@ -292,9 +293,12 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 
 	// Per-tick processing cascade: a Phase-1 bundle arrival can unlock
 	// the A1 upgrade path (if this is V_0 arriving at a NoValue-path op
-	// and host re-validates valid), which may in turn unlock σ-eligibility
-	// or change the equivocation-trigger state. Run upgrade-first then
-	// commit-trigger evaluation per §Emission ordering.
+	// and host re-validates valid). Under Op5 the upgrade KindValue
+	// carries the σ partial inline, so the upgrade IS the σ-side
+	// terminal emission. A second arrival establishing equivocation may
+	// instead arm the equivocation-trigger state for MaybeFirePhase2a.
+	// Run upgrade-first then commit-trigger evaluation per §Emission
+	// ordering.
 	i.afterStateDelta()
 }
 

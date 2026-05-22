@@ -150,16 +150,30 @@ type CrossSigningEvidence struct {
 // bundle either via a direct ObservePhase1Bundle call (envelope-signed
 // by the leader) or via Op11 peer-reflood-V harvest (synthesized from a
 // peer's KindValue; no leader envelope signature — only the L0Witness
-// inside is BLS-bound to the leader's pubkey). When either of the two
-// equivocating bundles is harvested, downstream slashing consumers MUST
-// route attribution via L0Witness verification rather than envelope
-// re-verification. SourceA / SourceB carry this routing hint.
+// inside is BLS-bound to the leader's pubkey). For a harvest-sourced
+// bundle, the envelope is unavailable, so downstream slashing consumers
+// MAY skip envelope re-verification — the L0Witness is sufficient
+// leader-binding either way, so envelope verify is redundant when
+// available and the *only* binding when not. SourceA / SourceB surface
+// the routing hint.
+//
+// Order-dependence caveat: when the receiver observes the SAME V via
+// both paths (direct then harvest, or harvest then direct), the dedup
+// in retainPhase1Bundle drops the second arrival silently — so SourceA
+// / SourceB reflect the FIRST observation's source for each V. For
+// Rule 2 (which requires TWO DISTINCT V's), each V's Source is
+// independently the first-observation source for that specific V; the
+// hint may understate envelope availability if the direct arrival
+// happened to land second, but it never overstates (Source=Direct
+// implies the envelope exists somewhere in the runner's mcache).
 type LeaderEquivocationEvidence struct {
 	BundleA *Phase1Bundle
 	BundleB *Phase1Bundle
-	// SourceA / SourceB record how BundleA / BundleB reached the
-	// Instance. Direct ⇒ envelope-signed; Harvest ⇒ L0Witness is the
-	// sole leader-binding artifact. See RetentionSource.
+	// SourceA / SourceB record how BundleA / BundleB FIRST reached the
+	// Instance. Direct ⇒ envelope-signed bundle observed via Phase-1
+	// gossipsub channel; Harvest ⇒ synthesized from a peer's KindValue
+	// with L0Witness as the sole leader-binding artifact. See
+	// RetentionSource.
 	SourceA RetentionSource
 	SourceB RetentionSource
 }

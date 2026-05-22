@@ -42,7 +42,10 @@ import (
 //
 //  1. Run MaybeBuildAndBroadcastUpgrade — A1 upgrade if preconditions
 //     are now satisfied.
-//  2. Run MaybeBuildAndBroadcastCommit — three-trigger evaluation.
+//  2. Run MaybeBuildAndBroadcastCommit — NR-eligibility trigger
+//     evaluation (post Op5; the σ-eligibility trigger no longer exists
+//     and the equivocation trigger fires at Phase 2a only via
+//     MaybeFirePhase2a, not here).
 //
 // Upgrade-first ensures the A1 sequence fires correctly when a NoValueMsg-
 // path op observes V_0 + host valid via reflood/harvest — the upgrade
@@ -72,14 +75,17 @@ func (i *Instance) afterStateDelta() {
 // O(10) state deltas with 0–2 cascade-error contributions each, so the
 // realistic upper bound is ~20. The cap is generous — only a pathological
 // signer that fails every tick forever would hit it — and prevents
-// unbounded memory growth in such a degenerate case. Hit-the-cap is
-// itself a telemetry-worthy event (signer hard-broken); the next error
-// after cap is silently dropped rather than panicking.
+// unbounded memory growth in such a degenerate case. Errors past the cap
+// are silently dropped; the Stats().CascadeErrorsCapped flag surfaces
+// the truncation event for callers that want to detect it.
 const cascadeErrorsCap = 100
 
 // recordCascadeError appends err to cascadeErrors with a length cap.
+// The cap-hit case sets the truncation flag (visible via Stats) and
+// drops the new error silently.
 func (i *Instance) recordCascadeError(err error) {
 	if len(i.cascadeErrors) >= cascadeErrorsCap {
+		i.cascadeErrorsCapped = true
 		return
 	}
 	i.cascadeErrors = append(i.cascadeErrors, err)

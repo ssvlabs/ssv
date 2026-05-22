@@ -39,12 +39,13 @@ import (
 // wantsHostValidationCh, runs its verdict logic, then calls back into
 // the Instance). The runner adapter SHOULD gate host callbacks on the
 // Instance's Finalized state, but async-reply races are easy to miss in
-// integration code — a late host reply arriving post-Finalize would
-// otherwise mutate hostVerdict / pendingValidation and trigger the
-// afterStateDelta cascade (potentially setting ownValueMsg / seeding
-// σ-pool) on an Instance the runner considers snapshotted. Mirrors the
-// defensive `i.ended` gate on requestHostValidation; silent no-op for
-// late replies.
+// integration code — and unlike the Observe* methods (which the runner
+// owns the dispatch for and can drain post-Finalize), the host-reply
+// path crosses the runner ↔ host process boundary where the runner
+// can't always intercept in time. Silent no-op for late replies. (The
+// Observe* methods don't get this guard because the runner is the sole
+// dispatcher and can stop calling them at Finalize-time; ApplyHostValidity
+// is the special case because the host owns the reply timing.)
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
@@ -406,10 +407,15 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 // path + has V_0 + host valid + not yet committed), and callers that
 // explicitly invoke this path want to distinguish "tried but blocked" from
 // "succeeded silently". Commit, by contrast, returns (nil, nil) for the
-// no-trigger case because it has THREE independent triggers in priority
-// order and the no-trigger state is the silent default (the slot's
-// runner-level relay-submission deadline is the hard wall, not a per-call
-// error). The cascade-driven afterStateDelta filters Upgrade's sentinel
+// no-trigger case because the NR-eligibility trigger is a passive
+// observation of cluster pool state with no per-call distinguishable
+// failure mode — the no-trigger state is the silent default (the slot's
+// runner-level relay-submission deadline is the hard wall, not a per-
+// call error). Pre-Op5 there were three priority-ordered triggers
+// (equivocation > σ-eligibility > NR-eligibility); post-Op5 the
+// equivocation trigger fires at Phase 2a only and σ-eligibility is
+// gone, so MaybeBuildAndBroadcastCommit reduces to NR-eligibility
+// alone. The cascade-driven afterStateDelta filters Upgrade's sentinel
 // out via errors.Is so it doesn't pollute CascadeErrors().
 //
 // Idempotent across upgrade attempts: a second call after the upgrade
@@ -576,20 +582,28 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	//
 	// The harvest runs ahead of the existing dedup/pool-update flow so
 	// the afterStateDelta cascade at the end of ObserveValueMsg sees the
-	// fresh retention state (enabling immediate A1 upgrade / σ-eligibility
-	// firing for V-drop receivers).
+	// fresh retention state (enabling immediate A1 upgrade for V-drop
+	// receivers).
 	//
-	// Note on cascade-runs-twice: a successful harvest fires
-	// afterStateDelta internally (from retainPhase1Bundle) before this
-	// method's own afterStateDelta at the end. Both runs are idempotent
-	// (per the cascade-helper contract — MaybeBuildAndBroadcastUpgrade
-	// and MaybeBuildAndBroadcastCommit return early on already-fired
-	// state), and the first run sees retention-but-no-ValueMsg-pool-
-	// update (the L0Partial pool seed runs later in this method), while
-	// the second run sees the fully-updated state. Refactoring either
-	// run away would change observable behavior (the upgrade can fire
-	// during the first run if the host already validated the harvested
-	// V via an earlier path).
+	// Note on cascade-runs-twice: when a harvest establishes NEW retention
+	// (priorRetained == 0), retainPhase1Bundle runs afterStateDelta
+	// internally (from phase1.go:299 at end of the helper) before this
+	// method's own afterStateDelta at the end of ObserveValueMsg. Both
+	// runs are idempotent (per the cascade-helper contract —
+	// MaybeBuildAndBroadcastUpgrade and MaybeBuildAndBroadcastCommit
+	// return early on already-fired state). The first run sees
+	// retention-fresh-but-no-peer-ValueMsg-pool-update (L0Partial pool
+	// seed runs later in this method); the second run sees the fully-
+	// updated state. Refactoring either run away would change observable
+	// behavior (the upgrade can fire during the first run if the host
+	// already validated the harvested V via an earlier path).
+	//
+	// In the dedup case (priorRetained ≥ 1 with V matching an existing
+	// retention), retainPhase1Bundle returns early at the dedup loop
+	// WITHOUT calling afterStateDelta — so only ObserveValueMsg's own
+	// afterStateDelta runs. This is the common steady-state re-broadcast
+	// path; the single run is correct because no retention-state delta
+	// occurred.
 	i.maybeHarvestPhase1BundleFromValueMsg(v)
 	existing, hadValue := i.peerValueMsg[op]
 	if hadValue {

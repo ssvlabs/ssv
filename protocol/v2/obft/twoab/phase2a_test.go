@@ -355,17 +355,21 @@ func TestRequestHostValidation_BufferFullRollsBackPendingFlag(t *testing.T) {
 	for k := 0; k < K; k++ {
 		op.requestHostValidation(k, Value(fmt.Sprintf("V%d", k)))
 	}
+	// Sanity-check the introspection: K pending entries summed across
+	// all layers.
+	require.Equal(t, K, op.Stats().PendingValidationCount,
+		"after K successful enqueues, K (layer, V_root) pairs should be pending")
 	// Channel is now full. Subsequent enqueue must hit the `default`
 	// branch and roll back its pendingValidation entry.
 	const droppedLayer = 0
 	droppedV := Value("V-dropped")
-	droppedRoot := ValueRoot(droppedV)
 	op.requestHostValidation(droppedLayer, droppedV)
-	// Inspect the rollback: pendingValidation[droppedLayer] must NOT
-	// contain droppedRoot (the rollback erased the just-set flag).
-	bucket := op.pendingValidation[droppedLayer]
-	require.NotContains(t, bucket, droppedRoot,
-		"buffer-full path MUST roll back the pendingValidation flag so a later harvest can re-attempt")
+	// Inspect the rollback through the public introspection API: the
+	// pending count should remain K — the rollback erased the just-set
+	// flag for the dropped (layer, V) pair, leaving only the original
+	// K pending entries.
+	require.Equal(t, K, op.Stats().PendingValidationCount,
+		"buffer-full path MUST roll back the pendingValidation flag so a later harvest can re-attempt; pending count should not grow on the drop")
 	// Drain ALL slots from the channel so the re-attempt lands cleanly
 	// in an empty channel (avoiding FIFO ordering noise with the
 	// earlier fill).
@@ -652,4 +656,134 @@ func TestObserveValueMsg_HarvestAtRetentionCapSilentDrop(t *testing.T) {
 	gotEvidence := op4.Evidence()
 	require.Equal(t, beforeEvidence, len(gotEvidence),
 		"silently-dropped harvest must not add new evidence")
+}
+
+// TestRetentionSource_DirectPath verifies that a bundle retained via
+// ObservePhase1Bundle (the direct gossipsub Phase-1 channel) carries
+// Source = RetentionDirect.
+func TestRetentionSource_DirectPath(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	op := s.instances[OperatorID(3)]
+	require.NoError(t, op.ObservePhase1Bundle(b, observedEarly))
+	retained := op.RetainedBundles(0, leader)
+	require.Len(t, retained, 1)
+	require.Equal(t, RetentionDirect, retained[0].Source,
+		"direct Phase-1 bundle observation must produce Source=RetentionDirect")
+}
+
+// TestRetentionSource_HarvestPath verifies that a bundle retained via
+// Op11 peer-reflood-V harvest (synthesized inside ObserveValueMsg)
+// carries Source = RetentionHarvest.
+func TestRetentionSource_HarvestPath(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	// Seed op2 with V0 directly so its KindValue forwards a real
+	// leader L0Witness.
+	s.deliverPhase1(0, Value("V0"), []OperatorID{leader, OperatorID(2)}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{leader, OperatorID(2)}, 0, Value("V0"), true)
+	vm, _, _, err := s.instances[OperatorID(2)].MaybeFirePhase2a()
+	require.NoError(t, err)
+	op3 := s.instances[OperatorID(3)]
+	require.NoError(t, op3.ObserveValueMsg(vm))
+	retained := op3.RetainedBundles(0, leader)
+	require.Len(t, retained, 1, "harvest path must establish retention")
+	require.Equal(t, RetentionHarvest, retained[0].Source,
+		"harvest-path retention must produce Source=RetentionHarvest")
+}
+
+// TestRetentionSource_OrderDependence locks in the documented "FIRST
+// observation wins" semantic: the Source field on a retainedBundle
+// reflects which path observed the (leader, V) FIRST, regardless of
+// whether the other path later observes the same V (and silently
+// dedups). This is a deliberate property of the dedup-by-V check in
+// retainPhase1Bundle.
+func TestRetentionSource_OrderDependence(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V0"))
+	require.NoError(t, err)
+	vm := &ValueMsg{
+		ClusterID:    s.cfg.ClusterID,
+		OperatorID:   2,
+		Height:       s.cfg.Height,
+		V:            Value("V0"),
+		ValueRoot:    ValueRoot(Value("V0")),
+		L0Witness:    b.L0Witness,
+		L0Partial:    op2Sig,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+
+	// Path A: direct-then-harvest at op3. Direct arrives first; harvest
+	// dedups silently. Source MUST stay RetentionDirect.
+	op3 := s.instances[OperatorID(3)]
+	require.NoError(t, op3.ObservePhase1Bundle(b, observedEarly))
+	require.NoError(t, op3.ObserveValueMsg(vm))
+	retA := op3.RetainedBundles(0, leader)
+	require.Len(t, retA, 1)
+	require.Equal(t, RetentionDirect, retA[0].Source,
+		"direct-then-harvest: Source reflects FIRST observation (Direct)")
+
+	// Path B: harvest-then-direct at op4. Harvest arrives first; direct
+	// dedups silently. Source MUST stay RetentionHarvest. Note: the
+	// runner's mcache may still hold the direct envelope from path B's
+	// later ObservePhase1Bundle call — but the Instance's Source field
+	// reflects how it FIRST learned of the (leader, V), not which paths
+	// have the envelope downstream.
+	op4 := s.instances[OperatorID(4)]
+	require.NoError(t, op4.ObserveValueMsg(vm))
+	require.NoError(t, op4.ObservePhase1Bundle(b, observedAfterPhase2a))
+	retB := op4.RetainedBundles(0, leader)
+	require.Len(t, retB, 1)
+	require.Equal(t, RetentionHarvest, retB[0].Source,
+		"harvest-then-direct: Source reflects FIRST observation (Harvest)")
+}
+
+// TestLeaderEquivocationEvidence_SurfacesSourcePerBundle verifies that
+// when Rule 2 fires on two distinct V's reaching retention via
+// different paths, the resulting LeaderEquivocationEvidence carries
+// SourceA / SourceB reflecting each bundle's actual arrival path.
+func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	// First V via direct path.
+	bA := s.buildByzEquivocatingBundle(leader, 0, Value("V_a"))
+	// Second V via harvest path: build a peer's KindValue forwarding the
+	// byz leader's L0Witness on V_b.
+	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
+	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V_b"))
+	require.NoError(t, err)
+	vmB := &ValueMsg{
+		ClusterID:    s.cfg.ClusterID,
+		OperatorID:   2,
+		Height:       s.cfg.Height,
+		V:            Value("V_b"),
+		ValueRoot:    ValueRoot(Value("V_b")),
+		L0Witness:    bB.L0Witness,
+		L0Partial:    op2Sig,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	op4 := s.instances[OperatorID(4)]
+	// Direct first → V_a.
+	require.NoError(t, op4.ObservePhase1Bundle(bA, observedEarly))
+	// Harvest second → V_b → triggers Rule 2.
+	require.NoError(t, op4.ObserveValueMsg(vmB))
+	require.Len(t, op4.RetainedBundles(0, leader), 2)
+
+	var rule2 *LeaderEquivocationEvidence
+	for _, e := range op4.Evidence() {
+		if e.Rule == EvidenceLeaderEquivocation {
+			rule2 = e.LeaderEquivocation
+			break
+		}
+	}
+	require.NotNil(t, rule2, "Rule 2 must fire on the second distinct V")
+	require.Equal(t, RetentionDirect, rule2.SourceA,
+		"SourceA reflects bundle A's arrival path (direct, observed first)")
+	require.Equal(t, RetentionHarvest, rule2.SourceB,
+		"SourceB reflects bundle B's arrival path (harvest, observed second)")
 }
