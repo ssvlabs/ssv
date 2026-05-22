@@ -8,17 +8,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // syncCommitteeContributionTestBeacon embeds the shared testing beacon node and
@@ -107,58 +104,22 @@ func newSyncCommitteeAggregatorRunnerForTest(
 ) (*SyncCommitteeAggregatorRunner, *spectestingutils.TestKeySet) {
 	t.Helper()
 
-	cfg := cloneTestNetworkConfig()
-	logger := zap.NewNop()
-	keySet := spectestingutils.Testing4SharesSet()
-	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleSyncCommitteeContribution)
-	network := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
-	operator := spectestingutils.TestingCommitteeMember(keySet)
-	operatorSigner := spectestingutils.NewOperatorSigner(keySet, 1)
+	kit := newRunnerTestKit(t, spectypes.RoleSyncCommitteeContribution, testBeacon, nil)
 	valCheck := ssv.NewSyncCommitteeContributionChecker(
-		cfg.Beacon,
+		kit.cfg.Beacon,
 		spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey),
 		spectestingutils.TestingValidatorIndex,
 	)
 
-	qbftConfig := protocoltesting.TestingConfig(logger, keySet)
-	qbftConfig.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-		return 1
-	}
-	qbftConfig.Network = network
-	qbftConfig.BeaconSigner = km
-
-	controller := protocoltesting.NewTestingQBFTController(
-		keySet,
-		identifier[:],
-		operator,
-		qbftConfig,
-		false,
-	)
-
-	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
-		share.ValidatorIndex: share,
-	}
-
 	runnerIface, err := NewSyncCommitteeAggregatorRunner(SyncCommitteeAggregatorRunnerOptions{
-		BaseRunnerOptions: BaseRunnerOptions{
-			NetworkConfig:  cfg,
-			Share:          shareMap,
-			Beacon:         testBeacon,
-			Network:        network,
-			Signer:         km,
-			OperatorSigner: operatorSigner,
-		},
-		QBFTController:     controller,
-		ValCheck:          valCheck,
+		BaseRunnerOptions:  kit.baseOptions,
+		QBFTController:     kit.qbftController,
+		ValCheck:           valCheck,
 		HighestDecidedSlot: 0,
 	})
 	require.NoError(t, err)
 
 	runner := runnerIface.(*SyncCommitteeAggregatorRunner)
-	runner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
-		return roundtimer.NewTestingTimer()
-	})
-	return runner, keySet
+	runner.SetQBFTRoundTimerF(testingRoundTimerF)
+	return runner, kit.keySet
 }

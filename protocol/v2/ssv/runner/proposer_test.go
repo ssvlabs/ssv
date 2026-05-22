@@ -23,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type proposerTestBeacon struct {
@@ -363,55 +362,19 @@ func newProposerRunnerForTest(
 ) (*ProposerRunner, *spectestingutils.TestKeySet, *spectestingutils.TestingNetwork) {
 	t.Helper()
 
-	if cfg == nil {
-		cfg = cloneTestNetworkConfig()
-	}
-
-	logger := zap.NewNop()
-	keySet := spectestingutils.Testing4SharesSet()
-	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
-	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleProposer)
-	network := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
-	operator := spectestingutils.TestingCommitteeMember(keySet)
-	operatorSigner := spectestingutils.NewOperatorSigner(keySet, 1)
+	// cfg may be nil; newRunnerTestKit falls back to cloneTestNetworkConfig().
+	kit := newRunnerTestKit(t, spectypes.RoleProposer, beacon, cfg)
 	valCheck := ssv.NewProposerChecker(
-		km,
-		cfg.Beacon,
+		kit.signer,
+		kit.cfg.Beacon,
 		spectypes.ValidatorPK(spectestingutils.TestingValidatorPubKey),
 		spectestingutils.TestingValidatorIndex,
-		phase0.BLSPubKey(share.SharePubKey),
+		phase0.BLSPubKey(kit.share.SharePubKey),
 	)
-
-	qbftConfig := protocoltesting.TestingConfig(logger, keySet)
-	qbftConfig.ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-		return 1
-	}
-	qbftConfig.Network = network
-	qbftConfig.BeaconSigner = km
-
-	controller := protocoltesting.NewTestingQBFTController(
-		keySet,
-		identifier[:],
-		operator,
-		qbftConfig,
-		false,
-	)
-
-	shareMap := map[phase0.ValidatorIndex]*spectypes.Share{
-		share.ValidatorIndex: share,
-	}
 
 	runnerIface, err := NewProposerRunner(ProposerRunnerOptions{
-		BaseRunnerOptions: BaseRunnerOptions{
-			NetworkConfig:  cfg,
-			Share:          shareMap,
-			Beacon:         beacon,
-			Network:        network,
-			Signer:         km,
-			OperatorSigner: operatorSigner,
-		},
-		QBFTController:      controller,
+		BaseRunnerOptions:   kit.baseOptions,
+		QBFTController:      kit.qbftController,
 		DoppelgangerHandler: dg,
 		ValCheck:            valCheck,
 		HighestDecidedSlot:  0,
@@ -421,10 +384,8 @@ func newProposerRunnerForTest(
 	require.NoError(t, err)
 
 	proposerRunner := runnerIface.(*ProposerRunner)
-	proposerRunner.SetQBFTRoundTimerF(func(_ context.Context, _ *zap.Logger, _ phase0.Slot) ssv.QBFTRoundTimer {
-		return roundtimer.NewTestingTimer()
-	})
-	return proposerRunner, keySet, network
+	proposerRunner.SetQBFTRoundTimerF(testingRoundTimerF)
+	return proposerRunner, kit.keySet, kit.network
 }
 
 func setupRunnerForPostConsensus(
