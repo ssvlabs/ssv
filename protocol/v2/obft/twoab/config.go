@@ -7,11 +7,14 @@
 // Phase 1 and Phase 2b. Each operator broadcasts a `KindValue` (has V_0 +
 // host valid) or `KindNoValue` (otherwise) at the Phase-2a fire-instant
 // `T_phase_2a = T_0_broadcast + 1·BTT`, enabling cluster-wide convergence
-// on σ-eligibility before any operator cryptographically commits. Phase 2b
-// is dynamic: each operator emits exactly one `KindCommit` (Signed / NR /
-// NR-direct) when one of three triggers fires locally on the observed
-// pool — there is NO protocol-level Phase-2b deadline. The slot's relay-
-// submission cutoff is the only hard wall (runner-level).
+// on σ-eligibility before any operator cryptographically commits. Post Op5,
+// the σ-side terminal emission is folded into `KindValue` (which carries
+// the emitter's σ partial inline), so Phase 2b only fires for the NR side:
+// each operator emits at most one `KindCommit` (NR / NR-direct) when the
+// NR-eligibility trigger fires locally on the observed pool (NR-direct
+// being a Phase-2a-time emission when the op observes leader equivocation
+// at L_0). There is NO protocol-level Phase-2b deadline — the slot's
+// relay-submission cutoff is the only hard wall (runner-level).
 //
 // Shared cryptography primitives (Signer, ThresholdIBE, NoQuorumTag, bare
 // type aliases) live in the parent obft package; this package re-exports

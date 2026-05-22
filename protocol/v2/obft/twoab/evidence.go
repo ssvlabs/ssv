@@ -3,10 +3,11 @@ package twoab
 // Slashing-evidence types. Per spec §Slashing evidence, 2abOBFT surfaces
 // six rules of byzantine-fault evidence: Rules 1-5 inherited from bare OBFT
 // (with slight wire-shape adjustments for 2abOBFT's message kinds) and
-// Rule 6a for Phase-2 equivocation. (Rule 6b "verdict-vs-action" from the
-// previous 2abOBFT design was dropped: KindValue is coordination-only — no
-// threshold partial on the wire — so the pivot KindValue → KindCommit-NR is
-// legitimate when authorized per §Authorized Phase-2 emission pairs A3/A4.)
+// Rule 6a for Phase-2 equivocation. (Rule 6b "verdict-vs-action" from an
+// earlier 2abOBFT design was dropped before Op5; post-Op5 the σ-XOR-NR
+// invariant is enforced by EKM at sign time — KindValue carries the σ
+// partial inline, so the cross-signing case is caught directly by Rule 1
+// on the (L0Partial, NR partial) pair from the same op.)
 //
 // None of these rules is load-bearing for safety; they exist so the
 // surviving operators can blacklist misbehaving operators (planned
@@ -152,7 +153,8 @@ type LeaderEquivocationEvidence struct {
 // CrossCommitEquivocationEvidence (Rule 3) — Operator OperatorID has σ
 // partials on two distinct V's at the same layer. The two partials may
 // come from any combination of:
-//   - L_0: Commit-Signed (the L_0 σ partial)
+//   - L_0 (post Op5): ValueMsg.L0Partial (the emitter's plaintext σ
+//     partial at L_0 — Commit-Signed no longer exists on the wire).
 //   - L_k>0: ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries with
 //     Kind=SigmaChained
 type CrossCommitEquivocationEvidence struct {
@@ -173,9 +175,18 @@ type FakeEncryptedPresenceEvidence struct {
 	DecryptError   string
 }
 
-// FakePlaintextSigmaEvidence (Rule 5) — Operator OperatorID's Commit-Signed
-// at L_0 carries a plaintext σ partial that doesn't verify against any
-// retained Phase-1 V at L_0.
+// FakePlaintextSigmaEvidence (Rule 5) — at L_0, a plaintext σ partial
+// emitted by Operator OperatorID does not verify against the operator's
+// pubKeyShare on the claimed V. Post Op5 the partial originates from one
+// of two wire sources:
+//   - ValueMsg.L0Partial (emitter == OperatorID). Rule 5 attributes to
+//     the emitter.
+//   - Phase1Bundle.L0Witness (the L_0 leader). Rule 5 attributes to the
+//     leader (OperatorID == bundle.OperatorID).
+//
+// The L0Witness forwarded inside a peer's KindValue does NOT fire Rule 5
+// (anti-framing: a byz emitter could embed a forged witness against an
+// honest leader). See §Op11 anti-framing notes.
 type FakePlaintextSigmaEvidence struct {
 	OnionPartial Signature
 	OnionValue   Value
@@ -185,28 +196,25 @@ type FakePlaintextSigmaEvidence struct {
 }
 
 // Phase2EquivocationEvidence (Rule 6a) — Operator OperatorID emitted a
-// Phase-2 sequence not in the authorized A1-A8 set. The evidence carries
-// the offending message pair; receivers MAY act on a single observed
-// pair (cluster-wide consensus on the evidence is not required).
+// Phase-2 sequence not in the post-Op5 authorized {A1, A5, A8} set. The
+// evidence carries the offending message pair; receivers MAY act on a
+// single observed pair (cluster-wide consensus on the evidence is not
+// required).
 //
 // Exactly one of {ValueA, NoValueA, CommitA} is set (the first observed
 // Phase-2 emission from the op); similarly for {ValueB, NoValueB,
 // CommitB} (the offending second emission). The detection paths in
 // ObserveValueMsg / ObserveNoValueMsg / ObserveCommit populate these.
 //
-// Triple-message sequences (e.g. KindNoValue → KindCommit-NR → KindValue
-// listed as slashable in the redesign plan) are NOT detected here:
-// from a receiver's observation set alone, that triple is
-// indistinguishable from the authorized A7 sequence (KindNoValue →
-// KindValue → KindCommit-NR) — both produce the same set of observed
-// messages, and gossipsub doesn't provide wire-level emission-order
-// metadata. Per §Receiver ordering tolerance, the receiver defaults to
-// the authorized interpretation; the slashable variant is unenforceable
-// from a single observer's view. Honest ops are gated against producing
-// the triple at the build path (MaybeBuildAndBroadcastUpgrade rejects
-// once ownCommit is set), so this affects only byz behavior — and
-// receivers conservatively accept rather than slash on ambiguous
-// evidence.
+// Triple-message sequences (e.g. KindNoValue → KindValue → KindCommit-NR)
+// are caught at the pair level under Op5: the (KindValue, KindCommit-NR)
+// pair from the same op directly violates σ-XOR-NR (KindValue σ-commits
+// at L_0 via L0Partial). Rule 6a fires on this pair, and Rule 1 fires
+// additionally if the L0Partial and NR partial both verify. The post-Op5
+// authorized set {A1, A5, A8} does NOT contain any (KindValue,
+// KindCommit-*) pair, so there's no longer a "indistinguishable from
+// authorized" ambiguity — every observed (KindValue, KindCommit-*) from
+// the same op is unambiguously slashable.
 type Phase2EquivocationEvidence struct {
 	ValueA   *ValueMsg
 	NoValueA *NoValueMsg

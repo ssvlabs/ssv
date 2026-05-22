@@ -83,9 +83,12 @@ func (i *Instance) Resolve() (*Output, error) {
 //   - (nil, nil) — no σ-quorum (caller should attempt NR-advance).
 //   - (nil, error) — internal error (e.g., aggregation crypto failure).
 //
-// At L_0: σ partials come from sigmaPool[0] (populated on Commit-Signed
-// observation in phase2b.go). Build groups by V_root (typically one
-// group, but cross-σ-V equivocation could produce more).
+// At L_0 (post Op5): σ partials come from sigmaPool[0]. Populated via
+// verifyAndPoolL0Partial in phase2a.go from peer ValueMsg.L0Partial (the
+// emitter's plaintext σ partial), plus the L_0 leader's Phase1Bundle
+// L0Witness contribution (Op3) and any harvested L0Witness contributions
+// from peer-reflood KindValue (Op11). Build groups by V_root (typically
+// one group, but cross-σ-V equivocation could produce more).
 //
 // At L_k > 0: σ partials come from Phase-2a SigmaChained entries inside
 // peerValueMsg / peerNoValueMsg / peerCommit (Side=NRDirect). The
@@ -102,10 +105,13 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 				g := groups[vRoot]
 				if g == nil {
 					// Reconstruct V from peer messages; we have the root
-					// but need the bytes. For L_0 sigmaPool, the V is in
-					// ownCommit.L0Value or peerCommit[op].L0Value. For
-					// L_k>0 sigmaPool, the V is in the original LayerEntry.
-					// Locate it via the helper.
+					// but need the bytes. For L_0 sigmaPool (post Op5), the
+					// V is in ownValueMsg.V / peerValueMsg[op].V (with a
+					// retainedBundles[0][leader] fallback when no KindValue
+					// has been observed yet but the leader's L0Witness has
+					// already contributed to sigmaPool). For L_k>0 sigmaPool,
+					// the V is in the original LayerEntry. Locate it via the
+					// helper.
 					v, ok := i.recoverV(layer, vRoot)
 					if !ok {
 						// Shouldn't happen if sigmaPool entries were

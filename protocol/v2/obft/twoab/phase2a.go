@@ -6,15 +6,21 @@ import (
 )
 
 // ApplyHostValidity records the host application's valid / not-valid
-// verdict on the given V at the given layer. Per spec §Phase 2a, the
-// host is consulted at:
+// verdict on the given V at the given layer. Per spec §Phase 2a (post
+// Op5), the host is consulted at:
 //
 //   - Phase-2a fire-time: to determine whether the op emits KindValue
-//     (host says valid AND op has V) or KindNoValue (otherwise).
-//   - Each commit emission time (host re-check): to route the σ-eligibility
-//     trigger to KindCommit-Signed vs KindCommit-NR. The host MAY flip
-//     its verdict between Phase 2a and commit time (mid-slot re-org); the
-//     re-check at commit time is what enables A3 (host-flip pivot).
+//     with σ partial (host says valid AND op has V; the σ-lock is
+//     acquired at this moment) or KindNoValue (otherwise).
+//   - A1 upgrade time: a KindNoValue-path op that later observes V_0 +
+//     host valid emits the upgrade KindValue (also carrying σ partial
+//     post Op5). The runner re-asks the host on the harvested V if
+//     it hasn't validated this (layer, V) yet — see WantsHostValidationCh.
+//
+// Post Op5: σ-lock is acquired at KindValue emit time, so A3 (host-flip
+// after KindValue) and A4 (equivocation-post-σ-commit) pivots no longer
+// exist. A mid-slot host re-validate-NV verdict has no protocol effect
+// once the op is σ-locked.
 //
 // Idempotent for the same (layer, V, valid) triple. Calling with a
 // different `valid` value for the same (layer, V) overwrites — the
@@ -24,8 +30,7 @@ import (
 // On L_0 host-validity updates, the Instance runs the per-tick
 // processing cascade so a host-flip-to-valid can trigger the A1 upgrade
 // path (if the op is on KindNoValue path AND now has V_0 + host says
-// valid) and the σ-eligibility trigger gets a chance to fire on the
-// resulting state.
+// valid).
 //
 // Returns an error if `layer` is out of [0, K) or `value` is empty.
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
@@ -391,8 +396,10 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 //
 // Idempotent across upgrade attempts: a second call after the upgrade
 // has already fired returns the cached ownValueMsg + nil. After the op
-// has emitted any Commit, the upgrade is no longer available (post-
-// commit upgrade is the slashable sequence A1+A5+A1).
+// has emitted any Commit, the upgrade is no longer available — post-Op5
+// the authorized-pair set is {A1, A5, A8}, so a KindValue following any
+// KindCommit-{NR,NRDirect} would violate the σ-XOR-NR invariant (Rule 1
+// cross-signing).
 func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
@@ -414,8 +421,10 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	leaderID := i.cfg.Layers[layer].Leader
 	retained := i.retainedBundles[layer][leaderID]
 	if len(retained) != 1 {
-		// 0 retained → no V to upgrade on; ≥ 2 retained → equivocation
-		// observed (would route to A4 NR pivot, not upgrade).
+		// 0 retained → no V to upgrade on; ≥ 2 retained → leader
+		// equivocation observed at L_0. Post-Op5 there is no A4 NR pivot;
+		// the op simply stays on the KindNoValue path and lets the NR
+		// fall-through cascade proceed via the existing Phase 2b path.
 		return nil, ErrUpgradeNotAvailable
 	}
 	v := retained[0].Bundle.Value
@@ -497,18 +506,21 @@ func (i *Instance) OwnCommit() (*Commit, bool) {
 // broadcast) Phase-2a ValueMsg. Per spec §Phase 2a / Pool aggregation:
 //
 //   - Bundles must pass structural validation (cluster id, slot, sender
-//     in cluster, valid V + ValueRoot consistency, well-formed
-//     LayerEntries).
+//     in cluster, valid V + ValueRoot consistency, non-empty L0Witness +
+//     L0Partial, well-formed LayerEntries).
 //   - First ValueMsg observed from op → recorded in peerValueMsg, pool
 //     updates per inference rules. If a NoValueMsg was previously
 //     observed from the same op, this is the A1 upgrade — move op from
-//     noValuePool[0] to valuePool[0][V_root].
+//     noValuePool[0] to valuePool[0][V_root]. The emitter's L0Partial is
+//     verified and pooled into σ-pool[0][V_root][emitter] (post Op5).
 //   - Identical re-broadcast (same content hash) → silent dedup.
 //   - Distinct second ValueMsg (different V_0) → Rule 6a + Rule 3
-//     evidence (cross-σ-V equivocation).
+//     evidence (cross-σ-V equivocation, when both L0Partials verify).
 //   - Post-Commit ValueMsg observation: if the op had previously emitted
-//     a KindCommit (Signed or NR), the resulting sequence is
-//     unauthorized (A5+A1 / A2+A1 / etc.) → Rule 6a evidence.
+//     a KindCommit-NR / KindCommit-NRDirect, the resulting sequence is
+//     unauthorized (σ-XOR-NR violation) → Rule 1 (cross-signing on
+//     partial verify) + Rule 6a (sequence violation). Post Op5 the
+//     authorized set is {A1, A5, A8}; KindCommit-Signed no longer exists.
 //
 // Self-observation: the local op's own ValueMsg from MaybeFirePhase2a /
 // MaybeBuildAndBroadcastUpgrade is already self-pool-updated in the
@@ -760,12 +772,13 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 		}
 		return nil
 	}
-	// Per spec §Receiver ordering tolerance: a `KindValue` + `KindNoValue`
-	// pair in either order is interpreted as A1 (upgrade — op originally
-	// emitted NoValue at Phase 2a, then upgraded to Value). NOT slashable.
-	// A `KindNoValue` + `KindCommit-{Signed,NR}` pair is interpreted as
-	// A5/A6/A7 (authorized). Only the post-NRDirect case is unambiguously
-	// slashable here.
+	// Per spec §Receiver ordering tolerance (post-Op5): a `KindValue` +
+	// `KindNoValue` pair in either order is interpreted as A1 (upgrade —
+	// op originally emitted NoValue at Phase 2a, then upgraded to Value).
+	// NOT slashable. A `KindNoValue` + `KindCommit-NR` pair is interpreted
+	// as A5 (NR fall-through). NOT slashable. Only the post-NRDirect case
+	// (KindNoValue arriving after KindCommit-NRDirect, which is sole-emission
+	// per A8) is unambiguously slashable here.
 	hadValue := i.peerValueMsg[op]
 	hadCommit := i.peerCommit[op]
 	const layer = 0
@@ -821,17 +834,17 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 		i.afterStateDelta()
 		return nil
 	}
-	// Fresh NoValueMsg, OR Commit-{Signed,NR} arrived earlier (reorder).
+	// Fresh NoValueMsg, OR Commit-NR arrived earlier (reorder).
 	i.peerNoValueMsg[op] = deepCopyNoValueMsg(nv)
 	if hadCommit == nil {
 		// No prior commit — op is on NoValue path; add to noValuePool.
 		i.addToNoValuePool(layer, op)
 	}
-	// If hadCommit != nil with Side in {Signed, NR}: reordered A2/A5/A6/A7.
-	// The Commit has already moved the op into valuePool or sigmaPool /
-	// nrTagPool as appropriate; the late-arriving NoValueMsg doesn't
-	// re-introduce a noValuePool entry. L_k>0 entries are processed
-	// either way (idempotent).
+	// If hadCommit != nil with Side == NR: reordered A5 (NoValue→Commit-NR
+	// fall-through arrived out of order). The Commit has already moved the
+	// op into nrTagPool; the late-arriving NoValueMsg doesn't re-introduce
+	// a noValuePool entry. L_k>0 entries are processed either way
+	// (idempotent).
 	i.processObservedLayerEntries(op, nv.LayerEntries)
 	i.afterStateDelta()
 	return nil

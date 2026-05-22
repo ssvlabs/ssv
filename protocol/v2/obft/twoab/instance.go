@@ -29,11 +29,14 @@ import (
 //     a. MaybeBuildAndBroadcastUpgrade() — KindNoValue-path ops who have
 //     received V_0 + host valid emit an upgrade KindValue (A1 sequence).
 //
-//  4. Phase 2b — dynamic, no protocol-level deadline:
-//     a. MaybeBuildAndBroadcastCommit() — each op evaluates the three
-//     triggers (equivocation > σ-eligibility > NR-eligibility with cannot-σ
-//     gate); fires at most one KindCommit per slot.
-//     b. ObserveCommit(c) for peers (Side ∈ {Signed, NR, NRDirect}).
+//  4. Phase 2b — dynamic, no protocol-level deadline (post Op5):
+//     a. MaybeBuildAndBroadcastCommit() — each op evaluates the
+//     NR-eligibility trigger (cluster noValuePool[L_0] reaches qEnc AND
+//     cannot-σ gate); fires at most one KindCommit-NR per slot. The
+//     equivocation trigger fires at Phase 2a (NRDirect) only; post Op5
+//     there is no separate σ-eligibility trigger — KindValue is the
+//     σ-side terminal emission with the emitter's σ partial inline.
+//     b. ObserveCommit(c) for peers (Side ∈ {NR, NRDirect}).
 //
 //  5. Phase 3 — observer-on-arrival from Phase-2a onward:
 //     a. Resolve() walks layers 0..K-1 checking σ-quorum / NR-quorum;
@@ -772,33 +775,3 @@ func (i *Instance) noValuePoolSize(layer int) int {
 	return len(i.noValuePool[layer])
 }
 
-// valuePoolMaxV returns the (V_root, count) for the V at this layer with
-// the most operators in its valuePool. Used by the σ-eligibility trigger
-// to determine which V (if any) the cluster has converged on.
-//
-// At n = 3f+1 (the SSV BFT-tight bound), at most one V can have
-// `|valuePool[V]| ≥ qV` per Pigeonhole 2 — so the "max V" is unambiguous
-// at quorum. Below quorum, the max V is informational only. Ties on
-// count are broken lexicographically on V_root for determinism across
-// ops (Go map iteration is unordered; without the tiebreak, equal-count
-// V's at sub-qV could flap between calls — irrelevant for trigger
-// firing but cheap insurance for diagnostics / future n > 3f+1 use).
-func (i *Instance) valuePoolMaxV(layer int) (vRoot [32]byte, count int) {
-	if i.valuePool[layer] == nil {
-		return [32]byte{}, 0
-	}
-	// Invariant: addToValuePool never inserts an empty inner ops map,
-	// and there's no removal path that empties one. So len(ops) ≥ 1 for
-	// every entry we iterate. The `count > 0` guard on the tiebreak is
-	// a defensive belt-and-suspenders that costs nothing.
-	for v, ops := range i.valuePool[layer] {
-		switch {
-		case len(ops) > count:
-			vRoot = v
-			count = len(ops)
-		case len(ops) == count && count > 0 && bytes.Compare(v[:], vRoot[:]) < 0:
-			vRoot = v
-		}
-	}
-	return vRoot, count
-}
