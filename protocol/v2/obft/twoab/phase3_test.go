@@ -219,3 +219,69 @@ func TestResolve_FakeEncryptedPresenceFiresRule4(t *testing.T) {
 	}
 	require.True(t, foundRule4, "malformed L_1 SigmaChained should fire Rule 4 during Resolve")
 }
+
+// TestSelectWinningGroup verifies the σ-group selection helper:
+// determinism-load-bearing lex-tiebreak on V when partial counts are
+// equal. Without the tiebreak, equal-count groups would resolve based
+// on map-iteration order (groups is built from sigmaPool which is a
+// V_root-keyed map), producing nondeterministic Output across operators
+// on transient pre-quorum states.
+func TestSelectWinningGroup(t *testing.T) {
+	mkPartials := func(ops ...OperatorID) map[OperatorID]Signature {
+		out := make(map[OperatorID]Signature, len(ops))
+		for _, op := range ops {
+			out[op] = Signature{byte(op)}
+		}
+		return out
+	}
+	mkGroups := func(gs ...*sigGroup) map[[32]byte]*sigGroup {
+		out := make(map[[32]byte]*sigGroup, len(gs))
+		for _, g := range gs {
+			out[ValueRoot(g.value)] = g
+		}
+		return out
+	}
+
+	t.Run("empty groups returns nil", func(t *testing.T) {
+		require.Nil(t, selectWinningGroup(nil))
+		require.Nil(t, selectWinningGroup(map[[32]byte]*sigGroup{}))
+	})
+
+	t.Run("single group wins", func(t *testing.T) {
+		g := &sigGroup{value: Value("V0"), partials: mkPartials(1, 2, 3)}
+		require.Equal(t, g, selectWinningGroup(mkGroups(g)))
+	})
+
+	t.Run("higher count wins", func(t *testing.T) {
+		gA := &sigGroup{value: Value("V_a"), partials: mkPartials(1, 2)}
+		gB := &sigGroup{value: Value("V_b"), partials: mkPartials(1, 2, 3)}
+		require.Equal(t, gB, selectWinningGroup(mkGroups(gA, gB)))
+	})
+
+	t.Run("equal count: lex-smaller V wins", func(t *testing.T) {
+		gA := &sigGroup{value: Value("V_a"), partials: mkPartials(1, 2)}
+		gB := &sigGroup{value: Value("V_b"), partials: mkPartials(3, 4)}
+		// Run many times to amortize map-iteration nondeterminism.
+		// The result must be deterministic regardless.
+		for i := 0; i < 100; i++ {
+			require.Equal(t, gA, selectWinningGroup(mkGroups(gA, gB)),
+				"iteration %d: equal-count lex-tiebreak must be deterministic", i)
+		}
+	})
+
+	t.Run("equal count three-way: smallest V wins", func(t *testing.T) {
+		gA := &sigGroup{value: Value("V_a"), partials: mkPartials(1)}
+		gB := &sigGroup{value: Value("V_b"), partials: mkPartials(2)}
+		gC := &sigGroup{value: Value("V_c"), partials: mkPartials(3)}
+		for i := 0; i < 100; i++ {
+			require.Equal(t, gA, selectWinningGroup(mkGroups(gA, gB, gC)),
+				"iteration %d: equal-count 3-way lex-tiebreak must be deterministic", i)
+		}
+	})
+
+	t.Run("byte-level lex order (not lexicographic-by-length)", func(t *testing.T) {
+		gAB := &sigGroup{value: Value("AB"), partials: mkPartials(1)}
+		gAC := &sigGroup{value: Value("AC"), partials: mkPartials(2)}
+		require.Equal(t, gAB, selectWinningGroup(mkGroups(gAB, gAC)))
+	})
+}

@@ -402,6 +402,103 @@ func TestFinalize_ClosesWantsHostValidationCh(t *testing.T) {
 	require.NotPanics(t, op.Finalize, "Finalize must be idempotent")
 }
 
+// TestFinalize_RefusesMutators verifies that after Finalize is called,
+// every state-mutating public Instance method returns ErrInstanceEnded
+// and does not mutate internal state. Mirrors
+// `base/instance_test.go::TestObft_Finalize_RefusesMutators`; load-bearing
+// for the Phase 3 convergence (twoab adopting base's lifecycle-guard
+// pattern uniformly across all mutators).
+//
+// Excludes BuildCertificate — that method is a pure value-constructor
+// without an i.ended guard (matches base); it's expected to keep
+// working post-Finalize.
+func TestFinalize_RefusesMutators(t *testing.T) {
+	s := newSim(t, 4)
+	receiver := s.instances[OperatorID(3)]
+	leaderID := s.leaderAt(0)
+	leaderInst := s.instances[leaderID]
+
+	// Build a peer bundle + ValueMsg + Commit pre-Finalize so we can
+	// replay them post-Finalize. Sourced from non-receiver instances to
+	// avoid mutating receiver state during setup.
+	bundle, err := leaderInst.BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	src2 := s.instances[OperatorID(2)]
+	require.NoError(t, src2.ObservePhase1Bundle(bundle, observedEarly))
+	require.NoError(t, src2.ApplyHostValidity(0, Value("V0"), true))
+	srcValueMsg, _, _, err := src2.MaybeFirePhase2a()
+	require.NoError(t, err)
+	require.NotNil(t, srcValueMsg)
+
+	// Snapshot pre-Finalize observables via the public Stats() API.
+	preStats := receiver.Stats()
+	preEv := append([]Evidence{}, receiver.Evidence()...)
+
+	receiver.Finalize()
+	require.True(t, receiver.Ended())
+
+	// Each mutator must return ErrInstanceEnded.
+	_, err = receiver.BuildPhase1Bundle(0, Value("V0"))
+	require.ErrorIs(t, err, ErrInstanceEnded, "BuildPhase1Bundle")
+	require.ErrorIs(t, receiver.ObservePhase1Bundle(bundle, observedEarly),
+		ErrInstanceEnded, "ObservePhase1Bundle")
+	require.ErrorIs(t, receiver.ApplyHostValidity(0, Value("V0"), true),
+		ErrInstanceEnded, "ApplyHostValidity")
+	_, _, _, err = receiver.MaybeFirePhase2a()
+	require.ErrorIs(t, err, ErrInstanceEnded, "MaybeFirePhase2a")
+	_, err = receiver.MaybeBuildAndBroadcastUpgrade()
+	require.ErrorIs(t, err, ErrInstanceEnded, "MaybeBuildAndBroadcastUpgrade")
+	_, err = receiver.MaybeBuildAndBroadcastCommit()
+	require.ErrorIs(t, err, ErrInstanceEnded, "MaybeBuildAndBroadcastCommit")
+	require.ErrorIs(t, receiver.ObserveValueMsg(srcValueMsg),
+		ErrInstanceEnded, "ObserveValueMsg")
+	require.ErrorIs(t, receiver.ObserveNoValueMsg(&NoValueMsg{
+		ClusterID:    s.cfg.ClusterID,
+		OperatorID:   2,
+		Height:       s.cfg.Height,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}), ErrInstanceEnded, "ObserveNoValueMsg")
+	require.ErrorIs(t, receiver.ObserveCommit(&Commit{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: 2,
+		Height:     s.cfg.Height,
+		Side:       CommitSideNR,
+		L0Partial:  Signature{0x11, 0x22, 0x33},
+	}), ErrInstanceEnded, "ObserveCommit")
+	_, err = receiver.Resolve()
+	require.ErrorIs(t, err, ErrInstanceEnded, "Resolve")
+	require.ErrorIs(t, receiver.ObserveCertificate(&Certificate{
+		ClusterID: s.cfg.ClusterID,
+		Height:    s.cfg.Height,
+		Value:     Value("V0"),
+		Signature: Signature{0xaa},
+	}), ErrInstanceEnded, "ObserveCertificate")
+
+	// State must be unchanged. Verify via the public Stats() snapshot
+	// + Evidence() — neither should grow post-Finalize.
+	postStats := receiver.Stats()
+	require.Equal(t, preStats.PendingValidationCount, postStats.PendingValidationCount,
+		"PendingValidationCount must not change")
+	require.Equal(t, preStats.VerifiedWitnessesCount, postStats.VerifiedWitnessesCount,
+		"VerifiedWitnessesCount must not change")
+	require.Equal(t, preStats.EvidenceCount, postStats.EvidenceCount,
+		"EvidenceCount must not change")
+	require.True(t, postStats.Ended, "Ended must be true post-Finalize")
+	require.Equal(t, len(preEv), len(receiver.Evidence()),
+		"Evidence accumulator must not grow")
+
+	// BuildCertificate is intentionally NOT guarded (pure value-
+	// constructor, no Instance mutation). Verify it still succeeds with
+	// a valid Output so the API contract holds post-Finalize.
+	cert, err := receiver.BuildCertificate(&Output{
+		Layer:     0,
+		Value:     Value("V0"),
+		Signature: Signature{0xbb},
+	})
+	require.NoError(t, err, "BuildCertificate must remain callable post-Finalize")
+	require.NotNil(t, cert)
+}
+
 // countingSigner wraps a real Signer and counts VerifyPartial calls
 // (filtered by a matcher predicate so we can isolate the L0Witness
 // verifies from incidental L0Partial verifies that happen on the same

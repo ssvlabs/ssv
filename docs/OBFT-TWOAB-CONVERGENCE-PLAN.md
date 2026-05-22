@@ -84,9 +84,11 @@ In twoab the situation is symmetric once C1 lands: all callers of `requestHostVa
 
 **twoab/instance.go:509-560** has `Stats() InstanceStats`. **base** does not.
 
-**Rationale to adopt in base**: tests in base reach into unexported state (same problem twoab had pre-Stats). Specifically: `witnessedLeaderSigma`, `pendingValidation`, `peerOnions` lengths — all visible only through test-package access. A `Stats()` accessor with comparable shape unlocks future test-readability cleanups.
+**Rationale to adopt in base**: provides public-API introspection parity with twoab; future external test/telemetry consumers can use it uniformly across protocols.
 
-**Action**: add `Stats() InstanceStats` to base, with fields matching twoab's shape where applicable: `PendingValidationCount`, `WitnessedLeaderSigmaCount` (base-specific), `EvidenceCount`, `Ended`. Refactor existing tests that reach into unexported state.
+**Action**: add `Stats() InstanceStats` to base, with fields matching twoab's shape where applicable: `PendingValidationCount`, `WitnessedLeaderSigmaCount` (base-specific), `EvidenceCount`, `Ended`. ~~Refactor existing tests that reach into unexported state.~~
+
+**Self-review on execution**: the test-refactor sub-task was reconsidered. The base tests flagged by the audit (e.g. `base/instance_test.go:1345-1346` reading `receiver.peerOnions[0]` / `receiver.peerNR[0]`) are package-internal white-box tests — direct unexported-state access is the correct idiom for them. Retrofitting them to use Stats() would require bloating Stats with `PeerOnionsCount[layer]` / `PeerNRPartialsCount[layer]` / etc. (counters useful only to those tests) to compensate. The Stats() API stays focused on the small set of counters with broad value; future external/black-box tests can use it, but the existing white-box tests stay as they are.
 
 #### B6. `MessageKind.String()` method
 
