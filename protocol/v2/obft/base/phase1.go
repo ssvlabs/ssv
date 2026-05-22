@@ -2,7 +2,6 @@ package base
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -39,14 +38,14 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 		return nil, ErrInstanceEnded
 	}
 	if layer < 0 || layer >= i.cfg.K() {
-		return nil, fmt.Errorf("obft: layer %d out of range [0, %d)", layer, i.cfg.K())
+		return nil, fmt.Errorf("%w: layer %d outside [0, %d)", ErrLayerOutOfRange, layer, i.cfg.K())
 	}
 	if i.cfg.Layers[layer].Leader != i.ownOperatorID {
-		return nil, fmt.Errorf("obft: local operator %d is not leader at layer %d (leader is %d)",
-			i.ownOperatorID, layer, i.cfg.Layers[layer].Leader)
+		return nil, fmt.Errorf("%w: local operator %d is not leader at layer %d (leader is %d)",
+			ErrNotLeader, i.ownOperatorID, layer, i.cfg.Layers[layer].Leader)
 	}
 	if len(value) == 0 {
-		return nil, errors.New("obft: empty value")
+		return nil, ErrEmptyValue
 	}
 
 	// EKM-style enforcement: single-σ-V per (slot, layer). The leader's
@@ -429,10 +428,10 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		return ErrInstanceEnded
 	}
 	if layer < 0 || layer >= i.cfg.K() {
-		return fmt.Errorf("obft: layer %d out of range", layer)
+		return fmt.Errorf("%w: layer %d outside [0, %d)", ErrLayerOutOfRange, layer, i.cfg.K())
 	}
 	if len(value) == 0 {
-		return errors.New("obft: empty value")
+		return ErrEmptyValue
 	}
 	if i.hostVerdict[layer] == nil {
 		i.hostVerdict[layer] = make(map[string]bool)

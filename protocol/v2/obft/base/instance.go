@@ -912,36 +912,38 @@ func (i *Instance) recordEvidence(e Evidence) {
 	i.evidenceObserver(e)
 }
 
+// recordRulePerLayer is the shared template for per-(op, layer) evidence
+// rules — all of base's slashing rules are keyed by (layer × op).
+// Lazily initializes the inner per-op map at `table[layer]`, then marks
+// (op, layer) as fired. Returns true on first observation, false if the
+// rule had already been recorded for this (op, layer) pair.
+//
+// Maps are reference types in Go — passing `table` by value still
+// allows the helper to populate `table[layer] = make(...)` and have
+// the mutation observed by the caller (the map header is a pointer-
+// like value sharing the backing hash table). Mirrors the equivalent
+// helper in twoab/instance.go.
+func (i *Instance) recordRulePerLayer(table map[int]map[OperatorID]bool, op OperatorID, layer int) bool {
+	if table[layer] == nil {
+		table[layer] = make(map[OperatorID]bool)
+	}
+	if table[layer][op] {
+		return false
+	}
+	table[layer][op] = true
+	return true
+}
+
 // recordRule4 marks Rule 4 (FakeEncryptedPresence) as fired for (op, layer).
 // Returns true if this is the first observation (caller should record evidence)
 // and false if Rule 4 was already fired for this pair (caller should skip).
 func (i *Instance) recordRule4(op OperatorID, layer int) bool {
-	bucket := i.rule4Fired[layer]
-	if bucket == nil {
-		bucket = make(map[OperatorID]bool)
-		i.rule4Fired[layer] = bucket
-	}
-	if bucket[op] {
-		return false
-	}
-	bucket[op] = true
-	return true
+	return i.recordRulePerLayer(i.rule4Fired, op, layer)
 }
 
-// recordRule1 marks Rule 1 (CrossSigning) as fired for (op, layer). Same
-// pattern as recordRule4 — returns true on first observation, false if
-// already recorded.
+// recordRule1 marks Rule 1 (CrossSigning) as fired for (op, layer).
 func (i *Instance) recordRule1(op OperatorID, layer int) bool {
-	bucket := i.rule1Fired[layer]
-	if bucket == nil {
-		bucket = make(map[OperatorID]bool)
-		i.rule1Fired[layer] = bucket
-	}
-	if bucket[op] {
-		return false
-	}
-	bucket[op] = true
-	return true
+	return i.recordRulePerLayer(i.rule1Fired, op, layer)
 }
 
 // recordRule3Leader marks the Rule 3 leader-cross-V check as fired for
@@ -950,48 +952,19 @@ func (i *Instance) recordRule1(op OperatorID, layer int) bool {
 // first one to fire wins, the other becomes a no-op. See the
 // rule3LeaderFired field comment.
 func (i *Instance) recordRule3Leader(op OperatorID, layer int) bool {
-	bucket := i.rule3LeaderFired[layer]
-	if bucket == nil {
-		bucket = make(map[OperatorID]bool)
-		i.rule3LeaderFired[layer] = bucket
-	}
-	if bucket[op] {
-		return false
-	}
-	bucket[op] = true
-	return true
+	return i.recordRulePerLayer(i.rule3LeaderFired, op, layer)
 }
 
 // recordRule5UnknownV marks Rule 5 as fired against (op, layer) for the
-// unknownV variant. Same pattern as recordRule1 — returns true on first
-// observation, false on dedup. See rule5UnknownVFired field comment.
+// unknownV variant. See rule5UnknownVFired field comment.
 func (i *Instance) recordRule5UnknownV(op OperatorID, layer int) bool {
-	bucket := i.rule5UnknownVFired[layer]
-	if bucket == nil {
-		bucket = make(map[OperatorID]bool)
-		i.rule5UnknownVFired[layer] = bucket
-	}
-	if bucket[op] {
-		return false
-	}
-	bucket[op] = true
-	return true
+	return i.recordRulePerLayer(i.rule5UnknownVFired, op, layer)
 }
 
 // recordRule2 marks Rule 2 (LeaderEquivocation) as fired for (leader, layer).
-// Same pattern as recordRule3Leader — returns true on first observation,
-// false if already recorded. See rule2Fired field comment.
+// See rule2Fired field comment.
 func (i *Instance) recordRule2(leader OperatorID, layer int) bool {
-	bucket := i.rule2Fired[layer]
-	if bucket == nil {
-		bucket = make(map[OperatorID]bool)
-		i.rule2Fired[layer] = bucket
-	}
-	if bucket[leader] {
-		return false
-	}
-	bucket[leader] = true
-	return true
+	return i.recordRulePerLayer(i.rule2Fired, leader, layer)
 }
 
 // findExistingLeaderSigmaOnDistinctV scans bundles[layer][leader] and

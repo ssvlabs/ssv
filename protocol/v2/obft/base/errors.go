@@ -13,6 +13,17 @@ import (
 // errors.Is(err, ErrNoQuorum) continue to match either flavor.
 var ErrNoQuorum = errors.New("obft: no quorum reached at any layer")
 
+// ErrNotLeader is returned by BuildPhase1Bundle when called on an operator
+// who is not the layer's designated leader.
+var ErrNotLeader = errors.New("obft: not leader at this layer")
+
+// ErrEmptyValue is returned by BuildPhase1Bundle and ApplyHostValidity
+// when called with an empty Value.
+var ErrEmptyValue = errors.New("obft: empty value")
+
+// ErrLayerOutOfRange is returned when a layer index is outside [0, K).
+var ErrLayerOutOfRange = errors.New("obft: layer out of range")
+
 // ResolveFailureReason discriminates the two ways Resolve can fail to reach
 // σ-quorum after walking the layer chain. The distinction matters for
 // upstream diagnostics — HV1-style adversarial scenarios produce

@@ -54,13 +54,13 @@ These twoab patterns are cleaner / more robust and should be backported.
 
 **Action**: add `if i == nil` to every public method in base. Estimated: 10 method-level additions across base/phase1.go, base/phase2.go, base/phase3.go, base/instance.go.
 
-#### B2. Pool-init helper extraction
+#### B2. ~~Pool-init helper extraction~~ (DROPPED on execution)
 
-**twoab** centralizes pool operations: `addToValuePool`, `addToNoValuePool`, `removeFromNoValuePool`, `addToSigmaPool`, `addToNrTagPool` etc. (`twoab/instance.go:821-888`). **base** inlines `if i.peerOnions[k] == nil { i.peerOnions[k] = make(...) }` at every call site (e.g. `base/phase2.go:144,329,500`).
+**twoab** centralizes pool operations: `addToValuePool`, `addToNoValuePool`, `removeFromNoValuePool`, `addToSigmaPool`, `addToNrTagPool` etc. (`twoab/instance.go:821-888`). **base** inlines `if i.peerOnions[k] == nil { i.peerOnions[k] = make(...) }` at the call sites.
 
-**Rationale to adopt in base**: DRY. Each call site in base has the same 2-line lazy-init dance; lifting to helpers reduces by ~20 call sites and ~40 LOC. Bug-class eliminated: missing lazy-init at a new call site.
+**Self-review on execution**: only 4 call sites in base actually have the lazy-init pattern (2 each for peerOnions, peerNR; total ~12 LOC of init code). Twoab's helpers encapsulate both the layer-map init AND the inner entry set with uniform semantics (bool-valued claim pools). In base, the inner entry semantics differ per call site — peerOnions appends with own-vs-peer dedup, peerNR conditionally overwrites with first-write-wins, witnessedLeaderSigma stores a struct with verify metadata. Helper extraction would either need multiple wrapper-variants (negating the DRY win) or fold all the dedup logic into one helper (which obscures the per-site semantic differences). The inline form is the more honest representation.
 
-**Action**: extract `addToOnionEntries`, `addToNRPartials`, `addToWitnessedSigma`, etc. into base. Refactor existing call sites.
+**Action**: none. Inline pattern stays.
 
 #### B3. `requestHostValidation` `i.ended` guard
 
