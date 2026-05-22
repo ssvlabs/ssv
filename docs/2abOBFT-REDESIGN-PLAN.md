@@ -1072,7 +1072,545 @@ After the v4 spec rewrite + implementation adjustments above land, draft a separ
 - Integration with the SSV adapter (when built).
 - Migration / coexistence testing if v1 and v4 clusters need to interop briefly.
 
-## Execution plan (impl rewrite)
+## Healthy-path optimizations (post-v4 amendment)
+
+> **READ-FLOW NOTE FOR MAINTAINERS.** This section is the **current** target design for the next 2abOBFT revision (wire version 0x05, codename "2abOBFT-fast"). It supersedes the v4 sections earlier in this document. The earlier sections (v4 protocol design, v4 execution plan, v4 implementation deviations) describe the *currently-shipped* v4 protocol — they remain in the doc as historical / context for understanding the diff to v5, but they are NOT the forward-going plan. When Phase A+B lands:
+>
+> - The v4 protocol summary, wire format, trigger rules, and authorized-pair table are replaced by their v5 equivalents documented in this section.
+> - §Implementation deviations (workarounds for v4 first-pass concessions) are obsolete — Op3+Op11 close the gaps; the deviations section will be deleted at v5 land time.
+> - The §Execution plan (v4 impl rewrite) describes work that has already shipped; its scope is the v4 codebase, not v5.
+> - §Implementation phases below is the v5 execution plan; it builds on the shipped v4 codebase.
+>
+> If you are a future maintainer looking for "what does 2abOBFT actually do today?" — read this section, plus the §Implementation phases / §Production rollout subsections below. Skip the v4-era sections unless you need the history of how we got here.
+
+Status: design draft, validated through multiple review rounds. Ready for execution pending sign-off on the production rollout strategy.
+
+Targets the structural ~1·BTT-vs-OBFT healthy-path latency gap documented in [§Honest framing of healthy-path latency](#goals) (line 20).
+
+### Glossary (recap for this section)
+
+- **qV**: σ-quorum threshold = 2f+1 (3 at n=4). Required σ-pool size for σ-side decision at any layer.
+- **qEnc**: NR-quorum threshold = 2f+1 (3 at n=4). Required nr_tag-pool size to unlock chain decryption.
+- **L0Ready**: predicate that closes locally when op has V_0 retained + host valid + L0Witness verified. Triggers async Phase-2a fire under Op5+Op6.
+- **L0Witness**: leader's σ partial on V_0 (BLS threshold partial signature, verifiable against leader's pubKeyShare).
+- **EKM state at L_0**: one of `{coordination, σ-locked(V_0), NR-locked}`. See §Op5 / EKM coordination subsection for transitions.
+
+### Relationship to existing "Implementation deviations" section
+
+Op11 (forwarded leader witness in KindValue) and Op3 (leader witness in Phase-1 bundle) together **supersede deviations #1 and #2** in §Implementation deviations:
+
+- **Deviation #1** ("KindValue carries no leader-auth-sig"): Op11 adds `L0Witness` to KindValue. The L0Witness is a BLS threshold partial signature (not a leader-identity signature), but plays the equivalent V-authentication role at the wire level — verifiable against the leader's pubKeyShare on V_0. The deviation's "lighter wire format, rely on layered defense" trade-off was a v4-first-pass concession; Op11 restores the spec-intended wire-level V-binding.
+- **Deviation #2** ("Peer-reflood-V via gossipsub Phase-1 reflood only, not via KindValue V extraction"): Op11 enables the safe V-extraction path that the deviation explicitly disabled. The deviation's safety concern (byz synthesizing retention for arbitrary V's) is closed because Op11 gates V-extraction on L0Witness verification — byz can't forge an L0Witness without forging the leader's BLS share.
+- **Deviation #3** (triple-message slashable sequences unenforceable): unchanged. Op5 removes the pivot-using sequences (A3/A4/A6/A7) so the triple-message ambiguity becomes structural — the authorized set under Op5 is A1/A5/A8, no triples to ambiguate.
+
+When Phase B lands, §Implementation deviations should be rewritten to reflect: deviations #1 and #2 reversed (Op3+Op11 ship the leader-binding mechanism that v4-first-pass deferred), deviation #3 reframed as "no longer applies under shrunken authorized-pair set."
+
+### Motivation
+
+The optimization is motivated primarily by **three structural / robustness wins**, not by the headline healthy-path latency reduction:
+
+1. **Slow-profile / degraded-mesh recovery.** Under v4 the `slow` p2p profile at BTT=100ms exhibits a ~9% success rate because the 2-hop cascade between `TPhase2a` and `Resolve` (250ms window) cannot absorb the ~130ms median per-hop latency. The 1-hop critical path under Op5+Op6 eliminates this structural pressure point. Targeted improvement: ~9% → ~80%+ on the slow-profile Healthy cell.
+2. **V-drop recovery (peer-reflood-V).** The current v4 impl explicitly disabled peer-reflood-V via KindValue extraction (§Implementation deviations #2) because KindValue carried no leader-signed authentication. Op11 restores the spec-intended mechanism. The `HV1SelectiveDelivery` scenario flips from MISS to SUCCESS — a real recovery class that v4 misses today.
+3. **Wire-level leader-binding (structural-binding posture).** Op3+Op11 add leader-signed witness to Phase-1 bundles and forward it through KindValue, closing the Variant-A withhold-then-fake-σ attack class at the wire level — currently mitigated via layered defense (per §Implementation deviations #1), not at the protocol layer where the spec originally placed it.
+
+The healthy-path latency reduction (3·BTT → 1·BTT post-bundle = ~400ms saved at BTT=200ms, ~1.7% of a 12s slot) is a real but lesser benefit. The structural wins above are what make the trade-off worthwhile.
+
+The trade-offs accepted to enable these wins are rare in production:
+
+- **Pivots are rare.** A3 (host-flip mid-slot) requires the relay's `host.Validate` verdict to change between Phase 1 and Phase 2 — possible in principle but uncommon. A4 (1-1-1 byz equivocation) requires a deliberate byz leader splitting V across honest receivers — possible only under active byz behavior, with bounded damage (one slot miss, next slot recovers).
+- **The healthy-path cost compounds under degraded mesh.** At `BTT < actual hop median` (e.g., user-set BTT=100ms vs ~130ms median under `slow` p2p profile), the 2-hop cascade becomes a hard bottleneck (see `00cb308b4 / SafetyBuffer-in-cascade-window` for the partial mitigation that didn't close the gap). Closing the gap to OBFT's 1-hop critical path is the real structural fix.
+
+Net trade: give up pivot capability + reduce healthy-path latency on the >99% common case, in exchange for structural mesh-degradation recovery + V-drop recovery + wire-level security posture upgrade.
+
+### Goal
+
+Reduce healthy-path completion to `1·BTT` post-bundle-arrival, matching OBFT's early-commit performance. Preserve:
+- **Mesh-tail robustness** — A1 upgrade (KindNoValue → KindValue) for V-drop ops who receive V via reflood. No T_commit hard wall.
+- **Clean NR fall-through** — NR-eligibility trigger fires on noValuePool ≥ qEnc for V-drop / NV cohorts.
+- **Safety** — all slashing rules (1, 3, 5, 6a) remain functional under the new wire format.
+
+Net result: 2abOBFT-fast matches OBFT's healthy-path latency (1·BTT post-bundle, with leader σ partial as head-start) AND OBFT's V-drop recovery (peer-reflood-V via embedded leader witness, enabling A1 upgrade authentication), while retaining 2abOBFT's three structural advantages over OBFT:
+
+1. **A1 upgrade path** for V-drop ops who emitted KindNoValue at TPhase2a backstop — OBFT has no analogous upgrade (once NR-committed, stuck).
+2. **NR-eligibility trigger** firing as soon as `noValuePool ≥ qEnc` — OBFT's NR commits fire at the T_commit synchronous fallback (slot end), 2abOBFT-fast's fire mid-slot enabling faster fall-through.
+3. **Configurable SafetyBuffer** decoupled from gossipsub HeartbeatInterval — OBFT's RefloodDelay is structurally coupled to the network constant.
+
+**Configuration support scope.** Phase A + B + C (the core optimization set: Op3 + Op5 + Op6 + Op11) targets the **K=2 default** (n=4 cluster, K=f+1 BFT-min) — the supported and validated SSV operating point. At K=2 the only deeper layer is L_1 = K-1 (the deepest layer), which has structurally different handling (no nr_tag at deepest; ops either σ at L_1 or fall off the chain). The Op3/Op11 L_0 witness mechanism covers the entire σ-side fast path at K=2.
+
+**K≥3 deployments require Phase D** (Op8 + Op12: per-layer leader witnesses in Phase-1 bundles + forwarded in KindValue) to achieve full OBFT-witness-section parity at fall-through layers. Without Phase D, 2abOBFT-fast at K≥3 has σ-pool head-start at L_0 only; OBFT has it at every layer. The structural gap manifests under multi-layer fall-through scenarios (clean NR-fall-through past L_0 → L_1 → L_2 → ...): OBFT's σ-pool[V_k] starts with 1 partial at each layer, 2abOBFT-fast-without-Phase-D starts empty. **K≥3 production rollouts should gate on Phase D shipping.**
+
+### Accepted trade-offs
+
+The optimization is **wire-incompatible** with v4 (KindValue gains a σ partial field, Phase 1 bundle gains a leader witness field, KindCommit-Signed wire kind is removed). Wire revision must bump accordingly.
+
+Functional trade-offs accepted as deliberate:
+
+1. **A4 equivocation pivot removed.** Under 1-1-1 byz equivocation, ops σ-commit on their own retained V before reflood surfaces the conflict → σ-pool fragments → slot misses. v4 recovered via NR-fall-through; the optimization accepts slot-miss-and-next-slot-recovery. Justification: 1-1-1 is deliberate byz behavior, not a chance failure; SSV's small-cluster operational profile makes it a rare and high-cost-to-mount attack with limited damage (single slot miss, next slot recovers).
+2. **A3 host-flip pivot removed.** Mid-slot host re-validation flipping NV after Phase 2a emission leaves the op σ-committed regardless. The cluster's σ-quorum decision is binding even if the locally-flipping op's host now disagrees. Justification: host flips are rare; cluster-level quorum semantics dominate single-op disagreement.
+3. **A6 / A7 multi-message sequences obsolete.** The pivot-using sequences (`KindNoValue → KindValue → KindCommit-Signed`, `KindNoValue → KindValue → KindCommit-NR`) collapse: the upgrade KindValue under the optimization carries the σ partial directly, so the third message is unneeded.
+
+### Critical path: before and after
+
+```
+BEFORE (current v4 — 3·BTT post-bundle):
+
+bundle arrives at peer
+   │
+   │ wait until TPhase2a (slack)
+   ↓
+TPhase2a: emit KindValue (no σ partial)
+   │
+   │ ← 1·BTT (hop A: peer KindValues propagate)
+   ↓
+σ-eligibility trigger → cascade emits KindCommit-Signed
+   │
+   │ ← 1·BTT (hop B: peer Commit-Signeds propagate)
+   ↓
+σ-pool ≥ qV → Resolve fires
+
+AFTER (with Op3 + Op5 — 1·BTT post-bundle):
+
+bundle arrives at peer (with leader σ_L^V witness)
+   │ ← σ-pool[V_0] = {leader} immediately
+   │
+   │ L0Ready close → emit KindValue (with σ partial) immediately;
+   │   no wait for TPhase2a (async fire — TPhase2a is now a backstop only)
+   ↓
+   │ ← 1·BTT (only hop: peer KindValues-with-σ propagate)
+   ↓
+σ-pool ≥ qV → Resolve fires
+```
+
+### Optimization catalog
+
+#### Op3 — Leader L0Witness in Phase-1 bundle
+
+Phase-1 bundle gains a single BLS partial signature field `L0Witness Signature` — the leader's σ partial on V_0. Receivers verify against `pubKeyShares[leader]` for the bundle's V on observation; on success, pool the leader into `σ-pool[V_0]`.
+
+**Wire format diff (Phase 1 bundle):**
+
+```
+Phase1Bundle {
+    ClusterID  [32]byte
+    OperatorID OperatorID
+    Height     Height
+    Layer      int
+    Value      Value
+    L0Witness  Signature   // ← NEW: leader's σ partial on V at L_0
+                            //         (signed via signer.SignPartial(Value))
+}
+```
+
+**Receiver-side path:** `ObservePhase1Bundle` verifies the witness via `signer.VerifyPartial(pubKeyShares[leader], V, L0Witness)`. On success, `addToSigmaPool(0, ValueRoot(V), leader, L0Witness)`. On failure, fire Rule 5 (`EvidenceFakePlaintextSigma`) keyed on `(operator: leader, layer: 0)` — the leader emitted a σ partial that doesn't verify, which is the same slashable behavior Rule 5 already covers for KindCommit-Signed.L0Partial failures. No new evidence rule needed; reuse the existing taxonomy. Bundle retention behavior on failure: retain V (the bundle's wire shape is otherwise valid; only the witness failed) so receivers can still observe V for downstream pool semantics, but DO NOT pool the witness into σ-pool[V_0]. The bad-witness Rule 5 evidence is independent of the retention decision.
+
+**Safety:** an honest leader signs σ partial on the single V it committed to. A byz leader emitting equivocating bundles signs σ partials on multiple V's — receivers detect cross-V σ partials on the same op as Rule 3 evidence once reflood surfaces conflict. Honest receivers do not commit their own σ partial until L0Ready closes (V retained + host valid) — so leader-side equivocation does not poison honest σ-pool entries.
+
+**Standalone gain:** `σ-pool[V_0]` is non-empty from the moment of bundle arrival, removing 1 partial's worth of waiting in cluster-wide quorum aggregation. Cluster needs `qV - 1` peer σ partials instead of `qV` — and the emitting op's OWN σ partial (self-pooled at KindValue emit time under Op5) is a second free partial, bringing the σ-pool baseline at first emission to 2 of 3 needed (at n=4 K=2 qV=3). So post-Op3+Op5 emission, a single peer's σ partial arriving completes σ-quorum at L_0. Modest standalone win for Op3 alone (~0.3·BTT typical under healthy mesh); foundational for Op5.
+
+#### Op5 — σ partial in KindValue (drops KindCommit-Signed wire kind)
+
+`KindValue` gains an `L0Partial Signature` field — the op's σ partial on V_0. The `KindCommit-Signed` wire kind is **removed entirely** — `KindValue` now carries everything the old `KindCommit-Signed` carried at L_0, parallelling how L_k>0 σ partials already live inside `KindValue.LayerEntries` (chained-encrypted).
+
+**Wire format diff (KindValue):**
+
+```
+KindValue {
+    ClusterID    [32]byte
+    OperatorID   OperatorID
+    Height       Height
+    V            Value
+    ValueRoot    [32]byte
+    L0Partial    Signature   // ← NEW: op's σ partial on V at L_0
+                              //         (plaintext, same as old KindCommit-Signed.L0Partial)
+    LayerEntries []LayerEntry  // L_1..L_{K-1} unchanged
+}
+```
+
+**Wire kinds after Op5:**
+
+| Kind | Carries L_0 partial? | Carries L_k>0 entries? | Direction |
+|---|---|---|---|
+| `KindValue` | σ partial (plaintext, on V_0) | yes (chained-σ / NR-plaintext / empty) | σ-side |
+| `KindNoValue` | none | yes (chained-σ / NR-plaintext / empty) | NR-side, pre-trigger |
+| `KindCommit-NR` | nr_tag_0 partial | none | NR-side, post-NR-eligibility |
+| `KindCommit-NRDirect` | nr_tag_0 partial | yes | NR-side, Phase-2a equivocation |
+
+(Old `KindCommit-Signed` is **gone** — its role is absorbed into `KindValue`.)
+
+**Receiver pool semantics:** the existing inference rule (redesign-plan line 441: "KindCommit-Signed from X implies X also emitted KindValue") becomes vacuous because KindValue itself now carries the σ partial. Direct semantics:
+
+- `KindValue` arrival → add op to `value_pool[V_0_root]` AND verify+add σ partial to `σ-pool[V_0_root]`.
+- All other kinds unchanged from v4.
+
+**EKM coordination — explicit state machine.** Under Op5, the L_0 EKM has three states per (slot, layer=0): `coordination` (no lock yet), `σ-locked` (committed to σ-side on a specific V_0), `NR-locked` (committed to NR-side). Transitions:
+
+- **Initial state**: `coordination` (no emission yet).
+- **KindNoValue emission** (V-drop / NV at TPhase2a backstop, or equivocation observed in coord-only path): state remains `coordination`. KindNoValue is NOT an NR-lock — the L_0 NR partial is NOT carried in KindNoValue (only L_k>0 entries are). This preserves the A1 upgrade path: from `coordination`, op can still transition to either side.
+- **KindValue emission** (σ-direction with L_0 σ partial on V_0): state → `σ-locked(V_0)`. Includes the A1 upgrade path (KindNoValue → KindValue): op transitions from `coordination` directly to `σ-locked(V_0)` when the upgrade KindValue fires. The σ partial in the upgrade KindValue is signed on V_0 at upgrade-emit time.
+- **KindCommit-NR emission** (NR-eligibility trigger fired post-KindNoValue): state → `NR-locked`. The L_0 nr_tag_0 partial is in KindCommit-NR.
+- **KindCommit-NRDirect emission** (Phase-2a equivocation observed pre-emission, bypasses KindNoValue entirely): state transitions from `coordination` → `NR-locked` in one step.
+
+Cross-state transitions (σ-locked → NR-locked or vice versa) are slashable per Rule 1 σ-XOR-NR / Rule 6a (depending on emission shape). Under v4 the lock was acquired at KindCommit-Signed emission time (Phase-2b). Under Op5 the lock is acquired at KindValue emission time. The strictness change (lock-on-emit vs lock-on-commit) is the structural cost of removing the A3/A4 pivot.
+
+**Critical invariant:** KindNoValue keeping the EKM at `coordination` (not transitioning to NR-locked) is what enables the A1 upgrade. The L_k>0 LayerEntries in KindNoValue do carry σ / NR partials at their respective layers, which acquire per-layer EKM locks (σ at L_k locks σ at L_k; NRPlaintext at L_k locks NR at L_k). Those are independent of the L_0 EKM state.
+
+**SafetyBuffer's role post-Op5/Op6.** Under v4 (pre-optimization, post commit `00cb308b4`), `SafetyBuffer` widened the post-TPhase2a cascade window (the 2-hop `KindValue → KindCommit-Signed` cascade). Under Op5+Op6, that cascade collapses to 1 hop and the SafetyBuffer's role changes:
+
+- **Post-Op5 meaning**: SafetyBuffer is now the absorption budget for σ-pool fill via gossipsub IHAVE/IWANT recovery when the initial KindValue eager-push doesn't reach all honest peers. Conceptually closer to OBFT's `RefloodDelay` role — both are "wait longer for a late peer's σ-partial to arrive via lazy-pull."
+- **Still decoupled from gossipsub HeartbeatInterval**: the protocol-level configurability framing (line 17) is preserved. Deployments can still tune SafetyBuffer independently.
+- **Existing variants `2abOBFT-tight` (SB=500ms) / `2abOBFT-lean` (SB=300ms)** may need re-validation: what they were buying under v4 (cascade-window slack for two-hop) is different from what they buy post-Op5 (reflood-recovery budget for one-hop). The stress sweep at Phase C should re-evaluate whether the 300/500/700ms spread is the right band post-Op5.
+- **`adapter.go` docstring at [`Protocol.SafetyBufferOverride`](../protocol/v2/consensustest/twoab/adapter.go) (lines 40-65) must be updated**: current text describes "post-Phase-2a cascade window... 2abOBFT's critical path post-bundle-arrival is TWO hops" — false post-Op5. Replace with "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop critical path." Add this to Phase A+B impl scope items.
+
+#### Op6 — Async Phase-2a fire on L0Ready (consequence of Op5)
+
+Under v4, `TPhase2a` was a cluster-wide synchronized event — every op simultaneously called `MaybeFirePhase2a` at that offset. Under Op5, ops fire `KindValue` (with σ partial) as soon as their local L0Ready closes: V retained from Phase-1 bundle + host valid + L0Witness verified. This is typically `t0Broadcast + ~1·BTT` (when the bundle arrives), well before the v4 `TPhase2a = t0Broadcast + 1·BTT` scheduled instant.
+
+`TPhase2a` becomes a **backstop** for ops that haven't observed V by then: they fire `KindNoValue` at TPhase2a, surfacing V-drop state to the cluster and enabling the NR-eligibility trigger via noValuePool growth.
+
+**Cascade rule change:** the σ-eligibility trigger in `MaybeBuildAndBroadcastCommit` disappears. The σ-direction commitment is now in KindValue emission itself, so there's no separate Phase-2b σ-commit event to trigger. The remaining triggers are:
+
+- **Equivocation trigger**: pre-KindValue-emission, fires `KindCommit-NRDirect` (unchanged from v4 — captures the Phase-2a NRDirect path for equivocation-observed-before-emission). **Post-Op5, this trigger is dead code for any op that has already σ-locked at L_0**: once an op fired KindValue, transitioning to NRDirect would be a Rule-1 σ-XOR-NR violation, blocked by EKM. The trigger therefore only meaningfully fires on ops still in `coordination` state (haven't emitted KindValue yet). Impl note: the predicate can be kept (defense-in-depth) or removed (simplification) — recommend keeping as a defense-in-depth guard but gating with an `if currentEKMState == coordination` check.
+- **NR-eligibility trigger**: post-KindNoValue, fires `KindCommit-NR` when noValuePool ≥ qEnc AND cannot-σ gate satisfied. **Cannot-σ gate semantics post-Op11**: re-evaluated against witness-derived L0Ready, not just host-validity. Specifically: an op who has observed a verified L0Witness via Op11 (via peer KindValue) plus has host-valid V_0 has L0Ready closed → is σ-eligible → cannot-σ gate is NOT satisfied → NR-eligibility trigger does NOT fire (the op should take the A1 upgrade path instead, transitioning coord→σ-locked). The gate fires only for ops genuinely unable to σ (no V retained, no peer-witness verified, OR host says NV).
+- **σ-eligibility trigger is removed entirely**: but receivers' `Resolve()` still runs opportunistically on every state delta (σ-pool growth via observed peer KindValues can independently reach qV without the local op committing).
+
+Note: under Op5, equivocation observed POST-KindValue-emission has no recovery path (the op is σ-committed). The "equivocation trigger" only handles the pre-emission case — see dead-code note above.
+
+#### Op6 corollary — resolveDeadline formula update (impl scope item)
+
+The current v4 [`des.go:215`](../protocol/v2/consensustest/twoab/des.go) sets `resolveDeadline = TPhase2a + 2·BTT + SafetyBuffer + ε_3`, reserving 2·BTT for the v4 two-hop cascade. Under Op5+Op6 the cascade collapses to **one hop** (peer KindValue carries the σ partial directly). The formula must update.
+
+**Canonical formula (anchored to TPhase2a, mirroring v4's convention):**
+
+```
+resolveDeadline = TPhase2a + 1·BTT + SafetyBuffer + ε_3
+```
+
+Equivalently, anchored to T0Broadcast (since `TPhase2a = T0Broadcast + 1·BTT`):
+
+```
+resolveDeadline = T0Broadcast + 2·BTT + SafetyBuffer + ε_3
+```
+
+The two forms are algebraically identical. Use the TPhase2a-anchored form as canonical in code and docs (matches v4's `des.go:215` parameterization; smaller diff vs current impl).
+
+Decomposition (T0Broadcast-anchored, for intuition):
+- 1·BTT for Phase-1 bundle propagation (leader → peers; bundle reaches all honest by `T0Broadcast + 1·BTT = TPhase2a`).
+- 1·BTT for first KindValue propagation (any σ-eligible op fires async on L0Ready ≈ TPhase2a; peer receives KindValue with σ partial within 1·BTT).
+- SafetyBuffer for σ-pool fill via gossipsub IHAVE/IWANT recovery (if first KindValues are slow).
+- ε_3 for Phase 3 walk.
+
+This is materially **earlier** than the v4 formula at the same SafetyBuffer (v4 reserved 2·BTT post-TPhase2a for the two-hop cascade; Op5+Op6 reserves only the single 1·BTT post-TPhase2a propagation cycle).
+
+**TPhase2a backstop offset (unchanged from v4):** `TPhase2a = T0Broadcast + 1·BTT`. Under Op6, TPhase2a serves only as the KindNoValue-emission deadline for ops still in `coordination` state (haven't observed V). It's typically reached after most σ-eligible ops have already emitted KindValue async.
+
+#### Op11 — Forward L0Witness in KindValue (peer-reflood-V authentication)
+
+`KindValue` carries a copy of the leader's `L0Witness` — byte-for-byte the same bytes the leader emitted in the Phase-1 bundle (Op3). No new signing by the emitting op; this is a forwarded redistribution of the leader's existing σ partial. Receivers verify against the leader's pubKeyShare on V_0 just as they would for the witness in the Phase-1 bundle directly.
+
+**Wire format diff (KindValue):**
+
+```
+KindValue {
+    ClusterID    [32]byte
+    OperatorID   OperatorID
+    Height       Height
+    V            Value
+    ValueRoot    [32]byte
+    L0Partial    Signature   // Op5: op's own σ partial on V_0
+    L0Witness    Signature   // ← NEW (Op11): byte-for-byte forwarded copy of
+                              //   Phase-1 bundle's L0Witness (leader's σ partial
+                              //   on V_0), for peer-reflood-V authentication
+    LayerEntries []LayerEntry
+}
+```
+
+**Mechanism:** a V-drop op who didn't receive the Phase-1 bundle (mesh-flaky, slow gossipsub reflood) observes a peer's KindValue and can:
+
+1. Extract V_0 from `KindValue.V`.
+2. Extract L0Witness from `KindValue.L0Witness`.
+3. Verify L0Witness against the L_0 leader's pubKeyShare on V_0 → V_0 authenticated.
+4. Submit V_0 to host validation.
+5. If host valid, take the A1 upgrade path: emit own KindValue (with own σ partial + the same L0Witness forwarded again).
+
+The L0Witness propagates transitively through KindValues — a V-drop op's own subsequent KindValue carries the witness onward, so downstream V-drops can also recover from THIS op's KindValue (not just from the original bundle).
+
+**Why this matters for the A1 path:**
+
+Without Op11, the spec's A1 upgrade clause "Op now has V_0 ... received via gossipsub reflood of a peer's KindValue" cannot be safely realized in impl — peer's KindValue carries V_0 but no leader-signed authentication. The current v4 impl (line 1268: "Peer-reflood-V via gossipsub Phase-1 reflood only, not via KindValue V extraction") fell back to waiting for the Phase-1 bundle via gossipsub IHAVE/IWANT, which under degraded mesh is the slowest path.
+
+Op11 enables the spec-text-intended A1 recovery — V-drops authenticate from any peer KindValue, fast-recovering through the same mesh that carries the cluster's σ-emissions.
+
+**Safety:** L0Witness is a BLS partial signature bound cryptographically to V_0 (leader's pubKeyShare verify on V_0 → either valid or rejected). A byz peer cannot forge V_b with a valid L0Witness — the verification would fail. A byz peer attempting to redirect onto a fake V_fake without a real L0Witness is detected at verify time and the upgrade is blocked. Same byz-safety gate as OBFT's witness section.
+
+**Critical ordering constraint (EKM σ-lock):** the L0Witness BLS verification on a forwarded witness MUST complete BEFORE the receiving op acquires its EKM σ-lock at L_0. Concretely: in the trigger evaluation cascade on receipt of a peer's KindValue, the order is (1) extract V_0 and L0Witness from peer's KindValue → (2) BLS-verify L0Witness against L_0 leader's pubKeyShare on V_0 → (3) if valid, host-validate V_0 → (4) if host valid, mark L0Ready closed → (5) build and emit own KindValue (which acquires σ-lock at L_0 via EKM). Skipping (2) or amortizing it asynchronously creates a window where a byz peer's forwarded garbage L0Witness could indirectly drive an honest op to σ-lock on a non-leader-blessed V. The impl MUST gate σ-lock acquisition on the witness verification result being valid; on verify-fail, IGNORE the L0Witness in the received KindValue (treat as if it carried no witness for V-authentication purposes) and DO NOT close L0Ready via the peer-reflood-V branch.
+
+**Rule 5 evidence keying on forwarded-witness verify-fail.** A failed-verify L0Witness inside a peer's KindValue is structurally the LEADER's fault (the leader either signed garbage or never signed σ on the claimed V). Evidence is keyed on **leader_id** (the entity who allegedly signed), **NOT on the forwarder** (the peer who packaged the witness in their KindValue). The forwarder just relayed bytes; the cryptographic accusation is against the leader. Rule-5 dedup at `(op=leader, layer=0)` deduplicates across many forwarders carrying the same bad witness — only one evidence entry is recorded against the leader regardless of how many peers relayed.
+
+If the forwarder is byz and FABRICATED the L0Witness bytes (i.e., the witness doesn't correspond to anything the leader actually signed), this is detected at verify time and Rule 5 fires against the leader — but the leader is innocent in this case. False-positive Rule 5 against an honest leader is impossible if BLS-verify is sound: verification succeeds iff the bytes are a valid σ partial signed by the leader's BLS share on V_0. A byz forwarder cannot construct verifying bytes without forging the leader's share. So `verify-fail → Rule 5 against leader` is always sound. (The byz forwarder's behavior — packaging a non-verifying L0Witness — is not directly slashable under the current rule set; impl can optionally record it as soft telemetry for debugging.)
+
+**Cost:** ~96 bytes per KindValue (one BLS partial). Cluster-wide at n=4 K=2: ~4·96 = 384 bytes overhead per slot. Trivial vs the latency win.
+
+**Content-hash semantics (impl detail).** The `valueMsgContentHash` used for re-broadcast dedup at [`phase2a.go`](../protocol/v2/obft/twoab/phase2a.go) must **exclude** the L0Witness field from the hash domain. Rationale: L0Witness is byte-for-byte forwarded from the leader's Phase-1 bundle; honest emitters all forward the same bytes. But if the impl ever switches to per-emitter canonical encoding (or a byz constructs a syntactically-distinct-but-verifying-identical L0Witness), the hash should NOT distinguish — receivers should still dedup. Excluding L0Witness from the hash makes the dedup semantics robust against syntactic-but-not-semantic differences. The L0Partial field (emitter's own σ partial) MUST be in the hash (different emitters produce different L0Partials; without including them, two different emitters' KindValues on the same V would collide).
+
+Bonus protection: with L0Witness excluded from the hash, a byz cannot DoS-amplify re-broadcasts by emitting many garbage-L0Witness variants on the same V — dedup catches the variants on `(emitter, V, LayerEntries)` hash. The per-L0Witness verify happens once per (leader, V_0_root) via the dedup map above.
+
+**Standalone vs combined:** Op11 is technically separable from Op5 — Op11 alone (without σ partial in KindValue) would still authenticate peer-reflood-V. But in combination with Op5, every KindValue carries BOTH the emitter's σ partial AND the leader's L0Witness in a single ~200-byte payload (plus V + entries), giving the cluster both σ-pool growth AND V-drop authentication from each emission. The combination matches OBFT's `KindCommit` wire structure (which carries both the emitter's onion σ partial and the leader σ_L^V witness).
+
+### Spec rule changes
+
+#### Authorized Phase-2 emission pairs (shrink from 8 to 3)
+
+| Pair | Sequence | Status under Op5 |
+|---|---|---|
+| A1 | `KindNoValue → KindValue` | **kept** (upgrade window; KindValue under Op5 carries σ partial) |
+| A2 | `KindValue → KindCommit-Signed` | **obsolete** (no KindCommit-Signed wire kind) |
+| A3 | `KindValue → KindCommit-NR` (host-flip pivot) | **obsolete** (no pivot — host-flip mid-slot accepted as op-side inconsistency) |
+| A4 | `KindValue → KindCommit-NR` (equivocation pivot) | **obsolete** (no pivot — equivocation post-σ-commit accepted as slot-miss) |
+| A5 | `KindNoValue → KindCommit-NR` | **kept** (NR-side commit after NR-eligibility) |
+| A6 | `KindNoValue → KindValue → KindCommit-Signed` | **obsolete** (KindValue under Op5 is the terminal σ-side emission) |
+| A7 | `KindNoValue → KindValue → KindCommit-NR` | **obsolete** (no pivot after upgrade) |
+| A8 | `KindCommit-NRDirect alone` | **kept** (Phase-2a NRDirect for equivocation observed pre-emission) |
+
+Net: **A1, A5, A8** remain. Slashing rules unchanged at the principle level — Rule 6a fires on sequences not in the authorized set. The set shrinks but the detection mechanism is the same.
+
+#### Receiver ordering tolerance
+
+Under v4 the ordering-tolerance rule lets receivers interpret `KindValue + KindNoValue` either order as A1 (upgrade). Under Op5 the same applies — order doesn't matter, just presence of both.
+
+Under v4 the rule also tolerated `KindValue + KindCommit-{Signed,NR}` either order as A2/A3/A4. Under Op5 those pairs are obsolete; new equivalent: `KindValue + anything-else-from-same-op` → if anything-else carries an NR partial, fire Rule 6a (σ-XOR-NR violation per EKM).
+
+#### Retroactive cross-firing of slashing rules (impl requirement)
+
+Evidence detection in 2abOBFT-fast must symmetric-fire across arrival orderings. The bundle-versus-KindValue cross-check pairs and bundle-versus-witness cross-check pairs MUST trigger evidence in both directions of arrival order. Specifically, the receiver MUST evaluate cross-V detection on every state delta:
+
+- **Bundle arrives first, then KindValue/KindCommit from same leader on different V**: receiver fires Rule 3 (cross-σ-V) on the second observation. Already specified.
+- **KindValue/KindCommit arrives first, then bundle from leader on different V**: receiver MUST retroactively re-check evidence — the bundle's `Value` field is the canonical claim; if a previously-pooled KindValue/KindCommit referenced a different V from the same leader, Rule 3 fires retroactively.
+- **Bundle arrives first, then forwarded L0Witness in a peer's KindValue claims V_b ≠ bundle's V_a**: same Rule 3 / Rule 5 path — the forwarded witness contradicts the bundle's `Value`.
+- **Forwarded L0Witness arrives first (via peer's KindValue), then bundle arrives from same leader on different V**: retroactively re-check evidence on bundle observation.
+
+The OBFT impl handles this via `reevaluateL0Sigmas` (re-walk pools when a new bundle or witness arrives that changes the V-vs-leader mapping). The 2abOBFT-fast impl MUST do the same — Rule 3 / Rule 5 evaluation is not a one-shot at first observation; it re-fires on every state delta that introduces a contradicting (leader, V) pairing. Specify this in the slashing-rules implementation alongside the new wire format.
+
+**Complexity bound (DoS resistance).** Retroactive re-eval MUST be bounded per state delta. Concretely:
+
+- **Trigger scope**: re-eval fires only on observation of a NEW (leader, V_root) pairing at L_0 — either via a Phase-1 bundle arrival or a forwarded L0Witness in a peer's KindValue. Re-broadcast of already-observed (leader, V_root) pairs (dedup hit) does NOT re-trigger.
+- **Re-walk scope**: per trigger, re-walk only the subset of pools indexed by L_0 (i.e., `valuePool[0]`, `σ-pool[V_0_root]`, peer-emissions indexed by leader). O(n) per trigger at n ops.
+- **Per-slot ceiling**: at most 2 bundles + n KindValues per (slot, leader) under the 2-V retention cap (§Inherited from OBFT impl patterns). So re-eval can fire at most `2 + n` times per leader, `K · (2 + n)` per slot total. Bounded.
+- **Byz amplification check**: a byz attempting to amplify cost via repeated equivocation injection is limited by the 2-V retention cap — additional bundles beyond the second are dropped (not retained, not re-evaluated). Same protection as v4. Equivocating forwarded witnesses in KindValue are also capped indirectly: each peer emits at most one KindValue per slot per (own A1-upgrade-emission), so forwarded-witness count is also bounded.
+
+The impl SHOULD assert these bounds at the test level (e.g., a test that confirms re-eval count ≤ K · (2 + n) under worst-case byz state-delta injection).
+
+**L0Witness verify-cost dedup.** Op11 forwards L0Witness in every KindValue, so a receiver observing N peer KindValues in a slot would naively re-verify the same `(leader, V_0_root)` witness N times. To bound BLS-partial-verify cost, the receiver MUST dedup verified witnesses on `(leader_id, V_0_root)` key — once verified, mark `witnessedLeaderSigma[layer=0][leader_id][V_0_root] = true` and skip re-verify on subsequent observations of the same (key, signature_bytes) pair. Mirrors OBFT's [`obft/base/instance.go`](../protocol/v2/obft/base/instance.go) `witnessedLeaderSigma` dedup map.
+
+**Worst-case verify count per slot per receiver at n=4 K=2**: 1 verify per (leader, V_0_root) key = at most 2 verifies per slot (2-V retention cap × 1 leader × K=2 = ≤ 4 verifies cluster-wide cap; honest receivers see ≤ 2 for a single leader). BLS verify is one pairing op (~1ms in production); trivial overhead.
+
+### Considered but rejected
+
+#### Op2 — Tightening cascade structural constants
+Rejected. BTT is a deployment-level parameter reflecting the network's actual p2p conditions, not a protocol knob — tightening "2·BTT cascade window" would be misnaming the budget, not reducing it.
+
+#### Op4 — Skip KindValue, emit KindCommit-Signed alone (alternative framing of Op5)
+Rejected in favor of Op5. Op4 keeps KindValue as a no-σ wire kind and adds A0 (KindCommit-Signed alone) to the authorized set. Functionally identical to Op5 but with one more wire kind and a more complex authorized-pair table. Op5 is the cleaner spec.
+
+#### Op7 — Aggregate σ partials in cascade messages (multi-partial KindValue)
+Rejected. KindValue would grow linearly with the number of carried partials. Bandwidth cost per emission ~scales with cluster size; latency gain marginal (helps only ops that join late). Diminishing returns.
+
+#### Op8 — Per-layer L_k>0 leader witnesses (deferred to Phase D, not rejected)
+Initially rejected on (incorrect) safety grounds. Re-examined against OBFT's analogous witness section: the plaintext L_k leader witness contributes 1 partial to `σ-pool[V_k]`; peer onion σ partials at L_k>0 are still chained-encrypted under `nr_tag_0 ∧ ... ∧ nr_tag_{k-1}` and require NR-quorum at every prior layer to decrypt. Since 1 < qV, the leader witness alone cannot produce σ-quorum at L_k>0 — the chained-encryption invariant holds. Same safety analysis as OBFT.
+
+Generalizes Op3 to all layers: each layer's leader includes their own σ partial on V_k in their Phase-1 bundle; receivers verify and pool into `σ-pool[V_k]`. Provides 1-partial head-start at every layer's σ-pool.
+
+**Value:** marginal under K=2 default (only L_0 and L_1 = deepest layer; L_0 is Op3, L_1 benefit only under L_0 NR-fall-through). Becomes more useful at K≥3 deployments where multiple fall-through layers exist. Deferred to Phase D as an optional follow-on to Phase A+B.
+
+#### Op9 — Predictive fast-path without leader witness
+Rejected as redundant with Op5. Op5 already has every σ-eligible op firing KindValue-with-σ on L0Ready close; no further "prediction" needed.
+
+#### Op10 — Drop TPhase2a entirely
+Rejected. TPhase2a is still useful as the backstop scheduling instant for ops that haven't observed V (so they emit KindNoValue and surface their state for NR-eligibility). Without TPhase2a, V-drop ops would sit idle indefinitely, preventing NR-quorum from forming.
+
+#### Op12 — Forward per-layer L_k>0 witnesses in KindValue (deferred to Phase D, not rejected)
+Generalizes Op11 to all layers. KindValue carries a witnesses section listing `(layer k, value_root, L_k_Witness)` for every Phase-1 bundle the emitting op has retained — byte-for-byte forwarded copies of leaders' σ partials at each layer (no new signing). Enables peer-reflood-V authentication at every layer (matches OBFT's full witness-section behavior).
+
+**Value:** at K=2 default, only the L_1 witness is added (Op11 covers L_0). The L_1 forwarded witness provides peer-reflood-V authentication during L_0 NR-fall-through scenarios. At larger K, more witnesses, more recovery paths. Bandwidth: ~96 bytes per additional witness × (K-1) per KindValue.
+
+**Why deferred:** Op12 only adds value at fall-through layers, which are rare under healthy mesh (L_0 decides) and partially adversarial (require L_0 NR-quorum to even reach L_1). The combined Op8+Op12 = "OBFT witness-section parity at every layer" is mostly a non-default-K deployment optimization. Bundled into Phase D as an optional follow-on.
+
+### Implementation phases
+
+**Phase sequencing rationale.** Op3 (L0Witness in Phase-1 bundle) was initially planned as a standalone Phase A shippable before the rest. On reflection that's a false economy: Op3 alone bumps the Phase-1 bundle wire format, which already requires a coordinated cluster cutover (no v4/v4.1 coexistence). Doing the cutover for ~0.3·BTT gain, then a second cutover for the full ~2·BTT gain, doubles the deployment coordination cost. Op3+Op5+Op6+Op11 ship as a single Phase A+B release with one wire-bump. Op3 ordering survives only as an internal implementation milestone (build the witness machinery first, then layer the KindValue changes on top).
+
+**Phase A+B (merged) — Op3 + Op5 + Op6 + Op11.** Full healthy-path optimization. **Estimate: ~1500–2000 LOC modified + ~500–800 LOC added in tests**, plus the v4-with-fast-commit spec rewrite of `docs/2abOBFT.md` (currently still v1; the pending v4-spec-rewrite-in-progress is folded into Phase A+B as a single-pass v5 rewrite — no v4 spec intermediate).
+
+Wire format changes:
+- `Phase1Bundle.L0Witness Signature` field (Op3): leader's σ partial on V_0.
+- `KindValue.L0Partial Signature` field (Op5): emitter's σ partial on V_0.
+- `KindValue.L0Witness Signature` field (Op11): byte-for-byte forwarded from Phase-1 bundle's L0Witness.
+- Remove `KindCommit` wire kind for `Side == CommitSideSigned` (Op5).
+
+Protocol Instance changes:
+- Builder: leader signs L0Witness at Phase-1 build time; self-pool into σ-pool[V_0].
+- `MaybeFirePhase2a` (or equivalent): on L0Ready close, build KindValue with own σ partial + forwarded L0Witness; fire async without waiting for TPhase2a SCHEDULED event (Op6). TPhase2a backstop fires KindNoValue only.
+- A1 upgrade path: V-drop op observing a peer's KindValue extracts V_0, verifies via the embedded L0Witness against the L_0 leader's pubKeyShare, then host-validates and fires upgrade KindValue.
+- `MaybeBuildAndBroadcastCommit`: drop the σ-eligibility trigger branch. Keep equivocation and NR-eligibility triggers.
+- Receiver: KindValue handler verifies and pools L0 σ partial into σ-pool[V_0]; verifies L0Witness, pools as 1 additional partial (leader's contribution), gates V-extraction on verify success.
+- EKM state machine: see §EKM coordination above (3-state: coordination, σ-locked, NR-locked).
+
+Spec rewrite (`docs/2abOBFT.md`):
+- This becomes the v4-with-fast-commit single-pass rewrite. The pending v4-spec rewrite has been folded into this release — Phase B's spec deliverable is the canonical "2abOBFT (fast)" spec, not a v4 intermediate. Sections to rewrite: §Phase 1 (add L0Witness), §Phase 2 (entire — drop Phase 2a/2b distinction, KindValue is the σ-side terminal emission), §Wire format (new KindValue shape, drop KindCommit-Signed), §EKM coordination (3-state machine), §Authorized Phase-2 emission pairs (shrink to A1/A5/A8), §Pool aggregation rules (L0Witness contribution), §Slashing evidence (Rule 5 covers fake L0Witness; retroactive cross-firing rules; complexity bound), §Failure modes (1-1-1 → MISS reframing).
+
+Tests:
+- Existing scenarios where the σ-eligibility cascade was the latency bottleneck should now decide in 1·BTT post-bundle.
+- New tests for V-drop peer-reflood-V via KindValue (HV1SelectiveDelivery class).
+- Existing slashing-rule tests adapted for new wire format (most outcomes unchanged; some specific Rule-fired tests will fire on different wire-kind sequences).
+- New EKM state-machine tests (coordination → σ-locked vs coordination → NR-locked transitions, A1 upgrade with EKM ordering).
+- **Test churn estimate revised**: counting `CommitSideSigned` references (~95 across 5 files) + σ-eligibility cascade tests (~30 cases) + A3/A4 pivot scenario assertions (~10 cases) + new state-machine tests + new V-drop peer-reflood-V scenarios → **~1200 LOC test churn** (rewrites + deletions + additions), substantially more than initial 500-800 estimate. Tests to specifically expect to rewrite-or-delete: `TestObserveCommit_KindCommitSignedInfersKindValue`, `TestEquivocationPriorityOverSigmaEligibility`, all `TestObserveCommit_PostCommit*`, scenarios asserting A3/A4 pivots in `catalog_*.go`.
+
+Phase A+B scope items (added):
+- **Remove §Implementation deviations #1 and #2** from `docs/2abOBFT-REDESIGN-PLAN.md` (now superseded by Op3/Op11). Rewrite #3 per shrunken authorized-pair set (Rule 6a triple-message sequences are mostly obsolete because A6/A7 pivots are gone).
+- **Update `Protocol.SafetyBufferOverride` docstring** in [`adapter.go`](../protocol/v2/consensustest/twoab/adapter.go): the "post-Phase-2a cascade window... TWO hops" claim is false post-Op5. Replace with "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop critical path."
+- **Update `resolveDeadline` formula** in [`des.go`](../protocol/v2/consensustest/twoab/des.go): from `TPhase2a + 2·BTT + SafetyBuffer + ε_3` to `TPhase2a + 1·BTT + SafetyBuffer + ε_3` (one-hop cascade post-Op5).
+- **Expand `docs/2abOBFT.md` spec rewrite scope**: not just §Pool aggregation rules and §Phase 2. Throughout the spec body, every reference to `KindCommit-Signed` becomes either KindValue (σ-side meaning) or obsolete (the wire kind no longer exists). Specifically: §Slashing evidence rule descriptions (Rule 1 cross-signing semantics refer to "σ at KindCommit-Signed AND NR at KindCommit-{NR,NRDirect}"; under Op5 the σ-side is at KindValue, not KindCommit). §EKM coordination model text. §Error taxonomy. §Failure modes worked-cases. The rewrite is at the entire-spec scope, not section-scoped.
+
+**Phase C — Validation and acceptance.**
+- Compare-and-contrast stress runs: 2abOBFT (current v4) vs 2abOBFT-fast (post Phase A+B), across all (n, K, BTT, p2p_profile) cells in the stress matrix.
+- Equivocation-scenario diff: `Equivocate111` was `ExpectMiss` under v4 (already misses); should stay MISS under fast-commit but with different miss-reason (was: cannot-σ-gate blocks NR-default + slow reflood; now: ops σ-committed before equivocation observed). Catalog comment update. Rule 3 detection-latency observably faster (fires on first cross-V observation in σ-pool, not waiting for reflood completion).
+- Slashing rule scenario tests: confirm Rules 1, 3, 5, 6a all still fire under the new wire format.
+- V-drop peer-reflood-V tests: scenarios where the L_0 leader's bundle reaches only some peers — confirm A1 upgrade via embedded L0Witness fires for the V-drops, matching the OBFT peer-reflood-V behavior in catalog scenarios like `HV1SelectiveDelivery`.
+
+**Phase D (optional follow-on) — Op8 + Op12: per-layer witness extension.** OBFT-witness-section-parity at all layers. ~200–300 LOC.
+- Wire: `Phase1Bundle.L0Witness` generalizes to the L_k leader's witness on V_k for any k (rename if necessary — e.g. `LeaderWitness`). KindValue gains a `LayerWitnesses []LayerWitness` section listing forwarded `(layer, leader_id, value_root, signature)` triples for every retained bundle at L_k>0.
+- Builder: each layer's leader signs σ partial on V_k at Phase-1 build time; receivers verify and pool into `σ-pool[V_k]`. Emitting ops forward witnesses from their retained bundles in KindValue.
+- Spec amendments: §Phase 1 description extends to "leader includes σ partial witness on V_k"; §Pool aggregation rules describe the witness contribution.
+- Tests: fall-through scenarios should decide at L_1 with σ-pool[V_1] head-started by L_1 leader's witness.
+- Conditional value: marginal at K=2 (only L_1 = deepest layer benefits, and only under L_0 NR-fall-through); more useful at K≥3 deployments. Ship if/when validated.
+
+### Validation plan
+
+The table below lists **targets** — hypothesized outcomes from the analytical model. Numerical claims (e.g., "~80%+ on slow profile") are educated estimates from the critical-path analysis (1·BTT post-bundle vs slow-profile hop p99) and MUST be confirmed empirically via stress sweep post-implementation. Treat any healthy-class cell post-change with success rate < 95% as an investigation hook, not a pass.
+
+| Stress cell | v4 baseline | Op3+Op5+Op6+Op11 **target** | + Op8+Op12 (Phase D) |
+|---|---|---|---|
+| Healthy / prod / BTT=200ms / BFT=0 | 100% / p99 ~3.3s | 100% / p99 ~3.1s (~200ms faster) | same |
+| Healthy / slow / BTT=100ms / BFT=0 | ~9% / p99 timeout | substantial improvement (~80%+ estimated; confirm empirically) | same |
+| HV1SelectiveDelivery / prod / BTT=200ms | MISS (V-drops can't recover) | **SUCCESS** at L_0 target (peer-reflood-V via Op11 → A1 upgrade) | same |
+| Healthy / heavy_tail / BTT=200ms | varies | improved | same |
+| Equivocate111 / prod / any BTT | MISS | MISS (different reason; see Rule 3 row) | same |
+| ValidityDivergence_PassiveByz_Silent_2NV / prod | MISS | MISS (NR-quorum still doesn't form for cannot-σ ops) | same |
+| PartialEquivocation_NaturalRecovery / prod | MISS | MISS (1-1-1 doesn't recover under Op5) | same |
+| Multi-silent / clean-NR-fall-through scenarios (K≥3) | misses or slow fall-through | faster fall-through via NR-eligibility trigger | **even faster** at L_1+ (Op8 head-starts σ-pool[V_k]) |
+| **Rule 3 detection latency (Equivocate111)** | fires after gossipsub reflood completes (~1·BTT post-equivocation under healthy mesh; bounded by reflood tail) | fires immediately on first cross-V observation in σ-pool (sub-BTT under healthy mesh — σ partials embedded in KindValue from L_0 fast-commit propagate directly, no reflood wait) | same |
+
+Healthy-class scenarios are *targeted* to improve substantially with Phase A+B; the `HV1SelectiveDelivery` scenario is *targeted* to flip from MISS to SUCCESS via the new peer-reflood-V mechanism (matching OBFT's behavior). Adversarial scenarios are *targeted* to remain MISS but with potentially different miss reasons. Phase D adds marginal improvement at K=2 (only fall-through-to-deepest) and more substantial improvement at K≥3.
+
+Any cell where the post-change number falls short of the target is a validation block — debug, root-cause, decide whether to land regardless OR revise the design before landing.
+
+### Subtle edge cases (for impl awareness)
+
+A grab-bag of edge cases surfaced during plan review. None are blockers, but call out at impl time so they don't cause surprise at validation.
+
+- **σ-lock acquisition is earlier under Op6.** Under v4, σ-lock at L_0 is acquired at KindCommit-Signed emit time (Phase-2b). Under Op5/Op6, σ-lock acquisition happens at KindValue emit time (typically `T0Broadcast + 1·BTT`, ~1·BTT earlier than v4). The Instance state machine is in-memory only — a crash between σ-lock acquisition and σ-broadcast loses the slot. The earlier σ-lock slightly enlarges the crash-loss window vs v4. Acceptable trade for the latency win; document for operators.
+- **NR-eligibility at K=2 with single V-drop never fires.** At n=4 K=2, a single V-drop op (noValuePool = {self}) cannot reach qEnc=3 because the other 3 ops emit KindValue (not KindNoValue). The single V-drop's only recovery path is A1 upgrade via Op11 (peer-reflood-V) — it cannot NR-fall-through alone. This is correct behavior, but it's a structural difference from v4 (where the V-drop could wait for the cascade to fire NR-eligibility with cluster-wide help). Catalog scenario `HV1SelectiveDelivery` is the primary exercise of this case; expect MISS → SUCCESS transition under Op11 ONLY when peer-V via KindValue reaches the V-drop within slot budget.
+- **3-V-drop scenario at K=2: NR-eligibility fires correctly.** At n=4 K=2 with 3 V-drops (e.g., leader byz silent, all non-leaders V-drop), noValuePool = 3 = qEnc → NR-eligibility trigger fires → cluster falls through to L_1. Unchanged from v4. Good case.
+- **Async fire ordering in DES simulation.** The discrete-event simulator at [`des.go`](../protocol/v2/consensustest/twoab/des.go) under Op6 needs to schedule per-op `MaybeFirePhase2a` independently on each L0Ready close (driven by `evtPhase1Arrival` + `evtHostValidate`), not on a cluster-wide `TPhase2a` event. The TPhase2a backstop event still exists but fires only for ops in `coordination` state. Catalog/stress test results may shift in subtle ways as a result; validate with comprehensive sweep.
+- **`byz.go` adversarial primitives may need re-mapping under Op5.** "Withhold bundle from N peers" under v4 meant: those N peers go to NoValue → NR cascade. Under Op5/Op11, those N peers can recover via peer-KindValue if at least one peer received the bundle and emitted KindValue (carrying L0Witness). The withhold primitive's MISS threshold shifts; existing adversarial test expectations need re-validation at Phase C.
+
+### Inherited from OBFT impl patterns (carry-forward to 2abOBFT-fast impl)
+
+The bare OBFT impl in `protocol/v2/obft/base/` ships several spec-implicit-but-impl-essential patterns that 2abOBFT-fast must inherit. Listed here so they don't get lost in the impl phase:
+
+- **Bundle dedup-first-then-verify** ([`obft/base/phase1.go`](../protocol/v2/obft/base/phase1.go) MaxRetainedPerOpLayer): cap per-(layer, leader) retention at 2 distinct V's. Two V's are sufficient for Rule 2 (cross-leader-V) evidence; further V's from the same leader add no detection power but enable a byz to amplify memory. 2abOBFT-fast's `ObservePhase1Bundle` should apply the same cap.
+- **σ-partial verify on bundle dedup-skip**: when a re-broadcast bundle (gossipsub IHAVE/IWANT) arrives, the receiver dedups by content hash and skips BLS verification. CPU optimization; carry over.
+- **Canonical-ordering of witnesses** in OBFT's witness section ([`obft/base/phase2.go`](../protocol/v2/obft/base/phase2.go) BuildKindCommit): witnesses are sorted by `(layer, leader_id, value_root)` so different ops emitting at different times produce identical wire payloads when their retention state agrees. Necessary for fuzz reproducibility + dedup at receivers. Op11/Op12 forwarded witnesses should canonical-order on the same key.
+- **Per-rule evidence dedup keys** ([`obft/base/instance.go`](../protocol/v2/obft/base/instance.go) `recordRule3Leader`, `recordRule5UnknownV`): per-rule first-observation dedup so cross-path observations don't double-fire evidence. 2abOBFT has the same `recordRule{1,3,4,5}` helpers (per the v4 impl); extend to handle the new retroactive-cross-firing paths from §Retroactive cross-firing of slashing rules above.
+- **Late-σ pool re-incorporation**: σ partials arriving AFTER a local Resolve attempt (e.g., a slow peer's KindValue arriving past the scheduled Resolve sweep) MUST be incorporated into σ-pool[V_0] and trigger Resolve re-run on the next state delta. 2abOBFT's `evtResolveRerun` already does this at the adapter level; ensure the protocol-level `tryOpportunisticResolve` is called on every KindValue arrival not just the first σ-pool growth event.
+- **Cluster-pubkey-cached BLS verify**: cluster public key is computed once at instance construction; BLS verify reuses it. CPU optimization; same in both protocols.
+- **σ partial cache**: ops cache their own σ partials per (slot, layer, V) so re-emission (rare under variant b semantics; possible under A1 upgrade) doesn't re-run BLS sign. Carry over.
+
+### Wire-version migration policy
+
+The optimization is wire-incompatible with v4 (Phase-1 bundle gains L0Witness; KindValue gains L0Partial + L0Witness; KindCommit-Signed wire kind removed). Wire version must bump.
+
+**Decision**: bump `ProtocolTag` to encode a 1-byte version. Concretely: `"2abOBFT" + version_byte + 8 NUL bytes` (16-byte field). v4 corresponds to `version_byte = 0x04`; the fast-commit revision corresponds to `version_byte = 0x05`. Future revisions bump the version byte. The discovery layer (gossipsub topic / SSV-runner pre-handshake) can negotiate on the tag prefix while the version byte distinguishes wire format.
+
+**Coexistence**: NO v4/v5 coexistence in production. A cluster commits to one wire version per slot; mixed-version clusters cannot decide. SSV deployment cutover is all-or-nothing per cluster: coordinate a single-slot transition (operators upgrade binary, cluster restarts on the new version next slot). This mirrors the v1→v4 transition policy.
+
+**Testing**: keep v4 adapter as a comparison baseline in stresstest variants (e.g., `2abOBFT-v4`) so the v4-vs-v5 healthy-path delta can be quantified post-cutover. Drop after v5 is in production and v4 is no longer a deployment target.
+
+### Production deployment scope
+
+**K=2 is the only supported configuration under Phase A+B+C.** SSV's default is K=f+1 = 2 at n=4. Phase A+B+C targets this configuration exclusively; the K=2 optimization is sound and validated.
+
+**K≥3 requires Phase D before production rollout.** At K≥3, the Phase-1 bundles for L_1, L_2, ..., L_{K-2} need leader witnesses (Op8) and KindValues need per-layer forwarded witnesses (Op12) to match OBFT's σ-pool head-start at fall-through layers. Without Phase D, K≥3 fall-through scenarios are structurally slower than OBFT at deeper layers. **Phase D is not "optional" for K≥3 deployments — it's a hard prerequisite.** It is optional only in the sense that K=3+ SSV deployments are not currently supported.
+
+Concretely:
+- **Today's SSV (K=2)**: Phase A+B+C is the complete optimization. Ship.
+- **Future K≥3 SSV**: gate K≥3 cluster enablement on Phase D shipping AND validation across K=3, K=4, K=5 in stresstest.
+
+### Production rollout
+
+Phase A+B is wire-incompatible with the currently-shipped v4 protocol. Rollout requires careful sequencing.
+
+#### Prerequisite: Phase L (runner integration)
+
+The fast-commit changes affect the protocol layer (`protocol/v2/obft/twoab/`) and the consensustest adapter (`protocol/v2/consensustest/twoab/`). For the optimization to reach production, the SSV runner integration ([`docs/2abOBFT-PHASE-L-PLAN.md`](2abOBFT-PHASE-L-PLAN.md)) must be in place — the runner is what drives the protocol Instance in real operator deployments. Phase L is currently a separate plan; **Phase L is a hard prerequisite for production rollout of Phase A+B**. The two efforts can proceed in parallel during development (Phase A+B against the consensustest harness; Phase L against the production runner code), but production rollout requires both landed and integrated.
+
+#### Message-validation pipeline touch-points
+
+[`message/validation/`](../message/validation/) has `obft_admissions.go` / `obft_validation.go` for bare OBFT message admissions (gossipsub topic validation, anti-amplification, sender authentication). The twoab wire kinds need analogous admission logic. Phase A+B impl scope must include:
+- `twoab_admissions.go` (or equivalent) accepting the new KindValue/KindNoValue/KindCommit/KindPhase1Bundle wire shapes.
+- Gossipsub topic registration for twoab message kinds.
+- Outer-envelope auth verification (op-identity signature, cluster ID, slot height bounds).
+- Rate-limiting per-op per-(slot, layer) emission (matching bare OBFT's anti-byz amplification — at most 1 KindValue per op per slot, etc.).
+
+This work is in addition to the protocol-layer LOC estimate (1500-2000) and the test churn (~1200 LOC). Adds another estimated ~300-500 LOC.
+
+#### Observability
+
+For production rollout, the impl MUST expose metrics that let operators confirm the fast-commit is working as designed and detect regressions. Required metrics:
+
+- `obft_twoab_l0_witness_verify_total{result="ok|fail"}` — counts L0Witness BLS verifications and outcomes.
+- `obft_twoab_resolve_post_bundle_latency_seconds{kind="healthy|a1_upgrade|nr_fallthrough"}` — histogram of resolve latency relative to Phase-1 bundle observation.
+- `obft_twoab_a1_upgrade_total` — count of A1 upgrade emissions (KindNoValue → KindValue transitions); a non-zero count under healthy mesh would indicate degraded propagation.
+- `obft_twoab_ekm_state{state="coordination|sigma_locked|nr_locked"}` — gauge of current per-slot EKM state per layer, sampled at end-of-slot.
+- `obft_twoab_kindvalue_emit_offset_seconds` — histogram of KindValue emit timestamp relative to slot start (validates Op6 async-fire is working).
+- `obft_twoab_slot_miss_reason{reason="cascade_window|equivocation_post_lock|host_flip|other"}` — categorize slot misses by structural cause.
+
+These metrics should be added in Phase A+B impl alongside the protocol changes. The Phase C validation plan should include "metrics-exposed-and-emitting" as an acceptance check.
+
+#### Rollback procedure
+
+A regression detected post-cutover requires reverting to v4. The rollback procedure:
+
+1. **Detection trigger**: any of (a) cluster-wide success rate drops by > X% over Y slots in monitoring, (b) safety-invariant alert fires (NoOfflineDoubleV, SingleV, Pigeonhole bounds), (c) operator-reported issues. Specific thresholds X, Y to be set during Phase C validation.
+2. **Authority**: rollback decision made by SSV ops + protocol team jointly. Single point of contact (TBD).
+3. **Mechanism**: operators downgrade their SSV binary to a v4-supporting version. Cluster's next slot uses v4 wire format. Since coexistence is not supported, the cluster experiences a single missed slot during cutover (the last v5 slot races with the first v4 slot in an undefined state); accept this as the rollback cost.
+4. **Binary state requirement**: operators MUST keep the v4-supporting binary pre-staged for the duration of the rollout (at least the first 30 days post-Phase-A+B production deploy). Document this in the operator-facing rollout instructions.
+
+#### Mixed-version cluster behavior (during cutover)
+
+A cluster where some operators are on v4 and others on v5 cannot decide:
+- v5 operators emit KindValue with L0Partial — v4 operators' decoders reject (unknown field).
+- v4 operators emit KindCommit-Signed — v5 operators' decoders reject (removed wire kind).
+- Result: no quorum can form. Cluster misses every slot until all operators converge on one version.
+
+**Implications for operator-driven rollout:**
+- The SSV runner SHOULD log a prominent warning if it detects mixed-version traffic on its cluster's topic (e.g., received messages with the "wrong" wire version byte). The warning should name the offending operator IDs so the cluster coordinator can chase them.
+- The SSV release notes for the v5-enabling binary MUST emphasize: "all cluster operators must upgrade in the same slot range; mixed-version clusters miss every slot until convergence."
+- Consider a **feature-flag rollout** as an alternative to all-or-nothing: each operator's config gates the v5 wire-format-emit; until the cluster reaches consensus on enabling v5, all operators emit v4. The flag flip itself is the cutover event, coordinated cluster-wide rather than binary-wide. This decouples binary deployment from protocol cutover. Trade-off: more complex config, requires explicit coordination beyond binary upgrade. Default recommendation: no feature flag for the initial rollout (small cluster sizes mean coordination is feasible); reconsider if cluster sizes grow.
+
+#### Validation beyond stress-sweep
+
+Phase C's catalog + stress-sweep validation is necessary but not sufficient for production. Additional validation phases:
+
+1. **Devnet smoke**: deploy Phase A+B to an SSV devnet cluster, run for at least 1000 slots under varied network conditions. Check metrics, miss rate, slashing-rule fire counts.
+2. **Stage canary**: enable on a small subset of stage clusters first. Compare metric distributions to baseline v4 stage clusters. Run for 1 week.
+3. **Mainnet partial rollout**: NOT FEASIBLE under the no-coexistence policy. Once a cluster enables v5, it's all operators or none. The "partial" axis is across CLUSTERS, not within: enable on cluster A first, monitor, then cluster B, etc. Mainnet rollout strategy = staged per-cluster enablement, not staged per-operator.
+4. **Crash recovery test**: validate σ-lock acquisition timing under operator restart mid-slot. Phase A+B's earlier σ-lock (line 1483) slightly enlarges the crash-loss window vs v4; confirm impact is bounded (e.g., < 1·BTT additional miss rate under controlled-restart test).
+5. **Production telemetry baseline**: pre-cutover, record v4 metric distributions across all relevant cells (healthy success rate, p99 latency, miss reasons). Post-cutover, compare. Any regression > 5% on any cell is a rollback trigger.
+
+## Execution plan (impl rewrite) — v4-historical
+
+> **This section describes the execution plan for the v4 impl rewrite, which has already shipped.** It remains in the doc as historical context for understanding the current codebase. The forward-going execution plan for the next protocol revision is in §Healthy-path optimizations / §Implementation phases above. **Delete this section when the v5 (Phase A+B) impl lands and the v4-specific scope is no longer relevant to maintainers.**
+
 
 This section captures the concrete plan we agreed for the implementation rewrite. The "v4" codename is purely a planning artifact — it does NOT appear in code, in the rewritten spec (`docs/2abOBFT.md`), in package/type/file names, in comments, or in test names. The implementation is a full rewrite of `protocol/v2/obft/twoab/`; the protocol's external name is just "2abOBFT".
 
@@ -1248,7 +1786,10 @@ This section captures the concrete plan we agreed for the implementation rewrite
 15. **Consensustest adapter**: events/byz/des restructure + adapter rewrite.
 16. **Makefile**: stresstest PROTOCOLS update.
 
-## Implementation deviations from this plan
+## Implementation deviations from this plan — v4-historical, superseded by Phase A+B
+
+> **This section documents v4-first-pass workarounds that the Phase A+B optimization (Op3 + Op11) supersedes.** Deviation #1 (no leader-auth-sig in KindValue) and Deviation #2 (no peer-reflood-V via KindValue extraction) are reversed by Op3+Op11 restoring the spec-intended wire-level binding. Deviation #3 (triple-message slashable sequences unenforceable) becomes mostly moot because Op5 removes the A6/A7 pivot-using sequences that produced the triple-message ambiguity. **Delete this section when Phase A+B lands.**
+
 
 The shipped implementation in `protocol/v2/obft/twoab/` diverges from the plan above in three deliberate ways. Documented here so the plan + impl stay in sync; the impl-side decisions are flagged in the source comments at the call sites.
 
