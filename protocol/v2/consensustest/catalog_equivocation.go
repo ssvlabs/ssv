@@ -174,5 +174,5 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
-	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452). 2ab loses OBFT's σ_V head-start (Variant C) so this fall-throughs to L_1 instead of L_0.",
+	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452). Post-Op3 the per-layer leader witness restores the σ_V head-start, so 2ab decides at L_0 like OBFT here (the 2f V_a-recipients' σ partials + the leader's witness on V_a reach qV).",
 }
