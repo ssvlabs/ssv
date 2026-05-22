@@ -94,6 +94,49 @@ func newByzSet(ops []ct.OperatorID) byzSet {
 
 func (s byzSet) Contains(op twoab.OperatorID) bool { return s.Lookup[op] }
 
+// crashOverlay wraps an internalByz so a set of "crashed" operators are
+// completely offline: no Phase-1 leader broadcast, no Phase-2a KindValue/
+// KindNoValue, no Phase-2b commit, no certificate, and no wire delivery in
+// or out. Layered on top of whatever byz Kind the scenario selected (the
+// crashed set is disjoint from the pattern's byz operators per Validate).
+// Phase-2b commits have no dedicated Allow gate, so they're suppressed at
+// the wire (AllowDelivery for from=crashed) plus the s.crashed guard in
+// emitMesh/emitDirect (which also avoids the NodeForOperator panic on a
+// crashed publisher absent from the mesh topology). Decision bookkeeping —
+// excluding crashed ops and stamping Err="offline" — lives in sim.outcome().
+type crashOverlay struct {
+	internalByz
+	crashed byzSet
+}
+
+func (c crashOverlay) LeaderBroadcastPlan(s *sim, leader twoab.OperatorID, layer int, honestV twoab.Value) []broadcastPlan {
+	if c.crashed.Contains(leader) {
+		return nil
+	}
+	return c.internalByz.LeaderBroadcastPlan(s, leader, layer, honestV)
+}
+
+func (c crashOverlay) AllowPhase2aEmission(op twoab.OperatorID) bool {
+	if c.crashed.Contains(op) {
+		return false
+	}
+	return c.internalByz.AllowPhase2aEmission(op)
+}
+
+func (c crashOverlay) AllowCertificateBroadcast(op twoab.OperatorID) bool {
+	if c.crashed.Contains(op) {
+		return false
+	}
+	return c.internalByz.AllowCertificateBroadcast(op)
+}
+
+func (c crashOverlay) AllowDelivery(from, to twoab.OperatorID, kind ct.MsgKind) bool {
+	if c.crashed.Contains(from) || c.crashed.Contains(to) {
+		return false
+	}
+	return c.internalByz.AllowDelivery(from, to, kind)
+}
+
 // translateByz maps an abstract consensustest.ByzPattern to a 2ab-internal
 // impl. Most catalog kinds translate faithfully; old verdict-flip /
 // verdict-withhold patterns are gone (Phase 2a has no direction field

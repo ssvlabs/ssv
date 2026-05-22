@@ -63,6 +63,10 @@ type sim struct {
 	commitEmitted map[obftbase.OperatorID]bool
 	canonValues   map[int]obftbase.Value
 	trace         []ct.TraceEntry
+	// crashed[op] = true for completely-offline operators. Wire behavior is
+	// suppressed by crashOverlay; this set lets outcome() exclude them from
+	// the decided set and stamp Err="offline".
+	crashed map[obftbase.OperatorID]bool
 }
 
 func newSim(cfg desConfig) (*sim, error) {
@@ -98,6 +102,11 @@ func newSim(cfg desConfig) (*sim, error) {
 		canonValues[k] = obftbase.Value(ct.MakeRealisticBlindedBlockValue(byte(k + 1)))
 	}
 
+	crashed := make(map[obftbase.OperatorID]bool, len(cfg.Crashed))
+	for _, op := range cfg.Crashed {
+		crashed[obftbase.OperatorID(op)] = true
+	}
+
 	return &sim{
 		cfg:           cfg,
 		rng:           mrand.New(mrand.NewSource(cfg.Seed)),
@@ -105,6 +114,7 @@ func newSim(cfg desConfig) (*sim, error) {
 		pubShares:     pubShares,
 		clusterPub:    clusterPub,
 		canonValues:   canonValues,
+		crashed:       crashed,
 		instances:     make(map[obftbase.OperatorID]*obftbase.Instance, N),
 		resolved:      make(map[obftbase.OperatorID]*obftbase.Output, N),
 		resolvedAt:    make(map[obftbase.OperatorID]time.Duration, N),
@@ -215,6 +225,13 @@ func (s *sim) outcome() rawOutcome {
 	}
 	earliestT := time.Duration(-1)
 	for _, op := range s.operators {
+		if s.crashed[op] {
+			// Completely offline: never a decider, reported with Err="offline"
+			// so Terminated stays satisfied (Decided=false, Err!="") and the
+			// op is excluded from SingleV / HonestAgreement (decided-only).
+			out.perOp[ct.OperatorID(op)] = rawOpOutcome{decided: false, layer: -1, err: "offline"}
+			continue
+		}
 		o := rawOpOutcome{decided: false, layer: -1}
 		if res := s.resolved[op]; res != nil {
 			o.decided = true

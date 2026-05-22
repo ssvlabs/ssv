@@ -61,7 +61,11 @@ type sim struct {
 	inflightRound        map[spectypes.OperatorID]specqbft.Round
 	byzProposalScheduled map[specqbft.Round]bool // dedup: one byz PROPOSE per round
 	byz                  internalByz
-	trace                []ct.TraceEntry
+	// crashed[op] = true for completely-offline operators. Wire behavior is
+	// suppressed by crashOverlay + the emitMesh guard; this set lets outcome()
+	// exclude them from the decided set and stamp Err="offline".
+	crashed map[spectypes.OperatorID]bool
+	trace   []ct.TraceEntry
 
 	// Post-consensus partial-sig aggregation state. partials[receiver]
 	// [valueKey] is the set of signers whose partial sig the receiver
@@ -101,6 +105,11 @@ func newSim(cfg desConfig) (*sim, error) {
 	}
 	committee := spectestingutils.TestingCommitteeMember(keys)
 
+	crashed := make(map[spectypes.OperatorID]bool, len(cfg.Crashed))
+	for _, op := range cfg.Crashed {
+		crashed[spectypes.OperatorID(op)] = true
+	}
+
 	return &sim{
 		cfg:        cfg,
 		rng:        mrand.New(mrand.NewSource(cfg.Seed)),
@@ -124,6 +133,7 @@ func newSim(cfg desConfig) (*sim, error) {
 		inflightRound:        make(map[spectypes.OperatorID]specqbft.Round, cfg.N),
 		byzProposalScheduled: make(map[specqbft.Round]bool),
 		byz:                  cfg.Byz,
+		crashed:              crashed,
 		partials:             make(map[spectypes.OperatorID]map[string]map[spectypes.OperatorID]bool, cfg.N),
 		readyAt:              make(map[spectypes.OperatorID]time.Duration, cfg.N),
 	}, nil
@@ -252,6 +262,13 @@ func (s *sim) outcome() rawOutcome {
 	// gathered enough post-consensus partial signatures" MissReason.
 	earliestReady := time.Duration(-1)
 	for _, op := range s.operators {
+		if s.crashed[op] {
+			// Completely offline: never a decider, reported with Err="offline"
+			// so Terminated stays satisfied and the op is excluded from
+			// SingleV / HonestAgreement (decided-only checks).
+			out.perOp[ct.OperatorID(op)] = rawOpOutcome{err: "offline"}
+			continue
+		}
 		oo := rawOpOutcome{}
 		rec, decidedLocally := s.decided[op]
 		ready, hasReady := s.readyAt[op]

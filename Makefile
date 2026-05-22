@@ -112,8 +112,9 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (6 curated sweeps × OBFT family + 2abOBFT family + QBFT family +
-# PSigs × per-scenario iterations) and writes / merges data.js into
+# (6 curated sweeps × the default protocol set — see the PROTOCOLS
+# variable below — × per-scenario iterations) and writes / merges
+# data.js into
 # REPORT_DIR (default ./stresstest-report)
 # — consumed by the static UI (index.html + app.js + styles.css)
 # already in that folder.
@@ -211,8 +212,13 @@ P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300,400
 BFT_STARTS ?=
 # PROTOCOLS — comma-separated protocol names to include in the sweep (e.g.
-# `OBFT,QBFT,PSigs`). Empty (default) runs ALL registered protocols.
-# Names must exactly match Protocol.Name() values defined in stress_test.go.
+# `OBFT,QBFT,PSigs`). Setting it empty (`PROTOCOLS=`) runs ALL registered
+# protocols. The curated default below is a deliberate subset: it omits the
+# PSigs baseline-cost reference and the OBFTx2 / OBFTx3 multiplier variants.
+# To include them, override per-run (e.g.
+# `make stresstest PROTOCOLS=OBFT,2abOBFT,QBFT,PSigs`) or run the full set
+# with `PROTOCOLS=`. Names must exactly match Protocol.Name() values
+# defined in stress_test.go.
 PROTOCOLS ?= OBFT,OBFT-RD0,2abOBFT,2abOBFT-tight,2abOBFT-lean,QBFT,QBFT-SSV
 .PHONY: stresstest
 stresstest:

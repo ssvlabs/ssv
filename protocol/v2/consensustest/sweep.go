@@ -278,7 +278,14 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 			obftFamily = append(obftFamily, p)
 		}
 	}
-	pts := make([]SweepPoint, 0, len(bttValues)*len(profiles)*len(InstabilityLevels)*len(bftStarts))
+	// faulty_nodes axis (0..f) crossed with every other axis (full outer
+	// product). 0 reproduces the pre-crash cells; >0 crashes that many
+	// operators on the Baseline group only (Healthy), drawn per-seed in
+	// Validate. Like instability, faulty_nodes>0 emits only Baseline-group
+	// scenarios — non-Baseline rows are crash-invariant here and the UI
+	// falls back to their faulty_nodes=0 cell.
+	faultyNodes := FaultyNodesRange(n)
+	pts := make([]SweepPoint, 0, len(bttValues)*len(profiles)*len(InstabilityLevels)*len(bftStarts)*len(faultyNodes))
 	for _, bftStart := range bftStarts {
 		// Per-BFT_start protocol set: full slice at BFT_start=0;
 		// obftFamily-only at BFT_start>0 (skip empty obftFamily to
@@ -294,48 +301,53 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 			for _, profile := range profiles {
 				profileIdx := P2PProfileIndex(profile)
 				for _, level := range InstabilityLevels {
-					base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-					base.K = k
-					base.BFTStart = bftStart
-					// Calibrated profile drives BOTH direct and mesh paths.
-					// At n=4 the cluster typically fits inside one
-					// gossipsub mesh, so per-hop ≈ cluster-wide for real
-					// prod; using the same profile for cfg.Network and
-					// cfg.Mesh.HopDelay keeps the report's direct and
-					// mesh columns anchored to the same empirical data
-					// instead of one being synthetic. Fresh per-point
-					// instances so stateful wrappers (loss / correlated /
-					// markov-slow added by Apply or instability wraps)
-					// compose on independent state per sim.
-					base.Network = P2PProfile(profile)
-					base.Mesh.HopDelay = P2PProfile(profile)
-					// At level=0 we run the full catalog (no wrap is a no-op
-					// for non-Baseline anyway, but emitting them here is what
-					// the heatmap reads for the bulk of scenarios). At
-					// level>0 only the Baseline group reruns under the wrap.
-					pointScenarios := scenarios
-					if level.Level > 0 {
-						pointScenarios = baselineOnly
+					for _, fn := range faultyNodes {
+						base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+						base.K = k
+						base.BFTStart = bftStart
+						// Calibrated profile drives BOTH direct and mesh paths.
+						// At n=4 the cluster typically fits inside one
+						// gossipsub mesh, so per-hop ≈ cluster-wide for real
+						// prod; using the same profile for cfg.Network and
+						// cfg.Mesh.HopDelay keeps the report's direct and
+						// mesh columns anchored to the same empirical data
+						// instead of one being synthetic. Fresh per-point
+						// instances so stateful wrappers (loss / correlated /
+						// markov-slow added by Apply or instability wraps)
+						// compose on independent state per sim.
+						base.Network = P2PProfile(profile)
+						base.Mesh.HopDelay = P2PProfile(profile)
+						// At level=0 AND fn=0 we run the full catalog (the
+						// wraps are no-ops for non-Baseline anyway, but this
+						// is what the heatmap reads for the bulk of
+						// scenarios). When either degradation axis is active
+						// only the Baseline group (Healthy) reruns under the
+						// wrap(s).
+						pointScenarios := scenarios
+						if level.Level > 0 || fn > 0 {
+							pointScenarios = baselineOnly
+						}
+						pts = append(pts, SweepPoint{
+							Label: fmt.Sprintf("n=%d K=%d BTT=%dms profile=%s instab=%s faulty=%d BFT_start=%dms",
+								n, k, btt.Milliseconds(), profile, level.Name, fn, bftStart.Milliseconds()),
+							Fields: map[string]float64{
+								"N":           float64(n),
+								"K":           float64(k),
+								"BTT":         float64(btt.Milliseconds()),
+								"p2p_profile": float64(profileIdx),
+								"Instability": float64(level.Level),
+								"FaultyNodes": float64(fn),
+								"BFT_start":   float64(bftStart.Milliseconds()),
+							},
+							Config: BatchConfig{
+								Iterations:        fallback,
+								IterationsByGroup: byGroup,
+								Base:              base,
+								Scenarios:         wrapAllForFaultyNodes(wrapAllForInstability(pointScenarios, level), fn),
+								Protocols:         pointProtocols,
+							},
+						})
 					}
-					pts = append(pts, SweepPoint{
-						Label: fmt.Sprintf("n=%d K=%d BTT=%dms profile=%s instab=%s BFT_start=%dms",
-							n, k, btt.Milliseconds(), profile, level.Name, bftStart.Milliseconds()),
-						Fields: map[string]float64{
-							"N":           float64(n),
-							"K":           float64(k),
-							"BTT":         float64(btt.Milliseconds()),
-							"p2p_profile": float64(profileIdx),
-							"Instability": float64(level.Level),
-							"BFT_start":   float64(bftStart.Milliseconds()),
-						},
-						Config: BatchConfig{
-							Iterations:        fallback,
-							IterationsByGroup: byGroup,
-							Base:              base,
-							Scenarios:         wrapAllForInstability(pointScenarios, level),
-							Protocols:         pointProtocols,
-						},
-					})
 				}
 			}
 		}

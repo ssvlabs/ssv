@@ -28,6 +28,11 @@ func (s *sim) operatorsCT() []ct.OperatorID {
 // carrying the spec-qbft SignedSSVMessage; self-loopback (zero delay) is
 // handled by Broadcast directly, not here.
 func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+	// Crashed operators are absent from the mesh topology — guard before
+	// NodeForOperator (which would panic on a missing op) and emit nothing.
+	if s.crashed[spectypes.OperatorID(from)] {
+		return
+	}
 	mesh := s.cfg.Mesh
 	fromNode := mesh.NodeForOperator(from)
 	id := mesh.NewMsgID()

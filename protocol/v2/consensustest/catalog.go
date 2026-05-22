@@ -71,6 +71,11 @@ var Catalog = []Scenario{
 	scenarioWithholdLeaderDeepest,
 	scenarioCertWithholding,
 
+	// Crashed operators (fully offline; ByzPattern.Crashed)
+	scenarioPrimaryLeaderCrash,
+	scenarioCrashNonLeader,
+	scenarioCrashPlusByz,
+
 	// Leader equivocation
 	scenarioEquivocate111,
 	scenarioEquivocateAllNR,

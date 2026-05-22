@@ -103,6 +103,13 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err != nil {
 		return ct.Outcome{}, err
 	}
+	// Layer crash suppression on top of the translated byz pattern: crashed
+	// operators emit nothing and receive nothing (the overlay), are absent
+	// from the mesh topology (MakeMeshTopology), and are reported offline by
+	// sim.outcome(). Composes with any Kind; the sets are disjoint per Validate.
+	if len(cfg.Byz.Crashed) > 0 {
+		internal = crashOverlay{internalByz: internal, crashed: newByzSet(cfg.Byz.Crashed)}
+	}
 
 	// Derive every timing budget internally from bttEff = multiplier ·
 	// cfg.BTT. The framework no longer carries Delta2 / BroadcastBudget /
@@ -176,6 +183,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		N:               cfg.N,
 		K:               cfg.K,
 		Operators:       cfg.Operators,
+		Crashed:         cfg.Byz.Crashed,
 		BFTStart:        bftStart,
 		TCommit:         tCommit,
 		Delta2:          delta2,
@@ -322,7 +330,8 @@ type desConfig struct {
 	N               int
 	K               int
 	Operators       []ct.OperatorID
-	BFTStart        time.Duration // forwarded to obftbase.Config.BFTStart
+	Crashed         []ct.OperatorID // completely-offline operators (subset of Operators)
+	BFTStart        time.Duration   // forwarded to obftbase.Config.BFTStart
 	TCommit         time.Duration
 	Delta2          time.Duration
 	Epsilon3        time.Duration // forwarded to obftbase.Config.Eps3 (= ε_3 per spec)

@@ -10,19 +10,26 @@
 // NoOfflineDoubleV), QuorumBackedDecision, NoEquivocationAccepted, plus
 // OBFT-specific OBFTCommitKindValid (every commit is σ-or-NR-backed) and
 // OBFTHostValidityRespect (decided value satisfies every honest
-// validator's host-validity predicate) — are enforced on every simulation
-// regardless of profile. Violations panic via SafetyPanic.
+// validator's host-validity predicate) — are the advertised safety set.
+// The framework runs IsViolation over every simulation regardless of
+// profile and panics on a violation via SafetyPanic.
 //
-// Invariants checked from PerOp/OfflineAgg directly (Agreement); the rest
-// read Outcome.CommitAttestation, populated by adapters. Adapters that
-// haven't instrumented a given invariant leave the corresponding *Checked
-// field zero; the framework treats unchecked invariants as
-// no-violation-reportable (graceful degradation, same pattern as
-// NoOfflineDoubleV pre-instrumentation).
+// Effective coverage today is narrower than that list. Only the Agreement
+// trio is load-bearing: it is computed directly from PerOp/OfflineAgg and
+// always fires. The other four read Outcome.CommitAttestation and cannot
+// fire under the current adapters — three (QuorumBackedDecision,
+// OBFTCommitKindValid, OBFTHostValidityRespect) have their *Checked gate set
+// by no adapter, and NoEquivocationAccepted is gated on but its trigger
+// (EquivocationsAccepted) is hardwired to 0. They default to true and are
+// retained so a future adapter can opt in without a framework-side change
+// (graceful degradation, same pattern as NoOfflineDoubleV pre-instrumentation).
+// See SafetyReport in safety.go for the per-invariant coverage table.
 package consensustest
 
 import (
 	"fmt"
+	mrand "math/rand"
+	"slices"
 	"strings"
 	"time"
 )
@@ -145,7 +152,58 @@ func (c *SimConfig) MakeMeshTopology() *MeshTopology {
 	if c.Delivery != DeliveryMesh {
 		return nil
 	}
-	return NewMeshTopology(c.Seed, c.Mesh, c.Operators)
+	// Crashed operators are fully offline — they don't participate in the
+	// mesh at all (neither originate nor forward), so the topology is built
+	// on the surviving cluster peers only. Survivors thus lose the crashed
+	// nodes' relay paths, which is the realistic "node down" propagation
+	// effect (vs. a half-present ghost that still forwards). Crashed is
+	// already resolved + bounded by Validate before any adapter calls this.
+	cluster := operatorsExcluding(c.Operators, c.Byz.Crashed)
+	return NewMeshTopology(c.Seed, c.Mesh, cluster)
+}
+
+// operatorsExcluding returns ops with every member of exclude removed,
+// preserving order. Returns ops unchanged when exclude is empty.
+func operatorsExcluding(ops, exclude []OperatorID) []OperatorID {
+	if len(exclude) == 0 {
+		return ops
+	}
+	ex := make(map[OperatorID]bool, len(exclude))
+	for _, e := range exclude {
+		ex[e] = true
+	}
+	out := make([]OperatorID, 0, len(ops))
+	for _, op := range ops {
+		if !ex[op] {
+			out = append(out, op)
+		}
+	}
+	return out
+}
+
+// selectCrashed deterministically picks `count` distinct operators from
+// `ops` (excluding any in `exclude`) using `seed`. The seed dependence lets
+// the Healthy faulty_nodes knob average over victim positions across iters
+// while staying reproducible — every protocol resolves the same crashed set
+// at a given (scenario, seed). The salt decorrelates this draw from the
+// network-model / mesh RNG streams (which seed off the same value). Result
+// is sorted for stable downstream iteration.
+func selectCrashed(seed int64, ops []OperatorID, exclude []OperatorID, count int) []OperatorID {
+	if count <= 0 {
+		return nil
+	}
+	// Copy before shuffling: operatorsExcluding may alias `ops` when
+	// `exclude` is empty, and an in-place shuffle would corrupt the
+	// caller's Operators ordering (load-bearing for leader rotation).
+	pool := append([]OperatorID(nil), operatorsExcluding(ops, exclude)...)
+	rng := mrand.New(mrand.NewSource(seed ^ 0x6661756c74795f76)) // "faulty_v"
+	rng.Shuffle(len(pool), func(i, j int) { pool[i], pool[j] = pool[j], pool[i] })
+	if count > len(pool) {
+		count = len(pool)
+	}
+	chosen := append([]OperatorID(nil), pool[:count]...)
+	slices.Sort(chosen)
+	return chosen
 }
 
 // F returns the byzantine bound implied by N (F = (N-1)/3).
@@ -466,9 +524,35 @@ func (c *SimConfig) Validate() error {
 		}
 		seenByz[op] = struct{}{}
 	}
-	if len(c.Byz.ByzOperators) > f {
-		return fmt.Errorf("consensustest: ByzPattern has %d byz operators but f=%d (cluster N=%d)",
-			len(c.Byz.ByzOperators), f, c.N)
+
+	// Resolve a random crashed set from CrashedCount (the Healthy
+	// faulty_nodes knob) when no explicit Crashed list was supplied.
+	// Deterministic in Seed so every protocol crashes the same operators
+	// at a given (scenario, seed); excludes ByzOperators so a crash+byz
+	// combo stays within the f-budget.
+	if c.Byz.CrashedCount > 0 && len(c.Byz.Crashed) == 0 {
+		c.Byz.Crashed = selectCrashed(c.Seed, c.Operators, c.Byz.ByzOperators, c.Byz.CrashedCount)
+	}
+	opSet := make(map[OperatorID]struct{}, len(c.Operators))
+	for _, op := range c.Operators {
+		opSet[op] = struct{}{}
+	}
+	seenCrash := make(map[OperatorID]struct{}, len(c.Byz.Crashed))
+	for _, op := range c.Byz.Crashed {
+		if _, ok := opSet[op]; !ok {
+			return fmt.Errorf("consensustest: ByzPattern.Crashed operator %d not in Operators", op)
+		}
+		if _, dup := seenCrash[op]; dup {
+			return fmt.Errorf("consensustest: ByzPattern.Crashed has duplicate operator %d", op)
+		}
+		if _, isByz := seenByz[op]; isByz {
+			return fmt.Errorf("consensustest: operator %d is in both ByzOperators and Crashed (faults must be disjoint)", op)
+		}
+		seenCrash[op] = struct{}{}
+	}
+	if total := len(c.Byz.ByzOperators) + len(c.Byz.Crashed); total > f {
+		return fmt.Errorf("consensustest: %d byz + %d crashed = %d total faults but f=%d (cluster N=%d)",
+			len(c.Byz.ByzOperators), len(c.Byz.Crashed), total, f, c.N)
 	}
 	seenRecipients := make(map[OperatorID]struct{}, len(c.Byz.Recipients))
 	for _, op := range c.Byz.Recipients {

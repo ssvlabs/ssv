@@ -67,11 +67,19 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err != nil {
 		return ct.Outcome{}, err
 	}
+	// Layer crash suppression on top of the translated byz pattern: crashed
+	// operators never sign and receive nothing (overlay), are absent from the
+	// mesh topology (MakeMeshTopology), and are reported offline by
+	// sim.outcome(). Composes with any Kind; the sets are disjoint per Validate.
+	if len(cfg.Byz.Crashed) > 0 {
+		internal = crashOverlay{internalByz: internal, crashed: setOf(cfg.Byz.Crashed)}
+	}
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
 		N:            cfg.N,
 		Operators:    cfg.Operators,
+		Crashed:      cfg.Byz.Crashed,
 		BTT:          cfg.BTT,
 		BFTStart:     cfg.BFTStart,
 		Network:      cfg.Network,
@@ -118,6 +126,7 @@ func classifyPSigsMiss(preDecided bool, preTime, deadline time.Duration) string 
 type desConfig struct {
 	N            int
 	Operators    []ct.OperatorID
+	Crashed      []ct.OperatorID // completely-offline operators (subset of Operators)
 	BTT          time.Duration
 	BFTStart     time.Duration // when each op signs + broadcasts; usually 0
 	Network      ct.NetworkModel

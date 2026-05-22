@@ -75,6 +75,11 @@ type sim struct {
 	noValueMsgEmitted map[twoab.OperatorID]bool
 	commitEmitted     map[twoab.OperatorID]bool
 
+	// crashed[op] = true for completely-offline operators. Wire behavior is
+	// suppressed by crashOverlay + the emit guards; this set lets outcome()
+	// exclude them from the decided set and stamp Err="offline".
+	crashed map[twoab.OperatorID]bool
+
 	// resolveDeadline is the slot offset past which late-arriving
 	// emissions trigger an evtResolveRerun on the receiver (analog of
 	// OBFT's "re-running on late KindCommit arrivals"). Set to the
@@ -117,6 +122,11 @@ func newSim(cfg desConfig) (*sim, error) {
 		canonValues[k] = twoab.Value(ct.MakeRealisticBlindedBlockValue(byte(k + 1)))
 	}
 
+	crashed := make(map[twoab.OperatorID]bool, len(cfg.Crashed))
+	for _, op := range cfg.Crashed {
+		crashed[twoab.OperatorID(op)] = true
+	}
+
 	return &sim{
 		cfg:               cfg,
 		rng:               mrand.New(mrand.NewSource(cfg.Seed)),
@@ -128,6 +138,7 @@ func newSim(cfg desConfig) (*sim, error) {
 		resolved:          make(map[twoab.OperatorID]*twoab.Output, N),
 		resolvedAt:        make(map[twoab.OperatorID]time.Duration, N),
 		resolveErrs:       make(map[twoab.OperatorID]error, N),
+		crashed:           crashed,
 		vQuorumAt:         make(map[twoab.OperatorID]time.Duration, N),
 		valueMsgEmitted:   make(map[twoab.OperatorID]bool, N),
 		noValueMsgEmitted: make(map[twoab.OperatorID]bool, N),
@@ -273,6 +284,13 @@ func (s *sim) outcome() rawOutcome {
 	}
 	earliestT := time.Duration(-1)
 	for _, op := range s.operators {
+		if s.crashed[op] {
+			// Completely offline: never a decider, reported with Err="offline"
+			// so Terminated stays satisfied and the op is excluded from
+			// SingleV / HonestAgreement (decided-only checks).
+			out.perOp[ct.OperatorID(op)] = rawOpOutcome{decided: false, layer: -1, err: "offline"}
+			continue
+		}
 		o := rawOpOutcome{decided: false, layer: -1}
 		if res := s.resolved[op]; res != nil {
 			o.decided = true
@@ -333,6 +351,12 @@ func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes
 
 // emitDirect is the full-fanout transport path.
 func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
+	// Crashed operators emit nothing on any path. Belt-and-suspenders with
+	// the crashOverlay gates (which also stop the build/aggregator-record
+	// step); this catches the Phase-2b commit path that has no Allow gate.
+	if s.crashed[from] {
+		return
+	}
 	for _, to := range recipients {
 		if to == from {
 			continue
@@ -355,6 +379,11 @@ func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, byte
 // emitMesh publishes via the per-sim MeshTopology. Behavior parallels the
 // OBFT adapter's emitMesh.
 func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
+	// Crashed operators are absent from the mesh topology — guard before
+	// NodeForOperator (which would panic on a missing op) and emit nothing.
+	if s.crashed[from] {
+		return
+	}
 	mesh := s.cfg.Mesh
 	fromOp := ct.OperatorID(from)
 	fromNode := mesh.NodeForOperator(fromOp)

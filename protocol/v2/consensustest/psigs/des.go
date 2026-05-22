@@ -43,13 +43,20 @@ type sim struct {
 	threshold    int
 	partialCount map[ct.OperatorID]int           // local partial-sig count (incl. self)
 	decidedAt    map[ct.OperatorID]time.Duration // first moment op held qV partials
-	trace        []ct.TraceEntry
+	// crashed[op] = true for completely-offline operators. Suppressed at
+	// AllowSign / AllowDelivery; this set lets outcome() report them offline.
+	crashed map[ct.OperatorID]bool
+	trace   []ct.TraceEntry
 }
 
 func newSim(cfg desConfig) *sim {
 	N := cfg.N
 	operators := make([]ct.OperatorID, N)
 	copy(operators, cfg.Operators)
+	crashed := make(map[ct.OperatorID]bool, len(cfg.Crashed))
+	for _, op := range cfg.Crashed {
+		crashed[op] = true
+	}
 	return &sim{
 		cfg:          cfg,
 		rng:          mrand.New(mrand.NewSource(cfg.Seed)),
@@ -58,6 +65,7 @@ func newSim(cfg desConfig) *sim {
 		threshold:    qV(N),
 		partialCount: make(map[ct.OperatorID]int, N),
 		decidedAt:    make(map[ct.OperatorID]time.Duration, N),
+		crashed:      crashed,
 	}
 }
 
@@ -107,6 +115,13 @@ func (s *sim) outcome() rawOutcome {
 	}
 	earliest := time.Duration(-1)
 	for _, op := range s.operators {
+		if s.crashed[op] {
+			// Completely offline: never a decider, reported with Err="offline"
+			// so Terminated stays satisfied and the op is excluded from
+			// SingleV / HonestAgreement (decided-only checks).
+			out.perOp[op] = rawOpOutcome{err: "offline"}
+			continue
+		}
 		o := rawOpOutcome{}
 		if t, ok := s.decidedAt[op]; ok {
 			o.decided = true
@@ -160,6 +175,11 @@ func (s *sim) emitDirect(from ct.OperatorID, kind ct.MsgKind, bytes int64, extra
 }
 
 func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+	// Crashed operators are absent from the mesh topology — guard before
+	// NodeForOperator (which would panic on a missing op) and emit nothing.
+	if s.crashed[from] {
+		return
+	}
 	mesh := s.mesh
 	fromNode := mesh.NodeForOperator(from)
 	id := mesh.NewMsgID()

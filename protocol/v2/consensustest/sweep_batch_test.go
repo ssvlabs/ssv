@@ -90,12 +90,12 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	// `require.Truef` rejects any unexpected name. No magic number to
 	// keep in sync as sweeps are added or removed.
 	expected := map[string]int{
-		"p2p_baseline":          len(bttValues) * len(profiles) * 5 * len(bftStarts), // BTT × profile × instability × BFT_start
-		"p2p_increasing_BTT":    len(bttValues),                                      // BTT
-		"p2p_packet_loss":       5,                                                   // LossRate
-		"p2p_correlated_delays": 4,                                                   // BadLinkProb
-		"p2p_node_slowness":     4,                                                   // slow-op count
-		"p2p_instability":       5,                                                   // instability level
+		"p2p_baseline":          len(bttValues) * len(profiles) * 5 * len(bftStarts) * len(ct.FaultyNodesRange(4)), // BTT × profile × instability × BFT_start × faulty_nodes (n=4)
+		"p2p_increasing_BTT":    len(bttValues),                                                                    // BTT
+		"p2p_packet_loss":       5,                                                                                 // LossRate
+		"p2p_correlated_delays": 4,                                                                                 // BadLinkProb
+		"p2p_node_slowness":     4,                                                                                 // slow-op count
+		"p2p_instability":       5,                                                                                 // instability level
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]

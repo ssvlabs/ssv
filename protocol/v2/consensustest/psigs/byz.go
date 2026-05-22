@@ -68,6 +68,32 @@ func setOf(ids []ct.OperatorID) map[ct.OperatorID]bool {
 	return out
 }
 
+// crashOverlay wraps an internalByz so a set of "crashed" operators are
+// completely offline: they never sign/broadcast their partial (AllowSign)
+// and receive nothing (AllowDelivery), so they can't reach the qV threshold
+// and never decide. They're also absent from the mesh topology
+// (MakeMeshTopology) and reported offline by sim.outcome(). Composes with
+// any Kind; the crashed set is disjoint from the pattern's byz operators
+// per Validate.
+type crashOverlay struct {
+	internalByz
+	crashed map[ct.OperatorID]bool
+}
+
+func (c crashOverlay) AllowSign(op ct.OperatorID) bool {
+	if c.crashed[op] {
+		return false
+	}
+	return c.internalByz.AllowSign(op)
+}
+
+func (c crashOverlay) AllowDelivery(from, to ct.OperatorID, kind ct.MsgKind) bool {
+	if c.crashed[from] || c.crashed[to] {
+		return false
+	}
+	return c.internalByz.AllowDelivery(from, to, kind)
+}
+
 // ---- byzNone: all honest -----------------------------------------------
 
 type byzNone struct{}

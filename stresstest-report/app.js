@@ -195,6 +195,14 @@ const P2P_PROFILE_LABELS = ['prod', 'stage1', 'stage2', 'slow', 'heavy_tail', 's
 // findBaselineCellForScenario.
 let selectedInstability = 0;
 
+// selectedFaultyNodes is the faulty_nodes picker value (0..f → number of
+// completely-crashed operators). Like instability, it only affects the
+// Baseline-group scenario (Healthy) in the heatmap and conditions chart;
+// non-Baseline rows fall back to the faulty_nodes=0 cell. The valid range
+// is N-dependent (0..(N-1)/3); the picker greys out values absent from the
+// current (N,K,BTT,profile) slice.
+let selectedFaultyNodes = 0;
+
 // activeProtocols is the set of protocol names currently shown in the
 // heatmap, charts, and collapsible legends. Initialized in main() from
 // localStorage (key: stresstest-active-protocols). Default (empty
@@ -401,6 +409,7 @@ function initBaselineSelections(data) {
   selectedBTT = pickClosest(dims.BTTs, selectedBTT);
   selectedP2pProfile = pickClosest(dims.P2pProfiles, selectedP2pProfile);
   selectedInstability = pickClosest(dims.Instabilities, selectedInstability);
+  selectedFaultyNodes = pickClosest(dims.FaultyNodesValues, selectedFaultyNodes);
 }
 
 // precomputeBFTShifts warms shiftedCell's cache for the heatmap's
@@ -524,7 +533,7 @@ function onBFTStartChange(newBFTStart) {
 // Instability field (legacy / pre-instability data) match
 // selectedInstability=0 only.
 function findBaselineSweepPoint(data) {
-  return findBaselinePointAtInstability(data, selectedInstability);
+  return findBaselinePointAtInstability(data, selectedInstability, selectedFaultyNodes);
 }
 
 // findBaselinePointAtBFTStart looks up the p2p_baseline point at the
@@ -532,7 +541,7 @@ function findBaselineSweepPoint(data) {
 // BFT_start. Returns null when no matching point exists. Points
 // emitted before the BFT_start axis was added carry no Fields.BFT_start
 // key; those default to BFT_start=0 for backward-compat.
-function findBaselinePointAtBFTStart(data, instability, bftStart) {
+function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart) {
   if (!data) return null;
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep) return null;
@@ -545,6 +554,7 @@ function findBaselinePointAtBFTStart(data, instability, bftStart) {
       f.BTT === selectedBTT &&
       f.p2p_profile === selectedP2pProfile &&
       (f.Instability ?? 0) === instability &&
+      (f.FaultyNodes ?? 0) === faultyNodes &&
       (f.BFT_start ?? 0) === bftStart
     ) {
       return { sweep, point: pt };
@@ -557,8 +567,8 @@ function findBaselinePointAtBFTStart(data, instability, bftStart) {
 // (callers that don't need to vary BFT_start, e.g. heatmap legend
 // rendering). Forwards to findBaselinePointAtBFTStart with
 // BFT_start=0.
-function findBaselinePointAtInstability(data, instability) {
-  return findBaselinePointAtBFTStart(data, instability, 0);
+function findBaselinePointAtInstability(data, instability, faultyNodes) {
+  return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0);
 }
 
 // findBaselineCellForScenario looks up the cell for the given scenario
@@ -577,8 +587,9 @@ function findBaselinePointAtInstability(data, instability) {
 function findBaselineCellForScenario(data, scenario, protocol) {
   const isBaseline = scenario && scenario.group === 'Baseline';
   const wantInstab = isBaseline ? selectedInstability : 0;
+  const wantFaulty = isBaseline ? selectedFaultyNodes : 0;
   const wantBFTStart = bftStartForProtocolLookup(protocol, selectedBTT, selectedBFTStart);
-  const match = findBaselinePointAtBFTStart(data, wantInstab, wantBFTStart);
+  const match = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, wantBFTStart);
   if (!match) return null;
   return findCell(match.point, scenario.name, protocol);
 }
@@ -595,6 +606,7 @@ function availableBaselineDimensions(data) {
   const BTTset = new Set();
   const p2pProfileSet = new Set();
   const instabilitySet = new Set();
+  const faultyNodesSet = new Set();
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (sw) {
     for (const pt of sw.points) {
@@ -610,18 +622,25 @@ function availableBaselineDimensions(data) {
       // slice doesn't contain that level. Below we still seed from data
       // so a future expanded levels-set is auto-discovered.
       if (typeof f.Instability === 'number') instabilitySet.add(f.Instability);
+      // faulty_nodes range is N-dependent (0..(N-1)/3); collect the values
+      // actually produced so the picker greys per-N slice. Always seed 0.
+      if (typeof f.FaultyNodes === 'number') faultyNodesSet.add(f.FaultyNodes);
     }
   }
   // Backfill 0..4 so the picker always shows all 5 levels even on
   // data.js generated before instability existed (those points have
   // no Instability field and fall back to level=0 via findBaseline*).
   for (let i = 0; i < INSTABILITY_NAMES.length; i++) instabilitySet.add(i);
+  // faulty_nodes=0 is always a valid choice (pre-crash behavior); legacy
+  // data without the FaultyNodes field falls back to 0 via findBaseline*.
+  faultyNodesSet.add(0);
   return {
     Ns: [...Nset].sort((a, b) => a - b),
     Ks: [...Kset].sort((a, b) => a - b),
     BTTs: [...BTTset].sort((a, b) => a - b),
     P2pProfiles: [...p2pProfileSet].sort((a, b) => a - b),
     Instabilities: [...instabilitySet].sort((a, b) => a - b),
+    FaultyNodesValues: [...faultyNodesSet].sort((a, b) => a - b),
   };
 }
 
@@ -630,7 +649,7 @@ function availableBaselineDimensions(data) {
 // to grey out buttons whose specific combination wasn't produced by
 // any `make stresstest` run. Points without Instability in Fields
 // (legacy data) match instability=0 only.
-function baselinePointExists(data, n, k, btt, p2pProfile, instability) {
+function baselinePointExists(data, n, k, btt, p2pProfile, instability, faultyNodes) {
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sw) return false;
   return sw.points.some((pt) => {
@@ -641,7 +660,8 @@ function baselinePointExists(data, n, k, btt, p2pProfile, instability) {
       f.K === k &&
       f.BTT === btt &&
       f.p2p_profile === p2pProfile &&
-      (f.Instability ?? 0) === instability
+      (f.Instability ?? 0) === instability &&
+      (f.FaultyNodes ?? 0) === (faultyNodes ?? 0)
     );
   });
 }
@@ -726,7 +746,10 @@ function renderConditionsSection(data) {
   const wantedInstab = scenario && scenario.group === 'Baseline'
     ? selectedInstability
     : 0;
-  const match = findBaselinePointAtInstability(data, wantedInstab);
+  const wantedFaulty = scenario && scenario.group === 'Baseline'
+    ? selectedFaultyNodes
+    : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty);
   if (scenario) {
     titleEl.textContent = scenario.title || scenario.name;
     if (scenario.note) {
@@ -753,19 +776,19 @@ function renderConditionsSection(data) {
     buildBaselinePicker('N:', dims.Ns.length ? dims.Ns : [selectedN], null,
       () => selectedN,
       (v) => { selectedN = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pProfile, selectedInstability)),
+      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes)),
   );
   pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
       (v) => { selectedK = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pProfile, selectedInstability)),
+      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes)),
   );
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
       (v) => { selectedBTT = v; saveSelectedBTT(); onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pProfile, selectedInstability)),
+      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pProfile, selectedInstability, selectedFaultyNodes)),
   );
   pickers.appendChild(
     // The p2p_profile picker shows the calibrated mixture LABEL (prod /
@@ -778,7 +801,7 @@ function renderConditionsSection(data) {
       (v) => P2P_PROFILE_LABELS[v] || ('p' + v),
       () => selectedP2pProfile,
       (v) => { selectedP2pProfile = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability, selectedFaultyNodes),
     ),
   );
   pickers.appendChild(
@@ -791,7 +814,21 @@ function renderConditionsSection(data) {
       (v) => INSTABILITY_NAMES[v] || ('L' + v),
       () => selectedInstability,
       (v) => { selectedInstability = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, v),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, v, selectedFaultyNodes),
+    ),
+  );
+  pickers.appendChild(
+    // faulty_nodes: number of completely-crashed operators (0..f). Numeric
+    // picker (no name mapping). disabledFor greys values absent from the
+    // current (N,K,BTT,profile,instability) slice — the range is
+    // N-dependent (0..(N-1)/3), so e.g. faulty=2 is greyed at n=4.
+    buildBaselinePicker(
+      'faulty_nodes:',
+      dims.FaultyNodesValues.length ? dims.FaultyNodesValues : [selectedFaultyNodes],
+      null,
+      () => selectedFaultyNodes,
+      (v) => { selectedFaultyNodes = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, v),
     ),
   );
   pickers.appendChild(buildBFTStartPicker());
@@ -947,7 +984,8 @@ function rebuildFailureBreakdown(data) {
   const scenario = data.scenarios.find((s) => s.name === selectedScenario);
   if (!scenario) return;
   const wantedInstab = scenario.group === 'Baseline' ? selectedInstability : 0;
-  const match = findBaselinePointAtInstability(data, wantedInstab);
+  const wantedFaulty = scenario.group === 'Baseline' ? selectedFaultyNodes : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty);
   if (!match) return;
   const activeNames = filteredProtocols(data.protocols);
   const cellByProtocol = {};
@@ -1063,7 +1101,10 @@ function rebuildConditionsChart(data) {
   const wantedInstab = scenario && scenario.group === 'Baseline'
     ? selectedInstability
     : 0;
-  const match = findBaselinePointAtInstability(data, wantedInstab);
+  const wantedFaulty = scenario && scenario.group === 'Baseline'
+    ? selectedFaultyNodes
+    : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty);
   if (!match || !scenario) return;
   const onePtSweep = { ...match.sweep, points: [match.point] };
   // Per-protocol BFT_start-aware lookup (see renderConditionsSection
@@ -1291,7 +1332,7 @@ function renderHeatmap(data) {
   // non-Baseline) but the Baseline row's cell will be missing —
   // rendered as an empty cell so the user sees "this level wasn't
   // generated yet" without losing the rest of the heatmap.
-  const level0 = findBaselinePointAtInstability(data, 0);
+  const level0 = findBaselinePointAtInstability(data, 0, 0);
   if (!level0) {
     const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
     if (!legacy || legacy.points.length === 0) {

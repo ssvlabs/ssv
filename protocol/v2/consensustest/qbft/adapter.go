@@ -94,6 +94,13 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err != nil {
 		return ct.Outcome{}, err
 	}
+	// Layer crash suppression on top of the translated byz pattern: crashed
+	// operators emit nothing and receive nothing (overlay), are absent from
+	// the mesh topology (MakeMeshTopology), and are reported offline by
+	// sim.outcome(). Composes with any Kind; the sets are disjoint per Validate.
+	if len(cfg.Byz.Crashed) > 0 {
+		internal = crashOverlay{internalByz: internal, crashed: newByzSet(cfg.Byz.Crashed)}
+	}
 
 	// PhaseBudget = bttEff mirrors OBFT's tightened Δ_2 = 1·BTT convention
 	// so the two protocols compare on equal-budget-per-phase footing under
@@ -139,6 +146,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	desCfg := desConfig{
 		N:            cfg.N,
 		Operators:    cfg.Operators,
+		Crashed:      cfg.Byz.Crashed,
 		BTT:          bttEff,
 		RT:           rt,
 		MaxRounds:    maxRounds,
@@ -254,6 +262,7 @@ func classifyQBFTMiss(out ct.Outcome, preDecided bool, preRound int, preTime, de
 type desConfig struct {
 	N            int
 	Operators    []ct.OperatorID
+	Crashed      []ct.OperatorID // completely-offline operators (subset of Operators)
 	BTT          time.Duration
 	RT           time.Duration
 	MaxRounds    int

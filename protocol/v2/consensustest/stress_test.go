@@ -65,10 +65,13 @@ import (
 //     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
 //     six. See ct.P2PProfileNames / ct.P2PProfile.
 //   - PROTOCOLS — comma-separated protocol names to include in the sweep
-//     (e.g. "OBFT,QBFT,PSigs"). Default (unset / empty): all registered
-//     protocols. Useful for partial regens — e.g. PROTOCOLS=PSigs runs
-//     only the baseline reference. Names must exactly match Protocol.Name()
-//     values from the `protocols` slice in this file.
+//     (e.g. "OBFT,QBFT,PSigs"). Test-level default (unset / empty): all
+//     registered protocols. `make stresstest` overrides this with a curated
+//     default that OMITS PSigs and the OBFTx2/x3 multiplier variants — pass
+//     `PROTOCOLS=` to that target for the full set. Useful for partial
+//     regens — e.g. PROTOCOLS=PSigs runs only the baseline reference. Names
+//     must exactly match Protocol.Name() values from the `protocols` slice
+//     in this file.
 //   - BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
 //     p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
 //     300, 400 per ct.DefaultBaselineBTTValues.

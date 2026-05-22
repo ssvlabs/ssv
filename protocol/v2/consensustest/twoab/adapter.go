@@ -92,6 +92,13 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err != nil {
 		return ct.Outcome{}, err
 	}
+	// Layer crash suppression on top of the translated byz pattern: crashed
+	// operators emit nothing and receive nothing (overlay), are absent from
+	// the mesh topology (MakeMeshTopology), and are reported offline by
+	// sim.outcome(). Composes with any Kind; the sets are disjoint per Validate.
+	if len(cfg.Byz.Crashed) > 0 {
+		internal = crashOverlay{internalByz: internal, crashed: newByzSet(cfg.Byz.Crashed)}
+	}
 
 	// 2abOBFT timing model (spec §Setting, post Op5+Op6):
 	//   - TPhase2a is the Phase-2a fire-instant; every op emits one of
@@ -183,6 +190,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		N:                    cfg.N,
 		K:                    cfg.K,
 		Operators:            cfg.Operators,
+		Crashed:              cfg.Byz.Crashed,
 		BFTStart:             bftStart,
 		TPhase2a:             tPhase2a,
 		SafetyBuffer:         safetyBuffer,
@@ -301,10 +309,11 @@ type desConfig struct {
 	N                    int
 	K                    int
 	Operators            []ct.OperatorID
-	BFTStart             time.Duration // forwarded to twoab.Config.BFTStart
-	TPhase2a             time.Duration // forwarded to twoab.Config.TPhase2a
-	SafetyBuffer         time.Duration // forwarded to twoab.Config.SafetyBuffer
-	Epsilon3             time.Duration // Phase-3 walk per-layer cost
+	Crashed              []ct.OperatorID // completely-offline operators (subset of Operators)
+	BFTStart             time.Duration   // forwarded to twoab.Config.BFTStart
+	TPhase2a             time.Duration   // forwarded to twoab.Config.TPhase2a
+	SafetyBuffer         time.Duration   // forwarded to twoab.Config.SafetyBuffer
+	Epsilon3             time.Duration   // Phase-3 walk per-layer cost
 	BTT                  time.Duration
 	HeaderSubmitHeadroom time.Duration
 	FetchAt              []time.Duration

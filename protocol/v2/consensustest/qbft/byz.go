@@ -141,6 +141,35 @@ func newByzSet(ops []ct.OperatorID) byzSet {
 
 func (s byzSet) Contains(op ct.OperatorID) bool { return s.Lookup[op] }
 
+// crashOverlay wraps an internalByz so a set of "crashed" operators are
+// completely offline. A crashed op is honest (not byzantine), so it still
+// runs a real qbft.Instance — but every message that Instance would
+// broadcast is dropped at SuppressBroadcast (covering PROPOSE / PREPARE /
+// COMMIT / ROUND_CHANGE and the self-loopback feed) and all wire delivery
+// in or out is dropped at AllowDelivery (covering the post-consensus
+// partial-sig path too). With no inbound it never decides. Crashed ops are
+// additionally absent from the mesh topology (MakeMeshTopology) and
+// reported offline by sim.outcome(). Composes with any Kind; the crashed
+// set is disjoint from the pattern's byz operators per Validate.
+type crashOverlay struct {
+	internalByz
+	crashed byzSet
+}
+
+func (c crashOverlay) SuppressBroadcast(from ct.OperatorID, kind ct.MsgKind, round int) bool {
+	if c.crashed.Contains(from) {
+		return true
+	}
+	return c.internalByz.SuppressBroadcast(from, kind, round)
+}
+
+func (c crashOverlay) AllowDelivery(from, to ct.OperatorID, kind ct.MsgKind) bool {
+	if c.crashed.Contains(from) || c.crashed.Contains(to) {
+		return false
+	}
+	return c.internalByz.AllowDelivery(from, to, kind)
+}
+
 // ---- honest defaults (mixin) -------------------------------------------
 
 type honestDefaults struct{}

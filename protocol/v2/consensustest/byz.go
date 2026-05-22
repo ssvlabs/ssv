@@ -31,6 +31,27 @@ type ByzPattern struct {
 	//     f). Default at f=1 / n=4: {op2}.
 	Recipients []OperatorID
 
+	// Crashed lists operators that are completely offline for the slot.
+	// A crashed op emits nothing in any role (no leader broadcast, no
+	// σ/NR commit, no certificate gossip) and neither sends nor receives
+	// on the wire; every adapter reports it as Decided=false / Err="offline"
+	// and excludes it from the mesh topology entirely. Orthogonal to Kind,
+	// so a crash composes with any byzantine pattern — the byz behavior
+	// applies to ByzOperators, the crash to Crashed. The two sets MUST be
+	// disjoint and satisfy len(ByzOperators)+len(Crashed) ≤ f (enforced by
+	// Validate). Crashes are a pure liveness fault: a fully-silent op can
+	// never help a byzantine aggregator forge a second V, so the safety
+	// invariants are unaffected.
+	Crashed []OperatorID
+
+	// CrashedCount, when > 0 and Crashed is empty, asks Validate to draw a
+	// random Crashed set of this size from Seed (excluding ByzOperators).
+	// Used by the Healthy "faulty_nodes" knob, which varies the COUNT and
+	// lets each seed pick a different victim set, so a deep-sampled cell
+	// averages over crash positions (leader and non-leader alike). Resolved
+	// to concrete IDs in Validate; adapters only ever read Crashed.
+	CrashedCount int
+
 	K     int // for ByzMultiSilent: how many top leaders are silent
 	Layer int // for layer-targeted patterns (e.g. ByzFakeEncryptedPresence)
 }
@@ -49,6 +70,16 @@ func (p ByzPattern) PrimaryByz() OperatorID {
 func (p ByzPattern) IsByz(op OperatorID) bool {
 	for _, b := range p.ByzOperators {
 		if b == op {
+			return true
+		}
+	}
+	return false
+}
+
+// IsCrashed reports whether op is in Crashed (a completely-offline operator).
+func (p ByzPattern) IsCrashed(op OperatorID) bool {
+	for _, c := range p.Crashed {
+		if c == op {
 			return true
 		}
 	}

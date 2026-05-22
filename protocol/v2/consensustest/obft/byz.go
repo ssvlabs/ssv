@@ -66,6 +66,54 @@ func newByzSet(ops []ct.OperatorID) byzSet {
 
 func (s byzSet) Contains(op obftbase.OperatorID) bool { return s.Lookup[op] }
 
+// crashOverlay wraps an internalByz so a set of "crashed" operators are
+// completely offline: they emit nothing in any role (no leader broadcast,
+// no σ/NR commit, no certificate) and neither send nor receive on the
+// wire. Layered on top of whatever byz Kind the scenario selected, so a
+// crash composes with any pattern — the crashed set is disjoint from the
+// pattern's byz operators (enforced by SimConfig.Validate). The remaining
+// internalByz methods (OverrideCommit, BuildExtraCommits, the delay
+// overrides) are inherited from the embedded interface; they only run on
+// the commit-emit path, which a crashed op never reaches.
+//
+// Decision bookkeeping — excluding crashed ops from the decided set and
+// reporting them as Err="offline" — lives in sim.outcome(); this overlay
+// governs only wire behavior. In mesh mode crashed ops are additionally
+// absent from the topology (SimConfig.MakeMeshTopology), so they're never
+// mapped to a mesh node.
+type crashOverlay struct {
+	internalByz
+	crashed byzSet
+}
+
+func (c crashOverlay) LeaderBroadcastPlan(s *sim, leader obftbase.OperatorID, layer int, honestV obftbase.Value) []broadcastPlan {
+	if c.crashed.Contains(leader) {
+		return nil
+	}
+	return c.internalByz.LeaderBroadcastPlan(s, leader, layer, honestV)
+}
+
+func (c crashOverlay) AllowCommitBroadcast(op obftbase.OperatorID) bool {
+	if c.crashed.Contains(op) {
+		return false
+	}
+	return c.internalByz.AllowCommitBroadcast(op)
+}
+
+func (c crashOverlay) AllowCertificateBroadcast(op obftbase.OperatorID) bool {
+	if c.crashed.Contains(op) {
+		return false
+	}
+	return c.internalByz.AllowCertificateBroadcast(op)
+}
+
+func (c crashOverlay) AllowDelivery(from, to obftbase.OperatorID, kind ct.MsgKind) bool {
+	if c.crashed.Contains(from) || c.crashed.Contains(to) {
+		return false
+	}
+	return c.internalByz.AllowDelivery(from, to, kind)
+}
+
 // translateByz maps an abstract consensustest.ByzPattern to an OBFT-internal
 // impl. All catalog kinds are OBFT-applicable; QBFT-only kinds would return
 // ct.ErrNotApplicable.
