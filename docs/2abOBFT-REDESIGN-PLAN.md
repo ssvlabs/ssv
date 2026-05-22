@@ -1137,7 +1137,7 @@ Net result: 2abOBFT-fast matches OBFT's healthy-path latency (1·BTT post-bundle
 
 **Configuration support scope.** Phase A + B + C (the core optimization set: Op3 + Op5 + Op6 + Op11) targets the **K=2 default** (n=4 cluster, K=f+1 BFT-min) — the supported and validated SSV operating point. At K=2 the only deeper layer is L_1 = K-1 (the deepest layer), which has structurally different handling (no nr_tag at deepest; ops either σ at L_1 or fall off the chain). The Op3/Op11 L_0 witness mechanism covers the entire σ-side fast path at K=2.
 
-**K≥3 deployments require Phase D** (Op8 + Op12: per-layer leader witnesses in Phase-1 bundles + forwarded in KindValue) to achieve full OBFT-witness-section parity at fall-through layers. Without Phase D, 2abOBFT-fast at K≥3 has σ-pool head-start at L_0 only; OBFT has it at every layer. The structural gap manifests under multi-layer fall-through scenarios (clean NR-fall-through past L_0 → L_1 → L_2 → ...): OBFT's σ-pool[V_k] starts with 1 partial at each layer, 2abOBFT-fast-without-Phase-D starts empty. **K≥3 production rollouts should gate on Phase D shipping.**
+**K≥3 deployments require Phase D** (Op8 + Op12: per-layer leader witnesses in Phase-1 bundles + forwarded in KindValue) to achieve full OBFT-witness-section parity at fall-through layers. Without Phase D, 2abOBFT-fast at K≥3 has σ-pool head-start at L_0 only; OBFT has it at every layer. The structural gap manifests under multi-layer fall-through scenarios (clean NR-fall-through past L_0 → L_1 → L_2 → ...): OBFT's σ-pool[V_k] starts with 1 partial at each layer, 2abOBFT-fast-without-Phase-D starts empty. **K≥3 production rollouts should gate on Phase D shipping** — which has now happened (Op8 `0697e78c8` + Op12 `fb61aaaa9`; see §Phase D status banner).
 
 ### Accepted trade-offs
 
@@ -1266,7 +1266,7 @@ Cross-state transitions (σ-locked → NR-locked or vice versa) are slashable pe
   | 400ms | 2.16s | 2.36s | **2.46s** | **2.46s** |
 
   At the canonical BTT=200 the band is distinct (clean 1·BTT decision-time / MEV-headroom steps), so it serves its purpose. At **BTT ≥ 300ms, `lean` (SB=300) falls below the `1·BTT` crossover and degenerates to the no-SafetyBuffer floor** — at BTT=400 `lean` ≡ `min(0)` (both window=800ms). This is correct max-formula behavior (SB below `1·BTT` can't widen the window — the `2·BTT` NR-fall-through path dominates), and is a useful "floor" data point in the sweep rather than a defect. The variants stay as **absolute** ms values (conceptually a HeartbeatInterval-tied reflood budget, not a BTT multiple). All variants decide 100% under this jitter level; the band trades MEV-fetch headroom (later TPhase2a) for nothing-extra below the crossover.
-- **`adapter.go` docstring at [`Protocol.SafetyBufferOverride`](../protocol/v2/consensustest/twoab/adapter.go)** — updated to the post-Op5/Op6 "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop σ-side critical path" framing (done in the Op6 commit).
+- **`adapter.go` docstring at [`Protocol.SafetyBufferOverride`](../protocol/v2/consensustest/twoab/adapter.go)** — the field docstring already carried the post-Op5 "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop σ-side critical path" framing. (The Op6 commit updated the separate `Run()` Cascade-depth note to sum→max, NOT this field docstring.) The Op6 crossover note — SafetyBuffer only widens the window above the `1·BTT` threshold — is added to the field docstring in the Op12 follow-up.
 
 #### Op6 — Async Phase-2a fire on L0Ready (consequence of Op5)
 
@@ -1350,23 +1350,23 @@ This is **not a pure regression** — the common case gets *faster* (L_0 vs L_1)
 - [x] Part 3 (equivocation gating): verified, **no code change** — twoab's equivocation→NRDirect path lives in `computeLocalValueState` (≥2 distinct V), reachable only inside `MaybeFirePhase2a` when `phase2aFired == false`. Already structurally gated by `phase2aFired`. Doc note added.
 - [x] L0Ready is a **best-effort hint, not a binding contract** (M2): because ApplyHostValidity tolerates a valid→NV flip, L0Ready is non-monotone — consumers MUST re-derive the emission kind from `MaybeFirePhase2a` at fire time, not assume it from the channel close. Documented on `L0ReadyCh`. (Unreachable in the DES's deterministic Host; relevant for a production runner that re-queries the host mid-slot.)
 
-**DES adapter (`protocol/v2/consensustest/twoab/`):**
-- [ ] `events.go`: add per-op `evtPhase2aFireOp{op}` event + `maybeEarlyFire(s, op)` helper mirroring base's `maybeEarlyCommit` (non-blocking `select` on `L0ReadyCh()`; if closed and not already fired, schedule `evtPhase2aFireOp` at `s.now`). Factor the emit-switch out of `evtPhase2aFire.handle` into a shared `fireOnePhase2a(s, op)` used by both the per-op early event and the cluster-wide backstop.
-- [ ] Call `maybeEarlyFire` from: `evtPhase1Arrival` (after `ApplyHostValidity`), `evtValueMsgArrival` (after harvest), and the leader's own bundle broadcast path. Guard against double-emit via the existing `valueMsgEmitted/noValueMsgEmitted/commitEmitted` flags + the Instance's `phase2aFired`.
-- [ ] `evtPhase2aFire` (cluster-wide at `TPhase2a`) stays as the **backstop**: iterate ops, skip those already fired, emit `KindNoValue` for ops still in coordination. (Existing flags make this automatic.)
-- [ ] `des.go`: change `resolveDeadline` from `TPhase2a + 2*BTT + SafetyBuffer + ε_3` to `TPhase2a + BTT + maxDur(SafetyBuffer, BTT) + ε_3`. Add a `maxDur` helper. Update the docstring at des.go:206-222.
-- [ ] `adapter.go`: change `resolveBudget := btt*2 + safetyBuffer + ...` to `btt + maxDur(safetyBuffer, btt) + ...`. Update the cascade-depth docstring at adapter.go:108-128. Keep the `tPhase2a <= btt` envelope check.
+**DES adapter (`protocol/v2/consensustest/twoab/`):** — DONE
+- [x] `events.go`: added per-op `evtPhase2aFireOp{op}` event + `maybeEarlyFire(s, op)` helper mirroring base's `maybeEarlyCommit` (non-blocking `select` on `L0ReadyCh()`; if closed and not already fired, schedule `evtPhase2aFireOp` at `s.now`). Factored the emit-switch out of `evtPhase2aFire.handle` into a shared `fireOnePhase2a(s, op)` used by both the per-op early event and the cluster-wide backstop.
+- [x] Call `maybeEarlyFire` from: `evtPhase1Arrival` (after `ApplyHostValidity`), `evtValueMsgArrival` (after harvest), and the leader self-observe path in `evtLeaderFetch`. Double-emit guarded via the existing emit flags + the Instance's `phase2aFired`.
+- [x] `evtPhase2aFire` (cluster-wide at `TPhase2a`) stays as the **backstop**: iterates ops, skips those already fired (loops `fireOnePhase2a`).
+- [x] `des.go`: changed `resolveDeadline` to `TPhase2a + BTT + max(SafetyBuffer, BTT) + ε_3`. Uses Go 1.26's **builtin `max`** (no `maxDur` helper — the earlier draft's helper is unnecessary). Updated the resolveDeadline docstring (the `2·BTT XOR-not-sum` rationale).
+- [x] `adapter.go`: changed `resolveBudget` to `btt + max(safetyBuffer, btt) + ...` (builtin `max`). Updated the `Run()` **Cascade-depth note** to the sum→max framing. Kept the `tPhase2a <= btt` envelope check. (The `Protocol.SafetyBufferOverride` *field* docstring carries the post-Op5 absorption-budget framing; its Op6 crossover note is added in the Op12 follow-up — see §SafetyBuffer's role.)
 
-**Docs:**
-- [ ] `config.go` `Config.SafetyBuffer` docstring: note the `resolveWindow = max(1·BTT + SafetyBuffer, 2·BTT) + ε_3` formula (currently says `2·BTT + SafetyBuffer`).
-- [ ] This plan's Op6 section (done).
+**Docs:** — DONE
+- [x] `config.go` `Config.SafetyBuffer` docstring: notes the `resolveWindow = max(1·BTT + SafetyBuffer, 2·BTT) + ε_3` formula.
+- [x] This plan's Op6 section (done).
 
-**Validation targets (run after each sub-change):**
-- [ ] `TestAdapter_OpportunisticDecisionTime` — SafetyBuffer=0, ConstantDelay{D=BTT}: expect **unchanged** (3600ms). Both async-fire (bundle arrives exactly at TPhase2a under D=BTT) and max-formula (SB=0 → max=2·BTT) are no-ops here. If it changes, the change is wrong.
-- [ ] Catalog NR-fall-through cells (`PrimaryLeaderSilent`, `ValidityDivergence_NRFallThrough`): **must stay decided**, same DecidedRound. Primary regression risk.
-- [ ] Catalog σ-side cells (`Healthy`, `HV1SelectiveDelivery`, mesh cells): decide **same-or-faster**; Healthy (SB=700) should show ~1·BTT later TPhase2a (more MEV headroom) without losing the decision.
-- [ ] `TestAdapter_SafetyBuffer_WidensCascadeWindow` (currently skipped): re-tune against the new max-formula window, or re-confirm the skip rationale.
-- [ ] Full `make spec-test` / catalog + stress matrix (`./protocol/v2/consensustest/...`): zero regressions.
+**Validation targets** — DONE:
+- [x] `TestAdapter_OpportunisticDecisionTime` — SafetyBuffer=0, ConstantDelay{D=BTT}. **Correction vs the original prediction:** it did NOT stay at 3600ms — async-fire moves it to **3200ms**. The max-formula is a no-op at SB=0 (`max(1·BTT, 2·BTT)=2·BTT`), but the leader's bundle arrives ~2·BTT before TPhase2a under D=BTT, so async-fire captures that gap (a genuine ~2·BTT improvement, not a regression). Test asserts 3200ms with the full timeline comment.
+- [x] Catalog NR-fall-through cells (`PrimaryLeaderSilent`, `ValidityDivergence_NRFallThrough`): stay decided, same DecidedRound.
+- [x] Catalog σ-side cells (`Healthy`, `HV1SelectiveDelivery`, mesh cells): decide same-or-faster; Healthy keeps its decision with more MEV headroom.
+- [x] Resolve-window behavior: covered by the new `TestAdapter_ResolveDeadline_SumToMax` (SB=0 ≡ SB=1·BTT decision-time; SB=2·BTT decides 1·BTT earlier). The originally-named `TestAdapter_SafetyBuffer_WidensCascadeWindow` was never created — `ResolveDeadline_SumToMax` is its post-Op6 replacement.
+- [x] Full catalog + stress matrix (`./protocol/v2/consensustest/...`): zero regressions.
 
 #### Op11 — Forward L0Witness in KindValue (peer-reflood-V authentication)
 
@@ -1479,7 +1479,7 @@ Rejected in favor of Op5. Op4 keeps KindValue as a no-σ wire kind and adds A0 (
 #### Op7 — Aggregate σ partials in cascade messages (multi-partial KindValue)
 Rejected. KindValue would grow linearly with the number of carried partials. Bandwidth cost per emission ~scales with cluster size; latency gain marginal (helps only ops that join late). Diminishing returns.
 
-#### Op8 — Per-layer L_k>0 leader witnesses (deferred to Phase D, not rejected)
+#### Op8 — Per-layer L_k>0 leader witnesses (SHIPPED in Phase D — see status banner below)
 Initially rejected on (incorrect) safety grounds. Re-examined against OBFT's analogous witness section: the plaintext L_k leader witness contributes 1 partial to `σ-pool[V_k]`; peer onion σ partials at L_k>0 are still chained-encrypted under `nr_tag_0 ∧ ... ∧ nr_tag_{k-1}` and require NR-quorum at every prior layer to decrypt. Since 1 < qV, the leader witness alone cannot produce σ-quorum at L_k>0 — the chained-encryption invariant holds. Same safety analysis as OBFT.
 
 Generalizes Op3 to all layers: each layer's leader includes their own σ partial on V_k in their Phase-1 bundle; receivers verify and pool into `σ-pool[V_k]`. Provides 1-partial head-start at every layer's σ-pool.
@@ -1492,7 +1492,7 @@ Rejected as redundant with Op5. Op5 already has every σ-eligible op firing Kind
 #### Op10 — Drop TPhase2a entirely
 Rejected. TPhase2a is still useful as the backstop scheduling instant for ops that haven't observed V (so they emit KindNoValue and surface their state for NR-eligibility). Without TPhase2a, V-drop ops would sit idle indefinitely, preventing NR-quorum from forming.
 
-#### Op12 — Forward per-layer L_k>0 witnesses in KindValue (deferred to Phase D, not rejected)
+#### Op12 — Forward per-layer L_k>0 witnesses in KindValue (SHIPPED in Phase D — see status banner below)
 Generalizes Op11 to all layers. KindValue carries a witnesses section listing `(layer k, value_root, L_k_Witness)` for every Phase-1 bundle the emitting op has retained — byte-for-byte forwarded copies of leaders' σ partials at each layer (no new signing). Enables peer-reflood-V authentication at every layer (matches OBFT's full witness-section behavior).
 
 **Value:** at K=2 default, only the L_1 witness is added (Op11 covers L_0). The L_1 forwarded witness provides peer-reflood-V authentication during L_0 NR-fall-through scenarios. At larger K, more witnesses, more recovery paths. Bandwidth: ~96 bytes per additional witness × (K-1) per KindValue.
@@ -1500,6 +1500,28 @@ Generalizes Op11 to all layers. KindValue carries a witnesses section listing `(
 **Why deferred:** Op12 only adds value at fall-through layers, which are rare under healthy mesh (L_0 decides) and partially adversarial (require L_0 NR-quorum to even reach L_1). The combined Op8+Op12 = "OBFT witness-section parity at every layer" is mostly a non-default-K deployment optimization. Bundled into Phase D as an optional follow-on.
 
 #### Phase D — implementation plan (Op8 + Op12)
+
+> **Implementation status (SHIPPED 2026-05-22):** both Op8 and Op12 are
+> implemented, tested, and committed (Op8 `0697e78c8`, Op12 `fb61aaaa9`).
+> The full catalog correctness suite, comparison matrix (K=3/4/5 at n≥7),
+> BTT sweep, and stress matrix pass. Two as-built deviations from the
+> sketch below, both validated:
+> - **Op8 σ-lock-aware `buildLayerEntry`.** Signing a k>0 witness σ-locks
+>   the leader at that layer (mirrors L_0). Because the k>0 NR path
+>   acquires an NR-lock (unlike L_0's KindNoValue), `buildLayerEntry` was
+>   made σ-lock-aware: an op already σ-locked at k (only ever the L_k
+>   leader, via its own witness) stays SigmaChained on the locked V even
+>   if the host flips that value invalid — flipping to NR would
+>   self-equivocate. This is the natural k>0 extension of the post-Op5
+>   "a host re-validate-NV verdict has no effect once σ-locked" principle.
+> - **Op12 "root + σ-colocation" witness shape.** `LayerWitness` carries
+>   `{Layer, ValueRoot, Witness}` (root-only, base-parity wire size). A
+>   witness is forwarded only for layers the emitter is σ-side on, so the
+>   V bytes needed to verify it ride alongside in the same KindValue (v.V
+>   at L_0, the SigmaChained entry at k>0). This was chosen over a
+>   full-V-in-witness shape for wire efficiency; it loses no recovery
+>   capability (any σ-at-k peer already forwards the witness, and if none
+>   is σ-at-k the layer can't σ-decide anyway).
 
 **Premise confirmed (not speculative).** `DefaultK(n) = (n-1)/3 + 1`, so the SSV-supported cluster sizes run K = {2, 3, 4, 5} at n = {4, 7, 10, 13}. The stress matrix already exercises K=3/4/5 at n≥7 (`matrix_test.go` uses `K: ct.DefaultK(n)`). Without Phase D, σ-pool[V_k] for k≥1 starts empty at those sizes (OBFT seeds it with 1 leader partial at every layer) — a real fall-through-recovery gap for n≥7 clusters.
 
@@ -1632,7 +1654,7 @@ The optimization is wire-incompatible with v4 (Phase-1 bundle gains L0Witness; K
 
 **K=2 is the only supported configuration under Phase A+B+C.** SSV's default is K=f+1 = 2 at n=4. Phase A+B+C targets this configuration exclusively; the K=2 optimization is sound and validated.
 
-**K≥3 requires Phase D before production rollout.** At K≥3, the Phase-1 bundles for L_1, L_2, ..., L_{K-2} need leader witnesses (Op8) and KindValues need per-layer forwarded witnesses (Op12) to match OBFT's σ-pool head-start at fall-through layers. Without Phase D, K≥3 fall-through scenarios are structurally slower than OBFT at deeper layers. **Phase D is not "optional" for K≥3 deployments — it's a hard prerequisite.** It is optional only in the sense that K=3+ SSV deployments are not currently supported.
+**K≥3 requires Phase D before production rollout.** At K≥3, the Phase-1 bundles for L_1, L_2, ..., L_{K-2} need leader witnesses (Op8) and KindValues need per-layer forwarded witnesses (Op12) to match OBFT's σ-pool head-start at fall-through layers. Without Phase D, K≥3 fall-through scenarios are structurally slower than OBFT at deeper layers. **Phase D is not "optional" for K≥3 deployments — it's a hard prerequisite.** It is optional only in the sense that K=3+ SSV deployments are not currently supported. **(Phase D has now shipped — Op8 `0697e78c8` + Op12 `fb61aaaa9` — so the code-level prerequisite is met; what remains for K≥3 enablement is the deployment-side validation noted below.)**
 
 Concretely:
 - **Today's SSV (K=2)**: Phase A+B+C is the complete optimization. Ship.

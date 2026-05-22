@@ -17,7 +17,9 @@ import (
 //	               Value(|V|) + LWitness(BLS sig) [Op8 — leader's σ partial on V at this layer]
 //	ValueMsg:      ClusterID(32) + OperatorID(8) + Height(8) +
 //	               Value(|V|) + ValueRoot(32) +
-//	               L0Witness(BLS sig) [Op11 — leader witness forwarded] +
+//	               Witnesses [Op11+Op12 — forwarded leader witnesses]:
+//	                   count(4) + per-entry (Layer(4) + ValueRoot(32) +
+//	                                         Witness(BLS sig)) +
 //	               L0Partial(BLS sig) [Op5 — emitter's own σ partial] +
 //	               K-1 LayerEntries × (Layer(4) + Kind(1) +
 //	                                   V(|V_k| if σ-chained, else 0) +
@@ -61,9 +63,19 @@ func layerEntriesSize(entries []twoab.LayerEntry) int64 {
 func valueMsgSize(v *twoab.ValueMsg) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes +
 		int64(len(v.V)) + valueRootBytes +
-		int64(len(v.L0Witness)) + // Op11 forwarded leader witness
+		layerWitnessesSize(v.Witnesses) + // Op11+Op12 forwarded leader witnesses
 		int64(len(v.L0Partial)) + // Op5 emitter's own σ partial
 		layerEntriesSize(v.LayerEntries)
+}
+
+// layerWitnessesSize accounts for the Op12 Witnesses[] wire block: a uint32
+// count prefix + per-entry Layer(4) + ValueRoot(32) + length-prefixed Witness.
+func layerWitnessesSize(ws []twoab.LayerWitness) int64 {
+	size := int64(4) // count prefix
+	for _, w := range ws {
+		size += layerBytes + valueRootBytes + 4 + int64(len(w.Witness))
+	}
+	return size
 }
 
 func noValueMsgSize(nv *twoab.NoValueMsg) int64 {

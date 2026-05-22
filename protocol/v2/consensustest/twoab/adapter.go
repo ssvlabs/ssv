@@ -46,7 +46,7 @@ type Protocol struct {
 	// for late peer KindValue arrivals when the network's per-hop
 	// latency tail exceeds 1·BTT.
 	//
-	// Cascade-window semantics (post Op5): KindValue carries the σ
+	// Cascade-window semantics (post Op5/Op6): KindValue carries the σ
 	// partial directly — the cluster's σ-pool[V_0] fills in 1 hop from
 	// TPhase2a (was 2 hops in v4 with the intermediate KindCommit-
 	// Signed). SafetyBuffer now plays the role of "σ-pool fill
@@ -56,10 +56,17 @@ type Protocol struct {
 	// v4's two-hop-cascade-slack role. The leader's pre-Phase-2a window
 	// (`B_0 = 1·BTT`) stays at the structural minimum; ops who don't
 	// observe V by TPhase2a fire KindNoValue and recover via A1 upgrade
-	// once the bundle (or peer KindValue carrying the L0Witness)
+	// once the bundle (or peer KindValue carrying the forwarded witness)
 	// arrives — that A1 upgrade is now the σ-side terminal emission
 	// (Op5), so it still benefits from the SafetyBuffer absorption
 	// budget for late peer observations.
+	//
+	// Op6 crossover: the resolve window is max(1·BTT + SafetyBuffer,
+	// 2·BTT) (a slot resolves σ-ward XOR NR-ward, so reserve the max not
+	// the sum). SafetyBuffer therefore only widens the window ABOVE the
+	// 1·BTT crossover — below it the 2·BTT NR-fall-through path dominates,
+	// so a smaller SafetyBuffer reclaims MEV-fetch headroom for nothing
+	// extra. See plan §SafetyBuffer's role post-Op5/Op6.
 	SafetyBufferOverride *time.Duration
 }
 

@@ -250,19 +250,20 @@ type Instance struct {
 	// pending).
 	pendingValidation map[int]map[[32]byte]bool
 
-	// verifiedL0Witnesses caches the result of verifyL0SigmaPartial for
-	// the L_0 leader on a given (layer, V_root). Op11 forwards L0Witness
-	// in every KindValue, so a receiver observing N peer KindValues for
-	// the same V in a slot would naively re-verify the same
-	// (leader, V_0_root) witness N times. BLS partial-verify is ~1ms in
+	// verifiedWitnesses caches the result of verifySigmaPartial for a
+	// layer's leader on a given (layer, V_root). Op11/Op12 forward leader
+	// witnesses in every KindValue, so a receiver observing N peer
+	// KindValues for the same V in a slot would naively re-verify the same
+	// (leader, V_root) witness N times. BLS partial-verify is ~1ms in
 	// production; at n=10 with byz-driven re-broadcast, the verify cost
 	// stacks against the slot budget. The cache short-circuits subsequent
-	// verifies of the same witness. Per spec §Op11 (verify-cost dedup);
-	// mirrors `protocol/v2/obft/base/instance.go` witnessedLeaderSigma.
+	// verifies of the same witness. Per spec §Op11/§Op12 (verify-cost
+	// dedup); mirrors `protocol/v2/obft/base/instance.go`
+	// witnessedLeaderSigma.
 	//
-	// Cache is per-layer to forward-compat with Phase D's L_k>0 leader
-	// witnesses (Op8); today only layer 0 is populated.
-	verifiedL0Witnesses map[int]map[[32]byte]bool
+	// Cache is per-layer: post-Op12 every layer's forwarded leader witness
+	// gets its own (V_root) dedup bucket.
+	verifiedWitnesses map[int]map[[32]byte]bool
 
 	// receivedCertificate is the FIRST peer-broadcast Certificate
 	// observed via ObserveCertificate at this Instance. Per spec
@@ -424,7 +425,7 @@ func NewInstance(
 		// holds L_0 entries (no L_k>0 harvest yet — Phase D).
 		wantsHostValidationCh: make(chan ValidationRequest, K),
 		pendingValidation:     make(map[int]map[[32]byte]bool, K),
-		verifiedL0Witnesses:   make(map[int]map[[32]byte]bool, K),
+		verifiedWitnesses:     make(map[int]map[[32]byte]bool, K),
 		l0ReadyCh:             make(chan struct{}),
 	}, nil
 }
@@ -628,8 +629,8 @@ type InstanceStats struct {
 	PendingValidationCount int
 
 	// VerifiedWitnessesCount is the total number of (layer, V_root)
-	// entries cached in verifiedL0Witnesses (positive cache only —
-	// every entry represents a successful BLS L0Witness verify that
+	// entries cached in verifiedWitnesses (positive cache only — every
+	// entry represents a successful BLS leader-witness verify that
 	// subsequent harvests short-circuit).
 	VerifiedWitnessesCount int
 
@@ -654,14 +655,14 @@ type InstanceStats struct {
 // new fields may be appended; existing fields are not removed or
 // renamed. Used by tests and telemetry to observe behavior that the
 // per-method API doesn't surface (e.g., the buffer-full rollback's
-// pendingValidation cleanup, the L0Witness verify-cost dedup cache).
+// pendingValidation cleanup, the leader-witness verify-cost dedup cache).
 func (i *Instance) Stats() InstanceStats {
 	pending := 0
 	for _, bucket := range i.pendingValidation {
 		pending += len(bucket)
 	}
 	verified := 0
-	for _, bucket := range i.verifiedL0Witnesses {
+	for _, bucket := range i.verifiedWitnesses {
 		verified += len(bucket)
 	}
 	return InstanceStats{
@@ -1001,4 +1002,3 @@ func (i *Instance) valuePoolSize(layer int, vRoot [32]byte) int {
 func (i *Instance) noValuePoolSize(layer int) int {
 	return len(i.noValuePool[layer])
 }
-

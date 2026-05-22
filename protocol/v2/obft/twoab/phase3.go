@@ -269,7 +269,7 @@ func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 // the σ partial directly). Also from any retainedBundle at L_0 — the
 // leader's bundle preserves V even if no peer KindValue carrying that
 // V has arrived yet (e.g., harvest-only state where σ-pool was seeded
-// from peer L0Witness alone).
+// from a peer's forwarded witness alone).
 //
 // At L_k>0: V comes from any SigmaChained LayerEntry (own or peer) at this
 // layer matching the root, or — post Op8 — from any retained bundle at this

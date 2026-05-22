@@ -63,10 +63,10 @@ const (
 	//   - Phase1Bundle.LWitness verify-fail (at ANY layer post-Op8) →
 	//     Rule 5 keyed on the LEADER at that layer (the bundle is
 	//     op-identity-signed by the leader at the outer envelope).
-	//   - ValueMsg.L0Witness verify-fail does NOT fire Rule 5 (anti-
-	//     framing: the L0Witness inside KindValue is signed-for-
-	//     forwarding by the emitter, not the leader — firing Rule 5
-	//     against the leader on a peer-emitter's forged witness would
+	//   - A forwarded witness in ValueMsg.Witnesses verify-fail does NOT
+	//     fire Rule 5 (anti-framing: the witness inside KindValue is
+	//     signed-for-forwarding by the emitter, not the leader — firing
+	//     Rule 5 against the leader on a peer-emitter's forged witness would
 	//     open a framing attack).
 	EvidenceFakePlaintextSigma EvidenceRule = 5
 
@@ -154,10 +154,10 @@ type CrossSigningEvidence struct {
 // Cryptographic-attribution caveat: post-Op11 the receiver can retain a
 // bundle either via a direct ObservePhase1Bundle call (envelope-signed
 // by the leader) or via Op11 peer-reflood-V harvest (synthesized from a
-// peer's KindValue; no leader envelope signature — only the L0Witness
+// peer's KindValue; no leader envelope signature — only the LWitness
 // inside is BLS-bound to the leader's pubkey). For a harvest-sourced
 // bundle, the envelope is unavailable, so downstream slashing consumers
-// MAY skip envelope re-verification — the L0Witness is sufficient
+// MAY skip envelope re-verification — the LWitness is sufficient
 // leader-binding either way, so envelope verify is redundant when
 // available and the *only* binding when not. SourceA / SourceB surface
 // the routing hint.
@@ -177,7 +177,7 @@ type LeaderEquivocationEvidence struct {
 	// SourceA / SourceB record how BundleA / BundleB FIRST reached the
 	// Instance. Direct ⇒ envelope-signed bundle observed via Phase-1
 	// gossipsub channel; Harvest ⇒ synthesized from a peer's KindValue
-	// with L0Witness as the sole leader-binding artifact. See
+	// with LWitness as the sole leader-binding artifact. See
 	// RetentionSource.
 	SourceA RetentionSource
 	SourceB RetentionSource
@@ -217,9 +217,9 @@ type FakeEncryptedPresenceEvidence struct {
 //     Rule 5 attributes to the leader (OperatorID == bundle.OperatorID)
 //     at the bundle's Layer.
 //
-// The L0Witness forwarded inside a peer's KindValue does NOT fire Rule 5
-// (anti-framing: a byz emitter could embed a forged witness against an
-// honest leader). See §Op11 anti-framing notes.
+// A witness forwarded inside a peer's KindValue (ValueMsg.Witnesses) does
+// NOT fire Rule 5 (anti-framing: a byz emitter could embed a forged witness
+// against an honest leader). See §Op11 anti-framing notes.
 type FakePlaintextSigmaEvidence struct {
 	OnionPartial Signature
 	OnionValue   Value

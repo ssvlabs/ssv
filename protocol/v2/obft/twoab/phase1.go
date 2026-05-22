@@ -278,7 +278,7 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	// semantics. On the harvest path the caller has pre-verified, so we
 	// trust + pool without re-verifying or firing Rule 5.
 	if len(b.LWitness) > 0 {
-		if witnessPreVerified || i.verifyL0SigmaPartial(b.OperatorID, b.Value, b.LWitness) {
+		if witnessPreVerified || i.verifySigmaPartial(b.OperatorID, b.Value, b.LWitness) {
 			i.addToSigmaPool(b.Layer, ValueRoot(b.Value), b.OperatorID, b.LWitness)
 		} else if i.recordRule5(b.OperatorID, b.Layer) {
 			i.recordEvidence(Evidence{

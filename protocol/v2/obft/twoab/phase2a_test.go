@@ -147,7 +147,7 @@ func TestMaybeBuildAndBroadcastUpgrade_NotAvailableWhenNoNoValueMsg(t *testing.T
 // ---------- Op11 peer-reflood-V harvest tests ----------
 
 // TestMaybeFirePhase2a_ValuePath_PopulatesL0Witness verifies that Op11
-// builder forwards the L_0 leader's L0Witness from the retained Phase-1
+// builder forwards the L_0 leader's L_0 witness from the retained Phase-1
 // bundle into the emitted KindValue (so receivers can verify and harvest
 // V via peer-reflood).
 func TestMaybeFirePhase2a_ValuePath_PopulatesL0Witness(t *testing.T) {
@@ -158,17 +158,17 @@ func TestMaybeFirePhase2a_ValuePath_PopulatesL0Witness(t *testing.T) {
 	vm, _, _, err := s.instances[OperatorID(2)].MaybeFirePhase2a()
 	require.NoError(t, err)
 	require.NotNil(t, vm)
-	require.NotEmpty(t, vm.L0Witness,
-		"Op11: KindValue must carry the L_0 leader's L0Witness forwarded from the retained bundle")
+	require.NotEmpty(t, l0WitnessOf(vm),
+		"Op11: KindValue must carry the L_0 leader's witness forwarded from the retained bundle")
 	// The forwarded witness should match what the leader signs on V_0.
 	expected, err := s.instances[leader].signer.SignPartial(Value("V0"))
 	require.NoError(t, err)
-	require.Equal(t, expected, vm.L0Witness,
-		"forwarded L0Witness must equal the leader's σ partial bytes (deterministic stub signer)")
+	require.Equal(t, expected, l0WitnessOf(vm),
+		"forwarded L_0 witness must equal the leader's σ partial bytes (deterministic stub signer)")
 }
 
 // TestMaybeBuildAndBroadcastUpgrade_PopulatesL0Witness verifies that the
-// A1 upgrade path also forwards L0Witness from the retained bundle.
+// A1 upgrade path also forwards L_0 witness from the retained bundle.
 func TestMaybeBuildAndBroadcastUpgrade_PopulatesL0Witness(t *testing.T) {
 	s := newSim(t, 4)
 	// Op 1 starts on KindNoValue path, then harvests V via late bundle arrival.
@@ -183,13 +183,13 @@ func TestMaybeBuildAndBroadcastUpgrade_PopulatesL0Witness(t *testing.T) {
 	require.NoError(t, s.instances[OperatorID(1)].ApplyHostValidity(0, Value("V0"), true))
 	upgrade, ok := s.instances[OperatorID(1)].OwnValueMsg()
 	require.True(t, ok)
-	require.NotEmpty(t, upgrade.L0Witness,
-		"Op11: A1 upgrade KindValue must also carry the leader's L0Witness")
+	require.NotEmpty(t, l0WitnessOf(upgrade),
+		"Op11: A1 upgrade KindValue must also carry the leader's L_0 witness")
 }
 
 // TestObserveValueMsg_HarvestSeedsRetentionAndSigmaPool verifies the core
 // Op11 harvest: a V-drop receiver observing a peer KindValue with a
-// verifying L0Witness establishes retention[0][leader] = {V} AND seeds
+// verifying L_0 witness establishes retention[0][leader] = {V} AND seeds
 // σ-pool[0][V_root][leader] with the leader's partial (effectively as
 // if the receiver had observed the leader's Phase-1 bundle directly).
 func TestObserveValueMsg_HarvestSeedsRetentionAndSigmaPool(t *testing.T) {
@@ -198,7 +198,7 @@ func TestObserveValueMsg_HarvestSeedsRetentionAndSigmaPool(t *testing.T) {
 	// V-recipient (op2) gets the bundle; V-drops (op3, op4) do NOT.
 	s.deliverPhase1(0, Value("V0"), []OperatorID{leader, OperatorID(2)}, observedEarly)
 	s.applyHostValidityFor([]OperatorID{leader, OperatorID(2)}, 0, Value("V0"), true)
-	// op2 fires KindValue with the leader's L0Witness forwarded.
+	// op2 fires KindValue with the leader's L_0 witness forwarded.
 	vm, _, _, err := s.instances[OperatorID(2)].MaybeFirePhase2a()
 	require.NoError(t, err)
 	require.NotNil(t, vm)
@@ -207,11 +207,11 @@ func TestObserveValueMsg_HarvestSeedsRetentionAndSigmaPool(t *testing.T) {
 	require.Empty(t, op3.RetainedBundles(0, leader), "op3 has no Phase-1 bundle before harvest")
 	require.NoError(t, op3.ObserveValueMsg(vm))
 	require.Len(t, op3.RetainedBundles(0, leader), 1,
-		"Op11: peer KindValue with valid L0Witness should harvest V into retention")
+		"Op11: peer KindValue with valid L_0 witness should harvest V into retention")
 	require.Equal(t, Value("V0"), op3.RetainedBundles(0, leader)[0].Bundle.Value)
 	root := ValueRoot(Value("V0"))
 	require.NotEmpty(t, op3.sigmaPool[0][root][leader],
-		"Op11: σ-pool[V_0][leader] should be seeded with the forwarded L0Witness")
+		"Op11: σ-pool[V_0][leader] should be seeded with the forwarded L_0 witness")
 }
 
 // TestObserveValueMsg_HarvestEnqueuesValidationRequest verifies that the
@@ -257,16 +257,16 @@ func TestObserveValueMsg_HarvestDoesNotEnqueueOnDirectRetention(t *testing.T) {
 }
 
 // TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded verifies the
-// anti-framing guarantee: a peer KindValue with a bogus L0Witness does
+// anti-framing guarantee: a peer KindValue with a bogus L_0 witness does
 // not harvest V into retention, does not seed σ-pool, and does NOT
 // enqueue a validation request OR fire Rule 5 (the leader would be
 // falsely accused if Rule 5 fired on the emitter-signed envelope).
 func TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
-	// Forge a KindValue from op 2 with V claim but bogus L0Witness bytes.
+	// Forge a KindValue from op 2 with V claim but bogus L_0 witness bytes.
 	// L0Partial is also bogus (different attribution — Rule 5 will fire
-	// against op 2 for the bad self-partial; the L0Witness verify is the
+	// against op 2 for the bad self-partial; the L_0 witness verify is the
 	// path we want to exercise; Rule 5 firing for emitter L0Partial is
 	// orthogonal and won't be checked here).
 	bogus := &ValueMsg{
@@ -275,17 +275,17 @@ func TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_fake"),
 		ValueRoot:    ValueRoot(Value("V_fake")),
-		L0Witness:    Signature{0xde, 0xad, 0xbe, 0xef},
+		Witnesses:    l0Witness(Value("V_fake"), Signature{0xde, 0xad, 0xbe, 0xef}),
 		L0Partial:    Signature{0xfe, 0xed},
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	op3 := s.instances[OperatorID(3)]
 	require.NoError(t, op3.ObserveValueMsg(bogus))
 	require.Empty(t, op3.RetainedBundles(0, leader),
-		"bogus L0Witness must not harvest V into retention")
+		"bogus L_0 witness must not harvest V into retention")
 	select {
 	case req := <-op3.WantsHostValidationCh():
-		t.Fatalf("bogus L0Witness must not enqueue validation (got %+v)", req)
+		t.Fatalf("bogus L_0 witness must not enqueue validation (got %+v)", req)
 	default:
 	}
 	// Anti-framing guarantee: Rule 5 must NOT fire against the LEADER.
@@ -295,7 +295,7 @@ func TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded(t *testing.T) {
 	for _, e := range op3.Evidence() {
 		if e.Rule == EvidenceFakePlaintextSigma {
 			require.NotEqualf(t, leader, e.OperatorID,
-				"bogus L0Witness in peer KindValue must NOT fire Rule 5 against the LEADER (framing-attack guard)")
+				"bogus L_0 witness in peer KindValue must NOT fire Rule 5 against the LEADER (framing-attack guard)")
 		}
 	}
 }
@@ -500,7 +500,7 @@ func TestFinalize_RefusesMutators(t *testing.T) {
 }
 
 // countingSigner wraps a real Signer and counts VerifyPartial calls
-// (filtered by a matcher predicate so we can isolate the L0Witness
+// (filtered by a matcher predicate so we can isolate the L_0 witness
 // verifies from incidental L0Partial verifies that happen on the same
 // peer KindValue). Used by TestObserveValueMsg_HarvestCacheDedupsVerify.
 type countingSigner struct {
@@ -530,9 +530,9 @@ func (c *countingSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig S
 
 // TestObserveValueMsg_HarvestCacheDedupsVerify locks in the Op11
 // verify-cost dedup: when multiple peers forward the same V (with the
-// same leader L0Witness inside their KindValues), the receiver verifies
-// the L0Witness exactly ONCE via BLS, then short-circuits subsequent
-// observations via verifiedL0Witnesses[layer][V_root]. Without the
+// same leader L_0 witness inside their KindValues), the receiver verifies
+// the L_0 witness exactly ONCE via BLS, then short-circuits subsequent
+// observations via verifiedWitnesses[layer][V_root]. Without the
 // cache, n peers re-flooding the same V would each trigger a fresh BLS
 // partial-verify (~1ms in production) on the receiver, stacking against
 // the slot budget.
@@ -540,7 +540,7 @@ func (c *countingSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig S
 // Setup: build a custom op-3 instance whose signer is wrapped with a
 // counter matching the (V, leaderID) verify message. Observe two
 // distinct peer KindValues from op-2 and op-4 both carrying the same V
-// + leader L0Witness. Assert exactly one matching verify call.
+// + leader L_0 witness. Assert exactly one matching verify call.
 func TestObserveValueMsg_HarvestCacheDedupsVerify(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
@@ -556,7 +556,7 @@ func TestObserveValueMsg_HarvestCacheDedupsVerify(t *testing.T) {
 
 	// Build a fresh op-3 instance with a counting signer wrapping the
 	// stub. The counter matches the (V, op-id) verify path that Op11's
-	// L0Witness check exercises.
+	// L_0 witness check exercises.
 	v0Bytes := []byte(v0)
 	innerSigner := NewStubSigner(s.cfg.QV(), s.pubShares[OperatorID(3)])
 	counter := &countingSigner{
@@ -581,7 +581,7 @@ func TestObserveValueMsg_HarvestCacheDedupsVerify(t *testing.T) {
 		"first harvest must establish retention")
 	firstCount := counter.count
 
-	// Second observation: cache hit MUST short-circuit the L0Witness
+	// Second observation: cache hit MUST short-circuit the L_0 witness
 	// verify. The verify call counter should not increment (modulo any
 	// L0Partial verify, which happens with msg = V_0 too — so we'll
 	// quantify the structural minimum).
@@ -589,19 +589,19 @@ func TestObserveValueMsg_HarvestCacheDedupsVerify(t *testing.T) {
 	require.Len(t, op3.RetainedBundles(0, leader), 1,
 		"second harvest dedups against the first (same V); retention stays at 1")
 	// Net new verify calls between the two observations:
-	//   - Op2 path (first obs):  1 L0Witness verify + 1 L0Partial verify = 2
-	//   - Op4 path (second obs): 0 L0Witness verify (cache hit) +
+	//   - Op2 path (first obs):  1 L_0 witness verify + 1 L0Partial verify = 2
+	//   - Op4 path (second obs): 0 L_0 witness verify (cache hit) +
 	//                            1 L0Partial verify (different signer/share) = 1
 	// So secondDelta should be exactly 1 (the L0Partial verify), NOT 2.
 	// Without the cache, secondDelta would be 2.
 	secondDelta := counter.count - firstCount
 	require.Equal(t, 1, secondDelta,
-		"Op11 verify-cost dedup: second observation should incur exactly 1 verify (L0Partial; L0Witness short-circuits via cache). Got %d total, %d after first observation, delta %d",
+		"Op11 verify-cost dedup: second observation should incur exactly 1 verify (L0Partial; L_0 witness short-circuits via cache). Got %d total, %d after first observation, delta %d",
 		counter.count, firstCount, secondDelta)
 }
 
 // TestObserveValueMsg_HarvestSecondDistinctVFiresRule2 verifies that
-// observing two peer KindValues with valid L0Witnesses on distinct V's
+// observing two peer KindValues with valid L_0 witnesses on distinct V's
 // from the same leader causes retention to grow to 2 via the harvest
 // path → Rule 2 (leader equivocation) fires. Rule 5 must NOT fire
 // (the framing-attack guard applies symmetrically to second-witness
@@ -610,12 +610,12 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	// Build two distinct byz-equivocating bundles (the byz leader signs
-	// L0Witnesses on both V_a and V_b — direct signer access bypasses
+	// L_0 witnesses on both V_a and V_b — direct signer access bypasses
 	// the σ-lock).
 	bA := s.buildByzEquivocatingBundle(leader, 0, Value("V_a"))
 	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
 	// Craft two peer KindValues from op 2 and op 3 forwarding the byz
-	// leader's L0Witnesses on V_a and V_b respectively. (In reality
+	// leader's L_0 witnesses on V_a and V_b respectively. (In reality
 	// these would be op2/op3's own Phase-2a emissions after they each
 	// retained a different bundle; we just need the wire shape.)
 	// Real σ partials from emitters (op2, op3) on their respective V's
@@ -623,9 +623,9 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 	// at the receiver works. Note: with real-signing partials, Rule 5
 	// will NOT fire against op2/op3 (they actually signed). The test
 	// asserts Rule 2 fires (leader equivocation) and Rule 5 does NOT
-	// fire (anti-framing guarantee on L0Witness verify failure path is
-	// preserved — leader equivocation is via the L0Witnesses, but the
-	// L0Witness verifies because the byz leader DID sign both).
+	// fire (anti-framing guarantee on L_0 witness verify failure path is
+	// preserved — leader equivocation is via the L_0 witnesses, but the
+	// L_0 witness verifies because the byz leader DID sign both).
 	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V_a"))
 	require.NoError(s.t, err)
 	op3Sig, err := s.instances[OperatorID(3)].signer.SignPartial(Value("V_b"))
@@ -636,7 +636,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
-		L0Witness:    bA.LWitness,
+		Witnesses:    l0Witness(Value("V_a"), bA.LWitness),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -646,7 +646,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
-		L0Witness:    bB.LWitness,
+		Witnesses:    l0Witness(Value("V_b"), bB.LWitness),
 		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -682,7 +682,7 @@ func TestObserveValueMsg_HarvestThenDirectConvergesToSameState(t *testing.T) {
 	// Build a Phase-1 bundle from the leader.
 	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
 	require.NoError(t, err)
-	// Craft op2's KindValue forwarding the same L0Witness (as op2 would
+	// Craft op2's KindValue forwarding the same L_0 witness (as op2 would
 	// have done after retaining the bundle).
 	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V0"))
 	require.NoError(t, err)
@@ -692,7 +692,7 @@ func TestObserveValueMsg_HarvestThenDirectConvergesToSameState(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		L0Witness:    b.LWitness,
+		Witnesses:    l0Witness(Value("V0"), b.LWitness),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -739,7 +739,7 @@ func TestObserveValueMsg_HarvestAtRetentionCapSilentDrop(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_c"),
 		ValueRoot:    ValueRoot(Value("V_c")),
-		L0Witness:    bC.LWitness,
+		Witnesses:    l0Witness(Value("V_c"), bC.LWitness),
 		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -778,7 +778,7 @@ func TestRetentionSource_HarvestPath(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	// Seed op2 with V0 directly so its KindValue forwards a real
-	// leader L0Witness.
+	// leader L_0 witness.
 	s.deliverPhase1(0, Value("V0"), []OperatorID{leader, OperatorID(2)}, observedEarly)
 	s.applyHostValidityFor([]OperatorID{leader, OperatorID(2)}, 0, Value("V0"), true)
 	vm, _, _, err := s.instances[OperatorID(2)].MaybeFirePhase2a()
@@ -810,7 +810,7 @@ func TestRetentionSource_OrderDependence(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		L0Witness:    b.LWitness,
+		Witnesses:    l0Witness(Value("V0"), b.LWitness),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -850,7 +850,7 @@ func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
 	// First V via direct path.
 	bA := s.buildByzEquivocatingBundle(leader, 0, Value("V_a"))
 	// Second V via harvest path: build a peer's KindValue forwarding the
-	// byz leader's L0Witness on V_b.
+	// byz leader's L_0 witness on V_b.
 	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
 	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V_b"))
 	require.NoError(t, err)
@@ -860,7 +860,7 @@ func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
-		L0Witness:    bB.LWitness,
+		Witnesses:    l0Witness(Value("V_b"), bB.LWitness),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -883,80 +883,6 @@ func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
 		"SourceA reflects bundle A's arrival path (direct, observed first)")
 	require.Equal(t, RetentionHarvest, rule2.SourceB,
 		"SourceB reflects bundle B's arrival path (harvest, observed second)")
-}
-
-// l0ReadyClosed reports whether op's L0ReadyCh has closed (non-blocking).
-func l0ReadyClosed(op *Instance) bool {
-	select {
-	case <-op.L0ReadyCh():
-		return true
-	default:
-		return false
-	}
-}
-
-// TestL0ReadyCh_ClosesWhenSigmaEligible (Op6): L0Ready closes only once
-// the op is σ-eligible (V_0 retained AND host valid → computeLocalValueState
-// == Value). Retention alone (host not yet consulted) keeps it open.
-func TestL0ReadyCh_ClosesWhenSigmaEligible(t *testing.T) {
-	s := newSim(t, 4)
-	op := s.instances[OperatorID(2)] // non-leader receiver
-	require.False(t, l0ReadyClosed(op), "open before any bundle (NoValue state)")
-
-	// Retention only — host not consulted yet → still NoValue → open.
-	s.deliverPhase1(0, Value("V0"), []OperatorID{OperatorID(2)}, observedEarly)
-	require.False(t, l0ReadyClosed(op),
-		"open: V_0 retained but host verdict not recorded (computeLocalValueState defensively NoValue)")
-
-	// Host validates → Value state → L0Ready closes.
-	s.applyHostValidityFor([]OperatorID{OperatorID(2)}, 0, Value("V0"), true)
-	require.True(t, l0ReadyClosed(op),
-		"closes when V_0 retained + host valid (Value → async-fire KindValue)")
-}
-
-// TestL0ReadyCh_StaysOpenOnHostNV (Op6): the NoValue path does NOT close
-// L0Ready — a host-NV op waits for the TPhase2a backstop (giving V its
-// reflood window) rather than firing early. This is the deliberate
-// divergence from base (whose L0Ready closes on any host verdict).
-func TestL0ReadyCh_StaysOpenOnHostNV(t *testing.T) {
-	s := newSim(t, 4)
-	op := s.instances[OperatorID(2)]
-	s.deliverPhase1(0, Value("V0"), []OperatorID{OperatorID(2)}, observedEarly)
-	s.applyHostValidityFor([]OperatorID{OperatorID(2)}, 0, Value("V0"), false) // host NV
-	require.False(t, l0ReadyClosed(op),
-		"host-NV op stays open: emits KindNoValue at the TPhase2a backstop, not early")
-}
-
-// TestL0ReadyCh_ClosesOnEquivocation (Op6): observed L_0 equivocation
-// (≥2 distinct V → NRDirect) closes L0Ready immediately, with no host
-// verdict required — the op fires KindCommit-NRDirect early.
-func TestL0ReadyCh_ClosesOnEquivocation(t *testing.T) {
-	s := newSim(t, 4)
-	op := s.instances[OperatorID(2)]
-	s.deliverPhase1Equivocation(0, Value("V_a"), Value("V_b"),
-		[]OperatorID{OperatorID(2)}, []OperatorID{OperatorID(2)}, observedEarly)
-	require.True(t, l0ReadyClosed(op),
-		"closes on observed equivocation (≥2 distinct V → NRDirect), no host verdict needed")
-}
-
-// TestL0ReadyCh_LeaderClosesOnSelfObserve (Op6): documents that the
-// leader's L0Ready is retention-driven (not σ-lock-driven). BuildPhase1Bundle
-// σ-locks but does NOT self-retain in twoab, so the leader's L0Ready
-// closes only after it self-observes its own bundle + records host
-// validity (which the DES/runner does at fetch time). This differs from
-// base, whose l0DecisionReady checks sigmaLocked[0] directly.
-func TestL0ReadyCh_LeaderClosesOnSelfObserve(t *testing.T) {
-	s := newSim(t, 4)
-	leader := s.leaderAt(0)
-	li := s.instances[leader]
-	b, err := li.BuildPhase1Bundle(0, Value("V0"))
-	require.NoError(t, err)
-	require.False(t, l0ReadyClosed(li),
-		"leader L0Ready open after BuildPhase1Bundle alone (twoab is retention-driven; σ-lock alone doesn't flip computeLocalValueState)")
-	require.NoError(t, li.ObservePhase1Bundle(b, observedEarly))
-	require.NoError(t, li.ApplyHostValidity(0, Value("V0"), true))
-	require.True(t, l0ReadyClosed(li),
-		"leader L0Ready closes after self-observe + self-host-validate")
 }
 
 // ---------- Op8 σ-lock-aware buildLayerEntry ----------
@@ -987,4 +913,128 @@ func TestBuildLayerEntry_LeaderStaysSigmaOnHostFlip(t *testing.T) {
 	require.Equal(t, LayerEntrySigmaChained, entry.Kind,
 		"Op8: σ-locked leader must stay σ-side at layer k despite host-flip-invalid")
 	require.Equal(t, v, entry.V)
+}
+
+// ---------- Op12 per-layer forwarded witnesses ----------
+
+// TestMaybeFirePhase2a_ForwardsDeeperLayerWitness verifies the Op12 builder:
+// an op σ-side at both L_0 and L_1 emits a KindValue whose Witnesses[] carries
+// BOTH the L_0 and L_1 leader witnesses (the deeper one rides alongside its
+// SigmaChained entry).
+func TestMaybeFirePhase2a_ForwardsDeeperLayerWitness(t *testing.T) {
+	s := newSimWithK(t, 7, 3) // K=3 → layer 1 exists
+	op := OperatorID(4)
+	v0, v1 := s.candidates[0], s.candidates[1]
+	// Deliver L_0 + L_1 bundles to op and validate both → op is σ at both.
+	s.deliverPhase1(0, v0, []OperatorID{op}, observedEarly)
+	s.deliverPhase1(1, v1, []OperatorID{op}, observedEarly)
+	require.NoError(t, s.instances[op].ApplyHostValidity(0, v0, true))
+	require.NoError(t, s.instances[op].ApplyHostValidity(1, v1, true))
+
+	vm, _, _, err := s.instances[op].MaybeFirePhase2a()
+	require.NoError(t, err)
+	require.NotNil(t, vm)
+
+	var haveL0, haveL1 bool
+	for _, w := range vm.Witnesses {
+		switch w.Layer {
+		case 0:
+			haveL0 = true
+			require.Equal(t, ValueRoot(v0), w.ValueRoot)
+		case 1:
+			haveL1 = true
+			require.Equal(t, ValueRoot(v1), w.ValueRoot, "Op12: L_1 witness root must match V_1 (rides with the SigmaChained entry)")
+		}
+	}
+	require.True(t, haveL0, "KindValue must forward the L_0 witness")
+	require.True(t, haveL1, "Op12: KindValue must forward the L_1 witness when σ-at-L_1")
+}
+
+// TestObserveValueMsg_HarvestsDeeperLayerWitness verifies the Op12 harvest: a
+// receiver that missed the L_1 bundle seeds σ-pool[1][V_1][L_1-leader] from a
+// peer KindValue's Layer-1 witness (V_1 recovered from the colocated
+// SigmaChained entry — "root + σ-colocation").
+func TestObserveValueMsg_HarvestsDeeperLayerWitness(t *testing.T) {
+	s := newSimWithK(t, 7, 3)
+	const k = 1
+	l0Leader, l1Leader := s.leaderAt(0), s.leaderAt(k)
+	v0, v1 := s.candidates[0], s.candidates[k]
+
+	// Real leader witnesses (so they BLS-verify at the receiver).
+	w0, err := s.instances[l0Leader].signer.SignPartial(v0)
+	require.NoError(t, err)
+	w1, err := s.instances[l1Leader].signer.SignPartial(v1)
+	require.NoError(t, err)
+
+	emitter := OperatorID(3)
+	emitterSig, err := s.instances[emitter].signer.SignPartial(v0)
+	require.NoError(t, err)
+	vm := &ValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: emitter,
+		Height:     s.cfg.Height,
+		V:          v0,
+		ValueRoot:  ValueRoot(v0),
+		Witnesses: []LayerWitness{
+			{Layer: 0, ValueRoot: ValueRoot(v0), Witness: w0},
+			{Layer: k, ValueRoot: ValueRoot(v1), Witness: w1},
+		},
+		L0Partial: emitterSig,
+		LayerEntries: []LayerEntry{
+			{Layer: k, Kind: LayerEntrySigmaChained, V: v1, Payload: []byte("ct")},
+			{Layer: 2, Kind: LayerEntryEmpty}, // K-1 entries required (K=3)
+		},
+	}
+
+	recv := s.instances[OperatorID(5)] // missed the L_1 bundle
+	require.NoError(t, recv.ObserveValueMsg(vm))
+
+	require.NotEmpty(t, recv.sigmaPool[k][ValueRoot(v1)][l1Leader],
+		"Op12: deeper-layer witness must seed σ-pool[k] with the L_k leader's partial")
+	require.Len(t, recv.RetainedBundles(k, l1Leader), 1,
+		"Op12: deeper-layer harvest must retain V_k under the L_k leader")
+}
+
+// TestObserveValueMsg_DeeperWitnessSkippedWithoutColocatedV verifies the
+// graceful skip when a Layer-k witness has no colocated V (no matching
+// SigmaChained entry) — the witness can't be verified, so it's silently
+// dropped (defensive; an honest emitter never forwards such a witness).
+func TestObserveValueMsg_DeeperWitnessSkippedWithoutColocatedV(t *testing.T) {
+	s := newSimWithK(t, 7, 3)
+	const k = 1
+	l0Leader, l1Leader := s.leaderAt(0), s.leaderAt(k)
+	v0, v1 := s.candidates[0], s.candidates[k]
+
+	w0, err := s.instances[l0Leader].signer.SignPartial(v0)
+	require.NoError(t, err)
+	w1, err := s.instances[l1Leader].signer.SignPartial(v1)
+	require.NoError(t, err)
+
+	emitterSig, err := s.instances[OperatorID(3)].signer.SignPartial(v0)
+	require.NoError(t, err)
+	vm := &ValueMsg{
+		ClusterID:  s.cfg.ClusterID,
+		OperatorID: OperatorID(3),
+		Height:     s.cfg.Height,
+		V:          v0,
+		ValueRoot:  ValueRoot(v0),
+		Witnesses: []LayerWitness{
+			{Layer: 0, ValueRoot: ValueRoot(v0), Witness: w0},
+			{Layer: k, ValueRoot: ValueRoot(v1), Witness: w1},
+		},
+		L0Partial: emitterSig,
+		// No SigmaChained entry at layer k → no colocated V_1. (K-1 entries
+		// still required for K=3.)
+		LayerEntries: []LayerEntry{
+			{Layer: k, Kind: LayerEntryEmpty},
+			{Layer: 2, Kind: LayerEntryEmpty},
+		},
+	}
+
+	recv := s.instances[OperatorID(5)]
+	require.NoError(t, recv.ObserveValueMsg(vm))
+	require.Empty(t, recv.sigmaPool[k][ValueRoot(v1)][l1Leader],
+		"Op12: a deeper witness without a colocated V must be skipped (not poolable)")
+	require.Empty(t, recv.RetainedBundles(k, l1Leader),
+		"Op12: no colocated V → no deeper-layer retention")
 }

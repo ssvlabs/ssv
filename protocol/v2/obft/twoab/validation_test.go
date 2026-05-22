@@ -85,26 +85,53 @@ func TestValidateValueMsg_AcceptsHealthy(t *testing.T) {
 		Height:       cfg.Height,
 		V:            v,
 		ValueRoot:    ValueRoot(v),
-		L0Witness:    Signature{0x01}, // structural: any non-empty bytes pass validation
-		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
+		Witnesses:    l0Witness(v, Signature{0x01}), // structural: any non-empty bytes pass validation
+		L0Partial:    Signature{0x01},               // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, ValidateValueMsg(vm, cfg))
 }
 
-func TestValidateValueMsg_RejectsEmptyL0Witness(t *testing.T) {
+// TestValidateValueMsg_RejectsMissingOrBadWitnesses covers the Op12
+// Witnesses[] structural checks (replacing the former single-L0Witness
+// check). cfg.K()==2, so Layer 1 is in range.
+func TestValidateValueMsg_RejectsMissingOrBadWitnesses(t *testing.T) {
 	cfg := healthyConfig()
 	v := Value("V0")
-	vm := &ValueMsg{
-		ClusterID:    cfg.ClusterID,
-		OperatorID:   1,
-		Height:       cfg.Height,
-		V:            v,
-		ValueRoot:    ValueRoot(v),
-		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	base := func() *ValueMsg {
+		return &ValueMsg{
+			ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height,
+			V: v, ValueRoot: ValueRoot(v),
+			L0Partial:    Signature{0x01},
+			LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+		}
+	}
+	// No witnesses at all → reject (a KindValue must forward the L_0 witness).
+	require.Error(t, ValidateValueMsg(base(), cfg),
+		"Op11/Op12: ValueMsg with no Witnesses should be rejected")
+	// Witnesses present but missing the mandatory Layer-0 entry → reject.
+	vm := base()
+	vm.Witnesses = []LayerWitness{{Layer: 1, ValueRoot: ValueRoot(Value("V1")), Witness: Signature{0x01}}}
+	require.Error(t, ValidateValueMsg(vm, cfg),
+		"Op12: ValueMsg without a Layer-0 witness should be rejected")
+	// Layer-0 witness whose ValueRoot != v.ValueRoot → reject.
+	vm = base()
+	vm.Witnesses = []LayerWitness{{Layer: 0, ValueRoot: ValueRoot(Value("other")), Witness: Signature{0x01}}}
+	require.Error(t, ValidateValueMsg(vm, cfg),
+		"Op12: Layer-0 witness ValueRoot must match v.ValueRoot")
+	// Duplicate layer → reject.
+	vm = base()
+	vm.Witnesses = []LayerWitness{
+		{Layer: 0, ValueRoot: ValueRoot(v), Witness: Signature{0x01}},
+		{Layer: 0, ValueRoot: ValueRoot(v), Witness: Signature{0x02}},
 	}
 	require.Error(t, ValidateValueMsg(vm, cfg),
-		"Op11: ValueMsg with empty L0Witness should be rejected")
+		"Op12: duplicate witness layer should be rejected")
+	// Empty witness bytes → reject.
+	vm = base()
+	vm.Witnesses = []LayerWitness{{Layer: 0, ValueRoot: ValueRoot(v), Witness: nil}}
+	require.Error(t, ValidateValueMsg(vm, cfg),
+		"Op12: empty witness signature should be rejected")
 }
 
 func TestValidateValueMsg_RejectsEmptyL0Partial(t *testing.T) {
@@ -116,7 +143,7 @@ func TestValidateValueMsg_RejectsEmptyL0Partial(t *testing.T) {
 		Height:     cfg.Height,
 		V:          v,
 		ValueRoot:  ValueRoot(v),
-		L0Witness:  Signature{0x01},
+		Witnesses:  l0Witness(v, Signature{0x01}),
 		// L0Partial intentionally empty — Op5 requires the emitter's own σ partial.
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -153,8 +180,15 @@ func TestValidateValueMsg_RejectsUnknownOperator(t *testing.T) {
 func TestValidateValueMsg_RejectsWrongLayerEntryCount(t *testing.T) {
 	cfg := healthyConfig()
 	v := Value("V0")
-	// K=2 expects K-1=1 entry; provide 0.
-	vm := &ValueMsg{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, V: v, ValueRoot: ValueRoot(v)}
+	// K=2 expects K-1=1 entry; provide 0. Supply valid Witnesses + L0Partial
+	// so validation reaches the layer-count check rather than short-circuiting
+	// on the earlier Witnesses/L0Partial checks.
+	vm := &ValueMsg{
+		ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height,
+		V: v, ValueRoot: ValueRoot(v),
+		Witnesses: l0Witness(v, Signature{0x01}),
+		L0Partial: Signature{0x01},
+	}
 	require.Error(t, ValidateValueMsg(vm, cfg))
 }
 

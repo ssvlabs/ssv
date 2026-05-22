@@ -198,8 +198,8 @@ func TestObserveValueMsg_IdenticalRebroadcastIsSilentDedup(t *testing.T) {
 		Height:     s.cfg.Height,
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
-		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
-		L0Partial:  Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
+		Witnesses:  l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
+		L0Partial:  Signature{0x01},                         // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntryEmpty},
 		},
@@ -650,7 +650,7 @@ func TestScenario_HostFlipMidSlot_3v1_SucceedsAtL0(t *testing.T) {
 // L_1. Per redesign plan §Liveness worked cases (line 789).
 //
 // NOTE (sub-chunk #1 / Op3): the L_0 leader now σ-locks at Phase-1 build
-// time via L0Witness signing, so the A3 host-flip pivot is structurally
+// time via L_0 witness signing, so the A3 host-flip pivot is structurally
 // no longer available to the leader. Under Op3-only intermediate state,
 // the leader emits Commit-Signed despite host-NV; non-leaders pivot to
 // Commit-NR. Σ-pool[V_0] = {leader} = 1 < qV=3; nr_tag_0-pool = 3 = qEnc

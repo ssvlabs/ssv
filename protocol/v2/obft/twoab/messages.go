@@ -193,6 +193,31 @@ type Phase1Bundle struct {
 	LWitness Signature
 }
 
+// LayerWitness is a forwarded leader σ-witness carried in a KindValue's
+// Witnesses section (Op12). It re-broadcasts a layer leader's σ partial on
+// V at `Layer` so peers who missed that layer's Phase-1 bundle can still
+// seed σ-pool[V_Layer][leader] with the leader's head-start partial.
+//
+// Wire shape is root-only (no full V) for compactness (~32 B vs ~1 KB):
+// the V bytes the receiver needs to BLS-verify Witness ride alongside in
+// the SAME KindValue — at Layer 0 the value is the KindValue's own V; at
+// Layer k>0 it is the V in this op's SigmaChained LayerEntry at that layer.
+// An emitter therefore forwards a witness only for layers it is σ-side on
+// (where that colocated V is present), per the Op12 "root + σ-colocation"
+// design (docs/2abOBFT-REDESIGN-PLAN.md §Phase D / Op12). Verification +
+// retention happens at the Instance layer (ObserveValueMsg harvest), where
+// Witness is checked against pubKeyShares[layer-leader] on the colocated V.
+type LayerWitness struct {
+	// Layer is the layer the witnessed bundle is for, in [0, K).
+	Layer int
+	// ValueRoot is sha256(V) — matches the colocated V (the KindValue's V
+	// at Layer 0, or the SigmaChained LayerEntry's V at Layer k>0).
+	ValueRoot [32]byte
+	// Witness is the layer leader's σ partial on V (BLS threshold share),
+	// verifiable against pubKeyShares[cfg.Layers[Layer].Leader] on V.
+	Witness Signature
+}
+
 // ValueMsg is the σ-direction Phase-2 emission at L_0. Post Op5, it is
 // the TERMINAL σ-side emission at L_0 — KindValue itself carries the
 // emitter's plaintext σ partial on V (the L0Partial field). The pre-Op5
@@ -210,17 +235,21 @@ type Phase1Bundle struct {
 //     → emit upgrade KindValue with same wire shape. The upgrade KindValue
 //     IS the σ-commit; there is no follow-up Commit-Signed under Op5.
 //
-// **V_0 binding to leader (post Op11)**: the L0Witness field carries the
-// L_0 leader's σ partial on V, byte-for-byte forwarded from the Phase-1
-// bundle the emitter retained. Receivers verify against the leader's
-// pubKeyShare on V; on success, V is harvested into retention as if the
-// receiver had observed the leader's Phase-1 bundle directly (closing the
+// **V binding to leader (post Op11 + Op12)**: the Witnesses field carries
+// forwarded leader σ-witnesses, one per layer the emitter is σ-side on.
+// The Layer-0 entry is the L_0 leader's σ partial on this KindValue's V
+// (the Op11 peer-reflood-V vector); deeper-layer entries (Op12) carry the
+// L_k leader's σ partial on V_k, with V_k riding in this op's SigmaChained
+// LayerEntry at that layer (root + σ-colocation — see LayerWitness).
+// Receivers verify each witness against the layer-leader's pubKeyShare on
+// the colocated V; on success V is harvested into retention as if the
+// receiver had observed that leader's Phase-1 bundle directly (closing the
 // v4 first-pass §Implementation deviation #2 and enabling peer-reflood-V
-// as the HV1SelectiveDelivery recovery vector). On verify failure, the
-// witness and the emitter's V-claim-into-retention are silently dropped
-// (anti-leader-framing — emitter's envelope doesn't cryptographically
-// attribute the bytes to the leader, so Rule 5 against the leader would
-// be unsound). The leader-signed-garbage attack stays covered by Op3 in
+// as the HV1SelectiveDelivery recovery vector — now at every fall-through
+// layer). On verify failure that witness is silently dropped (anti-leader-
+// framing — the emitter's envelope doesn't cryptographically attribute the
+// bytes to the leader, so Rule 5 against the leader would be unsound). The
+// leader-signed-garbage attack stays covered by Op3/Op8 in
 // ObservePhase1Bundle, where the bundle's outer envelope binds the bytes
 // to the leader.
 //
@@ -229,7 +258,8 @@ type Phase1Bundle struct {
 // artifact, verifiable against pubKeyShares[v.OperatorID] on v.V. A
 // failed verify is unambiguous emitter misbehavior — by BLS-share
 // unforgeability the emitter either presented random bytes or
-// deliberately signed garbage. No framing-attack symmetry with L0Witness.
+// deliberately signed garbage. No framing-attack symmetry with the
+// forwarded Witnesses.
 type ValueMsg struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
@@ -238,25 +268,29 @@ type ValueMsg struct {
 	V Value
 	// ValueRoot is sha256(V), included for receiver-side caching/dedup.
 	ValueRoot [32]byte
-	// L0Witness is the L_0 leader's σ partial on V, byte-for-byte forwarded
-	// from the Phase-1 bundle this emitter retained. Required and non-empty.
-	// Receivers verify against pubKeyShares[L_0_leader] on V; on success,
-	// V is harvested into retainedBundles[0][leaderID] (peer-reflood-V) and
-	// σ-pool[0][ValueRoot(V)][leaderID] is seeded with the partial. On
-	// verify failure: silently discarded (anti-framing — emitter's envelope
-	// doesn't cryptographically attribute the bytes to the leader).
+	// Witnesses carries forwarded leader σ-witnesses (Op12): one LayerWitness
+	// per layer this emitter is σ-side on. The Layer-0 entry (always present
+	// for a well-formed KindValue — KindValue IS the L_0 σ-side emission) is
+	// the L_0 leader's σ partial on V, byte-for-byte forwarded from the
+	// emitter's retained Phase-1 bundle. Deeper-layer entries carry the L_k
+	// leader's σ partial on V_k (V_k colocated in the SigmaChained LayerEntry
+	// at that layer). Receivers verify each against pubKeyShares[layer-leader]
+	// on the colocated V and harvest V into retainedBundles[layer][leader]
+	// (peer-reflood-V) + seed σ-pool[layer][V_root][leader]. On verify
+	// failure: that entry is silently discarded (anti-framing — the emitter's
+	// envelope doesn't attribute the bytes to the leader).
 	//
-	// Honest emitters always include the L0Witness from their retained
-	// bundle. Byz emitters who present random bytes here lose no semantic
-	// advantage: the harvest fails verify, no pool/retention update happens;
-	// the bogus claim is wire noise.
-	L0Witness Signature
+	// Honest emitters always include at least the Layer-0 witness. Byz
+	// emitters who present random bytes lose no semantic advantage: the
+	// harvest fails verify, no pool/retention update happens; the bogus
+	// claim is wire noise.
+	Witnesses []LayerWitness
 	// L0Partial is the emitter's own σ partial on V at L_0 (BLS threshold
 	// share signature, verifiable against pubKeyShares[OperatorID] on V).
 	// Required and non-empty post Op5. Receivers verify on observation
 	// and pool into σ-pool[L_0][ValueRoot(V)][emitter] on success; verify
 	// failure fires Rule 5 (fake plaintext σ) against the emitter (NOT
-	// the leader — see L0Witness vs L0Partial attribution distinction in
+	// the leader — see Witnesses vs L0Partial attribution distinction in
 	// the type-level docstring above).
 	//
 	// EKM lock at L_0 is acquired when L0Partial is signed (at KindValue
@@ -365,13 +399,13 @@ func ValueRoot(v Value) [32]byte {
 // by ObserveValue to dedup identical re-broadcasts vs flag distinct second
 // emissions (Phase-2 equivocation evidence).
 //
-// L0Witness and L0Partial are intentionally NOT in the hash: Rule 6a is
+// Witnesses and L0Partial are intentionally NOT in the hash: Rule 6a is
 // V-level equivocation (cross-V claims from same op), not partial-level.
 // A byz emitter who sends `{V_a, real_partial}` then `{V_a, fake_partial}`
 // is presenting wire noise on the same V claim — the partial-level byz
 // behavior is independently handled by ObserveValueMsg's verify paths
-// (fake L0Partial fires Rule 5 against the emitter; fake L0Witness
-// silently discards per anti-framing). Including these fields in the
+// (fake L0Partial fires Rule 5 against the emitter; a fake forwarded
+// witness silently discards per anti-framing). Including these fields in the
 // dedup hash would trip Rule 6a as a false positive on byz partial
 // mutation across re-broadcasts.
 func valueMsgContentHash(v *ValueMsg) [32]byte {

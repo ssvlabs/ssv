@@ -134,21 +134,21 @@ func TestObserveValueMsg_DistinctFromSameOpFiresRule6a(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
 	// Craft two distinct KindValues from same op on different V's. The
-	// L0Witness bytes are arbitrary non-empty — they fail leader-verify
-	// (so harvest silently discards), but ValidateValueMsg requires the
-	// field to be non-empty (Op11 invariant). Rule 6a fires from the
+	// forwarded-witness bytes are arbitrary non-empty — they fail leader-
+	// verify (so harvest silently discards), but ValidateValueMsg requires
+	// a Layer-0 witness (Op11/Op12 invariant). Rule 6a fires from the
 	// cross-V emission, not the witness verify failure.
 	vmA := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
-		L0Witness:    Signature{0xff},
+		Witnesses:    l0Witness(Value("V_a"), Signature{0xff}),
 		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	vmB := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_b"), ValueRoot: ValueRoot(Value("V_b")),
-		L0Witness:    Signature{0xff},
+		Witnesses:    l0Witness(Value("V_b"), Signature{0xff}),
 		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -185,7 +185,7 @@ func TestObserveValueMsgThenCommitNR_FiresRule1(t *testing.T) {
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
-		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		Witnesses:    l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
 		L0Partial:    sigmaPartial,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -230,8 +230,8 @@ func TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a(t *testing.T) {
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
-		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
-		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
+		Witnesses:    l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
+		L0Partial:    Signature{0x01},                         // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -257,8 +257,8 @@ func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) 
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
-		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
-		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
+		Witnesses:    l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
+		L0Partial:    Signature{0x01},                         // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -318,8 +318,8 @@ func TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a(t *test
 		Height:       s.cfg.Height,
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
-		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
-		L0Partial:    Signature{0x02}, // arbitrary
+		Witnesses:    l0Witness(Value("V_a"), Signature{0xff}), // arbitrary; harvest silently discards
+		L0Partial:    Signature{0x02},                          // arbitrary
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -413,8 +413,8 @@ func TestObserveValueMsg_A1UpgradeMismatchedLayerEntriesFiresRule6a(t *testing.T
 		Height:     s.cfg.Height,
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
-		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
-		L0Partial:  Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
+		Witnesses:  l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
+		L0Partial:  Signature{0x01},                         // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
 		},
@@ -442,8 +442,8 @@ func TestObserveNoValueMsg_ReorderMismatchedLayerEntriesFiresRule6a(t *testing.T
 		Height:     s.cfg.Height,
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
-		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
-		L0Partial:  Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
+		Witnesses:  l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
+		L0Partial:  Signature{0x01},                         // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
 		},
@@ -483,7 +483,7 @@ func TestObserveCommitNR_AfterKindValueFiresRule6aAndRule1(t *testing.T) {
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
-		L0Witness:    Signature{0xff},
+		Witnesses:    l0Witness(Value("V_a"), Signature{0xff}),
 		L0Partial:    sigmaPartial,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -528,7 +528,7 @@ func TestObserveValueMsg_AfterCommitNRFiresRule6aAndRule1(t *testing.T) {
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
-		L0Witness:    Signature{0xff},
+		Witnesses:    l0Witness(Value("V_a"), Signature{0xff}),
 		L0Partial:    sigmaPartial,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -550,7 +550,7 @@ func TestObserveValueMsg_AfterCommitNRFiresRule6aAndRule1(t *testing.T) {
 // an L0Partial that doesn't verify against the emitter's pubKeyShare on
 // V triggers Rule 5 (fake plaintext σ) keyed on the EMITTER (the L0Partial
 // is the emitter's own signing artifact, not a forwarded leader artifact
-// — Op5's Rule 5 attribution differs from Op11's L0Witness handling). The
+// — Op5's Rule 5 attribution differs from Op11's L_0 witness handling). The
 // emitter is still added to value_pool via the V-claim (claim pool), but
 // NOT to σ-pool — the fake partial can't contribute to threshold
 // reconstruction.
@@ -563,7 +563,7 @@ func TestObserveValueMsg_FakeL0PartialFiresRule5(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		Witnesses:    l0Witness(Value("V0"), Signature{0xff}), // arbitrary; harvest silently discards
 		L0Partial:    Signature("garbage-not-a-valid-partial"),
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}

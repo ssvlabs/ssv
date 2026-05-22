@@ -90,15 +90,40 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 		return fmt.Errorf("twoab: ValueMsg ValueRoot %x does not match sha256(V)",
 			v.ValueRoot)
 	}
-	// Op11: L0Witness is required non-empty. Every honest emitter has a
-	// retained Phase-1 bundle with the leader's witness (either directly
-	// observed or harvested via the peer-reflood path). The wire-level
-	// L0Witness check is structural; BLS verification + harvest happens at
-	// the Instance layer (ObserveValueMsg) against the L_0 leader's
-	// pubKeyShare. A peer presenting an empty L0Witness can't claim
-	// σ-direction — they should have emitted KindNoValue instead.
-	if len(v.L0Witness) == 0 {
-		return errors.New("twoab: ValueMsg has empty L0Witness (Op11 requires the L_0 leader's forwarded σ partial)")
+	// Op11 + Op12: Witnesses carries forwarded leader σ-witnesses. A
+	// KindValue is the L_0 σ-side emission, so it MUST forward the L_0
+	// leader's witness on v.V (a Layer-0 entry with ValueRoot ==
+	// v.ValueRoot — the Op11 peer-reflood-V invariant). Deeper-layer
+	// entries (Op12) are optional, one per σ-side layer. Structural checks:
+	// bounded count (≤ K, at most one per layer), each layer in range with
+	// non-empty bytes, no duplicate layers, and the mandatory Layer-0 entry
+	// present. BLS verification + harvest happen at the Instance layer
+	// (ObserveValueMsg) against each layer-leader's pubKeyShare.
+	if len(v.Witnesses) == 0 || len(v.Witnesses) > cfg.K() {
+		return fmt.Errorf("twoab: ValueMsg Witnesses count %d out of range [1, %d]", len(v.Witnesses), cfg.K())
+	}
+	seenWitnessLayer := make(map[int]bool, len(v.Witnesses))
+	var haveL0Witness bool
+	for _, w := range v.Witnesses {
+		if w.Layer < 0 || w.Layer >= cfg.K() {
+			return fmt.Errorf("twoab: ValueMsg witness layer %d out of range [0, %d)", w.Layer, cfg.K())
+		}
+		if seenWitnessLayer[w.Layer] {
+			return fmt.Errorf("twoab: ValueMsg has duplicate witness for layer %d", w.Layer)
+		}
+		seenWitnessLayer[w.Layer] = true
+		if len(w.Witness) == 0 {
+			return fmt.Errorf("twoab: ValueMsg witness at layer %d has empty signature", w.Layer)
+		}
+		if w.Layer == 0 {
+			haveL0Witness = true
+			if w.ValueRoot != v.ValueRoot {
+				return errors.New("twoab: ValueMsg Layer-0 witness ValueRoot does not match v.ValueRoot")
+			}
+		}
+	}
+	if !haveL0Witness {
+		return errors.New("twoab: ValueMsg missing the mandatory Layer-0 witness (Op11: the L_0 leader's forwarded σ partial)")
 	}
 	// Op5: L0Partial (the emitter's own σ partial on V at L_0) is required
 	// non-empty. KindValue under V3 is the terminal σ-side emission — an

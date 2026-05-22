@@ -678,7 +678,7 @@ func (b byzCrossSigning) OverrideCommit(s *sim, op twoab.OperatorID, c *twoab.Co
 // a V no leader broadcast. Rule 5 fires at receivers when the partial
 // doesn't verify against the emitter's pubKeyShare on the claimed V
 // (post Op5: Rule 5 attribution is to the EMITTER for bad L0Partial,
-// distinct from the leader-attribution path for bad L0Witness in
+// distinct from the leader-attribution path for bad LWitness in
 // Phase-1 bundles). We patch the natural KindValue emission via
 // OverrideValueMsg / OverrideUpgradeValueMsg.
 type byzFakePlaintextSigma struct {
@@ -702,6 +702,7 @@ func (b byzFakePlaintextSigma) OverrideValueMsg(_ *sim, op twoab.OperatorID, v *
 	cp := cloneValueMsg(v)
 	cp.V = append(twoab.Value{}, "byz-fake-V-at-L_0"...)
 	cp.ValueRoot = twoab.ValueRoot(cp.V)
+	resetL0WitnessRoot(cp.Witnesses, cp.ValueRoot)
 	cp.L0Partial = forgeSigmaPartialBytes(op, 0, []byte("byz-fake-V-at-L_0"))
 	return cp
 }
@@ -739,6 +740,7 @@ func (b byzCrossOnionEquivocation) BuildExtraValueMsgs(_ *sim, op twoab.Operator
 	cp := cloneValueMsg(v)
 	cp.V = append(twoab.Value{}, primeV...)
 	cp.ValueRoot = twoab.ValueRoot(cp.V)
+	resetL0WitnessRoot(cp.Witnesses, cp.ValueRoot)
 	cp.L0Partial = forgeSigmaPartialBytes(op, 0, primeV)
 	return []*twoab.ValueMsg{cp}
 }
@@ -839,6 +841,7 @@ func (b byzPhase2EquivocateCrossV) BuildExtraValueMsgs(_ *sim, op twoab.Operator
 	extra := cloneValueMsg(v)
 	extra.V = append(twoab.Value{}, "byz-cross-V"...)
 	extra.ValueRoot = twoab.ValueRoot(extra.V)
+	resetL0WitnessRoot(extra.Witnesses, extra.ValueRoot)
 	return []*twoab.ValueMsg{extra}
 }
 
@@ -1006,6 +1009,7 @@ func (b byzAggregatorBypass) BuildExtraValueMsgs(s *sim, op twoab.OperatorID, v 
 		cp.OperatorID = other
 		cp.V = append(twoab.Value{}, primeV...)
 		cp.ValueRoot = primeRoot
+		resetL0WitnessRoot(cp.Witnesses, cp.ValueRoot)
 		cp.L0Partial = forgeSigmaPartialBytes(other, 0, primeV)
 		forged = append(forged, cp)
 	}
@@ -1023,10 +1027,40 @@ func clonePhase1Bundle(b *twoab.Phase1Bundle) *twoab.Phase1Bundle {
 func cloneValueMsg(v *twoab.ValueMsg) *twoab.ValueMsg {
 	cp := *v
 	cp.V = append(twoab.Value(nil), v.V...)
-	cp.L0Witness = append(twoab.Signature(nil), v.L0Witness...)
+	cp.Witnesses = cloneLayerWitnesses(v.Witnesses)
 	cp.L0Partial = append(twoab.Signature(nil), v.L0Partial...)
 	cp.LayerEntries = cloneLayerEntries(v.LayerEntries)
 	return &cp
+}
+
+func cloneLayerWitnesses(ws []twoab.LayerWitness) []twoab.LayerWitness {
+	if ws == nil {
+		return nil
+	}
+	out := make([]twoab.LayerWitness, len(ws))
+	for i, w := range ws {
+		out[i] = twoab.LayerWitness{
+			Layer:     w.Layer,
+			ValueRoot: w.ValueRoot,
+			Witness:   append(twoab.Signature(nil), w.Witness...),
+		}
+	}
+	return out
+}
+
+// resetL0WitnessRoot points the mandatory Layer-0 forwarded-witness
+// ValueRoot at `root`. Byz patterns that forge a KindValue on a different
+// L_0 V (mutating cp.V / cp.ValueRoot) must keep the Layer-0 witness root
+// consistent with the new V, or ValidateValueMsg (Op12) rejects the message
+// before the cross-V / sequence / Rule paths run. The witness BLS bytes
+// stay bogus — the harvest discards them; the point is to keep the message
+// structurally valid so the V-claim-level rules still fire.
+func resetL0WitnessRoot(ws []twoab.LayerWitness, root [32]byte) {
+	for i := range ws {
+		if ws[i].Layer == 0 {
+			ws[i].ValueRoot = root
+		}
+	}
 }
 
 func cloneNoValueMsg(nv *twoab.NoValueMsg) *twoab.NoValueMsg {

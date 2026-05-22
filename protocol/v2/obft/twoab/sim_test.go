@@ -138,6 +138,24 @@ func (s *sim) leaderAt(layer int) OperatorID {
 	return s.cfg.Layers[layer].Leader
 }
 
+// l0Witness wraps a single L_0 forwarded leader witness on v into the
+// Witnesses[] shape a valid KindValue requires (Op12). Test convenience for
+// the common case where a ValueMsg only forwards the mandatory L_0 witness.
+func l0Witness(v Value, sig Signature) []LayerWitness {
+	return []LayerWitness{{Layer: 0, ValueRoot: ValueRoot(v), Witness: sig}}
+}
+
+// l0WitnessOf extracts the L_0 forwarded witness signature from a ValueMsg's
+// Witnesses[] (test convenience; nil if absent).
+func l0WitnessOf(vm *ValueMsg) Signature {
+	for _, w := range vm.Witnesses {
+		if w.Layer == 0 {
+			return w.Witness
+		}
+	}
+	return nil
+}
+
 // deliverPhase1 has the leader at `layer` build a bundle for `value`,
 // then delivers it (via ObservePhase1Bundle at the given offset) to each
 // of `recipients` (which may include the leader for self-observe).

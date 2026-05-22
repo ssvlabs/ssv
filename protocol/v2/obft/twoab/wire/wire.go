@@ -31,17 +31,16 @@ const (
 	// bump signals the semantic change (witness now required + processed at
 	// all layers). Wire-incompatible with V2/V1.
 	Phase1BundleVersionV3 byte = 0x03
-	// ValueMsgVersionV3 adds the emitter's own σ partial on V at L_0
-	// (L0Partial) per Op5 of the healthy-path optimization (see
-	// docs/2abOBFT-REDESIGN-PLAN.md §Healthy-path optimizations / Op5).
-	// KindValue under V3 is the terminal σ-side emission at L_0 — the
-	// pre-Op5 KindCommit-Signed wire kind no longer exists. Wire-
-	// incompatible with V2 (which had no L0Partial) and V1 (no L0Witness
-	// or L0Partial). Bundles both Op11's L0Witness (forwarded leader
-	// witness, byte-for-byte from the Phase-1 bundle) and Op5's
-	// L0Partial (the emitter's own σ partial signed at KindValue emit
-	// time).
-	ValueMsgVersionV3    byte = 0x03
+	// ValueMsgVersionV4 replaces the single L0Witness field with a
+	// Witnesses []LayerWitness section (Op12 / Phase D — see
+	// docs/2abOBFT-REDESIGN-PLAN.md §Phase D / Op12), so a KindValue
+	// forwards the leader σ-witness at every layer the emitter is σ-side
+	// on (L_0 always, plus deeper fall-through layers), not just L_0. V3
+	// (Op5+Op11) carried L0Partial + a single L0Witness; V4 keeps
+	// L0Partial (the emitter's own σ partial signed at emit time) and
+	// generalizes the forwarded witness to the per-layer list. Wire-
+	// incompatible with V3/V2/V1.
+	ValueMsgVersionV4    byte = 0x04
 	NoValueMsgVersionV1  byte = 0x01
 	CommitVersionV1      byte = 0x01
 	CertificateVersionV1 byte = 0x01
@@ -191,7 +190,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 
 // EncodeValueMsg serializes a Phase-2a ValueMsg envelope.
 //
-// Format (version 0x03 — adds L0Partial post Op5):
+// Format (version 0x04 — Witnesses[] section post Op12):
 //
 //	[1]  version
 //	[16] ProtocolTag
@@ -202,8 +201,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 //	[4]  V length
 //	[V bytes]
 //	[32] ValueRoot
-//	[4]  L0Witness length
-//	[L0Witness bytes]
+//	[Witnesses block — see encodeLayerWitnesses]
 //	[4]  L0Partial length
 //	[L0Partial bytes]
 //	[LayerEntries block — see encodeLayerEntries]
@@ -214,8 +212,8 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if len(v.V) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: ValueMsg V too long (%d)", len(v.V))
 	}
-	if len(v.L0Witness) > MaxFieldSize {
-		return nil, fmt.Errorf("wire: ValueMsg L0Witness too long (%d)", len(v.L0Witness))
+	if err := preflightLayerWitnesses(v.Witnesses, "ValueMsg"); err != nil {
+		return nil, err
 	}
 	if len(v.L0Partial) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: ValueMsg L0Partial too long (%d)", len(v.L0Partial))
@@ -224,8 +222,8 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 		return nil, err
 	}
 
-	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4+len(v.L0Witness)+4+len(v.L0Partial)+4)
-	out = append(out, ValueMsgVersionV3)
+	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4+4+len(v.L0Partial)+4)
+	out = append(out, ValueMsgVersionV4)
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindValueMsg)
 	out = append(out, v.ClusterID[:]...)
@@ -234,8 +232,7 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	out = appendUint32(out, uint32(len(v.V))) //nolint:gosec // bounds-checked
 	out = append(out, v.V...)
 	out = append(out, v.ValueRoot[:]...)
-	out = appendUint32(out, uint32(len(v.L0Witness))) //nolint:gosec // bounds-checked
-	out = append(out, v.L0Witness...)
+	out = encodeLayerWitnesses(out, v.Witnesses)
 	out = appendUint32(out, uint32(len(v.L0Partial))) //nolint:gosec // bounds-checked
 	out = append(out, v.L0Partial...)
 	out = encodeLayerEntries(out, v.LayerEntries)
@@ -245,7 +242,7 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 // DecodeValueMsg parses bytes produced by EncodeValueMsg.
 func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	r := newReader(data)
-	if err := readVersion(r, ValueMsgVersionV3, "ValueMsg"); err != nil {
+	if err := readVersion(r, ValueMsgVersionV4, "ValueMsg"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
@@ -274,7 +271,7 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	if err := r.readBytes(valueRoot[:]); err != nil {
 		return nil, fmt.Errorf("wire: ValueMsg value_root: %w", err)
 	}
-	witness, err := r.readLengthPrefixed("ValueMsg L0Witness")
+	witnesses, err := decodeLayerWitnesses(r, "ValueMsg")
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +292,7 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 		Height:       twoab.Height(height),
 		V:            twoab.Value(v),
 		ValueRoot:    valueRoot,
-		L0Witness:    twoab.Signature(witness),
+		Witnesses:    witnesses,
 		L0Partial:    twoab.Signature(partial),
 		LayerEntries: entries,
 	}, nil
@@ -658,6 +655,70 @@ func decodeLayerEntries(r *reader, kindLabel string) ([]twoab.LayerEntry, error)
 		}
 	}
 	return entries, nil
+}
+
+// ---------- LayerWitnesses (Op12) ----------
+
+func preflightLayerWitnesses(ws []twoab.LayerWitness, kindLabel string) error {
+	if len(ws) > MaxLayers {
+		return fmt.Errorf("wire: %s has %d Witnesses, max %d", kindLabel, len(ws), MaxLayers)
+	}
+	for i, w := range ws {
+		if w.Layer < 0 {
+			return fmt.Errorf("wire: %s Witnesses[%d] has negative Layer %d", kindLabel, i, w.Layer)
+		}
+		if len(w.Witness) > MaxFieldSize {
+			return fmt.Errorf("wire: %s Witnesses[%d] Witness too long (%d)", kindLabel, i, len(w.Witness))
+		}
+	}
+	return nil
+}
+
+func encodeLayerWitnesses(out []byte, ws []twoab.LayerWitness) []byte {
+	out = appendUint32(out, uint32(len(ws))) //nolint:gosec // bounds-checked by preflight
+	for _, w := range ws {
+		out = appendUint32(out, uint32(w.Layer)) //nolint:gosec // bounds-checked by preflight
+		out = append(out, w.ValueRoot[:]...)
+		out = appendUint32(out, uint32(len(w.Witness))) //nolint:gosec // bounds-checked by preflight
+		out = append(out, w.Witness...)
+	}
+	return out
+}
+
+func decodeLayerWitnesses(r *reader, kindLabel string) ([]twoab.LayerWitness, error) {
+	count, err := r.readUint32()
+	if err != nil {
+		return nil, fmt.Errorf("wire: %s Witnesses count: %w", kindLabel, err)
+	}
+	if count > MaxLayers {
+		return nil, fmt.Errorf("wire: %s Witnesses count %d exceeds MaxLayers %d",
+			kindLabel, count, MaxLayers)
+	}
+	ws := make([]twoab.LayerWitness, count)
+	for i := uint32(0); i < count; i++ {
+		layer, err := r.readUint32()
+		if err != nil {
+			return nil, fmt.Errorf("wire: %s Witnesses[%d] layer: %w", kindLabel, i, err)
+		}
+		if layer > MaxLayers {
+			return nil, fmt.Errorf("wire: %s Witnesses[%d] layer %d exceeds MaxLayers %d",
+				kindLabel, i, layer, MaxLayers)
+		}
+		var root [32]byte
+		if err := r.readBytes(root[:]); err != nil {
+			return nil, fmt.Errorf("wire: %s Witnesses[%d] value_root: %w", kindLabel, i, err)
+		}
+		wit, err := r.readLengthPrefixed(fmt.Sprintf("%s Witnesses[%d] Witness", kindLabel, i))
+		if err != nil {
+			return nil, err
+		}
+		ws[i] = twoab.LayerWitness{
+			Layer:     int(layer), //nolint:gosec // bounds-checked above
+			ValueRoot: root,
+			Witness:   twoab.Signature(wit),
+		}
+	}
+	return ws, nil
 }
 
 // ---------- Helpers ----------

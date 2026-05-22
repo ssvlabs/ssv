@@ -256,7 +256,7 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	// proof to land — a forged partial on either side fires Rule 5
 	// instead (separately, downstream).
 	if hadValue != nil &&
-		i.verifyL0SigmaPartial(op, hadValue.V, hadValue.L0Partial) &&
+		i.verifySigmaPartial(op, hadValue.V, hadValue.L0Partial) &&
 		i.verifyNRTagPartial(op, layer, c.L0Partial) &&
 		i.recordRule1(op, layer) {
 		i.recordEvidence(Evidence{
@@ -349,10 +349,10 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	return nil
 }
 
-// verifyL0SigmaPartial returns true if the σ partial verifies against
+// verifySigmaPartial returns true if the σ partial verifies against
 // op's pubshare on the claimed V. False on signer-verify failure or
 // missing pubshare.
-func (i *Instance) verifyL0SigmaPartial(op OperatorID, v Value, partial Signature) bool {
+func (i *Instance) verifySigmaPartial(op OperatorID, v Value, partial Signature) bool {
 	opPub, ok := i.pubKeyShares[op]
 	if !ok || len(opPub) == 0 {
 		return false
