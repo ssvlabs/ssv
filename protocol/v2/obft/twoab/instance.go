@@ -57,6 +57,17 @@ import (
 // Callers don't invoke these directly during the slot; the Instance does
 // it automatically. Manual invocation (e.g., on a timer-driven slot
 // deadline) is permitted but not required.
+
+// MaxRetainedPerOpLayer caps the number of distinct Phase-1 bundles (by
+// value_root) retained per (layer, leader) tuple. Per spec
+// §docs/2abOBFT-REDESIGN-PLAN.md §Phase 1 Retention bounds: a third
+// distinct V from the same leader is silently dropped — the first two
+// already establish equivocation evidence (Rule 2) and the third adds
+// no protocol-level information beyond what's already on the wire.
+//
+// Mirrors `protocol/v2/obft/base.MaxRetainedPerOpLayer`.
+const MaxRetainedPerOpLayer = 2
+
 type Instance struct {
 	cfg           *Config
 	ownOperatorID OperatorID
@@ -333,6 +344,9 @@ func NewInstance(
 	}
 	if pubKeyShares == nil {
 		return nil, errors.New("twoab: nil pubKeyShares (need at least an empty map)")
+	}
+	if len(clusterPubKey) == 0 {
+		return nil, errors.New("twoab: empty clusterPubKey (IBE trust anchor required)")
 	}
 	if !obft.OperatorInCluster(ownOperatorID, cfg.Operators) {
 		return nil, fmt.Errorf("twoab: own operator id %d not in cluster", ownOperatorID)

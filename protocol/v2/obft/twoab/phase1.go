@@ -37,6 +37,9 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
 	}
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	if layer < 0 || layer >= i.cfg.K() {
 		return nil, fmt.Errorf("twoab: %w: layer %d outside [0, %d)",
 			ErrLayerOutOfRange, layer, i.cfg.K())
@@ -155,6 +158,9 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
 	}
+	if i.ended {
+		return ErrInstanceEnded
+	}
 	if err := ValidatePhase1Bundle(b, i.cfg); err != nil {
 		return err
 	}
@@ -220,8 +226,9 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	}
 
 	// Distinct value_root.
-	if len(retained) >= 2 {
-		// Already have 2 distinct from this leader; drop the third+.
+	if len(retained) >= MaxRetainedPerOpLayer {
+		// Already have MaxRetainedPerOpLayer distinct from this leader;
+		// drop the third+. Per spec §Phase 1 Retention bounds.
 		return
 	}
 

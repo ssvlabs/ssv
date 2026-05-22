@@ -34,24 +34,28 @@ import (
 //
 // Returns an error if `layer` is out of [0, K) or `value` is empty.
 //
-// Post-Finalize guard: ApplyHostValidity is typically invoked from an
-// async host-reply path (the host receives a ValidationRequest on
+// Post-Finalize guard: returns ErrInstanceEnded if Finalize has been
+// called. ApplyHostValidity is typically invoked from an async host-
+// reply path (the host receives a ValidationRequest on
 // wantsHostValidationCh, runs its verdict logic, then calls back into
 // the Instance). The runner adapter SHOULD gate host callbacks on the
 // Instance's Finalized state, but async-reply races are easy to miss in
 // integration code — and unlike the Observe* methods (which the runner
-// owns the dispatch for and can drain post-Finalize), the host-reply
-// path crosses the runner ↔ host process boundary where the runner
-// can't always intercept in time. Silent no-op for late replies. (The
-// Observe* methods don't get this guard because the runner is the sole
-// dispatcher and can stop calling them at Finalize-time; ApplyHostValidity
-// is the special case because the host owns the reply timing.)
+// owns the dispatch for), the host-reply path crosses the runner ↔
+// host process boundary where the runner can't always intercept in
+// time. The ErrInstanceEnded return lets late callers detect the late-
+// reply scenario explicitly; runners that want silent-ignore semantics
+// can swallow the error at the callback boundary.
+//
+// (Post Phase 3 convergence — see docs/OBFT-TWOAB-CONVERGENCE-PLAN.md
+// §C1 — twoab's lifecycle mutators uniformly return ErrInstanceEnded
+// post-Finalize, matching base.)
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
 	}
 	if i.ended {
-		return nil
+		return ErrInstanceEnded
 	}
 	if layer < 0 || layer >= i.cfg.K() {
 		return fmt.Errorf("twoab: %w: layer %d outside [0, %d)",
@@ -270,6 +274,9 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 	if i == nil {
 		return nil, nil, nil, fmt.Errorf("twoab: nil instance")
 	}
+	if i.ended {
+		return nil, nil, nil, ErrInstanceEnded
+	}
 	if i.phase2aFired {
 		return i.ownValueMsg, i.ownNoValueMsg, i.ownCommit, nil
 	}
@@ -428,6 +435,9 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
 	}
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	// Already upgraded — idempotent.
 	if i.ownValueMsg != nil && i.ownNoValueMsg != nil {
 		return i.ownValueMsg, nil
@@ -553,6 +563,9 @@ func (i *Instance) OwnCommit() (*Commit, bool) {
 func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return ErrInstanceEnded
 	}
 	if err := ValidateValueMsg(v, i.cfg); err != nil {
 		return err
@@ -789,6 +802,9 @@ func (i *Instance) verifyAndPoolL0Partial(emitter OperatorID, v *ValueMsg) {
 func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return ErrInstanceEnded
 	}
 	if err := ValidateNoValueMsg(nv, i.cfg); err != nil {
 		return err

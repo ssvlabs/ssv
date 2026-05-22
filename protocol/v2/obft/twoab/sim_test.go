@@ -115,7 +115,7 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 			NewStubSigner(c.QV(), pubShares[op]),
 			NewStubSigner(c.QV(), pubShares[op]),
 			NewStubIBE(c.QEnc()),
-			nil, // clusterPubKey — stub VerifyAggregate ignores it
+			[]byte{0xCC, 0xDD}, // clusterPubKey — stub VerifyAggregate ignores the value; non-empty placeholder for NewInstance's emptiness check
 			pubShares,
 			nil, // ibePubKeyShares — Option A
 			nil, // evidenceObserver — set per test as needed

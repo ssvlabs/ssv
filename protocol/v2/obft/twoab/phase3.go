@@ -40,6 +40,12 @@ import (
 // without mutating Instance state, so observer-mode call sites pay no
 // cost for pre-quorum attempts.
 func (i *Instance) Resolve() (*Output, error) {
+	if i == nil {
+		return nil, fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	K := i.cfg.K()
 	// chainedKeys[j] is the aggregated NR-partials sig on nr_tag_j.
 	// To decrypt a layer-k onion entry, apply chainedKeys[0..k-1] in
@@ -359,6 +365,12 @@ func selectWinningGroup(groups map[[32]byte]*sigGroup) *sigGroup {
 // BuildCertificate produces the final-certificate gossip message after
 // a successful Resolve.
 func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
+	if i == nil {
+		return nil, fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	if out == nil {
 		return nil, fmt.Errorf("twoab: nil output")
 	}
@@ -375,6 +387,12 @@ func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 
 // ObserveCertificate records a peer's Certificate.
 func (i *Instance) ObserveCertificate(c *Certificate) error {
+	if i == nil {
+		return fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return ErrInstanceEnded
+	}
 	if err := ValidateCertificate(c, i.cfg); err != nil {
 		return err
 	}

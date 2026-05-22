@@ -127,6 +127,9 @@ func (i *Instance) MaybeBuildAndBroadcastCommit() (*Commit, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
 	}
+	if i.ended {
+		return nil, ErrInstanceEnded
+	}
 	if i.ownCommit != nil {
 		return nil, nil // already emitted
 	}
@@ -207,6 +210,9 @@ func (i *Instance) buildCommitNR() (*Commit, error) {
 func (i *Instance) ObserveCommit(c *Commit) error {
 	if i == nil {
 		return fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return ErrInstanceEnded
 	}
 	if err := ValidateCommit(c, i.cfg); err != nil {
 		return err

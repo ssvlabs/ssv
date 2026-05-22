@@ -471,7 +471,7 @@ func TestObserveValueMsg_HarvestCacheDedupsVerify(t *testing.T) {
 		counter,
 		NewStubSigner(s.cfg.QV(), s.pubShares[OperatorID(3)]),
 		NewStubIBE(s.cfg.QEnc()),
-		nil,
+		[]byte{0xCC, 0xDD}, // clusterPubKey placeholder (stub ignores value)
 		s.pubShares,
 		nil,
 		nil,
