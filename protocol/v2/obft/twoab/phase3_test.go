@@ -285,3 +285,26 @@ func TestSelectWinningGroup(t *testing.T) {
 		require.Equal(t, gAB, selectWinningGroup(mkGroups(gAB, gAC)))
 	})
 }
+
+// TestRecoverV_KGt0_FallsBackToRetainedBundle verifies the Op8 recoverV
+// fallback at k>0: a σ-pool[k] entry seeded purely from the leader's
+// plaintext LWitness (no peer SigmaChained entry carrying V_k observed yet)
+// can still recover V's bytes from the retained bundle — so the witness
+// head-start counts toward σ-quorum during reconstruction.
+func TestRecoverV_KGt0_FallsBackToRetainedBundle(t *testing.T) {
+	s := newSimWithK(t, 7, 3)
+	const k = 2
+	leader := s.leaderAt(k)
+	v := s.candidates[k]
+	b, err := s.instances[leader].BuildPhase1Bundle(k, v)
+	require.NoError(t, err)
+	recv := s.instances[OperatorID(5)]
+	require.NoError(t, recv.ObservePhase1Bundle(b, observedEarly))
+	// recv has the leader's witness in σ-pool[k] but has observed NO Phase-2a
+	// SigmaChained entry carrying V_k. recoverV must still find V via the
+	// retained-bundle fallback (mirrors the L_0 fallback).
+	root := ValueRoot(v)
+	got, ok := recv.recoverV(k, root)
+	require.True(t, ok, "Op8: recoverV must fall back to the retained bundle at k>0")
+	require.Equal(t, v, got)
+}

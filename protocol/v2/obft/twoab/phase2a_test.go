@@ -636,7 +636,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
-		L0Witness:    bA.L0Witness,
+		L0Witness:    bA.LWitness,
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -646,7 +646,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
-		L0Witness:    bB.L0Witness,
+		L0Witness:    bB.LWitness,
 		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -692,7 +692,7 @@ func TestObserveValueMsg_HarvestThenDirectConvergesToSameState(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		L0Witness:    b.L0Witness,
+		L0Witness:    b.LWitness,
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -739,7 +739,7 @@ func TestObserveValueMsg_HarvestAtRetentionCapSilentDrop(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_c"),
 		ValueRoot:    ValueRoot(Value("V_c")),
-		L0Witness:    bC.L0Witness,
+		L0Witness:    bC.LWitness,
 		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -810,7 +810,7 @@ func TestRetentionSource_OrderDependence(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		L0Witness:    b.L0Witness,
+		L0Witness:    b.LWitness,
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -860,7 +860,7 @@ func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
-		L0Witness:    bB.L0Witness,
+		L0Witness:    bB.LWitness,
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -957,4 +957,34 @@ func TestL0ReadyCh_LeaderClosesOnSelfObserve(t *testing.T) {
 	require.NoError(t, li.ApplyHostValidity(0, Value("V0"), true))
 	require.True(t, l0ReadyClosed(li),
 		"leader L0Ready closes after self-observe + self-host-validate")
+}
+
+// ---------- Op8 σ-lock-aware buildLayerEntry ----------
+
+// TestBuildLayerEntry_LeaderStaysSigmaOnHostFlip verifies the Op8
+// σ-lock-aware branch in buildLayerEntry: an L_k leader that σ-locked at
+// witness-sign time (BuildPhase1Bundle) stays σ-committed — it emits
+// SigmaChained on the locked V even if the host later flips that value
+// invalid. Flipping to NR would publish both a σ witness (Phase-1 bundle)
+// and an NR partial at the same layer = self-equivocation. This mirrors the
+// post-Op5 L_0 principle that a host re-validate-NV verdict has no protocol
+// effect once the op is σ-locked.
+func TestBuildLayerEntry_LeaderStaysSigmaOnHostFlip(t *testing.T) {
+	s := newSimWithK(t, 7, 3)
+	const k = 1
+	leader := s.leaderAt(k)
+	v := s.candidates[k]
+	inst := s.instances[leader]
+	// Leader builds its layer-k bundle → σ-locks layer k on V_k.
+	_, err := inst.BuildPhase1Bundle(k, v)
+	require.NoError(t, err)
+	require.True(t, inst.sigmaLocked[k], "BuildPhase1Bundle at k must σ-lock")
+	// Host flips V_k invalid at the leader (e.g. mid-slot re-evaluation).
+	require.NoError(t, inst.ApplyHostValidity(k, v, false))
+	// buildLayerEntry must STILL emit SigmaChained on V_k (not NRPlaintext).
+	entry, err := inst.buildLayerEntry(k)
+	require.NoError(t, err)
+	require.Equal(t, LayerEntrySigmaChained, entry.Kind,
+		"Op8: σ-locked leader must stay σ-side at layer k despite host-flip-invalid")
+	require.Equal(t, v, entry.V)
 }

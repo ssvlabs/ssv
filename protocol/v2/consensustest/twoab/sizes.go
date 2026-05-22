@@ -11,10 +11,10 @@ import (
 // verification CPU cost differs across modes, not wire size.
 //
 // Per docs/2abOBFT.md §Phase 1 / §Phase 2a / §Phase 2b / §Final-certificate
-// gossip wire formats (post Op3 + Op5 + Op11):
+// gossip wire formats (post Op3 + Op5 + Op8 + Op11):
 //
 //	Phase1Bundle:  ClusterID(32) + OperatorID(8) + Height(8) + Layer(4) +
-//	               Value(|V|) + L0Witness(BLS sig) [Op3 — leader's σ partial on V]
+//	               Value(|V|) + LWitness(BLS sig) [Op8 — leader's σ partial on V at this layer]
 //	ValueMsg:      ClusterID(32) + OperatorID(8) + Height(8) +
 //	               Value(|V|) + ValueRoot(32) +
 //	               L0Witness(BLS sig) [Op11 — leader witness forwarded] +
@@ -45,7 +45,7 @@ const (
 
 func phase1BundleSize(b *twoab.Phase1Bundle) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes + layerBytes +
-		int64(len(b.Value)) + int64(len(b.L0Witness))
+		int64(len(b.Value)) + int64(len(b.LWitness))
 }
 
 func layerEntriesSize(entries []twoab.LayerEntry) int64 {

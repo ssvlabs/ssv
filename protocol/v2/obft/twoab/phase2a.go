@@ -197,6 +197,18 @@ func (i *Instance) buildLayerEntry(k int) (LayerEntry, error) {
 		return LayerEntry{}, fmt.Errorf("twoab: %w: layer %d outside (0, %d)",
 			ErrLayerOutOfRange, k, i.cfg.K())
 	}
+	// Op8: if we already σ-committed at this layer, stay consistent — emit
+	// SigmaChained on the locked V regardless of the current host verdict.
+	// The only way to be σ-locked at k>0 before Phase-2a is as this layer's
+	// leader via our own Phase-1 LWitness (BuildPhase1Bundle σ-locks at
+	// witness-sign time). Flipping to NR here would publish both a σ witness
+	// (in our Phase-1 bundle) and an NR partial at the same layer —
+	// self-equivocation. This mirrors the post-Op5 L_0 principle that a
+	// host re-validate-NV verdict has no protocol effect once the op is
+	// σ-locked (see ApplyHostValidity docstring).
+	if i.sigmaLocked[k] {
+		return i.buildSigmaChainedEntry(k, i.sigmaLockedV[k])
+	}
 	leaderID := i.cfg.Layers[k].Leader
 	retained := i.retainedBundles[k][leaderID]
 
@@ -329,7 +341,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 		// retained bundle. Receivers verify against the leader's
 		// pubKeyShare on V and harvest V into their own retention on
 		// success (closing the peer-reflood-V path).
-		l0Witness := append(Signature{}, retained[0].Bundle.L0Witness...)
+		l0Witness := append(Signature{}, retained[0].Bundle.LWitness...)
 		// Op5: sign our own σ partial on V at L_0 and acquire the σ-side
 		// EKM lock at L_0. KindValue under V3 is the terminal σ-side
 		// emission — there is no follow-up Commit-Signed. Sequence is:
@@ -523,7 +535,7 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 		Height:       i.cfg.Height,
 		V:            append(Value{}, v...),
 		ValueRoot:    root,
-		L0Witness:    append(Signature{}, retained[0].Bundle.L0Witness...),
+		L0Witness:    append(Signature{}, retained[0].Bundle.LWitness...),
 		L0Partial:    append(Signature{}, l0Partial...),
 		LayerEntries: cloneLayerEntries(i.ownNoValueMsg.LayerEntries),
 	}
@@ -809,7 +821,7 @@ func (i *Instance) verifyAndPoolL0Partial(emitter OperatorID, v *ValueMsg) {
 			FakePlaintextSigma: &FakePlaintextSigmaEvidence{
 				OnionPartial:        append(Signature{}, v.L0Partial...),
 				OnionValue:          append(Value{}, v.V...),
-				RetainedValueHashes: i.retainedL0ValueHashes(),
+				RetainedValueHashes: i.retainedValueHashes(0),
 			},
 		})
 	}
@@ -1026,7 +1038,7 @@ func (i *Instance) maybeHarvestPhase1BundleFromValueMsg(v *ValueMsg) {
 		Height:     i.cfg.Height,
 		Layer:      layer,
 		Value:      append(Value{}, v.V...),
-		L0Witness:  append(Signature{}, v.L0Witness...),
+		LWitness:   append(Signature{}, v.L0Witness...),
 	}
 	// Defense-in-depth: re-validate the synthesized bundle structurally
 	// before retention. Today this is redundant (synth is built from

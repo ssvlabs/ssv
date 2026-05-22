@@ -55,14 +55,14 @@ const (
 	// encryption.
 	EvidenceFakeEncryptedPresence EvidenceRule = 4
 
-	// EvidenceFakePlaintextSigma — Rule 5: at L_0, an operator's plaintext
-	// σ partial does not verify against the operator's pubKeyShare on
-	// the claimed V. Detection points (post Op5):
-	//   - ValueMsg.L0Partial verify-fail → Rule 5 keyed on the EMITTER
-	//     (the L0Partial is the emitter's own signing artifact).
-	//   - Phase1Bundle.L0Witness verify-fail → Rule 5 keyed on the
-	//     LEADER (the bundle is op-identity-signed by the leader at the
-	//     outer envelope).
+	// EvidenceFakePlaintextSigma — Rule 5: an operator's plaintext σ
+	// partial does not verify against the operator's pubKeyShare on the
+	// claimed V. Detection points (post Op5 / Op8):
+	//   - ValueMsg.L0Partial verify-fail → Rule 5 keyed on the EMITTER at
+	//     L_0 (the L0Partial is the emitter's own signing artifact).
+	//   - Phase1Bundle.LWitness verify-fail (at ANY layer post-Op8) →
+	//     Rule 5 keyed on the LEADER at that layer (the bundle is
+	//     op-identity-signed by the leader at the outer envelope).
 	//   - ValueMsg.L0Witness verify-fail does NOT fire Rule 5 (anti-
 	//     framing: the L0Witness inside KindValue is signed-for-
 	//     forwarding by the emitter, not the leader — firing Rule 5
@@ -208,14 +208,14 @@ type FakeEncryptedPresenceEvidence struct {
 	DecryptError   string
 }
 
-// FakePlaintextSigmaEvidence (Rule 5) — at L_0, a plaintext σ partial
-// emitted by Operator OperatorID does not verify against the operator's
-// pubKeyShare on the claimed V. Post Op5 the partial originates from one
-// of two wire sources:
-//   - ValueMsg.L0Partial (emitter == OperatorID). Rule 5 attributes to
-//     the emitter.
-//   - Phase1Bundle.L0Witness (the L_0 leader). Rule 5 attributes to the
-//     leader (OperatorID == bundle.OperatorID).
+// FakePlaintextSigmaEvidence (Rule 5) — a plaintext σ partial emitted by
+// Operator OperatorID does not verify against the operator's pubKeyShare
+// on the claimed V. The partial originates from one of two wire sources:
+//   - ValueMsg.L0Partial (emitter == OperatorID), at L_0. Rule 5
+//     attributes to the emitter.
+//   - Phase1Bundle.LWitness (the layer leader), at any layer post-Op8.
+//     Rule 5 attributes to the leader (OperatorID == bundle.OperatorID)
+//     at the bundle's Layer.
 //
 // The L0Witness forwarded inside a peer's KindValue does NOT fire Rule 5
 // (anti-framing: a byz emitter could embed a forged witness against an

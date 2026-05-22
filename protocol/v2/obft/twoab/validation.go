@@ -23,12 +23,11 @@ import (
 // before deciding to accept the message at all.
 
 // ValidatePhase1Bundle checks structural invariants for an incoming
-// Phase-1 bundle. Per spec §Phase 1 (post Op3): the bundle carries the
-// leader's σ partial on V as `L0Witness` at L_0 — required and non-empty
-// when Layer==0. At L_k>0 (Phase D not shipped yet), L0Witness is empty.
-// L0Witness BLS verification happens at the Instance layer
-// (ObservePhase1Bundle) against the leader's pubKeyShare; only the
-// non-empty-bytes structural check is here.
+// Phase-1 bundle. Per spec §Phase 1 (post Op8): the bundle carries the
+// layer leader's σ partial on V as `LWitness` at every layer — required
+// and non-empty regardless of Layer. LWitness BLS verification happens at
+// the Instance layer (ObservePhase1Bundle) against the leader's
+// pubKeyShare; only the non-empty-bytes structural check is here.
 func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 	if b == nil {
 		return errors.New("twoab: nil phase-1 bundle")
@@ -54,8 +53,8 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 	if len(b.Value) == 0 {
 		return errors.New("twoab: phase-1 bundle has empty Value")
 	}
-	if b.Layer == 0 && len(b.L0Witness) == 0 {
-		return errors.New("twoab: phase-1 bundle at L_0 has empty L0Witness")
+	if len(b.LWitness) == 0 {
+		return fmt.Errorf("twoab: phase-1 bundle at layer %d has empty LWitness", b.Layer)
 	}
 	return nil
 }
@@ -297,4 +296,3 @@ func validateLayerEntries(entries []LayerEntry, cfg *Config, kindLabel string) e
 	}
 	return nil
 }
-

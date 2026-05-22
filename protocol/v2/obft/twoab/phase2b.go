@@ -29,9 +29,9 @@ import (
 // emission moved into KindValue (with the emitter's σ partial); there
 // is no separate Phase-2b σ-commit event. Receivers still run Resolve()
 // opportunistically on σ-pool growth — once cluster σ-pool[V_0] reaches
-// qV (via direct peer KindValues + leader L0Witness + harvested L0Witness
-// contributions), the L_0 σ-quorum reconstruction succeeds without any
-// commit-trigger firing locally.
+// qV (via direct peer KindValues + leader LWitness + harvested forwarded-
+// witness contributions), the L_0 σ-quorum reconstruction succeeds without
+// any commit-trigger firing locally.
 //
 // Per spec §Emission ordering, the upgrade check (Phase 2a-late A1)
 // runs BEFORE commit trigger evaluation on every state delta.
@@ -360,12 +360,14 @@ func (i *Instance) verifyL0SigmaPartial(op OperatorID, v Value, partial Signatur
 	return i.signer.VerifyPartial(opPub, v, partial)
 }
 
-// retainedL0ValueHashes returns sha256 hashes of all V's retained at
-// L_0 (across all leaders, though in practice only one leader per
-// layer). Used to populate Rule 5 evidence with the receiver's
-// reference set for third-party verification.
-func (i *Instance) retainedL0ValueHashes() [][]byte {
-	leaderMap := i.retainedBundles[0]
+// retainedValueHashes returns sha256 hashes of all V's retained at the
+// given layer (across all leaders, though in practice only one leader per
+// layer). Used to populate Rule 5 evidence with the receiver's reference
+// set for third-party verification. Op8 generalized this from the former
+// L_0-only helper so per-layer leader-witness Rule 5 carries the correct
+// layer's reference set.
+func (i *Instance) retainedValueHashes(layer int) [][]byte {
+	leaderMap := i.retainedBundles[layer]
 	if leaderMap == nil {
 		return nil
 	}

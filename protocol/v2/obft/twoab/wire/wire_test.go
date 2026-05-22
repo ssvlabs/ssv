@@ -21,7 +21,7 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 		Height:     42,
 		Layer:      0,
 		Value:      twoab.Value("V0-bytes"),
-		L0Witness:  twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
+		LWitness:   twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
 	}
 	encoded, err := EncodePhase1Bundle(b)
 	require.NoError(t, err)
@@ -32,46 +32,48 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, b.Height, decoded.Height)
 	require.Equal(t, b.Layer, decoded.Layer)
 	require.Equal(t, b.Value, decoded.Value)
-	require.Equal(t, b.L0Witness, decoded.L0Witness,
-		"Op3 L0Witness must round-trip through wire encode/decode")
+	require.Equal(t, b.LWitness, decoded.LWitness,
+		"Op8 LWitness must round-trip through wire encode/decode")
 }
 
-// TestPhase1Bundle_RejectsUnknownVersionByte verifies that the V2
-// decoder rejects wire bytes whose version byte differs from 0x02.
-// Includes rejection of the pre-Op3 V1 byte (0x01) — the cluster cutover
-// policy assumes wire-incompatible coexistence does not occur, so older-
-// version bytes hitting a V2 decoder should fail cleanly at the version
-// check (manifesting as silent quorum starvation on mixed-version
-// clusters — see wire.go's cluster-cutover documentation).
+// TestPhase1Bundle_RejectsUnknownVersionByte verifies that the V3
+// decoder rejects wire bytes whose version byte differs from 0x03.
+// Includes rejection of the pre-Op8 V2 byte (0x02) and the pre-Op3 V1
+// byte (0x01) — the cluster cutover policy assumes wire-incompatible
+// coexistence does not occur, so older-version bytes hitting a V3 decoder
+// should fail cleanly at the version check (manifesting as silent quorum
+// starvation on mixed-version clusters — see wire.go's cluster-cutover
+// documentation).
 func TestPhase1Bundle_RejectsUnknownVersionByte(t *testing.T) {
-	for _, badVersion := range []byte{0x00, 0x01, 0x03, 0xff} {
+	for _, badVersion := range []byte{0x00, 0x01, 0x02, 0xff} {
 		bytes := []byte{badVersion}
 		bytes = append(bytes, ProtocolTag[:]...)
 		bytes = append(bytes, 0x01) // inner kind Phase1Bundle
 		_, err := DecodePhase1Bundle(bytes)
-		require.Errorf(t, err, "V2 decoder must reject version byte 0x%02x", badVersion)
+		require.Errorf(t, err, "V3 decoder must reject version byte 0x%02x", badVersion)
 	}
 }
 
-// TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyL0Witness verifies that the
-// wire encoding tolerates an empty L0Witness at the encoder/decoder level
-// (the L_0 non-empty check is at ValidatePhase1Bundle, separation of
-// concerns). Empty L0Witness is the correct wire shape for L_k>0
-// bundles in the current Op3 scope (Phase D / Op8 will fill these).
-func TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyL0Witness(t *testing.T) {
+// TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyLWitness verifies that the
+// wire encoding tolerates an empty LWitness at the encoder/decoder level
+// (the non-empty check is at ValidatePhase1Bundle — separation of
+// concerns). Post-Op8 ValidatePhase1Bundle rejects an empty witness at
+// every layer, but the codec itself stays agnostic so a malformed bundle
+// fails at validation (with a specific error) rather than at decode.
+func TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyLWitness(t *testing.T) {
 	b := &twoab.Phase1Bundle{
 		ClusterID:  [32]byte{0xaa},
 		OperatorID: 2,
 		Height:     1,
 		Layer:      1,
 		Value:      twoab.Value("V1"),
-		// L0Witness intentionally empty (L_k>0 case in current scope).
+		// LWitness intentionally empty — codec tolerates; validation rejects.
 	}
 	encoded, err := EncodePhase1Bundle(b)
 	require.NoError(t, err)
 	decoded, err := DecodePhase1Bundle(encoded)
 	require.NoError(t, err)
-	require.Empty(t, decoded.L0Witness)
+	require.Empty(t, decoded.LWitness)
 }
 
 func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
@@ -233,7 +235,7 @@ func TestDomainSeparation_RejectsBareOBFTTag(t *testing.T) {
 	// different ProtocolTag (simulating a bare-OBFT envelope being
 	// mis-routed to the twoab wire layer).
 	bogus := make([]byte, 0)
-	bogus = append(bogus, Phase1BundleVersionV2)
+	bogus = append(bogus, Phase1BundleVersionV3)
 	// Wrong tag — "OBFT" left-aligned.
 	bogus = append(bogus, []byte{'O', 'B', 'F', 'T', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}...)
 	bogus = append(bogus, 0x01) // inner kind = phase1

@@ -107,20 +107,20 @@ func TestObservePhase1Bundle_AcceptsLateBundleNoErrLatePhase1(t *testing.T) {
 	require.Len(t, s.instances[OperatorID(2)].RetainedBundles(0, leader), 1)
 }
 
-// ---------- Op3 L0Witness tests ----------
+// ---------- Op3 LWitness tests ----------
 
-// TestBuildPhase1Bundle_PopulatesL0Witness verifies that BuildPhase1Bundle
-// at L_0 produces a non-empty L0Witness signed by the leader on V.
-func TestBuildPhase1Bundle_PopulatesL0Witness(t *testing.T) {
+// TestBuildPhase1Bundle_PopulatesLWitness verifies that BuildPhase1Bundle
+// at L_0 produces a non-empty LWitness signed by the leader on V.
+func TestBuildPhase1Bundle_PopulatesLWitness(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
 	require.NoError(t, err)
-	require.NotEmpty(t, b.L0Witness, "Op3: BuildPhase1Bundle at L_0 must populate L0Witness")
+	require.NotEmpty(t, b.LWitness, "Op3: BuildPhase1Bundle at L_0 must populate LWitness")
 }
 
 // TestBuildPhase1Bundle_AcquiresSigmaLockAtL0 verifies that signing the
-// L0Witness acquires the σ-direction EKM lock at L_0 — a subsequent
+// LWitness acquires the σ-direction EKM lock at L_0 — a subsequent
 // BuildPhase1Bundle call with a different V fails ErrSigmaLocked.
 func TestBuildPhase1Bundle_AcquiresSigmaLockAtL0(t *testing.T) {
 	s := newSim(t, 4)
@@ -131,9 +131,9 @@ func TestBuildPhase1Bundle_AcquiresSigmaLockAtL0(t *testing.T) {
 	require.Error(t, err, "second build on a different V should fail σ-lock")
 }
 
-// TestObservePhase1Bundle_PoolsL0WitnessOnVerify verifies that receivers
-// pool the leader's L0Witness into σ-pool[V_0] on successful BLS verify.
-func TestObservePhase1Bundle_PoolsL0WitnessOnVerify(t *testing.T) {
+// TestObservePhase1Bundle_PoolsLWitnessOnVerify verifies that receivers
+// pool the leader's LWitness into σ-pool[V_0] on successful BLS verify.
+func TestObservePhase1Bundle_PoolsLWitnessOnVerify(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	op2 := s.instances[OperatorID(2)]
@@ -143,25 +143,25 @@ func TestObservePhase1Bundle_PoolsL0WitnessOnVerify(t *testing.T) {
 	// σ-pool[V_0] should contain the leader's contribution.
 	root := ValueRoot(Value("V0"))
 	require.NotEmpty(t, op2.sigmaPool[0][root][leader],
-		"Op3: σ-pool[V_0] should be seeded with leader's L0Witness on bundle observation")
+		"Op3: σ-pool[V_0] should be seeded with leader's LWitness on bundle observation")
 }
 
-// TestObservePhase1Bundle_FakeL0WitnessFiresRule5 verifies that a bundle
-// with a tampered (non-verifying) L0Witness pools nothing into σ-pool
+// TestObservePhase1Bundle_FakeLWitnessFiresRule5 verifies that a bundle
+// with a tampered (non-verifying) LWitness pools nothing into σ-pool
 // AND fires Rule 5 (fake plaintext σ) keyed on the leader.
-func TestObservePhase1Bundle_FakeL0WitnessFiresRule5(t *testing.T) {
+func TestObservePhase1Bundle_FakeLWitnessFiresRule5(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	op2 := s.instances[OperatorID(2)]
 	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
 	require.NoError(t, err)
 	// Tamper with the witness — flip a byte.
-	b.L0Witness[0] ^= 0xff
+	b.LWitness[0] ^= 0xff
 	require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
 	// σ-pool should NOT contain the leader (verify failed).
 	root := ValueRoot(Value("V0"))
 	require.Empty(t, op2.sigmaPool[0][root][leader],
-		"tampered L0Witness should be rejected; no σ-pool entry")
+		"tampered LWitness should be rejected; no σ-pool entry")
 	// Rule 5 should fire against the leader.
 	var found bool
 	for _, e := range op2.Evidence() {
@@ -170,15 +170,15 @@ func TestObservePhase1Bundle_FakeL0WitnessFiresRule5(t *testing.T) {
 			break
 		}
 	}
-	require.True(t, found, "Rule 5 (fake plaintext σ) should fire against the leader on tampered L0Witness")
+	require.True(t, found, "Rule 5 (fake plaintext σ) should fire against the leader on tampered LWitness")
 }
 
-// TestObservePhase1Bundle_PreservesL0WitnessThroughRetention verifies
+// TestObservePhase1Bundle_PreservesLWitnessThroughRetention verifies
 // that the deepCopyBundle path inside ObservePhase1Bundle preserves
-// L0Witness bytes (the defensive copy doesn't drop the field). Pure
+// LWitness bytes (the defensive copy doesn't drop the field). Pure
 // in-memory retention check; for wire-level round-trip see
 // wire/wire_test.go.
-func TestObservePhase1Bundle_PreservesL0WitnessThroughRetention(t *testing.T) {
+func TestObservePhase1Bundle_PreservesLWitnessThroughRetention(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
@@ -187,8 +187,8 @@ func TestObservePhase1Bundle_PreservesL0WitnessThroughRetention(t *testing.T) {
 	require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
 	retained := op2.RetainedBundles(0, leader)
 	require.Len(t, retained, 1)
-	require.Equal(t, b.L0Witness, retained[0].Bundle.L0Witness,
-		"deep-copied bundle should preserve L0Witness")
+	require.Equal(t, b.LWitness, retained[0].Bundle.LWitness,
+		"deep-copied bundle should preserve LWitness")
 }
 
 // TestBuildPhase1Bundle_IdempotentOnSameValue verifies the docstring
@@ -203,8 +203,75 @@ func TestBuildPhase1Bundle_IdempotentOnSameValue(t *testing.T) {
 	require.NoError(t, err)
 	b2, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
 	require.NoError(t, err, "second build on same value should succeed (idempotent)")
-	require.Equal(t, b1.L0Witness, b2.L0Witness,
-		"identical (layer, value) inputs should produce byte-equal L0Witness (deterministic signer + cached partial)")
+	require.Equal(t, b1.LWitness, b2.LWitness,
+		"identical (layer, value) inputs should produce byte-equal LWitness (deterministic signer + cached partial)")
 	require.Equal(t, b1.Value, b2.Value)
 	require.Equal(t, b1.ClusterID, b2.ClusterID)
+}
+
+// ---------- Op8 per-layer LWitness tests (K>=3) ----------
+
+// TestBuildPhase1Bundle_PopulatesLWitnessAtAllLayers verifies Op8: every
+// layer's leader signs a non-empty LWitness, self-pools it into σ-pool[V_k],
+// and acquires the σ-lock at that layer (was L_0-only under Op3).
+func TestBuildPhase1Bundle_PopulatesLWitnessAtAllLayers(t *testing.T) {
+	s := newSimWithK(t, 7, 3) // K=3 → layers 0, 1, 2
+	for k := 0; k < s.K; k++ {
+		leader := s.leaderAt(k)
+		v := s.candidates[k]
+		b, err := s.instances[leader].BuildPhase1Bundle(k, v)
+		require.NoErrorf(t, err, "BuildPhase1Bundle at layer %d", k)
+		require.NotEmptyf(t, b.LWitness, "Op8: layer %d leader must populate LWitness", k)
+		require.Equal(t, k, b.Layer)
+		// Self-pooled into σ-pool[k] (head-start for this layer).
+		root := ValueRoot(v)
+		require.NotEmptyf(t, s.instances[leader].sigmaPool[k][root][leader],
+			"Op8: σ-pool[%d][V] should be seeded with the leader's own LWitness", k)
+		// σ-locked at layer k — a second build on a different V fails.
+		_, err = s.instances[leader].BuildPhase1Bundle(k, Value("other"))
+		require.Errorf(t, err, "Op8: layer %d witness must acquire σ-lock (2nd build on diff V fails)", k)
+	}
+}
+
+// TestObservePhase1Bundle_PoolsLWitnessAtKGt0 verifies that a receiver
+// observing an L_k>0 bundle seeds σ-pool[k] with the leader's witness — the
+// head-start that lets a fall-through layer reach σ-quorum faster.
+func TestObservePhase1Bundle_PoolsLWitnessAtKGt0(t *testing.T) {
+	s := newSimWithK(t, 7, 3)
+	const k = 2
+	leader := s.leaderAt(k)
+	v := s.candidates[k]
+	b, err := s.instances[leader].BuildPhase1Bundle(k, v)
+	require.NoError(t, err)
+	recv := s.instances[OperatorID(5)] // a non-leader
+	require.NoError(t, recv.ObservePhase1Bundle(b, observedEarly))
+	root := ValueRoot(v)
+	require.NotEmpty(t, recv.sigmaPool[k][root][leader],
+		"Op8: receiver should seed σ-pool[k] with the L_k leader's LWitness")
+}
+
+// TestObservePhase1Bundle_FakeLWitnessFiresRule5AtK verifies the Op8
+// recordRule5(_, b.Layer) generalization: a tampered LWitness at layer k
+// pools nothing AND fires Rule 5 keyed at layer k (not the former hardcoded
+// layer 0).
+func TestObservePhase1Bundle_FakeLWitnessFiresRule5AtK(t *testing.T) {
+	s := newSimWithK(t, 7, 3)
+	const k = 2
+	leader := s.leaderAt(k)
+	v := s.candidates[k]
+	b, err := s.instances[leader].BuildPhase1Bundle(k, v)
+	require.NoError(t, err)
+	b.LWitness[0] ^= 0xff // tamper — fails leader-verify
+	recv := s.instances[OperatorID(5)]
+	require.NoError(t, recv.ObservePhase1Bundle(b, observedEarly))
+	root := ValueRoot(v)
+	require.Empty(t, recv.sigmaPool[k][root][leader], "tampered LWitness must not pool")
+	var found bool
+	for _, e := range recv.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == leader && e.Layer == k {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "Op8: Rule 5 must fire at layer k (not hardcoded 0) on a fake L_k witness")
 }

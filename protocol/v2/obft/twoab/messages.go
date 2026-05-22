@@ -146,20 +146,27 @@ func (s CommitSide) IsNR() bool {
 }
 
 // Phase1Bundle is the Phase-1 message a layer's leader sends to distribute
-// their fetched candidate value. Per spec §Phase 1 (post Op3): the bundle
-// pairs the candidate value with the L_0 leader's σ partial on V (the
-// `L0Witness` field below). Wire-level leader-binding closes the
-// Variant-A withhold-then-fake-σ attack and seeds σ-pool[V_0] with one
-// partial from the moment the bundle is observed, accelerating cluster-
-// wide σ-quorum aggregation.
+// their fetched candidate value. Per spec §Phase 1: the bundle pairs the
+// candidate value with the layer leader's σ partial on V at this bundle's
+// layer (the `LWitness` field below). Wire-level leader-binding closes the
+// Variant-A withhold-then-fake-σ attack and seeds σ-pool[V_k] (k = Layer)
+// with one partial from the moment the bundle is observed, accelerating
+// cluster-wide σ-quorum aggregation.
+//
+// Per-layer witness (Op8): pre-Op8 only the L_0 leader carried a witness
+// (then named L0Witness). Post-Op8 every layer's leader carries LWitness =
+// its σ partial on V at that layer, so σ-pool[V_k] gets a leader head-start
+// at every fall-through layer (parity with bare OBFT's per-layer witness
+// section). The deeper-layer witnesses are plaintext head-starts (1 < qV,
+// so a witness alone never reaches σ-quorum — Pigeonhole 1 holds).
 //
 // Authentication: the outer envelope is op-identity-signed at construction
 // time; the inner bundle bytes (encoded by EncodePhase1Bundle) are what the
 // signature covers, so the (claimed) OperatorID below is bound to the
-// signer's identity at the envelope layer. The L0Witness adds threshold-
-// scheme binding on V: receivers verify L0Witness against the leader's
-// pubKeyShare on V, so a byz operator-identity-forging V_fake cannot pair
-// it with a valid L0Witness without forging the leader's BLS share.
+// signer's identity at the envelope layer. LWitness adds threshold-scheme
+// binding on V: receivers verify LWitness against the leader's pubKeyShare
+// on V, so a byz operator-identity-forging V_fake cannot pair it with a
+// valid LWitness without forging the leader's BLS share.
 type Phase1Bundle struct {
 	// ClusterID identifies the cluster this bundle is for. Receivers reject
 	// bundles whose ClusterID doesn't match their instance's ClusterID.
@@ -172,17 +179,18 @@ type Phase1Bundle struct {
 	Layer int
 	// Value is the candidate the leader fetched and committed to.
 	Value Value
-	// L0Witness is the leader's σ partial on Value at L_0 (BLS threshold
-	// share signature, verifiable against pubKeyShares[OperatorID] on
-	// Value). Required and non-empty. Receivers verify on observation and
-	// pool into σ-pool[L_0][ValueRoot(Value)] on success; verification
-	// failure fires Rule 5 (fake plaintext σ) against the leader.
+	// LWitness is the layer leader's σ partial on Value at this bundle's
+	// Layer (BLS threshold share signature, verifiable against
+	// pubKeyShares[OperatorID] on Value). Required and non-empty at every
+	// layer (Op8). Receivers verify on observation and pool into
+	// σ-pool[Layer][ValueRoot(Value)] on success; verification failure
+	// fires Rule 5 (fake plaintext σ) against the leader.
 	//
 	// Per spec §Phase 1: the witness is structural — it cryptographically
 	// binds V to the leader at the protocol layer, restoring the binding
 	// that the v4 first-pass deferred via outer-envelope-only auth (per
 	// §Implementation deviations #1, superseded by this design).
-	L0Witness Signature
+	LWitness Signature
 }
 
 // ValueMsg is the σ-direction Phase-2 emission at L_0. Post Op5, it is

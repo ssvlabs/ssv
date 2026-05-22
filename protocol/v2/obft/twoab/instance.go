@@ -15,10 +15,10 @@ import (
 //
 //  1. Phase 1 — [slot_start, T_0_broadcast]:
 //     a. If local operator is a layer leader: BuildPhase1Bundle(layer, V)
-//     constructs a bundle and broadcasts it. Post Op3 the L_0 leader
-//     embeds an L0Witness (σ partial on V) so receivers can seed
-//     σ-pool[V] from the bundle alone; Op8 (Phase D) will extend this
-//     to L_k>0 leader witnesses.
+//     constructs a bundle and broadcasts it. Every layer leader embeds an
+//     LWitness (σ partial on V at its layer) so receivers can seed
+//     σ-pool[V_k] from the bundle alone (Op8 generalized this from the
+//     L_0-only Op3 witness).
 //     b. ObservePhase1Bundle(b) for every retained peer bundle.
 //
 //  2. Phase 2a — fire-instant at T_phase_2a:
@@ -153,9 +153,10 @@ type Instance struct {
 	//   - sigmaPool[layer][V_root][op] = the op's σ partial on V at this
 	//     layer. At L_0 (post Op5): extracted from KindValue.L0Partial
 	//     via verifyAndPoolL0Partial; the leader's contribution comes
-	//     from Phase1Bundle.L0Witness (Op3). At L_k>0: decrypted from
-	//     Phase-2a LayerEntry (SigmaChained, peeled via accumulated
-	//     nr_tag keys).
+	//     from Phase1Bundle.LWitness. At L_k>0 (post Op8): the layer
+	//     leader's plaintext Phase1Bundle.LWitness (a head-start) plus
+	//     peers' σ partials decrypted from Phase-2a LayerEntry
+	//     (SigmaChained, peeled via accumulated nr_tag keys).
 	//   - nrTagPool[layer][op] = the op's nr_tag_k partial at this layer.
 	//     At L_0: extracted from KindCommit-NR / KindCommit-NRDirect. At
 	//     L_k>0: extracted from Phase-2a LayerEntry (NRPlaintext).
@@ -285,7 +286,7 @@ type Instance struct {
 
 // RetentionSource discriminates how a retained Phase-1 bundle reached
 // the Instance. Informational hint for slashing-evidence routing: the
-// L0Witness BLS partial is sufficient cryptographic leader-binding in
+// LWitness BLS partial is sufficient cryptographic leader-binding in
 // all cases (the Instance verifies it before retention), so envelope
 // re-verification by downstream consumers is OPTIONAL — useful as a
 // belt-and-suspenders check when available, skippable when not.
@@ -297,15 +298,15 @@ const (
 	// ObservePhase1Bundle call. The leader's envelope signature is
 	// available at the wire layer (in the runner's mcache); downstream
 	// consumers MAY re-verify the envelope against the leader's pubkey
-	// as a belt-and-suspenders check on top of L0Witness verification.
+	// as a belt-and-suspenders check on top of LWitness verification.
 	RetentionDirect RetentionSource = iota
 	// RetentionHarvest: the bundle was synthesized from a peer's
 	// KindValue (Op11 peer-reflood-V harvest). No leader envelope
-	// signature exists for this bundle; the L0Witness BLS partial
+	// signature exists for this bundle; the LWitness BLS partial
 	// inside is the sole leader-binding artifact (verified by the
 	// Instance against the leader's pubkey before retention).
 	// Downstream consumers should skip envelope re-verification (none
-	// to re-verify) and rely on L0Witness alone.
+	// to re-verify) and rely on LWitness alone.
 	RetentionHarvest
 )
 

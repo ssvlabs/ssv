@@ -24,10 +24,13 @@ import (
 // verification SHOULD ensure all cluster members run the same protocol
 // minor version before a version-bumping release is rolled out.
 const (
-	// Phase1BundleVersionV2 adds the leader L0Witness field per Op3 of
-	// the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md
-	// §Healthy-path optimizations / Op3). Wire-incompatible with V1.
-	Phase1BundleVersionV2 byte = 0x02
+	// Phase1BundleVersionV3 renames the leader witness field L0Witness →
+	// LWitness and carries it at EVERY layer (Op8 / Phase D), not just L_0
+	// (see docs/2abOBFT-REDESIGN-PLAN.md §Phase D / Op8). The byte layout is
+	// unchanged from V2 (which added the L_0-only L0Witness per Op3); the
+	// bump signals the semantic change (witness now required + processed at
+	// all layers). Wire-incompatible with V2/V1.
+	Phase1BundleVersionV3 byte = 0x03
 	// ValueMsgVersionV3 adds the emitter's own σ partial on V at L_0
 	// (L0Partial) per Op5 of the healthy-path optimization (see
 	// docs/2abOBFT-REDESIGN-PLAN.md §Healthy-path optimizations / Op5).
@@ -88,7 +91,8 @@ const MaxFieldSize = 16 * 1024 * 1024
 
 // EncodePhase1Bundle serializes a Phase-1 bundle.
 //
-// Format (version 0x02 — adds L0Witness post Op3):
+// Format (version 0x03 — per-layer LWitness post Op8; byte layout identical
+// to V2's L_0-only L0Witness):
 //
 //	[1]   version
 //	[16]  ProtocolTag    "2abOBFT" + 9 NULs
@@ -99,8 +103,8 @@ const MaxFieldSize = 16 * 1024 * 1024
 //	[4]   Layer          (uint32 big-endian)
 //	[4]   Value length   (uint32 big-endian)
 //	[Value bytes]
-//	[4]   L0Witness length  (uint32 big-endian)
-//	[L0Witness bytes]
+//	[4]   LWitness length  (uint32 big-endian)
+//	[LWitness bytes]
 func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	if b == nil {
 		return nil, errors.New("wire: nil phase-1 bundle")
@@ -111,13 +115,13 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	if len(b.Value) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle value too long (%d)", len(b.Value))
 	}
-	if len(b.L0Witness) > MaxFieldSize {
-		return nil, fmt.Errorf("wire: phase-1 bundle L0Witness too long (%d)", len(b.L0Witness))
+	if len(b.LWitness) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: phase-1 bundle LWitness too long (%d)", len(b.LWitness))
 	}
 
-	size := 1 + 16 + 1 + 32 + 8 + 8 + 4 + 4 + len(b.Value) + 4 + len(b.L0Witness)
+	size := 1 + 16 + 1 + 32 + 8 + 8 + 4 + 4 + len(b.Value) + 4 + len(b.LWitness)
 	out := make([]byte, 0, size)
-	out = append(out, Phase1BundleVersionV2)
+	out = append(out, Phase1BundleVersionV3)
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindPhase1Bundle)
 	out = append(out, b.ClusterID[:]...)
@@ -126,15 +130,15 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	out = appendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
 	out = appendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
 	out = append(out, b.Value...)
-	out = appendUint32(out, uint32(len(b.L0Witness))) //nolint:gosec // bounds-checked
-	out = append(out, b.L0Witness...)
+	out = appendUint32(out, uint32(len(b.LWitness))) //nolint:gosec // bounds-checked
+	out = append(out, b.LWitness...)
 	return out, nil
 }
 
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
 func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 	r := newReader(data)
-	if err := readVersion(r, Phase1BundleVersionV2, "phase-1 bundle"); err != nil {
+	if err := readVersion(r, Phase1BundleVersionV3, "phase-1 bundle"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
@@ -166,7 +170,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	witness, err := r.readLengthPrefixed("phase-1 bundle L0Witness")
+	witness, err := r.readLengthPrefixed("phase-1 bundle LWitness")
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +183,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 		Height:     twoab.Height(height),
 		Layer:      int(layer), //nolint:gosec // bounds-checked above
 		Value:      twoab.Value(value),
-		L0Witness:  twoab.Signature(witness),
+		LWitness:   twoab.Signature(witness),
 	}, nil
 }
 
