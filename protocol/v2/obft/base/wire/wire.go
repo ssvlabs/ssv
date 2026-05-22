@@ -18,6 +18,19 @@ import (
 // Wire format versions. Bumped when the on-the-wire layout changes
 // incompatibly. Encoders write the current version; decoders accept only
 // versions they understand.
+//
+// Cluster-cutover policy: operators MUST be rolled in lockstep across
+// any wire-version bump. Mixed-version clusters will see all cross-
+// version messages fail at the version-byte check inside the relevant
+// Decode* function, manifesting as silent quorum starvation (the
+// upgraded ops reject the legacy ops' bundles/commits as malformed,
+// and vice versa). There is no cross-version compatibility layer; the
+// decoder accepts exactly one version per kind. Pre-deployment
+// verification SHOULD ensure all cluster members run the same protocol
+// minor version before a version-bumping release is rolled out.
+//
+// Mirrors the equivalent migration policy in
+// `protocol/v2/obft/twoab/wire/wire.go`.
 const (
 	Phase1BundleVersionV1 byte = 0x01
 	CommitVersionV1       byte = 0x01

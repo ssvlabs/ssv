@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"hash"
 	"sort"
 )
 
@@ -203,22 +204,22 @@ type Output struct {
 func commitContentHash(c *Commit) [32]byte {
 	h := sha256.New()
 	h.Write(c.ClusterID[:])
-	binary.Write(h, binary.BigEndian, uint64(c.OperatorID))
-	binary.Write(h, binary.BigEndian, uint64(c.Height))
-	binary.Write(h, binary.BigEndian, uint32(len(c.Layers)))
+	writeUint64(h, uint64(c.OperatorID))
+	writeUint64(h, uint64(c.Height))
+	writeUint32(h, uint32(len(c.Layers)))
 	for _, el := range c.Layers {
-		binary.Write(h, binary.BigEndian, uint32(len(el.Value)))
+		writeUint32(h, uint32(len(el.Value)))
 		h.Write(el.Value)
-		binary.Write(h, binary.BigEndian, uint32(len(el.Ciphertext)))
+		writeUint32(h, uint32(len(el.Ciphertext)))
 		h.Write(el.Ciphertext)
 	}
 	nr := make([]NRPartial, len(c.NRPartials))
 	copy(nr, c.NRPartials)
 	sort.Slice(nr, func(i, j int) bool { return nr[i].Layer < nr[j].Layer })
-	binary.Write(h, binary.BigEndian, uint32(len(nr)))
+	writeUint32(h, uint32(len(nr)))
 	for _, p := range nr {
-		binary.Write(h, binary.BigEndian, uint32(p.Layer))
-		binary.Write(h, binary.BigEndian, uint32(len(p.PartialSig)))
+		writeUint32(h, uint32(p.Layer))
+		writeUint32(h, uint32(len(p.PartialSig)))
 		h.Write(p.PartialSig)
 	}
 	ws := make([]LeaderSigmaWitness, len(c.Witnesses))
@@ -232,15 +233,34 @@ func commitContentHash(c *Commit) [32]byte {
 		}
 		return bytes.Compare(ws[i].ValueRoot[:], ws[j].ValueRoot[:]) < 0
 	})
-	binary.Write(h, binary.BigEndian, uint32(len(ws)))
+	writeUint32(h, uint32(len(ws)))
 	for _, w := range ws {
-		binary.Write(h, binary.BigEndian, uint32(w.Layer))
-		binary.Write(h, binary.BigEndian, uint64(w.Leader))
+		writeUint32(h, uint32(w.Layer))
+		writeUint64(h, uint64(w.Leader))
 		h.Write(w.ValueRoot[:])
-		binary.Write(h, binary.BigEndian, uint32(len(w.SigmaV)))
+		writeUint32(h, uint32(len(w.SigmaV)))
 		h.Write(w.SigmaV)
 	}
 	var out [32]byte
 	copy(out[:], h.Sum(nil))
 	return out
+}
+
+// writeUint32 / writeUint64 write a big-endian fixed-width integer to
+// a hash.Hash. These helpers replace `binary.Write(h, ...)` to avoid
+// the brittle discarded-error pattern — hash.Hash.Write is documented
+// to never return an error, but the discarded error from binary.Write
+// is a lint magnet. Using explicit byte slicing makes the intent
+// obvious and removes the error return entirely. Mirrors the same
+// helpers in twoab/messages.go.
+func writeUint32(h hash.Hash, v uint32) {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], v)
+	h.Write(buf[:])
+}
+
+func writeUint64(h hash.Hash, v uint64) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], v)
+	h.Write(buf[:])
 }

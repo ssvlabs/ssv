@@ -3,6 +3,8 @@ package base
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // ErrNoQuorum is returned by Resolve when neither σ-quorum at any layer nor
@@ -108,4 +110,10 @@ var ErrAlreadyCommitted = errors.New("obft: operator already committed for this 
 // finalized instance under its instanceMu; this sentinel additionally
 // protects any caller path that bypasses the adapter (tests, future
 // plumbing) so the ended-flag promise on Instance is honored end-to-end.
-var ErrInstanceEnded = errors.New("obft: instance has been finalized")
+//
+// Re-exported from the parent `obft` package — the shared sentinel
+// lets callers writing cross-package code use either form interchangeably
+// with `errors.Is` (e.g. `errors.Is(err, base.ErrInstanceEnded)` and
+// `errors.Is(err, obft.ErrInstanceEnded)` both succeed). See
+// `protocol/v2/obft/errors.go` for the canonical declaration.
+var ErrInstanceEnded = obft.ErrInstanceEnded

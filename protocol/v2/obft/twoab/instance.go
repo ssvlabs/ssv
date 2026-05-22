@@ -334,7 +334,7 @@ func NewInstance(
 	if pubKeyShares == nil {
 		return nil, errors.New("twoab: nil pubKeyShares (need at least an empty map)")
 	}
-	if !operatorInCluster(ownOperatorID, cfg) {
+	if !obft.OperatorInCluster(ownOperatorID, cfg.Operators) {
 		return nil, fmt.Errorf("twoab: own operator id %d not in cluster", ownOperatorID)
 	}
 	for _, op := range cfg.Operators {

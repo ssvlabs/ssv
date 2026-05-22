@@ -166,3 +166,32 @@ type FakePlaintextSigmaEvidence struct {
 	// the verifier reproduces the partial-vs-V check).
 	RetainedValueHashes [][]byte
 }
+
+// EvidenceObserver is invoked the FIRST time an Evidence with a given
+// (Rule, OperatorID, Layer) tuple is recorded by an Instance. Subsequent
+// records for the same tuple do NOT re-fire (e.g., a Rule 3 equivocation
+// fires once per (operator, layer) regardless of how many redundant
+// emissions trigger detection). Implementations should be non-blocking;
+// the callback runs synchronously inside the protocol layer's recording
+// path.
+//
+// Per spec §Slashing evidence, honest operators MUST log observed evidence
+// per-rule for out-of-band aggregation. This callback is the logging
+// surface — see the evidenceObserver field comment on Instance for the
+// surrounding model.
+type EvidenceObserver func(Evidence)
+
+// evidenceObservedKey is the dedup key for per-(rule, op, layer) observer
+// fires.
+//
+// Layer is int (not uint) because the canonical top-level Rule 3 / commit-
+// equivocation entry uses Layer = -1 as the "spans the whole commit, not
+// per-layer" sentinel (see phase2.go top-level dedup path). Honest per-layer
+// entries are always Layer ≥ 0; the -1 sentinel and ≥ 0 indices coexist in
+// the same key space without collision because -1 is reserved for the single
+// "whole-commit" cross-onion rule.
+type evidenceObservedKey struct {
+	rule  EvidenceRule
+	op    OperatorID
+	layer int
+}

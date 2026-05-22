@@ -3,6 +3,8 @@ package base
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // Structural validation for OBFT messages received from peers.
@@ -82,7 +84,7 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 	if len(c.Layers) != cfg.K() {
 		return fmt.Errorf("obft: commit has %d σ layers, expected K=%d", len(c.Layers), cfg.K())
 	}
-	if !operatorInCluster(c.OperatorID, cfg) {
+	if !obft.OperatorInCluster(c.OperatorID, cfg.Operators) {
 		return fmt.Errorf("obft: commit sender %d not in cluster", c.OperatorID)
 	}
 
@@ -162,11 +164,3 @@ func ValidateCertificate(c *Certificate, cfg *Config) error {
 	return nil
 }
 
-func operatorInCluster(id OperatorID, cfg *Config) bool {
-	for _, op := range cfg.Operators {
-		if op == id {
-			return true
-		}
-	}
-	return false
-}

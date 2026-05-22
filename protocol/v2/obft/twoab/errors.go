@@ -3,9 +3,19 @@ package twoab
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // Protocol-specific errors.
+
+// ErrInstanceEnded is re-exported from the parent `obft` package so the
+// Finalized-instance contract is uniform across both protocol
+// implementations. Callers using either `obft.ErrInstanceEnded` or
+// `twoab.ErrInstanceEnded` with `errors.Is` match identically.
+// Returned by twoab Instance state-mutating methods after Finalize per
+// the C1 convergence (see docs/OBFT-TWOAB-CONVERGENCE-PLAN.md).
+var ErrInstanceEnded = obft.ErrInstanceEnded
 
 // ErrNilConfig is returned by NewInstance when called with a nil Config.
 var ErrNilConfig = errors.New("twoab: nil config")

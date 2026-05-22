@@ -3,6 +3,8 @@ package twoab
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 )
 
 // Structural validation for 2abOBFT messages received from peers.
@@ -79,7 +81,7 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 	if v.Height != cfg.Height {
 		return fmt.Errorf("twoab: ValueMsg height %d != instance height %d", v.Height, cfg.Height)
 	}
-	if !operatorInCluster(v.OperatorID, cfg) {
+	if !obft.OperatorInCluster(v.OperatorID, cfg.Operators) {
 		return fmt.Errorf("twoab: ValueMsg sender %d not in cluster", v.OperatorID)
 	}
 	if len(v.V) == 0 {
@@ -131,7 +133,7 @@ func ValidateNoValueMsg(nv *NoValueMsg, cfg *Config) error {
 	if nv.Height != cfg.Height {
 		return fmt.Errorf("twoab: NoValueMsg height %d != instance height %d", nv.Height, cfg.Height)
 	}
-	if !operatorInCluster(nv.OperatorID, cfg) {
+	if !obft.OperatorInCluster(nv.OperatorID, cfg.Operators) {
 		return fmt.Errorf("twoab: NoValueMsg sender %d not in cluster", nv.OperatorID)
 	}
 	if err := validateLayerEntries(nv.LayerEntries, cfg, "NoValueMsg"); err != nil {
@@ -167,7 +169,7 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 	if c.Height != cfg.Height {
 		return fmt.Errorf("twoab: Commit height %d != instance height %d", c.Height, cfg.Height)
 	}
-	if !operatorInCluster(c.OperatorID, cfg) {
+	if !obft.OperatorInCluster(c.OperatorID, cfg.Operators) {
 		return fmt.Errorf("twoab: Commit sender %d not in cluster", c.OperatorID)
 	}
 	if len(c.L0Partial) == 0 {
@@ -296,11 +298,3 @@ func validateLayerEntries(entries []LayerEntry, cfg *Config, kindLabel string) e
 	return nil
 }
 
-func operatorInCluster(id OperatorID, cfg *Config) bool {
-	for _, op := range cfg.Operators {
-		if op == id {
-			return true
-		}
-	}
-	return false
-}

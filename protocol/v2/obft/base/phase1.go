@@ -346,15 +346,17 @@ func (i *Instance) reevaluateL0Sigmas() {
 // deepCopyBundle returns a deep copy of b — the byte slices inside (Value,
 // SigmaV) are independent of the source. Used at retention boundaries so
 // caller-owned slices can be modified without corrupting Instance state.
+//
+// Style: struct-literal + slice-field overrides (matching the twoab
+// sibling helper). Harder to forget a slice field than the imperative
+// field-by-field literal form; new scalar fields added to Phase1Bundle
+// are picked up automatically by the `*b` copy, only slice/pointer
+// fields need explicit overrides below.
 func deepCopyBundle(b *Phase1Bundle) *Phase1Bundle {
-	return &Phase1Bundle{
-		ClusterID:  b.ClusterID,
-		OperatorID: b.OperatorID,
-		Height:     b.Height,
-		Layer:      b.Layer,
-		Value:      append(Value{}, b.Value...),
-		SigmaV:     append(Signature{}, b.SigmaV...),
-	}
+	out := *b
+	out.Value = append(Value{}, b.Value...)
+	out.SigmaV = append(Signature{}, b.SigmaV...)
+	return &out
 }
 
 // deepCopyCommit returns a deep copy of c — every nested slice (Layers,
