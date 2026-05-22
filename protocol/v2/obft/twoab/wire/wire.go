@@ -14,7 +14,10 @@ import (
 // layout changes incompatibly. Encoders write the current version;
 // decoders accept only versions they understand.
 const (
-	Phase1BundleVersionV1 byte = 0x01
+	// Phase1BundleVersionV2 adds the leader L0Witness field per Op3 of
+	// the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md
+	// §Healthy-path optimizations / Op3). Wire-incompatible with V1.
+	Phase1BundleVersionV2 byte = 0x02
 	ValueMsgVersionV1     byte = 0x01
 	NoValueMsgVersionV1   byte = 0x01
 	CommitVersionV1       byte = 0x01
@@ -65,17 +68,19 @@ const MaxFieldSize = 16 * 1024 * 1024
 
 // EncodePhase1Bundle serializes a Phase-1 bundle.
 //
-// Format (version 0x01):
+// Format (version 0x02 — adds L0Witness post Op3):
 //
-//	[1]  version
-//	[16] ProtocolTag    "2abOBFT" + 9 NULs
-//	[1]  inner kind     = innerKindPhase1Bundle
-//	[32] ClusterID
-//	[8]  OperatorID     (uint64 big-endian)
-//	[8]  Height         (uint64 big-endian)
-//	[4]  Layer          (uint32 big-endian)
-//	[4]  Value length   (uint32 big-endian)
+//	[1]   version
+//	[16]  ProtocolTag    "2abOBFT" + 9 NULs
+//	[1]   inner kind     = innerKindPhase1Bundle
+//	[32]  ClusterID
+//	[8]   OperatorID     (uint64 big-endian)
+//	[8]   Height         (uint64 big-endian)
+//	[4]   Layer          (uint32 big-endian)
+//	[4]   Value length   (uint32 big-endian)
 //	[Value bytes]
+//	[4]   L0Witness length  (uint32 big-endian)
+//	[L0Witness bytes]
 func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	if b == nil {
 		return nil, errors.New("wire: nil phase-1 bundle")
@@ -86,10 +91,13 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	if len(b.Value) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle value too long (%d)", len(b.Value))
 	}
+	if len(b.L0Witness) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: phase-1 bundle L0Witness too long (%d)", len(b.L0Witness))
+	}
 
-	size := 1 + 16 + 1 + 32 + 8 + 8 + 4 + 4 + len(b.Value)
+	size := 1 + 16 + 1 + 32 + 8 + 8 + 4 + 4 + len(b.Value) + 4 + len(b.L0Witness)
 	out := make([]byte, 0, size)
-	out = append(out, Phase1BundleVersionV1)
+	out = append(out, Phase1BundleVersionV2)
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindPhase1Bundle)
 	out = append(out, b.ClusterID[:]...)
@@ -98,13 +106,15 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	out = appendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
 	out = appendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
 	out = append(out, b.Value...)
+	out = appendUint32(out, uint32(len(b.L0Witness))) //nolint:gosec // bounds-checked
+	out = append(out, b.L0Witness...)
 	return out, nil
 }
 
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
 func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 	r := newReader(data)
-	if err := readVersion(r, Phase1BundleVersionV1, "phase-1 bundle"); err != nil {
+	if err := readVersion(r, Phase1BundleVersionV2, "phase-1 bundle"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
@@ -136,6 +146,10 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
+	witness, err := r.readLengthPrefixed("phase-1 bundle L0Witness")
+	if err != nil {
+		return nil, err
+	}
 	if err := r.requireEOF("phase-1 bundle"); err != nil {
 		return nil, err
 	}
@@ -145,6 +159,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 		Height:     twoab.Height(height),
 		Layer:      int(layer), //nolint:gosec // bounds-checked above
 		Value:      twoab.Value(value),
+		L0Witness:  twoab.Signature(witness),
 	}, nil
 }
 

@@ -68,24 +68,34 @@ func TestMaybeBuildAndBroadcastCommit_GateBlocksSigmaEligibleNRFire(t *testing.T
 	require.False(t, ok, "op 1 (σ-eligible) should wait, not fire NR commit")
 }
 
-// TestMaybeBuildAndBroadcastCommit_EquivocationFires: op observes ≥ 2
-// distinct V_0 from L_0 leader → equivocation trigger fires →
-// KindCommit-NR (A4 pivot if op had emitted KindValue).
+// TestMaybeBuildAndBroadcastCommit_EquivocationFires: non-leader op
+// observes ≥ 2 distinct V_0 from L_0 leader → equivocation trigger fires
+// → KindCommit-NR (A4 pivot if op had emitted KindValue).
+//
+// Uses op 2 (non-leader at L_0) so the equivocation pivot is structurally
+// available — under Op3 the L_0 LEADER σ-locks at Phase-1 build time via
+// L0Witness signing and cannot pivot, but non-leader KindValue emitters
+// remain in EKM `coordination` state at L_0 until their own Phase-2b
+// emission (under the Op3-only intermediate; Op5 will close even this path).
 func TestMaybeBuildAndBroadcastCommit_EquivocationFires(t *testing.T) {
 	s := newSim(t, 4)
-	// Op 1 emits KindValue on V_a. Then observes V_b — equivocation.
-	s.deliverPhase1(0, Value("V_a"), []OperatorID{1}, observedEarly)
-	s.applyHostValidityFor([]OperatorID{1}, 0, Value("V_a"), true)
-	vm, _, _, err := s.instances[OperatorID(1)].MaybeFirePhase2a()
+	// Byz leader builds V_a (legit path; σ-locks the leader's instance).
+	leader := s.leaderAt(0)
+	bA, err := s.instances[leader].BuildPhase1Bundle(0, Value("V_a"))
+	require.NoError(t, err)
+	// Op 2 (non-leader) observes V_a, emits KindValue on it.
+	op2 := s.instances[OperatorID(2)]
+	require.NoError(t, op2.ObservePhase1Bundle(bA, observedEarly))
+	require.NoError(t, op2.ApplyHostValidity(0, Value("V_a"), true))
+	vm, _, _, err := op2.MaybeFirePhase2a()
 	require.NoError(t, err)
 	require.NotNil(t, vm)
-	// Now leader emits a second distinct bundle observed by op 1.
-	leader := s.leaderAt(0)
-	bB, err := s.instances[leader].BuildPhase1Bundle(0, Value("V_b"))
-	require.NoError(t, err)
-	require.NoError(t, s.instances[OperatorID(1)].ObservePhase1Bundle(bB, observedAfterPhase2a))
-	// Op 1's equivocation trigger fires → emits KindCommit-NR (A4 pivot).
-	c, ok := s.instances[OperatorID(1)].OwnCommit()
+	// Now the byz leader emits a second distinct bundle on V_b
+	// (bypasses EKM σ-lock via direct signer). Op 2 observes V_b →
+	// equivocation observed at L_0 → A4 pivot to KindCommit-NR.
+	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
+	require.NoError(t, op2.ObservePhase1Bundle(bB, observedAfterPhase2a))
+	c, ok := op2.OwnCommit()
 	require.True(t, ok)
 	require.Equal(t, CommitSideNR, c.Side)
 }
@@ -300,10 +310,10 @@ func TestMaybeBuildAndBroadcastCommit_EquivocationPriorityOverSigmaEligibility(t
 	// At op 4: orchestrate so equivocation is observed BEFORE cluster
 	// σ-eligibility. Inject a second Phase-1 bundle from the leader on
 	// V_b (equivocation) — this fires equivocation trigger via the
-	// ObservePhase1Bundle cascade.
+	// ObservePhase1Bundle cascade. Byz-equivocation simulation: bypass
+	// EKM σ-lock via direct signer access.
 	leader := s.leaderAt(0)
-	bB, err := s.instances[leader].BuildPhase1Bundle(0, Value("V_b"))
-	require.NoError(t, err)
+	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
 	require.NoError(t, s.instances[OperatorID(4)].ObservePhase1Bundle(bB, observedAfterPhase2a))
 	// Equivocation trigger fires at op 4 → A4 pivot to Commit-NR.
 	c4, ok := s.instances[OperatorID(4)].OwnCommit()

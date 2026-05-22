@@ -149,15 +149,17 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		// at L_0 with V_a even though leader equivocated. Equivocation evidence
 		// still gossipable — success doesn't suppress slashing.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT: 2f honest σ-lock on V_a, 1 honest σ-locks on V_b — no
-		// equivocation observed locally. value_pool[V_a] = 2f (short of
-		// qV=2f+1 since the protocol has no Phase-1 σ_V head-start); the
-		// cannot-σ gate blocks σ-locked honest from NR-defaulting. With no
-		// T_commit hard wall, ops wait until slot deadline → MISS.
-		// Recovery requires gossipsub reflood to make each honest observe
-		// the alternative V (firing the equivocation trigger) — not modeled
-		// in direct-delivery catalog.
-		"2abOBFT": ExpectMiss,
+		// 2abOBFT (post Op3): the L_0 leader's L0Witness in the Phase-1
+		// bundle (BLS partial on V_a from the byz leader) seeds σ-pool[V_a]
+		// at every recipient. 2 V_a recipients + leader's L0Witness =
+		// σ-pool[V_a] = 3 = qV. Slot succeeds at L_0 on V_a, matching OBFT's
+		// natural-recovery behavior. The byz leader equivocated cluster-
+		// wide (V_a + V_b L0Witnesses signed by leader on different V's →
+		// Rule 3 cross-σ-V evidence is detectable cluster-wide once reflood
+		// surfaces the conflict). Pre-Op3 v4 missed this scenario because
+		// KindValue carried no σ-direction-partial and the leader's σ at
+		// Phase 2b never reached cluster-wide qV due to fragmentation.
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: PREPARE-pool on V_a = 2f honest (byz leader runs no real
 		// Instance, no PREPARE from leader); pool on V_b = 1. Both < quorum →
 		// R1 timeout → R2 honest leader proposes fresh V → succeeds.

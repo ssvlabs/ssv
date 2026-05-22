@@ -47,6 +47,7 @@ type sim struct {
 	pubShares   map[twoab.OperatorID][]byte
 	clusterPub  []byte
 	instances   map[twoab.OperatorID]*twoab.Instance
+	signers     map[twoab.OperatorID]obft.Signer // retained for byz-forging paths that need direct signer access bypassing EKM
 	resolved    map[twoab.OperatorID]*twoab.Output
 	resolvedAt  map[twoab.OperatorID]time.Duration
 	resolveErrs map[twoab.OperatorID]error
@@ -190,6 +191,10 @@ func (s *sim) start() error {
 			return fmt.Errorf("twoab adapter: new instance op %d: %w", op, err)
 		}
 		s.instances[op] = inst
+		if s.signers == nil {
+			s.signers = make(map[twoab.OperatorID]obft.Signer, s.cfg.N)
+		}
+		s.signers[op] = signer
 	}
 
 	// Slot-deadline for the schedule-anchored final Resolve sweep. In

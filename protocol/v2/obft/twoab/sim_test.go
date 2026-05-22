@@ -156,6 +156,15 @@ func (s *sim) deliverPhase1(layer int, value Value, recipients []OperatorID, obs
 // deliverPhase1Equivocation has the (presumed-byzantine) leader build
 // TWO distinct bundles V_a and V_b and selectively deliver them to
 // different subsets of recipients.
+//
+// Under Op3 (post sub-chunk #1 of healthy-path-optimizations), the
+// legitimate BuildPhase1Bundle path acquires σ-lock at L_0 on the
+// emitter's instance. Equivocation is inherently byz behavior — the
+// byz leader bypasses EKM to sign on multiple V's. Both bundles here
+// use the test-only direct signer access (buildByzEquivocatingBundle),
+// so the byz leader's own instance remains EKM-unlocked and can later
+// take any path (typically NRDirect once they observe their own
+// equivocation via self-observation).
 func (s *sim) deliverPhase1Equivocation(
 	layer int,
 	vA, vB Value,
@@ -164,11 +173,8 @@ func (s *sim) deliverPhase1Equivocation(
 ) (bA, bB *Phase1Bundle) {
 	s.t.Helper()
 	leader := s.leaderAt(layer)
-	var err error
-	bA, err = s.instances[leader].BuildPhase1Bundle(layer, vA)
-	require.NoError(s.t, err)
-	bB, err = s.instances[leader].BuildPhase1Bundle(layer, vB)
-	require.NoError(s.t, err)
+	bA = s.buildByzEquivocatingBundle(leader, layer, vA)
+	bB = s.buildByzEquivocatingBundle(leader, layer, vB)
 	for _, op := range recipientsA {
 		require.NoError(s.t, s.instances[op].ObservePhase1Bundle(bA, observedOffset))
 	}
@@ -176,6 +182,34 @@ func (s *sim) deliverPhase1Equivocation(
 		require.NoError(s.t, s.instances[op].ObservePhase1Bundle(bB, observedOffset))
 	}
 	return bA, bB
+}
+
+// buildByzEquivocatingBundle constructs a second Phase-1 bundle from
+// `leader` on a different value `vB` — bypassing the EKM σ-lock that
+// would otherwise block a legitimate second BuildPhase1Bundle call.
+// Used by equivocation tests to model a byz leader who signs σ partials
+// on multiple V's (which the BLS signer permits; only the protocol's
+// EKM gate blocks honest paths).
+//
+// The L0Witness at layer 0 is signed via direct signer access; deeper
+// layers leave L0Witness empty (Op3 covers L_0 only).
+func (s *sim) buildByzEquivocatingBundle(leader OperatorID, layer int, vB Value) *Phase1Bundle {
+	s.t.Helper()
+	inst := s.instances[leader]
+	var witness Signature
+	if layer == 0 {
+		w, err := inst.signer.SignPartial(vB)
+		require.NoError(s.t, err)
+		witness = w
+	}
+	return &Phase1Bundle{
+		ClusterID:  inst.cfg.ClusterID,
+		OperatorID: leader,
+		Height:     inst.cfg.Height,
+		Layer:      layer,
+		Value:      append(Value{}, vB...),
+		L0Witness:  witness,
+	}
 }
 
 // applyHostValidityAll applies the host's valid/not-valid verdict for V

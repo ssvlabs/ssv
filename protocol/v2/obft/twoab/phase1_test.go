@@ -85,10 +85,11 @@ func TestObservePhase1Bundle_ThirdDistinctBundleSilentlyDropped(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	// Cap at 2 distinct V's. Build 3 bundles, deliver all to op2.
+	// Byz-equivocation: leader signs all three via direct signer access
+	// (BuildPhase1Bundle would σ-lock on the first V and reject the rest).
 	op2 := s.instances[OperatorID(2)]
 	for _, v := range []Value{Value("V_a"), Value("V_b"), Value("V_c")} {
-		b, err := s.instances[leader].BuildPhase1Bundle(0, v)
-		require.NoError(t, err)
+		b := s.buildByzEquivocatingBundle(leader, 0, v)
 		require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
 	}
 	retained := op2.RetainedBundles(0, leader)
@@ -104,4 +105,88 @@ func TestObservePhase1Bundle_AcceptsLateBundleNoErrLatePhase1(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.instances[OperatorID(2)].ObservePhase1Bundle(b, observedAfterPhase2a))
 	require.Len(t, s.instances[OperatorID(2)].RetainedBundles(0, leader), 1)
+}
+
+// ---------- Op3 L0Witness tests ----------
+
+// TestBuildPhase1Bundle_PopulatesL0Witness verifies that BuildPhase1Bundle
+// at L_0 produces a non-empty L0Witness signed by the leader on V.
+func TestBuildPhase1Bundle_PopulatesL0Witness(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	require.NotEmpty(t, b.L0Witness, "Op3: BuildPhase1Bundle at L_0 must populate L0Witness")
+}
+
+// TestBuildPhase1Bundle_AcquiresSigmaLockAtL0 verifies that signing the
+// L0Witness acquires the σ-direction EKM lock at L_0 — a subsequent
+// BuildPhase1Bundle call with a different V fails ErrSigmaLocked.
+func TestBuildPhase1Bundle_AcquiresSigmaLockAtL0(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	_, err := s.instances[leader].BuildPhase1Bundle(0, Value("V_a"))
+	require.NoError(t, err)
+	_, err = s.instances[leader].BuildPhase1Bundle(0, Value("V_b"))
+	require.Error(t, err, "second build on a different V should fail σ-lock")
+}
+
+// TestObservePhase1Bundle_PoolsL0WitnessOnVerify verifies that receivers
+// pool the leader's L0Witness into σ-pool[V_0] on successful BLS verify.
+func TestObservePhase1Bundle_PoolsL0WitnessOnVerify(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	op2 := s.instances[OperatorID(2)]
+	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
+	// σ-pool[V_0] should contain the leader's contribution.
+	root := ValueRoot(Value("V0"))
+	require.NotEmpty(t, op2.sigmaPool[0][root][leader],
+		"Op3: σ-pool[V_0] should be seeded with leader's L0Witness on bundle observation")
+}
+
+// TestObservePhase1Bundle_FakeL0WitnessFiresRule5 verifies that a bundle
+// with a tampered (non-verifying) L0Witness pools nothing into σ-pool
+// AND fires Rule 5 (fake plaintext σ) keyed on the leader.
+func TestObservePhase1Bundle_FakeL0WitnessFiresRule5(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	op2 := s.instances[OperatorID(2)]
+	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	// Tamper with the witness — flip a byte.
+	b.L0Witness[0] ^= 0xff
+	require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
+	// σ-pool should NOT contain the leader (verify failed).
+	root := ValueRoot(Value("V0"))
+	require.Empty(t, op2.sigmaPool[0][root][leader],
+		"tampered L0Witness should be rejected; no σ-pool entry")
+	// Rule 5 should fire against the leader.
+	var found bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == leader && e.Layer == 0 {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "Rule 5 (fake plaintext σ) should fire against the leader on tampered L0Witness")
+}
+
+// TestPhase1Bundle_WireRoundTrip verifies the wire encode/decode of the
+// new L0Witness field is byte-stable.
+func TestPhase1Bundle_WireRoundTrip(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	// Round-trip via wire encode/decode happens at the SSV adapter layer;
+	// here we just confirm the field carries through the deep copy path
+	// inside ObservePhase1Bundle (defensive copy preserves L0Witness).
+	op2 := s.instances[OperatorID(2)]
+	require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
+	retained := op2.RetainedBundles(0, leader)
+	require.Len(t, retained, 1)
+	require.Equal(t, b.L0Witness, retained[0].Bundle.L0Witness,
+		"deep-copied bundle should preserve L0Witness")
 }

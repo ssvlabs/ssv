@@ -147,11 +147,11 @@ func TestDomainSeparation_RejectsBareOBFTTag(t *testing.T) {
 	// different ProtocolTag (simulating a bare-OBFT envelope being
 	// mis-routed to the twoab wire layer).
 	bogus := make([]byte, 0)
-	bogus = append(bogus, Phase1BundleVersionV1)
+	bogus = append(bogus, Phase1BundleVersionV2)
 	// Wrong tag — "OBFT" left-aligned.
 	bogus = append(bogus, []byte{'O', 'B', 'F', 'T', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}...)
 	bogus = append(bogus, 0x01) // inner kind = phase1
-	bogus = append(bogus, make([]byte, 32+8+8+4+4)...)
+	bogus = append(bogus, make([]byte, 32+8+8+4+4+4)...)
 	_, err := DecodePhase1Bundle(bogus)
 	require.Error(t, err, "wrong ProtocolTag should be rejected")
 }

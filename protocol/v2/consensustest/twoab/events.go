@@ -214,13 +214,28 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 	for _, p := range plans {
 		bundle, err := s.instances[leader].BuildPhase1Bundle(e.layer, p.V)
 		if err != nil {
-			// Byz operator forging — synthesize a bundle directly.
+			// Byz operator forging — synthesize a bundle directly, bypassing
+			// the EKM σ-lock that BuildPhase1Bundle acquires (a byz leader
+			// equivocating across multiple V's bypasses EKM exactly this way).
+			// Sign L0Witness via direct signer access (only at L_0; L_k>0
+			// leader witnesses are Phase D scope).
+			var l0Witness twoab.Signature
+			if e.layer == 0 {
+				w, signErr := s.signers[leader].SignPartial(p.V)
+				if signErr == nil {
+					l0Witness = w
+				}
+				// If signing fails, leave L0Witness empty — ValidatePhase1Bundle
+				// will reject the bundle at receivers, modeling a maximally-
+				// malformed byz emission.
+			}
 			bundle = &twoab.Phase1Bundle{
 				ClusterID:  s.cfgTwoab.ClusterID,
 				OperatorID: leader,
 				Height:     s.cfgTwoab.Height,
 				Layer:      e.layer,
 				Value:      append(twoab.Value{}, p.V...),
+				L0Witness:  l0Witness,
 			}
 		} else {
 			// Leader self-observes their own bundle so their own retention
