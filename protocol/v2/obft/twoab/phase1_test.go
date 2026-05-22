@@ -173,20 +173,38 @@ func TestObservePhase1Bundle_FakeL0WitnessFiresRule5(t *testing.T) {
 	require.True(t, found, "Rule 5 (fake plaintext σ) should fire against the leader on tampered L0Witness")
 }
 
-// TestPhase1Bundle_WireRoundTrip verifies the wire encode/decode of the
-// new L0Witness field is byte-stable.
-func TestPhase1Bundle_WireRoundTrip(t *testing.T) {
+// TestObservePhase1Bundle_PreservesL0WitnessThroughRetention verifies
+// that the deepCopyBundle path inside ObservePhase1Bundle preserves
+// L0Witness bytes (the defensive copy doesn't drop the field). Pure
+// in-memory retention check; for wire-level round-trip see
+// wire/wire_test.go.
+func TestObservePhase1Bundle_PreservesL0WitnessThroughRetention(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	b, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
 	require.NoError(t, err)
-	// Round-trip via wire encode/decode happens at the SSV adapter layer;
-	// here we just confirm the field carries through the deep copy path
-	// inside ObservePhase1Bundle (defensive copy preserves L0Witness).
 	op2 := s.instances[OperatorID(2)]
 	require.NoError(t, op2.ObservePhase1Bundle(b, observedEarly))
 	retained := op2.RetainedBundles(0, leader)
 	require.Len(t, retained, 1)
 	require.Equal(t, b.L0Witness, retained[0].Bundle.L0Witness,
 		"deep-copied bundle should preserve L0Witness")
+}
+
+// TestBuildPhase1Bundle_IdempotentOnSameValue verifies the docstring
+// idempotency claim: calling BuildPhase1Bundle twice with the same
+// (layer, value) returns byte-equal bundles and doesn't error on the
+// second call (cached partial via i.ownPartials[0], idempotent
+// transitionToSigma on same value).
+func TestBuildPhase1Bundle_IdempotentOnSameValue(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	b1, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	b2, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err, "second build on same value should succeed (idempotent)")
+	require.Equal(t, b1.L0Witness, b2.L0Witness,
+		"identical (layer, value) inputs should produce byte-equal L0Witness (deterministic signer + cached partial)")
+	require.Equal(t, b1.Value, b2.Value)
+	require.Equal(t, b1.ClusterID, b2.ClusterID)
 }

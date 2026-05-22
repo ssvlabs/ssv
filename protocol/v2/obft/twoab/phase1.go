@@ -53,31 +53,41 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	// witnesses see Phase D (Op8). Other layers ship with empty L0Witness
 	// for now (the field exists in the wire shape uniformly; only L_0 has
 	// the leader-witness mechanism in this phase).
+	//
+	// Sequencing: sign first, THEN acquire σ-lock + self-pool. A signer
+	// failure (BLS infra issue) must NOT leave the EKM σ-locked without
+	// a corresponding partial existing — that state would block any
+	// further L_0 emission from this leader without a recoverable retry
+	// path. By signing first (no state mutation on failure), we ensure
+	// the leader can retry the build later if the signer transiently
+	// fails.
 	var l0Witness Signature
 	if layer == 0 {
-		// Acquire σ-side EKM lock at L_0 on this value. Failure means the
-		// leader has previously locked NR (or σ on a different V) at L_0
-		// — should not happen for an honest leader who fetches once per
-		// slot, but the impl enforces.
-		if err := i.transitionToSigma(0, value); err != nil {
-			return nil, fmt.Errorf("twoab: leader L0Witness σ-lock at L_0: %w", err)
-		}
-		// Cache the partial in ownPartials[0] so it's available for
-		// downstream reuse (later phases may consult it).
+		// 1) Compute the partial. SignPartial is pure (no Instance state
+		// mutation); if it errors, we abort with no side effects.
 		partial, ok := i.ownPartials[0]
 		if !ok {
 			p, err := i.signer.SignPartial(value)
 			if err != nil {
 				return nil, fmt.Errorf("twoab: sign L0Witness for leader at L_0: %w", err)
 			}
-			i.ownPartials[0] = p
 			partial = p
 		}
+		// 2) Acquire σ-side EKM lock at L_0 on this value. Failure means
+		// the leader has previously locked NR or σ on a different V at
+		// L_0 — should not happen for an honest leader who fetches once
+		// per slot, but the impl enforces. We abort BEFORE caching the
+		// partial / pooling, so a lock-fail leaves Instance state
+		// untouched (the signed bytes are discarded).
+		if err := i.transitionToSigma(0, value); err != nil {
+			return nil, fmt.Errorf("twoab: leader L0Witness σ-lock at L_0: %w", err)
+		}
+		// 3) Both sign and lock succeeded — commit the partial to cache
+		// and self-pool into σ-pool[V_0]. Idempotent on subsequent calls
+		// with the same value (cache hit on ownPartials, idempotent
+		// addToSigmaPool semantics).
+		i.ownPartials[0] = partial
 		l0Witness = partial
-		// Self-pool the leader's own σ partial into σ-pool[V_0]. The
-		// leader is the first contributor; downstream receivers will
-		// re-pool when they observe the bundle (idempotent under
-		// addToSigmaPool's dedup-by-(layer, op) semantics).
 		i.addToSigmaPool(0, ValueRoot(value), i.ownOperatorID, partial)
 	}
 

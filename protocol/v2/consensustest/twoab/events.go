@@ -239,11 +239,13 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			}
 		} else {
 			// Leader self-observes their own bundle so their own retention
-			// state reflects V at this layer. 2abOBFT has no Phase-1 σ_V
-			// partial (the leader emits σ at Phase 2b uniformly with all other
-			// operators); without self-observation the leader's L_0
-			// retention would be empty and they'd take the NoValue path at
-			// their own Phase-2a fire-time.
+			// state reflects V at this layer. Without self-observation the
+			// leader's L_0 retention would be empty and they'd take the
+			// NoValue path at their own Phase-2a fire-time. Post Op3 the
+			// bundle also carries the leader's σ partial (L0Witness),
+			// which is self-pooled into σ-pool[V_0] via the ObservePhase1Bundle
+			// verify+pool path (the leader's own pool is updated as a
+			// receiver of their own bundle).
 			_ = s.instances[leader].ObservePhase1Bundle(bundle, s.observedOffset())
 			leaderValid := s.cfg.Host.Validate(ct.OperatorID(leader), e.layer, p.V, ct.PhasePhase1Acceptance)
 			_ = s.instances[leader].ApplyHostValidity(e.layer, p.V, leaderValid)
@@ -255,10 +257,12 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// any cascade emissions.
 			out = append(out, captureCascadeEmissions(s, leader)...)
 		}
-		// 2abOBFT Phase 1 carries no σ_V partial — no offline-aggregator
-		// ObserveSigma at leader-fetch time. σ partials are credited later
-		// via Phase-2b Commits (Side=Signed) and Phase-2a LayerEntries
-		// (SigmaChained, at L_k>0).
+		// 2abOBFT Phase 1 carries the leader's L0Witness σ partial at L_0
+		// post Op3. The offline-aggregator path does NOT observe this
+		// witness directly at leader-fetch time (the witness is verified
+		// + pooled via the ObservePhase1Bundle receiver path on every
+		// honest op). σ partials at L_k>0 are still credited via Phase-2a
+		// LayerEntries (SigmaChained).
 		bundleBytes := phase1BundleSize(bundle)
 		ownDelay := s.cfg.Byz.OverrideOwnPhase1Delay(s, leader)
 		recipients := p.Recipients

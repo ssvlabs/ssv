@@ -21,6 +21,7 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 		Height:     42,
 		Layer:      0,
 		Value:      twoab.Value("V0-bytes"),
+		L0Witness:  twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
 	}
 	encoded, err := EncodePhase1Bundle(b)
 	require.NoError(t, err)
@@ -31,6 +32,29 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, b.Height, decoded.Height)
 	require.Equal(t, b.Layer, decoded.Layer)
 	require.Equal(t, b.Value, decoded.Value)
+	require.Equal(t, b.L0Witness, decoded.L0Witness,
+		"Op3 L0Witness must round-trip through wire encode/decode")
+}
+
+// TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyL0Witness verifies that the
+// wire encoding tolerates an empty L0Witness at the encoder/decoder level
+// (the L_0 non-empty check is at ValidatePhase1Bundle, separation of
+// concerns). Empty L0Witness is the correct wire shape for L_k>0
+// bundles in the current Op3 scope (Phase D / Op8 will fill these).
+func TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyL0Witness(t *testing.T) {
+	b := &twoab.Phase1Bundle{
+		ClusterID:  [32]byte{0xaa},
+		OperatorID: 2,
+		Height:     1,
+		Layer:      1,
+		Value:      twoab.Value("V1"),
+		// L0Witness intentionally empty (L_k>0 case in current scope).
+	}
+	encoded, err := EncodePhase1Bundle(b)
+	require.NoError(t, err)
+	decoded, err := DecodePhase1Bundle(encoded)
+	require.NoError(t, err)
+	require.Empty(t, decoded.L0Witness)
 }
 
 func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {

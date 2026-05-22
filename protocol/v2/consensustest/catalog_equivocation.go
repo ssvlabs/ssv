@@ -154,11 +154,12 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		// at every recipient. 2 V_a recipients + leader's L0Witness =
 		// σ-pool[V_a] = 3 = qV. Slot succeeds at L_0 on V_a, matching OBFT's
 		// natural-recovery behavior. The byz leader equivocated cluster-
-		// wide (V_a + V_b L0Witnesses signed by leader on different V's →
-		// Rule 3 cross-σ-V evidence is detectable cluster-wide once reflood
-		// surfaces the conflict). Pre-Op3 v4 missed this scenario because
-		// KindValue carried no σ-direction-partial and the leader's σ at
-		// Phase 2b never reached cluster-wide qV due to fragmentation.
+		// wide (two distinct Phase-1 bundles V_a / V_b from the same leader);
+		// Rule 2 (leader equivocation) evidence is detectable cluster-wide
+		// via ObservePhase1Bundle once reflood surfaces both bundles to any
+		// single op. Pre-Op3 v4 missed this scenario because KindValue
+		// carried no σ-direction-partial and the leader's σ at Phase 2b
+		// never reached cluster-wide qV due to fragmentation.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: PREPARE-pool on V_a = 2f honest (byz leader runs no real
 		// Instance, no PREPARE from leader); pool on V_b = 1. Both < quorum →
