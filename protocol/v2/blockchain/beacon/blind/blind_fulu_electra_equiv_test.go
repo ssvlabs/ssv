@@ -20,10 +20,10 @@ import (
 )
 
 // TestEnsureBlinded_FuluProducesElectraEquivalentBytes verifies that SSV's
-// deliberate reuse of apiv1electra.BlindedBeaconBlock for Fulu (documented at
-// blind.go:176: "Fulu reuses Electra blinded block structures in this codebase")
-// produces SSZ bytes that are byte-identical to the equivalent Electra-versioned
-// blinded block.
+// deliberate reuse of apiv1electra.BlindedBeaconBlock for Fulu (documented in
+// EnsureBlinded's DataVersionFulu branch: "Fulu reuses Electra blinded block
+// structures in this codebase") produces SSZ bytes that are byte-identical to the
+// equivalent Electra-versioned blinded block.
 //
 // Why this matters for cross-client interop:
 //   - Lighthouse defines BeaconBlockBodyFulu and BeaconBlockBodyElectra as

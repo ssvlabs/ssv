@@ -655,6 +655,13 @@ type subnetSelectionProof struct {
 // nodes can then produce different Contributions SSZ roots for the same logical
 // contribution set. The spec's de-facto canonical ordering is ascending SubcommitteeIndex
 // (see ssv-spec/types/testingutils/beacon_node_sync_committee.go test fixtures).
+//
+// Subnet alone is a total order here, so the (unstable) slices.SortFunc needs no
+// tiebreaker: each pre-consensus root is the hash of
+// SyncAggregatorSelectionData{Slot, SubcommitteeIndex: subnet} (see executeDuty), so two
+// sync-committee indices that map to the same subnet collapse to a single root — pairs
+// never holds duplicate subnets. If that selection data ever becomes keyed by validator
+// index instead of subnet, add a deterministic tiebreaker (e.g. selection-proof bytes).
 func sortBySubnet(pairs []subnetSelectionProof) {
 	slices.SortFunc(pairs, func(a, b subnetSelectionProof) int {
 		return cmp.Compare(a.subnet, b.subnet)
