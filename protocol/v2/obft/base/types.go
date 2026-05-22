@@ -12,6 +12,12 @@
 // data structures, state machine, wire format, evidence types, and EKM
 // coordinator.
 //
+// Sibling package `protocol/v2/obft/twoab` implements 2abOBFT. The two
+// packages share lifecycle shape, wire-format conventions, and the
+// obft primitives from the parent package. Intentional API/pattern
+// divergences (and the convergence work that aligned the rest) are
+// catalogued in [docs/OBFT-TWOAB-CONVERGENCE-PLAN.md].
+//
 // This package is intentionally independent of github.com/ssvlabs/ssv-spec.
 // SSV-specific integration lives in protocol/v2/ssv/runner/obft.
 package base

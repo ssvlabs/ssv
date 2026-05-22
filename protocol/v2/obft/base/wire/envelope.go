@@ -68,15 +68,16 @@ const (
 
 // String returns a human-readable name for the MessageKind, used in
 // logs and error messages. Returns "unknown(0xNN)" for unrecognized
-// values. Mirrors the equivalent String method in twoab/wire/envelope.go.
+// values. Lowercase-dash casing matches twoab/wire/envelope.go's
+// equivalent String method so cross-package log output is uniform.
 func (k MessageKind) String() string {
 	switch k {
 	case KindPhase1Bundle:
-		return "Phase1Bundle"
+		return "phase1-bundle"
 	case KindCommit:
-		return "Commit"
+		return "commit"
 	case KindCertificate:
-		return "Certificate"
+		return "certificate"
 	default:
 		return fmt.Sprintf("unknown(0x%02x)", byte(k))
 	}

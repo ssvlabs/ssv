@@ -40,6 +40,12 @@ const MaxCommitHashesPerOp = 8
 // Two is sufficient slashable evidence under f=1 byzantine assumption (one
 // witnessed pair pins the byzantine); further accumulation is pure memory
 // pressure with no attribution gain.
+//
+// Sibling-package note: `protocol/v2/obft/twoab` has the same constant
+// name and value (`MaxRetainedPerOpLayer = 2`) but applies it only to
+// Phase-1 bundle retention — twoab's σ partial moved into
+// `KindValue.L0Partial` (post Op5), so there's no separate σ-onion
+// retention to bound. See docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §L5.
 const MaxRetainedPerOpLayer = 2
 
 // CommitState is one operator's per-layer commitment state in the three-state
@@ -379,8 +385,11 @@ func NewInstance(
 	ibePubKeyShares map[OperatorID][]byte,
 	evidenceObserver EvidenceObserver,
 ) (*Instance, error) {
-	if cfg == nil || signer == nil || ibe == nil {
-		return nil, errors.New("obft: nil config / signer / ibe")
+	if cfg == nil {
+		return nil, ErrNilConfig
+	}
+	if signer == nil || ibe == nil {
+		return nil, errors.New("obft: nil signer or ibe")
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("obft: invalid config: %w", err)
@@ -675,17 +684,25 @@ func (i *Instance) LocalState(layer int) CommitState {
 // are otherwise unobservable through the public API. Stable across
 // versions: fields are additive (new counters appended, never removed
 // or renamed). Intended for tests, telemetry, and diagnostic tooling.
-// Mirrors the equivalent type in twoab/instance.go.
+// Mirrors the equivalent type in twoab/instance.go (with package-
+// specific field set).
 type InstanceStats struct {
 	// PendingValidationCount is the total number of (layer, V_root)
-	// pairs currently waiting on host-validation reply via
-	// wantsHostValidationCh. Summed across all layers.
+	// pairs in the pendingValidation set, summed across all layers.
+	// Semantic note: in base, entries are inserted on request and only
+	// removed on the buffer-full rollback path — there is no removal
+	// on host-reply arrival, so this counter is monotonic-after-
+	// rollback rather than "currently outstanding". The counter
+	// reflects "requests issued that didn't immediately drop on
+	// buffer-full". For an "active request set" semantic, twoab's
+	// equivalent removes on ApplyHostValidity; base does not.
 	PendingValidationCount int
 
 	// WitnessedLeaderSigmaCount is the total number of (layer, V_root)
 	// entries cached in witnessedLeaderSigma — successful leader σ_V
-	// partial verifications harvested from peer onion entries. Summed
-	// across all layers.
+	// partial verifications harvested from peers' KindCommit.Witnesses[]
+	// (the explicit witness section of the commit wire format, NOT the
+	// σ-onion entries in peerOnions). Summed across all layers.
 	WitnessedLeaderSigmaCount int
 
 	// EvidenceCount is the current evidence accumulator length.

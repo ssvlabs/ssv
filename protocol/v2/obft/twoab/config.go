@@ -21,7 +21,10 @@
 // the type aliases for callers' convenience and owns all 2abOBFT-specific
 // data structures, state machine, wire format, evidence types, and EKM
 // coordinator. The bare-OBFT implementation lives in the parallel
-// sub-package protocol/v2/obft/base.
+// sub-package protocol/v2/obft/base. Intentional API/pattern divergences
+// between the two — Phase 2a Value/NoValue split, Op11 harvest, Rule 6a,
+// no T_commit, etc. — and the convergence work that aligned the rest are
+// catalogued in [docs/OBFT-TWOAB-CONVERGENCE-PLAN.md].
 //
 // This package is intentionally independent of github.com/ssvlabs/ssv-spec.
 // SSV-specific integration lives in a future runner adapter (analog of

@@ -24,6 +24,13 @@ var ErrEmptyValue = errors.New("obft: empty value")
 // ErrLayerOutOfRange is returned when a layer index is outside [0, K).
 var ErrLayerOutOfRange = errors.New("obft: layer out of range")
 
+// ErrNilConfig is returned by NewInstance when called with a nil Config.
+// Distinct from the composite "nil config / signer / ibe" message
+// returned for the multi-nil case in NewInstance — this sentinel covers
+// the specific nil-cfg scenario when callers want to programmatically
+// distinguish via errors.Is.
+var ErrNilConfig = errors.New("obft: nil config")
+
 // ResolveFailureReason discriminates the two ways Resolve can fail to reach
 // σ-quorum after walking the layer chain. The distinction matters for
 // upstream diagnostics — HV1-style adversarial scenarios produce
@@ -96,6 +103,11 @@ func (e *ResolveError) Unwrap() error {
 // first-observed past T_commit at any honest receiver are not counted by
 // that receiver toward σ-quorum at this layer; the cluster relies on K-layer
 // fall-through for partition recovery.
+//
+// Sibling-package note: `protocol/v2/obft/twoab` has no equivalent
+// sentinel — 2abOBFT removed the T_commit hard wall in favor of
+// trigger-driven Phase 2b emission, so late Phase-1 bundles are always
+// acceptable. The asymmetry is protocol-forced.
 var ErrLatePhase1Bundle = errors.New("obft: phase-1 bundle first-observed past T_commit")
 
 // ErrSigmaLocked is returned by EKM-style enforcement when an operation
@@ -112,6 +124,12 @@ var ErrNRLocked = errors.New("obft: operator is NR-locked at this layer")
 // ErrAlreadyCommitted is returned when BuildOwnCommit is called more than
 // once in a slot. Per spec §Phase 2, each operator emits exactly one
 // KindCommit per (slot, operator) at T_commit.
+//
+// Sibling-package note: `protocol/v2/obft/twoab` has no equivalent
+// sentinel — twoab's Maybe* pattern uses per-emission-cached state
+// (ownValueMsg != nil, ownCommit != nil checks) rather than a single
+// boolean committed flag. Idempotency is handled differently; the
+// asymmetry is protocol-forced.
 var ErrAlreadyCommitted = errors.New("obft: operator already committed for this slot")
 
 // ErrInstanceEnded is returned by state-mutating Instance methods (and

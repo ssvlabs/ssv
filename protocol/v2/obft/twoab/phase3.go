@@ -345,6 +345,15 @@ func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
 
 // selectWinningGroup picks the group with the most partials;
 // lexicographic V tiebreak for determinism across operators.
+//
+// Signature note: takes a map keyed by V_root (twoab's natural grouping
+// container — sigmaPool is V_root-keyed post-Op5). The bare-OBFT sibling
+// helper at `protocol/v2/obft/base.selectWinningGroup` takes a
+// `[]*sigGroup` slice (base's grouping is slice-driven via addToGroup
+// dedup). The function bodies are line-for-line identical; the input-
+// shape divergence reflects each package's internal sigGroup-collection
+// strategy. See docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §L2 for the
+// rationale for keeping the divergence.
 func selectWinningGroup(groups map[[32]byte]*sigGroup) *sigGroup {
 	var winning *sigGroup
 	for _, g := range groups {
@@ -364,12 +373,15 @@ func selectWinningGroup(groups map[[32]byte]*sigGroup) *sigGroup {
 
 // BuildCertificate produces the final-certificate gossip message after
 // a successful Resolve.
+//
+// No `i.ended` guard: BuildCertificate is a pure value-constructor
+// (reads `i.cfg.ClusterID` / `Height`, builds Certificate from supplied
+// Output) — no Instance state is mutated. Post-Finalize the method
+// still works, letting a runner build a certificate from a cached
+// Output for retry submission. Matches the base sibling.
 func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
-	}
-	if i.ended {
-		return nil, ErrInstanceEnded
 	}
 	if out == nil {
 		return nil, fmt.Errorf("twoab: nil output")

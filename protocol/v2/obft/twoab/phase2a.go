@@ -135,6 +135,14 @@ func (i *Instance) computeLocalValueState() localValueState {
 	leaderID := i.cfg.Layers[layer].Leader
 	retained := i.retainedBundles[layer][leaderID]
 
+	// Equivocation threshold: `>= 2` distinct V_0 retained from leader
+	// triggers NRDirect emission. The literal `2` here is intentionally
+	// NOT the MaxRetainedPerOpLayer constant — those are correlated
+	// (retention is capped at MaxRetainedPerOpLayer, so the equivocation
+	// threshold can never exceed it) but semantically distinct: the
+	// retention cap is a memory-bound policy, the equivocation threshold
+	// is a protocol-detection predicate. Conflating the two via the
+	// constant would obscure the protocol intent.
 	if len(retained) >= 2 {
 		return localValueStateNRDirect
 	}
@@ -189,6 +197,9 @@ func (i *Instance) buildLayerEntry(k int) (LayerEntry, error) {
 	retained := i.retainedBundles[k][leaderID]
 
 	// Equivocation observed at L_k → NR-side at this layer.
+	// (Inline `2` not MaxRetainedPerOpLayer — same rationale as
+	// computeLocalValueState: the equivocation-detection threshold is
+	// a protocol predicate distinct from the retention-cap policy.)
 	if len(retained) >= 2 {
 		return i.buildNRPlaintextEntry(k)
 	}
@@ -274,13 +285,16 @@ func (i *Instance) buildNRPlaintextEntry(k int) (LayerEntry, error) {
 // exactly one of {KindValue, KindNoValue, KindCommit-NRDirect} based on
 // their local state at fire-time.
 //
-// Idempotent: subsequent calls return (nil, nil) silently (the cached
-// emission is whatever was set on first call). Callers should examine
-// OwnValueMsg / OwnNoValueMsg / OwnCommit to retrieve the emission.
+// Idempotent: subsequent calls return the cached (ValueMsg, NoValueMsg,
+// Commit) triple — same as the first-call return shape. The local
+// emission is whatever was set on first call; callers can equally
+// retrieve it via OwnValueMsg / OwnNoValueMsg / OwnCommit.
 //
-// Returns a triple {ValueMsg, NoValueMsg, Commit} — exactly one is non-nil
-// (matching the local value state). Returns an error if Phase 2a build
-// fails (e.g., signer error during LayerEntry construction).
+// Returns a triple {ValueMsg, NoValueMsg, Commit, error} — exactly one
+// of the message-typed fields is non-nil on success (matching the
+// local value state at fire-time). Returns ErrInstanceEnded
+// post-Finalize. Returns a wrapped error if Phase 2a build fails (e.g.,
+// signer error during LayerEntry construction).
 func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 	if i == nil {
 		return nil, nil, nil, fmt.Errorf("twoab: nil instance")

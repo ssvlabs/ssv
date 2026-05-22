@@ -34,7 +34,7 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 		return errors.New("twoab: nil phase-1 bundle")
 	}
 	if cfg == nil {
-		return errors.New("twoab: nil config")
+		return ErrNilConfig
 	}
 	if b.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("twoab: phase-1 bundle cluster id %x != instance cluster id %x",
@@ -72,7 +72,7 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 		return errors.New("twoab: nil ValueMsg")
 	}
 	if cfg == nil {
-		return errors.New("twoab: nil config")
+		return ErrNilConfig
 	}
 	if v.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("twoab: ValueMsg cluster id %x != instance cluster id %x",
@@ -124,7 +124,7 @@ func ValidateNoValueMsg(nv *NoValueMsg, cfg *Config) error {
 		return errors.New("twoab: nil NoValueMsg")
 	}
 	if cfg == nil {
-		return errors.New("twoab: nil config")
+		return ErrNilConfig
 	}
 	if nv.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("twoab: NoValueMsg cluster id %x != instance cluster id %x",
@@ -160,7 +160,7 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 		return errors.New("twoab: nil Commit")
 	}
 	if cfg == nil {
-		return errors.New("twoab: nil config")
+		return ErrNilConfig
 	}
 	if c.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("twoab: Commit cluster id %x != instance cluster id %x",
@@ -207,7 +207,7 @@ func ValidateCertificate(c *Certificate, cfg *Config) error {
 		return errors.New("twoab: nil certificate")
 	}
 	if cfg == nil {
-		return errors.New("twoab: nil config")
+		return ErrNilConfig
 	}
 	if c.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("twoab: certificate cluster id %x != instance cluster id %x",

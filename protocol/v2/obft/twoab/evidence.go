@@ -76,6 +76,11 @@ const (
 	// envelopes are op-identity-signed by the offender; the offending
 	// sequence is unambiguous from a single observer's view.
 	//
+	// Sibling-package note: `protocol/v2/obft/base` has no Rule 6a —
+	// bare OBFT's single KindCommit-at-T_commit emission has no
+	// Phase-2 sequence to equivocate on. The asymmetry is
+	// protocol-forced; see docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §A.
+	//
 	// Authorized (NOT slashable) post Op5 — set shrunk from 8 to 3:
 	//   A1: KindNoValue → KindValue (upgrade — KindValue carries σ partial)
 	//   A5: KindNoValue → KindCommit-NR

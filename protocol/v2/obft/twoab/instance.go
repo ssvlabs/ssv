@@ -65,7 +65,13 @@ import (
 // already establish equivocation evidence (Rule 2) and the third adds
 // no protocol-level information beyond what's already on the wire.
 //
-// Mirrors `protocol/v2/obft/base.MaxRetainedPerOpLayer`.
+// Mirrors `protocol/v2/obft/base.MaxRetainedPerOpLayer` in NAME and
+// VALUE. The cross-package semantic surface is slightly different
+// though: base applies the same cap to BOTH Phase-1 bundle retention
+// AND σ-onion entry retention; twoab applies it only to Phase-1 bundle
+// retention (twoab's σ partial lives directly in KindValue.L0Partial,
+// not in a separate σ-onion message). Documented in
+// docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §L5.
 const MaxRetainedPerOpLayer = 2
 
 type Instance struct {

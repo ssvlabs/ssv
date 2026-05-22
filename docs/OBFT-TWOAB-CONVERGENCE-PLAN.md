@@ -158,13 +158,15 @@ These base patterns are stronger defenses and should be added to twoab.
 
 **Action**: add `MaxRetainedPerOpLayer = 2` in `twoab/instance.go`. Reference it at the one inline site in `twoab/phase1.go`.
 
+**Semantic-mismatch note (L5)**: the constants share name and value across packages but apply to slightly different surfaces — base caps both Phase-1 bundle retention AND σ-onion entry retention with the same constant; twoab caps only Phase-1 bundle retention (twoab's σ partial moved into `KindValue.L0Partial`, leaving no separate σ-onion message to cap). Documented in both constants' docstrings.
+
 #### C4. `ApplyHostValidity` verdict-flip handling
 
 **base/phase1.go:432-437** rejects verdict-flips with an error. **twoab/phase2a.go:65-68** silently overwrites.
 
 **Decision**: **diverge intentionally**. The two protocols have different host-revalidation models — base treats host verdict as a one-time commit-time decision; twoab treats it as a flowing signal that can flip mid-slot (the docstring at `twoab/phase2a.go:25-28` documents this). Forcing convergence would change protocol semantics in one direction.
 
-**Action**: none. Document the divergence at both sites with a forward reference to the other.
+**Action**: document the divergence at both sites with a forward reference to the other (landed in Phase 4 commit `71275fd97`).
 
 #### C5. `i.ended` guard on `ObserveCertificate` / `Resolve`
 
@@ -351,6 +353,14 @@ To prevent scope creep:
 - For Stats() in base (B5): what should the shape of `WitnessedLeaderSigmaCount` look like — slot-wide count, per-layer count, or per-(layer, V_root) count? Twoab uses `VerifiedWitnessesCount` summed across layers; base may want finer-grained.
 
 ---
+
+## Appendix B — Documented intentional divergences (kept on purpose)
+
+These asymmetries were considered for convergence and explicitly kept:
+
+- **C4. `ApplyHostValidity` verdict-flip semantics**: base rejects, twoab tolerates. Reflects different host-revalidation models. Cross-referenced at both sites.
+- **L2. `selectWinningGroup` input-shape**: base takes `[]*sigGroup` (slice-driven group collection); twoab takes `map[[32]byte]*sigGroup` (V_root-keyed map). Function bodies are line-for-line identical, but each package's internal sigGroup-collection strategy chose the natural container. Unifying would force slice-conversion churn at the twoab call site for cosmetic gain. Documented at both sites.
+- **L5. `MaxRetainedPerOpLayer` semantic surface**: base caps both Phase-1 bundle retention AND σ-onion entry retention; twoab caps only Phase-1 bundle retention (σ partial moved into KindValue.L0Partial). Same constant name + value, slightly different policy surface. Documented at both constants' docstrings.
 
 ## Appendix A — Catalog summary
 

@@ -30,7 +30,7 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 		return errors.New("obft: nil phase-1 bundle")
 	}
 	if cfg == nil {
-		return errors.New("obft: nil config")
+		return ErrNilConfig
 	}
 	if b.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("obft: phase-1 bundle cluster id %x != instance cluster id %x",
@@ -72,7 +72,7 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 		return errors.New("obft: nil commit")
 	}
 	if cfg == nil {
-		return errors.New("obft: nil config")
+		return ErrNilConfig
 	}
 	if c.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("obft: commit cluster id %x != instance cluster id %x",
@@ -145,7 +145,7 @@ func ValidateCertificate(c *Certificate, cfg *Config) error {
 		return errors.New("obft: nil certificate")
 	}
 	if cfg == nil {
-		return errors.New("obft: nil config")
+		return ErrNilConfig
 	}
 	if c.ClusterID != cfg.ClusterID {
 		return fmt.Errorf("obft: certificate cluster id %x != instance cluster id %x",
