@@ -27,6 +27,17 @@ import (
 // most recent host verdict wins, consistent with the spec's intent
 // that host stabilization narrows the divergence window over time.
 //
+// Divergence from base: base's ApplyHostValidity REJECTS a verdict-
+// flip with an error (`obft: host validity verdict for layer N
+// already locked`). twoab tolerates the flip silently. This is
+// intentional — base treats host validity as a commit-time decision
+// fixed before σ-commitment; twoab treats it as a flowing signal that
+// can shift as the host re-evaluates the candidate V mid-slot (the
+// runner is expected to call ApplyHostValidity opportunistically as
+// the host re-derives validity, not once-per-slot at Phase 1). See
+// docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §C4 for the convergence-audit
+// note on this divergence.
+//
 // On L_0 host-validity updates, the Instance runs the per-tick
 // processing cascade so a host-flip-to-valid can trigger the A1 upgrade
 // path (if the op is on KindNoValue path AND now has V_0 + host says

@@ -420,6 +420,12 @@ func deepCopyCommit(c *Commit) *Commit {
 // The verdict is recorded per (layer, V) since multiple V's may exist at a
 // layer under leader equivocation (though equivocation collapses to NR at
 // T_commit, regardless of validity verdicts on either V).
+//
+// Divergence from twoab: base REJECTS a verdict-flip on the same
+// (layer, V) with an error (the host is expected to lock at Phase 1
+// against a stable head). twoab tolerates verdict-flip silently — it
+// treats host validity as a flowing signal that can shift mid-slot.
+// See docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §C4.
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	if i == nil {
 		return fmt.Errorf("obft: nil instance")
