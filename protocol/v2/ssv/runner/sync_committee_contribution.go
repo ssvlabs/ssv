@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -143,6 +144,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
 	}
+
+	// Sort paired (subnets, selectionProofs) by ascending subnet so the resulting
+	// Contributions slice has a deterministic, spec-canonical order. See
+	// sortContributionsBySubnet for the full rationale.
+	sortContributionsBySubnet(subnets, selectionProofs)
 
 	if len(selectionProofs) == 0 {
 		r.markDutyFinished()
@@ -625,4 +631,34 @@ func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+// sortContributionsBySubnet sorts the paired (subnets, selectionProofs) slices in-place
+// by ascending subnet, preserving (subnet, proof) pairing. This canonicalises the
+// pre-consensus output before calling GetSyncCommitteeContribution so the resulting
+// Contributions slice has a deterministic, spec-aligned order.
+//
+// Without this normalisation, the upstream `roots` slice from basePreConsensusMsgProcessing
+// is built via `slices.Collect(maps.Keys(...))`, which Go randomises per process. Two SSV
+// nodes can then produce different Contributions SSZ roots for the same logical
+// contribution set. The spec's de-facto canonical ordering is ascending SubcommitteeIndex
+// (see ssv-spec/types/testingutils/beacon_node_sync_committee.go test fixtures).
+func sortContributionsBySubnet(subnets []uint64, selectionProofs []phase0.BLSSignature) {
+	if len(subnets) != len(selectionProofs) {
+		panic(fmt.Sprintf("sortContributionsBySubnet: paired slices must be the same length (subnets=%d, proofs=%d)", len(subnets), len(selectionProofs)))
+	}
+	sort.Stable(subnetSorter{subnets: subnets, selectionProofs: selectionProofs})
+}
+
+// subnetSorter implements sort.Interface over paired (subnets, selectionProofs) slices.
+type subnetSorter struct {
+	subnets         []uint64
+	selectionProofs []phase0.BLSSignature
+}
+
+func (s subnetSorter) Len() int           { return len(s.subnets) }
+func (s subnetSorter) Less(i, j int) bool { return s.subnets[i] < s.subnets[j] }
+func (s subnetSorter) Swap(i, j int) {
+	s.subnets[i], s.subnets[j] = s.subnets[j], s.subnets[i]
+	s.selectionProofs[i], s.selectionProofs[j] = s.selectionProofs[j], s.selectionProofs[i]
 }
