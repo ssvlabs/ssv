@@ -37,9 +37,13 @@ const (
 	EvidenceLeaderEquivocation EvidenceRule = 2
 
 	// EvidenceCrossCommitEquivocation — Rule 3: an operator emitted σ_i^V
-	// on V and σ_i^V on V' at the same layer (across one or multiple
-	// Commit-Signed / ValueMsg LayerEntries). Single-σ-V exclusivity is
-	// EKM-enforced.
+	// on V and σ_i^V on V' at the same layer. Post Op5 at L_0, this fires
+	// when two distinct ValueMsgs from the same op carry verifying
+	// L0Partials on different V's (the σ partials moved from KindCommit-
+	// Signed into KindValue.L0Partial). At L_k>0 the detection path is
+	// unchanged (chained σ partials inside LayerEntries). Single-σ-V
+	// exclusivity is EKM-enforced; observing two valid partials on
+	// distinct V's is cryptographic proof.
 	EvidenceCrossCommitEquivocation EvidenceRule = 3
 
 	// EvidenceFakeEncryptedPresence — Rule 4: at layer k > 0, an
@@ -50,37 +54,46 @@ const (
 	// encryption.
 	EvidenceFakeEncryptedPresence EvidenceRule = 4
 
-	// EvidenceFakePlaintextSigma — Rule 5: at L_0, an operator's
-	// Commit-Signed carries a plaintext σ partial that does not verify
-	// against any retained leader-broadcast V. Detection requires the
-	// receiver to have retained V at L_0.
+	// EvidenceFakePlaintextSigma — Rule 5: at L_0, an operator's plaintext
+	// σ partial does not verify against the operator's pubKeyShare on
+	// the claimed V. Detection points (post Op5):
+	//   - ValueMsg.L0Partial verify-fail → Rule 5 keyed on the EMITTER
+	//     (the L0Partial is the emitter's own signing artifact).
+	//   - Phase1Bundle.L0Witness verify-fail → Rule 5 keyed on the
+	//     LEADER (the bundle is op-identity-signed by the leader at the
+	//     outer envelope).
+	//   - ValueMsg.L0Witness verify-fail does NOT fire Rule 5 (anti-
+	//     framing: the L0Witness inside KindValue is signed-for-
+	//     forwarding by the emitter, not the leader — firing Rule 5
+	//     against the leader on a peer-emitter's forged witness would
+	//     open a framing attack).
 	EvidenceFakePlaintextSigma EvidenceRule = 5
 
 	// EvidencePhase2Equivocation — Rule 6a (2abOBFT-specific): an operator
-	// emitted a Phase-2 sequence not in the authorized A1-A8 set (see
-	// §Authorized Phase-2 emission pairs). Cryptographic, self-contained
-	// — all envelopes are op-identity-signed by the offender; the offending
+	// emitted a Phase-2 sequence not in the authorized set (see §Authorized
+	// Phase-2 emission pairs). Cryptographic, self-contained — all
+	// envelopes are op-identity-signed by the offender; the offending
 	// sequence is unambiguous from a single observer's view.
 	//
-	// Authorized (NOT slashable):
-	//   A1: KindNoValue → KindValue (upgrade)
-	//   A2: KindValue → KindCommit-Signed
-	//   A3: KindValue → KindCommit-NR (host-flip pivot — sequence-only check)
-	//   A4: KindValue → KindCommit-NR (equivocation pivot — sequence-only check)
+	// Authorized (NOT slashable) post Op5 — set shrunk from 8 to 3:
+	//   A1: KindNoValue → KindValue (upgrade — KindValue carries σ partial)
 	//   A5: KindNoValue → KindCommit-NR
-	//   A6: KindNoValue → KindValue → KindCommit-Signed
-	//   A7: KindNoValue → KindValue → KindCommit-NR
-	//   A8: KindCommit-NRDirect (alone)
+	//   A8: KindCommit-NRDirect (alone — Phase-2a NRDirect on equivocation)
 	//
-	// Slashable (NOT in A1-A8):
-	//   - Two KindValue on different V_0 (also Rule 3, cross-σ-V)
+	// A2/A3/A4/A6/A7 are OBSOLETE post Op5 — KindCommit-Signed no longer
+	// exists, σ partial moved into KindValue itself, and the σ-locked-
+	// on-emit semantics preclude A3/A4 pivots.
+	//
+	// Slashable (NOT in A1/A5/A8):
+	//   - Two KindValue on different V_0 (also Rule 3 cross-σ-V if both
+	//     L0Partials verify)
 	//   - KindValue → KindNoValue (downgrade)
-	//   - KindCommit-Signed → KindCommit-NR (or vice versa; cross-side)
-	//   - Two KindCommit-Signed on different V_0
+	//   - KindValue → KindCommit-NR / KindCommit-NRDirect (σ-XOR-NR
+	//     violation; also Rule 1 if partials verify)
+	//   - KindNoValue → KindCommit-NRDirect (A8 sole-emission violation)
 	//   - KindCommit-NRDirect followed by any other emission
-	//   - KindNoValue → KindCommit-Signed (missing upgrade KindValue per A6)
-	//   - KindNoValue → KindCommit-NR → KindValue (post-commit upgrade)
-	//   - Any other 3+ message sequence not matching A6 or A7
+	//   - KindNoValue → KindCommit-NR → KindValue (post-NR-commit σ-claim)
+	//   - Any other 3+ message sequence not matching A1 or A5
 	EvidencePhase2Equivocation EvidenceRule = 6
 )
 

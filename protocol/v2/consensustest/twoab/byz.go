@@ -631,11 +631,13 @@ func (b byzCrossSigning) OverrideCommit(s *sim, op twoab.OperatorID, c *twoab.Co
 
 // ---- byzFakePlaintextSigma (Rule 5) -----------------------------------
 
-// Byz emits a Commit-Signed with a plaintext σ partial at L_0 on a V no
-// leader broadcast. Rule 5 fires at receivers when the partial doesn't
-// verify against any retained V at L_0. The dynamic Commit emission
-// fires through the afterStateDelta cascade; we patch it via
-// OverrideCommit.
+// Byz emits a KindValue with a plaintext L0Partial (σ partial at L_0) on
+// a V no leader broadcast. Rule 5 fires at receivers when the partial
+// doesn't verify against the emitter's pubKeyShare on the claimed V
+// (post Op5: Rule 5 attribution is to the EMITTER for bad L0Partial,
+// distinct from the leader-attribution path for bad L0Witness in
+// Phase-1 bundles). We patch the natural KindValue emission via
+// OverrideValueMsg / OverrideUpgradeValueMsg.
 type byzFakePlaintextSigma struct {
 	honestDefaults
 	ByzSet byzSet
@@ -645,19 +647,24 @@ func (b byzFakePlaintextSigma) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzFakePlaintextSigma) OverrideCommit(_ *sim, op twoab.OperatorID, c *twoab.Commit) *twoab.Commit {
+func (b byzFakePlaintextSigma) OverrideValueMsg(_ *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
 	if !b.ByzSet.Contains(op) {
-		return c
+		return v
 	}
-	// Inject a fake plaintext σ at L_0: only meaningful for Side=Signed
-	// (where L0Value + L0Partial carry σ-direction-on-V_0).
-	if c.Side != twoab.CommitSideSigned {
-		return c
-	}
-	cp := cloneCommit(c)
-	cp.L0Value = append(twoab.Value{}, "byz-fake-V-at-L_0"...)
+	// Post Op5: σ partial at L_0 lives in ValueMsg.L0Partial. Inject a
+	// forged partial on a fake V to trigger Rule 5 (fake plaintext σ at
+	// L_0) at receivers. ObserveValueMsg's verifyAndPoolL0Partial fires
+	// Rule 5 against the emitter when the partial fails verify against
+	// the emitter's pubKeyShare on the claimed V.
+	cp := cloneValueMsg(v)
+	cp.V = append(twoab.Value{}, "byz-fake-V-at-L_0"...)
+	cp.ValueRoot = twoab.ValueRoot(cp.V)
 	cp.L0Partial = forgeSigmaPartialBytes(op, 0, []byte("byz-fake-V-at-L_0"))
 	return cp
+}
+
+func (b byzFakePlaintextSigma) OverrideUpgradeValueMsg(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) *twoab.ValueMsg {
+	return b.OverrideValueMsg(s, op, v)
 }
 
 // ---- byzCrossOnionEquivocation (Rule 3) -------------------------------
@@ -676,47 +683,52 @@ func (b byzCrossOnionEquivocation) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorI
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzCrossOnionEquivocation) BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
-	// Nil-guard: events.go calls BuildExtraCommits universally — c is nil
-	// when the natural Phase-2a kind was ValueMsg or NoValueMsg. This
-	// pattern only injects when a natural Commit exists (either Phase-2a
-	// NRDirect equivocation OR Phase-2b cascade-emitted Signed/NR commit —
-	// both funnel through BuildExtraCommits).
-	if c == nil || !b.ByzSet.Contains(op) {
+// BuildExtraValueMsgs injects a distinct ValueMsg on V' at L_0 — directly
+// detectable by ObserveValueMsg's cross-V check (Rule 3 / Rule 6a).
+// Post Op5, σ partial at L_0 lives in ValueMsg.L0Partial, so the cross-σ-V
+// equivocation primitive at L_0 lands here (it lived in BuildExtraCommits
+// pre-Op5 when the σ partial was in KindCommit-Signed).
+func (b byzCrossOnionEquivocation) BuildExtraValueMsgs(_ *sim, op twoab.OperatorID, v *twoab.ValueMsg) []*twoab.ValueMsg {
+	if v == nil || !b.ByzSet.Contains(op) || b.Layer != 0 {
 		return nil
 	}
 	primeV := []byte("byz-V-prime")
-	switch {
-	case b.Layer == 0 && c.Side == twoab.CommitSideSigned:
-		// Inject a distinct Signed commit on V' at L_0 — directly
-		// detectable by ObserveCommit's cross-V check.
-		cp := cloneCommit(c)
-		cp.L0Value = append(twoab.Value{}, primeV...)
-		cp.L0Partial = forgeSigmaPartialBytes(op, 0, primeV)
-		return []*twoab.Commit{cp}
-	case b.Layer > 0 && c.Side == twoab.CommitSideNRDirect:
-		// L_k>0 cross-σ-V equivocation can only land via NRDirect's
-		// LayerEntries — Signed and NR commits carry no L_k>0 entries.
-		if b.Layer < 0 || b.Layer >= len(c.LayerEntries)+1 {
-			return nil
-		}
-		cp := cloneCommit(c)
-		for i := range cp.LayerEntries {
-			if cp.LayerEntries[i].Layer != b.Layer {
-				continue
-			}
-			cp.LayerEntries[i] = twoab.LayerEntry{
-				Layer:   b.Layer,
-				Kind:    twoab.LayerEntrySigmaChained,
-				V:       append(twoab.Value{}, primeV...),
-				Payload: forgeSigmaPartialBytes(op, b.Layer, primeV),
-			}
-			break
-		}
-		return []*twoab.Commit{cp}
-	default:
+	cp := cloneValueMsg(v)
+	cp.V = append(twoab.Value{}, primeV...)
+	cp.ValueRoot = twoab.ValueRoot(cp.V)
+	cp.L0Partial = forgeSigmaPartialBytes(op, 0, primeV)
+	return []*twoab.ValueMsg{cp}
+}
+
+func (b byzCrossOnionEquivocation) BuildExtraCommits(_ *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
+	// L_k>0 cross-σ-V equivocation lands via NRDirect's LayerEntries —
+	// post Op5, ValueMsg/NoValueMsg also carry LayerEntries at L_k>0, but
+	// the catalog's L_k>0 byz scenario specifically uses Phase-2a NRDirect
+	// (equivocation observed pre-emission) for consistency with v4.
+	if c == nil || !b.ByzSet.Contains(op) || b.Layer <= 0 {
 		return nil
 	}
+	if c.Side != twoab.CommitSideNRDirect {
+		return nil
+	}
+	if b.Layer >= len(c.LayerEntries)+1 {
+		return nil
+	}
+	primeV := []byte("byz-V-prime")
+	cp := cloneCommit(c)
+	for i := range cp.LayerEntries {
+		if cp.LayerEntries[i].Layer != b.Layer {
+			continue
+		}
+		cp.LayerEntries[i] = twoab.LayerEntry{
+			Layer:   b.Layer,
+			Kind:    twoab.LayerEntrySigmaChained,
+			V:       append(twoab.Value{}, primeV...),
+			Payload: forgeSigmaPartialBytes(op, b.Layer, primeV),
+		}
+		break
+	}
+	return []*twoab.Commit{cp}
 }
 
 // ---- byzPhase2EquivocateCrossV (Rule 6a, 2abOBFT-specific) -----------
@@ -932,32 +944,26 @@ func (b byzAggregatorBypass) LeaderBroadcastPlan(_ *sim, _ twoab.OperatorID, _ i
 	return []broadcastPlan{{V: honestV}}
 }
 
-func (b byzAggregatorBypass) BuildExtraCommits(s *sim, op twoab.OperatorID, c *twoab.Commit) []*twoab.Commit {
-	// Nil-guard: events.go calls BuildExtraCommits universally — c is nil
-	// when the natural Phase-2a kind was ValueMsg/NoValueMsg. The forged-
-	// identity bypass only makes sense paired with a natural σ-direction
-	// Commit.
-	if c == nil || !b.ByzSet.Contains(op) {
-		return nil
-	}
-	if c.Side != twoab.CommitSideSigned {
-		// Forged-identity bypass only meaningful when we can pose as a
-		// σ-signing peer on V_prime. NR / NRDirect commits don't
-		// contribute to the aggregator's σ-pool.
+// BuildExtraValueMsgs forges σ-direction KindValues claiming each peer's
+// OperatorID. Post Op5, σ contributions live in KindValue.L0Partial, so
+// the aggregator-bypass primitive lands here (it lived in
+// BuildExtraCommits pre-Op5 when the σ partial was in KindCommit-Signed).
+func (b byzAggregatorBypass) BuildExtraValueMsgs(s *sim, op twoab.OperatorID, v *twoab.ValueMsg) []*twoab.ValueMsg {
+	if v == nil || !b.ByzSet.Contains(op) {
 		return nil
 	}
 	primeV := []byte("byz-bypass-V-prime")
-	forged := make([]*twoab.Commit, 0, len(s.operators)-1)
+	primeRoot := twoab.ValueRoot(twoab.Value(primeV))
+	forged := make([]*twoab.ValueMsg, 0, len(s.operators)-1)
 	for _, other := range s.operators {
 		if other == op {
 			continue
 		}
-		cp := cloneCommit(c)
+		cp := cloneValueMsg(v)
 		cp.OperatorID = other
-		cp.Side = twoab.CommitSideSigned
-		cp.L0Value = append(twoab.Value{}, primeV...)
+		cp.V = append(twoab.Value{}, primeV...)
+		cp.ValueRoot = primeRoot
 		cp.L0Partial = forgeSigmaPartialBytes(other, 0, primeV)
-		cp.LayerEntries = nil
 		forged = append(forged, cp)
 	}
 	return forged
@@ -975,6 +981,7 @@ func cloneValueMsg(v *twoab.ValueMsg) *twoab.ValueMsg {
 	cp := *v
 	cp.V = append(twoab.Value(nil), v.V...)
 	cp.L0Witness = append(twoab.Signature(nil), v.L0Witness...)
+	cp.L0Partial = append(twoab.Signature(nil), v.L0Partial...)
 	cp.LayerEntries = cloneLayerEntries(v.LayerEntries)
 	return &cp
 }

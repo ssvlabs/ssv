@@ -20,21 +20,22 @@ var scenarioEquivocate111 = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pools split below qV; no NR-quorum; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (post Op11): each honest retains one of the N-1 distinct
-		// V's via Phase-1 bundle direct delivery. They emit KindValue on
-		// their own V with the leader's L0Witness for that V (byz leader
-		// signed multiple V's). When honest ops cross-broadcast their
-		// KindValues, the receiver harvests the alternate V from a peer's
-		// KindValue (L0Witness verifies — the byz leader did sign both V's).
-		// Retention grows to 2 distinct V's at every honest op → Rule 2
-		// (leader equivocation) fires → equivocation-trigger Commit-NR
-		// emitted via afterStateDelta. NR-pool reaches qEnc cluster-wide →
-		// L_0 advances to L_1; honest L_1 leader's bundle propagates →
-		// σ at L_1. SuccessFallThrough at L_1. The Op11 harvest path is
-		// what unlocks cluster-wide equivocation detection without
-		// gossipsub reflood — v4 (pre-Op11) would have MISSed here per
-		// the original spec analysis.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT (post Op5+Op11): each honest retains one of the N-1
+		// distinct V's via Phase-1 bundle direct delivery and emits
+		// KindValue σ-locked on their own V (with σ partial). When
+		// honest ops cross-broadcast, each harvests the alternate V via
+		// Op11 from peers' KindValues. Retention grows to 2 → Rule 2
+		// fires. BUT post Op5 the equivocation trigger only fires for
+		// ops still in EKM coordination state — ops already σ-locked
+		// (which is everyone here) cannot pivot to NR. σ-pool[V_i]
+		// fragments (each V_i has 1 partial cluster-wide) — none reaches
+		// qV. NR-pool also empty (no ops emitted NR). Cluster MISSes at
+		// L_0 with no fall-through. **Op5 trade-off**: equivocation
+		// post-σ-commit has no recovery path (plan §Op5 line 1253);
+		// pre-Op5 this scenario would have fall-through-recovered via
+		// A4 NR-pivot. Pigeonhole 2 still guarantees safety (no V
+		// reaches qV → no cluster decision on any V).
+		"2abOBFT": ExpectMiss,
 		// QBFT: PREPARE pool fragments; R1 timeout → R2 with fresh V → success.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
@@ -102,24 +103,17 @@ var scenarioEquivocateSigmaLockedSplit = Scenario{
 		// OBFT: σ-pool on each V = f+1 < qV=2f+1; NR-pool from silent rest = f
 		// < qEnc=2f+1; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (post Op11): under Op11, each honest *does* observe
-		// equivocation via harvest — op2 (retains V_a directly) observes
-		// op3's KindValue(V_b, valid L0Witness_b) → harvests V_b →
-		// retention grows to {V_a, V_b} → Rule 2 fires → equivocation
-		// trigger emits Commit-NR. Symmetric for op3. The remaining
-		// N-1-2f silent honest also harvest both V's via cross-broadcast
-		// and pivot NR. NR-pool would reach qEnc cluster-wide → in
-		// principle the cluster could fall through to L_1.
-		// In practice, however, the same timing pathology that breaks
-		// LateLeaderBroadcast_L0 bites here: Op11's harvest triggers
-		// per-V validation requests at silent honest receivers (op{2f+2..n})
-		// → A1 upgrade KindValues fire late → the resulting σ-vs-NR
-		// race extends the cascade past the slot's submit deadline.
-		// The cluster commits to fall-through but past the deadline,
-		// classified as MISS by ClipLateDecision. See
-		// LateLeaderBroadcast_L0 for the same mechanism documented at
-		// a different byz primitive. Trade-off accepted in sub-chunk #2.
-		"2abOBFT": ExpectMiss,
+		// 2abOBFT (post Op5+Op11): the 1-hop cascade lets silent ops
+		// (op{2f+2..n}) harvest V_a from V_a-recipients' KindValues +
+		// A1 upgrade with their own σ partials. σ-pool[V_a] grows past
+		// qV cluster-wide via the silent ops' upgrades, even though the
+		// V_a recipients themselves σ-lock on V_a and the V_b recipient
+		// σ-locks on V_b (no NR pivot possible post Op5). Slot decides
+		// at L_0 with V_a. Pigeonhole 2 holds: only V_a reaches qV
+		// (V_b has 1 partial cluster-wide). **Recovery via Op5+Op11
+		// combo**: the wider Op11 harvest path + Op5's 1-hop cascade
+		// converts what was MISS pre-Op5 into a SuccessFastest.
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: PREPARE pool splits; R1 timeout → R2 fresh V → success.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate

@@ -172,49 +172,15 @@ func TestScenario_Healthy_N7_F2(t *testing.T) {
 	require.Equal(t, Value("V0"), out.Value)
 }
 
-// TestScenario_DualPoolMembershipForA3HostFlipPivot: per spec §Pool
-// aggregation rules / Dual-pool membership, an op that emits KindValue
-// then KindCommit-NR (A3 host-flip pivot) appears in both
-// valuePool[V_0] AND noValuePool[L_0] simultaneously. This is the
-// intended pool semantics: claim-pools (value_pool, novalue_pool)
-// track CLAIMS (the op's wire emissions), while threshold pools
-// (sigma_pool, nr_tag_0-pool) track ACTUAL partials. Pigeonhole 1
-// applies to the threshold pools, not the claim pools.
+// TestScenario_DualPoolMembershipForA3HostFlipPivot is obsolete post Op5:
+// the A3 host-flip pivot is removed (KindValue is σ-locking at L_0; an
+// op cannot transition to KindCommit-NR after emitting KindValue). Pool
+// semantics still distinguish claim pools from threshold pools, but the
+// dual-pool case this test exercised no longer arises from honest ops.
+// (Byz cross-signing — KindValue + KindCommit-NR from same op — is now
+// Rule 1 / Rule 6a slashable; covered in phase2b_test.)
 func TestScenario_DualPoolMembershipForA3HostFlipPivot(t *testing.T) {
-	s := newSim(t, 4)
-	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
-	s.applyHostValidityAll(0, Value("V0"), true)
-	for _, op := range s.allOperators() {
-		_, _, _, err := s.instances[op].MaybeFirePhase2a()
-		require.NoError(t, err)
-	}
-	vmA, _ := s.instances[OperatorID(1)].OwnValueMsg()
-	vmB, _ := s.instances[OperatorID(2)].OwnValueMsg()
-	vmC, _ := s.instances[OperatorID(3)].OwnValueMsg()
-	require.NotNil(t, vmA)
-	require.NotNil(t, vmB)
-	require.NotNil(t, vmC)
-	// Op 4's host flips to NV → A3 pivot at commit time.
-	require.NoError(t, s.instances[OperatorID(4)].ApplyHostValidity(0, Value("V0"), false))
-	// Deliver peer KindValues to drive σ-eligibility at op 4 → A3 pivot.
-	for _, vm := range []*ValueMsg{vmA, vmB, vmC} {
-		require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vm))
-	}
-	c4, ok := s.instances[OperatorID(4)].OwnCommit()
-	require.True(t, ok)
-	require.Equal(t, CommitSideNR, c4.Side)
-	// Now check pool membership at op 1 (observing op 4's A3 sequence).
-	op1 := s.instances[OperatorID(1)]
-	vmD, _ := s.instances[OperatorID(4)].OwnValueMsg()
-	require.NotNil(t, vmD, "op 4 emitted KindValue at Phase 2a before host flip")
-	require.NoError(t, op1.ObserveValueMsg(vmD))
-	require.NoError(t, op1.ObserveCommit(c4))
-	// Op 4 should be in BOTH valuePool[V_0] AND noValuePool[L_0] at op 1.
-	v0Root := ValueRoot(Value("V0"))
-	require.True(t, op1.valuePool[0][v0Root][OperatorID(4)],
-		"op 4 should be in valuePool[V_0] from its KindValue")
-	require.True(t, op1.noValuePool[0][OperatorID(4)],
-		"op 4 should ALSO be in noValuePool[L_0] from its Commit-NR (A3 dual-pool)")
+	t.Skip("Op5 removes A3 host-flip pivot; obsolete scenario — see plan §Op5 line 1253")
 }
 
 // TestObservePhase1Bundle / Phase-2a / Commit re-broadcast dedup: gossipsub
@@ -233,6 +199,7 @@ func TestObserveValueMsg_IdenticalRebroadcastIsSilentDedup(t *testing.T) {
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
 		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:  Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntryEmpty},
 		},
@@ -267,20 +234,25 @@ func TestObserveNoValueMsg_IdenticalRebroadcastIsSilentDedup(t *testing.T) {
 func TestObserveCommit_IdenticalRebroadcastIsSilentDedup(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
+	// Post Op5: Commit is NR-side only; KindCommit-NR with verified
+	// nr_tag_0 partial. Re-broadcasts of the identical commit dedup
+	// silently (no new evidence, no double-pool growth).
+	nrTag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	nrPartial, err := s.instances[OperatorID(1)].tagSigner.SignPartial(nrTag)
+	require.NoError(t, err)
 	c := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 1,
 		Height:     s.cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V0"),
-		L0Partial:  Signature{0x01},
+		Side:       CommitSideNR,
+		L0Partial:  nrPartial,
 	}
 	require.NoError(t, op2.ObserveCommit(c))
 	beforeEvidence := len(op2.Evidence())
 	require.NoError(t, op2.ObserveCommit(c))
 	require.NoError(t, op2.ObserveCommit(c))
 	require.Equal(t, beforeEvidence, len(op2.Evidence()))
-	require.Equal(t, 1, op2.valuePoolSize(0, ValueRoot(Value("V0"))))
+	require.Equal(t, 1, op2.noValuePoolSize(0))
 }
 
 // TestObserveCommit_KindCommitNRPopulatesNoValuePool: per inference rules,
@@ -511,35 +483,30 @@ func TestScenario_NonUniformMeshTailRecovery(t *testing.T) {
 		}
 	}
 
-	// At this point op 1's value_pool[V_0] = {op1, op2} = 2 < qV=3.
-	// noValuePool = {op4} = 1 < qEnc=3. The cannot-σ gate on NR-eligibility
-	// blocks op 1 from defaulting to NR (op 1 has V_local + host valid).
-	// Op 1 has NOT yet emitted a commit — it's waiting for the slow message.
-	_, op1HasCommit := s.instances[OperatorID(1)].OwnCommit()
-	require.False(t, op1HasCommit, "slow-view op 1 should be waiting, not yet committed")
-
-	// Meanwhile, ops 2 and 3 saw the full set (op 1's + 2's + 3's = 3
-	// KindValues ≥ qV); σ-eligibility fired for them. They've emitted
-	// KindCommit-Signed via the cascade.
-	for _, op := range []OperatorID{2, 3} {
-		c, ok := s.instances[op].OwnCommit()
-		require.True(t, ok, "op %d (full-view) should have emitted Commit-Signed", op)
-		require.Equal(t, CommitSideSigned, c.Side)
-	}
+	// At this point op 1's σ-pool[V_0] contains {self, op2} via direct
+	// KindValue observations (Op5: σ partial in KindValue.L0Partial).
+	// op 3's σ partial is missing → σ-pool size = 2 < qV=3.
+	// No Phase-2b Commit-Signed under Op5 — the σ-side terminal emission
+	// IS the KindValue itself. The cluster simply waits for the missing
+	// KindValue to arrive.
+	root := ValueRoot(Value("V0"))
+	require.Equal(t, 2, len(s.instances[OperatorID(1)].sigmaPool[0][root]),
+		"slow-view op 1's σ-pool has 2 partials, awaiting the delayed peer KindValue")
 
 	// Now simulate the mesh-tail recovery: op 3's KindValue finally
-	// arrives at op 1 (e.g., via gossipsub IHAVE/IWANT after the lazy-
-	// push HeartbeatInterval). The afterStateDelta cascade fires
-	// σ-eligibility and op 1 emits KindCommit-Signed.
+	// arrives at op 1. σ-pool grows to qV via direct observation.
 	require.NoError(t, s.instances[OperatorID(1)].ObserveValueMsg(vmC))
-	c, ok := s.instances[OperatorID(1)].OwnCommit()
-	require.True(t, ok, "op 1 should have committed once the slow KindValue arrived")
-	require.Equal(t, CommitSideSigned, c.Side, "op 1 should be σ-side (has V_local + host valid)")
+	require.GreaterOrEqual(t, len(s.instances[OperatorID(1)].sigmaPool[0][root]), s.cfg.QV(),
+		"σ-pool[V_0] reaches qV at op 1 once the delayed KindValue arrives (1-hop Op5 cascade)")
 
 	// Cross-broadcast all Commits so the cluster can reach σ-quorum.
+	// (Under Op5 ops 1/2/3 didn't emit any σ-side Commit — there's no
+	// commit to broadcast. The σ-pool grew directly via KindValue.)
 	for _, op := range []OperatorID{1, 2, 3} {
 		c, ok := s.instances[op].OwnCommit()
-		require.True(t, ok)
+		if !ok {
+			continue // no Commit under Op5 σ-side path
+		}
 		for _, peer := range s.allOperators() {
 			if peer == op {
 				continue
@@ -620,18 +587,25 @@ func TestScenario_HV2RecoversViaUpgrades(t *testing.T) {
 	require.Equal(t, Value("V0"), out.Value)
 }
 
-// Host re-org mid-slot, 3-σV vs 1-NV: 4 ops fire KindValue at Phase 2a;
-// one op's host flips to NV before its σ-eligibility commit fires.
-// σ-eligibility trigger fires for all 4 (value_pool=4≥qV). The flipped
-// op's side decision routes to NR (A3 host-flip pivot). σ-pool=3≥qV at
-// L_0; slot succeeds at L_0. Per redesign plan §Liveness worked cases
-// (line 786).
+// Host re-org mid-slot, post-Op5: 4 ops fire KindValue at Phase 2a; one
+// op's host flips to NV mid-slot. Under v4 (pre-Op5), this would have
+// pivoted that op to KindCommit-NR via A3 host-flip pivot at Phase 2b.
+// Post-Op5, the σ-lock is acquired at KindValue emit time — the op is
+// already σ-committed to V_0 and cannot pivot. The host-flip is a no-op
+// at the protocol level (the op stays σ-locked; the validator bears the
+// chain-reorg risk normally). Cluster σ-pool[V_0] still reaches qV via
+// direct KindValue observations (1-hop Op5 cascade); slot succeeds at
+// L_0 with V_0.
+//
+// Trade-off: pre-Op5's A3 safety net (avoiding signing a re-orged V) is
+// lost. See plan §Op5 line 1253 — explicit structural cost. Assumption 3
+// (host validity best-effort unanimous at decision time) makes mid-slot
+// flips rare; when they occur, validators take normal reorg-slashing
+// risk.
 func TestScenario_HostFlipMidSlot_3v1_SucceedsAtL0(t *testing.T) {
 	s := newSim(t, 4)
-	// All 4 ops have V_0 + host valid initially.
 	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
 	s.applyHostValidityAll(0, Value("V0"), true)
-	// All fire KindValue at Phase 2a.
 	for _, op := range s.allOperators() {
 		_, _, _, err := s.instances[op].MaybeFirePhase2a()
 		require.NoError(t, err)
@@ -640,45 +614,28 @@ func TestScenario_HostFlipMidSlot_3v1_SucceedsAtL0(t *testing.T) {
 	vmB, _ := s.instances[OperatorID(2)].OwnValueMsg()
 	vmC, _ := s.instances[OperatorID(3)].OwnValueMsg()
 	vmD, _ := s.instances[OperatorID(4)].OwnValueMsg()
-	// Deliver only ONE peer KindValue to op 4 so its value_pool stays
-	// below qV; then flip its host; then deliver the rest. By the time
-	// σ-eligibility fires at op 4, the host re-check says NV → Commit-NR.
-	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmA))
+	require.NotNil(t, vmA)
+	require.NotNil(t, vmB)
+	require.NotNil(t, vmC)
+	require.NotNil(t, vmD)
+	require.NotEmpty(t, vmD.L0Partial, "op 4 emitted KindValue σ-locked at L_0 on V_0")
+	// Host flips mid-slot to NV at op 4. Under Op5 this has no protocol
+	// effect — op 4 is already σ-locked.
 	require.NoError(t, s.instances[OperatorID(4)].ApplyHostValidity(0, Value("V0"), false))
-	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmB))
-	// At this point value_pool at op 4 = {self, op1, op2} = 3 = qV →
-	// σ-eligibility fired during ObserveValueMsg(vmB)'s cascade. Side
-	// decision: host re-check says NV → Commit-NR.
-	c4, ok := s.instances[OperatorID(4)].OwnCommit()
-	require.True(t, ok)
-	require.Equal(t, CommitSideNR, c4.Side, "op 4 should be NR-side via A3 host-flip pivot")
-	// Deliver op 3's KindValue to op 4 for completeness (no effect on commit).
-	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmC))
-	// Ops 1/2/3 see the full set; σ-eligibility fires; Commit-Signed via cascade.
+	// Op 4 stays σ-committed; no Commit-NR pivot fires.
+	_, op4HasCommit := s.instances[OperatorID(4)].OwnCommit()
+	require.False(t, op4HasCommit, "Op5: σ-locked op cannot pivot to NR on host flip (A3 removed)")
+	// Cross-broadcast all KindValues. Cluster σ-pool reaches qV at every
+	// honest receiver.
 	for from, vm := range map[OperatorID]*ValueMsg{1: vmA, 2: vmB, 3: vmC, 4: vmD} {
-		for _, peer := range []OperatorID{1, 2, 3} {
+		for _, peer := range s.allOperators() {
 			if peer == from {
 				continue
 			}
 			require.NoError(t, s.instances[peer].ObserveValueMsg(vm))
 		}
 	}
-	// Cross-broadcast all Commits to all peers.
 	s.propagatePostPhase2aEmissions()
-	for _, op := range []OperatorID{1, 2, 3} {
-		c, ok := s.instances[op].OwnCommit()
-		require.True(t, ok)
-		require.Equal(t, CommitSideSigned, c.Side, "op %d should be σ-side", op)
-		for _, peer := range s.allOperators() {
-			if peer == op {
-				continue
-			}
-			require.NoError(t, s.instances[peer].ObserveCommit(c))
-		}
-	}
-	for _, peer := range []OperatorID{1, 2, 3} {
-		require.NoError(t, s.instances[peer].ObserveCommit(c4))
-	}
 	outputs, errs := s.resolveAll()
 	for op, err := range errs {
 		require.NoError(t, err, "op %d Resolve", op)
@@ -759,60 +716,14 @@ func TestScenario_HostFlipMidSlot_4NV_FallsThroughToL1(t *testing.T) {
 	require.Equal(t, 1, out.Layer, "fall-through to L_1 via L_0 NR-quorum")
 }
 
-// Host re-org mid-slot, 2-σV vs 2-NV (assumption-3 violation): 2 ops'
-// hosts flip; 2 stay valid. σ-pool=2<qV; nr_tag_0-pool=2<qEnc. Both
-// pools short → slot misses at L_0, NO fall-through (no T_commit hard
-// wall to default the remaining ops). Inherited algebraic limit. Per
-// redesign plan §Liveness worked cases (line 787).
+// TestScenario_HostFlipMidSlot_2v2_StallsAtL0 is obsolete post Op5: the
+// A3 host-flip pivot is removed. Under Op5 all 4 ops emit KindValue
+// σ-locked at L_0 BEFORE the host flip can re-route them. The σ partials
+// pool cluster-wide; σ-quorum reaches at L_0 with V_0 — the cluster
+// commits to V_0 regardless of the late host flip. The "stall on 2-2
+// host flip" scenario depended on A3 pivot — that path is gone.
 func TestScenario_HostFlipMidSlot_2v2_StallsAtL0(t *testing.T) {
-	s := newSim(t, 4)
-	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
-	s.applyHostValidityAll(0, Value("V0"), true)
-	// L_1 also has a healthy delivery (so we can verify fall-through DOESN'T happen).
-	s.deliverPhase1(1, s.candidates[1], s.allOperators(), observedEarly)
-	s.applyHostValidityAll(1, s.candidates[1], true)
-	// All fire KindValue.
-	for _, op := range s.allOperators() {
-		_, _, _, err := s.instances[op].MaybeFirePhase2a()
-		require.NoError(t, err)
-	}
-	// Flip ops 3, 4 to NV before σ-eligibility fires.
-	for _, op := range []OperatorID{3, 4} {
-		require.NoError(t, s.instances[op].ApplyHostValidity(0, Value("V0"), false))
-	}
-	// Cross-broadcast KindValues.
-	for _, op := range s.allOperators() {
-		vm, _ := s.instances[op].OwnValueMsg()
-		require.NotNil(t, vm)
-		for _, peer := range s.allOperators() {
-			if peer == op {
-				continue
-			}
-			require.NoError(t, s.instances[peer].ObserveValueMsg(vm))
-		}
-	}
-	// Ops 1, 2 → Commit-Signed. Ops 3, 4 → Commit-NR (A3 pivot).
-	s.propagatePostPhase2aEmissions()
-	for _, op := range s.allOperators() {
-		c, ok := s.instances[op].OwnCommit()
-		require.True(t, ok)
-		for _, peer := range s.allOperators() {
-			if peer == op {
-				continue
-			}
-			require.NoError(t, s.instances[peer].ObserveCommit(c))
-		}
-	}
-	// σ-pool[V_0] = {op1, op2} = 2 < qV. nr_tag_0-pool = {op3, op4} = 2 < qEnc.
-	// Neither σ-quorum nor NR-quorum reaches at L_0. Resolve returns deadlock.
-	for _, op := range s.allOperators() {
-		_, err := s.instances[op].Resolve()
-		require.Error(t, err, "op %d Resolve should miss (2-2 split)", op)
-		var rerr *ResolveError
-		require.ErrorAs(t, err, &rerr)
-		require.Equal(t, ResolveFailureDeadlock, rerr.Reason,
-			"L_0 deadlock — both quorums short, no fall-through")
-	}
+	t.Skip("Op5 removes A3 host-flip pivot; the 2-2 host-flip stall scenario doesn't arise under Op5 (cluster σ-locks at Phase 2a fire)")
 }
 
 // Validity-divergence 2-σV vs 2-NV AT PHASE 1 (algebraic limit, distinct
@@ -842,14 +753,18 @@ func TestScenario_ValidityDivergence2v2_AtPhase1_StallsAtL0(t *testing.T) {
 	}
 }
 
-// 1-1-1 byz leader equivocation, recovery via Phase-1 reflood. Each
-// honest gets a different V from byz leader → no equivocation observed
-// locally initially. After reflood delivers all V's to each honest
-// (modeled here by manual delivery), each retainedBundles[L_0][leader]
-// has ≥ 2 V's → equivocation trigger fires for each honest → all emit
-// KindCommit-NR (A4 pivot). nr_tag_0-pool = 3 = qEnc → fall-through.
-// Per redesign plan §Liveness worked cases (line 784).
-func TestScenario_Equivocation111_ViaReflood_FallsThrough(t *testing.T) {
+// 1-1-1 byz leader equivocation, post Op5: each honest gets a different
+// V from byz leader → emits KindValue σ-locked on their own V at Phase 2a.
+// After reflood delivers all V's to each honest, each retainedBundles[
+// L_0][leader] grows to ≥ 2 V's → Rule 2 evidence fires. But under Op5
+// no NR pivot is available post-KindValue-σ-lock. σ-pool fragments (each
+// V has 1 partial cluster-wide); no V reaches qV. NR-pool empty (no NR
+// commits). Slot misses at L_0 with no fall-through. Pre-Op5 this
+// scenario succeeded at L_1 via A4 pivot + NR-fall-through; the loss is
+// a documented Op5 trade-off (plan §Op6 line 1276: equivocation
+// observed POST-KindValue-emission has no recovery path). Pigeonhole 2
+// safety holds: no V reaches qV, no cluster decision on any V.
+func TestScenario_Equivocation111_PostKindValue_MissesUnderOp5(t *testing.T) {
 	s := newSim(t, 4)
 	// Byz leader = op 1 (L_0 leader). Initially deliver V_a to op 2, V_b
 	// to op 3, V_c to op 4. Each honest sees 1 V from the leader.
@@ -877,41 +792,41 @@ func TestScenario_Equivocation111_ViaReflood_FallsThrough(t *testing.T) {
 		require.NoError(t, err)
 	}
 	// Reflood: deliver the alternative V's to each honest. After reflood,
-	// each honest has 2 retained V's from the leader → equivocation
-	// trigger ready to fire on next cascade.
+	// each honest has 2 retained V's from the leader → Rule 2 evidence
+	// fires (leader equivocation observed).
 	require.NoError(t, s.instances[OperatorID(2)].ObservePhase1Bundle(bB, observedAfterPhase2a))
 	require.NoError(t, s.instances[OperatorID(3)].ObservePhase1Bundle(bA, observedAfterPhase2a))
 	require.NoError(t, s.instances[OperatorID(4)].ObservePhase1Bundle(bA, observedAfterPhase2a))
-	// Each ObservePhase1Bundle's cascade fires equivocation trigger →
-	// A4 pivot from prior KindValue → Commit-NR.
+	// Post Op5: ops are σ-locked at L_0 from their Phase 2a KindValue
+	// emission; equivocation observed post-emission does NOT pivot to
+	// Commit-NR (A4 path is removed). Each op stays σ-committed on
+	// their respective V. Rule 2 evidence still fires on the equivocation
+	// observation (slashable signal preserved).
 	for _, op := range []OperatorID{2, 3, 4} {
-		c, ok := s.instances[op].OwnCommit()
-		require.True(t, ok, "op %d should have pivoted to Commit-NR via equivocation trigger", op)
-		require.Equal(t, CommitSideNR, c.Side)
-	}
-	// Cross-broadcast everything for completion.
-	for _, op := range []OperatorID{2, 3, 4} {
-		vm, _ := s.instances[op].OwnValueMsg()
-		c, _ := s.instances[op].OwnCommit()
-		for _, peer := range []OperatorID{2, 3, 4} {
-			if peer == op {
-				continue
+		var foundRule2 bool
+		for _, e := range s.instances[op].Evidence() {
+			if e.Rule == EvidenceLeaderEquivocation {
+				foundRule2 = true
 			}
-			if vm != nil {
-				_ = s.instances[peer].ObserveValueMsg(vm) // may fire Rule 6a / cross-V; ignore for this test
-			}
-			require.NoError(t, s.instances[peer].ObserveCommit(c))
 		}
+		require.True(t, foundRule2,
+			"Op5: equivocation post-KindValue fires Rule 2 (no NR pivot, but slashable signal preserved)")
+		_, hadCommit := s.instances[op].OwnCommit()
+		require.False(t, hadCommit,
+			"Op5: post-KindValue equivocation does NOT pivot to Commit-NR; op stays σ-locked")
 	}
+	// Cluster cannot reach σ-quorum (each op σ-locked on a DIFFERENT V;
+	// σ-pool fragments at 1 partial per V). Cluster cannot reach
+	// NR-quorum (no NR commits). Slot misses — by Pigeonhole 2 safety
+	// holds (no V reaches qV). Documented Op5 trade-off (§Op6 line 1276).
 	outputs, errs := s.resolveAll()
-	// Op 1 (byz) won't resolve since it never fired Phase 2a. Filter.
-	delete(outputs, OperatorID(1))
+	delete(outputs, OperatorID(1)) // byz didn't emit Phase 2a
 	delete(errs, OperatorID(1))
 	for op, err := range errs {
-		require.NoError(t, err, "op %d Resolve", op)
+		require.Error(t, err, "op %d should miss (σ-fragmented post-Op5)", op)
 	}
-	out := requireAllAgree(t, outputs)
-	require.Equal(t, 1, out.Layer, "fall-through to L_1 via L_0 NR-quorum (3 honest NRs reach qEnc)")
+	// No agreement reachable.
+	_ = outputs
 }
 
 // Slot-miss case (companion to TestScenario_NonUniformMeshTailRecovery):
@@ -949,24 +864,19 @@ func TestScenario_MeshTail_NoRecovery_MissesCleanly(t *testing.T) {
 	require.NoError(t, s.instances[OperatorID(3)].ObserveNoValueMsg(nvD))
 	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmA))
 	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmB))
-	// No op has committed (value_pool < qV at the σ-eligible ops; cannot-σ
-	// gate blocks NR-eligibility; equivocation not observed).
-	for _, op := range []OperatorID{1, 2} {
+	// Post Op5: ops 1, 2, 3 all σ-locked at L_0 at Phase 2a fire (KindValue
+	// carries σ partial). Op 4 is on KindNoValue path. No Commit fires on
+	// σ-side. Op 4's NR-eligibility gate isn't satisfied (noValuePool=1
+	// at op 4 since only its own KindNoValue arrived; the 2 σ-honest
+	// peers didn't emit NR). So op 4 also waits, no Commit fires
+	// anywhere.
+	for _, op := range []OperatorID{1, 2, 3, 4} {
 		_, ok := s.instances[op].OwnCommit()
-		require.False(t, ok, "op %d (σ-eligible but pool short) should be waiting", op)
+		require.False(t, ok, "op %d should be waiting (no Commit fires under Op5 σ-side; NR-eligibility gate unsatisfied at op 4)", op)
 	}
-	// Now if op 3 also doesn't see op 1's full set... let's check op 3
-	// — it saw 2 peer KindValues, so value_pool = self + op1 + op2 = 3 =
-	// qV → σ-eligibility fired → op 3 emitted Commit-Signed.
-	c3, ok := s.instances[OperatorID(3)].OwnCommit()
-	require.True(t, ok)
-	require.Equal(t, CommitSideSigned, c3.Side)
-	// Resolve at op 1 → no σ-quorum (sigmaPool has only op3's partial via
-	// inference but op 3's Commit-Signed hasn't been broadcast to op 1).
-	// Actually inference happens via ObserveCommit. Let me check more
-	// carefully: op 3's Commit-Signed hasn't been delivered to op 1 yet.
-	// So sigmaPool[op1's view] = empty (op 1 self isn't σ-side either —
-	// op 1 didn't emit Commit-Signed because value_pool was short).
+	// Op 1's σ-pool[V_0] = {self, op2} (its own L0Partial + op2's
+	// observed L0Partial via vmB) = 2 < qV=3. No σ-quorum, no
+	// NR-quorum → Resolve fails at op 1.
 	_, err := s.instances[OperatorID(1)].Resolve()
 	require.Error(t, err, "op 1 misses cleanly with no σ-quorum")
 }

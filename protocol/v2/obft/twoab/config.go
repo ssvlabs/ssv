@@ -149,21 +149,26 @@ type Config struct {
 	TPhase2a time.Duration
 
 	// SafetyBuffer is the protocol-level mesh-tail tolerance configurable.
-	// Per spec §Setting (post-v4-tightening): SafetyBuffer widens the
-	// post-Phase-2a CASCADE window — the wall-clock between TPhase2a
-	// and the scheduled Resolve sweep, during which the two-hop cascade
-	// (peer-KindValue → peer-KindCommit-Signed) must complete:
+	// Post Op5+Op11: SafetyBuffer widens the post-TPhase2a σ-pool fill
+	// window — the wall-clock between TPhase2a and the scheduled Resolve
+	// sweep, during which peer KindValues propagate and σ-pool[V_0]
+	// reaches qV. The σ-side critical path is 1 hop (KindValue carries
+	// the σ partial directly post Op5); the NR fall-through path is
+	// 2 hops (KindNoValue → KindCommit-NR → aggregate). The window must
+	// accommodate the worst case (2-hop fall-through):
 	//
-	//	cascadeWindow = 2·BTT + SafetyBuffer + ε_3
+	//	resolveWindow = 2·BTT + SafetyBuffer + ε_3
 	//
 	// The runner / adapter shifts TPhase2a earlier by SafetyBuffer
-	// (relative to the runner-level RelayCutoff) so the cascade has
-	// SafetyBuffer extra wall-clock to absorb slow / jittery peer hops.
-	// Each fetchAt[k] correspondingly shifts earlier by SafetyBuffer
-	// (since t0Broadcast = TPhase2a − BTT and fetchAt[k] = t0Broadcast −
-	// B_k), preserving the leader's structural broadcast budget at the
-	// minimum `B_k = (k+2)·BTT` while keeping the wall-clock pre-
-	// broadcast headroom unchanged at default SafetyBuffer.
+	// (relative to the runner-level RelayCutoff) so the cluster has
+	// SafetyBuffer extra wall-clock to absorb slow / jittery peer hops
+	// (e.g., σ-pool fill via gossipsub IHAVE/IWANT recovery when initial
+	// KindValue eager-push is incomplete). Each fetchAt[k] correspondingly
+	// shifts earlier by SafetyBuffer (since t0Broadcast = TPhase2a − BTT
+	// and fetchAt[k] = t0Broadcast − B_k), preserving the leader's
+	// structural broadcast budget at the minimum `B_k = (k+2)·BTT` while
+	// keeping the wall-clock pre-broadcast headroom unchanged at default
+	// SafetyBuffer.
 	//
 	// Default sizing: `SafetyBuffer = RefloodDelay` (the cluster's
 	// gossipsub HeartbeatInterval — typically 700ms in SSV deployments).
@@ -171,23 +176,13 @@ type Config struct {
 	// post-broadcast structural budget and the same MEV-fetch headroom.
 	//
 	// Lower SafetyBuffer (e.g. 300ms / 500ms) reclaims MEV-fetch headroom
-	// at the cost of cascade-window tolerance: the cluster commits to
-	// slot-miss rather than wait for late peer ValueMsg / Commit-Signed
-	// arrivals when the network's actual per-hop latency exceeds 1·BTT.
-	// Higher SafetyBuffer (e.g. 1·BTT + RefloodDelay) widens the
-	// tolerance at the cost of MEV-fetch headroom. SafetyBuffer is
-	// decoupled from the network's HeartbeatInterval (the gossipsub
-	// constant); SafetyBuffer is a protocol-level configurable, not a
-	// network parameter.
-	//
-	// Why SafetyBuffer goes into the cascade and not B_0 (vs OBFT's
-	// RefloodDelay which lives in B_0): OBFT's critical path post-
-	// bundle-arrival is one hop (early-commit fires immediately on
-	// L0Ready close, then propagates). 2abOBFT's critical path is
-	// TWO hops (peer ValueMsg propagates, then σ-eligibility cascade
-	// fires Commit-Signed, then that propagates). The structural
-	// mesh-tail-sensitive window in 2abOBFT is the cascade, not B_0
-	// — so the configurable tolerance budget belongs there.
+	// at the cost of σ-pool-fill tolerance: the cluster commits to
+	// slot-miss rather than wait for late peer KindValue arrivals when
+	// the network's per-hop latency tail exceeds 1·BTT. Higher
+	// SafetyBuffer (e.g. 1·BTT + RefloodDelay) widens the tolerance at
+	// the cost of MEV-fetch headroom. SafetyBuffer is decoupled from the
+	// network's HeartbeatInterval (the gossipsub constant); SafetyBuffer
+	// is a protocol-level configurable, not a network parameter.
 	SafetyBuffer time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec

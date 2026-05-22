@@ -66,6 +66,7 @@ func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 		V:          v,
 		ValueRoot:  twoab.ValueRoot(v),
 		L0Witness:  twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
+		L0Partial:  twoab.Signature{0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80},
 		LayerEntries: []twoab.LayerEntry{
 			{Layer: 1, Kind: twoab.LayerEntrySigmaChained, V: twoab.Value("V1"), Payload: []byte("ct")},
 		},
@@ -80,23 +81,26 @@ func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, vm.ValueRoot, decoded.ValueRoot)
 	require.Equal(t, vm.L0Witness, decoded.L0Witness,
 		"Op11: KindValue L0Witness must round-trip through wire encode/decode")
+	require.Equal(t, vm.L0Partial, decoded.L0Partial,
+		"Op5: KindValue L0Partial must round-trip through wire encode/decode")
 	require.Len(t, decoded.LayerEntries, 1)
 	require.Equal(t, vm.LayerEntries[0].Layer, decoded.LayerEntries[0].Layer)
 	require.Equal(t, vm.LayerEntries[0].Kind, decoded.LayerEntries[0].Kind)
 }
 
-// TestValueMsg_RejectsUnknownVersionByte verifies that the V2 decoder
-// rejects wire bytes whose version byte differs from 0x02. Includes
-// rejection of the pre-Op11 V1 byte (0x01) — the cluster cutover policy
-// assumes wire-incompatible coexistence does not occur, so V1-emitted
-// bytes hitting a V2 decoder should fail cleanly at the version check.
+// TestValueMsg_RejectsUnknownVersionByte verifies that the V3 decoder
+// rejects wire bytes whose version byte differs from 0x03. Includes
+// rejection of the pre-Op5 V2 byte (0x02) and the pre-Op11 V1 byte
+// (0x01) — the cluster cutover policy assumes wire-incompatible
+// coexistence does not occur, so older-version bytes hitting a V3
+// decoder should fail cleanly at the version check.
 func TestValueMsg_RejectsUnknownVersionByte(t *testing.T) {
-	for _, badVersion := range []byte{0x00, 0x01, 0x03, 0xff} {
+	for _, badVersion := range []byte{0x00, 0x01, 0x02, 0x04, 0xff} {
 		bytes := []byte{badVersion}
 		bytes = append(bytes, ProtocolTag[:]...)
 		bytes = append(bytes, 0x02) // inner kind ValueMsg
 		_, err := DecodeValueMsg(bytes)
-		require.Errorf(t, err, "V2 decoder must reject version byte 0x%02x", badVersion)
+		require.Errorf(t, err, "V3 decoder must reject version byte 0x%02x", badVersion)
 	}
 }
 
@@ -118,23 +122,46 @@ func TestNoValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, twoab.LayerEntryNRPlaintext, decoded.LayerEntries[0].Kind)
 }
 
-func TestCommit_SignedEncodeDecodeRoundTrip(t *testing.T) {
+// TestCommit_NREncodeDecodeRoundTrip covers the Phase-2b NR commit
+// (KindCommit-NR) wire round-trip. Post Op5, this is the most common
+// Commit kind on the wire — KindCommit-Signed has been removed and the
+// σ-side terminal emission moved into KindValue.
+func TestCommit_NREncodeDecodeRoundTrip(t *testing.T) {
 	c := &twoab.Commit{
 		ClusterID:  [32]byte{0xcc},
 		OperatorID: 1,
 		Height:     9,
-		Side:       twoab.CommitSideSigned,
-		L0Value:    twoab.Value("V0"),
-		L0Partial:  twoab.Signature("partial-bytes"),
+		Side:       twoab.CommitSideNR,
+		L0Partial:  twoab.Signature("nr-partial-bytes"),
 	}
 	encoded, err := EncodeCommit(c)
 	require.NoError(t, err)
 	decoded, err := DecodeCommit(encoded)
 	require.NoError(t, err)
-	require.Equal(t, twoab.CommitSideSigned, decoded.Side)
-	require.Equal(t, c.L0Value, decoded.L0Value)
+	require.Equal(t, twoab.CommitSideNR, decoded.Side)
+	require.Empty(t, decoded.L0Value)
 	require.Equal(t, c.L0Partial, decoded.L0Partial)
 	require.Empty(t, decoded.LayerEntries)
+}
+
+// TestCommit_SignedSideRejected verifies that the pre-Op5 Signed side
+// (byte 0x01) is rejected by the decoder loudly, surfacing wire-version
+// drift between cluster members.
+func TestCommit_SignedSideRejected(t *testing.T) {
+	// Craft a Commit byte stream with side byte 0x01 (pre-Op5 Signed).
+	// Use Encode with a hand-stamped side to bypass our own constants.
+	bytes := []byte{CommitVersionV1}
+	bytes = append(bytes, ProtocolTag[:]...)
+	bytes = append(bytes, 0x04)                // inner kind = Commit
+	bytes = append(bytes, make([]byte, 32)...) // ClusterID
+	bytes = append(bytes, make([]byte, 8)...)  // OperatorID
+	bytes = append(bytes, make([]byte, 8)...)  // Height
+	bytes = append(bytes, 0x01)                // side = Signed (removed post Op5)
+	bytes = append(bytes, 0, 0, 0, 0)          // L0Value length = 0
+	bytes = append(bytes, 0, 0, 0, 1, 0xaa)    // L0Partial length=1 + 1 byte
+	bytes = append(bytes, 0, 0, 0, 0)          // LayerEntries count = 0
+	_, err := DecodeCommit(bytes)
+	require.Error(t, err, "Op5: pre-Op5 CommitSideSigned (0x01) must be rejected at wire decode")
 }
 
 func TestCommit_NRDirectEncodeDecodeRoundTrip(t *testing.T) {

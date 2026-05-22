@@ -38,30 +38,28 @@ type Protocol struct {
 	VariantName string
 
 	// SafetyBufferOverride, when non-nil, sets the SafetyBuffer used to
-	// widen the post-Phase-2a cascade window. Default (nil) uses
-	// cfg.RefloodDelay so 2abOBFT matches bare OBFT's total post-broadcast
-	// structural budget at default. Lower SafetyBuffer (e.g. 300ms /
-	// 500ms) reclaims MEV-fetch headroom at the cost of cascade-window
-	// tolerance: the cluster commits to slot-miss rather than wait for
-	// late peer ValueMsg / Commit arrivals when the network's actual
-	// per-hop latency exceeds 1·BTT.
+	// widen the σ-pool absorption budget post-TPhase2a. Default (nil)
+	// uses cfg.RefloodDelay so 2abOBFT matches bare OBFT's total post-
+	// broadcast structural budget at default. Lower SafetyBuffer (e.g.
+	// 300ms / 500ms) reclaims MEV-fetch headroom at the cost of σ-pool-
+	// fill tolerance: the cluster commits to slot-miss rather than wait
+	// for late peer KindValue arrivals when the network's per-hop
+	// latency tail exceeds 1·BTT.
 	//
-	// Cascade-window semantics (post-tightening from the v4-initial spec):
-	// SafetyBuffer shifts `TPhase2a` earlier in the slot, widening the
-	// post-TPhase2a window for the two-hop cascade (peer KindValue →
-	// peer KindCommit-Signed). This differs from OBFT's RefloodDelay
-	// analog (which only widens the leader's broadcast budget B_0)
-	// because 2abOBFT's critical path post-bundle-arrival is TWO hops,
-	// not one — so structural mesh-tail tolerance lives in the cascade,
-	// not in B_0. The leader's pre-Phase-2a window (`B_0 = 2·BTT`) stays
-	// at the structural minimum; under degraded p2p profiles where V
-	// would fail to reach some peers within 1·BTT of fetchAt, the
-	// affected ops naturally enter the KindNoValue path at Phase 2a and
-	// recover via A1 upgrade once the bundle arrives — that A1 cascade
-	// hop ALSO lives in the post-Phase-2a window, so widening the
-	// cascade is exactly what helps it complete in time. Widening B_0
-	// instead would only buy back the pre-Phase-2a delivery cycle that
-	// the A1 upgrade path already handles.
+	// Cascade-window semantics (post Op5): KindValue carries the σ
+	// partial directly — the cluster's σ-pool[V_0] fills in 1 hop from
+	// TPhase2a (was 2 hops in v4 with the intermediate KindCommit-
+	// Signed). SafetyBuffer now plays the role of "σ-pool fill
+	// absorption budget for IHAVE/IWANT recovery when initial KindValue
+	// eager-push doesn't reach all honest peers" — conceptually closer
+	// to OBFT's RefloodDelay role (a lazy-pull recovery window) than
+	// v4's two-hop-cascade-slack role. The leader's pre-Phase-2a window
+	// (`B_0 = 1·BTT`) stays at the structural minimum; ops who don't
+	// observe V by TPhase2a fire KindNoValue and recover via A1 upgrade
+	// once the bundle (or peer KindValue carrying the L0Witness)
+	// arrives — that A1 upgrade is now the σ-side terminal emission
+	// (Op5), so it still benefits from the SafetyBuffer absorption
+	// budget for late peer observations.
 	SafetyBufferOverride *time.Duration
 }
 
@@ -95,30 +93,39 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 
-	// 2abOBFT timing model (spec §Setting, with the cascade-window-
-	// SafetyBuffer correction):
+	// 2abOBFT timing model (spec §Setting, post Op5+Op6):
 	//   - TPhase2a is the Phase-2a fire-instant; every op emits one of
-	//     {KindValue, KindNoValue, KindCommit-NRDirect} at this offset.
+	//     {KindValue (with σ partial), KindNoValue, KindCommit-NRDirect}
+	//     at this offset.
 	//   - T0Broadcast = TPhase2a − BTT is the L_0 leader's broadcast
 	//     time target — V_0 has 1·BTT to propagate before Phase 2a fires.
 	//   - SafetyBuffer shifts TPhase2a earlier in the slot, widening the
-	//     post-TPhase2a cascade window where the two-hop peer-KindValue →
-	//     peer-Commit-Signed sequence must complete. Default sizing uses
-	//     SafetyBuffer = RefloodDelay so 2abOBFT and bare OBFT have the
-	//     same total post-broadcast structural budget. See Protocol.
-	//     SafetyBufferOverride for the rationale on why SafetyBuffer
-	//     lives in the cascade (not B_0) under 2abOBFT's two-phase
-	//     coordination + commit design.
+	//     post-TPhase2a σ-pool fill window (post Op5: 1-hop peer
+	//     KindValue propagation; the v4 second hop to KindCommit-Signed
+	//     is removed). Default sizing uses SafetyBuffer = RefloodDelay
+	//     so 2abOBFT and bare OBFT have the same total post-broadcast
+	//     structural budget.
 	//
 	// We pick TPhase2a to fit within the slot's submit pipeline: the
 	// runner-level deadline is RelayCutoff − HeaderSubmitHeadroom; the
 	// adapter reserves phase3JitterBuffer + epsilon3 for Phase 3 + cert
-	// dispatch, plus 2·BTT + SafetyBuffer for the post-Phase-2a cascade.
-	// Phase 2b is dynamic (no scheduled deadline), so we don't need a
-	// Δ_2b reserve — commits fire opportunistically through the cascade
-	// and either land before the scheduled Resolve sweep at
-	// TPhase2a + 2·BTT + SafetyBuffer + ε_3 or trigger evtResolveRerun
-	// on late arrival.
+	// dispatch, plus 2·BTT + SafetyBuffer for the post-Phase-2a settle
+	// window.
+	//
+	// **Cascade-depth note (post Op5)**: the L_0 σ-side cascade collapses
+	// from 2 hops to 1 hop (KindValue carries the σ partial directly —
+	// no follow-up Commit-Signed). However, the L_0 NR-side cascade for
+	// fall-through-to-L_1 is STILL 2 hops (KindNoValue → KindCommit-NR
+	// → arrive at peer → NR-aggregate → decrypt L_1 entries). The
+	// resolveDeadline must accommodate the deeper cascade for liveness
+	// of fall-through scenarios. The plan's §Op6 corollary line 1278
+	// proposed `TPhase2a + 1·BTT + SafetyBuffer + ε_3`, but that formula
+	// only accommodates the σ-quorum-at-L_0 path; fall-through cells
+	// (PrimaryLeaderSilent, ValidityDivergence_NRFallThrough, etc.)
+	// require the 2·BTT budget. Keep `2·BTT` here as the worst-case
+	// reservation across both paths. The σ-side path doesn't suffer —
+	// it just decides earlier than the resolveDeadline and the cluster
+	// reports the earlier `vQuorumAt` via opportunistic Resolve.
 	btt := cfg.BTT
 	// SafetyBuffer: default = cfg.RefloodDelay (matches bare OBFT's
 	// structural budget); the SafetyBufferOverride variant field lets

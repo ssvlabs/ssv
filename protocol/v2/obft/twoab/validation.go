@@ -99,6 +99,15 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 	if len(v.L0Witness) == 0 {
 		return errors.New("twoab: ValueMsg has empty L0Witness (Op11 requires the L_0 leader's forwarded σ partial)")
 	}
+	// Op5: L0Partial (the emitter's own σ partial on V at L_0) is required
+	// non-empty. KindValue under V3 is the terminal σ-side emission — an
+	// op cannot claim σ-direction at L_0 without presenting its own σ
+	// partial on V. BLS verify happens at the Instance layer
+	// (ObserveValueMsg) against pubKeyShares[v.OperatorID]; a fake
+	// L0Partial fires Rule 5 against the emitter.
+	if len(v.L0Partial) == 0 {
+		return errors.New("twoab: ValueMsg has empty L0Partial (Op5 requires the emitter's own σ partial on V at L_0)")
+	}
 	if err := validateLayerEntries(v.LayerEntries, cfg, "ValueMsg"); err != nil {
 		return err
 	}
@@ -132,13 +141,18 @@ func ValidateNoValueMsg(nv *NoValueMsg, cfg *Config) error {
 }
 
 // ValidateCommit checks structural invariants for an incoming Phase-2b
-// (or Phase-2a NRDirect) Commit envelope.
+// (or Phase-2a NRDirect) Commit envelope. Post Op5, Commit is NR-side
+// only — the σ-side terminal emission moved into KindValue.
 //
 // Per spec §Wire format:
-//   - Side=Signed: L0Value non-empty + L0Partial non-empty + LayerEntries empty.
 //   - Side=NR: L0Value empty + L0Partial non-empty + LayerEntries empty.
 //   - Side=NRDirect: L0Value empty + L0Partial non-empty + LayerEntries
 //     present (K-1 entries; same structural rules as Phase-2a emissions).
+//
+// The historical Side=Signed value (0x01) is now invalid and rejected
+// here — surfaces wire-version drift between cluster members loudly
+// (catches a peer on the pre-Op5 wire format trying to talk to an Op5
+// receiver).
 func ValidateCommit(c *Commit, cfg *Config) error {
 	if c == nil {
 		return errors.New("twoab: nil Commit")
@@ -159,32 +173,27 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 	if len(c.L0Partial) == 0 {
 		return errors.New("twoab: Commit has empty L0Partial")
 	}
+	// Post Op5: L0Value is unused (was for Side=Signed which no longer
+	// exists). Reject non-empty L0Value on any Commit side to catch
+	// stragglers from the pre-Op5 wire format.
+	if len(c.L0Value) != 0 {
+		return errors.New("twoab: Commit has non-empty L0Value (post Op5 the σ-side moved into KindValue.L0Partial; Commit is NR-side only)")
+	}
 	switch c.Side {
-	case CommitSideSigned:
-		if len(c.L0Value) == 0 {
-			return errors.New("twoab: Commit Side=Signed requires non-empty L0Value")
-		}
-		if len(c.LayerEntries) != 0 {
-			return errors.New("twoab: Commit Side=Signed must have empty LayerEntries (L_k>0 entries live in earlier Phase-2a emission)")
-		}
 	case CommitSideNR:
-		if len(c.L0Value) != 0 {
-			return errors.New("twoab: Commit Side=NR must have empty L0Value")
-		}
 		if len(c.LayerEntries) != 0 {
-			return errors.New("twoab: Commit Side=NR must have empty LayerEntries (L_k>0 entries live in earlier Phase-2a emission)")
+			return errors.New("twoab: Commit Side=NR must have empty LayerEntries (L_k>0 entries live in earlier KindNoValue emission)")
 		}
 	case CommitSideNRDirect:
-		if len(c.L0Value) != 0 {
-			return errors.New("twoab: Commit Side=NRDirect must have empty L0Value")
-		}
 		if err := validateLayerEntries(c.LayerEntries, cfg, "Commit/NRDirect"); err != nil {
 			return err
 		}
 	case CommitSideUnspecified:
 		return errors.New("twoab: Commit Side is unspecified")
 	default:
-		return fmt.Errorf("twoab: Commit Side 0x%02x is invalid", byte(c.Side))
+		// 0x01 was the pre-Op5 CommitSideSigned value. Catch it here as
+		// an invalid side to make wire-version drift visible.
+		return fmt.Errorf("twoab: Commit Side 0x%02x is invalid (post Op5 only NR=0x02 and NRDirect=0x03 are valid; 0x01 was the removed Signed side)", byte(c.Side))
 	}
 	return nil
 }

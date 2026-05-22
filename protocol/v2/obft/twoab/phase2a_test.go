@@ -264,6 +264,10 @@ func TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded(t *testing.T) {
 	s := newSim(t, 4)
 	leader := s.leaderAt(0)
 	// Forge a KindValue from op 2 with V claim but bogus L0Witness bytes.
+	// L0Partial is also bogus (different attribution — Rule 5 will fire
+	// against op 2 for the bad self-partial; the L0Witness verify is the
+	// path we want to exercise; Rule 5 firing for emitter L0Partial is
+	// orthogonal and won't be checked here).
 	bogus := &ValueMsg{
 		ClusterID:    s.cfg.ClusterID,
 		OperatorID:   2,
@@ -271,6 +275,7 @@ func TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded(t *testing.T) {
 		V:            Value("V_fake"),
 		ValueRoot:    ValueRoot(Value("V_fake")),
 		L0Witness:    Signature{0xde, 0xad, 0xbe, 0xef},
+		L0Partial:    Signature{0xfe, 0xed},
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	op3 := s.instances[OperatorID(3)]
@@ -282,9 +287,15 @@ func TestObserveValueMsg_FakeL0WitnessSilentlyDiscarded(t *testing.T) {
 		t.Fatalf("bogus L0Witness must not enqueue validation (got %+v)", req)
 	default:
 	}
+	// Anti-framing guarantee: Rule 5 must NOT fire against the LEADER.
+	// (Post Op5, Rule 5 may fire against the EMITTER for the bogus
+	// L0Partial — that's correct behavior since L0Partial is the
+	// emitter's own signing artifact, not a forwarded leader artifact.)
 	for _, e := range op3.Evidence() {
-		require.NotEqualf(t, EvidenceFakePlaintextSigma, e.Rule,
-			"bogus L0Witness in peer KindValue must NOT fire Rule 5 (framing-attack guard)")
+		if e.Rule == EvidenceFakePlaintextSigma {
+			require.NotEqualf(t, leader, e.OperatorID,
+				"bogus L0Witness in peer KindValue must NOT fire Rule 5 against the LEADER (framing-attack guard)")
+		}
 	}
 }
 
@@ -355,6 +366,18 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 	// leader's L0Witnesses on V_a and V_b respectively. (In reality
 	// these would be op2/op3's own Phase-2a emissions after they each
 	// retained a different bundle; we just need the wire shape.)
+	// Real σ partials from emitters (op2, op3) on their respective V's
+	// so ValidateValueMsg's L0Partial-non-empty + Op5 verify-pool logic
+	// at the receiver works. Note: with real-signing partials, Rule 5
+	// will NOT fire against op2/op3 (they actually signed). The test
+	// asserts Rule 2 fires (leader equivocation) and Rule 5 does NOT
+	// fire (anti-framing guarantee on L0Witness verify failure path is
+	// preserved — leader equivocation is via the L0Witnesses, but the
+	// L0Witness verifies because the byz leader DID sign both).
+	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V_a"))
+	require.NoError(s.t, err)
+	op3Sig, err := s.instances[OperatorID(3)].signer.SignPartial(Value("V_b"))
+	require.NoError(s.t, err)
 	vmA := &ValueMsg{
 		ClusterID:    s.cfg.ClusterID,
 		OperatorID:   2,
@@ -362,6 +385,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
 		L0Witness:    bA.L0Witness,
+		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	vmB := &ValueMsg{
@@ -371,6 +395,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
 		L0Witness:    bB.L0Witness,
+		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	op4 := s.instances[OperatorID(4)]
@@ -378,19 +403,19 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 	require.NoError(t, op4.ObserveValueMsg(vmB))
 	require.Len(t, op4.RetainedBundles(0, leader), 2,
 		"two distinct harvests should grow retention to 2")
-	var foundRule2, foundRule5 bool
+	var foundRule2, foundRule5OnLeader bool
 	for _, e := range op4.Evidence() {
 		if e.Rule == EvidenceLeaderEquivocation {
 			foundRule2 = true
 		}
-		if e.Rule == EvidenceFakePlaintextSigma {
-			foundRule5 = true
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == leader {
+			foundRule5OnLeader = true
 		}
 	}
 	require.True(t, foundRule2,
 		"Op11: harvest of second distinct V must fire Rule 2 (leader equivocation)")
-	require.False(t, foundRule5,
-		"Op11: harvest path must NOT fire Rule 5 (anti-framing guarantee)")
+	require.False(t, foundRule5OnLeader,
+		"Op11: harvest path must NOT fire Rule 5 against the leader (anti-framing guarantee)")
 }
 
 // TestObserveValueMsg_HarvestThenDirectConvergesToSameState verifies the
@@ -407,6 +432,8 @@ func TestObserveValueMsg_HarvestThenDirectConvergesToSameState(t *testing.T) {
 	require.NoError(t, err)
 	// Craft op2's KindValue forwarding the same L0Witness (as op2 would
 	// have done after retaining the bundle).
+	op2Sig, err := s.instances[OperatorID(2)].signer.SignPartial(Value("V0"))
+	require.NoError(t, err)
 	vm := &ValueMsg{
 		ClusterID:    s.cfg.ClusterID,
 		OperatorID:   2,
@@ -414,6 +441,7 @@ func TestObserveValueMsg_HarvestThenDirectConvergesToSameState(t *testing.T) {
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
 		L0Witness:    b.L0Witness,
+		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	// Path A: harvest-then-direct at op3.
@@ -451,6 +479,8 @@ func TestObserveValueMsg_HarvestAtRetentionCapSilentDrop(t *testing.T) {
 	beforeEvidence := len(op4.Evidence())
 	// Now craft a peer KindValue with a third distinct V.
 	bC := s.buildByzEquivocatingBundle(leader, 0, Value("V_c"))
+	op3Sig, err := s.instances[OperatorID(3)].signer.SignPartial(Value("V_c"))
+	require.NoError(t, err)
 	vmC := &ValueMsg{
 		ClusterID:    s.cfg.ClusterID,
 		OperatorID:   3,
@@ -458,12 +488,17 @@ func TestObserveValueMsg_HarvestAtRetentionCapSilentDrop(t *testing.T) {
 		V:            Value("V_c"),
 		ValueRoot:    ValueRoot(Value("V_c")),
 		L0Witness:    bC.L0Witness,
+		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op4.ObserveValueMsg(vmC))
 	require.Len(t, op4.RetainedBundles(0, leader), 2,
 		"harvest at retention cap must silent-drop (no third distinct V retained)")
-	// No NEW evidence should fire on the silently-dropped harvest.
-	require.Equal(t, beforeEvidence, len(op4.Evidence()),
+	// No NEW evidence should fire on the silently-dropped harvest. (The
+	// L0Partial verify+pool still runs for the emitter — op 3 — but
+	// that's a separate path that doesn't add EVIDENCE; the assertion
+	// is that no NEW Rule-firing fires from the harvest itself.)
+	gotEvidence := op4.Evidence()
+	require.Equal(t, beforeEvidence, len(gotEvidence),
 		"silently-dropped harvest must not add new evidence")
 }

@@ -18,10 +18,17 @@ const (
 	// the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md
 	// §Healthy-path optimizations / Op3). Wire-incompatible with V1.
 	Phase1BundleVersionV2 byte = 0x02
-	// ValueMsgVersionV2 adds the forwarded leader L0Witness field per Op11
-	// of the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md
-	// §Healthy-path optimizations / Op11). Wire-incompatible with V1.
-	ValueMsgVersionV2    byte = 0x02
+	// ValueMsgVersionV3 adds the emitter's own σ partial on V at L_0
+	// (L0Partial) per Op5 of the healthy-path optimization (see
+	// docs/2abOBFT-REDESIGN-PLAN.md §Healthy-path optimizations / Op5).
+	// KindValue under V3 is the terminal σ-side emission at L_0 — the
+	// pre-Op5 KindCommit-Signed wire kind no longer exists. Wire-
+	// incompatible with V2 (which had no L0Partial) and V1 (no L0Witness
+	// or L0Partial). Bundles both Op11's L0Witness (forwarded leader
+	// witness, byte-for-byte from the Phase-1 bundle) and Op5's
+	// L0Partial (the emitter's own σ partial signed at KindValue emit
+	// time).
+	ValueMsgVersionV3    byte = 0x03
 	NoValueMsgVersionV1  byte = 0x01
 	CommitVersionV1      byte = 0x01
 	CertificateVersionV1 byte = 0x01
@@ -170,7 +177,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 
 // EncodeValueMsg serializes a Phase-2a ValueMsg envelope.
 //
-// Format (version 0x02 — adds L0Witness post Op11):
+// Format (version 0x03 — adds L0Partial post Op5):
 //
 //	[1]  version
 //	[16] ProtocolTag
@@ -183,6 +190,8 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 //	[32] ValueRoot
 //	[4]  L0Witness length
 //	[L0Witness bytes]
+//	[4]  L0Partial length
+//	[L0Partial bytes]
 //	[LayerEntries block — see encodeLayerEntries]
 func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if v == nil {
@@ -194,12 +203,15 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if len(v.L0Witness) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: ValueMsg L0Witness too long (%d)", len(v.L0Witness))
 	}
+	if len(v.L0Partial) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: ValueMsg L0Partial too long (%d)", len(v.L0Partial))
+	}
 	if err := preflightLayerEntries(v.LayerEntries, "ValueMsg"); err != nil {
 		return nil, err
 	}
 
-	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4+len(v.L0Witness)+4)
-	out = append(out, ValueMsgVersionV2)
+	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4+len(v.L0Witness)+4+len(v.L0Partial)+4)
+	out = append(out, ValueMsgVersionV3)
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindValueMsg)
 	out = append(out, v.ClusterID[:]...)
@@ -210,6 +222,8 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	out = append(out, v.ValueRoot[:]...)
 	out = appendUint32(out, uint32(len(v.L0Witness))) //nolint:gosec // bounds-checked
 	out = append(out, v.L0Witness...)
+	out = appendUint32(out, uint32(len(v.L0Partial))) //nolint:gosec // bounds-checked
+	out = append(out, v.L0Partial...)
 	out = encodeLayerEntries(out, v.LayerEntries)
 	return out, nil
 }
@@ -217,7 +231,7 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 // DecodeValueMsg parses bytes produced by EncodeValueMsg.
 func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	r := newReader(data)
-	if err := readVersion(r, ValueMsgVersionV2, "ValueMsg"); err != nil {
+	if err := readVersion(r, ValueMsgVersionV3, "ValueMsg"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
@@ -250,6 +264,10 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	if err != nil {
 		return nil, err
 	}
+	partial, err := r.readLengthPrefixed("ValueMsg L0Partial")
+	if err != nil {
+		return nil, err
+	}
 	entries, err := decodeLayerEntries(r, "ValueMsg")
 	if err != nil {
 		return nil, err
@@ -264,6 +282,7 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 		V:            twoab.Value(v),
 		ValueRoot:    valueRoot,
 		L0Witness:    twoab.Signature(witness),
+		L0Partial:    twoab.Signature(partial),
 		LayerEntries: entries,
 	}, nil
 }
@@ -420,10 +439,13 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 	}
 	side := twoab.CommitSide(sideByte)
 	switch side {
-	case twoab.CommitSideSigned, twoab.CommitSideNR, twoab.CommitSideNRDirect:
-		// valid
+	case twoab.CommitSideNR, twoab.CommitSideNRDirect:
+		// valid post Op5
 	default:
-		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid", sideByte)
+		// 0x01 was the pre-Op5 CommitSideSigned; deliberately rejected
+		// here to make wire-version drift visible. ValidateCommit at the
+		// Instance layer also rejects it.
+		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid (post Op5; 0x01 Signed removed)", sideByte)
 	}
 	l0Value, err := r.readLengthPrefixed("Commit L0Value")
 	if err != nil {

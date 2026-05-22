@@ -11,19 +11,21 @@ import (
 // verification CPU cost differs across modes, not wire size.
 //
 // Per docs/2abOBFT.md §Phase 1 / §Phase 2a / §Phase 2b / §Final-certificate
-// gossip wire formats:
+// gossip wire formats (post Op3 + Op5 + Op11):
 //
 //	Phase1Bundle:  ClusterID(32) + OperatorID(8) + Height(8) + Layer(4) +
-//	               Value(|V|)
+//	               Value(|V|) + L0Witness(BLS sig) [Op3 — leader's σ partial on V]
 //	ValueMsg:      ClusterID(32) + OperatorID(8) + Height(8) +
 //	               Value(|V|) + ValueRoot(32) +
+//	               L0Witness(BLS sig) [Op11 — leader witness forwarded] +
+//	               L0Partial(BLS sig) [Op5 — emitter's own σ partial] +
 //	               K-1 LayerEntries × (Layer(4) + Kind(1) +
 //	                                   V(|V_k| if σ-chained, else 0) +
 //	                                   Payload(BLS sig or chained IBE ct))
 //	NoValueMsg:    ClusterID(32) + OperatorID(8) + Height(8) +
 //	               K-1 LayerEntries × (as above)
 //	Commit:        ClusterID(32) + OperatorID(8) + Height(8) + Side(1) +
-//	               L0Value(|V| or 0) + L0Partial(BLS sig) +
+//	               L0Value(|V| or 0; post Op5 always 0) + L0Partial(BLS sig) +
 //	               LayerEntries × (only when Side=NRDirect)
 //	Certificate:   ClusterID(32) + Height(8) + Value(|V|) + Signature(BLS sig)
 //
@@ -43,7 +45,7 @@ const (
 
 func phase1BundleSize(b *twoab.Phase1Bundle) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes + layerBytes +
-		int64(len(b.Value))
+		int64(len(b.Value)) + int64(len(b.L0Witness))
 }
 
 func layerEntriesSize(entries []twoab.LayerEntry) int64 {
@@ -59,6 +61,8 @@ func layerEntriesSize(entries []twoab.LayerEntry) int64 {
 func valueMsgSize(v *twoab.ValueMsg) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes +
 		int64(len(v.V)) + valueRootBytes +
+		int64(len(v.L0Witness)) + // Op11 forwarded leader witness
+		int64(len(v.L0Partial)) + // Op5 emitter's own σ partial
 		layerEntriesSize(v.LayerEntries)
 }
 

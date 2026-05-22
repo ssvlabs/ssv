@@ -27,16 +27,18 @@ func TestLayerEntryKind_String(t *testing.T) {
 }
 
 func TestCommitSide_String(t *testing.T) {
-	require.Equal(t, "signed", CommitSideSigned.String())
 	require.Equal(t, "nr", CommitSideNR.String())
 	require.Equal(t, "nr-direct", CommitSideNRDirect.String())
 	require.Equal(t, "unspecified", CommitSideUnspecified.String())
+	// Post Op5: the 0x01 value (formerly Signed) no longer has a name —
+	// String() returns "unspecified" for any unrecognized value.
+	require.Equal(t, "unspecified", CommitSide(0x01).String())
 }
 
 func TestCommitSide_IsNR(t *testing.T) {
-	require.False(t, CommitSideSigned.IsNR())
 	require.True(t, CommitSideNR.IsNR())
 	require.True(t, CommitSideNRDirect.IsNR())
+	require.False(t, CommitSideUnspecified.IsNR())
 }
 
 func TestValueMsgContentHash_IdenticalProducesSameHash(t *testing.T) {
@@ -72,13 +74,19 @@ func TestNoValueMsgContentHash_IdenticalProducesSameHash(t *testing.T) {
 }
 
 func TestCommitContentHash_DistinguishesBySide(t *testing.T) {
-	cA := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideSigned, L0Value: Value("V"), L0Partial: Signature("p")}
-	cB := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("p")}
+	// Post Op5: only NR and NRDirect are valid sides. The two carry
+	// different LayerEntries shapes (NR is empty; NRDirect has K-1
+	// entries), so distinct hashes regardless of partial bytes.
+	cA := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("p")}
+	cB := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNRDirect, L0Partial: Signature("p")}
 	require.NotEqual(t, commitContentHash(cA), commitContentHash(cB))
 }
 
-func TestCommitContentHash_DistinguishesByL0Value(t *testing.T) {
-	cA := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideSigned, L0Value: Value("A"), L0Partial: Signature("p")}
-	cB := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideSigned, L0Value: Value("B"), L0Partial: Signature("p")}
+func TestCommitContentHash_DistinguishesByL0Partial(t *testing.T) {
+	// Post Op5: L0Value is unused on all commits. Distinct commits
+	// differ on L0Partial bytes (e.g., distinct NR partials from same op
+	// across re-broadcast — content-hash must capture this for dedup).
+	cA := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("pA")}
+	cB := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("pB")}
 	require.NotEqual(t, commitContentHash(cA), commitContentHash(cB))
 }

@@ -13,11 +13,12 @@ import (
 //     for the next layer; walk advances.
 //   - Neither reaches → walk terminates without an output (slot misses).
 //
-// At layer 0, σ partials are plaintext in KindCommit-Signed messages. At
-// layers k > 0, σ partials are chained-encrypted inside Phase-2a emissions
-// (ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries with Kind=SigmaChained);
-// the accumulated NR-quorum aggregates from prior layers serve as
-// decryption keys (outermost-first).
+// At layer 0, σ partials are plaintext in KindValue.L0Partial (post Op5)
+// and the leader's L0Witness in retained Phase-1 bundles (Op3). At layers
+// k > 0, σ partials are chained-encrypted inside Phase-2a emissions
+// (ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries with
+// Kind=SigmaChained); the accumulated NR-quorum aggregates from prior
+// layers serve as decryption keys (outermost-first).
 //
 // Returns:
 //   - (*Output, nil) — σ-quorum reached at some layer.
@@ -245,20 +246,34 @@ func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 // Used by tryReconstructLayer to populate sigGroup.value from sigmaPool
 // entries (which key by vRoot, not V bytes).
 //
-// At L_0: V comes from ownCommit (Side=Signed) or any peerCommit
-// (Side=Signed) matching the root.
+// At L_0 (post Op5): V comes from ownValueMsg or any peerValueMsg
+// matching the root (KindValue is the σ-side terminal emission carrying
+// the σ partial directly). Also from any retainedBundle at L_0 — the
+// leader's bundle preserves V even if no peer KindValue carrying that
+// V has arrived yet (e.g., harvest-only state where σ-pool was seeded
+// from peer L0Witness alone).
 //
 // At L_k>0: V comes from any peer SigmaChained LayerEntry at this layer
 // matching the root.
 func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
 	if layer == 0 {
-		if i.ownCommit != nil && i.ownCommit.Side == CommitSideSigned &&
-			ValueRoot(i.ownCommit.L0Value) == vRoot {
-			return i.ownCommit.L0Value, true
+		if i.ownValueMsg != nil && ValueRoot(i.ownValueMsg.V) == vRoot {
+			return i.ownValueMsg.V, true
 		}
-		for _, c := range i.peerCommit {
-			if c.Side == CommitSideSigned && ValueRoot(c.L0Value) == vRoot {
-				return c.L0Value, true
+		for _, vm := range i.peerValueMsg {
+			if ValueRoot(vm.V) == vRoot {
+				return vm.V, true
+			}
+		}
+		// Fall back to retained bundles — the leader's bundle preserves
+		// V even when no KindValue carrying it has been observed yet
+		// (e.g., σ-pool was seeded purely from the leader's L0Witness
+		// via Phase-1 bundle observation, before any KindValue arrived).
+		for _, retained := range i.retainedBundles[0] {
+			for _, r := range retained {
+				if ValueRoot(r.Bundle.Value) == vRoot {
+					return r.Bundle.Value, true
+				}
 			}
 		}
 		return nil, false

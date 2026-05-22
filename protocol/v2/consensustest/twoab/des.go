@@ -201,22 +201,24 @@ func (s *sim) start() error {
 	// 2abOBFT there is no RoundEndOffset() — Phase 2b is dynamic and the
 	// only hard wall is the runner-level RelayCutoff. The adapter
 	// schedules a final Resolve sweep AFTER the typical Phase-2b
-	// settle window:
+	// settle window.
 	//
-	//   Phase 2a fires at TPhase2a → ValueMsg arrivals at TPhase2a + BTT
-	//   → cascade Commit emissions at TPhase2a + BTT → Commit arrivals
-	//   at TPhase2a + 2·BTT. The Resolve sweep needs to land AFTER the
-	//   2·BTT settle window for the schedule-anchored backstop to see
-	//   the cluster's commit pool. ε_3 buffer matches OBFT's RoundEndOffset
-	//   semantic (T_commit + Δ_2 + ε_3).
+	// Post Op5 the L_0 σ-side cascade collapses from 2 hops to 1 hop
+	// (KindValue carries σ partial directly). However, the L_0 NR-side
+	// cascade for fall-through-to-L_1 is STILL 2 hops (KindNoValue →
+	// KindCommit-NR → peer arrival → aggregate). The 2·BTT budget here
+	// covers the worst-case cascade across both paths; σ-quorum-at-L_0
+	// scenarios just decide earlier than the resolveDeadline and the
+	// cluster reports the earlier vQuorumAt via opportunistic Resolve.
+	// See [adapter.go](adapter.go) Run() for the matching reservation
+	// rationale.
 	//
-	// SafetyBuffer extends the cascade-window structurally — when set,
-	// the scheduled Resolve waits SafetyBuffer extra wall-clock for
-	// late peer ValueMsg / Commit-Signed arrivals (per Config.
-	// SafetyBuffer's cascade-window-not-B_0 semantics). The TPhase2a
-	// shift in the adapter compensates so the wall-clock Resolve time
-	// stays at RelayCutoff − HeaderSubmit − phase3JitterBuffer (the
-	// maxDeadline clamp below).
+	// SafetyBuffer extends the absorption budget for σ-pool fill via
+	// gossipsub IHAVE/IWANT recovery when initial KindValue eager-push
+	// doesn't reach all honest peers (closer to OBFT's RefloodDelay
+	// semantic post Op5). The TPhase2a shift in the adapter compensates
+	// so the wall-clock Resolve time stays at RelayCutoff − HeaderSubmit
+	// − phase3JitterBuffer (the maxDeadline clamp below).
 	s.resolveDeadline = s.cfg.TPhase2a + 2*s.cfg.BTT + s.cfg.SafetyBuffer + s.cfg.Epsilon3
 	// Clamp to before the runner-level deadline so the resolve still
 	// has time to broadcast a cert and have it land before

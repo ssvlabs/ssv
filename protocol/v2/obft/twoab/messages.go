@@ -91,38 +91,44 @@ type LayerEntry struct {
 }
 
 // CommitSide discriminates the L_0 direction of a Phase-2b Commit emission.
-// Phase 2a emissions (ValueMsg / NoValueMsg) carry no L_0 partial — they
-// are op-identity-signed coordination only. Commit at Phase 2b carries the
-// L_0 threshold partial in one of three sides:
+// Phase 2a emissions: ValueMsg carries the emitter's σ partial directly at
+// L_0 (post Op5 — see ValueMsg.L0Partial); NoValueMsg carries no L_0
+// partial. Commit at Phase 2b carries only the NR-direction partial in one
+// of two sides:
 //
-//   - CommitSideSigned: σ-direction at L_0. Carries plaintext σ partial on
-//     V_0 (the L0Partial field) plus the L0Value (the V_0 being signed).
 //   - CommitSideNR: NR-direction at L_0 (Phase-2b emission). Carries the
 //     plaintext nr_tag_0 IBE partial in L0Partial; L0Value is empty.
-//   - CommitSideNRDirect: NR-direction at L_0 (Phase-2a emission, equivocation
-//     observed). Same wire shape as CommitSideNR for L_0, but additionally
-//     carries the full K-1 LayerEntries set (since the op skips ValueMsg /
-//     NoValueMsg entirely and the L_k>0 entries must travel with this
-//     emission to reach Phase-3 reconstruction).
+//     Emitted after a prior KindNoValue when the NR-eligibility trigger
+//     fires (per A5 authorized pair).
+//   - CommitSideNRDirect: NR-direction at L_0 (Phase-2a emission,
+//     equivocation observed pre-emission). Same L_0 shape as CommitSideNR,
+//     but additionally carries the K-1 LayerEntries since the op skips
+//     ValueMsg/NoValueMsg entirely (per A8 authorized pair).
 //
-// CommitSideSigned and CommitSideNR emissions at Phase 2b reference the op's
-// earlier ValueMsg / NoValueMsg for the L_k>0 partials (already on the
-// wire from Phase 2a). CommitSideNRDirect carries its own L_k>0 entries.
+// Post Op5 the wire kind set has no "Signed" side — KindValue itself IS
+// the σ-side terminal emission at L_0. The pre-Op5 CommitSideSigned
+// constant was removed; receivers MUST reject any commit with that
+// historical value at validation time.
+//
+// CommitSideNR at Phase 2b references the op's earlier KindNoValue for
+// the L_k>0 entries (already on the wire). CommitSideNRDirect carries its
+// own L_k>0 entries.
 type CommitSide byte
 
 const (
 	// CommitSideUnspecified is the zero value; never valid on the wire.
 	CommitSideUnspecified CommitSide = 0x00
-	CommitSideSigned      CommitSide = 0x01
-	CommitSideNR          CommitSide = 0x02
-	CommitSideNRDirect    CommitSide = 0x03
+	// 0x01 was the pre-Op5 CommitSideSigned constant. Removed: KindValue
+	// now carries the σ partial directly. Decoders MUST reject this value
+	// to surface cluster-wide wire-version drift loudly. Reservation
+	// preserved (do not reuse 0x01 for a new constant).
+	CommitSideNR       CommitSide = 0x02
+	CommitSideNRDirect CommitSide = 0x03
 )
 
 // String returns a human-readable label for telemetry/logging.
 func (s CommitSide) String() string {
 	switch s {
-	case CommitSideSigned:
-		return "signed"
 	case CommitSideNR:
 		return "nr"
 	case CommitSideNRDirect:
@@ -133,7 +139,8 @@ func (s CommitSide) String() string {
 }
 
 // IsNR reports whether the commit side is NR-direction (either Phase-2b NR
-// or Phase-2a NRDirect). σ-XOR-NR per layer at L_0.
+// or Phase-2a NRDirect). Post Op5, all valid Commit sides ARE NR-direction
+// — but the method is kept for call-site clarity vs IsNRDirect.
 func (s CommitSide) IsNR() bool {
 	return s == CommitSideNR || s == CommitSideNRDirect
 }
@@ -178,21 +185,22 @@ type Phase1Bundle struct {
 	L0Witness Signature
 }
 
-// ValueMsg is the Phase-2a coordination envelope for an operator who has
-// V_0 retained AND host re-validates V_0 as valid at the Phase-2a fire-
-// instant. Carries V_0 (fulltext) plus K-1 LayerEntries for the deeper
-// layers.
+// ValueMsg is the σ-direction Phase-2 emission at L_0. Post Op5, it is
+// the TERMINAL σ-side emission at L_0 — KindValue itself carries the
+// emitter's plaintext σ partial on V (the L0Partial field). The pre-Op5
+// two-hop cascade `KindValue → KindCommit-Signed` collapses to a single
+// hop: receivers observing KindValue immediately verify+pool the σ
+// partial into σ-pool[V_0_root], and the cluster reaches σ-quorum in 1·BTT
+// post-emission instead of 2·BTT.
 //
-// Per spec §Phase 2a: ValueMsg envelopes are op-identity-signed at the
-// wire layer (NOT threshold partials at L_0 — they only carry a
-// σ-direction-claim at L_0). They contribute to value_pool[V_0] in
-// receivers' views; receivers use the inference rules in §Pool aggregation
-// rules to combine ValueMsg / NoValueMsg / Commit observations into the
-// cluster-wide pool view.
-//
-// A ValueMsg emission also doubles as the upgrade path A1: a NoValueMsg-
-// path op who later receives V_0 + host valid emits a ValueMsg envelope
-// with the same wire shape (per spec §Authorized Phase-2 emission pairs A1).
+// Emission paths:
+//   - Phase-2a fire-time (V retained + host valid at TPhase2a) → KindValue
+//     emitted directly with σ partial signed at emit time. EKM acquires
+//     σ-lock at L_0 on V at this moment (was at Phase-2b Commit-Signed
+//     pre-Op5).
+//   - A1 upgrade path (NoValueMsg-path op later receives V + host valid)
+//     → emit upgrade KindValue with same wire shape. The upgrade KindValue
+//     IS the σ-commit; there is no follow-up Commit-Signed under Op5.
 //
 // **V_0 binding to leader (post Op11)**: the L0Witness field carries the
 // L_0 leader's σ partial on V, byte-for-byte forwarded from the Phase-1
@@ -201,14 +209,19 @@ type Phase1Bundle struct {
 // receiver had observed the leader's Phase-1 bundle directly (closing the
 // v4 first-pass §Implementation deviation #2 and enabling peer-reflood-V
 // as the HV1SelectiveDelivery recovery vector). On verify failure, the
-// witness and the emitter's V-claim-into-retention are silently dropped —
-// the emitter's V-claim still enters value_pool[V_0_root] (existing claim-
-// pool semantics; byz claims can't push past qV without honest backing),
-// but no σ-pool seeding and no Rule 5 firing (anti-leader-framing: a byz
-// emitter could otherwise spoof an honest leader by emitting bogus
-// L0Witness bytes). The leader-signed-garbage attack stays covered by Op3
-// in ObservePhase1Bundle, where the bundle's outer envelope binds the
-// bytes to the leader.
+// witness and the emitter's V-claim-into-retention are silently dropped
+// (anti-leader-framing — emitter's envelope doesn't cryptographically
+// attribute the bytes to the leader, so Rule 5 against the leader would
+// be unsound). The leader-signed-garbage attack stays covered by Op3 in
+// ObservePhase1Bundle, where the bundle's outer envelope binds the bytes
+// to the leader.
+//
+// **L0Partial verify failure (post Op5)** fires Rule 5 against the
+// EMITTER (not the leader): the L0Partial is the emitter's OWN signing
+// artifact, verifiable against pubKeyShares[v.OperatorID] on v.V. A
+// failed verify is unambiguous emitter misbehavior — by BLS-share
+// unforgeability the emitter either presented random bytes or
+// deliberately signed garbage. No framing-attack symmetry with L0Witness.
 type ValueMsg struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
@@ -230,6 +243,20 @@ type ValueMsg struct {
 	// advantage: the harvest fails verify, no pool/retention update happens;
 	// the bogus claim is wire noise.
 	L0Witness Signature
+	// L0Partial is the emitter's own σ partial on V at L_0 (BLS threshold
+	// share signature, verifiable against pubKeyShares[OperatorID] on V).
+	// Required and non-empty post Op5. Receivers verify on observation
+	// and pool into σ-pool[L_0][ValueRoot(V)][emitter] on success; verify
+	// failure fires Rule 5 (fake plaintext σ) against the emitter (NOT
+	// the leader — see L0Witness vs L0Partial attribution distinction in
+	// the type-level docstring above).
+	//
+	// EKM lock at L_0 is acquired when L0Partial is signed (at KindValue
+	// emit time). This is ~1·BTT earlier in the slot than the v4 lock-
+	// acquisition point (Phase-2b Commit-Signed). The structural cost is
+	// loss of the A3/A4 pivot — an op who emits KindValue with σ partial
+	// cannot pivot to KindCommit-NR mid-slot. See plan §Op5.
+	L0Partial Signature
 	// LayerEntries carries the operator's L_1..L_{K-1} per-layer
 	// commitments. Length K-1; index 0 → layer 1, ..., index K-2 → layer K-1.
 	// Each entry is one of {Empty, SigmaChained, NRPlaintext}.
@@ -251,47 +278,48 @@ type NoValueMsg struct {
 	LayerEntries []LayerEntry
 }
 
-// Commit is the Phase-2b binding envelope. Each operator emits at most one
-// Commit per (slot) — the Side flag distinguishes the L_0 σ vs NR direction;
-// at L_k>0 the per-layer commitment is already on the wire from Phase 2a
-// (in ValueMsg/NoValueMsg/Commit-NRDirect LayerEntries).
+// Commit is the Phase-2b binding envelope. Post Op5, Commit is NR-side
+// only — KindValue carries the σ partial directly at Phase 2a, so
+// Commit-Signed no longer exists. Each operator emits at most one Commit
+// per (slot); at L_k>0 the per-layer commitment is already on the wire
+// from Phase 2a (in ValueMsg/NoValueMsg/Commit-NRDirect LayerEntries).
 //
-// Per spec §Wire format:
+// Per spec §Wire format (post Op5):
 //
-//   - Side=Signed: plaintext σ partial on V_0 at L_0. L0Value carries V_0;
-//     L0Partial carries the σ partial. LayerEntries is empty (Phase 2a
-//     emission carried the L_k>0 σ-chained entries).
 //   - Side=NR: plaintext nr_tag_0 IBE partial at L_0. L0Value is empty;
 //     L0Partial carries the partial. LayerEntries is empty (Phase 2a
 //     emission carried the L_k>0 entries; this is a Phase-2b NR commit
-//     following an earlier ValueMsg or NoValueMsg from the same op).
-//   - Side=NRDirect: same L_0 shape as NR (nr_tag_0 partial in L0Partial),
-//     but additionally carries the K-1 LayerEntries since the operator
-//     skipped ValueMsg/NoValueMsg at Phase 2a (equivocation observed).
-//     This is the only Commit kind that carries LayerEntries.
+//     following an earlier KindNoValue per A5).
+//   - Side=NRDirect: same L_0 shape as NR, but additionally carries the
+//     K-1 LayerEntries since the operator skipped ValueMsg/NoValueMsg at
+//     Phase 2a (equivocation observed pre-emission, per A8). This is the
+//     only Commit kind that carries LayerEntries.
 //
 // EKM enforces single-σ-V at L_0 (only one V can have σ partials cluster-
 // wide per Pigeonhole 2) and σ-XOR-NR per (slot, layer) at the V-share /
-// IBE-share level. A bug that requested σ-then-NR at the same layer is
-// caught by transitionToSigma / transitionToNR in the Instance before any
-// wire bytes leave the build path.
+// IBE-share level. Post Op5 the σ-lock is acquired at KindValue emit time
+// (was at Commit-Signed pre-Op5); a bug that requested σ-then-NR or
+// NR-then-σ at the same layer is caught by transitionToSigma /
+// transitionToNR in the Instance before any wire bytes leave the build
+// path.
 type Commit struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
 	Height     Height
-	// Side discriminates the L_0 commitment shape.
+	// Side discriminates the L_0 commitment shape. Post Op5, valid values
+	// are NR / NRDirect only — Signed is removed.
 	Side CommitSide
-	// L0Value is the V_0 being σ-signed (Side=Signed only); empty for
-	// NR / NRDirect.
+	// L0Value is unused post Op5 — always empty. (Pre-Op5 it carried the
+	// V being σ-signed in Side=Signed commits, which no longer exist.)
+	// Validation rejects non-empty L0Value on any Commit.
 	L0Value Value
-	// L0Partial is the L_0 threshold partial:
-	//   - Side=Signed: plaintext σ partial on L0Value
-	//   - Side=NR / NRDirect: plaintext nr_tag_0 IBE partial
+	// L0Partial is the L_0 nr_tag_0 IBE partial (for both Side=NR and
+	// Side=NRDirect).
 	L0Partial Signature
 	// LayerEntries carries L_1..L_{K-1} per-layer commitments. Populated
 	// only for Side=NRDirect (Phase-2a NR-direct emitter who skipped
-	// ValueMsg/NoValueMsg); empty for Side=Signed and Side=NR (those
-	// reference the op's earlier Phase-2a emission for L_k>0 entries).
+	// ValueMsg/NoValueMsg); empty for Side=NR (which references the op's
+	// earlier KindNoValue for L_k>0 entries).
 	LayerEntries []LayerEntry
 }
 
@@ -329,14 +357,15 @@ func ValueRoot(v Value) [32]byte {
 // by ObserveValue to dedup identical re-broadcasts vs flag distinct second
 // emissions (Phase-2 equivocation evidence).
 //
-// L0Witness is intentionally NOT in the hash: Rule 6a is V-level
-// equivocation (cross-V claims from same op), not witness-level. A byz
-// emitter who sends `{V_a, real_witness}` then `{V_a, fake_witness}` is
-// just wire noise (different witness bytes for same V claim) — including
-// L0Witness in the hash would trip Rule 6a as a false positive. The
-// witness-level byz behavior is independently handled by the harvest path:
-// fake witnesses fail verify and silently discard; real witnesses are
-// idempotently re-pooled.
+// L0Witness and L0Partial are intentionally NOT in the hash: Rule 6a is
+// V-level equivocation (cross-V claims from same op), not partial-level.
+// A byz emitter who sends `{V_a, real_partial}` then `{V_a, fake_partial}`
+// is presenting wire noise on the same V claim — the partial-level byz
+// behavior is independently handled by ObserveValueMsg's verify paths
+// (fake L0Partial fires Rule 5 against the emitter; fake L0Witness
+// silently discards per anti-framing). Including these fields in the
+// dedup hash would trip Rule 6a as a false positive on byz partial
+// mutation across re-broadcasts.
 func valueMsgContentHash(v *ValueMsg) [32]byte {
 	h := sha256.New()
 	h.Write(v.ClusterID[:])

@@ -270,6 +270,30 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 		// pubKeyShare on V and harvest V into their own retention on
 		// success (closing the peer-reflood-V path).
 		l0Witness := append(Signature{}, retained[0].Bundle.L0Witness...)
+		// Op5: sign our own σ partial on V at L_0 and acquire the σ-side
+		// EKM lock at L_0. KindValue under V3 is the terminal σ-side
+		// emission — there is no follow-up Commit-Signed. Sequence is:
+		//   (1) Compute the partial (pure; signer may error before any
+		//       state mutation — abort with no side effects on failure).
+		//   (2) Acquire σ-lock at L_0 on V. Failure means EKM already
+		//       locked the op on a different V or on NR; should not
+		//       happen for honest fire-time semantics but enforce.
+		//   (3) Commit cache + self-pool. Both succeeded — emit.
+		// Mirrors the sign-first-then-lock ordering used in
+		// BuildPhase1Bundle for the L_0 leader's L0Witness.
+		l0Partial, cached := i.ownPartials[layer]
+		if !cached {
+			p, err := i.signer.SignPartial(v)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("twoab: sign σ at L_0 for KindValue: %w", err)
+			}
+			l0Partial = p
+		}
+		if err := i.transitionToSigma(layer, v); err != nil {
+			return nil, nil, nil, fmt.Errorf("twoab: σ-lock at L_0 for KindValue: %w", err)
+		}
+		i.ownPartials[layer] = l0Partial
+		i.addToSigmaPool(layer, root, i.ownOperatorID, l0Partial)
 		i.ownValueMsg = &ValueMsg{
 			ClusterID:    i.cfg.ClusterID,
 			OperatorID:   i.ownOperatorID,
@@ -277,16 +301,14 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 			V:            append(Value{}, v...),
 			ValueRoot:    root,
 			L0Witness:    l0Witness,
+			L0Partial:    append(Signature{}, l0Partial...),
 			LayerEntries: entries,
 		}
 		i.addToValuePool(layer, root, i.ownOperatorID)
 		i.phase2aFired = true
-		// The σ partial at L_0 will be signed at Commit-Signed emission
-		// time, not here — ValueMsg is op-id-signed coordination only.
 		// Phase 2a fire is a state delta — run the per-tick cascade so
-		// commit triggers can fire immediately if cluster σ-eligibility
-		// is already satisfied (e.g., peer Phase-2a emissions arrived
-		// before our fire-instant).
+		// downstream triggers can fire immediately if cluster pool state
+		// is already satisfied.
 		i.afterStateDelta()
 		return i.ownValueMsg, nil, nil, nil
 	case localValueStateNoValue:
@@ -401,11 +423,28 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	if !recorded || !valid {
 		return nil, ErrUpgradeNotAvailable
 	}
+	// Op5: sign σ partial on V at L_0 and acquire σ-lock. The upgrade
+	// KindValue IS the σ-side terminal emission — no follow-up Commit-
+	// Signed under Op5. Sign-first ordering matches MaybeFirePhase2a's
+	// Value-state branch (see that branch for the sequencing rationale).
+	root := ValueRoot(v)
+	l0Partial, cached := i.ownPartials[layer]
+	if !cached {
+		p, err := i.signer.SignPartial(v)
+		if err != nil {
+			return nil, fmt.Errorf("twoab: sign σ at L_0 for A1 upgrade: %w", err)
+		}
+		l0Partial = p
+	}
+	if err := i.transitionToSigma(layer, v); err != nil {
+		return nil, fmt.Errorf("twoab: σ-lock at L_0 for A1 upgrade: %w", err)
+	}
+	i.ownPartials[layer] = l0Partial
+	i.addToSigmaPool(layer, root, i.ownOperatorID, l0Partial)
 	// Build the upgrade KindValue. Per spec: identical wire shape to
 	// the Phase-2a KindValue, including the K-1 LayerEntries carried
 	// over from the prior KindNoValue. Op11: include the L0Witness from
 	// our retained bundle so harvest-via-peer-KindValue can propagate.
-	root := ValueRoot(v)
 	upgrade := &ValueMsg{
 		ClusterID:    i.cfg.ClusterID,
 		OperatorID:   i.ownOperatorID,
@@ -413,6 +452,7 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 		V:            append(Value{}, v...),
 		ValueRoot:    root,
 		L0Witness:    append(Signature{}, retained[0].Bundle.L0Witness...),
+		L0Partial:    append(Signature{}, l0Partial...),
 		LayerEntries: cloneLayerEntries(i.ownNoValueMsg.LayerEntries),
 	}
 	i.ownValueMsg = upgrade
@@ -516,8 +556,12 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 			// Identical re-broadcast — silent dedup.
 			return nil
 		}
-		// Distinct second ValueMsg → Rule 6a Phase-2 equivocation.
-		// Also Rule 3 cross-σ-V (different V_0).
+		// Distinct second ValueMsg → Rule 6a (Phase-2 equivocation). Also
+		// fires Rule 3 (cross-σ-V at L_0) when both messages carry σ
+		// partials that verify on different V's — under Op5 the σ partial
+		// is in KindValue itself, so cross-σ-V detection lives here (it
+		// was at ObserveCommit pre-Op5 when the σ partial was in
+		// KindCommit-Signed).
 		if i.recordRule6a(op) {
 			i.recordEvidence(Evidence{
 				Rule:       EvidencePhase2Equivocation,
@@ -529,21 +573,55 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 				},
 			})
 		}
+		if !bytes.Equal(existing.V, v.V) &&
+			i.verifyL0SigmaPartial(op, existing.V, existing.L0Partial) &&
+			i.verifyL0SigmaPartial(op, v.V, v.L0Partial) &&
+			i.recordRule3(op, 0) {
+			i.recordEvidence(Evidence{
+				Rule:       EvidenceCrossCommitEquivocation,
+				OperatorID: op,
+				Layer:      0,
+				CrossCommitEquivocation: &CrossCommitEquivocationEvidence{
+					ValueA:   append(Value{}, existing.V...),
+					ValueB:   append(Value{}, v.V...),
+					PartialA: append(Signature{}, existing.L0Partial...),
+					PartialB: append(Signature{}, v.L0Partial...),
+				},
+			})
+		}
 		return nil
 	}
 	// Determine the authorized-sequence interpretation of this
 	// observation relative to any prior peer emissions from op. Per spec
-	// §Receiver ordering tolerance (plan line 593): a `KindValue` +
-	// `KindNoValue` pair received in either order is interpreted as A1
-	// (upgrade). A `KindValue` + `KindCommit-{Signed,NR}` pair is
-	// interpreted as A2/A3/A4 (authorized). Only the post-NRDirect case
-	// is unambiguously slashable here (A8 is sole-emission per spec).
+	// §Receiver ordering tolerance (post Op5): a KindValue + KindNoValue
+	// pair received in either order is interpreted as A1 (upgrade). Any
+	// KindValue paired with a KindCommit (NR or NRDirect) is slashable
+	// post Op5 — KindValue's σ partial conflicts with the Commit's NR
+	// partial under EKM σ-XOR-NR. Reorder ambiguity (Commit-first vs
+	// KindValue-first) doesn't change the outcome; the cross-signing /
+	// sequence-violation evidence fires in either order.
 	hadNoValue := i.peerNoValueMsg[op] != nil
 	hadCommit := i.peerCommit[op]
 	const layer = 0
-	if hadCommit != nil && hadCommit.Side == CommitSideNRDirect {
-		// Post-NRDirect observation of any other emission from same op
-		// is unambiguously slashable (A8 forbids further emissions).
+	if hadCommit != nil {
+		// Post-Op5: any prior Commit means the op already chose NR-side
+		// at L_0. This KindValue (σ-side) is a cross-σ-NR violation.
+		// Rule 1 fires on cryptographic verify; Rule 6a fires on the
+		// sequence violation regardless.
+		if i.verifyL0SigmaPartial(op, v.V, v.L0Partial) &&
+			i.verifyNRTagPartial(op, layer, hadCommit.L0Partial) &&
+			i.recordRule1(op, layer) {
+			i.recordEvidence(Evidence{
+				Rule:       EvidenceCrossSigning,
+				OperatorID: op,
+				Layer:      layer,
+				CrossSigning: &CrossSigningEvidence{
+					SigmaPartial: append(Signature{}, v.L0Partial...),
+					SigmaValue:   append(Value{}, v.V...),
+					NRPartial:    append(Signature{}, hadCommit.L0Partial...),
+				},
+			})
+		}
 		if i.recordRule6a(op) {
 			i.recordEvidence(Evidence{
 				Rule:       EvidencePhase2Equivocation,
@@ -556,10 +634,15 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 			})
 		}
 		i.peerValueMsg[op] = deepCopyValueMsg(v)
+		// L0Partial pool / L_k entries handled below in the unified
+		// pool-update block (fall through after rule firing).
+		i.addToValuePool(layer, v.ValueRoot, op)
+		i.verifyAndPoolL0Partial(op, v)
+		i.processObservedLayerEntries(op, v.LayerEntries)
+		i.afterStateDelta()
 		return nil
 	}
-	// Fresh ValueMsg, A1 upgrade (prior NoValueMsg), or reorder of a
-	// Commit-{Signed,NR} sequence — all authorized. Pool-update.
+	// No prior Commit. Fresh ValueMsg or A1 upgrade (prior NoValueMsg).
 	if hadNoValue {
 		// A1 upgrade: move op from noValuePool[0] to valuePool[0].
 		// Per spec §Phase 2a-late upgrade, the L_k>0 entries MUST be
@@ -583,61 +666,55 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 			// prior NoValueMsg's contributions stand. L_0 move still
 			// happens (the upgrade itself is a valid L_0 claim).
 		}
-		// Additionally check cross-V against any prior KindCommit-Signed
-		// from the same op: the byz sequence
-		// `KindNoValue → KindCommit-Signed(V_b) → KindValue(V_a≠V_b)` is
-		// structurally outside A1-A8. The hadCommit branch below covers
-		// the Commit-first-then-Value reorder cross-V case; this nested
-		// check handles the three-message case where NoValue arrived
-		// first (so we take the A1 branch) but Commit-Signed had already
-		// landed.
-		if hadCommit != nil && hadCommit.Side == CommitSideSigned &&
-			!bytes.Equal(hadCommit.L0Value, v.V) {
-			if i.recordRule6a(op) {
-				i.recordEvidence(Evidence{
-					Rule:       EvidencePhase2Equivocation,
-					OperatorID: op,
-					Layer:      layer,
-					Phase2Equivocation: &Phase2EquivocationEvidence{
-						CommitA: hadCommit,
-						ValueB:  deepCopyValueMsg(v),
-					},
-				})
-			}
-		}
 		i.peerValueMsg[op] = deepCopyValueMsg(v)
 		i.removeFromNoValuePool(layer, op)
 		i.addToValuePool(layer, v.ValueRoot, op)
-	} else if hadCommit != nil && hadCommit.Side == CommitSideSigned {
-		// Reorder of A2 (KindValue → KindCommit-Signed) — Commit-Signed
-		// arrived first. Per spec §A2, the σ-eligibility commit is on
-		// the SAME V as the prior KindValue claim. If V differs between
-		// the two, that's an unauthorized cross-V sequence (V_a in
-		// KindValue, V_b in Commit-Signed).
-		if !bytes.Equal(hadCommit.L0Value, v.V) {
-			if i.recordRule6a(op) {
-				i.recordEvidence(Evidence{
-					Rule:       EvidencePhase2Equivocation,
-					OperatorID: op,
-					Layer:      layer,
-					Phase2Equivocation: &Phase2EquivocationEvidence{
-						CommitA: hadCommit,
-						ValueB:  deepCopyValueMsg(v),
-					},
-				})
-			}
-		}
-		i.peerValueMsg[op] = deepCopyValueMsg(v)
-		i.addToValuePool(layer, v.ValueRoot, op)
-		i.processObservedLayerEntries(op, v.LayerEntries)
 	} else {
 		i.peerValueMsg[op] = deepCopyValueMsg(v)
 		i.addToValuePool(layer, v.ValueRoot, op)
 		// L_k>0 entries contribute to deeper-layer pools per inference rules.
 		i.processObservedLayerEntries(op, v.LayerEntries)
 	}
+	// Post Op5: verify+pool the emitter's L0Partial into σ-pool. Done
+	// AFTER the main pool-update flow so retention/sequence-rule evidence
+	// fires first; the σ-pool seed is the cryptographic "we have an actual
+	// partial" step.
+	i.verifyAndPoolL0Partial(op, v)
 	i.afterStateDelta()
 	return nil
+}
+
+// verifyAndPoolL0Partial verifies the emitter's L0Partial against their
+// pubKeyShare on v.V and pools into σ-pool[L_0][V_root][emitter] on
+// success. On verify failure fires Rule 5 (fake plaintext σ at L_0)
+// against the emitter — the L0Partial is the emitter's OWN signing
+// artifact (verifiable against pubKeyShares[v.OperatorID]), so a failed
+// verify is unambiguous emitter misbehavior (no framing-attack symmetry
+// with L0Witness which is a forwarded leader artifact).
+func (i *Instance) verifyAndPoolL0Partial(emitter OperatorID, v *ValueMsg) {
+	if len(v.L0Partial) == 0 {
+		// Defensive: ValidateValueMsg requires non-empty L0Partial post
+		// Op5, so this branch shouldn't fire on validated input. Treat
+		// as silent skip — no Rule 5 (no claim to verify against).
+		return
+	}
+	const layer = 0
+	if i.verifyL0SigmaPartial(emitter, v.V, v.L0Partial) {
+		i.addToSigmaPool(layer, ValueRoot(v.V), emitter, v.L0Partial)
+		return
+	}
+	if i.recordRule5(emitter, layer) {
+		i.recordEvidence(Evidence{
+			Rule:       EvidenceFakePlaintextSigma,
+			OperatorID: emitter,
+			Layer:      layer,
+			FakePlaintextSigma: &FakePlaintextSigmaEvidence{
+				OnionPartial:        append(Signature{}, v.L0Partial...),
+				OnionValue:          append(Value{}, v.V...),
+				RetainedValueHashes: i.retainedL0ValueHashes(),
+			},
+		})
+	}
 }
 
 // ObserveNoValueMsg records a peer's Phase-2a NoValueMsg. Per spec
@@ -934,6 +1011,7 @@ func deepCopyValueMsg(v *ValueMsg) *ValueMsg {
 	out := *v
 	out.V = append(Value{}, v.V...)
 	out.L0Witness = append(Signature{}, v.L0Witness...)
+	out.L0Partial = append(Signature{}, v.L0Partial...)
 	out.LayerEntries = cloneLayerEntries(v.LayerEntries)
 	return &out
 }

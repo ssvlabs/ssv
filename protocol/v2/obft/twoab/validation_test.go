@@ -82,6 +82,7 @@ func TestValidateValueMsg_AcceptsHealthy(t *testing.T) {
 		V:            v,
 		ValueRoot:    ValueRoot(v),
 		L0Witness:    Signature{0x01}, // structural: any non-empty bytes pass validation
+		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, ValidateValueMsg(vm, cfg))
@@ -100,6 +101,23 @@ func TestValidateValueMsg_RejectsEmptyL0Witness(t *testing.T) {
 	}
 	require.Error(t, ValidateValueMsg(vm, cfg),
 		"Op11: ValueMsg with empty L0Witness should be rejected")
+}
+
+func TestValidateValueMsg_RejectsEmptyL0Partial(t *testing.T) {
+	cfg := healthyConfig()
+	v := Value("V0")
+	vm := &ValueMsg{
+		ClusterID:  cfg.ClusterID,
+		OperatorID: 1,
+		Height:     cfg.Height,
+		V:          v,
+		ValueRoot:  ValueRoot(v),
+		L0Witness:  Signature{0x01},
+		// L0Partial intentionally empty — Op5 requires the emitter's own σ partial.
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.Error(t, ValidateValueMsg(vm, cfg),
+		"Op5: ValueMsg with empty L0Partial should be rejected")
 }
 
 func TestValidateValueMsg_RejectsEmptyV(t *testing.T) {
@@ -152,17 +170,20 @@ func TestValidateNoValueMsg_RejectsNil(t *testing.T) {
 	require.Error(t, ValidateNoValueMsg(nil, cfg))
 }
 
-func TestValidateCommit_AcceptsSigned(t *testing.T) {
+// TestValidateCommit_RejectsSignedSidePostOp5: the pre-Op5 Side=Signed
+// value (0x01) is no longer valid. Decoders/validators reject it loudly
+// to surface cluster-wide wire-version drift.
+func TestValidateCommit_RejectsSignedSidePostOp5(t *testing.T) {
 	cfg := healthyConfig()
 	c := &Commit{
 		ClusterID:  cfg.ClusterID,
 		OperatorID: 1,
 		Height:     cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V0"),
+		Side:       CommitSide(0x01), // pre-Op5 Signed value
 		L0Partial:  Signature("partial"),
 	}
-	require.NoError(t, ValidateCommit(c, cfg))
+	require.Error(t, ValidateCommit(c, cfg),
+		"Op5: pre-Op5 CommitSideSigned (0x01) must be rejected")
 }
 
 func TestValidateCommit_AcceptsNR(t *testing.T) {
@@ -190,29 +211,11 @@ func TestValidateCommit_RejectsUnspecifiedSide(t *testing.T) {
 	require.Error(t, ValidateCommit(c, cfg))
 }
 
-func TestValidateCommit_RejectsSignedWithoutL0Value(t *testing.T) {
+func TestValidateCommit_RejectsAnyL0Value(t *testing.T) {
 	cfg := healthyConfig()
-	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideSigned, L0Partial: Signature("p")}
-	require.Error(t, ValidateCommit(c, cfg))
-}
-
-func TestValidateCommit_RejectsNRWithL0Value(t *testing.T) {
-	cfg := healthyConfig()
+	// Post Op5: L0Value is unused on all valid Commit sides. Reject
+	// non-empty L0Value to catch stragglers from pre-Op5 wire shapes.
 	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideNR, L0Value: Value("V0"), L0Partial: Signature("p")}
-	require.Error(t, ValidateCommit(c, cfg))
-}
-
-func TestValidateCommit_RejectsSignedWithLayerEntries(t *testing.T) {
-	cfg := healthyConfig()
-	c := &Commit{
-		ClusterID:    cfg.ClusterID,
-		OperatorID:   1,
-		Height:       cfg.Height,
-		Side:         CommitSideSigned,
-		L0Value:      Value("V0"),
-		L0Partial:    Signature("p"),
-		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
-	}
 	require.Error(t, ValidateCommit(c, cfg))
 }
 

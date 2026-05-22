@@ -6,19 +6,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMaybeBuildAndBroadcastCommit_SigmaEligibilityFires: cluster reaches
-// value_pool ≥ qV → σ-eligibility trigger fires → KindCommit-Signed.
-func TestMaybeBuildAndBroadcastCommit_SigmaEligibilityFires(t *testing.T) {
+// TestMaybeFirePhase2a_HealthyClusterSigmaQuorumViaKindValue: post Op5,
+// every σ-eligible op emits KindValue at Phase 2a with its own L0Partial.
+// No Phase-2b Commit follows on the σ-side (the σ-eligibility trigger
+// was removed). Cluster σ-pool[V_0] reaches qV via direct KindValue
+// observations — a 1-hop cascade vs the v4 2-hop KindValue→Commit-Signed.
+func TestMaybeFirePhase2a_HealthyClusterSigmaQuorumViaKindValue(t *testing.T) {
 	s := newSim(t, 4)
 	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
 	s.applyHostValidityAll(0, Value("V0"), true)
 	s.firePhase2aAll()
-	// After firePhase2aAll, all 4 ops should have emitted KindCommit-Signed.
+	// Every op emitted KindValue with σ partial; no σ-side Commit fires.
 	for _, op := range s.allOperators() {
-		c, ok := s.instances[op].OwnCommit()
-		require.True(t, ok, "op %d should have emitted KindCommit", op)
-		require.Equal(t, CommitSideSigned, c.Side, "op %d should be Signed side", op)
-		require.Equal(t, Value("V0"), c.L0Value)
+		vm, ok := s.instances[op].OwnValueMsg()
+		require.True(t, ok, "op %d should have emitted KindValue", op)
+		require.NotEmpty(t, vm.L0Partial, "Op5: KindValue must carry the emitter's σ partial")
+		require.Equal(t, Value("V0"), vm.V)
+		_, hadCommit := s.instances[op].OwnCommit()
+		require.False(t, hadCommit, "op %d should NOT emit Commit on σ-side under Op5", op)
+	}
+	// Each op's σ-pool[V_0] should contain qV partials via direct
+	// KindValue observation (own + peers).
+	root := ValueRoot(Value("V0"))
+	for _, op := range s.allOperators() {
+		count := len(s.instances[op].sigmaPool[0][root])
+		require.GreaterOrEqual(t, count, s.cfg.QV(),
+			"op %d σ-pool[V_0] should reach qV via direct KindValue observations", op)
 	}
 }
 
@@ -68,36 +81,41 @@ func TestMaybeBuildAndBroadcastCommit_GateBlocksSigmaEligibleNRFire(t *testing.T
 	require.False(t, ok, "op 1 (σ-eligible) should wait, not fire NR commit")
 }
 
-// TestMaybeBuildAndBroadcastCommit_EquivocationFires: non-leader op
-// observes ≥ 2 distinct V_0 from L_0 leader → equivocation trigger fires
-// → KindCommit-NR (A4 pivot if op had emitted KindValue).
+// TestEquivocationPostKindValue_NoRecoveryUnderOp5: under Op5, an op
+// that has emitted KindValue (σ-locked at L_0) cannot pivot to NR on
+// observing equivocation post-emission. The A4 pivot path is removed.
+// EKM enforces σ-XOR-NR — the op stays σ-committed to its V.
 //
-// Uses op 2 (non-leader at L_0) so the equivocation pivot is structurally
-// available — under Op3 the L_0 LEADER σ-locks at Phase-1 build time via
-// L0Witness signing and cannot pivot, but non-leader KindValue emitters
-// remain in EKM `coordination` state at L_0 until their own Phase-2b
-// emission (under the Op3-only intermediate; Op5 will close even this path).
-func TestMaybeBuildAndBroadcastCommit_EquivocationFires(t *testing.T) {
+// Pre-Op5, this scenario fired equivocation trigger → A4 NR-pivot at
+// Phase 2b. Post-Op5 the σ-lock is acquired at KindValue emit time
+// (~1·BTT earlier in slot), and equivocation observed post-emission
+// has no recovery path. Plan §Op5 line 1253; §Op6 line 1276.
+func TestEquivocationPostKindValue_NoRecoveryUnderOp5(t *testing.T) {
 	s := newSim(t, 4)
-	// Byz leader builds V_a (legit path; σ-locks the leader's instance).
 	leader := s.leaderAt(0)
 	bA, err := s.instances[leader].BuildPhase1Bundle(0, Value("V_a"))
 	require.NoError(t, err)
-	// Op 2 (non-leader) observes V_a, emits KindValue on it.
 	op2 := s.instances[OperatorID(2)]
 	require.NoError(t, op2.ObservePhase1Bundle(bA, observedEarly))
 	require.NoError(t, op2.ApplyHostValidity(0, Value("V_a"), true))
 	vm, _, _, err := op2.MaybeFirePhase2a()
 	require.NoError(t, err)
-	require.NotNil(t, vm)
-	// Now the byz leader emits a second distinct bundle on V_b
-	// (bypasses EKM σ-lock via direct signer). Op 2 observes V_b →
-	// equivocation observed at L_0 → A4 pivot to KindCommit-NR.
+	require.NotNil(t, vm, "op 2 emits KindValue σ-locked on V_a")
+	// Byz leader equivocates with V_b post-σ-lock.
 	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
 	require.NoError(t, op2.ObservePhase1Bundle(bB, observedAfterPhase2a))
-	c, ok := op2.OwnCommit()
-	require.True(t, ok)
-	require.Equal(t, CommitSideNR, c.Side)
+	// Op 2 retains both V_a and V_b (Rule 2 evidence fires) but cannot
+	// pivot — ownCommit stays nil because MaybeBuildAndBroadcastCommit
+	// gates on ownNoValueMsg != nil (KindValue-path ops are σ-locked).
+	_, hadCommit := op2.OwnCommit()
+	require.False(t, hadCommit, "Op5: post-KindValue equivocation does NOT fire NR pivot")
+	var foundRule2 bool
+	for _, e := range op2.Evidence() {
+		if e.Rule == EvidenceLeaderEquivocation {
+			foundRule2 = true
+		}
+	}
+	require.True(t, foundRule2, "Rule 2 still fires on equivocation observation (slashable signal preserved)")
 }
 
 // TestObserveValueMsg_FromPeerUpdatesValuePool.
@@ -124,12 +142,14 @@ func TestObserveValueMsg_DistinctFromSameOpFiresRule6a(t *testing.T) {
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
 		L0Witness:    Signature{0xff},
+		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	vmB := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_b"), ValueRoot: ValueRoot(Value("V_b")),
 		L0Witness:    Signature{0xff},
+		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vmA))
@@ -144,23 +164,37 @@ func TestObserveValueMsg_DistinctFromSameOpFiresRule6a(t *testing.T) {
 	require.True(t, foundRule6a, "cross-V KindValue should fire Rule 6a")
 }
 
-// TestObserveCommit_CrossSideFiresRule1.
-func TestObserveCommit_CrossSideFiresRule1(t *testing.T) {
+// TestObserveValueMsgThenCommitNR_FiresRule1: under Op5, the cross-σ-NR
+// (cross-signing) detection moves from Commit-Signed↔Commit-NR (pre-Op5)
+// to KindValue↔Commit-NR. The σ partial sits in KindValue.L0Partial; the
+// NR partial sits in Commit.L0Partial. Both must verify against their
+// respective key shares for Rule 1 to fire cryptographically. Rule 6a
+// also fires on the sequence violation (KindValue + KindCommit-NR is
+// outside the post-Op5 authorized set A1/A5/A8).
+func TestObserveValueMsgThenCommitNR_FiresRule1(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
-	// Craft Signed + NR commits from same op.
-	cSigned := &Commit{
+	// Real σ partial on V_0 signed by op 1's V-share signer.
+	sigmaPartial, err := s.instances[OperatorID(1)].signer.SignPartial(Value("V0"))
+	require.NoError(t, err)
+	// Real nr_tag_0 partial signed by op 1's IBE-share signer (= same
+	// signer under Option A).
+	nrTag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	nrPartial, err := s.instances[OperatorID(1)].tagSigner.SignPartial(nrTag)
+	require.NoError(t, err)
+	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
-		Side:      CommitSideSigned,
-		L0Value:   Value("V0"),
-		L0Partial: Signature{0x01}, // arbitrary
+		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
+		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:    sigmaPartial,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	cNR := &Commit{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		Side:      CommitSideNR,
-		L0Partial: Signature{0x02},
+		L0Partial: nrPartial,
 	}
-	require.NoError(t, op2.ObserveCommit(cSigned))
+	require.NoError(t, op2.ObserveValueMsg(vm))
 	require.NoError(t, op2.ObserveCommit(cNR))
 	var foundRule1, foundRule6a bool
 	for _, e := range op2.Evidence() {
@@ -171,8 +205,8 @@ func TestObserveCommit_CrossSideFiresRule1(t *testing.T) {
 			foundRule6a = true
 		}
 	}
-	require.True(t, foundRule1, "cross-side commit should fire Rule 1")
-	require.True(t, foundRule6a, "second distinct commit should also fire Rule 6a")
+	require.True(t, foundRule1, "KindValue σ + KindCommit-NR cross-signing should fire Rule 1")
+	require.True(t, foundRule6a, "sequence violation should fire Rule 6a")
 }
 
 // TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a.
@@ -197,6 +231,7 @@ func TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a(t *testing.T) {
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
 		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -223,6 +258,7 @@ func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) 
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
 		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:    Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -261,20 +297,21 @@ func TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a(t *test
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveNoValueMsg(nv))
-	// Prior KindCommit-Signed on V_b from same op (unauthorized
-	// "post-NoValue Commit-Signed without upgrade KindValue" — the
-	// inference layer silently accepts this since A6 might be in flight).
-	cSigned := &Commit{
+	// Post Op5: instead of a prior Commit-Signed, the post-Op5
+	// equivalent triple-message slashable sequence is
+	// `KindNoValue → KindCommit-NR → KindValue(V_a)` — the op committed
+	// NR but then σ-claims V_a in a later KindValue. The Rule 6a check
+	// in ObserveValueMsg's hadCommit branch fires on the sequence
+	// violation; Rule 1 cross-signing also fires if both partials
+	// verify.
+	cNR := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 1,
 		Height:     s.cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V_b"),
-		L0Partial:  Signature{0x01}, // unverified — Rule 5 will fire but doesn't block pool inference
+		Side:       CommitSideNR,
+		L0Partial:  Signature{0x01}, // unverified — sequence violation fires regardless
 	}
-	require.NoError(t, op2.ObserveCommit(cSigned))
-	// Now the "upgrade" KindValue arrives with V_a ≠ V_b — slashable
-	// triple-message cross-V sequence.
+	require.NoError(t, op2.ObserveCommit(cNR))
 	vm := &ValueMsg{
 		ClusterID:    s.cfg.ClusterID,
 		OperatorID:   1,
@@ -282,6 +319,7 @@ func TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a(t *test
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
 		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:    Signature{0x02}, // arbitrary
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -291,132 +329,61 @@ func TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a(t *test
 			foundRule6a = true
 		}
 	}
-	require.True(t, foundRule6a, "three-message NoValue → CommitSigned(V_b) → Value(V_a) should fire Rule 6a")
+	require.True(t, foundRule6a, "KindNoValue → KindCommit-NR → KindValue should fire Rule 6a (post Op5)")
 }
 
-// TestMaybeBuildAndBroadcastCommit_EquivocationPriorityOverSigmaEligibility:
-// when equivocation AND σ-eligibility are both eligible to fire on the
-// same state delta, equivocation wins per spec §Trigger rules priority
-// (equivocation > σ-eligibility > NR-eligibility). The op pivots from
-// KindValue → KindCommit-NR (A4 pivot), NOT to KindCommit-Signed on the
-// cluster's σ-eligible V.
-func TestMaybeBuildAndBroadcastCommit_EquivocationPriorityOverSigmaEligibility(t *testing.T) {
+// TestPhase2aFire_NRDirectOnEquivocationBeforeKindValue: under Op5, the
+// equivocation trigger fires only when the op is still in EKM
+// coordination state at L_0 — i.e., hasn't yet emitted KindValue. The
+// canonical path is Phase-2a fire-time NRDirect: an op observing ≥ 2
+// distinct V's from the leader at Phase-2a fire-time emits Commit-NRDirect
+// (per A8, sole emission for the slot). This test pins that path.
+func TestPhase2aFire_NRDirectOnEquivocationBeforeKindValue(t *testing.T) {
 	s := newSim(t, 4)
-	// Set up cluster σ-eligibility on V_a from ops 1, 2, 3 (full set).
-	s.deliverPhase1(0, Value("V_a"), s.allOperators(), observedEarly)
-	s.applyHostValidityAll(0, Value("V_a"), true)
-	// All fire KindValue.
-	for _, op := range s.allOperators() {
-		_, _, _, err := s.instances[op].MaybeFirePhase2a()
-		require.NoError(t, err)
-	}
-	vmA, _ := s.instances[OperatorID(1)].OwnValueMsg()
-	vmB, _ := s.instances[OperatorID(2)].OwnValueMsg()
-	vmC, _ := s.instances[OperatorID(3)].OwnValueMsg()
-	require.NotNil(t, vmA)
-	require.NotNil(t, vmB)
-	require.NotNil(t, vmC)
-	// At op 4: orchestrate so equivocation is observed BEFORE cluster
-	// σ-eligibility. Inject a second Phase-1 bundle from the leader on
-	// V_b (equivocation) — this fires equivocation trigger via the
-	// ObservePhase1Bundle cascade. Byz-equivocation simulation: bypass
-	// EKM σ-lock via direct signer access.
 	leader := s.leaderAt(0)
+	// Two distinct bundles retained at op 2 BEFORE Phase 2a fires.
+	bA := s.buildByzEquivocatingBundle(leader, 0, Value("V_a"))
 	bB := s.buildByzEquivocatingBundle(leader, 0, Value("V_b"))
-	require.NoError(t, s.instances[OperatorID(4)].ObservePhase1Bundle(bB, observedAfterPhase2a))
-	// Equivocation trigger fires at op 4 → A4 pivot to Commit-NR.
-	c4, ok := s.instances[OperatorID(4)].OwnCommit()
-	require.True(t, ok)
-	require.Equal(t, CommitSideNR, c4.Side, "equivocation should pivot to NR (A4)")
-	// Now deliver the rest of the peer KindValues to op 4. Cluster σ-
-	// eligibility would normally fire, but op 4 already committed NR.
-	// Verify op 4's commit is unchanged (idempotent / no re-fire).
-	for _, vm := range []*ValueMsg{vmA, vmB, vmC} {
-		require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vm))
-	}
-	c4After, _ := s.instances[OperatorID(4)].OwnCommit()
-	require.Same(t, c4, c4After, "second commit should not fire — equivocation already locked op 4 NR-side")
-}
-
-// TestObserveCommit_KindCommitSignedInfersKindValue: receivers add op
-// to valuePool[V_root] from observing KindCommit-Signed alone, even
-// without observing the prior KindValue (per spec §Pool aggregation
-// rules / Key inference — KindCommit-Signed is the only authorized
-// path to σ-direction commitment via A2/A6).
-func TestObserveCommit_KindCommitSignedInfersKindValue(t *testing.T) {
-	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
-	// Op 1's KindValue is NEVER observed by op 2; only its Commit-Signed.
-	cSigned := &Commit{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V0"),
-		L0Partial:  Signature{0x01}, // unverified — we just check pool inference
-	}
-	require.NoError(t, op2.ObserveCommit(cSigned))
-	// op 2's valuePool[V0_root] should contain op 1 via inference.
-	vRoot := ValueRoot(Value("V0"))
-	require.Equal(t, 1, op2.valuePoolSize(0, vRoot),
-		"KindCommit-Signed observation should add op to valuePool via inference (A2/A6)")
+	require.NoError(t, op2.ObservePhase1Bundle(bA, observedEarly))
+	require.NoError(t, op2.ObservePhase1Bundle(bB, observedEarly))
+	// Phase 2a fire-time decision: equivocation observed → NRDirect.
+	vm, nv, c, err := op2.MaybeFirePhase2a()
+	require.NoError(t, err)
+	require.Nil(t, vm)
+	require.Nil(t, nv)
+	require.NotNil(t, c)
+	require.Equal(t, CommitSideNRDirect, c.Side, "Phase 2a NRDirect on equivocation observed pre-emission")
 }
 
-// TestAfterStateDelta_UpgradeFiresBeforeCommit: per spec §Emission
-// ordering, on each state delta the upgrade check runs BEFORE the
-// commit-trigger check. When a NoValueMsg-path op simultaneously
-// receives V_0 (via Phase-1 reflood + host validity) AND cluster
-// σ-eligibility has been reached (peers' KindValues observed),
-// the upgrade KindValue must be emitted BEFORE the Commit-Signed,
-// producing an A6 sequence (KindNoValue → KindValue → KindCommit-Signed).
-func TestAfterStateDelta_UpgradeFiresBeforeCommit(t *testing.T) {
+// TestAfterStateDelta_A1UpgradeIsTerminalSigmaEmission: post Op5, the A1
+// upgrade KindValue IS the σ-side terminal emission — it carries the
+// emitter's σ partial at L_0 (L0Partial). There is no follow-up
+// Commit-Signed. Verifies the upgrade fires when preconditions are met
+// AND that no second σ-side emission happens after.
+func TestAfterStateDelta_A1UpgradeIsTerminalSigmaEmission(t *testing.T) {
 	s := newSim(t, 4)
 	// Ops 1, 2, 3 have V_0 + host valid; op 4 is a V-drop at Phase 2a.
 	s.deliverPhase1(0, Value("V0"), []OperatorID{1, 2, 3}, observedEarly)
 	s.applyHostValidityFor([]OperatorID{1, 2, 3}, 0, Value("V0"), true)
-	// All fire Phase 2a. Op 4 → KindNoValue.
 	for _, op := range s.allOperators() {
 		_, _, _, err := s.instances[op].MaybeFirePhase2a()
 		require.NoError(t, err)
 	}
-	// Deliver ops 1, 2's KindValues to op 4: value_pool at op 4 = 2 < qV.
-	vmA, _ := s.instances[OperatorID(1)].OwnValueMsg()
-	vmB, _ := s.instances[OperatorID(2)].OwnValueMsg()
-	vmC, _ := s.instances[OperatorID(3)].OwnValueMsg()
-	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmA))
-	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmB))
-	// Op 4 hasn't upgraded or committed yet (no V_0, cannot σ).
-	_, hasUpgrade := s.instances[OperatorID(4)].OwnValueMsg()
-	require.False(t, hasUpgrade)
-	_, hasCommit := s.instances[OperatorID(4)].OwnCommit()
-	require.False(t, hasCommit)
-	// Now simultaneously: deliver op 3's KindValue (pushes value_pool to
-	// qV → σ-eligibility could fire) AND ensure op 4 has V_0 + host
-	// valid. Sequence: deliver Phase-1 bundle + host validity FIRST
-	// (so the upgrade-first ordering can fire upgrade before the
-	// commit-trigger).
+	// Late delivery of V_0 + host valid to op 4 → A1 upgrade fires
+	// inside ApplyHostValidity's afterStateDelta cascade.
 	leader := s.leaderAt(0)
 	bundle, err := s.instances[leader].BuildPhase1Bundle(0, Value("V0"))
 	require.NoError(t, err)
 	require.NoError(t, s.instances[OperatorID(4)].ObservePhase1Bundle(bundle, observedAfterPhase2a))
-	// At this point: value_pool at op 4 = 2 (no upgrade fired yet —
-	// host not applied). ObservePhase1Bundle cascade ran but
-	// MaybeBuildAndBroadcastUpgrade saw no host validity → ErrUpgradeNotAvailable.
 	require.NoError(t, s.instances[OperatorID(4)].ApplyHostValidity(0, Value("V0"), true))
-	// ApplyHostValidity's afterStateDelta cascade: upgrade-check fires
-	// (NoValue path + V_0 + host valid) → upgrade KindValue emitted.
-	// Then commit-trigger: σ-eligibility fires (value_pool = 3 after
-	// upgrade self-update). Side decision: V_local + host valid →
-	// Commit-Signed.
 	upgrade, hadUpgrade := s.instances[OperatorID(4)].OwnValueMsg()
-	require.True(t, hadUpgrade, "upgrade should have fired via afterStateDelta")
+	require.True(t, hadUpgrade, "A1 upgrade should fire via afterStateDelta")
 	require.Equal(t, Value("V0"), upgrade.V)
-	c4, hadCommit2 := s.instances[OperatorID(4)].OwnCommit()
-	require.True(t, hadCommit2, "Commit-Signed should fire after upgrade")
-	require.Equal(t, CommitSideSigned, c4.Side, "should be A6: NoValue → Value(upgrade) → Commit-Signed")
-	require.Equal(t, Value("V0"), c4.L0Value)
-	// Deliver vmC to op 4 too (defensive — doesn't change outcome).
-	require.NoError(t, s.instances[OperatorID(4)].ObserveValueMsg(vmC))
+	require.NotEmpty(t, upgrade.L0Partial, "Op5: A1 upgrade carries σ partial directly")
+	// No σ-side Commit follows under Op5.
+	_, hadCommit := s.instances[OperatorID(4)].OwnCommit()
+	require.False(t, hadCommit, "Op5: A1 upgrade is the terminal σ-side emission; no Commit-Signed follows")
 }
 
 // TestObserveValueMsg_A1UpgradeMismatchedLayerEntriesFiresRule6a: a byz
@@ -447,6 +414,7 @@ func TestObserveValueMsg_A1UpgradeMismatchedLayerEntriesFiresRule6a(t *testing.T
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
 		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:  Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
 		},
@@ -475,6 +443,7 @@ func TestObserveNoValueMsg_ReorderMismatchedLayerEntriesFiresRule6a(t *testing.T
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
 		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:  Signature{0x01}, // Op5: arbitrary; verify fails (Rule 5 OK for these tests focused on Rule 6a)
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
 		},
@@ -499,107 +468,115 @@ func TestObserveNoValueMsg_ReorderMismatchedLayerEntriesFiresRule6a(t *testing.T
 	require.True(t, foundRule6a, "reorder with mismatched L_k entries should also fire Rule 6a")
 }
 
-// TestObserveCommit_SignedCrossVAfterValueMsgFiresRule6a: byz emits
-// KindValue(V_a), then KindCommit-Signed(V_b) with V_b ≠ V_a. Per A2,
-// the σ-eligibility commit MUST be on the V the op claimed σ-eligibility
-// on; cross-V is an unauthorized A1-A8 sequence. Should fire Rule 6a.
-func TestObserveCommit_SignedCrossVAfterValueMsgFiresRule6a(t *testing.T) {
+// TestObserveCommitNR_AfterKindValueFiresRule6aAndRule1: the post-Op5
+// equivalent of the cross-V Signed-after-KindValue test. KindValue(V_a)
+// then KindCommit-NR from same op is σ-XOR-NR violation. Rule 6a fires
+// on sequence; Rule 1 fires if partials verify cryptographically.
+func TestObserveCommitNR_AfterKindValueFiresRule6aAndRule1(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
+	sigmaPartial, err := s.instances[OperatorID(1)].signer.SignPartial(Value("V_a"))
+	require.NoError(t, err)
+	nrTag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	nrPartial, err := s.instances[OperatorID(1)].tagSigner.SignPartial(nrTag)
+	require.NoError(t, err)
 	vm := &ValueMsg{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		V:          Value("V_a"),
-		ValueRoot:  ValueRoot(Value("V_a")),
-		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
-		LayerEntries: []LayerEntry{
-			{Layer: 1, Kind: LayerEntryEmpty},
-		},
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
+		L0Witness:    Signature{0xff},
+		L0Partial:    sigmaPartial,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
 	c := &Commit{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V_b"), // ≠ V_a
-		L0Partial:  Signature("partial"),
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		Side:      CommitSideNR,
+		L0Partial: nrPartial,
 	}
 	require.NoError(t, op2.ObserveCommit(c))
-	var foundRule6a bool
+	var foundRule6a, foundRule1 bool
 	for _, e := range op2.Evidence() {
 		if e.Rule == EvidencePhase2Equivocation {
 			foundRule6a = true
 		}
+		if e.Rule == EvidenceCrossSigning {
+			foundRule1 = true
+		}
 	}
-	require.True(t, foundRule6a, "KindValue(V_a) → Commit-Signed(V_b) should fire Rule 6a")
+	require.True(t, foundRule6a, "KindValue → KindCommit-NR should fire Rule 6a (sequence)")
+	require.True(t, foundRule1, "KindValue σ + KindCommit-NR should fire Rule 1 (cross-signing)")
 }
 
-// TestObserveValueMsg_PostCommitSignedCrossVFiresRule6a: same as above
-// but reverse order — Commit-Signed(V_b) arrives first, then ValueMsg(V_a)
-// where V_a ≠ V_b. Symmetric Rule 6a fire from the ObserveValueMsg side.
-func TestObserveValueMsg_PostCommitSignedCrossVFiresRule6a(t *testing.T) {
+// TestObserveValueMsg_AfterCommitNRFiresRule6aAndRule1: reorder of the
+// above — KindCommit-NR arrives first, then KindValue. Same evidence
+// fires symmetrically from the ObserveValueMsg side (the hadCommit
+// branch checks for cross-signing + sequence violation).
+func TestObserveValueMsg_AfterCommitNRFiresRule6aAndRule1(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
+	sigmaPartial, err := s.instances[OperatorID(1)].signer.SignPartial(Value("V_a"))
+	require.NoError(t, err)
+	nrTag := NoQuorumTag(s.cfg.ClusterID, s.cfg.Height, 0)
+	nrPartial, err := s.instances[OperatorID(1)].tagSigner.SignPartial(nrTag)
+	require.NoError(t, err)
 	c := &Commit{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V_b"),
-		L0Partial:  Signature("partial"),
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		Side:      CommitSideNR,
+		L0Partial: nrPartial,
 	}
 	require.NoError(t, op2.ObserveCommit(c))
 	vm := &ValueMsg{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		V:          Value("V_a"), // ≠ V_b
-		ValueRoot:  ValueRoot(Value("V_a")),
-		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
-		LayerEntries: []LayerEntry{
-			{Layer: 1, Kind: LayerEntryEmpty},
-		},
+		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
+		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
+		L0Witness:    Signature{0xff},
+		L0Partial:    sigmaPartial,
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
-	var foundRule6a bool
+	var foundRule6a, foundRule1 bool
 	for _, e := range op2.Evidence() {
 		if e.Rule == EvidencePhase2Equivocation {
 			foundRule6a = true
 		}
+		if e.Rule == EvidenceCrossSigning {
+			foundRule1 = true
+		}
 	}
-	require.True(t, foundRule6a, "Commit-Signed(V_b) → ValueMsg(V_a) should fire Rule 6a")
+	require.True(t, foundRule6a, "KindCommit-NR → KindValue should fire Rule 6a (reorder)")
+	require.True(t, foundRule1, "KindCommit-NR + KindValue σ should fire Rule 1 (cross-signing reorder)")
 }
 
-// TestObserveCommit_FakePlaintextSigmaFiresRule5: a peer Commit-Signed
-// carrying an L_0 σ partial that doesn't verify against the op's
-// pubshare on the claimed V triggers Rule 5 (fake plaintext sigma at
-// L_0). The op is still added to value_pool via inference (KindCommit-
-// Signed implies a prior KindValue existed), but NOT to sigma-pool —
-// the fake partial can't contribute to σ-quorum reconstruction.
-func TestObserveCommit_FakePlaintextSigmaFiresRule5(t *testing.T) {
+// TestObserveValueMsg_FakeL0PartialFiresRule5: a peer's KindValue carrying
+// an L0Partial that doesn't verify against the emitter's pubKeyShare on
+// V triggers Rule 5 (fake plaintext σ) keyed on the EMITTER (the L0Partial
+// is the emitter's own signing artifact, not a forwarded leader artifact
+// — Op5's Rule 5 attribution differs from Op11's L0Witness handling). The
+// emitter is still added to value_pool via the V-claim (claim pool), but
+// NOT to σ-pool — the fake partial can't contribute to threshold
+// reconstruction.
+func TestObserveValueMsg_FakeL0PartialFiresRule5(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
-	// Craft a Commit-Signed from op 1 with garbage L0Partial.
-	c := &Commit{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		Side:       CommitSideSigned,
-		L0Value:    Value("V0"),
-		L0Partial:  Signature("garbage-not-a-valid-partial"),
+	vm := &ValueMsg{
+		ClusterID:    s.cfg.ClusterID,
+		OperatorID:   1,
+		Height:       s.cfg.Height,
+		V:            Value("V0"),
+		ValueRoot:    ValueRoot(Value("V0")),
+		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
+		L0Partial:    Signature("garbage-not-a-valid-partial"),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
-	require.NoError(t, op2.ObserveCommit(c))
+	require.NoError(t, op2.ObserveValueMsg(vm))
 	var foundRule5 bool
 	for _, e := range op2.Evidence() {
-		if e.Rule == EvidenceFakePlaintextSigma {
+		if e.Rule == EvidenceFakePlaintextSigma && e.OperatorID == 1 {
 			foundRule5 = true
 			require.NotNil(t, e.FakePlaintextSigma)
 			require.Equal(t, Value("V0"), e.FakePlaintextSigma.OnionValue)
 		}
 	}
-	require.True(t, foundRule5, "fake L_0 σ partial should fire Rule 5")
+	require.True(t, foundRule5, "fake L0Partial in KindValue should fire Rule 5 against emitter")
 }
 
 // TestObserveCommit_PreNRDirectNoValueMsgThenNRDirectFiresRule6a is the

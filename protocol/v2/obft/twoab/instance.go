@@ -95,10 +95,11 @@ type Instance struct {
 
 	// Peer Phase-2 emissions — first-observed retained per (slot, op).
 	// Used for:
-	//   - Inference (KindCommit-Signed implies KindValue existed per A2/A6).
+	//   - Pool aggregation per §Pool aggregation rules (post Op5,
+	//     KindValue carries both the σ-direction claim AND the emitter's
+	//     σ partial directly — no separate Commit-Signed inference step).
 	//   - Duplicate / equivocation detection (second distinct emission =
-	//     Phase-2 equivocation per Rule 6a, unless authorized by A1/A2/.../A8).
-	//   - Pool aggregation per §Pool aggregation rules.
+	//     Phase-2 equivocation per Rule 6a, unless authorized by A1/A5/A8).
 	peerValueMsg   map[OperatorID]*ValueMsg
 	peerNoValueMsg map[OperatorID]*NoValueMsg
 	peerCommit     map[OperatorID]*Commit
@@ -114,11 +115,11 @@ type Instance struct {
 	//   - noValuePool[layer] = set of operators claiming NR-direction at
 	//     this layer.
 	//
-	// Pool membership is per the inference rules: an op's KindValue at L_0
-	// adds them to valuePool[0][ValueRoot]; their L_k>0 SigmaChained entry
-	// adds them to valuePool[k][V_root]; their KindNoValue adds them to
-	// noValuePool[0]; etc. KindCommit-Signed implies an earlier KindValue
-	// (per A2/A6) and adds the op to valuePool[0][ValueRoot] via inference.
+	// Pool membership: an op's KindValue at L_0 adds them to
+	// valuePool[0][ValueRoot]; their L_k>0 SigmaChained entry adds them
+	// to valuePool[k][V_root]; their KindNoValue adds them to
+	// noValuePool[0]; KindCommit-NR / KindCommit-NRDirect adds to
+	// noValuePool[0].
 	valuePool   map[int]map[[32]byte]map[OperatorID]bool
 	noValuePool map[int]map[OperatorID]bool
 
@@ -127,17 +128,19 @@ type Instance struct {
 	// extractable partial signatures, not inferred-claim memberships.
 	//
 	//   - sigmaPool[layer][V_root][op] = the op's σ partial on V at this
-	//     layer. At L_0: extracted from KindCommit-Signed. At L_k>0:
-	//     decrypted from Phase-2a LayerEntry (SigmaChained, peeled via
-	//     accumulated nr_tag keys).
+	//     layer. At L_0 (post Op5): extracted from KindValue.L0Partial
+	//     via verifyAndPoolL0Partial; the leader's contribution comes
+	//     from Phase1Bundle.L0Witness (Op3). At L_k>0: decrypted from
+	//     Phase-2a LayerEntry (SigmaChained, peeled via accumulated
+	//     nr_tag keys).
 	//   - nrTagPool[layer][op] = the op's nr_tag_k partial at this layer.
 	//     At L_0: extracted from KindCommit-NR / KindCommit-NRDirect. At
 	//     L_k>0: extracted from Phase-2a LayerEntry (NRPlaintext).
 	//
-	// Threshold pools are populated lazily as the Phase 3 walk needs them
-	// (L_0 sigmaPool is populated on KindCommit-Signed observation; L_k>0
-	// is populated during Resolve()'s chain-decryption walk once enough
-	// nr_tag partials have aggregated to unlock the layer).
+	// Threshold pools are populated lazily as the Phase 3 walk needs
+	// them (L_0 sigmaPool is populated on KindValue observation;
+	// L_k>0 is populated during Resolve()'s chain-decryption walk once
+	// enough nr_tag partials have aggregated to unlock the layer).
 	sigmaPool map[int]map[[32]byte]map[OperatorID]Signature
 	nrTagPool map[int]map[OperatorID]Signature
 

@@ -735,12 +735,16 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledE
 }
 
 // recordValueMsgToAggregator records per-layer σ / encrypted-claim partials
-// from a ValueMsg into the offline aggregator. ValueMsg carries no L_0
-// σ partial (that's in the later Commit-Signed); only L_k>0 SigmaChained
-// LayerEntries contribute (as encrypted claims). Credits the claimed
-// sender's OperatorID, matching the byz-observer model from base OBFT.
+// from a ValueMsg into the offline aggregator. Post Op5, KindValue carries
+// the emitter's σ partial on V at L_0 in L0Partial — ObserveSigma at
+// L_0. L_k>0 SigmaChained LayerEntries contribute as encrypted claims
+// (unchanged from pre-Op5). Credits the claimed sender's OperatorID,
+// matching the byz-observer model from base OBFT.
 func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
 	from := ct.OperatorID(vm.OperatorID)
+	if len(vm.L0Partial) > 0 {
+		agg.ObserveSigma(from, 0, vm.V)
+	}
 	for _, e := range vm.LayerEntries {
 		switch e.Kind {
 		case twoab.LayerEntrySigmaChained:
@@ -767,18 +771,17 @@ func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, nv *twoab.NoValueMs
 }
 
 // recordCommitToAggregator records per-layer σ / NR partials from a
-// Commit into the offline aggregator. At L_0:
-//   - Side=Signed: plaintext σ partial on L0Value → ObserveSigma at L_0.
-//   - Side=NR or Side=NRDirect: NR tag partial at L_0 → ObserveNR at L_0.
+// Commit into the offline aggregator. Post Op5, Commit is NR-side only:
+//   - Side=NR: NR tag partial at L_0 → ObserveNR at L_0.
+//   - Side=NRDirect: NR tag partial at L_0 + K-1 LayerEntries (the
+//     NRDirect emission bundles the L_k>0 commitments with the L_0
+//     emission).
 //
-// For Side=NRDirect only: LayerEntries are also recorded (mirroring the
-// ValueMsg/NoValueMsg path) since the NRDirect emission bundles the K-1
-// L_k>0 commitments with the L_0 emission.
+// The pre-Op5 CommitSideSigned branch is removed — the σ partial moved
+// into KindValue (handled by recordValueMsgToAggregator's ObserveSigma).
 func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
 	from := ct.OperatorID(c.OperatorID)
 	switch c.Side {
-	case twoab.CommitSideSigned:
-		agg.ObserveSigma(from, 0, c.L0Value)
 	case twoab.CommitSideNR:
 		agg.ObserveNR(from, 0)
 	case twoab.CommitSideNRDirect:
@@ -799,8 +802,9 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
 // design rationale. 2abOBFT differs only in trigger events (Phase-2a
 // emissions + Commits; not just Commits as in base) and the concrete
 // Resolve impl walks the chained-NR ladder using both L_0 σ-pool entries
-// (from Commit-Signed) and L_k>0 σ-chained entries (from ValueMsg /
-// NoValueMsg / Commit-NRDirect LayerEntries).
+// (post Op5: from KindValue.L0Partial directly + leader's L0Witness; was
+// from KindCommit-Signed pre-Op5) and L_k>0 σ-chained entries (from
+// ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries).
 func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
 	if _, already := s.vQuorumAt[op]; already {
 		return
