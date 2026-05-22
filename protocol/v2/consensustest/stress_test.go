@@ -321,6 +321,14 @@ func TestStress(t *testing.T) {
 		// — useful for stresstest variants that probe the tightness band
 		// where the protocol commits to slot-miss rather than waiting
 		// for IHAVE/IWANT recovery.
+		//
+		// Post-Op6 note: the resolve window is max(1·BTT + SafetyBuffer,
+		// 2·BTT), so a variant's SafetyBuffer only bites ABOVE the 1·BTT
+		// crossover. In the BTT sweep, lean (SB=300ms) degenerates to the
+		// no-SafetyBuffer floor at BTT ≥ 300ms (at BTT=400 it equals SB=0);
+		// the band is distinct at the canonical BTT=200ms. Absolute ms
+		// (HeartbeatInterval-tied), not BTT multiples — intentional. See
+		// docs/2abOBFT-REDESIGN-PLAN.md §SafetyBuffer's role post-Op5/Op6.
 		twoabadapter.Protocol{VariantName: "2abOBFT-tight", SafetyBufferOverride: durPtr(500 * time.Millisecond)},
 		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
 		qbftadapter.Protocol{},

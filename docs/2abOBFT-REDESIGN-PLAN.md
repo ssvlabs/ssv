@@ -1258,8 +1258,15 @@ Cross-state transitions (σ-locked → NR-locked or vice versa) are slashable pe
 
 - **Post-Op5 meaning**: SafetyBuffer is now the absorption budget for σ-pool fill via gossipsub IHAVE/IWANT recovery when the initial KindValue eager-push doesn't reach all honest peers. Conceptually closer to OBFT's `RefloodDelay` role — both are "wait longer for a late peer's σ-partial to arrive via lazy-pull."
 - **Still decoupled from gossipsub HeartbeatInterval**: the protocol-level configurability framing (line 17) is preserved. Deployments can still tune SafetyBuffer independently.
-- **Existing variants `2abOBFT-tight` (SB=500ms) / `2abOBFT-lean` (SB=300ms)** may need re-validation: what they were buying under v4 (cascade-window slack for two-hop) is different from what they buy post-Op5 (reflood-recovery budget for one-hop). The stress sweep at Phase C should re-evaluate whether the 300/500/700ms spread is the right band post-Op5.
-- **`adapter.go` docstring at [`Protocol.SafetyBufferOverride`](../protocol/v2/consensustest/twoab/adapter.go) (lines 40-65) must be updated**: current text describes "post-Phase-2a cascade window... 2abOBFT's critical path post-bundle-arrival is TWO hops" — false post-Op5. Replace with "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop critical path." Add this to Phase A+B impl scope items.
+- **Existing variants `2abOBFT-tight` (SB=500ms) / `2abOBFT-lean` (SB=300ms) — re-evaluated post-Op6 (RESOLVED):** keep the band; no re-tune. Under the Op6 `sum→max` window `1·BTT + max(SafetyBuffer, 1·BTT)`, SafetyBuffer only widens the window above the `1·BTT` crossover. Measured (Healthy, heavy LogNormal jitter, n=7):
+
+  | BTT | default(700) | tight(500) | lean(300) | min(0) |
+  |---|---|---|---|---|
+  | 200ms | decide 2.63s | 2.83s | 3.03s | 3.13s |
+  | 400ms | 2.16s | 2.36s | **2.46s** | **2.46s** |
+
+  At the canonical BTT=200 the band is distinct (clean 1·BTT decision-time / MEV-headroom steps), so it serves its purpose. At **BTT ≥ 300ms, `lean` (SB=300) falls below the `1·BTT` crossover and degenerates to the no-SafetyBuffer floor** — at BTT=400 `lean` ≡ `min(0)` (both window=800ms). This is correct max-formula behavior (SB below `1·BTT` can't widen the window — the `2·BTT` NR-fall-through path dominates), and is a useful "floor" data point in the sweep rather than a defect. The variants stay as **absolute** ms values (conceptually a HeartbeatInterval-tied reflood budget, not a BTT multiple). All variants decide 100% under this jitter level; the band trades MEV-fetch headroom (later TPhase2a) for nothing-extra below the crossover.
+- **`adapter.go` docstring at [`Protocol.SafetyBufferOverride`](../protocol/v2/consensustest/twoab/adapter.go)** — updated to the post-Op5/Op6 "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop σ-side critical path" framing (done in the Op6 commit).
 
 #### Op6 — Async Phase-2a fire on L0Ready (consequence of Op5)
 
@@ -1491,6 +1498,34 @@ Generalizes Op11 to all layers. KindValue carries a witnesses section listing `(
 **Value:** at K=2 default, only the L_1 witness is added (Op11 covers L_0). The L_1 forwarded witness provides peer-reflood-V authentication during L_0 NR-fall-through scenarios. At larger K, more witnesses, more recovery paths. Bandwidth: ~96 bytes per additional witness × (K-1) per KindValue.
 
 **Why deferred:** Op12 only adds value at fall-through layers, which are rare under healthy mesh (L_0 decides) and partially adversarial (require L_0 NR-quorum to even reach L_1). The combined Op8+Op12 = "OBFT witness-section parity at every layer" is mostly a non-default-K deployment optimization. Bundled into Phase D as an optional follow-on.
+
+#### Phase D — implementation plan (Op8 + Op12)
+
+**Premise confirmed (not speculative).** `DefaultK(n) = (n-1)/3 + 1`, so the SSV-supported cluster sizes run K = {2, 3, 4, 5} at n = {4, 7, 10, 13}. The stress matrix already exercises K=3/4/5 at n≥7 (`matrix_test.go` uses `K: ct.DefaultK(n)`). Without Phase D, σ-pool[V_k] for k≥1 starts empty at those sizes (OBFT seeds it with 1 leader partial at every layer) — a real fall-through-recovery gap for n≥7 clusters.
+
+**Two sub-chunks, each a wire bump (lockstep cutover):**
+
+**Op8 — per-layer leader witness in Phase1Bundle.** The bundle is already per-(layer, leader) — one `Value` + one witness for `bundle.Layer`. So:
+- Wire: rename `Phase1Bundle.L0Witness` → `LWitness` (it's the leader's σ on this bundle's V at this bundle's Layer, not L_0-specific). `Phase1BundleVersionV2 → V3`.
+- `BuildPhase1Bundle`: drop the `if layer == 0` gate — sign the witness at every layer; self-pool into `sigmaPool[layer][V_root][leader]`.
+- `ObservePhase1Bundle`/`retainPhase1Bundle`: drop the `if b.Layer == 0` gate — verify `LWitness` against `pubKeyShares[leader]` on `V` at every layer; pool into `sigmaPool[b.Layer]`; Rule 5 on verify-fail at any layer (update the hardcoded `recordRule5(_, 0)` → `b.Layer`, the TODO(Op8) from the earlier review).
+- `ValidatePhase1Bundle`: require non-empty `LWitness` at every layer (currently only L_0).
+- Recovery (`phase3.go`): the L_k>0 leader witness is **plaintext** in `sigmaPool[k]` (a head-start partial), combined at `tryReconstructLayer(k)` with the chain-decrypted peer SigmaChained partials. Safe: 1 < qV, so the witness alone can't reach σ-quorum (Pigeonhole 1 chained-encryption invariant holds — same as OBFT's witness section). Verify the aggregation mixes plaintext-leader + decrypted-peer correctly.
+- L0Ready: unchanged (L_0-only fire decision); deeper layers don't drive Phase-2a fire.
+
+**Op12 — forward per-layer witnesses in KindValue.** An op observes Phase-1 bundles at multiple layers; forward all their witnesses so peers can harvest V_k at any layer.
+- Wire: `KindValue.L0Witness Signature` (single) → `KindValue.Witnesses []LayerWitness` where `LayerWitness = {Layer int, ValueRoot [32]byte, Witness Signature}`. `ValueMsgVersionV3 → V4`. (L0Partial stays — it's the emitter's own L_0 σ, distinct from forwarded leader witnesses.)
+- Builder: populate `Witnesses` from every retained bundle's `(Layer, ValueRoot, LWitness)`.
+- `ObserveValueMsg` harvest: generalize `maybeHarvestPhase1BundleFromValueMsg` to iterate `Witnesses`, verify each against its layer's leader pubKeyShare, synth+retain per-layer (currently L_0-only). The `verifiedL0Witnesses` cache generalizes to `verifiedWitnesses[layer][V_root]` (already layer-indexed — just populate k>0).
+- `ValidateValueMsg`: validate the `Witnesses` list (bounded count ≤ K; each well-formed).
+- Anti-framing + retroactive cross-firing (§Retroactive cross-firing): the per-layer forwarded witness participates in Rule 3 / Rule 5 cross-V detection at its layer, same as L_0 today.
+
+**Validation:**
+- Existing n≥7 matrix/sweep cells (K=3/4/5) now exercise the L_k>0 witness paths — confirm no regression + measure the fall-through-recovery improvement.
+- New targeted tests: multi-layer fall-through at K=3 (n=7) where L_0 → L_1 → L_2, asserting σ-pool[V_k] head-start; per-layer harvest via KindValue.Witnesses; Rule 5 on a fake L_k witness.
+- The `recordRule5(_, b.Layer)` generalization needs a per-layer-fake-witness test.
+
+**Parallel-tree note:** Op8/Op12 protocol-layer changes (`wire/`, `messages.go`, `validation.go`, `phase1.go`, `phase2a.go`, `phase3.go`, `instance.go`) are in `obft/twoab/` — clean of the concurrent crash feature (which lives in `consensustest/`). The adapter/des/byz changes (witness wiring in the DES, aggregator recording) intermingle with the crash work — hunk-commit as with Op6.
 
 ### Implementation phases
 
