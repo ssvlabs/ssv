@@ -634,12 +634,12 @@ func (r *SyncCommitteeAggregatorRunner) GetRoot() ([32]byte, error) {
 }
 
 // sortContributionsBySubnet sorts the paired (subnets, selectionProofs) slices in-place
-// by ascending subnet, preserving (subnet, proof) pairing. This canonicalises the
+// by ascending subnet, preserving (subnet, proof) pairing. This canonicalizes the
 // pre-consensus output before calling GetSyncCommitteeContribution so the resulting
 // Contributions slice has a deterministic, spec-aligned order.
 //
-// Without this normalisation, the upstream `roots` slice from basePreConsensusMsgProcessing
-// is built via `slices.Collect(maps.Keys(...))`, which Go randomises per process. Two SSV
+// Without this normalization, the upstream `roots` slice from basePreConsensusMsgProcessing
+// is built via `slices.Collect(maps.Keys(...))`, which Go randomizes per process. Two SSV
 // nodes can then produce different Contributions SSZ roots for the same logical
 // contribution set. The spec's de-facto canonical ordering is ascending SubcommitteeIndex
 // (see ssv-spec/types/testingutils/beacon_node_sync_committee.go test fixtures).

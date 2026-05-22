@@ -43,8 +43,6 @@ import (
 // This test pins SSV's behavior: any future Fulu-specific divergence in the
 // blind.go encoder would break this test, surfacing the change before it can
 // hit production interop.
-//
-// See docs/v2.4.3-QA-verification-plan.md §B8 for the full investigation.
 func TestEnsureBlinded_FuluProducesElectraEquivalentBytes(t *testing.T) {
 	// Build a deterministic ExecutionPayload, body, and block once; reuse for
 	// both Electra and Fulu versions so the only difference is the version tag.

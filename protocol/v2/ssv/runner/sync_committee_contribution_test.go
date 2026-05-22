@@ -7,14 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSortContributionsBySubnet pins the canonicalisation step that the runner applies
+// TestSortContributionsBySubnet pins the canonicalization step that the runner applies
 // to the paired (subnets, selectionProofs) slices before calling GetSyncCommitteeContribution.
 // See sortContributionsBySubnet for the full rationale.
 //
-// This indirectly covers the two test ideas proposed in
-// docs/v2.4.3-QA-verification-plan.md §B2 §6 — determinism across runs and spec-canonical
-// ordering — by testing the small helper directly. A full runner-level test was considered
-// but the helper is the only behaviour the fix introduces; everything upstream is unchanged.
+// Covers the two properties the fix needs to guarantee — determinism across runs and
+// spec-canonical ascending-by-subnet ordering — by testing the helper directly. A full
+// runner-level test was considered but the helper is the only behavior the fix introduces;
+// everything upstream is unchanged.
 func TestSortContributionsBySubnet(t *testing.T) {
 	// sig builds a phase0.BLSSignature with byte[0] set to tag for identity tracking.
 	sig := func(tag byte) phase0.BLSSignature {

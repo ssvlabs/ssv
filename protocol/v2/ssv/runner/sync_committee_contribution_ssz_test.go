@@ -14,8 +14,10 @@ import (
 // TestContributionsSSZEncodingMatchesSpec pins ssv-spec's current SSZ encoding
 // for spectypes.Contributions: variable-length-list framing (per-element 4-byte
 // offsets) applied to a list whose element type Contribution is fixed-length
-// 256 bytes. See docs/v2.4.3-QA-verification-plan.md §7.4 / §8 Tier 1 step 6
-// (Bug C) for the reasoning behind keeping this non-canonical SSZ framing.
+// 256 bytes. The hand-written encoder is at ssv-spec/types/consensus_data.go:73-106
+// (https://github.com/ssvlabs/ssv-spec/blob/v1.2.2/types/consensus_data.go#L73-L106);
+// the fastssz-generated Contribution.SizeSSZ at consensus_data_encoding.go:52
+// confirms the element is fixed-length 256 bytes.
 //
 // Both SSV-Go (via direct spec import) and Anchor (via ContributionWrapper)
 // implement this encoding faithfully, so the system works and there is no
@@ -76,8 +78,7 @@ func TestContributionsSSZEncodingMatchesSpec(t *testing.T) {
 	require.Equalf(t, expectedSpecLen, len(encoded),
 		"unexpected Contributions encoding size %d (want %d). "+
 			"If the spec switched to canonical-SSZ framing (plain concatenation), "+
-			"this needs a coordinated cross-client rollout with Anchor (drop ContributionWrapper). "+
-			"See docs/v2.4.3-QA-verification-plan.md §7.4.",
+			"this needs a coordinated cross-client rollout with Anchor (drop ContributionWrapper).",
 		len(encoded), expectedSpecLen)
 
 	// First 8 bytes must be two little-endian 4-byte offsets pointing at the

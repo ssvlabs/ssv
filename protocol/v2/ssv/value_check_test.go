@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestVoteCheckerSourceTargetEpoch pins the behaviour of the source/target epoch check at
+// TestVoteCheckerSourceTargetEpoch pins the behavior of the source/target epoch check at
 // value_check.go:47.
 //
 // The current implementation uses `source.Epoch >= target.Epoch` to reject the BeaconVote,
@@ -25,16 +25,17 @@ import (
 //
 // The over-strict `>=` rejects the genesis-epoch case where both source and target legitimately
 // equal 0 (because state.{current,previous}_justified_checkpoint == Checkpoint(0, ⊥) at genesis).
-// This is the root cause of the cross-client interop failure documented in
-// docs/v2.4.3-QA-verification-plan.md §B1 — every fresh-genesis cross-client test fails on
-// every committee duty throughout epoch 0.
+// This causes every fresh-genesis cross-client test to fail on every committee duty throughout
+// epoch 0 — observed in the v2.4.3 ↔ Anchor v1.2.3 interop logs.
 //
-// The corresponding ssv-spec rule with the same bug is at ssv-spec v1.2.2
-// ssv/value_check.go:54. Both should be fixed together.
+// The corresponding ssv-spec rule with the same bug is at ssv-spec v1.2.2 ssv/value_check.go:53;
+// filed upstream at ssvlabs/ssv-spec#631. SSV-Go's one-character mirror fix (`>=` → `>`) is held
+// back until spec-maintainer direction is confirmed on #631, to avoid SSV drifting from the
+// canonical spec unilaterally.
 //
-// When the fix lands (changing `>=` to `>`, or removing the check entirely), the genesis
-// sub-test's assertion needs to flip: the source/target gate should no longer fire on
-// `(0, 0)`. The source-greater-than-target sub-test is unaffected by the fix.
+// When the spec fix lands, the genesis sub-test's assertion needs to flip: the source/target
+// gate should no longer fire on `(0, 0)`. The source-greater-than-target sub-test is unaffected
+// by the fix.
 func TestVoteCheckerSourceTargetEpoch(t *testing.T) {
 	t.Run("genesis: source.Epoch == target.Epoch == 0 currently rejected (B1 bug)", func(t *testing.T) {
 		checker := NewVoteChecker(nil, 0, []phase0.BLSPubKey{}, &spectypes.BeaconVote{})
