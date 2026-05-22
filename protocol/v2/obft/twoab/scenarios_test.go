@@ -232,6 +232,7 @@ func TestObserveValueMsg_IdenticalRebroadcastIsSilentDedup(t *testing.T) {
 		Height:     s.cfg.Height,
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
+		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntryEmpty},
 		},

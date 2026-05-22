@@ -65,6 +65,7 @@ func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 		Height:     5,
 		V:          v,
 		ValueRoot:  twoab.ValueRoot(v),
+		L0Witness:  twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
 		LayerEntries: []twoab.LayerEntry{
 			{Layer: 1, Kind: twoab.LayerEntrySigmaChained, V: twoab.Value("V1"), Payload: []byte("ct")},
 		},
@@ -77,9 +78,26 @@ func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, vm.OperatorID, decoded.OperatorID)
 	require.Equal(t, vm.V, decoded.V)
 	require.Equal(t, vm.ValueRoot, decoded.ValueRoot)
+	require.Equal(t, vm.L0Witness, decoded.L0Witness,
+		"Op11: KindValue L0Witness must round-trip through wire encode/decode")
 	require.Len(t, decoded.LayerEntries, 1)
 	require.Equal(t, vm.LayerEntries[0].Layer, decoded.LayerEntries[0].Layer)
 	require.Equal(t, vm.LayerEntries[0].Kind, decoded.LayerEntries[0].Kind)
+}
+
+// TestValueMsg_RejectsUnknownVersionByte verifies that the V2 decoder
+// rejects wire bytes whose version byte differs from 0x02. Includes
+// rejection of the pre-Op11 V1 byte (0x01) — the cluster cutover policy
+// assumes wire-incompatible coexistence does not occur, so V1-emitted
+// bytes hitting a V2 decoder should fail cleanly at the version check.
+func TestValueMsg_RejectsUnknownVersionByte(t *testing.T) {
+	for _, badVersion := range []byte{0x00, 0x01, 0x03, 0xff} {
+		bytes := []byte{badVersion}
+		bytes = append(bytes, ProtocolTag[:]...)
+		bytes = append(bytes, 0x02) // inner kind ValueMsg
+		_, err := DecodeValueMsg(bytes)
+		require.Errorf(t, err, "V2 decoder must reject version byte 0x%02x", badVersion)
+	}
 }
 
 func TestNoValueMsg_EncodeDecodeRoundTrip(t *testing.T) {

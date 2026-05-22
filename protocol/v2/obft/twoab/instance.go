@@ -176,6 +176,40 @@ type Instance struct {
 	// only genuine signer/EKM failures accumulate.
 	cascadeErrors []error
 
+	// wantsHostValidationCh delivers (layer, value) pairs requesting the
+	// runner-side host hook to validate a V the Instance harvested from a
+	// peer KindValue (Op11 peer-reflood-V path). Buffered with capacity K;
+	// non-blocking enqueue, drops on full buffer with rollback so a later
+	// observation can re-attempt. Closed by Finalize.
+	//
+	// Mirrors `protocol/v2/obft/base/instance.go` WantsHostValidationCh
+	// pattern. See requestHostValidation for dedup rules; see
+	// maybeHarvestPhase1BundleFromValueMsg in phase2a.go for the producer
+	// side; see [`adapter`](../../consensustest/twoab/events.go)
+	// evtValueMsgArrival for the drain side.
+	wantsHostValidationCh chan ValidationRequest
+
+	// pendingValidation tracks in-flight host-validation requests by
+	// (layer, value_root). Dedup key: only one outstanding request per
+	// (layer, V_root) at a time. The Instance clears the pending flag
+	// implicitly on ApplyHostValidity (host verdict recorded → no longer
+	// pending).
+	pendingValidation map[int]map[[32]byte]bool
+
+	// verifiedL0Witnesses caches the result of verifyL0SigmaPartial for
+	// the L_0 leader on a given (layer, V_root). Op11 forwards L0Witness
+	// in every KindValue, so a receiver observing N peer KindValues for
+	// the same V in a slot would naively re-verify the same
+	// (leader, V_0_root) witness N times. BLS partial-verify is ~1ms in
+	// production; at n=10 with byz-driven re-broadcast, the verify cost
+	// stacks against the slot budget. The cache short-circuits subsequent
+	// verifies of the same witness. Per spec §Op11 (verify-cost dedup);
+	// mirrors `protocol/v2/obft/base/instance.go` witnessedLeaderSigma.
+	//
+	// Cache is per-layer to forward-compat with Phase D's L_k>0 leader
+	// witnesses (Op8); today only layer 0 is populated.
+	verifiedL0Witnesses map[int]map[[32]byte]bool
+
 	// receivedCertificate is the FIRST peer-broadcast Certificate
 	// observed via ObserveCertificate at this Instance. Per spec
 	// §Final-certificate gossip, surviving peers' certificates allow an
@@ -294,7 +328,99 @@ func NewInstance(
 		rule5Fired:       make(map[int]map[OperatorID]bool, K),
 		rule6aFired:      make(map[OperatorID]bool, len(cfg.Operators)),
 		evidenceObserved: make(map[evidenceObservedKey]bool),
+		// Op11 host-validation channel: buffered at K so a slot's worth of
+		// per-layer harvested V's can sit in the queue if the drain is
+		// briefly stalled. Realistically K=2 today and the channel only
+		// holds L_0 entries (no L_k>0 harvest yet — Phase D).
+		wantsHostValidationCh: make(chan ValidationRequest, K),
+		pendingValidation:     make(map[int]map[[32]byte]bool, K),
+		verifiedL0Witnesses:   make(map[int]map[[32]byte]bool, K),
 	}, nil
+}
+
+// ValidationRequest is a request from the Instance to its runner asking
+// for the host application to validate a V at a particular layer. Emitted
+// on Instance.WantsHostValidationCh when a V is first-observed via the
+// Op11 peer-reflood-V path (harvest from a peer KindValue) without an
+// existing host verdict. The runner dispatches validation against its
+// host hook and calls ApplyHostValidity with the result.
+//
+// Mirrors `protocol/v2/obft/base.ValidationRequest`.
+type ValidationRequest struct {
+	Layer int
+	Value Value
+}
+
+// WantsHostValidationCh returns the channel on which the Instance delivers
+// host-validity requests for V's first-observed via peer KindValue (Op11
+// peer-reflood-V harvest path). The runner MUST drain this channel
+// (typically via select alongside its other per-slot signals) and dispatch
+// validation through the host hook, invoking ApplyHostValidity with the
+// verdict.
+//
+// Direct Phase-1 bundle observation does NOT emit on this channel — the
+// runner already runs ApplyHostValidity inline at bundle arrival
+// (`evtPhase1Arrival` in the adapter). The channel exists only for the
+// harvest path, where retention is established without a direct bundle
+// observation and the host hasn't been queried for the harvested V.
+//
+// Buffered with capacity K; the Instance drops enqueue attempts if the
+// buffer is full (back-pressure: a slow runner that isn't draining means
+// the validation path is degraded, but the Instance never blocks). The
+// channel is closed by Finalize.
+func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
+	return i.wantsHostValidationCh
+}
+
+// requestHostValidation enqueues a host-validity request on the wants
+// channel if (a) host hasn't already validated this V at this layer, and
+// (b) no in-flight request exists for the same (layer, value_root).
+// Non-blocking: drops on full buffer with rollback of the pending flag.
+//
+// Mirrors `protocol/v2/obft/base.Instance.requestHostValidation`.
+//
+// Post-Finalize guard: sending on a closed channel panics even via
+// `select` with default. The Instance's Observe* methods (ObserveValueMsg,
+// ObservePhase1Bundle, etc.) intentionally have no `ended` guards (calls
+// after Finalize are silent no-ops at the protocol-state level), so a
+// late event arriving past Finalize can still reach the harvest path and
+// call into us. Gate on `i.ended` here to prevent the resulting
+// send-on-closed-channel panic.
+func (i *Instance) requestHostValidation(layer int, value Value) {
+	if i.ended {
+		return
+	}
+	if layer < 0 || layer >= i.cfg.K() {
+		return
+	}
+	if len(value) == 0 {
+		return
+	}
+	root := ValueRoot(value)
+	// Dedup: skip if host already validated this (layer, V).
+	if verdicts := i.hostVerdict[layer]; verdicts != nil {
+		if _, recorded := verdicts[string(root[:])]; recorded {
+			return
+		}
+	}
+	// Dedup: skip if request already in-flight for this (layer, V_root).
+	bucket := i.pendingValidation[layer]
+	if bucket == nil {
+		bucket = make(map[[32]byte]bool)
+		i.pendingValidation[layer] = bucket
+	}
+	if bucket[root] {
+		return
+	}
+	bucket[root] = true
+	select {
+	case i.wantsHostValidationCh <- ValidationRequest{Layer: layer, Value: append(Value{}, value...)}:
+	default:
+		// Buffer full — runner is not draining. Roll back the pending flag
+		// so a subsequent harvest can re-attempt; otherwise the request
+		// would never fire.
+		delete(bucket, root)
+	}
 }
 
 // Config returns the instance's config (read-only).
@@ -376,9 +502,16 @@ func (i *Instance) RetainedBundles(layer int, leaderID OperatorID) []*retainedBu
 // Ended reports whether the instance has been Finalized.
 func (i *Instance) Ended() bool { return i.ended }
 
-// Finalize closes the Instance. Idempotent.
+// Finalize closes the Instance. Idempotent. Closes wantsHostValidationCh
+// on first call so runners draining via range or select-with-zero-value
+// can detect end-of-slot. Repeat calls are safe — closing an already-
+// closed channel would panic, so we gate on `ended`.
 func (i *Instance) Finalize() {
+	if i.ended {
+		return
+	}
 	i.ended = true
+	close(i.wantsHostValidationCh)
 }
 
 // recordEvidence appends a non-nil evidence entry to the accumulator and

@@ -81,9 +81,25 @@ func TestValidateValueMsg_AcceptsHealthy(t *testing.T) {
 		Height:       cfg.Height,
 		V:            v,
 		ValueRoot:    ValueRoot(v),
+		L0Witness:    Signature{0x01}, // structural: any non-empty bytes pass validation
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, ValidateValueMsg(vm, cfg))
+}
+
+func TestValidateValueMsg_RejectsEmptyL0Witness(t *testing.T) {
+	cfg := healthyConfig()
+	v := Value("V0")
+	vm := &ValueMsg{
+		ClusterID:    cfg.ClusterID,
+		OperatorID:   1,
+		Height:       cfg.Height,
+		V:            v,
+		ValueRoot:    ValueRoot(v),
+		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+	}
+	require.Error(t, ValidateValueMsg(vm, cfg),
+		"Op11: ValueMsg with empty L0Witness should be rejected")
 }
 
 func TestValidateValueMsg_RejectsEmptyV(t *testing.T) {

@@ -974,6 +974,7 @@ func clonePhase1Bundle(b *twoab.Phase1Bundle) *twoab.Phase1Bundle {
 func cloneValueMsg(v *twoab.ValueMsg) *twoab.ValueMsg {
 	cp := *v
 	cp.V = append(twoab.Value(nil), v.V...)
+	cp.L0Witness = append(twoab.Signature(nil), v.L0Witness...)
 	cp.LayerEntries = cloneLayerEntries(v.LayerEntries)
 	return &cp
 }

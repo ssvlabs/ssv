@@ -41,6 +41,13 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	}
 	root := ValueRoot(value)
 	i.hostVerdict[layer][string(root[:])] = valid
+	// Clear any in-flight pending validation flag for (layer, V_root) —
+	// the verdict is now recorded; a subsequent harvest of the same V
+	// would dedup on hostVerdict anyway, but clearing keeps the
+	// pendingValidation set tight (memory-bounded).
+	if bucket := i.pendingValidation[layer]; bucket != nil {
+		delete(bucket, root)
+	}
 	i.afterStateDelta()
 	return nil
 }
@@ -258,12 +265,18 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 		retained := i.retainedBundles[layer][i.cfg.Layers[layer].Leader]
 		v := retained[0].Bundle.Value
 		root := ValueRoot(v)
+		// Op11: forward the leader's L0Witness byte-for-byte from our
+		// retained bundle. Receivers verify against the leader's
+		// pubKeyShare on V and harvest V into their own retention on
+		// success (closing the peer-reflood-V path).
+		l0Witness := append(Signature{}, retained[0].Bundle.L0Witness...)
 		i.ownValueMsg = &ValueMsg{
 			ClusterID:    i.cfg.ClusterID,
 			OperatorID:   i.ownOperatorID,
 			Height:       i.cfg.Height,
 			V:            append(Value{}, v...),
 			ValueRoot:    root,
+			L0Witness:    l0Witness,
 			LayerEntries: entries,
 		}
 		i.addToValuePool(layer, root, i.ownOperatorID)
@@ -390,7 +403,8 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	}
 	// Build the upgrade KindValue. Per spec: identical wire shape to
 	// the Phase-2a KindValue, including the K-1 LayerEntries carried
-	// over from the prior KindNoValue.
+	// over from the prior KindNoValue. Op11: include the L0Witness from
+	// our retained bundle so harvest-via-peer-KindValue can propagate.
 	root := ValueRoot(v)
 	upgrade := &ValueMsg{
 		ClusterID:    i.cfg.ClusterID,
@@ -398,6 +412,7 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 		Height:       i.cfg.Height,
 		V:            append(Value{}, v...),
 		ValueRoot:    root,
+		L0Witness:    append(Signature{}, retained[0].Bundle.L0Witness...),
 		LayerEntries: cloneLayerEntries(i.ownNoValueMsg.LayerEntries),
 	}
 	i.ownValueMsg = upgrade
@@ -471,6 +486,29 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	if op == i.ownOperatorID {
 		return nil
 	}
+	// Op11 peer-reflood-V harvest: if the embedded L0Witness verifies
+	// against the L_0 leader's pubKeyShare on v.V, treat the observation
+	// as if we had received the leader's Phase-1 bundle directly —
+	// synthesize the bundle and run it through the shared retention path
+	// (which dedupes against directly-observed bundles and idempotently
+	// seeds σ-pool[V_0][leader]). This closes the v4 first-pass
+	// §Implementation deviation #2 (peer-reflood-V via gossipsub Phase-1
+	// only, not KindValue) and is the recovery vector for
+	// HV1SelectiveDelivery.
+	//
+	// On verify failure: silently discard. Do NOT fire Rule 5 — the
+	// L0Witness inside this envelope is signed-for-forwarding by the
+	// emitter, not the leader; firing Rule 5 against the leader would
+	// open a framing attack (byz emitter spoofs leader with random
+	// bytes). The leader-signed-garbage attack stays covered by Op3 in
+	// ObservePhase1Bundle where the bundle's outer envelope binds the
+	// bytes to the leader.
+	//
+	// The harvest runs ahead of the existing dedup/pool-update flow so
+	// the afterStateDelta cascade at the end of ObserveValueMsg sees the
+	// fresh retention state (enabling immediate A1 upgrade / σ-eligibility
+	// firing for V-drop receivers).
+	i.maybeHarvestPhase1BundleFromValueMsg(v)
 	existing, hadValue := i.peerValueMsg[op]
 	if hadValue {
 		// Already have a ValueMsg from this op. Check content equality.
@@ -756,6 +794,138 @@ func (i *Instance) processObservedLayerEntries(op OperatorID, entries []LayerEnt
 	}
 }
 
+// maybeHarvestPhase1BundleFromValueMsg implements the Op11 peer-reflood-V
+// harvest. If the peer's KindValue carries an L0Witness that verifies
+// against the L_0 leader's pubKeyShare on v.V, synthesize a Phase-1 bundle
+// (as if the leader's bundle had reached us directly) and feed it to the
+// shared retention path. The retention helper handles dedup against any
+// already-retained bundle for this leader (so direct-then-harvest and
+// harvest-then-direct converge to the same state) and seeds σ-pool[V_0]
+// with the leader's partial.
+//
+// On successful harvest that establishes NEW retention (priorRetained == 0
+// at L_0 for this leader), the Instance enqueues a ValidationRequest on
+// wantsHostValidationCh so the runner can ask the host to validate the
+// harvested V. The A1 upgrade trigger fires off the host's reply via
+// ApplyHostValidity's afterStateDelta cascade. The channel-based hand-off
+// decouples the host-call timing from the harvest moment — runners with
+// scheduling policies can drain at their own cadence without changing
+// protocol semantics.
+//
+// Direct-observation retention does NOT enqueue: ObservePhase1Bundle's
+// caller (`evtPhase1Arrival`) already runs ApplyHostValidity inline.
+//
+// observedOffset for the synthetic bundle is set to 0 — there is no real
+// "leader-bundle arrival time" to record; the field is diagnostic-only
+// (no protocol branches on it) and 0 is the documented sentinel for
+// synthetic-from-peer-harvest retention. If timing-based diagnostics
+// become load-bearing later, lift this to an `observedOffset` parameter
+// on ObserveValueMsg.
+//
+// Verify failure: silent discard, no Rule 5, no request enqueue (see
+// ObserveValueMsg's docstring for the framing-attack rationale).
+func (i *Instance) maybeHarvestPhase1BundleFromValueMsg(v *ValueMsg) {
+	const layer = 0
+	if len(v.L0Witness) == 0 {
+		// Honest emitters always include L0Witness (post Op11). An empty
+		// witness here should have failed ValidateValueMsg upstream — but
+		// guard defensively in case a future caller bypasses validation.
+		return
+	}
+	leaderID := i.cfg.Layers[layer].Leader
+	if !i.verifyL0WitnessCached(layer, v.V, v.L0Witness, leaderID) {
+		return
+	}
+	// Snapshot retention BEFORE harvest so we can detect first-time
+	// retention establishment (true V-drop receiver). Only true V-drops
+	// need a host-validation request; receivers with prior retention have
+	// already been queried by evtPhase1Arrival.
+	priorRetained := len(i.retainedBundles[layer][leaderID])
+	synth := &Phase1Bundle{
+		ClusterID:  i.cfg.ClusterID,
+		OperatorID: leaderID,
+		Height:     i.cfg.Height,
+		Layer:      layer,
+		Value:      append(Value{}, v.V...),
+		L0Witness:  append(Signature{}, v.L0Witness...),
+	}
+	// Defense-in-depth: re-validate the synthesized bundle structurally
+	// before retention. Today this is redundant (synth is built from
+	// already-validated v.ClusterID/Height/V/L0Witness) but a future
+	// tightening of ValidatePhase1Bundle would otherwise silently skip
+	// the harvest path.
+	if err := ValidatePhase1Bundle(synth, i.cfg); err != nil {
+		return
+	}
+	i.retainPhase1Bundle(synth, 0 /* observedOffset sentinel */, true /* witnessPreVerified */)
+	if priorRetained != 0 || len(i.retainedBundles[layer][leaderID]) == 0 {
+		return
+	}
+	// First-time retention via harvest. Push validation request — the
+	// runner's host hook is the source of truth for V-validity, and the
+	// channel-based hand-off lets production runners apply their own
+	// scheduling policy.
+	//
+	// We don't gate the push on a "NR-fall-through still feasible"
+	// heuristic. Such a gate would correctly defer in scenarios like
+	// LateLeaderBroadcast (where peers are about to emit KindNoValue and
+	// the cluster can fall through to L_1) but would race-fail in
+	// scenarios like HV1SelectiveDelivery: at the harvest moment, the
+	// receiver may not have observed enough peer Phase-2a state to know
+	// whether NR-fall-through is feasible cluster-wide. The DES processes
+	// per-peer arrivals in scheduling order; in HV1SelectiveDelivery, the
+	// byz leader's KindValue arrives at the V-drop before the V-recipient's
+	// — at which point only ONE peer's Phase-2a is observed, and a
+	// no-NR-reachable heuristic would optimistically defer (false
+	// negative). The resulting MISS in HV1Selective is the worst possible
+	// outcome — the cluster's only L_0 recovery vector silently doesn't
+	// fire.
+	//
+	// Trade-off accepted: under LateLeaderBroadcast, the cluster prefers
+	// σ-at-L_0 (via harvest-driven A1 upgrade) over NR-fall-through to
+	// L_1. The σ-cascade doesn't fit in the slot budget when the leader's
+	// broadcast is sufficiently late → cluster MISSes where v4 would have
+	// fall-through-succeeded at L_1. This regression is mechanical and
+	// scenario-specific; documented in the sub-chunk #2 plan / self-review.
+	i.requestHostValidation(layer, v.V)
+}
+
+// verifyL0WitnessCached wraps verifyL0SigmaPartial with a memo on
+// (layer, V_root) — Op11 forwards the same leader L0Witness in every
+// peer KindValue, and a re-broadcast cluster would naively re-verify N
+// times per slot. The cache short-circuits subsequent verifies once the
+// (layer, V_root) is known-good. Cache hits return true without invoking
+// the BLS primitive; cache misses run verify and cache on success.
+//
+// Cache is positive-only: a verify failure does NOT cache. A byz emitter
+// presenting bogus bytes on the same V_root each time will still pay
+// re-verify cost, but they're punished by other mechanisms (Rule 6a on
+// cross-V; gossipsub scoring). Avoiding negative-caching keeps the door
+// open for a subsequent valid witness on the same V to land — for
+// instance, if the first observed L0Witness was corrupted on the wire
+// (truncation, malicious mutation by a relay) and a second arrival
+// carries the correct bytes.
+//
+// Per spec §Op11 (verify-cost dedup); mirrors OBFT's witnessedLeaderSigma.
+func (i *Instance) verifyL0WitnessCached(layer int, v Value, witness Signature, leaderID OperatorID) bool {
+	root := ValueRoot(v)
+	if bucket := i.verifiedL0Witnesses[layer]; bucket != nil {
+		if bucket[root] {
+			return true
+		}
+	}
+	if !i.verifyL0SigmaPartial(leaderID, v, witness) {
+		return false
+	}
+	bucket := i.verifiedL0Witnesses[layer]
+	if bucket == nil {
+		bucket = make(map[[32]byte]bool)
+		i.verifiedL0Witnesses[layer] = bucket
+	}
+	bucket[root] = true
+	return true
+}
+
 // deepCopyValueMsg returns an independent copy of v.
 func deepCopyValueMsg(v *ValueMsg) *ValueMsg {
 	if v == nil {
@@ -763,6 +933,7 @@ func deepCopyValueMsg(v *ValueMsg) *ValueMsg {
 	}
 	out := *v
 	out.V = append(Value{}, v.V...)
+	out.L0Witness = append(Signature{}, v.L0Witness...)
 	out.LayerEntries = cloneLayerEntries(v.LayerEntries)
 	return &out
 }

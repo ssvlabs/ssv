@@ -89,6 +89,16 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 		return fmt.Errorf("twoab: ValueMsg ValueRoot %x does not match sha256(V)",
 			v.ValueRoot)
 	}
+	// Op11: L0Witness is required non-empty. Every honest emitter has a
+	// retained Phase-1 bundle with the leader's witness (either directly
+	// observed or harvested via the peer-reflood path). The wire-level
+	// L0Witness check is structural; BLS verification + harvest happens at
+	// the Instance layer (ObserveValueMsg) against the L_0 leader's
+	// pubKeyShare. A peer presenting an empty L0Witness can't claim
+	// σ-direction — they should have emitted KindNoValue instead.
+	if len(v.L0Witness) == 0 {
+		return errors.New("twoab: ValueMsg has empty L0Witness (Op11 requires the L_0 leader's forwarded σ partial)")
+	}
 	if err := validateLayerEntries(v.LayerEntries, cfg, "ValueMsg"); err != nil {
 		return err
 	}

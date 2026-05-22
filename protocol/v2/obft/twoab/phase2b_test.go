@@ -115,15 +115,21 @@ func TestObserveValueMsg_FromPeerUpdatesValuePool(t *testing.T) {
 func TestObserveValueMsg_DistinctFromSameOpFiresRule6a(t *testing.T) {
 	s := newSim(t, 4)
 	op2 := s.instances[OperatorID(2)]
-	// Craft two distinct KindValues from same op on different V's.
+	// Craft two distinct KindValues from same op on different V's. The
+	// L0Witness bytes are arbitrary non-empty — they fail leader-verify
+	// (so harvest silently discards), but ValidateValueMsg requires the
+	// field to be non-empty (Op11 invariant). Rule 6a fires from the
+	// cross-V emission, not the witness verify failure.
 	vmA := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_a"), ValueRoot: ValueRoot(Value("V_a")),
+		L0Witness:    Signature{0xff},
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	vmB := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V_b"), ValueRoot: ValueRoot(Value("V_b")),
+		L0Witness:    Signature{0xff},
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vmA))
@@ -190,6 +196,7 @@ func TestObserveCommit_PostNRDirectAnyEmissionFiresRule6a(t *testing.T) {
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
+		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -215,6 +222,7 @@ func TestObserveCommit_PreNRDirectValueMsgThenNRDirectFiresRule6a(t *testing.T) 
 	vm := &ValueMsg{
 		ClusterID: s.cfg.ClusterID, OperatorID: 1, Height: s.cfg.Height,
 		V: Value("V0"), ValueRoot: ValueRoot(Value("V0")),
+		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -273,6 +281,7 @@ func TestObserveValueMsg_A1UpgradeWithPriorCommitSignedCrossVFiresRule6a(t *test
 		Height:       s.cfg.Height,
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
+		L0Witness:    Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
 	require.NoError(t, op2.ObserveValueMsg(vm))
@@ -437,6 +446,7 @@ func TestObserveValueMsg_A1UpgradeMismatchedLayerEntriesFiresRule6a(t *testing.T
 		Height:     s.cfg.Height,
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
+		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
 		},
@@ -464,6 +474,7 @@ func TestObserveNoValueMsg_ReorderMismatchedLayerEntriesFiresRule6a(t *testing.T
 		Height:     s.cfg.Height,
 		V:          Value("V0"),
 		ValueRoot:  ValueRoot(Value("V0")),
+		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntrySigmaChained, V: Value("V_b"), Payload: []byte("ct")},
 		},
@@ -501,6 +512,7 @@ func TestObserveCommit_SignedCrossVAfterValueMsgFiresRule6a(t *testing.T) {
 		Height:     s.cfg.Height,
 		V:          Value("V_a"),
 		ValueRoot:  ValueRoot(Value("V_a")),
+		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntryEmpty},
 		},
@@ -545,6 +557,7 @@ func TestObserveValueMsg_PostCommitSignedCrossVFiresRule6a(t *testing.T) {
 		Height:     s.cfg.Height,
 		V:          Value("V_a"), // ≠ V_b
 		ValueRoot:  ValueRoot(Value("V_a")),
+		L0Witness:  Signature{0xff}, // arbitrary; harvest silently discards
 		LayerEntries: []LayerEntry{
 			{Layer: 1, Kind: LayerEntryEmpty},
 		},

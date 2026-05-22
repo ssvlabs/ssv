@@ -194,31 +194,21 @@ type Phase1Bundle struct {
 // path op who later receives V_0 + host valid emits a ValueMsg envelope
 // with the same wire shape (per spec §Authorized Phase-2 emission pairs A1).
 //
-// **V_0 binding to leader**: the redesign-plan earlier had a leader-auth-sig
-// field embedded in ValueMsg, intended to let receivers verify that V_0
-// came from the layer's leader before propagating it as retention (the
-// "peer-reflood-V" path). That field is not in this implementation — the
-// leader-binding closure is achieved via:
-//
-//  1. The outer SignedSSVMessage envelope, which op-identity-signs the
-//     broadcaster (not the leader directly).
-//  2. The upgrade path's requirement that V_0 must be in
-//     retainedBundles[layer][leaderID] — populated only by
-//     ObservePhase1Bundle, which validates the bundle's leader-auth at
-//     ValidatePhase1Bundle structural-shape time and at the outer
-//     envelope-signature verification done by the SSV adapter before
-//     reaching this package.
-//
-// Consequence: receivers do NOT propagate V_0 from observed ValueMsg into
-// retention (the "peer-reflood-V via KindValue" propagation vector in the
-// plan's worked cases). V_0 retention enters only via Phase-1 bundle
-// gossipsub reflood. Byz operators can spam ValueMsg envelopes claiming
-// arbitrary fake V_0' values, inflating value_pool[V_0'_fake] membership
-// claims, but honest receivers won't have V_0'_fake retained — so their
-// commit-side decision never produces a σ partial on V_0'_fake, and the
-// σ-pool semantics (threshold partials only, not inferred claims) keep
-// the cluster from converging on fake V's. At f=1 n=4 the byz alone
-// can't push value_pool[V_0'_fake] past qV=3.
+// **V_0 binding to leader (post Op11)**: the L0Witness field carries the
+// L_0 leader's σ partial on V, byte-for-byte forwarded from the Phase-1
+// bundle the emitter retained. Receivers verify against the leader's
+// pubKeyShare on V; on success, V is harvested into retention as if the
+// receiver had observed the leader's Phase-1 bundle directly (closing the
+// v4 first-pass §Implementation deviation #2 and enabling peer-reflood-V
+// as the HV1SelectiveDelivery recovery vector). On verify failure, the
+// witness and the emitter's V-claim-into-retention are silently dropped —
+// the emitter's V-claim still enters value_pool[V_0_root] (existing claim-
+// pool semantics; byz claims can't push past qV without honest backing),
+// but no σ-pool seeding and no Rule 5 firing (anti-leader-framing: a byz
+// emitter could otherwise spoof an honest leader by emitting bogus
+// L0Witness bytes). The leader-signed-garbage attack stays covered by Op3
+// in ObservePhase1Bundle, where the bundle's outer envelope binds the
+// bytes to the leader.
 type ValueMsg struct {
 	ClusterID  [32]byte
 	OperatorID OperatorID
@@ -227,6 +217,19 @@ type ValueMsg struct {
 	V Value
 	// ValueRoot is sha256(V), included for receiver-side caching/dedup.
 	ValueRoot [32]byte
+	// L0Witness is the L_0 leader's σ partial on V, byte-for-byte forwarded
+	// from the Phase-1 bundle this emitter retained. Required and non-empty.
+	// Receivers verify against pubKeyShares[L_0_leader] on V; on success,
+	// V is harvested into retainedBundles[0][leaderID] (peer-reflood-V) and
+	// σ-pool[0][ValueRoot(V)][leaderID] is seeded with the partial. On
+	// verify failure: silently discarded (anti-framing — emitter's envelope
+	// doesn't cryptographically attribute the bytes to the leader).
+	//
+	// Honest emitters always include the L0Witness from their retained
+	// bundle. Byz emitters who present random bytes here lose no semantic
+	// advantage: the harvest fails verify, no pool/retention update happens;
+	// the bogus claim is wire noise.
+	L0Witness Signature
 	// LayerEntries carries the operator's L_1..L_{K-1} per-layer
 	// commitments. Length K-1; index 0 → layer 1, ..., index K-2 → layer K-1.
 	// Each entry is one of {Empty, SigmaChained, NRPlaintext}.
@@ -325,6 +328,15 @@ func ValueRoot(v Value) [32]byte {
 // valueMsgContentHash returns a SHA-256 hash of v's content fields. Used
 // by ObserveValue to dedup identical re-broadcasts vs flag distinct second
 // emissions (Phase-2 equivocation evidence).
+//
+// L0Witness is intentionally NOT in the hash: Rule 6a is V-level
+// equivocation (cross-V claims from same op), not witness-level. A byz
+// emitter who sends `{V_a, real_witness}` then `{V_a, fake_witness}` is
+// just wire noise (different witness bytes for same V claim) — including
+// L0Witness in the hash would trip Rule 6a as a false positive. The
+// witness-level byz behavior is independently handled by the harvest path:
+// fake witnesses fail verify and silently discard; real witnesses are
+// idempotently re-pooled.
 func valueMsgContentHash(v *ValueMsg) [32]byte {
 	h := sha256.New()
 	h.Write(v.ClusterID[:])

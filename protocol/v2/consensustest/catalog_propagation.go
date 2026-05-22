@@ -40,15 +40,20 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		// honest σ = 4 ≥ qV=3. Slot succeeds at L_0. Closes the historical
 		// h_V=1 deadlock that pre-§1 OBFT had no in-protocol recovery for.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT: at n=4 f=1, the cluster is {1 byz leader self-σ-on-V_0,
-		// 1 σ-honest receiving V_0, 2 V-drops}. value_pool = leader-byz +
-		// σ-honest = 2 < qV=3; noValuePool = 2 V-drops = 2 < qEnc=3. With
-		// no T_commit hard wall, the cannot-σ gate prevents the σ-eligible
-		// honest from defaulting to NR; ops wait until slot deadline → MISS.
-		// Recovery requires gossipsub reflood: leader's V (carried fulltext
-		// in KindValue) reaches V-drops, who upgrade via A1 → cluster
-		// reaches σ-quorum at L_0. Not modeled in direct-delivery catalog.
-		"2abOBFT": ExpectMiss,
+		// 2abOBFT (post Op11): the V-drops harvest V from the byz leader's
+		// (or V-recipient's) Phase-2a KindValue via the embedded L0Witness
+		// (the leader's σ partial on V is byte-for-byte forwarded in every
+		// KindValue post Op11). Receiver verifies L0Witness against the
+		// leader's pubKeyShare on V — passing — then enqueues a host-
+		// validation request on WantsHostValidationCh. The adapter
+		// (and production runner) drains the channel, calls ApplyHostValidity,
+		// which fires the A1 upgrade trigger in afterStateDelta. The V-drops
+		// emit KindValue(V) via A1 upgrade; the cluster value_pool reaches
+		// qV cluster-wide; σ-eligibility trigger fires → KindCommit-Signed;
+		// σ-pool reaches qV at L_0 → decide at L_0 with V. Matches OBFT's
+		// behavior class (ExpectSuccessFastest). Closes v4 §Implementation
+		// deviation #2 (no peer-reflood-V via KindValue).
+		"2abOBFT": ExpectSuccessFastest,
 		// QBFT analog: byz R1 leader's PROPOSE reaches only f recipients →
 		// PREPARE-pool below qV → R1 round-changes → honest R2 leader
 		// (round-robin) succeeds with fresh V. Outcome class = fall-through.
@@ -73,9 +78,23 @@ var scenarioLateLeaderBroadcast = Scenario{
 		// OBFT: L_0 σ-pool insufficient (byz bundle past T_commit, honest reject);
 		// NR-quorum at L_0 unlocks L_1 → honest L_1 leader broadcasts on time → fall-through.
 		"OBFT": ExpectSuccessFallThrough,
-		// 2abOBFT: same — bundle arrives past T_commit at honest receivers
-		// (rejected); NR-quorum at L_0 → advance to L_1 → σ at L_1.
-		"2abOBFT": ExpectSuccessFallThrough,
+		// 2abOBFT (post Op11): the byz leader's Phase-2a KindValue arrives at
+		// honest peers BEFORE their direct Phase-1 bundle (which is broadcast
+		// late). Honest peers harvest V via Op11 from the KindValue's L0Witness,
+		// then receive host validation via WantsHostValidationCh → A1 upgrade
+		// fires → σ-cascade. The cascade's depth (~3·BTT post-harvest) doesn't
+		// fit within the slot's maxDeadline when the late-broadcast delay
+		// (6·BTT) pushes the harvest to T_phase_2a + ~delay. The cluster
+		// commits Signed at L_0 but past the submission deadline → clipped
+		// to MISS. v4 (pre-Op11) had no harvest path: V-drops stayed on
+		// KindNoValue, NR-eligibility fired naturally via the cannot-σ gate
+		// once peer KindNoValues reached qEnc, fall-through to L_1 decided in
+		// time. The σ-vs-NR choice is now Op11-driven, and σ doesn't fit at
+		// this byz-delay magnitude. Documented sub-chunk #2 trade-off; the
+		// principled fix (Instance-side NR-feasibility gate, or runner-side
+		// scheduling policy) is deferred — see ObserveValueMsg's harvest
+		// docstring at protocol/v2/obft/twoab/phase2a.go for rationale.
+		"2abOBFT": ExpectMiss,
 		// QBFT analog: byz R1 leader's PROPOSE arrives past R1's timer
 		// (functionally equivalent to silent leader) → R1 round-changes →
 		// honest R2 leader succeeds with fresh V.

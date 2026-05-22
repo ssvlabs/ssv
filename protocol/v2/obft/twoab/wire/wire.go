@@ -18,10 +18,13 @@ const (
 	// the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md
 	// §Healthy-path optimizations / Op3). Wire-incompatible with V1.
 	Phase1BundleVersionV2 byte = 0x02
-	ValueMsgVersionV1     byte = 0x01
-	NoValueMsgVersionV1   byte = 0x01
-	CommitVersionV1       byte = 0x01
-	CertificateVersionV1  byte = 0x01
+	// ValueMsgVersionV2 adds the forwarded leader L0Witness field per Op11
+	// of the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md
+	// §Healthy-path optimizations / Op11). Wire-incompatible with V1.
+	ValueMsgVersionV2    byte = 0x02
+	NoValueMsgVersionV1  byte = 0x01
+	CommitVersionV1      byte = 0x01
+	CertificateVersionV1 byte = 0x01
 )
 
 // ProtocolTag is the fixed 16-byte literal stamped into every inner
@@ -167,7 +170,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 
 // EncodeValueMsg serializes a Phase-2a ValueMsg envelope.
 //
-// Format (version 0x01):
+// Format (version 0x02 — adds L0Witness post Op11):
 //
 //	[1]  version
 //	[16] ProtocolTag
@@ -178,6 +181,8 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 //	[4]  V length
 //	[V bytes]
 //	[32] ValueRoot
+//	[4]  L0Witness length
+//	[L0Witness bytes]
 //	[LayerEntries block — see encodeLayerEntries]
 func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if v == nil {
@@ -186,12 +191,15 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if len(v.V) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: ValueMsg V too long (%d)", len(v.V))
 	}
+	if len(v.L0Witness) > MaxFieldSize {
+		return nil, fmt.Errorf("wire: ValueMsg L0Witness too long (%d)", len(v.L0Witness))
+	}
 	if err := preflightLayerEntries(v.LayerEntries, "ValueMsg"); err != nil {
 		return nil, err
 	}
 
-	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4)
-	out = append(out, ValueMsgVersionV1)
+	out := make([]byte, 0, 1+16+1+32+8+8+4+len(v.V)+32+4+len(v.L0Witness)+4)
+	out = append(out, ValueMsgVersionV2)
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindValueMsg)
 	out = append(out, v.ClusterID[:]...)
@@ -200,6 +208,8 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	out = appendUint32(out, uint32(len(v.V))) //nolint:gosec // bounds-checked
 	out = append(out, v.V...)
 	out = append(out, v.ValueRoot[:]...)
+	out = appendUint32(out, uint32(len(v.L0Witness))) //nolint:gosec // bounds-checked
+	out = append(out, v.L0Witness...)
 	out = encodeLayerEntries(out, v.LayerEntries)
 	return out, nil
 }
@@ -207,7 +217,7 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 // DecodeValueMsg parses bytes produced by EncodeValueMsg.
 func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	r := newReader(data)
-	if err := readVersion(r, ValueMsgVersionV1, "ValueMsg"); err != nil {
+	if err := readVersion(r, ValueMsgVersionV2, "ValueMsg"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
@@ -236,6 +246,10 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	if err := r.readBytes(valueRoot[:]); err != nil {
 		return nil, fmt.Errorf("wire: ValueMsg value_root: %w", err)
 	}
+	witness, err := r.readLengthPrefixed("ValueMsg L0Witness")
+	if err != nil {
+		return nil, err
+	}
 	entries, err := decodeLayerEntries(r, "ValueMsg")
 	if err != nil {
 		return nil, err
@@ -249,6 +263,7 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 		Height:       twoab.Height(height),
 		V:            twoab.Value(v),
 		ValueRoot:    valueRoot,
+		L0Witness:    twoab.Signature(witness),
 		LayerEntries: entries,
 	}, nil
 }

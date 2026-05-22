@@ -406,9 +406,27 @@ func (e *evtValueMsgArrival) describe() string {
 func (e *evtValueMsgArrival) handle(s *sim) []scheduledEvent {
 	inst := s.instances[e.to]
 	_ = inst.ObserveValueMsg(e.msg)
+	// Op11: drain any host-validation requests the Instance enqueued
+	// (V's first-observed via the peer-reflood-V harvest path without an
+	// existing host verdict). Mirrors the OBFT adapter's drain pattern at
+	// [`obft/events.go`](../obft/events.go) evtCommitArrival and the
+	// production runner's drainHostValidationRequests goroutine. The
+	// drain calls ApplyHostValidity, whose afterStateDelta cascade may
+	// then fire the A1 upgrade (V-drop → KindValue) — captured below.
+drainLoop:
+	for {
+		select {
+		case req := <-inst.WantsHostValidationCh():
+			valid := s.cfg.Host.Validate(ct.OperatorID(e.to), req.Layer, req.Value, ct.PhasePhase1Acceptance)
+			_ = inst.ApplyHostValidity(req.Layer, req.Value, valid)
+		default:
+			break drainLoop
+		}
+	}
 	tryOpportunisticResolve(s, e.to)
-	// ObserveValueMsg ran the afterStateDelta cascade — capture any
-	// emissions that just fired (A1 upgrade or Phase-2b Commit).
+	// ObserveValueMsg + drained ApplyHostValidity ran the afterStateDelta
+	// cascade — capture any emissions that just fired (A1 upgrade or
+	// Phase-2b Commit).
 	out := captureCascadeEmissions(s, e.to)
 	// Spec-aligned late-arrival re-resolve: if past the slot cutoff and
 	// not yet decided, retry Resolve.
