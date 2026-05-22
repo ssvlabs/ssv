@@ -13,6 +13,16 @@ import (
 // Wire format versions per message kind. Bumped when the on-the-wire
 // layout changes incompatibly. Encoders write the current version;
 // decoders accept only versions they understand.
+//
+// Cluster-cutover policy: operators MUST be rolled in lockstep across
+// any wire-version bump. Mixed-version clusters will see all cross-
+// version messages fail at the version-byte check inside the relevant
+// Decode* function, manifesting as silent quorum starvation (the
+// upgraded ops reject the legacy ops' bundles/ValueMsgs as malformed,
+// and vice versa). There is no cross-version compatibility layer; the
+// decoder accepts exactly one version per kind. Pre-deployment
+// verification SHOULD ensure all cluster members run the same protocol
+// minor version before a version-bumping release is rolled out.
 const (
 	// Phase1BundleVersionV2 adds the leader L0Witness field per Op3 of
 	// the healthy-path optimization (see docs/2abOBFT-REDESIGN-PLAN.md

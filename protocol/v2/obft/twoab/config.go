@@ -186,6 +186,16 @@ type Config struct {
 	// the cost of MEV-fetch headroom. SafetyBuffer is decoupled from the
 	// network's HeartbeatInterval (the gossipsub constant); SafetyBuffer
 	// is a protocol-level configurable, not a network parameter.
+	//
+	// NOT consumed by Instance internally — only by Validate() for the
+	// sign-check (SafetyBuffer >= 0). The active consumer is the
+	// runner/adapter layer (see `protocol/v2/consensustest/twoab/des.go`
+	// for the test-adapter consumer; the planned production runner
+	// adapter will read SafetyBuffer the same way) which sizes the
+	// cascade window externally. The field lives on twoab.Config to
+	// keep the protocol-level configurable in one place and to
+	// forward-compat with adapter codepaths that wire timing fields
+	// through `twoab.Config` rather than a parallel runner-config.
 	SafetyBuffer time.Duration
 
 	// BTT is Block-Trip-Time, the unit propagation+skew budget. Per spec
@@ -309,9 +319,12 @@ func DefaultBroadcastBudget(K int, btt, t0Broadcast time.Duration) ([]time.Durat
 		out[2] = shallow(2)
 		out[3] = t0Broadcast
 	default:
-		// First three layers at 2 / 3 / 4 BTT + SafetyBuffer; intermediate layers
-		// interpolate linearly in duration space from 4·BTT + SafetyBuffer (at L_2)
-		// to T0Broadcast (at L_{K-1}).
+		// First three layers at 2·BTT / 3·BTT / 4·BTT; intermediate layers
+		// interpolate linearly in duration space from 4·BTT (at L_2) to
+		// T0Broadcast (at L_{K-1}). Per Config.SafetyBuffer's contract,
+		// SafetyBuffer is NOT folded into B_k — it widens the post-TPhase2a
+		// cascade window via the resolveWindow formula, not the per-layer
+		// Phase-1 broadcast budgets.
 		out[0] = shallow(0)
 		out[1] = shallow(1)
 		out[2] = shallow(2)

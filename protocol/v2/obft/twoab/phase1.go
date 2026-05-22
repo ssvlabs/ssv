@@ -200,6 +200,17 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	retained := i.retainedBundles[b.Layer][b.OperatorID]
 
 	// Dedup against already-retained value_roots.
+	//
+	// Rule 5 (fake plaintext σ at L_0) fires only on the FIRST observed
+	// bundle per (leader, V) — subsequent identical-V observations dedup
+	// here without re-verifying the L0Witness. This is sound: BLS
+	// signatures are deterministic, so a leader signing the same V twice
+	// produces byte-identical L0Witness; a second observation with
+	// matching V either matches the first L0Witness (no new information)
+	// or differs (the byz emitted bytes-distinct trash for the same V,
+	// which is structurally a separate fault — but since the protocol-
+	// level evidence is keyed on V_root, dedup-on-V is the right
+	// granularity).
 	for _, r := range retained {
 		if bytes.Equal(r.Bundle.Value, b.Value) {
 			// Identical re-broadcast — silent dedup.
@@ -214,9 +225,19 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	}
 
 	copyB := deepCopyBundle(b)
+	// Source derived from witnessPreVerified: harvest is the only path
+	// that pre-verifies (envelope absent because synth is built from a
+	// peer's KindValue). Direct path never pre-verifies (the bundle
+	// carries the leader's envelope; this helper does the L0Witness
+	// verify below).
+	source := RetentionDirect
+	if witnessPreVerified {
+		source = RetentionHarvest
+	}
 	newEntry := &retainedBundle{
 		Bundle:                 copyB,
 		RetentionEstablishedAt: observedOffset,
+		Source:                 source,
 	}
 
 	if len(retained) == 1 {
@@ -229,6 +250,8 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 			LeaderEquivocation: &LeaderEquivocationEvidence{
 				BundleA: retained[0].Bundle,
 				BundleB: copyB,
+				SourceA: retained[0].Source,
+				SourceB: source,
 			},
 		})
 	} else {
@@ -249,6 +272,11 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 		if witnessPreVerified || i.verifyL0SigmaPartial(b.OperatorID, b.Value, b.L0Witness) {
 			i.addToSigmaPool(0, ValueRoot(b.Value), b.OperatorID, b.L0Witness)
 		} else if i.recordRule5(b.OperatorID, 0) {
+			// TODO(Op8): the hardcoded layer=0 below is correct today
+			// because the enclosing block is gated on `b.Layer == 0` —
+			// L_0 is the only path that carries an L0Witness pre-Op8.
+			// Phase D introduces per-layer leader witnesses; once that
+			// gate widens to `b.Layer < K`, switch to `b.Layer` here.
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceFakePlaintextSigma,
 				OperatorID: b.OperatorID,

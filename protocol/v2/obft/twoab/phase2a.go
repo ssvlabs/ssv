@@ -33,7 +33,25 @@ import (
 // valid).
 //
 // Returns an error if `layer` is out of [0, K) or `value` is empty.
+//
+// Post-Finalize guard: ApplyHostValidity is typically invoked from an
+// async host-reply path (the host receives a ValidationRequest on
+// wantsHostValidationCh, runs its verdict logic, then calls back into
+// the Instance). The runner adapter SHOULD gate host callbacks on the
+// Instance's Finalized state, but async-reply races are easy to miss in
+// integration code — a late host reply arriving post-Finalize would
+// otherwise mutate hostVerdict / pendingValidation and trigger the
+// afterStateDelta cascade (potentially setting ownValueMsg / seeding
+// σ-pool) on an Instance the runner considers snapshotted. Mirrors the
+// defensive `i.ended` gate on requestHostValidation; silent no-op for
+// late replies.
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
+	if i == nil {
+		return fmt.Errorf("twoab: nil instance")
+	}
+	if i.ended {
+		return nil
+	}
 	if layer < 0 || layer >= i.cfg.K() {
 		return fmt.Errorf("twoab: %w: layer %d outside [0, %d)",
 			ErrLayerOutOfRange, layer, i.cfg.K())
@@ -560,6 +578,18 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	// the afterStateDelta cascade at the end of ObserveValueMsg sees the
 	// fresh retention state (enabling immediate A1 upgrade / σ-eligibility
 	// firing for V-drop receivers).
+	//
+	// Note on cascade-runs-twice: a successful harvest fires
+	// afterStateDelta internally (from retainPhase1Bundle) before this
+	// method's own afterStateDelta at the end. Both runs are idempotent
+	// (per the cascade-helper contract — MaybeBuildAndBroadcastUpgrade
+	// and MaybeBuildAndBroadcastCommit return early on already-fired
+	// state), and the first run sees retention-but-no-ValueMsg-pool-
+	// update (the L0Partial pool seed runs later in this method), while
+	// the second run sees the fully-updated state. Refactoring either
+	// run away would change observable behavior (the upgrade can fire
+	// during the first run if the host already validated the harvested
+	// V via an earlier path).
 	i.maybeHarvestPhase1BundleFromValueMsg(v)
 	existing, hadValue := i.peerValueMsg[op]
 	if hadValue {
@@ -948,7 +978,16 @@ func (i *Instance) maybeHarvestPhase1BundleFromValueMsg(v *ValueMsg) {
 		return
 	}
 	i.retainPhase1Bundle(synth, 0 /* observedOffset sentinel */, true /* witnessPreVerified */)
-	if priorRetained != 0 || len(i.retainedBundles[layer][leaderID]) == 0 {
+	// Only enqueue host validation on the FIRST retention via harvest
+	// (priorRetained == 0). For priorRetained ≥ 1 the receiver already
+	// has retention for this leader and the host has been queried (or is
+	// in-flight); re-enqueuing would duplicate work.
+	//
+	// Note: when priorRetained == 0, retainPhase1Bundle unconditionally
+	// adds (the synth's V is new — no dedup target, no ≥ 2 cap hit), so
+	// the post-call retention length is always ≥ 1. A `len(...) == 0`
+	// check here would be structurally unreachable.
+	if priorRetained != 0 {
 		return
 	}
 	// First-time retention via harvest. Push validation request — the

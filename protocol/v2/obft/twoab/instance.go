@@ -15,8 +15,10 @@ import (
 //
 //  1. Phase 1 — [slot_start, T_0_broadcast]:
 //     a. If local operator is a layer leader: BuildPhase1Bundle(layer, V)
-//     constructs a bundle and broadcasts it. NO σ_V partial (2abOBFT
-//     emits σ at Phase 2b uniformly with all operators).
+//     constructs a bundle and broadcasts it. Post Op3 the L_0 leader
+//     embeds an L0Witness (σ partial on V) so receivers can seed
+//     σ-pool[V] from the bundle alone; Op8 (Phase D) will extend this
+//     to L_k>0 leader witnesses.
 //     b. ObservePhase1Bundle(b) for every retained peer bundle.
 //
 //  2. Phase 2a — fire-instant at T_phase_2a:
@@ -236,6 +238,30 @@ type Instance struct {
 	ended bool
 }
 
+// RetentionSource discriminates how a retained Phase-1 bundle reached
+// the Instance. Load-bearing for slashing-evidence routing: bundles
+// retained via Op11 harvest have no leader envelope signature (only the
+// L0Witness is cryptographically leader-bound), so downstream slashing
+// consumers re-verifying envelopes need to know to skip envelope
+// re-verification and rely on L0Witness instead.
+type RetentionSource int
+
+const (
+	// RetentionDirect: the bundle reached the Instance via a direct
+	// ObservePhase1Bundle call. The leader's envelope signature is
+	// available at the wire layer; downstream consumers can re-verify
+	// the envelope against the leader's pubkey.
+	RetentionDirect RetentionSource = iota
+	// RetentionHarvest: the bundle was synthesized from a peer's
+	// KindValue (Op11 peer-reflood-V harvest). The synth bundle has no
+	// leader envelope signature — the only leader binding is the
+	// L0Witness BLS partial inside, verified by the Instance against
+	// the leader's pubkey before retention. Downstream slashing
+	// consumers MUST NOT re-verify envelope; cryptographic leader-
+	// attribution lives entirely in the L0Witness.
+	RetentionHarvest
+)
+
 // retainedBundle wraps a Phase-1 bundle. In 2abOBFT there is no
 // auth-only vs regular retention distinction — all in-slot bundles
 // are retained equivalently (no T_commit hard wall).
@@ -250,6 +276,13 @@ type retainedBundle struct {
 	// T_commit acceptance horizon). Useful for runner-level latency
 	// metrics and post-mortem analysis of mesh-tail recovery.
 	RetentionEstablishedAt time.Duration
+
+	// Source distinguishes Direct (envelope-signed Phase-1 bundle from
+	// gossipsub Phase-1 channel) from Harvest (synthesized from a
+	// peer's KindValue via Op11). Surfaced into Rule 2 (leader-
+	// equivocation) evidence so downstream slashing consumers can
+	// route envelope re-verification correctly. See RetentionSource.
+	Source RetentionSource
 }
 
 // NewInstance constructs a 2abOBFT Instance. Validates the config and
@@ -439,9 +472,13 @@ func (i *Instance) OwnOperatorID() OperatorID { return i.ownOperatorID }
 // the designated leader. Empty if the operator is not a leader at any
 // layer in this slot.
 //
-// Used by the SSV runner adapter (Phase L) at slot-start to enumerate
-// which layers the local op needs to fetch + broadcast Phase-1 bundles
-// for. Mirror of the equivalent helper in `protocol/v2/obft/base`.
+// Consumed by the planned twoab SSV runner adapter at slot-start to
+// enumerate which layers the local op needs to fetch + broadcast
+// Phase-1 bundles for (the parallel `protocol/v2/ssv/runner/obft`
+// adapter for bare-OBFT uses the identical helper on the base Instance;
+// the twoab runner adapter is Phase L scope and not yet landed). Kept
+// in the public API surface so the runner adapter doesn't need to plumb
+// it through Config.Layers iteration at the call site.
 func (i *Instance) LeaderAtLayers() []int {
 	var out []int
 	for k, l := range i.cfg.Layers {
@@ -510,8 +547,13 @@ func (i *Instance) Ended() bool { return i.ended }
 
 // Finalize closes the Instance. Idempotent. Closes wantsHostValidationCh
 // on first call so runners draining via range or select-with-zero-value
-// can detect end-of-slot. Repeat calls are safe — closing an already-
-// closed channel would panic, so we gate on `ended`.
+// can detect end-of-slot. Repeat calls are safe under the Instance's
+// single-goroutine serialization contract (callers MUST serialize access
+// per the package preamble) — the `i.ended` gate prevents the double-
+// close-panic on sequential repeat calls. Concurrent Finalize calls
+// from multiple goroutines are NOT safe and would race on the
+// `i.ended = true` write versus the `close(...)` call; the type-level
+// contract precludes this.
 func (i *Instance) Finalize() {
 	if i.ended {
 		return

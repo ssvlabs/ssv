@@ -61,11 +61,28 @@ import (
 // misses for unclear reasons.
 func (i *Instance) afterStateDelta() {
 	if _, err := i.MaybeBuildAndBroadcastUpgrade(); err != nil && !errors.Is(err, ErrUpgradeNotAvailable) {
-		i.cascadeErrors = append(i.cascadeErrors, err)
+		i.recordCascadeError(err)
 	}
 	if _, err := i.MaybeBuildAndBroadcastCommit(); err != nil {
-		i.cascadeErrors = append(i.cascadeErrors, err)
+		i.recordCascadeError(err)
 	}
+}
+
+// cascadeErrorsCap bounds the accumulator. In practice a slot processes
+// O(10) state deltas with 0–2 cascade-error contributions each, so the
+// realistic upper bound is ~20. The cap is generous — only a pathological
+// signer that fails every tick forever would hit it — and prevents
+// unbounded memory growth in such a degenerate case. Hit-the-cap is
+// itself a telemetry-worthy event (signer hard-broken); the next error
+// after cap is silently dropped rather than panicking.
+const cascadeErrorsCap = 100
+
+// recordCascadeError appends err to cascadeErrors with a length cap.
+func (i *Instance) recordCascadeError(err error) {
+	if len(i.cascadeErrors) >= cascadeErrorsCap {
+		return
+	}
+	i.cascadeErrors = append(i.cascadeErrors, err)
 }
 
 // MaybeBuildAndBroadcastCommit evaluates the Phase-2b commit triggers

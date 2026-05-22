@@ -141,7 +141,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		// available slot budget, or SafetyBuffer set too aggressively)
 		// the configuration is out of envelope.
 		return ct.Outcome{}, fmt.Errorf(
-			"%w: twoab adapter: derived TPhase2a=%v non-positive or <= BTT=%v (RelayCutoff=%v SafetyBuffer=%v)",
+			"%w: twoab adapter: derived TPhase2a=%v <= BTT=%v (RelayCutoff=%v SafetyBuffer=%v)",
 			ct.ErrConfigOutOfEnvelope, tPhase2a, btt, cfg.RelayCutoff, safetyBuffer)
 	}
 	t0Broadcast := tPhase2a - btt

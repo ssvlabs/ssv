@@ -251,10 +251,11 @@ func validateLayerEntries(entries []LayerEntry, cfg *Config, kindLabel string) e
 			return fmt.Errorf("twoab: %s LayerEntries[%d] has Layer %d, expected %d",
 				kindLabel, idx, e.Layer, expectedLayer)
 		}
-		if e.Layer < 1 || e.Layer >= K {
-			return fmt.Errorf("twoab: %s LayerEntry Layer %d out of valid range [1, %d)",
-				kindLabel, e.Layer, K)
-		}
+		// (The prior `e.Layer < 1 || e.Layer >= K` range check was
+		// removed: the `e.Layer != expectedLayer` mismatch above already
+		// constrains e.Layer to idx+1 for idx ∈ [0, K-2], so
+		// e.Layer ∈ [1, K-1] is structurally guaranteed by the time we
+		// reach this point.)
 		switch e.Kind {
 		case LayerEntryEmpty:
 			if len(e.V) != 0 {
