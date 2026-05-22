@@ -32,6 +32,9 @@ import (
 // verdict is consulted BEFORE BuildPhase1Bundle to avoid σ-locking on a
 // host-invalid V.
 func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, error) {
+	if i == nil {
+		return nil, fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return nil, ErrInstanceEnded
 	}
@@ -111,6 +114,9 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 //     has not yet σ-locked on the first) commits NR at T_commit; the
 //     equivocation observation foreclose σ-emit at this layer.
 func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Duration) error {
+	if i == nil {
+		return fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return ErrInstanceEnded
 	}
@@ -416,6 +422,9 @@ func deepCopyCommit(c *Commit) *Commit {
 // layer under leader equivocation (though equivocation collapses to NR at
 // T_commit, regardless of validity verdicts on either V).
 func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
+	if i == nil {
+		return fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return ErrInstanceEnded
 	}

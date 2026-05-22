@@ -66,6 +66,22 @@ const (
 	KindCertificate MessageKind = 0x04
 )
 
+// String returns a human-readable name for the MessageKind, used in
+// logs and error messages. Returns "unknown(0xNN)" for unrecognized
+// values. Mirrors the equivalent String method in twoab/wire/envelope.go.
+func (k MessageKind) String() string {
+	switch k {
+	case KindPhase1Bundle:
+		return "Phase1Bundle"
+	case KindCommit:
+		return "Commit"
+	case KindCertificate:
+		return "Certificate"
+	default:
+		return fmt.Sprintf("unknown(0x%02x)", byte(k))
+	}
+}
+
 // Envelope is a parsed wire envelope. Exactly one of the typed fields is
 // set, matching Kind.
 type Envelope struct {

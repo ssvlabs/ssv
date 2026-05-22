@@ -481,7 +481,19 @@ func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
 // channel if (a) host hasn't already validated this V at this layer, and
 // (b) no in-flight request exists for the same (layer, value_root).
 // Non-blocking: drops on full buffer.
+//
+// Post-Finalize guard: sending on a closed channel panics even via
+// `select` with default. Today base's mutator entry points all gate on
+// `i.ended` before reaching this helper (the sole caller is
+// maybeRequestL0PeerVValidation in phase2.go, called only from
+// ObserveCommit which is `i.ended`-guarded), so this defense-in-depth
+// guard protects against a future refactor that adds a new caller from
+// an unguarded path. Mirrors the equivalent guard in twoab's
+// requestHostValidation.
 func (i *Instance) requestHostValidation(layer int, value Value) {
+	if i.ended {
+		return
+	}
 	if layer < 0 || layer >= i.cfg.K() {
 		return
 	}
@@ -657,6 +669,54 @@ func (i *Instance) LocalState(layer int) CommitState {
 		return CommitUndecided
 	}
 	return i.localState[layer]
+}
+
+// InstanceStats is an introspection snapshot of internal counters that
+// are otherwise unobservable through the public API. Stable across
+// versions: fields are additive (new counters appended, never removed
+// or renamed). Intended for tests, telemetry, and diagnostic tooling.
+// Mirrors the equivalent type in twoab/instance.go.
+type InstanceStats struct {
+	// PendingValidationCount is the total number of (layer, V_root)
+	// pairs currently waiting on host-validation reply via
+	// wantsHostValidationCh. Summed across all layers.
+	PendingValidationCount int
+
+	// WitnessedLeaderSigmaCount is the total number of (layer, V_root)
+	// entries cached in witnessedLeaderSigma — successful leader σ_V
+	// partial verifications harvested from peer onion entries. Summed
+	// across all layers.
+	WitnessedLeaderSigmaCount int
+
+	// EvidenceCount is the current evidence accumulator length.
+	EvidenceCount int
+
+	// Ended reflects whether Finalize has been called.
+	Ended bool
+}
+
+// Stats returns an introspection snapshot of the Instance's internal
+// counters. Read-only — callers receive a value-typed struct that's
+// safe to inspect after the call returns. Stable additive contract:
+// new fields may be appended; existing fields are not removed or
+// renamed. Used by tests and telemetry to observe behavior that the
+// per-method API doesn't surface (e.g., the pendingValidation set's
+// size, the witnessed-leader-σ cache).
+func (i *Instance) Stats() InstanceStats {
+	pending := 0
+	for _, bucket := range i.pendingValidation {
+		pending += len(bucket)
+	}
+	witnessed := 0
+	for _, bucket := range i.witnessedLeaderSigma {
+		witnessed += len(bucket)
+	}
+	return InstanceStats{
+		PendingValidationCount:    pending,
+		WitnessedLeaderSigmaCount: witnessed,
+		EvidenceCount:             len(i.evidence),
+		Ended:                     i.ended,
+	}
 }
 
 // Evidence returns the accumulated slashing-evidence entries.

@@ -24,6 +24,9 @@ import (
 // NR-emission locks nrLocked[layer]. Returns ErrAlreadyCommitted if called
 // more than once.
 func (i *Instance) BuildOwnCommit() (*Commit, error) {
+	if i == nil {
+		return nil, fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return nil, ErrInstanceEnded
 	}
@@ -221,6 +224,9 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 //   - flags a structurally-distinct second KindCommit from the same operator
 //     as cross-onion equivocation (top-level dedup via content hash).
 func (i *Instance) ObserveCommit(c *Commit) error {
+	if i == nil {
+		return fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return ErrInstanceEnded
 	}

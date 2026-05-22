@@ -39,6 +39,9 @@ import (
 // mutating Instance state, so observer-mode call sites pay no cost for
 // pre-quorum attempts.
 func (i *Instance) Resolve() (*Output, error) {
+	if i == nil {
+		return nil, fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return nil, ErrInstanceEnded
 	}
@@ -201,27 +204,8 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 		}
 	}
 
-	// 3) Pick the group with the most partials; check qV. Tiebreak by
-	// lexicographic V — without it, two groups with equal partial counts
-	// would resolve based on map-iteration order (peerOnions[layer] is a
-	// map), producing nondeterministic Output across operators on transient
-	// pre-quorum states. Pigeonhole 2 guarantees only one V reaches qV
-	// cluster-wide given f-bound, but locally we can transiently observe
-	// two V's at equal-count below qV; deterministic tiebreak makes the
-	// "winner" identical across operators if both ever reach qV.
-	var winning *sigGroup
-	for _, g := range groups {
-		if winning == nil {
-			winning = g
-			continue
-		}
-		switch {
-		case len(g.partials) > len(winning.partials):
-			winning = g
-		case len(g.partials) == len(winning.partials) && bytes.Compare(g.value, winning.value) < 0:
-			winning = g
-		}
-	}
+	// 3) Pick the group with the most partials; check qV.
+	winning := selectWinningGroup(groups)
 	if winning == nil || len(winning.partials) < i.cfg.QV() {
 		return nil, nil
 	}
@@ -274,6 +258,9 @@ func addToGroup(groups *[]*sigGroup, value Value, opID OperatorID, partial Signa
 // failed to reconstruct locally) can submit (V, S) downstream — protecting
 // against the lone-reconstructor's beacon path failing.
 func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
+	if i == nil {
+		return nil, fmt.Errorf("obft: nil instance")
+	}
 	if out == nil {
 		return nil, fmt.Errorf("obft: nil output")
 	}
@@ -296,6 +283,9 @@ func (i *Instance) BuildCertificate(out *Output) (*Certificate, error) {
 // Per spec, receivers SHOULD re-run host-application validity on Value before
 // submitting downstream — that's a host concern, not in this method's scope.
 func (i *Instance) ObserveCertificate(c *Certificate) error {
+	if i == nil {
+		return fmt.Errorf("obft: nil instance")
+	}
 	if i.ended {
 		return ErrInstanceEnded
 	}
@@ -331,4 +321,34 @@ func (i *Instance) RetainedCertificate() *Certificate {
 		Value:     append(Value{}, src.Value...),
 		Signature: append(Signature{}, src.Signature...),
 	}
+}
+
+
+// selectWinningGroup picks the σ-group with the most partials at this
+// layer, breaking ties lexicographically on V. Tiebreak determinism is
+// load-bearing: without it, two groups with equal partial counts would
+// resolve based on map-iteration order (groups is built from
+// peerOnions[layer] which is a map), producing nondeterministic Output
+// across operators on transient pre-quorum states. Pigeonhole 2
+// guarantees only one V reaches qV cluster-wide given f-bound, but
+// locally we can transiently observe two V's at equal-count below qV;
+// deterministic tiebreak makes the "winner" identical across operators
+// if both ever reach qV.
+//
+// Returns nil if groups is empty.
+func selectWinningGroup(groups []*sigGroup) *sigGroup {
+	var winning *sigGroup
+	for _, g := range groups {
+		if winning == nil {
+			winning = g
+			continue
+		}
+		switch {
+		case len(g.partials) > len(winning.partials):
+			winning = g
+		case len(g.partials) == len(winning.partials) && bytes.Compare(g.value, winning.value) < 0:
+			winning = g
+		}
+	}
+	return winning
 }
