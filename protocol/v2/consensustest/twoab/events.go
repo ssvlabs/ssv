@@ -256,6 +256,11 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// layer's perspective via cluster-wide cascading state). Capture
 			// any cascade emissions.
 			out = append(out, captureCascadeEmissions(s, leader)...)
+			// Op6: the leader's self-observe (retention + host valid)
+			// closes its L0Ready at L_0 — async-fire its KindValue now,
+			// well before the TPhase2a backstop (this is the earliest
+			// σ-emission in the cluster, seeding σ-pool[V_0] for peers).
+			out = append(out, maybeEarlyFire(s, leader)...)
 		}
 		// 2abOBFT Phase 1 carries the leader's L0Witness σ partial at L_0
 		// post Op3. The offline-aggregator path does NOT observe this
@@ -327,7 +332,12 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 	// cascade internally (per spec §Emission ordering). Capture any
 	// emissions the cascade produced (A1 upgrade ValueMsg or Phase-2b
 	// Commit) and schedule per-recipient arrivals.
-	return captureCascadeEmissions(s, e.to)
+	out := captureCascadeEmissions(s, e.to)
+	// Op6: bundle retention + host verdict may have closed L0Ready
+	// (σ-eligible). Async-fire the initial KindValue before the TPhase2a
+	// backstop.
+	out = append(out, maybeEarlyFire(s, e.to)...)
+	return out
 }
 
 // ---- evtPhase2aFire ----------------------------------------------------
@@ -344,51 +354,114 @@ func (e *evtPhase2aFire) describe() string { return "Phase2aFire" }
 func (e *evtPhase2aFire) handle(s *sim) []scheduledEvent {
 	var out []scheduledEvent
 	for _, op := range s.operators {
-		if !s.cfg.Byz.AllowPhase2aEmission(op) {
-			continue
-		}
-		vm, nv, c, err := s.instances[op].MaybeFirePhase2a()
-		if err != nil {
-			continue
-		}
-		switch {
-		case vm != nil:
-			vm = s.cfg.Byz.OverrideValueMsg(s, op, vm)
-			s.markValueMsgEmitted(op)
-			out = append(out, scheduleValueMsg(s, op, vm)...)
-		case nv != nil:
-			nv = s.cfg.Byz.OverrideNoValueMsg(s, op, nv)
-			s.markNoValueMsgEmitted(op)
-			out = append(out, scheduleNoValueMsg(s, op, nv)...)
-		case c != nil:
-			c = s.cfg.Byz.OverrideCommit(s, op, c)
-			s.markCommitEmitted(op)
-			out = append(out, scheduleCommit(s, op, c)...)
-		}
-		// Universal BuildExtra* hooks: byz patterns may inject extras of
-		// ANY Phase-2a kind regardless of which natural-kind fired —
-		// enables A1/A2/A8 Rule-6a violation scenarios that mix kinds
-		// (e.g., natural KindValue + extra KindNoValue downgrade). Each
-		// hook receives the natural emission for the matching kind, or
-		// nil for the other kinds. Honest defaults return nil; byz
-		// patterns MUST nil-guard the natural-emission parameter.
-		for _, extra := range s.cfg.Byz.BuildExtraValueMsgs(s, op, vm) {
-			out = append(out, scheduleValueMsg(s, op, extra)...)
-		}
-		for _, extra := range s.cfg.Byz.BuildExtraNoValueMsgs(s, op, nv) {
-			out = append(out, scheduleNoValueMsg(s, op, extra)...)
-		}
-		for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
-			out = append(out, scheduleCommit(s, op, extra)...)
-		}
-		// Phase 2a fire may have cascaded into a Phase-2b Commit
-		// emission (e.g., σ-eligibility trigger already satisfied at fire
-		// time by earlier-cascading peer state). The Value/NoValue case
-		// above hasn't yet marked the commit as emitted; capture it
-		// here.
-		out = append(out, captureCascadeEmissions(s, op)...)
-		tryOpportunisticResolve(s, op)
+		out = append(out, fireOnePhase2a(s, op)...)
 	}
+	return out
+}
+
+// ---- evtPhase2aFireOp (Op6 async-fire) ---------------------------------
+
+// evtPhase2aFireOp fires a SINGLE op's Phase-2a emission early — at the
+// moment its L_0 decision becomes determinable (L0Ready close), before
+// the cluster-wide TPhase2a backstop. Scheduled by maybeEarlyFire from
+// evtPhase1Arrival (retention + host verdict), evtValueMsgArrival (Op11
+// harvest), and evtLeaderFetch (leader self-observe). Mirrors the bare-
+// OBFT adapter's evtCommitEmit.
+type evtPhase2aFireOp struct {
+	op twoab.OperatorID
+}
+
+func (e *evtPhase2aFireOp) describe() string {
+	return fmt.Sprintf("Phase2aFireOp[op=%d]", e.op)
+}
+
+func (e *evtPhase2aFireOp) handle(s *sim) []scheduledEvent {
+	return fireOnePhase2a(s, e.op)
+}
+
+// maybeEarlyFire schedules an early per-op Phase-2a fire if op's L0Ready
+// channel has closed (σ-eligible or equivocation-observed) and the op
+// hasn't already emitted. Mirrors base's maybeEarlyCommit. Returns the
+// scheduled event(s) for the caller to append; the actual emission runs
+// in evtPhase2aFireOp at s.now (this tick).
+func maybeEarlyFire(s *sim, op twoab.OperatorID) []scheduledEvent {
+	if s.valueMsgEmitted[op] || s.noValueMsgEmitted[op] || s.commitEmitted[op] {
+		return nil
+	}
+	// A byz-suppressed op's L0ReadyCh can still close (its Instance state
+	// retains V + host valid independent of the DES delivery filter).
+	// Skip scheduling a fire event for it — fireOnePhase2a would no-op on
+	// the AllowPhase2aEmission check anyway, but without this guard we'd
+	// re-schedule a dead evtPhase2aFireOp on every subsequent arrival.
+	if !s.cfg.Byz.AllowPhase2aEmission(op) {
+		return nil
+	}
+	select {
+	case <-s.instances[op].L0ReadyCh():
+		return []scheduledEvent{{when: s.now, ev: &evtPhase2aFireOp{op: op}}}
+	default:
+		return nil
+	}
+}
+
+// fireOnePhase2a runs a single op's Phase-2a emission (MaybeFirePhase2a)
+// and schedules the resulting ValueMsg / NoValueMsg / Commit-NRDirect
+// to peers, applying byz overrides + extras. Shared by the per-op early
+// fire (evtPhase2aFireOp) and the cluster-wide backstop (evtPhase2aFire).
+//
+// Idempotent: returns nil if the op has already emitted its Phase-2a
+// message (early-fire then backstop, or vice versa). The Instance's
+// phase2aFired makes MaybeFirePhase2a return the cached emission; the
+// DES-side mark flags guard the propagation side so we don't double-
+// broadcast.
+func fireOnePhase2a(s *sim, op twoab.OperatorID) []scheduledEvent {
+	if !s.cfg.Byz.AllowPhase2aEmission(op) {
+		return nil
+	}
+	if s.valueMsgEmitted[op] || s.noValueMsgEmitted[op] || s.commitEmitted[op] {
+		return nil // already fired (early or backstop)
+	}
+	vm, nv, c, err := s.instances[op].MaybeFirePhase2a()
+	if err != nil {
+		return nil
+	}
+	var out []scheduledEvent
+	switch {
+	case vm != nil:
+		vm = s.cfg.Byz.OverrideValueMsg(s, op, vm)
+		s.markValueMsgEmitted(op)
+		out = append(out, scheduleValueMsg(s, op, vm)...)
+	case nv != nil:
+		nv = s.cfg.Byz.OverrideNoValueMsg(s, op, nv)
+		s.markNoValueMsgEmitted(op)
+		out = append(out, scheduleNoValueMsg(s, op, nv)...)
+	case c != nil:
+		c = s.cfg.Byz.OverrideCommit(s, op, c)
+		s.markCommitEmitted(op)
+		out = append(out, scheduleCommit(s, op, c)...)
+	}
+	// Universal BuildExtra* hooks: byz patterns may inject extras of
+	// ANY Phase-2a kind regardless of which natural-kind fired —
+	// enables A1/A2/A8 Rule-6a violation scenarios that mix kinds
+	// (e.g., natural KindValue + extra KindNoValue downgrade). Each
+	// hook receives the natural emission for the matching kind, or
+	// nil for the other kinds. Honest defaults return nil; byz
+	// patterns MUST nil-guard the natural-emission parameter.
+	for _, extra := range s.cfg.Byz.BuildExtraValueMsgs(s, op, vm) {
+		out = append(out, scheduleValueMsg(s, op, extra)...)
+	}
+	for _, extra := range s.cfg.Byz.BuildExtraNoValueMsgs(s, op, nv) {
+		out = append(out, scheduleNoValueMsg(s, op, extra)...)
+	}
+	for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
+		out = append(out, scheduleCommit(s, op, extra)...)
+	}
+	// Phase 2a fire may have cascaded into a Phase-2b Commit emission
+	// (e.g., NR-eligibility trigger already satisfied at fire time by
+	// earlier-cascading peer state). The Value/NoValue case above
+	// hasn't yet marked the commit as emitted; capture it here.
+	out = append(out, captureCascadeEmissions(s, op)...)
+	tryOpportunisticResolve(s, op)
 	return out
 }
 
@@ -428,6 +501,12 @@ drainLoop:
 	// cascade — capture any emissions that just fired (A1 upgrade or
 	// Phase-2b Commit).
 	out := captureCascadeEmissions(s, e.to)
+	// Op6: an Op11 harvest (+ host verdict drained above) may have
+	// closed L0Ready for a V-drop receiver that just became σ-eligible.
+	// Async-fire the initial KindValue. (A1 upgrade for an op that
+	// already emitted KindNoValue goes via the cascade above, not here —
+	// maybeEarlyFire no-ops once the op has emitted.)
+	out = append(out, maybeEarlyFire(s, e.to)...)
 	// Spec-aligned late-arrival re-resolve: if past the slot cutoff and
 	// not yet decided, retry Resolve.
 	if s.now > s.resolveDeadline {

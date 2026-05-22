@@ -1263,7 +1263,11 @@ Cross-state transitions (σ-locked → NR-locked or vice versa) are slashable pe
 
 #### Op6 — Async Phase-2a fire on L0Ready (consequence of Op5)
 
+> **Implementation status (2026-05-22):** Op3/Op5/Op11 shipped. Op6 is the remaining core-set item, scoped here in three parts: **(1)** async-fire via a base-style `L0ReadyCh`, **(2)** the resolveDeadline corollary — **revised** from the original (wrong) `2·BTT→1·BTT` to a `sum→max` reservation (see corollary subsection below), **(3)** equivocation-trigger gating (already satisfied in twoab — see Part 3 note). The original corollary's `1·BTT` formula is **rejected**: it only traced the σ-side path and would clip NR fall-through (which is genuinely 2-hop at K=2, per the §Trade-off below).
+
 Under v4, `TPhase2a` was a cluster-wide synchronized event — every op simultaneously called `MaybeFirePhase2a` at that offset. Under Op5, ops fire `KindValue` (with σ partial) as soon as their local L0Ready closes: V retained from Phase-1 bundle + host valid + L0Witness verified. This is typically `t0Broadcast + ~1·BTT` (when the bundle arrives), well before the v4 `TPhase2a = t0Broadcast + 1·BTT` scheduled instant.
+
+**L0Ready mechanism (base-style).** Mirror `protocol/v2/obft/base.Instance.L0ReadyCh()`: a per-slot `chan struct{}` closed once when the op's L_0 Phase-2a emission becomes determinable. **Semantic difference from base:** base closes L0Ready on *any* host verdict (NV and σ are both commitments in bare OBFT). twoab closes L0Ready only when `computeLocalValueState() ∈ {Value, NRDirect}` — the σ-eligible and equivocation-observed cases that fire `KindValue` / `KindCommit-NRDirect` early. The `NoValue` case does **not** close L0Ready: a V-drop / host-NV op waits for the `TPhase2a` backstop (giving V time to arrive via reflood before the op declares NV), then emits `KindNoValue`; a later V arrival is handled by the existing A1-upgrade cascade. This divergence is protocol-forced — twoab's `KindNoValue` is coordination, not commitment.
 
 `TPhase2a` becomes a **backstop** for ops that haven't observed V by then: they fire `KindNoValue` at TPhase2a, surfacing V-drop state to the cluster and enabling the NR-eligibility trigger via noValuePool growth.
 
@@ -1275,33 +1279,87 @@ Under v4, `TPhase2a` was a cluster-wide synchronized event — every op simultan
 
 Note: under Op5, equivocation observed POST-KindValue-emission has no recovery path (the op is σ-committed). The "equivocation trigger" only handles the pre-emission case — see dead-code note above.
 
-#### Op6 corollary — resolveDeadline formula update (impl scope item)
+#### Op6 corollary — resolveDeadline `sum → max` (REVISED; the original `1·BTT` is rejected)
 
-The current v4 [`des.go:215`](../protocol/v2/consensustest/twoab/des.go) sets `resolveDeadline = TPhase2a + 2·BTT + SafetyBuffer + ε_3`, reserving 2·BTT for the v4 two-hop cascade. Under Op5+Op6 the cascade collapses to **one hop** (peer KindValue carries the σ partial directly). The formula must update.
+**Original (rejected) proposal.** The first draft proposed `resolveDeadline = TPhase2a + 1·BTT + SafetyBuffer + ε_3`, reasoning that Op5 collapses the cascade to one hop. This is **wrong**: it only traced the σ-side path. The L_0 **NR fall-through** to L_1 is still **2-hop** (`KindNoValue` at TPhase2a → propagate → `noValuePool ≥ qEnc` → `KindCommit-NR` → propagate → `nrTagPool ≥ qEnc` → decrypt L_1 σ entries → σ-quorum at L_1). The `resolveDeadline` is the *final backstop sweep* and must cover the NR path. A naïve `1·BTT` clips `PrimaryLeaderSilent` / `ValidityDivergence_NRFallThrough` (observed during the Op5 work). The 2-hop NR cascade is intrinsic to twoab's coordinate-then-NR-commit design (the cannot-σ gate that preserves A1-upgrade liveness) and **cannot** be reduced at K=2 without losing twoab's advantages over base.
 
-**Canonical formula (anchored to TPhase2a, mirroring v4's convention):**
-
+**Why we can still do better than the current `2·BTT + SafetyBuffer`.** The current code (`des.go`) reserves the **sum**:
 ```
-resolveDeadline = TPhase2a + 1·BTT + SafetyBuffer + ε_3
+resolveDeadline = TPhase2a + 2·BTT + SafetyBuffer + ε_3
 ```
-
-Equivalently, anchored to T0Broadcast (since `TPhase2a = T0Broadcast + 1·BTT`):
-
+where `2·BTT` covers the NR cascade and `SafetyBuffer` covers σ-pool fill via reflood. But a slot resolves **σ-ward XOR NR-ward** — mutually exclusive outcomes. No slot spends the σ-reflood budget *and then sequentially* spends the NR-cascade budget. The deadline only needs the **max** of the two paths:
 ```
-resolveDeadline = T0Broadcast + 2·BTT + SafetyBuffer + ε_3
+resolveDeadline = TPhase2a + max(1·BTT + SafetyBuffer,  2·BTT) + ε_3
+                = TPhase2a + 1·BTT + max(SafetyBuffer, 1·BTT) + ε_3
 ```
+- **σ-ward worst case** = `1·BTT` (KindValue prop) + `SafetyBuffer` (reflood tail).
+- **NR-ward worst case** = `2·BTT` (2-hop cascade).
 
-The two forms are algebraically identical. Use the TPhase2a-anchored form as canonical in code and docs (matches v4's `des.go:215` parameterization; smaller diff vs current impl).
+**Reclaim** = `(2·BTT + SafetyBuffer) − max(1·BTT + SafetyBuffer, 2·BTT)` = **`min(1·BTT, SafetyBuffer)`**:
+- default (SafetyBuffer = RefloodDelay = 700ms, BTT = 200ms): reclaims a full **1·BTT** of MEV-fetch headroom.
+- SafetyBuffer = 0 (eager-push-reliable, e.g. `TestAdapter_OpportunisticDecisionTime`): reclaims **0** — `max(1·BTT, 2·BTT) = 2·BTT`, identical to the sum. This config is unaffected.
 
-Decomposition (T0Broadcast-anchored, for intuition):
-- 1·BTT for Phase-1 bundle propagation (leader → peers; bundle reaches all honest by `T0Broadcast + 1·BTT = TPhase2a`).
-- 1·BTT for first KindValue propagation (any σ-eligible op fires async on L0Ready ≈ TPhase2a; peer receives KindValue with σ partial within 1·BTT).
-- SafetyBuffer for σ-pool fill via gossipsub IHAVE/IWANT recovery (if first KindValues are slow).
-- ε_3 for Phase 3 walk.
+**Where the reclaim lands.** `resolveDeadline` is clamped to `maxDeadline = RelayCutoff − HeaderSubmitHeadroom − phase3JitterBuffer`, and the sum-formula already hits that clamp exactly. The max-formula *also* hits it exactly (algebra: `TPhase2a_new + max(...) + ε_3 = maxDeadline`), so **`resolveDeadline`'s wall-clock is unchanged**. What moves is `TPhase2a` (derived in `adapter.go` as `RelayCutoff − resolveBudget`): a smaller `resolveBudget` shifts `TPhase2a` **later** by `min(1·BTT, SafetyBuffer)`, and transitively `T0Broadcast = TPhase2a − BTT` and every `FetchAt[k]` — i.e. **more block/MEV-fetch time at slot start**. The post-TPhase2a cascade window shrinks from `2·BTT + SafetyBuffer + ε_3` to `max(1·BTT + SafetyBuffer, 2·BTT) + ε_3`, which still fits both σ and NR worst cases.
 
-This is materially **earlier** than the v4 formula at the same SafetyBuffer (v4 reserved 2·BTT post-TPhase2a for the two-hop cascade; Op5+Op6 reserves only the single 1·BTT post-TPhase2a propagation cycle).
+**Safety/liveness case-walk (preserves both paths; same assumptions as today).** Both the current sum-formula and the max-formula assume **≤ 1 reflood cycle in the critical path** (the sum reserves `2·BTT + 1×SafetyBuffer`, not `2×SafetyBuffer` — so two independent reflood cycles are already an accepted rare miss). Under that shared assumption:
+
+| Path | Completion (from TPhase2a) | Covered by max()? |
+|---|---|---|
+| σ eager + reflood | `1·BTT + SafetyBuffer` | ✓ σ term |
+| NR, both hops eager | `2·BTT` | ✓ NR term |
+| NR, one hop reflood-delayed | `1·BTT + SafetyBuffer` | ✓ σ term (algebraically equal) |
+
+The max-formula covers every case the sum-formula covers; it only drops the never-realized "σ-reflood **then** NR-cascade sequential" slack.
+
+**Caveat — empirical validation required.** This is a first-order structural argument; the per-hop reflood interaction on the 2-hop NR cascade is subtle. Land it only after running the **full catalog + stress matrix** with zero regressions on the NR-fall-through cells (`PrimaryLeaderSilent`, `ValidityDivergence_NRFallThrough`) and the mesh-tail cells.
 
 **TPhase2a backstop offset (unchanged from v4):** `TPhase2a = T0Broadcast + 1·BTT`. Under Op6, TPhase2a serves only as the KindNoValue-emission deadline for ops still in `coordination` state (haven't observed V). It's typically reached after most σ-eligible ops have already emitted KindValue async.
+
+#### Op6 — accepted trade-off: `Equivocate_AllNR` under jitter (B1)
+
+Async-fire shrinks the equivocation-detection window: an op σ-locks on the first V it retains+host-validates, before a second equivocating V can arrive. In the `Equivocate_AllNR` scenario (byz leader floods BOTH V_a and V_b to all honest ops), this **changes the outcome distribution under jittery delivery**:
+
+| AllNR, n=7, LogNormal, 60 seeds | L_0 (fast) | L_1 (fall-through) | Miss |
+|---|---|---|---|
+| Pre-Op6 (synchronized fire) | 0 | 60 | 0 |
+| Post-Op6 (async-fire) | 46 | 0 | 14 |
+
+- Pre-Op6: every op waits to `TPhase2a`, by which point both V's have arrived → all emit NRDirect → NR-quorum at L_0 → **always falls through to L_1** (slow backup layer).
+- Post-Op6: ops σ-lock on whichever V arrives first; when enough land on the same V it reaches qV at L_0 → **most decide at L_0 directly (faster)**; the rest split sub-qV with too few NRDirect → **≈23% miss** (deadlock at L_0).
+
+This is **not a pure regression** — the common case gets *faster* (L_0 vs L_1); the cost is a miss tail. Properties:
+- **Safety-preserving.** Pigeonhole 2 still bounds two-V σ-quorum (only one V can reach qV cluster-wide); finalizing one of the leader's two equivocated values is a valid SingleV decision, and the equivocation stays slashable on the wire. Confirmed `SingleV` / `NoOfflineDoubleV` on the miss runs.
+- **Jitter-only.** Under `ConstantDelay{D=BTT}` both V's arrive simultaneously → ops still see both before firing → AllNR still cleanly falls through to L_1. So the catalog (which uses `ConstantDelay` via `CorrectnessProfile`) still observes `ExpectSuccessFallThrough` — that Expect entry is correct and **unchanged**.
+- **Adversarial + self-healing.** Requires a byz leader actively flooding both V's; a missed slot is followed by the next leader's block (standard BFT liveness).
+
+**Decision: accept (Option A).** Consistent with the plan's already-accepted "trade equivocation-recovery for healthy-path latency" philosophy (Op5 removed the A3/A4 pivots for the same reason). Op6 extends it to AllNR, which Op5 alone had preserved — so it is logged here explicitly. The rejected alternative (Option B) was a ~1·BTT grace before σ-side async-fire to let a 2nd V arrive; it would have halved the healthy-path win on 100% of slots to defend an adversarial, self-healing corner. A LogNormal tracking test (`TestAdapter_Equivocate_AllNR_JitterTradeoff`) measures the AllNR decision rate so the trade-off can't silently worsen.
+
+#### Op6 — implementation checklist (so nothing is missed)
+
+**Instance layer (`protocol/v2/obft/twoab/`):** — DONE
+- [x] `instance.go`: added `l0ReadyCh chan struct{}` field; init in `NewInstance` (`make(chan struct{})`). Added `L0ReadyCh() <-chan struct{}` accessor + `maybeSignalL0Ready()` + `l0DecisionReady()`. `l0DecisionReady()` = `computeLocalValueState() != localValueStateNoValue` (Value or NRDirect; NOT NoValue).
+- [x] Call `maybeSignalL0Ready()` from the **two and only two** mutators of computeLocalValueState's inputs (retainedBundles + hostVerdict): `retainPhase1Bundle` (covers ObservePhase1Bundle direct + Op11 harvest) and `ApplyHostValidity`. **Correction vs original draft:** `BuildPhase1Bundle` does NOT signal — in twoab it σ-locks but does not self-retain, so it cannot flip the (retention-driven) computeLocalValueState. The leader's L0Ready closes via self-observe (ObservePhase1Bundle + ApplyHostValidity at fetch time). This differs from base, whose `l0DecisionReady` checks `sigmaLocked[0]` and so signals from BuildPhase1Bundle.
+- [x] Finalize: `l0ReadyCh` left open if L_0 never became fire-ready — NOT closed in `Finalize` (only `wantsHostValidationCh` is). Mirrors base.
+- [x] Part 3 (equivocation gating): verified, **no code change** — twoab's equivocation→NRDirect path lives in `computeLocalValueState` (≥2 distinct V), reachable only inside `MaybeFirePhase2a` when `phase2aFired == false`. Already structurally gated by `phase2aFired`. Doc note added.
+- [x] L0Ready is a **best-effort hint, not a binding contract** (M2): because ApplyHostValidity tolerates a valid→NV flip, L0Ready is non-monotone — consumers MUST re-derive the emission kind from `MaybeFirePhase2a` at fire time, not assume it from the channel close. Documented on `L0ReadyCh`. (Unreachable in the DES's deterministic Host; relevant for a production runner that re-queries the host mid-slot.)
+
+**DES adapter (`protocol/v2/consensustest/twoab/`):**
+- [ ] `events.go`: add per-op `evtPhase2aFireOp{op}` event + `maybeEarlyFire(s, op)` helper mirroring base's `maybeEarlyCommit` (non-blocking `select` on `L0ReadyCh()`; if closed and not already fired, schedule `evtPhase2aFireOp` at `s.now`). Factor the emit-switch out of `evtPhase2aFire.handle` into a shared `fireOnePhase2a(s, op)` used by both the per-op early event and the cluster-wide backstop.
+- [ ] Call `maybeEarlyFire` from: `evtPhase1Arrival` (after `ApplyHostValidity`), `evtValueMsgArrival` (after harvest), and the leader's own bundle broadcast path. Guard against double-emit via the existing `valueMsgEmitted/noValueMsgEmitted/commitEmitted` flags + the Instance's `phase2aFired`.
+- [ ] `evtPhase2aFire` (cluster-wide at `TPhase2a`) stays as the **backstop**: iterate ops, skip those already fired, emit `KindNoValue` for ops still in coordination. (Existing flags make this automatic.)
+- [ ] `des.go`: change `resolveDeadline` from `TPhase2a + 2*BTT + SafetyBuffer + ε_3` to `TPhase2a + BTT + maxDur(SafetyBuffer, BTT) + ε_3`. Add a `maxDur` helper. Update the docstring at des.go:206-222.
+- [ ] `adapter.go`: change `resolveBudget := btt*2 + safetyBuffer + ...` to `btt + maxDur(safetyBuffer, btt) + ...`. Update the cascade-depth docstring at adapter.go:108-128. Keep the `tPhase2a <= btt` envelope check.
+
+**Docs:**
+- [ ] `config.go` `Config.SafetyBuffer` docstring: note the `resolveWindow = max(1·BTT + SafetyBuffer, 2·BTT) + ε_3` formula (currently says `2·BTT + SafetyBuffer`).
+- [ ] This plan's Op6 section (done).
+
+**Validation targets (run after each sub-change):**
+- [ ] `TestAdapter_OpportunisticDecisionTime` — SafetyBuffer=0, ConstantDelay{D=BTT}: expect **unchanged** (3600ms). Both async-fire (bundle arrives exactly at TPhase2a under D=BTT) and max-formula (SB=0 → max=2·BTT) are no-ops here. If it changes, the change is wrong.
+- [ ] Catalog NR-fall-through cells (`PrimaryLeaderSilent`, `ValidityDivergence_NRFallThrough`): **must stay decided**, same DecidedRound. Primary regression risk.
+- [ ] Catalog σ-side cells (`Healthy`, `HV1SelectiveDelivery`, mesh cells): decide **same-or-faster**; Healthy (SB=700) should show ~1·BTT later TPhase2a (more MEV headroom) without losing the decision.
+- [ ] `TestAdapter_SafetyBuffer_WidensCascadeWindow` (currently skipped): re-tune against the new max-formula window, or re-confirm the skip rationale.
+- [ ] Full `make spec-test` / catalog + stress matrix (`./protocol/v2/consensustest/...`): zero regressions.
 
 #### Op11 — Forward L0Witness in KindValue (peer-reflood-V authentication)
 
@@ -1467,7 +1525,7 @@ Tests:
 Phase A+B scope items (added):
 - **Remove §Implementation deviations #1 and #2** from `docs/2abOBFT-REDESIGN-PLAN.md` (now superseded by Op3/Op11). Rewrite #3 per shrunken authorized-pair set (Rule 6a triple-message sequences are mostly obsolete because A6/A7 pivots are gone).
 - **Update `Protocol.SafetyBufferOverride` docstring** in [`adapter.go`](../protocol/v2/consensustest/twoab/adapter.go): the "post-Phase-2a cascade window... TWO hops" claim is false post-Op5. Replace with "absorption budget for σ-pool fill via IHAVE/IWANT recovery; one-hop critical path."
-- **Update `resolveDeadline` formula** in [`des.go`](../protocol/v2/consensustest/twoab/des.go): from `TPhase2a + 2·BTT + SafetyBuffer + ε_3` to `TPhase2a + 1·BTT + SafetyBuffer + ε_3` (one-hop cascade post-Op5).
+- **Update `resolveDeadline` formula** in [`des.go`](../protocol/v2/consensustest/twoab/des.go): from `TPhase2a + 2·BTT + SafetyBuffer + ε_3` to `TPhase2a + max(1·BTT + SafetyBuffer, 2·BTT) + ε_3` (the `sum → max` revision — see §Op6 corollary; the originally-drafted flat `1·BTT` is **rejected** because NR fall-through is genuinely 2-hop). Mirror the same change in `adapter.go`'s `resolveBudget`.
 - **Expand `docs/2abOBFT.md` spec rewrite scope**: not just §Pool aggregation rules and §Phase 2. Throughout the spec body, every reference to `KindCommit-Signed` becomes either KindValue (σ-side meaning) or obsolete (the wire kind no longer exists). Specifically: §Slashing evidence rule descriptions (Rule 1 cross-signing semantics refer to "σ at KindCommit-Signed AND NR at KindCommit-{NR,NRDirect}"; under Op5 the σ-side is at KindValue, not KindCommit). §EKM coordination model text. §Error taxonomy. §Failure modes worked-cases. The rewrite is at the entire-spec scope, not section-scoped.
 
 **Phase C — Validation and acceptance.**

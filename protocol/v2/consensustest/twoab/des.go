@@ -203,23 +203,18 @@ func (s *sim) start() error {
 	// schedules a final Resolve sweep AFTER the typical Phase-2b
 	// settle window.
 	//
-	// Post Op5 the L_0 σ-side cascade collapses from 2 hops to 1 hop
-	// (KindValue carries σ partial directly). However, the L_0 NR-side
-	// cascade for fall-through-to-L_1 is STILL 2 hops (KindNoValue →
-	// KindCommit-NR → peer arrival → aggregate). The 2·BTT budget here
-	// covers the worst-case cascade across both paths; σ-quorum-at-L_0
-	// scenarios just decide earlier than the resolveDeadline and the
-	// cluster reports the earlier vQuorumAt via opportunistic Resolve.
-	// See [adapter.go](adapter.go) Run() for the matching reservation
-	// rationale.
-	//
-	// SafetyBuffer extends the absorption budget for σ-pool fill via
-	// gossipsub IHAVE/IWANT recovery when initial KindValue eager-push
-	// doesn't reach all honest peers (closer to OBFT's RefloodDelay
-	// semantic post Op5). The TPhase2a shift in the adapter compensates
-	// so the wall-clock Resolve time stays at RelayCutoff − HeaderSubmit
-	// − phase3JitterBuffer (the maxDeadline clamp below).
-	s.resolveDeadline = s.cfg.TPhase2a + 2*s.cfg.BTT + s.cfg.SafetyBuffer + s.cfg.Epsilon3
+	// Post Op5/Op6 the post-TPhase2a window is the MAX of the two
+	// mutually-exclusive resolve paths, not their sum:
+	//   - σ-ward: 1·BTT (KindValue prop) + SafetyBuffer (reflood tail).
+	//   - NR-ward fall-through to L_1: 2·BTT (KindNoValue → KindCommit-NR
+	//     → peer arrival → aggregate → decrypt L_1 entries).
+	// A slot goes σ-ward XOR NR-ward, never both sequentially, so:
+	//   window = max(1·BTT + SafetyBuffer, 2·BTT) = 1·BTT + max(SafetyBuffer, 1·BTT).
+	// This must stay consistent with adapter.go's resolveBudget (which
+	// derives TPhase2a from the same window); both use the max-form so
+	// resolveDeadline reconstructs to exactly maxDeadline below. See
+	// adapter.go Run() + docs/2abOBFT-REDESIGN-PLAN.md §Op6 corollary.
+	s.resolveDeadline = s.cfg.TPhase2a + s.cfg.BTT + max(s.cfg.SafetyBuffer, s.cfg.BTT) + s.cfg.Epsilon3
 	// Clamp to before the runner-level deadline so the resolve still
 	// has time to broadcast a cert and have it land before
 	// RelayCutoff − HeaderSubmitHeadroom.

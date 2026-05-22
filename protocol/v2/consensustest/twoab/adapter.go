@@ -112,27 +112,36 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// dispatch, plus 2·BTT + SafetyBuffer for the post-Phase-2a settle
 	// window.
 	//
-	// **Cascade-depth note (post Op5)**: the L_0 σ-side cascade collapses
-	// from 2 hops to 1 hop (KindValue carries the σ partial directly —
-	// no follow-up Commit-Signed). However, the L_0 NR-side cascade for
-	// fall-through-to-L_1 is STILL 2 hops (KindNoValue → KindCommit-NR
-	// → arrive at peer → NR-aggregate → decrypt L_1 entries). The
-	// resolveDeadline must accommodate the deeper cascade for liveness
-	// of fall-through scenarios. The plan's §Op6 corollary line 1278
-	// proposed `TPhase2a + 1·BTT + SafetyBuffer + ε_3`, but that formula
-	// only accommodates the σ-quorum-at-L_0 path; fall-through cells
-	// (PrimaryLeaderSilent, ValidityDivergence_NRFallThrough, etc.)
-	// require the 2·BTT budget. Keep `2·BTT` here as the worst-case
-	// reservation across both paths. The σ-side path doesn't suffer —
-	// it just decides earlier than the resolveDeadline and the cluster
-	// reports the earlier `vQuorumAt` via opportunistic Resolve.
+	// **Cascade-depth note (post Op5/Op6 — sum→max reservation)**: the
+	// L_0 σ-side cascade is 1 hop (KindValue carries the σ partial
+	// directly), but the L_0 NR-side cascade for fall-through-to-L_1 is
+	// 2 hops (KindNoValue → KindCommit-NR → peer arrival → NR-aggregate
+	// → decrypt L_1 entries). A slot resolves σ-ward XOR NR-ward — the
+	// two paths are mutually exclusive outcomes, never sequential — so
+	// the post-TPhase2a window only needs the MAX of the two, not their
+	// sum:
+	//
+	//	window = max(1·BTT + SafetyBuffer,  2·BTT)
+	//	             └── σ: KindValue prop ┘  └ NR: 2-hop ┘
+	//	             +     reflood tail
+	//	       = 1·BTT + max(SafetyBuffer, 1·BTT)
+	//
+	// The earlier draft reserved the SUM (`2·BTT + SafetyBuffer`); the
+	// originally-proposed flat `1·BTT` is rejected (it clips NR
+	// fall-through). The max-form reclaims min(1·BTT, SafetyBuffer) of
+	// MEV-fetch headroom by shifting TPhase2a later, while still covering
+	// both worst-case paths. resolveDeadline's wall-clock is unchanged
+	// (still clamps to RelayCutoff − HeaderSubmit − phase3JitterBuffer).
+	// See docs/2abOBFT-REDESIGN-PLAN.md §Op6 corollary for the full
+	// safety/liveness case-walk. At SafetyBuffer=0 the max degenerates
+	// to 2·BTT (identical to the old sum) — eager-push configs unaffected.
 	btt := cfg.BTT
 	// SafetyBuffer: default = cfg.RefloodDelay (matches bare OBFT's
 	// structural budget); the SafetyBufferOverride variant field lets
 	// stresstest variants exercise tighter / looser configurations.
 	safetyBuffer := p.safetyBuffer(cfg)
 
-	resolveBudget := btt*2 + safetyBuffer + epsilon3 + phase3JitterBuffer + cfg.HeaderSubmitHeadroom
+	resolveBudget := btt + max(safetyBuffer, btt) + epsilon3 + phase3JitterBuffer + cfg.HeaderSubmitHeadroom
 	tPhase2a := cfg.RelayCutoff - resolveBudget
 	if tPhase2a <= btt {
 		// TPhase2a must be > BTT so T0Broadcast = TPhase2a − BTT is

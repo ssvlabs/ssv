@@ -88,6 +88,10 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		delete(bucket, root)
 	}
 	i.afterStateDelta()
+	// Op6: recording a host verdict can flip computeLocalValueState to
+	// Value (retained V_0 now host-valid). Signal L0Ready so the
+	// runner/DES can async-fire MaybeFirePhase2a before TPhase2a.
+	i.maybeSignalL0Ready()
 	return nil
 }
 

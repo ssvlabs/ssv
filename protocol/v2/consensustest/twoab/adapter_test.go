@@ -62,8 +62,23 @@ func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	require.Equal(t, 3600*time.Millisecond, out.DecisionTime,
-		"observer-mode Resolve should catch L_0 σ-quorum at TPhase2a + 1·BTT = 3600ms (1-hop σ-side cascade post Op5)")
+	// Post-Op6 async-fire: σ-eligible ops emit KindValue the moment their
+	// L0Ready closes (bundle retained + host valid), NOT at the TPhase2a
+	// backstop. Timeline at BTT=200ms, ConstantDelay{D=BTT}, SafetyBuffer=0:
+	//   FetchAt[0] = T0Broadcast − B_0 = 3200 − 2·BTT = 2800ms (leader
+	//     broadcasts its Phase-1 bundle here).
+	//   bundle arrives at peers at 2800 + 1·BTT = 3000ms → L0Ready closes
+	//     → peers async-fire KindValue (with σ partial) at 3000ms.
+	//   peer KindValues arrive at 3000 + 1·BTT = 3200ms → σ-pool reaches
+	//     qV → opportunistic Resolve decides at 3200ms.
+	// This is TPhase2a − 1·BTT (3400 − 200), i.e. the decision now lands
+	// BEFORE the TPhase2a backstop — a 2·BTT improvement over the
+	// pre-Op6 synchronized-fire path (which decided at TPhase2a + 1·BTT =
+	// 3600ms). The exact gap is (3·BTT − propagation); under D=BTT that's
+	// 2·BTT. (SafetyBuffer=0 here, so the Op6 resolveDeadline sum→max
+	// change is a no-op for this config — only async-fire moves the time.)
+	require.Equal(t, 3200*time.Millisecond, out.DecisionTime,
+		"Op6 async-fire: L_0 σ-quorum at bundle-arrival + 1·BTT = 3200ms")
 }
 
 // TestAdapter_HealthyMesh_N4 — 2abOBFT healthy through the mesh
@@ -290,122 +305,129 @@ func TestAdapter_Phase2DowngradeValueNoValue_FiresRule6a(t *testing.T) {
 		"at least one honest op should detect Rule 6a (Phase-2 equivocation) on the byz's cross-kind downgrade sequence")
 }
 
-// TestAdapter_SafetyBuffer_WidensCascadeWindow locks in the variant-(b)
-// SafetyBuffer semantics: SafetyBuffer shifts TPhase2a earlier in the slot
-// and widens the post-TPhase2a cascade window (where peer KindValue and
-// cascade-fired Commit-Signed must both propagate). The structural mesh-
-// tail-sensitive window is the cascade, NOT B_0.
+// TestAdapter_ResolveDeadline_SumToMax validates the Op6 corollary:
+// the post-TPhase2a resolve window is
 //
-// Regression test design: a constant-delay network with per-hop delay D
-// greater than BTT but less than `2·BTT + SafetyBuffer` is a configuration
-// where:
-//   - At SafetyBuffer=0, the cascade window is just `2·BTT + ε_3`. With
-//     D > BTT, the two-hop cascade (peer KindValue → cascade Commit-Signed)
-//     exceeds this window → slot MISSes (or relies on evtResolveRerun
-//     between resolveDeadline and clipDeadline).
-//   - At sufficient SafetyBuffer > 0, the cascade window grows to
-//     `2·BTT + SafetyBuffer + ε_3`, comfortably absorbing 2·D → slot DECIDES.
+//	max(1·BTT + SafetyBuffer, 2·BTT) + ε_3 = 1·BTT + max(SafetyBuffer, 1·BTT) + ε_3
 //
-// If the impl regressed to variant (a) (SafetyBuffer in B_0 only), both
-// SB=0 and SB>0 would have the same cascade window and the test would
-// show identical outcomes — the test would fail.
+// (the `sum → max` revision), NOT the old `2·BTT + SafetyBuffer + ε_3`.
+// The distinguishing, deterministic signature of the max-form is that
+// the window is INSENSITIVE to SafetyBuffer below the 1·BTT crossover
+// (the NR-side 2·BTT term dominates), and grows 1:1 with SafetyBuffer
+// only above it. The old sum-form grew with SafetyBuffer everywhere.
 //
-// The fixed-delay (ConstantDelay) network is critical: variance would make
-// the per-run outcome non-deterministic. CorrectnessProfile uses
-// ConstantDelay{D: BTT}; here we override with D > BTT.
-func TestAdapter_SafetyBuffer_WidensCascadeWindow(t *testing.T) {
-	// Post Op5 the cascade collapses from 2 hops to 1 hop. The original
-	// variant-(b) test was tuned for v4's 2·BTT + SB cascade window;
-	// post Op5 the resolveDeadline = TPhase2a + 1·BTT + SB + ε_3 and the
-	// (hopDelay=150ms > BTT=100ms) configuration no longer hits the
-	// same SB=0-misses / SB>0-decides boundary. Skip until the test is
-	// re-tuned for Op5's 1-hop cascade window (needs hopDelay tuned to
-	// straddle the 1-hop boundary). The SafetyBuffer semantics still
-	// hold (SB widens the σ-pool fill absorption budget for IHAVE/IWANT
-	// recovery); just this particular boundary test no longer fires.
-	//
-	// TODO(re-tune): when re-tuning for Op5's 1-hop cascade, strengthen
-	// the bottom-of-test `require.Less` (strict-less) to a magnitude
-	// check — e.g., `require.Greater(outZero.DecisionTime - outBig.DecisionTime, 500*time.Millisecond)`
-	// — so a regression to a 1-nanosecond gap doesn't spuriously pass.
-	// The structural gain at SB=700ms should be ~700ms in the canonical
-	// 4-op configuration. Without the magnitude lower bound, a future
-	// drift in the adapter's scheduling math could erase most of the
-	// gain and the strict-less would still hold.
-	t.Skip("Op5 collapses cascade to 1 hop; re-tune hopDelay vs SB boundary for the new 1-hop semantics")
-	// BTT=100ms, per-hop delay D=150ms (> BTT, so cascade two-hop = 300ms
-	// > the SB=0 cascade window of 250ms).
-	const (
-		btt      = 100 * time.Millisecond
-		hopDelay = 150 * time.Millisecond
-		bigSB    = 700 * time.Millisecond // recovers cascade window to 950ms
-		zeroSB   = 0 * time.Millisecond
-	)
-	baseCfg := func() ct.SimConfig {
-		c := ct.DefaultProposerDutyConfig(btt)
-		c.N = 4
-		c.Operators = ct.MakeOperators(4)
-		c.K = 2
-		// Override CorrectnessProfile's ConstantDelay{D: BTT} with our
-		// slower per-hop delay to make the cascade window the bottleneck.
-		// Default Delivery is DeliveryDirect (no mesh), so per-hop delay
-		// applies uniformly to every message.
-		c.Network = ct.ConstantDelay{D: hopDelay}
-		return c
+// Decision-time relationship (healthy σ-path, ConstantDelay{D=BTT},
+// async-fire): decision = TPhase2a − 1·BTT, and
+// TPhase2a = RelayCutoff − (1·BTT + max(SB, 1·BTT) + ε_3 + jitter + headroom).
+// So a larger window shifts TPhase2a (and thus the decision) EARLIER,
+// while reclaiming MEV-fetch headroom at slot start (later FetchAt is the
+// flip side of an earlier-anchored, longer post-TPhase2a window). The
+// reclaim vs the old sum-form is min(1·BTT, SafetyBuffer); here we assert
+// the max-form's SB-insensitivity below the crossover, which the sum-form
+// could not exhibit.
+//
+// ConstantDelay{D=BTT} keeps the run deterministic.
+func TestAdapter_ResolveDeadline_SumToMax(t *testing.T) {
+	const btt = 200 * time.Millisecond
+	run := func(sb time.Duration) ct.Outcome {
+		cfg := ct.DefaultProposerDutyConfig(btt) // ConstantDelay{D=BTT} via Validate default
+		out, err := twoabadapter.Protocol{SafetyBufferOverride: ptrDur(sb)}.Run(cfg)
+		require.NoError(t, err)
+		require.True(t, out.Decided, "healthy should decide at SB=%v", sb)
+		require.Equal(t, 0, out.DecidedRound, "L_0 fastest path at SB=%v", sb)
+		return out
 	}
 
-	// At SB=0: cascade window = 2·BTT + ε_3 = 250ms. Cascade requires
-	// ~2·hopDelay = 300ms minimum. Scheduled Resolve at TPhase2a + 250ms
-	// fires BEFORE the second cascade hop completes. evtResolveRerun
-	// then triggers on the late commit arrival (~TPhase2a + 300ms),
-	// successfully resolving — under variant (b), the wider cascade
-	// window at SB>0 means the SCHEDULED Resolve catches the cascade
-	// without needing the rerun.
-	cfgZeroSB := baseCfg()
-	outZero, err := twoabadapter.Protocol{
-		SafetyBufferOverride: ptrDur(zeroSB),
-	}.Run(cfgZeroSB)
-	require.NoError(t, err)
+	outSB0 := run(0)
+	outSB1 := run(btt)     // SB = 1·BTT — at the crossover
+	outSB2 := run(2 * btt) // SB = 2·BTT — above the crossover
 
-	// At SB=700ms: cascade window = 2·BTT + 700 + ε_3 = 950ms. The two-
-	// hop cascade fits comfortably. SCHEDULED Resolve catches everything
-	// without needing rerun.
-	cfgBigSB := baseCfg()
-	outBig, err := twoabadapter.Protocol{
-		SafetyBufferOverride: ptrDur(bigSB),
-	}.Run(cfgBigSB)
-	require.NoError(t, err)
+	// Below/at the crossover (SB ≤ 1·BTT), max(SB, 1·BTT) = 1·BTT, so the
+	// window — and therefore TPhase2a and the decision time — are
+	// IDENTICAL at SB=0 and SB=1·BTT. Under the OLD sum-form these would
+	// differ by 1·BTT. This is the load-bearing max-vs-sum assertion.
+	require.Equal(t, outSB0.DecisionTime, outSB1.DecisionTime,
+		"max-form: SB below the 1·BTT crossover does not widen the window (NR-side 2·BTT dominates); sum-form would differ by 1·BTT")
 
-	// Both should decide (since the cluster is healthy and hopDelay isn't
-	// catastrophic). The interesting invariant is the *decision time*:
-	// SB=0 relies on evtResolveRerun firing late; SB=700ms scheduled-
-	// resolves earlier. So decision time at SB=700 should be <= SB=0.
-	require.True(t, outZero.Decided, "SB=0: slot still decides via evtResolveRerun (cascade window too tight for SCHEDULED Resolve, but late arrival rerun catches it)")
-	require.True(t, outBig.Decided, "SB=700ms: slot decides via scheduled Resolve (cascade window widened sufficient for two hops)")
+	// Above the crossover, each extra BTT of SafetyBuffer widens the
+	// window 1:1, shifting TPhase2a (and the decision) earlier by 1·BTT.
+	require.Equal(t, outSB0.DecisionTime-btt, outSB2.DecisionTime,
+		"max-form: SB=2·BTT widens the window by 1·BTT vs SB=0, decision earlier by 1·BTT")
 
-	// Key variant-(b) invariant: at SB=0, the decision time falls AT OR
-	// AFTER TPhase2a + 2·hopDelay + ε_3 ≈ 3950ms (because the scheduled
-	// Resolve at 3850ms can't see commits arriving at ~3900ms, so
-	// evtResolveRerun runs at the late commit arrival time).
-	//
-	// At SB=700, TPhase2a shifts back to 2900ms and resolveDeadline is
-	// still at the maxDeadline=3850ms. The cascade completes by ~3200ms
-	// (2900 + 2·150 = 3200), and scheduled Resolve at 3850ms picks it up.
-	//
-	// Net: SB=700 should decide noticeably earlier than SB=0 in this
-	// configuration.
-	require.Less(t, outBig.DecisionTime, outZero.DecisionTime,
-		"variant-(b) invariant: SB>0 widens cascade window, allowing SCHEDULED Resolve to catch commits earlier than late-arrival rerun (got SB=700 decision=%v, SB=0 decision=%v)",
-		outBig.DecisionTime, outZero.DecisionTime)
-	t.Logf("SB=0 decided at %v; SB=%v decided at %v (variant-(b) gain: %v earlier)",
-		outZero.DecisionTime, bigSB, outBig.DecisionTime, outZero.DecisionTime-outBig.DecisionTime)
+	// Concrete anchors (BTT=200, RelayCutoff=4000, ε_3=50, jitter=50,
+	// headroom=100): decision = RelayCutoff − 2·BTT − max(SB,BTT) − 200.
+	require.Equal(t, 3200*time.Millisecond, outSB0.DecisionTime, "SB=0 decision")
+	require.Equal(t, 3200*time.Millisecond, outSB1.DecisionTime, "SB=1·BTT decision (== SB=0)")
+	require.Equal(t, 3000*time.Millisecond, outSB2.DecisionTime, "SB=2·BTT decision (1·BTT earlier)")
 
-	// Variant-(a) regression check: if the impl reverted to SafetyBuffer-
-	// in-B_0, the two cascade windows would be identical (both 250ms),
-	// and the late-arrival rerun path would be hit in both → decision
-	// times would be equal. The strict-Less assertion above catches that.
+	t.Logf("decision times: SB=0 → %v, SB=1·BTT → %v, SB=2·BTT → %v",
+		outSB0.DecisionTime, outSB1.DecisionTime, outSB2.DecisionTime)
 }
 
 // ptrDur returns a pointer to a time.Duration. Local helper for fields
 // that take *time.Duration (e.g. Protocol.SafetyBufferOverride).
 func ptrDur(d time.Duration) *time.Duration { return &d }
+
+// TestAdapter_Equivocate_AllNR_JitterTradeoff tracks the accepted B1
+// Op6 trade-off (see docs/2abOBFT-REDESIGN-PLAN.md §Op6): async-fire
+// shrinks the equivocation-detection window, so under JITTERY delivery
+// the Equivocate_AllNR scenario (byz leader floods both V_a and V_b to
+// all honest ops) shifts from "always fall through to L_1" to "mostly
+// decide fast at L_0, with a miss tail".
+//
+// This test is a REGRESSION TRACKER, not a pass/fail spec: it pins a
+// conservative lower bound on the decision rate (so a future change that
+// badly worsens the miss tail is caught) and — load-bearing — asserts
+// SAFETY holds on EVERY run, including the misses (the trade-off is
+// liveness-only). Under ConstantDelay the catalog still observes clean
+// L_1 fall-through (TestCorrectness/Equivocate_AllNR/2abOBFT), so that
+// path is covered elsewhere; here we deliberately use LogNormal.
+func TestAdapter_Equivocate_AllNR_JitterTradeoff(t *testing.T) {
+	const (
+		btt   = 200 * time.Millisecond
+		n     = 7
+		seeds = 60
+	)
+	l0, l1, miss := 0, 0, 0
+	for seed := int64(1); seed <= seeds; seed++ {
+		cfg := ct.DefaultProposerDutyConfig(btt)
+		cfg.N = n
+		cfg.Operators = ct.MakeOperators(n)
+		cfg.Seed = seed
+		cfg.Network = ct.LogNormalDelay{Median: btt / 2, Sigma: 0.5}
+		cfg.Byz = ct.ByzPattern{Kind: ct.ByzEquivocateAllNR, ByzOperators: []ct.OperatorID{1}}
+
+		out, err := twoabadapter.Protocol{}.Run(cfg)
+		require.NoError(t, err, "seed=%d", seed)
+
+		// Safety MUST hold on every run, decided or missed — the B1
+		// trade-off is liveness-only.
+		rep := ct.ComputeSafetyReport(out)
+		require.Truef(t, rep.SingleV, "seed=%d SingleV: %s", seed, rep)
+		require.Truef(t, rep.NoOfflineDoubleV, "seed=%d NoOfflineDoubleV: %s", seed, rep)
+
+		switch {
+		case !out.Decided:
+			miss++
+		case out.DecidedRound == 0:
+			l0++
+		default:
+			l1++
+		}
+	}
+	decided := l0 + l1
+	t.Logf("AllNR n=%d LogNormal, %d seeds: L0=%d L1=%d MISS=%d (decided=%d/%d)",
+		n, seeds, l0, l1, miss, decided, seeds)
+
+	// Conservative regression lower bound. Observed ~77% decided (all at
+	// L_0) at the time of writing; assert ≥ 50% so a major worsening of
+	// the miss tail trips the test, without flaking on seed-set drift.
+	require.GreaterOrEqualf(t, decided, seeds/2,
+		"AllNR decided rate regressed below 50%% under jitter (got %d/%d); the B1 trade-off worsened materially — re-evaluate Op6 async-fire",
+		decided, seeds)
+	// The post-Op6 decided cases resolve at L_0 (fast), not L_1: assert
+	// the fast-path dominates the decided set (documents the distribution
+	// shift, not just the rate).
+	require.Greaterf(t, l0, l1,
+		"expected L_0-fast to dominate decided AllNR runs under Op6 (got L0=%d L1=%d)", l0, l1)
+}

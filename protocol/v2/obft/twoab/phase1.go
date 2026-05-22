@@ -307,6 +307,11 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	// Run upgrade-first then commit-trigger evaluation per §Emission
 	// ordering.
 	i.afterStateDelta()
+	// Op6: a retention change can flip computeLocalValueState into a
+	// fire-ready state (a second distinct V → NRDirect, or a first V
+	// when host validity is already recorded → Value). Signal L0Ready so
+	// the runner/DES can async-fire MaybeFirePhase2a before TPhase2a.
+	i.maybeSignalL0Ready()
 }
 
 // deepCopyBundle returns a defensive copy of b so retention state isn't

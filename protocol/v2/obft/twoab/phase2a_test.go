@@ -884,3 +884,77 @@ func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
 	require.Equal(t, RetentionHarvest, rule2.SourceB,
 		"SourceB reflects bundle B's arrival path (harvest, observed second)")
 }
+
+// l0ReadyClosed reports whether op's L0ReadyCh has closed (non-blocking).
+func l0ReadyClosed(op *Instance) bool {
+	select {
+	case <-op.L0ReadyCh():
+		return true
+	default:
+		return false
+	}
+}
+
+// TestL0ReadyCh_ClosesWhenSigmaEligible (Op6): L0Ready closes only once
+// the op is σ-eligible (V_0 retained AND host valid → computeLocalValueState
+// == Value). Retention alone (host not yet consulted) keeps it open.
+func TestL0ReadyCh_ClosesWhenSigmaEligible(t *testing.T) {
+	s := newSim(t, 4)
+	op := s.instances[OperatorID(2)] // non-leader receiver
+	require.False(t, l0ReadyClosed(op), "open before any bundle (NoValue state)")
+
+	// Retention only — host not consulted yet → still NoValue → open.
+	s.deliverPhase1(0, Value("V0"), []OperatorID{OperatorID(2)}, observedEarly)
+	require.False(t, l0ReadyClosed(op),
+		"open: V_0 retained but host verdict not recorded (computeLocalValueState defensively NoValue)")
+
+	// Host validates → Value state → L0Ready closes.
+	s.applyHostValidityFor([]OperatorID{OperatorID(2)}, 0, Value("V0"), true)
+	require.True(t, l0ReadyClosed(op),
+		"closes when V_0 retained + host valid (Value → async-fire KindValue)")
+}
+
+// TestL0ReadyCh_StaysOpenOnHostNV (Op6): the NoValue path does NOT close
+// L0Ready — a host-NV op waits for the TPhase2a backstop (giving V its
+// reflood window) rather than firing early. This is the deliberate
+// divergence from base (whose L0Ready closes on any host verdict).
+func TestL0ReadyCh_StaysOpenOnHostNV(t *testing.T) {
+	s := newSim(t, 4)
+	op := s.instances[OperatorID(2)]
+	s.deliverPhase1(0, Value("V0"), []OperatorID{OperatorID(2)}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{OperatorID(2)}, 0, Value("V0"), false) // host NV
+	require.False(t, l0ReadyClosed(op),
+		"host-NV op stays open: emits KindNoValue at the TPhase2a backstop, not early")
+}
+
+// TestL0ReadyCh_ClosesOnEquivocation (Op6): observed L_0 equivocation
+// (≥2 distinct V → NRDirect) closes L0Ready immediately, with no host
+// verdict required — the op fires KindCommit-NRDirect early.
+func TestL0ReadyCh_ClosesOnEquivocation(t *testing.T) {
+	s := newSim(t, 4)
+	op := s.instances[OperatorID(2)]
+	s.deliverPhase1Equivocation(0, Value("V_a"), Value("V_b"),
+		[]OperatorID{OperatorID(2)}, []OperatorID{OperatorID(2)}, observedEarly)
+	require.True(t, l0ReadyClosed(op),
+		"closes on observed equivocation (≥2 distinct V → NRDirect), no host verdict needed")
+}
+
+// TestL0ReadyCh_LeaderClosesOnSelfObserve (Op6): documents that the
+// leader's L0Ready is retention-driven (not σ-lock-driven). BuildPhase1Bundle
+// σ-locks but does NOT self-retain in twoab, so the leader's L0Ready
+// closes only after it self-observes its own bundle + records host
+// validity (which the DES/runner does at fetch time). This differs from
+// base, whose l0DecisionReady checks sigmaLocked[0] directly.
+func TestL0ReadyCh_LeaderClosesOnSelfObserve(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	li := s.instances[leader]
+	b, err := li.BuildPhase1Bundle(0, Value("V0"))
+	require.NoError(t, err)
+	require.False(t, l0ReadyClosed(li),
+		"leader L0Ready open after BuildPhase1Bundle alone (twoab is retention-driven; σ-lock alone doesn't flip computeLocalValueState)")
+	require.NoError(t, li.ObservePhase1Bundle(b, observedEarly))
+	require.NoError(t, li.ApplyHostValidity(0, Value("V0"), true))
+	require.True(t, l0ReadyClosed(li),
+		"leader L0Ready closes after self-observe + self-host-validate")
+}

@@ -181,6 +181,27 @@ type Instance struct {
 	// on every state delta.)
 	phase2aFired bool
 
+	// l0ReadyCh is closed (once) when the op's L_0 Phase-2a emission
+	// becomes determinable as σ-eligible (KindValue) or equivocation-
+	// observed (KindCommit-NRDirect) — i.e. when computeLocalValueState()
+	// would return Value or NRDirect. The runner/DES selects on it to
+	// fire MaybeFirePhase2a async (Op6), well before the TPhase2a
+	// backstop, shaving the bundle-arrival→TPhase2a gap off the healthy
+	// path. Mirrors `protocol/v2/obft/base.Instance.l0ReadyCh`.
+	//
+	// SEMANTIC DIVERGENCE FROM base: base closes L0Ready on ANY host
+	// verdict (NV and σ are both commitments in bare OBFT). twoab does
+	// NOT close it for the NoValue case — a V-drop / host-NV op waits
+	// for the TPhase2a backstop (giving V its reflood window before the
+	// op declares NV), then emits KindNoValue; a later V arrival is
+	// handled by the A1-upgrade cascade. This is protocol-forced:
+	// twoab's KindNoValue is coordination, not commitment.
+	//
+	// Stays open all slot if L_0 never becomes fire-ready (silent leader
+	// / grossly-late bundle); NOT closed by Finalize (only
+	// wantsHostValidationCh is). See l0DecisionReady / maybeSignalL0Ready.
+	l0ReadyCh chan struct{}
+
 	// Per-rule dedup buckets — ensure one Evidence entry per logical
 	// fault even when multiple detection paths fire.
 	rule1Fired  map[int]map[OperatorID]bool // Rule 1 cross-signing per (layer, op)
@@ -403,6 +424,7 @@ func NewInstance(
 		wantsHostValidationCh: make(chan ValidationRequest, K),
 		pendingValidation:     make(map[int]map[[32]byte]bool, K),
 		verifiedL0Witnesses:   make(map[int]map[[32]byte]bool, K),
+		l0ReadyCh:             make(chan struct{}),
 	}, nil
 }
 
@@ -438,6 +460,78 @@ type ValidationRequest struct {
 // channel is closed by Finalize.
 func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
 	return i.wantsHostValidationCh
+}
+
+// L0ReadyCh returns a channel closed once when the operator's L_0
+// Phase-2a emission becomes determinable as σ-eligible (KindValue) or
+// equivocation-observed (KindCommit-NRDirect) — see l0DecisionReady.
+// The runner/DES selects on it to fire MaybeFirePhase2a async (Op6),
+// before the TPhase2a backstop. Mirrors
+// `protocol/v2/obft/base.Instance.L0ReadyCh`, with the twoab semantic
+// divergence documented on the l0ReadyCh field: the NoValue case does
+// NOT close this channel (V-drop / host-NV ops wait for the TPhase2a
+// backstop). Stays open all slot if L_0 never becomes fire-ready.
+//
+// Best-effort hint, NOT a binding contract: because ApplyHostValidity
+// tolerates a valid→NV verdict flip (see its docstring), L0Ready is
+// non-monotone in principle — it can close (op was Value/NRDirect) and
+// then the determining state can change before the consumer fires (e.g.
+// host flips V_0 to NV, so MaybeFirePhase2a would now emit KindNoValue).
+// Consumers MUST treat "L0Ready closed" as "fire now" and re-derive the
+// actual emission kind from MaybeFirePhase2a at fire time — never assume
+// the kind from the channel close alone. (Unreachable in the DES, whose
+// Host.Validate is a deterministic function of (op, layer, V); relevant
+// only for a production runner that re-queries the host mid-slot.)
+func (i *Instance) L0ReadyCh() <-chan struct{} { return i.l0ReadyCh }
+
+// l0DecisionReady reports whether the op's L_0 Phase-2a emission is
+// determinable as a σ-side (Value) or equivocation (NRDirect) emission
+// — the two cases that fire early under Op6. Predicate underlying
+// L0ReadyCh.
+//
+// Returns false for the NoValue case (no V retained, or host says NV,
+// or host not yet consulted): those ops wait for the TPhase2a backstop
+// so V has its full reflood window before they declare NV. This is the
+// deliberate divergence from base's l0DecisionReady (which fires on any
+// host verdict) — twoab's KindNoValue is coordination, not commitment.
+//
+// Accepted trade-off (B1, see docs/2abOBFT-REDESIGN-PLAN.md §Op6): firing
+// on the first retained V σ-locks before a second equivocating V can
+// arrive. Under jittery delivery this changes the Equivocate_AllNR
+// outcome from "always fall through to L_1" to "mostly decide fast at
+// L_0, ~23% miss". Safety-preserving (Pigeonhole 2 still bounds two-V
+// σ-quorum); the trade is the plan's accepted "equivocation-recovery for
+// healthy-path latency". Tracked by TestAdapter_Equivocate_AllNR_JitterTradeoff.
+func (i *Instance) l0DecisionReady() bool {
+	return i.computeLocalValueState() != localValueStateNoValue
+}
+
+// maybeSignalL0Ready closes l0ReadyCh if the L_0 emission has just
+// become determinable (Value or NRDirect). Safe to call repeatedly;
+// close-at-most-once via the non-blocking drain check. Mirrors base's
+// maybeSignalL0Ready.
+//
+// Called from the two — and only two — mutators of the inputs that
+// computeLocalValueState reads (retainedBundles + hostVerdict):
+//   - retainPhase1Bundle (via ObservePhase1Bundle direct + Op11 harvest)
+//     — retention count change.
+//   - ApplyHostValidity — host verdict recorded.
+//
+// NOTE: BuildPhase1Bundle does NOT call this (and need not): in twoab it
+// σ-locks but does not self-retain, so computeLocalValueState (which is
+// retention-driven) is unchanged by it. The leader's L0Ready closes when
+// it self-observes its own bundle (ObservePhase1Bundle + ApplyHostValidity),
+// which the DES/runner does at fetch time. This differs from base, whose
+// l0DecisionReady checks sigmaLocked[0] and so signals from BuildPhase1Bundle.
+func (i *Instance) maybeSignalL0Ready() {
+	select {
+	case <-i.l0ReadyCh:
+		return // already closed
+	default:
+	}
+	if i.l0DecisionReady() {
+		close(i.l0ReadyCh)
+	}
 }
 
 // requestHostValidation enqueues a host-validity request on the wants

@@ -155,15 +155,17 @@ type Config struct {
 	TPhase2a time.Duration
 
 	// SafetyBuffer is the protocol-level mesh-tail tolerance configurable.
-	// Post Op5+Op11: SafetyBuffer widens the post-TPhase2a σ-pool fill
+	// Post Op5+Op6+Op11: SafetyBuffer widens the post-TPhase2a σ-pool fill
 	// window — the wall-clock between TPhase2a and the scheduled Resolve
 	// sweep, during which peer KindValues propagate and σ-pool[V_0]
 	// reaches qV. The σ-side critical path is 1 hop (KindValue carries
 	// the σ partial directly post Op5); the NR fall-through path is
-	// 2 hops (KindNoValue → KindCommit-NR → aggregate). The window must
-	// accommodate the worst case (2-hop fall-through):
+	// 2 hops (KindNoValue → KindCommit-NR → aggregate). A slot resolves
+	// σ-ward XOR NR-ward (mutually exclusive), so the window is the MAX
+	// of the two paths, not their sum (Op6 corollary):
 	//
-	//	resolveWindow = 2·BTT + SafetyBuffer + ε_3
+	//	resolveWindow = max(1·BTT + SafetyBuffer, 2·BTT) + ε_3
+	//	              = 1·BTT + max(SafetyBuffer, 1·BTT) + ε_3
 	//
 	// The runner / adapter shifts TPhase2a earlier by SafetyBuffer
 	// (relative to the runner-level RelayCutoff) so the cluster has
