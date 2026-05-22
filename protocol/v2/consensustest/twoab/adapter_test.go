@@ -323,6 +323,15 @@ func TestAdapter_SafetyBuffer_WidensCascadeWindow(t *testing.T) {
 	// straddle the 1-hop boundary). The SafetyBuffer semantics still
 	// hold (SB widens the σ-pool fill absorption budget for IHAVE/IWANT
 	// recovery); just this particular boundary test no longer fires.
+	//
+	// TODO(re-tune): when re-tuning for Op5's 1-hop cascade, strengthen
+	// the bottom-of-test `require.Less` (strict-less) to a magnitude
+	// check — e.g., `require.Greater(outZero.DecisionTime - outBig.DecisionTime, 500*time.Millisecond)`
+	// — so a regression to a 1-nanosecond gap doesn't spuriously pass.
+	// The structural gain at SB=700ms should be ~700ms in the canonical
+	// 4-op configuration. Without the magnitude lower bound, a future
+	// drift in the adapter's scheduling math could erase most of the
+	// gain and the strict-less would still hold.
 	t.Skip("Op5 collapses cascade to 1 hop; re-tune hopDelay vs SB boundary for the new 1-hop semantics")
 	// BTT=100ms, per-hop delay D=150ms (> BTT, so cascade two-hop = 300ms
 	// > the SB=0 cascade window of 250ms).

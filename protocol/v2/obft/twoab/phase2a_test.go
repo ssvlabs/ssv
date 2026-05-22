@@ -1,6 +1,7 @@
 package twoab
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -335,6 +336,55 @@ drainLoop:
 	require.Equal(t, 1, count, "in-flight dedup: should only enqueue one request per (layer, V_root)")
 }
 
+// TestRequestHostValidation_BufferFullRollsBackPendingFlag verifies the
+// buffer-full rollback semantic: when wantsHostValidationCh is full and
+// a new enqueue hits the `default` branch in select, the helper rolls
+// back the pendingValidation flag for that (layer, V_root). Without the
+// rollback, the (layer, V) pair would be permanently silenced — the
+// dedup-by-in-flight check would skip every subsequent harvest, but the
+// drop-on-full prevented the channel from ever receiving the request.
+// Load-bearing for "later harvest retries succeed" behavior under
+// transient buffer-full conditions.
+func TestRequestHostValidation_BufferFullRollsBackPendingFlag(t *testing.T) {
+	s := newSim(t, 4)
+	op := s.instances[OperatorID(1)]
+	K := op.Config().K()
+	// Fill the channel to capacity (the buffer is K-deep). Use distinct
+	// (layer, V) pairs across the K layers so the dedup-by-(layer, V_root)
+	// doesn't suppress any of them.
+	for k := 0; k < K; k++ {
+		op.requestHostValidation(k, Value(fmt.Sprintf("V%d", k)))
+	}
+	// Channel is now full. Subsequent enqueue must hit the `default`
+	// branch and roll back its pendingValidation entry.
+	const droppedLayer = 0
+	droppedV := Value("V-dropped")
+	droppedRoot := ValueRoot(droppedV)
+	op.requestHostValidation(droppedLayer, droppedV)
+	// Inspect the rollback: pendingValidation[droppedLayer] must NOT
+	// contain droppedRoot (the rollback erased the just-set flag).
+	bucket := op.pendingValidation[droppedLayer]
+	require.NotContains(t, bucket, droppedRoot,
+		"buffer-full path MUST roll back the pendingValidation flag so a later harvest can re-attempt")
+	// Drain ALL slots from the channel so the re-attempt lands cleanly
+	// in an empty channel (avoiding FIFO ordering noise with the
+	// earlier fill).
+	for k := 0; k < K; k++ {
+		<-op.WantsHostValidationCh()
+	}
+	// Now re-attempt the dropped request — it should succeed (and
+	// enqueue) because the rollback left the dedup state in a re-
+	// attemptable position.
+	op.requestHostValidation(droppedLayer, droppedV)
+	select {
+	case req := <-op.WantsHostValidationCh():
+		require.Equal(t, droppedLayer, req.Layer)
+		require.Equal(t, droppedV, req.Value)
+	default:
+		t.Fatal("after rollback + headroom freed, re-attempt MUST enqueue")
+	}
+}
+
 // TestFinalize_ClosesWantsHostValidationCh verifies that Finalize closes
 // the channel so runners draining via range terminate cleanly.
 func TestFinalize_ClosesWantsHostValidationCh(t *testing.T) {
@@ -346,6 +396,107 @@ func TestFinalize_ClosesWantsHostValidationCh(t *testing.T) {
 	require.False(t, ok, "channel should be closed after Finalize")
 	// Idempotent: second Finalize must not panic on close-of-closed.
 	require.NotPanics(t, op.Finalize, "Finalize must be idempotent")
+}
+
+// countingSigner wraps a real Signer and counts VerifyPartial calls
+// (filtered by a matcher predicate so we can isolate the L0Witness
+// verifies from incidental L0Partial verifies that happen on the same
+// peer KindValue). Used by TestObserveValueMsg_HarvestCacheDedupsVerify.
+type countingSigner struct {
+	inner    Signer
+	matchMsg func(msg []byte) bool
+	count    int
+}
+
+func (c *countingSigner) SignPartial(msg []byte) (Signature, error) {
+	return c.inner.SignPartial(msg)
+}
+
+func (c *countingSigner) AggregatePartials(partials map[OperatorID]Signature) (Signature, error) {
+	return c.inner.AggregatePartials(partials)
+}
+
+func (c *countingSigner) VerifyPartial(pubKeyShare []byte, msg []byte, partial Signature) bool {
+	if c.matchMsg(msg) {
+		c.count++
+	}
+	return c.inner.VerifyPartial(pubKeyShare, msg, partial)
+}
+
+func (c *countingSigner) VerifyAggregate(clusterPubKey []byte, msg []byte, sig Signature) bool {
+	return c.inner.VerifyAggregate(clusterPubKey, msg, sig)
+}
+
+// TestObserveValueMsg_HarvestCacheDedupsVerify locks in the Op11
+// verify-cost dedup: when multiple peers forward the same V (with the
+// same leader L0Witness inside their KindValues), the receiver verifies
+// the L0Witness exactly ONCE via BLS, then short-circuits subsequent
+// observations via verifiedL0Witnesses[layer][V_root]. Without the
+// cache, n peers re-flooding the same V would each trigger a fresh BLS
+// partial-verify (~1ms in production) on the receiver, stacking against
+// the slot budget.
+//
+// Setup: build a custom op-3 instance whose signer is wrapped with a
+// counter matching the (V, leaderID) verify message. Observe two
+// distinct peer KindValues from op-2 and op-4 both carrying the same V
+// + leader L0Witness. Assert exactly one matching verify call.
+func TestObserveValueMsg_HarvestCacheDedupsVerify(t *testing.T) {
+	s := newSim(t, 4)
+	leader := s.leaderAt(0)
+	// Seed leader + op-2 + op-4 with V_0 directly; op-3 is the V-drop
+	// receiver that will harvest V via the peer-KindValue path.
+	v0 := Value("V0")
+	s.deliverPhase1(0, v0, []OperatorID{leader, OperatorID(2), OperatorID(4)}, observedEarly)
+	s.applyHostValidityFor([]OperatorID{leader, OperatorID(2), OperatorID(4)}, 0, v0, true)
+	vm2, _, _, err := s.instances[OperatorID(2)].MaybeFirePhase2a()
+	require.NoError(t, err)
+	vm4, _, _, err := s.instances[OperatorID(4)].MaybeFirePhase2a()
+	require.NoError(t, err)
+
+	// Build a fresh op-3 instance with a counting signer wrapping the
+	// stub. The counter matches the (V, op-id) verify path that Op11's
+	// L0Witness check exercises.
+	v0Bytes := []byte(v0)
+	innerSigner := NewStubSigner(s.cfg.QV(), s.pubShares[OperatorID(3)])
+	counter := &countingSigner{
+		inner:    innerSigner,
+		matchMsg: func(msg []byte) bool { return string(msg) == string(v0Bytes) },
+	}
+	op3, err := NewInstance(
+		s.cfg, OperatorID(3),
+		counter,
+		NewStubSigner(s.cfg.QV(), s.pubShares[OperatorID(3)]),
+		NewStubIBE(s.cfg.QEnc()),
+		nil,
+		s.pubShares,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	// First observation: cache cold, real verify runs.
+	require.NoError(t, op3.ObserveValueMsg(vm2))
+	require.Len(t, op3.RetainedBundles(0, leader), 1,
+		"first harvest must establish retention")
+	firstCount := counter.count
+
+	// Second observation: cache hit MUST short-circuit the L0Witness
+	// verify. The verify call counter should not increment (modulo any
+	// L0Partial verify, which happens with msg = V_0 too — so we'll
+	// quantify the structural minimum).
+	require.NoError(t, op3.ObserveValueMsg(vm4))
+	require.Len(t, op3.RetainedBundles(0, leader), 1,
+		"second harvest dedups against the first (same V); retention stays at 1")
+	// Net new verify calls between the two observations:
+	//   - Op2 path (first obs):  1 L0Witness verify + 1 L0Partial verify = 2
+	//   - Op4 path (second obs): 0 L0Witness verify (cache hit) +
+	//                            1 L0Partial verify (different signer/share) = 1
+	// So secondDelta should be exactly 1 (the L0Partial verify), NOT 2.
+	// Without the cache, secondDelta would be 2.
+	secondDelta := counter.count - firstCount
+	require.Equal(t, 1, secondDelta,
+		"Op11 verify-cost dedup: second observation should incur exactly 1 verify (L0Partial; L0Witness short-circuits via cache). Got %d total, %d after first observation, delta %d",
+		counter.count, firstCount, secondDelta)
 }
 
 // TestObserveValueMsg_HarvestSecondDistinctVFiresRule2 verifies that

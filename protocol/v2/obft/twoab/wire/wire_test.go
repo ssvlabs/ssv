@@ -36,6 +36,23 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 		"Op3 L0Witness must round-trip through wire encode/decode")
 }
 
+// TestPhase1Bundle_RejectsUnknownVersionByte verifies that the V2
+// decoder rejects wire bytes whose version byte differs from 0x02.
+// Includes rejection of the pre-Op3 V1 byte (0x01) — the cluster cutover
+// policy assumes wire-incompatible coexistence does not occur, so older-
+// version bytes hitting a V2 decoder should fail cleanly at the version
+// check (manifesting as silent quorum starvation on mixed-version
+// clusters — see wire.go's cluster-cutover documentation).
+func TestPhase1Bundle_RejectsUnknownVersionByte(t *testing.T) {
+	for _, badVersion := range []byte{0x00, 0x01, 0x03, 0xff} {
+		bytes := []byte{badVersion}
+		bytes = append(bytes, ProtocolTag[:]...)
+		bytes = append(bytes, 0x01) // inner kind Phase1Bundle
+		_, err := DecodePhase1Bundle(bytes)
+		require.Errorf(t, err, "V2 decoder must reject version byte 0x%02x", badVersion)
+	}
+}
+
 // TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyL0Witness verifies that the
 // wire encoding tolerates an empty L0Witness at the encoder/decoder level
 // (the L_0 non-empty check is at ValidatePhase1Bundle, separation of
