@@ -497,8 +497,11 @@ func withLiveInstanceErr(c *Controller, slot phase0.Slot, fn func(r *RunningInst
 
 // withInstanceForRead is like withLiveInstance but does NOT reject a Finalize'd
 // instance. Read-only accessors (BuildCertificate / RetainedCertificate /
-// Evidence) are intentionally callable after EndInstance — e.g. to build a
-// certificate from a cached Output, or read accumulated evidence for logging.
+// Evidence) are intentionally callable on an instance that has Finalize'd
+// (Ended() == true) but is still registered — the window between Finalize and
+// EndInstance — e.g. to build a certificate from a cached Output, or read
+// accumulated evidence for logging. (After EndInstance the slot is removed from
+// c.instances, so lookup fails for these too.)
 func withInstanceForRead[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) (T, error)) (T, error) {
 	var zero T
 	r, err := c.lookup(slot)
