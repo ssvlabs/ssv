@@ -112,12 +112,10 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (6 curated sweeps × the default protocol set — see the PROTOCOLS
-# variable below — × per-scenario iterations) and writes / merges
-# data.js into
-# REPORT_DIR (default ./stresstest-report)
-# — consumed by the static UI (index.html + app.js + styles.css)
-# already in that folder.
+# (6 curated sweeps × the default protocol set — see PROTOCOLS below —
+# × per-scenario iterations) and writes / merges data.js into REPORT_DIR,
+# consumed by the static UI (index.html + app.js + styles.css) already
+# in that folder.
 #
 # Each `make stresstest` run produces data for one or more (n, K) pairs
 # (controlled by CLUSTER_SIZES_N and LAYERS_K). The reporting layer
@@ -158,6 +156,13 @@ consensustest-with-real-bls:
 #                            protocol/v2/consensustest/instability.go
 #                            for the per-level params.)
 #
+# Output:
+#   - REPORT_DIR (default ./stresstest-report) — directory the report's
+#     data.js is written / merged into; consumed by the static UI in that
+#     folder. `$(abspath ...)` resolves it before passing to `go test` so
+#     reports land where the user expects regardless of `go test`'s
+#     package CWD.
+#
 # Operating-point env vars (all have defaults; override to scope runs):
 #   - CLUSTER_SIZES_N (default 4) — comma-separated cluster sizes ∈ {4, 7}.
 #     Multiple values → one run per size, all merging into the same data.js.
@@ -184,6 +189,17 @@ consensustest-with-real-bls:
 #     highest emitted cell. Pipeline-shift protocols always pull from
 #     BFT_start=0.
 #
+# Protocol set:
+#   - PROTOCOLS (default = curated subset below) — comma-separated
+#     protocol names to include in the sweep (e.g. `OBFT,QBFT,PSigs`).
+#     Setting it empty (`PROTOCOLS=`) runs ALL registered protocols. The
+#     curated default is a deliberate subset: it omits the PSigs
+#     baseline-cost reference and the OBFTx2 / OBFTx3 multiplier variants.
+#     To include them, override per-run (e.g. `make stresstest
+#     PROTOCOLS=OBFT,2abOBFT,QBFT,PSigs`) or run the full set with
+#     `PROTOCOLS=`. Names must exactly match Protocol.Name() values
+#     defined in stress_test.go.
+#
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 10000) — high-confidence
 #     count for scenarios with Group == "Baseline" (currently just
@@ -199,31 +215,23 @@ consensustest-with-real-bls:
 #     ITERATIONS_UNSTABLE_OPERATIONS=100`) when you need a real CDF on
 #     the adversarial rows.
 #
-# `$(abspath ...)` resolves the path before passing to `go test` so
-# reports land where the user expects regardless of `go test`'s package CWD.
-#
 # Driver docstring: protocol/v2/consensustest/stress_test.go TestStress.
 # Sweep definitions: protocol/v2/consensustest/sweep.go DefaultSweeps.
 REPORT_DIR ?= ./stresstest-report
-ITERATIONS_BASELINE_OPERATIONS ?= 10000
-ITERATIONS_UNSTABLE_OPERATIONS ?= 1
+
 CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300,400
-BFT_STARTS ?=
-# PROTOCOLS — comma-separated protocol names to include in the sweep (e.g.
-# `OBFT,QBFT,PSigs`). Setting it empty (`PROTOCOLS=`) runs ALL registered
-# protocols. The curated default below is a deliberate subset: it omits the
-# PSigs baseline-cost reference and the OBFTx2 / OBFTx3 multiplier variants.
-# To include them, override per-run (e.g.
-# `make stresstest PROTOCOLS=OBFT,2abOBFT,QBFT,PSigs`) or run the full set
-# with `PROTOCOLS=`. Names must exactly match Protocol.Name() values
-# defined in stress_test.go.
+BFT_STARTS ?= 0,2400,2800,3200
+
 PROTOCOLS ?= OBFT-no-reflood,OBFT,2abOBFT-no-reflood,2abOBFT-lean,2abOBFT,QBFT-no-reflood,QBFT,QBFT-SSV
+
+ITERATIONS_BASELINE_OPERATIONS ?= 10000
+ITERATIONS_UNSTABLE_OPERATIONS ?= 1
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) BFT_STARTS=$(if $(BFT_STARTS),$(BFT_STARTS),<default>) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) BFT_STARTS=$(BFT_STARTS) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
