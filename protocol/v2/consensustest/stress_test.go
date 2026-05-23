@@ -163,7 +163,8 @@ func TestStress(t *testing.T) {
 	// (prod, stage1, stage2, slow, heavy_tail, slow_heavy_tail) from
 	// ct.P2PProfileNames. Each name becomes one point in the
 	// BTT × profile × instability cross-product, with both cfg.Network
-	// and cfg.Mesh.HopDelay sourced from the named profile.
+	// and cfg.Mesh.HopDelay sourced from the named profile. Duplicates
+	// are dropped, preserving first-occurrence order.
 	p2pProfilesRaw := os.Getenv("P2P_PROFILES")
 	if p2pProfilesRaw == "" {
 		p2pProfilesRaw = strings.Join(ct.P2PProfileNames, ",")
@@ -173,12 +174,17 @@ func TestStress(t *testing.T) {
 	for _, name := range ct.P2PProfileNames {
 		validProfileNames[name] = true
 	}
+	seenProfiles := make(map[string]bool)
 	for _, s := range strings.Split(p2pProfilesRaw, ",") {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
 		require.Truef(t, validProfileNames[s], "invalid P2P_PROFILES value %q; valid: %v", s, ct.P2PProfileNames)
+		if seenProfiles[s] {
+			continue
+		}
+		seenProfiles[s] = true
 		profiles = append(profiles, s)
 	}
 	require.NotEmpty(t, profiles, "P2P_PROFILES is empty after parsing")
@@ -228,9 +234,9 @@ func TestStress(t *testing.T) {
 
 	// BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
 	// p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
-	// 300, 400 per DefaultBaselineBTTValues. Sorted ascending after
-	// parse so p2p_increasing_BTT's axis is monotonic regardless of
-	// user input order.
+	// 300, 400 per DefaultBaselineBTTValues. Sorted ascending and
+	// de-duplicated after parse so p2p_increasing_BTT's axis is monotonic
+	// regardless of user input order.
 	bttValuesRaw := os.Getenv("BTT_VALUES_MS")
 	var bttValues []time.Duration
 	if bttValuesRaw == "" {
@@ -248,6 +254,9 @@ func TestStress(t *testing.T) {
 		}
 		require.NotEmpty(t, bttValues, "BTT_VALUES_MS is empty after parsing")
 		slices.Sort(bttValues)
+		// Drop duplicates (e.g. BTT_VALUES_MS=100,100,200) so the sweeps
+		// don't emit redundant identical points; Compact needs the sort above.
+		bttValues = slices.Compact(bttValues)
 	}
 
 	// Build (n, K) pairs: cross-product of clusterSizes × layersK,
