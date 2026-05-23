@@ -75,10 +75,10 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		return ErrEmptyValue
 	}
 	if i.hostVerdict[layer] == nil {
-		i.hostVerdict[layer] = make(map[string]bool)
+		i.hostVerdict[layer] = make(map[[32]byte]bool)
 	}
 	root := ValueRoot(value)
-	i.hostVerdict[layer][string(root[:])] = valid
+	i.hostVerdict[layer][root] = valid
 	// Clear any in-flight pending validation flag for (layer, V_root) —
 	// the verdict is now recorded; a subsequent harvest of the same V
 	// would dedup on hostVerdict anyway, but clearing keeps the
@@ -101,7 +101,7 @@ func (i *Instance) HostValidity(layer int, value Value) (valid bool, recorded bo
 		return false, false
 	}
 	root := ValueRoot(value)
-	v, ok := verdicts[string(root[:])]
+	v, ok := verdicts[root]
 	return v, ok
 }
 

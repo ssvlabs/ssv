@@ -94,13 +94,13 @@ type Instance struct {
 	// only hard cutoff).
 	retainedBundles map[int]map[OperatorID][]*retainedBundle
 
-	// hostVerdict[layer][string(value_root)] = host application's
+	// hostVerdict[layer][value_root] = host application's
 	// valid/not-valid verdict on the V identified by value_root at this
 	// layer. Populated via ApplyHostValidity; consumed by
 	// computeLocalValueState (Phase-2a fire-time emission decision),
 	// canSigmaAtLayer (the can-σ self-gate), and
 	// MaybeBuildAndBroadcastUpgrade (upgrade preconditions).
-	hostVerdict map[int]map[string]bool
+	hostVerdict map[int]map[[32]byte]bool
 
 	// Phase-2a own emissions. ownNoValueMsg is set if the op emitted
 	// NoValue at Phase 2a; ownValueMsg is set if the op emitted Value at
@@ -387,7 +387,7 @@ func NewInstance(
 		ibePubKeyShares:   ibePubKeyShares,
 		evidenceObserver:  evidenceObserver,
 		retainedBundles:   make(map[int]map[OperatorID][]*retainedBundle, K),
-		hostVerdict:       make(map[int]map[string]bool, K),
+		hostVerdict:       make(map[int]map[[32]byte]bool, K),
 		peerValueMsg:      make(map[OperatorID]*ValueMsg, len(cfg.Operators)),
 		peerNoValueMsg:    make(map[OperatorID]*NoValueMsg, len(cfg.Operators)),
 		peerCommit:        make(map[OperatorID]*Commit, len(cfg.Operators)),
@@ -528,7 +528,7 @@ func (i *Instance) requestHostValidation(layer int, value Value) {
 		if verdicts == nil {
 			return false
 		}
-		_, recorded := verdicts[string(root[:])]
+		_, recorded := verdicts[root]
 		return recorded
 	})
 }

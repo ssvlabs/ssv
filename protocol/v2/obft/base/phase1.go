@@ -440,9 +440,9 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		return ErrEmptyValue
 	}
 	if i.hostVerdict[layer] == nil {
-		i.hostVerdict[layer] = make(map[string]bool)
+		i.hostVerdict[layer] = make(map[[32]byte]bool)
 	}
-	key := valueRootKey(value)
+	key := ValueRoot(value)
 	// Per-operator validity-locking discipline: do not flip a verdict once
 	// recorded.
 	if existing, recorded := i.hostVerdict[layer][key]; recorded {
@@ -510,11 +510,11 @@ func (i *Instance) chosenVForLayer(layer int) (Value, bool) {
 // checkHostValidV returns (v, true) if the host has recorded `v` as valid
 // at this layer's verdict map; (nil, false) otherwise (not-recorded or
 // recorded-not-valid).
-func checkHostValidV(verdicts map[string]bool, v Value) (Value, bool) {
+func checkHostValidV(verdicts map[[32]byte]bool, v Value) (Value, bool) {
 	if verdicts == nil {
 		return nil, false
 	}
-	valid, recorded := verdicts[valueRootKey(v)]
+	valid, recorded := verdicts[ValueRoot(v)]
 	if !recorded || !valid {
 		return nil, false
 	}

@@ -193,14 +193,14 @@ func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	sigLen, err := r.uint32_("sigmaV length")
+	sigLen, err := r.uint32_("LeaderSigma length")
 	if err != nil {
 		return nil, err
 	}
 	if sigLen > MaxSignatureSize {
-		return nil, fmt.Errorf("wire: phase-1 sigmaV too long (%d)", sigLen)
+		return nil, fmt.Errorf("wire: phase-1 LeaderSigma too long (%d)", sigLen)
 	}
-	sig, err := r.bytes(int(sigLen), "sigmaV")
+	sig, err := r.bytes(int(sigLen), "LeaderSigma")
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +316,7 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 			return nil, fmt.Errorf("wire: commit witness %d has negative layer %d", i, w.Layer)
 		}
 		if len(w.Sigma) > MaxSignatureSize {
-			return nil, fmt.Errorf("wire: commit witness %d sigmaV too long (%d)", i, len(w.Sigma))
+			return nil, fmt.Errorf("wire: commit witness %d leader sigma too long (%d)", i, len(w.Sigma))
 		}
 		out = appendUint32(out, uint32(w.Layer))      //nolint:gosec // bounds-checked
 		out = appendUint64(out, uint64(w.Leader))     //
@@ -447,14 +447,14 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 		if err != nil {
 			return nil, err
 		}
-		sigLen, err := r.uint32_(fmt.Sprintf("witness %d sigmaV length", i))
+		sigLen, err := r.uint32_(fmt.Sprintf("witness %d leader sigma length", i))
 		if err != nil {
 			return nil, err
 		}
 		if sigLen > MaxSignatureSize {
-			return nil, fmt.Errorf("wire: witness %d sigmaV too long (%d)", i, sigLen)
+			return nil, fmt.Errorf("wire: witness %d leader sigma too long (%d)", i, sigLen)
 		}
-		sig, err := r.bytes(int(sigLen), fmt.Sprintf("witness %d sigmaV", i))
+		sig, err := r.bytes(int(sigLen), fmt.Sprintf("witness %d leader sigma", i))
 		if err != nil {
 			return nil, err
 		}

@@ -105,7 +105,7 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 		target := CommitNRSilent
 		if v, retained := i.chosenVAtLayer(k); retained {
 			if verdicts := i.hostVerdict[k]; verdicts != nil {
-				if valid, recorded := verdicts[valueRootKey(v)]; recorded && !valid {
+				if valid, recorded := verdicts[ValueRoot(v)]; recorded && !valid {
 					target = CommitNV
 				}
 			}
@@ -893,8 +893,8 @@ func (i *Instance) retainedL0ValueHashes() [][]byte {
 	var out [][]byte
 	for _, retained := range i.bundles[0] {
 		for _, b := range retained {
-			h := []byte(valueRootKey(b.Value))
-			out = append(out, h)
+			r := ValueRoot(b.Value)
+			out = append(out, r[:])
 		}
 	}
 	return out

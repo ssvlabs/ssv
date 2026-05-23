@@ -2,7 +2,6 @@ package base
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -158,9 +157,9 @@ type Instance struct {
 	// distinct value_roots per spec §Phase 1 / Retention bounds.
 	bundles map[int]map[OperatorID][]*Phase1Bundle
 
-	// hostVerdict[layer][string(value_root)] = host's valid/not-valid.
+	// hostVerdict[layer][value_root] = host's valid/not-valid.
 	// One entry per (layer, V); may be absent if host hasn't been asked.
-	hostVerdict map[int]map[string]bool
+	hostVerdict map[int]map[[32]byte]bool
 
 	// host is the channel + dedup plumbing for peer-reflood-V host-validation
 	// requests (see requestHostValidation). The runner drains its channel and
@@ -428,7 +427,7 @@ func NewInstance(
 		ibePubKeyShares:      ibePubKeyShares,
 		evidenceObserver:     evidenceObserver,
 		bundles:              make(map[int]map[OperatorID][]*Phase1Bundle, K),
-		hostVerdict:          make(map[int]map[string]bool, K),
+		hostVerdict:          make(map[int]map[[32]byte]bool, K),
 		peerOnions:           make(map[int]map[OperatorID][]EncryptedLayer, K),
 		peerNR:               make(map[int]map[OperatorID]Signature, K),
 		peerCommitHashes:     make(map[OperatorID]map[[32]byte]struct{}),
@@ -483,7 +482,7 @@ func (i *Instance) requestHostValidation(layer int, value Value) {
 		if verdicts == nil {
 			return false
 		}
-		_, recorded := verdicts[string(root[:])]
+		_, recorded := verdicts[root]
 		return recorded
 	})
 }
@@ -548,7 +547,7 @@ func (i *Instance) l0DecisionReady() bool {
 		if verdicts == nil {
 			return false
 		}
-		_, recorded := verdicts[valueRootKey(retained[0].Value)]
+		_, recorded := verdicts[ValueRoot(retained[0].Value)]
 		return recorded
 	}
 	// Peer-reflood-V σ path: no bundle locally, but a uniquely-observed
@@ -561,7 +560,7 @@ func (i *Instance) l0DecisionReady() bool {
 		if verdicts == nil {
 			return false
 		}
-		_, recorded := verdicts[valueRootKey(v)]
+		_, recorded := verdicts[ValueRoot(v)]
 		return recorded
 	}
 	return false
@@ -759,13 +758,6 @@ func (i *Instance) RetainedBundles(layer int, leader OperatorID) []*Phase1Bundle
 }
 
 // Helpers
-
-// valueRootKey returns a string key suitable for use in maps keyed by
-// value_root (the SHA-256 hash of a value).
-func valueRootKey(v Value) string {
-	h := sha256.Sum256(v)
-	return string(h[:])
-}
 
 // chainEncryptForLayer encrypts `partial` for layer `k` using the chained-IBE
 // construction from spec §Phase 2:
