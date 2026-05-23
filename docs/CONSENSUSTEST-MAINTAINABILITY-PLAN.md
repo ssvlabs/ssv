@@ -211,9 +211,14 @@ On closer inspection the byz/adapter scaffold is genuinely protocol-coupled, not
 So Phase 4's real duplication ("knowledge expressed twice") was the *types*, and that is already gone. The residual is textual handler similarity coupled to per-protocol mutable sim state — kept duplicated on purpose. (The big structural wins are Phases 1–2: ~1,700 lines of genuine engine/transport duplication removed.)
 
 ### Phase 5 — Secondary cleanups (independent; any order)
-- **Fields typing (decided: enum):** introduce a `FieldKey` enum whose `String()` emits the *same* wire names the report and the `stresstest-report/app.js` UI already consume (`"N"`, `"K"`, `"BTT"`, `"p2p_profile"`, `"Instability"`, `"BFT_start"`), so the data.js / JS-UI contract is unchanged while a key typo becomes a Go compile error. Centralize the `%g` value formatting in one place so sweep-side and report-side can't drift. This is the one cleanup with cross-language (Go↔JS UI) coupling — guard it with the Phase-0 data.js golden.
-- **Sweep-builder dedup:** extract one `withFreshNetworkWrap(point, makeModel)` helper for the loss/correlated/slowness sweeps.
-- **Safety mode (optional):** add a "collect violations, fail at end" mode for stress runs while keeping correctness mode's fail-fast `SafetyPanic`.
+- **Fields typing — DONE.** `FieldKey` string-backed enum on `SweepPoint.Fields` (and the reporting payload). A mistyped axis key is now a Go compile error; the string values are unchanged so the `reporting.fieldsKey` merge identity + the `stresstest-report` JS-UI pickers see byte-identical output (verified by the reporting merge tests). `%g` formatting was already centralized in `fieldsKey`.
+- **Sweep-builder dedup — DONE.** `wrapScenariosNetwork` replaces the three copies (loss / correlated / node-slowness) of the per-point clone-and-wrap block.
+- **Safety mode — deferred (optional, no active need).** A "collect violations, fail at end" stress mode would be additive; fail-fast `SafetyPanic` is fine for now.
+
+**Reviewer-flagged cleanups (assessed):**
+- *Committed trace golden* — **not added.** The existing assertion suite (catalog matrix + mesh/bandwidth tests) is the de-facto pre-refactor behavior baseline and stayed green through Phases 1–2; a committed event-sequence golden is post-hoc for the done phases and pins mostly-immaterial ordering at a brittleness cost (high churn mid-refactor). Worth adding once the harness settles, if event-sequence pinning is wanted.
+- *Seq-ordering invariant* — **documented** in `desim.Engine.RunUntil` (inline-scheduled events get lower seq than returned ones; load-bearing for QBFT's Broadcast-during-ProcessMsg). My refactor preserved it.
+- *`emitDirect` crashed-guard asymmetry* — **benign, no action.** `emitMesh`'s guard is necessary (avoids `NodeForOperator` panicking on a crashed op absent from the mesh); `emitDirect`'s is redundant (`crashOverlay.AllowDelivery` already suppresses a crashed sender). twoab's extra guard is harmless defensiveness, not protocol-justified; the helpers stay per-package (Phase 3), so nothing to fold.
 
 ### Cross-cutting — comment hygiene (any time)
 - The comments are thorough and mostly excellent — keep that. Only strip dev-history residue (no "vN", "pre/post-X", dangling refs to deleted docs) and update any comment that points at a moved symbol after Phases 1–4. Do **not** gut the genuinely-useful current-state documentation.
