@@ -170,24 +170,36 @@ func TestDeterminism_AllProtocols(t *testing.T) {
 		{"SilentLeader", ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}},
 		{"SigmaRefusal", ct.ByzPattern{Kind: ct.ByzSigmaRefusal, ByzOperators: []ct.OperatorID{1}}},
 	}
+	// Exercise both transports: direct fan-out and the mesh/gossip path. The
+	// shared desim transport must be byte-identical across runs too.
+	deliveries := []struct {
+		name string
+		mode ct.DeliveryMode
+	}{
+		{"direct", ct.DeliveryDirect},
+		{"mesh", ct.DeliveryMesh},
+	}
 	for _, p := range protocols {
 		for _, sc := range scenarios {
-			cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-			cfg.Byz = sc.byz
-			cfg.TraceEnabled = true
+			for _, d := range deliveries {
+				cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+				cfg.Byz = sc.byz
+				cfg.Delivery = d.mode
+				cfg.TraceEnabled = true
 
-			out1, err := p.Run(cfg)
-			if errors.Is(err, ct.ErrNotApplicable) {
-				continue // protocol doesn't model this byz pattern; skip
+				out1, err := p.Run(cfg)
+				if errors.Is(err, ct.ErrNotApplicable) {
+					continue // protocol doesn't model this byz pattern; skip
+				}
+				require.NoErrorf(t, err, "%s/%s/%s run1", p.Name(), sc.name, d.name)
+				out2, err := p.Run(cfg)
+				require.NoErrorf(t, err, "%s/%s/%s run2", p.Name(), sc.name, d.name)
+
+				require.Equalf(t, len(out1.Trace), len(out2.Trace),
+					"%s/%s/%s trace length differs across runs", p.Name(), sc.name, d.name)
+				require.Equalf(t, out1, out2,
+					"%s/%s/%s Outcome not byte-identical across runs", p.Name(), sc.name, d.name)
 			}
-			require.NoErrorf(t, err, "%s/%s run1", p.Name(), sc.name)
-			out2, err := p.Run(cfg)
-			require.NoErrorf(t, err, "%s/%s run2", p.Name(), sc.name)
-
-			require.Equalf(t, len(out1.Trace), len(out2.Trace),
-				"%s/%s trace length differs across runs", p.Name(), sc.name)
-			require.Equalf(t, out1, out2,
-				"%s/%s Outcome not byte-identical across runs", p.Name(), sc.name)
 		}
 	}
 }

@@ -37,7 +37,7 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, 
 	fromNode := mesh.NodeForOperator(from)
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
-	s.cacheArrivalForGossip(fromNode, fromNode, id, kind, frameworkRound, bytes, build)
+	desim.CacheArrivalForGossip(s, fromNode, fromNode, id, kind, frameworkRound, bytes, build)
 	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		isProto := mesh.IsProtocol(neighbor)
@@ -53,81 +53,16 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, 
 		}
 		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, frameworkRound, bytes)
-		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
-			from:      fromNode,
-			to:        neighbor,
-			publisher: fromNode,
-			msgID:     id,
-			kind:      kind,
-			round:     frameworkRound,
-			bytes:     bytes,
-			builder:   build,
+		s.Schedule(s.Now()+delay+extraDelay, &desim.MeshArrival{
+			From:      fromNode,
+			To:        neighbor,
+			Publisher: fromNode,
+			MsgID:     id,
+			Kind:      kind,
+			Layer:     frameworkRound,
+			Bytes:     bytes,
+			Builder:   build,
 		})
-	}
-}
-
-// cacheArrivalForGossip mirrors the OBFT helper of the same name. See
-// protocol/v2/consensustest/obft/des.go cacheArrivalForGossip for the
-// rationale; QBFT-specific: `round` plays the role OBFT's `layer`
-// does in mesh-hop bandwidth accounting.
-func (s *sim) cacheArrivalForGossip(
-	cacheOwner, publisher ct.MeshNode,
-	msgID ct.MsgID, kind ct.MsgKind, round int, bytes int64,
-	builder func(to ct.OperatorID) desim.Event,
-) {
-	mesh := s.cfg.Mesh
-	g := mesh.Gossip()
-	if !g.Enabled {
-		return
-	}
-	mesh.MCacheInsert(cacheOwner, msgID, ct.MCacheEntry{
-		Kind:  kind,
-		Bytes: bytes,
-		Reinject: func(requester ct.MeshNode) {
-			respEP := mesh.EndpointFor(cacheOwner)
-			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
-			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, round, bytes)
-			s.Schedule(s.Now()+delay, &evtMeshArrival{
-				from:      cacheOwner,
-				to:        requester,
-				publisher: publisher,
-				msgID:     msgID,
-				kind:      kind,
-				round:     round,
-				bytes:     bytes,
-				builder:   builder,
-			})
-		},
-	}, g.HistoryLength)
-}
-
-// scheduleInitialHeartbeats mirrors the OBFT helper. See
-// protocol/v2/consensustest/obft/des.go scheduleInitialHeartbeats for
-// the rationale. Identical body modulo the typed event.
-func (s *sim) scheduleInitialHeartbeats() {
-	mesh := s.cfg.Mesh
-	if mesh == nil {
-		return
-	}
-	g := mesh.Gossip()
-	if !g.Enabled || g.HeartbeatInterval <= 0 {
-		return
-	}
-	total := mesh.TotalNodes()
-	if total <= 0 {
-		return
-	}
-	phase := g.HeartbeatInterval / time.Duration(total)
-	for i := 0; i < total; i++ {
-		nodeOffset := time.Duration(i) * phase
-		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
-			at := nodeOffset + tick
-			if at > s.cfg.RelayCutoff {
-				break
-			}
-			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
-		}
 	}
 }
 

@@ -187,7 +187,7 @@ func (s *sim) start() error {
 	if s.byz.IsByz(ct.OperatorID(leader)) {
 		s.scheduleByzProposal(s.cfg.BFTStart, leader, specqbft.FirstRound)
 	}
-	s.scheduleInitialHeartbeats()
+	desim.ScheduleInitialHeartbeats(s, s.cfg.RelayCutoff)
 	return nil
 }
 

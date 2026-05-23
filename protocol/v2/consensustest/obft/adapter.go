@@ -370,7 +370,7 @@ type desConfig struct {
 	// publish/forward paths branch on Mesh != nil.
 	Mesh *ct.MeshTopology
 	// RelayCutoff is the slot's hard submit deadline (carried over
-	// from SimConfig). Used by scheduleInitialHeartbeats to bound the
+	// from SimConfig). Used by desim.ScheduleInitialHeartbeats to bound the
 	// gossip heartbeat sequence — no point firing heartbeats past the
 	// moment the slot's decision is moot.
 	RelayCutoff time.Duration

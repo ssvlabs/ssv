@@ -190,7 +190,7 @@ func (s *sim) start() error {
 	}
 	s.Schedule(cfgObft.TCommit, &evtPhaseTwoStart{})
 	s.Schedule(cfgObft.RoundEndOffset(), &evtResolve{})
-	s.scheduleInitialHeartbeats()
+	desim.ScheduleInitialHeartbeats(s, s.cfg.RelayCutoff)
 	return nil
 }
 
@@ -312,7 +312,7 @@ func (s *sim) emitDirect(from obftbase.OperatorID, kind ct.MsgKind, layer int, b
 
 // emitMesh publishes `from`'s message through the per-sim MeshTopology.
 // First-hop arrivals go to `from`'s mesh neighbors (cluster ops + relays);
-// each evtMeshArrival's handler dedup'd-forwards onward. `recipients` is
+// the shared desim.MeshArrival handler dedup'd-forwards onward. `recipients` is
 // retained for parity with emitDirect's signature but is consulted only
 // to apply per-(from, to) byz primitives at the publish step (byz patterns
 // that target a specific subset of cluster ops still suppress emission to
@@ -326,10 +326,14 @@ func (s *sim) emitMesh(from obftbase.OperatorID, kind ct.MsgKind, layer int, byt
 	// rather than re-delivered.
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
+	// Wrap the native-typed builder to the shared transport's ct.OperatorID
+	// signature; the obftbase↔ct conversion lands here, at the single
+	// mesh-publish boundary.
+	meshBuild := func(to ct.OperatorID) desim.Event { return build(obftbase.OperatorID(to)) }
 	// Stash a reinject closure on the publisher's mcache so it can
 	// answer IWANT for this mid until eviction. No-op when gossip is
 	// disabled.
-	s.cacheArrivalForGossip(fromNode, fromNode, id, kind, layer, bytes, build)
+	desim.CacheArrivalForGossip(s, fromNode, fromNode, id, kind, layer, bytes, meshBuild)
 	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		// Per-(from, to) byz primitives at publish only (relays escape
@@ -354,103 +358,17 @@ func (s *sim) emitMesh(from obftbase.OperatorID, kind ct.MsgKind, layer int, byt
 		// RelayEndpointBase, distinct from cluster ops 1..N).
 		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, layer, bytes)
-		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
-			from:      fromNode,
-			to:        neighbor,
-			publisher: fromNode,
-			msgID:     id,
-			kind:      kind,
-			layer:     layer,
-			bytes:     bytes,
-			builder:   build,
+		s.Schedule(s.Now()+delay+extraDelay, &desim.MeshArrival{
+			From:      fromNode,
+			To:        neighbor,
+			Publisher: fromNode,
+			MsgID:     id,
+			Kind:      kind,
+			Layer:     layer,
+			Bytes:     bytes,
+			Builder:   meshBuild,
 		})
 	}
 }
 
 func (s *sim) observedOffset() time.Duration { return s.Now() }
-
-// cacheArrivalForGossip stashes a reinject closure on `cacheOwner`'s
-// mcache so it can answer IWANT for `msgID`. Called by emitMesh (at
-// the publisher, cacheOwner == publisher) and by evtMeshArrival.handle
-// (at each receiver, cacheOwner = receiver, publisher carried over).
-// No-op when gossip is disabled — the closure-allocation cost is
-// avoided entirely on the eager-only path.
-//
-// The closure preserves `publisher` and the full message payload so
-// the rebuilt evtMeshArrival on IWANT-response looks indistinguishable
-// from a fresh eager-mesh hop to downstream consumers (same builder,
-// same msgID, same publisher metadata for the publisher-skip).
-func (s *sim) cacheArrivalForGossip(
-	cacheOwner, publisher ct.MeshNode,
-	msgID ct.MsgID, kind ct.MsgKind, layer int, bytes int64,
-	builder func(to obftbase.OperatorID) desim.Event,
-) {
-	mesh := s.cfg.Mesh
-	g := mesh.Gossip()
-	if !g.Enabled {
-		return
-	}
-	mesh.MCacheInsert(cacheOwner, msgID, ct.MCacheEntry{
-		Kind:  kind,
-		Bytes: bytes,
-		Reinject: func(requester ct.MeshNode) {
-			respEP := mesh.EndpointFor(cacheOwner)
-			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
-			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, layer, bytes)
-			s.Schedule(s.Now()+delay, &evtMeshArrival{
-				from:      cacheOwner,
-				to:        requester,
-				publisher: publisher,
-				msgID:     msgID,
-				kind:      kind,
-				layer:     layer,
-				bytes:     bytes,
-				builder:   builder,
-			})
-		},
-	}, g.HistoryLength)
-}
-
-// scheduleInitialHeartbeats fires evtMeshHeartbeat events across every
-// mesh node when the gossip layer is enabled, anchored at sim time 0.
-// Per-node phase offset = (node × HeartbeatInterval / TotalNodes)
-// staggers the cluster's heartbeats so they don't all fire at
-// t = k·HeartbeatInterval. Ticks beyond RelayCutoff are not scheduled
-// — past the submit deadline, the slot's decision is moot, so further
-// gossip cadence buys nothing. No-op when gossip is disabled or
-// DeliveryDirect is in effect.
-//
-// Pre-scheduling (rather than self-rescheduling inside the handler)
-// keeps the event queue finite-by-construction: a misconfigured
-// scenario without a decision-triggering chain still terminates when
-// the queue drains.
-func (s *sim) scheduleInitialHeartbeats() {
-	mesh := s.cfg.Mesh
-	if mesh == nil {
-		return
-	}
-	g := mesh.Gossip()
-	// HeartbeatInterval ≤ 0 is unreachable via the normal construction
-	// path (WithDefaults fills 0 → 700ms; MeshTopology snapshots that
-	// at build time), but guarding here makes the inner `tick +=`
-	// loop safe against a hand-mutated config that bypassed defaults.
-	if !g.Enabled || g.HeartbeatInterval <= 0 {
-		return
-	}
-	total := mesh.TotalNodes()
-	if total <= 0 {
-		return
-	}
-	phase := g.HeartbeatInterval / time.Duration(total)
-	for i := 0; i < total; i++ {
-		nodeOffset := time.Duration(i) * phase
-		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
-			at := nodeOffset + tick
-			if at > s.cfg.RelayCutoff {
-				break
-			}
-			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
-		}
-	}
-}

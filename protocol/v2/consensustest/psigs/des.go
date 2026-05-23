@@ -80,7 +80,7 @@ func (s *sim) start() {
 		}
 		s.Schedule(s.cfg.BFTStart, &evtPSigSign{op: op})
 	}
-	s.scheduleInitialHeartbeats()
+	desim.ScheduleInitialHeartbeats(s, s.cfg.RelayCutoff)
 }
 
 // outcome aggregates per-op decision state into a rawOutcome. Cluster-
@@ -125,7 +125,7 @@ func (s *sim) outcome() rawOutcome {
 //   - cfg.Mesh == nil (DeliveryDirect): per-recipient fanout against
 //     cfg.Network with per-(from, to) byz checks.
 //   - cfg.Mesh != nil (DeliveryMesh): publish to `from`'s mesh neighbors
-//     and let evtMeshArrival re-flood downstream.
+//     and let the shared desim.MeshArrival handler re-flood downstream.
 func (s *sim) emitToAll(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, build func(to ct.OperatorID) desim.Event) {
 	if s.mesh != nil {
 		s.emitMesh(from, kind, bytes, extraDelay, s.operators, build)
@@ -163,7 +163,7 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDe
 	fromNode := mesh.NodeForOperator(from)
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
-	s.cacheArrivalForGossip(fromNode, fromNode, id, kind, bytes, build)
+	desim.CacheArrivalForGossip(s, fromNode, fromNode, id, kind, -1, bytes, build)
 	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		isProto := mesh.IsProtocol(neighbor)
@@ -178,79 +178,15 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDe
 		}
 		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, -1, bytes)
-		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
-			from:      fromNode,
-			to:        neighbor,
-			publisher: fromNode,
-			msgID:     id,
-			kind:      kind,
-			bytes:     bytes,
-			builder:   build,
+		s.Schedule(s.Now()+delay+extraDelay, &desim.MeshArrival{
+			From:      fromNode,
+			To:        neighbor,
+			Publisher: fromNode,
+			MsgID:     id,
+			Kind:      kind,
+			Layer:     -1,
+			Bytes:     bytes,
+			Builder:   build,
 		})
-	}
-}
-
-// cacheArrivalForGossip mirrors the OBFT helper of the same name. See
-// protocol/v2/consensustest/obft/des.go cacheArrivalForGossip for the
-// rationale. PSigs-specific: the kind doesn't have per-layer / per-
-// round metadata, so RecordMeshHop receives layer=-1 (and the helper
-// signature is correspondingly shorter than OBFT's).
-func (s *sim) cacheArrivalForGossip(
-	cacheOwner, publisher ct.MeshNode,
-	msgID ct.MsgID, kind ct.MsgKind, bytes int64,
-	builder func(to ct.OperatorID) desim.Event,
-) {
-	mesh := s.mesh
-	g := mesh.Gossip()
-	if !g.Enabled {
-		return
-	}
-	mesh.MCacheInsert(cacheOwner, msgID, ct.MCacheEntry{
-		Kind:  kind,
-		Bytes: bytes,
-		Reinject: func(requester ct.MeshNode) {
-			respEP := mesh.EndpointFor(cacheOwner)
-			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
-			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, -1, bytes)
-			s.Schedule(s.Now()+delay, &evtMeshArrival{
-				from:      cacheOwner,
-				to:        requester,
-				publisher: publisher,
-				msgID:     msgID,
-				kind:      kind,
-				bytes:     bytes,
-				builder:   builder,
-			})
-		},
-	}, g.HistoryLength)
-}
-
-// scheduleInitialHeartbeats mirrors the OBFT helper. See
-// protocol/v2/consensustest/obft/des.go scheduleInitialHeartbeats for
-// the rationale; identical body modulo the typed event.
-func (s *sim) scheduleInitialHeartbeats() {
-	mesh := s.mesh
-	if mesh == nil {
-		return
-	}
-	g := mesh.Gossip()
-	if !g.Enabled || g.HeartbeatInterval <= 0 {
-		return
-	}
-	total := mesh.TotalNodes()
-	if total <= 0 {
-		return
-	}
-	phase := g.HeartbeatInterval / time.Duration(total)
-	for i := 0; i < total; i++ {
-		nodeOffset := time.Duration(i) * phase
-		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
-			at := nodeOffset + tick
-			if at > s.cfg.RelayCutoff {
-				break
-			}
-			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
-		}
 	}
 }

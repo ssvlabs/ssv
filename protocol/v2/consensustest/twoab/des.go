@@ -249,7 +249,7 @@ func (s *sim) start() error {
 	// hasn't yet decided through the dynamic Phase-2b cascade (e.g.,
 	// late-arriving cluster state).
 	s.Schedule(s.resolveDeadline, &evtResolve{})
-	s.scheduleInitialHeartbeats()
+	desim.ScheduleInitialHeartbeats(s, s.cfg.RelayCutoff)
 	return nil
 }
 
@@ -368,7 +368,11 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 	fromNode := mesh.NodeForOperator(fromOp)
 	id := mesh.NewMsgID()
 	mesh.MarkSeen(fromNode, id)
-	s.cacheArrivalForGossip(fromNode, fromNode, id, kind, layer, bytes, build)
+	// Wrap the native-typed builder to the shared transport's ct.OperatorID
+	// signature; the twoab↔ct conversion lands here, at the single
+	// mesh-publish boundary.
+	meshBuild := func(to ct.OperatorID) desim.Event { return build(twoab.OperatorID(to)) }
+	desim.CacheArrivalForGossip(s, fromNode, fromNode, id, kind, layer, bytes, meshBuild)
 	fromEP := mesh.EndpointFor(fromNode)
 	for _, neighbor := range mesh.Neighbors(fromNode) {
 		isProto := mesh.IsProtocol(neighbor)
@@ -383,15 +387,15 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 		}
 		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, layer, bytes)
-		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
-			from:      fromNode,
-			to:        neighbor,
-			publisher: fromNode,
-			msgID:     id,
-			kind:      kind,
-			layer:     layer,
-			bytes:     bytes,
-			builder:   build,
+		s.Schedule(s.Now()+delay+extraDelay, &desim.MeshArrival{
+			From:      fromNode,
+			To:        neighbor,
+			Publisher: fromNode,
+			MsgID:     id,
+			Kind:      kind,
+			Layer:     layer,
+			Bytes:     bytes,
+			Builder:   meshBuild,
 		})
 	}
 }
@@ -415,64 +419,4 @@ func (s *sim) markNoValueMsgEmitted(op twoab.OperatorID) {
 // Phase-2a NRDirect or Phase-2b NR).
 func (s *sim) markCommitEmitted(op twoab.OperatorID) {
 	s.commitEmitted[op] = true
-}
-
-// cacheArrivalForGossip mirrors the OBFT helper of the same name.
-func (s *sim) cacheArrivalForGossip(
-	cacheOwner, publisher ct.MeshNode,
-	msgID ct.MsgID, kind ct.MsgKind, layer int, bytes int64,
-	builder func(to twoab.OperatorID) desim.Event,
-) {
-	mesh := s.cfg.Mesh
-	g := mesh.Gossip()
-	if !g.Enabled {
-		return
-	}
-	mesh.MCacheInsert(cacheOwner, msgID, ct.MCacheEntry{
-		Kind:  kind,
-		Bytes: bytes,
-		Reinject: func(requester ct.MeshNode) {
-			respEP := mesh.EndpointFor(cacheOwner)
-			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
-			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, layer, bytes)
-			s.Schedule(s.Now()+delay, &evtMeshArrival{
-				from:      cacheOwner,
-				to:        requester,
-				publisher: publisher,
-				msgID:     msgID,
-				kind:      kind,
-				layer:     layer,
-				bytes:     bytes,
-				builder:   builder,
-			})
-		},
-	}, g.HistoryLength)
-}
-
-// scheduleInitialHeartbeats mirrors the OBFT helper of the same name.
-func (s *sim) scheduleInitialHeartbeats() {
-	mesh := s.cfg.Mesh
-	if mesh == nil {
-		return
-	}
-	g := mesh.Gossip()
-	if !g.Enabled || g.HeartbeatInterval <= 0 {
-		return
-	}
-	total := mesh.TotalNodes()
-	if total <= 0 {
-		return
-	}
-	phase := g.HeartbeatInterval / time.Duration(total)
-	for i := 0; i < total; i++ {
-		nodeOffset := time.Duration(i) * phase
-		for tick := time.Duration(0); ; tick += g.HeartbeatInterval {
-			at := nodeOffset + tick
-			if at > s.cfg.RelayCutoff {
-				break
-			}
-			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
-		}
-	}
 }
