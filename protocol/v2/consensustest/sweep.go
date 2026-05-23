@@ -413,44 +413,54 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 	}
 }
 
+// wrapScenariosNetwork clones every scenario with a per-sim network wrap
+// applied to BOTH cfg.Network (direct path) and cfg.Mesh.HopDelay (mesh
+// path), so a degradation axis (loss / correlated-link / node-slowness)
+// reaches Healthy in either transport. `wrap` builds the stateful model
+// from the inner model it receives, and is invoked fresh inside each sim's
+// Apply — required because these models hold per-instance/per-edge Markov
+// state that must NOT be shared across sims. The wrap composes ON TOP of
+// whatever model the inner scenario configured (e.g. MeshFlakiness's
+// PerReceiverDelay), defaulting a nil inner to Validate's equivalents
+// (ConstantDelay{D: BTT} for the direct path; the BTT/3 mesh-hop lognormal
+// for the mesh path). `active` gates the wrap so an axis zero-point passes
+// the scenarios through unwrapped. Centralizing this here keeps the three
+// degradation sweeps from re-deriving the compose-and-mirror logic — a
+// field-by-field rebuild of it was the source of a real Healthy-reverts-to-
+// direct regression (see CloneScenarioWith).
+func wrapScenariosNetwork(scenarios []Scenario, active bool, wrap func(inner NetworkModel) NetworkModel) []Scenario {
+	out := make([]Scenario, len(scenarios))
+	for i, s := range scenarios {
+		out[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
+			if !active {
+				return
+			}
+			base := cfg.Network
+			if base == nil {
+				base = ConstantDelay{D: cfg.BTT}
+			}
+			cfg.Network = wrap(base)
+			meshInner := cfg.Mesh.HopDelay
+			if meshInner == nil {
+				meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
+			}
+			cfg.Mesh.HopDelay = wrap(meshInner)
+		})
+	}
+	return out
+}
+
 func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	rates := []float64{0, 0.01, 0.05, 0.10, 0.20}
 	pts := make([]SweepPoint, 0, len(rates))
 	for _, rate := range rates {
 		rate := rate
-		// Each point gets its OWN scenario list with the loss model
-		// injected via Apply — fresh LossyNetwork per sim is required
-		// (the Markov state is stateful per-instance; sharing across
-		// sims would cross-contaminate).
-		scenariosWithLoss := make([]Scenario, len(scenarios))
-		for i, s := range scenarios {
-			scenariosWithLoss[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
-				if rate <= 0 {
-					return
-				}
-				// Compose: wrap whatever Network the inner scenario
-				// configured (e.g. PerReceiverDelay for MeshFlakiness)
-				// so loss adds ON TOP of the inner model. cfg.Network
-				// may be nil if the inner scenario didn't set it; use
-				// ConstantDelay{D: BTT} as the equivalent of Validate's
-				// default.
-				base := cfg.Network
-				if base == nil {
-					base = ConstantDelay{D: cfg.BTT}
-				}
-				cfg.Network = NewLossyNetwork(base, rate, 5)
-				// Mirror the loss wrap onto Mesh.HopDelay so mesh-mode
-				// Healthy responds to the loss axis. Keying is per
-				// mesh-endpoint (cluster + relay synthetic IDs), so the
-				// fresh LossyNetwork tracks state per mesh edge.
-				meshInner := cfg.Mesh.HopDelay
-				if meshInner == nil {
-					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
-				}
-				cfg.Mesh.HopDelay = NewLossyNetwork(meshInner, rate, 5)
-			})
-		}
+		// Fresh LossyNetwork per sim (stateful per-instance Markov state must
+		// not cross sims), composed over the inner model on both transports.
+		scenariosWithLoss := wrapScenariosNetwork(scenarios, rate > 0, func(inner NetworkModel) NetworkModel {
+			return NewLossyNetwork(inner, rate, 5)
+		})
 		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		base.K = k
@@ -498,43 +508,14 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 	pts := make([]SweepPoint, 0, len(probs))
 	for _, prob := range probs {
 		prob := prob
-		// Per-sim CorrelatedLinkDelay (stateful per-pair Markov chains —
-		// must construct fresh per sim, just like LossyNetwork).
-		//
-		// COMPOSITION: wrap whatever Network the inner scenario configured
-		// (e.g. PerReceiverDelay for MeshFlakiness, AsymmetricPropagation_*)
-		// so correlated-link slowness composes ON TOP of the scenario's
-		// own per-receiver model. cfg.Network may be nil if the inner
-		// scenario didn't set it; use ConstantDelay{D: BTT} as the
-		// equivalent of Validate's default. NOTE that for scenarios with
-		// hand-tuned per-receiver delays (MeshFlakiness's exactly-2·BTT
-		// flaky receivers), the extra correlated-slowness wrap pushes
-		// those receivers off the scenario's calibrated boundary — the
-		// resulting cell measures the COMPOUND effect, not the isolated
-		// scenario, which is the intended interpretation for this sweep.
-		scenariosWithCorr := make([]Scenario, len(scenarios))
-		for i, s := range scenarios {
-			scenariosWithCorr[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
-				if prob <= 0 {
-					return
-				}
-				base := cfg.Network
-				if base == nil {
-					base = ConstantDelay{D: cfg.BTT}
-				}
-				cfg.Network = NewCorrelatedLinkDelay(base, prob, 3.0, 20)
-				// Mirror onto Mesh.HopDelay so mesh-mode Healthy
-				// responds to the BadLinkProb axis; per-edge state
-				// keys on mesh-endpoint OperatorIDs (cluster + relay
-				// synthetic), so distinct mesh edges track distinct
-				// chains.
-				meshInner := cfg.Mesh.HopDelay
-				if meshInner == nil {
-					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
-				}
-				cfg.Mesh.HopDelay = NewCorrelatedLinkDelay(meshInner, prob, 3.0, 20)
-			})
-		}
+		// Fresh CorrelatedLinkDelay per sim, composed over the inner model on
+		// both transports. For scenarios with hand-tuned per-receiver delays
+		// (e.g. MeshFlakiness), this wrap pushes receivers off their
+		// calibrated boundary, so the cell measures the COMPOUND effect, not
+		// the isolated scenario — the intended reading for this sweep.
+		scenariosWithCorr := wrapScenariosNetwork(scenarios, prob > 0, func(inner NetworkModel) NetworkModel {
+			return NewCorrelatedLinkDelay(inner, prob, 3.0, 20)
+		})
 		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		base.K = k
@@ -597,55 +578,20 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 	pts := make([]SweepPoint, 0, len(counts))
 	for _, slowCount := range counts {
 		slowCount := slowCount
-		// Each point gets its OWN scenario list with a fresh
-		// MarkovianSlownessDelay constructed per Apply call — the
-		// per-op state map must NOT be shared across iterations.
-		//
-		// COMPOSITION: wrap whatever Network the inner scenario configured
-		// (e.g. PerReceiverDelay for MeshFlakiness, AsymmetricPropagation_*)
-		// so markov slowness composes ON TOP of the scenario's per-receiver
-		// model. cfg.Network may be nil if the inner scenario didn't set
-		// it; use ConstantDelay{D: BTT} as the equivalent of Validate's
-		// default. NOTE that for scenarios with hand-tuned per-receiver
-		// delays, the extra slowness wrap distorts the scenario's
-		// calibrated boundary — the resulting cell measures the COMPOUND
-		// effect (scenario + slowness), not the isolated scenario, which
-		// is the intended interpretation for this sweep.
-		scenariosWithSlowness := make([]Scenario, len(scenarios))
-		for i, s := range scenarios {
-			scenariosWithSlowness[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
-				if slowCount <= 0 {
-					return
-				}
-				slowOps := make([]OperatorID, 0, slowCount)
-				for j := 0; j < slowCount; j++ {
-					slowOps = append(slowOps, OperatorID(j+2))
-				}
-				base := cfg.Network
-				if base == nil {
-					base = ConstantDelay{D: cfg.BTT}
-				}
-				// ExtraDelay anchored to the network's SlowOpAnchor (per-
-				// impl; see NetworkModel interface comment). At this
-				// sweep's hardcoded BTT=300ms with productionLogNormal(btt)
-				// baseline (Median=BTT/2=150ms, anchor=2×Median=300ms),
-				// 3×anchor = 900ms — matches the old `3 × cfg.BTT`
-				// magnitude. Empirical-profile callers (if added later)
-				// would see the per-profile anchor.
-				cfg.Network = NewMarkovianSlowness(base, slowOps, slowOpExtraDelay(base, 3), persistP)
-				// Mirror onto Mesh.HopDelay so mesh-mode Healthy
-				// responds to the slow-op axis. SlowOps are cluster
-				// OperatorIDs (op2..op{k+1}), which match the cluster
-				// endpoint IDs returned by MeshTopology.EndpointFor —
-				// so the markov chain keys on cluster-op participation
-				// in mesh edges just as it does in the direct path.
-				meshInner := cfg.Mesh.HopDelay
-				if meshInner == nil {
-					meshInner = LogNormalDelay{Median: cfg.BTT / 3, Sigma: 0.3}
-				}
-				cfg.Mesh.HopDelay = NewMarkovianSlowness(meshInner, slowOps, slowOpExtraDelay(meshInner, 3), persistP)
-			})
+		// Slow ops are op2..op{slowCount+1} (leader op1 stays fast); depends
+		// only on the axis value, so compute once outside the per-sim wrap.
+		slowOps := make([]OperatorID, 0, slowCount)
+		for j := 0; j < slowCount; j++ {
+			slowOps = append(slowOps, OperatorID(j+2))
 		}
+		// Fresh MarkovianSlowness per sim, composed over the inner model on
+		// both transports. ExtraDelay is anchored to each inner model's
+		// SlowOpAnchor (see NetworkModel): at this sweep's BTT=300ms with the
+		// productionLogNormal baseline (anchor=300ms), 3×anchor = 900ms,
+		// matching the old `3 × cfg.BTT` magnitude.
+		scenariosWithSlowness := wrapScenariosNetwork(scenarios, slowCount > 0, func(inner NetworkModel) NetworkModel {
+			return NewMarkovianSlowness(inner, slowOps, slowOpExtraDelay(inner, 3), persistP)
+		})
 		btt := 300 * time.Millisecond
 		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
 		base.K = k
