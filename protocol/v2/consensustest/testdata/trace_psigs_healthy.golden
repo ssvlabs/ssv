@@ -1,0 +1,18 @@
+decided=true round=0 decisionTime=200ms missReason=""
+--- trace ---
+0s	PSigSign[op=1]
+0s	PSigSign[op=2]
+0s	PSigSign[op=3]
+0s	PSigSign[op=4]
+200ms	PSigArrival[from=1 to=2]
+200ms	PSigArrival[from=1 to=3]
+200ms	PSigArrival[from=1 to=4]
+200ms	PSigArrival[from=2 to=1]
+200ms	PSigArrival[from=2 to=3]
+200ms	PSigArrival[from=2 to=4]
+200ms	PSigArrival[from=3 to=1]
+200ms	PSigArrival[from=3 to=2]
+200ms	PSigArrival[from=3 to=4]
+200ms	PSigArrival[from=4 to=1]
+200ms	PSigArrival[from=4 to=2]
+200ms	PSigArrival[from=4 to=3]
