@@ -29,7 +29,7 @@ import (
 // carried inline in KindValue (with the emitter's σ partial), with no
 // separate Phase-2b σ-commit event. Receivers still run Resolve()
 // opportunistically on σ-pool growth — once cluster σ-pool[V_0] reaches
-// qV (via direct peer KindValues + leader LWitness + harvested forwarded-
+// qV (via direct peer KindValues + leader LeaderSigma + harvested forwarded-
 // witness contributions), the L_0 σ-quorum reconstruction succeeds without
 // any commit-trigger firing locally.
 //

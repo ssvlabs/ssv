@@ -50,8 +50,8 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 	if len(b.Value) == 0 {
 		return errors.New("obft: phase-1 bundle has empty Value")
 	}
-	if len(b.SigmaV) == 0 {
-		return errors.New("obft: phase-1 bundle has empty SigmaV")
+	if len(b.LeaderSigma) == 0 {
+		return errors.New("obft: phase-1 bundle has empty LeaderSigma")
 	}
 	return nil
 }
@@ -131,8 +131,8 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 		if w.ValueRoot == ([32]byte{}) {
 			return fmt.Errorf("obft: commit witness %d has zero ValueRoot", i)
 		}
-		if len(w.SigmaV) == 0 {
-			return fmt.Errorf("obft: commit witness %d has empty SigmaV", i)
+		if len(w.Sigma) == 0 {
+			return fmt.Errorf("obft: commit witness %d has empty Sigma", i)
 		}
 	}
 	return nil
@@ -163,4 +163,3 @@ func ValidateCertificate(c *Certificate, cfg *Config) error {
 	}
 	return nil
 }
-

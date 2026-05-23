@@ -288,7 +288,7 @@ func TestSelectWinningGroup(t *testing.T) {
 
 // TestRecoverV_KGt0_FallsBackToRetainedBundle verifies the recoverV
 // fallback at k>0: a σ-pool[k] entry seeded purely from the leader's
-// plaintext LWitness (no peer SigmaChained entry carrying V_k observed yet)
+// plaintext LeaderSigma (no peer SigmaChained entry carrying V_k observed yet)
 // can still recover V's bytes from the retained bundle — so the witness
 // head-start counts toward σ-quorum during reconstruction.
 func TestRecoverV_KGt0_FallsBackToRetainedBundle(t *testing.T) {

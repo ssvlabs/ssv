@@ -21,12 +21,12 @@ func TestController_BufferAndDrainPending(t *testing.T) {
 
 	const slot phase0.Slot = 100
 	bundle := &obftcore.Phase1Bundle{
-		ClusterID:  ctrl.clusterID,
-		OperatorID: 1,
-		Height:     obftcore.Height(slot),
-		Layer:      0,
-		Value:      []byte("V"),
-		SigmaV:     []byte("sig"),
+		ClusterID:   ctrl.clusterID,
+		OperatorID:  1,
+		Height:      obftcore.Height(slot),
+		Layer:       0,
+		Value:       []byte("V"),
+		LeaderSigma: []byte("sig"),
 	}
 	commit := &obftcore.Commit{
 		ClusterID:  ctrl.clusterID,
@@ -182,12 +182,12 @@ func TestController_PostEndInstance_RejectsMutations(t *testing.T) {
 		Layers:     make([]obftcore.EncryptedLayer, 4),
 	}
 	bundle := &obftcore.Phase1Bundle{
-		ClusterID:  ctrl.clusterID,
-		OperatorID: 1,
-		Height:     obftcore.Height(slot),
-		Layer:      0,
-		Value:      []byte("V"),
-		SigmaV:     []byte("sig"),
+		ClusterID:   ctrl.clusterID,
+		OperatorID:  1,
+		Height:      obftcore.Height(slot),
+		Layer:       0,
+		Value:       []byte("V"),
+		LeaderSigma: []byte("sig"),
 	}
 
 	// Path 2: simulate the race window — manually finalize the instance

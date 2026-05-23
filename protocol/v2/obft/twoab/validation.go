@@ -24,8 +24,8 @@ import (
 
 // ValidatePhase1Bundle checks structural invariants for an incoming
 // Phase-1 bundle. Per spec §Phase 1: the bundle carries the layer
-// leader's σ partial on V as `LWitness` at every layer — required
-// and non-empty regardless of Layer. LWitness BLS verification happens at
+// leader's σ partial on V as `LeaderSigma` at every layer — required
+// and non-empty regardless of Layer. LeaderSigma BLS verification happens at
 // the Instance layer (ObservePhase1Bundle) against the leader's
 // pubKeyShare; only the non-empty-bytes structural check is here.
 func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
@@ -53,8 +53,8 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 	if len(b.Value) == 0 {
 		return errors.New("twoab: phase-1 bundle has empty Value")
 	}
-	if len(b.LWitness) == 0 {
-		return fmt.Errorf("twoab: phase-1 bundle at layer %d has empty LWitness", b.Layer)
+	if len(b.LeaderSigma) == 0 {
+		return fmt.Errorf("twoab: phase-1 bundle at layer %d has empty LeaderSigma", b.Layer)
 	}
 	return nil
 }

@@ -53,6 +53,11 @@ type (
 	ThresholdIBE = obft.ThresholdIBE
 	StubSigner   = obft.StubSigner
 	StubIBE      = obft.StubIBE
+
+	// Shared wire types owned by the parent obft package.
+	Certificate  = obft.Certificate
+	Output       = obft.Output
+	Phase1Bundle = obft.Phase1Bundle
 )
 
 // Re-exported constructors/functions from the parent obft package.
@@ -72,6 +77,11 @@ func NewStubIBE(quorum int) *obft.StubIBE {
 // NoQuorumTag derives the IBE tag for layer k. See obft.NoQuorumTag.
 func NoQuorumTag(clusterID [32]byte, height obft.Height, layer int) []byte {
 	return obft.NoQuorumTag(clusterID, height, layer)
+}
+
+// ValueRoot returns the wire identifier (sha256) of V. See obft.ValueRoot.
+func ValueRoot(v Value) [32]byte {
+	return obft.ValueRoot(v)
 }
 
 // LayerSpec describes one layer of the K-layer onion structure. Per spec

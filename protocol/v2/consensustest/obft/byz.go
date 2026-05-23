@@ -808,7 +808,7 @@ func (b byzWitnessForgery) BuildExtraCommits(s *sim, op obftbase.OperatorID, c *
 			Layer:     targetLayer,
 			Leader:    other,
 			ValueRoot: primeRoot,
-			SigmaV:    forgeSigmaPartialBytes(other, targetLayer, primeV),
+			Sigma:     forgeSigmaPartialBytes(other, targetLayer, primeV),
 		})
 	}
 	return []*obftbase.Commit{cp}
@@ -852,7 +852,7 @@ func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op obftbase.Ope
 func clonePhase1Bundle(b *obftbase.Phase1Bundle) *obftbase.Phase1Bundle {
 	cp := *b
 	cp.Value = append(obftbase.Value(nil), b.Value...)
-	cp.SigmaV = append(obftbase.Signature(nil), b.SigmaV...)
+	cp.LeaderSigma = append(obftbase.Signature(nil), b.LeaderSigma...)
 	return &cp
 }
 
@@ -893,7 +893,7 @@ func cloneCommit(c *obftbase.Commit) *obftbase.Commit {
 			Layer:     w.Layer,
 			Leader:    w.Leader,
 			ValueRoot: w.ValueRoot,
-			SigmaV:    append(obftbase.Signature(nil), w.SigmaV...),
+			Sigma:     append(obftbase.Signature(nil), w.Sigma...),
 		}
 	}
 	return cp

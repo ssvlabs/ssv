@@ -11,12 +11,12 @@ import (
 
 func TestPhase1Bundle_Roundtrip(t *testing.T) {
 	in := &base.Phase1Bundle{
-		ClusterID:  [32]byte{0xAA, 0xBB, 0xCC, 0xDD},
-		OperatorID: 7,
-		Height:     12345,
-		Layer:      2,
-		Value:      []byte("hello world"),
-		SigmaV:     []byte{0x01, 0x02, 0x03, 0x04},
+		ClusterID:   [32]byte{0xAA, 0xBB, 0xCC, 0xDD},
+		OperatorID:  7,
+		Height:      12345,
+		Layer:       2,
+		Value:       []byte("hello world"),
+		LeaderSigma: []byte{0x01, 0x02, 0x03, 0x04},
 	}
 	bytes_, err := WrapPhase1Bundle(in)
 	require.NoError(t, err)
@@ -29,7 +29,7 @@ func TestPhase1Bundle_Roundtrip(t *testing.T) {
 	require.Equal(t, in.Height, env.Phase1Bundle.Height)
 	require.Equal(t, in.Layer, env.Phase1Bundle.Layer)
 	require.True(t, bytes.Equal(in.Value, env.Phase1Bundle.Value))
-	require.True(t, bytes.Equal(in.SigmaV, env.Phase1Bundle.SigmaV))
+	require.True(t, bytes.Equal(in.LeaderSigma, env.Phase1Bundle.LeaderSigma))
 }
 
 func TestCommit_Roundtrip(t *testing.T) {
@@ -47,8 +47,8 @@ func TestCommit_Roundtrip(t *testing.T) {
 			{Layer: 1, PartialSig: []byte("nr-sig-layer-1")},
 		},
 		Witnesses: []base.LeaderSigmaWitness{
-			{Layer: 0, Leader: 1, ValueRoot: base.ValueRoot([]byte("V0")), SigmaV: []byte("sigma-from-leader-1")},
-			{Layer: 2, Leader: 3, ValueRoot: base.ValueRoot([]byte("V2")), SigmaV: []byte("sigma-from-leader-3")},
+			{Layer: 0, Leader: 1, ValueRoot: base.ValueRoot([]byte("V0")), Sigma: []byte("sigma-from-leader-1")},
+			{Layer: 2, Leader: 3, ValueRoot: base.ValueRoot([]byte("V2")), Sigma: []byte("sigma-from-leader-3")},
 		},
 	}
 	bytes_, err := WrapCommit(in)
@@ -78,7 +78,7 @@ func TestCommit_Roundtrip(t *testing.T) {
 		require.Equal(t, expected.Layer, got.Layer)
 		require.Equal(t, expected.Leader, got.Leader)
 		require.Equal(t, expected.ValueRoot, got.ValueRoot, "witness %d ValueRoot mismatch", i)
-		require.True(t, bytes.Equal(expected.SigmaV, got.SigmaV), "witness %d SigmaV mismatch", i)
+		require.True(t, bytes.Equal(expected.Sigma, got.Sigma), "witness %d Sigma mismatch", i)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestDecodePhase1Bundle_RejectsLayerExceedingMaxLayers(t *testing.T) {
 	// Build a syntactically valid bundle with layer = MaxLayers+1.
 	in := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
-		Value: []byte("V"), SigmaV: []byte("s"),
+		Value: []byte("V"), LeaderSigma: []byte("s"),
 	}
 	encoded, err := EncodePhase1Bundle(in)
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestDecodePhase1Bundle_RejectsLayerExceedingMaxLayers(t *testing.T) {
 func TestDecodePhase1Bundle_RejectsBadProtocolTag(t *testing.T) {
 	in := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
-		Value: []byte("V"), SigmaV: []byte("s"),
+		Value: []byte("V"), LeaderSigma: []byte("s"),
 	}
 	encoded, err := EncodePhase1Bundle(in)
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestDecodePhase1Bundle_RejectsBadProtocolTag(t *testing.T) {
 func TestDecodePhase1Bundle_RejectsBadInnerKind(t *testing.T) {
 	in := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
-		Value: []byte("V"), SigmaV: []byte("s"),
+		Value: []byte("V"), LeaderSigma: []byte("s"),
 	}
 	encoded, err := EncodePhase1Bundle(in)
 	require.NoError(t, err)
@@ -253,21 +253,21 @@ func TestEncodeCommit_RejectsTooManyLayers(t *testing.T) {
 func TestEncodePhase1Bundle_RejectsOverlongValue(t *testing.T) {
 	b := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
-		Value:  make([]byte, MaxValueSize+1),
-		SigmaV: []byte("s"),
+		Value:       make([]byte, MaxValueSize+1),
+		LeaderSigma: []byte("s"),
 	}
 	_, err := EncodePhase1Bundle(b)
 	require.ErrorContains(t, err, "too long")
 }
 
 // TestEncodePhase1Bundle_RejectsOverlongSigmaV confirms the encoder rejects a
-// SigmaV larger than MaxSignatureSize (signatures are tighter-capped than
+// LeaderSigma larger than MaxSignatureSize (signatures are tighter-capped than
 // values).
 func TestEncodePhase1Bundle_RejectsOverlongSigmaV(t *testing.T) {
 	b := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
-		Value:  []byte("V"),
-		SigmaV: make([]byte, MaxSignatureSize+1),
+		Value:       []byte("V"),
+		LeaderSigma: make([]byte, MaxSignatureSize+1),
 	}
 	_, err := EncodePhase1Bundle(b)
 	require.ErrorContains(t, err, "too long")
@@ -300,14 +300,14 @@ func TestEncodeCommit_RejectsOverlongNRPartialSig(t *testing.T) {
 	require.ErrorContains(t, err, "too long")
 }
 
-// TestEncodeCommit_RejectsOverlongWitnessSigma confirms witness SigmaV fields
+// TestEncodeCommit_RejectsOverlongWitnessSigma confirms witness Sigma fields
 // cap at MaxSignatureSize.
 func TestEncodeCommit_RejectsOverlongWitnessSigma(t *testing.T) {
 	c := &base.Commit{
 		Witnesses: []base.LeaderSigmaWitness{{
 			Layer:  0,
 			Leader: 1,
-			SigmaV: make([]byte, MaxSignatureSize+1),
+			Sigma:  make([]byte, MaxSignatureSize+1),
 		}},
 	}
 	_, err := EncodeCommit(c)

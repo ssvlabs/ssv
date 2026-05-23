@@ -134,7 +134,7 @@ func FuzzOBFTUnwrap(f *testing.F) {
 // FuzzOBFTPhase1BundleDecode fuzzes the Phase1Bundle wire body decoder
 // directly (no envelope framing). Targets the field-by-field parser:
 // version, protocol tag, inner kind, ClusterID, OperatorID, Height, Layer,
-// Value, SigmaV.
+// Value, LeaderSigma.
 func FuzzOBFTPhase1BundleDecode(f *testing.F) {
 	// Strip the 2-byte envelope frame to feed the body decoder.
 	full := validPhase1BundleBytes()
@@ -238,12 +238,12 @@ func FuzzOBFTPhase1BundleRoundtrip(f *testing.F) {
 			return
 		}
 		in := &obftcore.Phase1Bundle{
-			ClusterID:  obftTestClusterID,
-			OperatorID: obftcore.OperatorID(opID),
-			Height:     obftcore.Height(height),
-			Layer:      int(layer),
-			Value:      obftcore.Value(value),
-			SigmaV:     obftcore.Signature(sigV),
+			ClusterID:   obftTestClusterID,
+			OperatorID:  obftcore.OperatorID(opID),
+			Height:      obftcore.Height(height),
+			Layer:       int(layer),
+			Value:       obftcore.Value(value),
+			LeaderSigma: obftcore.Signature(sigV),
 		}
 		encoded, err := wire.EncodePhase1Bundle(in)
 		if err != nil {
@@ -258,7 +258,7 @@ func FuzzOBFTPhase1BundleRoundtrip(f *testing.F) {
 			in.Height != out.Height ||
 			in.Layer != out.Layer ||
 			!bytes.Equal(in.Value, out.Value) ||
-			!bytes.Equal(in.SigmaV, out.SigmaV) {
+			!bytes.Equal(in.LeaderSigma, out.LeaderSigma) {
 			t.Fatalf("roundtrip mismatch:\n in=%+v\nout=%+v", in, out)
 		}
 	})
@@ -303,7 +303,7 @@ func FuzzOBFTCommitRoundtrip(f *testing.F) {
 			},
 			Witnesses: []obftcore.LeaderSigmaWitness{
 				{Layer: int(wLayer), Leader: obftcore.OperatorID(wLeader),
-					ValueRoot: obftcore.ValueRoot(wValue), SigmaV: obftcore.Signature(wSigV)},
+					ValueRoot: obftcore.ValueRoot(wValue), Sigma: obftcore.Signature(wSigV)},
 			},
 		}
 		encoded, err := wire.EncodeCommit(in)

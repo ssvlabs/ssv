@@ -202,12 +202,12 @@ func (s *sim) deliverPhase1Equivocation(layer int, vA, vB Value, recipientsA, re
 	sigB, err := signer.SignPartial(vB)
 	require.NoError(s.t, err)
 	bundleB := &Phase1Bundle{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: leaderID,
-		Height:     s.cfg.Height,
-		Layer:      layer,
-		Value:      append(Value{}, vB...),
-		SigmaV:     sigB,
+		ClusterID:   s.cfg.ClusterID,
+		OperatorID:  leaderID,
+		Height:      s.cfg.Height,
+		Layer:       layer,
+		Value:       append(Value{}, vB...),
+		LeaderSigma: sigB,
 	}
 
 	for _, rcp := range recipientsA {

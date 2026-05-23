@@ -14,7 +14,7 @@ import (
 // gossip wire formats:
 //
 //	Phase1Bundle:  ClusterID(32) + OperatorID(8) + Height(8) + Layer(4) +
-//	               Value(|V|) + LWitness(BLS sig) — leader's σ partial on V at this layer
+//	               Value(|V|) + LeaderSigma(BLS sig) — leader's σ partial on V at this layer
 //	ValueMsg:      ClusterID(32) + OperatorID(8) + Height(8) +
 //	               Value(|V|) + ValueRoot(32) +
 //	               Witnesses — forwarded leader witnesses:
@@ -46,7 +46,7 @@ const (
 
 func phase1BundleSize(b *twoab.Phase1Bundle) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes + layerBytes +
-		int64(len(b.Value)) + int64(len(b.LWitness))
+		int64(len(b.Value)) + int64(len(b.LeaderSigma))
 }
 
 func layerEntriesSize(entries []twoab.LayerEntry) int64 {

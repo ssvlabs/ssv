@@ -126,17 +126,17 @@ func proposerCandidateV() []byte {
 // ---------------------------------------------------------------------------
 
 // validPhase1BundleBytes returns wire-encoded bytes of a structurally valid
-// Phase1Bundle. NOT BLS-valid (SigmaV is a fixed placeholder), so feeding
+// Phase1Bundle. NOT BLS-valid (LeaderSigma is a fixed placeholder), so feeding
 // these to validateOBFTMessage will fail at BLS verify — but they're valid
 // seed corpus for the wire decoder.
 func validPhase1BundleBytes() []byte {
 	b, err := wire.WrapPhase1Bundle(&obftcore.Phase1Bundle{
-		ClusterID:  obftTestClusterID,
-		OperatorID: 1,
-		Height:     12345,
-		Layer:      0,
-		Value:      []byte("seed-V"),
-		SigmaV:     bytes.Repeat([]byte{0x01}, 96),
+		ClusterID:   obftTestClusterID,
+		OperatorID:  1,
+		Height:      12345,
+		Layer:       0,
+		Value:       []byte("seed-V"),
+		LeaderSigma: bytes.Repeat([]byte{0x01}, 96),
 	})
 	if err != nil {
 		panic(fmt.Sprintf("seed: wrap phase-1: %v", err))
@@ -162,7 +162,7 @@ func validCommitBytes() []byte {
 			{Layer: 1, PartialSig: bytes.Repeat([]byte{0x02}, 96)},
 		},
 		Witnesses: []obftcore.LeaderSigmaWitness{
-			{Layer: 0, Leader: 1, ValueRoot: obftcore.ValueRoot([]byte("V0")), SigmaV: bytes.Repeat([]byte{0x03}, 96)},
+			{Layer: 0, Leader: 1, ValueRoot: obftcore.ValueRoot([]byte("V0")), Sigma: bytes.Repeat([]byte{0x03}, 96)},
 		},
 	})
 	if err != nil {
@@ -187,7 +187,7 @@ func validCertificateBytes() []byte {
 }
 
 // blsValidPhase1BundleBytes returns wire-encoded bytes of a Phase1Bundle
-// whose SigmaV is a real partial BLS sig over the proposer-domain signing
+// whose LeaderSigma is a real partial BLS sig over the proposer-domain signing
 // root of the embedded V. This is admissible at the validation layer
 // (passes BLS verify); fuzz mutations of these bytes exercise the
 // post-decode validation path most thoroughly.
@@ -207,12 +207,12 @@ func blsValidPhase1BundleBytes() []byte {
 		panic(fmt.Sprintf("seed: sign V: %v", err))
 	}
 	b, err := wire.WrapPhase1Bundle(&obftcore.Phase1Bundle{
-		ClusterID:  obftTestClusterID,
-		OperatorID: obftcore.OperatorID(signer),
-		Height:     obftcore.Height(networkconfig.TestNetwork.EstimatedCurrentSlot()),
-		Layer:      0,
-		Value:      v,
-		SigmaV:     sigV,
+		ClusterID:   obftTestClusterID,
+		OperatorID:  obftcore.OperatorID(signer),
+		Height:      obftcore.Height(networkconfig.TestNetwork.EstimatedCurrentSlot()),
+		Layer:       0,
+		Value:       v,
+		LeaderSigma: sigV,
 	})
 	if err != nil {
 		panic(fmt.Sprintf("seed: wrap bls phase-1: %v", err))
@@ -241,8 +241,8 @@ func assertPhase1BundleInvariants(t testing.TB, b *obftcore.Phase1Bundle) {
 	if len(b.Value) > wire.MaxFieldSize {
 		t.Fatalf("Phase1Bundle.Value len %d > MaxFieldSize", len(b.Value))
 	}
-	if len(b.SigmaV) > wire.MaxFieldSize {
-		t.Fatalf("Phase1Bundle.SigmaV len %d > MaxFieldSize", len(b.SigmaV))
+	if len(b.LeaderSigma) > wire.MaxFieldSize {
+		t.Fatalf("Phase1Bundle.LeaderSigma len %d > MaxFieldSize", len(b.LeaderSigma))
 	}
 }
 
@@ -279,8 +279,8 @@ func assertCommitInvariants(t testing.TB, c *obftcore.Commit) {
 			t.Fatalf("Commit.Witnesses[%d].Layer %d out of range", i, w.Layer)
 		}
 		// ValueRoot is fixed 32 bytes — no MaxFieldSize check needed.
-		if len(w.SigmaV) > wire.MaxFieldSize {
-			t.Fatalf("Commit.Witnesses[%d].SigmaV len %d > MaxFieldSize", i, len(w.SigmaV))
+		if len(w.Sigma) > wire.MaxFieldSize {
+			t.Fatalf("Commit.Witnesses[%d].Sigma len %d > MaxFieldSize", i, len(w.Sigma))
 		}
 	}
 }
@@ -330,7 +330,7 @@ func commitsEqual(a, b *obftcore.Commit) bool {
 		if a.Witnesses[i].Layer != b.Witnesses[i].Layer ||
 			a.Witnesses[i].Leader != b.Witnesses[i].Leader ||
 			a.Witnesses[i].ValueRoot != b.Witnesses[i].ValueRoot ||
-			!bytes.Equal(a.Witnesses[i].SigmaV, b.Witnesses[i].SigmaV) {
+			!bytes.Equal(a.Witnesses[i].Sigma, b.Witnesses[i].Sigma) {
 			return false
 		}
 	}

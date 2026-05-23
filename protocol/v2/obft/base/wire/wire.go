@@ -80,7 +80,7 @@ const (
 	MaxValueSize = 1 * 1024 * 1024
 
 	// MaxSignatureSize caps BLS partial / aggregate signatures
-	// (Phase1Bundle.SigmaV, NRPartial.PartialSig, LeaderSigmaWitness.SigmaV,
+	// (Phase1Bundle.LeaderSigma, NRPartial.PartialSig, LeaderSigmaWitness.Sigma,
 	// Certificate.Signature). Real BLS12-381 signatures are 96 B and
 	// partial-sig aggregates the same. 1 KiB is 10× margin against any
 	// conceivable future signature scheme variant.
@@ -113,8 +113,8 @@ const MaxFieldSize = MaxValueSize
 //	[4]  Layer         (uint32 big-endian)
 //	[4]  Value length  (uint32 big-endian)
 //	[Value bytes]
-//	[4]  SigmaV length (uint32 big-endian)
-//	[SigmaV bytes]
+//	[4]  LeaderSigma length (uint32 big-endian)
+//	[LeaderSigma bytes]
 func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	if b == nil {
 		return nil, errors.New("wire: nil phase-1 bundle")
@@ -125,11 +125,11 @@ func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	if len(b.Value) > MaxValueSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle value too long (%d)", len(b.Value))
 	}
-	if len(b.SigmaV) > MaxSignatureSize {
-		return nil, fmt.Errorf("wire: phase-1 bundle SigmaV too long (%d)", len(b.SigmaV))
+	if len(b.LeaderSigma) > MaxSignatureSize {
+		return nil, fmt.Errorf("wire: phase-1 bundle LeaderSigma too long (%d)", len(b.LeaderSigma))
 	}
 
-	size := 1 + 8 + 1 + 32 + 8 + 8 + 4 + 4 + len(b.Value) + 4 + len(b.SigmaV)
+	size := 1 + 8 + 1 + 32 + 8 + 8 + 4 + 4 + len(b.Value) + 4 + len(b.LeaderSigma)
 	out := make([]byte, 0, size)
 	out = append(out, Phase1BundleVersionV1)
 	out = append(out, ProtocolTag[:]...)
@@ -140,8 +140,8 @@ func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	out = appendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
 	out = appendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
 	out = append(out, b.Value...)
-	out = appendUint32(out, uint32(len(b.SigmaV))) //nolint:gosec // bounds-checked
-	out = append(out, b.SigmaV...)
+	out = appendUint32(out, uint32(len(b.LeaderSigma))) //nolint:gosec // bounds-checked
+	out = append(out, b.LeaderSigma...)
 	return out, nil
 }
 
@@ -208,12 +208,12 @@ func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 		return nil, fmt.Errorf("wire: %d trailing bytes after phase-1 bundle", r.remaining())
 	}
 	return &base.Phase1Bundle{
-		ClusterID:  clusterID,
-		OperatorID: base.OperatorID(opID),
-		Height:     base.Height(height),
-		Layer:      int(layer),
-		Value:      base.Value(value),
-		SigmaV:     base.Signature(sig),
+		ClusterID:   clusterID,
+		OperatorID:  base.OperatorID(opID),
+		Height:      base.Height(height),
+		Layer:       int(layer),
+		Value:       base.Value(value),
+		LeaderSigma: base.Signature(sig),
 	}, nil
 }
 
@@ -249,8 +249,8 @@ const MaxWitnesses = MaxLayers * base.MaxRetainedPerOpLayer
 //	  [4]  Layer            (uint32 big-endian)
 //	  [8]  Leader OperatorID (uint64 big-endian)
 //	  [32] ValueRoot        (sha256(V), fixed-length)
-//	  [4]  SigmaV length    (uint32 big-endian)
-//	  [SigmaV bytes]
+//	  [4]  Sigma length    (uint32 big-endian)
+//	  [Sigma bytes]
 func EncodeCommit(c *base.Commit) ([]byte, error) {
 	if c == nil {
 		return nil, errors.New("wire: nil commit")
@@ -275,8 +275,8 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 	}
 	size += 2
 	for _, w := range c.Witnesses {
-		// Layer (4) + Leader (8) + ValueRoot (32) + SigmaV length (4) + SigmaV.
-		size += 4 + 8 + 32 + 4 + len(w.SigmaV)
+		// Layer (4) + Leader (8) + ValueRoot (32) + Sigma length (4) + Sigma.
+		size += 4 + 8 + 32 + 4 + len(w.Sigma)
 	}
 	out := make([]byte, 0, size)
 	out = append(out, CommitVersionV1)
@@ -315,14 +315,14 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 		if w.Layer < 0 {
 			return nil, fmt.Errorf("wire: commit witness %d has negative layer %d", i, w.Layer)
 		}
-		if len(w.SigmaV) > MaxSignatureSize {
-			return nil, fmt.Errorf("wire: commit witness %d sigmaV too long (%d)", i, len(w.SigmaV))
+		if len(w.Sigma) > MaxSignatureSize {
+			return nil, fmt.Errorf("wire: commit witness %d sigmaV too long (%d)", i, len(w.Sigma))
 		}
-		out = appendUint32(out, uint32(w.Layer))       //nolint:gosec // bounds-checked
-		out = appendUint64(out, uint64(w.Leader))      //
-		out = append(out, w.ValueRoot[:]...)           // fixed 32 bytes
-		out = appendUint32(out, uint32(len(w.SigmaV))) //nolint:gosec // bounds-checked
-		out = append(out, w.SigmaV...)
+		out = appendUint32(out, uint32(w.Layer))      //nolint:gosec // bounds-checked
+		out = appendUint64(out, uint64(w.Leader))     //
+		out = append(out, w.ValueRoot[:]...)          // fixed 32 bytes
+		out = appendUint32(out, uint32(len(w.Sigma))) //nolint:gosec // bounds-checked
+		out = append(out, w.Sigma...)
 	}
 	return out, nil
 }
@@ -464,7 +464,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 			Layer:     int(layer),
 			Leader:    base.OperatorID(leader),
 			ValueRoot: valueRoot,
-			SigmaV:    base.Signature(sig),
+			Sigma:     base.Signature(sig),
 		}
 	}
 	if r.remaining() != 0 {

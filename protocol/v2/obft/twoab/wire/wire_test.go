@@ -16,12 +16,12 @@ func TestProtocolTag_IsTwoabOBFTNotV1(t *testing.T) {
 
 func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 	b := &twoab.Phase1Bundle{
-		ClusterID:  [32]byte{0xaa, 0xbb, 0xcc},
-		OperatorID: 1,
-		Height:     42,
-		Layer:      0,
-		Value:      twoab.Value("V0-bytes"),
-		LWitness:   twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
+		ClusterID:   [32]byte{0xaa, 0xbb, 0xcc},
+		OperatorID:  1,
+		Height:      42,
+		Layer:       0,
+		Value:       twoab.Value("V0-bytes"),
+		LeaderSigma: twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04},
 	}
 	encoded, err := EncodePhase1Bundle(b)
 	require.NoError(t, err)
@@ -32,8 +32,8 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, b.Height, decoded.Height)
 	require.Equal(t, b.Layer, decoded.Layer)
 	require.Equal(t, b.Value, decoded.Value)
-	require.Equal(t, b.LWitness, decoded.LWitness,
-		"LWitness must round-trip through wire encode/decode")
+	require.Equal(t, b.LeaderSigma, decoded.LeaderSigma,
+		"LeaderSigma must round-trip through wire encode/decode")
 }
 
 // TestPhase1Bundle_RejectsUnknownVersionByte verifies that the V3
@@ -52,26 +52,26 @@ func TestPhase1Bundle_RejectsUnknownVersionByte(t *testing.T) {
 	}
 }
 
-// TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyLWitness verifies that the
-// wire encoding tolerates an empty LWitness at the encoder/decoder level
+// TestPhase1Bundle_EncodeDecodeRoundTrip_EmptySigmaV verifies that the
+// wire encoding tolerates an empty LeaderSigma at the encoder/decoder level
 // (the non-empty check is at ValidatePhase1Bundle — separation of
 // concerns). ValidatePhase1Bundle rejects an empty witness at every
 // layer, but the codec itself stays agnostic so a malformed bundle
 // fails at validation (with a specific error) rather than at decode.
-func TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyLWitness(t *testing.T) {
+func TestPhase1Bundle_EncodeDecodeRoundTrip_EmptySigmaV(t *testing.T) {
 	b := &twoab.Phase1Bundle{
 		ClusterID:  [32]byte{0xaa},
 		OperatorID: 2,
 		Height:     1,
 		Layer:      1,
 		Value:      twoab.Value("V1"),
-		// LWitness intentionally empty — codec tolerates; validation rejects.
+		// LeaderSigma intentionally empty — codec tolerates; validation rejects.
 	}
 	encoded, err := EncodePhase1Bundle(b)
 	require.NoError(t, err)
 	decoded, err := DecodePhase1Bundle(encoded)
 	require.NoError(t, err)
-	require.Empty(t, decoded.LWitness)
+	require.Empty(t, decoded.LeaderSigma)
 }
 
 func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 //   - Neither reaches → walk terminates without an output (slot misses).
 //
 // At layer 0, σ partials are plaintext in KindValue.L0Partial and the
-// leader's LWitness in retained Phase-1 bundles. At layers k > 0, the
-// layer leader's LWitness is likewise plaintext in its retained bundle
+// leader's LeaderSigma in retained Phase-1 bundles. At layers k > 0, the
+// layer leader's LeaderSigma is likewise plaintext in its retained bundle
 // (a head-start), while every other op's σ partial is chained-encrypted
 // inside Phase-2a emissions (ValueMsg / NoValueMsg /
 // Commit-NRDirect LayerEntries with Kind=SigmaChained); the accumulated
@@ -94,12 +94,12 @@ func (i *Instance) Resolve() (*Output, error) {
 // At L_0: σ partials come from sigmaPool[0]. Populated via
 // verifyAndPoolL0Partial in phase2a.go from peer ValueMsg.L0Partial (the
 // emitter's plaintext σ partial), plus the L_0 leader's Phase1Bundle
-// LWitness contribution and any harvested forwarded-witness contributions
+// LeaderSigma contribution and any harvested forwarded-witness contributions
 // from peer-reflood KindValue. Build groups by V_root (typically
 // one group, but cross-σ-V equivocation could produce more).
 //
 // At L_k > 0: σ partials come from two sources combined in
-// sigmaPool[k] / groups: (a) the layer leader's plaintext LWitness, seeded
+// sigmaPool[k] / groups: (a) the layer leader's plaintext LeaderSigma, seeded
 // at Phase-1 bundle observation (a head-start; 1 < qV so the witness alone
 // can't reach σ-quorum); and (b) Phase-2a SigmaChained entries inside
 // peerValueMsg / peerNoValueMsg / peerCommit (Side=NRDirect), whose
@@ -120,7 +120,7 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 					// but need the bytes. For L_0 sigmaPool, the
 					// V is in ownValueMsg.V / peerValueMsg[op].V (with a
 					// retainedBundles[0][leader] fallback when no KindValue
-					// has been observed yet but the leader's LWitness has
+					// has been observed yet but the leader's LeaderSigma has
 					// already contributed to sigmaPool). For L_k>0 sigmaPool,
 					// the V is in the original LayerEntry. Locate it via the
 					// helper.
@@ -273,7 +273,7 @@ func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
 //
 // At L_k>0: V comes from any SigmaChained LayerEntry (own or peer) at this
 // layer matching the root, or from any retained bundle at this layer (the
-// leader's plaintext LWitness seeds σ-pool[k] before any chained entry
+// leader's plaintext LeaderSigma seeds σ-pool[k] before any chained entry
 // decrypts).
 func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
 	if layer == 0 {
@@ -287,7 +287,7 @@ func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
 		}
 		// Fall back to retained bundles — the leader's bundle preserves
 		// V even when no KindValue carrying it has been observed yet
-		// (e.g., σ-pool was seeded purely from the leader's LWitness
+		// (e.g., σ-pool was seeded purely from the leader's LeaderSigma
 		// via Phase-1 bundle observation, before any KindValue arrived).
 		for _, retained := range i.retainedBundles[0] {
 			for _, r := range retained {
@@ -348,7 +348,7 @@ func (i *Instance) recoverV(layer int, vRoot [32]byte) (Value, bool) {
 			}
 		}
 	}
-	// Fall back to retained bundles at this layer — the leader's LWitness
+	// Fall back to retained bundles at this layer — the leader's LeaderSigma
 	// preserves V even when no SigmaChained entry carrying that V at this
 	// layer has arrived yet (e.g., σ-pool[k] was seeded purely from the
 	// leader's plaintext witness via Phase-1 bundle observation, before

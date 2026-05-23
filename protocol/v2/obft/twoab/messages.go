@@ -143,52 +143,6 @@ func (s CommitSide) IsNR() bool {
 	return s == CommitSideNR || s == CommitSideNRDirect
 }
 
-// Phase1Bundle is the Phase-1 message a layer's leader sends to distribute
-// their fetched candidate value. Per spec §Phase 1: the bundle pairs the
-// candidate value with the layer leader's σ partial on V at this bundle's
-// layer (the `LWitness` field below). Wire-level leader-binding closes the
-// Variant-A withhold-then-fake-σ attack and seeds σ-pool[V_k] (k = Layer)
-// with one partial from the moment the bundle is observed, accelerating
-// cluster-wide σ-quorum aggregation.
-//
-// Per-layer witness: every layer's leader carries LWitness = its σ partial
-// on V at that layer, so σ-pool[V_k] gets a leader head-start at every
-// fall-through layer (parity with bare OBFT's per-layer witness section).
-// The deeper-layer witnesses are plaintext head-starts (1 < qV, so a
-// witness alone never reaches σ-quorum — Pigeonhole 1 holds).
-//
-// Authentication: the outer envelope is op-identity-signed at construction
-// time; the inner bundle bytes (encoded by EncodePhase1Bundle) are what the
-// signature covers, so the (claimed) OperatorID below is bound to the
-// signer's identity at the envelope layer. LWitness adds threshold-scheme
-// binding on V: receivers verify LWitness against the leader's pubKeyShare
-// on V, so a byz operator-identity-forging V_fake cannot pair it with a
-// valid LWitness without forging the leader's BLS share.
-type Phase1Bundle struct {
-	// ClusterID identifies the cluster this bundle is for. Receivers reject
-	// bundles whose ClusterID doesn't match their instance's ClusterID.
-	ClusterID [32]byte
-	// OperatorID is the layer's leader (claimed; outer-envelope sig verifies).
-	OperatorID OperatorID
-	// Height is the consensus-instance identifier (slot, in SSV).
-	Height Height
-	// Layer is the layer index this bundle is for.
-	Layer int
-	// Value is the candidate the leader fetched and committed to.
-	Value Value
-	// LWitness is the layer leader's σ partial on Value at this bundle's
-	// Layer (BLS threshold share signature, verifiable against
-	// pubKeyShares[OperatorID] on Value). Required and non-empty at every
-	// layer. Receivers verify on observation and pool into
-	// σ-pool[Layer][ValueRoot(Value)] on success; verification failure
-	// fires Rule 5 (fake plaintext σ) against the leader.
-	//
-	// Per spec §Phase 1: the witness is structural — it cryptographically
-	// binds V to the leader at the protocol layer, beyond the outer-envelope
-	// op-identity auth.
-	LWitness Signature
-}
-
 // LayerWitness is a forwarded leader σ-witness carried in a KindValue's
 // Witnesses section. It re-broadcasts a layer leader's σ partial on V at
 // `Layer` so peers who missed that layer's Phase-1 bundle can still seed
@@ -350,36 +304,6 @@ type Commit struct {
 	// ValueMsg/NoValueMsg); empty for Side=NR (which references the op's
 	// earlier KindNoValue for L_k>0 entries).
 	LayerEntries []LayerEntry
-}
-
-// Certificate is the final-certificate wire payload (KindCertificate). Per
-// spec §Final-certificate gossip, after an operator successfully
-// reconstructs (V, S) it gossips this certificate so that receivers without
-// local reconstruction can submit (V, S) downstream.
-type Certificate struct {
-	ClusterID [32]byte
-	Height    Height
-	Value     Value
-	// Signature is the full reconstructed BLS signature on Value, verifiable
-	// against the cluster's V-keypair pubkey.
-	Signature Signature
-}
-
-// Output is the result of a successful consensus instance: which layer
-// reached σ-quorum, what value was decided, and the reconstructed full BLS
-// signature on it.
-type Output struct {
-	Layer     int
-	Value     Value
-	Signature Signature
-}
-
-// ValueRoot returns the 32-byte identifier (sha256) used to refer to a
-// Phase-1 V on the wire without retransmitting the full bytes. Cluster-
-// wide stable: every honest operator computes the same value_root for the
-// same V.
-func ValueRoot(v Value) [32]byte {
-	return sha256.Sum256(v)
 }
 
 // valueMsgContentHash returns a SHA-256 hash of v's content fields. Used

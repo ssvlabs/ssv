@@ -81,7 +81,7 @@ func (v *Verifier) VerifyPhase1Bundle(b *Phase1Bundle) error {
 	if !ok || len(share) == 0 {
 		return fmt.Errorf("obft: no pub-key share for operator %d", b.OperatorID)
 	}
-	if !v.Signer.VerifyPartial(share, b.Value, b.SigmaV) {
+	if !v.Signer.VerifyPartial(share, b.Value, b.LeaderSigma) {
 		return fmt.Errorf("obft: phase-1 σ_V from op %d does not verify", b.OperatorID)
 	}
 	return nil

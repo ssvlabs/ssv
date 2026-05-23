@@ -36,12 +36,12 @@ func TestValidateOBFT_Phase1Bundle_AcceptsValidSigma(t *testing.T) {
 	sigV, err := vSigner.SignPartial(v)
 	require.NoError(t, err)
 	bundle := &obftcore.Phase1Bundle{
-		ClusterID:  clusterID,
-		OperatorID: obftcore.OperatorID(signer),
-		Height:     obftTestHeight(mv),
-		Layer:      0,
-		Value:      v,
-		SigmaV:     sigV,
+		ClusterID:   clusterID,
+		OperatorID:  obftcore.OperatorID(signer),
+		Height:      obftTestHeight(mv),
+		Layer:       0,
+		Value:       v,
+		LeaderSigma: sigV,
 	}
 	body, err := wire.WrapPhase1Bundle(bundle)
 	require.NoError(t, err)
@@ -58,15 +58,15 @@ func TestValidateOBFT_Phase1Bundle_RejectsCorruptSigmaV(t *testing.T) {
 	mv, _, share, msgID, clusterID := obftTestSetup(t)
 	signer := share.Committee[0].Signer
 
-	// V is a well-formed block (so signingRootFor succeeds); SigmaV is
+	// V is a well-formed block (so signingRootFor succeeds); LeaderSigma is
 	// garbage — exercises the actual partial-sig verification failure.
 	bundle := &obftcore.Phase1Bundle{
-		ClusterID:  clusterID,
-		OperatorID: obftcore.OperatorID(signer),
-		Height:     obftTestHeight(mv),
-		Layer:      0,
-		Value:      proposerCandidateV(),
-		SigmaV:     []byte("garbage-not-a-valid-bls-partial--padded-to-some-length-like-real-sigs"),
+		ClusterID:   clusterID,
+		OperatorID:  obftcore.OperatorID(signer),
+		Height:      obftTestHeight(mv),
+		Layer:       0,
+		Value:       proposerCandidateV(),
+		LeaderSigma: []byte("garbage-not-a-valid-bls-partial--padded-to-some-length-like-real-sigs"),
 	}
 	body, err := wire.WrapPhase1Bundle(bundle)
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestValidateOBFT_Phase1Bundle_RejectsInnerOuterSignerMismatch(t *testing.T)
 		ClusterID:  clusterID,
 		OperatorID: obftcore.OperatorID(innerSigner),
 		Height:     obftTestHeight(mv), Layer: 0,
-		Value: v, SigmaV: sigV,
+		Value: v, LeaderSigma: sigV,
 	}
 	body, err := wire.WrapPhase1Bundle(bundle)
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestValidateOBFT_Commit_RejectsStructurallyInvalidWitness(t *testing.T) {
 		Layers:     make([]obftcore.EncryptedLayer, 4),
 		Witnesses: []obftcore.LeaderSigmaWitness{
 			// Leader 999 is not in the cluster — structural rejection.
-			{Layer: 0, Leader: 999, ValueRoot: obftcore.ValueRoot(proposerCandidateV()), SigmaV: []byte("witness-sig-padded-to-resemble-bls-length-12345")},
+			{Layer: 0, Leader: 999, ValueRoot: obftcore.ValueRoot(proposerCandidateV()), Sigma: []byte("witness-sig-padded-to-resemble-bls-length-12345")},
 		},
 	}
 	body, err := wire.WrapCommit(commit)
@@ -225,12 +225,12 @@ func TestValidateOBFT_Admissions_RejectsIdenticalRedelivery(t *testing.T) {
 	sigV, err := vSigner.SignPartial(v)
 	require.NoError(t, err)
 	bundle := &obftcore.Phase1Bundle{
-		ClusterID:  clusterID,
-		OperatorID: obftcore.OperatorID(signer),
-		Height:     obftTestHeight(mv),
-		Layer:      0,
-		Value:      v,
-		SigmaV:     sigV,
+		ClusterID:   clusterID,
+		OperatorID:  obftcore.OperatorID(signer),
+		Height:      obftTestHeight(mv),
+		Layer:       0,
+		Value:       v,
+		LeaderSigma: sigV,
 	}
 	body, err := wire.WrapPhase1Bundle(bundle)
 	require.NoError(t, err)

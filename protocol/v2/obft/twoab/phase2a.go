@@ -196,7 +196,7 @@ func (i *Instance) buildLayerEntries() ([]LayerEntry, error) {
 // `entries`), that layer's leader witness.
 //
 // Each witness is pulled from the emitter's own retained leader bundle at
-// that layer (retainedBundles[k][leader].LWitness); being σ-side at k
+// that layer (retainedBundles[k][leader].LeaderSigma); being σ-side at k
 // implies the emitter retained that bundle with the leader's verified
 // witness. Per the "root plus σ-colocation" design, V rides alongside
 // (v.V for L_0, the SigmaChained entry for k>0), so the witness carries
@@ -208,11 +208,11 @@ func (i *Instance) buildForwardedWitnesses(l0Root [32]byte, entries []LayerEntry
 	out := make([]LayerWitness, 0, 1+len(entries))
 	// L_0 — always present (the op is σ-at-L_0 by virtue of emitting KindValue).
 	l0Leader := i.cfg.Layers[0].Leader
-	if r := i.retainedBundles[0][l0Leader]; len(r) > 0 && len(r[0].Bundle.LWitness) > 0 {
+	if r := i.retainedBundles[0][l0Leader]; len(r) > 0 && len(r[0].Bundle.LeaderSigma) > 0 {
 		out = append(out, LayerWitness{
 			Layer:     0,
 			ValueRoot: l0Root,
-			Witness:   append(Signature{}, r[0].Bundle.LWitness...),
+			Witness:   append(Signature{}, r[0].Bundle.LeaderSigma...),
 		})
 	}
 	// k>0 — one per SigmaChained entry (σ-side layer); V rides in the entry.
@@ -222,13 +222,13 @@ func (i *Instance) buildForwardedWitnesses(l0Root [32]byte, entries []LayerEntry
 		}
 		kLeader := i.cfg.Layers[e.Layer].Leader
 		r := i.retainedBundles[e.Layer][kLeader]
-		if len(r) == 0 || len(r[0].Bundle.LWitness) == 0 {
+		if len(r) == 0 || len(r[0].Bundle.LeaderSigma) == 0 {
 			continue
 		}
 		out = append(out, LayerWitness{
 			Layer:     e.Layer,
 			ValueRoot: ValueRoot(e.V),
-			Witness:   append(Signature{}, r[0].Bundle.LWitness...),
+			Witness:   append(Signature{}, r[0].Bundle.LeaderSigma...),
 		})
 	}
 	return out
@@ -243,7 +243,7 @@ func (i *Instance) buildLayerEntry(k int) (LayerEntry, error) {
 	// If we already σ-committed at this layer, stay consistent — emit
 	// SigmaChained on the locked V regardless of the current host verdict.
 	// The only way to be σ-locked at k>0 before Phase-2a is as this layer's
-	// leader via our own Phase-1 LWitness (BuildPhase1Bundle σ-locks at
+	// leader via our own Phase-1 LeaderSigma (BuildPhase1Bundle σ-locks at
 	// witness-sign time). Flipping to NR here would publish both a σ witness
 	// (in our Phase-1 bundle) and an NR partial at the same layer —
 	// self-equivocation. This mirrors the L_0 principle that a host
@@ -394,7 +394,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 		//       happen for honest fire-time semantics but enforce.
 		//   (3) Commit cache + self-pool. Both succeeded — emit.
 		// Mirrors the sign-first-then-lock ordering used in
-		// BuildPhase1Bundle for the L_0 leader's LWitness.
+		// BuildPhase1Bundle for the L_0 leader's LeaderSigma.
 		l0Partial, cached := i.ownPartials[layer]
 		if !cached {
 			p, err := i.signer.SignPartial(v)
@@ -853,7 +853,7 @@ func (i *Instance) verifyAndPoolL0Partial(emitter OperatorID, v *ValueMsg) {
 	if i.verifySigmaPartial(emitter, v.V, v.L0Partial) {
 		i.addToSigmaPool(layer, ValueRoot(v.V), emitter, v.L0Partial)
 		// Cross-source Rule 3: the emitter may already hold a σ partial on a
-		// different V at L_0 (its own Phase-1 LWitness as the layer leader, or
+		// different V at L_0 (its own Phase-1 LeaderSigma as the layer leader, or
 		// a harvested witness). Re-check now, in any arrival order.
 		i.maybeFireCrossSigmaV(emitter, v.V)
 		return
@@ -1112,12 +1112,12 @@ func (i *Instance) harvestOneWitness(v *ValueMsg, w LayerWitness) {
 	// have already been queried by evtPhase1Arrival.
 	priorRetained := len(i.retainedBundles[w.Layer][leaderID])
 	synth := &Phase1Bundle{
-		ClusterID:  i.cfg.ClusterID,
-		OperatorID: leaderID,
-		Height:     i.cfg.Height,
-		Layer:      w.Layer,
-		Value:      append(Value{}, vK...),
-		LWitness:   append(Signature{}, w.Witness...),
+		ClusterID:   i.cfg.ClusterID,
+		OperatorID:  leaderID,
+		Height:      i.cfg.Height,
+		Layer:       w.Layer,
+		Value:       append(Value{}, vK...),
+		LeaderSigma: append(Signature{}, w.Witness...),
 	}
 	// Defense-in-depth: re-validate the synthesized bundle structurally
 	// before retention. Today this is redundant (synth is built from

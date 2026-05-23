@@ -16,7 +16,7 @@ import (
 //  1. Phase 1 — [slot_start, T_0_broadcast]:
 //     a. If local operator is a layer leader: BuildPhase1Bundle(layer, V)
 //     constructs a bundle and broadcasts it. Every layer leader embeds an
-//     LWitness (σ partial on V at its layer) so receivers can seed
+//     LeaderSigma (σ partial on V at its layer) so receivers can seed
 //     σ-pool[V_k] from the bundle alone (every layer's leader carries a
 //     witness, not just L_0).
 //     b. ObservePhase1Bundle(b) for every retained peer bundle.
@@ -153,8 +153,8 @@ type Instance struct {
 	//   - sigmaPool[layer][V_root][op] = the op's σ partial on V at this
 	//     layer. At L_0: extracted from KindValue.L0Partial via
 	//     verifyAndPoolL0Partial; the leader's contribution comes from
-	//     Phase1Bundle.LWitness. At L_k>0: the layer leader's plaintext
-	//     Phase1Bundle.LWitness (a head-start) plus peers' σ partials
+	//     Phase1Bundle.LeaderSigma. At L_k>0: the layer leader's plaintext
+	//     Phase1Bundle.LeaderSigma (a head-start) plus peers' σ partials
 	//     decrypted from Phase-2a LayerEntry (SigmaChained, peeled via
 	//     accumulated nr_tag keys).
 	//   - nrTagPool[layer][op] = the op's nr_tag_k partial at this layer.
@@ -286,7 +286,7 @@ type Instance struct {
 
 // RetentionSource discriminates how a retained Phase-1 bundle reached
 // the Instance. Informational hint for slashing-evidence routing: the
-// LWitness BLS partial is sufficient cryptographic leader-binding in
+// LeaderSigma BLS partial is sufficient cryptographic leader-binding in
 // all cases (the Instance verifies it before retention), so envelope
 // re-verification by downstream consumers is OPTIONAL — useful as a
 // belt-and-suspenders check when available, skippable when not.
@@ -298,15 +298,15 @@ const (
 	// ObservePhase1Bundle call. The leader's envelope signature is
 	// available at the wire layer (in the runner's mcache); downstream
 	// consumers MAY re-verify the envelope against the leader's pubkey
-	// as a belt-and-suspenders check on top of LWitness verification.
+	// as a belt-and-suspenders check on top of LeaderSigma verification.
 	RetentionDirect RetentionSource = iota
 	// RetentionHarvest: the bundle was synthesized from a peer's
 	// KindValue (peer-reflood-V harvest). No leader envelope
-	// signature exists for this bundle; the LWitness BLS partial
+	// signature exists for this bundle; the LeaderSigma BLS partial
 	// inside is the sole leader-binding artifact (verified by the
 	// Instance against the leader's pubkey before retention).
 	// Downstream consumers should skip envelope re-verification (none
-	// to re-verify) and rely on LWitness alone.
+	// to re-verify) and rely on LeaderSigma alone.
 	RetentionHarvest
 )
 
@@ -909,7 +909,7 @@ func (i *Instance) recordRule3(op OperatorID, layer int) bool {
 // maybeFireCrossSigmaV fires Rule 3 (cross-σ-V equivocation) if `op` now
 // holds verified σ partials on ≥ 2 distinct value-roots at L_0, having just
 // contributed `justV`. Called after every L_0 σ-pool insertion — the leader's
-// Phase-1 LWitness, an emitter's own KindValue.L0Partial, and harvested
+// Phase-1 LeaderSigma, an emitter's own KindValue.L0Partial, and harvested
 // forwarded witnesses — so a cross-SOURCE double-sign is caught in any arrival
 // order (e.g. a byz leader's witness on V_a plus its own L0Partial on V_b).
 // The two-distinct-KindValues case is caught separately in ObserveValueMsg;

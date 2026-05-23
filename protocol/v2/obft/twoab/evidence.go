@@ -41,7 +41,7 @@ const (
 	// covers two sources: (a) two distinct ValueMsgs from the same op
 	// carrying verifying L0Partials on different V's (ObserveValueMsg), and
 	// (b) the cross-source case where one op holds verifying σ partials on
-	// two distinct V's in the L_0 σ-pool — a leader's Phase-1 LWitness vs its
+	// two distinct V's in the L_0 σ-pool — a leader's Phase-1 LeaderSigma vs its
 	// own L0Partial, in any arrival order (maybeFireCrossSigmaV). At L_k>0 σ
 	// partials are chained-encrypted (not plaintext), so there is no L_k>0
 	// cross-σ-V detection path. Single-σ-V exclusivity is EKM-enforced;
@@ -61,7 +61,7 @@ const (
 	// claimed V. Detection points:
 	//   - ValueMsg.L0Partial verify-fail → Rule 5 keyed on the EMITTER at
 	//     L_0 (the L0Partial is the emitter's own signing artifact).
-	//   - Phase1Bundle.LWitness verify-fail (at ANY layer) →
+	//   - Phase1Bundle.LeaderSigma verify-fail (at ANY layer) →
 	//     Rule 5 keyed on the LEADER at that layer (the bundle is
 	//     op-identity-signed by the leader at the outer envelope).
 	//   - A forwarded witness in ValueMsg.Witnesses verify-fail does NOT
@@ -153,10 +153,10 @@ type CrossSigningEvidence struct {
 // Cryptographic-attribution caveat: the receiver can retain a bundle
 // either via a direct ObservePhase1Bundle call (envelope-signed by the
 // leader) or via peer-reflood-V harvest (synthesized from a peer's
-// KindValue; no leader envelope signature — only the LWitness inside is
+// KindValue; no leader envelope signature — only the LeaderSigma inside is
 // BLS-bound to the leader's pubkey). For a harvest-sourced
 // bundle, the envelope is unavailable, so downstream slashing consumers
-// MAY skip envelope re-verification — the LWitness is sufficient
+// MAY skip envelope re-verification — the LeaderSigma is sufficient
 // leader-binding either way, so envelope verify is redundant when
 // available and the *only* binding when not. SourceA / SourceB surface
 // the routing hint.
@@ -176,7 +176,7 @@ type LeaderEquivocationEvidence struct {
 	// SourceA / SourceB record how BundleA / BundleB FIRST reached the
 	// Instance. Direct ⇒ envelope-signed bundle observed via Phase-1
 	// gossipsub channel; Harvest ⇒ synthesized from a peer's KindValue
-	// with LWitness as the sole leader-binding artifact. See
+	// with LeaderSigma as the sole leader-binding artifact. See
 	// RetentionSource.
 	SourceA RetentionSource
 	SourceB RetentionSource
@@ -211,7 +211,7 @@ type FakeEncryptedPresenceEvidence struct {
 // on the claimed V. The partial originates from one of two wire sources:
 //   - ValueMsg.L0Partial (emitter == OperatorID), at L_0. Rule 5
 //     attributes to the emitter.
-//   - Phase1Bundle.LWitness (the layer leader), at any layer.
+//   - Phase1Bundle.LeaderSigma (the layer leader), at any layer.
 //     Rule 5 attributes to the leader (OperatorID == bundle.OperatorID)
 //     at the bundle's Layer.
 //

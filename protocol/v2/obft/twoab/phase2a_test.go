@@ -636,7 +636,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_a"),
 		ValueRoot:    ValueRoot(Value("V_a")),
-		Witnesses:    l0Witness(Value("V_a"), bA.LWitness),
+		Witnesses:    l0Witness(Value("V_a"), bA.LeaderSigma),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -646,7 +646,7 @@ func TestObserveValueMsg_HarvestSecondDistinctVFiresRule2(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
-		Witnesses:    l0Witness(Value("V_b"), bB.LWitness),
+		Witnesses:    l0Witness(Value("V_b"), bB.LeaderSigma),
 		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -692,7 +692,7 @@ func TestObserveValueMsg_HarvestThenDirectConvergesToSameState(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		Witnesses:    l0Witness(Value("V0"), b.LWitness),
+		Witnesses:    l0Witness(Value("V0"), b.LeaderSigma),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -739,7 +739,7 @@ func TestObserveValueMsg_HarvestAtRetentionCapSilentDrop(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_c"),
 		ValueRoot:    ValueRoot(Value("V_c")),
-		Witnesses:    l0Witness(Value("V_c"), bC.LWitness),
+		Witnesses:    l0Witness(Value("V_c"), bC.LeaderSigma),
 		L0Partial:    op3Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -810,7 +810,7 @@ func TestRetentionSource_OrderDependence(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V0"),
 		ValueRoot:    ValueRoot(Value("V0")),
-		Witnesses:    l0Witness(Value("V0"), b.LWitness),
+		Witnesses:    l0Witness(Value("V0"), b.LeaderSigma),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -860,7 +860,7 @@ func TestLeaderEquivocationEvidence_SurfacesSourcePerBundle(t *testing.T) {
 		Height:       s.cfg.Height,
 		V:            Value("V_b"),
 		ValueRoot:    ValueRoot(Value("V_b")),
-		Witnesses:    l0Witness(Value("V_b"), bB.LWitness),
+		Witnesses:    l0Witness(Value("V_b"), bB.LeaderSigma),
 		L0Partial:    op2Sig,
 		LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
 	}
@@ -1040,7 +1040,7 @@ func TestObserveValueMsg_DeeperWitnessSkippedWithoutColocatedV(t *testing.T) {
 }
 
 // TestCrossSourceRule3_WitnessVsL0Partial verifies the cross-source Rule 3
-// re-eval: a byz L_0 leader that σ-signs V_a in its Phase-1 LWitness AND V_b
+// re-eval: a byz L_0 leader that σ-signs V_a in its Phase-1 LeaderSigma AND V_b
 // in its own KindValue.L0Partial holds two σ partials on distinct values at
 // L_0 — flagged Rule 3 (cross-σ-V) in EITHER arrival order. The two-distinct-
 // KindValues path doesn't see this cross-source case (only one KindValue here).

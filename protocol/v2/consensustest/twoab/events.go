@@ -217,30 +217,30 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// Byz operator forging — synthesize a bundle directly, bypassing
 			// the EKM σ-lock that BuildPhase1Bundle acquires (a byz leader
 			// equivocating across multiple V's bypasses EKM exactly this way).
-			// Sign LWitness via direct signer access at this layer (every
+			// Sign LeaderSigma via direct signer access at this layer (every
 			// layer's leader carries a witness, not just L_0).
 			var lWitness twoab.Signature
 			w, signErr := s.signers[leader].SignPartial(p.V)
 			if signErr == nil {
 				lWitness = w
 			}
-			// If signing fails, leave LWitness empty — ValidatePhase1Bundle
+			// If signing fails, leave LeaderSigma empty — ValidatePhase1Bundle
 			// will reject the bundle at receivers, modeling a maximally-
 			// malformed byz emission.
 			bundle = &twoab.Phase1Bundle{
-				ClusterID:  s.cfgTwoab.ClusterID,
-				OperatorID: leader,
-				Height:     s.cfgTwoab.Height,
-				Layer:      e.layer,
-				Value:      append(twoab.Value{}, p.V...),
-				LWitness:   lWitness,
+				ClusterID:   s.cfgTwoab.ClusterID,
+				OperatorID:  leader,
+				Height:      s.cfgTwoab.Height,
+				Layer:       e.layer,
+				Value:       append(twoab.Value{}, p.V...),
+				LeaderSigma: lWitness,
 			}
 		} else {
 			// Leader self-observes their own bundle so their own retention
 			// state reflects V at this layer. Without self-observation the
 			// leader's L_0 retention would be empty and they'd take the
 			// NoValue path at their own Phase-2a fire-time. The bundle
-			// also carries the leader's σ partial (LWitness),
+			// also carries the leader's σ partial (LeaderSigma),
 			// which is self-pooled into σ-pool[V_k] via the ObservePhase1Bundle
 			// verify+pool path (the leader's own pool is updated as a
 			// receiver of their own bundle).
@@ -260,7 +260,7 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// σ-emission in the cluster, seeding σ-pool[V_0] for peers).
 			out = append(out, maybeEarlyFire(s, leader)...)
 		}
-		// 2abOBFT Phase 1 carries the leader's LWitness σ partial at every
+		// 2abOBFT Phase 1 carries the leader's LeaderSigma σ partial at every
 		// layer. The offline-aggregator path does NOT observe this
 		// witness directly at leader-fetch time (the witness is verified
 		// + pooled via the ObservePhase1Bundle receiver path on every
@@ -880,7 +880,7 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
 // design rationale. 2abOBFT differs only in trigger events (Phase-2a
 // emissions + Commits; not just Commits as in base) and the concrete
 // Resolve impl walks the chained-NR ladder using both L_0 σ-pool entries
-// (from KindValue.L0Partial directly plus the leader's LWitness) and
+// (from KindValue.L0Partial directly plus the leader's LeaderSigma) and
 // L_k>0 σ-chained entries (from ValueMsg / NoValueMsg / Commit-NRDirect
 // LayerEntries).
 func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {

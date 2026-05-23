@@ -11,14 +11,14 @@ import (
 // ErrNotLeader.
 //
 // Per spec §Phase 1: the bundle pairs `value` with the layer leader's σ
-// partial on V at this `layer` (`LWitness` field), signed via the
-// V-keypair share. LWitness binds V to the leader at the protocol layer
+// partial on V at this `layer` (`LeaderSigma` field), signed via the
+// V-keypair share. LeaderSigma binds V to the leader at the protocol layer
 // (closing the withhold-then-fake-σ attack) and seeds `σ-pool[V_k]`
 // (k = layer) with one partial from the moment the bundle is observed.
 // The outer envelope's op-identity signature on the encoded bundle bytes
 // is added by the SSV adapter at the wire layer.
 //
-// Side effects: LWitness signing acquires the σ-side EKM lock at `layer`
+// Side effects: LeaderSigma signing acquires the σ-side EKM lock at `layer`
 // (`transitionToSigma(layer, value)`), so subsequent attempts to
 // NR-direction at the same layer by the same leader op are blocked by EKM
 // (the leader's Phase-2a entry at this layer stays consistent with the
@@ -53,8 +53,8 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 		return nil, ErrEmptyValue
 	}
 
-	// Sign LWitness at this layer (every layer's leader carries a witness,
-	// not just L_0). LWitness = the leader's σ partial on `value` at
+	// Sign LeaderSigma at this layer (every layer's leader carries a witness,
+	// not just L_0). LeaderSigma = the leader's σ partial on `value` at
 	// `layer`, seeding σ-pool[V_k] (k = layer) with a head-start partial.
 	//
 	// Sequencing: sign first, THEN acquire σ-lock + self-pool. A signer
@@ -71,7 +71,7 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	if !ok {
 		p, err := i.signer.SignPartial(value)
 		if err != nil {
-			return nil, fmt.Errorf("twoab: sign LWitness for leader at layer %d: %w", layer, err)
+			return nil, fmt.Errorf("twoab: sign LeaderSigma for leader at layer %d: %w", layer, err)
 		}
 		partial = p
 	}
@@ -82,7 +82,7 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	// pooling, so a lock-fail leaves Instance state untouched (the signed
 	// bytes are discarded).
 	if err := i.transitionToSigma(layer, value); err != nil {
-		return nil, fmt.Errorf("twoab: leader LWitness σ-lock at layer %d: %w", layer, err)
+		return nil, fmt.Errorf("twoab: leader LeaderSigma σ-lock at layer %d: %w", layer, err)
 	}
 	// 3) Both sign and lock succeeded — commit the partial to cache and
 	// self-pool into σ-pool[V_k] (k = layer). Idempotent on subsequent
@@ -92,12 +92,12 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	i.addToSigmaPool(layer, ValueRoot(value), i.ownOperatorID, partial)
 
 	return &Phase1Bundle{
-		ClusterID:  i.cfg.ClusterID,
-		OperatorID: i.ownOperatorID,
-		Height:     i.cfg.Height,
-		Layer:      layer,
-		Value:      append(Value{}, value...), // defensive copy
-		LWitness:   append(Signature{}, partial...),
+		ClusterID:   i.cfg.ClusterID,
+		OperatorID:  i.ownOperatorID,
+		Height:      i.cfg.Height,
+		Layer:       layer,
+		Value:       append(Value{}, value...), // defensive copy
+		LeaderSigma: append(Signature{}, partial...),
 	}, nil
 }
 
@@ -133,7 +133,7 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 //     (b) One or both retained via the harvest path (synthetic
 //     bundle reconstructed from a peer KindValue): the outer
 //     envelope is the *emitter's*, not the leader's — but the
-//     LWitness on each retained bundle is the leader's BLS σ
+//     LeaderSigma on each retained bundle is the leader's BLS σ
 //     partial on V, pre-verified by the receiver against the
 //     leader's pubKeyShare before retention. Two valid leader-
 //     signed partials on distinct V_a / V_b is itself
@@ -164,7 +164,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 	// Direct-observation path: the bundle's outer envelope is op-identity-
 	// signed by the claimed leader (the SSV adapter has verified this before
 	// reaching the protocol layer). That cryptographic binding is what makes
-	// Rule 5 attribution to the leader sound on LWitness verify-fail —
+	// Rule 5 attribution to the leader sound on LeaderSigma verify-fail —
 	// hence witnessPreVerified=false (let retainPhase1Bundle verify and
 	// fire Rule 5 if needed).
 	i.retainPhase1Bundle(b, observedOffset, false /* witnessPreVerified */)
@@ -176,14 +176,14 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 // peer-harvest path in ObserveValueMsg (synthetic bundles reconstructed
 // from a verified peer-KindValue forwarded witness).
 //
-// `witnessPreVerified` controls LWitness handling (at the bundle's Layer):
+// `witnessPreVerified` controls LeaderSigma handling (at the bundle's Layer):
 //
-//   - false (direct observation): the helper verifies LWitness against the
+//   - false (direct observation): the helper verifies LeaderSigma against the
 //     leader's pubKeyShare. On verify-fail, it fires Rule 5 against the
 //     leader at b.Layer — sound because the bundle's outer envelope binds
 //     these bytes to the leader.
 //   - true (harvest from peer KindValue): the caller has ALREADY verified
-//     LWitness and the helper trusts it. Rule 5 is never fired from this
+//     LeaderSigma and the helper trusts it. Rule 5 is never fired from this
 //     path — an emitter's forwarded witness can't be cryptographically
 //     attributed to the leader (the envelope binds it to the forwarder),
 //     so the framing-the-leader attack would otherwise be open. See
@@ -196,7 +196,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 // Caller invariants:
 //
 //   - `b` has passed ValidatePhase1Bundle (structural).
-//   - If witnessPreVerified==true: caller verified LWitness against the
+//   - If witnessPreVerified==true: caller verified LeaderSigma against the
 //     leader's pubKey on b.Value BEFORE constructing the synthetic bundle.
 //     A no-op witness (len==0) is treated as "no σ-pool contribution"
 //     regardless of the flag.
@@ -210,10 +210,10 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	//
 	// Rule 5 (fake plaintext σ at L_0) fires only on the FIRST observed
 	// bundle per (leader, V) — subsequent identical-V observations dedup
-	// here without re-verifying the LWitness. This is sound: BLS
+	// here without re-verifying the LeaderSigma. This is sound: BLS
 	// signatures are deterministic, so a leader signing the same V twice
-	// produces byte-identical LWitness; a second observation with
-	// matching V either matches the first LWitness (no new information)
+	// produces byte-identical LeaderSigma; a second observation with
+	// matching V either matches the first LeaderSigma (no new information)
 	// or differs (the byz emitted bytes-distinct trash for the same V,
 	// which is structurally a separate fault — but since the protocol-
 	// level evidence is keyed on V_root, dedup-on-V is the right
@@ -236,7 +236,7 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	// Source derived from witnessPreVerified: harvest is the only path
 	// that pre-verifies (envelope absent because synth is built from a
 	// peer's KindValue). Direct path never pre-verifies (the bundle
-	// carries the leader's envelope; this helper does the LWitness
+	// carries the leader's envelope; this helper does the LeaderSigma
 	// verify below).
 	source := RetentionDirect
 	if witnessPreVerified {
@@ -267,7 +267,7 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 		i.retainedBundles[b.Layer][b.OperatorID] = []*retainedBundle{newEntry}
 	}
 
-	// LWitness verification + σ-pool seeding (every layer, not just L_0).
+	// LeaderSigma verification + σ-pool seeding (every layer, not just L_0).
 	// The witness is the layer leader's σ partial on V, verifiable against
 	// the leader's pubKeyShare on V (plaintext at every
 	// layer — the deeper-layer witness is a head-start, NOT chained-
@@ -277,9 +277,9 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	// rejected; the bundle's V is still retained for downstream pool
 	// semantics. On the harvest path the caller has pre-verified, so we
 	// trust + pool without re-verifying or firing Rule 5.
-	if len(b.LWitness) > 0 {
-		if witnessPreVerified || i.verifySigmaPartial(b.OperatorID, b.Value, b.LWitness) {
-			i.addToSigmaPool(b.Layer, ValueRoot(b.Value), b.OperatorID, b.LWitness)
+	if len(b.LeaderSigma) > 0 {
+		if witnessPreVerified || i.verifySigmaPartial(b.OperatorID, b.Value, b.LeaderSigma) {
+			i.addToSigmaPool(b.Layer, ValueRoot(b.Value), b.OperatorID, b.LeaderSigma)
 			if b.Layer == 0 {
 				// Cross-source Rule 3: the leader may have also σ-signed a
 				// different V at L_0 via its own KindValue.L0Partial (or a
@@ -292,7 +292,7 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 				OperatorID: b.OperatorID,
 				Layer:      b.Layer,
 				FakePlaintextSigma: &FakePlaintextSigmaEvidence{
-					OnionPartial:        append(Signature{}, b.LWitness...),
+					OnionPartial:        append(Signature{}, b.LeaderSigma...),
 					OnionValue:          append(Value{}, b.Value...),
 					RetainedValueHashes: i.retainedValueHashes(b.Layer),
 				},
@@ -320,6 +320,6 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 func deepCopyBundle(b *Phase1Bundle) *Phase1Bundle {
 	out := *b
 	out.Value = append(Value{}, b.Value...)
-	out.LWitness = append(Signature{}, b.LWitness...)
+	out.LeaderSigma = append(Signature{}, b.LeaderSigma...)
 	return &out
 }

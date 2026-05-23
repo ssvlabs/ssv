@@ -63,7 +63,7 @@ func TestBandwidth_Healthy_OBFT(t *testing.T) {
 	bands := []bandCheck{
 		// LeaderBroadcast: K=4 leaders × (N-1)=3 peers × ~5300 B bundle
 		// (V(~5152) + ClusterID(32) + OpID(8) + Height(8) + Layer(4) +
-		// SigmaV(96)) ≈ 62 KB. Observed ~62.1 KB.
+		// LeaderSigma(96)) ≈ 62 KB. Observed ~62.1 KB.
 		{"LeaderBroadcast", 55000, 70000},
 		// Commit: N=4 ops × (N-1)=3 peers × ~16 KB commit body ≈ 193 KB.
 		// Per-commit body: base(48) + (K-1)=3 σ-state onion entries with

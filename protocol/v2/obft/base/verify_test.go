@@ -31,7 +31,7 @@ func TestVerifier_Phase1Bundle_RejectsCorruptSigmaV(t *testing.T) {
 	v := makeVerifier(t, s)
 	b, err := s.instances[1].BuildPhase1Bundle(0, []byte("V"))
 	require.NoError(t, err)
-	b.SigmaV = []byte("garbage-not-a-real-partial")
+	b.LeaderSigma = []byte("garbage-not-a-real-partial")
 	require.ErrorContains(t, v.VerifyPhase1Bundle(b), "does not verify")
 }
 
@@ -126,7 +126,7 @@ func TestVerifier_CommitWitnesses_AcceptsValid(t *testing.T) {
 		ClusterID: s.cfg.ClusterID,
 		Height:    s.cfg.Height,
 		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: b.OperatorID, ValueRoot: ValueRoot(b.Value), SigmaV: b.SigmaV},
+			{Layer: 0, Leader: b.OperatorID, ValueRoot: ValueRoot(b.Value), Sigma: b.LeaderSigma},
 		},
 	}
 	require.NoError(t, v.VerifyCommitWitnesses(c))
@@ -139,7 +139,7 @@ func TestVerifier_CommitWitnesses_AcceptsValid(t *testing.T) {
 // retained V's are available for value_root → V cross-reference.
 //
 // This test pins down the structural-only contract: a witness with garbage
-// SigmaV PASSES validation; the protocol layer detects the mismatch (no
+// Sigma PASSES validation; the protocol layer detects the mismatch (no
 // retained V matches its value_root, or the retained V's σ_V was already
 // verified at Phase 1 and the witness is informational).
 func TestVerifier_CommitWitnesses_StructuralOnly(t *testing.T) {
@@ -149,8 +149,8 @@ func TestVerifier_CommitWitnesses_StructuralOnly(t *testing.T) {
 		ClusterID: s.cfg.ClusterID,
 		Height:    s.cfg.Height,
 		Witnesses: []LeaderSigmaWitness{
-			// Garbage SigmaV — VerifyCommitWitnesses is structural-only.
-			{Layer: 0, Leader: 1, ValueRoot: ValueRoot([]byte("V")), SigmaV: []byte("garbage")},
+			// Garbage Sigma — VerifyCommitWitnesses is structural-only.
+			{Layer: 0, Leader: 1, ValueRoot: ValueRoot([]byte("V")), Sigma: []byte("garbage")},
 		},
 	}
 	require.NoError(t, v.VerifyCommitWitnesses(c),
@@ -189,7 +189,7 @@ func TestVerifier_CommitWitnesses_RejectsBogusLeaderClaim(t *testing.T) {
 		ClusterID: s.cfg.ClusterID,
 		Height:    s.cfg.Height,
 		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: bogus, ValueRoot: ValueRoot([]byte("V")), SigmaV: []byte("any")},
+			{Layer: 0, Leader: bogus, ValueRoot: ValueRoot([]byte("V")), Sigma: []byte("any")},
 		},
 	}
 	err := v.VerifyCommitWitnesses(c)

@@ -20,33 +20,6 @@ import (
 // verification; defense-in-depth checks (claim vs verified senderID) live
 // at the Instance API boundary.
 
-// Phase1Bundle is the Phase-1 message a layer's leader sends to distribute
-// their fetched candidate value plus their σ partial sig on it.
-//
-// Per spec §Phase 1, the bundle gives the cluster a head-start of one real
-// threshold partial on V_{L_k} as soon as Phase 1 succeeds anywhere — the
-// leader's σ_{L_k}^V counts toward the σ-pool at L_k together with non-leader
-// Phase-2 commit contributions.
-type Phase1Bundle struct {
-	// ClusterID identifies the cluster this bundle is for. Receivers reject
-	// bundles whose ClusterID doesn't match their instance's ClusterID
-	// (defense-in-depth against cross-cluster replay; the outer SSV envelope's
-	// MsgID also binds cluster context, so this is belt-and-braces).
-	ClusterID [32]byte
-	// OperatorID is the layer's leader (claimed; outer-layer sig verifies).
-	OperatorID OperatorID
-	// Height is the consensus-instance identifier (slot, in SSV).
-	Height Height
-	// Layer is the layer index this bundle is for. The leader at layer k
-	// is determined by the cluster's per-slot leader rotation.
-	Layer int
-	// Value is the candidate the leader fetched and committed to.
-	Value Value
-	// SigmaV is the leader's V-keypair partial signature on Value. Counts
-	// as one of qV partials needed for cluster-wide reconstruction.
-	SigmaV Signature
-}
-
 // EncryptedLayer is one layer of a Commit's σ-side onion: a candidate value
 // plus the σ partial signature on it (encrypted under the chained NR-tag stack
 // at layers > 0; plaintext at layer 0).
@@ -124,17 +97,7 @@ type LeaderSigmaWitness struct {
 	Layer     int        // layer the witnessed bundle is for; in [0, K)
 	Leader    OperatorID // claimed leader (must match cfg.Layers[Layer].Leader)
 	ValueRoot [32]byte   // sha256(V) — wire identifier of the V the leader signed
-	SigmaV    Signature  // leader's V-keypair σ partial on V (verified against retained V at Instance layer)
-}
-
-// ValueRoot returns the 32-byte identifier (sha256) used to refer to a
-// Phase-1 V on the wire (in LeaderSigmaWitness) without retransmitting
-// the full bytes. Cluster-wide stable: every honest operator computes
-// the same value_root for the same V.
-//
-// Distinct from the σ_V signing target — see LeaderSigmaWitness comment.
-func ValueRoot(v Value) [32]byte {
-	return sha256.Sum256(v)
+	Sigma     Signature  // leader's V-keypair σ partial on V (verified against retained V at Instance layer)
 }
 
 // Commit is the wire payload carried in a single KindCommit message at
@@ -164,29 +127,6 @@ type Commit struct {
 	// the original Phase-1 broadcast still rehydrate the leader's σ
 	// contribution to their local σ-pool. Per spec §Phase 2 / §Appendix C.
 	Witnesses []LeaderSigmaWitness
-}
-
-// Certificate is the final-certificate wire payload (KindCertificate). Per
-// spec §Final-certificate gossip, after an operator successfully reconstructs
-// (V, S) it gossips this certificate so that receivers without local
-// reconstruction can submit (V, S) downstream — protecting against the
-// "lone-reconstructor's beacon path fails" failure mode.
-type Certificate struct {
-	ClusterID [32]byte
-	Height    Height
-	Value     Value
-	// Signature is the full reconstructed BLS signature on Value, verifiable
-	// against the cluster's V-keypair pubkey.
-	Signature Signature
-}
-
-// Output is the result of a successful consensus instance: which layer
-// reached σ-quorum, what value was decided, and the reconstructed full BLS
-// signature on it.
-type Output struct {
-	Layer     int
-	Value     Value
-	Signature Signature
 }
 
 // commitContentHash returns a SHA-256 hash of c's content fields, used by
@@ -238,8 +178,8 @@ func commitContentHash(c *Commit) [32]byte {
 		writeUint32(h, uint32(w.Layer))
 		writeUint64(h, uint64(w.Leader))
 		h.Write(w.ValueRoot[:])
-		writeUint32(h, uint32(len(w.SigmaV)))
-		h.Write(w.SigmaV)
+		writeUint32(h, uint32(len(w.Sigma)))
+		h.Write(w.Sigma)
 	}
 	var out [32]byte
 	copy(out[:], h.Sum(nil))

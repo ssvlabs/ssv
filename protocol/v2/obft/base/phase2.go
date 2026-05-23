@@ -185,7 +185,7 @@ func (i *Instance) BuildOwnCommit() (*Commit, error) {
 					Layer:     layer,
 					Leader:    leader,
 					ValueRoot: ValueRoot(b.Value),
-					SigmaV:    append(Signature{}, b.SigmaV...),
+					Sigma:     append(Signature{}, b.LeaderSigma...),
 				})
 			}
 		}
@@ -537,7 +537,7 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 					OperatorID: c.OperatorID,
 					Layer:      p.Layer,
 					CrossSigning: &CrossSigningEvidence{
-						SigmaPartial: append(Signature{}, bundles[0].SigmaV...),
+						SigmaPartial: append(Signature{}, bundles[0].LeaderSigma...),
 						SigmaValue:   append(Value{}, bundles[0].Value...),
 						NRPartial:    append(Signature{}, p.PartialSig...),
 					},
@@ -633,7 +633,7 @@ func (i *Instance) checkLeaderBundleCrossV(leader OperatorID, layer int, onionV 
 			CrossOnionEquivocation: &CrossOnionEquivocationEvidence{
 				ValueA:   append(Value{}, b.Value...),
 				ValueB:   append(Value{}, onionV...),
-				PartialA: append(Signature{}, b.SigmaV...),
+				PartialA: append(Signature{}, b.LeaderSigma...),
 				PartialB: append([]byte{}, onionCiphertext...),
 			},
 		})
@@ -689,13 +689,13 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 	if !ok {
 		return // drop category 1 (unregistered leader pub-share)
 	}
-	if !i.signer.VerifyPartial(pubShare, v, w.SigmaV) {
+	if !i.signer.VerifyPartial(pubShare, v, w.Sigma) {
 		return // drop category 3 — peer forwarded a fabricated witness
 	}
 
 	// Rule 2 (LeaderEquivocation) detection: if a distinct V is already
 	// known for this (layer, leader) — either via a retained bundle or via
-	// a previously-harvested witness — the new witness pair (v, w.SigmaV)
+	// a previously-harvested witness — the new witness pair (v, w.Sigma)
 	// together with the existing pair is leader-equivocation evidence.
 	// The σ_V's have been BLS-verified against the leader's pubshare on
 	// their respective V's; deterministic-BLS guarantees the leader must
@@ -704,12 +704,12 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 	// bundle-vs-bundle path in ObservePhase1Bundle doesn't double-fire.
 	if other := i.findExistingLeaderSigmaOnDistinctV(w.Layer, w.Leader, v); other != nil && i.recordRule2(w.Leader, w.Layer) {
 		newSynth := &Phase1Bundle{
-			ClusterID:  i.cfg.ClusterID,
-			OperatorID: w.Leader,
-			Height:     i.cfg.Height,
-			Layer:      w.Layer,
-			Value:      append(Value{}, v...),
-			SigmaV:     append(Signature{}, w.SigmaV...),
+			ClusterID:   i.cfg.ClusterID,
+			OperatorID:  w.Leader,
+			Height:      i.cfg.Height,
+			Layer:       w.Layer,
+			Value:       append(Value{}, v...),
+			LeaderSigma: append(Signature{}, w.Sigma...),
 		}
 		i.recordEvidence(Evidence{
 			Rule:       EvidenceLeaderEquivocation,
@@ -727,8 +727,8 @@ func (i *Instance) harvestWitness(w LeaderSigmaWitness) {
 		i.witnessedLeaderSigma[w.Layer] = bucket
 	}
 	bucket[w.ValueRoot] = witnessedSigma{
-		Value:  append(Value{}, v...),
-		SigmaV: append(Signature{}, w.SigmaV...),
+		Value: append(Value{}, v...),
+		Sigma: append(Signature{}, w.Sigma...),
 	}
 }
 

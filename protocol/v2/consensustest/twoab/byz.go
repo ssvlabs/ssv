@@ -409,12 +409,12 @@ func (b byzEquivocSigmaLockedSplit) LeaderBroadcastPlan(_ *sim, leader twoab.Ope
 //   - The byz leader self-observes BOTH bundles via the adapter's leader
 //     self-observation path → 2 distinct V's retained at the leader →
 //     Phase-2a NRDirect (equivocation observed).
-//   - Each Phase-1 bundle carries the leader's LWitness (a σ partial on
+//   - Each Phase-1 bundle carries the leader's LeaderSigma (a σ partial on
 //     that bundle's V), so every recipient seeds σ-pool from the bundle.
 //   - 2f recipients of V_a issue KindValue(V_a) with their own σ partials;
 //     the V_b recipient issues KindValue(V_b). σ-pool[V_a] = 2f recipients
-//     plus the leader's LWitness on V_a = 2f+1 = qV; σ-pool[V_b] = 1 plus
-//     the leader's LWitness on V_b = 2 < qV (for f ≥ 1).
+//     plus the leader's LeaderSigma on V_a = 2f+1 = qV; σ-pool[V_b] = 1 plus
+//     the leader's LeaderSigma on V_b = 2 < qV (for f ≥ 1).
 //   - σ-pool[V_a] reaches qV at L_0 → slot decides at L_0 on V_a. Pigeonhole
 //     2 bounds it to one V reaching qV; leader equivocation stays slashable
 //     (Rule 2 once reflood surfaces both bundles to any single op).
@@ -683,7 +683,7 @@ func (b byzCrossSigning) OverrideCommit(s *sim, op twoab.OperatorID, c *twoab.Co
 // a V no leader broadcast. Rule 5 fires at receivers when the partial
 // doesn't verify against the emitter's pubKeyShare on the claimed V
 // (Rule 5 attribution is to the EMITTER for bad L0Partial, distinct from
-// the leader-attribution path for bad LWitness in Phase-1 bundles). We
+// the leader-attribution path for bad LeaderSigma in Phase-1 bundles). We
 // patch the natural KindValue emission via OverrideValueMsg /
 // OverrideUpgradeValueMsg.
 type byzFakePlaintextSigma struct {

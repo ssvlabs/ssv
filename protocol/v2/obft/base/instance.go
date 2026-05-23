@@ -102,8 +102,8 @@ func (s CommitState) String() string {
 // same V are byte-identical; the receiver stores one and treats it as the
 // leader's σ-pool contribution. See Instance.witnessedLeaderSigma.
 type witnessedSigma struct {
-	Value  Value
-	SigmaV Signature
+	Value Value
+	Sigma Signature
 }
 
 // Instance is the per-slot OBFT state machine. It accumulates observations
@@ -427,32 +427,32 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:                  cfg,
-		ownOperatorID:        ownOperatorID,
-		signer:               signer,
-		tagSigner:            tagSigner,
-		ibe:                  ibe,
-		clusterPubKey:        clusterPubKey,
-		pubKeyShares:         pubKeyShares,
-		ibePubKeyShares:      ibePubKeyShares,
-		evidenceObserver:     evidenceObserver,
-		bundles:              make(map[int]map[OperatorID][]*Phase1Bundle, K),
-		hostVerdict:          make(map[int]map[string]bool, K),
-		peerOnions:           make(map[int]map[OperatorID][]EncryptedLayer, K),
-		peerNR:               make(map[int]map[OperatorID]Signature, K),
-		peerCommitHashes:     make(map[OperatorID]map[[32]byte]struct{}),
-		peerFirstCommit:      make(map[OperatorID]*Commit),
-		localState:           make([]CommitState, K),
-		sigmaLocked:          make([]bool, K),
-		sigmaLockedV:         make([]Value, K),
-		nrLocked:             make([]bool, K),
-		ownPartials:          make(map[int]Signature),
-		rule4Fired:           make(map[int]map[OperatorID]bool, K),
-		rule1Fired:           make(map[int]map[OperatorID]bool, K),
-		rule3LeaderFired:     make(map[int]map[OperatorID]bool, K),
-		rule5UnknownVFired:   make(map[int]map[OperatorID]bool, K),
-		rule2Fired:           make(map[int]map[OperatorID]bool, K),
-		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
+		cfg:                   cfg,
+		ownOperatorID:         ownOperatorID,
+		signer:                signer,
+		tagSigner:             tagSigner,
+		ibe:                   ibe,
+		clusterPubKey:         clusterPubKey,
+		pubKeyShares:          pubKeyShares,
+		ibePubKeyShares:       ibePubKeyShares,
+		evidenceObserver:      evidenceObserver,
+		bundles:               make(map[int]map[OperatorID][]*Phase1Bundle, K),
+		hostVerdict:           make(map[int]map[string]bool, K),
+		peerOnions:            make(map[int]map[OperatorID][]EncryptedLayer, K),
+		peerNR:                make(map[int]map[OperatorID]Signature, K),
+		peerCommitHashes:      make(map[OperatorID]map[[32]byte]struct{}),
+		peerFirstCommit:       make(map[OperatorID]*Commit),
+		localState:            make([]CommitState, K),
+		sigmaLocked:           make([]bool, K),
+		sigmaLockedV:          make([]Value, K),
+		nrLocked:              make([]bool, K),
+		ownPartials:           make(map[int]Signature),
+		rule4Fired:            make(map[int]map[OperatorID]bool, K),
+		rule1Fired:            make(map[int]map[OperatorID]bool, K),
+		rule3LeaderFired:      make(map[int]map[OperatorID]bool, K),
+		rule5UnknownVFired:    make(map[int]map[OperatorID]bool, K),
+		rule2Fired:            make(map[int]map[OperatorID]bool, K),
+		witnessedLeaderSigma:  make(map[int]map[[32]byte]witnessedSigma, K),
 		evidenceObserved:      make(map[evidenceObservedKey]bool),
 		l0ReadyCh:             make(chan struct{}),
 		wantsHostValidationCh: make(chan ValidationRequest, K),
@@ -1008,12 +1008,12 @@ func (i *Instance) findExistingLeaderSigmaOnDistinctV(layer int, leader Operator
 	for _, ws := range i.witnessedLeaderSigma[layer] {
 		if !bytes.Equal(ws.Value, newV) {
 			return &Phase1Bundle{
-				ClusterID:  i.cfg.ClusterID,
-				OperatorID: leader,
-				Height:     i.cfg.Height,
-				Layer:      layer,
-				Value:      append(Value{}, ws.Value...),
-				SigmaV:     append(Signature{}, ws.SigmaV...),
+				ClusterID:   i.cfg.ClusterID,
+				OperatorID:  leader,
+				Height:      i.cfg.Height,
+				Layer:       layer,
+				Value:       append(Value{}, ws.Value...),
+				LeaderSigma: append(Signature{}, ws.Sigma...),
 			}
 		}
 	}

@@ -619,7 +619,7 @@ func TestObft_Witness_BuildOwnCommit_PacksRetainedBundles(t *testing.T) {
 		expectedRoot := ValueRoot(expectedV)
 		for _, w := range c.Witnesses {
 			if w.Layer == layer && w.Leader == expectedLeader && w.ValueRoot == expectedRoot {
-				require.NotEmpty(t, w.SigmaV, "witness at L_%d has empty SigmaV", layer)
+				require.NotEmpty(t, w.Sigma, "witness at L_%d has empty Sigma", layer)
 				found = true
 				break
 			}
@@ -692,7 +692,7 @@ func TestObft_Witness_RejectsBadLeaderClaim(t *testing.T) {
 		Height:     s.cfg.Height,
 		Layers:     make([]EncryptedLayer, s.K),
 		Witnesses: []LeaderSigmaWitness{
-			{Layer: 0, Leader: 2 /* wrong: L_0 leader is op1 */, ValueRoot: ValueRoot([]byte("V")), SigmaV: []byte("sig")},
+			{Layer: 0, Leader: 2 /* wrong: L_0 leader is op1 */, ValueRoot: ValueRoot([]byte("V")), Sigma: []byte("sig")},
 		},
 	}
 	err := ValidateCommit(c, s.cfg)
@@ -730,14 +730,14 @@ func TestObft_Witness_DoesNotTriggerRule2_WhenVUnknown(t *testing.T) {
 		OperatorID: 2,
 		Height:     s.cfg.Height,
 		Layers:     make([]EncryptedLayer, s.K),
-		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, ValueRoot: ValueRoot(vA), SigmaV: sigA}},
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, ValueRoot: ValueRoot(vA), Sigma: sigA}},
 	}
 	c3 := &Commit{
 		ClusterID:  s.cfg.ClusterID,
 		OperatorID: 3,
 		Height:     s.cfg.Height,
 		Layers:     make([]EncryptedLayer, s.K),
-		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, ValueRoot: ValueRoot(vB), SigmaV: sigB}},
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: 1, ValueRoot: ValueRoot(vB), Sigma: sigB}},
 	}
 
 	receiver := s.instances[4]
@@ -809,7 +809,7 @@ func TestObft_Witness_TriggersRule2_WhenVsKnown(t *testing.T) {
 		OperatorID: p1,
 		Height:     s.cfg.Height,
 		Layers:     layersC1,
-		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: leaderID, ValueRoot: ValueRoot(vA), SigmaV: sigLeaderA}},
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: leaderID, ValueRoot: ValueRoot(vA), Sigma: sigLeaderA}},
 	}
 	layersC2 := make([]EncryptedLayer, s.K)
 	layersC2[0] = EncryptedLayer{Value: vB, Ciphertext: sigP2OnVB}
@@ -818,7 +818,7 @@ func TestObft_Witness_TriggersRule2_WhenVsKnown(t *testing.T) {
 		OperatorID: p2,
 		Height:     s.cfg.Height,
 		Layers:     layersC2,
-		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: leaderID, ValueRoot: ValueRoot(vB), SigmaV: sigLeaderB}},
+		Witnesses:  []LeaderSigmaWitness{{Layer: 0, Leader: leaderID, ValueRoot: ValueRoot(vB), Sigma: sigLeaderB}},
 	}
 
 	receiver := s.instances[receiverID]
@@ -874,12 +874,12 @@ func TestObft_Rule3_LeaderCrossV_FiresAtDeeperLayers(t *testing.T) {
 
 	// Bundle on V_a arrives first (retained).
 	bundle := &Phase1Bundle{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: leaderID,
-		Height:     s.cfg.Height,
-		Layer:      targetLayer,
-		Value:      vA,
-		SigmaV:     sigA,
+		ClusterID:   s.cfg.ClusterID,
+		OperatorID:  leaderID,
+		Height:      s.cfg.Height,
+		Layer:       targetLayer,
+		Value:       vA,
+		LeaderSigma: sigA,
 	}
 	require.NoError(t, receiver.ObservePhase1Bundle(bundle, observedEarly))
 
@@ -959,12 +959,12 @@ func TestObft_Rule3_LeaderCrossV_RetroactiveAtDeeperLayers(t *testing.T) {
 
 	// Bundle on V_a arrives — retroactive check at ObservePhase1Bundle fires.
 	bundle := &Phase1Bundle{
-		ClusterID:  s.cfg.ClusterID,
-		OperatorID: leaderID,
-		Height:     s.cfg.Height,
-		Layer:      targetLayer,
-		Value:      vA,
-		SigmaV:     sigA,
+		ClusterID:   s.cfg.ClusterID,
+		OperatorID:  leaderID,
+		Height:      s.cfg.Height,
+		Layer:       targetLayer,
+		Value:       vA,
+		LeaderSigma: sigA,
 	}
 	require.NoError(t, receiver.ObservePhase1Bundle(bundle, observedEarly))
 
@@ -1045,12 +1045,12 @@ func TestObft_ClusterID_RejectsMismatchedPhase1Bundle(t *testing.T) {
 	sig, err := signer.SignPartial(v)
 	require.NoError(t, err)
 	bundle := &Phase1Bundle{
-		ClusterID:  [32]byte{0xDE, 0xAD, 0xBE, 0xEF}, // wrong cluster
-		OperatorID: 1,
-		Height:     s.cfg.Height,
-		Layer:      0,
-		Value:      v,
-		SigmaV:     sig,
+		ClusterID:   [32]byte{0xDE, 0xAD, 0xBE, 0xEF}, // wrong cluster
+		OperatorID:  1,
+		Height:      s.cfg.Height,
+		Layer:       0,
+		Value:       v,
+		LeaderSigma: sig,
 	}
 	err = ValidatePhase1Bundle(bundle, s.cfg)
 	require.ErrorContains(t, err, "cluster id")

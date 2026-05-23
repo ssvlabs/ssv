@@ -208,7 +208,7 @@ func (s *sim) deliverPhase1Equivocation(
 // on multiple V's (which the BLS signer permits; only the protocol's
 // EKM gate blocks honest paths).
 //
-// The LWitness is signed via direct signer access at every layer (the
+// The LeaderSigma is signed via direct signer access at every layer (the
 // layer leader's witness is required at all layers). Equivocation
 // tests model a byz leader who signs σ partials on multiple V's, which the
 // BLS signer permits — only the protocol's EKM gate blocks honest paths.
@@ -218,12 +218,12 @@ func (s *sim) buildByzEquivocatingBundle(leader OperatorID, layer int, vB Value)
 	w, err := inst.signer.SignPartial(vB)
 	require.NoError(s.t, err)
 	return &Phase1Bundle{
-		ClusterID:  inst.cfg.ClusterID,
-		OperatorID: leader,
-		Height:     inst.cfg.Height,
-		Layer:      layer,
-		Value:      append(Value{}, vB...),
-		LWitness:   w,
+		ClusterID:   inst.cfg.ClusterID,
+		OperatorID:  leader,
+		Height:      inst.cfg.Height,
+		Layer:       layer,
+		Value:       append(Value{}, vB...),
+		LeaderSigma: w,
 	}
 }
 

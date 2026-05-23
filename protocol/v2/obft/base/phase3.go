@@ -113,8 +113,8 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 	// NewInstance ensures every layer's leader has a registered pub-share.
 	pubShare := i.pubKeyShares[leaderID]
 	for _, b := range i.bundles[layer][leaderID] {
-		if i.signer.VerifyPartial(pubShare, b.Value, b.SigmaV) {
-			addToGroup(&groups, b.Value, leaderID, b.SigmaV)
+		if i.signer.VerifyPartial(pubShare, b.Value, b.LeaderSigma) {
+			addToGroup(&groups, b.Value, leaderID, b.LeaderSigma)
 		}
 	}
 
@@ -136,7 +136,7 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 	//     tiebreak on Value below makes the eventual "winner" deterministic
 	//     across operators if both groups ever reach qV simultaneously.
 	for _, ws := range i.witnessedLeaderSigma[layer] {
-		addToGroup(&groups, ws.Value, leaderID, ws.SigmaV)
+		addToGroup(&groups, ws.Value, leaderID, ws.Sigma)
 	}
 
 	// 2) Onion contributions. Decrypt at layers > 0 using accumulated
@@ -322,7 +322,6 @@ func (i *Instance) RetainedCertificate() *Certificate {
 		Signature: append(Signature{}, src.Signature...),
 	}
 }
-
 
 // selectWinningGroup picks the σ-group with the most partials at this
 // layer, breaking ties lexicographically on V. Tiebreak determinism is

@@ -360,12 +360,12 @@ func (s *sim) forgeByzBundle(leader obftbase.OperatorID, layer int, v obftbase.V
 		panic(fmt.Sprintf("obft adapter: forge bundle for leader %d: %v", leader, err))
 	}
 	return &obftbase.Phase1Bundle{
-		ClusterID:  s.cfgObft.ClusterID,
-		OperatorID: leader,
-		Height:     s.cfgObft.Height,
-		Layer:      layer,
-		Value:      append(obftbase.Value{}, v...),
-		SigmaV:     sig,
+		ClusterID:   s.cfgObft.ClusterID,
+		OperatorID:  leader,
+		Height:      s.cfgObft.Height,
+		Layer:       layer,
+		Value:       append(obftbase.Value{}, v...),
+		LeaderSigma: sig,
 	}
 }
 

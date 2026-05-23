@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// stubWitness is a non-empty placeholder for LWitness in validation
+// stubWitness is a non-empty placeholder for LeaderSigma in validation
 // tests. ValidatePhase1Bundle does NOT BLS-verify the witness — only
 // checks non-emptiness (at every layer). BLS verification happens
 // at ObservePhase1Bundle (instance layer); tests for that path provide
@@ -16,12 +16,12 @@ var stubWitness = Signature{0xaa, 0xbb, 0xcc}
 func TestValidatePhase1Bundle_AcceptsHealthy(t *testing.T) {
 	cfg := healthyConfig()
 	b := &Phase1Bundle{
-		ClusterID:  cfg.ClusterID,
-		OperatorID: cfg.Layers[0].Leader,
-		Height:     cfg.Height,
-		Layer:      0,
-		Value:      Value("V0"),
-		LWitness:   stubWitness,
+		ClusterID:   cfg.ClusterID,
+		OperatorID:  cfg.Layers[0].Leader,
+		Height:      cfg.Height,
+		Layer:       0,
+		Value:       Value("V0"),
+		LeaderSigma: stubWitness,
 	}
 	require.NoError(t, ValidatePhase1Bundle(b, cfg))
 }
@@ -38,42 +38,42 @@ func TestValidatePhase1Bundle_RejectsNilConfig(t *testing.T) {
 
 func TestValidatePhase1Bundle_RejectsClusterMismatch(t *testing.T) {
 	cfg := healthyConfig()
-	b := &Phase1Bundle{ClusterID: [32]byte{0xff}, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0"), LWitness: stubWitness}
+	b := &Phase1Bundle{ClusterID: [32]byte{0xff}, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0"), LeaderSigma: stubWitness}
 	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsHeightMismatch(t *testing.T) {
 	cfg := healthyConfig()
-	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: 999, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0"), LWitness: stubWitness}
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: 999, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0"), LeaderSigma: stubWitness}
 	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsLayerOutOfRange(t *testing.T) {
 	cfg := healthyConfig()
-	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 99, OperatorID: cfg.Layers[0].Leader, Value: Value("V0"), LWitness: stubWitness}
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 99, OperatorID: cfg.Layers[0].Leader, Value: Value("V0"), LeaderSigma: stubWitness}
 	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsWrongLeader(t *testing.T) {
 	cfg := healthyConfig()
-	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: 99, Value: Value("V0"), LWitness: stubWitness}
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: 99, Value: Value("V0"), LeaderSigma: stubWitness}
 	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
 func TestValidatePhase1Bundle_RejectsEmptyValue(t *testing.T) {
 	cfg := healthyConfig()
-	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value{}, LWitness: stubWitness}
+	b := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value{}, LeaderSigma: stubWitness}
 	require.Error(t, ValidatePhase1Bundle(b, cfg))
 }
 
-// TestValidatePhase1Bundle_RejectsEmptyLWitness verifies that an empty
-// LWitness is rejected at EVERY layer.
-func TestValidatePhase1Bundle_RejectsEmptyLWitness(t *testing.T) {
+// TestValidatePhase1Bundle_RejectsEmptySigmaV verifies that an empty
+// LeaderSigma is rejected at EVERY layer.
+func TestValidatePhase1Bundle_RejectsEmptySigmaV(t *testing.T) {
 	cfg := healthyConfig() // K=2: layer 0 (leader op1), layer 1 (leader op2).
 	b0 := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 0, OperatorID: cfg.Layers[0].Leader, Value: Value("V0")}
-	require.Error(t, ValidatePhase1Bundle(b0, cfg), "empty LWitness at L_0 must be rejected")
+	require.Error(t, ValidatePhase1Bundle(b0, cfg), "empty LeaderSigma at L_0 must be rejected")
 	b1 := &Phase1Bundle{ClusterID: cfg.ClusterID, Height: cfg.Height, Layer: 1, OperatorID: cfg.Layers[1].Leader, Value: Value("V1")}
-	require.Error(t, ValidatePhase1Bundle(b1, cfg), "empty LWitness at L_k>0 must be rejected")
+	require.Error(t, ValidatePhase1Bundle(b1, cfg), "empty LeaderSigma at L_k>0 must be rejected")
 }
 
 func TestValidateValueMsg_AcceptsHealthy(t *testing.T) {

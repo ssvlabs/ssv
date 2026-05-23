@@ -70,12 +70,12 @@ func (i *Instance) BuildPhase1Bundle(layer int, value Value) (*Phase1Bundle, err
 	}
 
 	bundle := &Phase1Bundle{
-		ClusterID:  i.cfg.ClusterID,
-		OperatorID: i.ownOperatorID,
-		Height:     i.cfg.Height,
-		Layer:      layer,
-		Value:      append(Value{}, value...),
-		SigmaV:     partial,
+		ClusterID:   i.cfg.ClusterID,
+		OperatorID:  i.ownOperatorID,
+		Height:      i.cfg.Height,
+		Layer:       layer,
+		Value:       append(Value{}, value...),
+		LeaderSigma: partial,
 	}
 
 	// Self-observe so Resolve's σ-pool at this layer can find the leader's
@@ -164,7 +164,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 		// Leader's share not registered — treat as auth failure.
 		return fmt.Errorf("obft: no pubkey share for leader %d", b.OperatorID)
 	}
-	if !i.signer.VerifyPartial(leaderShare, b.Value, b.SigmaV) {
+	if !i.signer.VerifyPartial(leaderShare, b.Value, b.LeaderSigma) {
 		return fmt.Errorf("obft: phase-1 bundle σ_V does not verify against leader %d's share",
 			b.OperatorID)
 	}
@@ -220,7 +220,7 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 			OperatorID: b.OperatorID,
 			Layer:      b.Layer,
 			CrossSigning: &CrossSigningEvidence{
-				SigmaPartial: append(Signature{}, b.SigmaV...),
+				SigmaPartial: append(Signature{}, b.LeaderSigma...),
 				SigmaValue:   append(Value{}, b.Value...),
 				NRPartial:    append(Signature{}, nrSig...),
 			},
@@ -349,7 +349,7 @@ func (i *Instance) reevaluateL0Sigmas() {
 }
 
 // deepCopyBundle returns a deep copy of b — the byte slices inside (Value,
-// SigmaV) are independent of the source. Used at retention boundaries so
+// LeaderSigma) are independent of the source. Used at retention boundaries so
 // caller-owned slices can be modified without corrupting Instance state.
 //
 // Style: struct-literal + slice-field overrides (matching the twoab
@@ -360,7 +360,7 @@ func (i *Instance) reevaluateL0Sigmas() {
 func deepCopyBundle(b *Phase1Bundle) *Phase1Bundle {
 	out := *b
 	out.Value = append(Value{}, b.Value...)
-	out.SigmaV = append(Signature{}, b.SigmaV...)
+	out.LeaderSigma = append(Signature{}, b.LeaderSigma...)
 	return &out
 }
 
@@ -399,7 +399,7 @@ func deepCopyCommit(c *Commit) *Commit {
 				Layer:     w.Layer,
 				Leader:    w.Leader,
 				ValueRoot: w.ValueRoot,
-				SigmaV:    append(Signature{}, w.SigmaV...),
+				Sigma:     append(Signature{}, w.Sigma...),
 			}
 		}
 	}
