@@ -194,7 +194,8 @@ func TestStress(t *testing.T) {
 	// pipeline-shift protocols (PSigs / QBFT) are covered by the UI's
 	// pipeline-shift from the BFT_start=0 cell. BFT_start=0 is therefore
 	// required; an override that omits it is rejected (see the require
-	// below). Sorted ascending after parse for stable axis ordering.
+	// below). Sorted ascending and de-duplicated after parse for stable
+	// axis ordering.
 	bftStartsRaw := os.Getenv("BFT_STARTS")
 	var bftStarts []time.Duration
 	if bftStartsRaw == "" {
@@ -212,6 +213,9 @@ func TestStress(t *testing.T) {
 		}
 		require.NotEmpty(t, bftStarts, "BFT_STARTS is empty after parsing")
 		slices.Sort(bftStarts)
+		// Drop duplicates (e.g. BFT_STARTS=0,0,2400) so the sweep doesn't
+		// emit redundant identical points; Compact needs the sort above.
+		bftStarts = slices.Compact(bftStarts)
 	}
 	// BFT_start=0 is load-bearing and must be present: the p2p_baseline
 	// sweep emits the full protocol set only at BFT_start=0 (BFT_start>0
