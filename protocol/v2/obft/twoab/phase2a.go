@@ -858,6 +858,10 @@ func (i *Instance) verifyAndPoolL0Partial(emitter OperatorID, v *ValueMsg) {
 	const layer = 0
 	if i.verifySigmaPartial(emitter, v.V, v.L0Partial) {
 		i.addToSigmaPool(layer, ValueRoot(v.V), emitter, v.L0Partial)
+		// Cross-source Rule 3: the emitter may already hold a σ partial on a
+		// different V at L_0 (its own Phase-1 LWitness as the layer leader, or
+		// a harvested witness). Re-check now, in any arrival order.
+		i.maybeFireCrossSigmaV(emitter, v.V)
 		return
 	}
 	if i.recordRule5(emitter, layer) {

@@ -280,6 +280,12 @@ func (i *Instance) retainPhase1Bundle(b *Phase1Bundle, observedOffset time.Durat
 	if len(b.LWitness) > 0 {
 		if witnessPreVerified || i.verifySigmaPartial(b.OperatorID, b.Value, b.LWitness) {
 			i.addToSigmaPool(b.Layer, ValueRoot(b.Value), b.OperatorID, b.LWitness)
+			if b.Layer == 0 {
+				// Cross-source Rule 3: the leader may have also σ-signed a
+				// different V at L_0 via its own KindValue.L0Partial (or a
+				// second witness). Re-check now, in any arrival order.
+				i.maybeFireCrossSigmaV(b.OperatorID, b.Value)
+			}
 		} else if i.recordRule5(b.OperatorID, b.Layer) {
 			i.recordEvidence(Evidence{
 				Rule:       EvidenceFakePlaintextSigma,

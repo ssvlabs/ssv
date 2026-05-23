@@ -125,7 +125,7 @@ Under healthy mesh, an operator's L_0 emission becomes determinable as soon as t
 
 #### A1 upgrade
 
-A `KindNoValue`-path operator that *later* obtains `V_0` — via bundle re-flood, or by harvesting a forwarded witness from a peer's `KindValue` — and whose host re-validates it as valid, emits a single upgrade `KindValue`. The upgrade carries the operator's own σ partial inline (it *is* the σ-side commit; there is no separate later message), and acquires the L_0 σ-lock. The upgrade must precede any NR commit; once the operator has NR-locked at L_0, the upgrade is no longer authorized. Receivers recognize the A1 sequence (`KindNoValue` then `KindValue` from the same operator) by the presence of both messages, in any arrival order.
+A `KindNoValue`-path operator that *later* obtains `V_0` — via bundle re-flood, or by harvesting a forwarded witness from a peer's `KindValue` — and whose host re-validates it as valid, emits a single upgrade `KindValue`. The upgrade carries the operator's own σ partial inline (it *is* the σ-side commit; there is no separate later message), and acquires the L_0 σ-lock. The upgrade must precede any NR commit; once the operator has NR-locked at L_0, the upgrade is no longer authorized. Receivers recognize the A1 sequence (`KindNoValue` then `KindValue` from the same operator) by the presence of both messages, in any arrival order. The upgrade's `K-1` deeper-layer entries must match those of the prior `KindNoValue` (an L_0 upgrade changes only the L_0 emission, not the deeper commitments); a receiver that observes a mismatch records Rule 6 and keeps the prior entries.
 
 ### Phase 2b — dynamic NR-side commit
 
@@ -134,6 +134,8 @@ There is no hard Phase-2b deadline and no scheduled commit-build step. The only 
 - **NR-eligibility trigger.** An operator emits a `KindCommit-NR` (the `nr_tag_0` partial) when the cluster's L_0 no-value cohort reaches quorum — `|noValuePool[0]| ≥ qEnc` — **and** the operator cannot σ at L_0 (the *cannot-σ gate*). It acquires the L_0 NR-lock.
 
   The **cannot-σ gate** is essential: an operator that holds a verified leader witness + host-valid `V_0` is σ-eligible and must take the A1 upgrade instead of NR. Without the gate, σ-eligible operators would forfeit their σ contribution under byzantine no-value-flooding and break the L_0 σ-quorum at marginal `h_V`.
+
+Receivers verify every NR partial against the emitter's IBE-keypair share before counting it toward the NR-pool (anti-pollution); an unverifiable partial is dropped, so a byzantine cannot inflate NR-quorum with garbage. (Symmetrically, σ partials are verified before σ-pool inclusion — see Phase 1 and §Slashing evidence.)
 
 (The equivocation trigger fires at Phase 2a as `KindCommit-NRDirect`, not here. There is **no σ-eligibility trigger** — the σ-side is terminal in `KindValue`.)
 
@@ -202,6 +204,8 @@ where `LayerWitness = {Layer int, ValueRoot[32], Witness Signature}` and `LayerE
 
 The slot's only hard deadline is the runner-level relay-submission cutoff. All other instants are derived backward from it (see [§Setting](#setting)).
 
+**The Instance is timing-agnostic.** The protocol state machine consumes no wall-clock — it acts on observed messages and host verdicts and exposes hints (e.g. the L0Ready signal) to its driver. All the offsets below are derived and applied by the *runner*. In the reference design they live in the consensustest discrete-event simulator and are validated there across the scenario catalog; the production runner integration is a separate effort not yet built, so the timing here is **simulation-validated, not production-wired**. The same applies to the "SHOULD re-run host validity before submitting" step in [§Phase 3](#phase-3--reconstruction-observer-on-arrival): a runner-layer recommendation, not yet implemented.
+
 **`TPhase2a` is a backstop, not the primary fire-instant.** Under async fire, σ-eligible operators emit `KindValue` as soon as their bundle arrives + host validates (`~1·BTT` post-broadcast); `TPhase2a` only bounds the `KindNoValue` emission for operators still in `coordination`.
 
 **The resolve window is a `max`, not a sum.** A slot resolves σ-ward XOR NR-ward — never both sequentially — so the post-`TPhase2a` budget reserves the maximum of the two paths:
@@ -215,7 +219,7 @@ resolveWindow = max( 1·BTT + SafetyBuffer ,  2·BTT )  =  1·BTT + max(SafetyBu
 
 Reserving the `max` (rather than the sum) reclaims `min(1·BTT, SafetyBuffer)` of MEV-fetch headroom (a later `TPhase2a` ⇒ later leader fetch).
 
-**SafetyBuffer crossover.** Because the window is `1·BTT + max(SafetyBuffer, 1·BTT)`, `SafetyBuffer` only widens it *above* the `1·BTT` crossover. Below `1·BTT`, the `2·BTT` NR-fall-through path dominates and a smaller `SafetyBuffer` reclaims MEV headroom for nothing extra (at `BTT ≥ 300ms` a 300ms `SafetyBuffer` ≡ 0). The recommended spectrum: **lean** (`SafetyBuffer = 0`; max MEV headroom, no mesh-tail tolerance), **default** (`= RefloodDelay = 700ms`; one IHAVE/IWANT cycle), **loose** (`= RefloodDelay + 1·BTT`; one cycle + jitter tail). All are absolute ms (HeartbeatInterval-tied), not BTT multiples.
+**SafetyBuffer crossover.** Because the window is `1·BTT + max(SafetyBuffer, 1·BTT)`, `SafetyBuffer` only widens it *above* the `1·BTT` crossover. Below `1·BTT`, the `2·BTT` NR-fall-through path dominates and a smaller `SafetyBuffer` reclaims MEV headroom for nothing extra (at `BTT ≥ 300ms` a 300ms `SafetyBuffer` ≡ 0). The recommended spectrum: **lean** (`SafetyBuffer = 0`; max MEV headroom, no mesh-tail tolerance), **default** (`= RefloodDelay = 700ms`; one IHAVE/IWANT cycle), **loose** (`= RefloodDelay + 1·BTT`; one cycle + jitter tail). All are absolute milliseconds — sized to the reflood (IHAVE/IWANT) cycle rather than as BTT multiples — and tunable independently of the gossipsub `HeartbeatInterval` (the default merely matches `RefloodDelay`).
 
 ## Preconditions on the host application
 
@@ -304,7 +308,7 @@ Six rules surface byzantine faults for *attribution and out-of-band punishment*;
 - **Rule 5 — Fake plaintext σ.** A plaintext σ partial (a leader's Phase-1 `LWitness`, or an operator's `KindValue.L0Partial`) that does not verify against the signer's pubKeyShare on the claimed value. Keyed on the **signer**: a bad `LWitness` in a directly-observed bundle is attributed to the **leader**; a bad `L0Partial` to the **emitter**. A *forwarded* witness inside a peer's `KindValue` that fails to verify is **silently discarded, not slashed** — it is signed-for-forwarding by the emitter, not the leader, so firing Rule 5 against the leader here would open a framing attack: a byzantine forwarder can trivially place non-verifying garbage in the forwarded witness, and an honest leader would be slashed for it. The genuine leader-signed-garbage case instead stays covered by the direct-observation path, where the bundle's own op-identity envelope binds the bytes to the leader. Cryptographic, self-contained for the direct paths.
 - **Rule 6 — Phase-2 equivocation.** An operator's emission sequence is not in the authorized set `{KindNoValue→KindValue (A1 upgrade), KindNoValue→KindCommit-NR, KindCommit-NRDirect-alone}` — e.g., a `KindValue` followed by any NR partial at L_0 (σ-XOR-NR). Cryptographic, self-contained. (There is no verdict-vs-action rule: `KindValue` *is* the σ-side action, so there is no separate non-binding claim for a later action to contradict.)
 
-Evidence is **retroactively cross-fired**: Rule 3 / Rule 5 re-evaluate on every state delta that introduces a contradicting `(signer, value)` pairing (bundle-then-`KindValue`, `KindValue`-then-bundle, forwarded-witness-vs-bundle, in any arrival order). Re-evaluation triggers only on a *new* `(signer, value_root)` pairing and re-walks only the L_0-indexed pools, bounded at `≤ K·(2+n)` per slot by the two-value retention cap; each witness verifies once per `(leader, value_root)` regardless of how many peers forward it.
+Evidence is **retroactively cross-fired at L_0**: Rule 3 re-evaluates on every L_0 σ-pool insertion — a leader's Phase-1 witness, an emitter's own `KindValue.L0Partial`, or a harvested forwarded witness — so a single op that holds σ partials on two distinct values at L_0 is caught in any arrival order (bundle-then-`KindValue`, `KindValue`-then-bundle, forwarded-witness-vs-bundle), not just when two `KindValue`s arrive. Rule 5 likewise fires per partial-arrival on a verify-fail. The re-walk is over the L_0 σ-pool only (≤ n operators, each capped at two retained value-roots) and Rule 3 fires at most once per op (deduped); each forwarded witness verifies once per `(leader, value_root)` regardless of how many peers forward it. (Deeper layers have no plaintext cross-σ-V re-eval — k>0 σ partials are chained-encrypted.)
 
 ### Failure modes
 

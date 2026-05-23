@@ -1038,3 +1038,61 @@ func TestObserveValueMsg_DeeperWitnessSkippedWithoutColocatedV(t *testing.T) {
 	require.Empty(t, recv.RetainedBundles(k, l1Leader),
 		"Op12: no colocated V → no deeper-layer retention")
 }
+
+// TestCrossSourceRule3_WitnessVsL0Partial verifies the cross-source Rule 3
+// re-eval: a byz L_0 leader that σ-signs V_a in its Phase-1 LWitness AND V_b
+// in its own KindValue.L0Partial holds two σ partials on distinct values at
+// L_0 — flagged Rule 3 (cross-σ-V) in EITHER arrival order. The two-distinct-
+// KindValues path doesn't see this cross-source case (only one KindValue here).
+func TestCrossSourceRule3_WitnessVsL0Partial(t *testing.T) {
+	vA := Value("V_a")
+	vB := Value("V_b")
+
+	build := func() (*sim, OperatorID, *Phase1Bundle, *ValueMsg) {
+		s := newSim(t, 4)
+		leader := s.leaderAt(0)                                // the byz double-signer
+		bundleA := s.buildByzEquivocatingBundle(leader, 0, vA) // witness σ_leader(V_a)
+		sigB, err := s.instances[leader].signer.SignPartial(vB)
+		require.NoError(t, err)
+		vmB := &ValueMsg{ // leader's own KindValue carrying σ_leader(V_b)
+			ClusterID:    s.cfg.ClusterID,
+			OperatorID:   leader,
+			Height:       s.cfg.Height,
+			V:            vB,
+			ValueRoot:    ValueRoot(vB),
+			L0Partial:    sigB,
+			Witnesses:    l0Witness(vB, sigB),
+			LayerEntries: []LayerEntry{{Layer: 1, Kind: LayerEntryEmpty}},
+		}
+		return s, leader, bundleA, vmB
+	}
+
+	assertRule3 := func(t *testing.T, op *Instance, leader OperatorID) {
+		t.Helper()
+		var found bool
+		for _, e := range op.Evidence() {
+			if e.Rule == EvidenceCrossCommitEquivocation && e.OperatorID == leader && e.Layer == 0 {
+				found = true
+				break
+			}
+		}
+		require.True(t, found,
+			"cross-source Rule 3 must fire against the leader for witness(V_a) + L0Partial(V_b)")
+	}
+
+	t.Run("bundle then KindValue", func(t *testing.T) {
+		s, leader, bundleA, vmB := build()
+		recv := s.instances[OperatorID(2)]
+		require.NoError(t, recv.ObservePhase1Bundle(bundleA, observedEarly))
+		require.NoError(t, recv.ObserveValueMsg(vmB))
+		assertRule3(t, recv, leader)
+	})
+
+	t.Run("KindValue then bundle", func(t *testing.T) {
+		s, leader, bundleA, vmB := build()
+		recv := s.instances[OperatorID(3)]
+		require.NoError(t, recv.ObserveValueMsg(vmB))
+		require.NoError(t, recv.ObservePhase1Bundle(bundleA, observedEarly))
+		assertRule3(t, recv, leader)
+	})
+}

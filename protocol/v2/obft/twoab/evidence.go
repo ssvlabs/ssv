@@ -38,13 +38,15 @@ const (
 	EvidenceLeaderEquivocation EvidenceRule = 2
 
 	// EvidenceCrossCommitEquivocation — Rule 3: an operator emitted σ_i^V
-	// on V and σ_i^V on V' at the same layer. Post Op5 at L_0, this fires
-	// when two distinct ValueMsgs from the same op carry verifying
-	// L0Partials on different V's (the σ partials moved from KindCommit-
-	// Signed into KindValue.L0Partial). At L_k>0 the detection path is
-	// unchanged (chained σ partials inside LayerEntries). Single-σ-V
-	// exclusivity is EKM-enforced; observing two valid partials on
-	// distinct V's is cryptographic proof.
+	// on V and σ_i^V on V' at the same layer. Detection is L_0-only and
+	// covers two sources: (a) two distinct ValueMsgs from the same op
+	// carrying verifying L0Partials on different V's (ObserveValueMsg), and
+	// (b) the cross-source case where one op holds verifying σ partials on
+	// two distinct V's in the L_0 σ-pool — a leader's Phase-1 LWitness vs its
+	// own L0Partial, in any arrival order (maybeFireCrossSigmaV). At L_k>0 σ
+	// partials are chained-encrypted (not plaintext), so there is no L_k>0
+	// cross-σ-V detection path. Single-σ-V exclusivity is EKM-enforced;
+	// observing two valid partials on distinct V's is cryptographic proof.
 	EvidenceCrossCommitEquivocation EvidenceRule = 3
 
 	// EvidenceFakeEncryptedPresence — Rule 4: at layer k > 0, an

@@ -907,6 +907,58 @@ func (i *Instance) recordRule3(op OperatorID, layer int) bool {
 	return i.recordRulePerLayer(i.rule3Fired, op, layer)
 }
 
+// maybeFireCrossSigmaV fires Rule 3 (cross-σ-V equivocation) if `op` now
+// holds verified σ partials on ≥ 2 distinct value-roots at L_0, having just
+// contributed `justV`. Called after every L_0 σ-pool insertion — the leader's
+// Phase-1 LWitness, an emitter's own KindValue.L0Partial, and harvested
+// forwarded witnesses — so a cross-SOURCE double-sign is caught in any arrival
+// order (e.g. a byz leader's witness on V_a plus its own L0Partial on V_b).
+// The two-distinct-KindValues case is caught separately in ObserveValueMsg;
+// recordRule3's per-(op, layer) dedup keeps the two paths from double-firing.
+//
+// L_0-only: deeper-layer σ partials are chained-encrypted (not plaintext), so
+// no cross-source plaintext comparison exists there. All pooled partials are
+// already BLS-verified (pool inclusion gates on verify), so two pool entries
+// for one op on distinct roots is cryptographic proof of cross-σ-V.
+func (i *Instance) maybeFireCrossSigmaV(op OperatorID, justV Value) {
+	const layer = 0
+	pools := i.sigmaPool[layer]
+	justRoot := ValueRoot(justV)
+	if _, ok := pools[justRoot][op]; !ok {
+		return // the just-pooled partial isn't present (defensive)
+	}
+	for otherRoot, opPartials := range pools {
+		if otherRoot == justRoot {
+			continue
+		}
+		if _, ok := opPartials[op]; !ok {
+			continue
+		}
+		// op has σ partials on two distinct value-roots at L_0.
+		if !i.recordRule3(op, layer) {
+			return // already recorded (e.g. via the two-KindValues path)
+		}
+		otherV, _ := i.recoverV(layer, otherRoot)
+		// Deterministic A/B ordering by value-root for stable evidence.
+		vA, pA, vB, pB := justV, pools[justRoot][op], otherV, pools[otherRoot][op]
+		if bytes.Compare(otherRoot[:], justRoot[:]) < 0 {
+			vA, pA, vB, pB = otherV, pools[otherRoot][op], justV, pools[justRoot][op]
+		}
+		i.recordEvidence(Evidence{
+			Rule:       EvidenceCrossCommitEquivocation,
+			OperatorID: op,
+			Layer:      layer,
+			CrossCommitEquivocation: &CrossCommitEquivocationEvidence{
+				ValueA:   append(Value{}, vA...),
+				ValueB:   append(Value{}, vB...),
+				PartialA: append(Signature{}, pA...),
+				PartialB: append(Signature{}, pB...),
+			},
+		})
+		return
+	}
+}
+
 // recordRule4 marks Rule 4 (fake encrypted-presence at k > 0) as fired
 // for (op, layer). Returns true if this is the first observation.
 func (i *Instance) recordRule4(op OperatorID, layer int) bool {
