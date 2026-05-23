@@ -230,13 +230,20 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// k=0 above before the `max(BFTStart, …)` clamp — the largest BFTStart
 	// for which L_0's schedule is identical to BFTStart=0. The UI reuses
 	// the BFTStart=0 cell at or below this value (see
-	// Outcome.BFTStartIndependenceThreshold). Outcome-independent, so
-	// stamped unconditionally (valid on miss too).
-	bftIndep := t0Broadcast - broadcastBudget[0]
-	if bftIndep < 0 {
-		bftIndep = 0
+	// Outcome.BFTStartIndependenceThreshold).
+	//
+	// The value is BFTStart-invariant (a pure function of the rest of
+	// cfg), and the UI reads it only from the BFT_start=0 cell (its
+	// shape-anchor), so we stamp it just there and skip the redundant
+	// copies on BFTStart>0 cells. Outcome-independent, so stamped
+	// regardless of decided/miss.
+	if cfg.BFTStart == 0 {
+		bftIndep := t0Broadcast - broadcastBudget[0]
+		if bftIndep < 0 {
+			bftIndep = 0
+		}
+		out.BFTStartIndependenceThreshold = &bftIndep
 	}
-	out.BFTStartIndependenceThreshold = &bftIndep
 	// Stamp the deciding-layer broadcast deadline (anchored at
 	// t0Broadcast, per 2abOBFT's spec anchor). Shallow layers whose B_k
 	// exceed t0Broadcast clamp to BFTStart, matching the runtime rule

@@ -365,11 +365,14 @@ type Outcome struct {
 	//
 	// A pointer so that an emitted 0 (clamp engages immediately) is
 	// distinct from "not set". Set only by adapters with a slot-anchored
-	// Phase-1 schedule (OBFT family and 2abOBFT family); nil for
-	// pipeline-shift protocols (QBFT family, PSigs), which shift wholesale
-	// and whose UI path never consults it. Unlike DecidingBroadcastTime
-	// it's a pure function of cfg (not the sim outcome), so it survives
-	// ClipLateDecision unchanged and is valid even on !Decided iters.
+	// Phase-1 schedule (OBFT family and 2abOBFT family), and only on the
+	// BFTStart=0 cell: the value is BFTStart-invariant and the UI reads it
+	// from that anchor cell, so one copy suffices (BFTStart>0 cells leave
+	// it nil). nil for pipeline-shift protocols (QBFT family, PSigs),
+	// which shift wholesale and whose UI path never consults it. Unlike
+	// DecidingBroadcastTime it's a pure function of cfg (not the sim
+	// outcome), so it survives ClipLateDecision unchanged and is valid
+	// even on !Decided iters.
 	BFTStartIndependenceThreshold *time.Duration
 	PerOp                         map[OperatorID]OperatorOutcome
 	Trace                         []TraceEntry // non-nil iff cfg.TraceEnabled was set

@@ -154,9 +154,9 @@ type BatchCell struct {
 	// BFTStartIndependence is the cell's L_0 BFTStart-independence
 	// threshold (see Outcome.BFTStartIndependenceThreshold) — constant
 	// across the cell's iters, so captured once from the first iter that
-	// carries it. nil for pipeline-shift protocols and any cell whose
-	// schedule wasn't derived (out-of-envelope). The reporting layer
-	// serializes it as cellPayload.BFTStartIndependenceMs.
+	// carries it. nil for pipeline-shift protocols, out-of-envelope cells,
+	// and every BFTStart>0 cell (adapters stamp it only at BFTStart=0).
+	// The reporting layer serializes it as cellPayload.BFTStartIndependenceMs.
 	BFTStartIndependence *time.Duration
 }
 

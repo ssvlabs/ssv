@@ -215,12 +215,19 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// the `max(BFTStart, …)` clamp — the largest BFTStart for which L_0's
 	// schedule is identical to BFTStart=0. The UI reuses the BFTStart=0
 	// cell at or below this value (see Outcome.BFTStartIndependenceThreshold).
-	// Outcome-independent, so stamped unconditionally (valid on miss too).
-	bftIndep := tCommit - broadcastBudget[0] - fetchBuffer
-	if bftIndep < 0 {
-		bftIndep = 0
+	//
+	// The value is BFTStart-invariant (a pure function of the rest of
+	// cfg), and the UI reads it only from the BFT_start=0 cell (its
+	// shape-anchor), so we stamp it just there and skip the redundant
+	// copies on BFTStart>0 cells. Outcome-independent, so stamped
+	// regardless of decided/miss.
+	if cfg.BFTStart == 0 {
+		bftIndep := tCommit - broadcastBudget[0] - fetchBuffer
+		if bftIndep < 0 {
+			bftIndep = 0
+		}
+		out.BFTStartIndependenceThreshold = &bftIndep
 	}
-	out.BFTStartIndependenceThreshold = &bftIndep
 	// Stamp the deciding-layer broadcast deadline (T_broadcast_max_k for
 	// k=DecidedRound). Mirrors the fetchAt[] clamp above:
 	// max(BFTStart, T_commit − B_k). The reporting layer surfaces this

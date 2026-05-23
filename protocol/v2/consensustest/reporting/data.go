@@ -521,10 +521,12 @@ type cellPayload struct {
 	// SafetyBuffer.
 	//
 	// A *int (not omitempty-on-int) so an emitted 0 — clamp engages at
-	// any BFT_start>0 — is distinct from "not emitted". Omitted for
-	// pipeline-shift protocols (QBFT family, PSigs; UI shifts post-hoc)
-	// and out-of-envelope cells. Legacy data.js without this field falls
-	// back to the BFT_start=0 cell in the UI rather than rendering n/a.
+	// any BFT_start>0 — is distinct from "not emitted". Emitted only on
+	// the BFT_start=0 cell (the value is BFT_start-invariant and the UI
+	// reads it from that anchor cell); BFT_start>0 cells omit it. Also
+	// omitted for pipeline-shift protocols (QBFT family, PSigs; UI shifts
+	// post-hoc) and out-of-envelope cells. Legacy data.js without this
+	// field falls back to the BFT_start=0 cell in the UI rather than n/a.
 	BFTStartIndependenceMs *int `json:"bftStartIndependenceMs,omitempty"`
 }
 

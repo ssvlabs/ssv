@@ -69,7 +69,7 @@ const SLOT_END_MS = 4000;
 //     fetchAt[0]) so it tracks the adapter's actual sizing and the cell's
 //     per-scenario RefloodDelay/SafetyBuffer — no JS-side sizing mirror
 //     to drift. See findBaselineCellForScenario.
-const BFT_STARTS = [0, 400, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800, 3200];
+const BFT_STARTS = [0, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800, 3200];
 
 // selectedBFTStart is the page-level BFT_start used by the Conditions
 // chart at the top, the heatmap cell colors, and the cdfBFTStartPlugin's
@@ -478,14 +478,29 @@ function findBaselinePointAtInstability(data, instability, faultyNodes) {
   return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0);
 }
 
+// _availBFTStartsCache memoizes availableBaselineBFTStarts across the
+// many per-(scenario, protocol) calls in a single render. Keyed by the
+// full slice signature (N/K/BTT/profile/instability/faulty); guarded by
+// the data reference so a data.js reload (new object) drops the cache.
+// The slice signature changes whenever any picker changes, so stale
+// entries are never served — no explicit invalidation on picker clicks.
+let _availBFTStartsCache = { data: null, map: new Map() };
+
 // availableBaselineBFTStarts returns the sorted-ascending distinct
 // BFT_start values (ms) the p2p_baseline sweep actually emitted for the
 // current (N, K, BTT, profile) slice at the given instability +
 // faulty_nodes. Used by findBaselineCellForScenario to round an
 // OBFT-family picker value UP to the nearest emitted cell when no exact
 // cell exists (worst-case fallback). Mirrors the field-matching in
-// findBaselinePointAtBFTStart, minus the BFT_start constraint.
+// findBaselinePointAtBFTStart, minus the BFT_start constraint. Memoized
+// (see _availBFTStartsCache); callers must not mutate the returned array.
 function availableBaselineBFTStarts(data, instability, faultyNodes) {
+  if (_availBFTStartsCache.data !== data) {
+    _availBFTStartsCache = { data, map: new Map() };
+  }
+  const key = `${selectedN}|${selectedK}|${selectedBTT}|${selectedP2pProfile}|${instability}|${faultyNodes ?? 0}`;
+  const cached = _availBFTStartsCache.map.get(key);
+  if (cached) return cached;
   const out = new Set();
   const sweep = data && data.sweeps && data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (sweep) {
@@ -504,7 +519,9 @@ function availableBaselineBFTStarts(data, instability, faultyNodes) {
       }
     }
   }
-  return [...out].sort((a, b) => a - b);
+  const result = [...out].sort((a, b) => a - b);
+  _availBFTStartsCache.map.set(key, result);
+  return result;
 }
 
 // findBaselineCellForScenario looks up the cell for the given scenario
@@ -1552,8 +1569,8 @@ function destroyCurrentChart() {
 // Conditions section (active button + chart).
 //
 // The label carries a tooltip describing the per-cell reuse behavior
-// so users hover-discover why two adjacent picker values (e.g. 400ms
-// and 800ms) may yield identical legend rates for an OBFT-family cell.
+// so users hover-discover why two adjacent picker values (e.g. 800ms
+// and 1000ms) may yield identical legend rates for an OBFT-family cell.
 // See findBaselineCellForScenario / cellPayload.BFTStartIndependenceMs.
 function buildBFTStartPicker() {
   const picker = h('div', { class: 'sm-slot-picker' });
