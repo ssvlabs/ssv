@@ -1,51 +1,11 @@
 package psigs
 
 import (
-	"container/heap"
 	"fmt"
-	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
 )
-
-// ---- Event-queue primitives (mirror OBFT/QBFT adapter shape) -----------
-
-type event interface {
-	handle(s *sim) []scheduledEvent
-	describe() string
-}
-
-type scheduledEvent struct {
-	when time.Duration
-	ev   event
-}
-
-type queueItem struct {
-	when time.Duration
-	seq  int64
-	ev   event
-}
-
-type eventQueue []*queueItem
-
-func (q eventQueue) Len() int { return len(q) }
-func (q eventQueue) Less(i, j int) bool {
-	if q[i].when != q[j].when {
-		return q[i].when < q[j].when
-	}
-	return q[i].seq < q[j].seq
-}
-func (q eventQueue) Swap(i, j int) { q[i], q[j] = q[j], q[i] }
-func (q *eventQueue) Push(x any)   { *q = append(*q, x.(*queueItem)) }
-func (q *eventQueue) Pop() any {
-	old := *q
-	n := len(old)
-	x := old[n-1]
-	*q = old[:n-1]
-	return x
-}
-
-var _ heap.Interface = (*eventQueue)(nil)
 
 // pSigBytes is the wire size of a single partial-sig message for
 // bandwidth accounting. Models a BLS partial sig (96 bytes) + minimal
@@ -66,20 +26,21 @@ type evtPSigSign struct {
 	op ct.OperatorID
 }
 
-func (e *evtPSigSign) describe() string {
+func (e *evtPSigSign) Describe() string {
 	return fmt.Sprintf("PSigSign[op=%d]", e.op)
 }
 
-func (e *evtPSigSign) handle(s *sim) []scheduledEvent {
+func (e *evtPSigSign) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	s.partialCount[e.op] = 1
 	if s.partialCount[e.op] >= s.threshold {
-		s.decidedAt[e.op] = s.now
+		s.decidedAt[e.op] = s.Now()
 	}
 	// Byz patterns can delay an operator's own broadcast (ByzDelayedCommit)
 	// so the partial-sig lands at peers past the soft target. extraDelay is
 	// added on top of the per-pair network delay.
 	extraDelay := s.cfg.Byz.OverrideOwnSignDispatchDelay(e.op)
-	s.emitToAll(e.op, ct.KindPostConsensus, pSigBytes, extraDelay, func(to ct.OperatorID) event {
+	s.emitToAll(e.op, ct.KindPostConsensus, pSigBytes, extraDelay, func(to ct.OperatorID) desim.Event {
 		return &evtPSigArrival{from: e.op, to: to}
 	})
 	return nil
@@ -91,11 +52,12 @@ type evtPSigArrival struct {
 	from, to ct.OperatorID
 }
 
-func (e *evtPSigArrival) describe() string {
+func (e *evtPSigArrival) Describe() string {
 	return fmt.Sprintf("PSigArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtPSigArrival) handle(s *sim) []scheduledEvent {
+func (e *evtPSigArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	// Early-exit once the receiver has already reached qV — additional
 	// partials don't change the decided time, and skipping them keeps the
 	// partialCount bounded by qV. Mesh re-flood is already dedup'd by
@@ -107,7 +69,7 @@ func (e *evtPSigArrival) handle(s *sim) []scheduledEvent {
 	}
 	s.partialCount[e.to]++
 	if s.partialCount[e.to] >= s.threshold {
-		s.decidedAt[e.to] = s.now
+		s.decidedAt[e.to] = s.Now()
 	}
 	return nil
 }
@@ -126,25 +88,26 @@ type evtMeshArrival struct {
 	msgID     ct.MsgID
 	kind      ct.MsgKind
 	bytes     int64
-	builder   func(to ct.OperatorID) event
+	builder   func(to ct.OperatorID) desim.Event
 }
 
-func (e *evtMeshArrival) describe() string {
+func (e *evtMeshArrival) Describe() string {
 	return ct.FormatMeshArrival(e.from, e.to, e.publisher, e.msgID, e.kind)
 }
 
-func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
+func (e *evtMeshArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.mesh
 	if !mesh.MarkSeen(e.to, e.msgID) {
 		return nil
 	}
 	s.cacheArrivalForGossip(e.to, e.publisher, e.msgID, e.kind, e.bytes, e.builder)
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	if mesh.IsProtocol(e.to) {
 		recipientOp := mesh.OperatorForNode(e.to)
-		out = append(out, scheduledEvent{
-			when: s.now + mesh.ValidateDelay(),
-			ev:   e.builder(recipientOp),
+		out = append(out, desim.Scheduled{
+			When: s.Now() + mesh.ValidateDelay(),
+			Ev:   e.builder(recipientOp),
 		})
 	}
 	fromEP := mesh.EndpointFor(e.to)
@@ -152,11 +115,11 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 		if neighbor == e.from || neighbor == e.publisher {
 			continue
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), e.kind)
+		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), e.kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, neighbor, e.kind, -1, e.bytes)
-		out = append(out, scheduledEvent{
-			when: s.now + mesh.ValidateDelay() + delay,
-			ev: &evtMeshArrival{
+		out = append(out, desim.Scheduled{
+			When: s.Now() + mesh.ValidateDelay() + delay,
+			Ev: &evtMeshArrival{
 				from:      e.to,
 				to:        neighbor,
 				publisher: e.publisher,
@@ -182,11 +145,12 @@ type evtMeshHeartbeat struct {
 	node ct.MeshNode
 }
 
-func (e *evtMeshHeartbeat) describe() string {
+func (e *evtMeshHeartbeat) Describe() string {
 	return fmt.Sprintf("MeshHeartbeat[node=%d]", e.node)
 }
 
-func (e *evtMeshHeartbeat) handle(s *sim) []scheduledEvent {
+func (e *evtMeshHeartbeat) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.mesh
 	g := mesh.Gossip()
 	mesh.MCacheRotate(e.node)
@@ -194,17 +158,17 @@ func (e *evtMeshHeartbeat) handle(s *sim) []scheduledEvent {
 	if len(mids) == 0 {
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	fromEP := mesh.EndpointFor(e.node)
-	for _, to := range mesh.PickGossipRecipients(s.rng, e.node, g.Dlazy, g.GossipFactor) {
+	for _, to := range mesh.PickGossipRecipients(s.Rng(), e.node, g.Dlazy, g.GossipFactor) {
 		toEP := mesh.EndpointFor(to)
-		delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIHave)
+		delay := s.cfg.Network.Delay(s.Rng(), fromEP, toEP, ct.KindGossipIHave)
 		bytes := ct.GossipRPCSize(len(mids))
 		mesh.RecordMeshHop(s.cfg.Bandwidth, e.node, to, ct.KindGossipIHave, -1, bytes)
 		advertised := append([]ct.MsgID(nil), mids...)
-		out = append(out, scheduledEvent{
-			when: s.now + delay,
-			ev:   &evtMeshIHave{from: e.node, to: to, mids: advertised},
+		out = append(out, desim.Scheduled{
+			When: s.Now() + delay,
+			Ev:   &evtMeshIHave{from: e.node, to: to, mids: advertised},
 		})
 	}
 	return out
@@ -215,11 +179,12 @@ type evtMeshIHave struct {
 	mids     []ct.MsgID
 }
 
-func (e *evtMeshIHave) describe() string {
+func (e *evtMeshIHave) Describe() string {
 	return fmt.Sprintf("MeshIHave[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
 }
 
-func (e *evtMeshIHave) handle(s *sim) []scheduledEvent {
+func (e *evtMeshIHave) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.mesh
 	var want []ct.MsgID
 	for _, mid := range e.mids {
@@ -233,12 +198,12 @@ func (e *evtMeshIHave) handle(s *sim) []scheduledEvent {
 	}
 	fromEP := mesh.EndpointFor(e.to)
 	toEP := mesh.EndpointFor(e.from)
-	delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIWant)
+	delay := s.cfg.Network.Delay(s.Rng(), fromEP, toEP, ct.KindGossipIWant)
 	bytes := ct.GossipRPCSize(len(want))
 	mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, e.from, ct.KindGossipIWant, -1, bytes)
-	return []scheduledEvent{{
-		when: s.now + delay,
-		ev:   &evtMeshIWant{from: e.to, to: e.from, mids: want},
+	return []desim.Scheduled{{
+		When: s.Now() + delay,
+		Ev:   &evtMeshIWant{from: e.to, to: e.from, mids: want},
 	}}
 }
 
@@ -247,11 +212,12 @@ type evtMeshIWant struct {
 	mids     []ct.MsgID
 }
 
-func (e *evtMeshIWant) describe() string {
+func (e *evtMeshIWant) Describe() string {
 	return fmt.Sprintf("MeshIWant[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
 }
 
-func (e *evtMeshIWant) handle(s *sim) []scheduledEvent {
+func (e *evtMeshIWant) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.mesh
 	for _, mid := range e.mids {
 		entry, ok := mesh.MCacheLookup(e.to, mid)

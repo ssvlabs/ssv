@@ -1,12 +1,11 @@
 package psigs
 
 import (
-	"container/heap"
-	mrand "math/rand"
 	"slices"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
 )
 
 // preAgreedValue is the V every operator signs. PSigs has no consensus
@@ -23,21 +22,18 @@ func qV(N int) int {
 }
 
 // runDES drives the PSigs simulator end-to-end and returns the rawOutcome
-// (to be translated to ct.Outcome by the caller). Single-goroutine event
-// loop ordered by (when, seq) for tie-break determinism.
+// (to be translated to ct.Outcome by the caller). The shared desim.Engine
+// runs the (when, seq)-ordered event loop for tie-break determinism.
 func runDES(cfg desConfig) rawOutcome {
 	s := newSim(cfg)
 	s.start()
-	s.runLoop()
+	s.Run(s)
 	return s.outcome()
 }
 
 type sim struct {
+	*desim.Engine
 	cfg          desConfig
-	rng          *mrand.Rand
-	now          time.Duration
-	queue        eventQueue
-	seq          int64
 	operators    []ct.OperatorID
 	mesh         *ct.MeshTopology
 	threshold    int
@@ -46,7 +42,6 @@ type sim struct {
 	// crashed[op] = true for completely-offline operators. Suppressed at
 	// AllowSign / AllowDelivery; this set lets outcome() report them offline.
 	crashed map[ct.OperatorID]bool
-	trace   []ct.TraceEntry
 }
 
 func newSim(cfg desConfig) *sim {
@@ -58,8 +53,8 @@ func newSim(cfg desConfig) *sim {
 		crashed[op] = true
 	}
 	return &sim{
+		Engine:       desim.NewEngine(cfg.Seed, cfg.TraceEnabled),
 		cfg:          cfg,
-		rng:          mrand.New(mrand.NewSource(cfg.Seed)),
 		operators:    operators,
 		mesh:         cfg.Mesh,
 		threshold:    qV(N),
@@ -69,6 +64,12 @@ func newSim(cfg desConfig) *sim {
 	}
 }
 
+// Mesh / Network / Bandwidth satisfy desim.Host (Now/Rng/Schedule/Run/Trace
+// come from the embedded *desim.Engine).
+func (s *sim) Mesh() *ct.MeshTopology         { return s.mesh }
+func (s *sim) Network() ct.NetworkModel       { return s.cfg.Network }
+func (s *sim) Bandwidth() *ct.BandwidthReport { return s.cfg.Bandwidth }
+
 // start schedules one evtPSigSign per honest operator at BFTStart.
 // Byz operators that the byz pattern marks as non-signing are excluded
 // from the initial schedule (they neither self-observe nor broadcast).
@@ -77,31 +78,9 @@ func (s *sim) start() {
 		if !s.cfg.Byz.AllowSign(op) {
 			continue
 		}
-		s.schedule(s.cfg.BFTStart, &evtPSigSign{op: op})
+		s.Schedule(s.cfg.BFTStart, &evtPSigSign{op: op})
 	}
 	s.scheduleInitialHeartbeats()
-}
-
-func (s *sim) runLoop() {
-	for s.queue.Len() > 0 {
-		e := heap.Pop(&s.queue).(*queueItem)
-		s.now = e.when
-		if s.cfg.TraceEnabled {
-			s.trace = append(s.trace, ct.TraceEntry{
-				When:  e.when,
-				Event: e.ev.describe(),
-			})
-		}
-		newEvents := e.ev.handle(s)
-		for _, ne := range newEvents {
-			s.schedule(ne.when, ne.ev)
-		}
-	}
-}
-
-func (s *sim) schedule(when time.Duration, ev event) {
-	s.seq++
-	heap.Push(&s.queue, &queueItem{when: when, seq: s.seq, ev: ev})
 }
 
 // outcome aggregates per-op decision state into a rawOutcome. Cluster-
@@ -111,7 +90,7 @@ func (s *sim) schedule(when time.Duration, ev event) {
 func (s *sim) outcome() rawOutcome {
 	out := rawOutcome{
 		perOp: make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
-		trace: s.trace,
+		trace: s.Trace(),
 	}
 	earliest := time.Duration(-1)
 	for _, op := range s.operators {
@@ -147,7 +126,7 @@ func (s *sim) outcome() rawOutcome {
 //     cfg.Network with per-(from, to) byz checks.
 //   - cfg.Mesh != nil (DeliveryMesh): publish to `from`'s mesh neighbors
 //     and let evtMeshArrival re-flood downstream.
-func (s *sim) emitToAll(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, build func(to ct.OperatorID) event) {
+func (s *sim) emitToAll(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, build func(to ct.OperatorID) desim.Event) {
 	if s.mesh != nil {
 		s.emitMesh(from, kind, bytes, extraDelay, s.operators, build)
 		return
@@ -155,7 +134,7 @@ func (s *sim) emitToAll(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraD
 	s.emitDirect(from, kind, bytes, extraDelay, s.operators, build)
 }
 
-func (s *sim) emitDirect(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+func (s *sim) emitDirect(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) desim.Event) {
 	for _, to := range recipients {
 		if to == from {
 			continue
@@ -163,18 +142,18 @@ func (s *sim) emitDirect(from ct.OperatorID, kind ct.MsgKind, bytes int64, extra
 		if !s.cfg.Byz.AllowDelivery(from, to, kind) {
 			continue
 		}
-		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, kind)
+		delay := s.cfg.Byz.OverrideDelay(s.Rng(), from, to, kind)
 		if delay < 0 {
-			delay = s.cfg.Network.Delay(s.rng, from, to, kind)
+			delay = s.cfg.Network.Delay(s.Rng(), from, to, kind)
 		}
 		if s.cfg.Bandwidth != nil && bytes > 0 {
 			s.cfg.Bandwidth.Emission(from, to, kind, -1, bytes)
 		}
-		s.schedule(s.now+delay+extraDelay, build(to))
+		s.Schedule(s.Now()+delay+extraDelay, build(to))
 	}
 }
 
-func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) desim.Event) {
 	// Crashed operators are absent from the mesh topology — guard before
 	// NodeForOperator (which would panic on a missing op) and emit nothing.
 	if s.crashed[from] {
@@ -197,9 +176,9 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDe
 				continue
 			}
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
+		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, -1, bytes)
-		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
 			from:      fromNode,
 			to:        neighbor,
 			publisher: fromNode,
@@ -219,7 +198,7 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, bytes int64, extraDe
 func (s *sim) cacheArrivalForGossip(
 	cacheOwner, publisher ct.MeshNode,
 	msgID ct.MsgID, kind ct.MsgKind, bytes int64,
-	builder func(to ct.OperatorID) event,
+	builder func(to ct.OperatorID) desim.Event,
 ) {
 	mesh := s.mesh
 	g := mesh.Gossip()
@@ -232,9 +211,9 @@ func (s *sim) cacheArrivalForGossip(
 		Reinject: func(requester ct.MeshNode) {
 			respEP := mesh.EndpointFor(cacheOwner)
 			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.rng, respEP, reqEP, kind)
+			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
 			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, -1, bytes)
-			s.schedule(s.now+delay, &evtMeshArrival{
+			s.Schedule(s.Now()+delay, &evtMeshArrival{
 				from:      cacheOwner,
 				to:        requester,
 				publisher: publisher,
@@ -271,7 +250,7 @@ func (s *sim) scheduleInitialHeartbeats() {
 			if at > s.cfg.RelayCutoff {
 				break
 			}
-			s.schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
+			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
 		}
 	}
 }

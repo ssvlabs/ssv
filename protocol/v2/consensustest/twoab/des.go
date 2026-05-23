@@ -1,14 +1,13 @@
 package twoab
 
 import (
-	"container/heap"
 	"errors"
 	"fmt"
-	mrand "math/rand"
 	"slices"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
 	"github.com/ssvlabs/ssv/protocol/v2/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
@@ -32,16 +31,13 @@ func runDES(cfg desConfig) (rawOutcome, error) {
 	if err := s.start(); err != nil {
 		return rawOutcome{}, err
 	}
-	s.runLoop()
+	s.Run(s)
 	return s.outcome(), nil
 }
 
 type sim struct {
+	*desim.Engine
 	cfg         desConfig
-	rng         *mrand.Rand
-	now         time.Duration
-	queue       eventQueue
-	seq         int64
 	operators   []twoab.OperatorID
 	cfgTwoab    *twoab.Config
 	pubShares   map[twoab.OperatorID][]byte
@@ -88,7 +84,6 @@ type sim struct {
 	resolveDeadline time.Duration
 
 	canonValues map[int]twoab.Value
-	trace       []ct.TraceEntry
 }
 
 func newSim(cfg desConfig) (*sim, error) {
@@ -128,8 +123,8 @@ func newSim(cfg desConfig) (*sim, error) {
 	}
 
 	return &sim{
+		Engine:            desim.NewEngine(cfg.Seed, cfg.TraceEnabled),
 		cfg:               cfg,
-		rng:               mrand.New(mrand.NewSource(cfg.Seed)),
 		operators:         operators,
 		pubShares:         pubShares,
 		clusterPub:        clusterPub,
@@ -145,6 +140,12 @@ func newSim(cfg desConfig) (*sim, error) {
 		commitEmitted:     make(map[twoab.OperatorID]bool, N),
 	}, nil
 }
+
+// Mesh / Network / Bandwidth satisfy desim.Host (Now/Rng/Schedule/Run/Trace
+// come from the embedded *desim.Engine).
+func (s *sim) Mesh() *ct.MeshTopology         { return s.cfg.Mesh }
+func (s *sim) Network() ct.NetworkModel       { return s.cfg.Network }
+func (s *sim) Bandwidth() *ct.BandwidthReport { return s.cfg.Bandwidth }
 
 func (s *sim) start() error {
 	K := s.cfg.K
@@ -238,40 +239,18 @@ func (s *sim) start() error {
 	}
 
 	for k := 0; k < K; k++ {
-		s.schedule(s.cfg.FetchAt[k], &evtLeaderFetch{layer: k})
+		s.Schedule(s.cfg.FetchAt[k], &evtLeaderFetch{layer: k})
 	}
 	// Phase-2a fire-instant: every op simultaneously calls
 	// MaybeFirePhase2a per spec §Phase 2a. (Per-op offset is not used in
 	// the protocol — fire-time is a single cluster-wide slot offset.)
-	s.schedule(cfgTwoab.TPhase2a, &evtPhase2aFire{})
+	s.Schedule(cfgTwoab.TPhase2a, &evtPhase2aFire{})
 	// Final schedule-anchored Resolve sweep. Captures any op that
 	// hasn't yet decided through the dynamic Phase-2b cascade (e.g.,
 	// late-arriving cluster state).
-	s.schedule(s.resolveDeadline, &evtResolve{})
+	s.Schedule(s.resolveDeadline, &evtResolve{})
 	s.scheduleInitialHeartbeats()
 	return nil
-}
-
-func (s *sim) runLoop() {
-	for s.queue.Len() > 0 {
-		e := heap.Pop(&s.queue).(*queueItem)
-		s.now = e.when
-		if s.cfg.TraceEnabled {
-			s.trace = append(s.trace, ct.TraceEntry{
-				When:  e.when,
-				Event: e.ev.describe(),
-			})
-		}
-		newEvents := e.ev.handle(s)
-		for _, ne := range newEvents {
-			s.schedule(ne.when, ne.ev)
-		}
-	}
-}
-
-func (s *sim) schedule(when time.Duration, ev event) {
-	s.seq++
-	heap.Push(&s.queue, &queueItem{when: when, seq: s.seq, ev: ev})
 }
 
 func (s *sim) outcome() rawOutcome {
@@ -279,7 +258,7 @@ func (s *sim) outcome() rawOutcome {
 		decided:       false,
 		layer:         -1,
 		perOp:         make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
-		trace:         s.trace,
+		trace:         s.Trace(),
 		deadlockLayer: -1,
 	}
 	earliestT := time.Duration(-1)
@@ -341,7 +320,7 @@ func (s *sim) honestLeaderValue(layer int) twoab.Value {
 // Transport dispatch mirrors the OBFT adapter: DeliveryDirect (cfg.Mesh ==
 // nil) keeps the original full-fanout path; DeliveryMesh routes through
 // the per-sim MeshTopology with dedup + reflood.
-func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to twoab.OperatorID) event) {
+func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, build func(to twoab.OperatorID) desim.Event) {
 	if s.cfg.Mesh != nil {
 		s.emitMesh(from, kind, layer, bytes, extraDelay, s.operators, build)
 		return
@@ -350,7 +329,7 @@ func (s *sim) emitToAll(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes
 }
 
 // emitDirect is the full-fanout transport path.
-func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
+func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) desim.Event) {
 	// Crashed operators emit nothing on any path. Belt-and-suspenders with
 	// the crashOverlay gates (which also stop the build/aggregator-record
 	// step); this catches the Phase-2b commit path that has no Allow gate.
@@ -364,21 +343,21 @@ func (s *sim) emitDirect(from twoab.OperatorID, kind ct.MsgKind, layer int, byte
 		if !s.cfg.Byz.AllowDelivery(from, to, kind) {
 			continue
 		}
-		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, kind)
+		delay := s.cfg.Byz.OverrideDelay(s.Rng(), from, to, kind)
 		if delay < 0 {
-			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), kind)
+			delay = s.cfg.Network.Delay(s.Rng(), ct.OperatorID(from), ct.OperatorID(to), kind)
 		}
 		if s.cfg.Bandwidth != nil && bytes > 0 {
 			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), kind, layer, bytes)
 		}
 		ev := build(to)
-		s.schedule(s.now+delay+extraDelay, ev)
+		s.Schedule(s.Now()+delay+extraDelay, ev)
 	}
 }
 
 // emitMesh publishes via the per-sim MeshTopology. Behavior parallels the
 // OBFT adapter's emitMesh.
-func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) event) {
+func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes int64, extraDelay time.Duration, recipients []twoab.OperatorID, build func(to twoab.OperatorID) desim.Event) {
 	// Crashed operators are absent from the mesh topology — guard before
 	// NodeForOperator (which would panic on a missing op) and emit nothing.
 	if s.crashed[from] {
@@ -402,9 +381,9 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 				continue
 			}
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
+		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, layer, bytes)
-		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
 			from:      fromNode,
 			to:        neighbor,
 			publisher: fromNode,
@@ -417,7 +396,7 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 	}
 }
 
-func (s *sim) observedOffset() time.Duration { return s.now }
+func (s *sim) observedOffset() time.Duration { return s.Now() }
 
 // markValueMsgEmitted marks `op` as having broadcast its ValueMsg
 // (either Phase-2a fire-time or NoValue→Value upgrade). Subsequent
@@ -442,7 +421,7 @@ func (s *sim) markCommitEmitted(op twoab.OperatorID) {
 func (s *sim) cacheArrivalForGossip(
 	cacheOwner, publisher ct.MeshNode,
 	msgID ct.MsgID, kind ct.MsgKind, layer int, bytes int64,
-	builder func(to twoab.OperatorID) event,
+	builder func(to twoab.OperatorID) desim.Event,
 ) {
 	mesh := s.cfg.Mesh
 	g := mesh.Gossip()
@@ -455,9 +434,9 @@ func (s *sim) cacheArrivalForGossip(
 		Reinject: func(requester ct.MeshNode) {
 			respEP := mesh.EndpointFor(cacheOwner)
 			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.rng, respEP, reqEP, kind)
+			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
 			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, layer, bytes)
-			s.schedule(s.now+delay, &evtMeshArrival{
+			s.Schedule(s.Now()+delay, &evtMeshArrival{
 				from:      cacheOwner,
 				to:        requester,
 				publisher: publisher,
@@ -493,7 +472,7 @@ func (s *sim) scheduleInitialHeartbeats() {
 			if at > s.cfg.RelayCutoff {
 				break
 			}
-			s.schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
+			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
 		}
 	}
 }

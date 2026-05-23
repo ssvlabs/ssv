@@ -1,6 +1,7 @@
 package consensustest_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/obft"
+	psigsadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/psigs"
 	qbftadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/qbft"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
 // TestSmoke_HealthyOBFT verifies the OBFT adapter produces a healthy outcome
@@ -139,6 +142,52 @@ func TestSmoke_TraceDeterministic(t *testing.T) {
 		for i := range out1.Trace {
 			require.Equalf(t, out1.Trace[i], out2.Trace[i],
 				"%s trace[%d] differs across runs", p.Name(), i)
+		}
+	}
+}
+
+// TestDeterminism_AllProtocols is the cross-protocol safety net for the desim
+// shared-core extraction (docs/CONSENSUSTEST-MAINTAINABILITY-PLAN.md Phase 0).
+// It guards the byte-identical-(cfg, seed) contract for EVERY adapter — OBFT,
+// 2abOBFT, QBFT, and PSigs — with tracing on, across a healthy and two
+// adversarial scenarios. Any later phase that perturbs event ordering or
+// RNG-draw order breaks this immediately, on a full Outcome (incl. Trace,
+// PerOp, Bandwidth) deep-equality. Scenarios a protocol can't model
+// (ErrNotApplicable, e.g. SilentLeader on leaderless PSigs) are skipped;
+// Healthy is applicable to all four, so every adapter gets at least one check.
+func TestDeterminism_AllProtocols(t *testing.T) {
+	protocols := []ct.Protocol{
+		obftadapter.Protocol{},
+		twoabadapter.Protocol{},
+		qbftadapter.QBFTNoReflood{},
+		psigsadapter.Protocol{},
+	}
+	scenarios := []struct {
+		name string
+		byz  ct.ByzPattern
+	}{
+		{"Healthy", ct.ByzPattern{Kind: ct.ByzNone}},
+		{"SilentLeader", ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}},
+		{"SigmaRefusal", ct.ByzPattern{Kind: ct.ByzSigmaRefusal, ByzOperators: []ct.OperatorID{1}}},
+	}
+	for _, p := range protocols {
+		for _, sc := range scenarios {
+			cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+			cfg.Byz = sc.byz
+			cfg.TraceEnabled = true
+
+			out1, err := p.Run(cfg)
+			if errors.Is(err, ct.ErrNotApplicable) {
+				continue // protocol doesn't model this byz pattern; skip
+			}
+			require.NoErrorf(t, err, "%s/%s run1", p.Name(), sc.name)
+			out2, err := p.Run(cfg)
+			require.NoErrorf(t, err, "%s/%s run2", p.Name(), sc.name)
+
+			require.Equalf(t, len(out1.Trace), len(out2.Trace),
+				"%s/%s trace length differs across runs", p.Name(), sc.name)
+			require.Equalf(t, out1, out2,
+				"%s/%s Outcome not byte-identical across runs", p.Name(), sc.name)
 		}
 	}
 }

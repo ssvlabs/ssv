@@ -1,7 +1,6 @@
 package qbft
 
 import (
-	"fmt"
 	"slices"
 	"time"
 
@@ -9,6 +8,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
 )
 
 // operatorsCT returns the sim's operator IDs in framework-typed form,
@@ -27,7 +27,7 @@ func (s *sim) operatorsCT() []ct.OperatorID {
 // families. QBFT-specific: the build closure constructs an evtMessageArrival
 // carrying the spec-qbft SignedSSVMessage; self-loopback (zero delay) is
 // handled by Broadcast directly, not here.
-func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) event) {
+func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, bytes int64, extraDelay time.Duration, recipients []ct.OperatorID, build func(to ct.OperatorID) desim.Event) {
 	// Crashed operators are absent from the mesh topology — guard before
 	// NodeForOperator (which would panic on a missing op) and emit nothing.
 	if s.crashed[spectypes.OperatorID(from)] {
@@ -51,9 +51,9 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, 
 				continue
 			}
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), kind)
+		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, fromNode, neighbor, kind, frameworkRound, bytes)
-		s.schedule(s.now+delay+extraDelay, &evtMeshArrival{
+		s.Schedule(s.Now()+delay+extraDelay, &evtMeshArrival{
 			from:      fromNode,
 			to:        neighbor,
 			publisher: fromNode,
@@ -73,7 +73,7 @@ func (s *sim) emitMesh(from ct.OperatorID, kind ct.MsgKind, frameworkRound int, 
 func (s *sim) cacheArrivalForGossip(
 	cacheOwner, publisher ct.MeshNode,
 	msgID ct.MsgID, kind ct.MsgKind, round int, bytes int64,
-	builder func(to ct.OperatorID) event,
+	builder func(to ct.OperatorID) desim.Event,
 ) {
 	mesh := s.cfg.Mesh
 	g := mesh.Gossip()
@@ -86,9 +86,9 @@ func (s *sim) cacheArrivalForGossip(
 		Reinject: func(requester ct.MeshNode) {
 			respEP := mesh.EndpointFor(cacheOwner)
 			reqEP := mesh.EndpointFor(requester)
-			delay := s.cfg.Network.Delay(s.rng, respEP, reqEP, kind)
+			delay := s.cfg.Network.Delay(s.Rng(), respEP, reqEP, kind)
 			mesh.RecordMeshHop(s.cfg.Bandwidth, cacheOwner, requester, kind, round, bytes)
-			s.schedule(s.now+delay, &evtMeshArrival{
+			s.Schedule(s.Now()+delay, &evtMeshArrival{
 				from:      cacheOwner,
 				to:        requester,
 				publisher: publisher,
@@ -126,7 +126,7 @@ func (s *sim) scheduleInitialHeartbeats() {
 			if at > s.cfg.RelayCutoff {
 				break
 			}
-			s.schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
+			s.Schedule(at, &evtMeshHeartbeat{node: ct.MeshNode(i)})
 		}
 	}
 }
@@ -151,23 +151,20 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 		return nil
 	}
 	msgBytes, encErr := messageWireBytes(msg)
-	if encErr != nil && n.sim.cfg.TraceEnabled {
-		n.sim.trace = append(n.sim.trace, ct.TraceEntry{
-			When:  n.sim.now,
-			Event: fmt.Sprintf("MessageEncode-FAILED[from=%d kind=%s err=%v]", from, kind, encErr),
-		})
+	if encErr != nil {
+		n.sim.Tracef("MessageEncode-FAILED[from=%d kind=%s err=%v]", from, kind, encErr)
 	}
 	frameworkRound := frameworkRoundFor(round)
 	// Self-delivery (zero delay, no bandwidth) so the broadcaster's own
 	// container picks up the message synchronously with peers'. Independent
 	// of Direct vs Mesh — the self-feed is a model artifact for state
 	// propagation, not a wire event.
-	n.sim.schedule(n.sim.now, &evtMessageArrival{
+	n.sim.Schedule(n.sim.Now(), &evtMessageArrival{
 		from: from,
 		to:   from,
 		msg:  msg.DeepCopy(),
 	})
-	build := func(to ct.OperatorID) event {
+	build := func(to ct.OperatorID) desim.Event {
 		return &evtMessageArrival{
 			from: from,
 			to:   to,
@@ -186,14 +183,14 @@ func (n *virtualNetwork) Broadcast(_ spectypes.MessageID, msg *spectypes.SignedS
 		if !n.sim.byz.AllowDelivery(from, toCT, kind) {
 			continue
 		}
-		delay := n.sim.byz.OverrideDelay(n.sim.rng, from, toCT, kind)
+		delay := n.sim.byz.OverrideDelay(n.sim.Rng(), from, toCT, kind)
 		if delay < 0 {
-			delay = n.sim.cfg.Network.Delay(n.sim.rng, from, toCT, kind)
+			delay = n.sim.cfg.Network.Delay(n.sim.Rng(), from, toCT, kind)
 		}
 		if n.sim.cfg.Bandwidth != nil && msgBytes > 0 {
 			n.sim.cfg.Bandwidth.Emission(from, toCT, kind, frameworkRound, msgBytes)
 		}
-		n.sim.schedule(n.sim.now+delay, &evtMessageArrival{
+		n.sim.Schedule(n.sim.Now()+delay, &evtMessageArrival{
 			from: from,
 			to:   toCT,
 			msg:  msg.DeepCopy(),

@@ -35,7 +35,7 @@ func (t *virtualRoundTimer) TimeoutForRound(round specqbft.Round) {
 	if round > specqbft.FirstRound {
 		timeout += t.sim.cfg.RTRecoveryExtra
 	}
-	t.sim.schedule(t.sim.now+timeout, &evtRoundTimeout{
+	t.sim.Schedule(t.sim.Now()+timeout, &evtRoundTimeout{
 		op:    t.op,
 		round: round,
 		mySeq: mySeq,

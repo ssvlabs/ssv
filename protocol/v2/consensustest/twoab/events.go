@@ -1,51 +1,16 @@
 package twoab
 
 import (
-	"container/heap"
 	"fmt"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
 )
 
-// event is the discrete-event simulator's unit of work.
-type event interface {
-	handle(s *sim) []scheduledEvent
-	describe() string
-}
-
-type scheduledEvent struct {
-	when time.Duration
-	ev   event
-}
-
-type queueItem struct {
-	when time.Duration
-	seq  int64
-	ev   event
-}
-
-type eventQueue []*queueItem
-
-func (q eventQueue) Len() int { return len(q) }
-func (q eventQueue) Less(i, j int) bool {
-	if q[i].when != q[j].when {
-		return q[i].when < q[j].when
-	}
-	return q[i].seq < q[j].seq
-}
-func (q eventQueue) Swap(i, j int) { q[i], q[j] = q[j], q[i] }
-func (q *eventQueue) Push(x any)   { *q = append(*q, x.(*queueItem)) }
-func (q *eventQueue) Pop() any {
-	old := *q
-	n := len(old)
-	x := old[n-1]
-	*q = old[:n-1]
-	return x
-}
-
-var _ heap.Interface = (*eventQueue)(nil)
+// Events run on the shared desim.Engine; each event's Handle returns follow-on
+// desim.Scheduled items. Ordering is (when, seq) — see desim.Engine.
 
 // ---- evtMeshArrival ----------------------------------------------------
 
@@ -61,25 +26,26 @@ type evtMeshArrival struct {
 	kind      ct.MsgKind
 	layer     int
 	bytes     int64
-	builder   func(to twoab.OperatorID) event
+	builder   func(to twoab.OperatorID) desim.Event
 }
 
-func (e *evtMeshArrival) describe() string {
+func (e *evtMeshArrival) Describe() string {
 	return ct.FormatMeshArrival(e.from, e.to, e.publisher, e.msgID, e.kind)
 }
 
-func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
+func (e *evtMeshArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.cfg.Mesh
 	if !mesh.MarkSeen(e.to, e.msgID) {
 		return nil
 	}
 	s.cacheArrivalForGossip(e.to, e.publisher, e.msgID, e.kind, e.layer, e.bytes, e.builder)
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	if mesh.IsProtocol(e.to) {
 		recipientOp := twoab.OperatorID(mesh.OperatorForNode(e.to))
-		out = append(out, scheduledEvent{
-			when: s.now + mesh.ValidateDelay(),
-			ev:   e.builder(recipientOp),
+		out = append(out, desim.Scheduled{
+			When: s.Now() + mesh.ValidateDelay(),
+			Ev:   e.builder(recipientOp),
 		})
 	}
 	fromEP := mesh.EndpointFor(e.to)
@@ -87,11 +53,11 @@ func (e *evtMeshArrival) handle(s *sim) []scheduledEvent {
 		if neighbor == e.from || neighbor == e.publisher {
 			continue
 		}
-		delay := mesh.SampleHopDelay(s.rng, fromEP, mesh.EndpointFor(neighbor), e.kind)
+		delay := mesh.SampleHopDelay(s.Rng(), fromEP, mesh.EndpointFor(neighbor), e.kind)
 		mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, neighbor, e.kind, e.layer, e.bytes)
-		out = append(out, scheduledEvent{
-			when: s.now + mesh.ValidateDelay() + delay,
-			ev: &evtMeshArrival{
+		out = append(out, desim.Scheduled{
+			When: s.Now() + mesh.ValidateDelay() + delay,
+			Ev: &evtMeshArrival{
 				from:      e.to,
 				to:        neighbor,
 				publisher: e.publisher,
@@ -117,11 +83,12 @@ type evtMeshHeartbeat struct {
 	node ct.MeshNode
 }
 
-func (e *evtMeshHeartbeat) describe() string {
+func (e *evtMeshHeartbeat) Describe() string {
 	return fmt.Sprintf("MeshHeartbeat[node=%d]", e.node)
 }
 
-func (e *evtMeshHeartbeat) handle(s *sim) []scheduledEvent {
+func (e *evtMeshHeartbeat) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.cfg.Mesh
 	g := mesh.Gossip()
 	mesh.MCacheRotate(e.node)
@@ -129,17 +96,17 @@ func (e *evtMeshHeartbeat) handle(s *sim) []scheduledEvent {
 	if len(mids) == 0 {
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	fromEP := mesh.EndpointFor(e.node)
-	for _, to := range mesh.PickGossipRecipients(s.rng, e.node, g.Dlazy, g.GossipFactor) {
+	for _, to := range mesh.PickGossipRecipients(s.Rng(), e.node, g.Dlazy, g.GossipFactor) {
 		toEP := mesh.EndpointFor(to)
-		delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIHave)
+		delay := s.cfg.Network.Delay(s.Rng(), fromEP, toEP, ct.KindGossipIHave)
 		bytes := ct.GossipRPCSize(len(mids))
 		mesh.RecordMeshHop(s.cfg.Bandwidth, e.node, to, ct.KindGossipIHave, -1, bytes)
 		advertised := append([]ct.MsgID(nil), mids...)
-		out = append(out, scheduledEvent{
-			when: s.now + delay,
-			ev:   &evtMeshIHave{from: e.node, to: to, mids: advertised},
+		out = append(out, desim.Scheduled{
+			When: s.Now() + delay,
+			Ev:   &evtMeshIHave{from: e.node, to: to, mids: advertised},
 		})
 	}
 	return out
@@ -150,11 +117,12 @@ type evtMeshIHave struct {
 	mids     []ct.MsgID
 }
 
-func (e *evtMeshIHave) describe() string {
+func (e *evtMeshIHave) Describe() string {
 	return fmt.Sprintf("MeshIHave[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
 }
 
-func (e *evtMeshIHave) handle(s *sim) []scheduledEvent {
+func (e *evtMeshIHave) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.cfg.Mesh
 	var want []ct.MsgID
 	for _, mid := range e.mids {
@@ -168,12 +136,12 @@ func (e *evtMeshIHave) handle(s *sim) []scheduledEvent {
 	}
 	fromEP := mesh.EndpointFor(e.to)
 	toEP := mesh.EndpointFor(e.from)
-	delay := s.cfg.Network.Delay(s.rng, fromEP, toEP, ct.KindGossipIWant)
+	delay := s.cfg.Network.Delay(s.Rng(), fromEP, toEP, ct.KindGossipIWant)
 	bytes := ct.GossipRPCSize(len(want))
 	mesh.RecordMeshHop(s.cfg.Bandwidth, e.to, e.from, ct.KindGossipIWant, -1, bytes)
-	return []scheduledEvent{{
-		when: s.now + delay,
-		ev:   &evtMeshIWant{from: e.to, to: e.from, mids: want},
+	return []desim.Scheduled{{
+		When: s.Now() + delay,
+		Ev:   &evtMeshIWant{from: e.to, to: e.from, mids: want},
 	}}
 }
 
@@ -182,11 +150,12 @@ type evtMeshIWant struct {
 	mids     []ct.MsgID
 }
 
-func (e *evtMeshIWant) describe() string {
+func (e *evtMeshIWant) Describe() string {
 	return fmt.Sprintf("MeshIWant[from=%d to=%d mids=%d]", e.from, e.to, len(e.mids))
 }
 
-func (e *evtMeshIWant) handle(s *sim) []scheduledEvent {
+func (e *evtMeshIWant) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	mesh := s.cfg.Mesh
 	for _, mid := range e.mids {
 		entry, ok := mesh.MCacheLookup(e.to, mid)
@@ -204,13 +173,14 @@ type evtLeaderFetch struct {
 	layer int
 }
 
-func (e *evtLeaderFetch) describe() string { return fmt.Sprintf("LeaderFetch[layer=%d]", e.layer) }
+func (e *evtLeaderFetch) Describe() string { return fmt.Sprintf("LeaderFetch[layer=%d]", e.layer) }
 
-func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
+func (e *evtLeaderFetch) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	leader := s.cfgTwoab.Layers[e.layer].Leader
 	plans := s.cfg.Byz.LeaderBroadcastPlan(s, leader, e.layer, s.honestLeaderValue(e.layer))
 
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	for _, p := range plans {
 		bundle, err := s.instances[leader].BuildPhase1Bundle(e.layer, p.V)
 		if err != nil {
@@ -274,7 +244,7 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 		}
 		bundleCap := bundle
 		layerCap := e.layer
-		build := func(to twoab.OperatorID) event {
+		build := func(to twoab.OperatorID) desim.Event {
 			return &evtPhase1Arrival{from: leader, to: to, layer: layerCap, bundle: clonePhase1Bundle(bundleCap)}
 		}
 		if s.cfg.Mesh != nil {
@@ -285,17 +255,17 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			if to == leader {
 				continue
 			}
-			delay := s.cfg.Byz.OverrideDelay(s.rng, leader, to, ct.KindLeaderBroadcast)
+			delay := s.cfg.Byz.OverrideDelay(s.Rng(), leader, to, ct.KindLeaderBroadcast)
 			if delay < 0 {
-				delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(leader), ct.OperatorID(to), ct.KindLeaderBroadcast)
+				delay = s.cfg.Network.Delay(s.Rng(), ct.OperatorID(leader), ct.OperatorID(to), ct.KindLeaderBroadcast)
 			}
 			if s.cfg.Bandwidth != nil && bundleBytes > 0 {
 				s.cfg.Bandwidth.Emission(ct.OperatorID(leader), ct.OperatorID(to),
 					ct.KindLeaderBroadcast, e.layer, bundleBytes)
 			}
-			out = append(out, scheduledEvent{
-				when: s.now + delay + ownDelay,
-				ev:   &evtPhase1Arrival{from: leader, to: to, layer: e.layer, bundle: clonePhase1Bundle(bundle)},
+			out = append(out, desim.Scheduled{
+				When: s.Now() + delay + ownDelay,
+				Ev:   &evtPhase1Arrival{from: leader, to: to, layer: e.layer, bundle: clonePhase1Bundle(bundle)},
 			})
 		}
 	}
@@ -310,12 +280,13 @@ type evtPhase1Arrival struct {
 	bundle   *twoab.Phase1Bundle
 }
 
-func (e *evtPhase1Arrival) describe() string {
+func (e *evtPhase1Arrival) Describe() string {
 	return fmt.Sprintf("Phase1Arrival[from=%d to=%d layer=%d v=%s]",
 		e.from, e.to, e.layer, valuePrefix(e.bundle.Value))
 }
 
-func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
+func (e *evtPhase1Arrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	inst := s.instances[e.to]
 	// Per spec §Phase 1, 2abOBFT has no T_commit hard wall — bundles
 	// are accepted at any in-slot offset. ObservePhase1Bundle returns
@@ -347,10 +318,11 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 // further emissions (Phase-2b Commit, upgrade ValueMsg) — capture them all.
 type evtPhase2aFire struct{}
 
-func (e *evtPhase2aFire) describe() string { return "Phase2aFire" }
+func (e *evtPhase2aFire) Describe() string { return "Phase2aFire" }
 
-func (e *evtPhase2aFire) handle(s *sim) []scheduledEvent {
-	var out []scheduledEvent
+func (e *evtPhase2aFire) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
+	var out []desim.Scheduled
 	for _, op := range s.operators {
 		out = append(out, fireOnePhase2a(s, op)...)
 	}
@@ -369,11 +341,12 @@ type evtPhase2aFireOp struct {
 	op twoab.OperatorID
 }
 
-func (e *evtPhase2aFireOp) describe() string {
+func (e *evtPhase2aFireOp) Describe() string {
 	return fmt.Sprintf("Phase2aFireOp[op=%d]", e.op)
 }
 
-func (e *evtPhase2aFireOp) handle(s *sim) []scheduledEvent {
+func (e *evtPhase2aFireOp) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	return fireOnePhase2a(s, e.op)
 }
 
@@ -381,8 +354,8 @@ func (e *evtPhase2aFireOp) handle(s *sim) []scheduledEvent {
 // channel has closed (σ-eligible or equivocation-observed) and the op
 // hasn't already emitted. Mirrors base's maybeEarlyCommit. Returns the
 // scheduled event(s) for the caller to append; the actual emission runs
-// in evtPhase2aFireOp at s.now (this tick).
-func maybeEarlyFire(s *sim, op twoab.OperatorID) []scheduledEvent {
+// in evtPhase2aFireOp at s.Now() (this tick).
+func maybeEarlyFire(s *sim, op twoab.OperatorID) []desim.Scheduled {
 	if s.valueMsgEmitted[op] || s.noValueMsgEmitted[op] || s.commitEmitted[op] {
 		return nil
 	}
@@ -396,7 +369,7 @@ func maybeEarlyFire(s *sim, op twoab.OperatorID) []scheduledEvent {
 	}
 	select {
 	case <-s.instances[op].L0ReadyCh():
-		return []scheduledEvent{{when: s.now, ev: &evtPhase2aFireOp{op: op}}}
+		return []desim.Scheduled{{When: s.Now(), Ev: &evtPhase2aFireOp{op: op}}}
 	default:
 		return nil
 	}
@@ -412,7 +385,7 @@ func maybeEarlyFire(s *sim, op twoab.OperatorID) []scheduledEvent {
 // phase2aFired makes MaybeFirePhase2a return the cached emission; the
 // DES-side mark flags guard the propagation side so we don't double-
 // broadcast.
-func fireOnePhase2a(s *sim, op twoab.OperatorID) []scheduledEvent {
+func fireOnePhase2a(s *sim, op twoab.OperatorID) []desim.Scheduled {
 	if !s.cfg.Byz.AllowPhase2aEmission(op) {
 		return nil
 	}
@@ -423,7 +396,7 @@ func fireOnePhase2a(s *sim, op twoab.OperatorID) []scheduledEvent {
 	if err != nil {
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	switch {
 	case vm != nil:
 		vm = s.cfg.Byz.OverrideValueMsg(s, op, vm)
@@ -470,11 +443,12 @@ type evtValueMsgArrival struct {
 	msg      *twoab.ValueMsg
 }
 
-func (e *evtValueMsgArrival) describe() string {
+func (e *evtValueMsgArrival) Describe() string {
 	return fmt.Sprintf("ValueMsgArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtValueMsgArrival) handle(s *sim) []scheduledEvent {
+func (e *evtValueMsgArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	inst := s.instances[e.to]
 	_ = inst.ObserveValueMsg(e.msg)
 	// Drain any host-validation requests the Instance enqueued
@@ -507,9 +481,9 @@ drainLoop:
 	out = append(out, maybeEarlyFire(s, e.to)...)
 	// Spec-aligned late-arrival re-resolve: if past the slot cutoff and
 	// not yet decided, retry Resolve.
-	if s.now > s.resolveDeadline {
+	if s.Now() > s.resolveDeadline {
 		if _, already := s.resolved[e.to]; !already {
-			out = append(out, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
+			out = append(out, desim.Scheduled{When: s.Now(), Ev: &evtResolveRerun{op: e.to}})
 		}
 	}
 	return out
@@ -522,18 +496,19 @@ type evtNoValueMsgArrival struct {
 	msg      *twoab.NoValueMsg
 }
 
-func (e *evtNoValueMsgArrival) describe() string {
+func (e *evtNoValueMsgArrival) Describe() string {
 	return fmt.Sprintf("NoValueMsgArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtNoValueMsgArrival) handle(s *sim) []scheduledEvent {
+func (e *evtNoValueMsgArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	inst := s.instances[e.to]
 	_ = inst.ObserveNoValueMsg(e.msg)
 	tryOpportunisticResolve(s, e.to)
 	out := captureCascadeEmissions(s, e.to)
-	if s.now > s.resolveDeadline {
+	if s.Now() > s.resolveDeadline {
 		if _, already := s.resolved[e.to]; !already {
-			out = append(out, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
+			out = append(out, desim.Scheduled{When: s.Now(), Ev: &evtResolveRerun{op: e.to}})
 		}
 	}
 	return out
@@ -546,18 +521,19 @@ type evtCommitArrival struct {
 	commit   *twoab.Commit
 }
 
-func (e *evtCommitArrival) describe() string {
+func (e *evtCommitArrival) Describe() string {
 	return fmt.Sprintf("CommitArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
+func (e *evtCommitArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	inst := s.instances[e.to]
 	_ = inst.ObserveCommit(e.commit)
 	tryOpportunisticResolve(s, e.to)
 	out := captureCascadeEmissions(s, e.to)
-	if s.now > s.resolveDeadline {
+	if s.Now() > s.resolveDeadline {
 		if _, already := s.resolved[e.to]; !already {
-			out = append(out, scheduledEvent{when: s.now, ev: &evtResolveRerun{op: e.to}})
+			out = append(out, desim.Scheduled{When: s.Now(), Ev: &evtResolveRerun{op: e.to}})
 		}
 	}
 	return out
@@ -567,10 +543,11 @@ func (e *evtCommitArrival) handle(s *sim) []scheduledEvent {
 
 type evtResolve struct{}
 
-func (e *evtResolve) describe() string { return "Resolve" }
+func (e *evtResolve) Describe() string { return "Resolve" }
 
-func (e *evtResolve) handle(s *sim) []scheduledEvent {
-	var out []scheduledEvent
+func (e *evtResolve) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
+	var out []desim.Scheduled
 	for _, op := range s.operators {
 		out = append(out, resolveOpAndBroadcastCert(s, op)...)
 	}
@@ -583,11 +560,12 @@ type evtResolveRerun struct {
 	op twoab.OperatorID
 }
 
-func (e *evtResolveRerun) describe() string {
+func (e *evtResolveRerun) Describe() string {
 	return fmt.Sprintf("ResolveRerun[op=%d]", e.op)
 }
 
-func (e *evtResolveRerun) handle(s *sim) []scheduledEvent {
+func (e *evtResolveRerun) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	if _, decided := s.resolved[e.op]; decided {
 		return nil
 	}
@@ -601,11 +579,12 @@ type evtCertArrival struct {
 	cert     *twoab.Certificate
 }
 
-func (e *evtCertArrival) describe() string {
+func (e *evtCertArrival) Describe() string {
 	return fmt.Sprintf("CertArrival[from=%d to=%d]", e.from, e.to)
 }
 
-func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
+func (e *evtCertArrival) Handle(h desim.Host) []desim.Scheduled {
+	s := h.(*sim)
 	inst := s.instances[e.to]
 	if err := inst.ObserveCertificate(e.cert); err != nil {
 		return nil
@@ -618,11 +597,11 @@ func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
 		Value:     append(twoab.Value{}, e.cert.Value...),
 		Signature: append(twoab.Signature{}, e.cert.Signature...),
 	}
-	s.resolvedAt[e.to] = s.now
+	s.resolvedAt[e.to] = s.Now()
 	// Cert receipt is itself the earliest "submittable" moment for this
 	// op. Layer is unknown for cert-decided outputs; pass 0 so the
-	// recorded time is exactly s.now (no walk cost).
-	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, e.to, 0, s.now, s.cfg.Epsilon3)
+	// recorded time is exactly s.Now() (no walk cost).
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, e.to, 0, s.Now(), s.cfg.Epsilon3)
 	delete(s.resolveErrs, e.to)
 	return nil
 }
@@ -642,8 +621,8 @@ func (e *evtCertArrival) handle(s *sim) []scheduledEvent {
 // status to the cached flag and schedule arrivals for any newly-flipped
 // emission. The Instance enforces single-emission discipline internally;
 // the adapter's tracking handles the propagation side.
-func captureCascadeEmissions(s *sim, op twoab.OperatorID) []scheduledEvent {
-	var out []scheduledEvent
+func captureCascadeEmissions(s *sim, op twoab.OperatorID) []desim.Scheduled {
+	var out []desim.Scheduled
 	inst := s.instances[op]
 
 	if vm, ok := inst.OwnValueMsg(); ok && !s.valueMsgEmitted[op] {
@@ -687,7 +666,7 @@ func captureCascadeEmissions(s *sim, op twoab.OperatorID) []scheduledEvent {
 // delivery filter) cannot distinguish ValueMsg from NoValueMsg via the
 // MsgKind axis alone; patterns that need that distinction subclass the
 // adapter-internal hook (Override{Value,NoValue}Msg + Build{Value,NoValue}Extra*).
-func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []scheduledEvent {
+func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []desim.Scheduled {
 	if vm == nil {
 		return nil
 	}
@@ -697,14 +676,14 @@ func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []sched
 	bytes := valueMsgSize(vm)
 	vmCap := vm
 	fromCap := from
-	build := func(to twoab.OperatorID) event {
+	build := func(to twoab.OperatorID) desim.Event {
 		return &evtValueMsgArrival{from: fromCap, to: to, msg: cloneValueMsg(vmCap)}
 	}
 	if s.cfg.Mesh != nil {
 		s.emitMesh(from, ct.KindVerdict, -1, bytes, 0, s.operators, build)
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	for _, to := range s.operators {
 		if to == from {
 			continue
@@ -712,16 +691,16 @@ func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []sched
 		if !s.cfg.Byz.AllowDelivery(from, to, ct.KindVerdict) {
 			continue
 		}
-		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, ct.KindVerdict)
+		delay := s.cfg.Byz.OverrideDelay(s.Rng(), from, to, ct.KindVerdict)
 		if delay < 0 {
-			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict)
+			delay = s.cfg.Network.Delay(s.Rng(), ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict)
 		}
 		if s.cfg.Bandwidth != nil && bytes > 0 {
 			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict, -1, bytes)
 		}
-		out = append(out, scheduledEvent{
-			when: s.now + delay,
-			ev:   &evtValueMsgArrival{from: from, to: to, msg: cloneValueMsg(vm)},
+		out = append(out, desim.Scheduled{
+			When: s.Now() + delay,
+			Ev:   &evtValueMsgArrival{from: from, to: to, msg: cloneValueMsg(vm)},
 		})
 	}
 	return out
@@ -730,7 +709,7 @@ func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []sched
 // scheduleNoValueMsg broadcasts a NoValueMsg from `from` to every other
 // peer. Wire-kind: KindVerdict (shared with scheduleValueMsg) — see
 // scheduleValueMsg's comment for the rationale.
-func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []scheduledEvent {
+func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []desim.Scheduled {
 	if nv == nil {
 		return nil
 	}
@@ -740,14 +719,14 @@ func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []s
 	bytes := noValueMsgSize(nv)
 	nvCap := nv
 	fromCap := from
-	build := func(to twoab.OperatorID) event {
+	build := func(to twoab.OperatorID) desim.Event {
 		return &evtNoValueMsgArrival{from: fromCap, to: to, msg: cloneNoValueMsg(nvCap)}
 	}
 	if s.cfg.Mesh != nil {
 		s.emitMesh(from, ct.KindVerdict, -1, bytes, 0, s.operators, build)
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	for _, to := range s.operators {
 		if to == from {
 			continue
@@ -755,23 +734,23 @@ func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []s
 		if !s.cfg.Byz.AllowDelivery(from, to, ct.KindVerdict) {
 			continue
 		}
-		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, ct.KindVerdict)
+		delay := s.cfg.Byz.OverrideDelay(s.Rng(), from, to, ct.KindVerdict)
 		if delay < 0 {
-			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict)
+			delay = s.cfg.Network.Delay(s.Rng(), ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict)
 		}
 		if s.cfg.Bandwidth != nil && bytes > 0 {
 			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), ct.KindVerdict, -1, bytes)
 		}
-		out = append(out, scheduledEvent{
-			when: s.now + delay,
-			ev:   &evtNoValueMsgArrival{from: from, to: to, msg: cloneNoValueMsg(nv)},
+		out = append(out, desim.Scheduled{
+			When: s.Now() + delay,
+			Ev:   &evtNoValueMsgArrival{from: from, to: to, msg: cloneNoValueMsg(nv)},
 		})
 	}
 	return out
 }
 
 // scheduleCommit broadcasts a Commit from `from` to every other peer.
-func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledEvent {
+func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []desim.Scheduled {
 	if c == nil {
 		return nil
 	}
@@ -781,7 +760,7 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledE
 	bytes := commitSize(c)
 	cCap := c
 	fromCap := from
-	build := func(to twoab.OperatorID) event {
+	build := func(to twoab.OperatorID) desim.Event {
 		return &evtCommitArrival{from: fromCap, to: to, commit: cloneCommit(cCap)}
 	}
 	extraDelay := s.cfg.Byz.OverrideOwnCommitDispatchDelay(s, from)
@@ -789,7 +768,7 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledE
 		s.emitMesh(from, ct.KindCommit, -1, bytes, extraDelay, s.operators, build)
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	for _, to := range s.operators {
 		if to == from {
 			continue
@@ -797,16 +776,16 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledE
 		if !s.cfg.Byz.AllowDelivery(from, to, ct.KindCommit) {
 			continue
 		}
-		delay := s.cfg.Byz.OverrideDelay(s.rng, from, to, ct.KindCommit)
+		delay := s.cfg.Byz.OverrideDelay(s.Rng(), from, to, ct.KindCommit)
 		if delay < 0 {
-			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(from), ct.OperatorID(to), ct.KindCommit)
+			delay = s.cfg.Network.Delay(s.Rng(), ct.OperatorID(from), ct.OperatorID(to), ct.KindCommit)
 		}
 		if s.cfg.Bandwidth != nil && bytes > 0 {
 			s.cfg.Bandwidth.Emission(ct.OperatorID(from), ct.OperatorID(to), ct.KindCommit, -1, bytes)
 		}
-		out = append(out, scheduledEvent{
-			when: s.now + delay + extraDelay,
-			ev:   &evtCommitArrival{from: from, to: to, commit: cloneCommit(c)},
+		out = append(out, desim.Scheduled{
+			When: s.Now() + delay + extraDelay,
+			Ev:   &evtCommitArrival{from: from, to: to, commit: cloneCommit(c)},
 		})
 	}
 	return out
@@ -891,7 +870,7 @@ func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
 	if err != nil {
 		return
 	}
-	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.Now(), s.cfg.Epsilon3)
 }
 
 // resolveOpAndBroadcastCert runs Resolve for `op`, records the outcome in
@@ -900,7 +879,7 @@ func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
 //
 // On success, clears any prior resolveErrs entry so the late-recovered op
 // reports decided=true with no Err in the outcome.
-func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
+func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []desim.Scheduled {
 	res, err := s.instances[op].Resolve()
 	if err != nil {
 		if _, decided := s.resolved[op]; !decided {
@@ -911,9 +890,9 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 	s.resolved[op] = res
 	// Phase-3 walk cost grows linearly with the number of layers visited.
 	// Mirror the OBFT adapter's per-layer ε_3 accrual.
-	decisionTime := s.now + time.Duration(res.Layer)*s.cfg.Epsilon3
+	decisionTime := s.Now() + time.Duration(res.Layer)*s.cfg.Epsilon3
 	s.resolvedAt[op] = decisionTime
-	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.now, s.cfg.Epsilon3)
+	ct.RecordFirstOpportunisticQuorum(s.vQuorumAt, op, res.Layer, s.Now(), s.cfg.Epsilon3)
 	delete(s.resolveErrs, op)
 
 	if !s.cfg.Byz.AllowCertificateBroadcast(op) {
@@ -926,15 +905,15 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 	certBytes := certSize(cert)
 	certCap := cert
 	opCap := op
-	build := func(to twoab.OperatorID) event {
+	build := func(to twoab.OperatorID) desim.Event {
 		return &evtCertArrival{from: opCap, to: to, cert: cloneCertificate(certCap)}
 	}
-	extraDelay := decisionTime - s.now
+	extraDelay := decisionTime - s.Now()
 	if s.cfg.Mesh != nil {
 		s.emitMesh(op, ct.KindCertificate, -1, certBytes, extraDelay, s.operators, build)
 		return nil
 	}
-	var out []scheduledEvent
+	var out []desim.Scheduled
 	for _, to := range s.operators {
 		if to == op {
 			continue
@@ -942,17 +921,17 @@ func resolveOpAndBroadcastCert(s *sim, op twoab.OperatorID) []scheduledEvent {
 		if !s.cfg.Byz.AllowDelivery(op, to, ct.KindCertificate) {
 			continue
 		}
-		delay := s.cfg.Byz.OverrideDelay(s.rng, op, to, ct.KindCertificate)
+		delay := s.cfg.Byz.OverrideDelay(s.Rng(), op, to, ct.KindCertificate)
 		if delay < 0 {
-			delay = s.cfg.Network.Delay(s.rng, ct.OperatorID(op), ct.OperatorID(to), ct.KindCertificate)
+			delay = s.cfg.Network.Delay(s.Rng(), ct.OperatorID(op), ct.OperatorID(to), ct.KindCertificate)
 		}
 		if s.cfg.Bandwidth != nil && certBytes > 0 {
 			s.cfg.Bandwidth.Emission(ct.OperatorID(op), ct.OperatorID(to),
 				ct.KindCertificate, -1, certBytes)
 		}
-		out = append(out, scheduledEvent{
-			when: decisionTime + delay,
-			ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},
+		out = append(out, desim.Scheduled{
+			When: decisionTime + delay,
+			Ev:   &evtCertArrival{from: op, to: to, cert: cloneCertificate(cert)},
 		})
 	}
 	return out

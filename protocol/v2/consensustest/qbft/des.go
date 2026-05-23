@@ -1,10 +1,8 @@
 package qbft
 
 import (
-	"container/heap"
 	"context"
 	"fmt"
-	mrand "math/rand"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
 	qbftcfg "github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftinstance "github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -40,16 +39,20 @@ func runDES(cfg desConfig) (rawOutcome, error) {
 	if err := s.start(); err != nil {
 		return rawOutcome{}, err
 	}
-	s.runLoop()
+	// Cap virtual time at the relay cutoff plus one recovery round (see
+	// Engine.RunUntil) — far enough to capture every round that can decide
+	// before the deadline (decisions past RelayCutoff − headroom are clipped
+	// to MISS by the adapter) plus the first round that lands just after it
+	// (for miss labelling). NOT a function of RT × MaxRounds: the pristine
+	// per-round RT is tiny, so that product would cut the sim off long before
+	// the deadline and starve QBFT-no-reflood of the later rounds it can fit.
+	s.RunUntil(s, s.cfg.RelayCutoff+s.cfg.RT+s.cfg.RTRecoveryExtra)
 	return s.outcome(), nil
 }
 
 type sim struct {
+	*desim.Engine
 	cfg                  desConfig
-	rng                  *mrand.Rand
-	now                  time.Duration
-	queue                eventQueue
-	seq                  int64
 	operators            []spectypes.OperatorID
 	keys                 *spectestingutils.TestKeySet
 	committee            *spectypes.CommitteeMember
@@ -65,7 +68,6 @@ type sim struct {
 	// suppressed by crashOverlay + the emitMesh guard; this set lets outcome()
 	// exclude them from the decided set and stamp Err="offline".
 	crashed map[spectypes.OperatorID]bool
-	trace   []ct.TraceEntry
 
 	// Post-consensus partial-sig aggregation state. partials[receiver]
 	// [valueKey] is the set of signers whose partial sig the receiver
@@ -110,9 +112,9 @@ func newSim(cfg desConfig) (*sim, error) {
 		crashed[spectypes.OperatorID(op)] = true
 	}
 
-	return &sim{
+	s := &sim{
+		Engine:     desim.NewEngine(cfg.Seed, cfg.TraceEnabled),
 		cfg:        cfg,
-		rng:        mrand.New(mrand.NewSource(cfg.Seed)),
 		operators:  operators,
 		keys:       keys,
 		committee:  committee,
@@ -136,8 +138,25 @@ func newSim(cfg desConfig) (*sim, error) {
 		crashed:              crashed,
 		partials:             make(map[spectypes.OperatorID]map[string]map[spectypes.OperatorID]bool, cfg.N),
 		readyAt:              make(map[spectypes.OperatorID]time.Duration, cfg.N),
-	}, nil
+	}
+	// QBFT deprioritizes the round-timeout at equal virtual time so a decision
+	// reachable the instant the timer fires wins: the COMMIT arrival is
+	// processed first, drives the instance to decided, and the timer then
+	// no-ops (evtRoundTimeout.handle bails on IsDecided). This is what lets the
+	// pristine RT = 3·BTT floor (adapter.go) hold under ConstantDelay, where the
+	// healthy decision and the timer both land at exactly 3·BTT.
+	s.SetEqualTimeLowPriority(func(ev desim.Event) bool {
+		_, ok := ev.(*evtRoundTimeout)
+		return ok
+	})
+	return s, nil
 }
+
+// Mesh / Network / Bandwidth satisfy desim.Host (Now/Rng/Schedule/Run/Trace
+// come from the embedded *desim.Engine).
+func (s *sim) Mesh() *ct.MeshTopology         { return s.cfg.Mesh }
+func (s *sim) Network() ct.NetworkModel       { return s.cfg.Network }
+func (s *sim) Bandwidth() *ct.BandwidthReport { return s.cfg.Bandwidth }
 
 func (s *sim) start() error {
 	// Construct an Instance for each honest operator. Byz operators get no
@@ -159,7 +178,7 @@ func (s *sim) start() error {
 		if s.byz.IsByz(ct.OperatorID(op)) {
 			continue
 		}
-		s.schedule(s.cfg.BFTStart, &evtStartInstance{op: op})
+		s.Schedule(s.cfg.BFTStart, &evtStartInstance{op: op})
 	}
 	// Byz round-1 proposer is dispatched separately — the byz pattern's
 	// ProposalPlanForRound returns the messages to fabricate. Goes through
@@ -183,7 +202,7 @@ func (s *sim) scheduleByzProposal(when time.Duration, leader spectypes.OperatorI
 		return
 	}
 	s.byzProposalScheduled[round] = true
-	s.schedule(when, &evtByzProposal{leader: leader, round: round})
+	s.Schedule(when, &evtByzProposal{leader: leader, round: round})
 }
 
 func (s *sim) buildInstance(op spectypes.OperatorID) (*qbftinstance.Instance, error) {
@@ -219,42 +238,12 @@ func (s *sim) buildInstance(op spectypes.OperatorID) (*qbftinstance.Instance, er
 	return inst, nil
 }
 
-func (s *sim) runLoop() {
-	// Cap virtual time at the slot's relay cutoff plus one recovery round —
-	// far enough to capture every round that can decide before the deadline
-	// (decisions past RelayCutoff − headroom are clipped to MISS by the
-	// adapter) plus the first round that lands just after it (for miss
-	// labelling). NOT a function of RT × MaxRounds: the pristine per-round RT
-	// is tiny, so that product would cut the sim off long before the deadline
-	// and starve QBFT-no-reflood of the later rounds it can actually fit.
-	maxTime := s.cfg.RelayCutoff + s.cfg.RT + s.cfg.RTRecoveryExtra
-	for s.queue.Len() > 0 {
-		e := heap.Pop(&s.queue).(*queueItem)
-		if e.when > maxTime {
-			break
-		}
-		s.now = e.when
-		if s.cfg.TraceEnabled {
-			s.trace = append(s.trace, ct.TraceEntry{When: e.when, Event: e.ev.describe()})
-		}
-		newEvents := e.ev.handle(s)
-		for _, ne := range newEvents {
-			s.schedule(ne.when, ne.ev)
-		}
-	}
-}
-
-func (s *sim) schedule(when time.Duration, ev event) {
-	s.seq++
-	heap.Push(&s.queue, &queueItem{when: when, seq: s.seq, ev: ev})
-}
-
 func (s *sim) outcome() rawOutcome {
 	out := rawOutcome{
 		decided:               false,
 		decidedRound:          -1,
 		perOp:                 make(map[ct.OperatorID]rawOpOutcome, len(s.operators)),
-		trace:                 s.trace,
+		trace:                 s.Trace(),
 		equivocationsObserved: s.equivocationsObserved,
 	}
 	// "Ready to submit" semantic: an op is considered Decided only when
@@ -320,7 +309,7 @@ func (s *sim) quorum() int {
 
 // recordPartialSig records a partial-sig observation at `receiver` from
 // `signer` on `value`. Idempotent on duplicate (signer, value) at the
-// same receiver. Sets s.readyAt[receiver] = s.now the first time the
+// same receiver. Sets s.readyAt[receiver] = s.Now() the first time the
 // distinct-signer count for `value` reaches quorum (2f+1) AND `receiver`
 // has locally decided that same `value`.
 //
@@ -367,7 +356,7 @@ func (s *sim) recordPartialSig(receiver, signer spectypes.OperatorID, value []by
 		// PROPOSE/PREPARE). The receiver can't submit this cert.
 		return
 	}
-	s.readyAt[receiver] = s.now
+	s.readyAt[receiver] = s.Now()
 }
 
 // canonValueForRound returns a per-round canonical value. Different per round
