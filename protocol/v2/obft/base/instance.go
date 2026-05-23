@@ -822,20 +822,7 @@ func valueRootKey(v Value) string {
 //
 // The innermost wrap uses nr_tag_{k-1}; the outermost uses nr_tag_0.
 func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
-	if k == 0 {
-		return partial, nil // L_0 plaintext
-	}
-	inner := partial
-	// Wrap from innermost (nr_tag_{k-1}) to outermost (nr_tag_0).
-	for j := k - 1; j >= 0; j-- {
-		tag := obft.NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, j)
-		ct, err := i.ibe.Encrypt(i.clusterPubKey, tag, inner)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt at chain level %d: %w", j, err)
-		}
-		inner = ct
-	}
-	return inner, nil
+	return obft.ChainEncryptForLayer(i.ibe, i.clusterPubKey, i.cfg.ClusterID, i.cfg.Height, k, partial)
 }
 
 // chainDecryptForLayer decrypts a layer-k onion entry using `decryptionKeys`
@@ -847,22 +834,7 @@ func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
 //
 // Returns the recovered σ partial bytes.
 func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys [][]byte) ([]byte, error) {
-	if k == 0 {
-		return ciphertext, nil // L_0 plaintext
-	}
-	if len(decryptionKeys) < k {
-		return nil, fmt.Errorf("obft: need %d chained-decryption keys for layer %d, have %d",
-			k, k, len(decryptionKeys))
-	}
-	outer := ciphertext
-	for j := 0; j < k; j++ {
-		pt, err := i.ibe.Decrypt(outer, decryptionKeys[j])
-		if err != nil {
-			return nil, fmt.Errorf("decrypt at chain level %d: %w", j, err)
-		}
-		outer = pt
-	}
-	return outer, nil
+	return obft.ChainDecryptForLayer(i.ibe, k, ciphertext, decryptionKeys)
 }
 
 // transitionToSigma applies the σ-emit EKM lock for `layer` on `value`.

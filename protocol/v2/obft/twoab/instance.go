@@ -803,19 +803,7 @@ func (i *Instance) transitionToNR(layer int) error {
 // The innermost wrap uses nr_tag_{k-1}; the outermost uses nr_tag_0.
 // At k = 0, returns `partial` unchanged (plaintext per spec).
 func (i *Instance) chainEncryptForLayer(k int, partial []byte) ([]byte, error) {
-	if k == 0 {
-		return partial, nil
-	}
-	inner := partial
-	for j := k - 1; j >= 0; j-- {
-		tag := NoQuorumTag(i.cfg.ClusterID, i.cfg.Height, j)
-		ct, err := i.ibe.Encrypt(i.clusterPubKey, tag, inner)
-		if err != nil {
-			return nil, fmt.Errorf("twoab: encrypt at chain level %d: %w", j, err)
-		}
-		inner = ct
-	}
-	return inner, nil
+	return obft.ChainEncryptForLayer(i.ibe, i.clusterPubKey, i.cfg.ClusterID, i.cfg.Height, k, partial)
 }
 
 // verifyNRTagPartial returns true if `partial` is a valid threshold
@@ -853,22 +841,7 @@ func (i *Instance) verifyNRTagPartial(op OperatorID, layer int, partial Signatur
 //
 // Decryption applies keys outermost-first.
 func (i *Instance) chainDecryptForLayer(k int, ciphertext []byte, decryptionKeys [][]byte) ([]byte, error) {
-	if k == 0 {
-		return ciphertext, nil
-	}
-	if len(decryptionKeys) < k {
-		return nil, fmt.Errorf("twoab: need %d chained-decryption keys for layer %d, have %d",
-			k, k, len(decryptionKeys))
-	}
-	outer := ciphertext
-	for j := 0; j < k; j++ {
-		pt, err := i.ibe.Decrypt(outer, decryptionKeys[j])
-		if err != nil {
-			return nil, fmt.Errorf("twoab: decrypt at chain level %d: %w", j, err)
-		}
-		outer = pt
-	}
-	return outer, nil
+	return obft.ChainDecryptForLayer(i.ibe, k, ciphertext, decryptionKeys)
 }
 
 // ---------- Per-rule dedup helpers ----------
