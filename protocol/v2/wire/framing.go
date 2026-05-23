@@ -1,7 +1,9 @@
-// Package wire provides shared low-level wire-envelope framing primitives
-// used by SSV-side message-kind discriminators (notably tbft/wire and
-// dkg/wire). Domain packages keep their own kind enums and dispatch logic;
-// this package handles only the version-prefix-plus-kind framing.
+// Package wire provides shared low-level wire primitives for SSV's binary
+// message codecs: version-prefix-plus-kind envelope framing (this file) and
+// domain-agnostic length-prefixed read/write helpers (codec.go). Domain
+// packages (notably tbft/wire, dkg/wire, and obft's base/twoab wire packages)
+// keep their own kind enums, size caps, and per-message layouts, and build on
+// these primitives.
 //
 // On-wire frame:
 //

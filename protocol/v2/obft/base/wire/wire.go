@@ -8,11 +8,12 @@
 package wire
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 	base "github.com/ssvlabs/ssv/protocol/v2/obft/base"
+	sharedwire "github.com/ssvlabs/ssv/protocol/v2/wire"
 )
 
 // Wire format versions. Bumped when the on-the-wire layout changes
@@ -54,51 +55,16 @@ const (
 	innerKindCertificate  byte = 0x03
 )
 
-// MaxLayers caps the number of layers a Commit can declare on the wire.
-// Real OBFT configs use K ≤ n ≤ 13 in SSV; anything past 32 is almost
-// certainly malformed/malicious.
-const MaxLayers = 32
-
-// Per-field length caps on length-prefixed payloads. Each cap is tight to
-// the realistic size of its field type, with a healthy multiplicative
-// margin for future protocol evolution. The wire decoder rejects any field
-// length exceeding its cap before allocating the slice, bounding the
-// unbounded-allocation surface a malformed message can exercise.
-//
-// Choosing per-field bounds (rather than one global MaxFieldSize) tightens
-// the realistic upper bound on a Commit body's retained size — relevant
-// because a single byzantine's FIRST distinct Commit is deep-copied into
-// peerFirstCommit until Rule 3 fires on the second distinct emission, and
-// the protocol layer retains up to MaxRetainedPerOpLayer × n × layers of
-// onion entries during a slot.
+// Wire-level caps. Defined once in the parent obft package and re-exported
+// here (and identically in twoab/wire) so both OBFT-family codecs share one
+// reconciled set of bounds — see protocol/v2/obft/wire_caps.go. Layer indices
+// are valid in [0, MaxLayers); counts are valid in [0, MaxLayers].
 const (
-	// MaxValueSize caps proposer-duty candidate values (Phase1Bundle.Value,
-	// EncryptedLayer.Value, Certificate.Value). Real beacon-block-V3 with
-	// EIP-4844 blob commitments lands ~1–2 KB; future scaling (PeerDAS,
-	// larger blocks) may grow this. 1 MiB gives ~500× margin while still
-	// bounding total commit retention to single-digit MB per byzantine.
-	MaxValueSize = 1 * 1024 * 1024
-
-	// MaxSignatureSize caps BLS partial / aggregate signatures
-	// (Phase1Bundle.LeaderSigma, NRPartial.PartialSig, LeaderSigmaWitness.Sigma,
-	// Certificate.Signature). Real BLS12-381 signatures are 96 B and
-	// partial-sig aggregates the same. 1 KiB is 10× margin against any
-	// conceivable future signature scheme variant.
-	MaxSignatureSize = 1 * 1024
-
-	// MaxCiphertextSize caps IBE-wrapped σ partials in commit-layer onions
-	// (EncryptedLayer.Ciphertext). Inner plaintext is a ~96 B BLS partial;
-	// chained-IBE wrapping at layer k applies k encryptions, each adding
-	// constant overhead (~300 B for current IBE schemes). At K ≤ MaxLayers
-	// the worst case is ≈ 96 + 32 × 300 ≈ 10 KiB; 64 KiB gives ~6× margin.
-	MaxCiphertextSize = 64 * 1024
+	MaxLayers         = obft.MaxLayers
+	MaxValueSize      = obft.MaxValueSize
+	MaxSignatureSize  = obft.MaxSignatureSize
+	MaxCiphertextSize = obft.MaxCiphertextSize
 )
-
-// MaxFieldSize is the coarse upper bound covering any single length-prefixed
-// field — equal to MaxValueSize because Value is the largest field type.
-// Retained for backward compatibility with external test helpers that use
-// it as a sanity ceiling on the realistic field space.
-const MaxFieldSize = MaxValueSize
 
 // EncodePhase1Bundle serializes a Phase-1 bundle.
 //
@@ -135,45 +101,45 @@ func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindPhase1Bundle)
 	out = append(out, b.ClusterID[:]...)
-	out = appendUint64(out, uint64(b.OperatorID))
-	out = appendUint64(out, uint64(b.Height))
-	out = appendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
-	out = appendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint64(out, uint64(b.OperatorID))
+	out = sharedwire.AppendUint64(out, uint64(b.Height))
+	out = sharedwire.AppendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
+	out = sharedwire.AppendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
 	out = append(out, b.Value...)
-	out = appendUint32(out, uint32(len(b.LeaderSigma))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint32(out, uint32(len(b.LeaderSigma))) //nolint:gosec // bounds-checked
 	out = append(out, b.LeaderSigma...)
 	return out, nil
 }
 
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
 func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
-	r := newReader(data)
-	version, err := r.byte_("version")
+	r := sharedwire.NewReader(data)
+	version, err := r.Byte("version")
 	if err != nil {
 		return nil, err
 	}
 	if version != Phase1BundleVersionV1 {
 		return nil, fmt.Errorf("wire: unsupported phase-1 bundle version 0x%02x", version)
 	}
-	if err := r.expectProtocolTag(); err != nil {
+	if err := expectProtocolTag(r); err != nil {
 		return nil, err
 	}
-	if err := r.expectInnerKind(innerKindPhase1Bundle, "phase-1 bundle"); err != nil {
+	if err := expectInnerKind(r, innerKindPhase1Bundle, "phase-1 bundle"); err != nil {
 		return nil, err
 	}
-	clusterID, err := r.cluster_("cluster id")
+	var clusterID [32]byte
+	if err := r.FixedBytes(clusterID[:], "cluster id"); err != nil {
+		return nil, err
+	}
+	opID, err := r.Uint64("operator id")
 	if err != nil {
 		return nil, err
 	}
-	opID, err := r.uint64_("operator id")
+	height, err := r.Uint64("height")
 	if err != nil {
 		return nil, err
 	}
-	height, err := r.uint64_("height")
-	if err != nil {
-		return nil, err
-	}
-	layer, err := r.uint32_("layer")
+	layer, err := r.Uint32("layer")
 	if err != nil {
 		return nil, err
 	}
@@ -182,30 +148,16 @@ func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 	if layer >= MaxLayers {
 		return nil, fmt.Errorf("wire: phase-1 bundle layer %d exceeds MaxLayers %d", layer, MaxLayers)
 	}
-	valueLen, err := r.uint32_("value length")
+	value, err := r.LengthPrefixed("phase-1 value", MaxValueSize)
 	if err != nil {
 		return nil, err
 	}
-	if valueLen > MaxValueSize {
-		return nil, fmt.Errorf("wire: phase-1 value too long (%d)", valueLen)
-	}
-	value, err := r.bytes(int(valueLen), "value")
+	sig, err := r.LengthPrefixed("phase-1 LeaderSigma", MaxSignatureSize)
 	if err != nil {
 		return nil, err
 	}
-	sigLen, err := r.uint32_("LeaderSigma length")
-	if err != nil {
+	if err := r.RequireEOF("phase-1 bundle"); err != nil {
 		return nil, err
-	}
-	if sigLen > MaxSignatureSize {
-		return nil, fmt.Errorf("wire: phase-1 LeaderSigma too long (%d)", sigLen)
-	}
-	sig, err := r.bytes(int(sigLen), "LeaderSigma")
-	if err != nil {
-		return nil, err
-	}
-	if r.remaining() != 0 {
-		return nil, fmt.Errorf("wire: %d trailing bytes after phase-1 bundle", r.remaining())
 	}
 	return &base.Phase1Bundle{
 		ClusterID:   clusterID,
@@ -283,9 +235,9 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindCommit)
 	out = append(out, c.ClusterID[:]...)
-	out = appendUint64(out, uint64(c.OperatorID))
-	out = appendUint64(out, uint64(c.Height))
-	out = appendUint16(out, uint16(len(c.Layers))) //nolint:gosec // MaxLayers <= uint16 max
+	out = sharedwire.AppendUint64(out, uint64(c.OperatorID))
+	out = sharedwire.AppendUint64(out, uint64(c.Height))
+	out = sharedwire.AppendUint16(out, uint16(len(c.Layers))) //nolint:gosec // MaxLayers <= uint16 max
 	for i, el := range c.Layers {
 		if len(el.Value) > MaxValueSize {
 			return nil, fmt.Errorf("wire: commit layer %d value too long (%d)", i, len(el.Value))
@@ -293,12 +245,12 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 		if len(el.Ciphertext) > MaxCiphertextSize {
 			return nil, fmt.Errorf("wire: commit layer %d ciphertext too long (%d)", i, len(el.Ciphertext))
 		}
-		out = appendUint32(out, uint32(len(el.Value)))      //nolint:gosec // bounds-checked
-		out = append(out, el.Value...)                      //
-		out = appendUint32(out, uint32(len(el.Ciphertext))) //nolint:gosec // bounds-checked
+		out = sharedwire.AppendUint32(out, uint32(len(el.Value)))      //nolint:gosec // bounds-checked
+		out = append(out, el.Value...)                                 //
+		out = sharedwire.AppendUint32(out, uint32(len(el.Ciphertext))) //nolint:gosec // bounds-checked
 		out = append(out, el.Ciphertext...)
 	}
-	out = appendUint16(out, uint16(len(c.NRPartials))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint16(out, uint16(len(c.NRPartials))) //nolint:gosec // bounds-checked
 	for _, p := range c.NRPartials {
 		if p.Layer < 0 {
 			return nil, fmt.Errorf("wire: commit NR partial has negative layer %d", p.Layer)
@@ -306,11 +258,11 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 		if len(p.PartialSig) > MaxSignatureSize {
 			return nil, fmt.Errorf("wire: commit NR partial sig too long (%d)", len(p.PartialSig))
 		}
-		out = appendUint32(out, uint32(p.Layer))           //nolint:gosec // bounds-checked
-		out = appendUint32(out, uint32(len(p.PartialSig))) //nolint:gosec // bounds-checked
+		out = sharedwire.AppendUint32(out, uint32(p.Layer))           //nolint:gosec // bounds-checked
+		out = sharedwire.AppendUint32(out, uint32(len(p.PartialSig))) //nolint:gosec // bounds-checked
 		out = append(out, p.PartialSig...)
 	}
-	out = appendUint16(out, uint16(len(c.Witnesses))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint16(out, uint16(len(c.Witnesses))) //nolint:gosec // bounds-checked
 	for i, w := range c.Witnesses {
 		if w.Layer < 0 {
 			return nil, fmt.Errorf("wire: commit witness %d has negative layer %d", i, w.Layer)
@@ -318,10 +270,10 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 		if len(w.Sigma) > MaxSignatureSize {
 			return nil, fmt.Errorf("wire: commit witness %d leader sigma too long (%d)", i, len(w.Sigma))
 		}
-		out = appendUint32(out, uint32(w.Layer))      //nolint:gosec // bounds-checked
-		out = appendUint64(out, uint64(w.Leader))     //
-		out = append(out, w.ValueRoot[:]...)          // fixed 32 bytes
-		out = appendUint32(out, uint32(len(w.Sigma))) //nolint:gosec // bounds-checked
+		out = sharedwire.AppendUint32(out, uint32(w.Layer))      //nolint:gosec // bounds-checked
+		out = sharedwire.AppendUint64(out, uint64(w.Leader))     //
+		out = append(out, w.ValueRoot[:]...)                     // fixed 32 bytes
+		out = sharedwire.AppendUint32(out, uint32(len(w.Sigma))) //nolint:gosec // bounds-checked
 		out = append(out, w.Sigma...)
 	}
 	return out, nil
@@ -329,33 +281,33 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 
 // DecodeCommit parses bytes produced by EncodeCommit.
 func DecodeCommit(data []byte) (*base.Commit, error) {
-	r := newReader(data)
-	version, err := r.byte_("version")
+	r := sharedwire.NewReader(data)
+	version, err := r.Byte("version")
 	if err != nil {
 		return nil, err
 	}
 	if version != CommitVersionV1 {
 		return nil, fmt.Errorf("wire: unsupported commit version 0x%02x", version)
 	}
-	if err := r.expectProtocolTag(); err != nil {
+	if err := expectProtocolTag(r); err != nil {
 		return nil, err
 	}
-	if err := r.expectInnerKind(innerKindCommit, "commit"); err != nil {
+	if err := expectInnerKind(r, innerKindCommit, "commit"); err != nil {
 		return nil, err
 	}
-	clusterID, err := r.cluster_("cluster id")
+	var clusterID [32]byte
+	if err := r.FixedBytes(clusterID[:], "cluster id"); err != nil {
+		return nil, err
+	}
+	opID, err := r.Uint64("operator id")
 	if err != nil {
 		return nil, err
 	}
-	opID, err := r.uint64_("operator id")
+	height, err := r.Uint64("height")
 	if err != nil {
 		return nil, err
 	}
-	height, err := r.uint64_("height")
-	if err != nil {
-		return nil, err
-	}
-	numLayers, err := r.uint16_("layer count")
+	numLayers, err := r.Uint16("layer count")
 	if err != nil {
 		return nil, err
 	}
@@ -364,25 +316,11 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 	}
 	layers := make([]base.EncryptedLayer, numLayers)
 	for i := uint16(0); i < numLayers; i++ {
-		valueLen, err := r.uint32_(fmt.Sprintf("layer %d value length", i))
+		value, err := r.LengthPrefixed(fmt.Sprintf("layer %d value", i), MaxValueSize)
 		if err != nil {
 			return nil, err
 		}
-		if valueLen > MaxValueSize {
-			return nil, fmt.Errorf("wire: layer %d value too long (%d)", i, valueLen)
-		}
-		value, err := r.bytes(int(valueLen), fmt.Sprintf("layer %d value", i))
-		if err != nil {
-			return nil, err
-		}
-		ctLen, err := r.uint32_(fmt.Sprintf("layer %d ciphertext length", i))
-		if err != nil {
-			return nil, err
-		}
-		if ctLen > MaxCiphertextSize {
-			return nil, fmt.Errorf("wire: layer %d ciphertext too long (%d)", i, ctLen)
-		}
-		ct, err := r.bytes(int(ctLen), fmt.Sprintf("layer %d ciphertext", i))
+		ct, err := r.LengthPrefixed(fmt.Sprintf("layer %d ciphertext", i), MaxCiphertextSize)
 		if err != nil {
 			return nil, err
 		}
@@ -391,7 +329,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 			Ciphertext: ct,
 		}
 	}
-	nrCount, err := r.uint16_("NR partial count")
+	nrCount, err := r.Uint16("NR partial count")
 	if err != nil {
 		return nil, err
 	}
@@ -400,21 +338,14 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 	}
 	partials := make([]base.NRPartial, nrCount)
 	for i := uint16(0); i < nrCount; i++ {
-		layer, err := r.uint32_(fmt.Sprintf("NR partial %d layer", i))
+		layer, err := r.Uint32(fmt.Sprintf("NR partial %d layer", i))
 		if err != nil {
 			return nil, err
 		}
 		if layer >= MaxLayers {
 			return nil, fmt.Errorf("wire: NR partial %d layer %d exceeds MaxLayers %d", i, layer, MaxLayers)
 		}
-		sigLen, err := r.uint32_(fmt.Sprintf("NR partial %d sig length", i))
-		if err != nil {
-			return nil, err
-		}
-		if sigLen > MaxSignatureSize {
-			return nil, fmt.Errorf("wire: NR partial %d sig too long (%d)", i, sigLen)
-		}
-		sig, err := r.bytes(int(sigLen), fmt.Sprintf("NR partial %d sig", i))
+		sig, err := r.LengthPrefixed(fmt.Sprintf("NR partial %d sig", i), MaxSignatureSize)
 		if err != nil {
 			return nil, err
 		}
@@ -423,7 +354,7 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 			PartialSig: base.Signature(sig),
 		}
 	}
-	witnessCount, err := r.uint16_("witness count")
+	witnessCount, err := r.Uint16("witness count")
 	if err != nil {
 		return nil, err
 	}
@@ -432,34 +363,25 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 	}
 	witnesses := make([]base.LeaderSigmaWitness, witnessCount)
 	for i := uint16(0); i < witnessCount; i++ {
-		layer, err := r.uint32_(fmt.Sprintf("witness %d layer", i))
+		layer, err := r.Uint32(fmt.Sprintf("witness %d layer", i))
 		if err != nil {
 			return nil, err
 		}
 		if layer >= MaxLayers {
 			return nil, fmt.Errorf("wire: witness %d layer %d exceeds MaxLayers %d", i, layer, MaxLayers)
 		}
-		leader, err := r.uint64_(fmt.Sprintf("witness %d leader", i))
-		if err != nil {
-			return nil, err
-		}
-		valueRootBytes, err := r.bytes(32, fmt.Sprintf("witness %d valueRoot", i))
-		if err != nil {
-			return nil, err
-		}
-		sigLen, err := r.uint32_(fmt.Sprintf("witness %d leader sigma length", i))
-		if err != nil {
-			return nil, err
-		}
-		if sigLen > MaxSignatureSize {
-			return nil, fmt.Errorf("wire: witness %d leader sigma too long (%d)", i, sigLen)
-		}
-		sig, err := r.bytes(int(sigLen), fmt.Sprintf("witness %d leader sigma", i))
+		leader, err := r.Uint64(fmt.Sprintf("witness %d leader", i))
 		if err != nil {
 			return nil, err
 		}
 		var valueRoot [32]byte
-		copy(valueRoot[:], valueRootBytes)
+		if err := r.FixedBytes(valueRoot[:], fmt.Sprintf("witness %d valueRoot", i)); err != nil {
+			return nil, err
+		}
+		sig, err := r.LengthPrefixed(fmt.Sprintf("witness %d leader sigma", i), MaxSignatureSize)
+		if err != nil {
+			return nil, err
+		}
 		witnesses[i] = base.LeaderSigmaWitness{
 			Layer:     int(layer),
 			Leader:    base.OperatorID(leader),
@@ -467,8 +389,8 @@ func DecodeCommit(data []byte) (*base.Commit, error) {
 			Sigma:     base.Signature(sig),
 		}
 	}
-	if r.remaining() != 0 {
-		return nil, fmt.Errorf("wire: %d trailing bytes after commit", r.remaining())
+	if err := r.RequireEOF("commit"); err != nil {
+		return nil, err
 	}
 	return &base.Commit{
 		ClusterID:  clusterID,
@@ -510,62 +432,48 @@ func EncodeCertificate(c *base.Certificate) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindCertificate)
 	out = append(out, c.ClusterID[:]...)
-	out = appendUint64(out, uint64(c.Height))
-	out = appendUint32(out, uint32(len(c.Value)))     //nolint:gosec // bounds-checked
-	out = append(out, c.Value...)                     //
-	out = appendUint32(out, uint32(len(c.Signature))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint64(out, uint64(c.Height))
+	out = sharedwire.AppendUint32(out, uint32(len(c.Value)))     //nolint:gosec // bounds-checked
+	out = append(out, c.Value...)                                //
+	out = sharedwire.AppendUint32(out, uint32(len(c.Signature))) //nolint:gosec // bounds-checked
 	out = append(out, c.Signature...)
 	return out, nil
 }
 
 // DecodeCertificate parses bytes produced by EncodeCertificate.
 func DecodeCertificate(data []byte) (*base.Certificate, error) {
-	r := newReader(data)
-	version, err := r.byte_("version")
+	r := sharedwire.NewReader(data)
+	version, err := r.Byte("version")
 	if err != nil {
 		return nil, err
 	}
 	if version != CertificateVersionV1 {
 		return nil, fmt.Errorf("wire: unsupported certificate version 0x%02x", version)
 	}
-	if err := r.expectProtocolTag(); err != nil {
+	if err := expectProtocolTag(r); err != nil {
 		return nil, err
 	}
-	if err := r.expectInnerKind(innerKindCertificate, "certificate"); err != nil {
+	if err := expectInnerKind(r, innerKindCertificate, "certificate"); err != nil {
 		return nil, err
 	}
-	clusterID, err := r.cluster_("cluster id")
+	var clusterID [32]byte
+	if err := r.FixedBytes(clusterID[:], "cluster id"); err != nil {
+		return nil, err
+	}
+	height, err := r.Uint64("height")
 	if err != nil {
 		return nil, err
 	}
-	height, err := r.uint64_("height")
+	value, err := r.LengthPrefixed("certificate value", MaxValueSize)
 	if err != nil {
 		return nil, err
 	}
-	valueLen, err := r.uint32_("value length")
+	sig, err := r.LengthPrefixed("certificate signature", MaxSignatureSize)
 	if err != nil {
 		return nil, err
 	}
-	if valueLen > MaxValueSize {
-		return nil, fmt.Errorf("wire: certificate value too long (%d)", valueLen)
-	}
-	value, err := r.bytes(int(valueLen), "value")
-	if err != nil {
+	if err := r.RequireEOF("certificate"); err != nil {
 		return nil, err
-	}
-	sigLen, err := r.uint32_("signature length")
-	if err != nil {
-		return nil, err
-	}
-	if sigLen > MaxSignatureSize {
-		return nil, fmt.Errorf("wire: certificate signature too long (%d)", sigLen)
-	}
-	sig, err := r.bytes(int(sigLen), "signature")
-	if err != nil {
-		return nil, err
-	}
-	if r.remaining() != 0 {
-		return nil, fmt.Errorf("wire: %d trailing bytes after certificate", r.remaining())
 	}
 	return &base.Certificate{
 		ClusterID: clusterID,
@@ -575,74 +483,11 @@ func DecodeCertificate(data []byte) (*base.Certificate, error) {
 	}, nil
 }
 
-// ---- internal byte readers / writers ------------------------------------
+// ---- domain header readers ----------------------------------------------
 
-func appendUint16(b []byte, v uint16) []byte {
-	var buf [2]byte
-	binary.BigEndian.PutUint16(buf[:], v)
-	return append(b, buf[:]...)
-}
-
-func appendUint32(b []byte, v uint32) []byte {
-	var buf [4]byte
-	binary.BigEndian.PutUint32(buf[:], v)
-	return append(b, buf[:]...)
-}
-
-func appendUint64(b []byte, v uint64) []byte {
-	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], v)
-	return append(b, buf[:]...)
-}
-
-type reader struct {
-	data []byte
-	pos  int
-}
-
-func newReader(data []byte) *reader { return &reader{data: data} }
-
-func (r *reader) remaining() int { return len(r.data) - r.pos }
-
-func (r *reader) byte_(name string) (byte, error) {
-	if r.remaining() < 1 {
-		return 0, fmt.Errorf("wire: truncated reading %s", name)
-	}
-	b := r.data[r.pos]
-	r.pos++
-	return b, nil
-}
-
-func (r *reader) uint16_(name string) (uint16, error) {
-	if r.remaining() < 2 {
-		return 0, fmt.Errorf("wire: truncated reading %s", name)
-	}
-	v := binary.BigEndian.Uint16(r.data[r.pos : r.pos+2])
-	r.pos += 2
-	return v, nil
-}
-
-func (r *reader) uint32_(name string) (uint32, error) {
-	if r.remaining() < 4 {
-		return 0, fmt.Errorf("wire: truncated reading %s", name)
-	}
-	v := binary.BigEndian.Uint32(r.data[r.pos : r.pos+4])
-	r.pos += 4
-	return v, nil
-}
-
-func (r *reader) uint64_(name string) (uint64, error) {
-	if r.remaining() < 8 {
-		return 0, fmt.Errorf("wire: truncated reading %s", name)
-	}
-	v := binary.BigEndian.Uint64(r.data[r.pos : r.pos+8])
-	r.pos += 8
-	return v, nil
-}
-
-// expectProtocolTag reads 8 bytes and checks they match ProtocolTag.
-func (r *reader) expectProtocolTag() error {
-	tag, err := r.bytes(8, "protocol tag")
+// expectProtocolTag reads the 8-byte tag and checks it matches ProtocolTag.
+func expectProtocolTag(r *sharedwire.Reader) error {
+	tag, err := r.Bytes(8, "protocol tag")
 	if err != nil {
 		return err
 	}
@@ -655,8 +500,8 @@ func (r *reader) expectProtocolTag() error {
 }
 
 // expectInnerKind reads 1 byte and checks it equals `want`.
-func (r *reader) expectInnerKind(want byte, label string) error {
-	got, err := r.byte_("inner kind for " + label)
+func expectInnerKind(r *sharedwire.Reader, want byte, label string) error {
+	got, err := r.Byte("inner kind for " + label)
 	if err != nil {
 		return err
 	}
@@ -664,28 +509,4 @@ func (r *reader) expectInnerKind(want byte, label string) error {
 		return fmt.Errorf("wire: %s inner kind 0x%02x != expected 0x%02x", label, got, want)
 	}
 	return nil
-}
-
-func (r *reader) cluster_(name string) ([32]byte, error) {
-	var out [32]byte
-	if r.remaining() < 32 {
-		return out, fmt.Errorf("wire: truncated reading %s", name)
-	}
-	copy(out[:], r.data[r.pos:r.pos+32])
-	r.pos += 32
-	return out, nil
-}
-
-func (r *reader) bytes(n int, name string) ([]byte, error) {
-	if n < 0 {
-		return nil, fmt.Errorf("wire: negative length reading %s", name)
-	}
-	if r.remaining() < n {
-		return nil, fmt.Errorf("wire: truncated reading %s (need %d, have %d)", name, n, r.remaining())
-	}
-	// Defensive copy so the returned slice isn't aliased to the input buffer.
-	out := make([]byte, n)
-	copy(out, r.data[r.pos:r.pos+n])
-	r.pos += n
-	return out, nil
 }

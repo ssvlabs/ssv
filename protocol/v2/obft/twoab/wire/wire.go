@@ -3,11 +3,12 @@
 package wire
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 
+	"github.com/ssvlabs/ssv/protocol/v2/obft"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
+	sharedwire "github.com/ssvlabs/ssv/protocol/v2/wire"
 )
 
 // Wire format versions per message kind. Bumped when the on-the-wire
@@ -71,16 +72,16 @@ const (
 	innerKindCertificate  byte = 0x05
 )
 
-// MaxLayers caps the number of layers a Commit / Phase-2a emission can
-// declare on the wire. Real 2abOBFT configs use K ≤ n ≤ 13 in SSV;
-// anything past 32 is almost certainly malformed/malicious.
-const MaxLayers = 32
-
-// MaxFieldSize caps individual length-prefixed fields (values, ciphertexts,
-// signatures). 16 MiB is conservative — realistic 2abOBFT messages are far
-// smaller. The 16 MiB cap matches base/wire's choice so the same shared
-// SignedSSVMessage envelope sizing applies uniformly across protocols.
-const MaxFieldSize = 16 * 1024 * 1024
+// Wire-level caps. Defined once in the parent obft package and re-exported
+// here (and identically in base/wire) so both OBFT-family codecs share one
+// reconciled set of bounds — see protocol/v2/obft/wire_caps.go. Layer indices
+// are valid in [0, MaxLayers); counts are valid in [0, MaxLayers].
+const (
+	MaxLayers         = obft.MaxLayers
+	MaxValueSize      = obft.MaxValueSize
+	MaxSignatureSize  = obft.MaxSignatureSize
+	MaxCiphertextSize = obft.MaxCiphertextSize
+)
 
 // ---------- Phase1Bundle ----------
 
@@ -106,10 +107,10 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	if b.Layer < 0 {
 		return nil, fmt.Errorf("wire: phase-1 bundle has negative layer %d", b.Layer)
 	}
-	if len(b.Value) > MaxFieldSize {
+	if len(b.Value) > MaxValueSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle value too long (%d)", len(b.Value))
 	}
-	if len(b.LeaderSigma) > MaxFieldSize {
+	if len(b.LeaderSigma) > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: phase-1 bundle LeaderSigma too long (%d)", len(b.LeaderSigma))
 	}
 
@@ -119,19 +120,19 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindPhase1Bundle)
 	out = append(out, b.ClusterID[:]...)
-	out = appendUint64(out, uint64(b.OperatorID))
-	out = appendUint64(out, uint64(b.Height))
-	out = appendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
-	out = appendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint64(out, uint64(b.OperatorID))
+	out = sharedwire.AppendUint64(out, uint64(b.Height))
+	out = sharedwire.AppendUint32(out, uint32(b.Layer))      //nolint:gosec // bounds-checked above
+	out = sharedwire.AppendUint32(out, uint32(len(b.Value))) //nolint:gosec // bounds-checked
 	out = append(out, b.Value...)
-	out = appendUint32(out, uint32(len(b.LeaderSigma))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint32(out, uint32(len(b.LeaderSigma))) //nolint:gosec // bounds-checked
 	out = append(out, b.LeaderSigma...)
 	return out, nil
 }
 
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
 func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
-	r := newReader(data)
+	r := sharedwire.NewReader(data)
 	if err := readVersion(r, Phase1BundleVersionV3, "phase-1 bundle"); err != nil {
 		return nil, err
 	}
@@ -142,33 +143,33 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 		return nil, err
 	}
 	var clusterID [32]byte
-	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: phase-1 bundle cluster_id: %w", err)
+	if err := r.FixedBytes(clusterID[:], "phase-1 bundle cluster_id"); err != nil {
+		return nil, err
 	}
-	opID, err := r.readUint64()
+	opID, err := r.Uint64("phase-1 bundle operator_id")
 	if err != nil {
-		return nil, fmt.Errorf("wire: phase-1 bundle operator_id: %w", err)
+		return nil, err
 	}
-	height, err := r.readUint64()
+	height, err := r.Uint64("phase-1 bundle height")
 	if err != nil {
-		return nil, fmt.Errorf("wire: phase-1 bundle height: %w", err)
+		return nil, err
 	}
-	layer, err := r.readUint32()
+	layer, err := r.Uint32("phase-1 bundle layer")
 	if err != nil {
-		return nil, fmt.Errorf("wire: phase-1 bundle layer: %w", err)
+		return nil, err
 	}
-	if layer > MaxLayers {
+	if layer >= MaxLayers {
 		return nil, fmt.Errorf("wire: phase-1 bundle layer %d exceeds MaxLayers %d", layer, MaxLayers)
 	}
-	value, err := r.readLengthPrefixed("phase-1 bundle value")
+	value, err := r.LengthPrefixed("phase-1 bundle value", MaxValueSize)
 	if err != nil {
 		return nil, err
 	}
-	witness, err := r.readLengthPrefixed("phase-1 bundle LeaderSigma")
+	witness, err := r.LengthPrefixed("phase-1 bundle LeaderSigma", MaxSignatureSize)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireEOF("phase-1 bundle"); err != nil {
+	if err := r.RequireEOF("phase-1 bundle"); err != nil {
 		return nil, err
 	}
 	return &twoab.Phase1Bundle{
@@ -204,13 +205,13 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	if v == nil {
 		return nil, errors.New("wire: nil ValueMsg")
 	}
-	if len(v.V) > MaxFieldSize {
+	if len(v.V) > MaxValueSize {
 		return nil, fmt.Errorf("wire: ValueMsg V too long (%d)", len(v.V))
 	}
 	if err := preflightLayerWitnesses(v.Witnesses, "ValueMsg"); err != nil {
 		return nil, err
 	}
-	if len(v.L0Partial) > MaxFieldSize {
+	if len(v.L0Partial) > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: ValueMsg L0Partial too long (%d)", len(v.L0Partial))
 	}
 	if err := preflightLayerEntries(v.LayerEntries, "ValueMsg"); err != nil {
@@ -222,13 +223,13 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindValueMsg)
 	out = append(out, v.ClusterID[:]...)
-	out = appendUint64(out, uint64(v.OperatorID))
-	out = appendUint64(out, uint64(v.Height))
-	out = appendUint32(out, uint32(len(v.V))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint64(out, uint64(v.OperatorID))
+	out = sharedwire.AppendUint64(out, uint64(v.Height))
+	out = sharedwire.AppendUint32(out, uint32(len(v.V))) //nolint:gosec // bounds-checked
 	out = append(out, v.V...)
 	out = append(out, v.ValueRoot[:]...)
 	out = encodeLayerWitnesses(out, v.Witnesses)
-	out = appendUint32(out, uint32(len(v.L0Partial))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint32(out, uint32(len(v.L0Partial))) //nolint:gosec // bounds-checked
 	out = append(out, v.L0Partial...)
 	out = encodeLayerEntries(out, v.LayerEntries)
 	return out, nil
@@ -236,7 +237,7 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 
 // DecodeValueMsg parses bytes produced by EncodeValueMsg.
 func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
-	r := newReader(data)
+	r := sharedwire.NewReader(data)
 	if err := readVersion(r, ValueMsgVersionV4, "ValueMsg"); err != nil {
 		return nil, err
 	}
@@ -247,30 +248,30 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 		return nil, err
 	}
 	var clusterID [32]byte
-	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: ValueMsg cluster_id: %w", err)
+	if err := r.FixedBytes(clusterID[:], "ValueMsg cluster_id"); err != nil {
+		return nil, err
 	}
-	opID, err := r.readUint64()
+	opID, err := r.Uint64("ValueMsg operator_id")
 	if err != nil {
-		return nil, fmt.Errorf("wire: ValueMsg operator_id: %w", err)
+		return nil, err
 	}
-	height, err := r.readUint64()
+	height, err := r.Uint64("ValueMsg height")
 	if err != nil {
-		return nil, fmt.Errorf("wire: ValueMsg height: %w", err)
+		return nil, err
 	}
-	v, err := r.readLengthPrefixed("ValueMsg V")
+	v, err := r.LengthPrefixed("ValueMsg V", MaxValueSize)
 	if err != nil {
 		return nil, err
 	}
 	var valueRoot [32]byte
-	if err := r.readBytes(valueRoot[:]); err != nil {
-		return nil, fmt.Errorf("wire: ValueMsg value_root: %w", err)
+	if err := r.FixedBytes(valueRoot[:], "ValueMsg value_root"); err != nil {
+		return nil, err
 	}
 	witnesses, err := decodeLayerWitnesses(r, "ValueMsg")
 	if err != nil {
 		return nil, err
 	}
-	partial, err := r.readLengthPrefixed("ValueMsg L0Partial")
+	partial, err := r.LengthPrefixed("ValueMsg L0Partial", MaxSignatureSize)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +279,7 @@ func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireEOF("ValueMsg"); err != nil {
+	if err := r.RequireEOF("ValueMsg"); err != nil {
 		return nil, err
 	}
 	return &twoab.ValueMsg{
@@ -319,15 +320,15 @@ func EncodeNoValueMsg(nv *twoab.NoValueMsg) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindNoValueMsg)
 	out = append(out, nv.ClusterID[:]...)
-	out = appendUint64(out, uint64(nv.OperatorID))
-	out = appendUint64(out, uint64(nv.Height))
+	out = sharedwire.AppendUint64(out, uint64(nv.OperatorID))
+	out = sharedwire.AppendUint64(out, uint64(nv.Height))
 	out = encodeLayerEntries(out, nv.LayerEntries)
 	return out, nil
 }
 
 // DecodeNoValueMsg parses bytes produced by EncodeNoValueMsg.
 func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
-	r := newReader(data)
+	r := sharedwire.NewReader(data)
 	if err := readVersion(r, NoValueMsgVersionV1, "NoValueMsg"); err != nil {
 		return nil, err
 	}
@@ -338,22 +339,22 @@ func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
 		return nil, err
 	}
 	var clusterID [32]byte
-	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: NoValueMsg cluster_id: %w", err)
+	if err := r.FixedBytes(clusterID[:], "NoValueMsg cluster_id"); err != nil {
+		return nil, err
 	}
-	opID, err := r.readUint64()
+	opID, err := r.Uint64("NoValueMsg operator_id")
 	if err != nil {
-		return nil, fmt.Errorf("wire: NoValueMsg operator_id: %w", err)
+		return nil, err
 	}
-	height, err := r.readUint64()
+	height, err := r.Uint64("NoValueMsg height")
 	if err != nil {
-		return nil, fmt.Errorf("wire: NoValueMsg height: %w", err)
+		return nil, err
 	}
 	entries, err := decodeLayerEntries(r, "NoValueMsg")
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireEOF("NoValueMsg"); err != nil {
+	if err := r.RequireEOF("NoValueMsg"); err != nil {
 		return nil, err
 	}
 	return &twoab.NoValueMsg{
@@ -387,7 +388,7 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 	if c.Side == twoab.CommitSideUnspecified {
 		return nil, errors.New("wire: Commit Side is unspecified")
 	}
-	if len(c.L0Partial) > MaxFieldSize {
+	if len(c.L0Partial) > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: Commit L0Partial too long (%d)", len(c.L0Partial))
 	}
 	if err := preflightLayerEntries(c.LayerEntries, "Commit"); err != nil {
@@ -399,10 +400,10 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindCommit)
 	out = append(out, c.ClusterID[:]...)
-	out = appendUint64(out, uint64(c.OperatorID))
-	out = appendUint64(out, uint64(c.Height))
+	out = sharedwire.AppendUint64(out, uint64(c.OperatorID))
+	out = sharedwire.AppendUint64(out, uint64(c.Height))
 	out = append(out, byte(c.Side))
-	out = appendUint32(out, uint32(len(c.L0Partial))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint32(out, uint32(len(c.L0Partial))) //nolint:gosec // bounds-checked
 	out = append(out, c.L0Partial...)
 	out = encodeLayerEntries(out, c.LayerEntries)
 	return out, nil
@@ -410,7 +411,7 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 
 // DecodeCommit parses bytes produced by EncodeCommit.
 func DecodeCommit(data []byte) (*twoab.Commit, error) {
-	r := newReader(data)
+	r := sharedwire.NewReader(data)
 	if err := readVersion(r, CommitVersionV2, "Commit"); err != nil {
 		return nil, err
 	}
@@ -421,20 +422,20 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 		return nil, err
 	}
 	var clusterID [32]byte
-	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: Commit cluster_id: %w", err)
+	if err := r.FixedBytes(clusterID[:], "Commit cluster_id"); err != nil {
+		return nil, err
 	}
-	opID, err := r.readUint64()
+	opID, err := r.Uint64("Commit operator_id")
 	if err != nil {
-		return nil, fmt.Errorf("wire: Commit operator_id: %w", err)
+		return nil, err
 	}
-	height, err := r.readUint64()
+	height, err := r.Uint64("Commit height")
 	if err != nil {
-		return nil, fmt.Errorf("wire: Commit height: %w", err)
+		return nil, err
 	}
-	sideByte, err := r.readByte()
+	sideByte, err := r.Byte("Commit side")
 	if err != nil {
-		return nil, fmt.Errorf("wire: Commit side: %w", err)
+		return nil, err
 	}
 	side := twoab.CommitSide(sideByte)
 	switch side {
@@ -446,7 +447,7 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 		// layer also rejects it.
 		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid (only NR=0x02 and NRDirect=0x03 are valid)", sideByte)
 	}
-	l0Partial, err := r.readLengthPrefixed("Commit L0Partial")
+	l0Partial, err := r.LengthPrefixed("Commit L0Partial", MaxSignatureSize)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +455,7 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireEOF("Commit"); err != nil {
+	if err := r.RequireEOF("Commit"); err != nil {
 		return nil, err
 	}
 	return &twoab.Commit{
@@ -486,10 +487,10 @@ func EncodeCertificate(c *twoab.Certificate) ([]byte, error) {
 	if c == nil {
 		return nil, errors.New("wire: nil certificate")
 	}
-	if len(c.Value) > MaxFieldSize {
+	if len(c.Value) > MaxValueSize {
 		return nil, fmt.Errorf("wire: certificate value too long (%d)", len(c.Value))
 	}
-	if len(c.Signature) > MaxFieldSize {
+	if len(c.Signature) > MaxSignatureSize {
 		return nil, fmt.Errorf("wire: certificate signature too long (%d)", len(c.Signature))
 	}
 
@@ -499,17 +500,17 @@ func EncodeCertificate(c *twoab.Certificate) ([]byte, error) {
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindCertificate)
 	out = append(out, c.ClusterID[:]...)
-	out = appendUint64(out, uint64(c.Height))
-	out = appendUint32(out, uint32(len(c.Value))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint64(out, uint64(c.Height))
+	out = sharedwire.AppendUint32(out, uint32(len(c.Value))) //nolint:gosec // bounds-checked
 	out = append(out, c.Value...)
-	out = appendUint32(out, uint32(len(c.Signature))) //nolint:gosec // bounds-checked
+	out = sharedwire.AppendUint32(out, uint32(len(c.Signature))) //nolint:gosec // bounds-checked
 	out = append(out, c.Signature...)
 	return out, nil
 }
 
 // DecodeCertificate parses bytes produced by EncodeCertificate.
 func DecodeCertificate(data []byte) (*twoab.Certificate, error) {
-	r := newReader(data)
+	r := sharedwire.NewReader(data)
 	if err := readVersion(r, CertificateVersionV1, "certificate"); err != nil {
 		return nil, err
 	}
@@ -520,22 +521,22 @@ func DecodeCertificate(data []byte) (*twoab.Certificate, error) {
 		return nil, err
 	}
 	var clusterID [32]byte
-	if err := r.readBytes(clusterID[:]); err != nil {
-		return nil, fmt.Errorf("wire: certificate cluster_id: %w", err)
+	if err := r.FixedBytes(clusterID[:], "certificate cluster_id"); err != nil {
+		return nil, err
 	}
-	height, err := r.readUint64()
-	if err != nil {
-		return nil, fmt.Errorf("wire: certificate height: %w", err)
-	}
-	value, err := r.readLengthPrefixed("certificate value")
+	height, err := r.Uint64("certificate height")
 	if err != nil {
 		return nil, err
 	}
-	sig, err := r.readLengthPrefixed("certificate signature")
+	value, err := r.LengthPrefixed("certificate value", MaxValueSize)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.requireEOF("certificate"); err != nil {
+	sig, err := r.LengthPrefixed("certificate signature", MaxSignatureSize)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.RequireEOF("certificate"); err != nil {
 		return nil, err
 	}
 	return &twoab.Certificate{
@@ -568,10 +569,10 @@ func preflightLayerEntries(entries []twoab.LayerEntry, kindLabel string) error {
 		if e.Layer < 0 {
 			return fmt.Errorf("wire: %s LayerEntries[%d] has negative Layer %d", kindLabel, i, e.Layer)
 		}
-		if len(e.V) > MaxFieldSize {
+		if len(e.V) > MaxValueSize {
 			return fmt.Errorf("wire: %s LayerEntries[%d] V too long (%d)", kindLabel, i, len(e.V))
 		}
-		if len(e.Payload) > MaxFieldSize {
+		if len(e.Payload) > MaxCiphertextSize {
 			return fmt.Errorf("wire: %s LayerEntries[%d] Payload too long (%d)", kindLabel, i, len(e.Payload))
 		}
 	}
@@ -579,22 +580,22 @@ func preflightLayerEntries(entries []twoab.LayerEntry, kindLabel string) error {
 }
 
 func encodeLayerEntries(out []byte, entries []twoab.LayerEntry) []byte {
-	out = appendUint32(out, uint32(len(entries))) //nolint:gosec // bounds-checked by preflight
+	out = sharedwire.AppendUint32(out, uint32(len(entries))) //nolint:gosec // bounds-checked by preflight
 	for _, e := range entries {
-		out = appendUint32(out, uint32(e.Layer)) //nolint:gosec // bounds-checked by preflight
+		out = sharedwire.AppendUint32(out, uint32(e.Layer)) //nolint:gosec // bounds-checked by preflight
 		out = append(out, byte(e.Kind))
-		out = appendUint32(out, uint32(len(e.V))) //nolint:gosec // bounds-checked by preflight
+		out = sharedwire.AppendUint32(out, uint32(len(e.V))) //nolint:gosec // bounds-checked by preflight
 		out = append(out, e.V...)
-		out = appendUint32(out, uint32(len(e.Payload))) //nolint:gosec // bounds-checked by preflight
+		out = sharedwire.AppendUint32(out, uint32(len(e.Payload))) //nolint:gosec // bounds-checked by preflight
 		out = append(out, e.Payload...)
 	}
 	return out
 }
 
-func decodeLayerEntries(r *reader, kindLabel string) ([]twoab.LayerEntry, error) {
-	count, err := r.readUint32()
+func decodeLayerEntries(r *sharedwire.Reader, kindLabel string) ([]twoab.LayerEntry, error) {
+	count, err := r.Uint32(fmt.Sprintf("%s LayerEntries count", kindLabel))
 	if err != nil {
-		return nil, fmt.Errorf("wire: %s LayerEntries count: %w", kindLabel, err)
+		return nil, err
 	}
 	if count > MaxLayers {
 		return nil, fmt.Errorf("wire: %s LayerEntries count %d exceeds MaxLayers %d",
@@ -602,17 +603,17 @@ func decodeLayerEntries(r *reader, kindLabel string) ([]twoab.LayerEntry, error)
 	}
 	entries := make([]twoab.LayerEntry, count)
 	for i := uint32(0); i < count; i++ {
-		layer, err := r.readUint32()
+		layer, err := r.Uint32(fmt.Sprintf("%s LayerEntries[%d] layer", kindLabel, i))
 		if err != nil {
-			return nil, fmt.Errorf("wire: %s LayerEntries[%d] layer: %w", kindLabel, i, err)
+			return nil, err
 		}
-		if layer > MaxLayers {
+		if layer >= MaxLayers {
 			return nil, fmt.Errorf("wire: %s LayerEntries[%d] layer %d exceeds MaxLayers %d",
 				kindLabel, i, layer, MaxLayers)
 		}
-		kindByte, err := r.readByte()
+		kindByte, err := r.Byte(fmt.Sprintf("%s LayerEntries[%d] kind", kindLabel, i))
 		if err != nil {
-			return nil, fmt.Errorf("wire: %s LayerEntries[%d] kind: %w", kindLabel, i, err)
+			return nil, err
 		}
 		kind := twoab.LayerEntryKind(kindByte)
 		switch kind {
@@ -622,11 +623,11 @@ func decodeLayerEntries(r *reader, kindLabel string) ([]twoab.LayerEntry, error)
 			return nil, fmt.Errorf("wire: %s LayerEntries[%d] kind 0x%02x is invalid",
 				kindLabel, i, kindByte)
 		}
-		v, err := r.readLengthPrefixed(fmt.Sprintf("%s LayerEntries[%d] V", kindLabel, i))
+		v, err := r.LengthPrefixed(fmt.Sprintf("%s LayerEntries[%d] V", kindLabel, i), MaxValueSize)
 		if err != nil {
 			return nil, err
 		}
-		payload, err := r.readLengthPrefixed(fmt.Sprintf("%s LayerEntries[%d] Payload", kindLabel, i))
+		payload, err := r.LengthPrefixed(fmt.Sprintf("%s LayerEntries[%d] Payload", kindLabel, i), MaxCiphertextSize)
 		if err != nil {
 			return nil, err
 		}
@@ -650,7 +651,7 @@ func preflightLayerWitnesses(ws []twoab.LayerWitness, kindLabel string) error {
 		if w.Layer < 0 {
 			return fmt.Errorf("wire: %s Witnesses[%d] has negative Layer %d", kindLabel, i, w.Layer)
 		}
-		if len(w.Witness) > MaxFieldSize {
+		if len(w.Witness) > MaxSignatureSize {
 			return fmt.Errorf("wire: %s Witnesses[%d] Witness too long (%d)", kindLabel, i, len(w.Witness))
 		}
 	}
@@ -658,20 +659,20 @@ func preflightLayerWitnesses(ws []twoab.LayerWitness, kindLabel string) error {
 }
 
 func encodeLayerWitnesses(out []byte, ws []twoab.LayerWitness) []byte {
-	out = appendUint32(out, uint32(len(ws))) //nolint:gosec // bounds-checked by preflight
+	out = sharedwire.AppendUint32(out, uint32(len(ws))) //nolint:gosec // bounds-checked by preflight
 	for _, w := range ws {
-		out = appendUint32(out, uint32(w.Layer)) //nolint:gosec // bounds-checked by preflight
+		out = sharedwire.AppendUint32(out, uint32(w.Layer)) //nolint:gosec // bounds-checked by preflight
 		out = append(out, w.ValueRoot[:]...)
-		out = appendUint32(out, uint32(len(w.Witness))) //nolint:gosec // bounds-checked by preflight
+		out = sharedwire.AppendUint32(out, uint32(len(w.Witness))) //nolint:gosec // bounds-checked by preflight
 		out = append(out, w.Witness...)
 	}
 	return out
 }
 
-func decodeLayerWitnesses(r *reader, kindLabel string) ([]twoab.LayerWitness, error) {
-	count, err := r.readUint32()
+func decodeLayerWitnesses(r *sharedwire.Reader, kindLabel string) ([]twoab.LayerWitness, error) {
+	count, err := r.Uint32(fmt.Sprintf("%s Witnesses count", kindLabel))
 	if err != nil {
-		return nil, fmt.Errorf("wire: %s Witnesses count: %w", kindLabel, err)
+		return nil, err
 	}
 	if count > MaxLayers {
 		return nil, fmt.Errorf("wire: %s Witnesses count %d exceeds MaxLayers %d",
@@ -679,19 +680,19 @@ func decodeLayerWitnesses(r *reader, kindLabel string) ([]twoab.LayerWitness, er
 	}
 	ws := make([]twoab.LayerWitness, count)
 	for i := uint32(0); i < count; i++ {
-		layer, err := r.readUint32()
+		layer, err := r.Uint32(fmt.Sprintf("%s Witnesses[%d] layer", kindLabel, i))
 		if err != nil {
-			return nil, fmt.Errorf("wire: %s Witnesses[%d] layer: %w", kindLabel, i, err)
+			return nil, err
 		}
-		if layer > MaxLayers {
+		if layer >= MaxLayers {
 			return nil, fmt.Errorf("wire: %s Witnesses[%d] layer %d exceeds MaxLayers %d",
 				kindLabel, i, layer, MaxLayers)
 		}
 		var root [32]byte
-		if err := r.readBytes(root[:]); err != nil {
-			return nil, fmt.Errorf("wire: %s Witnesses[%d] value_root: %w", kindLabel, i, err)
+		if err := r.FixedBytes(root[:], fmt.Sprintf("%s Witnesses[%d] value_root", kindLabel, i)); err != nil {
+			return nil, err
 		}
-		wit, err := r.readLengthPrefixed(fmt.Sprintf("%s Witnesses[%d] Witness", kindLabel, i))
+		wit, err := r.LengthPrefixed(fmt.Sprintf("%s Witnesses[%d] Witness", kindLabel, i), MaxSignatureSize)
 		if err != nil {
 			return nil, err
 		}
@@ -706,92 +707,10 @@ func decodeLayerWitnesses(r *reader, kindLabel string) ([]twoab.LayerWitness, er
 
 // ---------- Helpers ----------
 
-func appendUint32(out []byte, v uint32) []byte {
-	var buf [4]byte
-	binary.BigEndian.PutUint32(buf[:], v)
-	return append(out, buf[:]...)
-}
-
-func appendUint64(out []byte, v uint64) []byte {
-	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], v)
-	return append(out, buf[:]...)
-}
-
-type reader struct {
-	data []byte
-	off  int
-}
-
-func newReader(data []byte) *reader { return &reader{data: data} }
-
-func (r *reader) remaining() int { return len(r.data) - r.off }
-
-func (r *reader) readByte() (byte, error) {
-	if r.remaining() < 1 {
-		return 0, errors.New("truncated")
-	}
-	b := r.data[r.off]
-	r.off++
-	return b, nil
-}
-
-func (r *reader) readBytes(out []byte) error {
-	n := len(out)
-	if r.remaining() < n {
-		return errors.New("truncated")
-	}
-	copy(out, r.data[r.off:r.off+n])
-	r.off += n
-	return nil
-}
-
-func (r *reader) readUint32() (uint32, error) {
-	if r.remaining() < 4 {
-		return 0, errors.New("truncated")
-	}
-	v := binary.BigEndian.Uint32(r.data[r.off : r.off+4])
-	r.off += 4
-	return v, nil
-}
-
-func (r *reader) readUint64() (uint64, error) {
-	if r.remaining() < 8 {
-		return 0, errors.New("truncated")
-	}
-	v := binary.BigEndian.Uint64(r.data[r.off : r.off+8])
-	r.off += 8
-	return v, nil
-}
-
-func (r *reader) readLengthPrefixed(field string) ([]byte, error) {
-	n, err := r.readUint32()
+func readVersion(r *sharedwire.Reader, expected byte, field string) error {
+	v, err := r.Byte(field + " version")
 	if err != nil {
-		return nil, fmt.Errorf("wire: %s length: %w", field, err)
-	}
-	if n > MaxFieldSize {
-		return nil, fmt.Errorf("wire: %s length %d exceeds MaxFieldSize %d", field, n, MaxFieldSize)
-	}
-	if r.remaining() < int(n) {
-		return nil, fmt.Errorf("wire: %s body truncated (need %d, have %d)", field, n, r.remaining())
-	}
-	out := make([]byte, n)
-	copy(out, r.data[r.off:r.off+int(n)])
-	r.off += int(n)
-	return out, nil
-}
-
-func (r *reader) requireEOF(field string) error {
-	if r.remaining() != 0 {
-		return fmt.Errorf("wire: %s has %d trailing bytes", field, r.remaining())
-	}
-	return nil
-}
-
-func readVersion(r *reader, expected byte, field string) error {
-	v, err := r.readByte()
-	if err != nil {
-		return fmt.Errorf("wire: %s version: %w", field, err)
+		return err
 	}
 	if v != expected {
 		return fmt.Errorf("wire: %s version 0x%02x not supported (expected 0x%02x)", field, v, expected)
@@ -799,10 +718,10 @@ func readVersion(r *reader, expected byte, field string) error {
 	return nil
 }
 
-func readProtocolTag(r *reader) error {
+func readProtocolTag(r *sharedwire.Reader) error {
 	var tag [16]byte
-	if err := r.readBytes(tag[:]); err != nil {
-		return fmt.Errorf("wire: protocol_tag: %w", err)
+	if err := r.FixedBytes(tag[:], "protocol_tag"); err != nil {
+		return err
 	}
 	if tag != ProtocolTag {
 		return fmt.Errorf("wire: protocol_tag mismatch (got %q, want %q)",
@@ -811,10 +730,10 @@ func readProtocolTag(r *reader) error {
 	return nil
 }
 
-func readInnerKind(r *reader, expected byte, field string) error {
-	k, err := r.readByte()
+func readInnerKind(r *sharedwire.Reader, expected byte, field string) error {
+	k, err := r.Byte(field + " inner kind")
 	if err != nil {
-		return fmt.Errorf("wire: %s inner kind: %w", field, err)
+		return err
 	}
 	if k != expected {
 		return fmt.Errorf("wire: %s inner kind 0x%02x mismatch (expected 0x%02x)", field, k, expected)
