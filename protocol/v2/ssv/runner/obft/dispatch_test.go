@@ -70,12 +70,12 @@ func TestController_LRUEvictsOldestSlot(t *testing.T) {
 	ctrl := newMinimalControllerForTest(t)
 
 	checkInvariant := func(stage string) {
-		require.Equal(t, len(ctrl.pending), len(ctrl.pendingElem),
+		require.Equal(t, len(ctrl.pending.bySlot), len(ctrl.pending.elem),
 			"%s: pending and pendingElem must have equal cardinality", stage)
-		require.Equal(t, len(ctrl.pending), ctrl.pendingOrder.Len(),
+		require.Equal(t, len(ctrl.pending.bySlot), ctrl.pending.order.Len(),
 			"%s: pending and pendingOrder must have equal cardinality", stage)
-		for s := range ctrl.pending {
-			elem, ok := ctrl.pendingElem[s]
+		for s := range ctrl.pending.bySlot {
+			elem, ok := ctrl.pending.elem[s]
 			require.Truef(t, ok, "%s: slot %d in pending but not pendingElem", stage, s)
 			require.Equal(t, s, elem.Value.(phase0.Slot),
 				"%s: pendingElem[%d] points to wrong slot", stage, s)
@@ -88,28 +88,28 @@ func TestController_LRUEvictsOldestSlot(t *testing.T) {
 			Commit: &obftcore.Commit{Height: obftcore.Height(s)},
 		})
 	}
-	require.Len(t, ctrl.pending, MaxPendingSlots)
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots)
 	checkInvariant("after fill")
 
 	// One more (slot MaxPendingSlots) → should evict slot 0.
 	ctrl.BufferEnvelope(phase0.Slot(MaxPendingSlots), PendingEnvelope{
 		Commit: &obftcore.Commit{Height: obftcore.Height(MaxPendingSlots)},
 	})
-	require.Len(t, ctrl.pending, MaxPendingSlots)
-	_, hasSlot0 := ctrl.pending[phase0.Slot(0)]
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots)
+	_, hasSlot0 := ctrl.pending.bySlot[phase0.Slot(0)]
 	require.False(t, hasSlot0, "slot 0 (oldest) should have been evicted")
-	_, hasNewSlot := ctrl.pending[phase0.Slot(MaxPendingSlots)]
+	_, hasNewSlot := ctrl.pending.bySlot[phase0.Slot(MaxPendingSlots)]
 	require.True(t, hasNewSlot, "newest slot should be present")
 	checkInvariant("after eviction")
 
 	// Drain a slot mid-list — invariant must hold.
 	ctrl.DrainPending(phase0.Slot(50))
-	require.Len(t, ctrl.pending, MaxPendingSlots-1)
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots-1)
 	checkInvariant("after drain")
 
 	// Forget another slot.
 	ctrl.ForgetPending(phase0.Slot(100))
-	require.Len(t, ctrl.pending, MaxPendingSlots-2)
+	require.Len(t, ctrl.pending.bySlot, MaxPendingSlots-2)
 	checkInvariant("after forget")
 }
 
@@ -121,10 +121,10 @@ func TestController_ForgetPending(t *testing.T) {
 	ctrl.BufferEnvelope(slot, PendingEnvelope{
 		Commit: &obftcore.Commit{Height: obftcore.Height(slot)},
 	})
-	require.NotEmpty(t, ctrl.pending[slot])
+	require.NotEmpty(t, ctrl.pending.bySlot[slot])
 
 	ctrl.ForgetPending(slot)
-	require.Empty(t, ctrl.pending[slot])
+	require.Empty(t, ctrl.pending.bySlot[slot])
 }
 
 // TestDispatch_BuffersOnNoActiveInstance — when DispatchEnvelope is called
@@ -155,7 +155,7 @@ func TestDispatch_BuffersOnNoActiveInstance(t *testing.T) {
 	// Dispatch with no instance for slot 200 — must buffer, not error.
 	err = DispatchEnvelope(t.Context(), sched, &wire.Envelope{Kind: wire.KindCommit, Commit: commit}, 0)
 	require.NoError(t, err)
-	require.Len(t, ctrl.pending[slot], 1)
+	require.Len(t, ctrl.pending.bySlot[slot], 1)
 }
 
 // Regression: state-mutating methods on a Controller for which EndInstance
@@ -249,9 +249,9 @@ func TestController_EndedSlotsRing_Bounded(t *testing.T) {
 		ctrl.EndInstance(s)
 	}
 	ctrl.mu.Lock()
-	require.Equal(t, MaxEndedSlots, ctrl.endedSlotOrder.Len(),
+	require.Equal(t, MaxEndedSlots, ctrl.ended.order.Len(),
 		"endedSlots ring must be capped at MaxEndedSlots")
-	_, slot0Still := ctrl.endedSlots[0]
+	_, slot0Still := ctrl.ended.set[0]
 	ctrl.mu.Unlock()
 	require.False(t, slot0Still, "slot 0 must have aged out of the ring")
 

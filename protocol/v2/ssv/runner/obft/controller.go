@@ -1,7 +1,6 @@
 package obft
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
 	"sort"
@@ -55,44 +54,13 @@ type Controller struct {
 	mu        sync.Mutex
 	instances map[phase0.Slot]*RunningInstance
 
-	// pending buffers envelopes that arrived before the slot's instance
-	// started (e.g., faster peers send during the slow operator's pre-
-	// consensus). Drained by Scheduler.DrainPending after StartNewInstance.
-	// Capped per-slot to MaxPendingPerSlot and globally to MaxPendingSlots
-	// (FIFO eviction via pendingOrder) to bound memory under abuse.
-	pending      map[phase0.Slot][]PendingEnvelope
-	pendingOrder *list.List                    // *list.Element holds phase0.Slot
-	pendingElem  map[phase0.Slot]*list.Element // O(1) lookup for Drain/Forget
-
-	// endedSlots is a small set of slots whose instance has been ended via
-	// EndInstance. BufferEnvelope refuses to buffer for slots in this set,
-	// closing the race where a late peer broadcast (post-EndInstance,
-	// post-ForgetPending) would otherwise re-buffer an envelope that has
-	// nowhere to drain into. Eviction is FIFO at MaxEndedSlots; slots that
-	// fall out of the ring can re-accept pending entries (which then sit
-	// until LRU eviction at MaxPendingSlots), but the ring is sized
-	// generously enough to cover the validation slot-window so that's
-	// effectively dead code.
-	endedSlots     map[phase0.Slot]struct{}
-	endedSlotOrder *list.List // *list.Element holds phase0.Slot, FIFO
+	// pending buffers envelopes that arrived before a slot's instance started;
+	// ended fences recently torn-down slots against post-teardown re-buffering.
+	// Both are plain (non-thread-safe) collections serialized under mu — see
+	// slotbuffers.go.
+	pending *pendingBuffer
+	ended   *endedRing
 }
-
-// MaxEndedSlots caps how many recently-ended slots the controller remembers
-// for the BufferEnvelope post-teardown gate. Sized to comfortably exceed
-// the validation slot-window (obftAllowedPastSlots + obftAllowedFutureSlots
-// ≈ 6) so any envelope that could pass slot-window admission is checked
-// against the ended-set.
-const MaxEndedSlots = 64
-
-// MaxPendingPerSlot caps the number of envelopes buffered per slot before
-// the instance starts. Above this, additional envelopes are dropped.
-const MaxPendingPerSlot = 64
-
-// MaxPendingSlots caps the total number of distinct slots with non-empty
-// buffers. Bounds memory under an attacker that emits envelopes targeting
-// many distinct slot numbers. When exceeded, the oldest slot entry is
-// evicted (LRU).
-const MaxPendingSlots = 256
 
 // ErrNoActiveInstance is returned by Controller.lookup when no instance
 // exists for the requested slot. Callers (e.g. the dispatcher) use
@@ -190,11 +158,8 @@ func NewController(opts ControllerOptions) (*Controller, error) {
 		overrides:        opts.Overrides,
 		evidenceObserver: opts.EvidenceObserver,
 		instances:        make(map[phase0.Slot]*RunningInstance),
-		pending:          make(map[phase0.Slot][]PendingEnvelope),
-		pendingOrder:     list.New(),
-		pendingElem:      make(map[phase0.Slot]*list.Element),
-		endedSlots:       make(map[phase0.Slot]struct{}),
-		endedSlotOrder:   list.New(),
+		pending:          newPendingBuffer(),
+		ended:            newEndedRing(),
 	}, nil
 }
 
@@ -214,27 +179,10 @@ func (c *Controller) BufferEnvelope(slot phase0.Slot, env PendingEnvelope) {
 	// the window where a peer envelope arrives between EndInstance (which
 	// also clears pending) and the slot-window check eventually rejecting
 	// new arrivals at the validation layer.
-	if _, ended := c.endedSlots[slot]; ended {
+	if c.ended.has(slot) {
 		return
 	}
-	if len(c.pending[slot]) >= MaxPendingPerSlot {
-		return
-	}
-	if _, exists := c.pending[slot]; !exists {
-		if len(c.pending) >= MaxPendingSlots {
-			// Evict the oldest slot (front of pendingOrder) to bound memory
-			// under an attacker creating many distinct slot numbers.
-			front := c.pendingOrder.Front()
-			if front != nil {
-				oldest := front.Value.(phase0.Slot)
-				c.pendingOrder.Remove(front)
-				delete(c.pendingElem, oldest)
-				delete(c.pending, oldest)
-			}
-		}
-		c.pendingElem[slot] = c.pendingOrder.PushBack(slot)
-	}
-	c.pending[slot] = append(c.pending[slot], env)
+	c.pending.add(slot, env)
 }
 
 // DrainPending removes and returns all buffered envelopes for `slot`. Called
@@ -243,9 +191,7 @@ func (c *Controller) BufferEnvelope(slot phase0.Slot, env PendingEnvelope) {
 func (c *Controller) DrainPending(slot phase0.Slot) []PendingEnvelope {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	p := c.pending[slot]
-	c.removePendingLocked(slot)
-	return p
+	return c.pending.drain(slot)
 }
 
 // ForgetPending evicts buffered envelopes for `slot` without dispatch. Used
@@ -254,17 +200,7 @@ func (c *Controller) DrainPending(slot phase0.Slot) []PendingEnvelope {
 func (c *Controller) ForgetPending(slot phase0.Slot) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.removePendingLocked(slot)
-}
-
-// removePendingLocked removes a slot from all three pending data structures.
-// Caller must hold c.mu.
-func (c *Controller) removePendingLocked(slot phase0.Slot) {
-	if elem, ok := c.pendingElem[slot]; ok {
-		c.pendingOrder.Remove(elem)
-		delete(c.pendingElem, slot)
-	}
-	delete(c.pending, slot)
+	c.pending.forget(slot)
 }
 
 // StartNewInstance initializes an OBFT instance for the given slot and
@@ -343,29 +279,8 @@ func (c *Controller) EndInstance(slot phase0.Slot) {
 	close(r.stateDelta)
 	r.instanceMu.Unlock()
 	delete(c.instances, slot)
-	c.removePendingLocked(slot)
-	c.markSlotEndedLocked(slot)
-}
-
-// markSlotEndedLocked records `slot` in the recently-ended ring so
-// BufferEnvelope refuses post-teardown buffering for it. FIFO eviction at
-// MaxEndedSlots; entries that fall out of the ring are unfenced (and will
-// then sit in pending until LRU eviction at MaxPendingSlots — same fate as
-// before this fence existed). Caller must hold c.mu.
-func (c *Controller) markSlotEndedLocked(slot phase0.Slot) {
-	if _, exists := c.endedSlots[slot]; exists {
-		return // idempotent: already in ring
-	}
-	if c.endedSlotOrder.Len() >= MaxEndedSlots {
-		front := c.endedSlotOrder.Front()
-		if front != nil {
-			oldest := front.Value.(phase0.Slot)
-			c.endedSlotOrder.Remove(front)
-			delete(c.endedSlots, oldest)
-		}
-	}
-	c.endedSlots[slot] = struct{}{}
-	c.endedSlotOrder.PushBack(slot)
+	c.pending.forget(slot)
+	c.ended.mark(slot)
 }
 
 // ActiveSlots returns the slots with currently-running instances, sorted.
@@ -384,16 +299,9 @@ func (c *Controller) ActiveSlots() []phase0.Slot {
 // a Phase-1 bundle for `value`. The bundle is also self-observed so the
 // leader's σ_V is in the σ-pool at Resolve time.
 func (c *Controller) BuildPhase1Bundle(slot phase0.Slot, layer int, value []byte) (*obftcore.Phase1Bundle, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		return nil, ErrNoActiveInstance
-	}
-	return r.instance.BuildPhase1Bundle(layer, obftcore.Value(value))
+	return withLiveInstance(c, slot, func(r *RunningInstance) (*obftcore.Phase1Bundle, error) {
+		return r.instance.BuildPhase1Bundle(layer, obftcore.Value(value))
+	})
 }
 
 // ObservePhase1Bundle records a peer's (or own) Phase-1 bundle.
@@ -403,31 +311,17 @@ func (c *Controller) ObservePhase1Bundle(b *obftcore.Phase1Bundle, observedOffse
 	if b == nil {
 		return errors.New("obft adapter: nil phase-1 bundle")
 	}
-	r, err := c.lookup(phase0.Slot(b.Height))
-	if err != nil {
-		return err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		return ErrNoActiveInstance
-	}
-	return r.instance.ObservePhase1Bundle(b, observedOffset)
+	return withLiveInstanceErr(c, phase0.Slot(b.Height), func(r *RunningInstance) error {
+		return r.instance.ObservePhase1Bundle(b, observedOffset)
+	})
 }
 
 // ApplyHostValidity records the host application's valid/not-valid verdict
 // for `value` at `layer`.
 func (c *Controller) ApplyHostValidity(slot phase0.Slot, layer int, value []byte, valid bool) error {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		return ErrNoActiveInstance
-	}
-	return r.instance.ApplyHostValidity(layer, obftcore.Value(value), valid)
+	return withLiveInstanceErr(c, slot, func(r *RunningInstance) error {
+		return r.instance.ApplyHostValidity(layer, obftcore.Value(value), valid)
+	})
 }
 
 // ProcessCommit routes a peer's Commit to the right instance.
@@ -435,24 +329,13 @@ func (c *Controller) ProcessCommit(cm *obftcore.Commit) error {
 	if cm == nil {
 		return errors.New("obft adapter: nil commit")
 	}
-	r, err := c.lookup(phase0.Slot(cm.Height))
-	if err != nil {
-		return err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	// Re-check under instanceMu: a goroutine that captured `r` before
-	// EndInstance ran could otherwise mutate state on a finalized instance,
-	// silently losing late evidence (e.g., a cryptoFake Rule 5 candidate
-	// observed AFTER Finalize set the ended flag).
-	if r.instance.Ended() {
-		return ErrNoActiveInstance
-	}
-	if err := r.instance.ObserveCommit(cm); err != nil {
-		return err
-	}
-	signalStateDeltaLocked(r)
-	return nil
+	return withLiveInstanceErr(c, phase0.Slot(cm.Height), func(r *RunningInstance) error {
+		if err := r.instance.ObserveCommit(cm); err != nil {
+			return err
+		}
+		signalStateDeltaLocked(r)
+		return nil
+	})
 }
 
 // ProcessCertificate routes a peer's Certificate to the right instance.
@@ -460,20 +343,13 @@ func (c *Controller) ProcessCertificate(cert *obftcore.Certificate) error {
 	if cert == nil {
 		return errors.New("obft adapter: nil certificate")
 	}
-	r, err := c.lookup(phase0.Slot(cert.Height))
-	if err != nil {
-		return err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		return ErrNoActiveInstance
-	}
-	if err := r.instance.ObserveCertificate(cert); err != nil {
-		return err
-	}
-	signalStateDeltaLocked(r)
-	return nil
+	return withLiveInstanceErr(c, phase0.Slot(cert.Height), func(r *RunningInstance) error {
+		if err := r.instance.ObserveCertificate(cert); err != nil {
+			return err
+		}
+		signalStateDeltaLocked(r)
+		return nil
+	})
 }
 
 // signalStateDeltaLocked publishes a non-blocking signal on r.stateDelta to
@@ -501,9 +377,7 @@ func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
 	defer c.mu.Unlock()
 	r, ok := c.instances[slot]
 	if !ok {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
+		return closedChan[struct{}]()
 	}
 	return r.stateDelta
 }
@@ -513,16 +387,9 @@ func (c *Controller) StateDeltaChan(slot phase0.Slot) <-chan struct{} {
 // this at T_emit = min(L_0-observed-and-validated event, T_commit fallback);
 // see L0ReadyCh for the early-emit trigger.
 func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		return nil, ErrNoActiveInstance
-	}
-	return r.instance.BuildOwnCommit()
+	return withLiveInstance(c, slot, func(r *RunningInstance) (*obftcore.Commit, error) {
+		return r.instance.BuildOwnCommit()
+	})
 }
 
 // L0ReadyCh returns the slot's instance L_0-ready channel (closed when the
@@ -532,20 +399,9 @@ func (c *Controller) BuildOwnCommit(slot phase0.Slot) (*obftcore.Commit, error) 
 // slot has no active instance (so callers don't block forever on a stale
 // slot).
 func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
-	r, err := c.lookup(slot)
-	if err != nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return r.instance.L0ReadyCh()
+	return liveInstanceChan(c, slot, func(r *RunningInstance) <-chan struct{} {
+		return r.instance.L0ReadyCh()
+	})
 }
 
 // WantsHostValidationCh returns the slot's instance host-validation
@@ -559,71 +415,41 @@ func (c *Controller) L0ReadyCh(slot phase0.Slot) <-chan struct{} {
 // Returns a closed channel if the slot has no active instance (so a
 // runner-side goroutine exits cleanly via the channel-close branch).
 func (c *Controller) WantsHostValidationCh(slot phase0.Slot) <-chan obftcore.ValidationRequest {
-	r, err := c.lookup(slot)
-	if err != nil {
-		ch := make(chan obftcore.ValidationRequest)
-		close(ch)
-		return ch
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		ch := make(chan obftcore.ValidationRequest)
-		close(ch)
-		return ch
-	}
-	return r.instance.WantsHostValidationCh()
+	return liveInstanceChan(c, slot, func(r *RunningInstance) <-chan obftcore.ValidationRequest {
+		return r.instance.WantsHostValidationCh()
+	})
 }
 
 // Resolve runs the Phase-3 reconstruction walk and returns the decided
 // Output (value + full reconstructed signature) or an error
 // (typically obftcore.ErrNoQuorum if the slot was missed).
 func (c *Controller) Resolve(slot phase0.Slot) (*obftcore.Output, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	if r.instance.Ended() {
-		return nil, ErrNoActiveInstance
-	}
-	return r.instance.Resolve()
+	return withLiveInstance(c, slot, func(r *RunningInstance) (*obftcore.Output, error) {
+		return r.instance.Resolve()
+	})
 }
 
 // BuildCertificate produces a final-certificate gossip message for an
 // already-resolved Output.
 func (c *Controller) BuildCertificate(slot phase0.Slot, out *obftcore.Output) (*obftcore.Certificate, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	return r.instance.BuildCertificate(out)
+	return withInstanceForRead(c, slot, func(r *RunningInstance) (*obftcore.Certificate, error) {
+		return r.instance.BuildCertificate(out)
+	})
 }
 
 // RetainedCertificate returns a peer-broadcast certificate (if any) — usable
 // as an alternative submission path when local Resolve fails.
 func (c *Controller) RetainedCertificate(slot phase0.Slot) (*obftcore.Certificate, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	return r.instance.RetainedCertificate(), nil
+	return withInstanceForRead(c, slot, func(r *RunningInstance) (*obftcore.Certificate, error) {
+		return r.instance.RetainedCertificate(), nil
+	})
 }
 
 // Evidence returns the slashing-evidence accumulated on this instance.
 func (c *Controller) Evidence(slot phase0.Slot) ([]obftcore.Evidence, error) {
-	r, err := c.lookup(slot)
-	if err != nil {
-		return nil, err
-	}
-	r.instanceMu.Lock()
-	defer r.instanceMu.Unlock()
-	return r.instance.Evidence(), nil
+	return withInstanceForRead(c, slot, func(r *RunningInstance) ([]obftcore.Evidence, error) {
+		return r.instance.Evidence(), nil
+	})
 }
 
 func (c *Controller) lookup(slot phase0.Slot) (*RunningInstance, error) {
@@ -634,6 +460,78 @@ func (c *Controller) lookup(slot phase0.Slot) (*RunningInstance, error) {
 		return nil, fmt.Errorf("%w %d", ErrNoActiveInstance, slot)
 	}
 	return r, nil
+}
+
+// withLiveInstance looks up slot's instance, takes its per-instance lock,
+// verifies it has not been Finalize'd, and runs fn under that lock — the single
+// enforcement point for the lookup → lock → ended-check contract every
+// state-touching Controller method shares. Returns ErrNoActiveInstance if the
+// slot has no instance or it has ended.
+//
+// The ended re-check under instanceMu is load-bearing: a goroutine that
+// captured the instance via lookup() before EndInstance ran could otherwise
+// mutate a finalized instance, silently losing late evidence (e.g. a Rule 5
+// candidate observed after Finalize set the ended flag). EndInstance sets that
+// flag under instanceMu, so re-checking it here closes the race.
+func withLiveInstance[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) (T, error)) (T, error) {
+	var zero T
+	r, err := c.lookup(slot)
+	if err != nil {
+		return zero, err
+	}
+	r.instanceMu.Lock()
+	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return zero, ErrNoActiveInstance
+	}
+	return fn(r)
+}
+
+// withLiveInstanceErr is withLiveInstance for methods that return only an error.
+func withLiveInstanceErr(c *Controller, slot phase0.Slot, fn func(r *RunningInstance) error) error {
+	_, err := withLiveInstance(c, slot, func(r *RunningInstance) (struct{}, error) {
+		return struct{}{}, fn(r)
+	})
+	return err
+}
+
+// withInstanceForRead is like withLiveInstance but does NOT reject a Finalize'd
+// instance. Read-only accessors (BuildCertificate / RetainedCertificate /
+// Evidence) are intentionally callable after EndInstance — e.g. to build a
+// certificate from a cached Output, or read accumulated evidence for logging.
+func withInstanceForRead[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) (T, error)) (T, error) {
+	var zero T
+	r, err := c.lookup(slot)
+	if err != nil {
+		return zero, err
+	}
+	r.instanceMu.Lock()
+	defer r.instanceMu.Unlock()
+	return fn(r)
+}
+
+// liveInstanceChan returns the channel fn produces for slot's live instance,
+// or a pre-closed channel if the slot has no active (non-ended) instance — so
+// callers select/range without blocking on a stale slot.
+func liveInstanceChan[T any](c *Controller, slot phase0.Slot, fn func(r *RunningInstance) <-chan T) <-chan T {
+	r, err := c.lookup(slot)
+	if err != nil {
+		return closedChan[T]()
+	}
+	r.instanceMu.Lock()
+	defer r.instanceMu.Unlock()
+	if r.instance.Ended() {
+		return closedChan[T]()
+	}
+	return fn(r)
+}
+
+// closedChan returns an already-closed channel of T (a receive returns the
+// zero value immediately).
+func closedChan[T any]() <-chan T {
+	ch := make(chan T)
+	close(ch)
+	return ch
 }
 
 func computeLeaderLayers(cfg *obftcore.Config, operatorID spectypes.OperatorID) []int {
