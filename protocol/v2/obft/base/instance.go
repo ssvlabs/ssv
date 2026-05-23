@@ -162,20 +162,11 @@ type Instance struct {
 	// One entry per (layer, V); may be absent if host hasn't been asked.
 	hostVerdict map[int]map[string]bool
 
-	// wantsHostValidationCh delivers (layer, value) pairs requesting the
-	// runner dispatch the host's validity check on V's first-observed via
-	// a peer's σ-onion entry (Phase-2 reflood path; see §Phase 2 / Peer-
-	// reflood V via early commit). The runner calls back through
-	// ApplyHostValidity with the verdict, which then drives
-	// l0DecisionReady on the σ-via-peer-V branch.
-	//
-	// Buffered (cap K) so ObserveCommit can enqueue without blocking under
-	// equivocation patterns that surface multiple V's at the same layer.
-	// pendingValidation tracks in-flight requests per (layer, value_root)
-	// to dedup — a second peer commit carrying the same V doesn't re-fire.
-	// Closed by Finalize.
-	wantsHostValidationCh chan ValidationRequest
-	pendingValidation     map[int]map[[32]byte]bool
+	// host is the channel + dedup plumbing for peer-reflood-V host-validation
+	// requests (see requestHostValidation). The runner drains its channel and
+	// calls back via ApplyHostValidity with the verdict (driving l0DecisionReady
+	// on the σ-via-peer-V branch). Closed by Finalize.
+	host *obft.HostValidationGate
 
 	// l0ReadyCh is closed when the operator has enough information at L_0 to
 	// commit early (per spec §Phase 2 emission-timing): a uniquely-retained
@@ -427,49 +418,36 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:                   cfg,
-		ownOperatorID:         ownOperatorID,
-		signer:                signer,
-		tagSigner:             tagSigner,
-		ibe:                   ibe,
-		clusterPubKey:         clusterPubKey,
-		pubKeyShares:          pubKeyShares,
-		ibePubKeyShares:       ibePubKeyShares,
-		evidenceObserver:      evidenceObserver,
-		bundles:               make(map[int]map[OperatorID][]*Phase1Bundle, K),
-		hostVerdict:           make(map[int]map[string]bool, K),
-		peerOnions:            make(map[int]map[OperatorID][]EncryptedLayer, K),
-		peerNR:                make(map[int]map[OperatorID]Signature, K),
-		peerCommitHashes:      make(map[OperatorID]map[[32]byte]struct{}),
-		peerFirstCommit:       make(map[OperatorID]*Commit),
-		localState:            make([]CommitState, K),
-		sigmaLocked:           make([]bool, K),
-		sigmaLockedV:          make([]Value, K),
-		nrLocked:              make([]bool, K),
-		ownPartials:           make(map[int]Signature),
-		rule4Fired:            make(map[int]map[OperatorID]bool, K),
-		rule1Fired:            make(map[int]map[OperatorID]bool, K),
-		rule3LeaderFired:      make(map[int]map[OperatorID]bool, K),
-		rule5UnknownVFired:    make(map[int]map[OperatorID]bool, K),
-		rule2Fired:            make(map[int]map[OperatorID]bool, K),
-		witnessedLeaderSigma:  make(map[int]map[[32]byte]witnessedSigma, K),
-		evidenceObserved:      make(map[evidenceObservedKey]bool),
-		l0ReadyCh:             make(chan struct{}),
-		wantsHostValidationCh: make(chan ValidationRequest, K),
-		pendingValidation:     make(map[int]map[[32]byte]bool, K),
+		cfg:                  cfg,
+		ownOperatorID:        ownOperatorID,
+		signer:               signer,
+		tagSigner:            tagSigner,
+		ibe:                  ibe,
+		clusterPubKey:        clusterPubKey,
+		pubKeyShares:         pubKeyShares,
+		ibePubKeyShares:      ibePubKeyShares,
+		evidenceObserver:     evidenceObserver,
+		bundles:              make(map[int]map[OperatorID][]*Phase1Bundle, K),
+		hostVerdict:          make(map[int]map[string]bool, K),
+		peerOnions:           make(map[int]map[OperatorID][]EncryptedLayer, K),
+		peerNR:               make(map[int]map[OperatorID]Signature, K),
+		peerCommitHashes:     make(map[OperatorID]map[[32]byte]struct{}),
+		peerFirstCommit:      make(map[OperatorID]*Commit),
+		localState:           make([]CommitState, K),
+		sigmaLocked:          make([]bool, K),
+		sigmaLockedV:         make([]Value, K),
+		nrLocked:             make([]bool, K),
+		ownPartials:          make(map[int]Signature),
+		rule4Fired:           make(map[int]map[OperatorID]bool, K),
+		rule1Fired:           make(map[int]map[OperatorID]bool, K),
+		rule3LeaderFired:     make(map[int]map[OperatorID]bool, K),
+		rule5UnknownVFired:   make(map[int]map[OperatorID]bool, K),
+		rule2Fired:           make(map[int]map[OperatorID]bool, K),
+		witnessedLeaderSigma: make(map[int]map[[32]byte]witnessedSigma, K),
+		evidenceObserved:     make(map[evidenceObservedKey]bool),
+		l0ReadyCh:            make(chan struct{}),
+		host:                 obft.NewHostValidationGate(K),
 	}, nil
-}
-
-// ValidationRequest is a request from the Instance to its runner asking
-// for the host application to validate a V at a particular layer. Emitted
-// on Instance.WantsHostValidationCh when a V is first-observed via a peer's
-// σ-onion entry (Phase-2 peer-reflood path, see §Phase 2 / Peer-reflood V
-// via early commit) without an existing host verdict. The runner dispatches
-// validation against its host hook and calls ApplyHostValidity with the
-// result.
-type ValidationRequest struct {
-	Layer int
-	Value Value
 }
 
 // WantsHostValidationCh returns the channel on which the Instance delivers
@@ -483,7 +461,7 @@ type ValidationRequest struct {
 // the validation path is degraded, but the Instance never blocks). The
 // channel is closed by Finalize.
 func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
-	return i.wantsHostValidationCh
+	return i.host.Channel()
 }
 
 // requestHostValidation enqueues a host-validity request on the wants
@@ -500,37 +478,14 @@ func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
 // an unguarded path. Mirrors the equivalent guard in twoab's
 // requestHostValidation.
 func (i *Instance) requestHostValidation(layer int, value Value) {
-	if i.ended {
-		return
-	}
-	if layer < 0 || layer >= i.cfg.K() {
-		return
-	}
-	root := ValueRoot(value)
-	// Dedup: skip if already validated.
-	if verdicts := i.hostVerdict[layer]; verdicts != nil {
-		if _, recorded := verdicts[valueRootKey(value)]; recorded {
-			return
+	i.host.Request(layer, value, i.cfg.K(), i.ended, func(l int, root [32]byte) bool {
+		verdicts := i.hostVerdict[l]
+		if verdicts == nil {
+			return false
 		}
-	}
-	// Dedup: skip if request already in-flight for this (layer, V_root).
-	bucket := i.pendingValidation[layer]
-	if bucket == nil {
-		bucket = make(map[[32]byte]bool)
-		i.pendingValidation[layer] = bucket
-	}
-	if bucket[root] {
-		return
-	}
-	bucket[root] = true
-	select {
-	case i.wantsHostValidationCh <- ValidationRequest{Layer: layer, Value: append(Value{}, value...)}:
-	default:
-		// Buffer full — runner is not draining. Roll back the pending
-		// flag so a subsequent ObserveCommit can re-attempt; otherwise
-		// the request would never fire.
-		delete(bucket, root)
-	}
+		_, recorded := verdicts[string(root[:])]
+		return recorded
+	})
 }
 
 // L0ReadyCh returns a channel closed when the operator has enough information
@@ -720,10 +675,7 @@ type InstanceStats struct {
 // per-method API doesn't surface (e.g., the pendingValidation set's
 // size, the witnessed-leader-σ cache).
 func (i *Instance) Stats() InstanceStats {
-	pending := 0
-	for _, bucket := range i.pendingValidation {
-		pending += len(bucket)
-	}
+	pending := i.host.PendingCount()
 	witnessed := 0
 	for _, bucket := range i.witnessedLeaderSigma {
 		witnessed += len(bucket)
@@ -782,7 +734,7 @@ func (i *Instance) Finalize() {
 	// Close the host-validation request channel so any runner blocking on
 	// a select case for it observes the close and unblocks. Safe to call
 	// once (ended-flag dedup above).
-	close(i.wantsHostValidationCh)
+	i.host.Close()
 }
 
 // Ended reports whether this Instance has been Finalize'd. Caller must hold

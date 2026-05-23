@@ -83,9 +83,7 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 	// the verdict is now recorded; a subsequent harvest of the same V
 	// would dedup on hostVerdict anyway, but clearing keeps the
 	// pendingValidation set tight (memory-bounded).
-	if bucket := i.pendingValidation[layer]; bucket != nil {
-		delete(bucket, root)
-	}
+	i.host.ClearPending(layer, root)
 	i.afterStateDelta()
 	// Recording a host verdict can flip computeLocalValueState to Value
 	// (retained V_0 now host-valid). Signal L0Ready so the runner/DES can

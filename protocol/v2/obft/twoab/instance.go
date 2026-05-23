@@ -230,25 +230,12 @@ type Instance struct {
 	// the silent truncation would mask the failure-rate signal).
 	cascadeErrorsCapped bool
 
-	// wantsHostValidationCh delivers (layer, value) pairs requesting the
-	// runner-side host hook to validate a V the Instance harvested from a
-	// peer KindValue (the peer-reflood-V path). Buffered with capacity K;
-	// non-blocking enqueue, drops on full buffer with rollback so a later
-	// observation can re-attempt. Closed by Finalize.
-	//
-	// Mirrors `protocol/v2/obft/base/instance.go` WantsHostValidationCh
-	// pattern. See requestHostValidation for dedup rules; see
-	// maybeHarvestPhase1BundleFromValueMsg in phase2a.go for the producer
-	// side; see [`adapter`](../../consensustest/twoab/events.go)
-	// evtValueMsgArrival for the drain side.
-	wantsHostValidationCh chan ValidationRequest
-
-	// pendingValidation tracks in-flight host-validation requests by
-	// (layer, value_root). Dedup key: only one outstanding request per
-	// (layer, V_root) at a time. The Instance clears the pending flag
-	// implicitly on ApplyHostValidity (host verdict recorded → no longer
-	// pending).
-	pendingValidation map[int]map[[32]byte]bool
+	// host is the channel + dedup plumbing for peer-reflood-V host-validation
+	// requests harvested from peer KindValues (see requestHostValidation /
+	// maybeHarvestPhase1BundleFromValueMsg). The runner drains its channel and
+	// calls back via ApplyHostValidity (which clears the pending flag). Closed
+	// by Finalize.
+	host *obft.HostValidationGate
 
 	// verifiedWitnesses caches the result of verifySigmaPartial for a
 	// layer's leader on a given (layer, V_root). Every KindValue forwards
@@ -390,56 +377,38 @@ func NewInstance(
 
 	K := cfg.K()
 	return &Instance{
-		cfg:              cfg,
-		ownOperatorID:    ownOperatorID,
-		signer:           signer,
-		tagSigner:        tagSigner,
-		ibe:              ibe,
-		clusterPubKey:    clusterPubKey,
-		pubKeyShares:     pubKeyShares,
-		ibePubKeyShares:  ibePubKeyShares,
-		evidenceObserver: evidenceObserver,
-		retainedBundles:  make(map[int]map[OperatorID][]*retainedBundle, K),
-		hostVerdict:      make(map[int]map[string]bool, K),
-		peerValueMsg:     make(map[OperatorID]*ValueMsg, len(cfg.Operators)),
-		peerNoValueMsg:   make(map[OperatorID]*NoValueMsg, len(cfg.Operators)),
-		peerCommit:       make(map[OperatorID]*Commit, len(cfg.Operators)),
-		valuePool:        make(map[int]map[[32]byte]map[OperatorID]bool, K),
-		noValuePool:      make(map[int]map[OperatorID]bool, K),
-		sigmaPool:        make(map[int]map[[32]byte]map[OperatorID]Signature, K),
-		nrTagPool:        make(map[int]map[OperatorID]Signature, K),
-		sigmaLocked:      make([]bool, K),
-		sigmaLockedV:     make([]Value, K),
-		nrLocked:         make([]bool, K),
-		ownPartials:      make(map[int]Signature, K),
-		rule1Fired:       make(map[int]map[OperatorID]bool, K),
-		rule3Fired:       make(map[int]map[OperatorID]bool, K),
-		rule4Fired:       make(map[int]map[OperatorID]bool, K),
-		rule5Fired:       make(map[int]map[OperatorID]bool, K),
-		rule6aFired:      make(map[OperatorID]bool, len(cfg.Operators)),
-		evidenceObserved: make(map[evidenceObservedKey]bool),
-		// Host-validation channel: buffered at K so a slot's worth of
-		// per-layer harvested V's can sit in the queue if the drain is
-		// briefly stalled. Realistically K=2 today and the channel only
-		// holds L_0 entries (no L_k>0 harvest yet — Phase D).
-		wantsHostValidationCh: make(chan ValidationRequest, K),
-		pendingValidation:     make(map[int]map[[32]byte]bool, K),
-		verifiedWitnesses:     make(map[int]map[[32]byte]bool, K),
-		l0ReadyCh:             make(chan struct{}),
+		cfg:               cfg,
+		ownOperatorID:     ownOperatorID,
+		signer:            signer,
+		tagSigner:         tagSigner,
+		ibe:               ibe,
+		clusterPubKey:     clusterPubKey,
+		pubKeyShares:      pubKeyShares,
+		ibePubKeyShares:   ibePubKeyShares,
+		evidenceObserver:  evidenceObserver,
+		retainedBundles:   make(map[int]map[OperatorID][]*retainedBundle, K),
+		hostVerdict:       make(map[int]map[string]bool, K),
+		peerValueMsg:      make(map[OperatorID]*ValueMsg, len(cfg.Operators)),
+		peerNoValueMsg:    make(map[OperatorID]*NoValueMsg, len(cfg.Operators)),
+		peerCommit:        make(map[OperatorID]*Commit, len(cfg.Operators)),
+		valuePool:         make(map[int]map[[32]byte]map[OperatorID]bool, K),
+		noValuePool:       make(map[int]map[OperatorID]bool, K),
+		sigmaPool:         make(map[int]map[[32]byte]map[OperatorID]Signature, K),
+		nrTagPool:         make(map[int]map[OperatorID]Signature, K),
+		sigmaLocked:       make([]bool, K),
+		sigmaLockedV:      make([]Value, K),
+		nrLocked:          make([]bool, K),
+		ownPartials:       make(map[int]Signature, K),
+		rule1Fired:        make(map[int]map[OperatorID]bool, K),
+		rule3Fired:        make(map[int]map[OperatorID]bool, K),
+		rule4Fired:        make(map[int]map[OperatorID]bool, K),
+		rule5Fired:        make(map[int]map[OperatorID]bool, K),
+		rule6aFired:       make(map[OperatorID]bool, len(cfg.Operators)),
+		evidenceObserved:  make(map[evidenceObservedKey]bool),
+		host:              obft.NewHostValidationGate(K),
+		verifiedWitnesses: make(map[int]map[[32]byte]bool, K),
+		l0ReadyCh:         make(chan struct{}),
 	}, nil
-}
-
-// ValidationRequest is a request from the Instance to its runner asking
-// for the host application to validate a V at a particular layer. Emitted
-// on Instance.WantsHostValidationCh when a V is first-observed via the
-// peer-reflood-V path (harvest from a peer KindValue) without an
-// existing host verdict. The runner dispatches validation against its
-// host hook and calls ApplyHostValidity with the result.
-//
-// Mirrors `protocol/v2/obft/base.ValidationRequest`.
-type ValidationRequest struct {
-	Layer int
-	Value Value
 }
 
 // WantsHostValidationCh returns the channel on which the Instance delivers
@@ -460,7 +429,7 @@ type ValidationRequest struct {
 // the validation path is degraded, but the Instance never blocks). The
 // channel is closed by Finalize.
 func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
-	return i.wantsHostValidationCh
+	return i.host.Channel()
 }
 
 // L0ReadyCh returns a channel closed once when the operator's L_0
@@ -554,40 +523,14 @@ func (i *Instance) maybeSignalL0Ready() {
 // harvest path and call into us, and the channel close happens in
 // Finalize itself.
 func (i *Instance) requestHostValidation(layer int, value Value) {
-	if i.ended {
-		return
-	}
-	if layer < 0 || layer >= i.cfg.K() {
-		return
-	}
-	if len(value) == 0 {
-		return
-	}
-	root := ValueRoot(value)
-	// Dedup: skip if host already validated this (layer, V).
-	if verdicts := i.hostVerdict[layer]; verdicts != nil {
-		if _, recorded := verdicts[string(root[:])]; recorded {
-			return
+	i.host.Request(layer, value, i.cfg.K(), i.ended, func(l int, root [32]byte) bool {
+		verdicts := i.hostVerdict[l]
+		if verdicts == nil {
+			return false
 		}
-	}
-	// Dedup: skip if request already in-flight for this (layer, V_root).
-	bucket := i.pendingValidation[layer]
-	if bucket == nil {
-		bucket = make(map[[32]byte]bool)
-		i.pendingValidation[layer] = bucket
-	}
-	if bucket[root] {
-		return
-	}
-	bucket[root] = true
-	select {
-	case i.wantsHostValidationCh <- ValidationRequest{Layer: layer, Value: append(Value{}, value...)}:
-	default:
-		// Buffer full — runner is not draining. Roll back the pending flag
-		// so a subsequent harvest can re-attempt; otherwise the request
-		// would never fire.
-		delete(bucket, root)
-	}
+		_, recorded := verdicts[string(root[:])]
+		return recorded
+	})
 }
 
 // Config returns the instance's config (read-only).
@@ -656,10 +599,7 @@ type InstanceStats struct {
 // per-method API doesn't surface (e.g., the buffer-full rollback's
 // pendingValidation cleanup, the leader-witness verify-cost dedup cache).
 func (i *Instance) Stats() InstanceStats {
-	pending := 0
-	for _, bucket := range i.pendingValidation {
-		pending += len(bucket)
-	}
+	pending := i.host.PendingCount()
 	verified := 0
 	for _, bucket := range i.verifiedWitnesses {
 		verified += len(bucket)
@@ -744,7 +684,7 @@ func (i *Instance) Finalize() {
 		return
 	}
 	i.ended = true
-	close(i.wantsHostValidationCh)
+	i.host.Close()
 }
 
 // recordEvidence appends a non-nil evidence entry to the accumulator and

@@ -50,6 +50,8 @@ type (
 	Phase1Bundle = obft.Phase1Bundle
 	// Shared cluster/layer-topology type.
 	LayerSpec = obft.LayerSpec
+	// Shared host-validation request type.
+	ValidationRequest = obft.ValidationRequest
 )
 
 // Re-exported constructors/functions from the parent obft package.
