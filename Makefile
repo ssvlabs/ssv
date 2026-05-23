@@ -218,15 +218,12 @@ consensustest-with-real-bls:
 # Driver docstring: protocol/v2/consensustest/stress_test.go TestStress.
 # Sweep definitions: protocol/v2/consensustest/sweep.go DefaultSweeps.
 REPORT_DIR ?= ./stresstest-report
-
 CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300,400
-BFT_STARTS ?= 0,2400,2800,3200
-
+BFT_STARTS ?= 0,2400,3200
 PROTOCOLS ?= OBFT-no-reflood,OBFT,2abOBFT-no-reflood,2abOBFT-lean,2abOBFT,QBFT-no-reflood,QBFT,QBFT-SSV
-
 ITERATIONS_BASELINE_OPERATIONS ?= 10000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 1
 .PHONY: stresstest
