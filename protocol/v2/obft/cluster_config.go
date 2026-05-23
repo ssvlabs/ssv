@@ -52,6 +52,9 @@ func ValidateClusterTopology(operators []OperatorID, f int, layers []LayerSpec, 
 	if len(layers) > len(operators) {
 		return errors.New("obft: K cannot exceed cluster size")
 	}
+	if len(layers) > MaxLayers {
+		return fmt.Errorf("obft: K=%d exceeds wire cap MaxLayers=%d (valid layer indices are [0, MaxLayers))", len(layers), MaxLayers)
+	}
 	if btt <= 0 {
 		return errors.New("obft: BTT must be positive")
 	}

@@ -511,17 +511,15 @@ func (i *Instance) maybeSignalL0Ready() {
 //
 // Mirrors `protocol/v2/obft/base.Instance.requestHostValidation`.
 //
-// Post-Finalize guard: sending on a closed channel panics even via
-// `select` with default. The Instance's Observe* methods (ObserveValueMsg,
-// ObservePhase1Bundle, etc.) intentionally have no `ended` guards —
-// they will still mutate Instance state (peer pools, retentions, σ-pool,
-// EKM locks, etc.) on calls after Finalize, but the runner's contract
-// is to take its snapshot at Finalize and treat post-Finalize state
-// changes as inert externally. The guard here is specifically for the
-// send-on-closed-channel panic risk, NOT for state-mutation
-// containment — late events arriving past Finalize can still reach the
-// harvest path and call into us, and the channel close happens in
-// Finalize itself.
+// Post-Finalize safety: Finalize closes the wants channel, and a send on a
+// closed channel panics even under `select`/default. Passing `i.ended` to
+// host.Request makes the enqueue a no-op once Finalize has run, so the send
+// is never attempted. This is a defensive backstop — the only path that
+// reaches here is ObserveValueMsg → harvest, and every Observe* method
+// returns ErrInstanceEnded post-Finalize, so this function is already
+// unreachable after the channel closes. Finalize sets i.ended before
+// host.Close(), so there is no window where the channel is closed while
+// i.ended is still false.
 func (i *Instance) requestHostValidation(layer int, value Value) {
 	i.host.Request(layer, value, i.cfg.K(), i.ended, func(l int, root [32]byte) bool {
 		verdicts := i.hostVerdict[l]
