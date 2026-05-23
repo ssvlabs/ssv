@@ -23,8 +23,8 @@ const (
 	// each op broadcasts before Phase-2b's Onion2b commit. Both kinds
 	// of Phase-2a wire message — KindValue (V_0 fulltext) and KindNoValue
 	// (V-drop / NV claim) — share this MsgKind bucket; the names "verdict"
-	// and "Verdict" are legacy from v1's binary verdict-kind enum and
-	// kept here because (1) bandwidth accounting groups both into one
+	// and "Verdict" are an umbrella label for the Phase-2a coordination
+	// pair, kept here because (1) bandwidth accounting groups both into one
 	// Phase-2a-coordination row, (2) network delay model has identical
 	// shape for both (~equal-size coordination broadcasts), and (3)
 	// splitting into KindValue/KindNoValue would force every byz pattern

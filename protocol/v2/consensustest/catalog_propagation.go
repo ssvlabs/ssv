@@ -40,19 +40,17 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		// honest σ = 4 ≥ qV=3. Slot succeeds at L_0. Closes the historical
 		// h_V=1 deadlock that pre-§1 OBFT had no in-protocol recovery for.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT (post Op11): the V-drops harvest V from the byz leader's
-		// (or V-recipient's) Phase-2a KindValue via the embedded L0Witness
+		// 2abOBFT: the V-drops harvest V from the byz leader's (or
+		// V-recipient's) Phase-2a KindValue via the embedded L0Witness
 		// (the leader's σ partial on V is byte-for-byte forwarded in every
-		// KindValue post Op11). Receiver verifies L0Witness against the
-		// leader's pubKeyShare on V — passing — then enqueues a host-
-		// validation request on WantsHostValidationCh. The adapter
-		// (and production runner) drains the channel, calls ApplyHostValidity,
-		// which fires the A1 upgrade trigger in afterStateDelta. The V-drops
-		// emit KindValue(V) via A1 upgrade; the cluster value_pool reaches
-		// qV cluster-wide; σ-eligibility trigger fires → KindCommit-Signed;
+		// KindValue). Receiver verifies L0Witness against the leader's
+		// pubKeyShare on V — passing — then enqueues a host-validation
+		// request on WantsHostValidationCh. The adapter (and production
+		// runner) drains the channel, calls ApplyHostValidity, which fires
+		// the upgrade trigger in afterStateDelta. The V-drops emit
+		// KindValue(V) via the upgrade, each carrying its σ partial inline;
 		// σ-pool reaches qV at L_0 → decide at L_0 with V. Matches OBFT's
-		// behavior class (ExpectSuccessFastest). Closes v4 §Implementation
-		// deviation #2 (no peer-reflood-V via KindValue).
+		// behavior class (ExpectSuccessFastest).
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT analog: byz R1 leader's PROPOSE reaches only f recipients →
 		// PREPARE-pool below qV → R1 round-changes → honest R2 leader
@@ -60,7 +58,7 @@ var scenarioHV1SelectiveDelivery = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to selectively-deliver
 	},
-	Note: "OBFT closes the historical h_V=1 deadlock in-protocol via OBFT.md §Phase 2 peer-reflood-V (V-drop receivers σ on V harvested from the in-time recipient's KindCommit σ-onion + σ_L^V witness) combined with the L0Ready-driven evtCommitEmit framework upgrade. The 1 V-recipient early-emits with V+σ_L^V; V-drop receivers σ on peer-V. 2abOBFT recovers via NR-quorum at L_0 → fall-through to L_1. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
+	Note: "OBFT closes the historical h_V=1 deadlock in-protocol via OBFT.md §Phase 2 peer-reflood-V (V-drop receivers σ on V harvested from the in-time recipient's KindCommit σ-onion + σ_L^V witness) combined with the L0Ready-driven evtCommitEmit framework upgrade. The 1 V-recipient early-emits with V+σ_L^V; V-drop receivers σ on peer-V. 2abOBFT recovers at L_0: V-drops harvest V via the forwarded leader witness, host-validate, and upgrade with their own σ partials so σ-pool reaches qV. QBFT round-changes from selective-delivery R1 failure to honest R2 leader.",
 }
 
 // ---- Late L_0 leader broadcast (Phase 3 — Class A spec) ---------------
@@ -78,17 +76,13 @@ var scenarioLateLeaderBroadcast = Scenario{
 		// OBFT: L_0 σ-pool insufficient (byz bundle past T_commit, honest reject);
 		// NR-quorum at L_0 unlocks L_1 → honest L_1 leader broadcasts on time → fall-through.
 		"OBFT": ExpectSuccessFallThrough,
-		// 2abOBFT (post Op5+Op11): under Op11, peers harvest V from byz
-		// leader's Phase-2a KindValue (carrying the leader's L0Witness).
-		// Under Op5, the post-harvest A1 upgrade KindValue carries the
-		// emitter's σ partial directly — the cascade collapses from v4's
-		// 2 hops to 1 hop. The post-harvest σ-cascade now fits within
-		// the slot's maxDeadline even at the byz 6·BTT broadcast delay.
-		// Cluster σ-pool reaches qV at L_0 via direct KindValue
-		// observations + A1 upgrade σ partials → decides at L_0 in
-		// 3.8s. **Recovery from the sub-chunk #2 regression**: combining
-		// Op5's 1-hop cascade with Op11's harvest restores HV1Selective-
-		// class wins without the LateLeader penalty.
+		// 2abOBFT: peers harvest V from the byz leader's Phase-2a KindValue
+		// (carrying the leader's L0Witness). The post-harvest upgrade
+		// KindValue carries the emitter's σ partial directly, so the
+		// σ-cascade is a single hop and fits within the slot's maxDeadline
+		// even at the byz 6·BTT broadcast delay. Cluster σ-pool reaches qV
+		// at L_0 via direct KindValue observations plus the upgrade σ
+		// partials → decides at L_0 in 3.8s.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT analog: byz R1 leader's PROPOSE arrives past R1's timer
 		// (functionally equivalent to silent leader) → R1 round-changes →
@@ -197,15 +191,15 @@ var scenarioMeshFlakiness = Scenario{
 		// pre-resize schedule where 2·BTT delay would have exceeded the
 		// old B_0 = 1·BTT and triggered the deadlock.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT (post Op5): KindValue carries the σ partial directly —
-		// no 2-hop cascade. Flaky receivers observe V at L_0 via Phase-1
-		// bundle (within the absorption window), σ-lock at Phase 2a, and
-		// emit KindValue. Peer KindValues arrive late at flaky ops (2·BTT
-		// inbound delay) but the cluster's σ-pool[V_0] grows opportun-
-		// istically as each KindValue arrives. With f=1 byz σ-refusal,
-		// σ-pool reaches qV = 2f+1 = 3 cluster-wide from the f+1 = 2
-		// non-flaky honest + leader's L0Witness; cluster decides at L_0.
-		// **Improvement** from the 1-hop cascade vs v4's 2-hop.
+		// 2abOBFT: KindValue carries the σ partial directly, so the
+		// σ-cascade is a single hop. Flaky receivers observe V at L_0 via
+		// Phase-1 bundle (within the absorption window), σ-lock at Phase 2a,
+		// and emit KindValue. Peer KindValues arrive late at flaky ops
+		// (2·BTT inbound delay) but the cluster's σ-pool[V_0] grows
+		// opportunistically as each KindValue arrives. With f=1 byz
+		// σ-refusal, σ-pool reaches qV = 2f+1 = 3 cluster-wide from the
+		// f+1 = 2 non-flaky honest + leader's L0Witness; cluster decides
+		// at L_0.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: flaky receivers see PROPOSE/PREPAREs with delay but non-flaky
 		// non-byz honest count (N-1-2f) PREPARE among themselves on time;
@@ -283,8 +277,8 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 		// OBFT: σ-pool = N-f = qV at L_0; decides at L_0 with the slow ops
 		// NR'd in their local commits but irrelevant to cluster σ-quorum.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT: σ-pool = N-f at L_0 from on-time receivers; verdict pool
-		// reaches qV at honest receivers → σ-quorum at L_0. Same outcome.
+		// 2abOBFT: σ-pool = N-f at L_0 from on-time receivers' KindValue
+		// partials, reaching qV → σ-quorum at L_0. Same outcome.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: slow ops PREPARE late (R1 PROPOSE arrives at them at
 		// 300+3·BTT=900ms; their PREPAREs arrive at others by 1100ms);
@@ -345,17 +339,14 @@ var scenarioAsymmetricPropagation_FPlus1Slow_Miss = Scenario{
 		// with no fall-through (chain stays sealed at L_0). Class A
 		// asymmetric-propagation-past-T_commit per §Failure modes.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (post Op5): the σ-pool / NR-pool short-of-quorum
-		// algebra is the same as v4, but the 1-hop cascade (KindValue
-		// carries σ partial) means the σ-pool fills faster from the
-		// non-slow ops. At BTT=200ms / RelayCutoff=4s and the new
-		// resolveDeadline = TPhase2a + 1·BTT + SB + ε_3, slow ops'
-		// late KindValues arrive after the resolveDeadline-anchored
-		// sweep but the evtResolveRerun mechanism re-resolves on each
-		// arrival. The fast subset's σ-pool reaches qV via direct
-		// KindValue observations within the absorption window. Slot
-		// decides at L_0 with V_0. **Improvement** from Op5's collapsed
-		// cascade window.
+		// 2abOBFT: the 1-hop cascade (KindValue carries σ partial) means
+		// the σ-pool fills quickly from the non-slow ops. At BTT=200ms /
+		// RelayCutoff=4s and resolveDeadline = TPhase2a + 1·BTT + SB +
+		// ε_3, slow ops' late KindValues arrive after the
+		// resolveDeadline-anchored sweep but the evtResolveRerun mechanism
+		// re-resolves on each arrival. The fast subset's σ-pool reaches qV
+		// via direct KindValue observations within the absorption window.
+		// Slot decides at L_0 with V_0.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: outcome is timing-dependent now that the framework
 		// models post-consensus partial-sig aggregation explicitly.

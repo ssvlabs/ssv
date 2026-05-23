@@ -11,16 +11,16 @@ import (
 // verification CPU cost differs across modes, not wire size.
 //
 // Per docs/2abOBFT.md §Phase 1 / §Phase 2a / §Phase 2b / §Final-certificate
-// gossip wire formats (post Op3 + Op5 + Op8 + Op11):
+// gossip wire formats:
 //
 //	Phase1Bundle:  ClusterID(32) + OperatorID(8) + Height(8) + Layer(4) +
-//	               Value(|V|) + LWitness(BLS sig) [Op8 — leader's σ partial on V at this layer]
+//	               Value(|V|) + LWitness(BLS sig) — leader's σ partial on V at this layer
 //	ValueMsg:      ClusterID(32) + OperatorID(8) + Height(8) +
 //	               Value(|V|) + ValueRoot(32) +
-//	               Witnesses [Op11+Op12 — forwarded leader witnesses]:
+//	               Witnesses — forwarded leader witnesses:
 //	                   count(4) + per-entry (Layer(4) + ValueRoot(32) +
 //	                                         Witness(BLS sig)) +
-//	               L0Partial(BLS sig) [Op5 — emitter's own σ partial] +
+//	               L0Partial(BLS sig) — emitter's own σ partial +
 //	               K-1 LayerEntries × (Layer(4) + Kind(1) +
 //	                                   V(|V_k| if σ-chained, else 0) +
 //	                                   Payload(BLS sig or chained IBE ct))
@@ -62,12 +62,12 @@ func layerEntriesSize(entries []twoab.LayerEntry) int64 {
 func valueMsgSize(v *twoab.ValueMsg) int64 {
 	return clusterIDBytes + operatorIDBytes + heightBytes +
 		int64(len(v.V)) + valueRootBytes +
-		layerWitnessesSize(v.Witnesses) + // Op11+Op12 forwarded leader witnesses
-		int64(len(v.L0Partial)) + // Op5 emitter's own σ partial
+		layerWitnessesSize(v.Witnesses) + // forwarded leader witnesses
+		int64(len(v.L0Partial)) + // emitter's own σ partial
 		layerEntriesSize(v.LayerEntries)
 }
 
-// layerWitnessesSize accounts for the Op12 Witnesses[] wire block: a uint32
+// layerWitnessesSize accounts for the Witnesses[] wire block: a uint32
 // count prefix + per-entry Layer(4) + ValueRoot(32) + length-prefixed Witness.
 func layerWitnessesSize(ws []twoab.LayerWitness) int64 {
 	size := int64(4) // count prefix

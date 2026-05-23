@@ -60,8 +60,8 @@ type sim struct {
 	// back to the schedule-anchored resolvedAt time when the
 	// schedule-anchored evtResolve at slot deadline is what first
 	// produces quorum (resolveOpAndBroadcastCert also writes here as a
-	// fallback). Read by outcome() as Outcome.DecisionTime. Plan:
-	// docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	// fallback). Read by outcome() as Outcome.DecisionTime. See
+	// docs/2abOBFT.md §Phase 3 (reconstruction — observer-on-arrival).
 	vQuorumAt map[twoab.OperatorID]time.Duration
 
 	// Per-op flags tracking which emissions have already been observed
@@ -214,7 +214,7 @@ func (s *sim) start() error {
 	// schedules a final Resolve sweep AFTER the typical Phase-2b
 	// settle window.
 	//
-	// Post Op5/Op6 the post-TPhase2a window is the MAX of the two
+	// The post-TPhase2a window is the MAX of the two
 	// mutually-exclusive resolve paths, not their sum:
 	//   - σ-ward: 1·BTT (KindValue prop) + SafetyBuffer (reflood tail).
 	//   - NR-ward fall-through to L_1: 2·BTT (KindNoValue → KindCommit-NR
@@ -420,7 +420,7 @@ func (s *sim) emitMesh(from twoab.OperatorID, kind ct.MsgKind, layer int, bytes 
 func (s *sim) observedOffset() time.Duration { return s.now }
 
 // markValueMsgEmitted marks `op` as having broadcast its ValueMsg
-// (either Phase-2a fire-time or A1 upgrade). Subsequent
+// (either Phase-2a fire-time or NoValue→Value upgrade). Subsequent
 // captureCascadeEmissions calls skip the ValueMsg re-broadcast path
 // for this op.
 func (s *sim) markValueMsgEmitted(op twoab.OperatorID) {
@@ -433,7 +433,7 @@ func (s *sim) markNoValueMsgEmitted(op twoab.OperatorID) {
 }
 
 // markCommitEmitted marks `op` as having broadcast its Commit (whether
-// Phase-2a NRDirect or Phase-2b Signed/NR).
+// Phase-2a NRDirect or Phase-2b NR).
 func (s *sim) markCommitEmitted(op twoab.OperatorID) {
 	s.commitEmitted[op] = true
 }

@@ -20,27 +20,25 @@ var scenarioEquivocate111 = Scenario{
 	Expect: map[string]ExpectClass{
 		// OBFT: σ-pools split below qV; no NR-quorum; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (post Op5+Op11): each honest retains one of the N-1
-		// distinct V's via Phase-1 bundle direct delivery and emits
-		// KindValue σ-locked on their own V (with σ partial). When
-		// honest ops cross-broadcast, each harvests the alternate V via
-		// Op11 from peers' KindValues. Retention grows to 2 → Rule 2
-		// fires. BUT post Op5 the equivocation trigger only fires for
-		// ops still in EKM coordination state — ops already σ-locked
-		// (which is everyone here) cannot pivot to NR. σ-pool[V_i]
+		// 2abOBFT: each honest retains one of the N-1 distinct V's via
+		// Phase-1 bundle direct delivery and emits KindValue σ-locked on
+		// their own V (with σ partial). When honest ops cross-broadcast,
+		// each harvests the alternate V from peers' KindValues. Retention
+		// grows to 2 → Rule 2 fires. But the equivocation trigger only
+		// fires for ops still in EKM coordination state — ops already
+		// σ-locked (which is everyone here) cannot pivot to NR. σ-pool[V_i]
 		// fragments (each V_i has 1 partial cluster-wide) — none reaches
 		// qV. NR-pool also empty (no ops emitted NR). Cluster MISSes at
-		// L_0 with no fall-through. **Op5 trade-off**: equivocation
-		// post-σ-commit has no recovery path (docs/2abOBFT.md §Failure modes);
-		// pre-Op5 this scenario would have fall-through-recovered via
-		// A4 NR-pivot. Pigeonhole 2 still guarantees safety (no V
-		// reaches qV → no cluster decision on any V).
+		// L_0 with no fall-through: equivocation post-σ-commit has no
+		// recovery path (docs/2abOBFT.md §Failure modes). Pigeonhole 2
+		// still guarantees safety (no V reaches qV → no cluster decision
+		// on any V).
 		"2abOBFT": ExpectMiss,
 		// QBFT: PREPARE pool fragments; R1 timeout → R2 with fresh V → success.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
-	Note: "BFT-comparison.md Table 3: QBFT recovers via R2 fresh-V; OBFT misses (R-invariant). 2ab recovers via NR-fall-through (verdict-pool fragmentation drives row 5 NR-quorum). Pattern emits N-1 distinct V's at any cluster size; the '1-1-1' name reflects f=1.",
+	Note: "BFT-comparison.md Table 3: QBFT recovers via R2 fresh-V; OBFT misses (R-invariant). 2abOBFT also misses: every honest σ-locks on its own distinct V, so no V's σ-pool reaches qV and the σ-locked ops cannot pivot to NR. Pattern emits N-1 distinct V's at any cluster size; the '1-1-1' name reflects f=1.",
 }
 
 // ---- Leader equivocates all-NR (floods both V's to all honest) --------
@@ -58,7 +56,8 @@ var scenarioEquivocateAllNR = Scenario{
 		// NR-quorum at L_0 → fall-through to L_1.
 		"OBFT": ExpectSuccessFallThrough,
 		// 2abOBFT: every honest sees both V's → equivocation observed →
-		// row 1 NR per receiver → NR-quorum at L_0 → fall-through to L_1.
+		// KindCommit-NRDirect per receiver → NR-quorum at L_0 → fall-through
+		// to L_1.
 		"2abOBFT": ExpectSuccessFallThrough,
 		// QBFT: byz proposer splits PROPOSE delivery 50/50 (V_a to half,
 		// V_b to half); receivers register only the first PROPOSE for the
@@ -69,7 +68,7 @@ var scenarioEquivocateAllNR = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
-	Note: "Both recover at fall-through cost; OBFT in-round (cheap, equivocation-NR-driven), QBFT pays RT (expensive, PREPARE-pool-fragmentation-driven). 2abOBFT Expect (SuccessFallThrough) holds under this profile's ConstantDelay (both V's arrive together → all NRDirect → L_1). Under JITTERY delivery, Op6 async-fire shifts 2abOBFT to mostly L_0-fast decide + a ~23% miss tail (safety-preserving) — see docs/2abOBFT.md §Liveness + TestAdapter_Equivocate_AllNR_JitterTradeoff.",
+	Note: "Both recover at fall-through cost; OBFT in-round (cheap, equivocation-NR-driven), QBFT pays RT (expensive, PREPARE-pool-fragmentation-driven). 2abOBFT Expect (SuccessFallThrough) holds under this profile's ConstantDelay (both V's arrive together → all NRDirect → L_1). Under JITTERY delivery, the async NRDirect timing shifts 2abOBFT to mostly L_0-fast decide + a ~23% miss tail (safety-preserving) — see docs/2abOBFT.md §Liveness + TestAdapter_Equivocate_AllNR_JitterTradeoff.",
 }
 
 // ---- σ-locked split (f-f) ---------------------------------------------
@@ -103,22 +102,20 @@ var scenarioEquivocateSigmaLockedSplit = Scenario{
 		// OBFT: σ-pool on each V = f+1 < qV=2f+1; NR-pool from silent rest = f
 		// < qEnc=2f+1; slot misses.
 		"OBFT": ExpectMiss,
-		// 2abOBFT (post Op5+Op11): the 1-hop cascade lets silent ops
-		// (op{2f+2..n}) harvest V_a from V_a-recipients' KindValues +
-		// A1 upgrade with their own σ partials. σ-pool[V_a] grows past
-		// qV cluster-wide via the silent ops' upgrades, even though the
-		// V_a recipients themselves σ-lock on V_a and the V_b recipient
-		// σ-locks on V_b (no NR pivot possible post Op5). Slot decides
-		// at L_0 with V_a. Pigeonhole 2 holds: only V_a reaches qV
-		// (V_b has 1 partial cluster-wide). **Recovery via Op5+Op11
-		// combo**: the wider Op11 harvest path + Op5's 1-hop cascade
-		// converts what was MISS pre-Op5 into a SuccessFastest.
+		// 2abOBFT: the 1-hop cascade lets silent ops (op{2f+2..n})
+		// harvest V_a from V_a-recipients' KindValues and upgrade with
+		// their own σ partials. σ-pool[V_a] grows past qV cluster-wide
+		// via the silent ops' upgrades, even though the V_a recipients
+		// themselves σ-lock on V_a and the V_b recipient σ-locks on V_b
+		// (no NR pivot possible once σ-locked). Slot decides at L_0 with
+		// V_a. Pigeonhole 2 holds: only V_a reaches qV (V_b has 1 partial
+		// cluster-wide).
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: PREPARE pool splits; R1 timeout → R2 fresh V → success.
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
-	Note: "OBFT-family R-invariant slot-miss at any cluster size (generalized 1-1 → f-f); QBFT R2 recovers. 2ab recovers in-round via NR-quorum at L_0 (Phase-2a verdict pool fragmentation + row 5).",
+	Note: "OBFT-family R-invariant slot-miss at any cluster size (generalized 1-1 → f-f); QBFT R2 recovers. 2abOBFT recovers at L_0 via σ-quorum: the silent ops harvest V_a from a V_a-recipient's forwarded leader witness, host-validate, and upgrade with their own σ partials, so σ-pool[V_a] reaches qV (the leader's per-value witnesses seed it; Pigeonhole 2 bounds it to one value).",
 }
 
 // ---- partial equivocation (natural recovery; OBFT.md:443) -------------
@@ -156,17 +153,15 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		// at L_0 with V_a even though leader equivocated. Equivocation evidence
 		// still gossipable — success doesn't suppress slashing.
 		"OBFT": ExpectSuccessFastest,
-		// 2abOBFT (post Op3): the L_0 leader's L0Witness in the Phase-1
-		// bundle (BLS partial on V_a from the byz leader) seeds σ-pool[V_a]
-		// at every recipient. 2 V_a recipients + leader's L0Witness =
-		// σ-pool[V_a] = 3 = qV. Slot succeeds at L_0 on V_a, matching OBFT's
+		// 2abOBFT: the L_0 leader's L0Witness in the Phase-1 bundle (BLS
+		// partial on V_a from the byz leader) seeds σ-pool[V_a] at every
+		// recipient. 2 V_a recipients + leader's L0Witness = σ-pool[V_a]
+		// = 3 = qV. Slot succeeds at L_0 on V_a, matching OBFT's
 		// natural-recovery behavior. The byz leader equivocated cluster-
 		// wide (two distinct Phase-1 bundles V_a / V_b from the same leader);
 		// Rule 2 (leader equivocation) evidence is detectable cluster-wide
 		// via ObservePhase1Bundle once reflood surfaces both bundles to any
-		// single op. Pre-Op3 v4 missed this scenario because KindValue
-		// carried no σ-direction-partial and the leader's σ at Phase 2b
-		// never reached cluster-wide qV due to fragmentation.
+		// single op.
 		"2abOBFT": ExpectSuccessFastest,
 		// QBFT: PREPARE-pool on V_a = 2f honest (byz leader runs no real
 		// Instance, no PREPARE from leader); pool on V_b = 1. Both < quorum →
@@ -174,5 +169,5 @@ var scenarioPartialEquivocationNaturalRecovery = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
-	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452). Post-Op3 the per-layer leader witness restores the σ_V head-start, so 2ab decides at L_0 like OBFT here (the 2f V_a-recipients' σ partials + the leader's witness on V_a reach qV).",
+	Note: "Byz fumbles equivocation timing; one V reaches qV naturally. Validates Pigeonhole 2 'at most one V reaches qV cluster-wide' under nonzero σ-pools on both V's. OBFT.md:443 (case analysis) / OBFT.md:477 (BFT-comparison row 'Byzantine leader equivocates, 2-1 split'). Distinct from EquivocateSigmaLockedSplit (σ-locked split slot-miss at OBFT.md:452). The per-layer leader witness gives the σ_V head-start, so 2abOBFT decides at L_0 like OBFT here (the 2f V_a-recipients' σ partials + the leader's witness on V_a reach qV).",
 }

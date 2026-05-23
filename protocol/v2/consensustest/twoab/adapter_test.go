@@ -39,7 +39,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 // OBFT-OPPORTUNISTIC-PHASE3 plan, mirrored for 2abOBFT. Asserts the
 // observer-mode metric is active: under DeliveryDirect at BTT=200ms
 // (ConstantDelay), σ-quorum at L_0 reaches via the KindValue-arrival
-// observer path at TPhase2a + 1·BTT (post Op5 — KindValue carries σ
+// observer path at TPhase2a + 1·BTT (KindValue carries the σ
 // partial directly).
 //
 // Adapter derives:
@@ -62,7 +62,7 @@ func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	// Post-Op6 async-fire: σ-eligible ops emit KindValue the moment their
+	// Async-fire: σ-eligible ops emit KindValue the moment their
 	// L0Ready closes (bundle retained + host valid), NOT at the TPhase2a
 	// backstop. Timeline at BTT=200ms, ConstantDelay{D=BTT}, SafetyBuffer=0:
 	//   FetchAt[0] = T0Broadcast − B_0 = 3200 − 2·BTT = 2800ms (leader
@@ -71,14 +71,12 @@ func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	//     → peers async-fire KindValue (with σ partial) at 3000ms.
 	//   peer KindValues arrive at 3000 + 1·BTT = 3200ms → σ-pool reaches
 	//     qV → opportunistic Resolve decides at 3200ms.
-	// This is TPhase2a − 1·BTT (3400 − 200), i.e. the decision now lands
-	// BEFORE the TPhase2a backstop — a 2·BTT improvement over the
-	// pre-Op6 synchronized-fire path (which decided at TPhase2a + 1·BTT =
-	// 3600ms). The exact gap is (3·BTT − propagation); under D=BTT that's
-	// 2·BTT. (SafetyBuffer=0 here, so the Op6 resolveDeadline sum→max
-	// change is a no-op for this config — only async-fire moves the time.)
+	// This is TPhase2a − 1·BTT (3400 − 200), i.e. the decision lands
+	// BEFORE the TPhase2a backstop. (SafetyBuffer=0 here, so the
+	// resolveDeadline max-form is a no-op for this config — only
+	// async-fire moves the time.)
 	require.Equal(t, 3200*time.Millisecond, out.DecisionTime,
-		"Op6 async-fire: L_0 σ-quorum at bundle-arrival + 1·BTT = 3200ms")
+		"async-fire: L_0 σ-quorum at bundle-arrival + 1·BTT = 3200ms")
 }
 
 // TestAdapter_HealthyMesh_N4 — 2abOBFT healthy through the mesh
@@ -176,15 +174,15 @@ func TestAdapter_CatalogRunsToCompletion(t *testing.T) {
 //     (`t0Broadcast − B_0`) — clamp dormant; schedule and decision
 //     time bit-identical to BFTStart=0.
 //  2. BFTStart above the fetch-clamp boundary but Phase-1 propagation
-//     + the A1 upgrade cascade still completes before the runner's
-//     submit deadline — cluster still decides via the dynamic
-//     Phase-2b cascade (Phase-2a NoValueMsg → upgrade ValueMsg on
-//     Phase-1 arrival → cascade-emitted Commit-Signed).
-//  3. BFTStart so late that the upgrade + commit cascade can't
+//     plus the upgrade cascade still completes before the runner's
+//     submit deadline — cluster still decides at L_0 via the upgrade
+//     cascade (Phase-2a NoValueMsg → upgrade ValueMsg carrying the σ
+//     partial inline, on Phase-1 arrival → σ-pool reaches qV).
+//  3. BFTStart so late that the upgrade cascade can't
 //     complete within the slot — cluster MISSes.
 //
-// Note: 2abOBFT's A1 upgrade path makes the "BFTStart > t0Broadcast"
-// regime more graceful than in bare OBFT or the old 2abOBFT design.
+// Note: 2abOBFT's NoValue→Value upgrade path makes the
+// "BFTStart > t0Broadcast" regime more graceful than in bare OBFT.
 // The protocol naturally recovers via NoValueMsg → upgrade ValueMsg
 // as long as enough wall-clock time remains for the cascade.
 func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
@@ -240,8 +238,8 @@ func TestAdapter_BFTStart_BoundaryBehavior(t *testing.T) {
 	// before the schedule-anchored Resolve sweep at TPhase2a + 2·BTT
 	// + ε_3 = 3850ms. At BFTStart=3700ms the Phase-1 bundle reaches
 	// peers ~3701ms (Phase2aFire already at 3600ms with no V → all
-	// NoValue), upgrade cascade fires but the σ-eligibility-triggered
-	// commits arrive too late for Resolve.
+	// NoValue), upgrade cascade fires but the upgrade ValueMsgs (carrying
+	// the σ partials) arrive too late for the σ-pool to reach qV by Resolve.
 	cfgPastFire := baseCfg(3700 * time.Millisecond)
 	outPastFire, err := twoabadapter.Protocol{}.Run(cfgPastFire)
 	require.NoError(t, err)
@@ -305,7 +303,7 @@ func TestAdapter_Phase2DowngradeValueNoValue_FiresRule6a(t *testing.T) {
 		"at least one honest op should detect Rule 6a (Phase-2 equivocation) on the byz's cross-kind downgrade sequence")
 }
 
-// TestAdapter_ResolveDeadline_SumToMax validates the Op6 corollary:
+// TestAdapter_ResolveDeadline_SumToMax validates that
 // the post-TPhase2a resolve window is
 //
 //	max(1·BTT + SafetyBuffer, 2·BTT) + ε_3 = 1·BTT + max(SafetyBuffer, 1·BTT) + ε_3
@@ -369,7 +367,7 @@ func TestAdapter_ResolveDeadline_SumToMax(t *testing.T) {
 func ptrDur(d time.Duration) *time.Duration { return &d }
 
 // TestAdapter_Equivocate_AllNR_JitterTradeoff tracks the accepted B1
-// Op6 trade-off (see docs/2abOBFT.md §Phase 2a, Async fire on L0Ready): async-fire
+// trade-off (see docs/2abOBFT.md §Phase 2a, Async fire on L0Ready): async-fire
 // shrinks the equivocation-detection window, so under JITTERY delivery
 // the Equivocate_AllNR scenario (byz leader floods both V_a and V_b to
 // all honest ops) shifts from "always fall through to L_1" to "mostly
@@ -423,11 +421,11 @@ func TestAdapter_Equivocate_AllNR_JitterTradeoff(t *testing.T) {
 	// L_0) at the time of writing; assert ≥ 50% so a major worsening of
 	// the miss tail trips the test, without flaking on seed-set drift.
 	require.GreaterOrEqualf(t, decided, seeds/2,
-		"AllNR decided rate regressed below 50%% under jitter (got %d/%d); the B1 trade-off worsened materially — re-evaluate Op6 async-fire",
+		"AllNR decided rate regressed below 50%% under jitter (got %d/%d); the B1 trade-off worsened materially — re-evaluate async-fire",
 		decided, seeds)
-	// The post-Op6 decided cases resolve at L_0 (fast), not L_1: assert
+	// The decided cases resolve at L_0 (fast), not L_1: assert
 	// the fast-path dominates the decided set (documents the distribution
 	// shift, not just the rate).
 	require.Greaterf(t, l0, l1,
-		"expected L_0-fast to dominate decided AllNR runs under Op6 (got L0=%d L1=%d)", l0, l1)
+		"expected L_0-fast to dominate decided AllNR runs with async-fire (got L0=%d L1=%d)", l0, l1)
 }

@@ -217,7 +217,7 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// Byz operator forging — synthesize a bundle directly, bypassing
 			// the EKM σ-lock that BuildPhase1Bundle acquires (a byz leader
 			// equivocating across multiple V's bypasses EKM exactly this way).
-			// Sign LWitness via direct signer access at this layer (Op8: every
+			// Sign LWitness via direct signer access at this layer (every
 			// layer's leader carries a witness, not just L_0).
 			var lWitness twoab.Signature
 			w, signErr := s.signers[leader].SignPartial(p.V)
@@ -239,8 +239,8 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// Leader self-observes their own bundle so their own retention
 			// state reflects V at this layer. Without self-observation the
 			// leader's L_0 retention would be empty and they'd take the
-			// NoValue path at their own Phase-2a fire-time. Post Op8 the
-			// bundle also carries the leader's σ partial (LWitness),
+			// NoValue path at their own Phase-2a fire-time. The bundle
+			// also carries the leader's σ partial (LWitness),
 			// which is self-pooled into σ-pool[V_k] via the ObservePhase1Bundle
 			// verify+pool path (the leader's own pool is updated as a
 			// receiver of their own bundle).
@@ -254,14 +254,14 @@ func (e *evtLeaderFetch) handle(s *sim) []scheduledEvent {
 			// layer's perspective via cluster-wide cascading state). Capture
 			// any cascade emissions.
 			out = append(out, captureCascadeEmissions(s, leader)...)
-			// Op6: the leader's self-observe (retention + host valid)
+			// The leader's self-observe (retention + host valid)
 			// closes its L0Ready at L_0 — async-fire its KindValue now,
 			// well before the TPhase2a backstop (this is the earliest
 			// σ-emission in the cluster, seeding σ-pool[V_0] for peers).
 			out = append(out, maybeEarlyFire(s, leader)...)
 		}
 		// 2abOBFT Phase 1 carries the leader's LWitness σ partial at every
-		// layer post Op8. The offline-aggregator path does NOT observe this
+		// layer. The offline-aggregator path does NOT observe this
 		// witness directly at leader-fetch time (the witness is verified
 		// + pooled via the ObservePhase1Bundle receiver path on every
 		// honest op). σ partials at L_k>0 are still credited via Phase-2a
@@ -328,10 +328,10 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 	_ = inst.ApplyHostValidity(e.layer, e.bundle.Value, valid)
 	// Both ObservePhase1Bundle and ApplyHostValidity run the afterStateDelta
 	// cascade internally (per spec §Emission ordering). Capture any
-	// emissions the cascade produced (A1 upgrade ValueMsg or Phase-2b
+	// emissions the cascade produced (upgrade ValueMsg or Phase-2b
 	// Commit) and schedule per-recipient arrivals.
 	out := captureCascadeEmissions(s, e.to)
-	// Op6: bundle retention + host verdict may have closed L0Ready
+	// Bundle retention + host verdict may have closed L0Ready
 	// (σ-eligible). Async-fire the initial KindValue before the TPhase2a
 	// backstop.
 	out = append(out, maybeEarlyFire(s, e.to)...)
@@ -344,7 +344,7 @@ func (e *evtPhase1Arrival) handle(s *sim) []scheduledEvent {
 // MaybeFirePhase2a, which returns one of {ValueMsg, NoValueMsg,
 // Commit-NRDirect} per spec §Phase 2a. After firing, the
 // afterStateDelta cascade inside MaybeFirePhase2a may have produced
-// further emissions (Phase-2b Commit, A1 upgrade) — capture them all.
+// further emissions (Phase-2b Commit, upgrade ValueMsg) — capture them all.
 type evtPhase2aFire struct{}
 
 func (e *evtPhase2aFire) describe() string { return "Phase2aFire" }
@@ -357,14 +357,14 @@ func (e *evtPhase2aFire) handle(s *sim) []scheduledEvent {
 	return out
 }
 
-// ---- evtPhase2aFireOp (Op6 async-fire) ---------------------------------
+// ---- evtPhase2aFireOp (async-fire) -------------------------------------
 
 // evtPhase2aFireOp fires a SINGLE op's Phase-2a emission early — at the
 // moment its L_0 decision becomes determinable (L0Ready close), before
 // the cluster-wide TPhase2a backstop. Scheduled by maybeEarlyFire from
-// evtPhase1Arrival (retention + host verdict), evtValueMsgArrival (Op11
-// harvest), and evtLeaderFetch (leader self-observe). Mirrors the bare-
-// OBFT adapter's evtCommitEmit.
+// evtPhase1Arrival (retention + host verdict), evtValueMsgArrival
+// (peer-reflood-V harvest), and evtLeaderFetch (leader self-observe).
+// Mirrors the bare-OBFT adapter's evtCommitEmit.
 type evtPhase2aFireOp struct {
 	op twoab.OperatorID
 }
@@ -440,7 +440,7 @@ func fireOnePhase2a(s *sim, op twoab.OperatorID) []scheduledEvent {
 	}
 	// Universal BuildExtra* hooks: byz patterns may inject extras of
 	// ANY Phase-2a kind regardless of which natural-kind fired —
-	// enables A1/A2/A8 Rule-6a violation scenarios that mix kinds
+	// enables Rule-6a violation scenarios that mix kinds
 	// (e.g., natural KindValue + extra KindNoValue downgrade). Each
 	// hook receives the natural emission for the matching kind, or
 	// nil for the other kinds. Honest defaults return nil; byz
@@ -477,13 +477,13 @@ func (e *evtValueMsgArrival) describe() string {
 func (e *evtValueMsgArrival) handle(s *sim) []scheduledEvent {
 	inst := s.instances[e.to]
 	_ = inst.ObserveValueMsg(e.msg)
-	// Op11: drain any host-validation requests the Instance enqueued
+	// Drain any host-validation requests the Instance enqueued
 	// (V's first-observed via the peer-reflood-V harvest path without an
 	// existing host verdict). Mirrors the OBFT adapter's drain pattern at
 	// [`obft/events.go`](../obft/events.go) evtCommitArrival and the
 	// production runner's drainHostValidationRequests goroutine. The
 	// drain calls ApplyHostValidity, whose afterStateDelta cascade may
-	// then fire the A1 upgrade (V-drop → KindValue) — captured below.
+	// then fire the upgrade (V-drop → KindValue) — captured below.
 drainLoop:
 	for {
 		select {
@@ -496,12 +496,12 @@ drainLoop:
 	}
 	tryOpportunisticResolve(s, e.to)
 	// ObserveValueMsg + drained ApplyHostValidity ran the afterStateDelta
-	// cascade — capture any emissions that just fired (A1 upgrade or
+	// cascade — capture any emissions that just fired (upgrade ValueMsg or
 	// Phase-2b Commit).
 	out := captureCascadeEmissions(s, e.to)
-	// Op6: an Op11 harvest (+ host verdict drained above) may have
+	// A harvest (+ host verdict drained above) may have
 	// closed L0Ready for a V-drop receiver that just became σ-eligible.
-	// Async-fire the initial KindValue. (A1 upgrade for an op that
+	// Async-fire the initial KindValue. (The upgrade for an op that
 	// already emitted KindNoValue goes via the cascade above, not here —
 	// maybeEarlyFire no-ops once the op has emitted.)
 	out = append(out, maybeEarlyFire(s, e.to)...)
@@ -647,10 +647,11 @@ func captureCascadeEmissions(s *sim, op twoab.OperatorID) []scheduledEvent {
 	inst := s.instances[op]
 
 	if vm, ok := inst.OwnValueMsg(); ok && !s.valueMsgEmitted[op] {
-		// Pure Phase-2a-late A1 upgrade vs Phase-2a fire-time
+		// Pure Phase-2a-late upgrade vs Phase-2a fire-time
 		// emission: at fire-time, MaybeFirePhase2a applies the byz
 		// override path explicitly. An upgrade fired from the cascade
-		// here is the A1 path — apply the byz upgrade-override hook.
+		// here is the NoValue→Value upgrade path — apply the byz
+		// upgrade-override hook.
 		vm = s.cfg.Byz.OverrideUpgradeValueMsg(s, op, vm)
 		s.markValueMsgEmitted(op)
 		out = append(out, scheduleValueMsg(s, op, vm)...)
@@ -812,11 +813,11 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []scheduledE
 }
 
 // recordValueMsgToAggregator records per-layer σ / encrypted-claim partials
-// from a ValueMsg into the offline aggregator. Post Op5, KindValue carries
-// the emitter's σ partial on V at L_0 in L0Partial — ObserveSigma at
-// L_0. L_k>0 SigmaChained LayerEntries contribute as encrypted claims
-// (unchanged from pre-Op5). Credits the claimed sender's OperatorID,
-// matching the byz-observer model from base OBFT.
+// from a ValueMsg into the offline aggregator. KindValue carries the
+// emitter's σ partial on V at L_0 in L0Partial — ObserveSigma at L_0.
+// L_k>0 SigmaChained LayerEntries contribute as encrypted claims.
+// Credits the claimed sender's OperatorID, matching the byz-observer
+// model from base OBFT.
 func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
 	from := ct.OperatorID(vm.OperatorID)
 	if len(vm.L0Partial) > 0 {
@@ -848,14 +849,14 @@ func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, nv *twoab.NoValueMs
 }
 
 // recordCommitToAggregator records per-layer σ / NR partials from a
-// Commit into the offline aggregator. Post Op5, Commit is NR-side only:
+// Commit into the offline aggregator. Commit is NR-side only:
 //   - Side=NR: NR tag partial at L_0 → ObserveNR at L_0.
 //   - Side=NRDirect: NR tag partial at L_0 + K-1 LayerEntries (the
 //     NRDirect emission bundles the L_k>0 commitments with the L_0
 //     emission).
 //
-// The pre-Op5 CommitSideSigned branch is removed — the σ partial moved
-// into KindValue (handled by recordValueMsgToAggregator's ObserveSigma).
+// The σ partial rides in KindValue (handled by
+// recordValueMsgToAggregator's ObserveSigma), not in Commit.
 func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
 	from := ct.OperatorID(c.OperatorID)
 	switch c.Side {
@@ -879,9 +880,9 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
 // design rationale. 2abOBFT differs only in trigger events (Phase-2a
 // emissions + Commits; not just Commits as in base) and the concrete
 // Resolve impl walks the chained-NR ladder using both L_0 σ-pool entries
-// (post Op5: from KindValue.L0Partial directly + leader's LWitness; was
-// from KindCommit-Signed pre-Op5) and L_k>0 σ-chained entries (from
-// ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries).
+// (from KindValue.L0Partial directly plus the leader's LWitness) and
+// L_k>0 σ-chained entries (from ValueMsg / NoValueMsg / Commit-NRDirect
+// LayerEntries).
 func tryOpportunisticResolve(s *sim, op twoab.OperatorID) {
 	if _, already := s.vQuorumAt[op]; already {
 		return

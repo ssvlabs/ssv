@@ -24,27 +24,20 @@ import (
 // verification SHOULD ensure all cluster members run the same protocol
 // minor version before a version-bumping release is rolled out.
 const (
-	// Phase1BundleVersionV3 renames the leader witness field L0Witness →
-	// LWitness and carries it at EVERY layer (Op8 / Phase D), not just L_0
-	// (see docs/2abOBFT.md §Phase 1). The byte layout is
-	// unchanged from V2 (which added the L_0-only L0Witness per Op3); the
-	// bump signals the semantic change (witness now required + processed at
-	// all layers). Wire-incompatible with V2/V1.
+	// Phase1BundleVersionV3 carries the leader witness field LWitness at
+	// EVERY layer, not just L_0 (see docs/2abOBFT.md §Phase 1): the
+	// witness is required and processed at all layers.
 	Phase1BundleVersionV3 byte = 0x03
-	// ValueMsgVersionV4 replaces the single L0Witness field with a
-	// Witnesses []LayerWitness section (Op12 / Phase D — see
-	// docs/2abOBFT.md §Phase 2a, Forwarded leader witnesses), so a KindValue
-	// forwards the leader σ-witness at every layer the emitter is σ-side
-	// on (L_0 always, plus deeper fall-through layers), not just L_0. V3
-	// (Op5+Op11) carried L0Partial + a single L0Witness; V4 keeps
-	// L0Partial (the emitter's own σ partial signed at emit time) and
-	// generalizes the forwarded witness to the per-layer list. Wire-
-	// incompatible with V3/V2/V1.
+	// ValueMsgVersionV4 carries a Witnesses []LayerWitness section (see
+	// docs/2abOBFT.md §Phase 2a, Forwarded leader witnesses), so a
+	// KindValue forwards the leader σ-witness at every layer the emitter
+	// is σ-side on (L_0 always, plus deeper fall-through layers), not just
+	// L_0. It also carries L0Partial, the emitter's own σ partial signed
+	// at emit time.
 	ValueMsgVersionV4   byte = 0x04
 	NoValueMsgVersionV1 byte = 0x01
-	// CommitVersionV2 drops the always-empty L0Value field (post Op5 the
-	// σ-side moved into KindValue.L0Partial; V1 carried L0Value as a
-	// reserved always-empty field). Wire-incompatible with V1.
+	// CommitVersionV2: the σ-side lives in KindValue.L0Partial, so Commit
+	// carries no L0Value field.
 	CommitVersionV2      byte = 0x02
 	CertificateVersionV1 byte = 0x01
 )
@@ -93,8 +86,7 @@ const MaxFieldSize = 16 * 1024 * 1024
 
 // EncodePhase1Bundle serializes a Phase-1 bundle.
 //
-// Format (version 0x03 — per-layer LWitness post Op8; byte layout identical
-// to V2's L_0-only L0Witness):
+// Format (version 0x03 — per-layer LWitness):
 //
 //	[1]   version
 //	[16]  ProtocolTag    "2abOBFT" + 9 NULs
@@ -193,7 +185,7 @@ func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 
 // EncodeValueMsg serializes a Phase-2a ValueMsg envelope.
 //
-// Format (version 0x04 — Witnesses[] section post Op12):
+// Format (version 0x04 — Witnesses[] section):
 //
 //	[1]  version
 //	[16] ProtocolTag
@@ -376,7 +368,7 @@ func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
 
 // EncodeCommit serializes a Phase-2b (or Phase-2a NRDirect) Commit envelope.
 //
-// Format (version 0x02 — L0Value removed):
+// Format (version 0x02 — no L0Value field):
 //
 //	[1]  version
 //	[16] ProtocolTag
@@ -447,12 +439,12 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 	side := twoab.CommitSide(sideByte)
 	switch side {
 	case twoab.CommitSideNR, twoab.CommitSideNRDirect:
-		// valid post Op5
+		// valid
 	default:
-		// 0x01 was the pre-Op5 CommitSideSigned; deliberately rejected
-		// here to make wire-version drift visible. ValidateCommit at the
-		// Instance layer also rejects it.
-		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid (post Op5; 0x01 Signed removed)", sideByte)
+		// 0x01 is not a valid Commit side; deliberately rejected here to
+		// make wire-version drift visible. ValidateCommit at the Instance
+		// layer also rejects it.
+		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid (only NR=0x02 and NRDirect=0x03 are valid)", sideByte)
 	}
 	l0Partial, err := r.readLengthPrefixed("Commit L0Partial")
 	if err != nil {
@@ -648,7 +640,7 @@ func decodeLayerEntries(r *reader, kindLabel string) ([]twoab.LayerEntry, error)
 	return entries, nil
 }
 
-// ---------- LayerWitnesses (Op12) ----------
+// ---------- LayerWitnesses ----------
 
 func preflightLayerWitnesses(ws []twoab.LayerWitness, kindLabel string) error {
 	if len(ws) > MaxLayers {

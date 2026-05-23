@@ -3,11 +3,10 @@ package twoab
 // Slashing-evidence types. Per spec §Slashing evidence, 2abOBFT surfaces
 // six rules of byzantine-fault evidence: Rules 1-5 inherited from bare OBFT
 // (with slight wire-shape adjustments for 2abOBFT's message kinds) and
-// Rule 6a for Phase-2 equivocation. (Rule 6b "verdict-vs-action" from an
-// earlier 2abOBFT design was dropped before Op5; post-Op5 the σ-XOR-NR
-// invariant is enforced by EKM at sign time — KindValue carries the σ
-// partial inline, so the cross-signing case is caught directly by Rule 1
-// on the (L0Partial, NR partial) pair from the same op.)
+// Rule 6a for Phase-2 equivocation. There is no verdict-vs-action rule:
+// the σ-XOR-NR invariant is enforced by EKM at sign time — KindValue
+// carries the σ partial inline, so the cross-signing case is caught
+// directly by Rule 1 on the (L0Partial, NR partial) pair from the same op.
 //
 // None of these rules is load-bearing for safety; they exist so the
 // surviving operators can blacklist misbehaving operators (planned
@@ -59,10 +58,10 @@ const (
 
 	// EvidenceFakePlaintextSigma — Rule 5: an operator's plaintext σ
 	// partial does not verify against the operator's pubKeyShare on the
-	// claimed V. Detection points (post Op5 / Op8):
+	// claimed V. Detection points:
 	//   - ValueMsg.L0Partial verify-fail → Rule 5 keyed on the EMITTER at
 	//     L_0 (the L0Partial is the emitter's own signing artifact).
-	//   - Phase1Bundle.LWitness verify-fail (at ANY layer post-Op8) →
+	//   - Phase1Bundle.LWitness verify-fail (at ANY layer) →
 	//     Rule 5 keyed on the LEADER at that layer (the bundle is
 	//     op-identity-signed by the leader at the outer envelope).
 	//   - A forwarded witness in ValueMsg.Witnesses verify-fail does NOT
@@ -83,25 +82,23 @@ const (
 	// Phase-2 sequence to equivocate on. The asymmetry is
 	// protocol-forced; see docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §A.
 	//
-	// Authorized (NOT slashable) post Op5 — set shrunk from 8 to 3:
-	//   A1: KindNoValue → KindValue (upgrade — KindValue carries σ partial)
-	//   A5: KindNoValue → KindCommit-NR
-	//   A8: KindCommit-NRDirect (alone — Phase-2a NRDirect on equivocation)
+	// Authorized (NOT slashable):
+	//   KindNoValue → KindValue (the upgrade — KindValue carries σ partial)
+	//   KindNoValue → KindCommit-NR
+	//   KindCommit-NRDirect (alone — Phase-2a NRDirect on equivocation)
 	//
-	// A2/A3/A4/A6/A7 are OBSOLETE post Op5 — KindCommit-Signed no longer
-	// exists, σ partial moved into KindValue itself, and the σ-locked-
-	// on-emit semantics preclude A3/A4 pivots.
-	//
-	// Slashable (NOT in A1/A5/A8):
+	// Slashable (NOT in the authorized set):
 	//   - Two KindValue on different V_0 (also Rule 3 cross-σ-V if both
 	//     L0Partials verify)
 	//   - KindValue → KindNoValue (downgrade)
 	//   - KindValue → KindCommit-NR / KindCommit-NRDirect (σ-XOR-NR
 	//     violation; also Rule 1 if partials verify)
-	//   - KindNoValue → KindCommit-NRDirect (A8 sole-emission violation)
+	//   - KindNoValue → KindCommit-NRDirect (the Commit-NRDirect-alone rule:
+	//     NRDirect must be the sole emission)
 	//   - KindCommit-NRDirect followed by any other emission
 	//   - KindNoValue → KindCommit-NR → KindValue (post-NR-commit σ-claim)
-	//   - Any other 3+ message sequence not matching A1 or A5
+	//   - Any other 3+ message sequence not matching the upgrade or the
+	//     NoValue→Commit-NR sequence
 	EvidencePhase2Equivocation EvidenceRule = 6
 )
 
@@ -153,11 +150,11 @@ type CrossSigningEvidence struct {
 // LeaderEquivocationEvidence (Rule 2) — Two distinct Phase-1 bundles
 // from the same leader at the same (slot, layer).
 //
-// Cryptographic-attribution caveat: post-Op11 the receiver can retain a
-// bundle either via a direct ObservePhase1Bundle call (envelope-signed
-// by the leader) or via Op11 peer-reflood-V harvest (synthesized from a
-// peer's KindValue; no leader envelope signature — only the LWitness
-// inside is BLS-bound to the leader's pubkey). For a harvest-sourced
+// Cryptographic-attribution caveat: the receiver can retain a bundle
+// either via a direct ObservePhase1Bundle call (envelope-signed by the
+// leader) or via peer-reflood-V harvest (synthesized from a peer's
+// KindValue; no leader envelope signature — only the LWitness inside is
+// BLS-bound to the leader's pubkey). For a harvest-sourced
 // bundle, the envelope is unavailable, so downstream slashing consumers
 // MAY skip envelope re-verification — the LWitness is sufficient
 // leader-binding either way, so envelope verify is redundant when
@@ -188,8 +185,7 @@ type LeaderEquivocationEvidence struct {
 // CrossCommitEquivocationEvidence (Rule 3) — Operator OperatorID has σ
 // partials on two distinct V's at the same layer. The two partials may
 // come from any combination of:
-//   - L_0 (post Op5): ValueMsg.L0Partial (the emitter's plaintext σ
-//     partial at L_0 — Commit-Signed no longer exists on the wire).
+//   - L_0: ValueMsg.L0Partial (the emitter's plaintext σ partial at L_0).
 //   - L_k>0: ValueMsg / NoValueMsg / Commit-NRDirect LayerEntries with
 //     Kind=SigmaChained
 type CrossCommitEquivocationEvidence struct {
@@ -215,13 +211,13 @@ type FakeEncryptedPresenceEvidence struct {
 // on the claimed V. The partial originates from one of two wire sources:
 //   - ValueMsg.L0Partial (emitter == OperatorID), at L_0. Rule 5
 //     attributes to the emitter.
-//   - Phase1Bundle.LWitness (the layer leader), at any layer post-Op8.
+//   - Phase1Bundle.LWitness (the layer leader), at any layer.
 //     Rule 5 attributes to the leader (OperatorID == bundle.OperatorID)
 //     at the bundle's Layer.
 //
 // A witness forwarded inside a peer's KindValue (ValueMsg.Witnesses) does
 // NOT fire Rule 5 (anti-framing: a byz emitter could embed a forged witness
-// against an honest leader). See §Op11 anti-framing notes.
+// against an honest leader). See docs/2abOBFT.md §Phase 2a.
 type FakePlaintextSigmaEvidence struct {
 	OnionPartial Signature
 	OnionValue   Value
@@ -231,10 +227,10 @@ type FakePlaintextSigmaEvidence struct {
 }
 
 // Phase2EquivocationEvidence (Rule 6a) — Operator OperatorID emitted a
-// Phase-2 sequence not in the post-Op5 authorized {A1, A5, A8} set. The
-// evidence carries the offending message pair; receivers MAY act on a
-// single observed pair (cluster-wide consensus on the evidence is not
-// required).
+// Phase-2 sequence not in the authorized {NoValue→Value, NoValue→Commit-NR,
+// Commit-NRDirect-alone} set. The evidence carries the offending message
+// pair; receivers MAY act on a single observed pair (cluster-wide consensus
+// on the evidence is not required).
 //
 // Exactly one of {ValueA, NoValueA, CommitA} is set (the first observed
 // Phase-2 emission from the op); similarly for {ValueB, NoValueB,
@@ -242,14 +238,13 @@ type FakePlaintextSigmaEvidence struct {
 // ObserveValueMsg / ObserveNoValueMsg / ObserveCommit populate these.
 //
 // Triple-message sequences (e.g. KindNoValue → KindValue → KindCommit-NR)
-// are caught at the pair level under Op5: the (KindValue, KindCommit-NR)
-// pair from the same op directly violates σ-XOR-NR (KindValue σ-commits
-// at L_0 via L0Partial). Rule 6a fires on this pair, and Rule 1 fires
-// additionally if the L0Partial and NR partial both verify. The post-Op5
-// authorized set {A1, A5, A8} does NOT contain any (KindValue,
-// KindCommit-*) pair, so there's no longer a "indistinguishable from
-// authorized" ambiguity — every observed (KindValue, KindCommit-*) from
-// the same op is unambiguously slashable.
+// are caught at the pair level: the (KindValue, KindCommit-NR) pair from
+// the same op directly violates σ-XOR-NR (KindValue σ-commits at L_0 via
+// L0Partial). Rule 6a fires on this pair, and Rule 1 fires additionally
+// if the L0Partial and NR partial both verify. The authorized set does
+// NOT contain any (KindValue, KindCommit-*) pair, so there is no
+// "indistinguishable from authorized" ambiguity — every observed
+// (KindValue, KindCommit-*) from the same op is unambiguously slashable.
 type Phase2EquivocationEvidence struct {
 	ValueA   *ValueMsg
 	NoValueA *NoValueMsg

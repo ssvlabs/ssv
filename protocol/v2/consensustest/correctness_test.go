@@ -28,8 +28,6 @@ import (
 // One operating point per scenario; no sweeps (sweeps live in the stress
 // tier — see TestStress). Re-running this test produces identical
 // results: ConstantDelay is deterministic, seeds are fixed.
-//
-// See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestCorrectness(t *testing.T) {
 	profile := ct.CorrectnessProfile(200 * time.Millisecond)
 	protocols := []ct.Protocol{

@@ -91,8 +91,6 @@ import (
 //	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2 P2P_PROFILES=prod,stage1,stage2 \
 //	    ITERATIONS_BASELINE_OPERATIONS=100 ITERATIONS_UNSTABLE_OPERATIONS=10 \
 //	    go test -timeout 30m -run TestStress ./protocol/v2/consensustest/
-//
-// See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 func TestStress(t *testing.T) {
 	dir := os.Getenv("REPORT_DIR")
 	if dir == "" {
@@ -323,7 +321,7 @@ func TestStress(t *testing.T) {
 		// where the protocol commits to slot-miss rather than waiting
 		// for IHAVE/IWANT recovery.
 		//
-		// Post-Op6 note: the resolve window is max(1·BTT + SafetyBuffer,
+		// Note: the resolve window is max(1·BTT + SafetyBuffer,
 		// 2·BTT), so a variant's SafetyBuffer only bites ABOVE the 1·BTT
 		// crossover. In the BTT sweep, lean (SB=300ms) degenerates to the
 		// no-SafetyBuffer floor at BTT ≥ 300ms (at BTT=400 it equals SB=0);

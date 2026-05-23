@@ -3,10 +3,10 @@ package twoab
 // Convergence-related helpers shared between Phase 2a (LayerEntry direction
 // choice) and Phase 2b (commit-trigger gate evaluation).
 //
-// Post Op5, the only remaining Phase-2b trigger is NR-eligibility (with the
-// cannot-σ gate). The σ-eligibility trigger was removed when KindValue
-// became the σ-side terminal emission; the equivocation trigger only fires
-// at Phase-2a fire-time for ops still in EKM coordination state.
+// The only Phase-2b trigger is NR-eligibility (with the cannot-σ gate),
+// since KindValue is the σ-side terminal emission. The equivocation
+// trigger only fires at Phase-2a fire-time for ops still in EKM
+// coordination state.
 
 // canSigmaAtLayer reports whether the local operator could currently emit
 // a σ partial at the given layer. Used:
@@ -17,9 +17,8 @@ package twoab
 //     NR-eligibility trigger (per spec §Trigger rules / "Why NR-eligibility
 //     has the cannot-σ gate"). A σ-eligible op observing novalue_pool ≥
 //     qEnc before its own KindValue σ-emit must NOT emit KindCommit-NR
-//     via NR-eligibility — the gate routes it to take the A1 upgrade
-//     path instead (under Op5 the A1 upgrade KindValue IS the σ-side
-//     terminal emission).
+//     via NR-eligibility — the gate routes it to take the upgrade path
+//     instead (the upgrade KindValue IS the σ-side terminal emission).
 //
 // Returns true if all of:
 //   - The layer's leader has exactly 1 retained Phase-1 bundle (no

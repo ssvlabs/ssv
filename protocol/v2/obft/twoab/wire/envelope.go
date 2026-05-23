@@ -30,14 +30,14 @@ const (
 	KindPhase1Bundle MessageKind = 0x01
 	// KindValue indicates the body is an EncodeValueMsg-encoded
 	// *twoab.ValueMsg — Phase-2a coordination envelope, op has V_0 + host
-	// valid (or A1 upgrade from prior KindNoValue).
+	// valid (or the upgrade from a prior KindNoValue).
 	KindValue MessageKind = 0x02
 	// KindNoValue indicates the body is an EncodeNoValueMsg-encoded
 	// *twoab.NoValueMsg — Phase-2a coordination envelope, op has no V_0
 	// or host says not-valid.
 	KindNoValue MessageKind = 0x03
 	// KindCommit indicates the body is an EncodeCommit-encoded
-	// *twoab.Commit — Phase-2b binding envelope (Side=Signed or NR) OR
+	// *twoab.Commit — Phase-2b binding envelope (Side=NR) OR
 	// Phase-2a NR-direct emission (Side=NRDirect, with L_k>0 LayerEntries).
 	KindCommit MessageKind = 0x04
 	// KindCertificate indicates the body is an EncodeCertificate-encoded

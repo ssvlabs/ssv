@@ -51,7 +51,7 @@ type sim struct {
 	// time when the schedule-anchored evtResolve at RoundEndOffset is
 	// what first produces quorum (since resolveOpAndBroadcastCert also
 	// writes here as a fallback). Read by outcome() as Outcome.DecisionTime.
-	// Plan: docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	// See docs/OBFT.md §Phase 3 (opportunistic Resolve).
 	vQuorumAt map[obftbase.OperatorID]time.Duration
 	// commitEmitted[op] = true once op's KindCommit has been built and
 	// dispatched. Guard for the L0Ready-driven evtCommitEmit (fired early

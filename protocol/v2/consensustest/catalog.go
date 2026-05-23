@@ -9,7 +9,7 @@ package consensustest
 // validity divergence → OBFT-specific patterns (n/a for QBFT).
 //
 // Tiers: every catalog scenario opts into BOTH ModeCorrectness and
-// ModeStress (see docs/CONSENSUSTEST-SPLIT-PLAN.md). The Apply functions
+// ModeStress. The Apply functions
 // are pure config mutators (no randomness, no in-body assertions). Each
 // tier runs them with a different network model:
 //   - TestCorrectness uses CorrectnessProfile (ConstantDelay): outcomes

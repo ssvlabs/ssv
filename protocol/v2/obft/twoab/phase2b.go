@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Phase 2b dynamic commit emission. Per spec §Phase 2b (post Op5):
+// Phase 2b dynamic commit emission. Per spec §Phase 2b:
 //
 // Each operator emits at most one KindCommit per slot. Emission is
 // trigger-driven (NO T_commit hard wall) — the Instance is a passive
@@ -21,36 +21,36 @@ import (
 //   2. NR-eligibility trigger: cluster's noValuePool[L_0] reaches qEnc
 //      AND op cannot σ at L_0 (cannot-σ gate) → KindCommit-NR. The gate
 //      blocks σ-eligible ops from forfeiting σ contributions to premature
-//      NR-side emission. Under Op11 the "cannot σ" semantic is re-
-//      evaluated against witness-derived L0Ready (host-validated V from
-//      either direct bundle or harvest), not just bundle retention.
+//      NR-side emission. The "cannot σ" semantic is evaluated against
+//      witness-derived L0Ready (host-validated V from either direct
+//      bundle or harvest), not just bundle retention.
 //
-// **σ-eligibility trigger is REMOVED** post-Op5. The σ-side terminal
-// emission moved into KindValue (with the emitter's σ partial); there
-// is no separate Phase-2b σ-commit event. Receivers still run Resolve()
+// There is no σ-eligibility trigger: the σ-side terminal emission is
+// carried inline in KindValue (with the emitter's σ partial), with no
+// separate Phase-2b σ-commit event. Receivers still run Resolve()
 // opportunistically on σ-pool growth — once cluster σ-pool[V_0] reaches
 // qV (via direct peer KindValues + leader LWitness + harvested forwarded-
 // witness contributions), the L_0 σ-quorum reconstruction succeeds without
 // any commit-trigger firing locally.
 //
-// Per spec §Emission ordering, the upgrade check (Phase 2a-late A1)
-// runs BEFORE commit trigger evaluation on every state delta.
+// Per spec §Emission ordering, the upgrade check (Phase 2a-late) runs
+// BEFORE commit trigger evaluation on every state delta.
 
 // afterStateDelta is the per-tick processing cascade invoked at the end
 // of every Observe* method (and ApplyHostValidity). Implements the
 // normative emission ordering from spec §Emission ordering:
 //
-//  1. Run MaybeBuildAndBroadcastUpgrade — A1 upgrade if preconditions
+//  1. Run MaybeBuildAndBroadcastUpgrade — the upgrade if preconditions
 //     are now satisfied.
 //  2. Run MaybeBuildAndBroadcastCommit — NR-eligibility trigger
-//     evaluation (post Op5; the σ-eligibility trigger no longer exists
-//     and the equivocation trigger fires at Phase 2a only via
-//     MaybeFirePhase2a, not here).
+//     evaluation (there is no σ-eligibility trigger, and the
+//     equivocation trigger fires at Phase 2a only via MaybeFirePhase2a,
+//     not here).
 //
-// Upgrade-first ensures the A1 sequence fires correctly when a NoValueMsg-
-// path op observes V_0 + host valid via reflood/harvest — the upgrade
-// KindValue carries the σ partial directly and is the σ-side terminal
-// emission (post Op5). Each helper is independently idempotent: returns
+// Upgrade-first ensures the upgrade sequence fires correctly when a
+// NoValueMsg-path op observes V_0 + host valid via reflood/harvest — the
+// upgrade KindValue carries the σ partial directly and is the σ-side
+// terminal emission. Each helper is independently idempotent: returns
 // early when conditions aren't met or when the relevant emission has
 // already fired.
 //
@@ -95,8 +95,8 @@ func (i *Instance) recordCascadeError(err error) {
 // and, if one fires AND the op has not yet emitted a KindCommit, builds
 // + records the appropriate KindCommit-NR. Idempotent.
 //
-// Post Op5, the only commit triggered here is KindCommit-NR; the σ-side
-// terminal emission moved into KindValue (handled by MaybeFirePhase2a
+// The only commit triggered here is KindCommit-NR; the σ-side terminal
+// emission is carried inline in KindValue (handled by MaybeFirePhase2a
 // + MaybeBuildAndBroadcastUpgrade). The equivocation trigger fires only
 // for ops still in EKM coordination state at L_0 (haven't yet emitted
 // KindValue with a σ partial). Post-σ-lock equivocation is unrecoverable.
@@ -105,8 +105,8 @@ func (i *Instance) recordCascadeError(err error) {
 //   - Op has emitted KindNoValue at Phase 2a (ownNoValueMsg non-nil).
 //     KindValue-path ops are σ-locked at L_0 and can't transition to
 //     NR-side (would equivocate the σ partial already on the wire).
-//     NRDirect-path ops (ownCommit set at Phase 2a) are sole-emission per
-//     A8 and don't get a second Commit.
+//     NRDirect-path ops (ownCommit set at Phase 2a) are a sole emission
+//     and don't get a second Commit.
 //   - Op has not already emitted KindCommit (ownCommit nil).
 //
 // Returns:
@@ -136,15 +136,15 @@ func (i *Instance) MaybeBuildAndBroadcastCommit() (*Commit, error) {
 	if i.ownNoValueMsg == nil {
 		// Phase 2a hasn't fired KindNoValue. Either:
 		//   - Phase 2a not yet fired (silent wait).
-		//   - Phase 2a fired KindValue (σ-locked; no Commit follows under Op5).
+		//   - Phase 2a fired KindValue (σ-locked; no Commit follows).
 		//   - Phase 2a fired KindCommit-NRDirect (ownCommit non-nil, caught above).
 		return nil, nil
 	}
 
 	const layer = 0
 
-	// NR-eligibility trigger (the only remaining trigger here post-Op5).
-	// Cannot-σ gate: ops who CAN still σ at L_0 must take the A1 upgrade
+	// NR-eligibility trigger (the only trigger here).
+	// Cannot-σ gate: ops who CAN still σ at L_0 must take the upgrade
 	// path (via MaybeBuildAndBroadcastUpgrade) rather than NR-pivot from
 	// KindNoValue. The gate fires for ops genuinely unable to σ — no V
 	// retained, retention but no host-valid verdict, or equivocation
@@ -185,13 +185,12 @@ func (i *Instance) buildCommitNR() (*Commit, error) {
 }
 
 // ObserveCommit records a peer's (or the local operator's own, after
-// broadcast) Phase-2b (or Phase-2a NRDirect) KindCommit. Post Op5, Commit
-// is NR-side only (CommitSideNR / CommitSideNRDirect); the σ-side moved
-// into KindValue.
+// broadcast) Phase-2b (or Phase-2a NRDirect) KindCommit. Commit is
+// NR-side only (CommitSideNR / CommitSideNRDirect); the σ-side rides
+// inline in KindValue.
 //
 //   - Commit must pass structural validation (cluster id, slot, sender
 //     in cluster, NR or NRDirect side, well-formed L0Partial/LayerEntries).
-//     The pre-Op5 CommitSideSigned constant is rejected at ValidateCommit.
 //   - First Commit observed from op → recorded in peerCommit, NR partial
 //     verified and pooled into nrTagPool[0] on success; noValuePool[0]
 //     also grows.
@@ -201,9 +200,9 @@ func (i *Instance) buildCommitNR() (*Commit, error) {
 //   - Prior KindValue + this KindCommit-NR/NRDirect from same op → Rule 1
 //     (cross-signing: σ partial in the prior KindValue's L0Partial XOR NR
 //     partial in this Commit's L0Partial — the EKM σ-XOR-NR invariant is
-//     violated). The cross-signing detection that lived in v4's
-//     ObserveCommit for Signed↔NR pairs now fires here for KindValue↔Commit.
-//   - Prior KindNoValue + this KindCommit-NRDirect → Rule 6a (A8 violation).
+//     violated).
+//   - Prior KindNoValue + this KindCommit-NRDirect → Rule 6a
+//     (Commit-NRDirect must be the sole emission).
 //   - Prior KindValue + this KindCommit-NRDirect → Rule 6a AND Rule 1.
 //
 // Self-observation: silent dedup (own emissions are self-pool-updated).
@@ -227,9 +226,9 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 		if commitContentHash(existing) == commitContentHash(c) {
 			return nil // identical re-broadcast
 		}
-		// Distinct second Commit from same op — Rule 6a. (Post-Op5 both
-		// commits are NR-side; cross-V detection between commits is moot
-		// since neither carries V. The only meaningful distinction is
+		// Distinct second Commit from same op — Rule 6a. (Both commits
+		// are NR-side; cross-V detection between commits is moot since
+		// neither carries V. The only meaningful distinction is
 		// NRDirect-with-different-LayerEntries.)
 		if i.recordRule6a(op) {
 			i.recordEvidence(Evidence{
@@ -273,21 +272,20 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 
 	// Detect non-conformant emission sequences (Rule 6a, sequence-only).
 	//
-	// Per spec §Authorized Phase-2 emission pairs (post Op5):
-	//   - A1: KindNoValue → KindValue (handled in ObserveValueMsg).
-	//   - A5: KindNoValue → KindCommit-NR (authorized; no Rule 6a here).
-	//   - A8: KindCommit-NRDirect alone (no prior Phase-2a emission).
+	// The authorized set (spec §Slashing evidence, Rule 6):
+	//   - NoValue→Value (the upgrade; handled in ObserveValueMsg).
+	//   - NoValue→Commit-NR (authorized; no Rule 6a here).
+	//   - Commit-NRDirect-alone (no prior Phase-2a emission).
 	//
 	// Sequences detected here:
 	//   - hadValue + KindCommit-NR/NRDirect: Rule 6a (cross-σ-NR violation
 	//     of σ-XOR-NR — also Rule 1 above on cryptographic verify).
-	//   - hadNoValue + KindCommit-NRDirect: Rule 6a (A8 requires NRDirect
-	//     to be the sole emission; prior KindNoValue voids that).
+	//   - hadNoValue + KindCommit-NRDirect: Rule 6a (Commit-NRDirect must
+	//     be the sole emission; prior KindNoValue voids that).
 	switch {
 	case c.Side == CommitSideNR && hadValue != nil:
-		// KindValue (σ-side) followed by KindCommit-NR is unauthorized.
-		// (Pre-Op5 this was A3/A4 host-flip/equivocation pivot; post Op5
-		// the σ-lock acquired at KindValue emit blocks NR-pivot.)
+		// KindValue (σ-side) followed by KindCommit-NR is unauthorized:
+		// the σ-lock acquired at KindValue emit blocks the NR-pivot.
 		if i.recordRule6a(op) {
 			i.recordEvidence(Evidence{
 				Rule:       EvidencePhase2Equivocation,
@@ -300,7 +298,7 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 			})
 		}
 	case c.Side == CommitSideNRDirect && (hadValue != nil || hadNoValue != nil):
-		// A8 requires NRDirect to be sole emission; any prior Phase-2a
+		// Commit-NRDirect must be the sole emission; any prior Phase-2a
 		// emission violates the rule.
 		if i.recordRule6a(op) {
 			ev := Phase2EquivocationEvidence{CommitB: deepCopyCommit(c)}
@@ -363,9 +361,8 @@ func (i *Instance) verifySigmaPartial(op OperatorID, v Value, partial Signature)
 // retainedValueHashes returns sha256 hashes of all V's retained at the
 // given layer (across all leaders, though in practice only one leader per
 // layer). Used to populate Rule 5 evidence with the receiver's reference
-// set for third-party verification. Op8 generalized this from the former
-// L_0-only helper so per-layer leader-witness Rule 5 carries the correct
-// layer's reference set.
+// set for third-party verification. Layer-general so per-layer
+// leader-witness Rule 5 carries the correct layer's reference set.
 func (i *Instance) retainedValueHashes(layer int) [][]byte {
 	leaderMap := i.retainedBundles[layer]
 	if leaderMap == nil {

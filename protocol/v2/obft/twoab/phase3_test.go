@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestResolve_HealthyClusterReachesSigmaAtL0: all ops emit Signed; Resolve
-// reconstructs at L_0 with V_0.
+// TestResolve_HealthyClusterReachesSigmaAtL0: all ops emit KindValue
+// (σ partial inline); Resolve reconstructs at L_0 with V_0.
 func TestResolve_HealthyClusterReachesSigmaAtL0(t *testing.T) {
 	s := newSim(t, 4)
 	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
@@ -286,7 +286,7 @@ func TestSelectWinningGroup(t *testing.T) {
 	})
 }
 
-// TestRecoverV_KGt0_FallsBackToRetainedBundle verifies the Op8 recoverV
+// TestRecoverV_KGt0_FallsBackToRetainedBundle verifies the recoverV
 // fallback at k>0: a σ-pool[k] entry seeded purely from the leader's
 // plaintext LWitness (no peer SigmaChained entry carrying V_k observed yet)
 // can still recover V's bytes from the retained bundle — so the witness
@@ -305,6 +305,6 @@ func TestRecoverV_KGt0_FallsBackToRetainedBundle(t *testing.T) {
 	// retained-bundle fallback (mirrors the L_0 fallback).
 	root := ValueRoot(v)
 	got, ok := recv.recoverV(k, root)
-	require.True(t, ok, "Op8: recoverV must fall back to the retained bundle at k>0")
+	require.True(t, ok, "recoverV must fall back to the retained bundle at k>0")
 	require.Equal(t, v, got)
 }

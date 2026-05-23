@@ -134,7 +134,7 @@ func TestSweep_BTT(t *testing.T) {
 // semantics under realistic mesh asymmetry — when ≤ f honest are slow,
 // OBFT's staggered design must still decide via the in-time honest
 // majority; when > f honest are slow, fall-through behavior shifts but
-// safety must hold. Tier 1 stress-test addition per CONSENSUS-TEST-PLAN.md.
+// safety must hold. Tier 1 stress-test addition.
 //
 // Slow-receiver counts:
 //   - 0: baseline (matches ConstantDelay)
@@ -213,7 +213,7 @@ func TestSweep_Asymmetric(t *testing.T) {
 // PartitionedNetwork. Verifies BFT-comparison.md Table 3's "Sustained
 // partition > absorption window" claim — protocol must miss cleanly with
 // no safety violation, regardless of which subset is partitioned. Tier 2
-// stress-test addition per CONSENSUS-TEST-PLAN.md (failure-mode validation).
+// stress-test addition (failure-mode validation).
 //
 // Partition counts:
 //   - 0: baseline (no partition; should decide)
@@ -287,8 +287,7 @@ func TestSweep_Partition(t *testing.T) {
 
 // TestSweep_ClockSkew — vary per-operator clock skew via ClockSkewedNetwork
 // across the catalog. Verifies the spec's δ-bound claim: consensus tolerates
-// per-pair clock differences ≤ δ. Tier 1 stress-test addition per
-// CONSENSUS-TEST-PLAN.md (clock skew is a MUST per the protocol's partial-
+// per-pair clock differences ≤ δ. Tier 1 stress-test addition (clock skew is a MUST per the protocol's partial-
 // synchrony assumption).
 //
 // The model captures clock skew at the network layer rather than DES timer
@@ -417,8 +416,7 @@ func TestSweep_ClockSkew(t *testing.T) {
 }
 
 // TestSweep_PassiveByz_UnderStress — passive-byz catalog scenarios under
-// within-bound clock skew. Tier 1 stress-test addition per
-// CONSENSUS-TEST-PLAN.md ("byz indistinguishable from honest = liveness
+// within-bound clock skew. Tier 1 stress-test addition ("byz indistinguishable from honest = liveness
 // MUST hold"). Asserts that each passive-byz scenario matches its
 // catalog expectation under the spec's δ-bound clock-skew stress.
 //

@@ -100,9 +100,9 @@ var scenarioCrossOnionEquivocationRule3 = Scenario{
 // on V (the leader's honest value) AND injects an extra KindValue on a
 // distinct V_b. Each honest receiver fires Rule 6a (Phase2Equivocation)
 // when the cross-V second ValueMsg arrives. The cluster's honest majority
-// (op1 leader + op3 + op4 = 3 ops at n=4 f=1) still contributes to
-// value_pool[V] reaching qV=3, so σ-eligibility fires and the slot
-// succeeds at L_0.
+// (op1 leader + op3 + op4 = 3 ops at n=4 f=1) still contributes σ
+// partials to value_pool[V] reaching qV=3, so the σ-pool reaches quorum
+// and the slot succeeds at L_0.
 //
 // This is the catalog complement to the unit-level Rule-6a tests in
 // protocol/v2/obft/twoab/phase2b_test.go (the multi-message cross-V cases)
@@ -141,7 +141,7 @@ var scenarioPhase2EquivocateCrossV_Rule6a = Scenario{
 // Phase-2 equivocation path: byz=op2 emits its natural KindValue on V
 // (the leader's honest value) AND an extra KindNoValue from the same op.
 // The sequence "KindValue → KindNoValue" is unauthorized per spec (only
-// the reverse, A1 upgrade, is allowed). Receivers fire Rule 6a when they
+// the reverse — the NoValue→Value upgrade — is allowed). Receivers fire Rule 6a when they
 // observe both kinds from the same op. Cluster decides at L_0 via the
 // honest majority on value_pool[V] ≥ qV=3.
 //
@@ -176,5 +176,5 @@ var scenarioPhase2DowngradeValueNoValue_Rule6a = Scenario{
 		"QBFT":    ExpectNotApplicable, // No equivalent equivocation-detection path
 		"PSigs":   ExpectNotApplicable, // No leader/coordination phase
 	},
-	Note: "Rule 6a (Phase-2 equivocation) evidence: byz emits KindValue(V) + KindNoValue downgrade from same op. 2abOBFT receivers detect the unauthorized cross-kind sequence (only A1 reverse direction is allowed); cluster still decides at L_0 via honest majority. Companion to Phase2EquivocateCrossV_Rule6a — together they cover both major Rule-6a categories (same-kind cross-V and cross-kind downgrade).",
+	Note: "Rule 6a (Phase-2 equivocation) evidence: byz emits KindValue(V) + KindNoValue downgrade from same op. 2abOBFT receivers detect the unauthorized cross-kind sequence (only the NoValue→Value upgrade reverses direction); cluster still decides at L_0 via honest majority. Companion to Phase2EquivocateCrossV_Rule6a — together they cover both major Rule-6a categories (same-kind cross-V and cross-kind downgrade).",
 }

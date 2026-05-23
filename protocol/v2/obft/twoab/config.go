@@ -3,17 +3,17 @@
 // broadcast + Phase 2b dynamic σ-or-NR commit).
 //
 // The protocol is described in docs/2abOBFT.md. 2abOBFT extends bare OBFT
-// (docs/OBFT.md) by inserting a Phase-2a coordination broadcast between
-// Phase 1 and Phase 2b. Each operator broadcasts a `KindValue` (has V_0 +
-// host valid) or `KindNoValue` (otherwise) at the Phase-2a fire-instant
-// `T_phase_2a = T_0_broadcast + 1·BTT`, enabling cluster-wide convergence
-// on σ-eligibility before any operator cryptographically commits. Post Op5,
-// the σ-side terminal emission is folded into `KindValue` (which carries
-// the emitter's σ partial inline), so Phase 2b only fires for the NR side:
-// each operator emits at most one `KindCommit` (NR / NR-direct) when the
-// NR-eligibility trigger fires locally on the observed pool (NR-direct
-// being a Phase-2a-time emission when the op observes leader equivocation
-// at L_0). There is NO protocol-level Phase-2b deadline — the slot's
+// (docs/OBFT.md) by inserting a Phase-2a broadcast between Phase 1 and
+// Phase 2b. Each operator broadcasts a `KindValue` (has V_0 + host valid)
+// or `KindNoValue` (otherwise) at the Phase-2a fire-instant
+// `T_phase_2a = T_0_broadcast + 1·BTT`. `KindValue` is the σ-side terminal
+// emission — it carries the emitter's σ partial inline — while `KindNoValue`
+// is a non-binding NR-side coordination signal; so Phase 2b only fires for
+// the NR side: each operator emits at most one `KindCommit` (NR / NR-direct)
+// when the NR-eligibility trigger fires locally on the observed pool
+// (NR-direct being a Phase-2a-time emission when the op observes leader
+// equivocation at L_0). There is NO protocol-level Phase-2b deadline — the
+// slot's relay-submission cutoff is the only hard wall (runner-level).
 // relay-submission cutoff is the only hard wall (runner-level).
 //
 // Shared cryptography primitives (Signer, ThresholdIBE, NoQuorumTag, bare
@@ -22,9 +22,10 @@
 // data structures, state machine, wire format, evidence types, and EKM
 // coordinator. The bare-OBFT implementation lives in the parallel
 // sub-package protocol/v2/obft/base. Intentional API/pattern divergences
-// between the two — Phase 2a Value/NoValue split, Op11 harvest, Rule 6a,
-// no T_commit, etc. — and the convergence work that aligned the rest are
-// catalogued in [docs/OBFT-TWOAB-CONVERGENCE-PLAN.md].
+// between the two — Phase 2a Value/NoValue split, peer-reflood-V witness
+// harvest, Rule 6a, no T_commit, etc. — and the convergence work that
+// aligned the rest are catalogued in
+// [docs/OBFT-TWOAB-CONVERGENCE-PLAN.md].
 //
 // This package is intentionally independent of github.com/ssvlabs/ssv-spec.
 // SSV-specific integration lives in a future runner adapter (analog of
@@ -155,14 +156,14 @@ type Config struct {
 	TPhase2a time.Duration
 
 	// SafetyBuffer is the protocol-level mesh-tail tolerance configurable.
-	// Post Op5+Op6+Op11: SafetyBuffer widens the post-TPhase2a σ-pool fill
-	// window — the wall-clock between TPhase2a and the scheduled Resolve
-	// sweep, during which peer KindValues propagate and σ-pool[V_0]
-	// reaches qV. The σ-side critical path is 1 hop (KindValue carries
-	// the σ partial directly post Op5); the NR fall-through path is
-	// 2 hops (KindNoValue → KindCommit-NR → aggregate). A slot resolves
-	// σ-ward XOR NR-ward (mutually exclusive), so the window is the MAX
-	// of the two paths, not their sum (Op6 corollary):
+	// SafetyBuffer widens the post-TPhase2a σ-pool fill window — the
+	// wall-clock between TPhase2a and the scheduled Resolve sweep, during
+	// which peer KindValues propagate and σ-pool[V_0] reaches qV. The
+	// σ-side critical path is 1 hop (KindValue carries the σ partial
+	// directly); the NR fall-through path is 2 hops (KindNoValue →
+	// KindCommit-NR → aggregate). A slot resolves σ-ward XOR NR-ward
+	// (mutually exclusive), so the window is the MAX of the two paths,
+	// not their sum:
 	//
 	//	resolveWindow = max(1·BTT + SafetyBuffer, 2·BTT) + ε_3
 	//	              = 1·BTT + max(SafetyBuffer, 1·BTT) + ε_3
@@ -413,10 +414,9 @@ func (c *Config) Validate() error {
 	// degraded operating points multiple layers' broadcast targets clamp
 	// to BFT_start (the runtime `max(BFT_start, T0Broadcast − B_k)`
 	// floor), and at extreme operating points the canonical staggered
-	// shallow budgets even exceed T0Broadcast. Strict-increasing was
-	// historically enforced but rejected these degenerate-but-still-valid
-	// configs; non-decreasing keeps the staggering intent without
-	// blocking them.
+	// shallow budgets even exceed T0Broadcast. A strict-increasing check
+	// would reject these degenerate-but-still-valid configs; non-decreasing
+	// keeps the staggering intent without blocking them.
 	for k := 1; k < len(c.Layers); k++ {
 		if c.Layers[k].BroadcastBudget < c.Layers[k-1].BroadcastBudget {
 			return errors.New("twoab: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
@@ -442,11 +442,11 @@ func (c *Config) Validate() error {
 		}
 		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
 		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
-		// fetch asymmetry). Strict-decreasing was historically enforced;
-		// the non-increasing relaxation lets multiple layers' targets
-		// collide at BFT_start when the operating point pushes shallow
-		// targets past T0Broadcast (matches the BroadcastBudget
-		// non-decreasing relaxation above).
+		// fetch asymmetry). The non-increasing check (rather than
+		// strict-decreasing) lets multiple layers' targets collide at
+		// BFT_start when the operating point pushes shallow targets past
+		// T0Broadcast (matches the BroadcastBudget non-decreasing check
+		// above).
 		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
 			return errors.New("twoab: layer fetch times must be non-increasing in k")
 		}

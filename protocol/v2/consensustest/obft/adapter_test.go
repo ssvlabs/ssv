@@ -413,7 +413,7 @@ func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 // 3850ms): fall-through to L_2 added 2·ε_3 = 100ms walk cost on top of
 // RoundEndOffset → decisionTime = 3950ms > the 3900ms relay-submit
 // deadline, so ClipLateDecision converted to MISS. Observer-mode
-// (Phase 1 of docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md): Resolve runs at
+// (docs/OBFT.md §Phase 3, opportunistic Resolve): Resolve runs at
 // every commit arrival; at BTT=200ms commits arrive at T_commit + 1·BTT
 // = 3600ms; the L_2 σ-walk completes at 3600 + 100ms = 3700ms, inside
 // the 3900ms deadline. The new semantic correctly reflects that

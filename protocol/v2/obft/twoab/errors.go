@@ -44,7 +44,7 @@ var ErrNRLocked = errors.New("twoab: NR already locked at this layer (σ-XOR-NR 
 // ErrUpgradeNotAvailable is returned by MaybeBuildAndBroadcastUpgrade when
 // the upgrade preconditions are not met (op is not on KindNoValue path, or
 // has no V_0, or host re-validates as NV, or op has already emitted
-// KindCommit at L_0 — the post-commit upgrade is not authorized per A1).
+// KindCommit at L_0 — a post-commit upgrade is not authorized).
 var ErrUpgradeNotAvailable = errors.New("twoab: upgrade KindValue not available")
 
 // ErrNoQuorum is returned by Resolve when the K-layer walk exhausts

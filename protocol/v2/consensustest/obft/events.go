@@ -487,8 +487,7 @@ func emitOwnCommit(s *sim, op obftbase.OperatorID) {
 	// qV=1) can satisfy σ-quorum from its own self-observation alone.
 	// At realistic f≥1 the probe returns ErrNoQuorum (1 partial < qV)
 	// and is a no-op. Cheap insurance against future degenerate-fixture
-	// regressions; matches OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §OBFT
-	// instrumentation table.
+	// regressions.
 	tryOpportunisticResolve(s, op)
 }
 
@@ -593,8 +592,7 @@ drainLoop:
 	// submittable σ-cert. Resolve is stateless / idempotent (spec §Phase
 	// 3) so probing on every arrival is safe and cheap. The Outcome
 	// layer reads vQuorumAt as the BTT-sensitive DecisionTime, matching
-	// QBFT's post-consensus partial-sig quorum semantic. See
-	// docs/OBFT-OPPORTUNISTIC-PHASE3-PLAN.md.
+	// QBFT's post-consensus partial-sig quorum semantic.
 	tryOpportunisticResolve(s, e.to)
 
 	// Spec §Phase 3 / "Re-running on late KindCommit arrivals": if this

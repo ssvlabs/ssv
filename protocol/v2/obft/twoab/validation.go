@@ -23,8 +23,8 @@ import (
 // before deciding to accept the message at all.
 
 // ValidatePhase1Bundle checks structural invariants for an incoming
-// Phase-1 bundle. Per spec §Phase 1 (post Op8): the bundle carries the
-// layer leader's σ partial on V as `LWitness` at every layer — required
+// Phase-1 bundle. Per spec §Phase 1: the bundle carries the layer
+// leader's σ partial on V as `LWitness` at every layer — required
 // and non-empty regardless of Layer. LWitness BLS verification happens at
 // the Instance layer (ObservePhase1Bundle) against the leader's
 // pubKeyShare; only the non-empty-bytes structural check is here.
@@ -62,7 +62,7 @@ func ValidatePhase1Bundle(b *Phase1Bundle, cfg *Config) error {
 // ValidateValueMsg checks structural invariants for an incoming Phase-2a
 // ValueMsg envelope. Per spec §Phase 2a, an op emits exactly one ValueMsg
 // per (slot) — either at the Phase-2a fire-instant (initial emission) or
-// as the A1 upgrade from a prior NoValueMsg. A second distinct ValueMsg
+// as the upgrade from a prior NoValueMsg. A second distinct ValueMsg
 // from the same op is Rule-6a (Phase-2 equivocation) slashable; caught at
 // Instance.ObserveValue, not here — this function only does per-message
 // structural checks.
@@ -90,11 +90,11 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 		return fmt.Errorf("twoab: ValueMsg ValueRoot %x does not match sha256(V)",
 			v.ValueRoot)
 	}
-	// Op11 + Op12: Witnesses carries forwarded leader σ-witnesses. A
-	// KindValue is the L_0 σ-side emission, so it MUST forward the L_0
-	// leader's witness on v.V (a Layer-0 entry with ValueRoot ==
-	// v.ValueRoot — the Op11 peer-reflood-V invariant). Deeper-layer
-	// entries (Op12) are optional, one per σ-side layer. Structural checks:
+	// Witnesses carries forwarded leader σ-witnesses. A KindValue is the
+	// L_0 σ-side emission, so it MUST forward the L_0 leader's witness on
+	// v.V (a Layer-0 entry with ValueRoot == v.ValueRoot — the
+	// peer-reflood-V invariant). Deeper-layer entries are optional, one
+	// per σ-side layer. Structural checks:
 	// bounded count (≤ K, at most one per layer), each layer in range with
 	// non-empty bytes, no duplicate layers, and the mandatory Layer-0 entry
 	// present. BLS verification + harvest happen at the Instance layer
@@ -123,16 +123,16 @@ func ValidateValueMsg(v *ValueMsg, cfg *Config) error {
 		}
 	}
 	if !haveL0Witness {
-		return errors.New("twoab: ValueMsg missing the mandatory Layer-0 witness (Op11: the L_0 leader's forwarded σ partial)")
+		return errors.New("twoab: ValueMsg missing the mandatory Layer-0 witness (the L_0 leader's forwarded σ partial)")
 	}
-	// Op5: L0Partial (the emitter's own σ partial on V at L_0) is required
-	// non-empty. KindValue under V3 is the terminal σ-side emission — an
-	// op cannot claim σ-direction at L_0 without presenting its own σ
-	// partial on V. BLS verify happens at the Instance layer
-	// (ObserveValueMsg) against pubKeyShares[v.OperatorID]; a fake
-	// L0Partial fires Rule 5 against the emitter.
+	// L0Partial (the emitter's own σ partial on V at L_0) is required
+	// non-empty. KindValue is the terminal σ-side emission — an op cannot
+	// claim σ-direction at L_0 without presenting its own σ partial on V.
+	// BLS verify happens at the Instance layer (ObserveValueMsg) against
+	// pubKeyShares[v.OperatorID]; a fake L0Partial fires Rule 5 against
+	// the emitter.
 	if len(v.L0Partial) == 0 {
-		return errors.New("twoab: ValueMsg has empty L0Partial (Op5 requires the emitter's own σ partial on V at L_0)")
+		return errors.New("twoab: ValueMsg has empty L0Partial (the emitter's own σ partial on V at L_0 is required)")
 	}
 	if err := validateLayerEntries(v.LayerEntries, cfg, "ValueMsg"); err != nil {
 		return err
@@ -167,18 +167,17 @@ func ValidateNoValueMsg(nv *NoValueMsg, cfg *Config) error {
 }
 
 // ValidateCommit checks structural invariants for an incoming Phase-2b
-// (or Phase-2a NRDirect) Commit envelope. Post Op5, Commit is NR-side
-// only — the σ-side terminal emission moved into KindValue.
+// (or Phase-2a NRDirect) Commit envelope. Commit is NR-side only — the
+// σ-side terminal emission lives in KindValue.
 //
 // Per spec §Wire format:
 //   - Side=NR: L0Partial non-empty + LayerEntries empty.
 //   - Side=NRDirect: L0Partial non-empty + LayerEntries present (K-1
 //     entries; same structural rules as Phase-2a emissions).
 //
-// The historical Side=Signed value (0x01) is now invalid and rejected
-// here — surfaces wire-version drift between cluster members loudly
-// (catches a peer on the pre-Op5 wire format trying to talk to an Op5
-// receiver).
+// Side 0x01 (the removed Signed side) is invalid and rejected here —
+// surfaces wire-version drift between cluster members loudly (catches a
+// peer running an incompatible wire format).
 func ValidateCommit(c *Commit, cfg *Config) error {
 	if c == nil {
 		return errors.New("twoab: nil Commit")
@@ -211,9 +210,9 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 	case CommitSideUnspecified:
 		return errors.New("twoab: Commit Side is unspecified")
 	default:
-		// 0x01 was the pre-Op5 CommitSideSigned value. Catch it here as
-		// an invalid side to make wire-version drift visible.
-		return fmt.Errorf("twoab: Commit Side 0x%02x is invalid (post Op5 only NR=0x02 and NRDirect=0x03 are valid; 0x01 was the removed Signed side)", byte(c.Side))
+		// 0x01 was the removed Signed side. Catch it here as an invalid
+		// side to make wire-version drift visible.
+		return fmt.Errorf("twoab: Commit Side 0x%02x is invalid (only NR=0x02 and NRDirect=0x03 are valid; 0x01 was the removed Signed side)", byte(c.Side))
 	}
 	return nil
 }

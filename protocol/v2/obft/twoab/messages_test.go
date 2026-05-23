@@ -30,8 +30,8 @@ func TestCommitSide_String(t *testing.T) {
 	require.Equal(t, "nr", CommitSideNR.String())
 	require.Equal(t, "nr-direct", CommitSideNRDirect.String())
 	require.Equal(t, "unspecified", CommitSideUnspecified.String())
-	// Post Op5: the 0x01 value (formerly Signed) no longer has a name —
-	// String() returns "unspecified" for any unrecognized value.
+	// 0x01 is not a valid Commit side — String() returns "unspecified" for
+	// any unrecognized value.
 	require.Equal(t, "unspecified", CommitSide(0x01).String())
 }
 
@@ -74,9 +74,9 @@ func TestNoValueMsgContentHash_IdenticalProducesSameHash(t *testing.T) {
 }
 
 func TestCommitContentHash_DistinguishesBySide(t *testing.T) {
-	// Post Op5: only NR and NRDirect are valid sides. The two carry
-	// different LayerEntries shapes (NR is empty; NRDirect has K-1
-	// entries), so distinct hashes regardless of partial bytes.
+	// Only NR and NRDirect are valid sides. The two carry different
+	// LayerEntries shapes (NR is empty; NRDirect has K-1 entries), so
+	// distinct hashes regardless of partial bytes.
 	cA := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("p")}
 	cB := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNRDirect, L0Partial: Signature("p")}
 	require.NotEqual(t, commitContentHash(cA), commitContentHash(cB))

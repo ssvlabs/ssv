@@ -5,8 +5,6 @@ import "time"
 // Mode identifies which test tier a scenario participates in. Scenarios
 // declare their supported modes via Scenario.Modes; test entry points
 // (TestCorrectness, TestStress) filter the Catalog by mode.
-//
-// See docs/CONSENSUSTEST-SPLIT-PLAN.md.
 type Mode string
 
 const (

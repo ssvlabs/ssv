@@ -148,8 +148,8 @@ const (
 	// 2abOBFT-specific: Phase-2 "downgrade" equivocation (Rule 6a). A byz
 	// operator emits its natural KindValue on V at Phase 2a AND ALSO emits
 	// a KindNoValue from the same op. The sequence "KindValue → KindNoValue"
-	// is not in the authorized A1-A8 set per spec — downgrade is unauthorized
-	// (only the reverse direction, KindNoValue → KindValue upgrade, is A1).
+	// is not in the authorized set per spec — downgrade is unauthorized
+	// (only the reverse direction, KindNoValue → KindValue, is the upgrade).
 	// Receivers fire Rule 6a on the cross-kind second observation. Cluster
 	// still decides via honest majority at L_0. Exercises the cross-kind
 	// BuildExtra hook path in the twoab adapter; other protocols have no

@@ -17,7 +17,7 @@ import (
 const observedEarly = 600 * time.Millisecond
 
 // observedAfterPhase2a is past TPhase2a but well within the slot —
-// models a late-arriving bundle that may still drive an A1 upgrade.
+// models a late-arriving bundle that may still drive the upgrade.
 const observedAfterPhase2a = 1500 * time.Millisecond
 
 // sim is a multi-operator harness for protocol-level tests.
@@ -139,7 +139,7 @@ func (s *sim) leaderAt(layer int) OperatorID {
 }
 
 // l0Witness wraps a single L_0 forwarded leader witness on v into the
-// Witnesses[] shape a valid KindValue requires (Op12). Test convenience for
+// Witnesses[] shape a valid KindValue requires. Test convenience for
 // the common case where a ValueMsg only forwards the mandatory L_0 witness.
 func l0Witness(v Value, sig Signature) []LayerWitness {
 	return []LayerWitness{{Layer: 0, ValueRoot: ValueRoot(v), Witness: sig}}
@@ -175,8 +175,7 @@ func (s *sim) deliverPhase1(layer int, value Value, recipients []OperatorID, obs
 // TWO distinct bundles V_a and V_b and selectively deliver them to
 // different subsets of recipients.
 //
-// Under Op3 (post sub-chunk #1 of healthy-path-optimizations), the
-// legitimate BuildPhase1Bundle path acquires σ-lock at L_0 on the
+// The legitimate BuildPhase1Bundle path acquires σ-lock at L_0 on the
 // emitter's instance. Equivocation is inherently byz behavior — the
 // byz leader bypasses EKM to sign on multiple V's. Both bundles here
 // use the test-only direct signer access (buildByzEquivocatingBundle),
@@ -209,8 +208,8 @@ func (s *sim) deliverPhase1Equivocation(
 // on multiple V's (which the BLS signer permits; only the protocol's
 // EKM gate blocks honest paths).
 //
-// The LWitness is signed via direct signer access at every layer (Op8:
-// the layer leader's witness is required at all layers). Equivocation
+// The LWitness is signed via direct signer access at every layer (the
+// layer leader's witness is required at all layers). Equivocation
 // tests model a byz leader who signs σ partials on multiple V's, which the
 // BLS signer permits — only the protocol's EKM gate blocks honest paths.
 func (s *sim) buildByzEquivocatingBundle(leader OperatorID, layer int, vB Value) *Phase1Bundle {
@@ -307,7 +306,7 @@ func (s *sim) propagatePostPhase2aEmissions() {
 			inst := s.instances[op]
 			// Check for new upgrade KindValue.
 			if vm, ok := inst.OwnValueMsg(); ok && !upgraded[op] {
-				// Only an upgrade if op also has ownNoValueMsg (A1 path).
+				// Only an upgrade if op also has ownNoValueMsg (the NoValue→Value path).
 				if _, hadNV := inst.OwnNoValueMsg(); hadNV {
 					upgraded[op] = true
 					progress = true
@@ -320,7 +319,7 @@ func (s *sim) propagatePostPhase2aEmissions() {
 					}
 				}
 			}
-			// Check for new Phase-2b Commit (Side=Signed or NR, not NRDirect
+			// Check for new Phase-2b Commit (Side=NR, not NRDirect
 			// — NRDirect was already broadcast in firePhase2aAll).
 			if c, ok := inst.OwnCommit(); ok && !committed[op] && c.Side != CommitSideNRDirect {
 				committed[op] = true

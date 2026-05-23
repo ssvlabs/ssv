@@ -9,7 +9,7 @@ import (
 // Scenario describes a test condition independently of the protocol under
 // test. Apply modifies SimConfig (typically Byz / Host / Network); Expect
 // declares per-protocol outcome buckets; Modes opts the scenario into the
-// correctness and/or stress tiers (see docs/CONSENSUSTEST-SPLIT-PLAN.md).
+// correctness and/or stress tiers.
 type Scenario struct {
 	Name  string
 	Title string // human-readable label for reports/charts; falls back to Name when empty

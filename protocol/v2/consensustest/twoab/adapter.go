@@ -46,24 +46,22 @@ type Protocol struct {
 	// for late peer KindValue arrivals when the network's per-hop
 	// latency tail exceeds 1·BTT.
 	//
-	// Cascade-window semantics (post Op5/Op6): KindValue carries the σ
-	// partial directly — the cluster's σ-pool[V_0] fills in 1 hop from
-	// TPhase2a (was 2 hops in v4 with the intermediate KindCommit-
-	// Signed). SafetyBuffer now plays the role of "σ-pool fill
-	// absorption budget for IHAVE/IWANT recovery when initial KindValue
-	// eager-push doesn't reach all honest peers" — conceptually closer
-	// to OBFT's RefloodDelay role (a lazy-pull recovery window) than
-	// v4's two-hop-cascade-slack role. The leader's pre-Phase-2a window
+	// Cascade-window semantics: KindValue carries the σ partial directly,
+	// so the cluster's σ-pool[V_0] fills in 1 hop from TPhase2a.
+	// SafetyBuffer plays the role of "σ-pool fill absorption budget for
+	// IHAVE/IWANT recovery when initial KindValue eager-push doesn't reach
+	// all honest peers" — conceptually close to OBFT's RefloodDelay role (a
+	// lazy-pull recovery window). The leader's pre-Phase-2a window
 	// (`B_0 = 1·BTT`) stays at the structural minimum; ops who don't
-	// observe V by TPhase2a fire KindNoValue and recover via A1 upgrade
-	// once the bundle (or peer KindValue carrying the forwarded witness)
-	// arrives — that A1 upgrade is now the σ-side terminal emission
-	// (Op5), so it still benefits from the SafetyBuffer absorption
-	// budget for late peer observations.
+	// observe V by TPhase2a fire KindNoValue and upgrade to KindValue once
+	// the bundle (or peer KindValue carrying the forwarded witness)
+	// arrives — that upgrade is the σ-side terminal emission, so it still
+	// benefits from the SafetyBuffer absorption budget for late peer
+	// observations.
 	//
-	// Op6 crossover: the resolve window is max(1·BTT + SafetyBuffer,
-	// 2·BTT) (a slot resolves σ-ward XOR NR-ward, so reserve the max not
-	// the sum). SafetyBuffer therefore only widens the window ABOVE the
+	// Crossover: the resolve window is max(1·BTT + SafetyBuffer, 2·BTT)
+	// (a slot resolves σ-ward XOR NR-ward, so reserve the max not the
+	// sum). SafetyBuffer therefore only widens the window ABOVE the
 	// 1·BTT crossover — below it the 2·BTT NR-fall-through path dominates,
 	// so a smaller SafetyBuffer reclaims MEV-fetch headroom for nothing
 	// extra. See docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
@@ -107,16 +105,15 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		internal = crashOverlay{internalByz: internal, crashed: newByzSet(cfg.Byz.Crashed)}
 	}
 
-	// 2abOBFT timing model (spec §Setting, post Op5+Op6):
+	// 2abOBFT timing model (spec §Setting):
 	//   - TPhase2a is the Phase-2a fire-instant; every op emits one of
 	//     {KindValue (with σ partial), KindNoValue, KindCommit-NRDirect}
 	//     at this offset.
 	//   - T0Broadcast = TPhase2a − BTT is the L_0 leader's broadcast
 	//     time target — V_0 has 1·BTT to propagate before Phase 2a fires.
 	//   - SafetyBuffer shifts TPhase2a earlier in the slot, widening the
-	//     post-TPhase2a σ-pool fill window (post Op5: 1-hop peer
-	//     KindValue propagation; the v4 second hop to KindCommit-Signed
-	//     is removed). Default sizing uses SafetyBuffer = RefloodDelay
+	//     post-TPhase2a σ-pool fill window (1-hop peer KindValue
+	//     propagation). Default sizing uses SafetyBuffer = RefloodDelay
 	//     so 2abOBFT and bare OBFT have the same total post-broadcast
 	//     structural budget.
 	//
@@ -126,7 +123,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// dispatch, plus 2·BTT + SafetyBuffer for the post-Phase-2a settle
 	// window.
 	//
-	// **Cascade-depth note (post Op5/Op6 — sum→max reservation)**: the
+	// **Cascade-depth note (sum→max reservation)**: the
 	// L_0 σ-side cascade is 1 hop (KindValue carries the σ partial
 	// directly), but the L_0 NR-side cascade for fall-through-to-L_1 is
 	// 2 hops (KindNoValue → KindCommit-NR → peer arrival → NR-aggregate
@@ -286,13 +283,13 @@ func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Dur
 		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
 	}
 	if deadlockLayer >= 0 {
-		// Under v4: both pools short at this layer + cannot-σ gate blocks
-		// σ-eligible ops from defaulting to NR + no T_commit hard wall →
-		// cluster waits indefinitely until slot deadline. This shape is
-		// distinct from OBFT's classic "σ-pool short, NR-pool failed to
-		// reach qEnc" deadlock — in v4 it's "neither pool reaches its
-		// threshold, gate prevents NR-default" — though both manifest
-		// as the same per-layer stuck state.
+		// Both pools short at this layer + cannot-σ gate blocks σ-eligible
+		// ops from defaulting to NR + no T_commit hard wall → cluster
+		// waits indefinitely until slot deadline. This shape is distinct
+		// from OBFT's classic "σ-pool short, NR-pool failed to reach qEnc"
+		// deadlock — here it's "neither pool reaches its threshold, gate
+		// prevents NR-default" — though both manifest as the same
+		// per-layer stuck state.
 		return fmt.Sprintf("Cluster deadlocked at layer %d (neither σ-quorum nor NR-quorum reaches; cannot-σ gate prevents NR-default)", deadlockLayer)
 	}
 	return "Cluster never assembled a threshold signature at any layer"

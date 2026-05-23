@@ -8,7 +8,7 @@ import (
 
 // Unit tests for the L_0 early-fire signal (l0ReadyCh / maybeSignalL0Ready /
 // l0DecisionReady). The DES/runner selects on L0ReadyCh() to async-fire
-// MaybeFirePhase2a before the cluster-wide TPhase2a backstop (Op6).
+// MaybeFirePhase2a before the cluster-wide TPhase2a backstop.
 //
 // These pin twoab's L0Ready semantics, which DIVERGE from base
 // (protocol/v2/obft/base/early_commit_test.go) in two load-bearing ways:

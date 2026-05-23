@@ -275,7 +275,7 @@ func TestRunProposerSlot_LateCommit_OpportunisticResolve(t *testing.T) {
 }
 
 // TestScheduler_OpportunisticResolve_EndInstanceWhileWaiting verifies the
-// risk-mitigation invariant from OBFT-OPPORTUNISTIC-PHASE3-PLAN.md §Risks:
+// risk-mitigation invariant:
 // "The Controller's StateDeltaChan(slot) must close when EndInstance fires
 // for that slot. Orphaned waiters in ResolveAndSubmitOpportunistically
 // must unblock cleanly."

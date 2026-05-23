@@ -17,8 +17,8 @@ import (
 //     a. If local operator is a layer leader: BuildPhase1Bundle(layer, V)
 //     constructs a bundle and broadcasts it. Every layer leader embeds an
 //     LWitness (σ partial on V at its layer) so receivers can seed
-//     σ-pool[V_k] from the bundle alone (Op8 generalized this from the
-//     L_0-only Op3 witness).
+//     σ-pool[V_k] from the bundle alone (every layer's leader carries a
+//     witness, not just L_0).
 //     b. ObservePhase1Bundle(b) for every retained peer bundle.
 //
 //  2. Phase 2a — fire-instant at T_phase_2a:
@@ -29,15 +29,15 @@ import (
 //
 //  3. Phase 2a-late — opportunistic upgrade window [T_phase_2a, slot deadline]:
 //     a. MaybeBuildAndBroadcastUpgrade() — KindNoValue-path ops who have
-//     received V_0 + host valid emit an upgrade KindValue (A1 sequence).
+//     received V_0 + host valid emit an upgrade KindValue (the upgrade).
 //
-//  4. Phase 2b — dynamic, no protocol-level deadline (post Op5):
+//  4. Phase 2b — dynamic, no protocol-level deadline:
 //     a. MaybeBuildAndBroadcastCommit() — each op evaluates the
 //     NR-eligibility trigger (cluster noValuePool[L_0] reaches qEnc AND
 //     cannot-σ gate); fires at most one KindCommit-NR per slot. The
-//     equivocation trigger fires at Phase 2a (NRDirect) only; post Op5
-//     there is no separate σ-eligibility trigger — KindValue is the
-//     σ-side terminal emission with the emitter's σ partial inline.
+//     equivocation trigger fires at Phase 2a (NRDirect) only; there is
+//     no separate σ-eligibility trigger — KindValue is the σ-side
+//     terminal emission with the emitter's σ partial inline.
 //     b. ObserveCommit(c) for peers (Side ∈ {NR, NRDirect}).
 //
 //  5. Phase 3 — observer-on-arrival from Phase-2a onward:
@@ -98,16 +98,16 @@ type Instance struct {
 	// valid/not-valid verdict on the V identified by value_root at this
 	// layer. Populated via ApplyHostValidity; consumed by
 	// computeLocalValueState (Phase-2a fire-time emission decision),
-	// canSigmaAtLayer (post-Op5 σ-eligibility self-gate), and
-	// MaybeBuildAndBroadcastUpgrade (A1 upgrade preconditions).
+	// canSigmaAtLayer (the can-σ self-gate), and
+	// MaybeBuildAndBroadcastUpgrade (upgrade preconditions).
 	hostVerdict map[int]map[string]bool
 
 	// Phase-2a own emissions. ownNoValueMsg is set if the op emitted
 	// NoValue at Phase 2a; ownValueMsg is set if the op emitted Value at
-	// Phase 2a OR as a Phase-2a-late A1 upgrade from a prior NoValue. Both
-	// non-nil indicates the upgrade happened (A1 sequence). Phase-2a
-	// NRDirect emitters set ownCommit directly (Side=NRDirect) and leave
-	// ownValueMsg / ownNoValueMsg nil.
+	// Phase 2a OR as a Phase-2a-late upgrade from a prior NoValue. Both
+	// non-nil indicates the upgrade happened. Phase-2a NRDirect emitters
+	// set ownCommit directly (Side=NRDirect) and leave ownValueMsg /
+	// ownNoValueMsg nil.
 	ownValueMsg   *ValueMsg
 	ownNoValueMsg *NoValueMsg
 
@@ -118,11 +118,11 @@ type Instance struct {
 
 	// Peer Phase-2 emissions — first-observed retained per (slot, op).
 	// Used for:
-	//   - Pool aggregation per §Pool aggregation rules (post Op5,
-	//     KindValue carries both the σ-direction claim AND the emitter's
-	//     σ partial directly — no separate Commit-Signed inference step).
+	//   - Pool aggregation per §Pool aggregation rules (KindValue carries
+	//     both the σ-direction claim AND the emitter's σ partial directly).
 	//   - Duplicate / equivocation detection (second distinct emission =
-	//     Phase-2 equivocation per Rule 6a, unless authorized by A1/A5/A8).
+	//     Phase-2 equivocation per Rule 6a, unless authorized by
+	//     {NoValue→Value, NoValue→Commit-NR, Commit-NRDirect-alone}).
 	peerValueMsg   map[OperatorID]*ValueMsg
 	peerNoValueMsg map[OperatorID]*NoValueMsg
 	peerCommit     map[OperatorID]*Commit
@@ -151,12 +151,12 @@ type Instance struct {
 	// extractable partial signatures, not inferred-claim memberships.
 	//
 	//   - sigmaPool[layer][V_root][op] = the op's σ partial on V at this
-	//     layer. At L_0 (post Op5): extracted from KindValue.L0Partial
-	//     via verifyAndPoolL0Partial; the leader's contribution comes
-	//     from Phase1Bundle.LWitness. At L_k>0 (post Op8): the layer
-	//     leader's plaintext Phase1Bundle.LWitness (a head-start) plus
-	//     peers' σ partials decrypted from Phase-2a LayerEntry
-	//     (SigmaChained, peeled via accumulated nr_tag keys).
+	//     layer. At L_0: extracted from KindValue.L0Partial via
+	//     verifyAndPoolL0Partial; the leader's contribution comes from
+	//     Phase1Bundle.LWitness. At L_k>0: the layer leader's plaintext
+	//     Phase1Bundle.LWitness (a head-start) plus peers' σ partials
+	//     decrypted from Phase-2a LayerEntry (SigmaChained, peeled via
+	//     accumulated nr_tag keys).
 	//   - nrTagPool[layer][op] = the op's nr_tag_k partial at this layer.
 	//     At L_0: extracted from KindCommit-NR / KindCommit-NRDirect. At
 	//     L_k>0: extracted from Phase-2a LayerEntry (NRPlaintext).
@@ -186,16 +186,16 @@ type Instance struct {
 	// becomes determinable as σ-eligible (KindValue) or equivocation-
 	// observed (KindCommit-NRDirect) — i.e. when computeLocalValueState()
 	// would return Value or NRDirect. The runner/DES selects on it to
-	// fire MaybeFirePhase2a async (Op6), well before the TPhase2a
-	// backstop, shaving the bundle-arrival→TPhase2a gap off the healthy
-	// path. Mirrors `protocol/v2/obft/base.Instance.l0ReadyCh`.
+	// fire MaybeFirePhase2a async, well before the TPhase2a backstop,
+	// shaving the bundle-arrival→TPhase2a gap off the healthy path.
+	// Mirrors `protocol/v2/obft/base.Instance.l0ReadyCh`.
 	//
 	// SEMANTIC DIVERGENCE FROM base: base closes L0Ready on ANY host
 	// verdict (NV and σ are both commitments in bare OBFT). twoab does
 	// NOT close it for the NoValue case — a V-drop / host-NV op waits
 	// for the TPhase2a backstop (giving V its reflood window before the
 	// op declares NV), then emits KindNoValue; a later V arrival is
-	// handled by the A1-upgrade cascade. This is protocol-forced:
+	// handled by the upgrade cascade. This is protocol-forced:
 	// twoab's KindNoValue is coordination, not commitment.
 	//
 	// Stays open all slot if L_0 never becomes fire-ready (silent leader
@@ -232,7 +232,7 @@ type Instance struct {
 
 	// wantsHostValidationCh delivers (layer, value) pairs requesting the
 	// runner-side host hook to validate a V the Instance harvested from a
-	// peer KindValue (Op11 peer-reflood-V path). Buffered with capacity K;
+	// peer KindValue (the peer-reflood-V path). Buffered with capacity K;
 	// non-blocking enqueue, drops on full buffer with rollback so a later
 	// observation can re-attempt. Closed by Finalize.
 	//
@@ -251,18 +251,17 @@ type Instance struct {
 	pendingValidation map[int]map[[32]byte]bool
 
 	// verifiedWitnesses caches the result of verifySigmaPartial for a
-	// layer's leader on a given (layer, V_root). Op11/Op12 forward leader
-	// witnesses in every KindValue, so a receiver observing N peer
-	// KindValues for the same V in a slot would naively re-verify the same
-	// (leader, V_root) witness N times. BLS partial-verify is ~1ms in
-	// production; at n=10 with byz-driven re-broadcast, the verify cost
-	// stacks against the slot budget. The cache short-circuits subsequent
-	// verifies of the same witness. Per spec §Op11/§Op12 (verify-cost
-	// dedup); mirrors `protocol/v2/obft/base/instance.go`
-	// witnessedLeaderSigma.
+	// layer's leader on a given (layer, V_root). Every KindValue forwards
+	// leader witnesses, so a receiver observing N peer KindValues for the
+	// same V in a slot would naively re-verify the same (leader, V_root)
+	// witness N times. BLS partial-verify is ~1ms in production; at n=10
+	// with byz-driven re-broadcast, the verify cost stacks against the
+	// slot budget. The cache short-circuits subsequent verifies of the
+	// same witness (verify-cost dedup); mirrors
+	// `protocol/v2/obft/base/instance.go` witnessedLeaderSigma.
 	//
-	// Cache is per-layer: post-Op12 every layer's forwarded leader witness
-	// gets its own (V_root) dedup bucket.
+	// Cache is per-layer: every layer's forwarded leader witness gets its
+	// own (V_root) dedup bucket.
 	verifiedWitnesses map[int]map[[32]byte]bool
 
 	// receivedCertificate is the FIRST peer-broadcast Certificate
@@ -302,7 +301,7 @@ const (
 	// as a belt-and-suspenders check on top of LWitness verification.
 	RetentionDirect RetentionSource = iota
 	// RetentionHarvest: the bundle was synthesized from a peer's
-	// KindValue (Op11 peer-reflood-V harvest). No leader envelope
+	// KindValue (peer-reflood-V harvest). No leader envelope
 	// signature exists for this bundle; the LWitness BLS partial
 	// inside is the sole leader-binding artifact (verified by the
 	// Instance against the leader's pubkey before retention).
@@ -321,16 +320,16 @@ type retainedBundle struct {
 
 	// RetentionEstablishedAt is the offset (from slot_start) at which
 	// this retention entry was first observed. Diagnostic / telemetry
-	// only — the protocol's behavior doesn't depend on it (v4 has no
+	// only — the protocol's behavior doesn't depend on it (there is no
 	// T_commit acceptance horizon). Useful for runner-level latency
 	// metrics and post-mortem analysis of mesh-tail recovery.
 	RetentionEstablishedAt time.Duration
 
 	// Source distinguishes Direct (envelope-signed Phase-1 bundle from
 	// gossipsub Phase-1 channel) from Harvest (synthesized from a
-	// peer's KindValue via Op11). Surfaced into Rule 2 (leader-
-	// equivocation) evidence so downstream slashing consumers can
-	// route envelope re-verification correctly. See RetentionSource.
+	// peer's KindValue). Surfaced into Rule 2 (leader-equivocation)
+	// evidence so downstream slashing consumers can route envelope
+	// re-verification correctly. See RetentionSource.
 	Source RetentionSource
 }
 
@@ -419,7 +418,7 @@ func NewInstance(
 		rule5Fired:       make(map[int]map[OperatorID]bool, K),
 		rule6aFired:      make(map[OperatorID]bool, len(cfg.Operators)),
 		evidenceObserved: make(map[evidenceObservedKey]bool),
-		// Op11 host-validation channel: buffered at K so a slot's worth of
+		// Host-validation channel: buffered at K so a slot's worth of
 		// per-layer harvested V's can sit in the queue if the drain is
 		// briefly stalled. Realistically K=2 today and the channel only
 		// holds L_0 entries (no L_k>0 harvest yet — Phase D).
@@ -433,7 +432,7 @@ func NewInstance(
 // ValidationRequest is a request from the Instance to its runner asking
 // for the host application to validate a V at a particular layer. Emitted
 // on Instance.WantsHostValidationCh when a V is first-observed via the
-// Op11 peer-reflood-V path (harvest from a peer KindValue) without an
+// peer-reflood-V path (harvest from a peer KindValue) without an
 // existing host verdict. The runner dispatches validation against its
 // host hook and calls ApplyHostValidity with the result.
 //
@@ -444,7 +443,7 @@ type ValidationRequest struct {
 }
 
 // WantsHostValidationCh returns the channel on which the Instance delivers
-// host-validity requests for V's first-observed via peer KindValue (Op11
+// host-validity requests for V's first-observed via peer KindValue (the
 // peer-reflood-V harvest path). The runner MUST drain this channel
 // (typically via select alongside its other per-slot signals) and dispatch
 // validation through the host hook, invoking ApplyHostValidity with the
@@ -467,7 +466,7 @@ func (i *Instance) WantsHostValidationCh() <-chan ValidationRequest {
 // L0ReadyCh returns a channel closed once when the operator's L_0
 // Phase-2a emission becomes determinable as σ-eligible (KindValue) or
 // equivocation-observed (KindCommit-NRDirect) — see l0DecisionReady.
-// The runner/DES selects on it to fire MaybeFirePhase2a async (Op6),
+// The runner/DES selects on it to fire MaybeFirePhase2a async,
 // before the TPhase2a backstop. Mirrors
 // `protocol/v2/obft/base.Instance.L0ReadyCh`, with the twoab semantic
 // divergence documented on the l0ReadyCh field: the NoValue case does
@@ -488,7 +487,7 @@ func (i *Instance) L0ReadyCh() <-chan struct{} { return i.l0ReadyCh }
 
 // l0DecisionReady reports whether the op's L_0 Phase-2a emission is
 // determinable as a σ-side (Value) or equivocation (NRDirect) emission
-// — the two cases that fire early under Op6. Predicate underlying
+// — the two cases that fire early on L0Ready. Predicate underlying
 // L0ReadyCh.
 //
 // Returns false for the NoValue case (no V retained, or host says NV,
@@ -502,8 +501,8 @@ func (i *Instance) L0ReadyCh() <-chan struct{} { return i.l0ReadyCh }
 // arrive. Under jittery delivery this changes the Equivocate_AllNR
 // outcome from "always fall through to L_1" to "mostly decide fast at
 // L_0, ~23% miss". Safety-preserving (Pigeonhole 2 still bounds two-V
-// σ-quorum); the trade is the plan's accepted "equivocation-recovery for
-// healthy-path latency". Tracked by TestAdapter_Equivocate_AllNR_JitterTradeoff.
+// σ-quorum); the trade is equivocation-recovery for healthy-path
+// latency. Tracked by TestAdapter_Equivocate_AllNR_JitterTradeoff.
 func (i *Instance) l0DecisionReady() bool {
 	return i.computeLocalValueState() != localValueStateNoValue
 }
@@ -515,7 +514,7 @@ func (i *Instance) l0DecisionReady() bool {
 //
 // Called from the two — and only two — mutators of the inputs that
 // computeLocalValueState reads (retainedBundles + hostVerdict):
-//   - retainPhase1Bundle (via ObservePhase1Bundle direct + Op11 harvest)
+//   - retainPhase1Bundle (via ObservePhase1Bundle direct + harvest)
 //     — retention count change.
 //   - ApplyHostValidity — host verdict recorded.
 //

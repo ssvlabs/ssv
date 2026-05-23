@@ -9,7 +9,7 @@ import (
 )
 
 func TestProtocolTag_IsTwoabOBFTNotV1(t *testing.T) {
-	// ProtocolTag is "2abOBFT" + 9 NUL bytes per the rewrite (no "-v1" suffix).
+	// ProtocolTag is "2abOBFT" + 9 NUL bytes (no "-v1" suffix).
 	expected := [16]byte{'2', 'a', 'b', 'O', 'B', 'F', 'T'}
 	require.Equal(t, expected, ProtocolTag)
 }
@@ -33,17 +33,15 @@ func TestPhase1Bundle_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, b.Layer, decoded.Layer)
 	require.Equal(t, b.Value, decoded.Value)
 	require.Equal(t, b.LWitness, decoded.LWitness,
-		"Op8 LWitness must round-trip through wire encode/decode")
+		"LWitness must round-trip through wire encode/decode")
 }
 
 // TestPhase1Bundle_RejectsUnknownVersionByte verifies that the V3
-// decoder rejects wire bytes whose version byte differs from 0x03.
-// Includes rejection of the pre-Op8 V2 byte (0x02) and the pre-Op3 V1
-// byte (0x01) — the cluster cutover policy assumes wire-incompatible
-// coexistence does not occur, so older-version bytes hitting a V3 decoder
-// should fail cleanly at the version check (manifesting as silent quorum
-// starvation on mixed-version clusters — see wire.go's cluster-cutover
-// documentation).
+// decoder rejects wire bytes whose version byte differs from 0x03 — the
+// cluster cutover policy assumes wire-incompatible coexistence does not
+// occur, so any non-V3 byte hitting a V3 decoder should fail cleanly at
+// the version check (manifesting as silent quorum starvation on
+// mixed-version clusters — see wire.go's cluster-cutover documentation).
 func TestPhase1Bundle_RejectsUnknownVersionByte(t *testing.T) {
 	for _, badVersion := range []byte{0x00, 0x01, 0x02, 0xff} {
 		bytes := []byte{badVersion}
@@ -57,8 +55,8 @@ func TestPhase1Bundle_RejectsUnknownVersionByte(t *testing.T) {
 // TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyLWitness verifies that the
 // wire encoding tolerates an empty LWitness at the encoder/decoder level
 // (the non-empty check is at ValidatePhase1Bundle — separation of
-// concerns). Post-Op8 ValidatePhase1Bundle rejects an empty witness at
-// every layer, but the codec itself stays agnostic so a malformed bundle
+// concerns). ValidatePhase1Bundle rejects an empty witness at every
+// layer, but the codec itself stays agnostic so a malformed bundle
 // fails at validation (with a specific error) rather than at decode.
 func TestPhase1Bundle_EncodeDecodeRoundTrip_EmptyLWitness(t *testing.T) {
 	b := &twoab.Phase1Bundle{
@@ -84,7 +82,7 @@ func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 		Height:     5,
 		V:          v,
 		ValueRoot:  twoab.ValueRoot(v),
-		// Op12: a Layer-0 witness plus a deeper-layer one (exercises the
+		// A Layer-0 witness plus a deeper-layer one (exercises the
 		// multi-entry Witnesses[] list codec).
 		Witnesses: []twoab.LayerWitness{
 			{Layer: 0, ValueRoot: twoab.ValueRoot(v), Witness: twoab.Signature{0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04}},
@@ -104,20 +102,19 @@ func TestValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, vm.V, decoded.V)
 	require.Equal(t, vm.ValueRoot, decoded.ValueRoot)
 	require.Equal(t, vm.Witnesses, decoded.Witnesses,
-		"Op12: KindValue Witnesses[] must round-trip through wire encode/decode")
+		"KindValue Witnesses[] must round-trip through wire encode/decode")
 	require.Equal(t, vm.L0Partial, decoded.L0Partial,
-		"Op5: KindValue L0Partial must round-trip through wire encode/decode")
+		"KindValue L0Partial must round-trip through wire encode/decode")
 	require.Len(t, decoded.LayerEntries, 1)
 	require.Equal(t, vm.LayerEntries[0].Layer, decoded.LayerEntries[0].Layer)
 	require.Equal(t, vm.LayerEntries[0].Kind, decoded.LayerEntries[0].Kind)
 }
 
 // TestValueMsg_RejectsUnknownVersionByte verifies that the V4 decoder
-// rejects wire bytes whose version byte differs from 0x04. Includes
-// rejection of the pre-Op12 V3 byte (0x03), the pre-Op5 V2 byte (0x02),
-// and the pre-Op11 V1 byte (0x01) — the cluster cutover policy assumes
-// wire-incompatible coexistence does not occur, so older-version bytes
-// hitting a V4 decoder should fail cleanly at the version check.
+// rejects wire bytes whose version byte differs from 0x04 — the cluster
+// cutover policy assumes wire-incompatible coexistence does not occur, so
+// any non-V4 byte hitting a V4 decoder should fail cleanly at the version
+// check.
 func TestValueMsg_RejectsUnknownVersionByte(t *testing.T) {
 	for _, badVersion := range []byte{0x00, 0x01, 0x02, 0x03, 0xff} {
 		bytes := []byte{badVersion}
@@ -147,9 +144,9 @@ func TestNoValueMsg_EncodeDecodeRoundTrip(t *testing.T) {
 }
 
 // TestCommit_NREncodeDecodeRoundTrip covers the Phase-2b NR commit
-// (KindCommit-NR) wire round-trip. Post Op5, this is the most common
-// Commit kind on the wire — KindCommit-Signed has been removed and the
-// σ-side terminal emission moved into KindValue.
+// (KindCommit-NR) wire round-trip. This is the most common Commit kind on
+// the wire — the σ-side terminal emission rides inline in KindValue, so NR
+// and NRDirect are the only Commit sides.
 func TestCommit_NREncodeDecodeRoundTrip(t *testing.T) {
 	c := &twoab.Commit{
 		ClusterID:  [32]byte{0xcc},
@@ -167,11 +164,11 @@ func TestCommit_NREncodeDecodeRoundTrip(t *testing.T) {
 	require.Empty(t, decoded.LayerEntries)
 }
 
-// TestCommit_SignedSideRejected verifies that the pre-Op5 Signed side
+// TestCommit_SignedSideRejected verifies that the removed Signed side
 // (byte 0x01) is rejected by the decoder loudly, surfacing wire-version
 // drift between cluster members.
 func TestCommit_SignedSideRejected(t *testing.T) {
-	// Craft a Commit byte stream with side byte 0x01 (pre-Op5 Signed).
+	// Craft a Commit byte stream with side byte 0x01 (the removed Signed side).
 	// Use Encode with a hand-stamped side to bypass our own constants.
 	bytes := []byte{CommitVersionV2}
 	bytes = append(bytes, ProtocolTag[:]...)
@@ -179,11 +176,11 @@ func TestCommit_SignedSideRejected(t *testing.T) {
 	bytes = append(bytes, make([]byte, 32)...) // ClusterID
 	bytes = append(bytes, make([]byte, 8)...)  // OperatorID
 	bytes = append(bytes, make([]byte, 8)...)  // Height
-	bytes = append(bytes, 0x01)                // side = Signed (removed post Op5)
-	bytes = append(bytes, 0, 0, 0, 1, 0xaa)    // L0Partial length=1 + 1 byte
+	bytes = append(bytes, 0x01)                // side = the removed Signed side
+	bytes = append(bytes, 0, 0, 0, 1, 0xaa)    // L0Partial length=1 plus 1 byte
 	bytes = append(bytes, 0, 0, 0, 0)          // LayerEntries count = 0
 	_, err := DecodeCommit(bytes)
-	require.Error(t, err, "Op5: pre-Op5 CommitSideSigned (0x01) must be rejected at wire decode")
+	require.Error(t, err, "the removed Signed side (0x01) must be rejected at wire decode")
 }
 
 func TestCommit_NRDirectEncodeDecodeRoundTrip(t *testing.T) {

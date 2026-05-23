@@ -6,21 +6,20 @@ import (
 )
 
 // ApplyHostValidity records the host application's valid / not-valid
-// verdict on the given V at the given layer. Per spec §Phase 2a (post
-// Op5), the host is consulted at:
+// verdict on the given V at the given layer. Per spec §Phase 2a, the host
+// is consulted at:
 //
 //   - Phase-2a fire-time: to determine whether the op emits KindValue
 //     with σ partial (host says valid AND op has V; the σ-lock is
 //     acquired at this moment) or KindNoValue (otherwise).
-//   - A1 upgrade time: a KindNoValue-path op that later observes V_0 +
-//     host valid emits the upgrade KindValue (also carrying σ partial
-//     post Op5). The runner re-asks the host on the harvested V if
-//     it hasn't validated this (layer, V) yet — see WantsHostValidationCh.
+//   - Upgrade time: a KindNoValue-path op that later observes V_0 + host
+//     valid emits the upgrade KindValue (also carrying its σ partial). The
+//     runner re-asks the host on the harvested V if it hasn't validated
+//     this (layer, V) yet — see WantsHostValidationCh.
 //
-// Post Op5: σ-lock is acquired at KindValue emit time, so A3 (host-flip
-// after KindValue) and A4 (equivocation-post-σ-commit) pivots no longer
-// exist. A mid-slot host re-validate-NV verdict has no protocol effect
-// once the op is σ-locked.
+// σ-lock is acquired at KindValue emit time, so once the op is σ-locked a
+// mid-slot host re-validate-NV verdict has no protocol effect (flipping to
+// NR would self-equivocate).
 //
 // Idempotent for the same (layer, V, valid) triple. Calling with a
 // different `valid` value for the same (layer, V) overwrites — the
@@ -39,7 +38,7 @@ import (
 // note on this divergence.
 //
 // On L_0 host-validity updates, the Instance runs the per-tick
-// processing cascade so a host-flip-to-valid can trigger the A1 upgrade
+// processing cascade so a host-flip-to-valid can trigger the upgrade
 // path (if the op is on KindNoValue path AND now has V_0 + host says
 // valid).
 //
@@ -88,9 +87,9 @@ func (i *Instance) ApplyHostValidity(layer int, value Value, valid bool) error {
 		delete(bucket, root)
 	}
 	i.afterStateDelta()
-	// Op6: recording a host verdict can flip computeLocalValueState to
-	// Value (retained V_0 now host-valid). Signal L0Ready so the
-	// runner/DES can async-fire MaybeFirePhase2a before TPhase2a.
+	// Recording a host verdict can flip computeLocalValueState to Value
+	// (retained V_0 now host-valid). Signal L0Ready so the runner/DES can
+	// async-fire MaybeFirePhase2a before TPhase2a.
 	i.maybeSignalL0Ready()
 	return nil
 }
@@ -191,15 +190,15 @@ func (i *Instance) buildLayerEntries() ([]LayerEntry, error) {
 	return entries, nil
 }
 
-// buildForwardedWitnesses assembles the Op12 Witnesses section for a
-// KindValue: the L_0 leader's witness (always — KindValue is the L_0
-// σ-side emission) plus, for each layer the emitter is σ-side on (a
-// SigmaChained entry in `entries`), that layer's leader witness.
+// buildForwardedWitnesses assembles the Witnesses section for a KindValue:
+// the L_0 leader's witness (always — KindValue is the L_0 σ-side emission)
+// plus, for each layer the emitter is σ-side on (a SigmaChained entry in
+// `entries`), that layer's leader witness.
 //
 // Each witness is pulled from the emitter's own retained leader bundle at
 // that layer (retainedBundles[k][leader].LWitness); being σ-side at k
 // implies the emitter retained that bundle with the leader's verified
-// witness. Per the Op12 "root + σ-colocation" design, V rides alongside
+// witness. Per the "root plus σ-colocation" design, V rides alongside
 // (v.V for L_0, the SigmaChained entry for k>0), so the witness carries
 // only the value-root — receivers recover V from the same KindValue.
 //
@@ -241,15 +240,15 @@ func (i *Instance) buildLayerEntry(k int) (LayerEntry, error) {
 		return LayerEntry{}, fmt.Errorf("twoab: %w: layer %d outside (0, %d)",
 			ErrLayerOutOfRange, k, i.cfg.K())
 	}
-	// Op8: if we already σ-committed at this layer, stay consistent — emit
+	// If we already σ-committed at this layer, stay consistent — emit
 	// SigmaChained on the locked V regardless of the current host verdict.
 	// The only way to be σ-locked at k>0 before Phase-2a is as this layer's
 	// leader via our own Phase-1 LWitness (BuildPhase1Bundle σ-locks at
 	// witness-sign time). Flipping to NR here would publish both a σ witness
 	// (in our Phase-1 bundle) and an NR partial at the same layer —
-	// self-equivocation. This mirrors the post-Op5 L_0 principle that a
-	// host re-validate-NV verdict has no protocol effect once the op is
-	// σ-locked (see ApplyHostValidity docstring).
+	// self-equivocation. This mirrors the L_0 principle that a host
+	// re-validate-NV verdict has no protocol effect once the op is σ-locked
+	// (see ApplyHostValidity docstring).
 	if i.sigmaLocked[k] {
 		return i.buildSigmaChainedEntry(k, i.sigmaLockedV[k])
 	}
@@ -381,13 +380,13 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 		retained := i.retainedBundles[layer][i.cfg.Layers[layer].Leader]
 		v := retained[0].Bundle.Value
 		root := ValueRoot(v)
-		// Op11 + Op12: forward leader σ-witnesses (L_0 always, plus each
-		// σ-side deeper layer) so receivers can harvest V + seed σ-pool
-		// with the leader's head-start at every layer (peer-reflood-V).
-		// Assembled from `entries` + retained bundles in the struct below.
-		// Op5: sign our own σ partial on V at L_0 and acquire the σ-side
-		// EKM lock at L_0. KindValue under V3 is the terminal σ-side
-		// emission — there is no follow-up Commit-Signed. Sequence is:
+		// Forward leader σ-witnesses (L_0 always, plus each σ-side deeper
+		// layer) so receivers can harvest V + seed σ-pool with the leader's
+		// head-start at every layer (peer-reflood-V). Assembled from
+		// `entries` + retained bundles in the struct below.
+		// Sign our own σ partial on V at L_0 and acquire the σ-side EKM lock
+		// at L_0. KindValue is the terminal σ-side emission — there is no
+		// follow-up σ commit. Sequence is:
 		//   (1) Compute the partial (pure; signer may error before any
 		//       state mutation — abort with no side effects on failure).
 		//   (2) Acquire σ-lock at L_0 on V. Failure means EKM already
@@ -440,8 +439,8 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 	case localValueStateNRDirect:
 		// Phase-2a NR-direct: equivocation observed at L_0. Emit a
 		// Commit with Side=NRDirect that bundles the L_0 nr_tag_0
-		// partial + the K-1 LayerEntries (since the op skips KindValue
-		// / KindNoValue entirely per A8).
+		// partial plus the K-1 LayerEntries (since the op skips KindValue
+		// / KindNoValue entirely — the Commit-NRDirect-alone sequence).
 		if err := i.transitionToNR(0); err != nil {
 			return nil, nil, nil, fmt.Errorf("twoab: NR-emit at L_0 (NRDirect): %w", err)
 		}
@@ -469,7 +468,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 	}
 }
 
-// MaybeBuildAndBroadcastUpgrade evaluates the A1 upgrade preconditions
+// MaybeBuildAndBroadcastUpgrade evaluates the upgrade preconditions
 // at L_0 and, if met, builds + records the upgrade KindValue.
 //
 // Preconditions (per spec §Trigger rules / Upgrade trigger):
@@ -480,7 +479,7 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 //
 // On successful upgrade:
 //   - ownValueMsg is set (alongside ownNoValueMsg — both are retained for
-//     the A1 sequence on the wire).
+//     the NoValue→Value sequence on the wire).
 //   - Receiver-side pool semantics (per §Receiver-side robustness): the
 //     op is moved from noValuePool[0] to valuePool[0][V_0_root].
 //   - The L_k>0 entries carried in the upgrade KindValue are identical
@@ -502,19 +501,19 @@ func (i *Instance) MaybeFirePhase2a() (*ValueMsg, *NoValueMsg, *Commit, error) {
 // observation of cluster pool state with no per-call distinguishable
 // failure mode — the no-trigger state is the silent default (the slot's
 // runner-level relay-submission deadline is the hard wall, not a per-
-// call error). Pre-Op5 there were three priority-ordered triggers
-// (equivocation > σ-eligibility > NR-eligibility); post-Op5 the
-// equivocation trigger fires at Phase 2a only and σ-eligibility is
-// gone, so MaybeBuildAndBroadcastCommit reduces to NR-eligibility
-// alone. The cascade-driven afterStateDelta filters Upgrade's sentinel
-// out via errors.Is so it doesn't pollute CascadeErrors().
+// call error). MaybeBuildAndBroadcastCommit fires on NR-eligibility
+// alone: the equivocation trigger fires at Phase 2a only (as
+// KindCommit-NRDirect), and there is no σ-eligibility trigger (the
+// σ-side is terminal in KindValue). The cascade-driven afterStateDelta
+// filters Upgrade's sentinel out via errors.Is so it doesn't pollute
+// CascadeErrors().
 //
 // Idempotent across upgrade attempts: a second call after the upgrade
 // has already fired returns the cached ownValueMsg + nil. After the op
-// has emitted any Commit, the upgrade is no longer available — post-Op5
-// the authorized-pair set is {A1, A5, A8}, so a KindValue following any
-// KindCommit-{NR,NRDirect} would violate the σ-XOR-NR invariant (Rule 1
-// cross-signing).
+// has emitted any Commit, the upgrade is unavailable — the authorized-
+// sequence set is {NoValue→Value, NoValue→Commit-NR, Commit-NRDirect-
+// alone}, so a KindValue following any KindCommit-{NR,NRDirect} would
+// violate the σ-XOR-NR invariant (Rule 1 cross-signing).
 func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	if i == nil {
 		return nil, fmt.Errorf("twoab: nil instance")
@@ -540,9 +539,9 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	retained := i.retainedBundles[layer][leaderID]
 	if len(retained) != 1 {
 		// 0 retained → no V to upgrade on; ≥ 2 retained → leader
-		// equivocation observed at L_0. Post-Op5 there is no A4 NR pivot;
-		// the op simply stays on the KindNoValue path and lets the NR
-		// fall-through cascade proceed via the existing Phase 2b path.
+		// equivocation observed at L_0. There is no NR pivot here; the op
+		// simply stays on the KindNoValue path and lets the NR fall-through
+		// cascade proceed via the existing Phase 2b path.
 		return nil, ErrUpgradeNotAvailable
 	}
 	v := retained[0].Bundle.Value
@@ -550,29 +549,29 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 	if !recorded || !valid {
 		return nil, ErrUpgradeNotAvailable
 	}
-	// Op5: sign σ partial on V at L_0 and acquire σ-lock. The upgrade
-	// KindValue IS the σ-side terminal emission — no follow-up Commit-
-	// Signed under Op5. Sign-first ordering matches MaybeFirePhase2a's
-	// Value-state branch (see that branch for the sequencing rationale).
+	// Sign σ partial on V at L_0 and acquire σ-lock. The upgrade KindValue
+	// IS the σ-side terminal emission — no follow-up σ commit. Sign-first
+	// ordering matches MaybeFirePhase2a's Value-state branch (see that
+	// branch for the sequencing rationale).
 	root := ValueRoot(v)
 	l0Partial, cached := i.ownPartials[layer]
 	if !cached {
 		p, err := i.signer.SignPartial(v)
 		if err != nil {
-			return nil, fmt.Errorf("twoab: sign σ at L_0 for A1 upgrade: %w", err)
+			return nil, fmt.Errorf("twoab: sign σ at L_0 for upgrade: %w", err)
 		}
 		l0Partial = p
 	}
 	if err := i.transitionToSigma(layer, v); err != nil {
-		return nil, fmt.Errorf("twoab: σ-lock at L_0 for A1 upgrade: %w", err)
+		return nil, fmt.Errorf("twoab: σ-lock at L_0 for upgrade: %w", err)
 	}
 	i.ownPartials[layer] = l0Partial
 	i.addToSigmaPool(layer, root, i.ownOperatorID, l0Partial)
 	// Build the upgrade KindValue. Per spec: identical wire shape to
 	// the Phase-2a KindValue, including the K-1 LayerEntries carried
-	// over from the prior KindNoValue. Op11 + Op12: forward leader
-	// σ-witnesses (L_0 + each σ-side carried-over layer) so harvest-
-	// via-peer-KindValue can propagate at every layer.
+	// over from the prior KindNoValue. Forward leader σ-witnesses (L_0
+	// plus each σ-side carried-over layer) so harvest-via-peer-KindValue
+	// can propagate at every layer.
 	upgradeEntries := cloneLayerEntries(i.ownNoValueMsg.LayerEntries)
 	upgrade := &ValueMsg{
 		ClusterID:    i.cfg.ClusterID,
@@ -593,8 +592,8 @@ func (i *Instance) MaybeBuildAndBroadcastUpgrade() (*ValueMsg, error) {
 }
 
 // OwnValueMsg returns the local operator's cached ValueMsg emission
-// (either the Phase-2a fire-time emission or the Phase-2a-late A1
-// upgrade), or (nil, false) if no ValueMsg has been emitted.
+// (either the Phase-2a fire-time emission or the Phase-2a-late upgrade),
+// or (nil, false) if no ValueMsg has been emitted.
 func (i *Instance) OwnValueMsg() (*ValueMsg, bool) {
 	if i.ownValueMsg == nil {
 		return nil, false
@@ -613,7 +612,7 @@ func (i *Instance) OwnNoValueMsg() (*NoValueMsg, bool) {
 }
 
 // OwnCommit returns the local operator's cached Commit emission (either
-// the Phase-2a NRDirect emission or the Phase-2b Signed/NR commit), or
+// the Phase-2a NRDirect emission or the Phase-2b NR commit), or
 // (nil, false) if no Commit has been emitted yet.
 func (i *Instance) OwnCommit() (*Commit, bool) {
 	if i.ownCommit == nil {
@@ -631,17 +630,17 @@ func (i *Instance) OwnCommit() (*Commit, bool) {
 //     L0Partial, well-formed LayerEntries).
 //   - First ValueMsg observed from op → recorded in peerValueMsg, pool
 //     updates per inference rules. If a NoValueMsg was previously
-//     observed from the same op, this is the A1 upgrade — move op from
+//     observed from the same op, this is the upgrade — move op from
 //     noValuePool[0] to valuePool[0][V_root]. The emitter's L0Partial is
-//     verified and pooled into σ-pool[0][V_root][emitter] (post Op5).
+//     verified and pooled into σ-pool[0][V_root][emitter].
 //   - Identical re-broadcast (same content hash) → silent dedup.
 //   - Distinct second ValueMsg (different V_0) → Rule 6a + Rule 3
 //     evidence (cross-σ-V equivocation, when both L0Partials verify).
 //   - Post-Commit ValueMsg observation: if the op had previously emitted
 //     a KindCommit-NR / KindCommit-NRDirect, the resulting sequence is
 //     unauthorized (σ-XOR-NR violation) → Rule 1 (cross-signing on
-//     partial verify) + Rule 6a (sequence violation). Post Op5 the
-//     authorized set is {A1, A5, A8}; KindCommit-Signed no longer exists.
+//     partial verify) + Rule 6a (sequence violation). The authorized set
+//     is {NoValue→Value, NoValue→Commit-NR, Commit-NRDirect-alone}.
 //
 // Self-observation: the local op's own ValueMsg from MaybeFirePhase2a /
 // MaybeBuildAndBroadcastUpgrade is already self-pool-updated in the
@@ -662,27 +661,25 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	if op == i.ownOperatorID {
 		return nil
 	}
-	// Op11/Op12 peer-reflood-V harvest: for each forwarded witness that
-	// verifies against its layer-leader's pubKeyShare on the colocated V,
-	// treat the observation as if we had received that leader's Phase-1
-	// bundle directly — synthesize the bundle and run it through the shared
+	// Peer-reflood-V harvest: for each forwarded witness that verifies
+	// against its layer-leader's pubKeyShare on the colocated V, treat the
+	// observation as if we had received that leader's Phase-1 bundle
+	// directly — synthesize the bundle and run it through the shared
 	// retention path (which dedupes against directly-observed bundles and
-	// idempotently seeds σ-pool[layer][V_root][leader]). This closes the v4
-	// first-pass §Implementation deviation #2 (peer-reflood-V via gossipsub
-	// Phase-1 only, not KindValue) and is the recovery vector for
-	// HV1SelectiveDelivery — now at every fall-through layer.
+	// idempotently seeds σ-pool[layer][V_root][leader]). This is the
+	// recovery vector for HV1SelectiveDelivery, at every fall-through layer.
 	//
 	// On verify failure: silently discard. Do NOT fire Rule 5 — a
 	// forwarded witness inside this envelope is signed-for-forwarding by the
 	// emitter, not the leader; firing Rule 5 against the leader would
 	// open a framing attack (byz emitter spoofs leader with random
-	// bytes). The leader-signed-garbage attack stays covered by Op3 in
+	// bytes). The leader-signed-garbage attack stays covered in
 	// ObservePhase1Bundle where the bundle's outer envelope binds the
 	// bytes to the leader.
 	//
 	// The harvest runs ahead of the existing dedup/pool-update flow so
 	// the afterStateDelta cascade at the end of ObserveValueMsg sees the
-	// fresh retention state (enabling immediate A1 upgrade for V-drop
+	// fresh retention state (enabling immediate upgrade for V-drop
 	// receivers).
 	//
 	// Note on cascade-runs-twice: when a harvest establishes NEW retention
@@ -714,10 +711,8 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 		}
 		// Distinct second ValueMsg → Rule 6a (Phase-2 equivocation). Also
 		// fires Rule 3 (cross-σ-V at L_0) when both messages carry σ
-		// partials that verify on different V's — under Op5 the σ partial
-		// is in KindValue itself, so cross-σ-V detection lives here (it
-		// was at ObserveCommit pre-Op5 when the σ partial was in
-		// KindCommit-Signed).
+		// partials that verify on different V's — the σ partial is in
+		// KindValue itself, so cross-σ-V detection lives here.
 		if i.recordRule6a(op) {
 			i.recordEvidence(Evidence{
 				Rule:       EvidencePhase2Equivocation,
@@ -749,21 +744,21 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 	}
 	// Determine the authorized-sequence interpretation of this
 	// observation relative to any prior peer emissions from op. Per spec
-	// §Receiver ordering tolerance (post Op5): a KindValue + KindNoValue
-	// pair received in either order is interpreted as A1 (upgrade). Any
-	// KindValue paired with a KindCommit (NR or NRDirect) is slashable
-	// post Op5 — KindValue's σ partial conflicts with the Commit's NR
-	// partial under EKM σ-XOR-NR. Reorder ambiguity (Commit-first vs
-	// KindValue-first) doesn't change the outcome; the cross-signing /
-	// sequence-violation evidence fires in either order.
+	// §Receiver ordering tolerance: a KindValue + KindNoValue pair received
+	// in either order is interpreted as the upgrade. Any KindValue paired
+	// with a KindCommit (NR or NRDirect) is slashable — KindValue's σ
+	// partial conflicts with the Commit's NR partial under EKM σ-XOR-NR.
+	// Reorder ambiguity (Commit-first vs KindValue-first) doesn't change
+	// the outcome; the cross-signing / sequence-violation evidence fires in
+	// either order.
 	hadNoValue := i.peerNoValueMsg[op] != nil
 	hadCommit := i.peerCommit[op]
 	const layer = 0
 	if hadCommit != nil {
-		// Post-Op5: any prior Commit means the op already chose NR-side
-		// at L_0. This KindValue (σ-side) is a cross-σ-NR violation.
-		// Rule 1 fires on cryptographic verify; Rule 6a fires on the
-		// sequence violation regardless.
+		// Any prior Commit means the op already chose NR-side at L_0. This
+		// KindValue (σ-side) is a cross-σ-NR violation. Rule 1 fires on
+		// cryptographic verify; Rule 6a fires on the sequence violation
+		// regardless.
 		if i.verifySigmaPartial(op, v.V, v.L0Partial) &&
 			i.verifyNRTagPartial(op, layer, hadCommit.L0Partial) &&
 			i.recordRule1(op, layer) {
@@ -798,9 +793,9 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 		i.afterStateDelta()
 		return nil
 	}
-	// No prior Commit. Fresh ValueMsg or A1 upgrade (prior NoValueMsg).
+	// No prior Commit. Fresh ValueMsg or upgrade (prior NoValueMsg).
 	if hadNoValue {
-		// A1 upgrade: move op from noValuePool[0] to valuePool[0].
+		// Upgrade: move op from noValuePool[0] to valuePool[0].
 		// Per spec §Phase 2a-late upgrade, the L_k>0 entries MUST be
 		// identical to those in the prior NoValueMsg. A byz emitting an
 		// upgrade with mismatched L_k entries would attempt to inject
@@ -831,10 +826,9 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 		// L_k>0 entries contribute to deeper-layer pools per inference rules.
 		i.processObservedLayerEntries(op, v.LayerEntries)
 	}
-	// Post Op5: verify+pool the emitter's L0Partial into σ-pool. Done
-	// AFTER the main pool-update flow so retention/sequence-rule evidence
-	// fires first; the σ-pool seed is the cryptographic "we have an actual
-	// partial" step.
+	// Verify+pool the emitter's L0Partial into σ-pool. Done AFTER the main
+	// pool-update flow so retention/sequence-rule evidence fires first; the
+	// σ-pool seed is the cryptographic "we have an actual partial" step.
 	i.verifyAndPoolL0Partial(op, v)
 	i.afterStateDelta()
 	return nil
@@ -850,9 +844,9 @@ func (i *Instance) ObserveValueMsg(v *ValueMsg) error {
 // rather than self-attributed).
 func (i *Instance) verifyAndPoolL0Partial(emitter OperatorID, v *ValueMsg) {
 	if len(v.L0Partial) == 0 {
-		// Defensive: ValidateValueMsg requires non-empty L0Partial post
-		// Op5, so this branch shouldn't fire on validated input. Treat
-		// as silent skip — no Rule 5 (no claim to verify against).
+		// Defensive: ValidateValueMsg requires a non-empty L0Partial, so
+		// this branch shouldn't fire on validated input. Treat as silent
+		// skip — no Rule 5 (no claim to verify against).
 		return
 	}
 	const layer = 0
@@ -924,18 +918,19 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 		}
 		return nil
 	}
-	// Per spec §Receiver ordering tolerance (post-Op5): a `KindValue` +
-	// `KindNoValue` pair in either order is interpreted as A1 (upgrade —
-	// op originally emitted NoValue at Phase 2a, then upgraded to Value).
-	// NOT slashable. A `KindNoValue` + `KindCommit-NR` pair is interpreted
-	// as A5 (NR fall-through). NOT slashable. Only the post-NRDirect case
-	// (KindNoValue arriving after KindCommit-NRDirect, which is sole-emission
-	// per A8) is unambiguously slashable here.
+	// Per spec §Receiver ordering tolerance: a `KindValue` + `KindNoValue`
+	// pair in either order is the upgrade (op originally emitted NoValue at
+	// Phase 2a, then upgraded to Value). NOT slashable. A `KindNoValue` +
+	// `KindCommit-NR` pair is the NoValue→Commit-NR fall-through. NOT
+	// slashable. Only the post-NRDirect case (KindNoValue arriving after
+	// KindCommit-NRDirect, which is a sole emission) is unambiguously
+	// slashable here.
 	hadValue := i.peerValueMsg[op]
 	hadCommit := i.peerCommit[op]
 	const layer = 0
 	if hadCommit != nil && hadCommit.Side == CommitSideNRDirect {
-		// Post-NRDirect: any further emission is slashable (A8 sole-emission).
+		// Post-NRDirect: any further emission is slashable (NRDirect is a
+		// sole emission).
 		if i.recordRule6a(op) {
 			i.recordEvidence(Evidence{
 				Rule:       EvidencePhase2Equivocation,
@@ -951,7 +946,7 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 		return nil
 	}
 	if hadValue != nil {
-		// A1 upgrade reorder: op emitted KindNoValue at Phase 2a then
+		// Upgrade reorder: op emitted KindNoValue at Phase 2a then
 		// upgraded to KindValue (already observed). The current NoValueMsg
 		// is the original Phase-2a emission arriving late. NOT slashable
 		// at the pair level (per §Receiver ordering tolerance).
@@ -992,8 +987,8 @@ func (i *Instance) ObserveNoValueMsg(nv *NoValueMsg) error {
 		// No prior commit — op is on NoValue path; add to noValuePool.
 		i.addToNoValuePool(layer, op)
 	}
-	// If hadCommit != nil with Side == NR: reordered A5 (NoValue→Commit-NR
-	// fall-through arrived out of order). The Commit has already moved the
+	// If hadCommit != nil with Side == NR: reordered NoValue→Commit-NR
+	// fall-through arrived out of order. The Commit has already moved the
 	// op into nrTagPool; the late-arriving NoValueMsg doesn't re-introduce
 	// a noValuePool entry. L_k>0 entries are processed either way
 	// (idempotent).
@@ -1036,8 +1031,8 @@ func (i *Instance) processObservedLayerEntries(op OperatorID, entries []LayerEnt
 	}
 }
 
-// maybeHarvestPhase1BundleFromValueMsg implements the Op11/Op12
-// peer-reflood-V harvest. For each forwarded witness in the peer's
+// maybeHarvestPhase1BundleFromValueMsg implements the peer-reflood-V
+// harvest. For each forwarded witness in the peer's
 // KindValue (Witnesses[]), if it verifies against its layer-leader's
 // pubKeyShare on the colocated V (v.V at L_0, the SigmaChained entry at
 // k>0), synthesize a Phase-1 bundle (as if that leader's bundle had reached
@@ -1050,7 +1045,7 @@ func (i *Instance) processObservedLayerEntries(op OperatorID, entries []LayerEnt
 // On successful harvest that establishes NEW retention (priorRetained == 0
 // at L_0 for this leader), the Instance enqueues a ValidationRequest on
 // wantsHostValidationCh so the runner can ask the host to validate the
-// harvested V. The A1 upgrade trigger fires off the host's reply via
+// harvested V. The upgrade trigger fires off the host's reply via
 // ApplyHostValidity's afterStateDelta cascade. The channel-based hand-off
 // decouples the host-call timing from the harvest moment — runners with
 // scheduling policies can drain at their own cadence without changing
@@ -1069,14 +1064,14 @@ func (i *Instance) processObservedLayerEntries(op OperatorID, entries []LayerEnt
 // Verify failure: silent discard, no Rule 5, no request enqueue (see
 // ObserveValueMsg's docstring for the framing-attack rationale).
 func (i *Instance) maybeHarvestPhase1BundleFromValueMsg(v *ValueMsg) {
-	// Op12: iterate the forwarded witnesses (L_0 + each σ-side deeper layer).
+	// Iterate the forwarded witnesses (L_0 plus each σ-side deeper layer).
 	for _, w := range v.Witnesses {
 		i.harvestOneWitness(v, w)
 	}
 }
 
 // harvestOneWitness verifies + retains a single forwarded LayerWitness from
-// a peer KindValue (Op11 at L_0, Op12 at deeper layers). The V bytes needed
+// a peer KindValue (at L_0 and at deeper layers). The V bytes needed
 // to BLS-verify the witness ride alongside in the SAME KindValue (root +
 // σ-colocation): v.V at Layer 0, the SigmaChained LayerEntry's V at k>0. On
 // verify failure / missing colocated V: silent discard (anti-framing — the
@@ -1133,7 +1128,7 @@ func (i *Instance) harvestOneWitness(v *ValueMsg, w LayerWitness) {
 	}
 	i.retainPhase1Bundle(synth, 0 /* observedOffset sentinel */, true /* witnessPreVerified */)
 	// Host-validation request only for L_0 first-retention (priorRetained
-	// == 0). It drives the A1 upgrade — the V-drop recovery vector — which
+	// == 0). It drives the upgrade — the V-drop recovery vector — which
 	// is an L_0-only mechanism. A harvested V_k>0 has no upgrade path: the
 	// op has already fired Phase-2a with its L_k commitment fixed, so the
 	// harvest only seeds σ-pool[k] for Resolve's reconstruction; no host
@@ -1169,22 +1164,22 @@ func (i *Instance) harvestOneWitness(v *ValueMsg, w LayerWitness) {
 	// fire.
 	//
 	// Trade-off accepted: under LateLeaderBroadcast, the cluster prefers
-	// σ-at-L_0 (via harvest-driven A1 upgrade) over NR-fall-through to
-	// L_1. The σ-cascade doesn't fit in the slot budget when the leader's
-	// broadcast is sufficiently late → cluster MISSes where v4 would have
-	// fall-through-succeeded at L_1. This regression is mechanical and
-	// scenario-specific; documented in the sub-chunk #2 plan / self-review.
+	// σ-at-L_0 (via the harvest-driven upgrade) over NR-fall-through to
+	// L_1. When the leader's broadcast is sufficiently late the σ-cascade
+	// doesn't fit in the slot budget and the cluster MISSes (a design
+	// without the leader-witness head-start would instead fall through and
+	// succeed at L_1). This trade-off is mechanical and scenario-specific.
 	i.requestHostValidation(0, vK)
 }
 
 // verifyWitnessCached wraps verifySigmaPartial with a memo on
-// (layer, V_root) — Op11/Op12 forward the same leader witness in every
-// peer KindValue, and a re-broadcast cluster would naively re-verify N
-// times per slot. The cache short-circuits subsequent verifies once the
+// (layer, V_root) — every peer forwards the same leader witness in its
+// KindValue, and a re-broadcast cluster would naively re-verify N times
+// per slot. The cache short-circuits subsequent verifies once the
 // (layer, V_root) is known-good. Cache hits return true without invoking
 // the BLS primitive; cache misses run verify and cache on success. The
 // cache is layer-indexed (verifiedWitnesses[layer][V_root]) so per-layer
-// forwarded witnesses (Op12) each get their own dedup bucket.
+// forwarded witnesses each get their own dedup bucket.
 //
 // Cache is positive-only: a verify failure does NOT cache. A byz emitter
 // presenting bogus bytes on the same V_root each time will still pay
@@ -1195,8 +1190,7 @@ func (i *Instance) harvestOneWitness(v *ValueMsg, w LayerWitness) {
 // (truncation, malicious mutation by a relay) and a second arrival
 // carries the correct bytes.
 //
-// Per spec §Op11/§Op12 (verify-cost dedup); mirrors OBFT's
-// witnessedLeaderSigma.
+// Per spec (verify-cost dedup); mirrors OBFT's witnessedLeaderSigma.
 func (i *Instance) verifyWitnessCached(layer int, v Value, witness Signature, leaderID OperatorID) bool {
 	root := ValueRoot(v)
 	if bucket := i.verifiedWitnesses[layer]; bucket != nil {
