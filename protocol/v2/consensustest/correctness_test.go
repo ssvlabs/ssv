@@ -33,7 +33,8 @@ func TestCorrectness(t *testing.T) {
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
 		twoabadapter.Protocol{},
-		qbftadapter.Protocol{},
+		qbftadapter.QBFT{},
+		qbftadapter.QBFTSSV{},
 		psigsadapter.Protocol{},
 	}
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeCorrectness)

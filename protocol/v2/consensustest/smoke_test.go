@@ -26,7 +26,7 @@ func TestSmoke_HealthyOBFT(t *testing.T) {
 // TestSmoke_HealthyQBFT verifies the QBFT adapter on ByzNone.
 func TestSmoke_HealthyQBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "QBFT should decide healthy")
 	require.Equal(t, 0, out.DecidedRound, "should decide at round 1 (= 0-indexed)")
@@ -48,7 +48,7 @@ func TestSmoke_SilentLeaderOBFT(t *testing.T) {
 func TestSmoke_SilentLeaderQBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "QBFT should round-change to R2")
 	require.Equal(t, 1, out.DecidedRound, "should decide at round 2 (= 1-indexed → 1)")
@@ -77,7 +77,7 @@ func TestSmoke_SafetyInvariant(t *testing.T) {
 func TestSmoke_NotApplicable(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzFakeEncryptedPresence, ByzOperators: []ct.OperatorID{1}}
-	_, err := qbftadapter.Protocol{}.Run(cfg)
+	_, err := qbftadapter.QBFT{}.Run(cfg)
 	require.ErrorIs(t, err, ct.ErrNotApplicable)
 }
 
@@ -93,7 +93,7 @@ func TestSmoke_RunScenarioOnProtocol(t *testing.T) {
 			"QBFT": ct.ExpectSuccessFastest,
 		},
 	}
-	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
+	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
 		r := ct.RunScenarioOnProtocol(t, p, scenario, base)
 		require.Truef(t, r.Match, "%s/%s mismatch: %s", p.Name(), scenario.Name, r.Why)
 		require.Truef(t, r.Safety.SingleV, "%s/%s safety: %s", p.Name(), scenario.Name, r.Safety)
@@ -125,7 +125,7 @@ func TestSmoke_TraceDeterministic(t *testing.T) {
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 	cfg.TraceEnabled = true
 
-	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
+	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
 		out1, err := p.Run(cfg)
 		require.NoError(t, err)
 		out2, err := p.Run(cfg)

@@ -16,7 +16,7 @@ import (
 func TestCrash_R1LeaderDirect(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Crashed: []ct.OperatorID{1}}
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "3 honest of 4 should still decide after round-changing past the crashed R1 leader")
 	require.GreaterOrEqual(t, out.DecidedRound, 1, "R1 leader crashed → decision at a later round (DecidedRound is 0-indexed: R2 → 1)")
@@ -29,7 +29,7 @@ func TestCrash_R1LeaderDirect(t *testing.T) {
 func TestCrash_NonLeaderDirect(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Crashed: []ct.OperatorID{4}}
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "3 honest signers meet quorum at R1 with one non-leader down")
 	require.Equal(t, "offline", out.PerOp[4].Err)
@@ -46,7 +46,7 @@ func TestCrash_Mesh(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Delivery = ct.DeliveryMesh
 	cfg.Byz = ct.ByzPattern{Crashed: []ct.OperatorID{4}}
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy mesh on 3 survivors should decide at R1 with one non-leader down")
 	require.Equal(t, "offline", out.PerOp[4].Err)
@@ -57,7 +57,7 @@ func TestCrash_Mesh(t *testing.T) {
 func TestCrash_CountRandomSelection(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{CrashedCount: 1}
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "a single crash is within the f=1 budget at n=4")
 	offline := 0

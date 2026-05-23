@@ -107,7 +107,7 @@ func TestBandwidth_Healthy_OBFT(t *testing.T) {
 // at canonical config.
 func TestBandwidth_Healthy_QBFT(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided)
 
@@ -147,7 +147,7 @@ func TestBandwidth_QBFT_RoundChange_AddsRoundChangeBytes(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "QBFT R1 silent → R2 should decide")
 	require.Greater(t, out.Bandwidth.PerKindBytes["RoundChange"], int64(0),
@@ -163,7 +163,7 @@ func TestBandwidth_QBFT_ByzProposalCounted(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzEquivocate111, ByzOperators: []ct.OperatorID{1}}
 
-	out, err := qbftadapter.Protocol{}.Run(cfg)
+	out, err := qbftadapter.QBFT{}.Run(cfg)
 	require.NoError(t, err)
 
 	// Honest leader at R2 (op2) emits one PROPOSE via virtualNetwork.Broadcast;

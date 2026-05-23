@@ -39,7 +39,24 @@ func (q eventQueue) Less(i, j int) bool {
 	if q[i].when != q[j].when {
 		return q[i].when < q[j].when
 	}
+	// At equal virtual time a round-timeout sorts after every other event,
+	// so a decision reachable the instant the timer fires wins: the COMMIT
+	// arrival is processed first, drives the instance to decided, and the
+	// timer then no-ops (evtRoundTimeout.handle bails on IsDecided). This is
+	// what lets the pristine RT = 3·BTT floor (adapter.go) hold under
+	// ConstantDelay, where the healthy decision and the timer both land at
+	// exactly 3·BTT.
+	if it, jt := isRoundTimeout(q[i].ev), isRoundTimeout(q[j].ev); it != jt {
+		return !it
+	}
 	return q[i].seq < q[j].seq
+}
+
+// isRoundTimeout reports whether ev is the give-up round timer, which is
+// deprioritized against same-time progress events in eventQueue.Less.
+func isRoundTimeout(ev event) bool {
+	_, ok := ev.(*evtRoundTimeout)
+	return ok
 }
 func (q eventQueue) Swap(i, j int) { q[i], q[j] = q[j], q[i] }
 func (q *eventQueue) Push(x any)   { *q = append(*q, x.(*queueItem)) }

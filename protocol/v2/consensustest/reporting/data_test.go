@@ -66,7 +66,7 @@ func parseDataJS(t *testing.T, dir string) map[string]any {
 // level keys + at least one cell with the expected sub-shape.
 func TestWriteReportData_PayloadShape(t *testing.T) {
 	scenarios := smallScenarios(t)
-	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 
 	canonical := runOneSweep(t, "canonical", "Reference: n=4 BTT=200ms", "",
 		[]ct.SweepPoint{{
@@ -134,7 +134,7 @@ func TestWriteReportData_NACellOmitsDecisionTime(t *testing.T) {
 	}
 	require.Len(t, naScenario, 1)
 
-	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 	canonical := runOneSweep(t, "canonical", "n=4", "",
 		[]ct.SweepPoint{{Label: "n=4 BTT=200ms",
 			Config: ct.BatchConfig{
@@ -176,7 +176,7 @@ func TestWriteReportData_EmptySweeps(t *testing.T) {
 // duplicates collide silently and are rejected up front.
 func TestWriteReportData_DuplicateSweepNames(t *testing.T) {
 	scenarios := smallScenarios(t)
-	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 	one := runOneSweep(t, "same", "first", "", []ct.SweepPoint{{
 		Label: "n=4", Config: ct.BatchConfig{
 			Iterations: 1, SeedStart: 1,
@@ -202,7 +202,7 @@ func TestWriteReportData_DuplicateSweepNames(t *testing.T) {
 // charts in the UI).
 func TestWriteReportData_MultiPointSweep(t *testing.T) {
 	scenarios := smallScenarios(t)
-	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 	btt := runOneSweep(t, "btt", "BTT sweep", "BTT",
 		[]ct.SweepPoint{
 			{Label: "BTT=100ms", Config: ct.BatchConfig{
@@ -254,7 +254,7 @@ func TestApplicable_ZeroIterationsIsFalse(t *testing.T) {
 func TestDefaultSweeps_FieldsKeyStable(t *testing.T) {
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios)
-	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	sweeps := ct.DefaultSweeps(scenarios, protos, iters, 4, 2, ct.P2PProfileNames, ct.DefaultBaselineBFTStarts, ct.DefaultBaselineBTTValues)
 	require.NotEmpty(t, sweeps)
@@ -284,7 +284,7 @@ func TestDefaultSweeps_FieldsKeyStable(t *testing.T) {
 // back the iterations the K=4 point reports.
 func TestWriteReportData_MergesAcrossRuns(t *testing.T) {
 	scenarios := smallScenarios(t)
-	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protos := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 	dir := t.TempDir()
 
 	build := func(n, k, iters int) reporting.Comparison {
@@ -400,7 +400,7 @@ func TestWriteReportData_PartialRegen(t *testing.T) {
 
 	// Run 1: both protocols at iters=1.
 	require.NoError(t, reporting.WriteReportData(
-		build([]ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}, 1), dir))
+		build([]ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}, 1), dir))
 	pl := parseDataJS(t, dir)
 	pts := pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
 	require.Len(t, pts, 1)
@@ -414,7 +414,7 @@ func TestWriteReportData_PartialRegen(t *testing.T) {
 	// Run 2: QBFT-only regen at iters=5 (same Fields-tuple). OBFT cells
 	// MUST carry forward; QBFT cells MUST be replaced with iters=5.
 	require.NoError(t, reporting.WriteReportData(
-		build([]ct.Protocol{qbftadapter.Protocol{}}, 5), dir))
+		build([]ct.Protocol{qbftadapter.QBFT{}}, 5), dir))
 	pl = parseDataJS(t, dir)
 	pts = pl["sweeps"].([]any)[0].(map[string]any)["points"].([]any)
 	require.Len(t, pts, 1, "still one point after partial regen")

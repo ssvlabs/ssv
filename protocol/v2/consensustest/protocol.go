@@ -45,9 +45,9 @@ type OperatorID uint64
 //
 // SimConfig carries only what the framework or MULTIPLE adapters need to
 // share. Protocol-specific timing derivation (OBFT's Δ_2 / B_k schedule /
-// FetchAt; QBFT's RT / PhaseBudget) lives on the per-adapter Protocol
-// struct and is derived from BTT at Run-time. The bridge value is BTT —
-// adapters multiply it by their per-variant BTTMultiplier before deriving
+// FetchAt; QBFT's per-round RT) lives in the per-adapter Run path and is
+// derived from BTT at Run-time. The bridge value is BTT — some adapters
+// scale it by a per-variant BTTMultiplier (e.g. OBFT's x2/x3) before deriving
 // budgets, so the sweep can drive every protocol family from the same
 // network BTT while letting each variant model a different operator-side
 // pessimism.
@@ -93,9 +93,8 @@ type SimConfig struct {
 	// recommendation; reflood absorbed by B_0, not by Δ_2 — see
 	// RefloodDelay); 2abOBFT Δ_2a + Δ_2b = 3·bttEff total (Δ_2a =
 	// 2·bttEff structural minimum per 2abOBFT.md §Setting, Δ_2b =
-	// 1·bttEff spec-aligned); QBFT phase budget = 1·bttEff (unified
-	// per-emission convention; computed RT = 6×phaseBudget = 6·bttEff
-	// for operational margin).
+	// 1·bttEff spec-aligned); QBFT pristine per-round RT = 3·bttEff (R1)
+	// / 4·bttEff (rounds ≥ 2, +1·BTT ROUND_CHANGE hop), QBFTSSV flat 2s.
 	BTT time.Duration
 
 	// RefloodDelay is the per-scenario reflood-absorption budget folded
@@ -107,7 +106,7 @@ type SimConfig struct {
 	// gossip heartbeat (700ms by default), matching the production SSV
 	// adapter's DefaultRefloodDelay. Does NOT scale with BTTMultiplier —
 	// reflood-cycle latency is a libp2p deployment constant (mirrors
-	// QBFT-SSV's FixedRT convention). Ignored by QBFT and PSigs adapters
+	// QBFT-SSV's fixed 2s round-timeout convention). Ignored by QBFT and PSigs adapters
 	// (no spec-level reflood-absorption concept).
 	RefloodDelay time.Duration
 

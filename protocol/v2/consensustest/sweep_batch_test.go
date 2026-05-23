@@ -24,7 +24,7 @@ func TestRunSweep_Smoke(t *testing.T) {
 	}
 	require.Len(t, scenarios, 2)
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 
 	sweep := ct.Sweep{
 		Name:        "smoke",
@@ -75,7 +75,7 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	}
 	require.Len(t, scenarios, 1)
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
 	// All six calibrated profiles — point count expectations below
 	// derive from len(profiles).
@@ -197,7 +197,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
 		twoabadapter.Protocol{},
-		qbftadapter.Protocol{},
+		qbftadapter.QBFT{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	profiles := []string{"prod", "stage1", "stage2"}

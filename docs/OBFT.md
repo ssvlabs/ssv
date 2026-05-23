@@ -554,7 +554,7 @@ In all cases, Pigeonhole 2 ensures at most one V can reach qV cluster-wide regar
 
 ### Liveness comparison: OBFT vs OBFTR(R=2) vs QBFT
 
-The table below puts OBFT, OBFTR(R=2), and QBFT side-by-side per scenario at the standard SSV proposer-duty configuration (n=4, f=1, **K=2 default**, ~4s relay cutoff). Timing assumes the SSV proposer-duty operating point (`BTT = 200ms` = P99=150ms + δ=50ms; primary-vs-backup `B_0 = 2·BTT + RefloodDelay = 1100ms`, `B_1 = T_commit = 3600ms` at K=2 — see [Timing budget](#timing-budget)). The Multi-failure fall-through row uses K=4 as an up-tier illustration of multi-silent-leader recovery (K=2 has only L_0 → L_1; multi-silent fall-through requires K ≥ 3). All counts at the unified tightened "1 BTT per emission" sizing (OBFT `Δ_2 = 1 BTT`; OBFTR per-round `Δ_2 = 1 BTT`; QBFT 4 BTT R1) — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention). For QBFT-SSV, `RT = 2s = 10 BTT`; QBFT-optimal RT = 6 BTT.
+The table below puts OBFT, OBFTR(R=2), and QBFT side-by-side per scenario at the standard SSV proposer-duty configuration (n=4, f=1, **K=2 default**, ~4s relay cutoff). Timing assumes the SSV proposer-duty operating point (`BTT = 200ms` = P99=150ms + δ=50ms; primary-vs-backup `B_0 = 2·BTT + RefloodDelay = 1100ms`, `B_1 = T_commit = 3600ms` at K=2 — see [Timing budget](#timing-budget)). The Multi-failure fall-through row uses K=4 as an up-tier illustration of multi-silent-leader recovery (K=2 has only L_0 → L_1; multi-silent fall-through requires K ≥ 3). All counts at the unified tightened "1 BTT per emission" sizing (OBFT `Δ_2 = 1 BTT`; OBFTR per-round `Δ_2 = 1 BTT`; QBFT 4 BTT R1) — see [docs/BFT-comparison.md / Sizing convention](BFT-comparison.md#sizing-convention). For QBFT-SSV, `RT = 2s = 10 BTT`; pristine QBFT uses per-round RT (R1 = 3·BTT, R≥2 = 4·BTT).
 
 | Scenario | OBFT outcome | OBFTR(R=2) outcome | QBFT-SSV outcome |
 |---|---|---|---|
@@ -774,7 +774,7 @@ QBFT-SSV under SSV's production round-timeout (`RT = 2s = 10 BTT`) at the same o
 | 1 † | Partial-sigs on pre-agreed V | **3550ms** | 3550ms | Floor; only available if V is pre-agreed (no MEV / no V-disagreement) — not directly applicable to SSV proposer duty |
 | 2 | QBFT R2 leader | 2950ms | 2950ms | (RT=2s; only after paying the R1-timeout gap; widens substantially vs older 2·BTT/emission framing) |
 | 3 | OBFT V_0 | **~2350ms** | **3050ms** | The MEV-fresh primary; the only OBFT layer that competes on MEV-fetch |
-| 4 | QBFT-optimal R1 leader | 1750ms | 1750ms | (RT = 6 BTT variant; tighter RT recovers more R1 fetch) |
+| 4 | QBFT R1 leader (pristine) | 2150ms | 2150ms | (per-round timer; recovers more R1 fetch than QBFT-SSV) |
 | 5 | QBFT-SSV R1 leader | 950ms | 950ms | RT=2s still eats slot budget but R1 fetch grows ~6× vs older framing |
 | 6 (last) | OBFT V_1 (K=2 default; V_1, V_2, V_3 at K=4 up-tier) | ~0ms | ~0ms | Backups — broadcast at BFT_start with deepest-confirmed-parent fetch; no MEV-fetch budget by design (safety nets, not MEV-fresh alternatives) |
 

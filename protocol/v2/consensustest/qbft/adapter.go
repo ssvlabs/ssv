@@ -17,72 +17,49 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 )
 
-// Default QBFT round timeout used by the UseFixedRT variant ("QBFT-SSV").
-// Mirrors production SSV QBFT's QuickTimeout (roundtimer/timer.go).
+// defaultFixedRT is the QBFTSSV variant's flat round timeout — production
+// SSV QBFT's QuickTimeout (roundtimer/timer.go).
 const defaultFixedRT = 2 * time.Second
 
-// Protocol is the QBFT adapter. Use as `qbft.Protocol{}` (defaults to
-// "QBFT" + computed-RT variant) or with explicit field overrides for the
-// "QBFT-SSV" variant.
-type Protocol struct {
-	// MaxRounds caps round-change attempts before giving up. Default 4.
-	MaxRounds int
+// defaultMaxRounds caps round-change attempts before the instance gives up.
+const defaultMaxRounds = 4
 
-	// VariantName overrides the protocol name reported by Name(). When
-	// empty, defaults to "QBFT".
-	VariantName string
+// QBFT is the pristine structural-floor variant (Name "QBFT"). Its round
+// timer carries no jitter cushion: round 1 = 3·BTT (the three consensus
+// emissions PROPOSE + PREPARE + COMMIT at 1·BTT each — P99 propagation,
+// matching OBFT's Δ_2 = 1·BTT); rounds ≥ 2 add 1·BTT for the ROUND_CHANGE
+// hop to the new leader (the timer is armed at round entry, so that hop is
+// inside the round's own window) = 4·BTT. Each round's timer equals that
+// round's exact decision time, so a healthy/recovery decision coincides
+// with the timer and eventQueue.Less (events.go) breaks the tie toward the
+// decision — RT is never padded. This is the no-cushion reference: compare
+// against other protocols' no-cushion variants (e.g. OBFT-RD0), not the
+// cushioned ones. At BTT=100: R1=300ms, R≥2=400ms.
+type QBFT struct{}
 
-	// BTTMultiplier scales cfg.BTT internally before deriving PhaseBudget
-	// (= bttEff), and — when UseFixedRT=false — the round timeout
-	// (RT = 6 × PhaseBudget = 6·bttEff). Zero → 1.0 (no scaling).
-	// Matches the OBFT/2abOBFT variant convention so the whole protocol
-	// family shares one "loose-vs-tight" knob.
-	BTTMultiplier float64
+func (QBFT) Name() string { return "QBFT" }
 
-	// UseFixedRT picks the round-timeout source:
-	//   false (default) — RT = 6 × PhaseBudget (= 6·bttEff). Matches the
-	//     OBFT-family budget convention where each phase is 1·BTT (P99
-	//     propagation only — tightened to match OBFT's Δ_2 = 1·BTT).
-	//     The 6×-multiplier (vs the 3·BTT minimum "sum of consensus
-	//     phases") leaves round-change operational margin: ROUND_CHANGE
-	//     quorum + new PROPOSE (~1·BTT) + 3-phase consensus (~3·BTT) =
-	//     4·BTT minimum before the next RT fires, plus 2·BTT jitter
-	//     cushion before triggering another premature round-change.
-	//     Use for the "QBFT" research variant.
-	//   true — RT = FixedRT (= 2s when zero). Matches production SSV
-	//     QBFT (QuickTimeout in roundtimer/timer.go). Use for the
-	//     "QBFT-SSV" variant. BTTMultiplier does NOT scale FixedRT —
-	//     it's an absolute SSV-deployment constant, not a BTT-derived
-	//     budget.
-	UseFixedRT bool
-
-	// FixedRT overrides the fixed-RT value when UseFixedRT=true. Zero
-	// defaults to 2s. Has no effect when UseFixedRT=false.
-	FixedRT time.Duration
+func (QBFT) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, 3*cfg.BTT, cfg.BTT)
 }
 
-func (p Protocol) Name() string {
-	if p.VariantName != "" {
-		return p.VariantName
-	}
-	return "QBFT"
+// QBFTSSV is the production variant (Name "QBFT-SSV"): a flat 2s round
+// timeout for every round, mirroring SSV's QuickTimeout (roundtimer/timer.go).
+// 2s already dwarfs the per-round structural cost, so there is no per-round
+// recovery extra. This is the deployed-timing reference.
+type QBFTSSV struct{}
+
+func (QBFTSSV) Name() string { return "QBFT-SSV" }
+
+func (QBFTSSV) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, defaultFixedRT, 0)
 }
 
-// effectiveBTT applies the BTTMultiplier to cfg.BTT, clamped to ≥ 1ns.
-// Zero multiplier → 1.0 (no scaling).
-func (p Protocol) effectiveBTT(btt time.Duration) time.Duration {
-	mul := p.BTTMultiplier
-	if mul <= 0 {
-		mul = 1
-	}
-	out := time.Duration(float64(btt) * mul)
-	if out < time.Nanosecond {
-		out = time.Nanosecond
-	}
-	return out
-}
-
-func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+// run is the shared QBFT DES driver. rt is the round-1 timeout (and, for the
+// flat-RT variant, every round's timeout); rtRecoveryExtra is added by
+// timer.go for rounds > FirstRound (the ROUND_CHANGE preamble) and is 0 for
+// the flat-RT variant.
+func run(cfg ct.SimConfig, rt, rtRecoveryExtra time.Duration) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
 		// Mirror the OBFT / 2abOBFT adapters: SimConfig.Validate failures
 		// at this point mean the operating point is incompatible with
@@ -102,63 +79,37 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		internal = crashOverlay{internalByz: internal, crashed: newByzSet(cfg.Byz.Crashed)}
 	}
 
-	// PhaseBudget = bttEff mirrors OBFT's tightened Δ_2 = 1·BTT convention
-	// so the two protocols compare on equal-budget-per-phase footing under
-	// the computed-RT variant. Mesh-jitter / reflood absorption lives in
-	// round-timer slack (RT − sum_of_phases) rather than per-emission
-	// cushion, matching how OBFT moved reflood from Δ_2 into B_k.
-	bttEff := p.effectiveBTT(cfg.BTT)
-	phaseBudget := bttEff
-
-	var rt time.Duration
-	if p.UseFixedRT {
-		rt = p.FixedRT
-		if rt == 0 {
-			rt = defaultFixedRT
-		}
-	} else {
-		// Computed RT = 6 × PhaseBudget. Decomposes as 3·BTT minimum
-		// consensus-phase budget (PROPOSE + PREPARE + COMMIT) + 1·BTT
-		// ROUND_CHANGE preamble for the next round to start + 2·BTT
-		// jitter / processing slack before triggering a premature
-		// round-change while the next round is mid-flight. ROUND_CHANGE
-		// itself is a separate post-timer phase not directly counted in
-		// RT but absorbed by the 2·BTT slack. At BTT=200 this is 1200ms;
-		// at BTT=300 it's 1800ms.
-		rt = 6 * phaseBudget
-	}
-	maxRounds := p.MaxRounds
-	if maxRounds == 0 {
-		maxRounds = 4
-	}
+	// One consensus emission = 1·BTT (P99 propagation), mirroring OBFT's
+	// tightened Δ_2 = 1·BTT so the protocols compare on equal per-emission
+	// footing.
+	bttEff := cfg.BTT
 
 	// BFTStart drives QBFT's PROPOSE-start anchor. Defaults to 0 (slot
 	// start), matching OBFT's earliest broadcast time (FetchAt[K-1] ≈ 0
 	// in the default OBFT schedule — the deepest / lowest-MEV layer) and
 	// production SSV QBFT (proposer-role headStart=0 in
 	// roundtimer/timer.go). The DES at qbft/des.go schedules
-	// evtStartInstance at this offset for every honest op. At BFTStart=0
-	// the R2 fallback still fits: R2 success lands at RT + 4·BTT ≈ 3.2s
-	// at BTT=300ms, within the 3.9s effective deadline.
+	// evtStartInstance at this offset for every honest op.
 	bftStart := cfg.BFTStart
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
-		N:            cfg.N,
-		Operators:    cfg.Operators,
-		Crashed:      cfg.Byz.Crashed,
-		BTT:          bttEff,
-		RT:           rt,
-		MaxRounds:    maxRounds,
-		BFTStart:     bftStart,
-		Network:      cfg.Network,
-		Host:         cfg.Host,
-		Byz:          internal,
-		Seed:         cfg.Seed,
-		TraceEnabled: cfg.TraceEnabled,
-		Bandwidth:    &bw,
-		Mesh:         cfg.MakeMeshTopology(),
-		RelayCutoff:  cfg.RelayCutoff,
+		N:               cfg.N,
+		Operators:       cfg.Operators,
+		Crashed:         cfg.Byz.Crashed,
+		BTT:             bttEff,
+		RT:              rt,
+		RTRecoveryExtra: rtRecoveryExtra,
+		MaxRounds:       defaultMaxRounds,
+		BFTStart:        bftStart,
+		Network:         cfg.Network,
+		Host:            cfg.Host,
+		Byz:             internal,
+		Seed:            cfg.Seed,
+		TraceEnabled:    cfg.TraceEnabled,
+		Bandwidth:       &bw,
+		Mesh:            cfg.MakeMeshTopology(),
+		RelayCutoff:     cfg.RelayCutoff,
 	}
 
 	rawOut, err := runDES(desCfg)
@@ -260,20 +211,21 @@ func classifyQBFTMiss(out ct.Outcome, preDecided bool, preRound int, preTime, de
 
 // desConfig is the QBFT-DES-internal configuration.
 type desConfig struct {
-	N            int
-	Operators    []ct.OperatorID
-	Crashed      []ct.OperatorID // completely-offline operators (subset of Operators)
-	BTT          time.Duration
-	RT           time.Duration
-	MaxRounds    int
-	BFTStart     time.Duration
-	Network      ct.NetworkModel
-	Host         ct.HostPattern
-	Byz          internalByz
-	Seed         int64
-	TraceEnabled bool
-	Bandwidth    *ct.BandwidthReport
-	Mesh         *ct.MeshTopology // nil when DeliveryDirect
+	N               int
+	Operators       []ct.OperatorID
+	Crashed         []ct.OperatorID // completely-offline operators (subset of Operators)
+	BTT             time.Duration
+	RT              time.Duration // round-1 (base) round timeout
+	RTRecoveryExtra time.Duration // added for rounds ≥ 2 (round-change hop); 0 for fixed-RT
+	MaxRounds       int
+	BFTStart        time.Duration
+	Network         ct.NetworkModel
+	Host            ct.HostPattern
+	Byz             internalByz
+	Seed            int64
+	TraceEnabled    bool
+	Bandwidth       *ct.BandwidthReport
+	Mesh            *ct.MeshTopology // nil when DeliveryDirect
 	// RelayCutoff is the slot's hard submit deadline (carried over
 	// from SimConfig). Used to bound the gossip-heartbeat sequence.
 	RelayCutoff time.Duration

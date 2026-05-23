@@ -295,9 +295,9 @@ func TestStress(t *testing.T) {
 	//     OBFT quantifies the RefloodDelay cushion's value at each
 	//     operating point. Listed first in the slice so the report
 	//     renders OBFT-RD0 immediately above bare OBFT.
-	//   - QBFT ships in the research variant (computed RT = 6·PhaseBudget
-	//     = 6·bttEff at tightened per-emission PhaseBudget = 1·bttEff) and
-	//     the production SSV variant (fixed 2s RT).
+	//   - QBFT ships in the pristine variant (per-round RT: R1 = 3·BTT,
+	//     R≥2 = 4·BTT — the no-cushion structural floor) and the production
+	//     SSV variant (fixed 2s RT).
 	protocols := []ct.Protocol{
 		// OBFT-RD0 is the canonical OBFT with RefloodDelay forced to 0 —
 		// models the "fully-meshed cluster, eager push reliable" assumption
@@ -330,8 +330,8 @@ func TestStress(t *testing.T) {
 		// docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
 		twoabadapter.Protocol{VariantName: "2abOBFT-tight", SafetyBufferOverride: durPtr(500 * time.Millisecond)},
 		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
-		qbftadapter.Protocol{},
-		qbftadapter.Protocol{VariantName: "QBFT-SSV", UseFixedRT: true},
+		qbftadapter.QBFT{},
+		qbftadapter.QBFTSSV{},
 		// PSigs is a baseline-cost reference: every honest op signs the
 		// pre-agreed V at BFTStart and broadcasts; the cluster decides at
 		// the qV-th partial-sig arrival. No consensus on V, no rounds,

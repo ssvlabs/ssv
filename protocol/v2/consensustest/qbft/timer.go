@@ -7,8 +7,10 @@ import (
 
 // virtualRoundTimer implements ssv.QBFTRoundTimer (and specqbft.Timer) under
 // virtual time. TimeoutForRound enqueues an evtRoundTimeout into the DES
-// queue at `now + RT`; later TimeoutForRound calls invalidate prior timers
-// via the seq counter (callbacks no-op on seq mismatch).
+// queue at `now + RT` for round 1, or `now + RT + RTRecoveryExtra` for
+// rounds ≥ 2 (the recovery-round round-change hop); later TimeoutForRound
+// calls invalidate prior timers via the seq counter (callbacks no-op on
+// seq mismatch).
 //
 // Cluster construction wires one virtualRoundTimer per (operator, instance);
 // each instance's Stop is invoked when the instance terminates (decided or
@@ -27,7 +29,13 @@ func newVirtualRoundTimer(s *sim, op spectypes.OperatorID) *virtualRoundTimer {
 func (t *virtualRoundTimer) TimeoutForRound(round specqbft.Round) {
 	t.seq++
 	mySeq := t.seq
-	t.sim.schedule(t.sim.now+t.sim.cfg.RT, &evtRoundTimeout{
+	// Round 1 = base RT; rounds ≥ 2 add RTRecoveryExtra (the ROUND_CHANGE
+	// hop before the new leader can PROPOSE). See adapter.go for the floor.
+	timeout := t.sim.cfg.RT
+	if round > specqbft.FirstRound {
+		timeout += t.sim.cfg.RTRecoveryExtra
+	}
+	t.sim.schedule(t.sim.now+timeout, &evtRoundTimeout{
 		op:    t.op,
 		round: round,
 		mySeq: mySeq,

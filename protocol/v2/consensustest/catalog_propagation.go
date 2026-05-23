@@ -201,14 +201,15 @@ var scenarioMeshFlakiness = Scenario{
 		// f+1 = 2 non-flaky honest + leader's L0Witness; cluster decides
 		// at L_0.
 		"2abOBFT": ExpectSuccessFastest,
-		// QBFT: flaky receivers see PROPOSE/PREPAREs with delay but non-flaky
-		// non-byz honest count (N-1-2f) PREPARE among themselves on time;
-		// quorum (qV=2f+1) reaches at R1 once flaky ops' delayed PREPAREs
-		// arrive. Decides at R1 across all SSV cluster sizes — the
-		// QBFT-vs-OBFT-family asymmetry the spec calls out under mesh
-		// flakiness (PREPARE-pool quorum-by-arrival vs OBFT's hard T_commit
-		// cutoff with no late retention).
-		"QBFT": ExpectSuccessFastest,
+		// QBFT (pristine floor): no mesh-tail cushion, so the flaky receiver's
+		// 2·BTT inbound delay pushes its PREPARE to the R1 = 3·BTT timer with
+		// no room for the COMMIT phase; every recovery round hits the same wall
+		// (flaky op slow each round, byz op refuses) → deterministic MISS.
+		"QBFT": ExpectMiss,
+		// QBFT-SSV (production 2s RT): the wide timer waits out the flaky op's
+		// delayed PREPARE — the PREPARE-pool reaches qV=2f+1 by arrival (no
+		// hard cutoff) and the cluster decides at R1.
+		"QBFT-SSV": ExpectSuccessFastest,
 		// PSigs: byz σ-refusal removes one signer; flaky-receiver delays
 		// affect that op's inbound only — outbound partials from flaky
 		// ops still arrive at non-flaky receivers on time. N-1-f = 2f
@@ -220,7 +221,7 @@ var scenarioMeshFlakiness = Scenario{
 		// visible on the heatmap.
 		"PSigs": ExpectSuccessFastest,
 	},
-	Note: "OBFT.md §Properties / Mesh-flakiness tolerance: flaky honest NR-emits incorrectly + byz σ-refusal → OBFT both quorums short → no fall-through (miss). QBFT recovers at R1 (PREPARE-pool reaches qV once delayed flaky PREPAREs arrive — no hard cutoff). PSigs decides naturally (no σ-or-NR split → no flakiness deadlock). Validates the spec's 'mesh-flaky honest = f-budget consumer' claim and the QBFT-vs-OBFT asymmetry.",
+	Note: "OBFT.md §Properties / Mesh-flakiness tolerance. The reflood-aware primary B_0 = 2·BTT lets OBFT/2abOBFT absorb the 2·BTT flaky-receiver delay and decide at L_0; QBFT-SSV's wide 2s RT likewise waits out the delayed PREPAREs (PREPARE-pool quorum-by-arrival, no hard cutoff). Pristine QBFT — the no-cushion floor — misses: its per-round timer has no slack to wait for the flaky op within R1, so it round-changes indefinitely. PSigs decides naturally (no σ-or-NR split → no flakiness deadlock). Shows the cushion dependence: QBFT tolerates mesh flakiness only with a wide round timer; stripped to the structural floor it loses to OBFT's B_0.",
 }
 
 // ---- Asymmetric-propagation f-boundary (OBFT.md §Liveness) -----------
@@ -280,9 +281,11 @@ var scenarioAsymmetricPropagation_FSlow_Success = Scenario{
 		// 2abOBFT: σ-pool = N-f at L_0 from on-time receivers' KindValue
 		// partials, reaching qV → σ-quorum at L_0. Same outcome.
 		"2abOBFT": ExpectSuccessFastest,
-		// QBFT: slow ops PREPARE late (R1 PROPOSE arrives at them at
-		// 300+3·BTT=900ms; their PREPAREs arrive at others by 1100ms);
-		// PREPARE-quorum reaches at fast ops within R1 (RT=2s); R1 succeeds.
+		// QBFT: the (N-f) on-time ops (leader + on-time non-leaders) are
+		// exactly the 2f+1 quorum, so they reach PREPARE/COMMIT quorum at R1
+		// without the f slow receivers — the cluster decides at R1 regardless
+		// of the round-timeout variant (the slow ops' late PREPAREs aren't
+		// needed for quorum).
 		"QBFT": ExpectSuccessFastest,
 		// PSigs: V is pre-agreed, so receiver-side delays don't keep an
 		// op from signing. Slow ops still emit partials (their outbound

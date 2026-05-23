@@ -103,7 +103,7 @@ func TestRealBLS_Healthy_AllClusterSizes(t *testing.T) {
 // crypto doesn't change protocol-level outcomes for any scenario.
 func TestRealBLS_Catalog_n4(t *testing.T) {
 	cfg := realBLSConfig(t, 4, 200*time.Millisecond)
-	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
+	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
 		for _, s := range ct.Catalog {
 			r := ct.RunScenarioOnProtocol(t, p, s, cfg)
 			require.Truef(t, r.Match, "%s/%s real-BLS mismatch: %s", p.Name(), s.Name, r.Why)
@@ -122,7 +122,7 @@ func TestRealBLS_Catalog_n4(t *testing.T) {
 // per-scenario expectations calibrated at the n=7 operating point.
 func TestRealBLS_Catalog_n7_Diagnostic(t *testing.T) {
 	cfg := realBLSConfig(t, 7, 200*time.Millisecond)
-	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.Protocol{}} {
+	for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
 		for _, s := range ct.Catalog {
 			r := ct.RunScenarioOnProtocol(t, p, s, cfg)
 			if !r.Match && !r.Skipped {
