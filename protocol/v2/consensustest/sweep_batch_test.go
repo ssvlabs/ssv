@@ -108,8 +108,8 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 		// different (n, k) operating points.
 		for _, pt := range sw.Points {
 			require.NotNil(t, pt.Fields, "sweep %s point %q missing Fields", sw.Name, pt.Label)
-			require.Containsf(t, pt.Fields, "N", "sweep %s point %q missing N field", sw.Name, pt.Label)
-			require.Containsf(t, pt.Fields, "K", "sweep %s point %q missing K field", sw.Name, pt.Label)
+			require.Containsf(t, pt.Fields, ct.FieldN, "sweep %s point %q missing N field", sw.Name, pt.Label)
+			require.Containsf(t, pt.Fields, ct.FieldK, "sweep %s point %q missing K field", sw.Name, pt.Label)
 		}
 		delete(expected, sw.Name)
 	}
@@ -231,8 +231,8 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 			}
 			require.Truef(t, anyOK,
 				"sweep %s pt %q: ALL protocols out of envelope at K=%v BTT=%v profile=%v instab=%v BFT_start=%v — the UI has nothing to render at this baseline point",
-				sw.Name, pt.Label, pt.Fields["K"], pt.Fields["BTT"],
-				pt.Fields["p2p_profile"], pt.Fields["Instability"], pt.Fields["BFT_start"])
+				sw.Name, pt.Label, pt.Fields[ct.FieldK], pt.Fields[ct.FieldBTT],
+				pt.Fields[ct.FieldP2PProfile], pt.Fields[ct.FieldInstability], pt.Fields[ct.FieldBFTStart])
 			totalPoints++
 		}
 	}

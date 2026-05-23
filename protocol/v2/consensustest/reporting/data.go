@@ -405,21 +405,21 @@ func mergePointCells(prev, next pointPayload) pointPayload {
 // or sqrt), it MUST round to a canonical form before storing — `%g`
 // would otherwise serialize the last-ulp drift differently across
 // runs and silently split one logical point into two.
-func fieldsKey(fields map[string]float64) string {
+func fieldsKey(fields map[ct.FieldKey]float64) string {
 	if len(fields) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(fields))
+	keys := make([]ct.FieldKey, 0, len(fields))
 	for k := range fields {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 	var b strings.Builder
 	for i, k := range keys {
 		if i > 0 {
 			b.WriteByte('|')
 		}
-		fmt.Fprintf(&b, "%s=%g", k, fields[k])
+		fmt.Fprintf(&b, "%s=%g", string(k), fields[k])
 	}
 	return b.String()
 }
@@ -468,8 +468,8 @@ type pointPayload struct {
 	// Fields exposes the numeric axis values for this point (K, BTT in ms,
 	// Sigma, …) so the UI can look up points by exact value without
 	// parsing Label. Mirrors SweepPoint.Fields verbatim.
-	Fields map[string]float64 `json:"fields,omitempty"`
-	Cells  []cellPayload      `json:"cells"`
+	Fields map[ct.FieldKey]float64 `json:"fields,omitempty"`
+	Cells  []cellPayload           `json:"cells"`
 }
 
 type cellPayload struct {

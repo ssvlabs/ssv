@@ -298,7 +298,7 @@ func TestWriteReportData_MergesAcrossRuns(t *testing.T) {
 			UnstableIterations: iters,
 			Sweeps: []ct.SweepResult{runOneSweep(t, "p2p_baseline", "", "", []ct.SweepPoint{{
 				Label:  "n=" + strconv.Itoa(n) + " K=" + strconv.Itoa(k),
-				Fields: map[string]float64{"N": float64(n), "K": float64(k), "BTT": 300, "Sigma": 0.5},
+				Fields: map[ct.FieldKey]float64{ct.FieldN: float64(n), ct.FieldK: float64(k), ct.FieldBTT: 300, ct.FieldKey("Sigma"): 0.5},
 				Config: ct.BatchConfig{
 					Iterations: iters, SeedStart: 1,
 					Base:      base,
@@ -379,7 +379,7 @@ func TestWriteReportData_PartialRegen(t *testing.T) {
 			UnstableIterations: iters,
 			Sweeps: []ct.SweepResult{runOneSweep(t, "p2p_baseline", "", "", []ct.SweepPoint{{
 				Label:  "n=4 K=2",
-				Fields: map[string]float64{"N": 4, "K": 2, "BTT": 300},
+				Fields: map[ct.FieldKey]float64{ct.FieldN: 4, ct.FieldK: 2, ct.FieldBTT: 300},
 				Config: ct.BatchConfig{
 					Iterations: iters, SeedStart: 1,
 					Base:      base,

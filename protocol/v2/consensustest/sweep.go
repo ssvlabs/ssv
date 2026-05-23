@@ -15,17 +15,34 @@ import (
 // for the point in a machine-readable form. Picker-driven UIs (the
 // stresstest-report's N / K / BTT / p2p_profile / p2p_instability /
 // BFT_start pickers in particular) consume Fields to drive lookups
-// by exact value, without parsing the human-readable Label. Keys are
-// the per-axis names — typically capitalized for the cluster-shape
-// axes ("N", "K", "Instability", "BFT_start", "Loss", "BadLinkProb",
-// "SlowOps") and lowercase for the picker-labeled axes ("BTT" (ms),
-// "p2p_profile" (index into ct.P2PProfileNames)) — whichever the
-// point varies. Case is load-bearing: the JS lookup matches exactly.
+// by exact value, without parsing the human-readable Label. Keys are the
+// FieldKey constants below; only the axes a point varies are present.
 type SweepPoint struct {
 	Label  string
 	Config BatchConfig
-	Fields map[string]float64
+	Fields map[FieldKey]float64
 }
+
+// FieldKey names a numeric axis value carried in SweepPoint.Fields. It is a
+// string-backed enum so a mistyped key is a compile error rather than a
+// silently-split data point. The string values are a wire contract: they are
+// the merge identity (reporting.fieldsKey) and the exact keys the
+// stresstest-report JS pickers look up (case included), so they must not
+// change without updating the UI.
+type FieldKey string
+
+const (
+	FieldN           FieldKey = "N"
+	FieldK           FieldKey = "K"
+	FieldBTT         FieldKey = "BTT"
+	FieldP2PProfile  FieldKey = "p2p_profile"
+	FieldInstability FieldKey = "Instability"
+	FieldFaultyNodes FieldKey = "FaultyNodes"
+	FieldBFTStart    FieldKey = "BFT_start"
+	FieldLoss        FieldKey = "Loss"
+	FieldBadLinkProb FieldKey = "BadLinkProb"
+	FieldSlowOps     FieldKey = "SlowOps"
+)
 
 // Sweep is an ordered series of SweepPoints sharing a theme. Built once,
 // run via RunSweep, rendered as a single report with multiple sections —
@@ -342,14 +359,14 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 						pts = append(pts, SweepPoint{
 							Label: fmt.Sprintf("n=%d K=%d BTT=%dms profile=%s instab=%s faulty=%d BFT_start=%dms",
 								n, k, btt.Milliseconds(), profile, level.Name, fn, bftStart.Milliseconds()),
-							Fields: map[string]float64{
-								"N":           float64(n),
-								"K":           float64(k),
-								"BTT":         float64(btt.Milliseconds()),
-								"p2p_profile": float64(profileIdx),
-								"Instability": float64(level.Level),
-								"FaultyNodes": float64(fn),
-								"BFT_start":   float64(bftStart.Milliseconds()),
+							Fields: map[FieldKey]float64{
+								FieldN:           float64(n),
+								FieldK:           float64(k),
+								FieldBTT:         float64(btt.Milliseconds()),
+								FieldP2PProfile:  float64(profileIdx),
+								FieldInstability: float64(level.Level),
+								FieldFaultyNodes: float64(fn),
+								FieldBFTStart:    float64(bftStart.Milliseconds()),
 							},
 							Config: BatchConfig{
 								Iterations:        fallback,
@@ -389,10 +406,10 @@ func p2pIncreasingBTTSweep(scenarios []Scenario, protocols []Protocol, iters Ite
 		base.Mesh.HopDelay = LogNormalDelay{Median: btt / 3, Sigma: 0.5}
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d BTT=%s", n, k, btt),
-			Fields: map[string]float64{
-				"N":   float64(n),
-				"K":   float64(k),
-				"BTT": float64(btt.Milliseconds()),
+			Fields: map[FieldKey]float64{
+				FieldN:   float64(n),
+				FieldK:   float64(k),
+				FieldBTT: float64(btt.Milliseconds()),
 			},
 			Config: BatchConfig{
 				Iterations:        fallback,
@@ -468,10 +485,10 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 		base.Network = productionLogNormal(btt)
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d loss=%.2f", n, k, rate),
-			Fields: map[string]float64{
-				"N":    float64(n),
-				"K":    float64(k),
-				"Loss": rate,
+			Fields: map[FieldKey]float64{
+				FieldN:    float64(n),
+				FieldK:    float64(k),
+				FieldLoss: rate,
 			},
 			Config: BatchConfig{
 				Iterations:        fallback,
@@ -522,10 +539,10 @@ func p2pCorrelatedDelaysSweep(scenarios []Scenario, protocols []Protocol, iters 
 		base.Network = productionLogNormal(btt)
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d badProb=%.2f", n, k, prob),
-			Fields: map[string]float64{
-				"N":           float64(n),
-				"K":           float64(k),
-				"BadLinkProb": prob,
+			Fields: map[FieldKey]float64{
+				FieldN:           float64(n),
+				FieldK:           float64(k),
+				FieldBadLinkProb: prob,
 			},
 			Config: BatchConfig{
 				Iterations:        fallback,
@@ -598,10 +615,10 @@ func p2pNodeSlownessSweep(scenarios []Scenario, protocols []Protocol, iters Iter
 		base.Network = productionLogNormal(btt)
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d slowOps=%d", n, k, slowCount),
-			Fields: map[string]float64{
-				"N":       float64(n),
-				"K":       float64(k),
-				"SlowOps": float64(slowCount),
+			Fields: map[FieldKey]float64{
+				FieldN:       float64(n),
+				FieldK:       float64(k),
+				FieldSlowOps: float64(slowCount),
 			},
 			Config: BatchConfig{
 				Iterations:        fallback,
@@ -654,10 +671,10 @@ func p2pInstabilitySweep(scenarios []Scenario, protocols []Protocol, iters Itera
 		base.Mesh.HopDelay = LogNormalDelay{Median: btt / 3, Sigma: sigma}
 		pts = append(pts, SweepPoint{
 			Label: fmt.Sprintf("n=%d K=%d %s", n, k, level.Name),
-			Fields: map[string]float64{
-				"N":           float64(n),
-				"K":           float64(k),
-				"Instability": float64(level.Level),
+			Fields: map[FieldKey]float64{
+				FieldN:           float64(n),
+				FieldK:           float64(k),
+				FieldInstability: float64(level.Level),
 			},
 			Config: BatchConfig{
 				Iterations:        fallback,

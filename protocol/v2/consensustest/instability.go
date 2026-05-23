@@ -30,8 +30,8 @@ import (
 // determinism is preserved (each iter gets its own Markov chain).
 type InstabilityLevel struct {
 	Name string
-	// Level is what flows through SweepPoint.Fields["Instability"] —
-	// numeric so it fits map[string]float64; the UI maps it back to
+	// Level is what flows through SweepPoint.Fields[FieldInstability] —
+	// numeric so it fits map[FieldKey]float64; the UI maps it back to
 	// Name for picker labels.
 	Level int
 

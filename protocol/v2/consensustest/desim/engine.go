@@ -163,6 +163,12 @@ func (e *Engine) RunUntil(host Host, maxTime time.Duration) {
 		if e.traceEnabled {
 			e.trace = append(e.trace, ct.TraceEntry{When: it.when, Event: it.ev.Describe()})
 		}
+		// Handle runs to completion before its returned events are scheduled,
+		// so any event it schedules INLINE (e.g. QBFT's virtualNetwork
+		// Broadcast during ProcessMsg) gets a lower seq than the events it
+		// RETURNS here. At equal `when`, lower seq fires first (eventQueue.Less),
+		// so inline-scheduled events are processed before returned ones from the
+		// same Handle. Adapters depend on this ordering — preserve it.
 		for _, ne := range it.ev.Handle(host) {
 			e.Schedule(ne.When, ne.Ev)
 		}
