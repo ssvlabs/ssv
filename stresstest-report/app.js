@@ -911,6 +911,17 @@ function renderConditionsSection(data) {
 const GROUP_READY_DEPTH_0 = 'Cluster ready to submit (at layer 0 / round 1), past the submit deadline';
 const GROUP_READY_DEPTH_1 = 'Cluster ready to submit (at layer 1 / round 2), past the submit deadline';
 const GROUP_READY_DEPTH_2P = 'Cluster ready to submit (at layer 2+ / round 3+), past the submit deadline';
+// GROUP_PIPELINE_OVERFLOW is a UI-synthesized row — no adapter emits it.
+// Pipeline-shift protocols (PSigs / QBFT family) are swept only at
+// BFT_start=0; the UI shifts decision times by +BFT_start post-hoc
+// (shiftCell). A sample that decided within-slot at BFT_start=0 but whose
+// decide_time + BFT_start exceeds the slot end is dropped from the shifted
+// success count — yet it carries no MissReason, because it was a success
+// in the BFT_start=0 sim. rebuildFailureBreakdown reconstructs this row
+// from the shift's drop so the table reconciles with the CDF chart's
+// shifted success rate. Only ever non-zero for pipeline-shift protocols at
+// BFT_start > 0; the count falls out as deciders − survivors (0 otherwise).
+const GROUP_PIPELINE_OVERFLOW = 'Decided, but pipeline shift pushed submission past slot end';
 function canonicalizeMissReason(reason) {
   if (reason === 'Cluster ready to submit, past the submit deadline') {
     return GROUP_READY_DEPTH_0;
@@ -942,6 +953,7 @@ const FAILURE_TOP_ORDER = [
   GROUP_READY_DEPTH_0,
   GROUP_READY_DEPTH_1,
   GROUP_READY_DEPTH_2P,
+  GROUP_PIPELINE_OVERFLOW,
 ];
 const FAILURE_BOTTOM_ORDER = [
   'Cluster never reached consensus before slot end',
@@ -975,6 +987,15 @@ function sortFailureReasons(reasons, totals) {
 // one row; the row sort goes through sortFailureReasons (pinned top
 // block, count-sorted middle, pinned bottom block).
 //
+// The table follows the BFT_start picker, using the same per-protocol
+// BFT_start-aware view as the CDF chart above
+// (shiftedCell(findBaselineCellForScenario(...))): OBFT-family rows come
+// from the selected BFT_start's real sim cell, pipeline-shift rows from
+// the shifted BFT_start=0 cell — plus a synthesized GROUP_PIPELINE_OVERFLOW
+// row capturing shift-induced misses that carry no adapter MissReason (see
+// that const). This keeps the table's totals reconciled with the chart's
+// shifted success rate at every BFT_start.
+//
 // Cells where the protocol had zero failures of that reason render as
 // "—" rather than "0" so the eye catches active rows; cells where the
 // protocol's cell is missing entirely render as "n/a". Hidden when
@@ -985,35 +1006,57 @@ function rebuildFailureBreakdown(data) {
   host.innerHTML = '';
   const scenario = data.scenarios.find((s) => s.name === selectedScenario);
   if (!scenario) return;
-  const wantedInstab = scenario.group === 'Baseline' ? selectedInstability : 0;
-  const wantedFaulty = scenario.group === 'Baseline' ? selectedFaultyNodes : 0;
-  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty);
-  if (!match) return;
   const activeNames = filteredProtocols(data.protocols);
+  // Per-protocol BFT_start-aware display cell, mirroring the CDF chart
+  // above so the table reconciles with it: findBaselineCellForScenario
+  // resolves OBFT-family to the matching pre-computed BFT_start cell and
+  // pipeline-shift protocols to their BFT_start=0 cell; shiftedCell then
+  // applies the post-hoc +BFT_start shift (a no-op for OBFT-family). The
+  // per-protocol overflow drop (deciders that no longer fit the slot once
+  // shifted) is captured here and surfaced as GROUP_PIPELINE_OVERFLOW —
+  // it is 0 for OBFT-family and for BFT_start=0, so the row only appears
+  // for pipeline-shift protocols at BFT_start > 0.
   const cellByProtocol = {};
+  const overflowByProtocol = {};
   for (const p of activeNames) {
-    const cell = match.point.cells.find(
-      (c) => c.protocol === p && c.scenario === scenario.name,
-    );
-    if (cell) cellByProtocol[p] = cell;
+    const base = findBaselineCellForScenario(data, scenario, p);
+    const cell = shiftedCell(base, selectedBFTStart);
+    if (!cell) continue;
+    cellByProtocol[p] = cell;
+    const deciders = base && base.decisionTimes ? base.decisionTimes.length : 0;
+    const survivors = cell.decisionTimes ? cell.decisionTimes.length : 0;
+    overflowByProtocol[p] = Math.max(0, deciders - survivors);
   }
   // Union of canonicalized reasons + per-protocol counts. Multiple raw
   // reasons may map to one canonical row (e.g. OBFT's "ready at layer
   // 0" + QBFT's "ready at round 1" both → GROUP_READY_DEPTH_0); counts
-  // are summed under the canonical key per protocol.
+  // are summed under the canonical key per protocol. The synthesized
+  // pipeline-overflow drop adds one more row for the protocols that have
+  // it (disjoint from the adapter misses: those never decided in-slot,
+  // the overflow ones decided in-slot at BFT_start=0 then shifted out).
   const reasonTotals = {}; // canonical reason -> total count across active protocols
   const perCell = {};      // protocol -> canonical reason -> count
   let anyFailure = false;
   for (const p of activeNames) {
     const cell = cellByProtocol[p];
     perCell[p] = {};
-    if (!cell || !cell.missReasons) continue;
-    for (const [rawReason, count] of Object.entries(cell.missReasons)) {
-      if (count <= 0) continue;
+    if (!cell) continue;
+    if (cell.missReasons) {
+      for (const [rawReason, count] of Object.entries(cell.missReasons)) {
+        if (count <= 0) continue;
+        anyFailure = true;
+        const reason = canonicalizeMissReason(rawReason);
+        perCell[p][reason] = (perCell[p][reason] || 0) + count;
+        reasonTotals[reason] = (reasonTotals[reason] || 0) + count;
+      }
+    }
+    const overflow = overflowByProtocol[p] || 0;
+    if (overflow > 0) {
       anyFailure = true;
-      const reason = canonicalizeMissReason(rawReason);
-      perCell[p][reason] = (perCell[p][reason] || 0) + count;
-      reasonTotals[reason] = (reasonTotals[reason] || 0) + count;
+      perCell[p][GROUP_PIPELINE_OVERFLOW] =
+        (perCell[p][GROUP_PIPELINE_OVERFLOW] || 0) + overflow;
+      reasonTotals[GROUP_PIPELINE_OVERFLOW] =
+        (reasonTotals[GROUP_PIPELINE_OVERFLOW] || 0) + overflow;
     }
   }
   if (!anyFailure) return; // hide entirely when no failures to show

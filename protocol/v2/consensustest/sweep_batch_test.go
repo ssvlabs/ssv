@@ -154,6 +154,11 @@ func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 		func() {
 			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, []time.Duration{-1 * time.Millisecond}, btt)
 		})
+	require.PanicsWithValue(t, "consensustest: DefaultSweeps: bftStarts must include 0 (got [2.4s 2.8s 3.2s])",
+		func() {
+			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles,
+				[]time.Duration{2400 * time.Millisecond, 2800 * time.Millisecond, 3200 * time.Millisecond}, btt)
+		})
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: BTT 0s must be > 0",
 		func() {
 			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, bft, []time.Duration{0})

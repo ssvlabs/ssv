@@ -199,8 +199,9 @@ var DefaultBaselineBFTStarts = []time.Duration{
 // reporting.WriteReportData uses that tuple to dedup / append.
 //
 // Panics with a specific reason on invalid input (empty scenarios /
-// protocols / profiles / bftStarts / bttValues, unknown profile names,
-// non-positive iteration budgets, non-positive n or k). These are
+// protocols / profiles / bftStarts / bttValues, bftStarts missing the
+// required 0 anchor, unknown profile names, non-positive iteration
+// budgets, non-positive n or k). These are
 // programmer errors — the test driver should always pass valid inputs;
 // a panic surfaces the bug at the failure site rather than collapsing
 // to a confusing "expected N sweeps got 0" downstream.
@@ -231,10 +232,21 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 	for _, name := range profiles {
 		_ = P2PProfileIndex(name)
 	}
+	bftStartsHaveZero := false
 	for _, bs := range bftStarts {
 		if bs < 0 {
 			panic(fmt.Sprintf("consensustest: DefaultSweeps: BFT_start %v must be >= 0", bs))
 		}
+		if bs == 0 {
+			bftStartsHaveZero = true
+		}
+	}
+	if !bftStartsHaveZero {
+		// BFT_start=0 is the shape anchor: p2pBaselineSweep emits the full
+		// protocol set only at BFT_start=0, so without it pipeline-shift
+		// protocols (PSigs / QBFT) get no cells and the UI has nothing to
+		// shift from. Reject rather than emit a silently broken sweep.
+		panic(fmt.Sprintf("consensustest: DefaultSweeps: bftStarts must include 0 (got %v)", bftStarts))
 	}
 	for _, btt := range bttValues {
 		if btt <= 0 {

@@ -187,7 +187,9 @@ consensustest-with-real-bls:
 #     emitted independence threshold (exact reuse), else rounds UP to the
 #     nearest emitted cell (worst-case), and shows n/a only past the
 #     highest emitted cell. Pipeline-shift protocols always pull from
-#     BFT_start=0.
+#     BFT_start=0. The list MUST include 0 — it anchors the full-catalog
+#     sweep and the UI's pipeline-shift / below-threshold reuse; an
+#     override that omits 0 is rejected at startup.
 #
 # Protocol set:
 #   - PROTOCOLS (default = curated subset below) — comma-separated

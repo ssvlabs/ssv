@@ -192,8 +192,9 @@ func TestStress(t *testing.T) {
 	// operating points, so BFT_start differentiates protocols only above
 	// ~2400ms). BFT_start > 0 only runs the OBFT-family protocols;
 	// pipeline-shift protocols (PSigs / QBFT) are covered by the UI's
-	// pipeline-shift from the BFT_start=0 cell. Sorted ascending after
-	// parse for stable axis ordering.
+	// pipeline-shift from the BFT_start=0 cell. BFT_start=0 is therefore
+	// required; an override that omits it is rejected (see the require
+	// below). Sorted ascending after parse for stable axis ordering.
 	bftStartsRaw := os.Getenv("BFT_STARTS")
 	var bftStarts []time.Duration
 	if bftStartsRaw == "" {
@@ -212,6 +213,14 @@ func TestStress(t *testing.T) {
 		require.NotEmpty(t, bftStarts, "BFT_STARTS is empty after parsing")
 		slices.Sort(bftStarts)
 	}
+	// BFT_start=0 is load-bearing and must be present: the p2p_baseline
+	// sweep emits the full protocol set only at BFT_start=0 (BFT_start>0
+	// runs OBFT-family only), and the UI derives pipeline-shift protocols
+	// (PSigs / QBFT family) plus the OBFT-family below-threshold reuse cell
+	// from that anchor. Dropping 0 would silently leave PSigs / QBFT with
+	// no cells, so reject the config here rather than emit a broken report.
+	require.Containsf(t, bftStarts, time.Duration(0),
+		"BFT_STARTS must include 0 (anchors the full-catalog sweep + the UI's pipeline-shift / below-threshold reuse); got %v", bftStarts)
 
 	// BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
 	// p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
