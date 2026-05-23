@@ -104,21 +104,33 @@ var DefaultBaselineBTTValues = []time.Duration{
 	400 * time.Millisecond,
 }
 
-// DefaultBaselineBFTStarts — the BFT_start axis the p2p_baseline sweep
-// adds for OBFT-family protocols. UI picker values that fall under
-// each cell's per-variant approximation boundary (computed in JS via
-// obftFamilyApproxBoundaryMs — for bare OBFT at BTT=100ms / Healthy
-// RefloodDelay=700ms, the boundary is `T_commit − B_0 ≈ 2800ms`)
-// reuse the BFT_start=0 cell as a close-to-ground-truth approximation;
-// picker values above the per-cell boundary require a matching
-// pre-computed cell or render n/a. Driver-overridable via BFT_STARTS
-// env var. PSigs and QBFT are skipped at BFT_start > 0 (the UI's
+// DefaultBaselineBFTStarts — the default BFT_start axis the p2p_baseline
+// sweep adds for OBFT-family protocols, overridable via the BFT_STARTS
+// env var (comma-separated ms; see the Makefile `stresstest` target).
+//
+// UI picker values at or under each cell's BFT_start-independence
+// threshold reuse the BFT_start=0 cell (the schedule is bit-identical
+// there). That threshold is no longer recomputed in JS — each adapter
+// emits it per-cell as the unclamped fetchAt[0]
+// (Outcome.BFTStartIndependenceThreshold →
+// cellPayload.BFTStartIndependenceMs); for bare OBFT at BTT=100ms /
+// Healthy RefloodDelay=700ms it is `T_commit − B_0 − BTT/4 ≈ 2775ms`.
+// Picker values above the threshold use the exact pre-computed cell when
+// swept, else round UP to the nearest emitted cell (worst-case); only
+// values past the highest emitted cell render n/a.
+//
+// The default set {0, 2400, 2800, 3200} brackets the failure regime: 0
+// anchors the below-threshold reuse for every variant, and the high trio
+// straddles where the OBFT-family L_0 clamp bites and success starts
+// dropping (the per-variant thresholds land ~1900–2125ms at the standard
+// operating points, so sampling ≥2400 is where BFT_start differentiates
+// protocols). PSigs and QBFT are skipped at BFT_start > 0 (the UI's
 // pipeline-shift covers them from the BFT_start=0 cell).
 var DefaultBaselineBFTStarts = []time.Duration{
 	0,
-	2000 * time.Millisecond,
 	2400 * time.Millisecond,
 	2800 * time.Millisecond,
+	3200 * time.Millisecond,
 }
 
 // DefaultSweeps returns the curated set of comparison sweeps the stress
@@ -135,7 +147,7 @@ var DefaultBaselineBFTStarts = []time.Duration{
 //     (default {prod, stage1, stage2, slow, heavy_tail, slow_heavy_tail}
 //     via P2P_PROFILES env var), instability ∈ {none, low, moderate,
 //     high, extreme}, BFT_start from the `bftStarts` parameter (default
-//     {0, 2000, 2400, 2800} ms via BFT_STARTS env var). Level=0 emits
+//     {0, 2400, 2800, 3200} ms via BFT_STARTS env var). Level=0 emits
 //     the full catalog; Level>0 emits ONLY Baseline-group scenarios.
 //     BFT_start > 0 emits only OBFT-family protocols (PSigs / QBFT use
 //     UI pipeline-shift from BFT_start=0 cells instead of a per-BFT_start

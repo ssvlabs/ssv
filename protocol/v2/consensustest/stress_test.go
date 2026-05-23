@@ -76,8 +76,8 @@ import (
 //     p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
 //     300, 400 per ct.DefaultBaselineBTTValues.
 //   - BFT_STARTS — comma-separated BFT_start values (ms) for the
-//     p2p_baseline sweep's BFT_start axis. Default: 0, 2000, 2400,
-//     2800 per ct.DefaultBaselineBFTStarts. BFT_start > 0 points emit
+//     p2p_baseline sweep's BFT_start axis. Default: 0, 2400, 2800,
+//     3200 per ct.DefaultBaselineBFTStarts. BFT_start > 0 points emit
 //     OBFT-family cells only; pipeline-shift protocols (PSigs / QBFT)
 //     are covered by the BFT_start=0 cell + UI pipeline-shift.
 //
@@ -186,15 +186,16 @@ func TestStress(t *testing.T) {
 	require.NotEmpty(t, profiles, "P2P_PROFILES is empty after parsing")
 
 	// BFT_STARTS — comma-separated BFT_start values (ms) for the
-	// p2p_baseline sweep's BFT_start axis. Default: 0, 2000, 2400, 2800
-	// per DefaultBaselineBFTStarts — covers BFT_start=0 (used by the UI
-	// for picker values in [0, 1600]ms via the close-to-ground-truth
-	// approximation) plus the {2000, 2400, 2800} values where the
-	// OBFT-family broadcast schedule's L_0 clamp begins to bite (at
-	// BTT=100ms, T_commit − B_0 ≈ 2700ms). BFT_start > 0 only runs the
-	// OBFT-family protocols; pipeline-shift protocols (PSigs / QBFT)
-	// are covered by the UI's pipeline-shift from the BFT_start=0 cell.
-	// Sorted ascending after parse for stable axis ordering.
+	// p2p_baseline sweep's BFT_start axis. Default: 0, 2400, 2800, 3200
+	// per DefaultBaselineBFTStarts — BFT_start=0 anchors the below-
+	// threshold reuse cell for every variant, and the {2400, 2800, 3200}
+	// trio brackets the failure regime where the OBFT-family L_0 clamp
+	// bites (per-variant thresholds land ~1900–2125ms at the standard
+	// operating points, so BFT_start differentiates protocols only above
+	// ~2400ms). BFT_start > 0 only runs the OBFT-family protocols;
+	// pipeline-shift protocols (PSigs / QBFT) are covered by the UI's
+	// pipeline-shift from the BFT_start=0 cell. Sorted ascending after
+	// parse for stable axis ordering.
 	bftStartsRaw := os.Getenv("BFT_STARTS")
 	var bftStarts []time.Duration
 	if bftStartsRaw == "" {

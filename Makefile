@@ -175,13 +175,14 @@ consensustest-with-real-bls:
 #     values in ms. Shared by the p2p_baseline and p2p_increasing_BTT
 #     sweeps; drives the protocol's internal timing budgets (the network
 #     itself is the profile, ≈ 1-10 ms in prod).
-#   - BFT_STARTS      (default 0,2000,2400,2800) — comma-separated
+#   - BFT_STARTS      (default 0,2400,2800,3200) — comma-separated
 #     BFT_start values in ms for the p2p_baseline sweep's BFT_start
-#     axis. The UI picker exposes more values (0–2800ms in 11 steps)
-#     but values that don't match a sim point use the BFT_start=0 cell
-#     as a close-to-ground-truth approximation when the per-cell clamp
-#     boundary allows; outside that range the UI shows n/a. Pipeline-
-#     shift protocols always pull from BFT_start=0.
+#     axis. The UI picker exposes more values; a picker value with no
+#     matching sim point uses the BFT_start=0 cell when below the cell's
+#     emitted independence threshold (exact reuse), else rounds UP to the
+#     nearest emitted cell (worst-case), and shows n/a only past the
+#     highest emitted cell. Pipeline-shift protocols always pull from
+#     BFT_start=0.
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 10000) — high-confidence

@@ -209,6 +209,18 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
+	// Stamp the L_0 BFTStart-independence threshold = the unclamped
+	// fetchAt[0] (= T_commit − B_0 − fetchBuffer, floored at 0). This is
+	// exactly the `fa` computed for k=0 in the fetchAt loop above, before
+	// the `max(BFTStart, …)` clamp — the largest BFTStart for which L_0's
+	// schedule is identical to BFTStart=0. The UI reuses the BFTStart=0
+	// cell at or below this value (see Outcome.BFTStartIndependenceThreshold).
+	// Outcome-independent, so stamped unconditionally (valid on miss too).
+	bftIndep := tCommit - broadcastBudget[0] - fetchBuffer
+	if bftIndep < 0 {
+		bftIndep = 0
+	}
+	out.BFTStartIndependenceThreshold = &bftIndep
 	// Stamp the deciding-layer broadcast deadline (T_broadcast_max_k for
 	// k=DecidedRound). Mirrors the fetchAt[] clamp above:
 	// max(BFTStart, T_commit − B_k). The reporting layer surfaces this

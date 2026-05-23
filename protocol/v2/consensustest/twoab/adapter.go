@@ -224,6 +224,19 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
+	// Stamp the L_0 BFTStart-independence threshold = the unclamped
+	// fetchAt[0] (= T0Broadcast − B_0, floored at 0; no fetchBuffer term —
+	// 2ab's fetchAt loop doesn't use one). This is the `fa` computed for
+	// k=0 above before the `max(BFTStart, …)` clamp — the largest BFTStart
+	// for which L_0's schedule is identical to BFTStart=0. The UI reuses
+	// the BFTStart=0 cell at or below this value (see
+	// Outcome.BFTStartIndependenceThreshold). Outcome-independent, so
+	// stamped unconditionally (valid on miss too).
+	bftIndep := t0Broadcast - broadcastBudget[0]
+	if bftIndep < 0 {
+		bftIndep = 0
+	}
+	out.BFTStartIndependenceThreshold = &bftIndep
 	// Stamp the deciding-layer broadcast deadline (anchored at
 	// t0Broadcast, per 2abOBFT's spec anchor). Shallow layers whose B_k
 	// exceed t0Broadcast clamp to BFTStart, matching the runtime rule

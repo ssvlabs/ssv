@@ -509,6 +509,23 @@ type cellPayload struct {
 	// vs "0 bytes typical").
 	PerKindBandwidthStats map[string]perKindStatsPayload `json:"perKindBandwidthStats,omitempty"`
 	MissReasons           map[string]int                 `json:"missReasons,omitempty"`
+	// BFTStartIndependenceMs is the largest BFT_start (ms) for which this
+	// cell's deciding-layer (L_0) broadcast schedule is identical to
+	// BFT_start=0. The UI reuses the BFT_start=0 cell at or below this
+	// value instead of requiring a per-BFT_start pre-computed cell; above
+	// it the UI uses the exact cell when swept, else rounds up to the
+	// nearest emitted cell (worst-case), rendering n/a only past the
+	// highest emitted cell. Replaces the UI's former JS-side sizing
+	// mirror, so the threshold stays correct as the adapters' timing
+	// evolves and reflects the cell's actual per-scenario RefloodDelay /
+	// SafetyBuffer.
+	//
+	// A *int (not omitempty-on-int) so an emitted 0 — clamp engages at
+	// any BFT_start>0 — is distinct from "not emitted". Omitted for
+	// pipeline-shift protocols (QBFT family, PSigs; UI shifts post-hoc)
+	// and out-of-envelope cells. Legacy data.js without this field falls
+	// back to the BFT_start=0 cell in the UI rather than rendering n/a.
+	BFTStartIndependenceMs *int `json:"bftStartIndependenceMs,omitempty"`
 }
 
 // perKindStatsPayload describes one MsgKind's per-cell bandwidth profile.
@@ -578,6 +595,10 @@ func buildCell(c ct.BatchCell) cellPayload {
 		Protocol:    c.Protocol,
 		Iterations:  c.Iterations,
 		SuccessRate: c.SuccessRate,
+	}
+	if c.BFTStartIndependence != nil {
+		ms := int(c.BFTStartIndependence.Milliseconds())
+		out.BFTStartIndependenceMs = &ms
 	}
 	if c.DecisionTime.Len() > 0 {
 		out.DecisionTime = &percentilesPayload{

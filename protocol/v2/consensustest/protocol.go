@@ -352,8 +352,27 @@ type Outcome struct {
 	// leaves it zero and the UI's shiftCell pipeline-shift branch
 	// doesn't consult it. Zero when !Decided.
 	DecidingBroadcastTime time.Duration
-	PerOp                 map[OperatorID]OperatorOutcome
-	Trace                 []TraceEntry // non-nil iff cfg.TraceEnabled was set
+	// BFTStartIndependenceThreshold is the largest BFTStart for which the
+	// deciding-layer (L_0) primary broadcast schedule is bit-identical to
+	// BFTStart=0 — i.e. the *unclamped* fetchAt[0] (= anchor − B_0,
+	// floored at 0, where anchor = T_commit for OBFT / T0Broadcast for
+	// 2abOBFT and B_0 = broadcastBudget[0]). At or below this value the
+	// spec clamp `max(BFTStart, anchor − B_0)` is dormant at L_0, so the
+	// BFTStart=0 cell is an exact stand-in; above it a per-BFTStart
+	// pre-computed cell is required. The UI reads the serialized value to
+	// decide cell reuse instead of recomputing the sizing JS-side (which
+	// drifts whenever the adapter's timing changes).
+	//
+	// A pointer so that an emitted 0 (clamp engages immediately) is
+	// distinct from "not set". Set only by adapters with a slot-anchored
+	// Phase-1 schedule (OBFT family and 2abOBFT family); nil for
+	// pipeline-shift protocols (QBFT family, PSigs), which shift wholesale
+	// and whose UI path never consults it. Unlike DecidingBroadcastTime
+	// it's a pure function of cfg (not the sim outcome), so it survives
+	// ClipLateDecision unchanged and is valid even on !Decided iters.
+	BFTStartIndependenceThreshold *time.Duration
+	PerOp                         map[OperatorID]OperatorOutcome
+	Trace                         []TraceEntry // non-nil iff cfg.TraceEnabled was set
 
 	// Bandwidth aggregates per-message byte counts emitted during the sim.
 	// Populated by adapters that instrument message emission.

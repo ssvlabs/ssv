@@ -428,6 +428,13 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 			cell.ClusterBandwidth = append(cell.ClusterBandwidth, 0)
 			continue
 		}
+		// The BFTStart-independence threshold is iter-invariant (a pure
+		// function of cfg + protocol, set even on miss iters), so capture
+		// it from the first non-panic iter that carries it. nil for
+		// pipeline-shift protocols / out-of-envelope cells.
+		if cell.BFTStartIndependence == nil && r.out.BFTStartIndependenceThreshold != nil {
+			cell.BFTStartIndependence = r.out.BFTStartIndependenceThreshold
+		}
 		report := ComputeSafetyReport(r.out)
 		if report.IsViolation() {
 			SafetyPanic(report, scenario.Name, protocol.Name(), ExpectSuccessOrMiss, r.seed, r.out)

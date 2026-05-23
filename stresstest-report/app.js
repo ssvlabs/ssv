@@ -56,93 +56,20 @@ const SLOT_END_MS = 4000;
 //     when shifted time overflows SLOT_END_MS.
 //   OBFT / 2abOBFT (slot-anchored schedule): cells are pre-computed
 //     at the picker's BFT_start (per-BFT_start sim in p2p_baseline,
-//     see sweep.go). For picker values ≤ the per-cell approximation
-//     boundary (see obftFamilyApproxBoundaryMs), the OBFT-family
-//     schedule is functionally identical to BFT_start=0 (the spec's
-//     `T_broadcast_max_k = max(BFT_start, T_commit − B_k)` clamp
-//     doesn't engage), so the BFT_start=0 cell is reused as a
-//     close-to-ground-truth approximation. Above the per-cell
-//     boundary the exact cell is required.
-const BFT_STARTS = [0, 400, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800];
-
-// SSV's gossipsub HeartbeatInterval — RefloodDelay used by all Healthy
-// p2p_baseline cells. Adversarial scenarios use RefloodDelay=0 but
-// the BFT_start picker is meaningful primarily for the Healthy row,
-// so this is the value the per-cell approximation boundary assumes.
-// Mirrors network/topics/params/gossipsub.go HeartbeatInterval.
-const REFLOOD_DELAY_HEALTHY_MS = 700;
-
-// obftFamilyApproxBoundaryMs computes the BFT_start picker value below
-// which an OBFT-family cell's broadcast schedule is bit-identical to
-// BFT_start=0 — i.e. the spec's `T_broadcast_max_0 = max(BFT_start,
-// T_commit − B_0)` clamp is dormant for the primary layer. Picker
-// values ≤ this boundary reuse the BFT_start=0 cell as the
-// close-to-ground-truth approximation; values > this boundary require
-// a real per-BFT_start pre-computed cell.
-//
-// Derived from the adapter sizing formulas (mirrors
-// protocol/v2/consensustest/{obft,twoab}/adapter.go and
-// protocol/v2/obft/{base,twoab}/Config.BroadcastMaxOffsetForLayer):
-//   OBFT-family       (anchor = T_commit       = 3800 − BTTeff)
-//   2abOBFT-family    (anchor = T_verdict_start = 3800 − 5·BTTeff)
-//   B_0 = 2·BTTeff + RefloodDelay
-//   BTTeff = BTT × multiplier (1/2/3 for canonical/x2/x3)
-//   RefloodDelay = 700ms (Healthy default) for all variants except
-//                  `-RD0`-suffixed ones (OBFT-RD0 today; OBFTx2-RD0
-//                  / 2abOBFT-RD0 etc. should they ever be added),
-//                  which force RefloodDelay=0 in the broadcast
-//                  budget. Skipping the variant-aware RefloodDelay
-//                  would silently under-approximate those variants'
-//                  boundaries by 700ms and force the UI into
-//                  exact-match lookups when the BFT_start=0 cell
-//                  would have been correct.
-// where the 3800 = RelayCutoff − HeaderSubmitHeadroom − ε_3 − phase3JitterBuffer
-// constants live in obft/adapter.go.
-//
-// Returns 0 when the formula yields ≤ 0 (the variant's primary clamp
-// engages at BFT_start = 0 already — i.e. the variant is structurally
-// at its budget envelope, e.g. 2abOBFTx2 at BTT ≥ 300ms). Pipeline-
-// shift protocols ignore this — they always pull from BFT_start=0.
-function obftFamilyApproxBoundaryMs(protocolName, btt) {
-  if (isPipelineShiftProtocol(protocolName)) return 0;
-  const mult = bttMultiplierForVariant(protocolName);
-  const bttEff = btt * mult;
-  const refloodDelay = variantHasNoRefloodDelay(protocolName) ? 0 : REFLOOD_DELAY_HEALTHY_MS;
-  const b0 = 2 * bttEff + refloodDelay;
-  const anchor = protocolName.startsWith('2abOBFT')
-    ? 3800 - 5 * bttEff   // T_verdict_start
-    : 3800 - bttEff;      // T_commit
-  return Math.max(0, anchor - b0);
-}
-
-// bttMultiplierForVariant extracts the BTT multiplier from the
-// protocol variant name (OBFT/2abOBFT=1, OBFTx2/2abOBFTx2=2,
-// OBFTx3/2abOBFTx3=3). Mirrors the Go-side adapter's BTTMultiplier
-// field (set when registering the variant in stress_test.go).
-//
-// The regex requires `x<n>` to be at the suffix boundary — preceded
-// by an uppercase letter (the SSV naming convention has canonical
-// names ending in an uppercase letter, e.g. OBFT/2abOBFT/QBFT) and
-// followed by end-of-string or a hyphen. This catches the canonical
-// `OBFTx2` / `OBFTx2-RD0` cases without false-positives on hypothetical
-// names like `OBFT-Fix2` (lowercase `i` before `x`, fails the boundary
-// check) or `OBFT-x2y` (non-hyphen after `x2`, fails the suffix check).
-function bttMultiplierForVariant(protocolName) {
-  if (typeof protocolName !== 'string') return 1;
-  const m = protocolName.match(/[A-Z]x(\d+)(?:$|-)/);
-  return m ? parseInt(m[1], 10) : 1;
-}
-
-// variantHasNoRefloodDelay reports whether `protocolName` is a
-// "-RD0"-suffixed variant — i.e. the adapter's NoRefloodDelay flag is
-// set, forcing `B_0 = 2·BTT` (no RefloodDelay cushion) regardless of
-// cfg.RefloodDelay. Mirrors the Go-side
-// obft.Protocol.NoRefloodDelay convention via the variant name
-// suffix; covers OBFT-RD0 today and any future combo-variants
-// (OBFTx2-RD0, 2abOBFT-RD0, etc.) without needing per-name updates.
-function variantHasNoRefloodDelay(protocolName) {
-  return typeof protocolName === 'string' && protocolName.endsWith('-RD0');
-}
+//     see sweep.go). For picker values ≤ the cell's emitted
+//     bftStartIndependenceMs threshold, the OBFT-family schedule is
+//     bit-identical to BFT_start=0 (the spec's `T_broadcast_max_k =
+//     max(BFT_start, anchor − B_k)` clamp is dormant at L_0), so the
+//     BFT_start=0 cell is reused exactly. Above the threshold the exact
+//     pre-computed cell is used if swept, else the picker rounds UP to
+//     the nearest emitted cell (worst-case: a later BFT_start has less
+//     slack, so this under-states rather than over-states success). The
+//     threshold is emitted per-cell by the Go sweep
+//     (cellPayload.BFTStartIndependenceMs, = the adapter's unclamped
+//     fetchAt[0]) so it tracks the adapter's actual sizing and the cell's
+//     per-scenario RefloodDelay/SafetyBuffer — no JS-side sizing mirror
+//     to drift. See findBaselineCellForScenario.
+const BFT_STARTS = [0, 400, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800, 3200];
 
 // selectedBFTStart is the page-level BFT_start used by the Conditions
 // chart at the top, the heatmap cell colors, and the cdfBFTStartPlugin's
@@ -450,26 +377,6 @@ function isPipelineShiftProtocol(name) {
   return name === 'QBFT' || name === 'PSigs' || name.startsWith('QBFT-');
 }
 
-// bftStartForProtocolLookup maps the UI picker value to the BFT_start
-// the OBFT-family sweep was actually run at — picker ≤ per-cell
-// approximation boundary (see obftFamilyApproxBoundaryMs) reuses the
-// BFT_start=0 cell (close-to-ground-truth approximation per
-// OBFT-BFT-START-SWEEP-PLAN.md Q2; the spec's runtime clamp
-// `max(BFT_start, T_commit − B_k)` is dormant at the primary layer
-// below the boundary). Above the boundary, the matching pre-computed
-// cell is required. Pipeline-shift protocols always look up the
-// BFT_start=0 cell (the UI's shiftCell applies the shift post-hoc).
-//
-// The boundary is per-cell, not global: OBFTx2/x3 at degraded BTT or
-// 2abOBFT-family at all but the smallest BTT values have a boundary
-// well below the picker's 1600ms midpoint — a global cutoff would
-// silently serve stale BFT_start=0 data for those cells.
-function bftStartForProtocolLookup(protocolName, btt, picker) {
-  if (isPipelineShiftProtocol(protocolName)) return 0;
-  const boundary = obftFamilyApproxBoundaryMs(protocolName, btt);
-  return picker <= boundary ? 0 : picker;
-}
-
 // shiftedCell returns a BFT_start-adjusted view of `cell`. For
 // pipeline-shift protocols (PSigs / QBFT family) it shifts decision
 // times by +BFT_start in place, lazily computing + caching on
@@ -571,6 +478,35 @@ function findBaselinePointAtInstability(data, instability, faultyNodes) {
   return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0);
 }
 
+// availableBaselineBFTStarts returns the sorted-ascending distinct
+// BFT_start values (ms) the p2p_baseline sweep actually emitted for the
+// current (N, K, BTT, profile) slice at the given instability +
+// faulty_nodes. Used by findBaselineCellForScenario to round an
+// OBFT-family picker value UP to the nearest emitted cell when no exact
+// cell exists (worst-case fallback). Mirrors the field-matching in
+// findBaselinePointAtBFTStart, minus the BFT_start constraint.
+function availableBaselineBFTStarts(data, instability, faultyNodes) {
+  const out = new Set();
+  const sweep = data && data.sweeps && data.sweeps.find((s) => s.name === 'p2p_baseline');
+  if (sweep) {
+    for (const pt of sweep.points) {
+      const f = pt.fields;
+      if (!f) continue;
+      if (
+        f.N === selectedN &&
+        f.K === selectedK &&
+        f.BTT === selectedBTT &&
+        f.p2p_profile === selectedP2pProfile &&
+        (f.Instability ?? 0) === instability &&
+        (f.FaultyNodes ?? 0) === (faultyNodes ?? 0)
+      ) {
+        out.add(f.BFT_start ?? 0);
+      }
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
 // findBaselineCellForScenario looks up the cell for the given scenario
 // + protocol at the current (N, K, BTT, profile, instability,
 // BFT_start). For Baseline-group scenarios (Healthy) the cell is the
@@ -579,19 +515,66 @@ function findBaselinePointAtInstability(data, instability, faultyNodes) {
 // construction, so generating duplicate cells at every level would
 // just waste compute (see p2pBaselineSweep in sweep.go).
 //
-// BFT_start is resolved per-protocol via bftStartForProtocolLookup:
-// OBFT-family at picker > the per-cell approximation boundary pulls
-// from the matching pre-computed BFT_start cell; pipeline-shift
-// protocols always pull from the BFT_start=0 cell (the UI shifts
-// post-hoc via shiftedCell).
+// BFT_start resolution (OBFT-family), keyed off the independence
+// threshold emitted on each protocol's BFT_start=0 cell (always present,
+// since the full catalog is swept at BFT_start=0):
+//   - picker ≤ threshold  → reuse the BFT_start=0 cell (schedule is
+//     bit-identical there, so this is exact);
+//   - picker > threshold  → use the exact pre-computed cell if swept,
+//     else round UP to the nearest emitted BFT_start cell. Success is
+//     monotonically non-increasing in BFT_start (a later start = less
+//     slack before the relay cutoff), so the next-higher cell reports
+//     worst-case (lower success / higher p99) numbers — the safe
+//     direction. Rounding DOWN would overstate success; n/a would hide
+//     the cell. Only when the picker exceeds the highest emitted cell
+//     (no ≥ cell to be conservative with) do we render n/a.
+// Pipeline-shift protocols always pull from the BFT_start=0 cell (the
+// UI shifts post-hoc, exactly, via shiftedCell).
 function findBaselineCellForScenario(data, scenario, protocol) {
   const isBaseline = scenario && scenario.group === 'Baseline';
   const wantInstab = isBaseline ? selectedInstability : 0;
   const wantFaulty = isBaseline ? selectedFaultyNodes : 0;
-  const wantBFTStart = bftStartForProtocolLookup(protocol, selectedBTT, selectedBFTStart);
-  const match = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, wantBFTStart);
-  if (!match) return null;
-  return findCell(match.point, scenario.name, protocol);
+  // The BFT_start=0 cell is the shape-anchor: always present, and it
+  // carries the emitted bftStartIndependenceMs threshold this protocol's
+  // schedule is invariant below.
+  const base0 = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, 0);
+  const cell0 = base0 ? findCell(base0.point, scenario.name, protocol) : null;
+
+  // Pipeline-shift protocols shift wholesale with BFT_start; shiftedCell
+  // applies the exact +BFT_start post-hoc, so the BFT_start=0 cell is the
+  // right source at any picker value.
+  if (isPipelineShiftProtocol(protocol)) return cell0;
+
+  const threshold = cell0 ? cell0.bftStartIndependenceMs : undefined;
+
+  // Legacy data.js without an emitted threshold: we can't tell whether
+  // this picker shifts the schedule, so try the exact cell and degrade to
+  // the BFT_start=0 cell rather than render n/a.
+  if (threshold == null) {
+    const m = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, selectedBFTStart);
+    const c = m ? findCell(m.point, scenario.name, protocol) : null;
+    return c || cell0;
+  }
+
+  // At/below the independence threshold the schedule equals BFT_start=0.
+  if (selectedBFTStart <= threshold) return cell0;
+
+  // Above the threshold: exact cell if swept, else round UP to the
+  // nearest emitted cell (worst-case). Ascending scan over emitted
+  // BFT_starts ≥ picker returns the first that has a cell for this
+  // scenario+protocol.
+  const higher = availableBaselineBFTStarts(data, wantInstab, wantFaulty).filter(
+    (b) => b >= selectedBFTStart,
+  );
+  for (const b of higher) {
+    const m = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, b);
+    const c = m ? findCell(m.point, scenario.name, protocol) : null;
+    if (c) return c;
+  }
+  // Picker is beyond the highest emitted cell — no ≥ cell to be
+  // conservative with, so n/a rather than fall back to a lower
+  // (optimistic) cell.
+  return null;
 }
 
 // availableBaselineDimensions reads the distinct N/K/BTT/profile values
@@ -844,12 +827,11 @@ function renderConditionsSection(data) {
     const onePtSweep = match
       ? { ...match.sweep, points: [match.point] }
       : { name: '', points: [] };
-    // Per-protocol BFT_start-aware lookup: OBFT-family at picker >
-    // the per-cell approximation boundary (see
-    // obftFamilyApproxBoundaryMs) pulls from a DIFFERENT pre-computed
-    // point than `match.point` (which is just the shape-anchor at
-    // BFT_start=0). Pipeline-shift protocols pull from BFT_start=0 and
-    // the UI shifts post-hoc via shiftedCell.
+    // Per-protocol BFT_start-aware lookup: OBFT-family at picker > the
+    // cell's emitted bftStartIndependenceMs threshold pulls from a
+    // DIFFERENT pre-computed point than `match.point` (which is just the
+    // shape-anchor at BFT_start=0). Pipeline-shift protocols pull from
+    // BFT_start=0 and the UI shifts post-hoc via shiftedCell.
     const baselineLookup = (_pt, _scName, protName) =>
       findBaselineCellForScenario(data, scenario, protName);
     legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols,
@@ -1569,17 +1551,17 @@ function destroyCurrentChart() {
 // re-renders the heatmap (cell colors track BFT_start) and the
 // Conditions section (active button + chart).
 //
-// The label carries a tooltip describing the per-cell approximation
-// behavior so users hover-discover why two adjacent picker values
-// (e.g. 400ms and 800ms) may yield identical legend rates for an
-// OBFT-family cell. See obftFamilyApproxBoundaryMs.
+// The label carries a tooltip describing the per-cell reuse behavior
+// so users hover-discover why two adjacent picker values (e.g. 400ms
+// and 800ms) may yield identical legend rates for an OBFT-family cell.
+// See findBaselineCellForScenario / cellPayload.BFTStartIndependenceMs.
 function buildBFTStartPicker() {
   const picker = h('div', { class: 'sm-slot-picker' });
   const label = h('span', {
     class: 'sm-slot-picker-label',
     title: 'BFT_start = time the protocol\'s primary broadcast pipeline begins (= end of pre-fetch / pre-consensus).\n' +
       '\n' +
-      'OBFT-family: each picker value is served from a pre-computed cell run at that BFT_start, OR from the BFT_start=0 cell when the spec clamp `max(BFT_start, T_commit−B_0)` is still dormant for the variant + BTT (close-to-ground-truth approximation). Cells at picker values above the variant\'s clamp boundary that have no pre-computed cell render n/a.\n' +
+      'OBFT-family: each picker value is served from a pre-computed cell run at that BFT_start, OR — when ≤ the cell\'s BFT_start-independence threshold (the point below which the spec clamp `max(BFT_start, anchor−B_0)` is dormant at L_0, so the schedule is bit-identical) — exactly from the BFT_start=0 cell. The threshold is emitted per-cell by the sweep. Above the threshold, a picker with no exact cell rounds UP to the nearest emitted cell, reporting worst-case (lower success / higher p99) numbers; only picker values beyond the highest emitted cell render n/a.\n' +
       '\n' +
       'QBFT / PSigs: cells are pipeline-shifted post-hoc (sample t → t + BFT_start), dropped when shifted t exceeds the relay cutoff.',
   }, 'BFT_start:');
