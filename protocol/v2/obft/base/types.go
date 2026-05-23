@@ -48,6 +48,8 @@ type (
 	Certificate  = obft.Certificate
 	Output       = obft.Output
 	Phase1Bundle = obft.Phase1Bundle
+	// Shared cluster/layer-topology type.
+	LayerSpec = obft.LayerSpec
 )
 
 // Re-exported constructors/functions from the parent obft package.
@@ -72,58 +74,6 @@ func NoQuorumTag(clusterID [32]byte, height obft.Height, layer int) []byte {
 // ValueRoot returns the wire identifier (sha256) of V. See obft.ValueRoot.
 func ValueRoot(v Value) [32]byte {
 	return obft.ValueRoot(v)
-}
-
-// LayerSpec describes one layer of the K-layer onion structure: which
-// operator is the layer's leader, when (relative to slot start) they should
-// fetch their candidate value, and how much absorption budget the layer's
-// receivers are given.
-//
-// Per spec §Setting: Layers[0] is the primary L_0 (latest fetch — picks up
-// MEV-late values), Layers[1..K-1] are backups that all fetch from a
-// deepest-confirmed parent at slot start and broadcast at BFT_start. Only
-// L_0 carries MEV-fresh fetch; backups are last-resort safety nets that
-// trade MEV freshness for maximally-wide propagation absorption.
-type LayerSpec struct {
-	Leader  OperatorID
-	FetchAt time.Duration
-
-	// BroadcastBudget is the layer's T_commit-anchored absorption *target*
-	// `B_k` per OBFT.md §Setting: the leader aims to broadcast their
-	// Phase-1 bundle by `T_broadcast_max_k = max(0, T_commit − B_k)` so
-	// the bundle's first-observation at any honest receiver lands by
-	// `T_commit` under partial-synchrony assumptions for that layer's
-	// propagation budget.
-	//
-	// Spec recommends `B_0 = 2·BTT + RefloodDelay` (primary, MEV-fresh)
-	// and `B_1..B_{K-1} = T_commit` (backups broadcast at BFT_start).
-	// `B_0 ≤ B_1 = ... = B_{K-1}` — backups all share the maximally-wide
-	// absorption budget; the primary has a tighter budget for MEV-fetch
-	// headroom and falls through to a backup if propagation slips.
-	//
-	// B_k is a *target*, not a hard runtime cap. The only runtime
-	// acceptance gate is `T_commit` (peers admit bundles first-observed
-	// in `[slot_start, T_commit]` regardless of which layer they came
-	// from). A leader that cannot meet `T_broadcast_max_k` broadcasts
-	// best-effort (broadcast as soon as the bundle is ready). When
-	// `B_k ≥ T_commit`, `T_broadcast_max_k` clamps at 0 — the leader's
-	// target broadcast time is slot start. `B_k = T_commit` for backups
-	// deliberately hits this clamp ("earliest possible" backup broadcast).
-	//
-	// Spec K=4 Config A (BTT=200ms, T_commit=3600ms, RefloodDelay=700ms):
-	// B_k values are [1100, 3600, 3600, 3600]ms. The primary L_0 absorbs
-	// real propagation up to 2·BTT + RefloodDelay (one IWANT round-trip
-	// plus one IHAVE/IWANT reflood cycle for mesh-flaky receivers); the
-	// backups broadcast at slot start and absorb up to the entire commit
-	// budget.
-	//
-	// Required: must be > 0 on every layer. Config.Validate rejects
-	// zero/negative values and decreasing-in-k schedules (equal adjacent
-	// budgets are accepted — backups all tie at T_commit; see spec
-	// §Setting). Use DefaultBroadcastBudget(K, BTT, RefloodDelay,
-	// T_commit) for the spec-recommended schedule when constructing a
-	// Config manually.
-	BroadcastBudget time.Duration
 }
 
 // Config parameterizes one consensus instance. Timing fields are absolute
@@ -348,30 +298,8 @@ func (c *Config) RoundEndOffset() time.Duration {
 // Validate checks the config for internal consistency. Bad configs are
 // programmer errors; callers run this once at instance construction.
 func (c *Config) Validate() error {
-	if c.F < 1 {
-		return errors.New("obft: byzantine bound F must be >= 1")
-	}
-	if len(c.Operators) < 3*c.F+1 {
-		return errors.New("obft: cluster size must be at least 3F+1")
-	}
-	// Per spec §Setting: K ≥ f+1 is the BFT-liveness minimum (pigeonhole
-	// over the f-byz bound guarantees ≥ 1 honest leader; at K < f+1 all
-	// leaders could be byzantine and no σ-quorum reaches at any layer).
-	// K ≥ f+2 additionally provides late-leader-resilience (≥ 2 honest
-	// leaders, so a single late-broadcasting honest leader doesn't
-	// foreclose the slot via the deepest-layer NR-lock pathology) — that
-	// choice is left to the operator/deployment per spec §Setting and is
-	// not enforced here.
-	minK := c.F + 1
-	if len(c.Layers) < minK {
-		return fmt.Errorf("obft: K=%d below BFT-liveness minimum %d (= f+1 at f=%d)",
-			len(c.Layers), minK, c.F)
-	}
-	if len(c.Layers) > len(c.Operators) {
-		return errors.New("obft: K cannot exceed cluster size")
-	}
-	if c.BTT <= 0 {
-		return errors.New("obft: BTT must be positive")
+	if err := obft.ValidateClusterTopology(c.Operators, c.F, c.Layers, c.BTT); err != nil {
+		return err
 	}
 	if c.TCommit <= 0 {
 		return errors.New("obft: TCommit must be positive")
@@ -382,89 +310,13 @@ func (c *Config) Validate() error {
 	if c.Eps3 <= 0 {
 		return errors.New("obft: Eps3 must be positive")
 	}
-	// Delta2 < 1 BTT and TCommit < 2 BTT are the BFT-liveness minimums for
-	// Phase 2 propagation and the broadcast deadline (spec §Setting). Below
-	// these thresholds the cluster systematically misses (KindCommit
-	// messages don't propagate before Phase 3 starts; leader broadcasts
-	// don't fit before T_commit). Validate does not enforce these floors
-	// — that's a deployment / operator choice. The simulator and
-	// production stack still run; the resulting 0% success-rate is
-	// informative data, not a setup error.
-
-	members := make(map[OperatorID]bool, len(c.Operators))
-	for _, op := range c.Operators {
-		if members[op] {
-			return errors.New("obft: duplicate operator ID in cluster")
-		}
-		members[op] = true
-	}
-
-	// Per-layer BroadcastBudget — required on every layer per spec §Setting.
-	// Callers can use DefaultBroadcastBudget(K, BTT, RefloodDelay, T_commit)
-	// for the spec-recommended primary-vs-backup schedule (B_0 = 2·BTT +
-	// RefloodDelay; B_1..B_{K-1} = T_commit), or supply their own per-layer
-	// values.
-	for k, l := range c.Layers {
-		if l.BroadcastBudget <= 0 {
-			return fmt.Errorf("obft: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for the spec-conforming primary-vs-backup schedule)", k)
-		}
-	}
-	// B_0 ≤ B_1 ≤ ... ≤ B_{K-1}: deeper layers get ≥ their predecessor's
-	// absorption / chain-decryption headroom (spec §Setting "B_k ≥
-	// B_{k-1}" verbatim). Equal adjacent budgets are tolerated: at
-	// the spec-recommended primary-vs-backup schedule all backups share
-	// B_k = T_commit (multiple layers' broadcast targets clamp to BFT_start
-	// via the runtime `max(BFT_start, T_commit − B_k)` floor). Strict-
-	// increasing was historically enforced (when the schedule was staggered)
-	// but rejected the now-default primary-vs-backup configs; non-decreasing
-	// is the current convention.
-	for k := 1; k < len(c.Layers); k++ {
-		if c.Layers[k].BroadcastBudget < c.Layers[k-1].BroadcastBudget {
-			return errors.New("obft: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
-		}
-	}
-	// The deepest layer's budget is the cluster's worst-case liveness
-	// guarantee. Spec §Setting recommends `B_{K-1} ≥ 2·BTT` for the
-	// cluster to have a liveness guarantee at any layer; below that the
-	// deepest leader's bundle can't both propagate and reach Phase-2
-	// quorum before T_commit, so the cluster systematically misses. The
-	// floor is *informational* — Validate does not enforce it. Operators
-	// who want to study (or knowingly run) at extreme operating points
-	// where no layer has a liveness guarantee can; the simulator and
-	// production stack still execute.
-
-	seenLeaders := make(map[OperatorID]bool, len(c.Layers))
+	// Anchor-specific: FetchAt must land within each layer's broadcast
+	// deadline max(BFTStart, T_commit − B_k).
 	for k, layer := range c.Layers {
-		if !members[layer.Leader] {
-			return errors.New("obft: layer leader is not a cluster member")
-		}
-		if seenLeaders[layer.Leader] {
-			return errors.New("obft: duplicate leader across layers")
-		}
-		seenLeaders[layer.Leader] = true
-		if layer.FetchAt < 0 {
-			return errors.New("obft: layer FetchAt must be non-negative")
-		}
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
-			// Deadline = max(BFTStart, T_commit−B_k). When B_k ≥ T_commit
-			// the T_commit−B_k component collapses to ≤ 0, so the deadline
-			// is BFTStart (best-effort broadcast at BFT_start, per spec
-			// §Setting); FetchAt must then be ≤ BFTStart. Surface the
-			// underlying T_commit−B_k value so over-budget configs are
-			// obvious in the error.
 			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, T_commit−B_k=%v))",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k),
 				c.BFTStart, c.TCommit-c.Layers[k].BroadcastBudget)
-		}
-		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
-		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
-		// fetch asymmetry between primary and backups). Strict-
-		// decreasing was historically enforced (when the schedule was
-		// staggered); the non-increasing relaxation lets all backups
-		// share FetchAt = 0 under the current primary-vs-backup schedule
-		// (matches the BroadcastBudget non-decreasing relaxation above).
-		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
-			return errors.New("obft: layer fetch times must be non-increasing in k")
 		}
 	}
 	return nil

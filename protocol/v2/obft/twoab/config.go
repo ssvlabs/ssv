@@ -58,6 +58,8 @@ type (
 	Certificate  = obft.Certificate
 	Output       = obft.Output
 	Phase1Bundle = obft.Phase1Bundle
+	// Shared cluster/layer-topology type.
+	LayerSpec = obft.LayerSpec
 )
 
 // Re-exported constructors/functions from the parent obft package.
@@ -82,44 +84,6 @@ func NoQuorumTag(clusterID [32]byte, height obft.Height, layer int) []byte {
 // ValueRoot returns the wire identifier (sha256) of V. See obft.ValueRoot.
 func ValueRoot(v Value) [32]byte {
 	return obft.ValueRoot(v)
-}
-
-// LayerSpec describes one layer of the K-layer onion structure. Per spec
-// §Setting, fetch times are non-increasing in layer index (deeper layers
-// fetch earlier from deeper-confirmed parents), and per-layer broadcast
-// budgets are staggered so deeper layers absorb more propagation tail.
-//
-// In 2abOBFT the broadcast deadline is anchored on T_0_broadcast, i.e. the
-// pre-Phase-2a anchor at `T_phase_2a − 1·BTT`: the leader broadcasts their
-// Phase-1 bundle so V_0 has 1·BTT to propagate before Phase 2a fires.
-type LayerSpec struct {
-	Leader  OperatorID
-	FetchAt time.Duration
-
-	// BroadcastBudget is the layer's T_0_broadcast-anchored absorption
-	// target `B_k` per spec §Setting: the leader aims to broadcast their
-	// Phase-1 bundle by `T_broadcast_max_k = max(BFTStart, T_0_broadcast − B_k)`.
-	// Per spec, `B_0 < B_1 < ... < B_{K-1}` — deeper layers get larger
-	// budgets (wider absorption); the primary gets the smallest (max
-	// MEV-fetch headroom, willing to fall through to L_1+ if propagation
-	// slips).
-	//
-	// B_k is a target, not a hard runtime cap. The only protocol-level
-	// "acceptance gate" in 2abOBFT is the Phase-2a fire-instant: bundles
-	// observed at or before `T_phase_2a` drive the operator's Phase-2a
-	// emission decision; bundles observed later still contribute (via
-	// the Phase-2a-late upgrade path for KindNoValue-path ops), bounded
-	// only by the slot's relay-submission deadline at the runner level.
-	//
-	// Required: must be > 0 on every layer. Config.Validate rejects
-	// zero/negative values and decreasing-in-k schedules (equal adjacent
-	// budgets are accepted — multiple layers may share the BFT_start
-	// clamp at degraded operating points; see spec §Setting). Use
-	// DefaultBroadcastBudget(K, BTT, T_0_broadcast) for the spec-
-	// recommended staggered schedule when constructing a Config
-	// manually. Mesh-tail tolerance lives in Config.SafetyBuffer (which
-	// shifts TPhase2a and transitively T_0_broadcast), not in B_k.
-	BroadcastBudget time.Duration
 }
 
 // Config parameterizes one 2abOBFT consensus instance. Timing fields are
@@ -370,27 +334,8 @@ func DefaultBroadcastBudget(K int, btt, t0Broadcast time.Duration) ([]time.Durat
 // Validate checks the config for internal consistency. Bad configs are
 // programmer errors; callers run this once at instance construction.
 func (c *Config) Validate() error {
-	if c.F < 1 {
-		return errors.New("twoab: byzantine bound F must be >= 1")
-	}
-	if len(c.Operators) < 3*c.F+1 {
-		return errors.New("twoab: cluster size must be at least 3F+1")
-	}
-	// Per spec §Setting: K ≥ f+1 is the BFT-liveness minimum (pigeonhole
-	// over the f-byz bound guarantees ≥ 1 honest leader). K ≥ f+2
-	// additionally provides late-leader-resilience (≥ 2 honest leaders);
-	// that choice is left to the operator/deployment per spec §Setting
-	// and is not enforced here.
-	minK := c.F + 1
-	if len(c.Layers) < minK {
-		return fmt.Errorf("twoab: K=%d below BFT-liveness minimum %d (= f+1 at f=%d)",
-			len(c.Layers), minK, c.F)
-	}
-	if len(c.Layers) > len(c.Operators) {
-		return errors.New("twoab: K cannot exceed cluster size")
-	}
-	if c.BTT <= 0 {
-		return errors.New("twoab: BTT must be positive")
+	if err := obft.ValidateClusterTopology(c.Operators, c.F, c.Layers, c.BTT); err != nil {
+		return err
 	}
 	if c.TPhase2a <= 0 {
 		return errors.New("twoab: TPhase2a must be positive")
@@ -398,67 +343,17 @@ func (c *Config) Validate() error {
 	if c.SafetyBuffer < 0 {
 		return errors.New("twoab: SafetyBuffer must be >= 0")
 	}
-	// TPhase2a must accommodate T_0_broadcast = TPhase2a − BTT being
-	// positive (the Phase-1 broadcast time must land within the slot).
+	// TPhase2a must accommodate T_0_broadcast = TPhase2a − BTT being positive.
 	if c.TPhase2a <= c.BTT {
 		return errors.New("twoab: TPhase2a must be > BTT so T0Broadcast is positive")
 	}
-
-	members := make(map[OperatorID]bool, len(c.Operators))
-	for _, op := range c.Operators {
-		if members[op] {
-			return errors.New("twoab: duplicate operator ID in cluster")
-		}
-		members[op] = true
-	}
-
-	// Per-layer BroadcastBudget — required on every layer per spec §Setting.
-	for k, l := range c.Layers {
-		if l.BroadcastBudget <= 0 {
-			return fmt.Errorf("twoab: layer %d BroadcastBudget must be > 0 (use DefaultBroadcastBudget for a spec-conforming staggered schedule)", k)
-		}
-	}
-	// B_0 ≤ B_1 ≤ ... ≤ B_{K-1}: deeper layers get ≥ their predecessor's
-	// absorption / chain-decryption headroom (spec §Setting "B_k ≥
-	// B_{k-1}" verbatim). Equal adjacent budgets are tolerated: at
-	// degraded operating points multiple layers' broadcast targets clamp
-	// to BFT_start (the runtime `max(BFT_start, T0Broadcast − B_k)`
-	// floor), and at extreme operating points the canonical staggered
-	// shallow budgets even exceed T0Broadcast. A strict-increasing check
-	// would reject these degenerate-but-still-valid configs; non-decreasing
-	// keeps the staggering intent without blocking them.
-	for k := 1; k < len(c.Layers); k++ {
-		if c.Layers[k].BroadcastBudget < c.Layers[k-1].BroadcastBudget {
-			return errors.New("twoab: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
-		}
-	}
-
-	seenLeaders := make(map[OperatorID]bool, len(c.Layers))
+	// Anchor-specific: FetchAt must land within each layer's broadcast
+	// deadline max(BFTStart, T0Broadcast − B_k).
 	for k, layer := range c.Layers {
-		if !members[layer.Leader] {
-			return errors.New("twoab: layer leader is not a cluster member")
-		}
-		if seenLeaders[layer.Leader] {
-			return errors.New("twoab: duplicate leader across layers")
-		}
-		seenLeaders[layer.Leader] = true
-		if layer.FetchAt < 0 {
-			return errors.New("twoab: layer FetchAt must be non-negative")
-		}
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
 			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, T0Broadcast−B_k=%v))",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k),
 				c.BFTStart, c.T0Broadcast()-c.Layers[k].BroadcastBudget)
-		}
-		// Per spec §Setting: T_{K-1} ≤ ... ≤ T_1 ≤ T_0. Deeper layers
-		// fetch ≤ their predecessor's offset (re-org resistance, MEV-
-		// fetch asymmetry). The non-increasing check (rather than
-		// strict-decreasing) lets multiple layers' targets collide at
-		// BFT_start when the operating point pushes shallow targets past
-		// T0Broadcast (matches the BroadcastBudget non-decreasing check
-		// above).
-		if k > 0 && layer.FetchAt > c.Layers[k-1].FetchAt {
-			return errors.New("twoab: layer fetch times must be non-increasing in k")
 		}
 	}
 	return nil
