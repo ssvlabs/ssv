@@ -180,7 +180,7 @@ func TestScenario_Healthy_N7_F2(t *testing.T) {
 // (Byz cross-signing — KindValue + KindCommit-NR from same op — is now
 // Rule 1 / Rule 6a slashable; covered in phase2b_test.)
 func TestScenario_DualPoolMembershipForA3HostFlipPivot(t *testing.T) {
-	t.Skip("Op5 removes A3 host-flip pivot; obsolete scenario — see plan §Op5 line 1253")
+	t.Skip("KindValue carries the σ partial inline, so there is no A3 host-flip pivot; obsolete scenario")
 }
 
 // TestObservePhase1Bundle / Phase-2a / Commit re-broadcast dedup: gossipsub
@@ -430,8 +430,8 @@ func TestEKM_LockingIsPerLayer(t *testing.T) {
 // slow-view op emits KindCommit-Signed, L_0 σ-quorum reaches.
 //
 // This is the headline case for v4's "closes the non-uniform mesh-tail
-// boundary" claim from the redesign plan §Liveness worked cases
-// (line 783): the protocol absorbs slow-edge propagation up to the slot
+// boundary" claim (see docs/2abOBFT.md §Liveness): the protocol
+// absorbs slow-edge propagation up to the slot
 // deadline without forcing premature NR-default. The test orchestrates
 // delayed delivery manually rather than porting gossipsub mesh machinery
 // into the unit-test sim — the underlying protocol behavior (wait for
@@ -537,7 +537,7 @@ func TestScenario_NonUniformMeshTailRecovery(t *testing.T) {
 }
 
 // h_V_honest=2: 2 honest have V_0 at Phase 1, 2 honest are V-drops. Per
-// the redesign plan §Liveness worked cases (line 780): both V-drops
+// docs/2abOBFT.md §Liveness: both V-drops
 // receive V_0 via Phase-1 reflood + host valid → upgrade. After upgrades,
 // value_pool reaches qV=3 (2 original + 2 upgrades = 4 ops on V_0); all
 // 4 ops emit KindCommit-Signed; L_0 σ-quorum.
@@ -598,7 +598,7 @@ func TestScenario_HV2RecoversViaUpgrades(t *testing.T) {
 // L_0 with V_0.
 //
 // Trade-off: pre-Op5's A3 safety net (avoiding signing a re-orged V) is
-// lost. See plan §Op5 line 1253 — explicit structural cost. Assumption 3
+// lost. See docs/2abOBFT.md §Failure modes — explicit structural cost. Assumption 3
 // (host validity best-effort unanimous at decision time) makes mid-slot
 // flips rare; when they occur, validators take normal reorg-slashing
 // risk.
@@ -647,7 +647,7 @@ func TestScenario_HostFlipMidSlot_3v1_SucceedsAtL0(t *testing.T) {
 // Host re-org mid-slot, 4-NV (all 4 ops' hosts flip post-Phase-2a-fire):
 // σ-eligibility fires for all 4 (value_pool=4≥qV). All 4 side-decision
 // to NR (host re-check NV). nr_tag_0-pool = 4 = qEnc → fall-through to
-// L_1. Per redesign plan §Liveness worked cases (line 789).
+// L_1. Per docs/2abOBFT.md §Liveness.
 //
 // NOTE (sub-chunk #1 / Op3): the L_0 leader now σ-locks at Phase-1 build
 // time via L_0 witness signing, so the A3 host-flip pivot is structurally
@@ -730,7 +730,7 @@ func TestScenario_HostFlipMidSlot_2v2_StallsAtL0(t *testing.T) {
 // from the host-flip case above — here divergence starts before Phase 2a
 // fires, so 2 ops emit KindValue and 2 emit KindNoValue). value_pool=2 <
 // qV; noValuePool=2 < qEnc. Neither trigger fires; cluster stalls until
-// slot deadline. Per redesign plan §Liveness worked cases (line 785).
+// slot deadline. Per docs/2abOBFT.md §Liveness.
 func TestScenario_ValidityDivergence2v2_AtPhase1_StallsAtL0(t *testing.T) {
 	s := newSim(t, 4)
 	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
@@ -761,7 +761,7 @@ func TestScenario_ValidityDivergence2v2_AtPhase1_StallsAtL0(t *testing.T) {
 // V has 1 partial cluster-wide); no V reaches qV. NR-pool empty (no NR
 // commits). Slot misses at L_0 with no fall-through. Pre-Op5 this
 // scenario succeeded at L_1 via A4 pivot + NR-fall-through; the loss is
-// a documented Op5 trade-off (plan §Op6 line 1276: equivocation
+// a documented leader-witness trade-off (docs/2abOBFT.md §Failure modes: equivocation
 // observed POST-KindValue-emission has no recovery path). Pigeonhole 2
 // safety holds: no V reaches qV, no cluster decision on any V.
 func TestScenario_Equivocation111_PostKindValue_MissesUnderOp5(t *testing.T) {

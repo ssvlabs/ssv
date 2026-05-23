@@ -31,7 +31,7 @@ var scenarioEquivocate111 = Scenario{
 		// fragments (each V_i has 1 partial cluster-wide) — none reaches
 		// qV. NR-pool also empty (no ops emitted NR). Cluster MISSes at
 		// L_0 with no fall-through. **Op5 trade-off**: equivocation
-		// post-σ-commit has no recovery path (plan §Op5 line 1253);
+		// post-σ-commit has no recovery path (docs/2abOBFT.md §Failure modes);
 		// pre-Op5 this scenario would have fall-through-recovered via
 		// A4 NR-pivot. Pigeonhole 2 still guarantees safety (no V
 		// reaches qV → no cluster decision on any V).

@@ -27,7 +27,7 @@ import (
 // contribution. NOTE: under v4 the leader's σ partial was produced at
 // Phase 2b (Commit-Signed); moving it to Phase 1 shifts the σ-lock
 // acquisition ~1·BTT earlier in the slot (slightly enlarges the
-// crash-loss window — see redesign-plan §Subtle edge cases).
+// crash-loss window).
 //
 // Idempotent: calling with the same (layer, value) repeatedly returns
 // equivalent bundles (same σ partial; signer is deterministic). Calling

@@ -66,7 +66,7 @@ type Protocol struct {
 	// the sum). SafetyBuffer therefore only widens the window ABOVE the
 	// 1·BTT crossover — below it the 2·BTT NR-fall-through path dominates,
 	// so a smaller SafetyBuffer reclaims MEV-fetch headroom for nothing
-	// extra. See plan §SafetyBuffer's role post-Op5/Op6.
+	// extra. See docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
 	SafetyBufferOverride *time.Duration
 }
 

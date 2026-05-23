@@ -297,7 +297,7 @@ type ValueMsg struct {
 	// emit time). This is ~1·BTT earlier in the slot than the v4 lock-
 	// acquisition point (Phase-2b Commit-Signed). The structural cost is
 	// loss of the A3/A4 pivot — an op who emits KindValue with σ partial
-	// cannot pivot to KindCommit-NR mid-slot. See plan §Op5.
+	// cannot pivot to KindCommit-NR mid-slot. See docs/2abOBFT.md §Phase 2a.
 	L0Partial Signature
 	// LayerEntries carries the operator's L_1..L_{K-1} per-layer
 	// commitments. Length K-1; index 0 → layer 1, ..., index K-2 → layer K-1.

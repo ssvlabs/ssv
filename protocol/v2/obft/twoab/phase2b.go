@@ -17,7 +17,7 @@ import (
 //      in EKM coordination state at L_0) → emit KindCommit-NRDirect at
 //      Phase 2a (handled in MaybeFirePhase2a). Post-σ-lock, equivocation
 //      is unrecoverable — the op is committed to V via its σ partial
-//      already on the wire in KindValue. See plan §Op5 line 1253.
+//      already on the wire in KindValue. See docs/2abOBFT.md §Failure modes.
 //   2. NR-eligibility trigger: cluster's noValuePool[L_0] reaches qEnc
 //      AND op cannot σ at L_0 (cannot-σ gate) → KindCommit-NR. The gate
 //      blocks σ-eligible ops from forfeiting σ contributions to premature

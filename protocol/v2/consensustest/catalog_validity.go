@@ -40,9 +40,9 @@ var scenarioValidityDivergenceAlgebraicLimit = Scenario{
 		// satisfied only by NV honest, and only 2 of them exist). σ-eligible
 		// honest's cannot-σ gate fails (V_local + host valid). With no
 		// T_commit hard wall, ops wait until slot deadline → MISS. This is
-		// the spec's assumption-3-boundary algebraic limit (redesign plan
-		// §Liveness worked cases line 787): v1's row 5 NR-default at
-		// T_commit attempted L_1 fall-through, v4 does not.
+		// the spec's assumption-3-boundary algebraic limit (see
+		// docs/2abOBFT.md §Liveness): with no T_commit NR-default wall,
+		// v4 does not attempt L_1 fall-through here.
 		"2abOBFT": ExpectMiss,
 		// QBFT: R1 PREPARE pool insufficient (host-NV non-leaders don't
 		// PREPARE); R1 timeout; R2 leader proposes fresh V which validates
