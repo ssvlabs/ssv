@@ -195,6 +195,24 @@ Between L6 and L7, the adapter itself can be exercised stand-alone (without Prop
 - Operator config file (`config/config.go` or wherever) — add `ConsensusVariant string` field with default `"base"`. The exact location depends on existing convention; I'll grep and pick.
 - Validator-side dispatch: `ProcessOBFTEnvelopeMsg` (in proposer_obft.go) becomes variant-aware OR a separate `ProcessTwoabEnvelopeMsg` handler is added — depends on Approach 1 vs 2.
 
+## Integration-surface contract (salvaged from the shared-core refactor)
+
+The shared-core refactor (now complete) kept a frozen set of exported symbols the production node wires against. The bare-OBFT integration points are the template for what the twoab runner must expose; the crypto + value types are already shared.
+
+**Already shared / reusable as-is:**
+- `OperatorID`, `Output`, `Evidence`, `EvidenceObserver` live in the parent `obft` package; `twoab` re-exports them via type aliases.
+- `blsbackend` constructors (`New`, `NewTLockIBE`, `NewKyberSigner`) are protocol-agnostic — twoab reuses the same backend (production-wired in [operator/validator/setup_obft.go](../operator/validator/setup_obft.go)).
+- `twoab/wire` already provides the parallel `Envelope` / `Kind*` / `Unwrap` / `MessageKind` surface (with the `"2abOBFT"` tag).
+
+**twoab must build the parallel piece:**
+- `twoab/verify.go` (`Verifier` + `Verify{Phase1Bundle,…,Certificate}`, see E4), wired into a twoab validation path mirroring [message/validation/obft_validation.go](../message/validation/obft_validation.go).
+
+**Node-side wiring checklist (L7–L8)** — the seven points the bare-OBFT runner touches, each needing a twoab branch or sibling: [obft_validation.go](../message/validation/obft_validation.go), [setup_obft.go](../operator/validator/setup_obft.go), [proposer_obft.go](../protocol/v2/ssv/runner/proposer_obft.go) + [proposer.go](../protocol/v2/ssv/runner/proposer.go), [validator.go](../protocol/v2/ssv/validator/validator.go), [queue/messages.go](../protocol/v2/ssv/queue/messages.go), [testing/runner.go](../protocol/v2/ssv/testing/runner.go).
+
+**No unified `Instance` interface.** base and twoab method sets are largely Phase-2-disjoint and `ObserveCommit` semantics differ; one interface would be a fat union (panic stubs) or a too-thin intersection. This is why Phase L uses **separate runners** (Approach 2) driving their concrete `Instance`, not a shared driver behind one interface.
+
+Share-vs-duplicate decisions during Phase L (e.g. whether the twoab Controller reuses base's pending/ended buffers + `withLiveInstance` plumbing or duplicates them) follow the over-dedup guardrails in [2abOBFT-design-notes.md](2abOBFT-design-notes.md#over-deduplication-guardrails-shared-core).
+
 ## Out of scope (deferred to Phase M or follow-up)
 
 - **Per-cluster variant selection** (vs operator-wide). Phase M wires this if needed; for Phase L, operator-wide is enough.

@@ -503,3 +503,15 @@ Variant C — dropping Phase-1 σ_V — is what lets 2abOBFT recover validity-di
 The Phase 2 split costs +1 RTT of slot budget. At Config A this is +200-400ms depending on sizing; at the recommended `Δ_2a = Δ_2b = 2 BTT`, it is +400ms. Submission headroom drops by ~400ms vs single-Phase-2 designs — still a comfortable margin.
 
 The trade-off vs bare OBFT: a healthy-h_V=2 case falls through to L_1 (rather than succeeding at L_0 via the Phase-1 σ_V head-start). At K = n = 4, fall-through is one local-decryption iteration in Phase 3 — no extra RTT, slot still succeeds.
+
+## Over-deduplication guardrails (shared-core)
+
+Salvaged from the (completed) shared-core refactor; these govern any base↔twoab share-vs-duplicate decision, including Phase L's runner choices (e.g. whether the twoab Controller shares base's pending/ended buffers + `withLiveInstance` plumbing or duplicates them under the separate-runner approach).
+
+Over-deduplication is itself an antipattern — the *wrong abstraction* costs more than duplication. The aim is to remove **knowledge expressed twice**, not to merge code that merely **looks** alike.
+
+- **Litmus test.** Share it only if both copies must change *for the same reason*. If base and twoab would plausibly evolve the piece independently (a Phase-2-driven change, protocol-specific tuning), keep it duplicated. Coincidental shape ≠ shared knowledge.
+- **Share mechanism, not policy.** Extract the plumbing; leave the decision per-protocol. (Precedent: `HostValidationGate` shares the channel + dedup + non-blocking enqueue, but not when-to-request or the host-validity semantics.)
+- **Cleaner shape wins.** When base and twoab genuinely share a part but differ on it, the shared form follows the simpler/cleaner shape — decided per-case, not "base-shaped" or "twoab-shaped" by default.
+- **The flag test (hard stop).** If a proposed shared helper needs a `protocol`/`isBase` flag, grows more than ~1 boolean param, or sprouts `if base { … } else { … }` branches — the abstraction is wrong. Prefer two clear copies.
+- **Readability beats LOC.** Don't extract a 5-line helper to dedup 5 lines; indirection a reader must chase to understand one call site is a net loss even if it removes lines.
