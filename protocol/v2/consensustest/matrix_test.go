@@ -166,7 +166,7 @@ func TestComparison_Matrix(t *testing.T) {
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
 		twoabadapter.Protocol{},
-		qbftadapter.QBFT{},
+		qbftadapter.QBFTNoReflood{},
 		psigsadapter.Protocol{},
 	}
 	protoNames := []string{}
@@ -211,7 +211,7 @@ func TestComparison_BTTSweep(t *testing.T) {
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
 		twoabadapter.Protocol{},
-		qbftadapter.QBFT{},
+		qbftadapter.QBFTNoReflood{},
 		psigsadapter.Protocol{},
 	}
 

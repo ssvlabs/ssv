@@ -50,7 +50,7 @@ func TestSweep_N(t *testing.T) {
 		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
 			t.Parallel()
 			cfg := baseSweepConfig(n, 200*time.Millisecond)
-			for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
+			for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}} {
 				out, err := p.Run(cfg)
 				require.NoErrorf(t, err, "n=%d %s Run", n, p.Name())
 				require.Truef(t, out.Decided, "n=%d %s Healthy must decide", n, p.Name())
@@ -105,7 +105,7 @@ func TestSweep_BTT(t *testing.T) {
 
 			// Healthy must decide at fastest path at canonical BTT (200ms).
 			// At other BTTs, log but don't assert.
-			for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
+			for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}} {
 				out, err := p.Run(cfg)
 				require.NoErrorf(t, err, "BTT=%v %s Run", btt, p.Name())
 				if btt == 200*time.Millisecond {
@@ -119,7 +119,7 @@ func TestSweep_BTT(t *testing.T) {
 			fmt.Fprintf(&b, "\nBTT=%v catalog matrix:\n", btt)
 			for _, s := range ct.Catalog {
 				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
-				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFT{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFTNoReflood{}, s, cfg)
 				fmt.Fprintf(&b, "  %-32s OBFT=%-12s QBFT=%-12s\n",
 					s.Name, sweepCellSummary(obftR), sweepCellSummary(qbftR))
 			}
@@ -150,7 +150,7 @@ func TestSweep_Asymmetric(t *testing.T) {
 	const btt = 200 * time.Millisecond
 	slowCounts := []int{0, 1, 2}
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}}
 
 	for _, slowN := range slowCounts {
 		t.Run(fmt.Sprintf("slowN=%d", slowN), func(t *testing.T) {
@@ -186,7 +186,7 @@ func TestSweep_Asymmetric(t *testing.T) {
 			obftDecided, qbftDecided := 0, 0
 			for _, s := range ct.Catalog {
 				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
-				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFT{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFTNoReflood{}, s, cfg)
 				if !obftR.Skipped {
 					obftTotal++
 					if obftR.Outcome.Decided {
@@ -249,7 +249,7 @@ func TestSweep_Partition(t *testing.T) {
 			obftDecided, qbftDecided := 0, 0
 			for _, s := range ct.Catalog {
 				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
-				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFT{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFTNoReflood{}, s, cfg)
 				if !obftR.Skipped {
 					obftTotal++
 					if obftR.Outcome.Decided {
@@ -274,7 +274,7 @@ func TestSweep_Partition(t *testing.T) {
 			// miss for both protocols — verifies clean failure, no safety
 			// invariant violation (already enforced via panic gate).
 			if partN == 2 {
-				for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
+				for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}} {
 					out, err := p.Run(cfg)
 					require.NoErrorf(t, err, "partN=%d %s Run", partN, p.Name())
 					require.Falsef(t, out.Decided,
@@ -363,7 +363,7 @@ func TestSweep_ClockSkew(t *testing.T) {
 		},
 	}
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}}
 
 	for _, pat := range skewPatterns {
 		t.Run(pat.name, func(t *testing.T) {
@@ -392,7 +392,7 @@ func TestSweep_ClockSkew(t *testing.T) {
 			obftDecided, qbftDecided := 0, 0
 			for _, s := range ct.Catalog {
 				obftR := ct.RunScenarioOnProtocol(t, obftadapter.Protocol{}, s, cfg)
-				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFT{}, s, cfg)
+				qbftR := ct.RunScenarioOnProtocol(t, qbftadapter.QBFTNoReflood{}, s, cfg)
 				if !obftR.Skipped {
 					obftTotal++
 					if obftR.Outcome.Decided {
@@ -470,7 +470,7 @@ func TestSweep_PassiveByz_UnderStress(t *testing.T) {
 		Skew:  skew,
 	}
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}}
 
 	var b strings.Builder
 	b.WriteString("\npassive-byz-under-clock-skew (within-bound, pair-wise ≤ δ):\n")
@@ -514,7 +514,7 @@ func TestSweep_Seeds(t *testing.T) {
 			cfg := cfg
 			cfg.Seed = seed
 			cfg.Network = ct.LogNormalDelay{Median: 100 * time.Millisecond, Sigma: 0.5}
-			for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT{}} {
+			for _, p := range []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}} {
 				out, err := p.Run(cfg)
 				require.NoErrorf(t, err, "seed=%d %s Run", seed, p.Name())
 				rep := ct.ComputeSafetyReport(out)
@@ -536,7 +536,7 @@ func TestSweep_Seeds(t *testing.T) {
 // the deadline → MISS.
 //
 // Uses the QBFT-SSV variant because the assertion is calibrated against
-// the production RT=2s; the pristine "QBFT" variant (qbftadapter.QBFT{},
+// the production RT=2s; the pristine "QBFT" variant (qbftadapter.QBFTNoReflood{},
 // per-round R1=3·BTT / R≥2=4·BTT) has much tighter round timers that let
 // R3 land before RelayCutoff in this exact configuration.
 func TestSweep_MultiByz_n7(t *testing.T) {

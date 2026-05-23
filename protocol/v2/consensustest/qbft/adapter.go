@@ -22,24 +22,51 @@ import (
 const defaultFixedRT = 2 * time.Second
 
 // defaultMaxRounds caps round-change attempts before the instance gives up.
-const defaultMaxRounds = 4
+// Set high enough that the slot deadline (runLoop's RelayCutoff-based maxTime
+// + the adapter's clip), not the round count, is the binding limit across the
+// sweep BTT range: the pristine per-round timers fit ~9-10 rounds within a 4s
+// proposer slot at BTT=100, and we don't want to cap QBFT-no-reflood below
+// what it can actually fit. QBFT-SSV's wide 2s RT is deadline-bound at ~2-3
+// rounds regardless, so the higher cap is a no-op for it.
+const defaultMaxRounds = 12
 
-// QBFT is the pristine structural-floor variant (Name "QBFT"). Its round
-// timer carries no jitter cushion: round 1 = 3·BTT (the three consensus
-// emissions PROPOSE + PREPARE + COMMIT at 1·BTT each — P99 propagation,
-// matching OBFT's Δ_2 = 1·BTT); rounds ≥ 2 add 1·BTT for the ROUND_CHANGE
-// hop to the new leader (the timer is armed at round entry, so that hop is
-// inside the round's own window) = 4·BTT. Each round's timer equals that
-// round's exact decision time, so a healthy/recovery decision coincides
-// with the timer and eventQueue.Less (events.go) breaks the tie toward the
-// decision — RT is never padded. This is the no-cushion reference: compare
-// against other protocols' no-cushion variants (e.g. OBFT-RD0), not the
-// cushioned ones. At BTT=100: R1=300ms, R≥2=400ms.
+// QBFT is the reflood-aware variant (Name "QBFT") — the realistic,
+// production-shaped reference. Its per-round timer is the pristine
+// structural minimum plus one full gossip-backstop recovery cushion
+// (RefloodDelay heartbeat + 1·BTT IWANT round-trip): round 1 =
+// 3·BTT + (RefloodDelay + 1·BTT) = 4·BTT + RefloodDelay; rounds ≥ 2 add
+// the 1·BTT ROUND_CHANGE hop = 5·BTT + RefloodDelay. This matches OBFT's
+// reflood budget (B_0 = 2·BTT + RefloodDelay, whose 2·BTT base already
+// carries the IWANT round-trip that QBFT's tight per-emission base lacks),
+// so the two compare apples-to-apples on mesh-tail tolerance. Compare
+// against bare OBFT (also reflood-aware).
 type QBFT struct{}
 
 func (QBFT) Name() string { return "QBFT" }
 
 func (QBFT) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	// R1 = 3·BTT + (RefloodDelay + 1·BTT cushion) = 4·BTT + RefloodDelay;
+	// rtRecoveryExtra = 1·BTT (the ROUND_CHANGE hop) → R≥2 = 5·BTT + RefloodDelay.
+	return run(cfg, 4*cfg.BTT+cfg.RefloodDelay, cfg.BTT)
+}
+
+// QBFTNoReflood is the pristine structural-floor variant (Name
+// "QBFT-no-reflood"). Its round timer carries no mesh-tail cushion:
+// round 1 = 3·BTT (the three consensus emissions PROPOSE + PREPARE +
+// COMMIT at 1·BTT each — P99 propagation, matching OBFT's Δ_2 = 1·BTT);
+// rounds ≥ 2 add 1·BTT for the ROUND_CHANGE hop to the new leader (the
+// timer is armed at round entry, so that hop is inside the round's own
+// window) = 4·BTT. Each round's timer equals that round's exact decision
+// time, so a healthy/recovery decision coincides with the timer and
+// eventQueue.Less (events.go) breaks the tie toward the decision — RT is
+// never padded. The zero-cushion reference: compare against other
+// protocols' no-reflood variants (e.g. OBFT-no-reflood). At BTT=100:
+// R1=300ms, R≥2=400ms.
+type QBFTNoReflood struct{}
+
+func (QBFTNoReflood) Name() string { return "QBFT-no-reflood" }
+
+func (QBFTNoReflood) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	return run(cfg, 3*cfg.BTT, cfg.BTT)
 }
 

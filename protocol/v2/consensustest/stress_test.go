@@ -23,8 +23,8 @@ import (
 // TestStress is the stress-tier entry point per the catalog-split plan.
 // It runs DefaultSweeps over every catalog scenario opted into
 // ModeStress for the registered protocol families (OBFT family incl.
-// OBFT-RD0 / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFT-tight / 2abOBFT-lean,
-// QBFT family incl. QBFT-SSV, and PSigs) and writes a `data.js` file
+// OBFT-no-reflood / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFT-tight / 2abOBFT-lean,
+// QBFT family incl. QBFT-no-reflood / QBFT-SSV, and PSigs) and writes a `data.js` file
 // consumed by the static UI in `stresstest-report/` (index.html + app.js
 // + styles.css, all tracked in git). Refreshing index.html in a browser
 // re-renders from the new data.js without rerunning this test.
@@ -288,18 +288,19 @@ func TestStress(t *testing.T) {
 	//     at the cost of MEV freshness. Network propagation still
 	//     happens at the sweep's actual BTT — the multiplier models
 	//     operator-side pessimism only.
-	//   - OBFT ships an additional OBFT-RD0 variant that forces
+	//   - OBFT ships an additional OBFT-no-reflood variant that forces
 	//     RefloodDelay=0 in the broadcast budget (B_0 = 2·BTT instead
 	//     of 2·BTT + 700ms). Same protocol, no schedule-level cushion
 	//     for lazy-push recovery — the per-cell delta against bare
 	//     OBFT quantifies the RefloodDelay cushion's value at each
 	//     operating point. Listed first in the slice so the report
-	//     renders OBFT-RD0 immediately above bare OBFT.
-	//   - QBFT ships in the pristine variant (per-round RT: R1 = 3·BTT,
-	//     R≥2 = 4·BTT — the no-cushion structural floor) and the production
-	//     SSV variant (fixed 2s RT).
+	//     renders OBFT-no-reflood immediately above bare OBFT.
+	//   - QBFT ships in three variants: bare QBFT (reflood-aware — per-round
+	//     RT R1 = 4·BTT + RefloodDelay, the realistic mesh-tolerant default),
+	//     QBFT-no-reflood (the no-cushion structural floor, R1 = 3·BTT,
+	//     R≥2 = 4·BTT), and QBFT-SSV (production fixed 2s RT).
 	protocols := []ct.Protocol{
-		// OBFT-RD0 is the canonical OBFT with RefloodDelay forced to 0 —
+		// OBFT-no-reflood is the canonical OBFT with RefloodDelay forced to 0 —
 		// models the "fully-meshed cluster, eager push reliable" assumption
 		// (OBFT.md §Setting `RefloodDelay=0` path). Listed before bare OBFT
 		// so the report shows the no-cushion variant immediately above the
@@ -307,8 +308,8 @@ func TestStress(t *testing.T) {
 		// delta read directly. Identical to OBFT on adversarial scenarios
 		// (which already set cfg.RefloodDelay=0); the interesting cells
 		// are Healthy on a degraded p2p_profile, where bare OBFT's 700ms
-		// cushion in B_0 buys the lazy-push absorption that OBFT-RD0 lacks.
-		obftadapter.Protocol{VariantName: "OBFT-RD0", NoRefloodDelay: true},
+		// cushion in B_0 buys the lazy-push absorption that OBFT-no-reflood lacks.
+		obftadapter.Protocol{VariantName: "OBFT-no-reflood", NoRefloodDelay: true},
 		obftadapter.Protocol{},
 		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
 		obftadapter.Protocol{VariantName: "OBFTx3", BTTMultiplier: 3},
@@ -331,6 +332,7 @@ func TestStress(t *testing.T) {
 		twoabadapter.Protocol{VariantName: "2abOBFT-tight", SafetyBufferOverride: durPtr(500 * time.Millisecond)},
 		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
 		qbftadapter.QBFT{},
+		qbftadapter.QBFTNoReflood{},
 		qbftadapter.QBFTSSV{},
 		// PSigs is a baseline-cost reference: every honest op signs the
 		// pre-agreed V at BFTStart and broadcasts; the cluster decides at

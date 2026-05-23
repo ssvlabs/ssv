@@ -220,8 +220,14 @@ func (s *sim) buildInstance(op spectypes.OperatorID) (*qbftinstance.Instance, er
 }
 
 func (s *sim) runLoop() {
-	// Cap virtual time at slot duration + headroom; events past that are dropped.
-	maxTime := s.cfg.BFTStart + s.cfg.RT*time.Duration(s.cfg.MaxRounds+1)
+	// Cap virtual time at the slot's relay cutoff plus one recovery round —
+	// far enough to capture every round that can decide before the deadline
+	// (decisions past RelayCutoff − headroom are clipped to MISS by the
+	// adapter) plus the first round that lands just after it (for miss
+	// labelling). NOT a function of RT × MaxRounds: the pristine per-round RT
+	// is tiny, so that product would cut the sim off long before the deadline
+	// and starve QBFT-no-reflood of the later rounds it can actually fit.
+	maxTime := s.cfg.RelayCutoff + s.cfg.RT + s.cfg.RTRecoveryExtra
 	for s.queue.Len() > 0 {
 		e := heap.Pop(&s.queue).(*queueItem)
 		if e.when > maxTime {

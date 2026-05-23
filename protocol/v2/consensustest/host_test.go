@@ -35,7 +35,7 @@ func TestHost_FlipMidSlot_QBFT_RoundAwareReject(t *testing.T) {
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 	cfg.Host = ct.HostFlipMidSlot{ValidUntilLayer: 0} // R1 valid (= layer 0); R2 (= layer 1) rejected
 
-	out, err := qbftadapter.QBFT{}.Run(cfg)
+	out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
 	require.NoError(t, err)
 	require.False(t, out.Decided,
 		"QBFT R1 silenced + R2 host-invalid should MISS; got decided at round %d", out.DecidedRound)
@@ -63,7 +63,7 @@ func TestHost_InvalidUntilLayer_QBFT_DecidesAtR2(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Host = ct.HostInvalidUntilLayer{InvalidUntilLayer: 0}
 
-	out, err := qbftadapter.QBFT{}.Run(cfg)
+	out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "QBFT should decide at R2 fresh-V; got !Decided")
 	require.Equal(t, 1, out.DecidedRound, "should decide at R2 (= 1-indexed → 1)")

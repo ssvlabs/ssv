@@ -135,7 +135,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
 	// to match libp2p heartbeat), mirroring the production SSV adapter's
 	// DefaultRefloodDelay. NoRefloodDelay (variant knob) forces 0
-	// regardless — used by the OBFT-RD0 variant to probe the
+	// regardless — used by the OBFT-no-reflood variant to probe the
 	// cushion's value on otherwise-identical scenarios.
 	refloodDelay := cfg.RefloodDelay
 	if p.NoRefloodDelay {

@@ -34,6 +34,7 @@ func TestCorrectness(t *testing.T) {
 		obftadapter.Protocol{},
 		twoabadapter.Protocol{},
 		qbftadapter.QBFT{},
+		qbftadapter.QBFTNoReflood{},
 		qbftadapter.QBFTSSV{},
 		psigsadapter.Protocol{},
 	}

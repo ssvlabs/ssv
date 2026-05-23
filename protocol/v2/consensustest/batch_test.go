@@ -35,7 +35,7 @@ func TestBatch_Smoke(t *testing.T) {
 		SeedStart:  1,
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
-		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.QBFT{}},
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.QBFTNoReflood{}},
 	}
 
 	report := ct.RunBatch(t, cfg)
@@ -77,7 +77,7 @@ func TestBatch_Determinism(t *testing.T) {
 		SeedStart:  1,
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
-		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.QBFT{}},
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.QBFTNoReflood{}},
 		// Parallelism left at the default (GOMAXPROCS). RunBatch's Cells
 		// slice is index-assigned in (cellIdx) order regardless of which
 		// worker finishes first, and each (cellIdx, iter) sim is fully
@@ -127,7 +127,7 @@ func TestBatch_NotApplicableSkips(t *testing.T) {
 		SeedStart:  1,
 		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
 		Scenarios:  scenarios,
-		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.QBFT{}},
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}, twoabadapter.Protocol{}, qbftadapter.QBFTNoReflood{}},
 	}
 	report := ct.RunBatch(t, cfg)
 
