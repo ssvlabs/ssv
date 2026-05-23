@@ -1196,21 +1196,39 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			// Proposer duty runs on OBFT exclusively (the QBFT path was
-			// removed). Build the OBFT controller from the operator's
-			// share + cluster pubkey shares.
+			// Proposer duty runs on an OBFT-family protocol (the QBFT path was
+			// removed). The operator-wide UseTwoabOBFT toggle selects bare OBFT
+			// vs 2abOBFT; the corresponding controller is built from the
+			// operator's share + cluster pubkey shares and handed to the same
+			// ProposerRunner (which selects its driver from whichever controller
+			// is set). A nil controller (the signer doesn't expose the required
+			// share material — typically remote-signing, or a test setup that
+			// hasn't registered the share) means the validator boots without a
+			// proposer runner; other duties still work.
+			if UseTwoabOBFT {
+				twoabCtrl, twoabErr := buildTwoabControllerForProposer(share, operator, options)
+				if twoabErr != nil {
+					return nil, fmt.Errorf("could not build 2abOBFT controller: %w", twoabErr)
+				}
+				if twoabCtrl == nil {
+					continue
+				}
+				runners[role], err = runner.NewProposerRunner(runner.ProposerRunnerOptions{
+					BaseRunnerOptions:   baseOpts,
+					DoppelgangerHandler: options.DoppelgangerHandler,
+					HighestDecidedSlot:  0,
+					Graffiti:            options.Graffiti,
+					ProposerDelay:       options.ProposerDelay,
+					TwoabController:     twoabCtrl,
+				})
+				break
+			}
+
 			obftCtrl, obftErr := buildOBFTControllerForProposer(share, operator, options)
 			if obftErr != nil {
 				return nil, fmt.Errorf("could not build OBFT controller: %w", obftErr)
 			}
 			if obftCtrl == nil {
-				// OBFT not available for this share — typically a
-				// remote-signing setup before the drand-DST EKM
-				// extension lands, or a test setup that hasn't
-				// registered the share with the local signer. The
-				// validator boots without a proposer runner; other
-				// duties still work. (Callers can detect this by
-				// asking the runners map whether RoleProposer is set.)
 				continue
 			}
 

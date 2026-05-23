@@ -23,13 +23,35 @@ import (
 	"github.com/ssvlabs/ssv/observability/log/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	obftadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft"
+	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/ssv/runner/obft/twoab"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// ProposerRunner runs the proposer duty using OBFT for consensus. The QBFT
-// path was removed in favor of OBFT exclusively (see docs/OBFT.md +
-// docs/IBE-INTEGRATION.md). Construction without a OBFTController is an
-// error.
+// consensusVariant selects which OBFT-family protocol a ProposerRunner drives.
+// Exactly one variant is active per runner, chosen at construction from which
+// controller the caller supplies.
+type consensusVariant uint8
+
+const (
+	// variantOBFT drives bare OBFT (protocol/v2/obft/base via runner/obft).
+	variantOBFT consensusVariant = iota
+	// variantTwoab drives 2abOBFT (protocol/v2/obft/twoab via runner/obft/twoab).
+	variantTwoab
+)
+
+// ProposerRunner runs the proposer duty using an OBFT-family protocol for
+// consensus (bare OBFT or 2abOBFT, selected per cluster). The QBFT path was
+// removed in favor of OBFT exclusively (see docs/OBFT.md +
+// docs/IBE-INTEGRATION.md). Construction requires exactly one of OBFTController
+// or TwoabController.
+//
+// The two variants share all beacon-side lifecycle hooks (FetchCandidate /
+// HostValidate / SubmitOutput / OnMissedSlot) — those operate on the shared
+// obft.Output type and the variant-identical candidate encoding — and the
+// per-slot scratch state (obftSlots). Only the consensus driver wiring (which
+// Scheduler / RateLimiter / dispatch + the broadcast envelope's MsgType)
+// differs; the 2ab-specific glue lives in proposer_twoab.go, the OBFT glue in
+// proposer_obft.go.
 type ProposerRunner struct {
 	*BaseRunner
 
@@ -46,15 +68,25 @@ type ProposerRunner struct {
 	// higher MEV.
 	proposerDelay time.Duration
 
-	// OBFT machinery. Owned by the runner; constructed in NewProposerRunner
-	// from the caller-supplied Controller plus runner-bound LifecycleHooks.
-	// `obftSlots` carries per-slot scratch state (RANDAO sig, fetched block
-	// version) that the lifecycle hooks need but the protocol wire types
-	// don't carry.
+	// variant selects the active consensus driver (OBFT vs 2abOBFT).
+	variant consensusVariant
+
+	// OBFT machinery. Non-nil iff variant == variantOBFT. Owned by the runner;
+	// constructed in NewProposerRunner from the caller-supplied Controller plus
+	// runner-bound LifecycleHooks.
 	obftCtrl  *obftadapter.Controller
 	obftSched *obftadapter.Scheduler
 	obftRL    *obftadapter.RateLimiter
 
+	// 2abOBFT machinery. Non-nil iff variant == variantTwoab. Mirrors the OBFT
+	// trio above; the beacon-side hooks and obftSlots scratch are shared.
+	twoabCtrl  *twoabadapter.Controller
+	twoabSched *twoabadapter.Scheduler
+	twoabRL    *twoabadapter.RateLimiter
+
+	// obftSlots carries per-slot scratch state (RANDAO sig, fetched block
+	// version) that the lifecycle hooks need but the protocol wire types don't
+	// carry. Shared by both variants (the scratch is variant-neutral).
 	obftMu    sync.Mutex
 	obftSlots map[phase0.Slot]*obftSlotState
 }
@@ -91,21 +123,28 @@ type ProposerRunnerOptions struct {
 	// higher MEV.
 	ProposerDelay time.Duration
 
-	// OBFTController is required. It owns the cluster's OBFT primitives
-	// (BLSSigner for value-signing, KyberSigner for IBE-tag signing under
-	// the DST-trick approach, TLockIBE for layer encryption, plus the
-	// pubkey-shares map and committee). See docs/IBE-INTEGRATION.md and
-	// protocol/v2/ssv/runner/obft for the adapter API. NewProposerRunner
-	// returns an error when this is nil.
+	// OBFTController owns the cluster's bare-OBFT primitives (BLSSigner for
+	// value-signing, KyberSigner for IBE-tag signing under the DST-trick
+	// approach, TLockIBE for layer encryption, plus the pubkey-shares map and
+	// committee). See docs/IBE-INTEGRATION.md and protocol/v2/ssv/runner/obft.
+	//
+	// Exactly one of OBFTController / TwoabController must be set: the non-nil
+	// one selects the runner's consensus variant. NewProposerRunner errors if
+	// neither or both are set.
 	OBFTController *obftadapter.Controller
+
+	// TwoabController owns the cluster's 2abOBFT primitives — the same crypto
+	// shape as OBFTController, driving the split-Phase-2 (Value/NoValue + dynamic
+	// commit) protocol. See protocol/v2/ssv/runner/obft/twoab.
+	TwoabController *twoabadapter.Controller
 }
 
 func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 	if len(opts.Share) != 1 {
 		return nil, errors.New("must have one share")
 	}
-	if opts.OBFTController == nil {
-		return nil, errors.New("OBFTController is required for ProposerRunner")
+	if (opts.OBFTController == nil) == (opts.TwoabController == nil) {
+		return nil, errors.New("exactly one of OBFTController / TwoabController is required for ProposerRunner")
 	}
 
 	r := &ProposerRunner{
@@ -130,6 +169,32 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 
 		proposerDelay: opts.ProposerDelay,
 	}
+	r.obftSlots = make(map[phase0.Slot]*obftSlotState)
+
+	if opts.TwoabController != nil {
+		// 2abOBFT variant. Beacon-side hooks are shared with OBFT (same
+		// obft.Output type + identical candidate encoding); only Broadcast /
+		// BroadcastCertificate (distinct MsgType) and OnReplayError (2ab wire
+		// kind) are variant-specific. See proposer_twoab.go.
+		hooks := &twoabadapter.LifecycleHooks{
+			FetchCandidate:       r.obftFetchCandidate,
+			HostValidate:         r.obftHostValidate,
+			Broadcast:            r.twoabBroadcast,
+			SubmitOutput:         r.obftSubmitOutput,
+			BroadcastCertificate: r.twoabBroadcastCertificate,
+			OnMissedSlot:         r.obftOnMissedSlot,
+			OnReplayError:        r.twoabOnReplayError,
+		}
+		sched, err := twoabadapter.NewScheduler(opts.TwoabController, hooks)
+		if err != nil {
+			return nil, fmt.Errorf("build 2abOBFT scheduler: %w", err)
+		}
+		r.variant = variantTwoab
+		r.twoabCtrl = opts.TwoabController
+		r.twoabSched = sched
+		r.twoabRL = twoabadapter.NewRateLimiter()
+		return r, nil
+	}
 
 	hooks := &obftadapter.LifecycleHooks{
 		FetchCandidate:       r.obftFetchCandidate,
@@ -144,10 +209,10 @@ func NewProposerRunner(opts ProposerRunnerOptions) (Runner, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build OBFT scheduler: %w", err)
 	}
+	r.variant = variantOBFT
 	r.obftCtrl = opts.OBFTController
 	r.obftSched = sched
 	r.obftRL = obftadapter.NewRateLimiter()
-	r.obftSlots = make(map[phase0.Slot]*obftSlotState)
 
 	return r, nil
 }
@@ -215,11 +280,14 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return fmt.Errorf("current validator duty: %w", err)
 	}
 
-	// Hand off to the OBFT driver. Each layer leader fetches via the
-	// FetchCandidate hook at its own FetchAt offset; SubmitOutput
-	// delivers the agreed-upon block to the beacon node. RANDAO is
+	// Hand off to the OBFT-family driver for the active variant. Each layer
+	// leader fetches via the FetchCandidate hook at its own FetchAt offset;
+	// SubmitOutput delivers the agreed-upon block to the beacon node. RANDAO is
 	// plumbed via per-slot state so the FetchCandidate hook can use it.
 	r.measurements.StartConsensus()
+	if r.variant == variantTwoab {
+		return r.twoabStartSlot(ctx, logger, duty.Slot, fullSig)
+	}
 	return r.obftStartSlot(ctx, logger, duty.Slot, fullSig)
 }
 
@@ -229,7 +297,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 // misrouted message or a peer running an older binary; we surface them
 // as an error so the network layer logs and drops them.
 func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
-	return fmt.Errorf("proposer runner: QBFT consensus messages are not handled (OBFT only)")
+	return fmt.Errorf("proposer runner: QBFT consensus messages are not handled (OBFT-family only)")
 }
 
 // ProcessPostConsensus is unused on the proposer — OBFT folds post-
@@ -238,7 +306,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 // partial-signature messages arriving at a proposer runner are treated
 // the same way as stray QBFT consensus messages above.
 func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	return fmt.Errorf("proposer runner: QBFT post-consensus messages are not handled (OBFT only)")
+	return fmt.Errorf("proposer runner: QBFT post-consensus messages are not handled (OBFT-family only)")
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
@@ -255,7 +323,7 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // sig collection phase (the reconstructed block-root signature falls out
 // of Phase 3's IBE walk, see proposer_obft.go::obftSubmitOutput).
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, phase0.DomainType{}, fmt.Errorf("proposer runner: no post-consensus phase (OBFT only)")
+	return nil, phase0.DomainType{}, fmt.Errorf("proposer runner: no post-consensus phase (OBFT-family only)")
 }
 
 // executeDuty steps:

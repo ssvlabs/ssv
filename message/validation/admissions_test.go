@@ -21,7 +21,7 @@ func tMsgID(b byte) spectypes.MessageID {
 }
 
 func TestOBFTAdmissions_DropsIdentical(t *testing.T) {
-	tr := newOBFTAdmissionTracker()
+	tr := newConsensusAdmissionTracker()
 	id := tMsgID(1)
 	require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, tBodyA))
 	// Same body redelivered → reject.
@@ -30,7 +30,7 @@ func TestOBFTAdmissions_DropsIdentical(t *testing.T) {
 }
 
 func TestOBFTAdmissions_AdmitsDistinct(t *testing.T) {
-	tr := newOBFTAdmissionTracker()
+	tr := newConsensusAdmissionTracker()
 	id := tMsgID(1)
 	require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, tBodyA))
 	// Distinct body from same op — admit (so the protocol layer's Rule 2/3
@@ -38,12 +38,12 @@ func TestOBFTAdmissions_AdmitsDistinct(t *testing.T) {
 	require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, tBodyB))
 }
 
-// Bucket cap: distinct admissions past obftValidationMaxDistinctPerOpSlot
+// Bucket cap: distinct admissions past consensusValidationMaxDistinctPerOpSlot
 // are rejected — saves the BLS cost on rejected envelopes.
 func TestOBFTAdmissions_BucketCap(t *testing.T) {
-	tr := newOBFTAdmissionTracker()
+	tr := newConsensusAdmissionTracker()
 	id := tMsgID(1)
-	for k := 0; k < obftValidationMaxDistinctPerOpSlot; k++ {
+	for k := 0; k < consensusValidationMaxDistinctPerOpSlot; k++ {
 		body := []byte{byte(k)}
 		require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, body))
 	}
@@ -72,14 +72,14 @@ func TestOBFTAdmissions_BucketCap(t *testing.T) {
 // eviction is unconditional, not throttled), so capacity recovers
 // immediately as entries age out.
 func TestOBFTAdmissions_TTLEvictsPerBucket(t *testing.T) {
-	tr := newOBFTAdmissionTracker()
+	tr := newConsensusAdmissionTracker()
 	tr.maxAge = 100 * time.Millisecond
 	now := time.Unix(1_700_000_000, 0)
 	tr.now = func() time.Time { return now }
 
 	id := tMsgID(1)
-	bucket := obftAdmissionBucket{msgID: id, slot: 1, op: spectypes.OperatorID(2), kind: 1}
-	for k := 0; k < obftValidationMaxDistinctPerOpSlot; k++ {
+	bucket := consensusAdmissionBucket{msgID: id, slot: 1, op: spectypes.OperatorID(2), kind: 1}
+	for k := 0; k < consensusValidationMaxDistinctPerOpSlot; k++ {
 		body := []byte{byte(k)}
 		require.NoError(t, tr.Admit(id, phase0.Slot(1), spectypes.OperatorID(2), 1, body))
 	}
@@ -105,7 +105,7 @@ func TestOBFTAdmissions_TTLEvictsPerBucket(t *testing.T) {
 // most recent global sweep would stay capped until the next sweep window
 // — wrongly rejecting legitimate distinct content.
 func TestOBFTAdmissions_PerBucketEvictionUnthrottled(t *testing.T) {
-	tr := newOBFTAdmissionTracker()
+	tr := newConsensusAdmissionTracker()
 	tr.maxAge = 1000 * time.Millisecond // throttle = maxAge/8 = 125ms.
 	now := time.Unix(1_700_000_000, 0)
 	tr.now = func() time.Time { return now }
@@ -118,7 +118,7 @@ func TestOBFTAdmissions_PerBucketEvictionUnthrottled(t *testing.T) {
 
 	// Fill bucket A at t=0 (first Admit also triggers the initial global
 	// sweep, setting lastGlobalSweep ≈ now=0).
-	for k := 0; k < obftValidationMaxDistinctPerOpSlot; k++ {
+	for k := 0; k < consensusValidationMaxDistinctPerOpSlot; k++ {
 		require.NoError(t, bucketA([]byte{byte(k)}))
 	}
 	require.Error(t, bucketA([]byte{0xFF}))
@@ -140,7 +140,7 @@ func TestOBFTAdmissions_PerBucketEvictionUnthrottled(t *testing.T) {
 
 	// Sanity: bucket A should now contain only the fresh entry.
 	tr.mu.Lock()
-	require.Len(t, tr.buckets[obftAdmissionBucket{
+	require.Len(t, tr.buckets[consensusAdmissionBucket{
 		msgID: idA, slot: 1, op: spectypes.OperatorID(2), kind: 1,
 	}].entries, 1)
 	tr.mu.Unlock()

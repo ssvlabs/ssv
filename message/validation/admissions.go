@@ -10,41 +10,30 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// obftValidationMaxDistinctPerOpSlot caps how many distinct envelope-bodies
+// consensusValidationMaxDistinctPerOpSlot caps how many distinct envelope-bodies
 // the validation layer admits per (msgID, slot, op, kind) bucket. Mirrors
 // the runner-side rate limiter's MaxDistinctPerOpSlot — enforcing the cap
 // pre-BLS saves the BLS verify cost on rejected envelopes (a byzantine
 // who already exhausted the bucket can no longer spend our CPU).
-const obftValidationMaxDistinctPerOpSlot = 8
+const consensusValidationMaxDistinctPerOpSlot = 8
 
-// obftAdmissionMaxAge bounds the per-entry retention window. Sized for
-// OBFT's in-slot completion plus a small forward budget — anything older
-// is rejected upstream by the slot-window check, anything beyond the
+// consensusAdmissionMaxAge bounds the per-entry retention window. Sized for
+// the OBFT-family in-slot completion plus a small forward budget — anything
+// older is rejected upstream by the slot-window check, anything beyond the
 // forward budget is rejected likewise. 8 slots ≈ 96s on mainnet covers
 // the [-2, +4] window with comfortable slack.
-const obftAdmissionMaxAge = 8 * 12 * time.Second
+const consensusAdmissionMaxAge = 8 * 12 * time.Second
 
-// obftAdmissionKey identifies a single distinct envelope-body within the
-// per-(msgID, slot, op, kind) bucket. msgID isolates validators (the spec
-// MessageID encodes domain + role + validator-pubkey for proposer-OBFT).
-type obftAdmissionKey struct {
-	msgID spectypes.MessageID
-	slot  phase0.Slot
-	op    spectypes.OperatorID
-	kind  byte
-	hash  [32]byte
-}
-
-// obftAdmissionBucket is the cap-tracking key (without hash) for a single
+// consensusAdmissionBucket is the cap-tracking key (without hash) for a single
 // (msgID, slot, op, kind) admissions bucket.
-type obftAdmissionBucket struct {
+type consensusAdmissionBucket struct {
 	msgID spectypes.MessageID
 	slot  phase0.Slot
 	op    spectypes.OperatorID
 	kind  byte
 }
 
-// obftAdmissionTracker enforces a per-(msgID, slot, op, kind) bucket cap
+// consensusAdmissionTracker enforces a per-(msgID, slot, op, kind) bucket cap
 // at the validation layer, identical to the runner-side rate limiter's
 // shape but applied BEFORE BLS verification. Without this, a byzantine
 // can keep paying validation-layer BLS cost up to the runner-side cap
@@ -55,14 +44,14 @@ type obftAdmissionBucket struct {
 // regardless of how big the global tracker grows. A periodic global sweep
 // also runs to reclaim buckets that have gone idle (otherwise stale empty
 // buckets would never be GC'd).
-type obftAdmissionTracker struct {
+type consensusAdmissionTracker struct {
 	mu sync.Mutex
 
 	// buckets holds the per-bucket admission state. Each bucket carries
 	// its own list of (hash, time) entries, capped at
-	// obftValidationMaxDistinctPerOpSlot. This makes per-Admit eviction
+	// consensusValidationMaxDistinctPerOpSlot. This makes per-Admit eviction
 	// trivially cheap (only walk the bucket being touched).
-	buckets map[obftAdmissionBucket]*admissionBucketState
+	buckets map[consensusAdmissionBucket]*admissionBucketState
 
 	maxAge          time.Duration
 	now             func() time.Time
@@ -82,10 +71,10 @@ type admissionEntry struct {
 	ts   time.Time
 }
 
-func newOBFTAdmissionTracker() *obftAdmissionTracker {
-	return &obftAdmissionTracker{
-		buckets: make(map[obftAdmissionBucket]*admissionBucketState),
-		maxAge:  obftAdmissionMaxAge,
+func newConsensusAdmissionTracker() *consensusAdmissionTracker {
+	return &consensusAdmissionTracker{
+		buckets: make(map[consensusAdmissionBucket]*admissionBucketState),
+		maxAge:  consensusAdmissionMaxAge,
 		now:     time.Now,
 	}
 }
@@ -94,7 +83,7 @@ func newOBFTAdmissionTracker() *obftAdmissionTracker {
 // been seen for this (msgID, slot, op, kind) before OR if the bucket is
 // already at the distinct-content cap. Per-bucket aged entries are evicted
 // on every Admit so the cap reflects only entries within `maxAge`.
-func (t *obftAdmissionTracker) Admit(
+func (t *consensusAdmissionTracker) Admit(
 	msgID spectypes.MessageID,
 	slot phase0.Slot,
 	op spectypes.OperatorID,
@@ -108,7 +97,7 @@ func (t *obftAdmissionTracker) Admit(
 	defer t.mu.Unlock()
 	t.maybeGlobalSweepLocked(now)
 
-	bucket := obftAdmissionBucket{msgID: msgID, slot: slot, op: op, kind: kind}
+	bucket := consensusAdmissionBucket{msgID: msgID, slot: slot, op: op, kind: kind}
 	state := t.buckets[bucket]
 	if state == nil {
 		state = &admissionBucketState{}
@@ -116,7 +105,7 @@ func (t *obftAdmissionTracker) Admit(
 	}
 
 	// Per-bucket eviction: drop entries past maxAge before checking dedup
-	// and cap. Bounded to ≤ obftValidationMaxDistinctPerOpSlot per call.
+	// and cap. Bounded to ≤ consensusValidationMaxDistinctPerOpSlot per call.
 	cutoff := now.Add(-t.maxAge)
 	if len(state.entries) > 0 {
 		filtered := state.entries[:0]
@@ -130,14 +119,14 @@ func (t *obftAdmissionTracker) Admit(
 
 	for _, e := range state.entries {
 		if e.hash == hash {
-			return fmt.Errorf("OBFT envelope: identical content from operator %d at slot %d kind %d (already admitted)",
+			return fmt.Errorf("consensus admission: identical content from operator %d at slot %d kind %d (already admitted)",
 				op, slot, kind)
 		}
 	}
 
-	if len(state.entries) >= obftValidationMaxDistinctPerOpSlot {
-		return fmt.Errorf("OBFT envelope: too many distinct messages from operator %d at slot %d kind %d (cap %d)",
-			op, slot, kind, obftValidationMaxDistinctPerOpSlot)
+	if len(state.entries) >= consensusValidationMaxDistinctPerOpSlot {
+		return fmt.Errorf("consensus admission: too many distinct messages from operator %d at slot %d kind %d (cap %d)",
+			op, slot, kind, consensusValidationMaxDistinctPerOpSlot)
 	}
 
 	state.entries = append(state.entries, admissionEntry{hash: hash, ts: now})
@@ -149,7 +138,7 @@ func (t *obftAdmissionTracker) Admit(
 // traffic this is O(buckets) per ~12 s on mainnet, cheap. Without this,
 // stale empty buckets would never be GC'd (per-bucket Admit eviction
 // keeps entries bounded but doesn't drop the bucket itself).
-func (t *obftAdmissionTracker) maybeGlobalSweepLocked(now time.Time) {
+func (t *consensusAdmissionTracker) maybeGlobalSweepLocked(now time.Time) {
 	if !t.lastGlobalSweep.IsZero() && now.Sub(t.lastGlobalSweep) < t.maxAge/8 {
 		return
 	}

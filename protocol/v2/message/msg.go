@@ -30,6 +30,17 @@ const (
 	// PLACEHOLDER VALUE: 0xF1 (= 241). Same mainnet-allocation caveat as
 	// SSVOBFTMsgType.
 	SSVDKGMsgType spectypes.MsgType = 0xF1
+
+	// SSV2abOBFTMsgType carries 2abOBFT-protocol envelopes (Phase1Bundle /
+	// Value / NoValue / Commit / Certificate, see protocol/v2/obft/twoab/wire)
+	// inside a SignedSSVMessage. Distinct from SSVOBFTMsgType so the network
+	// routes the two consensus variants to their respective dispatch paths;
+	// the inner wire format additionally carries a distinct ProtocolTag, so a
+	// mis-delivered envelope is rejected at decode regardless.
+	//
+	// PLACEHOLDER VALUE: 0xF2 (= 242). Same mainnet-allocation caveat as
+	// SSVOBFTMsgType.
+	SSV2abOBFTMsgType spectypes.MsgType = 0xF2
 )
 
 // RoleDKG is the RunnerRole used in DKG-ceremony MsgIDs. The dutyExecutorID
@@ -55,6 +66,8 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "event"
 	case SSVOBFTMsgType:
 		return "obft"
+	case SSV2abOBFTMsgType:
+		return "2abobft"
 	case SSVDKGMsgType:
 		return "dkg"
 	default:

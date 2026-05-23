@@ -71,9 +71,9 @@ func obftTestSetup(t testing.TB) (
 	validatorStore.EXPECT().Committee(gomock.Any()).Return(nil, false).AnyTimes()
 
 	mv := &messageValidator{
-		netCfg:         networkconfig.TestNetwork,
-		validatorStore: validatorStore,
-		obftAdmissions: newOBFTAdmissionTracker(),
+		netCfg:              networkconfig.TestNetwork,
+		validatorStore:      validatorStore,
+		consensusAdmissions: newConsensusAdmissionTracker(),
 	}
 	msgID := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, share.ValidatorPubKey[:], spectypes.RoleProposer)
 	return mv, ks, share, msgID, obftTestClusterID
@@ -238,11 +238,11 @@ func assertPhase1BundleInvariants(t testing.TB, b *obftcore.Phase1Bundle) {
 	if b.Layer >= wire.MaxLayers {
 		t.Fatalf("Phase1Bundle.Layer = %d >= MaxLayers %d", b.Layer, wire.MaxLayers)
 	}
-	if len(b.Value) > wire.MaxFieldSize {
-		t.Fatalf("Phase1Bundle.Value len %d > MaxFieldSize", len(b.Value))
+	if len(b.Value) > wire.MaxValueSize {
+		t.Fatalf("Phase1Bundle.Value len %d > MaxValueSize", len(b.Value))
 	}
-	if len(b.LeaderSigma) > wire.MaxFieldSize {
-		t.Fatalf("Phase1Bundle.LeaderSigma len %d > MaxFieldSize", len(b.LeaderSigma))
+	if len(b.LeaderSigma) > wire.MaxSignatureSize {
+		t.Fatalf("Phase1Bundle.LeaderSigma len %d > MaxSignatureSize", len(b.LeaderSigma))
 	}
 }
 
@@ -259,28 +259,28 @@ func assertCommitInvariants(t testing.TB, c *obftcore.Commit) {
 		t.Fatalf("Commit.Witnesses len %d > MaxWitnesses", len(c.Witnesses))
 	}
 	for i, el := range c.Layers {
-		if len(el.Value) > wire.MaxFieldSize {
-			t.Fatalf("Commit.Layers[%d].Value len %d > MaxFieldSize", i, len(el.Value))
+		if len(el.Value) > wire.MaxValueSize {
+			t.Fatalf("Commit.Layers[%d].Value len %d > MaxValueSize", i, len(el.Value))
 		}
-		if len(el.Ciphertext) > wire.MaxFieldSize {
-			t.Fatalf("Commit.Layers[%d].Ciphertext len %d > MaxFieldSize", i, len(el.Ciphertext))
+		if len(el.Ciphertext) > wire.MaxCiphertextSize {
+			t.Fatalf("Commit.Layers[%d].Ciphertext len %d > MaxCiphertextSize", i, len(el.Ciphertext))
 		}
 	}
 	for i, p := range c.NRPartials {
 		if p.Layer < 0 || p.Layer >= wire.MaxLayers {
 			t.Fatalf("Commit.NRPartials[%d].Layer %d out of range", i, p.Layer)
 		}
-		if len(p.PartialSig) > wire.MaxFieldSize {
-			t.Fatalf("Commit.NRPartials[%d].PartialSig len %d > MaxFieldSize", i, len(p.PartialSig))
+		if len(p.PartialSig) > wire.MaxSignatureSize {
+			t.Fatalf("Commit.NRPartials[%d].PartialSig len %d > MaxSignatureSize", i, len(p.PartialSig))
 		}
 	}
 	for i, w := range c.Witnesses {
 		if w.Layer < 0 || w.Layer >= wire.MaxLayers {
 			t.Fatalf("Commit.Witnesses[%d].Layer %d out of range", i, w.Layer)
 		}
-		// ValueRoot is fixed 32 bytes — no MaxFieldSize check needed.
-		if len(w.Sigma) > wire.MaxFieldSize {
-			t.Fatalf("Commit.Witnesses[%d].Sigma len %d > MaxFieldSize", i, len(w.Sigma))
+		// ValueRoot is fixed 32 bytes — no size-cap check needed.
+		if len(w.Sigma) > wire.MaxSignatureSize {
+			t.Fatalf("Commit.Witnesses[%d].Sigma len %d > MaxSignatureSize", i, len(w.Sigma))
 		}
 	}
 }
@@ -289,11 +289,11 @@ func assertCommitInvariants(t testing.TB, c *obftcore.Commit) {
 // Certificate.
 func assertCertificateInvariants(t testing.TB, c *obftcore.Certificate) {
 	t.Helper()
-	if len(c.Value) > wire.MaxFieldSize {
-		t.Fatalf("Certificate.Value len %d > MaxFieldSize", len(c.Value))
+	if len(c.Value) > wire.MaxValueSize {
+		t.Fatalf("Certificate.Value len %d > MaxValueSize", len(c.Value))
 	}
-	if len(c.Signature) > wire.MaxFieldSize {
-		t.Fatalf("Certificate.Signature len %d > MaxFieldSize", len(c.Signature))
+	if len(c.Signature) > wire.MaxSignatureSize {
+		t.Fatalf("Certificate.Signature len %d > MaxSignatureSize", len(c.Signature))
 	}
 }
 

@@ -69,12 +69,13 @@ type messageValidator struct {
 	// states keeps track of signers(individual runners, of which every operator has multiple) per validator.
 	states *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 
-	// obftAdmissions enforces the OBFT distinct-content bucket cap at the
-	// validation boundary, BEFORE BLS verification — saving BLS cost on
+	// consensusAdmissions enforces the OBFT-family distinct-content bucket cap
+	// at the validation boundary, BEFORE BLS verification — saving BLS cost on
 	// envelopes that would be rejected by the runner-side rate limiter
-	// downstream anyway. Lazily-allocated entries TTL out per
-	// obftAdmissionMaxAge.
-	obftAdmissions *obftAdmissionTracker
+	// downstream anyway. Shared by both consensus variants (the tracker keys on
+	// an opaque kind byte). Lazily-allocated entries TTL out per
+	// consensusAdmissionMaxAge.
+	consensusAdmissions *consensusAdmissionTracker
 
 	selfPID    peer.ID
 	selfAccept bool
@@ -98,7 +99,7 @@ func New(
 		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
-		obftAdmissions:      newOBFTAdmissionTracker(),
+		consensusAdmissions: newConsensusAdmissionTracker(),
 	}
 
 	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.SlotDuration // #nosec G115 -- amount of slots cannot exceed int64
@@ -236,6 +237,13 @@ func (mv *messageValidator) handleSignedSSVMessage(
 
 	case ssvmessage.SSVOBFTMsgType:
 		envelope, err := mv.validateOBFTMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
+		decodedMessage.Body = envelope
+		if err != nil {
+			return decodedMessage, err
+		}
+
+	case ssvmessage.SSV2abOBFTMsgType:
+		envelope, err := mv.validateTwoabMessage(ctx, signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = envelope
 		if err != nil {
 			return decodedMessage, err

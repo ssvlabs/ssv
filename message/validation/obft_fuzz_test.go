@@ -16,7 +16,7 @@
 //     mutations exercise the full pre-consensus path including admission
 //     side-effects on the messageValidator's tracker state.
 //
-//   - obftAdmissionTracker.Admit: the rate-limit / dedup gate on
+//   - consensusAdmissionTracker.Admit: the rate-limit / dedup gate on
 //     (msgID, slot, op, kind) buckets. Fuzzes (key tuple, body) inputs so
 //     a single tracker sees random traffic and we can assert the bucket
 //     invariants (cap ≤ MaxDistinctPerOpSlot, identical bodies always
@@ -25,14 +25,14 @@
 // What invariants we check:
 //
 //   - No panic, no goroutine leak, no resource exhaustion (Go's fuzz harness
-//     surfaces panics and goroutine leaks; the wire decoder's MaxFieldSize /
-//     MaxLayers / MaxWitnesses caps prevent unbounded allocation).
+//     surfaces panics and goroutine leaks; the wire decoder's per-field size
+//     caps / MaxLayers / MaxWitnesses caps prevent unbounded allocation).
 //   - No infinite loop or quadratic blowup: Go's fuzz harness times out
 //     individual iterations; the wire decoder is single-pass O(n) over
 //     input length.
 //   - Either the decoder/validator returns an error OR returns a structurally
 //     consistent value (Kind matches the populated typed-field; layer/witness
-//     counts within MaxLayers/MaxWitnesses; field lengths within MaxFieldSize).
+//     counts within MaxLayers/MaxWitnesses; field lengths within the per-field size caps).
 //   - The encoder/decoder are inverses: Encode(Decode(x)) == x for any x
 //     that decodes successfully (catches asymmetric corner cases).
 //   - Admission tracker: no panic on any input; identical bodies always
@@ -232,8 +232,8 @@ func FuzzOBFTPhase1BundleRoundtrip(f *testing.F) {
 		if layer < 0 || layer >= wire.MaxLayers {
 			return
 		}
-		// Encoder rejects fields > MaxFieldSize. The fuzzer can synthesize
-		// large inputs — clamp to a sane upper bound to keep iterations fast.
+		// Encoder rejects oversized fields (per-field size caps). The fuzzer can
+		// synthesize large inputs — clamp to a sane upper bound to keep iterations fast.
 		if len(value) > 1<<20 || len(sigV) > 1<<20 {
 			return
 		}
@@ -401,7 +401,7 @@ func FuzzOBFTAdmissionsAdmit(f *testing.F) {
 		if len(body) > 1<<20 {
 			return
 		}
-		tr := newOBFTAdmissionTracker()
+		tr := newConsensusAdmissionTracker()
 		var msgID spectypes.MessageID
 		msgID[0] = msgIDByte
 		s := phase0.Slot(slot)
@@ -421,7 +421,7 @@ func FuzzOBFTAdmissionsAdmit(f *testing.F) {
 		}
 
 		// Bucket invariant: cap is never exceeded.
-		bucket := obftAdmissionBucket{msgID: msgID, slot: s, op: o, kind: kind}
+		bucket := consensusAdmissionBucket{msgID: msgID, slot: s, op: o, kind: kind}
 		tr.mu.Lock()
 		state, ok := tr.buckets[bucket]
 		count := 0
@@ -429,8 +429,8 @@ func FuzzOBFTAdmissionsAdmit(f *testing.F) {
 			count = len(state.entries)
 		}
 		tr.mu.Unlock()
-		if count > obftValidationMaxDistinctPerOpSlot {
-			t.Fatalf("bucket entry count %d exceeds cap %d", count, obftValidationMaxDistinctPerOpSlot)
+		if count > consensusValidationMaxDistinctPerOpSlot {
+			t.Fatalf("bucket entry count %d exceeds cap %d", count, consensusValidationMaxDistinctPerOpSlot)
 		}
 		// First admit succeeded → bucket has exactly one entry.
 		if count != 1 {

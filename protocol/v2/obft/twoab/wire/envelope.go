@@ -26,7 +26,8 @@ type MessageKind byte
 
 const (
 	// KindPhase1Bundle indicates the body is an EncodePhase1Bundle-encoded
-	// *twoab.Phase1Bundle. The bundle does NOT carry a σ_V threshold partial.
+	// *twoab.Phase1Bundle — the layer leader's V paired with its σ partial on
+	// V (the LeaderSigma field), seeding σ-pool[V] from first observation.
 	KindPhase1Bundle MessageKind = 0x01
 	// KindValue indicates the body is an EncodeValueMsg-encoded
 	// *twoab.ValueMsg — Phase-2a coordination envelope, op has V_0 + host

@@ -278,7 +278,7 @@ func TestValidateOBFT_Admissions_BucketCapEnforced(t *testing.T) {
 	// Up to MaxDistinctPerOpSlot distinct emissions are admitted (each
 	// fails BLS-verify downstream — that's a different error than
 	// "too many distinct messages").
-	for k := 0; k < 8; k++ { // matches obftValidationMaxDistinctPerOpSlot
+	for k := 0; k < 8; k++ { // matches consensusValidationMaxDistinctPerOpSlot
 		err := emit(byte(k))
 		require.NotContains(t, fmt.Sprint(err), "too many distinct messages",
 			"emission %d should NOT hit the bucket cap", k)

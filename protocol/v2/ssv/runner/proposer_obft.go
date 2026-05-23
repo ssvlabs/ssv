@@ -95,6 +95,14 @@ func (r *ProposerRunner) ProcessOBFTEnvelopeMsg(ctx context.Context, senderID sp
 	if env == nil {
 		return fmt.Errorf("obft: nil envelope")
 	}
+	// Variant guard: this entry point is reached purely by SSVMessage type
+	// (the validator dispatch doesn't cross-check the runner's variant), so an
+	// OBFT envelope mis-delivered to a 2abOBFT-variant runner would nil-deref
+	// the OBFT machinery. Reject cleanly instead — the runner stays sound even
+	// if the validation layer is bypassed.
+	if r.variant != variantOBFT {
+		return fmt.Errorf("obft: envelope routed to a non-OBFT-variant proposer runner")
+	}
 
 	// Defense-in-depth: enforce that the inner-message claimed signer matches
 	// the outer SSV signer. Without this, a byzantine X could broadcast a

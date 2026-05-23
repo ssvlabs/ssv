@@ -105,8 +105,8 @@ func (mv *messageValidator) validateOBFTMessage(
 	// verify cost is paid. Mirrors the runner-side rate limiter so a
 	// byzantine cannot make us pay BLS for envelopes the runner would
 	// reject downstream anyway.
-	if mv.obftAdmissions != nil {
-		if err := mv.obftAdmissions.Admit(
+	if mv.consensusAdmissions != nil {
+		if err := mv.consensusAdmissions.Admit(
 			signedSSVMessage.SSVMessage.GetID(),
 			envSlot,
 			signer,

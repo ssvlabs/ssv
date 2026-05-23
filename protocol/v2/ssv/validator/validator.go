@@ -21,6 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/observability/traces"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/obft/base/wire"
+	twoabwire "github.com/ssvlabs/ssv/protocol/v2/obft/twoab/wire"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -259,6 +260,31 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		rawData := msg.SignedSSVMessage.SSVMessage.Data
 		if err := proposerRunner.ProcessOBFTEnvelopeMsg(ctx, senderID, envelope, rawData); err != nil {
 			return fmt.Errorf("process OBFT envelope: %w", err)
+		}
+		return nil
+	case message.SSV2abOBFTMsgType:
+		span.AddEvent("process validator message = 2abOBFT envelope")
+
+		envelope, ok := msg.Body.(*twoabwire.Envelope)
+		if !ok || envelope == nil {
+			return fmt.Errorf("could not decode 2abOBFT envelope body, type: %T", msg.Body)
+		}
+
+		// 2abOBFT runs only for the proposer duty today. If the runner for
+		// this MsgID isn't a ProposerRunner, the message was misrouted.
+		proposerRunner, ok := dutyRunner.(*runner.ProposerRunner)
+		if !ok {
+			return fmt.Errorf("2abOBFT envelope routed to non-proposer runner: %T", dutyRunner)
+		}
+
+		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
+			return fmt.Errorf("2abOBFT envelope must have exactly one signer")
+		}
+		senderID := msg.SignedSSVMessage.OperatorIDs[0]
+
+		rawData := msg.SignedSSVMessage.SSVMessage.Data
+		if err := proposerRunner.ProcessTwoabEnvelopeMsg(ctx, senderID, envelope, rawData); err != nil {
+			return fmt.Errorf("process 2abOBFT envelope: %w", err)
 		}
 		return nil
 	default:
