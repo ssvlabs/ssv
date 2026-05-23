@@ -43,8 +43,8 @@ const MaxCommitHashesPerOp = 8
 //
 // Sibling-package note: `protocol/v2/obft/twoab` has the same constant
 // name and value (`MaxRetainedPerOpLayer = 2`) but applies it only to
-// Phase-1 bundle retention — twoab's σ partial moved into
-// `KindValue.L0Partial` (post Op5), so there's no separate σ-onion
+// Phase-1 bundle retention — twoab's σ partial lives in
+// `KindValue.L0Partial`, so there's no separate σ-onion
 // retention to bound. See docs/OBFT-TWOAB-CONVERGENCE-PLAN.md §L5.
 const MaxRetainedPerOpLayer = 2
 
