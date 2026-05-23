@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 )
@@ -134,6 +135,45 @@ func (r *Reader) LengthPrefixed(name string, maxLen int) ([]byte, error) {
 func (r *Reader) RequireEOF(name string) error {
 	if r.Remaining() != 0 {
 		return fmt.Errorf("wire: %s has %d trailing bytes", name, r.Remaining())
+	}
+	return nil
+}
+
+// ExpectByte reads one byte and checks it equals want, returning a `what`-
+// labeled error on mismatch (e.g. what = "phase-1 bundle inner kind").
+func (r *Reader) ExpectByte(want byte, what string) error {
+	got, err := r.Byte(what)
+	if err != nil {
+		return err
+	}
+	if got != want {
+		return fmt.Errorf("wire: %s mismatch: got 0x%02x, want 0x%02x", what, got, want)
+	}
+	return nil
+}
+
+// ExpectBytes reads len(want) bytes and checks they equal want — e.g. a fixed
+// protocol tag — returning a `what`-labeled error on mismatch.
+func (r *Reader) ExpectBytes(want []byte, what string) error {
+	got, err := r.Bytes(len(want), what)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(got, want) {
+		return fmt.Errorf("wire: %s mismatch (got %q, want %q)", what, got, want)
+	}
+	return nil
+}
+
+// ExpectVersion reads the one-byte version prefix and checks it equals want,
+// returning an "unsupported <label> version" error on mismatch.
+func (r *Reader) ExpectVersion(want byte, label string) error {
+	got, err := r.Byte(label + " version")
+	if err != nil {
+		return err
+	}
+	if got != want {
+		return fmt.Errorf("wire: unsupported %s version 0x%02x", label, got)
 	}
 	return nil
 }

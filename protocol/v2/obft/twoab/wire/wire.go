@@ -133,13 +133,13 @@ func EncodePhase1Bundle(b *twoab.Phase1Bundle) ([]byte, error) {
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
 func DecodePhase1Bundle(data []byte) (*twoab.Phase1Bundle, error) {
 	r := sharedwire.NewReader(data)
-	if err := readVersion(r, Phase1BundleVersionV3, "phase-1 bundle"); err != nil {
+	if err := r.ExpectVersion(Phase1BundleVersionV3, "phase-1 bundle"); err != nil {
 		return nil, err
 	}
-	if err := readProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindPhase1Bundle, "phase-1 bundle"); err != nil {
+	if err := r.ExpectByte(innerKindPhase1Bundle, "phase-1 bundle inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -238,13 +238,13 @@ func EncodeValueMsg(v *twoab.ValueMsg) ([]byte, error) {
 // DecodeValueMsg parses bytes produced by EncodeValueMsg.
 func DecodeValueMsg(data []byte) (*twoab.ValueMsg, error) {
 	r := sharedwire.NewReader(data)
-	if err := readVersion(r, ValueMsgVersionV4, "ValueMsg"); err != nil {
+	if err := r.ExpectVersion(ValueMsgVersionV4, "ValueMsg"); err != nil {
 		return nil, err
 	}
-	if err := readProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindValueMsg, "ValueMsg"); err != nil {
+	if err := r.ExpectByte(innerKindValueMsg, "ValueMsg inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -329,13 +329,13 @@ func EncodeNoValueMsg(nv *twoab.NoValueMsg) ([]byte, error) {
 // DecodeNoValueMsg parses bytes produced by EncodeNoValueMsg.
 func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
 	r := sharedwire.NewReader(data)
-	if err := readVersion(r, NoValueMsgVersionV1, "NoValueMsg"); err != nil {
+	if err := r.ExpectVersion(NoValueMsgVersionV1, "NoValueMsg"); err != nil {
 		return nil, err
 	}
-	if err := readProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindNoValueMsg, "NoValueMsg"); err != nil {
+	if err := r.ExpectByte(innerKindNoValueMsg, "NoValueMsg inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -412,13 +412,13 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 // DecodeCommit parses bytes produced by EncodeCommit.
 func DecodeCommit(data []byte) (*twoab.Commit, error) {
 	r := sharedwire.NewReader(data)
-	if err := readVersion(r, CommitVersionV2, "Commit"); err != nil {
+	if err := r.ExpectVersion(CommitVersionV2, "Commit"); err != nil {
 		return nil, err
 	}
-	if err := readProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindCommit, "Commit"); err != nil {
+	if err := r.ExpectByte(innerKindCommit, "Commit inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -511,13 +511,13 @@ func EncodeCertificate(c *twoab.Certificate) ([]byte, error) {
 // DecodeCertificate parses bytes produced by EncodeCertificate.
 func DecodeCertificate(data []byte) (*twoab.Certificate, error) {
 	r := sharedwire.NewReader(data)
-	if err := readVersion(r, CertificateVersionV1, "certificate"); err != nil {
+	if err := r.ExpectVersion(CertificateVersionV1, "certificate"); err != nil {
 		return nil, err
 	}
-	if err := readProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := readInnerKind(r, innerKindCertificate, "certificate"); err != nil {
+	if err := r.ExpectByte(innerKindCertificate, "certificate inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -703,40 +703,4 @@ func decodeLayerWitnesses(r *sharedwire.Reader, kindLabel string) ([]twoab.Layer
 		}
 	}
 	return ws, nil
-}
-
-// ---------- Helpers ----------
-
-func readVersion(r *sharedwire.Reader, expected byte, field string) error {
-	v, err := r.Byte(field + " version")
-	if err != nil {
-		return err
-	}
-	if v != expected {
-		return fmt.Errorf("wire: %s version 0x%02x not supported (expected 0x%02x)", field, v, expected)
-	}
-	return nil
-}
-
-func readProtocolTag(r *sharedwire.Reader) error {
-	var tag [16]byte
-	if err := r.FixedBytes(tag[:], "protocol_tag"); err != nil {
-		return err
-	}
-	if tag != ProtocolTag {
-		return fmt.Errorf("wire: protocol_tag mismatch (got %q, want %q)",
-			string(tag[:]), string(ProtocolTag[:]))
-	}
-	return nil
-}
-
-func readInnerKind(r *sharedwire.Reader, expected byte, field string) error {
-	k, err := r.Byte(field + " inner kind")
-	if err != nil {
-		return err
-	}
-	if k != expected {
-		return fmt.Errorf("wire: %s inner kind 0x%02x mismatch (expected 0x%02x)", field, k, expected)
-	}
-	return nil
 }

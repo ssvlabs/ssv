@@ -114,17 +114,13 @@ func EncodePhase1Bundle(b *base.Phase1Bundle) ([]byte, error) {
 // DecodePhase1Bundle parses bytes produced by EncodePhase1Bundle.
 func DecodePhase1Bundle(data []byte) (*base.Phase1Bundle, error) {
 	r := sharedwire.NewReader(data)
-	version, err := r.Byte("version")
-	if err != nil {
+	if err := r.ExpectVersion(Phase1BundleVersionV1, "phase-1 bundle"); err != nil {
 		return nil, err
 	}
-	if version != Phase1BundleVersionV1 {
-		return nil, fmt.Errorf("wire: unsupported phase-1 bundle version 0x%02x", version)
-	}
-	if err := expectProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := expectInnerKind(r, innerKindPhase1Bundle, "phase-1 bundle"); err != nil {
+	if err := r.ExpectByte(innerKindPhase1Bundle, "phase-1 bundle inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -282,17 +278,13 @@ func EncodeCommit(c *base.Commit) ([]byte, error) {
 // DecodeCommit parses bytes produced by EncodeCommit.
 func DecodeCommit(data []byte) (*base.Commit, error) {
 	r := sharedwire.NewReader(data)
-	version, err := r.Byte("version")
-	if err != nil {
+	if err := r.ExpectVersion(CommitVersionV1, "commit"); err != nil {
 		return nil, err
 	}
-	if version != CommitVersionV1 {
-		return nil, fmt.Errorf("wire: unsupported commit version 0x%02x", version)
-	}
-	if err := expectProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := expectInnerKind(r, innerKindCommit, "commit"); err != nil {
+	if err := r.ExpectByte(innerKindCommit, "commit inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -443,17 +435,13 @@ func EncodeCertificate(c *base.Certificate) ([]byte, error) {
 // DecodeCertificate parses bytes produced by EncodeCertificate.
 func DecodeCertificate(data []byte) (*base.Certificate, error) {
 	r := sharedwire.NewReader(data)
-	version, err := r.Byte("version")
-	if err != nil {
+	if err := r.ExpectVersion(CertificateVersionV1, "certificate"); err != nil {
 		return nil, err
 	}
-	if version != CertificateVersionV1 {
-		return nil, fmt.Errorf("wire: unsupported certificate version 0x%02x", version)
-	}
-	if err := expectProtocolTag(r); err != nil {
+	if err := r.ExpectBytes(ProtocolTag[:], "protocol tag"); err != nil {
 		return nil, err
 	}
-	if err := expectInnerKind(r, innerKindCertificate, "certificate"); err != nil {
+	if err := r.ExpectByte(innerKindCertificate, "certificate inner kind"); err != nil {
 		return nil, err
 	}
 	var clusterID [32]byte
@@ -481,32 +469,4 @@ func DecodeCertificate(data []byte) (*base.Certificate, error) {
 		Value:     base.Value(value),
 		Signature: base.Signature(sig),
 	}, nil
-}
-
-// ---- domain header readers ----------------------------------------------
-
-// expectProtocolTag reads the 8-byte tag and checks it matches ProtocolTag.
-func expectProtocolTag(r *sharedwire.Reader) error {
-	tag, err := r.Bytes(8, "protocol tag")
-	if err != nil {
-		return err
-	}
-	for i, b := range ProtocolTag {
-		if tag[i] != b {
-			return fmt.Errorf("wire: protocol tag mismatch (got %q, want %q)", tag, ProtocolTag[:])
-		}
-	}
-	return nil
-}
-
-// expectInnerKind reads 1 byte and checks it equals `want`.
-func expectInnerKind(r *sharedwire.Reader, want byte, label string) error {
-	got, err := r.Byte("inner kind for " + label)
-	if err != nil {
-		return err
-	}
-	if got != want {
-		return fmt.Errorf("wire: %s inner kind 0x%02x != expected 0x%02x", label, got, want)
-	}
-	return nil
 }
