@@ -26,20 +26,23 @@
 // "x<n>" multiplier variants share the family hue but with a noticeably
 // lighter / desaturated tint that gets paler as the multiplier grows,
 // so x2 reads as "slightly looser sibling of canonical" and x3 reads
-// as "even looser". OBFT-RD0 uses a DARKER OBFT-hue tint (the
-// no-RefloodDelay variant is structurally tighter than canonical OBFT,
-// not looser).
+// as "even looser". The "-no-reflood" variants use a DARKER family-hue
+// tint (no RefloodDelay / no cushion is structurally tighter than the
+// canonical reflood-aware protocol, not looser).
 const PROTOCOL_COLORS = {
-  'OBFT-RD0':   '#c05621', // dark orange — tighter (no-RefloodDelay) OBFT
-  OBFT:         '#ed8936', // light orange
-  OBFTx2:       '#f6ad55', // paler orange — looser OBFT (×2)
-  OBFTx3:       '#fbd38d', // very pale orange — much-looser OBFT (×3)
-  '2abOBFT':    '#06b6d4', // cyan
-  '2abOBFTx2':  '#67e8f9', // paler cyan — looser 2abOBFT (×2)
-  '2abOBFTx3':  '#a5f3fc', // very pale cyan — much-looser 2abOBFT (×3)
-  QBFT:         '#e85a71', // light pink-red (computed-RT variant)
-  'QBFT-SSV':   '#8b5cf6', // purple (production-RT variant)
-  PSigs:        '#10b981', // green (baseline partial-sig-only reference)
+  'OBFT-no-reflood': '#c05621', // dark orange — tighter (no-RefloodDelay) OBFT
+  OBFT:              '#ed8936', // light orange
+  OBFTx2:            '#f6ad55', // paler orange — looser OBFT (×2)
+  OBFTx3:            '#fbd38d', // very pale orange — much-looser OBFT (×3)
+  '2abOBFT-no-reflood': '#0e7490', // dark cyan — tighter (no-cushion) 2abOBFT floor
+  '2abOBFT-lean':    '#0891b2', // medium cyan — intermediate cushion (SB=300ms)
+  '2abOBFT':         '#06b6d4', // cyan
+  '2abOBFTx2':       '#67e8f9', // paler cyan — looser 2abOBFT (×2)
+  '2abOBFTx3':       '#a5f3fc', // very pale cyan — much-looser 2abOBFT (×3)
+  'QBFT-no-reflood': '#b4324b', // dark pink-red — tighter (no-cushion) QBFT floor
+  QBFT:              '#e85a71', // light pink-red (reflood-aware default)
+  'QBFT-SSV':        '#8b5cf6', // purple (production-RT variant)
+  PSigs:             '#10b981', // green (baseline partial-sig-only reference)
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
@@ -143,7 +146,7 @@ const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
 const LS_KEY_BTT = 'stresstest-selected-btt';
 
 function loadActiveProtocols(allProtocols) {
-  const DEFAULT_ACTIVE = new Set(['OBFT-RD0', 'OBFT', '2abOBFT', 'QBFT', 'QBFT-SSV', 'PSigs']);
+  const DEFAULT_ACTIVE = new Set(['OBFT-no-reflood', 'OBFT', '2abOBFT-no-reflood', '2abOBFT', 'QBFT-no-reflood', 'QBFT', 'QBFT-SSV', 'PSigs']);
   const stored = localStorage.getItem(LS_KEY_PROTOCOLS);
   if (stored) {
     try {
@@ -2024,12 +2027,12 @@ function protocolColor(name) {
 //   ["OBFT","OBFTx2","OBFTx3","2abOBFT","QBFT"]
 // Family identity is the canonical name minus an optional "x<n>"
 // (numeric multiplier suffix like OBFTx2) or "-<suffix>" (variant
-// flavor like QBFT-SSV / OBFT-RD0). Family order in the output is
+// flavor like QBFT-SSV / OBFT-no-reflood). Family order in the output is
 // first-occurrence in the input; within each family, variants appear
 // in input order.
 //
 // Trusting Go-side registration order matters: variant placement
-// communicates intent. E.g. OBFT-RD0 is registered before bare OBFT
+// communicates intent. E.g. OBFT-no-reflood is registered before bare OBFT
 // in stress_test.go so the report shows the no-cushion variant
 // immediately above the with-cushion baseline. A within-family
 // re-sort here would silently override that intent — so we don't.

@@ -109,8 +109,8 @@ func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
 // name. Strips the two suffix conventions the framework uses:
 //   - "xN" multiplier suffix (e.g. "OBFTx2" → "OBFT") where N is one or
 //     more trailing digits preceded by 'x'
-//   - "-suffix" variant flavor (e.g. "QBFT-SSV" → "QBFT", "2abOBFT-tight"
-//     → "2abOBFT", "2abOBFT-lean" → "2abOBFT")
+//   - "-suffix" variant flavor (e.g. "QBFT-SSV" → "QBFT", "2abOBFT-lean"
+//     → "2abOBFT", "2abOBFT-no-reflood" → "2abOBFT")
 //
 // Returns the input unchanged when neither suffix is present.
 func variantBase(name string) string {

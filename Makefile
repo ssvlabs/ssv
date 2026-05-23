@@ -220,7 +220,7 @@ BFT_STARTS ?=
 # `make stresstest PROTOCOLS=OBFT,2abOBFT,QBFT,PSigs`) or run the full set
 # with `PROTOCOLS=`. Names must exactly match Protocol.Name() values
 # defined in stress_test.go.
-PROTOCOLS ?= OBFT,OBFT-RD0,2abOBFT,2abOBFT-tight,2abOBFT-lean,QBFT,QBFT-SSV
+PROTOCOLS ?= OBFT-no-reflood,OBFT,2abOBFT-no-reflood,2abOBFT-lean,2abOBFT,QBFT-no-reflood,QBFT,QBFT-SSV
 .PHONY: stresstest
 stresstest:
 	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) BFT_STARTS=$(if $(BFT_STARTS),$(BFT_STARTS),<default>) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"

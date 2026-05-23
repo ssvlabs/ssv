@@ -23,7 +23,7 @@ import (
 // TestStress is the stress-tier entry point per the catalog-split plan.
 // It runs DefaultSweeps over every catalog scenario opted into
 // ModeStress for the registered protocol families (OBFT family incl.
-// OBFT-no-reflood / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFT-tight / 2abOBFT-lean,
+// OBFT-no-reflood / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFT-no-reflood / 2abOBFT-lean,
 // QBFT family incl. QBFT-no-reflood / QBFT-SSV, and PSigs) and writes a `data.js` file
 // consumed by the static UI in `stresstest-report/` (index.html + app.js
 // + styles.css, all tracked in git). Refreshing index.html in a browser
@@ -300,6 +300,8 @@ func TestStress(t *testing.T) {
 	//     QBFT-no-reflood (the no-cushion structural floor, R1 = 3·BTT,
 	//     R≥2 = 4·BTT), and QBFT-SSV (production fixed 2s RT).
 	protocols := []ct.Protocol{
+		// Within each family, variants are listed least-safe → most-safe (least
+		// mesh-tail cushion → most), so the report reads floor → production.
 		// OBFT-no-reflood is the canonical OBFT with RefloodDelay forced to 0 —
 		// models the "fully-meshed cluster, eager push reliable" assumption
 		// (OBFT.md §Setting `RefloodDelay=0` path). Listed before bare OBFT
@@ -313,14 +315,14 @@ func TestStress(t *testing.T) {
 		obftadapter.Protocol{},
 		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
 		obftadapter.Protocol{VariantName: "OBFTx3", BTTMultiplier: 3},
-		twoabadapter.Protocol{},
-		// 2abOBFT-tight / 2abOBFT-lean exercise the SafetyBuffer knob
-		// specific to 2abOBFT (the protocol-level mesh-tolerance
-		// configurable; default is cfg.RefloodDelay). Lower SafetyBuffer
-		// reclaims MEV-fetch headroom at the cost of mesh-tail tolerance
-		// — useful for stresstest variants that probe the tightness band
-		// where the protocol commits to slot-miss rather than waiting
-		// for IHAVE/IWANT recovery.
+		// 2abOBFT-no-reflood / 2abOBFT-lean exercise the SafetyBuffer knob
+		// specific to 2abOBFT (its protocol-level mesh-tolerance configurable;
+		// default = cfg.RefloodDelay, so bare 2abOBFT is reflood-aware).
+		// 2abOBFT-no-reflood sets SafetyBuffer = 0 — the no-cushion structural
+		// floor (the resolve window degenerates to its 2·BTT minimum), the
+		// 2abOBFT peer of OBFT-no-reflood / QBFT-no-reflood. 2abOBFT-lean
+		// (SB=300ms) is an intermediate point that reclaims MEV-fetch headroom
+		// at the cost of mesh-tail tolerance.
 		//
 		// Note: the resolve window is max(1·BTT + SafetyBuffer,
 		// 2·BTT), so a variant's SafetyBuffer only bites ABOVE the 1·BTT
@@ -329,10 +331,11 @@ func TestStress(t *testing.T) {
 		// the band is distinct at the canonical BTT=200ms. Absolute ms
 		// (HeartbeatInterval-tied), not BTT multiples — intentional. See
 		// docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
-		twoabadapter.Protocol{VariantName: "2abOBFT-tight", SafetyBufferOverride: durPtr(500 * time.Millisecond)},
+		twoabadapter.Protocol{VariantName: "2abOBFT-no-reflood", SafetyBufferOverride: durPtr(0)},
 		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
-		qbftadapter.QBFT{},
+		twoabadapter.Protocol{},
 		qbftadapter.QBFTNoReflood{},
+		qbftadapter.QBFT{},
 		qbftadapter.QBFTSSV{},
 		// PSigs is a baseline-cost reference: every honest op signs the
 		// pre-agreed V at BFTStart and broadcasts; the cluster decides at
