@@ -260,10 +260,10 @@ func TestEncodePhase1Bundle_RejectsOverlongValue(t *testing.T) {
 	require.ErrorContains(t, err, "too long")
 }
 
-// TestEncodePhase1Bundle_RejectsOverlongSigmaV confirms the encoder rejects a
-// LeaderSigma larger than MaxSignatureSize (signatures are tighter-capped than
-// values).
-func TestEncodePhase1Bundle_RejectsOverlongSigmaV(t *testing.T) {
+// TestEncodePhase1Bundle_RejectsOverlongLeaderSigma confirms the encoder
+// rejects a LeaderSigma larger than MaxSignatureSize (signatures are
+// tighter-capped than values).
+func TestEncodePhase1Bundle_RejectsOverlongLeaderSigma(t *testing.T) {
 	b := &base.Phase1Bundle{
 		OperatorID: 1, Height: 1, Layer: 0,
 		Value:       []byte("V"),

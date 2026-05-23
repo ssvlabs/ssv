@@ -249,3 +249,105 @@ func TestUnwrap_UnknownKindRejected(t *testing.T) {
 	_, err := Unwrap(bogus)
 	require.Error(t, err)
 }
+
+// ---- per-field length caps (MaxValueSize / MaxSignatureSize / MaxCiphertextSize) ----
+//
+// These guard the Phase-4 cap reconciliation: twoab's encoders previously
+// applied a single coarse 16 MiB MaxFieldSize to every field, now replaced by
+// the tight per-field caps shared with base/wire (obft.MaxValueSize /
+// MaxSignatureSize / MaxCiphertextSize). Each encoder must reject a field that
+// exceeds its own cap before serializing — the allocation-bound a malformed
+// peer can exercise. Every cap site is exercised once (the LayerEntries /
+// Witnesses sites are shared preflight helpers, covered here via ValueMsg).
+
+func TestEncodePhase1Bundle_RejectsOverlongValue(t *testing.T) {
+	b := &twoab.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value:       make(twoab.Value, MaxValueSize+1),
+		LeaderSigma: twoab.Signature("s"),
+	}
+	_, err := EncodePhase1Bundle(b)
+	require.ErrorContains(t, err, "too long")
+}
+
+func TestEncodePhase1Bundle_RejectsOverlongLeaderSigma(t *testing.T) {
+	b := &twoab.Phase1Bundle{
+		OperatorID: 1, Height: 1, Layer: 0,
+		Value:       twoab.Value("V"),
+		LeaderSigma: make(twoab.Signature, MaxSignatureSize+1),
+	}
+	_, err := EncodePhase1Bundle(b)
+	require.ErrorContains(t, err, "too long")
+}
+
+// TestEncodeValueMsg_RejectsOverlongFields covers every capped ValueMsg field,
+// including the shared preflightLayerWitnesses / preflightLayerEntries helpers
+// (V→MaxValueSize, signatures→MaxSignatureSize, payload→MaxCiphertextSize).
+func TestEncodeValueMsg_RejectsOverlongFields(t *testing.T) {
+	t.Run("V", func(t *testing.T) {
+		vm := &twoab.ValueMsg{OperatorID: 1, Height: 1, V: make(twoab.Value, MaxValueSize+1)}
+		_, err := EncodeValueMsg(vm)
+		require.ErrorContains(t, err, "too long")
+	})
+	t.Run("L0Partial", func(t *testing.T) {
+		vm := &twoab.ValueMsg{
+			OperatorID: 1, Height: 1, V: twoab.Value("V"),
+			L0Partial: make(twoab.Signature, MaxSignatureSize+1),
+		}
+		_, err := EncodeValueMsg(vm)
+		require.ErrorContains(t, err, "too long")
+	})
+	t.Run("witness", func(t *testing.T) {
+		vm := &twoab.ValueMsg{
+			OperatorID: 1, Height: 1, V: twoab.Value("V"),
+			Witnesses: []twoab.LayerWitness{{Layer: 0, Witness: make(twoab.Signature, MaxSignatureSize+1)}},
+		}
+		_, err := EncodeValueMsg(vm)
+		require.ErrorContains(t, err, "too long")
+	})
+	t.Run("layerEntry V", func(t *testing.T) {
+		vm := &twoab.ValueMsg{
+			OperatorID: 1, Height: 1, V: twoab.Value("V"),
+			LayerEntries: []twoab.LayerEntry{{Layer: 1, Kind: twoab.LayerEntrySigmaChained, V: make(twoab.Value, MaxValueSize+1)}},
+		}
+		_, err := EncodeValueMsg(vm)
+		require.ErrorContains(t, err, "too long")
+	})
+	t.Run("layerEntry payload", func(t *testing.T) {
+		vm := &twoab.ValueMsg{
+			OperatorID: 1, Height: 1, V: twoab.Value("V"),
+			LayerEntries: []twoab.LayerEntry{{Layer: 1, Kind: twoab.LayerEntrySigmaChained, Payload: make([]byte, MaxCiphertextSize+1)}},
+		}
+		_, err := EncodeValueMsg(vm)
+		require.ErrorContains(t, err, "too long")
+	})
+}
+
+func TestEncodeCommit_RejectsOverlongL0Partial(t *testing.T) {
+	c := &twoab.Commit{
+		OperatorID: 1, Height: 1,
+		Side:      twoab.CommitSideNR,
+		L0Partial: make(twoab.Signature, MaxSignatureSize+1),
+	}
+	_, err := EncodeCommit(c)
+	require.ErrorContains(t, err, "too long")
+}
+
+func TestEncodeCertificate_RejectsOverlongFields(t *testing.T) {
+	t.Run("value", func(t *testing.T) {
+		c := &twoab.Certificate{
+			Height: 1,
+			Value:  make(twoab.Value, MaxValueSize+1), Signature: twoab.Signature("s"),
+		}
+		_, err := EncodeCertificate(c)
+		require.ErrorContains(t, err, "too long")
+	})
+	t.Run("signature", func(t *testing.T) {
+		c := &twoab.Certificate{
+			Height: 1,
+			Value:  twoab.Value("V"), Signature: make(twoab.Signature, MaxSignatureSize+1),
+		}
+		_, err := EncodeCertificate(c)
+		require.ErrorContains(t, err, "too long")
+	})
+}
