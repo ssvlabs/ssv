@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Worked-cases catalog per docs/2abOBFT-REDESIGN-PLAN.md §Liveness worked
-// cases. Each scenario corresponds to a row in the worked-cases table —
-// see the plan for the full state-transition narrative.
+// Worked-cases catalog per docs/2abOBFT.md §Liveness (synchrony-conditional).
+// Each scenario corresponds to a row in the worked-cases table — see the
+// spec's Liveness section for the full state-transition narrative.
 
 // Healthy h_V=4: all 4 ops retain V_0, all host-valid. L_0 σ-quorum.
 func TestScenario_HealthyL0Success(t *testing.T) {

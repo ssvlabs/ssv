@@ -1071,7 +1071,6 @@ func cloneNoValueMsg(nv *twoab.NoValueMsg) *twoab.NoValueMsg {
 
 func cloneCommit(c *twoab.Commit) *twoab.Commit {
 	cp := *c
-	cp.L0Value = append(twoab.Value(nil), c.L0Value...)
 	cp.L0Partial = append(twoab.Signature(nil), c.L0Partial...)
 	cp.LayerEntries = cloneLayerEntries(c.LayerEntries)
 	return &cp

@@ -224,7 +224,7 @@ func (s *sim) start() error {
 	// This must stay consistent with adapter.go's resolveBudget (which
 	// derives TPhase2a from the same window); both use the max-form so
 	// resolveDeadline reconstructs to exactly maxDeadline below. See
-	// adapter.go Run() + docs/2abOBFT-REDESIGN-PLAN.md §Op6 corollary.
+	// adapter.go Run() + docs/2abOBFT.md §Timing parameters (resolve window max-form).
 	s.resolveDeadline = s.cfg.TPhase2a + s.cfg.BTT + max(s.cfg.SafetyBuffer, s.cfg.BTT) + s.cfg.Epsilon3
 	// Clamp to before the runner-level deadline so the resolve still
 	// has time to broadcast a cert and have it land before

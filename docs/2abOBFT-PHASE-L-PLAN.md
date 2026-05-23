@@ -2,7 +2,7 @@
 
 Plan-doc for Phase L of [2abOBFT-IMPL-PLAN.md](2abOBFT-IMPL-PLAN.md): drive `twoab.Instance` from the SSV runner layer, parallel to the existing bare OBFT runner integration. After Phase L, a 4-operator cluster can run a full proposer-duty slot through 2abOBFT end-to-end via the SSV runner harness and produce a certificate.
 
-> **Note**: this plan was originally written against the v1 2abOBFT protocol (Verdict / Onion2b / 5-row convergence). The current `twoab` implementation is the v4 redesign per [docs/2abOBFT-REDESIGN-PLAN.md](2abOBFT-REDESIGN-PLAN.md): `KindValue` / `KindNoValue` / `KindCommit` wire, dynamic Phase 2b with three triggers, no `T_commit` hard wall. This document has been updated to match the v4 API surface; the legacy spec doc [docs/2abOBFT.md](2abOBFT.md) is still v1 (rewrite pending).
+> **Note**: this plan was originally written against the v1 2abOBFT protocol (Verdict / Onion2b / 5-row convergence). The current `twoab` implementation is the v4 leader-witness design now specified in [docs/2abOBFT.md](2abOBFT.md): `KindValue` / `KindNoValue` / `KindCommit` wire, dynamic Phase 2b with three triggers, no `T_commit` hard wall. This document has been updated to match the v4 API surface; [docs/2abOBFT.md](2abOBFT.md) is the canonical spec (the earlier `2abOBFT-REDESIGN-PLAN.md` it was folded from has been removed).
 
 ## Goal
 

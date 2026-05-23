@@ -249,14 +249,6 @@ func TestValidateCommit_RejectsUnspecifiedSide(t *testing.T) {
 	require.Error(t, ValidateCommit(c, cfg))
 }
 
-func TestValidateCommit_RejectsAnyL0Value(t *testing.T) {
-	cfg := healthyConfig()
-	// Post Op5: L0Value is unused on all valid Commit sides. Reject
-	// non-empty L0Value to catch stragglers from pre-Op5 wire shapes.
-	c := &Commit{ClusterID: cfg.ClusterID, OperatorID: 1, Height: cfg.Height, Side: CommitSideNR, L0Value: Value("V0"), L0Partial: Signature("p")}
-	require.Error(t, ValidateCommit(c, cfg))
-}
-
 func TestValidateCertificate_AcceptsHealthy(t *testing.T) {
 	cfg := healthyConfig()
 	c := &Certificate{ClusterID: cfg.ClusterID, Height: cfg.Height, Value: Value("V0"), Signature: Signature("sig")}

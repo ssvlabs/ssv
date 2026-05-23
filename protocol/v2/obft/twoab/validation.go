@@ -171,9 +171,9 @@ func ValidateNoValueMsg(nv *NoValueMsg, cfg *Config) error {
 // only — the σ-side terminal emission moved into KindValue.
 //
 // Per spec §Wire format:
-//   - Side=NR: L0Value empty + L0Partial non-empty + LayerEntries empty.
-//   - Side=NRDirect: L0Value empty + L0Partial non-empty + LayerEntries
-//     present (K-1 entries; same structural rules as Phase-2a emissions).
+//   - Side=NR: L0Partial non-empty + LayerEntries empty.
+//   - Side=NRDirect: L0Partial non-empty + LayerEntries present (K-1
+//     entries; same structural rules as Phase-2a emissions).
 //
 // The historical Side=Signed value (0x01) is now invalid and rejected
 // here — surfaces wire-version drift between cluster members loudly
@@ -198,12 +198,6 @@ func ValidateCommit(c *Commit, cfg *Config) error {
 	}
 	if len(c.L0Partial) == 0 {
 		return errors.New("twoab: Commit has empty L0Partial")
-	}
-	// Post Op5: L0Value is unused (was for Side=Signed which no longer
-	// exists). Reject non-empty L0Value on any Commit side to catch
-	// stragglers from the pre-Op5 wire format.
-	if len(c.L0Value) != 0 {
-		return errors.New("twoab: Commit has non-empty L0Value (post Op5 the σ-side moved into KindValue.L0Partial; Commit is NR-side only)")
 	}
 	switch c.Side {
 	case CommitSideNR:

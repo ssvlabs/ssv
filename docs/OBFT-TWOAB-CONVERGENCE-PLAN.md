@@ -1,6 +1,6 @@
 # OBFT ↔ 2abOBFT Convergence Plan
 
-Status: draft, 2026-05-22.
+Status: applied, 2026-05-23 (phases 1–4 landed across the convergence commits; the deferred architectural questions E1–E4 remain future work).
 Author: derived from systematic audit of `protocol/v2/obft/base` vs `protocol/v2/obft/twoab` after three review-rounds surfacing 22 findings.
 
 ## Executive summary
@@ -156,7 +156,7 @@ These base patterns are stronger defenses and should be added to twoab.
 
 **base/instance.go:43** defines `MaxRetainedPerOpLayer = 2`. **twoab/phase1.go:223** inlines `if len(retained) >= 2`.
 
-**Rationale to adopt in twoab**: named-constant discipline. The cap is a spec-level invariant (per `docs/2abOBFT-REDESIGN-PLAN.md §Phase 1 Retention bounds`), and inlining it scatters the policy. A const declaration centralizes the invariant.
+**Rationale to adopt in twoab**: named-constant discipline. The cap is a spec-level invariant (per [2abOBFT.md §Phase 1](2abOBFT.md#phase-1--candidate-broadcast) Retention bounds), and inlining it scatters the policy. A const declaration centralizes the invariant.
 
 **Action**: add `MaxRetainedPerOpLayer = 2` in `twoab/instance.go`. Reference it at the one inline site in `twoab/phase1.go`.
 

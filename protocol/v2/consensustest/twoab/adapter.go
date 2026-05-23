@@ -146,7 +146,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// MEV-fetch headroom by shifting TPhase2a later, while still covering
 	// both worst-case paths. resolveDeadline's wall-clock is unchanged
 	// (still clamps to RelayCutoff − HeaderSubmit − phase3JitterBuffer).
-	// See docs/2abOBFT-REDESIGN-PLAN.md §Op6 corollary for the full
+	// See docs/2abOBFT.md §Timing parameters (resolve window max-form) for the full
 	// safety/liveness case-walk. At SafetyBuffer=0 the max degenerates
 	// to 2·BTT (identical to the old sum) — eager-push configs unaffected.
 	btt := cfg.BTT

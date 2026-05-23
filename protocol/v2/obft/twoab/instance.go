@@ -60,7 +60,7 @@ import (
 
 // MaxRetainedPerOpLayer caps the number of distinct Phase-1 bundles (by
 // value_root) retained per (layer, leader) tuple. Per spec
-// §docs/2abOBFT-REDESIGN-PLAN.md §Phase 1 Retention bounds: a third
+// docs/2abOBFT.md §Phase 1 (Retention bounds): a third
 // distinct V from the same leader is silently dropped — the first two
 // already establish equivocation evidence (Rule 2) and the third adds
 // no protocol-level information beyond what's already on the wire.
@@ -497,7 +497,7 @@ func (i *Instance) L0ReadyCh() <-chan struct{} { return i.l0ReadyCh }
 // deliberate divergence from base's l0DecisionReady (which fires on any
 // host verdict) — twoab's KindNoValue is coordination, not commitment.
 //
-// Accepted trade-off (B1, see docs/2abOBFT-REDESIGN-PLAN.md §Op6): firing
+// Accepted trade-off (see docs/2abOBFT.md §Phase 2a, Async fire on L0Ready): firing
 // on the first retained V σ-locks before a second equivocating V can
 // arrive. Under jittery delivery this changes the Equivocate_AllNR
 // outcome from "always fall through to L_1" to "mostly decide fast at

@@ -329,7 +329,7 @@ func TestStress(t *testing.T) {
 		// no-SafetyBuffer floor at BTT ≥ 300ms (at BTT=400 it equals SB=0);
 		// the band is distinct at the canonical BTT=200ms. Absolute ms
 		// (HeartbeatInterval-tied), not BTT multiples — intentional. See
-		// docs/2abOBFT-REDESIGN-PLAN.md §SafetyBuffer's role post-Op5/Op6.
+		// docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
 		twoabadapter.Protocol{VariantName: "2abOBFT-tight", SafetyBufferOverride: durPtr(500 * time.Millisecond)},
 		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
 		qbftadapter.Protocol{},

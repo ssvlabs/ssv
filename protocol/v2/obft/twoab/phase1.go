@@ -188,8 +188,8 @@ func (i *Instance) ObservePhase1Bundle(b *Phase1Bundle, observedOffset time.Dura
 //     path — an emitter's forwarded witness can't be cryptographically
 //     attributed to the leader (the envelope binds it to the forwarder),
 //     so the framing-the-leader attack would otherwise be open. See
-//     [`docs/2abOBFT-REDESIGN-PLAN.md`](../../../../docs/2abOBFT-REDESIGN-PLAN.md)
-//     §Op11 for the full attribution analysis. (Until Op12 the harvest
+//     [`docs/2abOBFT.md`](../../../../docs/2abOBFT.md)
+//     §Slashing evidence (Rule 5) for the full attribution analysis. (Until Op12 the harvest
 //     path only synthesizes L_0 bundles, so witnessPreVerified=true is
 //     L_0-only in practice; the code below is already layer-general.)
 //

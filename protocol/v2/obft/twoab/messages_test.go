@@ -83,9 +83,9 @@ func TestCommitContentHash_DistinguishesBySide(t *testing.T) {
 }
 
 func TestCommitContentHash_DistinguishesByL0Partial(t *testing.T) {
-	// Post Op5: L0Value is unused on all commits. Distinct commits
-	// differ on L0Partial bytes (e.g., distinct NR partials from same op
-	// across re-broadcast — content-hash must capture this for dedup).
+	// Distinct commits differ on L0Partial bytes (e.g., distinct NR
+	// partials from the same op across re-broadcast — content-hash must
+	// capture this for dedup).
 	cA := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("pA")}
 	cB := &Commit{ClusterID: [32]byte{1}, OperatorID: 1, Height: 1, Side: CommitSideNR, L0Partial: Signature("pB")}
 	require.NotEqual(t, commitContentHash(cA), commitContentHash(cB))

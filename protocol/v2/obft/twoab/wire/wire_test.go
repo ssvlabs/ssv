@@ -163,7 +163,6 @@ func TestCommit_NREncodeDecodeRoundTrip(t *testing.T) {
 	decoded, err := DecodeCommit(encoded)
 	require.NoError(t, err)
 	require.Equal(t, twoab.CommitSideNR, decoded.Side)
-	require.Empty(t, decoded.L0Value)
 	require.Equal(t, c.L0Partial, decoded.L0Partial)
 	require.Empty(t, decoded.LayerEntries)
 }
@@ -174,14 +173,13 @@ func TestCommit_NREncodeDecodeRoundTrip(t *testing.T) {
 func TestCommit_SignedSideRejected(t *testing.T) {
 	// Craft a Commit byte stream with side byte 0x01 (pre-Op5 Signed).
 	// Use Encode with a hand-stamped side to bypass our own constants.
-	bytes := []byte{CommitVersionV1}
+	bytes := []byte{CommitVersionV2}
 	bytes = append(bytes, ProtocolTag[:]...)
 	bytes = append(bytes, 0x04)                // inner kind = Commit
 	bytes = append(bytes, make([]byte, 32)...) // ClusterID
 	bytes = append(bytes, make([]byte, 8)...)  // OperatorID
 	bytes = append(bytes, make([]byte, 8)...)  // Height
 	bytes = append(bytes, 0x01)                // side = Signed (removed post Op5)
-	bytes = append(bytes, 0, 0, 0, 0)          // L0Value length = 0
 	bytes = append(bytes, 0, 0, 0, 1, 0xaa)    // L0Partial length=1 + 1 byte
 	bytes = append(bytes, 0, 0, 0, 0)          // LayerEntries count = 0
 	_, err := DecodeCommit(bytes)
@@ -204,7 +202,6 @@ func TestCommit_NRDirectEncodeDecodeRoundTrip(t *testing.T) {
 	decoded, err := DecodeCommit(encoded)
 	require.NoError(t, err)
 	require.Equal(t, twoab.CommitSideNRDirect, decoded.Side)
-	require.Empty(t, decoded.L0Value)
 	require.Len(t, decoded.LayerEntries, 1)
 }
 

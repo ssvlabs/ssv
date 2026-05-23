@@ -97,7 +97,7 @@ type LayerEntry struct {
 // of two sides:
 //
 //   - CommitSideNR: NR-direction at L_0 (Phase-2b emission). Carries the
-//     plaintext nr_tag_0 IBE partial in L0Partial; L0Value is empty.
+//     plaintext nr_tag_0 IBE partial in L0Partial.
 //     Emitted after a prior KindNoValue when the NR-eligibility trigger
 //     fires (per A5 authorized pair).
 //   - CommitSideNRDirect: NR-direction at L_0 (Phase-2a emission,
@@ -204,7 +204,7 @@ type Phase1Bundle struct {
 // Layer k>0 it is the V in this op's SigmaChained LayerEntry at that layer.
 // An emitter therefore forwards a witness only for layers it is σ-side on
 // (where that colocated V is present), per the Op12 "root + σ-colocation"
-// design (docs/2abOBFT-REDESIGN-PLAN.md §Phase D / Op12). Verification +
+// design (docs/2abOBFT.md §Phase 2a, Forwarded leader witnesses). Verification +
 // retention happens at the Instance layer (ObserveValueMsg harvest), where
 // Witness is checked against pubKeyShares[layer-leader] on the colocated V.
 type LayerWitness struct {
@@ -328,10 +328,9 @@ type NoValueMsg struct {
 //
 // Per spec §Wire format (post Op5):
 //
-//   - Side=NR: plaintext nr_tag_0 IBE partial at L_0. L0Value is empty;
-//     L0Partial carries the partial. LayerEntries is empty (Phase 2a
-//     emission carried the L_k>0 entries; this is a Phase-2b NR commit
-//     following an earlier KindNoValue per A5).
+//   - Side=NR: plaintext nr_tag_0 IBE partial at L_0 carried in L0Partial.
+//     LayerEntries is empty (Phase 2a emission carried the L_k>0 entries;
+//     this is a Phase-2b NR commit following an earlier KindNoValue per A5).
 //   - Side=NRDirect: same L_0 shape as NR, but additionally carries the
 //     K-1 LayerEntries since the operator skipped ValueMsg/NoValueMsg at
 //     Phase 2a (equivocation observed pre-emission, per A8). This is the
@@ -351,10 +350,6 @@ type Commit struct {
 	// Side discriminates the L_0 commitment shape. Post Op5, valid values
 	// are NR / NRDirect only — Signed is removed.
 	Side CommitSide
-	// L0Value is unused post Op5 — always empty. (Pre-Op5 it carried the
-	// V being σ-signed in Side=Signed commits, which no longer exist.)
-	// Validation rejects non-empty L0Value on any Commit.
-	L0Value Value
 	// L0Partial is the L_0 nr_tag_0 IBE partial (for both Side=NR and
 	// Side=NRDirect).
 	L0Partial Signature
@@ -445,8 +440,6 @@ func commitContentHash(c *Commit) [32]byte {
 	writeUint64(h, uint64(c.OperatorID))
 	writeUint64(h, uint64(c.Height))
 	h.Write([]byte{byte(c.Side)})
-	writeUint32(h, uint32(len(c.L0Value)))
-	h.Write(c.L0Value)
 	writeUint32(h, uint32(len(c.L0Partial)))
 	h.Write(c.L0Partial)
 	hashLayerEntries(h, c.LayerEntries)
@@ -459,7 +452,7 @@ func commitContentHash(c *Commit) [32]byte {
 // byte-identical content. Used by ObserveValueMsg / ObserveNoValueMsg
 // to enforce the spec's "L_k>0 entries identical across the
 // KindNoValue → upgrade KindValue pair" requirement
-// (§Phase 2a-late upgrade in docs/2abOBFT-REDESIGN-PLAN.md).
+// (§Phase 2a A1 upgrade in docs/2abOBFT.md).
 // Mismatched entries from same op across the pair are Rule 6a-slashable.
 func layerEntriesEqual(a, b []LayerEntry) bool {
 	if len(a) != len(b) {

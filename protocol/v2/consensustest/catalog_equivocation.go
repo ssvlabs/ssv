@@ -69,7 +69,7 @@ var scenarioEquivocateAllNR = Scenario{
 		"QBFT":  ExpectSuccessFallThrough,
 		"PSigs": ExpectNotApplicable, // PSigs has no leader to equivocate
 	},
-	Note: "Both recover at fall-through cost; OBFT in-round (cheap, equivocation-NR-driven), QBFT pays RT (expensive, PREPARE-pool-fragmentation-driven). 2abOBFT Expect (SuccessFallThrough) holds under this profile's ConstantDelay (both V's arrive together → all NRDirect → L_1). Under JITTERY delivery, Op6 async-fire shifts 2abOBFT to mostly L_0-fast decide + a ~23% miss tail (safety-preserving) — see docs/2abOBFT-REDESIGN-PLAN.md §Op6 B1 + TestAdapter_Equivocate_AllNR_JitterTradeoff.",
+	Note: "Both recover at fall-through cost; OBFT in-round (cheap, equivocation-NR-driven), QBFT pays RT (expensive, PREPARE-pool-fragmentation-driven). 2abOBFT Expect (SuccessFallThrough) holds under this profile's ConstantDelay (both V's arrive together → all NRDirect → L_1). Under JITTERY delivery, Op6 async-fire shifts 2abOBFT to mostly L_0-fast decide + a ~23% miss tail (safety-preserving) — see docs/2abOBFT.md §Liveness + TestAdapter_Equivocate_AllNR_JitterTradeoff.",
 }
 
 // ---- σ-locked split (f-f) ---------------------------------------------

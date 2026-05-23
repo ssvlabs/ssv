@@ -26,23 +26,26 @@ import (
 const (
 	// Phase1BundleVersionV3 renames the leader witness field L0Witness →
 	// LWitness and carries it at EVERY layer (Op8 / Phase D), not just L_0
-	// (see docs/2abOBFT-REDESIGN-PLAN.md §Phase D / Op8). The byte layout is
+	// (see docs/2abOBFT.md §Phase 1). The byte layout is
 	// unchanged from V2 (which added the L_0-only L0Witness per Op3); the
 	// bump signals the semantic change (witness now required + processed at
 	// all layers). Wire-incompatible with V2/V1.
 	Phase1BundleVersionV3 byte = 0x03
 	// ValueMsgVersionV4 replaces the single L0Witness field with a
 	// Witnesses []LayerWitness section (Op12 / Phase D — see
-	// docs/2abOBFT-REDESIGN-PLAN.md §Phase D / Op12), so a KindValue
+	// docs/2abOBFT.md §Phase 2a, Forwarded leader witnesses), so a KindValue
 	// forwards the leader σ-witness at every layer the emitter is σ-side
 	// on (L_0 always, plus deeper fall-through layers), not just L_0. V3
 	// (Op5+Op11) carried L0Partial + a single L0Witness; V4 keeps
 	// L0Partial (the emitter's own σ partial signed at emit time) and
 	// generalizes the forwarded witness to the per-layer list. Wire-
 	// incompatible with V3/V2/V1.
-	ValueMsgVersionV4    byte = 0x04
-	NoValueMsgVersionV1  byte = 0x01
-	CommitVersionV1      byte = 0x01
+	ValueMsgVersionV4   byte = 0x04
+	NoValueMsgVersionV1 byte = 0x01
+	// CommitVersionV2 drops the always-empty L0Value field (post Op5 the
+	// σ-side moved into KindValue.L0Partial; V1 carried L0Value as a
+	// reserved always-empty field). Wire-incompatible with V1.
+	CommitVersionV2      byte = 0x02
 	CertificateVersionV1 byte = 0x01
 )
 
@@ -373,7 +376,7 @@ func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
 
 // EncodeCommit serializes a Phase-2b (or Phase-2a NRDirect) Commit envelope.
 //
-// Format (version 0x01):
+// Format (version 0x02 — L0Value removed):
 //
 //	[1]  version
 //	[16] ProtocolTag
@@ -382,8 +385,6 @@ func DecodeNoValueMsg(data []byte) (*twoab.NoValueMsg, error) {
 //	[8]  OperatorID
 //	[8]  Height
 //	[1]  Side
-//	[4]  L0Value length
-//	[L0Value bytes]
 //	[4]  L0Partial length
 //	[L0Partial bytes]
 //	[LayerEntries block — empty (count=0) for Side != NRDirect]
@@ -394,9 +395,6 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 	if c.Side == twoab.CommitSideUnspecified {
 		return nil, errors.New("wire: Commit Side is unspecified")
 	}
-	if len(c.L0Value) > MaxFieldSize {
-		return nil, fmt.Errorf("wire: Commit L0Value too long (%d)", len(c.L0Value))
-	}
 	if len(c.L0Partial) > MaxFieldSize {
 		return nil, fmt.Errorf("wire: Commit L0Partial too long (%d)", len(c.L0Partial))
 	}
@@ -404,16 +402,14 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 		return nil, err
 	}
 
-	out := make([]byte, 0, 1+16+1+32+8+8+1+4+len(c.L0Value)+4+len(c.L0Partial)+4)
-	out = append(out, CommitVersionV1)
+	out := make([]byte, 0, 1+16+1+32+8+8+1+4+len(c.L0Partial)+4)
+	out = append(out, CommitVersionV2)
 	out = append(out, ProtocolTag[:]...)
 	out = append(out, innerKindCommit)
 	out = append(out, c.ClusterID[:]...)
 	out = appendUint64(out, uint64(c.OperatorID))
 	out = appendUint64(out, uint64(c.Height))
 	out = append(out, byte(c.Side))
-	out = appendUint32(out, uint32(len(c.L0Value))) //nolint:gosec // bounds-checked
-	out = append(out, c.L0Value...)
 	out = appendUint32(out, uint32(len(c.L0Partial))) //nolint:gosec // bounds-checked
 	out = append(out, c.L0Partial...)
 	out = encodeLayerEntries(out, c.LayerEntries)
@@ -423,7 +419,7 @@ func EncodeCommit(c *twoab.Commit) ([]byte, error) {
 // DecodeCommit parses bytes produced by EncodeCommit.
 func DecodeCommit(data []byte) (*twoab.Commit, error) {
 	r := newReader(data)
-	if err := readVersion(r, CommitVersionV1, "Commit"); err != nil {
+	if err := readVersion(r, CommitVersionV2, "Commit"); err != nil {
 		return nil, err
 	}
 	if err := readProtocolTag(r); err != nil {
@@ -458,10 +454,6 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 		// Instance layer also rejects it.
 		return nil, fmt.Errorf("wire: Commit side 0x%02x is invalid (post Op5; 0x01 Signed removed)", sideByte)
 	}
-	l0Value, err := r.readLengthPrefixed("Commit L0Value")
-	if err != nil {
-		return nil, err
-	}
 	l0Partial, err := r.readLengthPrefixed("Commit L0Partial")
 	if err != nil {
 		return nil, err
@@ -478,7 +470,6 @@ func DecodeCommit(data []byte) (*twoab.Commit, error) {
 		OperatorID:   twoab.OperatorID(opID),
 		Height:       twoab.Height(height),
 		Side:         side,
-		L0Value:      twoab.Value(l0Value),
 		L0Partial:    twoab.Signature(l0Partial),
 		LayerEntries: entries,
 	}, nil

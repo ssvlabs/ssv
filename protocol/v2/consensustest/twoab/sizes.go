@@ -27,8 +27,7 @@ import (
 //	NoValueMsg:    ClusterID(32) + OperatorID(8) + Height(8) +
 //	               K-1 LayerEntries × (as above)
 //	Commit:        ClusterID(32) + OperatorID(8) + Height(8) + Side(1) +
-//	               L0Value(|V| or 0; post Op5 always 0) + L0Partial(BLS sig) +
-//	               LayerEntries × (only when Side=NRDirect)
+//	               L0Partial(BLS sig) + LayerEntries × (only Side=NRDirect)
 //	Certificate:   ClusterID(32) + Height(8) + Value(|V|) + Signature(BLS sig)
 //
 // Excludes outer SignedSSVMessage envelope overhead (wrapper not modeled
@@ -85,7 +84,6 @@ func noValueMsgSize(nv *twoab.NoValueMsg) int64 {
 
 func commitSize(c *twoab.Commit) int64 {
 	size := int64(clusterIDBytes + operatorIDBytes + heightBytes + commitSideBytes)
-	size += int64(len(c.L0Value))
 	size += ct.StubSignatureSize // L0Partial
 	size += layerEntriesSize(c.LayerEntries)
 	return size

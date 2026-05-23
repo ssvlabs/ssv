@@ -369,7 +369,7 @@ func TestAdapter_ResolveDeadline_SumToMax(t *testing.T) {
 func ptrDur(d time.Duration) *time.Duration { return &d }
 
 // TestAdapter_Equivocate_AllNR_JitterTradeoff tracks the accepted B1
-// Op6 trade-off (see docs/2abOBFT-REDESIGN-PLAN.md §Op6): async-fire
+// Op6 trade-off (see docs/2abOBFT.md §Phase 2a, Async fire on L0Ready): async-fire
 // shrinks the equivocation-detection window, so under JITTERY delivery
 // the Equivocate_AllNR scenario (byz leader floods both V_a and V_b to
 // all honest ops) shifts from "always fall through to L_1" to "mostly

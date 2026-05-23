@@ -4,6 +4,8 @@
 
 ## Status
 
+> **⚠️ Superseded (2026-05-23).** The canonical [2abOBFT spec](2abOBFT.md) and the shipped implementation ([protocol/v2/obft/twoab](../protocol/v2/obft/twoab/)) evolved *past* Variant C. The implemented design **restores the per-layer leader σ-witness** (`LWitness`, Phase 1) for the healthy-path head-start, and replaces verdict broadcasts with the Phase-2 message split (`KindValue` / `KindNoValue` / `KindCommit-NRDirect`). The Variant-C-specific claims in this document — no Phase-1 σ_V, the verdict pool, the 3-RTT healthy path, the 2-1-byz-defect regression — therefore **do not describe the current protocol**. This file is retained only as the historical record of why Variant C was considered and ultimately not shipped; for the implemented design see [2abOBFT.md](2abOBFT.md).
+
 - **Variant chosen**: "Variant C" below — no Phase-1 leader σ_V; verdict broadcasts in Phase-2a; σ/NR commit in Phase-2b. Justification follows.
 - **Scope**: SSV proposer duty at `n = 4, f = 1, K = 4` as the running example; algebra generalizes to higher `n`/`f`.
 - **Relationship to existing code**: bare OBFT (without Phase 2a/2b) is implemented in [protocol/v2/obft](../protocol/v2/obft/). 2abOBFT extends it by adding the Phase-2a observation phase; several 2abOBFT pieces are drop-in additions on top of the existing bare-OBFT state machine.

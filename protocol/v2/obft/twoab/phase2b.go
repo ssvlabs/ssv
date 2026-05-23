@@ -387,7 +387,6 @@ func deepCopyCommit(c *Commit) *Commit {
 		return nil
 	}
 	out := *c
-	out.L0Value = append(Value{}, c.L0Value...)
 	out.L0Partial = append(Signature{}, c.L0Partial...)
 	out.LayerEntries = cloneLayerEntries(c.LayerEntries)
 	return &out
