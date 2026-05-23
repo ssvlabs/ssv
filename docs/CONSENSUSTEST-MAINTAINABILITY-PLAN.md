@@ -190,16 +190,25 @@ Each phase is independently shippable and **must keep every existing test green*
 - This is the single highest-value, lowest-risk chunk — do it immediately after the engine seam exists.
 - Gate: determinism tests + the mesh-specific tests (`TestMesh*`, `TestMeshGossip*`) byte-identical.
 
-### Phase 3 — Shared byz/crash + adapter scaffold (`desim/byzscaffold.go`, `desim/adapter.go`)
-- Extract `byzSet` + `crashOverlay` (identical mechanism).
-- Extract the adapter `Run` glue: the `Validate`→`ErrConfigOutOfEnvelope` wrap, the pre-clip snapshot + `ClipLateDecision`, bandwidth-report setup. Keep `classify*Miss`, `computeAttestation`, and all timing derivation per-protocol (flag test).
-- Decide on `translateByz`'s dispatch skeleton per the §3 borderline verdict — share only if clean.
+### Phase 3 — Shared byz/crash + adapter scaffold — INVESTIGATED → kept duplicated on purpose
+On closer inspection the byz/adapter scaffold is genuinely protocol-coupled, not "knowledge expressed twice". Per the §3 litmus / flag tests, nothing here extracts cleanly, so it stays per-package. Recorded so it is not re-litigated:
+- **`crashOverlay` — keep.** Each package's overlay overrides a *different* protocol-specific method set (psigs `AllowSign`; qbft `SuppressBroadcast`; obft `LeaderBroadcastPlan`/`AllowCommitBroadcast`/`AllowCertificateBroadcast`; twoab `LeaderBroadcastPlan`/`AllowPhase2aEmission`/`AllowCertificateBroadcast`), and obft/twoab's `LeaderBroadcastPlan` takes the package-local `*sim`. No shared shape without the rejected unified-`internalByz` interface.
+- **`byzSet` — keep.** Its element type is the *native* operator-ID (qbft stores `ct.OperatorID`; obft/twoab convert to `obftbase`/`twoab` types in `newByzSet`). A generic `ByzSet[T]` would force verbose per-call-site conversions for a ~15-line struct — net-negative per the readability guardrail.
+- **`translateByz` — keep.** Protocol-specific dispatch over protocol-specific byz-kind bodies (the genuine per-protocol divergence).
+- **Adapter `Run` glue — keep.** The genuinely-shared bits are *already* shared in `ct` (`cfg.Validate`, `ct.NewBandwidthReport`, `ct.ClipLateDecision`); the residual (the `ErrConfigOutOfEnvelope` wrap + the pre-clip snapshot) is 3–4 thin, per-protocol-flavored lines feeding the per-protocol `classify*Miss` — extracting it fails the "don't dedup 5 lines behind indirection" guardrail.
 
 ### Phase 4 — obft↔twoab twin consolidation (reference-guided; prototype-and-revert)
 - This is the Hat-2 work. **Use the shipped protocol-side split as the authoritative reference for where the genuine divergence lies:** `protocol/v2/obft` (parent shared core + thin `base/` + `twoab/`). The harness `obft`/`twoab` packages wrap exactly those protocols, so the harness cut-lines should mirror the protocol cut-lines. The seam runs through **Phase 2/2a** (message/wire types, protocol timings, Rule 6a); Phase-1 build/observe and the Phase-3 resolve walk are the shared-*candidate* mechanics.
 - **Methodology — decided at execution time, not committed up front:** before extracting, re-read the actual `base`/`twoab` divergence to confirm the seam; then prototype one flow (start with Phase-1 build/observe), evaluate against §3, and **keep it only if it is obviously cleaner — otherwise revert and record "kept duplicated on purpose."** Let the prototype outcomes draw the line. Explicitly: do **not** fully skip Phase 4, and do **not** force a total merge.
 - **Phase-2a stays entirely in twoab** — the genuine protocol divergence (the seam runs through Phase 2, exactly as on the protocol side).
 - Expect a mixed outcome: some flows merge, some stay as two clear copies.
+
+**INVESTIGATED (prototype-and-revert verdict): the harness handlers stay per-package.** The key finding cuts *for* the user: the completed protocol-side refactor already aliases `base.*` and `twoab.*` to the *same* shared `obft.*` types (`OperatorID`/`Value`/`Output`/`Certificate`/`Phase1Bundle`/`Signature`), so there is **no type-level duplication left** between the harness twins, and `tryOpportunisticResolve`/`resolveOpAndBroadcastCert` are even byte-identical. But extracting the one genuinely-shared flow (Phase-3 resolve/cert) into a shared core does **not** come out obviously cleaner:
+- The four reconstruction maps (`resolved`/`resolveErrs`/`resolvedAt`/`vQuorumAt`) are read/written **pervasively** (~23 obft / ~21 twoab refs) across *both* the shared resolve/cert flow *and* the Phase-2-divergent handlers (`evtCommitArrival`, `maybeEarlyCommit`/cascade). A shared `Recon` state struct would force ~44 invasive renames and expose its maps through a leaky interface.
+- `resolveOpAndBroadcastCert` also needs each sim's per-protocol `emitMesh` + byz model, so a shared version needs a fat host interface re-exposing the sim — the §3 flag test.
+- The protocol side itself kept `Resolve` per-package (`base/phase3.go` vs `twoab/phase3.go`) for the same reason.
+
+So Phase 4's real duplication ("knowledge expressed twice") was the *types*, and that is already gone. The residual is textual handler similarity coupled to per-protocol mutable sim state — kept duplicated on purpose. (The big structural wins are Phases 1–2: ~1,700 lines of genuine engine/transport duplication removed.)
 
 ### Phase 5 — Secondary cleanups (independent; any order)
 - **Fields typing (decided: enum):** introduce a `FieldKey` enum whose `String()` emits the *same* wire names the report and the `stresstest-report/app.js` UI already consume (`"N"`, `"K"`, `"BTT"`, `"p2p_profile"`, `"Instability"`, `"BFT_start"`), so the data.js / JS-UI contract is unchanged while a key typo becomes a Go compile error. Centralize the `%g` value formatting in one place so sweep-side and report-side can't drift. This is the one cleanup with cross-language (Go↔JS UI) coupling — guard it with the Phase-0 data.js golden.
