@@ -229,6 +229,9 @@ func checkInner2abSignerMatchesOuter(env *twoabwire.Envelope, outerSigner specty
 		}
 	case twoabwire.KindCertificate:
 		// Certificate has no inner OperatorID; outer signer is the only binding.
+		if env.Certificate == nil {
+			return fmt.Errorf("2abobft dispatch: nil Certificate body")
+		}
 	}
 	return nil
 }

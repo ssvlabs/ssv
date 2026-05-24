@@ -146,6 +146,8 @@ func verifyTwoabInnerSignerMatchesOuter(env *twoabwire.Envelope, outerSigner spe
 		}
 	case twoabwire.KindCertificate:
 		// No inner OperatorID; outer signer is the only identity binding.
+	default:
+		return fmt.Errorf("2abOBFT envelope: unknown kind 0x%02x", byte(env.Kind))
 	}
 	return nil
 }
@@ -174,6 +176,8 @@ func verifyTwoabEnvelopeCrypto(env *twoabwire.Envelope, verifier *twoabcore.Veri
 		if err := verifier.VerifyCertificate(env.Certificate); err != nil {
 			return fmt.Errorf("2abOBFT certificate verification: %w", err)
 		}
+	default:
+		return fmt.Errorf("2abOBFT crypto verification: unknown envelope kind 0x%02x", byte(env.Kind))
 	}
 	return nil
 }
