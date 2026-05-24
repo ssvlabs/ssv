@@ -59,6 +59,34 @@ func (i *Instance) WhyNotSigma(layer int) SigmaBlock {
 	return SigmaEligible
 }
 
+// RetainedLeaderValueRoots returns the distinct value-roots this operator has
+// retained from the given layer's leader: 0 (nothing retained), 1 (the normal
+// case), or ≥ 2 (leader equivocation observed). A driver can union these
+// across the cluster to separate a single-value stall (≤ 1 distinct value —
+// the value simply didn't reach a σ-quorum in time) from a genuine σ-split
+// (≥ 2 distinct values, none reaching qV). See docs/2abOBFT.md §Liveness.
+func (i *Instance) RetainedLeaderValueRoots(layer int) [][32]byte {
+	if layer < 0 || layer >= i.cfg.K() {
+		return nil
+	}
+	leaderID := i.cfg.Layers[layer].Leader
+	retained := i.retainedBundles[layer][leaderID]
+	if len(retained) == 0 {
+		return nil
+	}
+	seen := make(map[[32]byte]struct{}, len(retained))
+	out := make([][32]byte, 0, len(retained))
+	for _, r := range retained {
+		root := ValueRoot(r.Bundle.Value)
+		if _, ok := seen[root]; ok {
+			continue
+		}
+		seen[root] = struct{}{}
+		out = append(out, root)
+	}
+	return out
+}
+
 // canSigmaAtLayer reports whether the local operator could currently emit a
 // σ partial at the given layer (exactly one retained Phase-1 bundle,
 // host-validated valid). Used:

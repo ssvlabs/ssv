@@ -278,13 +278,14 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 //     submit deadline → "ready to submit at layer X, past the deadline".
 //   - Deadlock walk (ResolveFailureDeadlock): no certificate formed and the
 //     Phase-3 walk stalled at a layer (σ-pool < qV, NR-pool < qEnc). This
-//     splits by deadlockKind (computed in des.go via Instance.WhyNotSigma):
-//   - undelivered → a recoverable propagation stall: the stuck cohort
-//     never received the value. NOT a protocol wedge — the instance
-//     self-heals the instant the value arrives; the slot misses only
-//     because the value never reached a σ-quorum before the relay
-//     deadline (the degraded-mesh tail). Same species as QBFT's
-//     non-delivery miss.
+//     splits by deadlockKind (computed in des.go/classifyDeadlock from
+//     host-rejection + distinct-retained-value evidence; stall by default):
+//   - undelivered → a recoverable propagation stall: a single proposed
+//     value that didn't reach a σ-quorum in time (typically undelivered to
+//     the stuck cohort). NOT a protocol wedge — the instance self-heals the
+//     instant the value arrives; the slot misses only because the value
+//     never reached a σ-quorum before the relay deadline (the degraded-mesh
+//     tail). Same species as QBFT's non-delivery miss.
 //   - validity → a validity-divergence wedge: the stuck cohort holds the
 //     value but its host verdict is not-valid, so σ-recovery is
 //     impossible even with perfect delivery and the cannot-σ gate bars
@@ -374,17 +375,17 @@ type desConfig struct {
 }
 
 // deadlockKind sub-classifies a ResolveFailureDeadlock walk outcome by root
-// cause, so the classifier can separate a recoverable propagation stall
-// (value undelivered) from the genuine 2ab-specific wedges. Computed in
-// des.go outcome() by polling Instance.WhyNotSigma across the cluster at the
-// deadlock layer. See classifyTwoabMiss.
+// cause, so the classifier can separate a recoverable propagation stall from
+// the genuine 2ab-specific wedges. Computed in des.go/classifyDeadlock from
+// host-rejection and distinct-retained-value evidence across the cluster
+// (stall by default). See classifyTwoabMiss.
 type deadlockKind int
 
 const (
 	deadlockNone        deadlockKind = iota // no deadlock (deadlockLayer < 0)
-	deadlockUndelivered                     // propagation stall: stuck cohort lacks the bundle (recoverable on delivery)
-	deadlockValidity                        // validity-divergence wedge: stuck cohort host-rejected the value
-	deadlockSplit                           // σ split across values, none reaching qV (e.g. 1-1-1 equivocation)
+	deadlockUndelivered                     // propagation stall: single value never reached a σ-quorum in time (recoverable)
+	deadlockValidity                        // validity-divergence wedge: some op host-rejected the value
+	deadlockSplit                           // σ split across ≥ 2 values, none reaching qV (leader equivocation)
 )
 
 // rawOutcome is the 2ab-internal outcome before translation to ct.Outcome.

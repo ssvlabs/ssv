@@ -85,3 +85,30 @@ func TestClassifyTwoabMiss_Branches(t *testing.T) {
 		})
 	}
 }
+
+// classifyDeadlockKind is the evidence-based decision table behind the
+// deadlock split. The load-bearing case is the all-honest single-value
+// deadlock — no host-rejection, exactly one proposed value — which must
+// resolve to the recoverable stall (deadlockUndelivered), NOT σ-split: an
+// all-honest single-leader cluster cannot produce a genuine value split, so
+// the Healthy panel must never show "σ split across values".
+func TestClassifyDeadlockKind(t *testing.T) {
+	cases := []struct {
+		name           string
+		hostRejected   bool
+		distinctValues int
+		want           deadlockKind
+	}{
+		{"all_honest_single_value", false, 1, deadlockUndelivered},
+		{"nothing_retained", false, 0, deadlockUndelivered},
+		{"genuine_split_two_values", false, 2, deadlockSplit},
+		{"genuine_split_three_values", false, 3, deadlockSplit},
+		{"host_rejected_single_value", true, 1, deadlockValidity},
+		{"host_rejected_outranks_split", true, 2, deadlockValidity},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, classifyDeadlockKind(tc.hostRejected, tc.distinctValues))
+		})
+	}
+}

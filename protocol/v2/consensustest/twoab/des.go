@@ -305,37 +305,53 @@ func (s *sim) outcome() rawOutcome {
 	return out
 }
 
-// classifyDeadlock sub-classifies a deadlock (layer ≥ 0) by polling each
-// live instance's σ-eligibility at the stuck layer: a host-invalid verdict
-// anywhere means a validity-divergence wedge; otherwise a missing-bundle
-// cohort with no equivocation means a recoverable propagation stall; the
-// remainder (σ split across values, e.g. 1-1-1 equivocation) is a genuine
-// no-single-value wedge. See classifyTwoabMiss.
+// classifyDeadlock sub-classifies a deadlock (layer ≥ 0) from positive
+// evidence gathered across the live instances at the stuck layer:
+//
+//   - a host-rejected verdict anywhere → validity-divergence wedge;
+//   - ≥ 2 distinct leader values retained cluster-wide → a genuine σ-split
+//     (leader equivocation — no single value can reach qV);
+//   - otherwise → a recoverable propagation stall (one proposed value that
+//     simply didn't reach a σ-quorum in time — the all-honest degraded-mesh
+//     tail).
+//
+// The stall is the DEFAULT: without host-rejection or multi-value evidence a
+// single-value deadlock is always the recoverable kind. This is deliberately
+// evidence-based rather than inferred from per-op σ-eligibility at quiescence,
+// which is not a faithful proxy for what happened during the run (late
+// arrivals, NR-locks, emission ordering). See classifyTwoabMiss.
 func classifyDeadlock(s *sim, layer int) deadlockKind {
 	if layer < 0 {
 		return deadlockNone
 	}
-	var hostInvalid, noBundle, equiv bool
+	hostRejected := false
+	roots := make(map[[32]byte]struct{})
 	for _, op := range s.operators {
 		if s.crashed[op] {
 			continue
 		}
-		switch s.instances[op].WhyNotSigma(layer) {
-		case twoab.SigmaBlockHostInvalid:
-			hostInvalid = true
-		case twoab.SigmaBlockNoBundle:
-			noBundle = true
-		case twoab.SigmaBlockEquivocation:
-			equiv = true
+		inst := s.instances[op]
+		if inst.WhyNotSigma(layer) == twoab.SigmaBlockHostInvalid {
+			hostRejected = true
+		}
+		for _, r := range inst.RetainedLeaderValueRoots(layer) {
+			roots[r] = struct{}{}
 		}
 	}
+	return classifyDeadlockKind(hostRejected, len(roots))
+}
+
+// classifyDeadlockKind is the pure decision table for classifyDeadlock,
+// split out for testability. hostRejected: some op host-rejected the layer's
+// value. distinctValues: distinct leader values retained cluster-wide.
+func classifyDeadlockKind(hostRejected bool, distinctValues int) deadlockKind {
 	switch {
-	case hostInvalid:
+	case hostRejected:
 		return deadlockValidity
-	case noBundle && !equiv:
-		return deadlockUndelivered
-	default:
+	case distinctValues >= 2:
 		return deadlockSplit
+	default:
+		return deadlockUndelivered
 	}
 }
 
