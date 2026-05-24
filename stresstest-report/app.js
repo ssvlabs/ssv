@@ -1221,7 +1221,7 @@ function rebuildLayerBreakdown(data) {
       pct[p][idx] += (count / cell.iterations) * 100;
     }
   }
-  host.appendChild(h('h3', { class: 'conditions-layers-title' }, 'Decision layer / round'));
+  host.appendChild(h('h3', { class: 'conditions-layers-title' }, 'Decided layer / round (MEV density)'));
   const grouped = groupProtocolsByFamily(activeNames);
   const table = h('table', { class: 'conditions-layers-table grouped-table' });
   table.appendChild(buildGroupedTableHeader('Layer / Round', grouped));
