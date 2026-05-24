@@ -184,15 +184,6 @@ type Config struct {
 	// §Setting: BTT = P99 + δ. Used as the unit for time-budget formulas.
 	// Concrete sizing at Config A: P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
-
-	// BFTStart is BFT_start — the slot-relative offset at which the
-	// protocol's primary broadcast pipeline begins. Pre-fetch and
-	// pre-consensus sit in `[slot_start, BFTStart]`. Default 0. When
-	// BFTStart > T_0_broadcast − B_k for some layer k, the spec's
-	// runtime clamp `T_broadcast_max_k = max(BFTStart, T_0_broadcast − B_k)`
-	// floors that layer's broadcast deadline at BFTStart and the
-	// schedule degrades but stays valid.
-	BFTStart time.Duration
 }
 
 // K returns the number of layers (= len(Layers)).
@@ -227,19 +218,18 @@ func (c *Config) T0Broadcast() time.Duration {
 }
 
 // BroadcastMaxOffsetForLayer returns `T_broadcast_max_k =
-// max(BFTStart, T_0_broadcast − B_k)` for layer k — the leader's target
+// max(0, T_0_broadcast − B_k)` for layer k — the leader's target
 // Phase-1 broadcast time per spec §Setting.
 //
-// B_k is a target, not a hard cap; the BFTStart floor (default 0) handles
-// the degraded case where the layer's design-time budget overshoots
-// T_0_broadcast. In that case the leader broadcasts at BFTStart
-// best-effort, and the layer's effective absorption window contracts
-// accordingly.
+// B_k is a target, not a hard cap; the 0 floor handles the degraded case
+// where the layer's design-time budget overshoots T_0_broadcast. In that
+// case the leader broadcasts at slot start best-effort, and the layer's
+// effective absorption window contracts accordingly.
 func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
-	if d := c.T0Broadcast() - c.Layers[k].BroadcastBudget; d > c.BFTStart {
+	if d := c.T0Broadcast() - c.Layers[k].BroadcastBudget; d > 0 {
 		return d
 	}
-	return c.BFTStart
+	return 0
 }
 
 // DefaultBroadcastBudget returns a spec-conforming staggered B_k schedule
@@ -267,8 +257,8 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 // the canonical shallow multiples (e.g. T0Broadcast ≤ 4·BTT at K≥4),
 // the helper still returns a schedule — the shallow B_k values can
 // exceed T0Broadcast. The protocol's runtime `T_broadcast_max_k =
-// max(BFT_start, T0Broadcast − B_k)` clamps those layers' targets at
-// BFT_start, so the configuration remains valid (the fall-through
+// max(0, T0Broadcast − B_k)` clamps those layers' targets at slot
+// start, so the configuration remains valid (the fall-through
 // depth shrinks but the cluster still operates). Callers that want
 // the canonical staggered shape preserved can widen T0Broadcast
 // (loosen the post-Phase-2a budget / header headroom) or supply their
@@ -320,11 +310,11 @@ func DefaultBroadcastBudget(K int, btt, t0Broadcast time.Duration) ([]time.Durat
 	// Cap each B_k at T0Broadcast so the schedule stays non-decreasing
 	// even at degraded operating points where the canonical staggered
 	// shallow multiples overshoot.
-	// Capped layers share `T_broadcast_max_k = max(BFT_start,
-	// T0Broadcast − B_k) = BFT_start` — multiple layers may collide at
-	// BFT_start without safety impact. The deepest layer is already
+	// Capped layers share `T_broadcast_max_k = max(0,
+	// T0Broadcast − B_k) = 0` — multiple layers may collide at slot
+	// start without safety impact. The deepest layer is already
 	// T0Broadcast by construction; the cap turns degraded shallow layers
-	// into "broadcast at BFT_start" peers of the deepest.
+	// into "broadcast at slot start" peers of the deepest.
 	for k := 0; k < K; k++ {
 		if out[k] > t0Broadcast {
 			out[k] = t0Broadcast
@@ -350,12 +340,12 @@ func (c *Config) Validate() error {
 		return errors.New("twoab: TPhase2a must be > BTT so T0Broadcast is positive")
 	}
 	// Anchor-specific: FetchAt must land within each layer's broadcast
-	// deadline max(BFTStart, T0Broadcast − B_k).
+	// deadline max(0, T0Broadcast − B_k).
 	for k, layer := range c.Layers {
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
-			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, T0Broadcast−B_k=%v))",
+			return fmt.Errorf("twoab: layer %d FetchAt %v exceeds broadcast deadline %v (max(0, T0Broadcast−B_k=%v))",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k),
-				c.BFTStart, c.T0Broadcast()-c.Layers[k].BroadcastBudget)
+				c.T0Broadcast()-c.Layers[k].BroadcastBudget)
 		}
 	}
 	return nil

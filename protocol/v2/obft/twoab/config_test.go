@@ -39,7 +39,6 @@ func healthyConfig() *Config {
 		TPhase2a:     tPhase2a,
 		SafetyBuffer: safetyBuffer,
 		BTT:          btt,
-		BFTStart:     0,
 	}
 }
 
@@ -164,7 +163,7 @@ func TestConfig_Validate_RejectsDecreasingBroadcastBudgets(t *testing.T) {
 func TestConfig_Validate_AcceptsEqualAdjacentBroadcastBudgets(t *testing.T) {
 	c := healthyConfig()
 	// Equal budgets force both layers' broadcast deadline to clamp at
-	// BFTStart=0. Adjust FetchAt to match (must be ≤ broadcast deadline).
+	// slot start (0). Adjust FetchAt to match (must be ≤ broadcast deadline).
 	c.Layers[0].BroadcastBudget = c.Layers[1].BroadcastBudget
 	c.Layers[0].FetchAt = 0
 	c.Layers[1].FetchAt = 0

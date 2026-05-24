@@ -52,7 +52,7 @@ The only reason the identical code can't be shared today: `sim`, `event`, and `s
 - **Protocol event handlers** — QBFT `evtStartInstance`/`evtMessageArrival`/`evtRoundTimeout`/`evtByzProposal`; OBFT `evtLeaderFetch`/`evtCommitArrival`/`emitOwnCommit`/resolve walk; twoab Phase-2a (`evtPhase2aFire`, `scheduleValueMsg`/`scheduleNoValueMsg`); psigs `evtPSigSign`/`evtPSigArrival`.
 - **`newSim` / `start` / `outcome`** — they construct and read protocol `Instance` objects; only the loop they sit inside is shared.
 - **Byz kinds** — each protocol's attack surface differs; only the *scaffold* (`byzSet`, `crashOverlay`, the `translateByz` dispatch shape) is shared, not the kind bodies.
-- **Timing algebra** — OBFT `T_commit`/`BroadcastBudget`/`FetchAt`; twoab `TPhase2a`/`T0Broadcast` max-form; QBFT per-round RT; psigs flat sign-time. The `BTTMultiplier`/`SafetyBuffer`/variant knobs.
+- **Timing algebra** — OBFT `T_commit`/`BroadcastBudget`/`FetchAt`; twoab `TPhase2a`/`T0Broadcast` max-form; QBFT per-round RT; psigs flat sign-time. The `SafetyBuffer`/variant knobs.
 
 ### What is already fine (do not touch — see §7 Non-goals)
 

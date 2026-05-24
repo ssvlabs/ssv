@@ -25,7 +25,7 @@ const defaultFixedRT = 2 * time.Second
 // Set high enough that the slot deadline (runLoop's RelayCutoff-based maxTime
 // + the adapter's clip), not the round count, is the binding limit across the
 // sweep BTT range: the pristine per-round timers fit ~9-10 rounds within a 4s
-// proposer slot at BTT=100, and we don't want to cap QBFT-no-reflood below
+// proposer slot at BTT=100, and we don't want to cap QBFT-0 below
 // what it can actually fit. QBFT-SSV's wide 2s RT is deadline-bound at ~2-3
 // rounds regardless, so the higher cap is a no-op for it.
 const defaultMaxRounds = 12
@@ -50,24 +50,59 @@ func (QBFT) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	return run(cfg, 4*cfg.BTT+cfg.RefloodDelay, cfg.BTT)
 }
 
-// QBFTNoReflood is the pristine structural-floor variant (Name
-// "QBFT-no-reflood"). Its round timer carries no mesh-tail cushion:
-// round 1 = 3·BTT (the three consensus emissions PROPOSE + PREPARE +
-// COMMIT at 1·BTT each — P99 propagation, matching OBFT's Δ_2 = 1·BTT);
-// rounds ≥ 2 add 1·BTT for the ROUND_CHANGE hop to the new leader (the
-// timer is armed at round entry, so that hop is inside the round's own
-// window) = 4·BTT. Each round's timer equals that round's exact decision
-// time, so a healthy/recovery decision coincides with the timer and
+// QBFT0 is the pristine structural-floor variant, reported as
+// "QBFT-0" (the 0-cushion rung of the QBFT ladder). Its round timer carries
+// no mesh-tail cushion: round 1 = 3·BTT (the three consensus emissions
+// PROPOSE + PREPARE + COMMIT at 1·BTT each — P99 propagation, matching
+// OBFT's Δ_2 = 1·BTT); rounds ≥ 2 add 1·BTT for the ROUND_CHANGE hop to the
+// new leader (the timer is armed at round entry, so that hop is inside the
+// round's own window) = 4·BTT. Each round's timer equals that round's exact
+// decision time, so a healthy/recovery decision coincides with the timer and
 // eventQueue.Less (events.go) breaks the tie toward the decision — RT is
-// never padded. The zero-cushion reference: compare against other
-// protocols' no-reflood variants (e.g. OBFT-no-reflood). At BTT=100:
-// R1=300ms, R≥2=400ms.
-type QBFTNoReflood struct{}
+// never padded. Zero-cushion reference (compare against OBFT-0 / 2abOBFT-0).
+// At BTT=100: R1=300ms, R≥2=400ms. NB this rung also drops the structural
+// 1·BTT that the cushioned rungs carry, so the QBFT ladder is uneven:
+// 3·BTT (QBFT-0) then 4·BTT+{300,500,700}.
+type QBFT0 struct{}
 
-func (QBFTNoReflood) Name() string { return "QBFT-no-reflood" }
+func (QBFT0) Name() string { return "QBFT-0" }
 
-func (QBFTNoReflood) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+func (QBFT0) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	return run(cfg, 3*cfg.BTT, cfg.BTT)
+}
+
+// QBFT300 is the 300ms-cushion rung, reported as "QBFT-300": the
+// reflood-aware structure of bare QBFT with a fixed 300ms cushion.
+// R1 = 4·BTT + 300ms, R≥2 = 5·BTT + 300ms. Analogue of OBFT-300 /
+// 2abOBFT-300.
+type QBFT300 struct{}
+
+func (QBFT300) Name() string { return "QBFT-300" }
+
+func (QBFT300) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, 4*cfg.BTT+300*time.Millisecond, cfg.BTT)
+}
+
+// QBFT500 / QBFT700 are the 500ms / 700ms cushion rungs ("QBFT-500" /
+// "QBFT-700"): same reflood-aware structure, fixed cushion, R1 = 4·BTT +
+// {500,700}ms. QBFT-700 is the fixed-cushion analogue of the generic bare
+// QBFT (which uses scenario cfg.RefloodDelay = 700 on Healthy / 0 on
+// adversarial); the stress matrix uses the explicit QBFT-700 rung so the
+// cushion is named and scenario-independent.
+type QBFT500 struct{}
+
+func (QBFT500) Name() string { return "QBFT-500" }
+
+func (QBFT500) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, 4*cfg.BTT+500*time.Millisecond, cfg.BTT)
+}
+
+type QBFT700 struct{}
+
+func (QBFT700) Name() string { return "QBFT-700" }
+
+func (QBFT700) Run(cfg ct.SimConfig) (ct.Outcome, error) {
+	return run(cfg, 4*cfg.BTT+700*time.Millisecond, cfg.BTT)
 }
 
 // QBFTSSV is the production variant (Name "QBFT-SSV"): a flat 2s round
@@ -108,27 +143,23 @@ func run(cfg ct.SimConfig, rt, rtRecoveryExtra time.Duration) (ct.Outcome, error
 
 	// One consensus emission = 1·BTT (P99 propagation), mirroring OBFT's
 	// tightened Δ_2 = 1·BTT so the protocols compare on equal per-emission
-	// footing.
-	bttEff := cfg.BTT
+	// footing — forwarded as cfg.BTT to the DES below.
 
-	// BFTStart drives QBFT's PROPOSE-start anchor. Defaults to 0 (slot
-	// start), matching OBFT's earliest broadcast time (FetchAt[K-1] ≈ 0
-	// in the default OBFT schedule — the deepest / lowest-MEV layer) and
-	// production SSV QBFT (proposer-role headStart=0 in
-	// roundtimer/timer.go). The DES at qbft/des.go schedules
-	// evtStartInstance at this offset for every honest op.
-	bftStart := cfg.BFTStart
+	// QBFT's PROPOSE-start anchor is slot start (the DES at qbft/des.go
+	// schedules evtStartInstance at offset 0 for every honest op). The
+	// whole QBFT pipeline shifts wholesale with BFT_start, so the sim
+	// runs at BFT_start=0 and the report UI shifts decision times post-hoc
+	// to model later BFT_start values.
 
 	bw := ct.NewBandwidthReport()
 	desCfg := desConfig{
 		N:               cfg.N,
 		Operators:       cfg.Operators,
 		Crashed:         cfg.Byz.Crashed,
-		BTT:             bttEff,
+		BTT:             cfg.BTT,
 		RT:              rt,
 		RTRecoveryExtra: rtRecoveryExtra,
 		MaxRounds:       defaultMaxRounds,
-		BFTStart:        bftStart,
 		Network:         cfg.Network,
 		Host:            cfg.Host,
 		Byz:             internal,
@@ -245,7 +276,6 @@ type desConfig struct {
 	RT              time.Duration // round-1 (base) round timeout
 	RTRecoveryExtra time.Duration // added for rounds ≥ 2 (round-change hop); 0 for fixed-RT
 	MaxRounds       int
-	BFTStart        time.Duration
 	Network         ct.NetworkModel
 	Host            ct.HostPattern
 	Byz             internalByz

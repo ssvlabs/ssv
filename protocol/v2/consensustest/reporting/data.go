@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -483,13 +484,12 @@ type cellPayload struct {
 	// percentiles. omitted when no sim decided.
 	DecisionTimes []int `json:"decisionTimes,omitempty"`
 	// DecidingBroadcastTimes is index-aligned with DecisionTimes: entry
-	// i is T_broadcast_max (slot-anchored, in ms; = max(BFTStart,
+	// i is T_broadcast_max (slot-anchored, in ms; = max(0,
 	// T_commit − B_k) per the spec's runtime clamp) for the deciding
 	// layer of the i-th decision sample. Reported for diagnostic /
-	// per-sample timeline rendering. The UI's BFT_start picker uses
-	// pre-computed cells (one per BFT_start sweep point) rather than
-	// post-hoc filtering on this array for OBFT-family. Zero values
-	// for protocols with no slot-anchored broadcast (QBFT family,
+	// per-sample timeline rendering. BFT_start is not a sweep axis (the
+	// sim runs at BFT_start=0); the UI derives BFT_start post-hoc. Zero
+	// values for protocols with no slot-anchored broadcast (QBFT family,
 	// PSigs) — those use pipeline-shift in the UI and don't consult
 	// this field. Omitted when no sim decided.
 	DecidingBroadcastTimes []int               `json:"decidingBroadcastTimes,omitempty"`
@@ -509,24 +509,25 @@ type cellPayload struct {
 	// vs "0 bytes typical").
 	PerKindBandwidthStats map[string]perKindStatsPayload `json:"perKindBandwidthStats,omitempty"`
 	MissReasons           map[string]int                 `json:"missReasons,omitempty"`
+	// DecidedRounds is a histogram of the cluster's deciding round/layer over
+	// the successful sims (key = stringified depth: layer for OBFT/2abOBFT,
+	// 0-indexed round for QBFT, 0 for PSigs; value = count). Lets the UI show
+	// whether a success rate is MEV-dense (L_0 / R1) or fall-through (L_1+).
+	DecidedRounds map[string]int `json:"decidedRounds,omitempty"`
 	// BFTStartIndependenceMs is the largest BFT_start (ms) for which this
 	// cell's deciding-layer (L_0) broadcast schedule is identical to
-	// BFT_start=0. The UI reuses the BFT_start=0 cell at or below this
-	// value instead of requiring a per-BFT_start pre-computed cell; above
-	// it the UI uses the exact cell when swept, else rounds up to the
-	// nearest emitted cell (worst-case), rendering n/a only past the
-	// highest emitted cell. Replaces the UI's former JS-side sizing
-	// mirror, so the threshold stays correct as the adapters' timing
-	// evolves and reflects the cell's actual per-scenario RefloodDelay /
-	// SafetyBuffer.
+	// BFT_start=0. BFT_start is not a sweep axis (the sim runs at
+	// BFT_start=0); the UI uses this threshold to decide which picker
+	// BFT_starts the cell covers exactly vs. approximately. Replaces the
+	// UI's former JS-side sizing mirror, so the threshold stays correct as
+	// the adapters' timing evolves and reflects the cell's actual
+	// per-scenario RefloodDelay / SafetyBuffer.
 	//
 	// A *int (not omitempty-on-int) so an emitted 0 — clamp engages at
-	// any BFT_start>0 — is distinct from "not emitted". Emitted only on
-	// the BFT_start=0 cell (the value is BFT_start-invariant and the UI
-	// reads it from that anchor cell); BFT_start>0 cells omit it. Also
-	// omitted for pipeline-shift protocols (QBFT family, PSigs; UI shifts
-	// post-hoc) and out-of-envelope cells. Legacy data.js without this
-	// field falls back to the BFT_start=0 cell in the UI rather than n/a.
+	// any BFT_start>0 — is distinct from "not emitted". Emitted by
+	// adapters with a slot-anchored Phase-1 schedule (OBFT family and
+	// 2abOBFT family); omitted for pipeline-shift protocols (QBFT family,
+	// PSigs; UI shifts post-hoc) and out-of-envelope cells.
 	BFTStartIndependenceMs *int `json:"bftStartIndependenceMs,omitempty"`
 }
 
@@ -685,6 +686,12 @@ func buildCell(c ct.BatchCell) cellPayload {
 		out.MissReasons = make(map[string]int, len(c.MissReasons))
 		for k, v := range c.MissReasons {
 			out.MissReasons[k] = v
+		}
+	}
+	if len(c.DecidedRounds) > 0 {
+		out.DecidedRounds = make(map[string]int, len(c.DecidedRounds))
+		for k, v := range c.DecidedRounds {
+			out.DecidedRounds[strconv.Itoa(k)] = v
 		}
 	}
 	return out

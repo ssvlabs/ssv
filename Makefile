@@ -180,27 +180,20 @@ consensustest-with-real-bls:
 #     values in ms. Shared by the p2p_baseline and p2p_increasing_BTT
 #     sweeps; drives the protocol's internal timing budgets (the network
 #     itself is the profile, ≈ 1-10 ms in prod).
-#   - BFT_STARTS      (default 0,2400,2800,3200) — comma-separated
-#     BFT_start values in ms for the p2p_baseline sweep's BFT_start
-#     axis. The UI picker exposes more values; a picker value with no
-#     matching sim point uses the BFT_start=0 cell when below the cell's
-#     emitted independence threshold (exact reuse), else rounds UP to the
-#     nearest emitted cell (worst-case), and shows n/a only past the
-#     highest emitted cell. Pipeline-shift protocols always pull from
-#     BFT_start=0. The list MUST include 0 — it anchors the full-catalog
-#     sweep and the UI's pipeline-shift / below-threshold reuse; an
-#     override that omits 0 is rejected at startup.
+# BFT_start is NOT a sweep parameter — the sim always runs at BFT_start=0
+# and the report UI derives every other BFT_start value post-hoc (reuse of
+# the BFT_start=0 cell below each variant's independence threshold, n/a
+# above it, pipeline-shift for QBFT/PSigs). See stresstest-report/app.js.
 #
 # Protocol set:
 #   - PROTOCOLS (default = curated subset below) — comma-separated
-#     protocol names to include in the sweep (e.g. `OBFT,QBFT,PSigs`).
+#     protocol names to include in the sweep (e.g. `OBFT-700,QBFT-700,PSigs`).
 #     Setting it empty (`PROTOCOLS=`) runs ALL registered protocols. The
 #     curated default is a deliberate subset: it omits the PSigs
-#     baseline-cost reference and the OBFTx2 / OBFTx3 multiplier variants.
-#     To include them, override per-run (e.g. `make stresstest
-#     PROTOCOLS=OBFT,2abOBFT,QBFT,PSigs`) or run the full set with
-#     `PROTOCOLS=`. Names must exactly match Protocol.Name() values
-#     defined in stress_test.go.
+#     baseline-cost reference. To include it, override per-run (e.g. `make
+#     stresstest PROTOCOLS=OBFT-700,2abOBFT-700,QBFT-700,PSigs`) or run the
+#     full set with `PROTOCOLS=`. Names must exactly match Protocol.Name()
+#     values defined in stress_test.go.
 #
 # Iteration count split into two budgets:
 #   - ITERATIONS_BASELINE_OPERATIONS (default 10000) — high-confidence
@@ -224,19 +217,17 @@ CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300,400
-BFT_STARTS ?= 0,2400,3200
-PROTOCOLS ?= OBFT-no-reflood,OBFT,2abOBFT-no-reflood,2abOBFT-lean,2abOBFT,QBFT-no-reflood,QBFT,QBFT-SSV
+PROTOCOLS ?= OBFT-0,OBFT-300,OBFT-500,OBFT-700,2abOBFT-0,2abOBFT-300,2abOBFT-500,2abOBFT-700,QBFT-0,QBFT-300,QBFT-500,QBFT-700,QBFT-SSV
 ITERATIONS_BASELINE_OPERATIONS ?= 10000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 1
 .PHONY: stresstest
 stresstest:
-	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) BFT_STARTS=$(BFT_STARTS) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
+	@echo "Generating stress test report to $(abspath $(REPORT_DIR)) (CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) LAYERS_K=$(LAYERS_K) P2P_PROFILES=$(P2P_PROFILES) BTT_VALUES_MS=$(BTT_VALUES_MS) PROTOCOLS=$(if $(PROTOCOLS),$(PROTOCOLS),<all>) baseline=$(ITERATIONS_BASELINE_OPERATIONS) unstable=$(ITERATIONS_UNSTABLE_OPERATIONS))"
 	@REPORT_DIR=$(abspath $(REPORT_DIR)) \
 		CLUSTER_SIZES_N=$(CLUSTER_SIZES_N) \
 		LAYERS_K=$(LAYERS_K) \
 		P2P_PROFILES=$(P2P_PROFILES) \
 		BTT_VALUES_MS=$(BTT_VALUES_MS) \
-		BFT_STARTS=$(BFT_STARTS) \
 		PROTOCOLS=$(PROTOCOLS) \
 		ITERATIONS_BASELINE_OPERATIONS=$(ITERATIONS_BASELINE_OPERATIONS) \
 		ITERATIONS_UNSTABLE_OPERATIONS=$(ITERATIONS_UNSTABLE_OPERATIONS) \

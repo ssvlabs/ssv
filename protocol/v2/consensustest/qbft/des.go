@@ -45,7 +45,7 @@ func runDES(cfg desConfig) (rawOutcome, error) {
 	// to MISS by the adapter) plus the first round that lands just after it
 	// (for miss labelling). NOT a function of RT × MaxRounds: the pristine
 	// per-round RT is tiny, so that product would cut the sim off long before
-	// the deadline and starve QBFT-no-reflood of the later rounds it can fit.
+	// the deadline and starve QBFT-0 of the later rounds it can fit.
 	s.RunUntil(s, s.cfg.RelayCutoff+s.cfg.RT+s.cfg.RTRecoveryExtra)
 	return s.outcome(), nil
 }
@@ -171,21 +171,23 @@ func (s *sim) start() error {
 		}
 		s.instances[op] = inst
 	}
-	// Schedule each honest op to start at BFTStart. evtStartInstance triggers
-	// Instance.Start, which arms the round-1 timer and (if op is round-1
-	// proposer) emits the proposal.
+	// Schedule each honest op to start at slot start (offset 0).
+	// evtStartInstance triggers Instance.Start, which arms the round-1
+	// timer and (if op is round-1 proposer) emits the proposal. The QBFT
+	// pipeline shifts wholesale with BFT_start, so the sim runs at
+	// BFT_start=0 and the report UI shifts decision times post-hoc.
 	for _, op := range s.operators {
 		if s.byz.IsByz(ct.OperatorID(op)) {
 			continue
 		}
-		s.Schedule(s.cfg.BFTStart, &evtStartInstance{op: op})
+		s.Schedule(0, &evtStartInstance{op: op})
 	}
 	// Byz round-1 proposer is dispatched separately — the byz pattern's
 	// ProposalPlanForRound returns the messages to fabricate. Goes through
 	// scheduleByzProposal so the per-round dedup map records it.
 	leader := proposerForRound(s.operators, specqbft.FirstRound)
 	if s.byz.IsByz(ct.OperatorID(leader)) {
-		s.scheduleByzProposal(s.cfg.BFTStart, leader, specqbft.FirstRound)
+		s.scheduleByzProposal(0, leader, specqbft.FirstRound)
 	}
 	desim.ScheduleInitialHeartbeats(s, s.cfg.RelayCutoff)
 	return nil

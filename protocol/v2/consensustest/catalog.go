@@ -16,7 +16,7 @@ package consensustest
 //     are deterministic, the test asserts the declared outcome class.
 //   - TestStress runs the six curated DefaultSweeps at a single
 //     (n, K) operating point across the OBFT, 2abOBFT, and QBFT
-//     protocol families (with BTT-multiplier variants — see
+//     protocol families (cushion-ladder + fixed-RT variants — see
 //     stress_test.go for the full registered list). p2p_baseline
 //     uses calibrated empirical mesh-hop profiles fitted to SSV
 //     prod / stage gossipsub telemetry; the synthetic-degradation

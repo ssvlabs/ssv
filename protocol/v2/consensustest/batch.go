@@ -93,6 +93,17 @@ func (c *BatchConfig) validate() error {
 	return nil
 }
 
+// isBaselineOnly reports whether a protocol variant runs only on
+// Baseline-group (Healthy) scenarios — the cushion-sensitivity rungs
+// (X-0 / X-300 / X-500) declare this via an optional IsBaselineOnly()
+// method, so RunBatch renders them n/a on adversarial scenarios, where only
+// the canonical X-700 rung per family runs. A protocol that doesn't
+// implement the interface is treated as not baseline-only.
+func isBaselineOnly(p Protocol) bool {
+	bo, ok := p.(interface{ IsBaselineOnly() bool })
+	return ok && bo.IsBaselineOnly()
+}
+
 // RunBatch drives all (scenario, protocol) cells Iterations times each and
 // aggregates results. Cells run in parallel up to BatchConfig.Parallelism;
 // sims within a cell run sequentially.
@@ -125,6 +136,12 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	cellIters := make([]int, cellCount)
 	totalIters := 0
 	for ci := 0; ci < cellCount; ci++ {
+		// Baseline-only variants (the cushion-sensitivity rungs X-0/X-300/
+		// X-500) don't run on adversarial scenarios — only the canonical
+		// X-700 rung does there. Leave cellIters[ci]=0 (no jobs) → n/a.
+		if isBaselineOnly(protocolOf(ci)) && !IsBaselineGroup(scenarioOf(ci)) {
+			continue
+		}
 		cellIters[ci] = cfg.IterationsFor(scenarioOf(ci))
 		totalIters += cellIters[ci]
 	}
@@ -175,6 +192,12 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	// Reduce per-iter results into per-cell BatchCells single-threaded.
 	cells := make([]BatchCell, cellCount)
 	for ci := range cells {
+		// Baseline-only variant on an adversarial scenario — not run; emit
+		// an n/a cell (Iterations:0), same shape as ErrNotApplicable cells.
+		if isBaselineOnly(protocolOf(ci)) && !IsBaselineGroup(scenarioOf(ci)) {
+			cells[ci] = BatchCell{Protocol: protocolOf(ci).Name(), Scenario: scenarioOf(ci).Name, Iterations: 0}
+			continue
+		}
 		cells[ci] = reduceCellResults(t, cellIters[ci], scenarioOf(ci), protocolOf(ci), results[ci])
 	}
 
@@ -405,6 +428,7 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 		ClusterBandwidth:      make(Distribution, 0, cellIter),
 		PerKindBandwidth:      make(map[string]Distribution),
 		MissReasons:           make(map[string]int),
+		DecidedRounds:         make(map[int]int),
 	}
 	successCount := 0
 	loggedPanic := false
@@ -428,7 +452,7 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 			cell.ClusterBandwidth = append(cell.ClusterBandwidth, 0)
 			continue
 		}
-		// The BFTStart-independence threshold is iter-invariant (a pure
+		// The BFT_start-independence threshold is iter-invariant (a pure
 		// function of cfg + protocol, set even on miss iters), so capture
 		// it from the first non-panic iter that carries it. nil for
 		// pipeline-shift protocols / out-of-envelope cells.
@@ -443,6 +467,7 @@ func aggregateCellIters(t *testing.T, cellIter int, scenario Scenario, protocol 
 			successCount++
 			cell.DecisionTime = append(cell.DecisionTime, float64(r.out.DecisionTime.Milliseconds()))
 			cell.DecidingBroadcastTime = append(cell.DecidingBroadcastTime, float64(r.out.DecidingBroadcastTime.Milliseconds()))
+			cell.DecidedRounds[r.out.DecidedRound]++
 		} else {
 			cell.MissReasons[classifyMiss(r.out)]++
 		}

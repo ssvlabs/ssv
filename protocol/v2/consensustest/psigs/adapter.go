@@ -35,7 +35,7 @@ type Protocol struct {
 	// VariantName overrides the protocol name reported by Name(). When
 	// empty, defaults to "PSigs". Kept for parity with the OBFT / QBFT
 	// adapters' variant convention, though PSigs has no protocol knobs
-	// to vary (no BTTMultiplier, no fixed-RT vs computed-RT — the
+	// to vary (no cushion knob, no fixed-RT vs computed-RT — the
 	// protocol is a single broadcast + threshold-collect).
 	VariantName string
 }
@@ -81,7 +81,6 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		Operators:    cfg.Operators,
 		Crashed:      cfg.Byz.Crashed,
 		BTT:          cfg.BTT,
-		BFTStart:     cfg.BFTStart,
 		Network:      cfg.Network,
 		Byz:          internal,
 		Seed:         cfg.Seed,
@@ -128,7 +127,6 @@ type desConfig struct {
 	Operators    []ct.OperatorID
 	Crashed      []ct.OperatorID // completely-offline operators (subset of Operators)
 	BTT          time.Duration
-	BFTStart     time.Duration // when each op signs + broadcasts; usually 0
 	Network      ct.NetworkModel
 	Byz          internalByz
 	Seed         int64

@@ -84,14 +84,12 @@ func CloneScenarioWith(s Scenario, extra func(*SimConfig)) Scenario {
 //
 //  1. exact match on pname
 //  2. fallback to the protocol's "base" name (canonical family),
-//     determined by stripping either of the two variant-suffix
-//     conventions: "xN" multiplier suffix ("OBFTx2" → "OBFT") or
-//     "-suffix" variant suffix ("QBFT-SSV" → "QBFT")
+//     determined by stripping the "-suffix" variant convention
+//     ("QBFT-SSV" → "QBFT", "OBFT-700" → "OBFT")
 //
 // Scenarios that legitimately need a different expectation for a
 // variant (e.g. QBFT-SSV's tighter fixed-RT misses where QBFT's
-// computed-RT succeeds; OBFTx3's T_commit collapse at a BTT where
-// OBFT succeeds) can override by setting both keys explicitly.
+// computed-RT succeeds) can override by setting both keys explicitly.
 // Returns (zero, false) when neither key is present.
 func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
 	if v, ok := s.Expect[pname]; ok {
@@ -106,25 +104,11 @@ func (s Scenario) ExpectFor(pname string) (ExpectClass, bool) {
 }
 
 // variantBase returns the canonical family name for a protocol-variant
-// name. Strips the two suffix conventions the framework uses:
-//   - "xN" multiplier suffix (e.g. "OBFTx2" → "OBFT") where N is one or
-//     more trailing digits preceded by 'x'
-//   - "-suffix" variant flavor (e.g. "QBFT-SSV" → "QBFT", "2abOBFT-lean"
-//     → "2abOBFT", "2abOBFT-no-reflood" → "2abOBFT")
+// name by stripping the "-suffix" variant flavor (e.g. "QBFT-SSV" →
+// "QBFT", "OBFT-700" → "OBFT", "2abOBFT-300" → "2abOBFT").
 //
-// Returns the input unchanged when neither suffix is present.
+// Returns the input unchanged when no suffix is present.
 func variantBase(name string) string {
-	// "xN" suffix: walk back from the end while the byte is a digit;
-	// if at least one digit was consumed and the byte before is 'x',
-	// strip both.
-	digitStart := len(name)
-	for digitStart > 0 && name[digitStart-1] >= '0' && name[digitStart-1] <= '9' {
-		digitStart--
-	}
-	if digitStart < len(name) && digitStart > 0 && name[digitStart-1] == 'x' {
-		return name[:digitStart-1]
-	}
-	// "-suffix" suffix.
 	if i := strings.IndexByte(name, '-'); i > 0 {
 		return name[:i]
 	}

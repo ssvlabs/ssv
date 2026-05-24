@@ -567,6 +567,59 @@ section.conditions .conditions-legend .sm-legend {
   font-size: 0.85em;
 }
 
+/* Decision layer/round breakdown — mirrors the failure-breakdown table,
+   with per-(family, depth) MEV-density cell shading. */
+.conditions-layers {
+  margin-top: 1em;
+}
+.conditions-layers-title {
+  margin: 0 0 0.5em 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text);
+}
+.conditions-layers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+.conditions-layers-table th,
+.conditions-layers-table td {
+  padding: 0.35em 0.7em;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.conditions-layers-table thead th {
+  font-weight: 600;
+  background: var(--surface-muted);
+  white-space: nowrap;
+}
+.conditions-layers-table th.proto-col,
+.conditions-layers-table td.layer-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+.conditions-layers-table td.depth {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.conditions-layers-table td.layer-cell.zero,
+.conditions-layers-table td.layer-cell.na {
+  color: var(--na);
+}
+.conditions-layers-table td.layer-cell.layer-mev {
+  background: rgba(16, 185, 129, 0.16); /* green — MEV-fresh (L_0 / QBFT round) */
+}
+.conditions-layers-table td.layer-cell.layer-fallback {
+  background: rgba(217, 119, 6, 0.16); /* amber — deeper safe-parent fallback */
+}
+.conditions-layers-note {
+  margin: 0.5em 0 0 0;
+  font-size: 0.8em;
+  color: var(--text-faint);
+}
+
 /* Collapsibles below the heatmap — one section per multi-point sweep,
  * collapsed by default. Header is a click target; body slides under
  * via display:none when collapsed (no animation — keeps the page

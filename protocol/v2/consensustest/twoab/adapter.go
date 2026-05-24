@@ -66,6 +66,11 @@ type Protocol struct {
 	// so a smaller SafetyBuffer reclaims MEV-fetch headroom for nothing
 	// extra. See docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
 	SafetyBufferOverride *time.Duration
+
+	// BaselineOnly marks a variant that only runs on Baseline-group
+	// (Healthy) scenarios — RunBatch renders it n/a on adversarial
+	// scenarios. Set on the cushion-sensitivity rungs (X-0 / X-300 / X-500).
+	BaselineOnly bool
 }
 
 func (p Protocol) Name() string {
@@ -74,6 +79,10 @@ func (p Protocol) Name() string {
 	}
 	return "2abOBFT"
 }
+
+// IsBaselineOnly reports whether this variant runs only on Baseline-group
+// scenarios (see BaselineOnly). Consumed by RunBatch.
+func (p Protocol) IsBaselineOnly() bool { return p.BaselineOnly }
 
 // safetyBuffer returns the SafetyBuffer for this variant: the override
 // if set, otherwise cfg.RefloodDelay (the spec default that matches bare
@@ -176,15 +185,14 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, fmt.Errorf("%w: twoab adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)
 	}
-	// Apply the spec's runtime clamp `T_broadcast_max_k = max(BFTStart,
-	// T0Broadcast − B_k)`. BFTStart=0 preserves the legacy `if < 0`
-	// clamp bit-exactly.
-	bftStart := cfg.BFTStart
+	// Apply the spec's runtime clamp `T_broadcast_max_k = max(0,
+	// T0Broadcast − B_k)`. A layer whose designed fetch lands before
+	// slot start floors to 0.
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
 		fa := t0Broadcast - broadcastBudget[k]
-		if fa < bftStart {
-			fa = bftStart
+		if fa < 0 {
+			fa = 0
 		}
 		fetchAt[k] = fa
 	}
@@ -195,7 +203,6 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		K:                    cfg.K,
 		Operators:            cfg.Operators,
 		Crashed:              cfg.Byz.Crashed,
-		BFTStart:             bftStart,
 		TPhase2a:             tPhase2a,
 		SafetyBuffer:         safetyBuffer,
 		Epsilon3:             epsilon3,
@@ -221,34 +228,30 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
-	// Stamp the L_0 BFTStart-independence threshold = the unclamped
+	// Stamp the L_0 BFT_start-independence threshold = the unclamped
 	// fetchAt[0] (= T0Broadcast − B_0, floored at 0; no fetchBuffer term —
 	// 2ab's fetchAt loop doesn't use one). This is the `fa` computed for
-	// k=0 above before the `max(BFTStart, …)` clamp — the largest BFTStart
-	// for which L_0's schedule is identical to BFTStart=0. The UI reuses
-	// the BFTStart=0 cell at or below this value (see
+	// k=0 above — the largest BFT_start for which L_0's schedule is
+	// identical to BFT_start=0. The report UI reuses this (BFT_start=0)
+	// cell at or below this value (see
 	// Outcome.BFTStartIndependenceThreshold).
 	//
-	// The value is BFTStart-invariant (a pure function of the rest of
-	// cfg), and the UI reads it only from the BFT_start=0 cell (its
-	// shape-anchor), so we stamp it just there and skip the redundant
-	// copies on BFTStart>0 cells. Outcome-independent, so stamped
-	// regardless of decided/miss.
-	if cfg.BFTStart == 0 {
-		bftIndep := t0Broadcast - broadcastBudget[0]
-		if bftIndep < 0 {
-			bftIndep = 0
-		}
-		out.BFTStartIndependenceThreshold = &bftIndep
+	// The value is a pure function of cfg (BFT_start is not a sim
+	// parameter — the sim always runs at BFT_start=0), so it's stamped
+	// unconditionally on the single cell, regardless of decided/miss.
+	bftIndep := t0Broadcast - broadcastBudget[0]
+	if bftIndep < 0 {
+		bftIndep = 0
 	}
+	out.BFTStartIndependenceThreshold = &bftIndep
 	// Stamp the deciding-layer broadcast deadline (anchored at
 	// t0Broadcast, per 2abOBFT's spec anchor). Shallow layers whose B_k
-	// exceed t0Broadcast clamp to BFTStart, matching the runtime rule
-	// T_broadcast_max_k = max(BFTStart, T0Broadcast − B_k).
+	// exceed t0Broadcast clamp to 0, matching the runtime rule
+	// T_broadcast_max_k = max(0, T0Broadcast − B_k).
 	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
 		bt := t0Broadcast - broadcastBudget[out.DecidedRound]
-		if bt < bftStart {
-			bt = bftStart
+		if bt < 0 {
+			bt = 0
 		}
 		out.DecidingBroadcastTime = bt
 	}
@@ -334,7 +337,6 @@ type desConfig struct {
 	K                    int
 	Operators            []ct.OperatorID
 	Crashed              []ct.OperatorID // completely-offline operators (subset of Operators)
-	BFTStart             time.Duration   // forwarded to twoab.Config.BFTStart
 	TPhase2a             time.Duration   // forwarded to twoab.Config.TPhase2a
 	SafetyBuffer         time.Duration   // forwarded to twoab.Config.SafetyBuffer
 	Epsilon3             time.Duration   // Phase-3 walk per-layer cost

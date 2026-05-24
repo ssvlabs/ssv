@@ -145,7 +145,6 @@ func (s *sim) start() error {
 		Delta2:    s.cfg.Delta2,
 		Eps3:      s.cfg.Epsilon3, // production obftbase.Config.Eps3 is the pure ε_3 budget
 		BTT:       s.cfg.BTT,
-		BFTStart:  s.cfg.BFTStart,
 	}
 	if err := cfgObft.Validate(); err != nil {
 		// Validate failures at this point mean the SimConfig translates

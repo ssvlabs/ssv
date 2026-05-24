@@ -30,7 +30,6 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -46,17 +45,14 @@ type OperatorID uint64
 // SimConfig carries only what the framework or MULTIPLE adapters need to
 // share. Protocol-specific timing derivation (OBFT's Δ_2 / B_k schedule /
 // FetchAt; QBFT's per-round RT) lives in the per-adapter Run path and is
-// derived from BTT at Run-time. The bridge value is BTT — some adapters
-// scale it by a per-variant BTTMultiplier (e.g. OBFT's x2/x3) before deriving
-// budgets, so the sweep can drive every protocol family from the same
-// network BTT while letting each variant model a different operator-side
-// pessimism.
+// derived from BTT at Run-time. The bridge value is BTT, so the sweep can
+// drive every protocol family from the same network BTT.
 //
 //   - qV = qEnc       = 2f+1 from N
 //   - F               = (N−1)/3
 //   - T_commit, B_k, FetchAt, Delta2, RT, PhaseBudget — all derived
-//     inside the relevant adapter from BTT (× the variant's multiplier)
-//     and RelayCutoff − HeaderSubmitHeadroom.
+//     inside the relevant adapter from BTT and
+//     RelayCutoff − HeaderSubmitHeadroom.
 type SimConfig struct {
 	N         int          // cluster size; F = (N-1)/3 is implied
 	Operators []OperatorID // typically 1..N
@@ -66,15 +62,6 @@ type SimConfig struct {
 	// ignore this. Must satisfy MinK(N) ≤ K ≤ N where MinK = f+1.
 	K int
 
-	// BFTStart is the virtual-time offset at which the protocol's primary
-	// broadcast pipeline begins (= BFT_start in the spec). Pre-fetch and
-	// pre-consensus modeling are not in scope for the sim; this field
-	// captures BFT activity start directly. Defaults to 0 (BFT starts at
-	// slot start). The OBFT-family schedules apply the spec's runtime
-	// clamp `T_broadcast_max_k = max(BFTStart, T_commit − B_k)`; PSigs
-	// uses this as the time each op signs + broadcasts; QBFT uses it as
-	// the PROPOSE-start anchor.
-	BFTStart     time.Duration
 	SlotDuration time.Duration // 12s for Ethereum
 	RelayCutoff  time.Duration // application hard deadline (4s for proposer duty)
 
@@ -87,14 +74,13 @@ type SimConfig struct {
 
 	// BTT (broadcast trip time) = network P99 one-way propagation + clock skew δ.
 	// The single network-side knob the sweep varies; each Protocol-family
-	// adapter scales BTT by its own BTTMultiplier (default 1.0) before
-	// deriving every internal timing budget. Framework-side sizing
-	// (spec-aligned, post-tightening): OBFT Δ_2 = 1·bttEff (spec
+	// adapter derives every internal timing budget from it. Framework-side
+	// sizing (spec-aligned, post-tightening): OBFT Δ_2 = 1·BTT (spec
 	// recommendation; reflood absorbed by B_0, not by Δ_2 — see
-	// RefloodDelay); 2abOBFT Δ_2a + Δ_2b = 3·bttEff total (Δ_2a =
-	// 2·bttEff structural minimum per 2abOBFT.md §Setting, Δ_2b =
-	// 1·bttEff spec-aligned); QBFT pristine per-round RT = 3·bttEff (R1)
-	// / 4·bttEff (rounds ≥ 2, +1·BTT ROUND_CHANGE hop), QBFTSSV flat 2s.
+	// RefloodDelay); 2abOBFT Δ_2a + Δ_2b = 3·BTT total (Δ_2a =
+	// 2·BTT structural minimum per 2abOBFT.md §Setting, Δ_2b =
+	// 1·BTT spec-aligned); QBFT pristine per-round RT = 3·BTT (R1)
+	// / 4·BTT (rounds ≥ 2, +1·BTT ROUND_CHANGE hop), QBFTSSV flat 2s.
 	BTT time.Duration
 
 	// RefloodDelay is the per-scenario reflood-absorption budget folded
@@ -104,10 +90,10 @@ type SimConfig struct {
 	// schedule-level reflood absorption. Production-realistic-mesh
 	// scenarios opt in by setting cfg.RefloodDelay equal to the mesh's
 	// gossip heartbeat (700ms by default), matching the production SSV
-	// adapter's DefaultRefloodDelay. Does NOT scale with BTTMultiplier —
-	// reflood-cycle latency is a libp2p deployment constant (mirrors
-	// QBFT-SSV's fixed 2s round-timeout convention). Ignored by QBFT and PSigs adapters
-	// (no spec-level reflood-absorption concept).
+	// adapter's DefaultRefloodDelay. An absolute duration, not a BTT
+	// multiple — reflood-cycle latency is a libp2p deployment constant
+	// (mirrors QBFT-SSV's fixed 2s round-timeout convention). Ignored by
+	// QBFT and PSigs adapters (no spec-level reflood-absorption concept).
 	RefloodDelay time.Duration
 
 	Network NetworkModel
@@ -241,23 +227,6 @@ type Protocol interface {
 	Run(cfg SimConfig) (Outcome, error)
 }
 
-// IsPipelineShiftProtocol reports whether the UI uses post-hoc pipeline-shift
-// (decision_time + BFTStart) for this protocol — i.e. the protocol's whole
-// pipeline shifts wholesale with BFTStart and one BFTStart=0 sim is
-// equivalent to running at any BFTStart. Returns true for QBFT family and
-// PSigs; false for OBFT family (where per-layer broadcast schedules are
-// slot-anchored and BFTStart shifts only the lower bound of each layer's
-// broadcast deadline — requires a real per-BFTStart simulation, not a shift).
-//
-// Drives sweep-matrix protocol filtering: at BFTStart > 0 the sweep skips
-// pipeline-shift protocols (the BFTStart=0 cell + UI shift already covers
-// them) and only runs the OBFT-family ones for which BFTStart materially
-// changes the schedule.
-func IsPipelineShiftProtocol(p Protocol) bool {
-	name := p.Name()
-	return name == "QBFT" || name == "PSigs" || strings.HasPrefix(name, "QBFT-")
-}
-
 // ErrNotApplicable is returned by Run when a scenario doesn't translate to
 // this protocol (e.g. OBFT-specific h_V=1 on QBFT). The framework treats it
 // as "skip" rather than "fail" when comparing outcomes (renders as n/a).
@@ -341,37 +310,36 @@ type Outcome struct {
 	MissReason string
 	// DecidingBroadcastTime is the slot-anchored T_broadcast_max_k for
 	// k=DecidedRound — i.e. the absolute slot time at which the deciding
-	// layer's primary broadcast fired (= max(BFTStart, T_commit − B_k)
+	// layer's primary broadcast fired (= max(0, T_commit − B_k)
 	// per the spec's runtime clamp). Reported for diagnostic / UI use
 	// and per-sample timeline rendering.
 	//
 	// Set only by adapters with a slot-anchored Phase-1 schedule (OBFT
-	// family and 2abOBFT family). QBFT's pipeline shifts wholesale with
-	// BFTStart so the field is meaningless there; the QBFT adapter
-	// leaves it zero and the UI's shiftCell pipeline-shift branch
-	// doesn't consult it. Zero when !Decided.
+	// family and 2abOBFT family). The QBFT adapter has no slot-anchored
+	// broadcast schedule and leaves this zero; the report UI derives
+	// BFT_start post-hoc and its QBFT-family pipeline-shift branch doesn't
+	// consult it. Zero when !Decided.
 	DecidingBroadcastTime time.Duration
-	// BFTStartIndependenceThreshold is the largest BFTStart for which the
+	// BFTStartIndependenceThreshold is the largest BFT_start for which the
 	// deciding-layer (L_0) primary broadcast schedule is bit-identical to
-	// BFTStart=0 — i.e. the *unclamped* fetchAt[0] (= anchor − B_0,
+	// BFT_start=0 — i.e. the *unclamped* fetchAt[0] (= anchor − B_0,
 	// floored at 0, where anchor = T_commit for OBFT / T0Broadcast for
 	// 2abOBFT and B_0 = broadcastBudget[0]). At or below this value the
-	// spec clamp `max(BFTStart, anchor − B_0)` is dormant at L_0, so the
-	// BFTStart=0 cell is an exact stand-in; above it a per-BFTStart
-	// pre-computed cell is required. The UI reads the serialized value to
-	// decide cell reuse instead of recomputing the sizing JS-side (which
+	// spec clamp `max(BFT_start, anchor − B_0)` is dormant at L_0, so the
+	// sim's (BFT_start=0) cell is an exact stand-in for that BFT_start;
+	// above it the cell is only an approximation. BFT_start is not a sim
+	// parameter — the sim always runs at BFT_start=0 and the report UI
+	// reads this serialized value to decide which picker BFT_starts a cell
+	// covers exactly, instead of recomputing the sizing JS-side (which
 	// drifts whenever the adapter's timing changes).
 	//
 	// A pointer so that an emitted 0 (clamp engages immediately) is
 	// distinct from "not set". Set only by adapters with a slot-anchored
-	// Phase-1 schedule (OBFT family and 2abOBFT family), and only on the
-	// BFTStart=0 cell: the value is BFTStart-invariant and the UI reads it
-	// from that anchor cell, so one copy suffices (BFTStart>0 cells leave
-	// it nil). nil for pipeline-shift protocols (QBFT family, PSigs),
-	// which shift wholesale and whose UI path never consults it. Unlike
-	// DecidingBroadcastTime it's a pure function of cfg (not the sim
-	// outcome), so it survives ClipLateDecision unchanged and is valid
-	// even on !Decided iters.
+	// Phase-1 schedule (OBFT family and 2abOBFT family); nil for the
+	// pipeline-shift protocols (QBFT family, PSigs), whose UI path shifts
+	// wholesale and never consults it. The value is a pure function of cfg
+	// (not the sim outcome), so it survives ClipLateDecision unchanged and
+	// is valid even on !Decided iters.
 	BFTStartIndependenceThreshold *time.Duration
 	PerOp                         map[OperatorID]OperatorOutcome
 	Trace                         []TraceEntry // non-nil iff cfg.TraceEnabled was set
@@ -500,9 +468,6 @@ func (c *SimConfig) Validate() error {
 	if c.RefloodDelay < 0 {
 		return fmt.Errorf("consensustest: RefloodDelay must be >= 0")
 	}
-	if c.BFTStart < 0 {
-		return fmt.Errorf("consensustest: BFTStart must be >= 0")
-	}
 	if c.RelayCutoff <= 0 {
 		return fmt.Errorf("consensustest: RelayCutoff must be > 0")
 	}
@@ -615,7 +580,6 @@ func DefaultProposerDutyConfig(btt time.Duration) SimConfig {
 		N:                    4,
 		Operators:            operators,
 		K:                    0, // → DefaultK(N=4) = 2 (K = f+1 BFT-min)
-		BFTStart:             0,
 		SlotDuration:         12 * time.Second,
 		RelayCutoff:          4 * time.Second,
 		HeaderSubmitHeadroom: 100 * time.Millisecond,

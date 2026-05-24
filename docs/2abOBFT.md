@@ -272,7 +272,29 @@ Two distinct `V` signatures (at `L_k` and `L_{k+m}`, `m ≥ 1`) cannot both reco
 
 ### Liveness (synchrony-conditional)
 
-Liveness is partial-synchrony-conditional within the slot's relay deadline. The recovery profile below is the protocol's behavior as exercised by the reference test catalog (`protocol/v2/consensustest/`). Running example: `f = 1, n = 4, K = 2`; honest A, B, C; byzantine D.
+Liveness is **partial-synchrony-conditional within the slot's relay deadline**. The recovery profile below is the protocol's behavior as exercised by the reference test catalog (`protocol/v2/consensustest/`, protocol `2abOBFT`). Running example: `f = 1, n = 4, K = 2`; honest A, B, C; byzantine D. The protocol terminates with a V signature on the first layer whose bundle reaches a σ-quorum within its σ-side absorption window (`~1·BTT + SafetyBuffer` at L_0; deeper layers wider), else falls through via NR-quorum to a deeper backup, else — past the deepest layer's window (Class A sustained partition) — misses cleanly; **safety holds in either case**. View-divergence is recovered in-protocol where an honest majority resolves it (most equivocation splits, honest-majority validity-divergence); the residual splits slot-miss — equivocation cases are slashable, validity-divergence is not attributable.
+
+> ### ⚠️ Like the rest of the OBFT family, 2abOBFT's liveness is conditional on two requirements per slot:
+>
+> **(a) [Assumption 2](#assumed) (within-budget partial-synchrony) holds for that slot.** Honest emissions reach a `2f+1` quorum within the σ-side absorption window (`~1·BTT + SafetyBuffer` at L_0; deeper layers wider). This is the same partial-synchrony assumption QBFT operates under for its `PREPARE` / `COMMIT` phases.
+>
+> **(b) At each layer `L_k`, the leader's Phase-1 bundle must EITHER reach a `2f+1` σ-quorum (output V at this layer), OR fail to reach by a wide-enough margin that the remaining `≥ qEnc` operators NR-quorum (chain falls through to `L_{k+1}`).** The partial-propagation band in between — `n − qEnc < receivers < qV`, at f=1 n=4 exactly `r = 2` (= byz leader + 1 honest receiver, the `h_V=1` shape) — is where a layer can deadlock: σ-pool `< qV`, NR-pool `< qEnc`. **2abOBFT narrows this band relative to bare OBFT.** Because `KindNoValue` is non-binding (no L_0 lock), a V-drop operator does not hard-commit at the `TPhase2a` backstop — it stays upgrade-eligible, so a bundle (or a forwarded witness) re-flooding within the σ-pool fill window lets it upgrade to σ and lift the layer over `qV`. The residual deadlock is the **degraded-mesh tail**: neither `V` nor a forwarded witness re-floods in time to lift σ-pool to `qV`, and the no-value cohort is itself below `qEnc` (so no NR-quorum forms to fall through) — chain encryption then stays sealed at `L_k`, no cluster-wide fall-through.
+>
+> **Caveat at f=1, n=4 with a dormant byzantine** (byz silent / offline; counted as silent, equivalent to a down honest): the "fail by a wide-enough margin" NR branch in (b) is unavailable — only 2 of 4 ops are honest non-leaders, so even if both go no-value, `noValuePool = 2 < qEnc = 3`. At this configuration every layer succeeds only when its leader's bundle reaches σ-quorum (directly, or via the peer-reflood-V harvest + upgrade); any zero/partial propagation the upgrade path cannot lift collapses the slot, since NR-quorum cannot form to unlock chain encryption for fall-through.
+>
+> **Practical causes of (b) failing:**
+> - Late leader broadcast (fetch / disk / MEV-relay overrun)
+> - Phase-1 mesh propagation tail past the fill window (peer-score pruning, mesh churn, network spike)
+> - Clock skew beyond `δ`
+>
+> Deployments with mesh-flakiness or honest leaders prone to processing tails should expect proportionally higher slot-miss rates from the residual (b) tail.
+>
+> **Practical mitigations narrow (b) substantially:**
+> - The `SafetyBuffer` fill window absorbs a full gossipsub IHAVE/IWANT cycle.
+> - The `KindNoValue` no-lock + upgrade converts late-`V` arrivals into σ recoveries rather than the hard NR-locks bare OBFT takes at `T_commit`.
+> - Peer-reflood-V harvest of forwarded witnesses largely addresses the worst sub-case (`h_V=1`) at L_0.
+>
+> **Comparison to QBFT.** QBFT has no analogous per-layer (b) deadlock — it round-changes when a round fails to converge and only misses when cumulative round-change exceeds the slot budget. See [§Comparison](#comparison-with-the-obft-family-and-qbft) for the side-by-side across bare OBFT, 2abOBFT, and QBFT.
 
 **Healthy path — decides at L_0, ~1·BTT post-bundle.** All operators retain `V_0` + host-valid → all emit `KindValue` with σ partials. The leader witness seeds σ-pool, so a single honest peer completes `qV = 3`. **Success (fastest).**
 
@@ -281,7 +303,7 @@ Liveness is partial-synchrony-conditional within the slot's relay deadline. The 
 - **Primary leader silent or crashed** — no `V_0` reaches the cluster; honest operators coordinate `KindNoValue`, `noValuePool[0] = 3 ≥ qEnc`, all emit `KindCommit-NR`, `nr_tag_0`-quorum unlocks L_1, the backup leader's value σ-decides. **Success (fall-through).**
 - **Late L_0 leader broadcast** (bundle arrives in the absorption window past the nominal target) — re-flood + the SafetyBuffer fill window let σ-pool reach `qV` at L_0. **Success (fastest).**
 - **Mesh-flaky honest + byzantine σ-refusal** — IHAVE/IWANT recovery within the SafetyBuffer fills the flaky operator's σ-pool. **Success (fastest).**
-- **h_V=1 byzantine selective-delivery** (the leader delivers `V_0` to only one honest operator) — the V-drop operators harvest `V_0` + the leader's witness from the recipient's `KindValue` (peer-reflood-V), host-validate, and upgrade to σ. **Success (fastest).**
+- **h_V=1 byzantine selective-delivery** (the leader delivers `V_0` to only one honest operator) — the V-drop operators harvest `V_0` + the leader's witness from the recipient's `KindValue` (peer-reflood-V), host-validate, and upgrade to σ → σ-pool reaches `qV` at L_0. **Success (fastest)** under healthy mesh — peer-reflood-V largely addresses the worst (b) sub-case; the degraded-mesh tail slot-misses, deterred via assumption 4.
 
 **Leader equivocation:**
 - **σ-locked f-f split** (the leader gives `V_a` to `f` honest, `V_b` to `f` honest, ∅ to the rest) — the leader's per-value witnesses + the silent operators harvesting `V_a` via forwarded witnesses push one value's σ-pool past `qV`. **Success (fastest).** (Pigeonhole 2 guarantees only one value reaches `qV`.)
@@ -289,13 +311,17 @@ Liveness is partial-synchrony-conditional within the slot's relay deadline. The 
 - **All-NR equivocation** (both values flooded to everyone) — every honest operator observes ≥ 2 values → `KindCommit-NRDirect` → `nr_tag_0`-quorum → **Success (fall-through)** under uniform delivery. (Under heavy jitter, async fire can σ-lock some operators on the first value before the second arrives; the slot then mostly decides fast at L_0 with a minority miss tail — safety-preserving, since finalizing one of the two equivocated values is a valid decision and the equivocation stays slashable.)
 - **1-1-1 equivocation** (a distinct value to each honest operator) — each σ-locks on its own value before re-flood surfaces the conflict; every `σ-pool[V_i]` = the recipient + the leader's witness = `2 < qV`, and no σ-locked operator can pivot to NR. **Miss** (no fall-through; recovers next slot). This is the headline cost of the leader-witness head-start.
 
-**Validity-divergence** (a re-org splits honest host verdicts mid-slot):
+Pigeonhole 2 ensures at most one value can reach `qV` cluster-wide regardless of how honest σ-emissions split — there is no two-output safety violation in any equivocation case above.
+
+**Validity-divergence** (a re-org splits honest host verdicts mid-slot; the leader's Phase-1 witness locks it σ-side regardless of a later host flip):
 - **3-σ vs 1-NV** — `σ-pool[V] = 3 = qV`. **Success (fastest).**
 - **1-σ vs 3-NV** — `noValuePool[0] = 3 = qEnc` (the NV operators can NR since they never σ-locked); fall-through. **Success (fall-through).**
 - **2-σ vs 2-NV (boundary)** — `σ-pool = 2 < qV` and `noValuePool = 2 < qEnc`; no trigger fires; **Miss** (stalls at L_0). The f=1 n=4 algebraic limit.
 - **Validity-divergence + passive byzantine** (the honest split is below quorum and the byzantine stays silent or σ-locks on a single value, including a leader whose host flips post-fetch) — neither quorum reaches; **Miss**. These are the σ-locked-leader regressions (assumption 3).
 
-**Deepest-layer / cascade:** if all `K` leaders are silent, or every layer's leader fails non-recoverably, the slot **misses** (at `K ≥ f+1`, byzantines alone cannot cause this — pigeonhole guarantees ≥ 1 honest leader; it requires `> f` faults or coincident independent failures).
+**Deepest-layer / multi-failure fall-through.** With `K > 2` layers the cluster falls through past multiple silent or non-validating layers **within Phase 3's single reconstruction walk** (sequential local decryption, no per-layer RTT) — a structural difference from QBFT (which round-changes once per failed leader). If all `K` leaders are silent, or every layer's leader fails non-recoverably, the slot **misses** — at `K ≥ f+1`, byzantines alone cannot cause this (pigeonhole guarantees ≥ 1 honest leader); it requires `> f` faults or coincident independent failures.
+
+**Adversarial scheduling.** A network adversary delaying messages by up to `1 BTT` cannot affect safety (the pigeonholes are over the cluster-wide signed-message set, not arrival times). Its liveness effect reduces to the (b) split: delaying `V` to ≤ 1 honest still leaves `σ-pool = 2 + leader witness = qV` (the quorum reaches without the delayed operator); delaying to ≥ 2 honest is absorbed by the `KindNoValue` no-lock — the delayed operators upgrade to σ if `V` or a forwarded witness re-floods before they NR-commit (the `h_V=1` shape, under healthy mesh), else fall through if `noValuePool` reaches `qEnc`, else slot-miss on the degraded-mesh / dormant-byz tail.
 
 ### Slashing evidence
 
@@ -381,6 +407,7 @@ QBFT is SSV's existing consensus protocol; bare [OBFT](OBFT.md) is the spec-simp
 
 - **QBFT vs the OBFT family:** QBFT separates "decide on a value" from "sign the decided value"; the OBFT family fuses them by embedding threshold partials inside the consensus phases. QBFT recovers a silent leader via serial round-change (`RT` per round); the OBFT family recovers `K-1` silent leaders in a *single* Phase-3 reconstruction walk (parallel fall-through, no per-layer RTT) — decisive when `K-1` is large relative to the slot budget.
 - **2abOBFT vs bare OBFT:** both carry a per-layer leader σ-witness, reach σ-quorum fast at L_0, and recover honest-majority validity-divergence (3-1 / 1-3) and 2-1 partial equivocation. 2abOBFT adds the Phase-2 split (the `KindNoValue` coordination signal + the dynamic NR-eligibility commit) and the peer-reflood-V harvest of forwarded witnesses. The net effect over bare OBFT: **σ-locked-split leader equivocation**, which bare OBFT misses, recovers at L_0 (the silent operators harvest the value via forwarded witnesses and upgrade), and a **late L_0-leader broadcast** decides at L_0 rather than falling through. They are otherwise close on the healthy path and share the same residual misses (1-1-1 equivocation, 2-2 validity-divergence).
+- **The per-layer (b) liveness condition** (the propagation requirement each spec's [§Liveness](#liveness-synchrony-conditional) box names): bare OBFT carries the widest (b) deadlock band — a receiver without `V` at `T_commit` hard-NR-locks, so the partial-propagation middle (`n − qEnc < receivers < qV`) deadlocks unless peer-reflood-V lifts it at L_0. 2abOBFT **narrows (b)**: the `KindNoValue` no-lock keeps late-`V` receivers upgrade-eligible, so a **late L_0-leader broadcast decides at L_0** (where bare OBFT falls through to L_1) and late multi-receiver propagation tails upgrade to σ rather than NR-lock; the residual is the shared degraded-mesh tail. QBFT has **no per-layer (b) deadlock** — round-change re-proposes — which is also why it recovers the 1-1-1 equivocation and 2-2 validity-divergence cases the OBFT family misses (those are separate from (b), but trace to the same absence of an in-protocol pivot in the family).
 
 **Recovery coverage** (✓ recover, ✗ miss; at equal total slot budget):
 

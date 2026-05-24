@@ -14,10 +14,11 @@ import (
 // partial-sig wire footprint.
 const pSigBytes int64 = 96 + 160
 
-// ---- evtPSigSign: operator signs V at BFTStart and broadcasts --------
+// ---- evtPSigSign: operator signs V at slot start and broadcasts ------
 
-// evtPSigSign fires once per honest operator at BFTStart. The op self-
-// observes (count = 1) and broadcasts the partial sig to every peer.
+// evtPSigSign fires once per honest operator at slot start (offset 0).
+// The op self-observes (count = 1) and broadcasts the partial sig to
+// every peer.
 // The local self-observation can already satisfy qV at f=0 (degenerate
 // n=1 single-op "cluster" where qV=1) — we record the decision time
 // here to cover that edge case; for realistic f≥1 the count increments

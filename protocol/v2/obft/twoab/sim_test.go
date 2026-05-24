@@ -85,7 +85,6 @@ func newSimWithFK(t *testing.T, n, f, K int) *sim {
 		TPhase2a:     tPhase2a,
 		SafetyBuffer: safetyBuffer,
 		BTT:          btt,
-		BFTStart:     0,
 	}
 	require.NoError(t, c.Validate())
 

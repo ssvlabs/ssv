@@ -144,19 +144,25 @@ type BatchCell struct {
 	// T_broadcast_max for the deciding layer of the i-th successful sim
 	// (zero when the protocol has no slot-anchored broadcast, e.g. QBFT).
 	// Reporting layer relies on the index alignment to emit parallel-sorted
-	// arrays for the UI's BFT_start-aware cell lookup and the legacy
+	// arrays for the UI's per-sample timeline rendering and the
 	// pipeline-shift fallback.
 	DecisionTime          Distribution
 	DecidingBroadcastTime Distribution
 	ClusterBandwidth      Distribution
 	PerKindBandwidth      map[string]Distribution
 	MissReasons           map[string]int
-	// BFTStartIndependence is the cell's L_0 BFTStart-independence
+	// DecidedRounds is a histogram of the cluster's deciding round/layer
+	// over the successful sims (key = Outcome.DecidedRound: layer for
+	// OBFT/2abOBFT, 0-indexed round for QBFT, 0 for PSigs; value = count).
+	// Σ values == success count. Lets the report show whether a success
+	// rate is MEV-dense (decided at L_0 / R1) or fall-through (L_1+).
+	DecidedRounds map[int]int
+	// BFTStartIndependence is the cell's L_0 BFT_start-independence
 	// threshold (see Outcome.BFTStartIndependenceThreshold) — constant
 	// across the cell's iters, so captured once from the first iter that
-	// carries it. nil for pipeline-shift protocols, out-of-envelope cells,
-	// and every BFTStart>0 cell (adapters stamp it only at BFTStart=0).
-	// The reporting layer serializes it as cellPayload.BFTStartIndependenceMs.
+	// carries it. nil for pipeline-shift protocols and out-of-envelope
+	// cells. The reporting layer serializes it as
+	// cellPayload.BFTStartIndependenceMs.
 	BFTStartIndependence *time.Duration
 }
 

@@ -135,17 +135,6 @@ type Config struct {
 	// B_1..B_{K-1} = T_commit backups). Concrete sizing at Config A:
 	// P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
-
-	// BFTStart is BFT_start — the slot-relative offset at which the
-	// protocol's primary broadcast pipeline begins. Pre-fetch and
-	// pre-consensus sit in `[slot_start, BFTStart]`. Default 0 (BFT
-	// starts at slot start). When BFTStart > T_commit − B_k for some
-	// layer k, the spec's runtime clamp
-	// `T_broadcast_max_k = max(BFTStart, T_commit − B_k)` floors that
-	// layer's broadcast deadline at BFTStart — the schedule degrades
-	// (effective B_k = T_commit − BFTStart) but stays valid; the
-	// validator below admits these configurations.
-	BFTStart time.Duration
 }
 
 // K returns the number of layers (= len(Layers)).
@@ -172,20 +161,19 @@ func (c *Config) Quorum() int {
 	return c.QV()
 }
 
-// BroadcastMaxOffsetForLayer returns `T_broadcast_max_k = max(BFTStart, T_commit − B_k)`
+// BroadcastMaxOffsetForLayer returns `T_broadcast_max_k = max(0, T_commit − B_k)`
 // for layer k — the leader's target broadcast time per spec §Setting.
 //
-// `B_k` is a target, not a hard cap; the BFTStart floor (default 0) handles
-// the degraded case where the layer's design-time budget overshoots
-// `T_commit − BFTStart`. In that case the leader broadcasts at BFTStart
-// best-effort, and the layer's effective absorption window contracts to
-// `T_commit − BFTStart` (= `min(B_k, T_commit − BFTStart)`). The only
+// `B_k` is a target, not a hard cap; the slot-start floor (0) handles the
+// degraded case where the layer's design-time budget overshoots `T_commit`.
+// In that case the leader broadcasts at slot start best-effort, and the
+// layer's effective absorption window contracts to `T_commit`. The only
 // runtime acceptance gate remains T_commit at receivers.
 func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
-	if d := c.TCommit - c.Layers[k].BroadcastBudget; d > c.BFTStart {
+	if d := c.TCommit - c.Layers[k].BroadcastBudget; d > 0 {
 		return d
 	}
-	return c.BFTStart
+	return 0
 }
 
 // DefaultBroadcastBudget returns a spec-conforming B_k schedule for K layers
@@ -211,8 +199,8 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 //
 // At extreme degraded operating points where T_commit shrinks below
 // 2·BTT + RefloodDelay, B_0 can exceed T_commit. The protocol's runtime
-// `T_broadcast_max_k = max(BFT_start, T_commit − B_k)` clamps the primary's
-// target at BFT_start, so the configuration remains valid (the primary
+// `T_broadcast_max_k = max(0, T_commit − B_k)` clamps the primary's
+// target at slot start, so the configuration remains valid (the primary
 // becomes a redundant peer of the backups; cluster still operates).
 //
 // Callers that need deployment-specific tunings (e.g. the SSV adapter's
@@ -313,12 +301,12 @@ func (c *Config) Validate() error {
 		return errors.New("obft: Eps3 must be positive")
 	}
 	// Anchor-specific: FetchAt must land within each layer's broadcast
-	// deadline max(BFTStart, T_commit − B_k).
+	// deadline max(0, T_commit − B_k).
 	for k, layer := range c.Layers {
 		if layer.FetchAt > c.BroadcastMaxOffsetForLayer(k) {
-			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v (max(BFTStart=%v, T_commit−B_k=%v))",
+			return fmt.Errorf("obft: layer %d FetchAt %v exceeds broadcast deadline %v (max(0, T_commit−B_k=%v))",
 				k, layer.FetchAt, c.BroadcastMaxOffsetForLayer(k),
-				c.BFTStart, c.TCommit-c.Layers[k].BroadcastBudget)
+				c.TCommit-c.Layers[k].BroadcastBudget)
 		}
 	}
 	return nil

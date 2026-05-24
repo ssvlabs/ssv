@@ -19,7 +19,7 @@ type LayerSpec struct {
 	FetchAt time.Duration
 
 	// BroadcastBudget is the layer's absorption target B_k: the leader aims to
-	// broadcast its Phase-1 bundle by max(BFTStart, anchor − B_k). It is a
+	// broadcast its Phase-1 bundle by max(0, anchor − B_k). It is a
 	// target, not a hard runtime cap. Required > 0 on every layer and must be
 	// non-decreasing in layer index. Use each protocol's DefaultBroadcastBudget
 	// for a spec-conforming schedule.
@@ -74,7 +74,7 @@ func ValidateClusterTopology(operators []OperatorID, f int, layers []LayerSpec, 
 	}
 	// B_0 ≤ B_1 ≤ ... ≤ B_{K-1}: deeper layers get ≥ their predecessor's
 	// absorption headroom. Equal adjacent budgets are tolerated (multiple
-	// layers may clamp to BFTStart at degraded operating points).
+	// layers may clamp to slot start at degraded operating points).
 	for k := 1; k < len(layers); k++ {
 		if layers[k].BroadcastBudget < layers[k-1].BroadcastBudget {
 			return errors.New("obft: BroadcastBudget must be non-decreasing in layer index (B_0 ≤ B_1 ≤ ...)")
@@ -95,7 +95,7 @@ func ValidateClusterTopology(operators []OperatorID, f int, layers []LayerSpec, 
 		}
 		// Deeper layers fetch ≤ their predecessor's offset (re-org resistance,
 		// MEV-fetch asymmetry). Non-increasing (not strict-decreasing) lets
-		// layers tie at BFTStart at degraded operating points.
+		// layers tie at slot start at degraded operating points.
 		if k > 0 && layer.FetchAt > layers[k-1].FetchAt {
 			return errors.New("obft: layer fetch times must be non-increasing in k")
 		}

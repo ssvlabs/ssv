@@ -69,11 +69,6 @@ type ConfigOverrides struct {
 	// the cost of σ-pool-fill tolerance; see docs/2abOBFT.md §Timing.
 	SafetyBuffer time.Duration
 
-	// BFTStart is the slot-relative offset at which broadcasts may begin
-	// (pre-fetch / pre-consensus sit in [slot_start, BFTStart]). Default 0.
-	// The runtime clamp is T_broadcast_max_k = max(BFTStart, T_0_broadcast − B_k).
-	BFTStart time.Duration
-
 	// Test-only protocol-timing overrides. Production callers MUST NOT set
 	// these — BTT is the only protocol-timing input. Unexported so external
 	// callers cannot construct them; settable from package-internal fixtures.
@@ -82,7 +77,7 @@ type ConfigOverrides struct {
 	jitterBufferOverride time.Duration
 
 	// FetchAt overrides the default per-layer fetch offsets. If nil, derived
-	// as max(BFTStart, T_0_broadcast − B_k). Length must match K.
+	// as max(0, T_0_broadcast − B_k). Length must match K.
 	FetchAt []time.Duration
 
 	// BroadcastBudget overrides the default per-layer absorption windows B_k.
@@ -149,13 +144,6 @@ func (o *ConfigOverrides) jitterBuffer() time.Duration {
 	return o.jitterBufferOverride
 }
 
-func (o *ConfigOverrides) bftStart() time.Duration {
-	if o == nil {
-		return 0
-	}
-	return o.BFTStart
-}
-
 // resolveBudget reserves the post-TPhase2a window before RelayCutoff: the MAX
 // of the σ-path and NR-fall-through path, plus ε_3 + jitter + header headroom.
 func (o *ConfigOverrides) resolveBudget() time.Duration {
@@ -220,7 +208,6 @@ func ConfigForCluster(
 			tPhase2a, btt, overrides.relayCutoff(), overrides.safetyBuffer())
 	}
 	t0Broadcast := tPhase2a - btt
-	bftStart := overrides.bftStart()
 
 	sorted := make([]spectypes.OperatorID, len(committee))
 	copy(sorted, committee)
@@ -241,13 +228,13 @@ func ConfigForCluster(
 
 	fetchAt := overrides.FetchAt
 	if fetchAt == nil {
-		// Apply the spec runtime clamp T_broadcast_max_k = max(BFTStart,
+		// Apply the spec runtime clamp T_broadcast_max_k = max(0,
 		// T_0_broadcast − B_k); each leader fetches by its broadcast deadline.
 		fetchAt = make([]time.Duration, K)
 		for k := 0; k < K; k++ {
 			fa := t0Broadcast - broadcastBudget[k]
-			if fa < bftStart {
-				fa = bftStart
+			if fa < 0 {
+				fa = 0
 			}
 			fetchAt[k] = fa
 		}
@@ -279,7 +266,6 @@ func ConfigForCluster(
 		TPhase2a:     tPhase2a,
 		SafetyBuffer: overrides.safetyBuffer(),
 		BTT:          btt,
-		BFTStart:     bftStart,
 	}
 	return cfg, nil
 }

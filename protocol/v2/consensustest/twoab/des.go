@@ -166,7 +166,6 @@ func (s *sim) start() error {
 		TPhase2a:     s.cfg.TPhase2a,
 		SafetyBuffer: s.cfg.SafetyBuffer,
 		BTT:          s.cfg.BTT,
-		BFTStart:     s.cfg.BFTStart,
 	}
 	if err := cfgTwoab.Validate(); err != nil {
 		// Validate failures at this point mean the SimConfig translates

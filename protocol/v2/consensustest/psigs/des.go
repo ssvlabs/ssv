@@ -70,15 +70,18 @@ func (s *sim) Mesh() *ct.MeshTopology         { return s.mesh }
 func (s *sim) Network() ct.NetworkModel       { return s.cfg.Network }
 func (s *sim) Bandwidth() *ct.BandwidthReport { return s.cfg.Bandwidth }
 
-// start schedules one evtPSigSign per honest operator at BFTStart.
-// Byz operators that the byz pattern marks as non-signing are excluded
-// from the initial schedule (they neither self-observe nor broadcast).
+// start schedules one evtPSigSign per honest operator at slot start
+// (offset 0). The PSigs pipeline shifts wholesale with BFT_start, so the
+// sim runs at BFT_start=0 and the report UI shifts decision times
+// post-hoc. Byz operators that the byz pattern marks as non-signing are
+// excluded from the initial schedule (they neither self-observe nor
+// broadcast).
 func (s *sim) start() {
 	for _, op := range s.operators {
 		if !s.cfg.Byz.AllowSign(op) {
 			continue
 		}
-		s.Schedule(s.cfg.BFTStart, &evtPSigSign{op: op})
+		s.Schedule(0, &evtPSigSign{op: op})
 	}
 	desim.ScheduleInitialHeartbeats(s, s.cfg.RelayCutoff)
 }

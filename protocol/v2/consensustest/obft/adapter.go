@@ -15,38 +15,22 @@ import (
 // Adapter-internal constants. NOT network-derived: ε_3 is the BLS-aggregation
 // + IBE-decryption-walk CPU cost per fall-through layer (OBFT.md §Phase 3 /
 // §Timing budget), and phase3JitterBuffer is the residual scheduling jitter
-// between Phase 3 completion and cert/submit. Both are operator-side, so
-// they don't scale with the BTT-multiplier (which models network slack only).
+// between Phase 3 completion and cert/submit. Both are operator-side
+// reserves, independent of the network's BTT.
 const (
 	epsilon3           = 50 * time.Millisecond
 	phase3JitterBuffer = 50 * time.Millisecond
 )
 
 // Protocol is the OBFT adapter. Use as `obft.Protocol{}` for the canonical
-// variant, or with BTTMultiplier > 1 to model a "loose" deployment that
-// over-budgets its internal timing assumptions relative to the network's
-// actual BTT (see CAVEAT below).
+// variant, or set the variant knobs below (RefloodDelayOverride,
+// NoRefloodDelay, MaxMEVFetch) to register cushion / max-MEV variants
+// alongside it in the stress matrix without name collisions.
 type Protocol struct {
 	// VariantName overrides the reported protocol name. Empty → "OBFT".
-	// Used for registering Loose / MaxMEV-style variants alongside the
+	// Used for registering cushion / MaxMEV-style variants alongside the
 	// canonical adapter in the stress matrix without name collisions.
 	VariantName string
-
-	// BTTMultiplier scales cfg.BTT internally before deriving any timing
-	// budget (Delta2, primary B_0 = 2·BTT + RefloodDelay, FetchAt fetch
-	// buffer, and the BTT field forwarded to obftbase.Config). Backups
-	// L_1..L_{K-1} use B_k = T_commit and are unaffected by the
-	// multiplier. Zero is treated as 1.0 (no scaling).
-	//
-	// CAVEAT — the multiplier affects the protocol's INTERNAL assumptions
-	// only; the simulated network still propagates at cfg.BTT. Multiplier
-	// > 1 ("loose") means the protocol budgets more slack per BTT-multiple
-	// at the cost of an earlier T_commit (since Delta2 = 1·bttEff
-	// consumes more of RelayCutoff under the scaled bttEff); multiplier
-	// < 1 ("tight") is the inverse trade. The CPU-side constants
-	// (epsilon3, phase3JitterBuffer, cfg.HeaderSubmitHeadroom) do NOT
-	// scale — they're operator-side reserves, not network propagation slack.
-	BTTMultiplier float64
 
 	// MaxMEVFetch removes the per-layer fetch buffer (the BTT/4 margin
 	// between leader fetch and T_broadcast_max_k). When true, every leader
@@ -66,6 +50,25 @@ type Protocol struct {
 	// is worth under each operating point. Default false: variant
 	// respects cfg.RefloodDelay (Healthy: 700ms; adversarial: 0).
 	NoRefloodDelay bool
+
+	// RefloodDelayOverride, when non-nil, sets the broadcast budget's
+	// RefloodDelay to an explicit value regardless of cfg.RefloodDelay or
+	// NoRefloodDelay. Registers the OBFT-300 variant (RefloodDelay=300ms):
+	// the intermediate point between OBFT-0 (RefloodDelay=0) and bare OBFT
+	// (cfg.RefloodDelay, 700ms on Healthy). Analogue of 2abOBFT's
+	// SafetyBufferOverride and QBFT-300's fixed cushion. Unlike 2abOBFT-300
+	// (which collapses onto 2abOBFT-0 at BTT≥300 via the max(SB,BTT)
+	// crossover), OBFT's B_0 = 2·BTT + RefloodDelay is linear in RefloodDelay,
+	// so OBFT-300 stays distinct from OBFT-0 at every BTT.
+	RefloodDelayOverride *time.Duration
+
+	// BaselineOnly marks a variant that only runs on Baseline-group
+	// (Healthy) scenarios — RunBatch renders it n/a on adversarial
+	// scenarios. Set on the cushion-sensitivity rungs (X-0 / X-300 / X-500),
+	// which exist to compare mesh-tail tolerance on Healthy; on adversarial
+	// scenarios only the canonical X-700 rung runs (the cushion barely
+	// affects adversarial recovery, which is structural).
+	BaselineOnly bool
 }
 
 func (p Protocol) Name() string {
@@ -75,20 +78,9 @@ func (p Protocol) Name() string {
 	return "OBFT"
 }
 
-// effectiveBTT applies the BTTMultiplier to cfg.BTT, clamped to ≥ 1ns.
-// Zero multiplier is treated as 1.0 (no scaling) so the zero-value
-// Protocol{} behaves identically to the canonical OBFT.
-func (p Protocol) effectiveBTT(btt time.Duration) time.Duration {
-	mul := p.BTTMultiplier
-	if mul <= 0 {
-		mul = 1
-	}
-	out := time.Duration(float64(btt) * mul)
-	if out < time.Nanosecond {
-		out = time.Nanosecond
-	}
-	return out
-}
+// IsBaselineOnly reports whether this variant runs only on Baseline-group
+// scenarios (see BaselineOnly). Consumed by RunBatch.
+func (p Protocol) IsBaselineOnly() bool { return p.BaselineOnly }
 
 func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	if err := cfg.Validate(); err != nil {
@@ -111,21 +103,20 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		internal = crashOverlay{internalByz: internal, crashed: newByzSet(cfg.Byz.Crashed)}
 	}
 
-	// Derive every timing budget internally from bttEff = multiplier ·
-	// cfg.BTT. The framework no longer carries Delta2 / BroadcastBudget /
-	// FetchAt on SimConfig; OBFT family adapters own the spec's BTT-as-
-	// unit conventions. Δ_2 = 1·bttEff matches the spec recommendation —
-	// reflood lives in B_0 (per-scenario cfg.RefloodDelay folded into
-	// the primary-layer broadcast budget), not in Δ_2; see OBFT.md
-	// §Timing budget. Production SSV adapter uses the same sizing.
-	bttEff := p.effectiveBTT(cfg.BTT)
-	delta2 := bttEff
+	// Derive every timing budget internally from cfg.BTT. The framework no
+	// longer carries Delta2 / BroadcastBudget / FetchAt on SimConfig; OBFT
+	// family adapters own the spec's BTT-as-unit conventions. Δ_2 = 1·BTT
+	// matches the spec recommendation — reflood lives in B_0 (per-scenario
+	// cfg.RefloodDelay folded into the primary-layer broadcast budget), not
+	// in Δ_2; see OBFT.md §Timing budget. Production SSV adapter uses the
+	// same sizing.
+	delta2 := cfg.BTT
 	tCommit := cfg.RelayCutoff - cfg.HeaderSubmitHeadroom - phase3JitterBuffer - epsilon3 - delta2
 	if tCommit <= 0 {
 		return ct.Outcome{}, fmt.Errorf(
-			"%w: obft adapter: derived T_commit=%v non-positive (RelayCutoff=%v HeaderSubmit=%v Phase3JitterBuffer=%v Epsilon3=%v Delta2=%v at BTTMultiplier=%v)",
+			"%w: obft adapter: derived T_commit=%v non-positive (RelayCutoff=%v HeaderSubmit=%v Phase3JitterBuffer=%v Epsilon3=%v Delta2=%v)",
 			ct.ErrConfigOutOfEnvelope, tCommit, cfg.RelayCutoff, cfg.HeaderSubmitHeadroom,
-			phase3JitterBuffer, epsilon3, delta2, p.BTTMultiplier)
+			phase3JitterBuffer, epsilon3, delta2)
 	}
 
 	// cfg.RefloodDelay is the per-scenario opt-in for the spec's reflood-
@@ -138,10 +129,12 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// regardless — used by the OBFT-no-reflood variant to probe the
 	// cushion's value on otherwise-identical scenarios.
 	refloodDelay := cfg.RefloodDelay
-	if p.NoRefloodDelay {
+	if p.RefloodDelayOverride != nil {
+		refloodDelay = *p.RefloodDelayOverride
+	} else if p.NoRefloodDelay {
 		refloodDelay = 0
 	}
-	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, bttEff, refloodDelay, tCommit)
+	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, cfg.BTT, refloodDelay, tCommit)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: obft adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)
@@ -155,25 +148,21 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		}
 	}
 
-	// Per-layer fetch buffer: bttEff/4 by default, 0 under MaxMEVFetch
+	// Per-layer fetch buffer: BTT/4 by default, 0 under MaxMEVFetch
 	// (the spec's max-MEV-freshness boundary — leader fetches and
 	// broadcasts at T_broadcast_max_k exactly).
-	fetchBuffer := bttEff / 4
+	fetchBuffer := cfg.BTT / 4
 	if p.MaxMEVFetch {
 		fetchBuffer = 0
 	}
-	// Apply the spec's runtime clamp `T_broadcast_max_k = max(BFTStart,
-	// T_commit − B_k)` (obft/base/types.go §B_k). BFTStart > T_commit − B_k
-	// shrinks the layer's effective B_k from above; BFTStart > T_commit
-	// makes the broadcast collide with T_commit itself and the cluster
-	// MISSes. Subsuming the legacy `if fa < 0` clamp — BFTStart=0
-	// preserves prior behavior bit-exactly.
-	bftStart := cfg.BFTStart
+	// Apply the spec's runtime clamp `T_broadcast_max_k = max(0,
+	// T_commit − B_k)` (obft/base/types.go §B_k). A layer whose designed
+	// fetch lands before slot start floors to 0.
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
 		fa := tCommit - broadcastBudget[k] - fetchBuffer
-		if fa < bftStart {
-			fa = bftStart
+		if fa < 0 {
+			fa = 0
 		}
 		fetchAt[k] = fa
 	}
@@ -184,11 +173,10 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		K:               cfg.K,
 		Operators:       cfg.Operators,
 		Crashed:         cfg.Byz.Crashed,
-		BFTStart:        bftStart,
 		TCommit:         tCommit,
 		Delta2:          delta2,
 		Epsilon3:        epsilon3,
-		BTT:             bttEff,
+		BTT:             cfg.BTT,
 		FetchAt:         fetchAt,
 		BroadcastBudget: broadcastBudget,
 		Network:         cfg.Network,
@@ -209,37 +197,31 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
-	// Stamp the L_0 BFTStart-independence threshold = the unclamped
+	// Stamp the L_0 BFT_start-independence threshold = the unclamped
 	// fetchAt[0] (= T_commit − B_0 − fetchBuffer, floored at 0). This is
-	// exactly the `fa` computed for k=0 in the fetchAt loop above, before
-	// the `max(BFTStart, …)` clamp — the largest BFTStart for which L_0's
-	// schedule is identical to BFTStart=0. The UI reuses the BFTStart=0
-	// cell at or below this value (see Outcome.BFTStartIndependenceThreshold).
+	// exactly the `fa` computed for k=0 in the fetchAt loop above — the
+	// largest BFT_start for which L_0's schedule is identical to
+	// BFT_start=0. The report UI reuses this (BFT_start=0) cell at or
+	// below this value (see Outcome.BFTStartIndependenceThreshold).
 	//
-	// The value is BFTStart-invariant (a pure function of the rest of
-	// cfg), and the UI reads it only from the BFT_start=0 cell (its
-	// shape-anchor), so we stamp it just there and skip the redundant
-	// copies on BFTStart>0 cells. Outcome-independent, so stamped
-	// regardless of decided/miss.
-	if cfg.BFTStart == 0 {
-		bftIndep := tCommit - broadcastBudget[0] - fetchBuffer
-		if bftIndep < 0 {
-			bftIndep = 0
-		}
-		out.BFTStartIndependenceThreshold = &bftIndep
+	// The value is a pure function of cfg (BFT_start is not a sim
+	// parameter — the sim always runs at BFT_start=0), so it's stamped
+	// unconditionally on the single cell, regardless of decided/miss.
+	bftIndep := tCommit - broadcastBudget[0] - fetchBuffer
+	if bftIndep < 0 {
+		bftIndep = 0
 	}
+	out.BFTStartIndependenceThreshold = &bftIndep
 	// Stamp the deciding-layer broadcast deadline (T_broadcast_max_k for
 	// k=DecidedRound). Mirrors the fetchAt[] clamp above:
-	// max(BFTStart, T_commit − B_k). The reporting layer surfaces this
+	// max(0, T_commit − B_k). The reporting layer surfaces this
 	// as `DecidingBroadcastTime` for the UI to label per-cell timing.
 	// broadcastBudget[k] is already clamped to ≤ tCommit upstream, so
-	// the subtraction never goes negative; the BFTStart floor matters
-	// when BFTStart > T_commit − B_k (the spec's "degraded broadcast
-	// schedule" boundary).
+	// the subtraction never goes negative.
 	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
 		bt := tCommit - broadcastBudget[out.DecidedRound]
-		if bt < bftStart {
-			bt = bftStart
+		if bt < 0 {
+			bt = 0
 		}
 		out.DecidingBroadcastTime = bt
 	}
@@ -350,7 +332,6 @@ type desConfig struct {
 	K               int
 	Operators       []ct.OperatorID
 	Crashed         []ct.OperatorID // completely-offline operators (subset of Operators)
-	BFTStart        time.Duration   // forwarded to obftbase.Config.BFTStart
 	TCommit         time.Duration
 	Delta2          time.Duration
 	Epsilon3        time.Duration // forwarded to obftbase.Config.Eps3 (= ε_3 per spec)

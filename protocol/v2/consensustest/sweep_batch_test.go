@@ -24,7 +24,7 @@ func TestRunSweep_Smoke(t *testing.T) {
 	}
 	require.Len(t, scenarios, 2)
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT0{}}
 
 	sweep := ct.Sweep{
 		Name:        "smoke",
@@ -75,27 +75,26 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 	}
 	require.Len(t, scenarios, 1)
 
-	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFTNoReflood{}}
+	protocols := []ct.Protocol{obftadapter.Protocol{}, qbftadapter.QBFT0{}}
 	iters := ct.Iterations{Baseline: 10, Unstable: 10}
 	// All six calibrated profiles — point count expectations below
 	// derive from len(profiles).
 	profiles := ct.P2PProfileNames
 
-	bftStarts := ct.DefaultBaselineBFTStarts
 	bttValues := ct.DefaultBaselineBTTValues
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles, bftStarts, bttValues)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles, bttValues)
 
 	// `expected` below double-counts as both the per-name shape check
 	// AND the total-count check: every entry must be matched, and
 	// `require.Truef` rejects any unexpected name. No magic number to
 	// keep in sync as sweeps are added or removed.
 	expected := map[string]int{
-		"p2p_baseline":          len(bttValues) * len(profiles) * 5 * len(bftStarts) * len(ct.FaultyNodesRange(4)), // BTT × profile × instability × BFT_start × faulty_nodes (n=4)
-		"p2p_increasing_BTT":    len(bttValues),                                                                    // BTT
-		"p2p_packet_loss":       5,                                                                                 // LossRate
-		"p2p_correlated_delays": 4,                                                                                 // BadLinkProb
-		"p2p_node_slowness":     4,                                                                                 // slow-op count
-		"p2p_instability":       5,                                                                                 // instability level
+		"p2p_baseline":          len(bttValues) * len(profiles) * 5 * len(ct.FaultyNodesRange(4)), // BTT × profile × instability × faulty_nodes (n=4)
+		"p2p_increasing_BTT":    len(bttValues),                                                   // BTT
+		"p2p_packet_loss":       5,                                                                // LossRate
+		"p2p_correlated_delays": 4,                                                                // BadLinkProb
+		"p2p_node_slowness":     4,                                                                // slow-op count
+		"p2p_instability":       5,                                                                // instability level
 	}
 	for _, sw := range sweeps {
 		wantPoints, ok := expected[sw.Name]
@@ -126,42 +125,30 @@ func TestDefaultSweeps_InvalidInputs(t *testing.T) {
 	scen := []ct.Scenario{ct.Catalog[0]}
 	good := ct.Iterations{Baseline: 10, Unstable: 10}
 	profiles := []string{"prod"}
-	bft := ct.DefaultBaselineBFTStarts
 	btt := ct.DefaultBaselineBTTValues
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty scenarios",
-		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4, profiles, bft, btt) })
+		func() { ct.DefaultSweeps(nil, protocols, good, 4, 4, profiles, btt) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty protocols",
-		func() { ct.DefaultSweeps(scen, nil, good, 4, 4, profiles, bft, btt) })
+		func() { ct.DefaultSweeps(scen, nil, good, 4, 4, profiles, btt) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty profiles",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, nil, bft, btt) })
-	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty bftStarts",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, nil, btt) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, nil, btt) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps called with empty bttValues",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, bft, nil) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, nil) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Baseline must be > 0 (got 0)",
 		func() {
-			ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4, profiles, bft, btt)
+			ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 0, Unstable: 10}, 4, 4, profiles, btt)
 		})
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: Iterations.Unstable must be > 0 (got 0)",
 		func() {
-			ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4, profiles, bft, btt)
+			ct.DefaultSweeps(scen, protocols, ct.Iterations{Baseline: 10, Unstable: 0}, 4, 4, profiles, btt)
 		})
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: cluster size n must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4, profiles, bft, btt) })
+		func() { ct.DefaultSweeps(scen, protocols, good, 0, 4, profiles, btt) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: layer count k must be > 0 (got 0)",
-		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0, profiles, bft, btt) })
-	require.PanicsWithValue(t, "consensustest: DefaultSweeps: BFT_start -1ms must be >= 0",
-		func() {
-			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, []time.Duration{-1 * time.Millisecond}, btt)
-		})
-	require.PanicsWithValue(t, "consensustest: DefaultSweeps: bftStarts must include 0 (got [2.4s 2.8s 3.2s])",
-		func() {
-			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles,
-				[]time.Duration{2400 * time.Millisecond, 2800 * time.Millisecond, 3200 * time.Millisecond}, btt)
-		})
+		func() { ct.DefaultSweeps(scen, protocols, good, 4, 0, profiles, btt) })
 	require.PanicsWithValue(t, "consensustest: DefaultSweeps: BTT 0s must be > 0",
 		func() {
-			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, bft, []time.Duration{0})
+			ct.DefaultSweeps(scen, protocols, good, 4, 4, profiles, []time.Duration{0})
 		})
 }
 
@@ -202,11 +189,11 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
 		twoabadapter.Protocol{},
-		qbftadapter.QBFTNoReflood{},
+		qbftadapter.QBFT0{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	profiles := []string{"prod", "stage1", "stage2"}
-	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBFTStarts, ct.DefaultBaselineBTTValues)
+	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBTTValues)
 	require.NotEmpty(t, sweeps, "DefaultSweeps must return at least one sweep")
 
 	totalPoints := 0
@@ -235,9 +222,9 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 				}
 			}
 			require.Truef(t, anyOK,
-				"sweep %s pt %q: ALL protocols out of envelope at K=%v BTT=%v profile=%v instab=%v BFT_start=%v — the UI has nothing to render at this baseline point",
+				"sweep %s pt %q: ALL protocols out of envelope at K=%v BTT=%v profile=%v instab=%v — the UI has nothing to render at this baseline point",
 				sw.Name, pt.Label, pt.Fields[ct.FieldK], pt.Fields[ct.FieldBTT],
-				pt.Fields[ct.FieldP2PProfile], pt.Fields[ct.FieldInstability], pt.Fields[ct.FieldBFTStart])
+				pt.Fields[ct.FieldP2PProfile], pt.Fields[ct.FieldInstability])
 			totalPoints++
 		}
 	}

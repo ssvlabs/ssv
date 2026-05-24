@@ -24,12 +24,12 @@ func TestSweeps_HealthyStaysMesh(t *testing.T) {
 	require.NotEmpty(t, scenarios)
 	protocols := []ct.Protocol{
 		obftadapter.Protocol{},
-		qbftadapter.QBFTNoReflood{},
+		qbftadapter.QBFT0{},
 		twoabadapter.Protocol{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
 	profiles := []string{"prod"}
-	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBFTStarts, ct.DefaultBaselineBTTValues)
+	sweeps := ct.DefaultSweeps(scenarios, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBTTValues)
 	for _, sw := range sweeps {
 		for ptIdx, pt := range sw.Points {
 			var healthy *ct.Scenario
@@ -75,7 +75,7 @@ func TestMeshHealthy_RespondsToSigma(t *testing.T) {
 			cfg.Seed = int64(i + 1)
 			cfg.Network = ct.LogNormalDelay{Median: btt / 2, Sigma: sigma}
 			cfg.Mesh.HopDelay = ct.LogNormalDelay{Median: btt / 3, Sigma: sigma}
-			out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+			out, err := qbftadapter.QBFT0{}.Run(cfg)
 			require.NoError(t, err)
 			if out.Decided {
 				decided++

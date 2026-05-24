@@ -49,8 +49,8 @@ func TestTraceGolden(t *testing.T) {
 		{"obft_healthy_mesh", obftadapter.Protocol{}, healthy, ct.DeliveryMesh},
 		{"twoab_healthy", twoabadapter.Protocol{}, healthy, ct.DeliveryDirect},
 		{"twoab_silentleader", twoabadapter.Protocol{}, silentLeader, ct.DeliveryDirect},
-		{"qbft_healthy", qbftadapter.QBFTNoReflood{}, healthy, ct.DeliveryDirect},
-		{"qbft_silentleader", qbftadapter.QBFTNoReflood{}, silentLeader, ct.DeliveryDirect},
+		{"qbft_healthy", qbftadapter.QBFT0{}, healthy, ct.DeliveryDirect},
+		{"qbft_silentleader", qbftadapter.QBFT0{}, silentLeader, ct.DeliveryDirect},
 		{"psigs_healthy", psigsadapter.Protocol{}, healthy, ct.DeliveryDirect},
 	}
 

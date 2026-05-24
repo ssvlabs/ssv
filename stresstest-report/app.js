@@ -23,26 +23,49 @@
 // Protocol series colors — used for chart lines, dataset point markers,
 // and the per-protocol legend rows. Picked with similar saturation/
 // lightness so the protocols read as peers rather than figure/ground.
-// "x<n>" multiplier variants share the family hue but with a noticeably
-// lighter / desaturated tint that gets paler as the multiplier grows,
-// so x2 reads as "slightly looser sibling of canonical" and x3 reads
-// as "even looser". The "-no-reflood" variants use a DARKER family-hue
-// tint (no RefloodDelay / no cushion is structurally tighter than the
-// canonical reflood-aware protocol, not looser).
+// Each family's cushion ladder (X-0 / X-300 / X-500 / X-700) runs darkest
+// (smallest cushion) → lightest (largest), so the rung is legible from the
+// hue. QBFT-SSV (purple) and PSigs (green) sit outside the cushion ladders.
+// The bare generic keys (OBFT / 2abOBFT / QBFT) are kept = their -700 shade
+// for any legacy data.js that still carries the old names (the matrix now
+// emits only X-{cushion}).
 const PROTOCOL_COLORS = {
-  'OBFT-no-reflood': '#c05621', // dark orange — tighter (no-RefloodDelay) OBFT
-  OBFT:              '#ed8936', // light orange
-  OBFTx2:            '#f6ad55', // paler orange — looser OBFT (×2)
-  OBFTx3:            '#fbd38d', // very pale orange — much-looser OBFT (×3)
-  '2abOBFT-no-reflood': '#0e7490', // dark cyan — tighter (no-cushion) 2abOBFT floor
-  '2abOBFT-lean':    '#0891b2', // medium cyan — intermediate cushion (SB=300ms)
-  '2abOBFT':         '#06b6d4', // cyan
-  '2abOBFTx2':       '#67e8f9', // paler cyan — looser 2abOBFT (×2)
-  '2abOBFTx3':       '#a5f3fc', // very pale cyan — much-looser 2abOBFT (×3)
-  'QBFT-no-reflood': '#b4324b', // dark pink-red — tighter (no-cushion) QBFT floor
-  QBFT:              '#e85a71', // light pink-red (reflood-aware default)
-  'QBFT-SSV':        '#8b5cf6', // purple (production-RT variant)
-  PSigs:             '#10b981', // green (baseline partial-sig-only reference)
+  'OBFT-0':   '#9c4221', // darkest orange — 0 cushion
+  'OBFT-300': '#c05621',
+  'OBFT-500': '#dd6b20',
+  'OBFT-700': '#ed8936', // lightest orange — 700 cushion
+  OBFT:       '#ed8936', // generic (tests/legacy) — = OBFT-700 shade
+  '2abOBFT-0':   '#155e75', // darkest cyan — 0 cushion
+  '2abOBFT-300': '#0e7490',
+  '2abOBFT-500': '#0891b2',
+  '2abOBFT-700': '#06b6d4', // lightest cyan — 700 cushion
+  '2abOBFT':     '#06b6d4', // generic (tests/legacy)
+  'QBFT-0':   '#9b2d43', // darkest pink-red — 0 cushion (3·BTT floor)
+  'QBFT-300': '#b4324b',
+  'QBFT-500': '#d23f5a',
+  'QBFT-700': '#e85a71', // lightest pink-red — 700 cushion
+  QBFT:       '#e85a71', // generic (tests/legacy)
+  'QBFT-SSV': '#8b5cf6', // purple (production-RT variant)
+  PSigs:      '#10b981', // green (baseline partial-sig-only reference)
+};
+
+// PROTOCOL_NOTES are hover tooltips shown on each legend row, documenting
+// the cushion variants. The QBFT ladder is deliberately uneven (no-reflood
+// also drops a structural 1·BTT), so its note spells out the per-round timers.
+const PROTOCOL_NOTES = {
+  'OBFT-0': 'OBFT, RefloodDelay=0 — no lazy-push cushion in B_0.',
+  'OBFT-300': 'OBFT, RefloodDelay=300ms (B_0 = 2·BTT + 300).',
+  'OBFT-500': 'OBFT, RefloodDelay=500ms (B_0 = 2·BTT + 500).',
+  'OBFT-700': 'OBFT, RefloodDelay=700ms (B_0 = 2·BTT + 700).',
+  '2abOBFT-0': '2abOBFT, SafetyBuffer=0.',
+  '2abOBFT-300': '2abOBFT, SafetyBuffer=300ms (≡ lower rungs at BTT ≥ 300 via the max(SB,BTT) crossover).',
+  '2abOBFT-500': '2abOBFT, SafetyBuffer=500ms (≡ lower rungs at BTT ≥ 500).',
+  '2abOBFT-700': '2abOBFT, SafetyBuffer=700ms.',
+  'QBFT-0': 'QBFT round timer 3·BTT — no cushion, and drops a structural 1·BTT vs the cushioned rungs (ladder is uneven).',
+  'QBFT-300': 'QBFT round timer 4·BTT+300ms.',
+  'QBFT-500': 'QBFT round timer 4·BTT+500ms.',
+  'QBFT-700': 'QBFT round timer 4·BTT+700ms.',
+  'QBFT-SSV': 'QBFT, SSV production flat 2s round timeout.',
 };
 
 // SLOT_END_MS is the spec's relay cutoff (the 4 s proposer-duty
@@ -50,29 +73,30 @@ const PROTOCOL_COLORS = {
 // BFT_start — the chart axis is absolute slot time.
 const SLOT_END_MS = 4000;
 
-// BFT_STARTS is the set of "BFT pipeline begins at" offsets the picker
-// offers. The chart x-axis is absolute slot time; cdfBFTStartPlugin
-// draws a dashed marker at BFT_start showing where in the slot the
-// BFT actually starts (= end of pre-fetch / pre-consensus).
-//   QBFT / PSigs (pipeline-shift): cells are simulated at BFT_start=0
-//     and the UI shifts decision times by +BFT_start; sample fails
-//     when shifted time overflows SLOT_END_MS.
-//   OBFT / 2abOBFT (slot-anchored schedule): cells are pre-computed
-//     at the picker's BFT_start (per-BFT_start sim in p2p_baseline,
-//     see sweep.go). For picker values ≤ the cell's emitted
-//     bftStartIndependenceMs threshold, the OBFT-family schedule is
-//     bit-identical to BFT_start=0 (the spec's `T_broadcast_max_k =
-//     max(BFT_start, anchor − B_k)` clamp is dormant at L_0), so the
-//     BFT_start=0 cell is reused exactly. Above the threshold the exact
-//     pre-computed cell is used if swept, else the picker rounds UP to
-//     the nearest emitted cell (worst-case: a later BFT_start has less
-//     slack, so this under-states rather than over-states success). The
-//     threshold is emitted per-cell by the Go sweep
-//     (cellPayload.BFTStartIndependenceMs, = the adapter's unclamped
-//     fetchAt[0]) so it tracks the adapter's actual sizing and the cell's
-//     per-scenario RefloodDelay/SafetyBuffer — no JS-side sizing mirror
-//     to drift. See findBaselineCellForScenario.
-const BFT_STARTS = [0, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800, 3200];
+// BFT_STARTS is the fixed set of "BFT pipeline begins at" offsets the
+// picker offers. It is NOT a sweep axis — the sweep runs only at
+// BFT_start=0 and every other value is derived in the UI. The chart
+// x-axis is absolute slot time; cdfBFTStartPlugin draws a dashed marker
+// at BFT_start showing where in the slot the BFT actually starts (= end
+// of pre-fetch / pre-consensus).
+//   QBFT / PSigs (pipeline-shift, forward-scheduled): the UI shifts the
+//     BFT_start=0 decision times by +BFT_start; a sample fails when the
+//     shifted time overflows the relay deadline. Shown at every BFT_start.
+//   OBFT / 2abOBFT (slot-anchored, schedule derived backward from the
+//     relay cutoff): feasible only while the configured broadcast budget
+//     B_0 fits between BFT_start and the commit/backstop anchor — i.e.
+//     for picker values ≤ the cell's emitted bftStartIndependenceMs
+//     threshold (= the adapter's unclamped fetchAt[0] = anchor − B_0). At
+//     or below it the schedule is bit-identical to BFT_start=0, so the
+//     BFT_start=0 cell is the exact result. ABOVE it the budget no longer
+//     fits: L_0 (the MEV layer) can't reliably land and the cluster would
+//     fall through to L_1+ (deeper-confirmed safe parent — not MEV), so
+//     the config is not deployable and the UI renders n/a. It does NOT
+//     clamp-and-run or round up to a later cell. The threshold is
+//     per-cell/per-variant (it tracks each variant's
+//     RefloodDelay/SafetyBuffer), so smaller-cushion variants stay
+//     feasible to a later BFT_start. See findBaselineCellForScenario.
+const BFT_STARTS = [0, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800, 3200, 3400, 3600];
 
 // selectedBFTStart is the page-level BFT_start used by the Conditions
 // chart at the top, the heatmap cell colors, and the cdfBFTStartPlugin's
@@ -146,7 +170,7 @@ const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
 const LS_KEY_BTT = 'stresstest-selected-btt';
 
 function loadActiveProtocols(allProtocols) {
-  const DEFAULT_ACTIVE = new Set(['OBFT-no-reflood', 'OBFT', '2abOBFT-no-reflood', '2abOBFT', 'QBFT-no-reflood', 'QBFT', 'QBFT-SSV', 'PSigs']);
+  const DEFAULT_ACTIVE = new Set(['OBFT-0', 'OBFT-700', '2abOBFT-0', '2abOBFT-700', 'QBFT-0', 'QBFT-700', 'QBFT-SSV', 'PSigs']);
   const stored = localStorage.getItem(LS_KEY_PROTOCOLS);
   if (stored) {
     try {
@@ -481,52 +505,6 @@ function findBaselinePointAtInstability(data, instability, faultyNodes) {
   return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0);
 }
 
-// _availBFTStartsCache memoizes availableBaselineBFTStarts across the
-// many per-(scenario, protocol) calls in a single render. Keyed by the
-// full slice signature (N/K/BTT/profile/instability/faulty); guarded by
-// the data reference so a data.js reload (new object) drops the cache.
-// The slice signature changes whenever any picker changes, so stale
-// entries are never served — no explicit invalidation on picker clicks.
-let _availBFTStartsCache = { data: null, map: new Map() };
-
-// availableBaselineBFTStarts returns the sorted-ascending distinct
-// BFT_start values (ms) the p2p_baseline sweep actually emitted for the
-// current (N, K, BTT, profile) slice at the given instability +
-// faulty_nodes. Used by findBaselineCellForScenario to round an
-// OBFT-family picker value UP to the nearest emitted cell when no exact
-// cell exists (worst-case fallback). Mirrors the field-matching in
-// findBaselinePointAtBFTStart, minus the BFT_start constraint. Memoized
-// (see _availBFTStartsCache); callers must not mutate the returned array.
-function availableBaselineBFTStarts(data, instability, faultyNodes) {
-  if (_availBFTStartsCache.data !== data) {
-    _availBFTStartsCache = { data, map: new Map() };
-  }
-  const key = `${selectedN}|${selectedK}|${selectedBTT}|${selectedP2pProfile}|${instability}|${faultyNodes ?? 0}`;
-  const cached = _availBFTStartsCache.map.get(key);
-  if (cached) return cached;
-  const out = new Set();
-  const sweep = data && data.sweeps && data.sweeps.find((s) => s.name === 'p2p_baseline');
-  if (sweep) {
-    for (const pt of sweep.points) {
-      const f = pt.fields;
-      if (!f) continue;
-      if (
-        f.N === selectedN &&
-        f.K === selectedK &&
-        f.BTT === selectedBTT &&
-        f.p2p_profile === selectedP2pProfile &&
-        (f.Instability ?? 0) === instability &&
-        (f.FaultyNodes ?? 0) === (faultyNodes ?? 0)
-      ) {
-        out.add(f.BFT_start ?? 0);
-      }
-    }
-  }
-  const result = [...out].sort((a, b) => a - b);
-  _availBFTStartsCache.map.set(key, result);
-  return result;
-}
-
 // findBaselineCellForScenario looks up the cell for the given scenario
 // + protocol at the current (N, K, BTT, profile, instability,
 // BFT_start). For Baseline-group scenarios (Healthy) the cell is the
@@ -536,18 +514,16 @@ function availableBaselineBFTStarts(data, instability, faultyNodes) {
 // just waste compute (see p2pBaselineSweep in sweep.go).
 //
 // BFT_start resolution (OBFT-family), keyed off the independence
-// threshold emitted on each protocol's BFT_start=0 cell (always present,
-// since the full catalog is swept at BFT_start=0):
-//   - picker ≤ threshold  → reuse the BFT_start=0 cell (schedule is
+// threshold emitted on each protocol's BFT_start=0 cell (always present —
+// the catalog is swept only at BFT_start=0):
+//   - picker ≤ threshold  → reuse the BFT_start=0 cell (the schedule is
 //     bit-identical there, so this is exact);
-//   - picker > threshold  → use the exact pre-computed cell if swept,
-//     else round UP to the nearest emitted BFT_start cell. Success is
-//     monotonically non-increasing in BFT_start (a later start = less
-//     slack before the relay cutoff), so the next-higher cell reports
-//     worst-case (lower success / higher p99) numbers — the safe
-//     direction. Rounding DOWN would overstate success; n/a would hide
-//     the cell. Only when the picker exceeds the highest emitted cell
-//     (no ≥ cell to be conservative with) do we render n/a.
+//   - picker > threshold  → n/a. Above it the configured broadcast budget
+//     B_0 no longer fits between BFT_start and the anchor, so L_0 (the
+//     MEV layer) can't reliably land and the cluster would fall through
+//     to L_1+ (safe parent, not MEV). That isn't a deployable config, so
+//     we render n/a rather than a clamped/degraded result. No round-up:
+//     configs above the threshold are never simulated.
 // Pipeline-shift protocols always pull from the BFT_start=0 cell (the
 // UI shifts post-hoc, exactly, via shiftedCell).
 function findBaselineCellForScenario(data, scenario, protocol) {
@@ -576,24 +552,18 @@ function findBaselineCellForScenario(data, scenario, protocol) {
     return c || cell0;
   }
 
-  // At/below the independence threshold the schedule equals BFT_start=0.
+  // At/below the independence threshold the schedule is bit-identical to
+  // BFT_start=0, so the BFT_start=0 cell is the exact result.
   if (selectedBFTStart <= threshold) return cell0;
 
-  // Above the threshold: exact cell if swept, else round UP to the
-  // nearest emitted cell (worst-case). Ascending scan over emitted
-  // BFT_starts ≥ picker returns the first that has a cell for this
-  // scenario+protocol.
-  const higher = availableBaselineBFTStarts(data, wantInstab, wantFaulty).filter(
-    (b) => b >= selectedBFTStart,
-  );
-  for (const b of higher) {
-    const m = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, b);
-    const c = m ? findCell(m.point, scenario.name, protocol) : null;
-    if (c) return c;
-  }
-  // Picker is beyond the highest emitted cell — no ≥ cell to be
-  // conservative with, so n/a rather than fall back to a lower
-  // (optimistic) cell.
+  // Above the threshold the configured broadcast budget B_0 no longer
+  // fits between BFT_start and the commit/backstop anchor: the leader
+  // would have to broadcast below its designed budget, so L_0 (the MEV
+  // layer) can't reliably land and the cluster falls through to L_1+
+  // (deeper-confirmed safe parent — not MEV). That isn't a config anyone
+  // deploys, so render n/a rather than a clamped/degraded "success". No
+  // round-up to a later cell — configs above the threshold are never
+  // simulated.
   return null;
 }
 
@@ -847,11 +817,11 @@ function renderConditionsSection(data) {
     const onePtSweep = match
       ? { ...match.sweep, points: [match.point] }
       : { name: '', points: [] };
-    // Per-protocol BFT_start-aware lookup: OBFT-family at picker > the
-    // cell's emitted bftStartIndependenceMs threshold pulls from a
-    // DIFFERENT pre-computed point than `match.point` (which is just the
-    // shape-anchor at BFT_start=0). Pipeline-shift protocols pull from
-    // BFT_start=0 and the UI shifts post-hoc via shiftedCell.
+    // Per-protocol BFT_start-aware lookup (see findBaselineCellForScenario):
+    // OBFT-family reuses the BFT_start=0 cell at/below its emitted
+    // bftStartIndependenceMs threshold and renders n/a above it (B_0 no
+    // longer fits). Pipeline-shift protocols pull from BFT_start=0 and the
+    // UI shifts post-hoc via shiftedCell.
     const baselineLookup = (_pt, _scName, protName) =>
       findBaselineCellForScenario(data, scenario, protName);
     legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols,
@@ -865,6 +835,15 @@ function renderConditionsSection(data) {
   const canvas = h('canvas', { id: 'conditions-chart-canvas' });
   wrap.appendChild(canvas);
   sec.appendChild(wrap);
+
+  // Decision layer/round breakdown host — populated by rebuildLayerBreakdown
+  // after the section mounts. Sits between the CDF chart and the failure
+  // breakdown; same placeholder-div pattern.
+  const layersHost = h('div', {
+    class: 'conditions-layers',
+    id: 'conditions-layers',
+  });
+  sec.appendChild(layersHost);
 
   // Failure-breakdown table host — populated by rebuildFailureBreakdown
   // after the section mounts. Mirrors the conditions-chart pattern
@@ -881,6 +860,7 @@ function renderConditionsSection(data) {
   // mounts the section.
   Promise.resolve().then(() => {
     rebuildConditionsChart(data);
+    rebuildLayerBreakdown(data);
     rebuildFailureBreakdown(data);
   });
   return sec;
@@ -1108,6 +1088,100 @@ function rebuildFailureBreakdown(data) {
   }
   table.appendChild(tbody);
   host.appendChild(table);
+}
+
+// layerColorClass picks the MEV-density color for a (protocol, depth-bucket)
+// cell. OBFT/2abOBFT decide the MEV-fresh block at L_0 and fall through to
+// deeper-confirmed safe parents (L_1+, not MEV) → depth 0 green, deeper amber.
+// QBFT rounds are all MEV blocks (R2 re-fetches a fresh one) and PSigs signs
+// the single pre-agreed V → green at every depth. Deliberately approximate;
+// see the note rendered under the table.
+function layerColorClass(protocol, bucketKey) {
+  const obftFamily = protocol.startsWith('OBFT') || protocol.startsWith('2abOBFT');
+  if (!obftFamily) return 'layer-mev';
+  return bucketKey === 0 ? 'layer-mev' : 'layer-fallback';
+}
+
+// rebuildLayerBreakdown populates the decision layer/round table between the
+// CDF chart and the failure breakdown. One row per decision-depth bucket
+// (L_0/R1, L_1/R2, L_2+/R3+), one column per active protocol; each cell is
+// the % of total iterations that decided at that depth (so a column's rows
+// sum to its success rate, complementing the failure breakdown toward ~100%).
+// Reads decidedRounds (a depth→count histogram) from the UNSHIFTED base cell:
+// the round at which a decision was reached is shift-invariant — a later
+// BFT_start only clips deciders past the deadline (captured as overflow in
+// the failure breakdown), it doesn't change which layer/round decided. Color
+// encodes MEV-density per family (see layerColorClass). Hidden when no active
+// protocol has decision data (all n/a / 0% success).
+function rebuildLayerBreakdown(data) {
+  const host = document.getElementById('conditions-layers');
+  if (!host) return;
+  host.innerHTML = '';
+  const scenario = data.scenarios.find((s) => s.name === selectedScenario);
+  if (!scenario) return;
+  const activeNames = filteredProtocols(data.protocols);
+  const cellByProtocol = {};
+  let anyData = false;
+  for (const p of activeNames) {
+    // base (unshifted) cell — n/a above the OBFT-family threshold, the
+    // BFT_start=0 cell for pipeline-shift protocols.
+    const base = findBaselineCellForScenario(data, scenario, p);
+    if (base && base.decidedRounds && base.iterations > 0) {
+      cellByProtocol[p] = base;
+      anyData = true;
+    }
+  }
+  if (!anyData) return;
+  const buckets = [
+    { key: 0, label: 'L_0 / R1' },
+    { key: 1, label: 'L_1 / R2' },
+    { key: 2, label: 'L_2+ / R3+' },
+  ];
+  const pct = {}; // protocol -> [bucket0%, bucket1%, bucket2%]
+  for (const p of activeNames) {
+    const cell = cellByProtocol[p];
+    pct[p] = [0, 0, 0];
+    if (!cell) continue;
+    for (const [depthStr, count] of Object.entries(cell.decidedRounds)) {
+      const depth = parseInt(depthStr, 10);
+      const idx = depth <= 0 ? 0 : depth === 1 ? 1 : 2;
+      pct[p][idx] += (count / cell.iterations) * 100;
+    }
+  }
+  host.appendChild(h('h3', { class: 'conditions-layers-title' }, 'Decision layer / round'));
+  const table = h('table', { class: 'conditions-layers-table' });
+  const thead = h('thead');
+  const headRow = h('tr');
+  headRow.appendChild(h('th', { class: 'depth' }, 'Layer / Round'));
+  for (const p of activeNames) {
+    headRow.appendChild(h('th', { class: 'proto-col' }, p));
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = h('tbody');
+  buckets.forEach((bucket, idx) => {
+    const tr = h('tr');
+    tr.appendChild(h('td', { class: 'depth' }, bucket.label));
+    for (const p of activeNames) {
+      const cell = cellByProtocol[p];
+      if (!cell) {
+        tr.appendChild(h('td', { class: 'layer-cell na' }, 'n/a'));
+        continue;
+      }
+      const v = pct[p][idx];
+      if (v <= 0) {
+        tr.appendChild(h('td', { class: 'layer-cell zero' }, '—'));
+      } else {
+        tr.appendChild(h('td', { class: 'layer-cell ' + layerColorClass(p, bucket.key) }, v.toFixed(2) + '%'));
+      }
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  host.appendChild(table);
+  host.appendChild(h('p', { class: 'conditions-layers-note' },
+    '% of all iterations that decided at each depth (Layer for OBFT/2abOBFT, Round for QBFT). ' +
+    'Green = MEV-fresh (L_0, or any QBFT round / PSigs); amber = deeper safe-parent fallback (L_1+, not MEV).'));
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap
@@ -1557,7 +1631,7 @@ function renderHeatmapCell(cell, scenario) {
       'div',
       {
         class: 'hcell na',
-        title: `n/a — scenario doesn't apply to this protocol`,
+        title: "protocol doesn't work under this configuration",
       },
       'n/a',
     );
@@ -1624,7 +1698,7 @@ function buildBFTStartPicker() {
     class: 'sm-slot-picker-label',
     title: 'BFT_start = time the protocol\'s primary broadcast pipeline begins (= end of pre-fetch / pre-consensus).\n' +
       '\n' +
-      'OBFT-family: each picker value is served from a pre-computed cell run at that BFT_start, OR — when ≤ the cell\'s BFT_start-independence threshold (the point below which the spec clamp `max(BFT_start, anchor−B_0)` is dormant at L_0, so the schedule is bit-identical) — exactly from the BFT_start=0 cell. The threshold is emitted per-cell by the sweep. Above the threshold, a picker with no exact cell rounds UP to the nearest emitted cell, reporting worst-case (lower success / higher p99) numbers; only picker values beyond the highest emitted cell render n/a.\n' +
+      'OBFT-family: derived from the single BFT_start=0 sim. At/below the cell\'s BFT_start-independence threshold (emitted per-variant by the sweep — the point below which the schedule is bit-identical to BFT_start=0) the BFT_start=0 cell is the exact result. Above it the configured broadcast budget B_0 no longer fits before the commit/backstop anchor, so L_0 (the MEV layer) can\'t reliably land and the cluster would fall through to L_1+ (safe parent, not MEV): the config is not deployable, so it renders n/a — no clamping, no round-up.\n' +
       '\n' +
       'QBFT / PSigs: cells are pipeline-shifted post-hoc (sample t → t + BFT_start), dropped when shifted t exceeds the relay cutoff.',
   }, 'BFT_start:');
@@ -1783,7 +1857,9 @@ function buildSweepLegend(sweep, scenario, protocols, onProtocolToggle, cellLook
     );
     row.appendChild(h('span', { class: 'sm-legend-name' }, p));
     const stats = protocolStats(sweep, scenario, p, cellLookup);
+    if (PROTOCOL_NOTES[p]) row.title = PROTOCOL_NOTES[p];
     if (!stats) {
+      row.title = "protocol doesn't work under this configuration";
       row.appendChild(h('span', { class: 'sm-legend-pct na' }, 'n/a'));
       row.appendChild(h('span', { class: 'sm-legend-sep' }));
       row.appendChild(h('span', { class: 'sm-legend-p99' }));
@@ -2065,27 +2141,23 @@ function protocolColor(name) {
 // sortProtocolsByFamily reorders the protocol list so variants sit next
 // to their canonical base, preserving Go-side registration order
 // WITHIN each family. E.g.
-//   ["OBFT","2abOBFT","OBFTx2","QBFT","OBFTx3"]
+//   ["OBFT-0","QBFT-0","OBFT-700","QBFT-700"]
 // becomes
-//   ["OBFT","OBFTx2","OBFTx3","2abOBFT","QBFT"]
-// Family identity is the canonical name minus an optional "x<n>"
-// (numeric multiplier suffix like OBFTx2) or "-<suffix>" (variant
-// flavor like QBFT-SSV / OBFT-no-reflood). Family order in the output is
-// first-occurrence in the input; within each family, variants appear
-// in input order.
+//   ["OBFT-0","OBFT-700","QBFT-0","QBFT-700"]
+// Family identity is the canonical name minus an optional "-<suffix>"
+// (variant flavor like QBFT-SSV or a cushion rung like OBFT-300). Family
+// order in the output is first-occurrence in the input; within each
+// family, variants appear in input order.
 //
 // Trusting Go-side registration order matters: variant placement
-// communicates intent. E.g. OBFT-no-reflood is registered before bare OBFT
-// in stress_test.go so the report shows the no-cushion variant
-// immediately above the with-cushion baseline. A within-family
-// re-sort here would silently override that intent — so we don't.
+// communicates intent. E.g. the cushion rungs are registered least → most
+// cushion (X-0 before X-700) in stress_test.go so the report reads floor →
+// production. A within-family re-sort here would silently override that
+// intent — so we don't.
 function sortProtocolsByFamily(protocols) {
   if (!Array.isArray(protocols) || protocols.length <= 1) return protocols;
   const familyOf = (name) => {
-    // Numeric "x<n>" multiplier suffix (e.g. "OBFTx2" → "OBFT").
-    const xm = name.match(/^(.+?)x\d+$/);
-    if (xm) return xm[1];
-    // Hyphenated variant suffix (e.g. "QBFT-SSV" → "QBFT").
+    // Hyphenated variant suffix (e.g. "QBFT-SSV" → "QBFT", "OBFT-300" → "OBFT").
     const i = name.indexOf('-');
     return i < 0 ? name : name.slice(0, i);
   };

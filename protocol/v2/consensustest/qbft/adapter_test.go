@@ -29,7 +29,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 		},
 		TraceEnabled: true,
 	}
-	out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+	out, err := qbftadapter.QBFT0{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "mesh-mode healthy should decide")
 	ct.AssertNoRefloodToPublisher(t, out.Trace)
@@ -52,7 +52,7 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 			HopDelay: ct.LogNormalDelay{Median: btt / 3, Sigma: 0.3},
 		},
 	}
-	out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+	out, err := qbftadapter.QBFT0{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "mesh-mode healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "mesh-mode healthy should decide at round 1")
@@ -77,7 +77,7 @@ func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 				Byz:          ct.ByzPattern{Kind: ct.ByzNone},
 				Seed:         1,
 			}
-			out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+			out, err := qbftadapter.QBFT0{}.Run(cfg)
 			require.NoError(t, err, "n=%d Run", n)
 			require.True(t, out.Decided, "n=%d should decide healthy", n)
 			require.Equal(t, 0, out.DecidedRound, "n=%d should decide at round 1 (= 0-indexed)", n)
@@ -95,7 +95,7 @@ func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 func TestAdapter_RoundChange(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
-	out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+	out, err := qbftadapter.QBFT0{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "should decide at round 2 after round 1 timeout")
 	require.Equal(t, 1, out.DecidedRound, "should decide at round 2 (= 1-indexed → 1)")
@@ -111,7 +111,7 @@ func TestAdapter_EquivocationFallThrough(t *testing.T) {
 		Kind:         ct.ByzEquivocateAllNR,
 		ByzOperators: []ct.OperatorID{1},
 	}
-	out, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+	out, err := qbftadapter.QBFT0{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "should decide via round 2 fresh-V")
 	require.Equal(t, 1, out.DecidedRound, "should decide at round 2 (= 1-indexed → 1)")
@@ -125,9 +125,9 @@ func TestAdapter_DeterministicAcrossRuns(t *testing.T) {
 	cfg.Byz = ct.ByzPattern{Kind: ct.ByzSilentLeader, ByzOperators: []ct.OperatorID{1}}
 	cfg.TraceEnabled = true
 
-	out1, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+	out1, err := qbftadapter.QBFT0{}.Run(cfg)
 	require.NoError(t, err)
-	out2, err := qbftadapter.QBFTNoReflood{}.Run(cfg)
+	out2, err := qbftadapter.QBFT0{}.Run(cfg)
 	require.NoError(t, err)
 	require.Equal(t, out1.Decided, out2.Decided)
 	require.Equal(t, out1.DecisionTime, out2.DecisionTime)

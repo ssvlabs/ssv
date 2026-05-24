@@ -22,9 +22,9 @@ import (
 
 // TestStress is the stress-tier entry point per the catalog-split plan.
 // It runs DefaultSweeps over every catalog scenario opted into
-// ModeStress for the registered protocol families (OBFT family incl.
-// OBFT-no-reflood / OBFTx2 / OBFTx3, 2abOBFT family incl. 2abOBFT-no-reflood / 2abOBFT-lean,
-// QBFT family incl. QBFT-no-reflood / QBFT-SSV, and PSigs) and writes a `data.js` file
+// ModeStress for the registered protocol families (each consensus family —
+// OBFT / 2abOBFT / QBFT — ships the X-0 / X-300 / X-500 / X-700 cushion
+// ladder, plus QBFT-SSV and PSigs) and writes a `data.js` file
 // consumed by the static UI in `stresstest-report/` (index.html + app.js
 // + styles.css, all tracked in git). Refreshing index.html in a browser
 // re-renders from the new data.js without rerunning this test.
@@ -65,21 +65,18 @@ import (
 //     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
 //     six. See ct.P2PProfileNames / ct.P2PProfile.
 //   - PROTOCOLS — comma-separated protocol names to include in the sweep
-//     (e.g. "OBFT,QBFT,PSigs"). Test-level default (unset / empty): all
-//     registered protocols. `make stresstest` overrides this with a curated
-//     default that OMITS PSigs and the OBFTx2/x3 multiplier variants — pass
-//     `PROTOCOLS=` to that target for the full set. Useful for partial
-//     regens — e.g. PROTOCOLS=PSigs runs only the baseline reference. Names
-//     must exactly match Protocol.Name() values from the `protocols` slice
-//     in this file.
+//     (e.g. "OBFT-700,QBFT-700,PSigs"). Test-level default (unset / empty):
+//     all registered protocols. `make stresstest` overrides this with a
+//     curated default that OMITS PSigs — pass `PROTOCOLS=` to that target
+//     for the full set. Useful for partial regens — e.g. PROTOCOLS=PSigs
+//     runs only the baseline reference. Names must exactly match
+//     Protocol.Name() values from the `protocols` slice in this file.
 //   - BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
 //     p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
 //     300, 400 per ct.DefaultBaselineBTTValues.
-//   - BFT_STARTS — comma-separated BFT_start values (ms) for the
-//     p2p_baseline sweep's BFT_start axis. Default: 0, 2400, 2800,
-//     3200 per ct.DefaultBaselineBFTStarts. BFT_start > 0 points emit
-//     OBFT-family cells only; pipeline-shift protocols (PSigs / QBFT)
-//     are covered by the BFT_start=0 cell + UI pipeline-shift.
+//
+// BFT_start is not a sweep axis — the sim always runs at BFT_start=0 and
+// the report UI derives later BFT_start values post-hoc.
 //
 // Usage:
 //
@@ -189,49 +186,6 @@ func TestStress(t *testing.T) {
 	}
 	require.NotEmpty(t, profiles, "P2P_PROFILES is empty after parsing")
 
-	// BFT_STARTS — comma-separated BFT_start values (ms) for the
-	// p2p_baseline sweep's BFT_start axis. Default: 0, 2400, 2800, 3200
-	// per DefaultBaselineBFTStarts — BFT_start=0 anchors the below-
-	// threshold reuse cell for every variant, and the {2400, 2800, 3200}
-	// trio brackets the failure regime where the OBFT-family L_0 clamp
-	// bites (per-variant thresholds land ~1900–2125ms at the standard
-	// operating points, so BFT_start differentiates protocols only above
-	// ~2400ms). BFT_start > 0 only runs the OBFT-family protocols;
-	// pipeline-shift protocols (PSigs / QBFT) are covered by the UI's
-	// pipeline-shift from the BFT_start=0 cell. BFT_start=0 is therefore
-	// required; an override that omits it is rejected (see the require
-	// below). Sorted ascending and de-duplicated after parse for stable
-	// axis ordering.
-	bftStartsRaw := os.Getenv("BFT_STARTS")
-	var bftStarts []time.Duration
-	if bftStartsRaw == "" {
-		bftStarts = ct.DefaultBaselineBFTStarts
-	} else {
-		for _, s := range strings.Split(bftStartsRaw, ",") {
-			s = strings.TrimSpace(s)
-			if s == "" {
-				continue
-			}
-			ms, err := strconv.Atoi(s)
-			require.NoErrorf(t, err, "invalid BFT_STARTS value %q (want comma-separated ms integers)", s)
-			require.GreaterOrEqualf(t, ms, 0, "BFT_STARTS value %q must be >= 0", s)
-			bftStarts = append(bftStarts, time.Duration(ms)*time.Millisecond)
-		}
-		require.NotEmpty(t, bftStarts, "BFT_STARTS is empty after parsing")
-		slices.Sort(bftStarts)
-		// Drop duplicates (e.g. BFT_STARTS=0,0,2400) so the sweep doesn't
-		// emit redundant identical points; Compact needs the sort above.
-		bftStarts = slices.Compact(bftStarts)
-	}
-	// BFT_start=0 is load-bearing and must be present: the p2p_baseline
-	// sweep emits the full protocol set only at BFT_start=0 (BFT_start>0
-	// runs OBFT-family only), and the UI derives pipeline-shift protocols
-	// (PSigs / QBFT family) plus the OBFT-family below-threshold reuse cell
-	// from that anchor. Dropping 0 would silently leave PSigs / QBFT with
-	// no cells, so reject the config here rather than emit a broken report.
-	require.Containsf(t, bftStarts, time.Duration(0),
-		"BFT_STARTS must include 0 (anchors the full-catalog sweep + the UI's pipeline-shift / below-threshold reuse); got %v", bftStarts)
-
 	// BTT_VALUES_MS — comma-separated BTT values (ms) shared by the
 	// p2p_baseline and p2p_increasing_BTT sweeps. Default: 100, 200,
 	// 300, 400 per DefaultBaselineBTTValues. Sorted ascending and
@@ -297,70 +251,55 @@ func TestStress(t *testing.T) {
 	scenarios := ct.ScenariosWithMode(ct.Catalog, ct.ModeStress)
 	require.NotEmpty(t, scenarios, "no catalog scenarios opted into ModeStress")
 	t.Logf("=== %d/%d catalog scenarios opted into ModeStress", len(scenarios), len(ct.Catalog))
-	// Three flavor axes:
-	//   - OBFT and 2abOBFT each ship in a canonical (multiplier=1) form
-	//     plus "x2" and "x3" multiplier variants that scale bttEff
-	//     internally. Every BTT-derived budget (Δ_2, primary B_0 = 2·BTT,
-	//     FetchAt fetch buffer, and 2ab's TAcceptMax / TVerdictMax
-	//     horizons) scales linearly with the multiplier; backup layers
-	//     L_1..L_{K-1} have B_k = T_commit and don't scale with the
-	//     multiplier. T_commit lands earlier as a result (Δ_2 = 1·m·BTT
-	//     for OBFT-m at spec-aligned sizing; Δ_2a + Δ_2b = 3·m·BTT for
-	//     2abOBFT-m, of which Δ_2a = 2·m·BTT is the structural minimum)
-	//     at the cost of MEV freshness. Network propagation still
-	//     happens at the sweep's actual BTT — the multiplier models
-	//     operator-side pessimism only.
-	//   - OBFT ships an additional OBFT-no-reflood variant that forces
-	//     RefloodDelay=0 in the broadcast budget (B_0 = 2·BTT instead
-	//     of 2·BTT + 700ms). Same protocol, no schedule-level cushion
-	//     for lazy-push recovery — the per-cell delta against bare
-	//     OBFT quantifies the RefloodDelay cushion's value at each
-	//     operating point. Listed first in the slice so the report
-	//     renders OBFT-no-reflood immediately above bare OBFT.
-	//   - QBFT ships in three variants: bare QBFT (reflood-aware — per-round
-	//     RT R1 = 4·BTT + RefloodDelay, the realistic mesh-tolerant default),
-	//     QBFT-no-reflood (the no-cushion structural floor, R1 = 3·BTT,
-	//     R≥2 = 4·BTT), and QBFT-SSV (production fixed 2s RT).
+	// Variant families in the matrix:
+	//   - Cushion ladder per consensus family — OBFT / 2abOBFT / QBFT each
+	//     ship rungs X-0 / X-300 / X-500 / X-700, naming the mesh-tail cushion
+	//     in ms: RefloodDelay folded into OBFT's primary B_0; SafetyBuffer for
+	//     2abOBFT; the per-round RT cushion for QBFT. Each rung is a FIXED,
+	//     scenario-independent cushion (so the names are accurate on every
+	//     scenario). See the per-family comments below for the exact mapping
+	//     and caveats (notably the uneven QBFT ladder and the 2abOBFT
+	//     max(SB,BTT) crossover).
+	//   - QBFT-SSV (production fixed 2s RT) and PSigs (partial-sigs baseline)
+	//     sit outside the cushion ladders.
 	protocols := []ct.Protocol{
 		// Within each family, variants are listed least-safe → most-safe (least
 		// mesh-tail cushion → most), so the report reads floor → production.
-		// OBFT-no-reflood is the canonical OBFT with RefloodDelay forced to 0 —
-		// models the "fully-meshed cluster, eager push reliable" assumption
-		// (OBFT.md §Setting `RefloodDelay=0` path). Listed before bare OBFT
-		// so the report shows the no-cushion variant immediately above the
-		// with-cushion baseline, making the per-cell RefloodDelay-cost
-		// delta read directly. Identical to OBFT on adversarial scenarios
-		// (which already set cfg.RefloodDelay=0); the interesting cells
-		// are Healthy on a degraded p2p_profile, where bare OBFT's 700ms
-		// cushion in B_0 buys the lazy-push absorption that OBFT-no-reflood lacks.
-		obftadapter.Protocol{VariantName: "OBFT-no-reflood", NoRefloodDelay: true},
-		obftadapter.Protocol{},
-		obftadapter.Protocol{VariantName: "OBFTx2", BTTMultiplier: 2},
-		obftadapter.Protocol{VariantName: "OBFTx3", BTTMultiplier: 3},
-		// 2abOBFT-no-reflood / 2abOBFT-lean exercise the SafetyBuffer knob
-		// specific to 2abOBFT (its protocol-level mesh-tolerance configurable;
-		// default = cfg.RefloodDelay, so bare 2abOBFT is reflood-aware).
-		// 2abOBFT-no-reflood sets SafetyBuffer = 0 — the no-cushion structural
-		// floor (the resolve window degenerates to its 2·BTT minimum), the
-		// 2abOBFT peer of OBFT-no-reflood / QBFT-no-reflood. 2abOBFT-lean
-		// (SB=300ms) is an intermediate point that reclaims MEV-fetch headroom
-		// at the cost of mesh-tail tolerance.
-		//
-		// Note: the resolve window is max(1·BTT + SafetyBuffer,
-		// 2·BTT), so a variant's SafetyBuffer only bites ABOVE the 1·BTT
-		// crossover. In the BTT sweep, lean (SB=300ms) degenerates to the
-		// no-SafetyBuffer floor at BTT ≥ 300ms (at BTT=400 it equals SB=0);
-		// the band is distinct at the canonical BTT=200ms. Absolute ms
-		// (HeartbeatInterval-tied), not BTT multiples — intentional. See
+		// OBFT cushion ladder — RefloodDelay = 0 / 300 / 500 / 700ms (the
+		// reflood absorption folded into the primary's B_0 = 2·BTT +
+		// RefloodDelay). Each rung is a FIXED, scenario-independent cushion
+		// (RefloodDelayOverride), so the names are accurate on every scenario —
+		// including adversarial, where the generic bare OBFT would instead
+		// collapse to cfg.RefloodDelay=0. B_0 is linear in RefloodDelay, so all
+		// four rungs stay distinct at every BTT (unlike the 2abOBFT ladder,
+		// whose lower rungs collapse via the max(SB,BTT) crossover).
+		obftadapter.Protocol{VariantName: "OBFT-0", RefloodDelayOverride: durPtr(0), BaselineOnly: true},
+		obftadapter.Protocol{VariantName: "OBFT-300", RefloodDelayOverride: durPtr(300 * time.Millisecond), BaselineOnly: true},
+		obftadapter.Protocol{VariantName: "OBFT-500", RefloodDelayOverride: durPtr(500 * time.Millisecond), BaselineOnly: true},
+		obftadapter.Protocol{VariantName: "OBFT-700", RefloodDelayOverride: durPtr(700 * time.Millisecond)},
+		// 2abOBFT cushion ladder — SafetyBuffer = 0 / 300 / 500 / 700ms (the
+		// post-TPhase2a σ-pool fill window). Fixed per rung (SafetyBufferOverride).
+		// Note: the resolve window is max(1·BTT + SafetyBuffer, 2·BTT), so a
+		// rung's SafetyBuffer only bites ABOVE the 1·BTT crossover — in the BTT
+		// sweep the lower rungs collapse onto each other (e.g. at BTT=300 the
+		// 0/300 rungs coincide; at BTT=500, 0/300/500 coincide), distinct only
+		// at smaller BTT. Absolute ms, not BTT multiples — intentional. See
 		// docs/2abOBFT.md §Timing parameters (SafetyBuffer crossover).
-		twoabadapter.Protocol{VariantName: "2abOBFT-no-reflood", SafetyBufferOverride: durPtr(0)},
-		twoabadapter.Protocol{VariantName: "2abOBFT-lean", SafetyBufferOverride: durPtr(300 * time.Millisecond)},
-		twoabadapter.Protocol{},
-		qbftadapter.QBFTNoReflood{},
-		qbftadapter.QBFT{},
+		twoabadapter.Protocol{VariantName: "2abOBFT-0", SafetyBufferOverride: durPtr(0), BaselineOnly: true},
+		twoabadapter.Protocol{VariantName: "2abOBFT-300", SafetyBufferOverride: durPtr(300 * time.Millisecond), BaselineOnly: true},
+		twoabadapter.Protocol{VariantName: "2abOBFT-500", SafetyBufferOverride: durPtr(500 * time.Millisecond), BaselineOnly: true},
+		twoabadapter.Protocol{VariantName: "2abOBFT-700", SafetyBufferOverride: durPtr(700 * time.Millisecond)},
+		// QBFT cushion ladder — round-timer cushion = 0 / 300 / 500 / 700ms,
+		// plus the fixed-2s production variant. NB uneven: QBFT-0 (the
+		// no-reflood floor) is 3·BTT — it drops a structural 1·BTT that the
+		// cushioned rungs carry — while QBFT-{300,500,700} are 4·BTT+cushion.
+		baselineOnly(qbftadapter.QBFT0{}), // "QBFT-0" (Baseline-only)
+		baselineOnly(qbftadapter.QBFT300{}),      // "QBFT-300" (Baseline-only)
+		baselineOnly(qbftadapter.QBFT500{}),       // "QBFT-500" (Baseline-only)
+		qbftadapter.QBFT700{},                     // "QBFT-700"
 		qbftadapter.QBFTSSV{},
 		// PSigs is a baseline-cost reference: every honest op signs the
-		// pre-agreed V at BFTStart and broadcasts; the cluster decides at
+		// pre-agreed V at slot start and broadcasts; the cluster decides at
 		// the qV-th partial-sig arrival. No consensus on V, no rounds,
 		// no encrypted onion — most adversarial catalog scenarios return
 		// ErrNotApplicable (rendered as n/a in the report). The cell row
@@ -370,8 +309,8 @@ func TestStress(t *testing.T) {
 	}
 
 	// PROTOCOLS — comma-separated allowlist; empty → all. Useful for
-	// partial regens (e.g. only PSigs, or only the canonical OBFT/QBFT
-	// pair without the multiplier / fixed-RT variants). Each requested
+	// partial regens (e.g. only PSigs, or only the canonical X-700 rungs
+	// without the rest of the cushion ladder). Each requested
 	// name must exactly match a Protocol.Name() in the slice above;
 	// typos fail loudly so a partial regen doesn't silently produce a
 	// data.js missing the cells the caller expected.
@@ -411,7 +350,7 @@ func TestStress(t *testing.T) {
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
 	for pairIdx, pp := range pairs {
-		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bftStarts, bttValues)
+		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bttValues)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		pairStart := time.Now()
 		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)
@@ -488,3 +427,14 @@ func TestStress(t *testing.T) {
 // durPtr returns a pointer to a time.Duration — used to populate optional
 // duration override fields like Protocol.SafetyBufferOverride.
 func durPtr(d time.Duration) *time.Duration { return &d }
+
+// baselineOnlyVariant wraps a Protocol to mark it Baseline-group-only: it
+// runs on Healthy but RunBatch renders it n/a on adversarial scenarios (see
+// isBaselineOnly in batch.go). Used for the QBFT cushion rungs, whose
+// adapters are fixed structs that can't carry a per-instance flag — the
+// obft/twoab adapters set their Protocol.BaselineOnly field directly instead.
+type baselineOnlyVariant struct{ ct.Protocol }
+
+func (baselineOnlyVariant) IsBaselineOnly() bool { return true }
+
+func baselineOnly(p ct.Protocol) ct.Protocol { return baselineOnlyVariant{p} }
