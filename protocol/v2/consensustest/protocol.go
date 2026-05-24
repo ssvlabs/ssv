@@ -310,8 +310,10 @@ type Outcome struct {
 	// outcomes. Populated post-ClipLateDecision by each adapter using
 	// protocol-specific context (pre-clip round / layer, byz pattern,
 	// etc.) so the report can render rich categorization like
-	// "Cluster ready to submit at layer 2, past the submit deadline"
-	// or "Cluster never assembled a threshold signature at any layer".
+	// "Cluster ready to submit at layer 2, past the submit deadline",
+	// "Cluster stalled at layer 0 — value didn't reach σ-quorum in time
+	// (undelivered)", or "Cluster never assembled a threshold signature at
+	// any layer".
 	// Labels are intentionally NOT parameterised on per-iter lateness
 	// in ms — the DecisionTime distribution carries that signal;
 	// grouping the failure-breakdown table by category keeps the row

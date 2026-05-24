@@ -965,8 +965,9 @@ function renderConditionsSection(data) {
 //        submit deadline"
 //
 // Any reason that doesn't match these patterns passes through unchanged
-// (e.g. "Cluster never assembled..." or "Cluster deadlocked at layer
-// X (...)" — those carry their own meaning and stay separate rows).
+// (e.g. "Cluster never assembled...", "Cluster stalled at layer X ...",
+// or "Cluster deadlocked at layer X (...)" — those carry their own
+// meaning and stay separate rows).
 const GROUP_READY_DEPTH_0 = 'Cluster ready to submit (at layer 0 / round 1), past the submit deadline';
 const GROUP_READY_DEPTH_1 = 'Cluster ready to submit (at layer 1 / round 2), past the submit deadline';
 const GROUP_READY_DEPTH_2P = 'Cluster ready to submit (at layer 2+ / round 3+), past the submit deadline';
