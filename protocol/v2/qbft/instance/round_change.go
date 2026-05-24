@@ -337,7 +337,7 @@ func (i *Instance) validRoundChangeForDataVerifySignature(
 	}
 
 	// Verify signature
-	if err := spectypes.Verify(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
+	if err := i.verifySignature(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
 		return spectypes.WrapError(spectypes.MessageSignatureInvalidErrorCode, fmt.Errorf("msg signature invalid: %w", err))
 	}
 

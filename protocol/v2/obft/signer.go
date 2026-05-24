@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash"
+	"sync"
 )
 
 // Signer is the BLS-style threshold signing primitive OBFT uses to:
@@ -61,7 +63,7 @@ type Signer interface {
 //
 // Format:
 //
-//	partial    = []byte{0x10} || H(share)[:8] || sha256(msg)[:8] || sha256(share || msg)
+//	partial    = []byte{0x10} || H(share)[:8] || sha256(msg)[:8] || sha256(share || sha256(msg))
 //	aggregate  = []byte{0x11} || sha256(msg)[:8] || quorum(big-endian 4 bytes)
 //
 // "Share" is just an opaque identity tag in the stub — typically the
@@ -108,15 +110,35 @@ func (s *StubSigner) SignPartial(msg []byte) (Signature, error) {
 	return stubPartialFor(s.share, msg), nil
 }
 
+// sha256Pool reuses streaming hashers for the share-bound tag below so each
+// partial avoids allocating a hasher (and any input concatenation) on the hot
+// path. The (potentially ≈5 KB) value is hashed only once — for msgID — and
+// only its 32-byte digest is fed here, so the tag hash itself is tiny.
+var sha256Pool = sync.Pool{New: func() any { return sha256.New() }}
+
 func stubPartialFor(share, msg []byte) Signature {
 	shareID := shareHash(share)
-	msgID := msgHash(msg)
-	full := sha256.Sum256(append(append([]byte{}, share...), msg...))
+	// Hash the (potentially large) value exactly once. The digest serves as
+	// both msgID and the input to the share-bound tag: hashing the value a
+	// second time for the tag would be pure waste, since the stub only needs a
+	// value that is deterministic and distinct per (share, msg), and
+	// sha256(share || sha256(msg)) has that property. (Real-BLS CPU realism is
+	// behind the real_bls build tag, not the stub.)
+	msgDigest := sha256.Sum256(msg)
+	msgID := msgDigest[:8]
+
+	h := sha256Pool.Get().(hash.Hash)
+	h.Reset()
+	h.Write(share)
+	h.Write(msgDigest[:])
+	var full [32]byte
+	h.Sum(full[:0])
+	sha256Pool.Put(h)
 
 	out := make([]byte, 0, 1+8+8+32)
 	out = append(out, stubVersionPartialSig)
 	out = append(out, shareID[:]...)
-	out = append(out, msgID[:]...)
+	out = append(out, msgID...)
 	out = append(out, full[:]...)
 	return out
 }

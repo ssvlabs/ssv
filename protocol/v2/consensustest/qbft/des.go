@@ -105,7 +105,10 @@ func newSim(cfg desConfig) (*sim, error) {
 	for i := 0; i < cfg.N; i++ {
 		operators[i] = spectypes.OperatorID(cfg.Operators[i])
 	}
-	committee := spectestingutils.TestingCommitteeMember(keys)
+	committee, err := committeeForN(cfg.N)
+	if err != nil {
+		return nil, err
+	}
 
 	crashed := make(map[spectypes.OperatorID]bool, len(cfg.Crashed))
 	for _, op := range cfg.Crashed {
@@ -223,6 +226,10 @@ func (s *sim) buildInstance(op spectypes.OperatorID) (*qbftinstance.Instance, er
 		},
 		Network:     newVirtualNetwork(s, op),
 		CutOffRound: specqbft.Round(s.cfg.MaxRounds + 1),
+		// Memoize signature verification across the sweep (see verify.go).
+		// Behavior-identical to spectypes.Verify; turns the dominant RSA cost
+		// into a map lookup on the sweep's many repeated signatures.
+		SignatureVerifier: newCachingVerifier(s.cfg.N),
 	}
 
 	inst := qbftinstance.NewInstance(

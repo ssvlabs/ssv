@@ -84,6 +84,23 @@ func (i *Instance) Timer() specqbft.Timer {
 	return i.roundTimer
 }
 
+// verifySignature checks msg's signatures against operators. When the Config
+// supplies a SignatureVerifier (discovered via a type assertion so IConfig
+// stays unchanged), it is used; otherwise this is exactly spectypes.Verify, so
+// production behavior is unmodified. The override is a pure speed optimization
+// (it must return what spectypes.Verify would) used by the consensustest stress
+// harness to memoize repeated verifications.
+func (i *Instance) verifySignature(msg *spectypes.SignedSSVMessage, operators []*spectypes.Operator) error {
+	if c, ok := i.config.(interface {
+		GetSignatureVerifier() qbft.SignatureVerifier
+	}); ok {
+		if v := c.GetSignatureVerifier(); v != nil {
+			return v(msg, operators)
+		}
+	}
+	return spectypes.Verify(msg, operators)
+}
+
 func (i *Instance) Start(
 	ctx context.Context,
 	value []byte,

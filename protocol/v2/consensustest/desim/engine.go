@@ -12,7 +12,6 @@
 package desim
 
 import (
-	"container/heap"
 	"fmt"
 	mrand "math/rand"
 	"time"
@@ -53,16 +52,29 @@ type queueItem struct {
 	ev   Event
 }
 
+// eventQueue is a typed min-heap of queueItems stored BY VALUE. It replaces
+// the previous container/heap-based queue, which boxed each item into `any`
+// for the heap.Interface and allocated a *queueItem per Schedule (the hot
+// path: millions of events per stress run). Storing items by value in the
+// backing slice removes the per-item heap allocation and the interface
+// indirection.
+//
+// Ordering (less) is a strict TOTAL order — (when, then deprioritize
+// false-before-true, then the unique seq) — so the pop sequence is identical
+// to any other correct heap over the same comparator, preserving the
+// framework's byte-identical-trace determinism guarantee regardless of the
+// internal array layout.
 type eventQueue struct {
-	items []*queueItem
+	items []queueItem
 	// deprioritize, when non-nil, refines equal-time ordering: events for
 	// which it returns true sort AFTER events for which it returns false.
 	deprioritize func(Event) bool
 }
 
-func (q eventQueue) Len() int { return len(q.items) }
-func (q eventQueue) Less(i, j int) bool {
-	a, b := q.items[i], q.items[j]
+func (q *eventQueue) len() int { return len(q.items) }
+
+func (q *eventQueue) less(i, j int) bool {
+	a, b := &q.items[i], &q.items[j]
 	if a.when != b.when {
 		return a.when < b.when
 	}
@@ -74,17 +86,46 @@ func (q eventQueue) Less(i, j int) bool {
 	}
 	return a.seq < b.seq
 }
-func (q eventQueue) Swap(i, j int) { q.items[i], q.items[j] = q.items[j], q.items[i] }
-func (q *eventQueue) Push(x any)   { q.items = append(q.items, x.(*queueItem)) }
-func (q *eventQueue) Pop() any {
-	old := q.items
-	n := len(old)
-	x := old[n-1]
-	q.items = old[:n-1]
-	return x
+
+// push appends an item and sifts it up to restore the heap invariant.
+func (q *eventQueue) push(it queueItem) {
+	q.items = append(q.items, it)
+	i := len(q.items) - 1
+	for i > 0 {
+		parent := (i - 1) / 2
+		if !q.less(i, parent) {
+			break
+		}
+		q.items[i], q.items[parent] = q.items[parent], q.items[i]
+		i = parent
+	}
 }
 
-var _ heap.Interface = (*eventQueue)(nil)
+// pop removes and returns the minimum item, sifting the moved last element
+// down to restore the heap invariant.
+func (q *eventQueue) pop() queueItem {
+	n := len(q.items) - 1
+	q.items[0], q.items[n] = q.items[n], q.items[0]
+	top := q.items[n]
+	q.items = q.items[:n]
+	i := 0
+	for {
+		l := 2*i + 1
+		if l >= n {
+			break
+		}
+		smallest := l
+		if r := l + 1; r < n && q.less(r, l) {
+			smallest = r
+		}
+		if !q.less(smallest, i) {
+			break
+		}
+		q.items[i], q.items[smallest] = q.items[smallest], q.items[i]
+		i = smallest
+	}
+	return top
+}
 
 // Engine is the virtual-time event loop and its deterministic-driver state. A
 // sim embeds *Engine and passes itself to Run as the Host.
@@ -130,7 +171,7 @@ func (e *Engine) Tracef(format string, args ...any) {
 // which is what makes a run byte-identical across repetitions.
 func (e *Engine) Schedule(when time.Duration, ev Event) {
 	e.seq++
-	heap.Push(&e.queue, &queueItem{when: when, seq: e.seq, ev: ev})
+	e.queue.push(queueItem{when: when, seq: e.seq, ev: ev})
 }
 
 // SetEqualTimeLowPriority installs a predicate consulted only at equal virtual
@@ -154,8 +195,8 @@ func (e *Engine) Run(host Host) { e.RunUntil(host, 0) }
 // without processing it. Used by adapters (e.g. QBFT) that cap virtual time at
 // a deadline-derived horizon rather than running to quiescence.
 func (e *Engine) RunUntil(host Host, maxTime time.Duration) {
-	for e.queue.Len() > 0 {
-		it := heap.Pop(&e.queue).(*queueItem)
+	for e.queue.len() > 0 {
+		it := e.queue.pop()
 		if maxTime > 0 && it.when > maxTime {
 			break
 		}

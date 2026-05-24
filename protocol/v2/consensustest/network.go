@@ -398,6 +398,11 @@ type LogNormalMixtureDelay struct {
 	// cumWeights are never rewritten), so the analytic median is fixed
 	// at construction and caching it is safe.
 	analyticAnchor time.Duration
+	// mu[i] = ln(Components[i].Median), precomputed at construction so the
+	// per-hop Delay sampler (called on every mesh edge) doesn't recompute a
+	// transcendental that's constant for the lifetime of the model. 0 for
+	// non-positive medians, which Delay short-circuits before reading mu.
+	mu []float64
 }
 
 type LogNormalComponent struct {
@@ -431,7 +436,13 @@ func NewLogNormalMixtureDelay(components []LogNormalComponent) *LogNormalMixture
 	}
 	// Guard against floating drift on the last entry.
 	cum[len(cum)-1] = 1.0
-	l := &LogNormalMixtureDelay{Components: components, cumWeights: cum}
+	mu := make([]float64, len(components))
+	for i, c := range components {
+		if c.Median > 0 {
+			mu[i] = math.Log(float64(c.Median))
+		}
+	}
+	l := &LogNormalMixtureDelay{Components: components, cumWeights: cum, mu: mu}
 	l.analyticAnchor = 2 * time.Duration(l.mixtureQuantile(0.5))
 	return l
 }
@@ -450,9 +461,8 @@ func (l *LogNormalMixtureDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKin
 	if c.Median <= 0 {
 		return time.Nanosecond
 	}
-	mu := math.Log(float64(c.Median))
 	z := rng.NormFloat64()
-	raw := math.Exp(mu + c.Sigma*z)
+	raw := math.Exp(l.mu[idx] + c.Sigma*z)
 	// Same overflow guard as LogNormalDelay: clamp extreme tail draws to
 	// DroppedDelay so time.Duration(+Inf) can't silently become a negative
 	// duration downstream.
