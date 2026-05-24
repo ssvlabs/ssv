@@ -1470,28 +1470,33 @@ function renderHeatmap(data) {
   const colCount = grouped.families.length * grouped.cushions.length + grouped.solos.length;
   section.style.setProperty('--hcols', String(colCount));
 
-  // No header/subtitle on the heatmap — the cluster-setup label lives in
-  // the Conditions section above. Two stacked column-header rows: a family
-  // super-header spanning each family's cushion columns, then the cushion
-  // (ms) sub-header. First column of each family group carries .grp.
-  const famRow = h('div', { class: 'heatmap-cols heatmap-fam-cols' });
-  famRow.appendChild(h('div', { class: 'col-head scen' }));
+  // Column header — one two-row grid: the "scenario" corner and ladder-less
+  // solos span both rows; each family super-header spans its cushion columns
+  // over the cushion (ms) sub-header. Explicit grid placement keeps it
+  // aligned with the data rows' shared --hcols column template.
+  const header = h('div', { class: 'heatmap-cols heatmap-header' });
+  const corner = h('div', { class: 'col-head scen span2' }, 'scenario');
+  corner.style.gridArea = '1 / 1 / 3 / 2';
+  header.appendChild(corner);
+  let col = 2;
   grouped.families.forEach((fam) => {
-    famRow.appendChild(h('div', {
-      class: 'col-head col-fam grp',
-      style: `grid-column: span ${grouped.cushions.length}`,
-    }, fam.family));
+    const fcell = h('div', { class: 'col-head col-fam grp' }, fam.family);
+    fcell.style.gridArea = `1 / ${col} / 2 / ${col + grouped.cushions.length}`;
+    header.appendChild(fcell);
+    grouped.cushions.forEach((c, i) => {
+      const ccell = h('div', { class: i === 0 ? 'col-head col-cush grp' : 'col-head col-cush' }, c + ' ms');
+      ccell.style.gridArea = `2 / ${col + i} / 3 / ${col + i + 1}`;
+      header.appendChild(ccell);
+    });
+    col += grouped.cushions.length;
   });
-  grouped.solos.forEach((name) => famRow.appendChild(h('div', { class: 'col-head col-fam grp' }, name)));
-  section.appendChild(famRow);
-
-  const cushRow = h('div', { class: 'heatmap-cols heatmap-cush-cols' });
-  cushRow.appendChild(h('div', { class: 'col-head scen' }));
-  grouped.families.forEach((fam) => {
-    grouped.cushions.forEach((c, i) => cushRow.appendChild(h('div', { class: 'col-head col-cush' + (i === 0 ? ' grp' : '') }, c + ' ms')));
+  grouped.solos.forEach((name) => {
+    const scell = h('div', { class: 'col-head col-fam span2 grp' }, name);
+    scell.style.gridArea = `1 / ${col} / 3 / ${col + 1}`;
+    header.appendChild(scell);
+    col += 1;
   });
-  grouped.solos.forEach(() => cushRow.appendChild(h('div', { class: 'col-head col-cush grp' })));
-  section.appendChild(cushRow);
+  section.appendChild(header);
 
   // Bucket scenarios by group, preserving catalog order.
   const groups = new Map();
@@ -1525,19 +1530,17 @@ function renderHeatmap(data) {
       // row pulls from instability=0 (those scenarios are instability-
       // invariant). Iterate the grouped layout so cells align with the
       // family/cushion header; empty slots (family lacks a cushion) render
-      // a blank cell. grp marks the first column of each family group.
-      const addCell = (name, grp) => {
-        if (!name) { row.appendChild(h('div', { class: 'hcell empty' + (grp ? ' grp' : '') })); return; }
+      // a blank cell.
+      const addCell = (name) => {
+        if (!name) { row.appendChild(h('div', { class: 'hcell empty' })); return; }
         const cell = findBaselineCellForScenario(data, sc, name);
         if (cell && cell.iterations > 0) hasData = true;
-        const cellEl = renderHeatmapCell(cell, sc);
-        if (grp) cellEl.classList.add('grp');
-        row.appendChild(cellEl);
+        row.appendChild(renderHeatmapCell(cell, sc));
       };
       grouped.families.forEach((fam) => {
-        grouped.cushions.forEach((c, i) => addCell(fam.byCushion[c] || null, i === 0));
+        grouped.cushions.forEach((c) => addCell(fam.byCushion[c] || null));
       });
-      grouped.solos.forEach((name) => addCell(name, true));
+      grouped.solos.forEach((name) => addCell(name));
       // Row-level click handler: clicking a row sets the Conditions
       // chart's selected scenario, re-renders that section (so the
       // legend reflects the new scenario), and scrolls the page up so
@@ -1895,6 +1898,19 @@ function groupProtocolsByFamily(protocols) {
 // first column of each family group carries .grp for the separator line.
 function buildGroupedTableHeader(rowheadLabel, grouped) {
   const { families, solos, cushions } = grouped;
+  const frag = document.createDocumentFragment();
+  // Explicit per-column widths via <col>: under table-layout:fixed this gives
+  // every data column an identical width regardless of cell content. A width
+  // set on the colspan family header instead is distributed unreliably (the
+  // browser skews it toward narrower-content columns), which misaligns the
+  // cushion sub-headers. .col-rowhead is the fixed first column (280px,
+  // matching the heatmap scenario column); the unsized data <col>s split the
+  // remainder evenly.
+  const colgroup = h('colgroup');
+  colgroup.appendChild(h('col', { class: 'col-rowhead' }));
+  const nData = families.length * cushions.length + solos.length;
+  for (let i = 0; i < nData; i += 1) colgroup.appendChild(h('col', { class: 'col-data' }));
+  frag.appendChild(colgroup);
   const thead = h('thead');
   const r1 = h('tr');
   r1.appendChild(h('th', { class: 'rowhead', rowspan: '2' }, rowheadLabel));
@@ -1910,7 +1926,8 @@ function buildGroupedTableHeader(rowheadLabel, grouped) {
     cushions.forEach((c, i) => r2.appendChild(h('th', i === 0 ? { class: 'grp' } : {}, c + ' ms')));
   });
   thead.appendChild(r2);
-  return thead;
+  frag.appendChild(thead);
+  return frag;
 }
 
 // buildFamilyCushionGrid renders the shared family × cushion legend grid:

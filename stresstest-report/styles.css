@@ -6,6 +6,7 @@
   color-scheme: light;
   --bg: #f6f8fb;
   --surface-muted: #fafbfd;
+  --header-bg: transparent; /* table/heatmap headers carry no fill — set off by muted text + borders */
   --border: #e1e6ec;
   --text: #1a1a1a;
   --text-muted: #475569;
@@ -79,8 +80,12 @@ section.heatmap {
  * because the card's padding already contributes 1em. */
 .heatmap-cols, .hrow {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) repeat(var(--hcols), minmax(96px, 130px));
-  gap: 2px;
+  /* Fixed 280px first column + equal flexible data columns, no column gap —
+   * the breakdown tables mirror this exact geometry so every protocol column
+   * lines up across sections. Pills get their visual separation from .hcell
+   * side margins instead of a grid gap. */
+  grid-template-columns: 280px repeat(var(--hcols), minmax(0, 1fr));
+  gap: 2px 0;
   align-items: center;
 }
 
@@ -102,21 +107,41 @@ section.heatmap {
   padding-right: 0.7em;
 }
 .col-head {
-  background: var(--surface-muted);
+  background: var(--header-bg);
   font-weight: 600;
   font-size: 0.84em;
   color: var(--text-muted);
-  letter-spacing: 0.04em;
   text-align: center;
   padding: 0.4em 0.7em;
-  border-radius: 4px;
+  white-space: nowrap;
 }
-.col-head.scen { background: transparent; }
-/* Family super-header row sits tight above the cushion sub-header row. */
-.heatmap-fam-cols { margin-bottom: 2px; }
-/* Family-group separator — thin, just darker than the row borders. */
-.heatmap .col-head.grp,
-.heatmap .hcell.grp { border-left: 1px solid #d7dde5; }
+/* Two-row column header — the scenario corner and ladder-less solos span
+ * both rows (via .span2); families span their cushion columns. Ruled like
+ * the breakdown tables: a continuous bottom border under the whole header,
+ * a mid border under the family row, and .grp left borders at family
+ * boundaries. */
+.heatmap-header {
+  grid-template-rows: auto auto;
+  border-bottom: 1px solid var(--border);
+}
+.heatmap-header .span2 {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* mid rule between the family super-header row and the cushion sub-row. */
+.col-head.col-fam:not(.span2) {
+  border-bottom: 1px solid var(--border);
+}
+/* vertical separator at each family boundary (and before the solos). */
+.col-head.grp {
+  border-left: 1px solid #d7dde5;
+}
+/* scenario-column corner header: left-aligned to match the name column. */
+.col-head.scen {
+  justify-content: flex-start;
+}
 
 /* Group card — one per Scenario.Group. Surface bg + subtle border so
  * each group reads as its own chunk against the grey page bg. */
@@ -164,6 +189,7 @@ section.heatmap {
  * weight as the scenario name; the colored background carries the
  * emphasis.  */
 .hcell {
+  margin: 0 1px; /* pill separation now that the grid has no column gap */
   padding: 0.15em 0.5em;
   text-align: center;
   border-radius: 4px;
@@ -456,6 +482,7 @@ section.conditions .conditions-legend {
   border-collapse: collapse;
   font-size: 0.84em;
   font-variant-numeric: tabular-nums;
+  background: #fff;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
@@ -471,7 +498,7 @@ section.conditions .conditions-legend {
   font-size: 0.9em;
   letter-spacing: 0.02em;
   color: var(--text-faint);
-  background: var(--surface-muted);
+  background: var(--header-bg);
   text-align: center;
 }
 .sm-legend-grid thead th.corner {
@@ -539,9 +566,13 @@ section.conditions .conditions-legend {
 .grid-pill.on.na {
   background: #e2e8f0;
 }
-/* Passive pills (collapsible sweep legends) aren't clickable. */
+/* Passive pills (collapsible sweep legends) aren't clickable, and their
+ * multi-point success RANGES ("99.97–100.00%") are wider than single
+ * values — widen the floor so every column stays even (the single-point
+ * conditions legend keeps the tighter 6.4em above). */
 .grid-pill.static {
   cursor: default;
+  min-width: 9.6em;
 }
 
 /* Failure-breakdown table — sits below the CDF chart. Hidden (host
@@ -561,11 +592,23 @@ section.conditions .conditions-legend {
  * centered cells. The first column of each family group carries .grp for a
  * thin separator line. */
 .grouped-table {
-  width: 100%;
+  /* Inset and column geometry match the heatmap so every protocol column
+   * lines up across all three sections. The 1rem/1.7rem insets equal the
+   * heatmap's 1em/1.7em (root font 16px) regardless of this table's smaller
+   * font. width is definite (calc, not auto) so table-layout:fixed
+   * distributes the data columns evenly. */
+  width: calc(100% - 1rem - 1.7rem);
+  margin-left: 1rem;
   border-collapse: collapse;
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
   table-layout: fixed;
+}
+/* First column fixed at the heatmap's scenario-column width; the unsized
+ * data <col>s then split the remainder into equal columns that match the
+ * heatmap's flexible data columns. */
+.grouped-table .col-rowhead {
+  width: 280px;
 }
 .grouped-table th,
 .grouped-table td {
@@ -576,10 +619,9 @@ section.conditions .conditions-legend {
 }
 .grouped-table thead th {
   font-weight: 600;
-  background: var(--surface-muted);
+  background: var(--header-bg);
 }
 .grouped-table .rowhead {
-  width: 9em;
   text-align: left;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
@@ -590,10 +632,8 @@ section.conditions .conditions-legend {
 .grouped-table .grp {
   border-left: 1px solid #d7dde5;
 }
-/* Failure table — wider wrapping reason column; count + percent cells. */
-.conditions-failures-table .rowhead {
-  width: 14em;
-}
+/* Failure table — count + percent cells (the reason column width now comes
+ * from the shared .col-rowhead so it aligns with the other sections). */
 .conditions-failures-table td.count.zero,
 .conditions-failures-table td.count.na {
   color: var(--na);
@@ -601,6 +641,11 @@ section.conditions .conditions-legend {
 .conditions-failures-table .count-pct {
   color: var(--text-faint);
   font-size: 0.85em;
+}
+/* Let a large "N (P%)" wrap (count over percent) inside the narrow fixed
+ * column instead of spilling past it; small counts still sit on one line. */
+.conditions-failures-table td.count {
+  white-space: normal;
 }
 
 /* Decision layer/round breakdown — mirrors the failure-breakdown table,
