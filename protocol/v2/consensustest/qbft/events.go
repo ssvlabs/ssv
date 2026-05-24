@@ -10,7 +10,23 @@ import (
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 	"github.com/ssvlabs/ssv/protocol/v2/consensustest/desim"
+	qbftinstance "github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
+
+// queueCapacity bounds each operator's virtual inbound queue, mirroring SSV's
+// defaultValidatorQueueSize (validator/opts.go). When the queue is full the
+// arriving message is dropped — the same TryPush-failure behavior as the
+// production queue consumer, so message floods under instability still shed
+// load rather than buffering without bound.
+const queueCapacity = 128
+
+// pendingMsg is one buffered inbound message in an operator's virtual inbound
+// queue (drainQueue). The raw envelope is retained (re-decoded per attempt)
+// because a message rejected with a retryable error must be replayable later.
+type pendingMsg struct {
+	from ct.OperatorID
+	msg  *spectypes.SignedSSVMessage
+}
 
 // QBFT events run on the shared desim.Engine. Each event's Handle returns
 // follow-on desim.Scheduled items; the equal-time round-timeout
@@ -53,32 +69,92 @@ func (e *evtMessageArrival) Handle(h desim.Host) []desim.Scheduled {
 	s := h.(*sim)
 	op := spectypes.OperatorID(e.to)
 	inst := s.instances[op]
-	if inst == nil {
+	if inst == nil || !inst.CanProcessMessages() {
 		return nil
 	}
-	if !inst.CanProcessMessages() {
+	// Model SSV's per-validator inbound queue (validator/queue_validator.go):
+	// enqueue the arrival, then process everything currently processable. A
+	// vote that races ahead of its round's proposal is held by drainQueue
+	// (retryable ErrNoProposalForCurrentRound) and replayed once the proposal
+	// lands, rather than dropped — which is what production's queue (its
+	// proposal-gating filter + 25ms retry) does. A full queue drops the new
+	// message, matching the production TryPush bound.
+	if len(s.pending[op]) >= queueCapacity {
+		s.Tracef("QueueFull-drop[from=%d to=%d]", e.from, e.to)
 		return nil
 	}
-	pm, err := specqbft.NewProcessingMessage(e.msg)
-	if err != nil {
-		s.Tracef("MessageDecode-FAILED[from=%d to=%d err=%v]", e.from, e.to, err)
-		return nil
-	}
-	// Stash the in-flight round so virtualValueChecker.CheckValue (called
-	// inside ProcessMsg → uponProposal → isProposalJustification) can report
-	// the proposal's round to the host instead of Instance.State.Round (which
-	// hasn't been bumped yet). Cleared after ProcessMsg returns.
-	s.inflightRound[op] = pm.QBFTMessage.Round
-	decided, decidedValue, _, err := inst.ProcessMsg(context.Background(), zap.NewNop(), pm)
-	delete(s.inflightRound, op)
-	if err != nil {
-		s.Tracef("ProcessMsg-rejected[from=%d to=%d type=%d round=%d err=%v]",
-			e.from, e.to, pm.QBFTMessage.MsgType, pm.QBFTMessage.Round, err)
-	}
-	if decided {
-		s.recordDecided(op, pm.QBFTMessage.Round, decidedValue)
-	}
+	s.pending[op] = append(s.pending[op], pendingMsg{from: e.from, msg: e.msg})
+	s.drainQueue(op)
 	return nil
+}
+
+// drainQueue processes op's buffered inbound messages, looping until no further
+// progress is possible. Each pass feeds every buffered message to ProcessMsg:
+// applied and non-retryably-rejected messages are removed; messages rejected
+// with a retryable error (a vote whose proposal hasn't been accepted yet, or a
+// message for a round the instance hasn't reached) are kept for a later drain.
+// Applying a proposal — or advancing a round — unblocks held votes, so the loop
+// re-runs after any progress and the just-unblocked messages are picked up at
+// the same virtual instant. This mirrors the production queue consumer popping
+// the proposal first, then the previously-gated votes (validator/queue_validator.go).
+func (s *sim) drainQueue(op spectypes.OperatorID) {
+	inst := s.instances[op]
+	if inst == nil {
+		s.pending[op] = nil
+		return
+	}
+	for {
+		if !inst.CanProcessMessages() {
+			// Decided / no longer relevant: discard the remainder, as the
+			// production runner stops consuming once the duty is done.
+			s.pending[op] = nil
+			return
+		}
+		q := s.pending[op]
+		if len(q) == 0 {
+			return
+		}
+		progressed := false
+		keep := make([]pendingMsg, 0, len(q))
+		for _, item := range q {
+			if !inst.CanProcessMessages() {
+				// Decided mid-pass: stop here; the outer loop discards the
+				// remainder (the production runner stops consuming on decide).
+				break
+			}
+			pm, err := specqbft.NewProcessingMessage(item.msg)
+			if err != nil {
+				s.Tracef("MessageDecode-FAILED[from=%d to=%d err=%v]", item.from, op, err)
+				progressed = true
+				continue
+			}
+			// Stash the in-flight round so virtualValueChecker.CheckValue (called
+			// inside ProcessMsg → uponProposal → isProposalJustification) reports
+			// the proposal's round to the host instead of Instance.State.Round
+			// (not yet bumped). Cleared after ProcessMsg returns.
+			s.inflightRound[op] = pm.QBFTMessage.Round
+			decided, decidedValue, _, perr := inst.ProcessMsg(context.Background(), zap.NewNop(), pm)
+			delete(s.inflightRound, op)
+			if perr != nil {
+				if qbftinstance.IsRetryable(perr) {
+					keep = append(keep, item) // hold for a later drain
+					continue
+				}
+				s.Tracef("ProcessMsg-rejected[from=%d to=%d type=%d round=%d err=%v]",
+					item.from, op, pm.QBFTMessage.MsgType, pm.QBFTMessage.Round, perr)
+				progressed = true
+				continue
+			}
+			progressed = true
+			if decided {
+				s.recordDecided(op, pm.QBFTMessage.Round, decidedValue)
+			}
+		}
+		s.pending[op] = keep
+		if !progressed {
+			return // only retryable-held messages remain; nothing more to do now
+		}
+	}
 }
 
 // ---- evtRoundTimeout: virtual round timer fires --------------------------
@@ -113,6 +189,10 @@ func (e *evtRoundTimeout) Handle(h desim.Host) []desim.Scheduled {
 	// emits the new PROPOSE; for byz leaders we schedule a fabricated one.
 	_ = inst.UponRoundTimeout(context.Background(), zap.NewNop())
 
+	// Advancing the round may unblock buffered messages that were waiting for
+	// it (held as retryable by drainQueue while the instance was a round behind).
+	s.drainQueue(e.op)
+
 	newRound := e.round + 1
 	newLeader := proposerForRound(s.operators, newRound)
 	if s.byz.IsByz(ct.OperatorID(newLeader)) {
@@ -125,15 +205,13 @@ func (s *sim) recordDecided(op spectypes.OperatorID, round specqbft.Round, value
 	if _, already := s.decided[op]; already {
 		return
 	}
-	// Local QBFT-consensus decision: stamped at s.Now() (no PhaseBudget
-	// shift). The "ready to submit" time — which is what
-	// Outcome.DecisionTime now exposes — accrues separately as op's
-	// partials-on-value count reaches 2f+1. See outcome() for the
-	// earliest-ready derivation.
+	// Record the local QBFT-consensus decision (value + round). The
+	// "ready to submit" time that Outcome.DecisionTime exposes is tracked
+	// separately, accruing as the op's partials-on-value count reaches
+	// 2f+1 — see outcome() for the earliest-ready derivation.
 	s.decided[op] = decidedRecord{
 		value: append([]byte(nil), value...),
 		round: round,
-		at:    s.Now(),
 	}
 	// SSV's QBFT-then-post-consensus model: every honest operator that
 	// reaches Decided broadcasts one PartialSignatureMessage on the

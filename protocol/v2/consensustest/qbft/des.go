@@ -52,16 +52,23 @@ func runDES(cfg desConfig) (rawOutcome, error) {
 
 type sim struct {
 	*desim.Engine
-	cfg                  desConfig
-	operators            []spectypes.OperatorID
-	keys                 *spectestingutils.TestKeySet
-	committee            *spectypes.CommitteeMember
-	identifier           []byte
-	startValue           []byte
-	instances            map[spectypes.OperatorID]*qbftinstance.Instance
-	timers               map[spectypes.OperatorID]*virtualRoundTimer
-	decided              map[spectypes.OperatorID]decidedRecord
-	inflightRound        map[spectypes.OperatorID]specqbft.Round
+	cfg           desConfig
+	operators     []spectypes.OperatorID
+	keys          *spectestingutils.TestKeySet
+	committee     *spectypes.CommitteeMember
+	identifier    []byte
+	startValue    []byte
+	instances     map[spectypes.OperatorID]*qbftinstance.Instance
+	timers        map[spectypes.OperatorID]*virtualRoundTimer
+	decided       map[spectypes.OperatorID]decidedRecord
+	inflightRound map[spectypes.OperatorID]specqbft.Round
+	// pending is each operator's virtual inbound queue: messages buffered on
+	// arrival and replayed by drainQueue until processable. Mirrors SSV's
+	// per-validator-per-role queue (validator/queue_validator.go) that sits in
+	// front of the Instance — without it, a vote that races ahead of its
+	// proposal (retryable ErrNoProposalForCurrentRound) would be dropped on
+	// arrival rather than held and replayed once the proposal lands.
+	pending              map[spectypes.OperatorID][]pendingMsg
 	byzProposalScheduled map[specqbft.Round]bool // dedup: one byz PROPOSE per round
 	byz                  internalByz
 	// crashed[op] = true for completely-offline operators. Wire behavior is
@@ -93,7 +100,6 @@ type sim struct {
 type decidedRecord struct {
 	value []byte
 	round specqbft.Round
-	at    time.Duration
 }
 
 func newSim(cfg desConfig) (*sim, error) {
@@ -136,6 +142,7 @@ func newSim(cfg desConfig) (*sim, error) {
 		timers:               make(map[spectypes.OperatorID]*virtualRoundTimer, cfg.N),
 		decided:              make(map[spectypes.OperatorID]decidedRecord, cfg.N),
 		inflightRound:        make(map[spectypes.OperatorID]specqbft.Round, cfg.N),
+		pending:              make(map[spectypes.OperatorID][]pendingMsg, cfg.N),
 		byzProposalScheduled: make(map[specqbft.Round]bool),
 		byz:                  cfg.Byz,
 		crashed:              crashed,
