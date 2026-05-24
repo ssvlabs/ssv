@@ -60,6 +60,42 @@ type BatchConfig struct {
 	// 0 → GOMAXPROCS. A single goroutine processes its assigned cell's
 	// iter-count sims sequentially, so per-cell determinism is preserved.
 	Parallelism int
+
+	// Progress, when non-nil, is incremented once per completed sim so a
+	// driver can render run-wide progress / ETA. Observability only — it never
+	// affects outcomes or the report, so it is excluded from the determinism
+	// contract above. Nil for callers that don't want progress (unit tests).
+	Progress *ProgressTracker
+}
+
+// cellIterCounts returns the per-cell iteration count, indexed the same way as
+// RunBatch's cell grid (cellIdx = scenario*nProtocols + protocol). A cell is 0
+// when it won't run: baseline-only protocol variants on non-Baseline scenarios
+// (rendered n/a). Single source of truth shared by RunBatch and TotalIters so
+// the progress total can't drift from the work actually executed.
+func (c BatchConfig) cellIterCounts() []int {
+	nProto := len(c.Protocols)
+	counts := make([]int, len(c.Scenarios)*nProto)
+	for ci := range counts {
+		sc := c.Scenarios[ci/nProto]
+		p := c.Protocols[ci%nProto]
+		if isBaselineOnly(p) && !IsBaselineGroup(sc) {
+			continue
+		}
+		counts[ci] = c.IterationsFor(sc)
+	}
+	return counts
+}
+
+// TotalIters is the number of sims this batch will run (sum of cellIterCounts).
+// Drivers sum it across every batch to seed a ProgressTracker before any sim
+// runs.
+func (c BatchConfig) TotalIters() int64 {
+	var total int64
+	for _, n := range c.cellIterCounts() {
+		total += int64(n)
+	}
+	return total
 }
 
 // IterationsFor returns the per-cell iteration count for scenario `sc`.
@@ -132,18 +168,14 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 
 	// Per-cell iteration count — looked up via IterationsFor(scenario) so
 	// "Baseline"-group scenarios can run with a different budget than
-	// adversarial / unstable ones.
-	cellIters := make([]int, cellCount)
+	// adversarial / unstable ones. Baseline-only variants (the cushion-
+	// sensitivity rungs X-0/X-300/X-500) get 0 on adversarial scenarios (n/a;
+	// only the canonical X-700 rung runs there). Shared with TotalIters via
+	// cellIterCounts so progress accounting matches the work executed.
+	cellIters := cfg.cellIterCounts()
 	totalIters := 0
-	for ci := 0; ci < cellCount; ci++ {
-		// Baseline-only variants (the cushion-sensitivity rungs X-0/X-300/
-		// X-500) don't run on adversarial scenarios — only the canonical
-		// X-700 rung does there. Leave cellIters[ci]=0 (no jobs) → n/a.
-		if isBaselineOnly(protocolOf(ci)) && !IsBaselineGroup(scenarioOf(ci)) {
-			continue
-		}
-		cellIters[ci] = cfg.IterationsFor(scenarioOf(ci))
-		totalIters += cellIters[ci]
+	for _, n := range cellIters {
+		totalIters += n
 	}
 
 	// Single iteration-level work queue: each job is one (cellIdx, iter)
@@ -183,6 +215,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 			defer wg.Done()
 			for j := range jobs {
 				results[j.cellIdx][j.iter] = runOneSim(cfg, scenarioOf(j.cellIdx), protocolOf(j.cellIdx), j.iter)
+				cfg.Progress.Add(1) // nil-safe; observability only
 			}
 		}()
 	}

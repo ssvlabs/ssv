@@ -293,10 +293,10 @@ func TestStress(t *testing.T) {
 		// plus the fixed-2s production variant. NB uneven: QBFT-0 (the
 		// no-reflood floor) is 3·BTT — it drops a structural 1·BTT that the
 		// cushioned rungs carry — while QBFT-{300,500,700} are 4·BTT+cushion.
-		baselineOnly(qbftadapter.QBFT0{}), // "QBFT-0" (Baseline-only)
-		baselineOnly(qbftadapter.QBFT300{}),      // "QBFT-300" (Baseline-only)
-		baselineOnly(qbftadapter.QBFT500{}),       // "QBFT-500" (Baseline-only)
-		qbftadapter.QBFT700{},                     // "QBFT-700"
+		baselineOnly(qbftadapter.QBFT0{}),   // "QBFT-0" (Baseline-only)
+		baselineOnly(qbftadapter.QBFT300{}), // "QBFT-300" (Baseline-only)
+		baselineOnly(qbftadapter.QBFT500{}), // "QBFT-500" (Baseline-only)
+		qbftadapter.QBFT700{},               // "QBFT-700"
 		qbftadapter.QBFTSSV{},
 		// PSigs is a baseline-cost reference: every honest op signs the
 		// pre-agreed V at slot start and broadcasts; the cluster decides at
@@ -347,11 +347,48 @@ func TestStress(t *testing.T) {
 	for i, p := range protocols {
 		protocolNames[i] = p.Name()
 	}
-	totalStart := time.Now()
-	t.Logf("=== %d (n, K) operating points to run: %v", len(pairs), pairs)
-	for pairIdx, pp := range pairs {
+	// Build every pair's sweeps up front so the TOTAL sim count is known
+	// before the first sim runs — that's what lets the progress bar show a
+	// run-wide ETA instead of per-batch guesses. DefaultSweeps only constructs
+	// config (no sims), so this pre-pass is cheap.
+	type pairWork struct {
+		pair   runPair
+		sweeps []ct.Sweep
+	}
+	work := make([]pairWork, 0, len(pairs))
+	var grandTotal int64
+	for _, pp := range pairs {
 		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bttValues)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
+		for si := range sweeps {
+			for i := range sweeps[si].Points {
+				grandTotal += sweeps[si].Points[i].Config.TotalIters()
+			}
+		}
+		work = append(work, pairWork{pair: pp, sweeps: sweeps})
+	}
+
+	// Wire one shared progress tracker into every batch and render a live bar +
+	// ETA to stderr (in-place on a terminal, periodic log lines otherwise).
+	// stderr bypasses `go test`'s output buffering, so the bar updates live even
+	// under `-v`. Observability only — does not affect data.js.
+	progress := ct.NewProgressTracker(grandTotal)
+	for wi := range work {
+		for si := range work[wi].sweeps {
+			for i := range work[wi].sweeps[si].Points {
+				work[wi].sweeps[si].Points[i].Config.Progress = progress
+			}
+		}
+	}
+	stopProgress := progress.StartRenderer(os.Stderr)
+	defer stopProgress()
+
+	totalStart := time.Now()
+	t.Logf("=== %d (n, K) operating points to run: %v (%s simulations total)",
+		len(pairs), pairs, ct.HumanCount(grandTotal))
+	for pairIdx, w := range work {
+		pp := w.pair
+		sweeps := w.sweeps
 		pairStart := time.Now()
 		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)
 		results := make([]ct.SweepResult, 0, len(sweeps))

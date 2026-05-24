@@ -162,6 +162,11 @@ consensustest-with-real-bls:
 #     folder. `$(abspath ...)` resolves it before passing to `go test` so
 #     reports land where the user expects regardless of `go test`'s
 #     package CWD.
+#   - A live progress bar prints to stderr as the run proceeds, showing
+#     percent complete, sims done / total, and elapsed time (the total sim
+#     count is computed up front, so the percentage is run-wide, not
+#     per-sweep). On a terminal it redraws one line in place; when stderr is
+#     redirected it falls back to a progress line every 30s.
 #
 # Operating-point env vars (all have defaults; override to scope runs):
 #   - CLUSTER_SIZES_N (default 4) — comma-separated cluster sizes ∈ {4, 7}.
