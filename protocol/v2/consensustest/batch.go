@@ -71,8 +71,9 @@ type BatchConfig struct {
 // cellIterCounts returns the per-cell iteration count, indexed the same way as
 // RunBatch's cell grid (cellIdx = scenario*nProtocols + protocol). A cell is 0
 // when it won't run: baseline-only protocol variants on non-Baseline scenarios
-// (rendered n/a). Single source of truth shared by RunBatch and TotalIters so
-// the progress total can't drift from the work actually executed.
+// (rendered n/a). Single source of truth shared by RunBatch and
+// TotalItersByProtocol so the progress totals can't drift from the work
+// actually executed.
 func (c BatchConfig) cellIterCounts() []int {
 	nProto := len(c.Protocols)
 	counts := make([]int, len(c.Scenarios)*nProto)
@@ -87,15 +88,18 @@ func (c BatchConfig) cellIterCounts() []int {
 	return counts
 }
 
-// TotalIters is the number of sims this batch will run (sum of cellIterCounts).
-// Drivers sum it across every batch to seed a ProgressTracker before any sim
+// TotalItersByProtocol returns the number of sims this batch will run, keyed by
+// protocol name (summed over scenarios via cellIterCounts). Drivers sum these
+// across every batch to seed the per-protocol ProgressTracker before any sim
 // runs.
-func (c BatchConfig) TotalIters() int64 {
-	var total int64
-	for _, n := range c.cellIterCounts() {
-		total += int64(n)
+func (c BatchConfig) TotalItersByProtocol() map[string]int64 {
+	nProto := len(c.Protocols)
+	counts := c.cellIterCounts()
+	out := make(map[string]int64, nProto)
+	for ci, n := range counts {
+		out[c.Protocols[ci%nProto].Name()] += int64(n)
 	}
-	return total
+	return out
 }
 
 // IterationsFor returns the per-cell iteration count for scenario `sc`.
@@ -170,12 +174,20 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	// "Baseline"-group scenarios can run with a different budget than
 	// adversarial / unstable ones. Baseline-only variants (the cushion-
 	// sensitivity rungs X-0/X-300/X-500) get 0 on adversarial scenarios (n/a;
-	// only the canonical X-700 rung runs there). Shared with TotalIters via
-	// cellIterCounts so progress accounting matches the work executed.
+	// only the canonical X-700 rung runs there). Shared with
+	// TotalItersByProtocol via cellIterCounts so progress accounting matches the
+	// work executed.
 	cellIters := cfg.cellIterCounts()
 	totalIters := 0
 	for _, n := range cellIters {
 		totalIters += n
+	}
+
+	// Per-cell protocol name, looked up once so the per-sim progress increment
+	// is a slice index + atomic add rather than a Name() call each time.
+	cellProto := make([]string, cellCount)
+	for ci := range cellProto {
+		cellProto[ci] = protocolOf(ci).Name()
 	}
 
 	// Single iteration-level work queue: each job is one (cellIdx, iter)
@@ -215,7 +227,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 			defer wg.Done()
 			for j := range jobs {
 				results[j.cellIdx][j.iter] = runOneSim(cfg, scenarioOf(j.cellIdx), protocolOf(j.cellIdx), j.iter)
-				cfg.Progress.Add(1) // nil-safe; observability only
+				cfg.Progress.Add(cellProto[j.cellIdx], 1) // nil-safe; observability only
 			}
 		}()
 	}

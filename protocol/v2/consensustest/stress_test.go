@@ -356,23 +356,26 @@ func TestStress(t *testing.T) {
 		sweeps []ct.Sweep
 	}
 	work := make([]pairWork, 0, len(pairs))
+	totalByProtocol := make(map[string]int64)
 	var grandTotal int64
 	for _, pp := range pairs {
 		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bttValues)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		for si := range sweeps {
 			for i := range sweeps[si].Points {
-				grandTotal += sweeps[si].Points[i].Config.TotalIters()
+				for name, n := range sweeps[si].Points[i].Config.TotalItersByProtocol() {
+					totalByProtocol[name] += n
+					grandTotal += n
+				}
 			}
 		}
 		work = append(work, pairWork{pair: pp, sweeps: sweeps})
 	}
 
-	// Wire one shared progress tracker into every batch and render a live bar +
-	// ETA to stderr (in-place on a terminal, periodic log lines otherwise).
-	// stderr bypasses `go test`'s output buffering, so the bar updates live even
-	// under `-v`. Observability only — does not affect data.js.
-	progress := ct.NewProgressTracker(grandTotal)
+	// Wire one shared progress tracker (one bar per protocol) into every batch
+	// and render it live to the terminal. Observability only — does not affect
+	// data.js. protocolNames gives the bars a stable display order.
+	progress := ct.NewProgressTracker(protocolNames, totalByProtocol)
 	for wi := range work {
 		for si := range work[wi].sweeps {
 			for i := range work[wi].sweeps[si].Points {
@@ -380,12 +383,23 @@ func TestStress(t *testing.T) {
 			}
 		}
 	}
-	stopProgress := progress.StartRenderer(os.Stderr)
+	// Render to the controlling terminal directly: `go test` captures the test
+	// binary's stdout/stderr and buffers it until the test returns, so a bar
+	// written to os.Stderr wouldn't appear live during the (long) run. /dev/tty
+	// bypasses that capture and is a real TTY, so the bar redraws in place.
+	// Falls back to stderr when there's no controlling terminal (CI / piped),
+	// where the periodic-line mode is the right behavior anyway.
+	progressOut := os.Stderr
+	if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
+		defer tty.Close()
+		progressOut = tty
+	}
+	stopProgress := progress.StartRenderer(progressOut)
 	defer stopProgress()
 
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v (%s simulations total)",
-		len(pairs), pairs, ct.HumanCount(grandTotal))
+		len(pairs), pairs, ct.CommaInt(grandTotal))
 	for pairIdx, w := range work {
 		pp := w.pair
 		sweeps := w.sweeps
