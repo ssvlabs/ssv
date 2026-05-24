@@ -25,8 +25,25 @@ func TestCommaInt(t *testing.T) {
 	}
 }
 
+func TestBarCellsForCols(t *testing.T) {
+	const nameW = 11
+	// On a roomy terminal the rendered line fills the width exactly, leaving
+	// blockIndent on the left and blockRightPad on the right.
+	for _, cols := range []int{120, 80, 60} {
+		cells := barCellsForCols(cols, nameW)
+		lineW := blockIndent + nameW + perLineFixed + cells + blockRightPad
+		if lineW != cols {
+			t.Errorf("cols=%d: rendered line width %d, want %d (cells=%d)", cols, lineW, cells, lineW)
+		}
+	}
+	// A too-narrow terminal clamps to the 8-cell floor.
+	if got := barCellsForCols(20, nameW); got != 8 {
+		t.Errorf("narrow terminal should clamp to 8, got %d", got)
+	}
+}
+
 func TestProgressBar(t *testing.T) {
-	const cells = progressBarCells
+	const cells = fallbackBarCells
 	for _, pct := range []float64{-5, 0, 0.1, 12.3, 50, 99.9, 100, 150} {
 		bar := progressBar(pct, cells)
 		if !strings.HasPrefix(bar, "[") || !strings.HasSuffix(bar, "]") {

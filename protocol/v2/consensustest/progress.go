@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/term"
 )
 
 // ProgressTracker reports stress-run progress as one bar per protocol — each
@@ -39,9 +41,19 @@ type protoBar struct {
 	done  int64 // atomic
 }
 
-// progressBarCells is the number of cells in each protocol's bar (its display
-// width is cells + 2 for the surrounding brackets).
-const progressBarCells = 30
+const (
+	// fallbackBarCells is each bar's cell count when the terminal width can't
+	// be determined (e.g. output isn't a terminal). On a real terminal the bars
+	// stretch to fill the line, minus the side padding — see barCellsForCols.
+	fallbackBarCells = 30
+	// blockIndent / blockRightPad are the left / right padding (in columns) kept
+	// around the progress block so the bars don't run to the terminal edges.
+	blockIndent   = 4
+	blockRightPad = 4
+	// perLineFixed is a protocol line's width excluding its bar cells, its left
+	// indent, and its (variable-width) name: "  " + "[" + "]" + " " + "100.0%".
+	perLineFixed = 11
+)
 
 // NewProgressTracker builds a tracker with one bar per protocol, in `names`
 // order, each sized to totals[name] (a name absent from totals gets total 0).
@@ -120,7 +132,7 @@ func (p *ProgressTracker) emit(w io.Writer, tty bool) {
 		fmt.Fprintf(w, "stresstest progress: %s\n", p.overallLine())
 		return
 	}
-	lines := p.frameLines()
+	lines := p.frameLines(p.barCells(w))
 	if p.drawn {
 		// Move up over the previously-printed block (every line but the last),
 		// return to column 0, and erase to end of screen before redrawing.
@@ -143,36 +155,82 @@ func (p *ProgressTracker) overallLine() string {
 }
 
 // frameLines is the terminal block: one line per protocol (name left-aligned to
-// a common width, then its bar and percent), with the overall header centered
-// above them across the protocol lines' width.
-func (p *ProgressTracker) frameLines() []string {
-	nameW := 0
-	for _, b := range p.bars {
-		if len(b.name) > nameW {
-			nameW = len(b.name)
-		}
-	}
+// a common width, then a `barCells`-wide bar and percent), with the overall
+// header centered above them across the protocol lines' width.
+func (p *ProgressTracker) frameLines(barCells int) []string {
+	nameW := p.maxNameWidth()
+	indent := strings.Repeat(" ", blockIndent)
 	protoLines := make([]string, len(p.bars))
-	blockW := 0
+	contentW := 0 // widest protocol line excluding the left indent
 	for i, b := range p.bars {
 		pct := percentOf(atomic.LoadInt64(&b.done), b.total)
-		protoLines[i] = fmt.Sprintf("  %-*s  %s %5.1f%%",
-			nameW, b.name, progressBar(pct, progressBarCells), pct)
+		content := fmt.Sprintf("%-*s  %s %5.1f%%", nameW, b.name, progressBar(pct, barCells), pct)
+		protoLines[i] = indent + content
 		// Display width: the bar's block runes are multi-byte but one column
 		// each, so count runes rather than bytes.
-		if w := utf8.RuneCountInString(protoLines[i]); w > blockW {
-			blockW = w
+		if w := utf8.RuneCountInString(content); w > contentW {
+			contentW = w
 		}
 	}
 	header := p.overallLine() // ASCII, so byte length == display width
-	pad := 0
-	if blockW > len(header) {
-		pad = (blockW - len(header)) / 2
+	lead := blockIndent
+	if contentW > len(header) {
+		lead += (contentW - len(header)) / 2
 	}
 	lines := make([]string, 0, len(p.bars)+1)
-	lines = append(lines, strings.Repeat(" ", pad)+header)
+	lines = append(lines, strings.Repeat(" ", lead)+header)
 	lines = append(lines, protoLines...)
 	return lines
+}
+
+// maxNameWidth is the widest protocol name, for column-aligning the labels.
+func (p *ProgressTracker) maxNameWidth() int {
+	w := 0
+	for _, b := range p.bars {
+		if len(b.name) > w {
+			w = len(b.name)
+		}
+	}
+	return w
+}
+
+// barCells sizes each protocol's bar to fill w's line: terminal columns minus
+// the fixed per-line chrome (indent, name, separators, brackets, percent) and a
+// one-column margin so the line can't wrap (which would corrupt the in-place
+// redraw). Falls back to fallbackBarCells when the width is unknown.
+func (p *ProgressTracker) barCells(w io.Writer) int {
+	cols := terminalWidth(w)
+	if cols <= 0 {
+		return fallbackBarCells
+	}
+	return barCellsForCols(cols, p.maxNameWidth())
+}
+
+// barCellsForCols is the bar width for a `cols`-wide terminal and `nameW`-wide
+// labels: total columns minus the left/right padding, the name, and the fixed
+// per-line chrome. The result keeps blockIndent/blockRightPad columns clear on
+// each side (which also prevents wrapping, since wrapping corrupts the in-place
+// redraw). Never below 8.
+func barCellsForCols(cols, nameW int) int {
+	cells := cols - blockIndent - blockRightPad - nameW - perLineFixed
+	if cells < 8 {
+		cells = 8
+	}
+	return cells
+}
+
+// terminalWidth returns w's column count, or 0 when w isn't a terminal or the
+// size can't be read.
+func terminalWidth(w io.Writer) int {
+	f, ok := w.(*os.File)
+	if !ok {
+		return 0
+	}
+	cols, _, err := term.GetSize(int(f.Fd()))
+	if err != nil {
+		return 0
+	}
+	return cols
 }
 
 // percentOf is 100*done/total clamped to [0, 100]; 0 when total is non-positive.
