@@ -1022,15 +1022,29 @@ func (b byzAggregatorBypass) BuildExtraValueMsgs(s *sim, op twoab.OperatorID, v 
 
 // ---- helpers -----------------------------------------------------------
 
+// shareImmutable returns an append-safe view of s sharing s's backing array
+// (3-index slice → cap == len, so any append reallocates instead of writing
+// through). The per-recipient fan-out clones use it for the large payloads the
+// protocol never mutates in place — the consensus value and the onion payload
+// are only signed / hashed / compared / decrypted (reads) after construction,
+// and byz patterns wanting a different value reassign the field to a fresh
+// slice. Sharing one backing across recipients avoids a ~5 KB-per-entry copy on
+// every delivery while each recipient keeps an independent struct + outer
+// slices (small signatures are still copied). Pinned by the full-catalog,
+// high-byz-iteration data.js diff. Mirrors the obft adapter's shareImmutable.
+func shareImmutable[S ~[]E, E any](s S) S {
+	return s[:len(s):len(s)]
+}
+
 func clonePhase1Bundle(b *twoab.Phase1Bundle) *twoab.Phase1Bundle {
 	cp := *b
-	cp.Value = append(twoab.Value(nil), b.Value...)
+	cp.Value = shareImmutable(b.Value)
 	return &cp
 }
 
 func cloneValueMsg(v *twoab.ValueMsg) *twoab.ValueMsg {
 	cp := *v
-	cp.V = append(twoab.Value(nil), v.V...)
+	cp.V = shareImmutable(v.V)
 	cp.Witnesses = cloneLayerWitnesses(v.Witnesses)
 	cp.L0Partial = append(twoab.Signature(nil), v.L0Partial...)
 	cp.LayerEntries = cloneLayerEntries(v.LayerEntries)
@@ -1089,8 +1103,8 @@ func cloneLayerEntries(entries []twoab.LayerEntry) []twoab.LayerEntry {
 		out[i] = twoab.LayerEntry{
 			Layer:   e.Layer,
 			Kind:    e.Kind,
-			V:       append(twoab.Value(nil), e.V...),
-			Payload: append([]byte(nil), e.Payload...),
+			V:       shareImmutable(e.V),
+			Payload: shareImmutable(e.Payload),
 		}
 	}
 	return out
@@ -1098,7 +1112,7 @@ func cloneLayerEntries(entries []twoab.LayerEntry) []twoab.LayerEntry {
 
 func cloneCertificate(c *twoab.Certificate) *twoab.Certificate {
 	cp := *c
-	cp.Value = append(twoab.Value(nil), c.Value...)
+	cp.Value = shareImmutable(c.Value)
 	cp.Signature = append(twoab.Signature(nil), c.Signature...)
 	return &cp
 }

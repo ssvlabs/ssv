@@ -845,28 +845,49 @@ func (b byzDelayedCommit) OverrideOwnCommitDispatchDelay(s *sim, op obftbase.Ope
 
 // ---- helpers -----------------------------------------------------------
 
-// clonePhase1Bundle deep-copies a Phase1Bundle so each per-recipient arrival
-// event holds an independent copy. Mirrors the QBFT adapter's per-recipient
-// DeepCopy pattern; protects against future receiver-side mutations
-// corrupting other receivers' inbound data.
+// shareImmutable returns an append-safe view of s that shares s's backing
+// array: the 3-index slice caps length == capacity, so any later append
+// reallocates instead of writing through the shared bytes.
+//
+// The per-recipient fan-out clones use it for the large payloads the protocol
+// never mutates in place — the consensus value and the IBE onion ciphertext are
+// only signed / hashed / compared / decrypted (all reads) after construction,
+// and byz patterns that want a different value reassign the field to a fresh
+// slice rather than overwriting bytes. Sharing one backing across recipients
+// avoids a ~5 KB-per-layer copy on every delivery (the dominant clone-path
+// allocation), while each recipient still gets an independent struct + outer
+// slices, and the small signatures are still copied. Safety is pinned by the
+// full-catalog, high-byz-iteration data.js diff: any in-place mutation of a
+// shared payload would change a decided value or agreement check and break it.
+func shareImmutable[S ~[]E, E any](s S) S {
+	return s[:len(s):len(s)]
+}
+
+// clonePhase1Bundle gives each per-recipient arrival event an independent
+// Phase1Bundle struct, sharing the immutable Value payload (see shareImmutable)
+// and copying the small LeaderSigma. Mirrors the QBFT adapter's per-recipient
+// pattern.
 func clonePhase1Bundle(b *obftbase.Phase1Bundle) *obftbase.Phase1Bundle {
 	cp := *b
-	cp.Value = append(obftbase.Value(nil), b.Value...)
+	cp.Value = shareImmutable(b.Value)
 	cp.LeaderSigma = append(obftbase.Signature(nil), b.LeaderSigma...)
 	return &cp
 }
 
-// cloneCertificate deep-copies a Certificate so each per-recipient arrival
-// event holds an independent copy. See clonePhase1Bundle.
+// cloneCertificate gives each per-recipient arrival event an independent
+// Certificate struct, sharing the immutable Value payload. See clonePhase1Bundle.
 func cloneCertificate(c *obftbase.Certificate) *obftbase.Certificate {
 	cp := *c
-	cp.Value = append(obftbase.Value(nil), c.Value...)
+	cp.Value = shareImmutable(c.Value)
 	cp.Signature = append(obftbase.Signature(nil), c.Signature...)
 	return &cp
 }
 
-// cloneCommit deep-copies a Commit so OverrideCommit / BuildExtraCommits
-// don't mutate the honest-built original.
+// cloneCommit gives each recipient (and each byz OverrideCommit /
+// BuildExtraCommits caller) an independent Commit struct with its own outer
+// slices, sharing the immutable per-layer Value/Ciphertext payloads (see
+// shareImmutable) and copying the small partial signatures. Byz callers
+// reassign fields to fresh slices, so they never write through the shared bytes.
 func cloneCommit(c *obftbase.Commit) *obftbase.Commit {
 	cp := &obftbase.Commit{
 		ClusterID:  c.ClusterID,
@@ -878,8 +899,8 @@ func cloneCommit(c *obftbase.Commit) *obftbase.Commit {
 	}
 	for i, el := range c.Layers {
 		cp.Layers[i] = obftbase.EncryptedLayer{
-			Value:      append(obftbase.Value(nil), el.Value...),
-			Ciphertext: append([]byte(nil), el.Ciphertext...),
+			Value:      shareImmutable(el.Value),
+			Ciphertext: shareImmutable(el.Ciphertext),
 		}
 	}
 	for i, nr := range c.NRPartials {

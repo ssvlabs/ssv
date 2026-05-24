@@ -157,12 +157,18 @@ func (s *sim) recordDecided(op spectypes.OperatorID, round specqbft.Round, value
 // emitMesh. Self-loopback is handled by the caller (recordPartialSig
 // for the op's own partial).
 func (s *sim) broadcastPartialSig(from ct.OperatorID, value []byte) {
-	valueBytes := append([]byte(nil), value...)
+	// The decided value is immutable, and the only consumer (recordPartialSig)
+	// reads it solely to key s.partials by string(value) — it never retains or
+	// mutates the slice. So every per-recipient arrival can share one
+	// append-safe backing (3-index slice → cap == len, so any append
+	// reallocates) instead of each copying ~5 KB. Mirrors the obft/twoab
+	// adapters' shareImmutable fan-out sharing.
+	shared := value[:len(value):len(value)]
 	build := func(to ct.OperatorID) desim.Event {
 		return &evtPartialSigArrival{
 			from:  from,
 			to:    to,
-			value: append([]byte(nil), valueBytes...),
+			value: shared,
 		}
 	}
 	if s.cfg.Mesh != nil {
@@ -187,7 +193,7 @@ func (s *sim) broadcastPartialSig(from ct.OperatorID, value []byte) {
 		s.Schedule(s.Now()+delay, &evtPartialSigArrival{
 			from:  from,
 			to:    to,
-			value: append([]byte(nil), valueBytes...),
+			value: shared,
 		})
 	}
 }
