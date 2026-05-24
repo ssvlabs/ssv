@@ -85,11 +85,11 @@ func RunSweep(t *testing.T, s Sweep) SweepResult {
 	t.Helper()
 	res := SweepResult{Sweep: s, Reports: make([]BatchReport, 0, len(s.Points))}
 	for _, pt := range s.Points {
-		if isCancelled(pt.Config.Cancel) {
+		if IsCancelled(pt.Config.Cancel) {
 			break
 		}
 		rep := RunBatch(t, pt.Config)
-		if isCancelled(pt.Config.Cancel) {
+		if IsCancelled(pt.Config.Cancel) {
 			break // RunBatch returned an incomplete batch; drop it
 		}
 		res.Reports = append(res.Reports, rep)

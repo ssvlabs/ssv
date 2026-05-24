@@ -458,7 +458,7 @@ func TestStress(t *testing.T) {
 			swStart := time.Now()
 			results = append(results, ct.RunSweep(t, sw))
 			t.Logf("        %s wallclock: %v", sw.Name, time.Since(swStart))
-			if isClosed(cancel) {
+			if ct.IsCancelled(cancel) {
 				break // interrupted: stop launching sweeps; partial results saved below
 			}
 		}
@@ -487,7 +487,7 @@ func TestStress(t *testing.T) {
 			Wallclock:          time.Since(totalStart),
 		}, dir))
 		t.Logf("    n=%d K=%d wallclock: %v (cumulative %v)", pp.n, pp.k, time.Since(pairStart), time.Since(totalStart))
-		if isClosed(cancel) {
+		if ct.IsCancelled(cancel) {
 			// Interrupted: the partial results for this pair were just written
 			// above (merged into data.js). Exit gracefully — skip the remaining
 			// pairs and the full-run smoke check below.
@@ -529,17 +529,6 @@ func TestStress(t *testing.T) {
 // durPtr returns a pointer to a time.Duration — used to populate optional
 // duration override fields like Protocol.SafetyBufferOverride.
 func durPtr(d time.Duration) *time.Duration { return &d }
-
-// isClosed reports whether ch (the interrupt signal) has been closed — a
-// non-blocking "was the run interrupted?" check.
-func isClosed(ch <-chan struct{}) bool {
-	select {
-	case <-ch:
-		return true
-	default:
-		return false
-	}
-}
 
 // baselineOnlyVariant wraps a Protocol to mark it Baseline-group-only: it
 // runs on Healthy but RunBatch renders it n/a on adversarial scenarios (see

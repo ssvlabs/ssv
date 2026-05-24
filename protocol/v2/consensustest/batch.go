@@ -75,9 +75,11 @@ type BatchConfig struct {
 	Cancel <-chan struct{}
 }
 
-// isCancelled reports whether ch is non-nil and already closed. Used as a
-// non-blocking "should I stop?" check on the hot path.
-func isCancelled(ch <-chan struct{}) bool {
+// IsCancelled reports whether ch is non-nil and already closed — the canonical
+// non-blocking check for whether a BatchConfig.Cancel signal has fired, shared
+// by RunBatch, RunSweep, and the stress driver. A nil channel (the common "no
+// cancellation" case) reports false.
+func IsCancelled(ch <-chan struct{}) bool {
 	if ch == nil {
 		return false
 	}
@@ -247,7 +249,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				if isCancelled(cfg.Cancel) {
+				if IsCancelled(cfg.Cancel) {
 					return // interrupted: stop pulling, leave the rest unrun
 				}
 				results[j.cellIdx][j.iter] = runOneSim(cfg, scenarioOf(j.cellIdx), protocolOf(j.cellIdx), j.iter)
@@ -261,7 +263,7 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	// Interrupted mid-batch: some cells' iters never ran, so the reduce below
 	// would mis-aggregate the zero-value slots. Return an empty report; the
 	// caller (RunSweep) drops a batch whose Cancel fired.
-	if isCancelled(cfg.Cancel) {
+	if IsCancelled(cfg.Cancel) {
 		return BatchReport{Config: cfg, Wallclock: wallclock, GeneratedAt: time.Now().UTC()}
 	}
 
