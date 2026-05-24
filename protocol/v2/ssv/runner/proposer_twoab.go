@@ -232,6 +232,8 @@ func checkInner2abSignerMatchesOuter(env *twoabwire.Envelope, outerSigner specty
 		if env.Certificate == nil {
 			return fmt.Errorf("2abobft dispatch: nil Certificate body")
 		}
+	default:
+		return fmt.Errorf("2abobft dispatch: unknown envelope kind 0x%02x", byte(env.Kind))
 	}
 	return nil
 }

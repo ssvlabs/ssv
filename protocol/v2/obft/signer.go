@@ -53,8 +53,8 @@ type Signer interface {
 // StubSigner is a non-cryptographic Signer for protocol-level testing,
 // mirroring the StubIBE approach. Properties:
 //
-//   - Partials are deterministic (H(share || msg)), so distinct shares
-//     produce distinct partials.
+//   - Partials are deterministic (sha256(share || sha256(msg))), so distinct
+//     shares produce distinct partials.
 //   - Aggregates are deterministic and depend only on (msg, quorum) — any
 //     2f+1 subset of valid partials on the same message yields the SAME
 //     aggregate. This is the property real BLS threshold reconstruction has
