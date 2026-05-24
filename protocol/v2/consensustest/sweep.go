@@ -74,11 +74,25 @@ type SweepResult struct {
 // BatchReports. Sequential (not parallel across points) because each point
 // itself parallelizes per-cell via RunBatch — running points in parallel
 // would over-subscribe goroutines without speedup.
+//
+// Cancellation (graceful interrupt): if a point's Config.Cancel fires, RunSweep
+// stops and returns only the points completed so far. Reports is appended in
+// point order, so Reports[i] still corresponds to Points[i] for the completed
+// prefix (which is what the reporting layer relies on); the remaining points
+// are simply absent and render as n/a. The in-progress point whose RunBatch was
+// interrupted is dropped (its partial batch is incomplete).
 func RunSweep(t *testing.T, s Sweep) SweepResult {
 	t.Helper()
-	res := SweepResult{Sweep: s, Reports: make([]BatchReport, len(s.Points))}
-	for i, pt := range s.Points {
-		res.Reports[i] = RunBatch(t, pt.Config)
+	res := SweepResult{Sweep: s, Reports: make([]BatchReport, 0, len(s.Points))}
+	for _, pt := range s.Points {
+		if isCancelled(pt.Config.Cancel) {
+			break
+		}
+		rep := RunBatch(t, pt.Config)
+		if isCancelled(pt.Config.Cancel) {
+			break // RunBatch returned an incomplete batch; drop it
+		}
+		res.Reports = append(res.Reports, rep)
 	}
 	return res
 }

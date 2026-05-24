@@ -162,11 +162,16 @@ consensustest-with-real-bls:
 #     folder. `$(abspath ...)` resolves it before passing to `go test` so
 #     reports land where the user expects regardless of `go test`'s
 #     package CWD.
-#   - A live progress bar prints to stderr as the run proceeds, showing
-#     percent complete, sims done / total, and elapsed time (the total sim
-#     count is computed up front, so the percentage is run-wide, not
-#     per-sweep). On a terminal it redraws one line in place; when stderr is
-#     redirected it falls back to a progress line every 30s.
+#   - While running, a live progress display is drawn to the terminal: one bar
+#     per protocol (each aggregating all of that protocol's runs) under a
+#     centered overall header, stretched to the terminal width and redrawn in
+#     place. The total sim count is computed up front, so the percentages are
+#     run-wide, not per-sweep. When the output isn't a terminal (CI / piped) it
+#     falls back to a periodic one-line summary.
+#   - Interrupting the run (Ctrl-C / SIGINT) stops gracefully: it abandons the
+#     in-progress batch, writes the results computed so far to data.js, and
+#     exits — so a long run can be cut short without losing completed data. A
+#     second Ctrl-C force-quits immediately.
 #
 # Operating-point env vars (all have defaults; override to scope runs):
 #   - CLUSTER_SIZES_N (default 4) — comma-separated cluster sizes ∈ {4, 7}.

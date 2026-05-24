@@ -2,11 +2,14 @@ package consensustest_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -372,14 +375,21 @@ func TestStress(t *testing.T) {
 		work = append(work, pairWork{pair: pp, sweeps: sweeps})
 	}
 
-	// Wire one shared progress tracker (one bar per protocol) into every batch
-	// and render it live to the terminal. Observability only — does not affect
-	// data.js. protocolNames gives the bars a stable display order.
+	// cancel is closed by the interrupt handler below; wired into every batch so
+	// RunBatch/RunSweep stop launching new work and return what they've
+	// completed (see graceful-interrupt handling at the run loop).
+	cancel := make(chan struct{})
+
+	// Wire one shared progress tracker (one bar per protocol) and the cancel
+	// channel into every batch. The tracker renders live to the terminal;
+	// observability only — neither affects data.js. protocolNames gives the
+	// bars a stable display order.
 	progress := ct.NewProgressTracker(protocolNames, totalByProtocol)
 	for wi := range work {
 		for si := range work[wi].sweeps {
 			for i := range work[wi].sweeps[si].Points {
 				work[wi].sweeps[si].Points[i].Config.Progress = progress
+				work[wi].sweeps[si].Points[i].Config.Cancel = cancel
 			}
 		}
 	}
@@ -394,8 +404,39 @@ func TestStress(t *testing.T) {
 		defer tty.Close()
 		progressOut = tty
 	}
+
+	// Start the live renderer before the interrupt watcher so the watcher can
+	// capture stopProgress and stop the renderer cleanly — clearing the
+	// in-place block and parking the cursor below it — BEFORE printing its
+	// notice. Printing while the renderer is still doing cursor-relative
+	// redraws would corrupt the display. stopProgress is idempotent (sync.Once),
+	// so the watcher's call and this deferred call don't conflict.
 	stopProgress := progress.StartRenderer(progressOut)
 	defer stopProgress()
+
+	// Graceful interrupt: on the first SIGINT/SIGTERM, close `cancel` so the run
+	// stops launching work and the loop below saves what's completed so far. A
+	// second signal force-quits. `done` unblocks the watcher when the test ends
+	// normally so it doesn't leak.
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-sigCh:
+			close(cancel)
+			stopProgress() // clear the live block before printing the notice
+			fmt.Fprintf(progressOut, "\ninterrupt — stopping after the in-flight batch and saving partial data (Ctrl-C again to force quit)\n")
+			select {
+			case <-sigCh:
+				os.Exit(130)
+			case <-done:
+			}
+		case <-done:
+		}
+	}()
 
 	totalStart := time.Now()
 	t.Logf("=== %d (n, K) operating points to run: %v (%s simulations total)",
@@ -417,6 +458,9 @@ func TestStress(t *testing.T) {
 			swStart := time.Now()
 			results = append(results, ct.RunSweep(t, sw))
 			t.Logf("        %s wallclock: %v", sw.Name, time.Since(swStart))
+			if isClosed(cancel) {
+				break // interrupted: stop launching sweeps; partial results saved below
+			}
 		}
 		// Each (n, K) pair's data merges into data.js — WriteReportData
 		// reads the existing file and combines by Fields-tuple, so
@@ -443,6 +487,13 @@ func TestStress(t *testing.T) {
 			Wallclock:          time.Since(totalStart),
 		}, dir))
 		t.Logf("    n=%d K=%d wallclock: %v (cumulative %v)", pp.n, pp.k, time.Since(pairStart), time.Since(totalStart))
+		if isClosed(cancel) {
+			// Interrupted: the partial results for this pair were just written
+			// above (merged into data.js). Exit gracefully — skip the remaining
+			// pairs and the full-run smoke check below.
+			t.Logf("interrupted: saved partial data through n=%d K=%d to %s/data.js", pp.n, pp.k, dir)
+			return
+		}
 	}
 
 	t.Logf("Report data written: %s/data.js", dir)
@@ -478,6 +529,17 @@ func TestStress(t *testing.T) {
 // durPtr returns a pointer to a time.Duration — used to populate optional
 // duration override fields like Protocol.SafetyBufferOverride.
 func durPtr(d time.Duration) *time.Duration { return &d }
+
+// isClosed reports whether ch (the interrupt signal) has been closed — a
+// non-blocking "was the run interrupted?" check.
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
 
 // baselineOnlyVariant wraps a Protocol to mark it Baseline-group-only: it
 // runs on Healthy but RunBatch renders it n/a on adversarial scenarios (see

@@ -60,6 +60,63 @@ func TestBatch_Smoke(t *testing.T) {
 	}
 }
 
+// TestBatch_CancelReturnsEarly: a batch whose Cancel is already closed runs no
+// sims and returns an empty (cell-less) report — the caller discards it. This
+// underpins the stresstest's graceful interrupt.
+func TestBatch_CancelReturnsEarly(t *testing.T) {
+	var scenarios []ct.Scenario
+	for _, s := range ct.Catalog {
+		if s.Name == "Healthy" {
+			scenarios = append(scenarios, s)
+			break
+		}
+	}
+	require.Len(t, scenarios, 1, "test setup: Healthy scenario must exist")
+	cancel := make(chan struct{})
+	close(cancel) // already interrupted before any sim runs
+	report := ct.RunBatch(t, ct.BatchConfig{
+		Iterations: 100,
+		SeedStart:  1,
+		Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
+		Scenarios:  scenarios,
+		Protocols:  []ct.Protocol{obftadapter.Protocol{}},
+		Cancel:     cancel,
+	})
+	require.Empty(t, report.Cells, "a cancelled batch must run no cells")
+}
+
+// TestSweep_CancelReturnsPartial: a sweep whose Cancel is already closed
+// completes no points, so it returns fewer Reports than Points (the reporting
+// layer renders the missing points as n/a).
+func TestSweep_CancelReturnsPartial(t *testing.T) {
+	var scenarios []ct.Scenario
+	for _, s := range ct.Catalog {
+		if s.Name == "Healthy" {
+			scenarios = append(scenarios, s)
+			break
+		}
+	}
+	require.Len(t, scenarios, 1)
+	cancel := make(chan struct{})
+	close(cancel)
+	mkCfg := func() ct.BatchConfig {
+		return ct.BatchConfig{
+			Iterations: 100,
+			SeedStart:  1,
+			Base:       ct.DefaultProposerDutyConfig(200 * time.Millisecond),
+			Scenarios:  scenarios,
+			Protocols:  []ct.Protocol{obftadapter.Protocol{}},
+			Cancel:     cancel,
+		}
+	}
+	sw := ct.Sweep{Name: "x", Points: []ct.SweepPoint{
+		{Label: "a", Config: mkCfg()},
+		{Label: "b", Config: mkCfg()},
+	}}
+	res := ct.RunSweep(t, sw)
+	require.Less(t, len(res.Reports), len(sw.Points), "cancelled sweep returns a partial prefix")
+}
+
 // TestBatch_Determinism — same (Iterations, SeedStart, Base, Scenarios,
 // Protocols) produces byte-identical BatchCell stats across runs. This is
 // the load-bearing guarantee for the framework's reproducibility.

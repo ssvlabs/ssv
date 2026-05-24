@@ -116,13 +116,20 @@ func (p *ProgressTracker) StartRenderer(w io.Writer) (stop func()) {
 			}
 		}
 	}()
+	var once sync.Once
 	return func() {
-		close(doneCh)
-		wg.Wait()
-		p.emit(w, tty) // final snapshot (typically 100%)
-		if tty {
-			fmt.Fprintln(w) // move the cursor below the block
-		}
+		// Idempotent: the driver both defers stop and may call it from its
+		// signal handler (to clear the live block before printing an interrupt
+		// notice). Without the guard the second call would close a closed
+		// channel and emit a duplicate final frame.
+		once.Do(func() {
+			close(doneCh)
+			wg.Wait()
+			p.emit(w, tty) // final snapshot (typically 100%)
+			if tty {
+				fmt.Fprintln(w) // move the cursor below the block
+			}
+		})
 	}
 }
 

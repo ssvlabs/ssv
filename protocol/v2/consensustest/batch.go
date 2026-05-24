@@ -66,6 +66,27 @@ type BatchConfig struct {
 	// affects outcomes or the report, so it is excluded from the determinism
 	// contract above. Nil for callers that don't want progress (unit tests).
 	Progress *ProgressTracker
+
+	// Cancel, when non-nil and closed, tells RunBatch to stop launching new
+	// sims and return early; the partial batch it returns must be discarded by
+	// the caller (its per-cell stats are incomplete). Used by the stress driver
+	// for graceful interrupt. A batch that completes normally never observes it,
+	// so it's outside the determinism contract above. Nil = never cancel.
+	Cancel <-chan struct{}
+}
+
+// isCancelled reports whether ch is non-nil and already closed. Used as a
+// non-blocking "should I stop?" check on the hot path.
+func isCancelled(ch <-chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
 
 // cellIterCounts returns the per-cell iteration count, indexed the same way as
@@ -226,6 +247,9 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
+				if isCancelled(cfg.Cancel) {
+					return // interrupted: stop pulling, leave the rest unrun
+				}
 				results[j.cellIdx][j.iter] = runOneSim(cfg, scenarioOf(j.cellIdx), protocolOf(j.cellIdx), j.iter)
 				cfg.Progress.Add(cellProto[j.cellIdx], 1) // nil-safe; observability only
 			}
@@ -233,6 +257,13 @@ func RunBatch(t *testing.T, cfg BatchConfig) BatchReport {
 	}
 	wg.Wait()
 	wallclock := time.Since(start)
+
+	// Interrupted mid-batch: some cells' iters never ran, so the reduce below
+	// would mis-aggregate the zero-value slots. Return an empty report; the
+	// caller (RunSweep) drops a batch whose Cancel fired.
+	if isCancelled(cfg.Cancel) {
+		return BatchReport{Config: cfg, Wallclock: wallclock, GeneratedAt: time.Now().UTC()}
+	}
 
 	// Reduce per-iter results into per-cell BatchCells single-threaded.
 	cells := make([]BatchCell, cellCount)
