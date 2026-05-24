@@ -267,33 +267,48 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// either, so the comparison clips them to MISS.
 	ct.ClipLateDecision(&out, deadline)
 	if !out.Decided {
-		out.MissReason = classifyTwoabMiss(preClipDecided, preClipRound, preClipTime, deadline, rawOut.deadlockLayer)
+		out.MissReason = classifyTwoabMiss(preClipDecided, preClipRound, preClipTime, deadline, rawOut.deadlockLayer, rawOut.deadlockKind)
 	}
 	return out, nil
 }
 
-// classifyTwoabMiss mirrors the OBFT classifier; structurally identical
-// (decided-but-clipped vs deadlocked-mid-walk vs exhausted-K-layers),
-// since the 2ab Phase-3 walk has the same two failure modes. See
-// classifyOBFTMiss in the obft adapter for the rationale on each
-// regime. 2abOBFT's Phase-2a coordination broadcast makes the HV1-style
-// L_0 deadlock that bites OBFT recover via NR-quorum here, so in
-// practice ResolveFailureDeadlock should be rare for 2abOBFT — when
-// it appears it implies a different pathology than the OBFT case
-// (e.g. σ AND NR pools BOTH degraded at the same layer).
-func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Duration, deadlockLayer int) string {
+// classifyTwoabMiss labels a non-decided 2abOBFT outcome. Regimes:
+//
+//   - Decided-but-clipped: a certificate formed at some layer but past the
+//     submit deadline → "ready to submit at layer X, past the deadline".
+//   - Deadlock walk (ResolveFailureDeadlock): no certificate formed and the
+//     Phase-3 walk stalled at a layer (σ-pool < qV, NR-pool < qEnc). This
+//     splits by deadlockKind (computed in des.go via Instance.WhyNotSigma):
+//   - undelivered → a recoverable propagation stall: the stuck cohort
+//     never received the value. NOT a protocol wedge — the instance
+//     self-heals the instant the value arrives; the slot misses only
+//     because the value never reached a σ-quorum before the relay
+//     deadline (the degraded-mesh tail). Same species as QBFT's
+//     non-delivery miss.
+//   - validity → a validity-divergence wedge: the stuck cohort holds the
+//     value but its host verdict is not-valid, so σ-recovery is
+//     impossible even with perfect delivery and the cannot-σ gate bars
+//     the NR-default. A genuine 2ab-specific deadlock (QBFT escapes via
+//     round-change to a fresh value).
+//   - split → no single value reaches qV (e.g. 1-1-1 leader equivocation)
+//     and σ-locked operators can't pivot to NR. Also a genuine wedge
+//     QBFT escapes by re-proposing.
+//     See docs/2abOBFT.md §Liveness.
+//   - Exhaustion: walked all K layers (NR-quorums advanced) without a
+//     σ-quorum → "never assembled a threshold signature at any layer".
+func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Duration, deadlockLayer int, kind deadlockKind) string {
 	if preDecided && preTime > deadline {
 		return fmt.Sprintf("Cluster ready to submit at layer %d, past the submit deadline", preRound)
 	}
 	if deadlockLayer >= 0 {
-		// Both pools short at this layer + cannot-σ gate blocks σ-eligible
-		// ops from defaulting to NR + no T_commit hard wall → cluster
-		// waits indefinitely until slot deadline. This shape is distinct
-		// from OBFT's classic "σ-pool short, NR-pool failed to reach qEnc"
-		// deadlock — here it's "neither pool reaches its threshold, gate
-		// prevents NR-default" — though both manifest as the same
-		// per-layer stuck state.
-		return fmt.Sprintf("Cluster deadlocked at layer %d (neither σ-quorum nor NR-quorum reaches; cannot-σ gate prevents NR-default)", deadlockLayer)
+		switch kind {
+		case deadlockValidity:
+			return fmt.Sprintf("Cluster deadlocked at layer %d (validity split — σ impossible for the dissenting cohort, NR-default gated)", deadlockLayer)
+		case deadlockSplit:
+			return fmt.Sprintf("Cluster deadlocked at layer %d (σ split across values, none reaching qV; NR-default gated)", deadlockLayer)
+		default: // deadlockUndelivered
+			return fmt.Sprintf("Cluster stalled at layer %d — value didn't reach σ-quorum in time (undelivered)", deadlockLayer)
+		}
 	}
 	return "Cluster never assembled a threshold signature at any layer"
 }
@@ -358,6 +373,20 @@ type desConfig struct {
 	RelayCutoff time.Duration
 }
 
+// deadlockKind sub-classifies a ResolveFailureDeadlock walk outcome by root
+// cause, so the classifier can separate a recoverable propagation stall
+// (value undelivered) from the genuine 2ab-specific wedges. Computed in
+// des.go outcome() by polling Instance.WhyNotSigma across the cluster at the
+// deadlock layer. See classifyTwoabMiss.
+type deadlockKind int
+
+const (
+	deadlockNone        deadlockKind = iota // no deadlock (deadlockLayer < 0)
+	deadlockUndelivered                     // propagation stall: stuck cohort lacks the bundle (recoverable on delivery)
+	deadlockValidity                        // validity-divergence wedge: stuck cohort host-rejected the value
+	deadlockSplit                           // σ split across values, none reaching qV (e.g. 1-1-1 equivocation)
+)
+
 // rawOutcome is the 2ab-internal outcome before translation to ct.Outcome.
 type rawOutcome struct {
 	decided      bool
@@ -369,6 +398,8 @@ type rawOutcome struct {
 	// deadlockLayer mirrors the OBFT adapter's: deepest layer at which
 	// any non-decided op hit ResolveFailureDeadlock. -1 when none.
 	deadlockLayer int
+	// deadlockKind sub-classifies the deadlock (when deadlockLayer ≥ 0).
+	deadlockKind deadlockKind
 }
 
 type rawOpOutcome struct {

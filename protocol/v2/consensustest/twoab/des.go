@@ -301,7 +301,42 @@ func (s *sim) outcome() rawOutcome {
 		o.evidenceByRule = evidenceByRule(s.instances[op].Evidence())
 		out.perOp[ct.OperatorID(op)] = o
 	}
+	out.deadlockKind = classifyDeadlock(s, out.deadlockLayer)
 	return out
+}
+
+// classifyDeadlock sub-classifies a deadlock (layer ≥ 0) by polling each
+// live instance's σ-eligibility at the stuck layer: a host-invalid verdict
+// anywhere means a validity-divergence wedge; otherwise a missing-bundle
+// cohort with no equivocation means a recoverable propagation stall; the
+// remainder (σ split across values, e.g. 1-1-1 equivocation) is a genuine
+// no-single-value wedge. See classifyTwoabMiss.
+func classifyDeadlock(s *sim, layer int) deadlockKind {
+	if layer < 0 {
+		return deadlockNone
+	}
+	var hostInvalid, noBundle, equiv bool
+	for _, op := range s.operators {
+		if s.crashed[op] {
+			continue
+		}
+		switch s.instances[op].WhyNotSigma(layer) {
+		case twoab.SigmaBlockHostInvalid:
+			hostInvalid = true
+		case twoab.SigmaBlockNoBundle:
+			noBundle = true
+		case twoab.SigmaBlockEquivocation:
+			equiv = true
+		}
+	}
+	switch {
+	case hostInvalid:
+		return deadlockValidity
+	case noBundle && !equiv:
+		return deadlockUndelivered
+	default:
+		return deadlockSplit
+	}
 }
 
 func (s *sim) honestLeaderValue(layer int) twoab.Value {
