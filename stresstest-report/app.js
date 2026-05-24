@@ -367,39 +367,51 @@ function initBaselineSelections(data) {
   selectedFaultyNodes = pickClosest(dims.FaultyNodesValues, selectedFaultyNodes);
 }
 
-// precomputeBFTShifts warms shiftedCell's cache for the heatmap's
-// source point so the first BFT_start change doesn't trigger a burst
-// of shift computations under the click. Only pipeline-shift protocols
-// (PSigs / QBFT family) need warming — OBFT-family cells are looked up
-// per pre-computed BFT_start in sweep data, no post-hoc shift applies.
-// Only the heatmap point is warmed (collapsibles lazy-compute on first
-// expansion + the conditions chart picks a single point lazily).
+// precomputeBFTShifts warms shiftedCell's cache for the heatmap's source
+// points so the first BFT_start change doesn't trigger a burst of shift
+// computations under the click. Only pipeline-shift protocols (PSigs / QBFT
+// family) need warming — OBFT-family cells are looked up per pre-computed
+// BFT_start in sweep data, no post-hoc shift applies.
+//
+// These protocols are K-independent: findPipelineShiftBaselineCell resolves
+// each from any K-slice (lowest K with a real cell), which need not be
+// selectedK. So we warm the pipeline-shift cells of EVERY K-slice at the
+// default heatmap axes (instability=0, faulty=0, BFT_start=0) — just one
+// point per K, so the canonical cell is cached whatever K wins. (Runs after
+// initBaselineSelections, so the module-level N/BTT/profile are snapped.)
 // Cells with no samples (n/a, 0%) are skipped — nothing to shift.
 function precomputeBFTShifts(data) {
-  let point = null;
-  const match = findBaselineSweepPoint(data);
-  if (match) {
-    point = match.point;
-  } else {
+  const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
+  let points = sweep
+    ? sweep.points.filter((pt) => pt.fields && baselineAxesMatch(pt.fields, 0, 0, 0))
+    : [];
+  if (points.length === 0) {
     const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
-    if (legacy && legacy.points.length > 0) point = legacy.points[0];
+    if (legacy && legacy.points.length > 0) points = [legacy.points[0]];
   }
-  if (!point) return;
-  point.cells.forEach((cell) => {
-    if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
-    if (!isPipelineShiftProtocol(cell.protocol)) return;
-    for (let i = 1; i < BFT_STARTS.length; i++) {
-      shiftedCell(cell, BFT_STARTS[i]);
-    }
+  points.forEach((point) => {
+    point.cells.forEach((cell) => {
+      if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
+      if (!isPipelineShiftProtocol(cell.protocol)) return;
+      for (let i = 1; i < BFT_STARTS.length; i++) {
+        shiftedCell(cell, BFT_STARTS[i]);
+      }
+    });
   });
 }
 
 // isPipelineShiftProtocol mirrors the Go-side ct.IsPipelineShiftProtocol:
-// PSigs and QBFT-family are sweep-skipped at BFT_start > 0 (one
-// BFT_start=0 sim covers them) and the UI shifts their decision times
-// post-hoc. OBFT-family protocols are simulated per-BFT_start in
-// p2p_baseline and their cells are looked up by Fields.BFT_start, not
-// shifted post-hoc.
+// the QBFT family and PSigs. They are special in two related ways the rest
+// of this file keys off:
+//   - K-independent: K is a layer count only OBFT/2abOBFT consume, so the Go
+//     stress driver simulates them at just the smallest K per n; the UI
+//     resolves their cells across K-slices (findPipelineShiftBaselineCell /
+//     findKIndependentCellInSweep), so the K picker never changes them.
+//   - Pipeline-shift: every cell is simulated at BFT_start=0 and their whole
+//     pipeline shifts wholesale, so the UI derives later BFT_starts post-hoc
+//     by sliding decision times (shiftCell). OBFT-family cells instead read
+//     their per-cell BFT_start-independence threshold (also a BFT_start=0
+//     sim) — see findBaselineCellForScenario.
 function isPipelineShiftProtocol(name) {
   if (typeof name !== 'string') return false;
   return name === 'QBFT' || name === 'PSigs' || name.startsWith('QBFT-');
@@ -459,23 +471,30 @@ function onBFTStartChange(newBFTStart) {
 //
 // Data source: p2p_baseline (BTT × profile × instability cross-product),
 // looked up by (selectedK, selectedBTT, selectedP2pProfile) via
-// findBaselineSweepPoint.
+// findBaselinePointAtInstability (K-dependent families) and, for the
+// K-independent pipeline-shift protocols, findPipelineShiftBaselineCell.
 
-// findBaselineSweepPoint returns {sweep, point} matching the current
-// (N, K, BTT, profile, instability) selection within p2p_baseline, or
-// null if no point matches. Reads sweep_point.fields (set by sweep.go) —
-// see reporting.pointPayload.Fields for the schema. Points without an
-// Instability field (legacy / pre-instability data) match
-// selectedInstability=0 only.
-function findBaselineSweepPoint(data) {
-  return findBaselinePointAtInstability(data, selectedInstability, selectedFaultyNodes);
+// baselineAxesMatch reports whether a p2p_baseline point's Fields `f`
+// match the current (N, BTT, profile) selection plus the requested
+// instability / faulty / BFT_start — i.e. every baseline axis EXCEPT K.
+// findBaselinePointAtBFTStart adds the `f.K === selectedK` constraint on
+// top (K-dependent OBFT-family lookups); the K-independent pipeline-shift
+// lookup (findPipelineShiftBaselineCell) omits it. Points emitted before
+// an axis existed carry no key for it and default to 0 for backward-compat.
+function baselineAxesMatch(f, instability, faultyNodes, bftStart) {
+  return (
+    f.N === selectedN &&
+    f.BTT === selectedBTT &&
+    f.p2p_profile === selectedP2pProfile &&
+    (f.Instability ?? 0) === instability &&
+    (f.FaultyNodes ?? 0) === faultyNodes &&
+    (f.BFT_start ?? 0) === bftStart
+  );
 }
 
 // findBaselinePointAtBFTStart looks up the p2p_baseline point at the
 // current (N, K, BTT, profile) and the requested instability +
-// BFT_start. Returns null when no matching point exists. Points
-// emitted before the BFT_start axis was added carry no Fields.BFT_start
-// key; those default to BFT_start=0 for backward-compat.
+// BFT_start. Returns null when no matching point exists.
 function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart) {
   if (!data) return null;
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
@@ -483,15 +502,7 @@ function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart) {
   for (const pt of sweep.points) {
     const f = pt.fields;
     if (!f) continue;
-    if (
-      f.N === selectedN &&
-      f.K === selectedK &&
-      f.BTT === selectedBTT &&
-      f.p2p_profile === selectedP2pProfile &&
-      (f.Instability ?? 0) === instability &&
-      (f.FaultyNodes ?? 0) === faultyNodes &&
-      (f.BFT_start ?? 0) === bftStart
-    ) {
+    if (f.K === selectedK && baselineAxesMatch(f, instability, faultyNodes, bftStart)) {
       return { sweep, point: pt };
     }
   }
@@ -504,6 +515,41 @@ function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart) {
 // BFT_start=0.
 function findBaselinePointAtInstability(data, instability, faultyNodes) {
   return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0);
+}
+
+// pickKIndependentCell selects a K-independent (pipeline-shift) protocol's
+// cell from `candidates` — points that already match every axis EXCEPT K.
+// K is a layer count only OBFT/2abOBFT consume, so QBFT-family / PSigs data
+// must not change with the K picker. We prefer the lowest K that carries a
+// real (iterations > 0) cell, which makes the choice deterministic and
+// picker-independent: the same cell renders whatever K is selected. Falls
+// back to an empty cell, then null, so coverage gaps degrade gracefully.
+// (Seeds don't depend on K, so where two K-runs both simulated a cell they
+// agree; differences across K-runs are coverage, which this skips over.)
+function pickKIndependentCell(candidates, scenarioName, protocol) {
+  const sorted = candidates.slice().sort(
+    (a, b) => ((a.fields && a.fields.K) || 0) - ((b.fields && b.fields.K) || 0));
+  let fallback = null;
+  for (const pt of sorted) {
+    const c = findCell(pt, scenarioName, protocol);
+    if (!c) continue;
+    if (c.iterations > 0) return c;
+    if (!fallback) fallback = c;
+  }
+  return fallback;
+}
+
+// findPipelineShiftBaselineCell resolves a K-independent protocol's
+// p2p_baseline cell across every K-slice at the current (N, BTT, profile)
+// and the given instability / faulty / BFT_start. See pickKIndependentCell
+// for the selection policy.
+function findPipelineShiftBaselineCell(data, scenarioName, protocol, instability, faultyNodes, bftStart) {
+  if (!data) return null;
+  const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
+  if (!sweep) return null;
+  const candidates = sweep.points.filter(
+    (pt) => pt.fields && baselineAxesMatch(pt.fields, instability, faultyNodes, bftStart));
+  return pickKIndependentCell(candidates, scenarioName, protocol);
 }
 
 // findBaselineCellForScenario looks up the cell for the given scenario
@@ -525,22 +571,28 @@ function findBaselinePointAtInstability(data, instability, faultyNodes) {
 //     to L_1+ (safe parent, not MEV). That isn't a deployable config, so
 //     we render n/a rather than a clamped/degraded result. No round-up:
 //     configs above the threshold are never simulated.
-// Pipeline-shift protocols always pull from the BFT_start=0 cell (the
-// UI shifts post-hoc, exactly, via shiftedCell).
+// Pipeline-shift protocols (QBFT family, PSigs) are K-independent and pull
+// their BFT_start=0 cell from any K-slice (findPipelineShiftBaselineCell);
+// the UI then shifts it post-hoc, exactly, via shiftedCell.
 function findBaselineCellForScenario(data, scenario, protocol) {
   const isBaseline = scenario && scenario.group === 'Baseline';
   const wantInstab = isBaseline ? selectedInstability : 0;
   const wantFaulty = isBaseline ? selectedFaultyNodes : 0;
-  // The BFT_start=0 cell is the shape-anchor: always present, and it
-  // carries the emitted bftStartIndependenceMs threshold this protocol's
-  // schedule is invariant below.
+
+  // Pipeline-shift protocols are K-independent — K is a layer count only
+  // OBFT/2abOBFT consume, so the K picker must not change their data. Resolve
+  // their BFT_start=0 cell from any K-slice; shiftedCell applies the exact
+  // +BFT_start post-hoc, so BFT_start=0 is the right source at any picker.
+  if (isPipelineShiftProtocol(protocol)) {
+    return findPipelineShiftBaselineCell(data, scenario.name, protocol, wantInstab, wantFaulty, 0);
+  }
+
+  // OBFT-family is K-dependent: resolve at the selected K. The BFT_start=0
+  // cell is the shape-anchor (always present) and carries the emitted
+  // bftStartIndependenceMs threshold this protocol's schedule is invariant
+  // below.
   const base0 = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, 0);
   const cell0 = base0 ? findCell(base0.point, scenario.name, protocol) : null;
-
-  // Pipeline-shift protocols shift wholesale with BFT_start; shiftedCell
-  // applies the exact +BFT_start post-hoc, so the BFT_start=0 cell is the
-  // right source at any picker value.
-  if (isPipelineShiftProtocol(protocol)) return cell0;
 
   const threshold = cell0 ? cell0.bftStartIndependenceMs : undefined;
 
@@ -655,6 +707,32 @@ function filterSweepByNK(sweep, n, k) {
     return true;
   });
   return { ...sweep, points: filtered };
+}
+
+// fieldsEqualExceptK reports whether two points' Fields agree on every axis
+// except K. Within one sweep all points share the same key set (only values
+// differ), so comparing every non-K key identifies "the same axis value at a
+// different K-slice" — what the K-independent collapsible lookup needs.
+function fieldsEqualExceptK(a, b) {
+  if (!a || !b) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (key === 'K') continue;
+    if (a[key] === undefined || b[key] === undefined) return false;
+    if (Math.abs(a[key] - b[key]) > 1e-6) return false;
+  }
+  return true;
+}
+
+// findKIndependentCellInSweep resolves a pipeline-shift protocol's cell for
+// the axis-point `pt` from any K-slice of the (unfiltered) `sweep`, so the
+// collapsible trend/legend data for QBFT-family / PSigs doesn't change with
+// the K picker. `pt` comes from the K-filtered sweep (it fixes the axis
+// value); we match every other K-slice at the same axis value and apply the
+// shared lowest-K selection policy. See pickKIndependentCell.
+function findKIndependentCellInSweep(sweep, pt, scenarioName, protocol) {
+  const candidates = sweep.points.filter((q) => fieldsEqualExceptK(q.fields, pt.fields));
+  return pickKIndependentCell(candidates, scenarioName, protocol);
 }
 
 // buildBaselinePicker renders a labeled button group for one picker
@@ -1307,6 +1385,17 @@ function renderCollapsibleBody(body, sweep, data, state) {
   // merged data.js may contain.
   const filtered = filterSweepByNK(sweep, selectedN, selectedK);
 
+  // The filtered sweep fixes the x-axis (one tick per selected-K point) and
+  // feeds the K-dependent OBFT/2abOBFT series. Pipeline-shift protocols
+  // (QBFT family, PSigs) are K-independent, so resolve their per-point cell
+  // from any K-slice of the UNFILTERED sweep at the same axis value — that
+  // keeps their trend/legend identical as the K picker changes.
+  const kIndepLookup = (pt, scName, protName) => (
+    isPipelineShiftProtocol(protName)
+      ? findKIndependentCellInSweep(sweep, pt, scName, protName)
+      : findCell(pt, scName, protName)
+  );
+
   // Top strip — description (flex:1, left) + legend (margin-left:auto,
   // right). Sharing one .sm-content-top row puts them on the same line.
   const scenario = data.scenarios.find((s) => s.name === selectedScenario) || data.scenarios[0];
@@ -1317,7 +1406,7 @@ function renderCollapsibleBody(body, sweep, data, state) {
     top.appendChild(desc);
   }
   if (scenario) {
-    top.appendChild(buildSweepLegend(filtered, scenario, filteredProtocols(data.protocols)));
+    top.appendChild(buildSweepLegend(filtered, scenario, filteredProtocols(data.protocols), kIndepLookup));
   }
   if (top.children.length > 0) body.appendChild(top);
 
@@ -1347,7 +1436,7 @@ function renderCollapsibleBody(body, sweep, data, state) {
     const savedSlot = selectedBFTStart;
     selectedBFTStart = state.bftStart;
     try {
-      buildTrendLineChart(canvas, filtered, filteredProtocols(data.protocols), scenario, state.metric);
+      buildTrendLineChart(canvas, filtered, filteredProtocols(data.protocols), scenario, state.metric, kIndepLookup);
     } finally {
       selectedBFTStart = savedSlot;
     }
@@ -1430,10 +1519,11 @@ function applyChartDefaults() {
 // read as visually distinct chunks rather than rows in one wall of
 // data. Clicking a row updates the Conditions chart's selected scenario.
 //
-// Source: p2p_baseline matched to (selectedK, selectedBTT, selectedP2pProfile)
-// via findBaselineSweepPoint. Falls back to legacy p2p_normal's single
-// point when data.js predates Phase 2 (so the heatmap still renders
-// against an older data.js without a regen).
+// Source: p2p_baseline, resolved per cell via findBaselineCellForScenario —
+// K-dependent families (OBFT/2abOBFT) at (selectedK, selectedBTT,
+// selectedP2pProfile), K-independent ones (QBFT family, PSigs) from any
+// K-slice. Falls back to legacy p2p_normal's single point when no
+// p2p_baseline is present, so the heatmap still renders.
 function renderHeatmap(data) {
   // We check at instability=0 (where non-Baseline scenarios always
   // live) to decide whether ANY data exists for this (n, K, BTT, profile).
@@ -1837,10 +1927,12 @@ function protocolStats(sweep, scenario, protocol, cellLookup) {
 // passive: each cell shows a variant's success-rate range across the
 // sweep's points (a single value when the range collapses), tinted by the
 // worst-case rate. p99 is omitted — the trend chart's y-axis carries it.
-// Callers pre-filter `protocols` to the active set.
-function buildSweepLegend(sweep, scenario, protocols) {
+// Callers pre-filter `protocols` to the active set. `cellLookup` overrides
+// the default per-point findCell (the collapsibles pass a K-independent
+// lookup so QBFT-family / PSigs ranges don't track the K picker).
+function buildSweepLegend(sweep, scenario, protocols, cellLookup) {
   return buildFamilyCushionGrid(protocols, (name) => {
-    const stats = protocolStats(sweep, scenario, name);
+    const stats = protocolStats(sweep, scenario, name, cellLookup);
     const pill = h('span', { class: 'grid-pill on static' });
     pill.title = PROTOCOL_NOTES[name] || name;
     if (!stats) {
@@ -2149,7 +2241,7 @@ function buildLatencyChart(canvas, sweep, protocols, scenario, cellLookup) {
 //   with red/yellow/green zone bands; 'p99' draws p99 decision time
 //   (ms) on a free y-axis without zones.
 
-function buildTrendLineChart(canvas, sweep, protocols, scenario, metric) {
+function buildTrendLineChart(canvas, sweep, protocols, scenario, metric, cellLookup) {
   const isSuccess = metric !== 'p99';
   const ySuccess = {
     title: { display: true, text: 'success rate' },
@@ -2165,7 +2257,7 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario, metric) {
   };
   return new Chart(canvas, {
     type: 'line',
-    data: trendLineChartData(sweep, protocols, scenario, metric),
+    data: trendLineChartData(sweep, protocols, scenario, metric, cellLookup),
     plugins: isSuccess ? [cdfZonesPlugin] : [],
     options: {
       responsive: true,
@@ -2202,13 +2294,14 @@ function buildTrendLineChart(canvas, sweep, protocols, scenario, metric) {
   });
 }
 
-function trendLineChartData(sweep, protocols, scenario, metric) {
+function trendLineChartData(sweep, protocols, scenario, metric, cellLookup) {
   const isSuccess = metric !== 'p99';
+  const lookup = cellLookup || ((pt, scName, protName) => findCell(pt, scName, protName));
   return {
     labels: sweep.points.map((pt) => pt.label),
     datasets: protocols.map((p) => {
       const data = sweep.points.map((pt) => {
-        const cell = shiftedCell(findCell(pt, scenario.name, p), selectedBFTStart);
+        const cell = shiftedCell(lookup(pt, scenario.name, p), selectedBFTStart);
         if (!cell || cell.iterations === 0) return null;
         if (isSuccess) return cell.successRate;
         return cell.decisionTime ? cell.decisionTime.p99 : null;

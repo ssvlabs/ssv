@@ -739,3 +739,19 @@ func TestSweep_FullCatalog_LargerN(t *testing.T) {
 		})
 	}
 }
+
+// TestIsPipelineShiftProtocol pins the K-independent (pipeline-shift)
+// classification. It's load-bearing: the stress driver skips these
+// protocols above the smallest K per n (TestStress), so a misclassification
+// silently drops a protocol's cells from data.js. The names are the wire
+// contract — they must match the data Fields and the JS mirror in
+// stresstest-report/app.js (isPipelineShiftProtocol).
+func TestIsPipelineShiftProtocol(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"QBFT", "QBFT-0", "QBFT-300", "QBFT-500", "QBFT-700", "QBFT-SSV", "PSigs"} {
+		require.Truef(t, ct.IsPipelineShiftProtocol(name), "%q is K-independent (pipeline-shift)", name)
+	}
+	for _, name := range []string{"OBFT", "OBFT-0", "OBFT-700", "2abOBFT", "2abOBFT-0", "2abOBFT-700"} {
+		require.Falsef(t, ct.IsPipelineShiftProtocol(name), "%q is K-dependent", name)
+	}
+}

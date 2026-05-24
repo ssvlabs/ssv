@@ -23,7 +23,7 @@ import (
 	twoabadapter "github.com/ssvlabs/ssv/protocol/v2/consensustest/twoab"
 )
 
-// TestStress is the stress-tier entry point per the catalog-split plan.
+// TestStress is the stress-tier entry point.
 // It runs DefaultSweeps over every catalog scenario opted into
 // ModeStress for the registered protocol families (each consensus family —
 // OBFT / 2abOBFT / QBFT — ships the X-0 / X-300 / X-500 / X-700 cushion
@@ -350,19 +350,49 @@ func TestStress(t *testing.T) {
 	for i, p := range protocols {
 		protocolNames[i] = p.Name()
 	}
+	// K-independent protocols (QBFT family, PSigs) don't consume K — it's a
+	// layer count only OBFT/2abOBFT use — so running them at more than one K
+	// for the same cluster size is wasted work. Within this invocation run
+	// them at only the smallest K requested per n; the report resolves them
+	// from that slice regardless of the K picker (stresstest-report/app.js
+	// findPipelineShiftBaselineCell), and higher-K pairs then run just the
+	// K-dependent families. The smallest requested K is always simulated, so
+	// no data is lost — a standalone higher-K run, or a PROTOCOLS set with no
+	// K-dependent members, still produces them (the guard in the loop below).
+	minKForN := make(map[int]int)
+	for _, pp := range pairs {
+		if mk, ok := minKForN[pp.n]; !ok || pp.k < mk {
+			minKForN[pp.n] = pp.k
+		}
+	}
+	kDependentProtocols := make([]ct.Protocol, 0, len(protocols))
+	for _, p := range protocols {
+		if !ct.IsPipelineShiftProtocol(p.Name()) {
+			kDependentProtocols = append(kDependentProtocols, p)
+		}
+	}
+
 	// Build every pair's sweeps up front so the TOTAL sim count is known
 	// before the first sim runs — that's what lets the progress bar show a
 	// run-wide ETA instead of per-batch guesses. DefaultSweeps only constructs
 	// config (no sims), so this pre-pass is cheap.
 	type pairWork struct {
-		pair   runPair
-		sweeps []ct.Sweep
+		pair          runPair
+		sweeps        []ct.Sweep
+		protocolNames []string // per-pair set (higher-K pairs drop K-independent protocols)
 	}
 	work := make([]pairWork, 0, len(pairs))
 	totalByProtocol := make(map[string]int64)
 	var grandTotal int64
 	for _, pp := range pairs {
-		sweeps := ct.DefaultSweeps(scenarios, protocols, iters, pp.n, pp.k, profiles, bttValues)
+		// Above the smallest K for this n, drop the K-independent protocols —
+		// but only when a K-dependent protocol remains, so a pipeline-shift-only
+		// PROTOCOLS set still runs at every K rather than yielding an empty sweep.
+		pairProtocols := protocols
+		if pp.k > minKForN[pp.n] && len(kDependentProtocols) > 0 {
+			pairProtocols = kDependentProtocols
+		}
+		sweeps := ct.DefaultSweeps(scenarios, pairProtocols, iters, pp.n, pp.k, profiles, bttValues)
 		require.NotEmpty(t, sweeps, "DefaultSweeps returned no sweeps for (n=%d, K=%d)", pp.n, pp.k)
 		for si := range sweeps {
 			for i := range sweeps[si].Points {
@@ -372,7 +402,11 @@ func TestStress(t *testing.T) {
 				}
 			}
 		}
-		work = append(work, pairWork{pair: pp, sweeps: sweeps})
+		pairProtocolNames := make([]string, len(pairProtocols))
+		for i, p := range pairProtocols {
+			pairProtocolNames[i] = p.Name()
+		}
+		work = append(work, pairWork{pair: pp, sweeps: sweeps, protocolNames: pairProtocolNames})
 	}
 
 	// cancel is closed by the interrupt handler below; wired into every batch so
@@ -454,7 +488,7 @@ func TestStress(t *testing.T) {
 			}
 			t.Logf("    sweep %s: %d sweep points [%s] × baseline=%d unstable=%d iterations × %d scenarios × %d protocols [%s]",
 				sw.Name, len(sw.Points), strings.Join(pointLabels, ", "),
-				iters.Baseline, iters.Unstable, len(scenarios), len(protocols), strings.Join(protocolNames, ", "))
+				iters.Baseline, iters.Unstable, len(scenarios), len(w.protocolNames), strings.Join(w.protocolNames, ", "))
 			swStart := time.Now()
 			results = append(results, ct.RunSweep(t, sw))
 			t.Logf("        %s wallclock: %v", sw.Name, time.Since(swStart))
@@ -477,7 +511,7 @@ func TestStress(t *testing.T) {
 			Description: "Curated sweeps × OBFT/2abOBFT/QBFT across diverse network conditions and cluster sizes. " +
 				"DecisionTime semantic: \"ready to submit\" for all three protocols — for OBFT/2abOBFT this is " +
 				"the earliest local σ-cert in hand; for QBFT it is the earliest receiver to accumulate 2f+1 " +
-				"post-consensus partial sigs on the decided value (Phase C of the mesh-transport plan). " +
+				"post-consensus partial sigs on the decided value. " +
 				"Healthy is the only scenario that runs through the libp2p-shaped mesh transport (per-cluster: " +
 				"N protocol peers + N forward-only relay peers, each node at degree 3); every adversarial " +
 				"scenario uses direct fanout to keep per-(from, to) byz primitives precise.",

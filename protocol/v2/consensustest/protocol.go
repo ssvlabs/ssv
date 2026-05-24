@@ -30,6 +30,7 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -217,6 +218,18 @@ func DefaultK(n int) int { return (n-1)/3 + 1 }
 func MinK(n int) int {
 	f := (n - 1) / 3
 	return f + 1
+}
+
+// IsPipelineShiftProtocol reports whether a protocol (identified by its
+// Name()) is K-independent: the QBFT family and PSigs. K is a layer count
+// that only the OBFT / 2abOBFT families consume — QBFT runs rounds and
+// PSigs has no layers — so these protocols produce the same result at any
+// K. The stress driver exploits this by simulating them at only the
+// smallest K requested per cluster size (see TestStress); the report
+// resolves them across K-slices regardless of the K picker
+// (stresstest-report/app.js isPipelineShiftProtocol mirrors this).
+func IsPipelineShiftProtocol(name string) bool {
+	return name == "QBFT" || name == "PSigs" || strings.HasPrefix(name, "QBFT-")
 }
 
 // Protocol is implemented by per-algorithm adapters. Adapters MUST be
