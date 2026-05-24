@@ -112,6 +112,11 @@ section.heatmap {
   border-radius: 4px;
 }
 .col-head.scen { background: transparent; }
+/* Family super-header row sits tight above the cushion sub-header row. */
+.heatmap-fam-cols { margin-bottom: 2px; }
+/* Family-group separator — thin, just darker than the row borders. */
+.heatmap .col-head.grp,
+.heatmap .hcell.grp { border-left: 1px solid #d7dde5; }
 
 /* Group card — one per Scenario.Group. Surface bg + subtle border so
  * each group reads as its own chunk against the grey page bg. */
@@ -263,85 +268,10 @@ section.heatmap {
   min-width: 0;
   margin: 0;
 }
-.sm-content-top .sm-legend {
+/* Collapsible sweep legends use the shared .sm-legend-grid card (see the
+ * conditions legend); in the top strip it sits right of the description. */
+.sm-content-top .sm-legend-grid {
   margin: 0 0 0 auto;
-}
-
-/* Custom legend — one row per protocol, with hue-tinted success-rate
- * chip matching the heatmap gradient. Replaces Chart.js's built-in
- * legend (which is disabled in the chart options).
- *
- * Uses a single parent grid (5 columns: swatch · name · chip · sep ·
- * p99) so columns align across rows; each .sm-legend-item is
- * display:contents so its children participate in the parent grid
- * directly. Every row emits exactly 5 children (n/a rows include empty
- * placeholders for sep + p99) to keep grid placement deterministic.
- *
- * --checkable variant adds a 6th column (checkbox) at the left for the
- * Conditions section's protocol filter. Each .sm-legend-item > * reads
- * --sm-legend-item-opacity so inactive (unchecked) rows can be dimmed
- * by setting the custom property on the display:contents item, which
- * inherits into its children. */
-.sm-legend {
-  display: grid;
-  grid-template-columns: auto auto auto auto auto;
-  row-gap: 0.2em;
-  column-gap: 0.4em;
-  align-items: center;
-  font-size: 0.75em;
-  font-variant-numeric: tabular-nums;
-}
-.sm-legend.sm-legend--checkable {
-  grid-template-columns: auto auto auto auto auto auto;
-}
-.sm-legend-item {
-  display: contents;
-  color: var(--text);
-}
-.sm-legend-item > * {
-  opacity: var(--sm-legend-item-opacity, 1);
-  transition: opacity 120ms ease;
-}
-.sm-legend-swatch {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-}
-.sm-legend-name {
-  font-weight: 600;
-  color: #0f172a;
-}
-/* min-width sized to fit the widest single-value formatting we emit
- * ("99.90%" = 6 chars at tabular-nums); display:inline-block makes
- * min-width effective on the underlying <span>. Without this the chip
- * shrinks to fit "100%" (4 chars) and the row jitters when toggling
- * between sweep points whose worst-case rate flips between 100 and
- * 99.x. Range strings ("99.50–99.90%") still grow beyond the floor —
- * those are infrequent and the user expects a wider chip there. */
-.sm-legend-pct {
-  display: inline-block;
-  min-width: 5.8em;
-  background: var(--hcell-bg);
-  padding: 0.05em 0.3em;
-  border-radius: 3px;
-  font-size: 0.88em;
-  color: var(--hcell-fg, #1a1a1a);
-  text-align: center;
-  box-sizing: border-box;
-  white-space: nowrap;
-}
-.sm-legend-pct.na {
-  background: #e2e8f0;
-  color: var(--na);
-  font-weight: 500;
-}
-.sm-legend-sep {
-  color: var(--text-faint);
-}
-.sm-legend-p99 {
-  color: var(--text-muted);
-  white-space: nowrap;
 }
 
 /* Collapsible controls row — holds the BFT_start picker and the
@@ -438,10 +368,10 @@ section.conditions {
   padding-top: 1em;
   padding-bottom: 0.5em;
 }
-/* Header row — scenario title on the left, "n=4" cluster-setup label
- * on the right. baseline alignment keeps the subtitle's text sitting
- * on the title's text baseline. flex-wrap lets the subtitle drop
- * below on narrow viewports. */
+/* Header row — scenario title on the left, the ×N iteration-count badge
+ * on the right. baseline alignment keeps the badge's text sitting on the
+ * title's text baseline. flex-wrap lets the badge drop below on narrow
+ * viewports. */
 section.conditions .conditions-head {
   display: flex;
   align-items: baseline;
@@ -457,66 +387,161 @@ section.conditions .conditions-title {
   margin: 0;
   font-size: 1em;
 }
-/* "n=4" stays at 0.95em — deliberately the largest element on the
- * conditions strip after the title shrinks, since it's the single
- * cluster-setup indicator. */
-section.conditions .conditions-subtitle {
-  color: var(--text-muted);
-  font-size: 0.95em;
-}
 section.conditions .conditions-desc {
   margin: 0;
 }
 
-/* Body row — pickers stack (left) + legend block (right). Both sides
- * are 4-row grids with identical row heights, so picker[N] center-Y
- * matches protocol[N] center-Y in the legend. The legend's internal
- * 5-column grid is preserved so swatch / name / chip / sep / p99
- * columns align across protocol rows. */
+/* Body row — parameter pickers (left, flex-grow) + the protocol legend
+ * card (right, natural width, vertically centered against the picker
+ * stack). The picker stack shrinks (its button rows wrap in place) so the
+ * legend card stays beside it rather than dropping onto its own line. */
 section.conditions .conditions-body-row {
   display: flex;
   align-items: flex-start;
-  gap: 1.5em;
+  gap: 2.4em;
   margin: 0.6em 0 0.9em;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 section.conditions .conditions-pickers-stack {
   display: grid;
-  /* grid-auto-rows (not grid-template-rows) so the stack grows with
-   * however many pickers the section currently renders. The page
-   * started at 4 pickers (K/BTT/profile/BFT_start) but now ships 6
-   * (n/K/BTT/profile/p2p_instability/BFT_start); hard-coded
-   * `repeat(4, ...)` left the extra rows in `grid-auto-rows: auto`
-   * and drifted out of row-height alignment with the legend on the
-   * right. Use rem (not em) so the picker stack and legend below
-   * share row heights despite their elements having different
-   * inherited font-sizes. */
-  grid-auto-rows: 1.8rem;
+  /* minmax(1.8rem, auto): single-line picker rows keep a uniform 1.8rem
+   * height; a row whose buttons wrap (e.g. BFT_start's full ladder)
+   * grows to fit instead of overflowing into the next row. flex:1 lets
+   * the stack shrink within the body row so wide button rows wrap here
+   * rather than pushing the legend card onto its own line. */
+  grid-auto-rows: minmax(2rem, auto);
+  row-gap: 0.1em;
   align-items: center;
+  flex: 1 1 auto;
   min-width: 0;
 }
 section.conditions .conditions-pickers-stack .sm-slot-picker {
   margin: 0;
-  font-size: 0.78em;
+  font-size: 0.86em;
+  /* Hanging indent: wrapped button lines align under the first button
+   * (at the label-column edge) instead of restarting under the label.
+   * Paired with the label's matching negative margin below. */
+  padding-left: 9.35em;
 }
 /* Picker labels right-aligned inside a fixed-width column — buttons
  * start at the same X across all rows (label column width = widest
  * label's natural width, currently "p2p_instability:" ≈ 8.5em at
- * 0.78em font-size), but the label TEXT sits flush against its
- * trailing margin so short labels ("n:", "K:") don't leave a wide
+ * 0.78em font-size), but the label TEXT sits flush against the right
+ * of the label column so short labels ("n:", "K:") don't leave a wide
  * gap before their first button. Without the right-align, short
  * labels sat at the column's left edge with empty space between
  * them and their buttons. */
 section.conditions .conditions-pickers-stack .sm-slot-picker-label {
   min-width: 9em;
+  /* Hang the label in the gutter created by the picker's padding-left so
+   * the first and wrapped button lines share one left edge. margin-right
+   * is zeroed so only the flex gap (0.35em) sits between label and first
+   * button — matching the padding-left budget exactly. */
+  margin-left: -9.35em;
+  margin-right: 0;
   text-align: right;
 }
 section.conditions .conditions-legend {
-  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
 }
-section.conditions .conditions-legend .sm-legend {
-  align-items: center;
-  row-gap: 0;
+
+/* Protocol legend / filter — a compact family × cushion grid beside the
+ * parameter pickers: one row per protocol family, cushions (0/300/500/700)
+ * as columns, plus a single-cell row per ladder-less protocol (QBFT-SSV,
+ * PSigs). Each cell is a click-to-toggle success-rate pill (tinted by rate
+ * like the heatmap); active variants are filled, inactive ones outlined.
+ * p99 is omitted on purpose — the CDF chart below carries latency. */
+.sm-legend-grid {
+  border-collapse: collapse;
+  font-size: 0.84em;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sm-legend-grid th,
+.sm-legend-grid td {
+  padding: 0.34em 0.7em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.sm-legend-grid thead th {
+  font-weight: 600;
+  font-size: 0.9em;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  background: var(--surface-muted);
+  text-align: center;
+}
+.sm-legend-grid thead th.corner {
+  text-align: left;
+}
+.sm-legend-grid tbody tr:last-child td {
+  border-bottom: none;
+}
+.sm-legend-grid td.cell {
+  text-align: center;
+  padding: 0.28em 0.4em;
+}
+/* Ladder-less protocols (QBFT-SSV, PSigs) span the cushion columns; float
+ * their single success pill to the right edge instead of centering it. */
+.sm-legend-grid td.cell.solo {
+  text-align: right;
+}
+.sm-legend-grid .fam {
+  text-align: left;
+  font-weight: 600;
+  color: #0f172a;
+}
+.sm-legend-grid .fam .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 0.5em;
+}
+.sm-legend-grid .grid-empty {
+  color: var(--text-faint);
+  opacity: 0.4;
+}
+/* Cushion toggle pill — outlined when inactive, filled (success-tinted via
+ * inline background/color set by app.js) when active. */
+.grid-pill {
+  display: inline-block;
+  font-size: 0.9em;
+  /* min-width sized (in the pill's own em) to fit the widest value we print
+   * ("100.00%") so every pill in a column is the same width — no jitter
+   * between 2-decimal and shorter values, or when a cell flips to "n/a". */
+  min-width: 6.4em;
+  box-sizing: border-box;
+  padding: 0.12em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--text-faint);
+  text-align: center;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.grid-pill.on {
+  border-color: transparent;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+.grid-pill.off:hover {
+  background: rgba(15, 23, 42, 0.04);
+}
+.grid-pill.na {
+  color: var(--na);
+}
+.grid-pill.on.na {
+  background: #e2e8f0;
+}
+/* Passive pills (collapsible sweep legends) aren't clickable. */
+.grid-pill.static {
+  cursor: default;
 }
 
 /* Failure-breakdown table — sits below the CDF chart. Hidden (host
@@ -531,32 +556,43 @@ section.conditions .conditions-legend .sm-legend {
   font-weight: 600;
   color: var(--text);
 }
-.conditions-failures-table {
+/* Grouped breakdown tables (failure + decision-layer) share a two-level
+ * family/cushion header, equal-width columns (table-layout: fixed), and
+ * centered cells. The first column of each family group carries .grp for a
+ * thin separator line. */
+.grouped-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
+  table-layout: fixed;
 }
-.conditions-failures-table th,
-.conditions-failures-table td {
-  padding: 0.35em 0.7em;
+.grouped-table th,
+.grouped-table td {
+  padding: 0.4em 0.4em;
   border-bottom: 1px solid var(--border);
-  text-align: left;
+  text-align: center;
+  white-space: nowrap;
 }
-.conditions-failures-table thead th {
+.grouped-table thead th {
   font-weight: 600;
   background: var(--surface-muted);
-  white-space: nowrap;
 }
-.conditions-failures-table th.proto-col,
-.conditions-failures-table td.count {
-  text-align: right;
-  white-space: nowrap;
-}
-.conditions-failures-table td.reason {
+.grouped-table .rowhead {
+  width: 9em;
+  text-align: left;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
+  white-space: normal;
   word-break: break-word;
+}
+/* family-group separator — 1px, just darker than the row borders */
+.grouped-table .grp {
+  border-left: 1px solid #d7dde5;
+}
+/* Failure table — wider wrapping reason column; count + percent cells. */
+.conditions-failures-table .rowhead {
+  width: 14em;
 }
 .conditions-failures-table td.count.zero,
 .conditions-failures-table td.count.na {
@@ -578,32 +614,7 @@ section.conditions .conditions-legend .sm-legend {
   font-weight: 600;
   color: var(--text);
 }
-.conditions-layers-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.85em;
-  font-variant-numeric: tabular-nums;
-}
-.conditions-layers-table th,
-.conditions-layers-table td {
-  padding: 0.35em 0.7em;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-.conditions-layers-table thead th {
-  font-weight: 600;
-  background: var(--surface-muted);
-  white-space: nowrap;
-}
-.conditions-layers-table th.proto-col,
-.conditions-layers-table td.layer-cell {
-  text-align: right;
-  white-space: nowrap;
-}
-.conditions-layers-table td.depth {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.9em;
-}
+/* Decision-layer table — per-(family, depth) MEV-density cell shading. */
 .conditions-layers-table td.layer-cell.zero,
 .conditions-layers-table td.layer-cell.na {
   color: var(--na);

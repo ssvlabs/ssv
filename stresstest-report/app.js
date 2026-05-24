@@ -160,10 +160,11 @@ let selectedFaultyNodes = 0;
 // activeProtocols is the set of protocol names currently shown in the
 // heatmap, charts, and collapsible legends. Initialized in main() from
 // localStorage (key: stresstest-active-protocols). Default (empty
-// localStorage) is the three canonical protocols: OBFT, 2abOBFT, QBFT.
-// Persisted to localStorage on every checkbox change so it survives
-// page refreshes. null until main() fires (safe — filteredProtocols
-// checks for null and falls back to the full list).
+// localStorage) is the 0- and 700-cushion variant of each family plus
+// QBFT-SSV / PSigs (see loadActiveProtocols). Persisted to localStorage on
+// every legend toggle so it survives page refreshes. null until main()
+// fires (safe — filteredProtocols checks for null and falls back to the
+// full list).
 let activeProtocols = null;
 
 const LS_KEY_PROTOCOLS = 'stresstest-active-protocols';
@@ -693,15 +694,15 @@ function buildBaselinePickerLabeled(label, values, labelFor, getValue, setValue,
 
 // renderConditionsSection builds the always-visible primary CDF chart at
 // the top of the page. Layout:
-//   header  — scenario title on the left, "n=4" cluster-setup label
+//   header  — scenario title on the left, the ×N iteration-count badge
 //             on the right.
 //   desc    — scenario.note, full width below the header.
-//   bodyRow — two columns: left holds the K/BTT/profile/BFT_start picker
-//             stack; right holds the per-protocol legend block
-//             (buildSweepLegend keeps swatch/name/chip/sep/p99 columns
-//             aligned across protocol rows). Both columns use grid
-//             rows of identical height so picker[N] aligns Y-by-Y
-//             with protocol[N].
+//   bodyRow — params left, legend right on one row (legend centered): the
+//             left holds the N/K/BTT/profile/instability/faulty/BFT_start
+//             picker stack; the right holds the per-protocol legend card
+//             (buildConditionsLegendCard). The picker stack flex-shrinks
+//             so wide button rows (BFT_start) wrap in place rather than
+//             pushing the legend card onto its own line.
 //   chart   — CDF canvas, full width below the body row.
 function renderConditionsSection(data) {
   const sec = h('section', { class: 'conditions', id: 'conditions' });
@@ -807,11 +808,11 @@ function renderConditionsSection(data) {
   pickers.appendChild(buildBFTStartPicker());
   bodyRow.appendChild(pickers);
 
-  // Legend block — pass a synthetic single-point sweep so buildSweepLegend
+  // Legend block — pass a synthetic single-point sweep so the legend card
   // renders single values (not ranges). Empty when no sweep matches the
   // current K/BTT/profile; the legend then shows "n/a" per protocol.
-  // Always passes all protocols (not filtered) so checkboxes for every
-  // protocol are present and the user can re-enable unchecked ones.
+  // Always passes all protocols (not filtered) so a toggle cell for every
+  // protocol is present and the user can re-enable inactive ones.
   const legendWrap = h('div', { class: 'conditions-legend' });
   if (scenario) {
     const onePtSweep = match
@@ -824,7 +825,7 @@ function renderConditionsSection(data) {
     // UI shifts post-hoc via shiftedCell.
     const baselineLookup = (_pt, _scName, protName) =>
       findBaselineCellForScenario(data, scenario, protName);
-    legendWrap.appendChild(buildSweepLegend(onePtSweep, scenario, data.protocols,
+    legendWrap.appendChild(buildConditionsLegendCard(onePtSweep, scenario, data.protocols,
       () => onConditionsChange(), baselineLookup));
   }
   bodyRow.appendChild(legendWrap);
@@ -960,9 +961,10 @@ function sortFailureReasons(reasons, totals) {
 
 // rebuildFailureBreakdown populates the failure-breakdown table beneath
 // the CDF chart. One row per distinct MissReason observed across the
-// active protocols at the current operating point; one column per
-// active protocol with the per-iteration count (and a percent-of-iters
-// secondary value). Raw reasons are canonicalized via
+// active protocols at the current operating point; one column per active
+// protocol grouped by family (cushion as sub-columns), with the
+// per-iteration count (and a percent-of-iters secondary value). Raw
+// reasons are canonicalized via
 // canonicalizeMissReason so same-shape outcomes across adapters share
 // one row; the row sort goes through sortFailureReasons (pinned top
 // block, count-sorted middle, pinned bottom block).
@@ -1045,45 +1047,37 @@ function rebuildFailureBreakdown(data) {
   const title = h('h3', { class: 'conditions-failures-title' },
     'Failure breakdown');
   host.appendChild(title);
-  const table = h('table', { class: 'conditions-failures-table' });
-  const thead = h('thead');
-  const headRow = h('tr');
-  headRow.appendChild(h('th', { class: 'reason' }, 'Reason'));
-  for (const p of activeNames) {
-    headRow.appendChild(h('th', { class: 'proto-col' }, p));
-  }
-  thead.appendChild(headRow);
-  table.appendChild(thead);
+  const grouped = groupProtocolsByFamily(activeNames);
+  const table = h('table', { class: 'conditions-failures-table grouped-table' });
+  table.appendChild(buildGroupedTableHeader('Reason', grouped));
+
+  // One cell per (protocol, reason): empty when the family lacks that
+  // cushion; n/a when the protocol didn't run (missing / iterations==0);
+  // "—" for zero failures of this reason (so the eye catches non-zero
+  // rows); otherwise the count + percent-of-iterations. grp marks the
+  // first column of each family group for the separator.
+  const failCell = (name, reason, grp) => {
+    const cls = (extra) => 'count' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
+    if (!name) return h('td', { class: cls('empty') });
+    const cell = cellByProtocol[name];
+    if (!cell || cell.iterations === 0) return h('td', { class: cls('na') }, 'n/a');
+    const count = perCell[name][reason] || 0;
+    if (count === 0) return h('td', { class: cls('zero') }, '—');
+    const pct = (count / cell.iterations) * 100;
+    const td = h('td', { class: cls() });
+    td.appendChild(h('span', { class: 'count-n' }, String(count)));
+    td.appendChild(h('span', { class: 'count-pct' }, ' (' + pct.toFixed(2) + '%)'));
+    return td;
+  };
+
   const tbody = h('tbody');
   for (const reason of reasons) {
     const tr = h('tr');
-    tr.appendChild(h('td', { class: 'reason' }, reason));
-    for (const p of activeNames) {
-      const cell = cellByProtocol[p];
-      // Three states for the cell:
-      //   - missing or iterations==0 → protocol didn't run this scenario
-      //     (ErrNotApplicable / no data point yet). Render "n/a".
-      //   - iterations>0 but count==0 → protocol ran, zero failures of
-      //     this reason. Render "—" so the eye catches the non-zero
-      //     rows; "0" is harder to scan.
-      //   - count>0 → render the count + percent-of-iterations.
-      if (!cell || cell.iterations === 0) {
-        tr.appendChild(h('td', { class: 'count na' }, 'n/a'));
-        continue;
-      }
-      const count = perCell[p][reason] || 0;
-      if (count === 0) {
-        tr.appendChild(h('td', { class: 'count zero' }, '—'));
-      } else {
-        const pct = (count / cell.iterations) * 100;
-        const cellEl = h('td', { class: 'count' });
-        cellEl.appendChild(h('span', { class: 'count-n' }, String(count)));
-        cellEl.appendChild(
-          h('span', { class: 'count-pct' }, ' (' + pct.toFixed(2) + '%)'),
-        );
-        tr.appendChild(cellEl);
-      }
-    }
+    tr.appendChild(h('td', { class: 'rowhead reason' }, reason));
+    grouped.families.forEach((fam) => {
+      grouped.cushions.forEach((c, i) => tr.appendChild(failCell(fam.byCushion[c] || null, reason, i === 0)));
+    });
+    grouped.solos.forEach((name) => tr.appendChild(failCell(name, reason, true)));
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
@@ -1104,9 +1098,10 @@ function layerColorClass(protocol, bucketKey) {
 
 // rebuildLayerBreakdown populates the decision layer/round table between the
 // CDF chart and the failure breakdown. One row per decision-depth bucket
-// (L_0/R1, L_1/R2, L_2+/R3+), one column per active protocol; each cell is
-// the % of total iterations that decided at that depth (so a column's rows
-// sum to its success rate, complementing the failure breakdown toward ~100%).
+// (L_0/R1, L_1/R2, L_2+/R3+), one column per active protocol grouped by
+// family (cushion as sub-columns); each cell is the % of total iterations
+// that decided at that depth (so a column's rows sum to its success rate,
+// complementing the failure breakdown toward ~100%).
 // Reads decidedRounds (a depth→count histogram) from the UNSHIFTED base cell:
 // the round at which a decision was reached is shift-invariant — a later
 // BFT_start only clips deciders past the deadline (captured as overflow in
@@ -1149,39 +1144,37 @@ function rebuildLayerBreakdown(data) {
     }
   }
   host.appendChild(h('h3', { class: 'conditions-layers-title' }, 'Decision layer / round'));
-  const table = h('table', { class: 'conditions-layers-table' });
-  const thead = h('thead');
-  const headRow = h('tr');
-  headRow.appendChild(h('th', { class: 'depth' }, 'Layer / Round'));
-  for (const p of activeNames) {
-    headRow.appendChild(h('th', { class: 'proto-col' }, p));
-  }
-  thead.appendChild(headRow);
-  table.appendChild(thead);
+  const grouped = groupProtocolsByFamily(activeNames);
+  const table = h('table', { class: 'conditions-layers-table grouped-table' });
+  table.appendChild(buildGroupedTableHeader('Layer / Round', grouped));
+
+  // One cell per (protocol, depth): empty when the family lacks that
+  // cushion, n/a when the protocol has no data, "—" for a zero share.
+  // grp marks the first column of each family group for the separator.
+  const layerCell = (name, idx, depthKey, grp) => {
+    const cls = (extra) => 'layer-cell' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
+    if (!name) return h('td', { class: cls('empty') });
+    if (!cellByProtocol[name]) return h('td', { class: cls('na') }, 'n/a');
+    const v = pct[name][idx];
+    if (v <= 0) return h('td', { class: cls('zero') }, '—');
+    return h('td', { class: cls(layerColorClass(name, depthKey)) }, v.toFixed(2) + '%');
+  };
+
   const tbody = h('tbody');
   buckets.forEach((bucket, idx) => {
     const tr = h('tr');
-    tr.appendChild(h('td', { class: 'depth' }, bucket.label));
-    for (const p of activeNames) {
-      const cell = cellByProtocol[p];
-      if (!cell) {
-        tr.appendChild(h('td', { class: 'layer-cell na' }, 'n/a'));
-        continue;
-      }
-      const v = pct[p][idx];
-      if (v <= 0) {
-        tr.appendChild(h('td', { class: 'layer-cell zero' }, '—'));
-      } else {
-        tr.appendChild(h('td', { class: 'layer-cell ' + layerColorClass(p, bucket.key) }, v.toFixed(2) + '%'));
-      }
-    }
+    tr.appendChild(h('td', { class: 'rowhead' }, bucket.label));
+    grouped.families.forEach((fam) => {
+      grouped.cushions.forEach((c, i) => tr.appendChild(layerCell(fam.byCushion[c] || null, idx, bucket.key, i === 0)));
+    });
+    grouped.solos.forEach((name) => tr.appendChild(layerCell(name, idx, bucket.key, true)));
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
   host.appendChild(table);
   host.appendChild(h('p', { class: 'conditions-layers-note' },
-    '% of all iterations that decided at each depth (Layer for OBFT/2abOBFT, Round for QBFT). ' +
-    'Green = MEV-fresh (L_0, or any QBFT round / PSigs); amber = deeper safe-parent fallback (L_1+, not MEV).'));
+    'Each cell is the share of iterations that decided at that layer (OBFT/2abOBFT) or round (QBFT). ' +
+    'Green = the decision landed on a fresh MEV block; amber = it fell back to a deeper safe parent with no MEV (OBFT/2abOBFT, L_1+ only).'));
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap
@@ -1469,22 +1462,36 @@ function renderHeatmap(data) {
 
   const section = h('section', { class: 'heatmap', id: 'overview' });
   const activeProtos = filteredProtocols(data.protocols);
-  // --hcols drives the shared grid template (column-header row + every
-  // .hrow inside every card). Keeping one CSS var means cards always
-  // align horizontally with the column-header bar.
-  section.style.setProperty('--hcols', String(activeProtos.length));
+  const grouped = groupProtocolsByFamily(activeProtos);
+  // --hcols drives the shared grid template (both column-header rows +
+  // every .hrow inside every card) so columns align across cards. Counts
+  // the grouped layout: each family contributes cushions.length columns
+  // (empty slots included) plus one column per ladder-less solo.
+  const colCount = grouped.families.length * grouped.cushions.length + grouped.solos.length;
+  section.style.setProperty('--hcols', String(colCount));
 
-  // No header/subtitle on the heatmap — the cluster-setup label
-  // ("SSV proposer duty at n=4") now lives in the Conditions section's
-  // header above. The column-header bar (protocol names) sits at the
-  // top of the heatmap directly.
+  // No header/subtitle on the heatmap — the cluster-setup label lives in
+  // the Conditions section above. Two stacked column-header rows: a family
+  // super-header spanning each family's cushion columns, then the cushion
+  // (ms) sub-header. First column of each family group carries .grp.
+  const famRow = h('div', { class: 'heatmap-cols heatmap-fam-cols' });
+  famRow.appendChild(h('div', { class: 'col-head scen' }));
+  grouped.families.forEach((fam) => {
+    famRow.appendChild(h('div', {
+      class: 'col-head col-fam grp',
+      style: `grid-column: span ${grouped.cushions.length}`,
+    }, fam.family));
+  });
+  grouped.solos.forEach((name) => famRow.appendChild(h('div', { class: 'col-head col-fam grp' }, name)));
+  section.appendChild(famRow);
 
-  // Shared column-header bar — sits above every group card. Empty
-  // top-left placeholder lines up with the scenario-name column.
-  const cols = h('div', { class: 'heatmap-cols' });
-  cols.appendChild(h('div', { class: 'col-head scen' }));
-  activeProtos.forEach((p) => cols.appendChild(h('div', { class: 'col-head' }, p)));
-  section.appendChild(cols);
+  const cushRow = h('div', { class: 'heatmap-cols heatmap-cush-cols' });
+  cushRow.appendChild(h('div', { class: 'col-head scen' }));
+  grouped.families.forEach((fam) => {
+    grouped.cushions.forEach((c, i) => cushRow.appendChild(h('div', { class: 'col-head col-cush' + (i === 0 ? ' grp' : '') }, c + ' ms')));
+  });
+  grouped.solos.forEach(() => cushRow.appendChild(h('div', { class: 'col-head col-cush grp' })));
+  section.appendChild(cushRow);
 
   // Bucket scenarios by group, preserving catalog order.
   const groups = new Map();
@@ -1514,14 +1521,23 @@ function renderHeatmap(data) {
       const row = h('div', { class: rowClass, 'data-scenario': sc.name });
       row.appendChild(h('div', { class: 'hname' }, sc.title || sc.name));
       let hasData = false;
-      activeProtos.forEach((p) => {
-        // Baseline rows pull from the selectedInstability point;
-        // every other row pulls from instability=0 (those scenarios
-        // are instability-invariant and only have data at level=0).
-        const cell = findBaselineCellForScenario(data, sc, p);
+      // Baseline rows pull from the selectedInstability point; every other
+      // row pulls from instability=0 (those scenarios are instability-
+      // invariant). Iterate the grouped layout so cells align with the
+      // family/cushion header; empty slots (family lacks a cushion) render
+      // a blank cell. grp marks the first column of each family group.
+      const addCell = (name, grp) => {
+        if (!name) { row.appendChild(h('div', { class: 'hcell empty' + (grp ? ' grp' : '') })); return; }
+        const cell = findBaselineCellForScenario(data, sc, name);
         if (cell && cell.iterations > 0) hasData = true;
-        row.appendChild(renderHeatmapCell(cell, sc));
+        const cellEl = renderHeatmapCell(cell, sc);
+        if (grp) cellEl.classList.add('grp');
+        row.appendChild(cellEl);
+      };
+      grouped.families.forEach((fam) => {
+        grouped.cushions.forEach((c, i) => addCell(fam.byCushion[c] || null, i === 0));
       });
+      grouped.solos.forEach((name) => addCell(name, true));
       // Row-level click handler: clicking a row sets the Conditions
       // chart's selected scenario, re-renders that section (so the
       // legend reflects the new scenario), and scrolls the page up so
@@ -1779,8 +1795,9 @@ function percentileOf(sortedArr, p) {
 
 // protocolStats returns success-rate and P99 ranges for `protocol` across
 // the sweep's points, or null when the scenario doesn't apply at any
-// point. Used by buildSweepLegend to render the colored per-protocol
-// summary rows above each chart. Every sweep — single- or multi-point —
+// point. Used by buildSweepLegend and buildConditionsLegendCard to
+// render the per-protocol summary rows above each chart. Every sweep —
+// single- or multi-point —
 // sees the BFT_start-adjusted view of each cell.
 //
 // `cellLookup(pt, scenarioName, protocolName)` overrides the default
@@ -1812,99 +1829,185 @@ function protocolStats(sweep, scenario, protocol, cellLookup) {
   };
 }
 
-// buildSweepLegend renders one row per protocol: colored swatch + name +
-// success-rate chip (HSL-tinted by the worst-case rate via rateToColor,
-// matching the heatmap gradient) + p99 (range when the sweep is
-// multi-point). Replaces Chart.js's built-in legend, which is disabled
-// in the chart options.
-//
-// When onProtocolToggle is provided the legend switches to checkable
-// mode: a checkbox is prepended to each row (6-column grid via
-// .sm-legend--checkable) so the user can enable / disable protocols.
-// In checkable mode ALL protocols are expected (not pre-filtered) so
-// unchecked ones remain visible and can be re-enabled. Inactive rows
-// are dimmed via the --sm-legend-item-opacity CSS variable.
-//
-// Every row contributes exactly five children (swatch, name, chip, sep,
-// p99) — or six when checkable (checkbox first) — so the parent grid
-// keeps columns aligned across rows; n/a rows emit empty placeholders
-// for the missing sep/p99 slots.
-function buildSweepLegend(sweep, scenario, protocols, onProtocolToggle, cellLookup) {
-  const checkable = typeof onProtocolToggle === 'function';
-  const legend = h('div', { class: checkable ? 'sm-legend sm-legend--checkable' : 'sm-legend' });
-  protocols.forEach((p) => {
-    const row = h('div', { class: 'sm-legend-item' });
-    const isActive = !activeProtocols || activeProtocols.has(p);
-    if (!isActive) {
-      row.style.setProperty('--sm-legend-item-opacity', '0.35');
-    }
-    let checkbox = null;
-    if (checkable) {
-      checkbox = h('input', { type: 'checkbox' });
-      checkbox.checked = isActive;
-      checkbox.addEventListener('change', () => {
-        if (activeProtocols) {
-          if (checkbox.checked) activeProtocols.add(p);
-          else activeProtocols.delete(p);
-        }
-        saveActiveProtocols();
-        onProtocolToggle();
-      });
-      row.appendChild(checkbox);
-    }
-    row.appendChild(
-      h('span', { class: 'sm-legend-swatch', style: `background: ${protocolColor(p)}` }),
-    );
-    row.appendChild(h('span', { class: 'sm-legend-name' }, p));
-    const stats = protocolStats(sweep, scenario, p, cellLookup);
-    if (PROTOCOL_NOTES[p]) row.title = PROTOCOL_NOTES[p];
+// buildSweepLegend renders the collapsible sweep section's legend as the
+// shared family × cushion grid (same card as the conditions legend), but
+// passive: each cell shows a variant's success-rate range across the
+// sweep's points (a single value when the range collapses), tinted by the
+// worst-case rate. p99 is omitted — the trend chart's y-axis carries it.
+// Callers pre-filter `protocols` to the active set.
+function buildSweepLegend(sweep, scenario, protocols) {
+  return buildFamilyCushionGrid(protocols, (name) => {
+    const stats = protocolStats(sweep, scenario, name);
+    const pill = h('span', { class: 'grid-pill on static' });
+    pill.title = PROTOCOL_NOTES[name] || name;
     if (!stats) {
-      row.title = "protocol doesn't work under this configuration";
-      row.appendChild(h('span', { class: 'sm-legend-pct na' }, 'n/a'));
-      row.appendChild(h('span', { class: 'sm-legend-sep' }));
-      row.appendChild(h('span', { class: 'sm-legend-p99' }));
+      pill.classList.add('na');
+      pill.textContent = 'n/a';
     } else {
-      // Color the chip by the worst-case (min) rate so a sweep that dips
-      // into the red zone reads as red even if other points are green.
-      const { bg, fg } = rateToColor(stats.successMin);
-      // Suppress fractional precision when the per-cell sample size can't
-      // support it. At N < 100 iterations the sample resolution is ≥ 1%,
-      // so 2-decimal-place rates are spurious precision; round to whole
-      // percent. The heatmap cells already do this; this brings the legend
-      // chip into line.
+      // Suppress fractional precision the per-cell sample size can't support
+      // (< 100 iterations → resolution ≥ 1%). Matches the heatmap cells.
       const decimals = stats.minIters >= 100 ? 2 : 0;
-      const sMin = (stats.successMin * 100).toFixed(decimals);
-      const sMax = (stats.successMax * 100).toFixed(decimals);
-      const sStr = sMin === sMax ? `${sMin}%` : `${sMin}–${sMax}%`;
-      row.appendChild(
-        h('span', { class: 'sm-legend-pct', style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}` }, sStr),
-      );
-      if (stats.p99Min !== null) {
-        const pMin = Math.round(stats.p99Min);
-        const pMax = Math.round(stats.p99Max);
-        const pStr = pMin === pMax ? `p99 ${pMin} ms` : `p99 ${pMin}–${pMax} ms`;
-        row.appendChild(h('span', { class: 'sm-legend-sep' }, '·'));
-        row.appendChild(h('span', { class: 'sm-legend-p99' }, pStr));
-      } else {
-        row.appendChild(h('span', { class: 'sm-legend-sep' }));
-        row.appendChild(h('span', { class: 'sm-legend-p99' }));
+      const lo = (stats.successMin * 100).toFixed(decimals);
+      const hi = (stats.successMax * 100).toFixed(decimals);
+      pill.textContent = lo === hi ? `${lo}%` : `${lo}–${hi}%`;
+      const { bg, fg } = rateToColor(stats.successMin);
+      pill.style.background = bg;
+      pill.style.color = fg;
+    }
+    return pill;
+  });
+}
+
+// parseProtocolVariant splits a cushion-ladder protocol name into
+// { family, cushion } (e.g. "OBFT-700" → OBFT / 700). Ladder-less
+// protocols (QBFT-SSV, PSigs — no trailing numeric cushion) return
+// cushion: null and render as their own single-cell row.
+function parseProtocolVariant(name) {
+  const m = /^(.+)-(\d+)$/.exec(name);
+  if (m) return { family: m[1], cushion: parseInt(m[2], 10) };
+  return { family: name, cushion: null };
+}
+
+// groupProtocolsByFamily buckets protocol names into cushion families
+// (first-seen order, each with a cushion→name map) and ladder-less solos
+// (QBFT-SSV, PSigs), plus the sorted union of cushion values seen. Shared
+// by the conditions legend grid and the grouped breakdown tables.
+function groupProtocolsByFamily(protocols) {
+  const families = [];
+  const familyIndex = {};
+  const solos = [];
+  const cushionSet = new Set();
+  protocols.forEach((name) => {
+    const { family, cushion } = parseProtocolVariant(name);
+    if (cushion === null) { solos.push(name); return; }
+    cushionSet.add(cushion);
+    let fam = familyIndex[family];
+    if (!fam) { fam = { family, byCushion: {} }; familyIndex[family] = fam; families.push(fam); }
+    fam.byCushion[cushion] = name;
+  });
+  return { families, solos, cushions: [...cushionSet].sort((a, b) => a - b) };
+}
+
+// buildGroupedTableHeader builds the shared two-level <thead> for the
+// breakdown tables: a corner cell (rowheadLabel) spanning both header rows,
+// a family super-header spanning each family's cushion columns, ladder-less
+// solos as single rowspan-2 columns, then a cushion sub-header row. The
+// first column of each family group carries .grp for the separator line.
+function buildGroupedTableHeader(rowheadLabel, grouped) {
+  const { families, solos, cushions } = grouped;
+  const thead = h('thead');
+  const r1 = h('tr');
+  r1.appendChild(h('th', { class: 'rowhead', rowspan: '2' }, rowheadLabel));
+  families.forEach((fam) => {
+    r1.appendChild(h('th', { class: 'grp', colspan: String(cushions.length) }, fam.family));
+  });
+  solos.forEach((name) => {
+    r1.appendChild(h('th', { class: 'grp', rowspan: '2' }, name));
+  });
+  thead.appendChild(r1);
+  const r2 = h('tr');
+  families.forEach((fam) => {
+    cushions.forEach((c, i) => r2.appendChild(h('th', i === 0 ? { class: 'grp' } : {}, c + ' ms')));
+  });
+  thead.appendChild(r2);
+  return thead;
+}
+
+// buildFamilyCushionGrid renders the shared family × cushion legend grid:
+// header (protocol | cushion 0/300/500/700 ms), one row per family (dot +
+// name) with a cell per cushion, plus a single-cell row per ladder-less
+// solo (QBFT-SSV, PSigs). cellFn(name) returns the pill node for a real
+// variant; empty family/cushion slots get a placeholder. The conditions
+// legend passes a toggleable pill; the collapsible sweep legends pass a
+// passive range pill.
+function buildFamilyCushionGrid(protocols, cellFn) {
+  const { families, solos, cushions } = groupProtocolsByFamily(protocols);
+  const span = Math.max(cushions.length, 1);
+
+  const cell = (name, colspan) => {
+    const td = h('td', colspan ? { class: 'cell', colspan: String(colspan) } : { class: 'cell' });
+    if (!name) td.appendChild(h('span', { class: 'grid-empty' }, '·'));
+    else td.appendChild(cellFn(name));
+    return td;
+  };
+  const famRow = (label, swatch, cells) => {
+    const tr = h('tr');
+    const famTd = h('td', { class: 'fam' });
+    famTd.appendChild(h('span', { class: 'dot', style: `background: ${protocolColor(swatch)}` }));
+    famTd.appendChild(h('span', { class: 'name' }, label));
+    tr.appendChild(famTd);
+    cells.forEach((c) => tr.appendChild(c));
+    return tr;
+  };
+
+  const table = h('table', { class: 'sm-legend-grid' });
+  const thead = h('thead');
+  const hr1 = h('tr');
+  hr1.appendChild(h('th', { class: 'corner', rowspan: '2' }, 'protocol'));
+  if (cushions.length > 0) {
+    hr1.appendChild(h('th', { class: 'cush-group', colspan: String(cushions.length) }, 'cushion'));
+  }
+  thead.appendChild(hr1);
+  const hr2 = h('tr');
+  cushions.forEach((c) => hr2.appendChild(h('th', {}, c + ' ms')));
+  thead.appendChild(hr2);
+  table.appendChild(thead);
+
+  const tbody = h('tbody');
+  families.forEach((fam) => {
+    // Family swatch = the highest-cushion variant's shade (any present one).
+    const swatch = fam.byCushion[cushions[cushions.length - 1]] || Object.values(fam.byCushion)[0];
+    tbody.appendChild(famRow(fam.family, swatch, cushions.map((c) => cell(fam.byCushion[c] || null))));
+  });
+  solos.forEach((name) => {
+    const c = cell(name, span);
+    c.classList.add('solo');
+    tbody.appendChild(famRow(name, name, [c]));
+  });
+  table.appendChild(tbody);
+  return table;
+}
+
+// buildConditionsLegendCard renders the conditions-section protocol filter
+// as a compact family × cushion grid: one row per protocol family with the
+// cushion ladder (0/300/500/700) as columns, plus a single-cell row per
+// ladder-less protocol (QBFT-SSV, PSigs). Each cell is a click-to-toggle
+// pill showing that variant's success rate, tinted green→amber by rate
+// (same ramp as the heatmap); active variants are filled, inactive ones
+// outlined. Each cell toggles its variant in activeProtocols, so any mix
+// can be on at once (e.g. cushion 0 and 700 of the same family). p99 is
+// omitted on purpose: the CDF chart below already shows latency. n/a cells
+// are variants with no data at the current config (still toggleable).
+function buildConditionsLegendCard(sweep, scenario, protocols, onProtocolToggle, cellLookup) {
+  return buildFamilyCushionGrid(protocols, (name) => {
+    const isActive = !activeProtocols || activeProtocols.has(name);
+    const stats = protocolStats(sweep, scenario, name, cellLookup);
+    const pill = h('span', { class: 'grid-pill ' + (isActive ? 'on' : 'off') });
+    pill.title = PROTOCOL_NOTES[name] || name;
+    if (!stats) {
+      pill.classList.add('na');
+      pill.textContent = 'n/a';
+    } else {
+      // Suppress fractional precision the per-cell sample size can't support
+      // (< 100 iterations → resolution ≥ 1%). Matches the heatmap cells.
+      const decimals = stats.minIters >= 100 ? 2 : 0;
+      pill.textContent = (stats.successMin * 100).toFixed(decimals) + '%';
+      if (isActive) {
+        const { bg, fg } = rateToColor(stats.successMin);
+        pill.style.background = bg;
+        pill.style.color = fg;
       }
     }
-    // Make every non-checkbox child act as a click target for the row,
-    // so the user can toggle a protocol by clicking anywhere on its row.
-    if (checkable && checkbox) {
-      [...row.children].forEach((child) => {
-        if (child === checkbox) return;
-        child.style.cursor = 'pointer';
-        child.addEventListener('click', () => {
-          checkbox.checked = !checkbox.checked;
-          checkbox.dispatchEvent(new Event('change'));
-        });
-      });
-    }
-    legend.appendChild(row);
+    pill.addEventListener('click', () => {
+      if (activeProtocols) {
+        if (activeProtocols.has(name)) activeProtocols.delete(name);
+        else activeProtocols.add(name);
+      }
+      saveActiveProtocols();
+      onProtocolToggle();
+    });
+    return pill;
   });
-  return legend;
 }
 
 // ---- CDF chart (single-point sweep) ---------------------------------
