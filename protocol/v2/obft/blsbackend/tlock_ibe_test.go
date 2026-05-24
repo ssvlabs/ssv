@@ -22,7 +22,7 @@ import (
 //
 // If this round-trip works, no separate IBE DKG is needed: existing SSV
 // operator shares can serve both validator-output signing AND IBE-tag
-// signing. See docs/IBE-INTEGRATION.md.
+// signing.
 
 // kyberSignTag returns a kyber partial sig from operator `id` over `tag`,
 // using a freshly-constructed share-bound KyberSigner.

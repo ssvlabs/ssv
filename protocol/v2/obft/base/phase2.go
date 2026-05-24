@@ -938,7 +938,7 @@ func (i *Instance) chosenVAtLayer(layer int) (Value, bool) {
 //
 // IBE shares fallback (Option A vs Option B): when ibePubKeyShares is nil,
 // we fall back to pubKeyShares (the V-keypair shares). This is the Option A
-// integration documented in docs/IBE-INTEGRATION.md — the validator's
+// integration — the validator's
 // V-keypair shares double as IBE shares with cryptographic separation
 // achieved via distinct domain-separation tags (DSTs) in the BLS primitive
 // rather than a separate IBE keypair. Spec §Setting describes the threshold

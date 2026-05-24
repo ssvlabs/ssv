@@ -30,7 +30,7 @@ import (
 // cryptographically independent (cross-protocol secure), but Lagrange
 // interpolation over kyber-format partial sigs from 2f+1 operators yields
 // a valid full BLS signature usable as a tlock IBE decryption key — without
-// any new DKG ceremony. See docs/IBE-INTEGRATION.md.
+// any new DKG ceremony.
 
 // HerumiSecretShareSize is the number of bytes herumi's bls.SecretKey.Serialize()
 // produces for a BLS12-381 share. (BLS12-381 scalar field is ~256 bits; 32 bytes.)

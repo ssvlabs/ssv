@@ -26,18 +26,18 @@ import (
 //   - Option A (default): the validator's existing herumi BLS share
 //     serves as the IBE source via the DST trick. KyberSigner consumes
 //     the validator share bytes; ClusterPubKey is the validator
-//     pubkey. No DKG runs; IBEPubKeyShares is nil (Phase E5
+//     pubkey. No DKG runs; IBEPubKeyShares is nil (per-operator NR
 //     verification is not applicable — there's no separate IBE
 //     polynomial to evaluate per operator).
 //   - Option B: the cluster's per-DKG IBE share material established
-//     by the orchestrator (Phases E1-E2). KyberSigner consumes the
+//     by the orchestrator. KyberSigner consumes the
 //     IBE share; ClusterPubKey is the cluster IBE pubkey;
 //     IBEPubKeyShares is computed from polyCommits for observe-time
 //     verification.
 //
 // Returns (nil, nil) if the signer does not expose the share material
-// the active mode requires (typical for remote-signing setups; FW1 in
-// docs/TBFT-DKG-TASKS.md). The caller skips the proposer runner.
+// the active mode requires (typical for remote-signing setups). The
+// caller skips the proposer runner.
 //
 // Returns a non-nil error only on Controller construction failure
 // (malformed inputs, etc.).
@@ -144,7 +144,7 @@ func buildOBFTControllerForProposer(
 		opts.IBEPubKeyShares = ibePubKeyShares
 	} else {
 		// Option A: validator share doubles as IBE share via the DST
-		// trick (docs/IBE-INTEGRATION.md). The validator pubkey is the
+		// trick. The validator pubkey is the
 		// IBE trust anchor; per-NR-partial verification is not wired
 		// up (no separate IBE polynomial to evaluate).
 		opts.ClusterPubKey = append([]byte(nil), ssvShare.ValidatorPubKey[:]...)

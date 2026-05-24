@@ -35,9 +35,9 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	ct.AssertNoRefloodToPublisher(t, out.Trace)
 }
 
-// TestAdapter_OpportunisticDecisionTime — Phase 1 of the
-// OBFT-OPPORTUNISTIC-PHASE3 plan, mirrored for 2abOBFT. Asserts the
-// observer-mode metric is active: under DeliveryDirect at BTT=200ms
+// TestAdapter_OpportunisticDecisionTime is the 2abOBFT sibling of the
+// bare-OBFT test; asserts the observer-mode metric is active: under
+// DeliveryDirect at BTT=200ms
 // (ConstantDelay), σ-quorum at L_0 reaches via the KindValue-arrival
 // observer path at TPhase2a + 1·BTT (KindValue carries the σ
 // partial directly).

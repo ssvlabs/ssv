@@ -80,8 +80,7 @@ type BeaconSigner interface {
 // ShareBytesProvider is implemented by signers that can hand back the
 // raw BLS share bytes for a given pubkey. Used by callers that need the
 // share material for non-Eth2 BLS operations under the DST-trick
-// approach (e.g. TBFT's IBE-tag KyberSigner — see the IBE-INTEGRATION
-// doc).
+// approach (e.g. TBFT's IBE-tag KyberSigner).
 //
 // Only LocalKeyManager implements this. RemoteKeyManager intentionally
 // does not — share material never leaves the remote signer in that

@@ -72,7 +72,7 @@ type LocalKeyManager struct {
 	// scalar the operator's share corresponds to. Populated at AddShare
 	// time, cleared at RemoveShare time. Used by callers that need the
 	// share material for non-Eth2 BLS operations under the DST-trick
-	// approach (TBFT's KyberSigner, see docs/IBE-INTEGRATION.md).
+	// approach (TBFT's KyberSigner).
 	//
 	// Local-mode-only — RemoteKeyManager keeps shares behind ssv-signer
 	// and does not implement ShareBytesProvider.

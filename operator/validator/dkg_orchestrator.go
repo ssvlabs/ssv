@@ -27,12 +27,12 @@ import (
 // persists the resulting IBE share bytes to the operator's
 // `LocalKeyManager` on success.
 //
-// Lifecycle (see docs/TBFT-DKG-TASKS.md Phase E):
+// Lifecycle:
 //
 //   - The Controller constructs one DKGOrchestrator per node at startup.
 //   - On startup and on `ValidatorAdded` events for own-validator shares,
 //     EnsureClusterIBE is called for the cluster. It is synchronous —
-//     duties don't proceed until DKG completes (per D7).
+//     duties don't proceed until DKG completes.
 //   - Inbound `SSVDKGMsgType` messages are routed via Receive, which
 //     looks up the right Transport by the envelope's clusterID and
 //     delivers the bytes.
@@ -128,10 +128,10 @@ func NewDKGOrchestrator(opts DKGOrchestratorOptions) (*DKGOrchestrator, error) {
 //
 // `committee` is the cluster's full operator-ID list; `threshold` is
 // computed from len(committee) per the protocol's `qEnc = 2f+1` rule
-// (see docs/TBFT.md "Why it's safe" — unified threshold for cryptographic
-// safety against byzantine cross-signing).
+// (a unified threshold for cryptographic safety against byzantine
+// cross-signing).
 // `generation` is the per-cluster monotonic counter (0 for fresh DKG;
-// reconfig in Phase F bumps it).
+// reconfig bumps it).
 func (o *DKGOrchestrator) EnsureClusterIBE(
 	ctx context.Context,
 	clusterID [32]byte,
@@ -352,8 +352,8 @@ func serializeDistKeyShare(s *kyber_dkg.DistKeyShare) (shareBytes, pubKeyBytes [
 // ibeThresholdForCommitteeSize returns qEnc = 2f+1 where n = 3f+1. SSV
 // committees are sized at n ∈ {4, 7, 10, 13}; this maps each to the
 // expected IBE threshold (3, 5, 7, 9). Matches qV (the V-keypair
-// threshold) per docs/TBFT.md "Why it's safe" — the unified threshold
-// gives cryptographic safety against byzantine cross-signing. The IBE
+// threshold) — the unified threshold gives cryptographic safety against
+// byzantine cross-signing. The IBE
 // keypair is still distinct from the V-keypair (different DST / signing
 // backend), only the threshold value coincides.
 func ibeThresholdForCommitteeSize(n int) int {

@@ -28,9 +28,9 @@ import (
 // The decryption key TLockIBE expects (the `key []byte` argument to
 // `Decrypt`) is a serialized kyber G2 point — the aggregated BLS
 // signature on the IBE tag, produced by `KyberSigner.AggregatePartials`
-// over 2f+1 partial sigs. Under Option A's "DST trick" (see
-// docs/IBE-INTEGRATION.md), those partial sigs come from operators'
-// existing herumi validator shares, reinterpreted as kyber scalars.
+// over 2f+1 partial sigs. Under Option A's "DST trick", those partial
+// sigs come from operators' existing herumi validator shares,
+// reinterpreted as kyber scalars.
 //
 // The cluster-pubkey TLockIBE expects (the `clusterPubKey []byte`
 // argument to `Encrypt`) is the validator's herumi-format G1 pubkey

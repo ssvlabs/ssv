@@ -31,7 +31,7 @@ func TestMeshArrival_NoRefloodToPublisher(t *testing.T) {
 	ct.AssertNoRefloodToPublisher(t, out.Trace)
 }
 
-// TestMeshGossip_SmokeOBFT exercises the Phase B gossip layer on top
+// TestMeshGossip_SmokeOBFT exercises the gossip layer on top
 // of the existing healthy-mesh path: gossip enabled with SSV defaults
 // (700ms heartbeat, 4-slot IHAVE window, etc.), TraceEnabled so the
 // gossip events show up in out.Trace, and we assert the run still
@@ -166,7 +166,7 @@ func TestRecovery_PeerVOnHV1(t *testing.T) {
 // sees — no framework-vs-production divergence.
 func TestRecovery_PeerVOnHV1_DegradedBTT(t *testing.T) {
 	// Operational SSV BTT envelope: 100ms (LAN-fast) to 600ms (degraded
-	// WAN). The §6 plan question explicitly calls out BTT=600ms.
+	// WAN).
 	for _, btt := range []time.Duration{
 		100 * time.Millisecond,
 		200 * time.Millisecond,
@@ -196,7 +196,7 @@ func TestRecovery_PeerVOnHV1_DegradedBTT(t *testing.T) {
 // cluster's PerOperatorIn metric must not accumulate any bytes against
 // OperatorID(0). The sentinel-0 receiver was previously created by
 // charging relay-bound bytes through Emission, polluting the per-op
-// inbound histogram. Phase B's EmissionToRelay split fixed that;
+// inbound histogram. The EmissionToRelay split fixed that;
 // pin the contract here.
 func TestMeshBandwidth_NoPhantomRelayOperator(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
@@ -213,7 +213,7 @@ func TestMeshBandwidth_NoPhantomRelayOperator(t *testing.T) {
 	}
 }
 
-// TestCalibration_MeshVsDirect_Healthy_OBFT validates Phase B's
+// TestCalibration_MeshVsDirect_Healthy_OBFT validates the
 // calibration anchor: the default HopDelay = LogNormal{Median: BTT/3,
 // Sigma: 0.3} lands mesh-mode Healthy at the same OBFT outcome class
 // (decided at L_0) as direct-mode Healthy, with mesh-mode wire
@@ -265,7 +265,7 @@ func TestCalibration_MeshVsDirect_Healthy_OBFT(t *testing.T) {
 // TestAdapter_HealthyMesh_N4 runs the healthy path through the mesh
 // transport (4 cluster ops + 4 forward-only relays). Asserts the sim
 // decides at L_0 just like direct-mode healthy — the mesh transport is
-// transparent to the protocol layer, and Phase A's calibration target
+// transparent to the protocol layer, and the calibration target
 // is that mesh-mode Healthy lands roughly at the same outcome as direct
 // mode at n=4. Tight tolerance not required here; we just need to
 // confirm propagation works end-to-end through the mesh.
@@ -281,9 +281,9 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 		Seed:         1,
 		Delivery:     ct.DeliveryMesh,
 		Mesh: ct.MeshConfig{
-			// Phase A picks BTT/3 as the working calibration anchor
+			// BTT/3 is the working calibration anchor
 			// (mesh-as-realism: 2-hop typical at n=4 + 4 relays gives
-			// cluster-wide P99 ≈ direct-mode BTT). Phase B will tune.
+			// cluster-wide P99 ≈ direct-mode BTT).
 			HopDelay: ct.LogNormalDelay{Median: btt / 3, Sigma: 0.3},
 		},
 	}
@@ -297,9 +297,7 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 	t.Logf("mesh-mode healthy: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
 }
 
-// TestAdapter_OpportunisticDecisionTime — Phase 1 of the
-// OBFT-OPPORTUNISTIC-PHASE3 plan, updated for the L0Ready-driven event-
-// driven commit emit framework upgrade. Asserts the observer-mode metric
+// TestAdapter_OpportunisticDecisionTime asserts the observer-mode metric
 // is active AND that commits fire on L0Ready close (not at T_commit):
 // under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum at L_0
 // reaches at FetchAt[0] + 2·BTT = 3550ms (was 3800ms = T_commit + 1·BTT
@@ -328,15 +326,11 @@ func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 			"(was 3800ms under sync-at-T_commit emit; was schedule-anchored 3850ms pre-observer)")
 }
 
-// TestAdapter_OpportunisticDecisionTime_Fallthrough is the OBFT-
-// OPPORTUNISTIC-PHASE3 plan's "FallbackToScheduleAnchor" test, adapted to
-// the observer-mode implementation. The plan was written before observer-
-// mode landed and expected DecisionTime to fall back to
-// `RoundEndOffset + 1·Epsilon3` in fall-through cases. Under observer-
-// mode, the cumulative pool reaches the L_1 σ-quorum at the commit-
-// arrival moment too — Resolve walks L_0 (NR-quorum from honest+silent-
-// leader NR partials) → L_1 (σ-quorum from honest σ partials) inline on
-// every arrival.
+// TestAdapter_OpportunisticDecisionTime_Fallthrough covers the fall-through
+// case under observer-mode: the cumulative pool reaches the L_1 σ-quorum at
+// the commit-arrival moment — Resolve walks L_0 (NR-quorum from honest+
+// silent-leader NR partials) → L_1 (σ-quorum from honest σ partials) inline
+// on every arrival.
 //
 // What this test pins: the fall-through DecisionTime is T_commit +
 // 1·BTT + 1·Epsilon3 (commit-arrival + one-layer-walk cost), NOT the
@@ -375,9 +369,8 @@ func TestAdapter_OpportunisticDecisionTime_Fallthrough(t *testing.T) {
 }
 
 // TestAdapter_HealthyAtClusterSizes verifies the adapter runs healthy at
-// every SSV-supported cluster size (n=4,7,10,13). Phase 1 plumbs cfg.K /
-// cfg.BroadcastBudget / cfg.FetchAt through the adapter; n != 4 was previously
-// untested.
+// every SSV-supported cluster size (n=4,7,10,13), plumbing cfg.K /
+// cfg.BroadcastBudget / cfg.FetchAt through the adapter.
 func TestAdapter_HealthyAtClusterSizes(t *testing.T) {
 	btt := 200 * time.Millisecond
 	for _, n := range ct.ClusterSizes {

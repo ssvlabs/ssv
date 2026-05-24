@@ -132,7 +132,7 @@ func TestWrapBaselineForInstability_PreservesHealthyMeshSettings(t *testing.T) {
 }
 
 // TestMeshHealthy_RespondsToInstability — the instability wrap should
-// degrade mesh-mode Healthy as the level rises. Phase B/C's plan calls
+// degrade mesh-mode Healthy as the level rises. The tuning target calls
 // for high → 10-30% drop and extreme → 0-30% success range. We assert a
 // much looser inequality (level=extreme has lower success rate than
 // level=none) to avoid pinning specific tuning numbers, but a

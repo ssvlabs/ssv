@@ -147,10 +147,9 @@ type Controller struct {
 	messageValidator     validation.MessageValidator
 
 	// dkgOrchestrator drives Pedersen DKG ceremonies for clusters this
-	// operator participates in (TBFT Option B; see
-	// docs/TBFT-DKG-TASKS.md). nil for remote-signer setups whose
-	// BeaconSigner doesn't expose IBE share storage — those operators
-	// continue to run without a OBFT proposer runner (FW1).
+	// operator participates in (TBFT Option B). nil for remote-signer
+	// setups whose BeaconSigner doesn't expose IBE share storage — those
+	// operators continue to run without a OBFT proposer runner.
 	dkgOrchestrator *DKGOrchestrator
 
 	// committeesObservers is a cache of initialized committeeObserver instances
@@ -272,7 +271,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	// as the IBE source via the DST trick — no DKG runs, no orchestrator
 	// is needed. Option B additionally requires that the local
 	// BeaconSigner exposes IBE share storage (LocalKeyManager); remote-
-	// signer setups don't yet support that (FW1 in docs/TBFT-DKG-TASKS.md).
+	// signer setups don't yet support that.
 	if IBEUseOptionB {
 		if store, ok := options.BeaconSigner.(ibeShareStore); ok {
 			dkgOrch, err := NewDKGOrchestrator(DKGOrchestratorOptions{
@@ -762,7 +761,7 @@ func (c *Controller) onShareStop(pubKey spectypes.ValidatorPK) {
 			}
 			// Last validator for this committee is gone — clean up the
 			// orphaned IBE share so a future cluster with the same
-			// committee composition starts a fresh DKG (Phase F1).
+			// committee composition starts a fresh DKG.
 			if c.dkgOrchestrator != nil {
 				if err := c.dkgOrchestrator.RemoveClusterIBE(v.Share.CommitteeID()); err != nil {
 					c.logger.Warn("could not remove orphaned IBE share",
@@ -787,9 +786,9 @@ func (c *Controller) onShareInit(share *ssvtypes.SSVShare) (v *validator.Validat
 	}
 
 	// Ensure the cluster's IBE share is established before any runner is
-	// constructed (OBFT proposer runner depends on it). Per
-	// docs/TBFT-DKG-TASKS.md D7, this blocks duties for the share until
-	// DKG completes. Idempotent: returns immediately if a share is
+	// constructed (OBFT proposer runner depends on it). This blocks duties
+	// for the share until DKG completes. Idempotent: returns immediately
+	// if a share is
 	// already persisted for this cluster. Skipped when the orchestrator
 	// is unavailable (remote-signer setup) — the proposer runner is
 	// silently skipped downstream in that case.

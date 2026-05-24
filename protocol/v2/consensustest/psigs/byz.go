@@ -31,8 +31,7 @@ type internalByz interface {
 // PSigs-side analog. Those patterns return ErrNotApplicable so the
 // catalog cell renders n/a.
 //
-// Supported patterns (per the OBFT-OPPORTUNISTIC-PHASE3 plan's minimal
-// mapping):
+// Supported patterns (a minimal mapping):
 //   - ByzNone — honest baseline.
 //   - ByzSigmaRefusal — byz never signs (witnesses the cluster losing
 //     one of its 2f+1 partial-sig sources).

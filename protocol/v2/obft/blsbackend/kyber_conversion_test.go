@@ -11,7 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
-// The DST-trick approach (see docs/IBE-INTEGRATION.md) hinges on byte-format
+// The DST-trick approach hinges on byte-format
 // compatibility between herumi/bls-eth-go-binary and kyber-bls12381 for:
 //
 //   1. BLS12-381 scalars (32 bytes, big-endian) — for sharing operator

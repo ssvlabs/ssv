@@ -16,7 +16,7 @@ import (
 // share with both signers, producing signatures with different DSTs
 // (Eth2 DST via herumi, drand's NUL DST via kyber).
 //
-// This is the "DST-trick" approach (see docs/IBE-INTEGRATION.md): the
+// This is the "DST-trick" approach: the
 // herumi-generated validator share serves both validator-output signing
 // and IBE-tag signing. No separate DKG is required.
 //

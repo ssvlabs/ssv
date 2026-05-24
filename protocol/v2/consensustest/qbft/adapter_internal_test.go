@@ -9,7 +9,7 @@ import (
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
 )
 
-// TestRun_PostConsensusQuorumMiss — Phase C regression test: at n=4 with
+// TestRun_PostConsensusQuorumMiss — a regression test: at n=4 with
 // f+1=2 slow receivers (op2, op3 at 3·BTT inbound delay), consensus on the
 // fast subset (op1, op4) completes but the cluster can't accumulate 2f+1
 // post-consensus partial sigs in time because the slow ops never decide
@@ -20,7 +20,7 @@ import (
 //     consensus-decided locally (op1, op4)
 //   - per-op Err = "did not decide before sim end" for the slow ops (op2, op3)
 //
-// Pins the Phase C semantic ("DecisionTime = earliest 2f+1 partial sigs",
+// Pins the semantic ("DecisionTime = earliest 2f+1 partial sigs",
 // not "any op consensus-decided + fixed PhaseBudget").
 //
 // The fast/slow split needs a round timeout between the fast ops'

@@ -11,9 +11,9 @@ import (
 )
 
 // validateDKGMessage applies the minimum sanity checks to a DKG-ceremony
-// envelope carried in `signedSSVMessage.Data`. Per docs/TBFT-DKG-TASKS.md
-// (Phase E), envelope decoding is deferred to the per-cluster
-// orchestrator (which owns the kyber suite); this function only enforces:
+// envelope carried in `signedSSVMessage.Data`. Envelope decoding is
+// deferred to the per-cluster orchestrator (which owns the kyber suite);
+// this function only enforces:
 //
 //   - The envelope is non-empty.
 //   - Sender count == 1 (DKG envelopes are operator-signed, single signer).

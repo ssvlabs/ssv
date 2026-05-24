@@ -323,10 +323,10 @@ func (c *Coordinator) pumpInbox(ctx context.Context, board *kyberBoard) {
 	}
 }
 
-// deriveNonce produces the 32-byte ceremony nonce per D5 of
-// docs/TBFT-DKG-TASKS.md: H(clusterID || generation). All operators in
-// the same cluster ceremony compute the same nonce; cross-cluster and
-// cross-generation replay is structurally prevented.
+// deriveNonce produces the 32-byte ceremony nonce as H(clusterID ||
+// generation). All operators in the same cluster ceremony compute the
+// same nonce; cross-cluster and cross-generation replay is structurally
+// prevented.
 func deriveNonce(clusterID [32]byte, generation uint64) []byte {
 	h := sha256.New()
 	h.Write(clusterID[:])

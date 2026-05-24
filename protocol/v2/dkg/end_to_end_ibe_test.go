@@ -13,7 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
-// TestEndToEnd_DKGOutput_TLockIBE — the Phase G1 capstone. Proves that
+// TestEndToEnd_DKGOutput_TLockIBE — the end-to-end capstone. Proves that
 // the OBFT-IBE Option-B pipeline works end-to-end with a DKG-derived IBE
 // keypair:
 //

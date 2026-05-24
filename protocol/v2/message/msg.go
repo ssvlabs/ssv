@@ -25,7 +25,7 @@ const (
 	// SSVDKGMsgType carries OBFT-IBE DKG ceremony envelopes (Exchange /
 	// Deal / Response / Justification, see protocol/v2/dkg/wire) inside
 	// a SignedSSVMessage. Used once-per-cluster-lifetime to establish
-	// the IBE keypair under Option B (see docs/TBFT-DKG-TASKS.md).
+	// the IBE keypair under Option B.
 	//
 	// PLACEHOLDER VALUE: 0xF1 (= 241). Same mainnet-allocation caveat as
 	// SSVOBFTMsgType.

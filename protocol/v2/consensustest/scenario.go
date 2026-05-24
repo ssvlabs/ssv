@@ -18,7 +18,7 @@ type Scenario struct {
 	// Modes lists the tiers this scenario participates in. An empty slice
 	// is treated as {ModeStress} for back-compat — every Catalog scenario
 	// is currently a stress contributor; correctness opt-ins are filled in
-	// during the per-scenario audit (Phase 2 of the split plan).
+	// during the per-scenario audit.
 	Modes []Mode
 
 	// Delivery selects the transport model for this scenario. Default

@@ -138,7 +138,7 @@ func (s *sim) recordDecided(op spectypes.OperatorID, round specqbft.Round, value
 	// SSV's QBFT-then-post-consensus model: every honest operator that
 	// reaches Decided broadcasts one PartialSignatureMessage on the
 	// decided value so the cluster can aggregate the full validator
-	// signature. Phase C models this as real events through the same
+	// signature. The sim models this as real events through the same
 	// broadcast transport (mesh or direct per cfg.Delivery); 2f+1
 	// distinct partials at any receiver mark that receiver as "ready
 	// to submit" via recordPartialSig.

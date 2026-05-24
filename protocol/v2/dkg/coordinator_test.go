@@ -17,9 +17,8 @@ import (
 )
 
 // inMemBus is a synthetic broadcast bus that fans out each operator's
-// outbound bytes to every other operator's inbox. Used by Phase B unit
-// tests; production wires SSV's P2P broadcaster behind the Transport
-// interface in Phase C.
+// outbound bytes to every other operator's inbox. Used by unit tests;
+// production wires SSV's P2P broadcaster behind the Transport interface.
 type inMemBus struct {
 	mu      sync.Mutex
 	inboxes map[uint64]chan []byte
@@ -309,7 +308,7 @@ func TestCoordinator_DKGOutput_KyberSignerRoundTrip(t *testing.T) {
 	require.Len(t, results, len(committee))
 
 	// Each operator's KyberSigner consumes the marshaled Share.V bytes —
-	// the same shape Phase E3's setup_obft.go would produce from the
+	// the same shape setup_obft.go would produce from the
 	// IBEShareWriter persistence. Sign a fixed test tag with each
 	// operator and aggregate any threshold-sized subset.
 	tag := []byte("dkg-roundtrip-tag/v1")

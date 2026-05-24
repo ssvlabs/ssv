@@ -1,6 +1,5 @@
-// Package wire provides the on-wire format for SSV.s OBFT-IBE DKG ceremony
-// messages. The DKG ceremony is described in docs/TBFT-DKG-TASKS.md; this
-// package covers Phase A2 (wire format) of that plan.
+// Package wire provides the on-wire format for SSV's OBFT-IBE DKG ceremony
+// messages.
 //
 // The envelope is a thin discriminated wrapper that lets a single byte
 // stream carry any of the four DKG-ceremony message kinds (Exchange, Deal,

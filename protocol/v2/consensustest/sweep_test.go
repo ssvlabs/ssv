@@ -553,8 +553,8 @@ func TestSweep_MultiByz_n7(t *testing.T) {
 	t.Run("OBFT", func(t *testing.T) {
 		out, err := obftadapter.Protocol{}.Run(cfg)
 		require.NoError(t, err)
-		// Observer-mode Resolve (Phase 1 of OBFT-OPPORTUNISTIC-PHASE3
-		// plan): at BTT=200ms commits arrive at T_commit + 1·BTT =
+		// Observer-mode Resolve: at BTT=200ms commits arrive at
+		// T_commit + 1·BTT =
 		// 3600ms; the L_2 fall-through walk completes at 3600 + 2·ε_3 =
 		// 3700ms, comfortably inside the 3900ms submit deadline.
 		// Pre-observer-mode this same configuration missed (Resolve

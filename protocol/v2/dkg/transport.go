@@ -3,7 +3,7 @@ package dkg
 // Transport is the message-passing channel the Coordinator uses to talk
 // to peers in the cluster during a DKG ceremony.
 //
-// Production wires SSV's P2P broadcaster behind this in Phase C. Tests
+// Production wires SSV's P2P broadcaster behind this. Tests
 // use an in-memory fan-out implementation.
 //
 // The transport handles raw envelope bytes; envelope parsing

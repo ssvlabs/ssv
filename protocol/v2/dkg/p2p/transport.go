@@ -2,7 +2,7 @@
 // One instance per active DKG ceremony (clusterID + generation): outbound
 // envelope bytes are wrapped in a signed SignedSSVMessage and broadcast
 // via SSV's existing pubsub layer; inbound bytes are pushed in via Deliver
-// (called by the per-node dispatcher in Phase E).
+// (called by the per-node dispatcher).
 //
 // MsgID design choice: DKG is per-committee, not per-validator, but P2P
 // subnet routing in SSV is per-validator-pubkey. Callers therefore supply
@@ -104,7 +104,7 @@ func (t *Transport) Inbox() <-chan []byte {
 }
 
 // Deliver pushes `envelope` into the inbox. Called by the per-node
-// DKG dispatcher (Phase E) after it has identified that the envelope's
+// DKG dispatcher after it has identified that the envelope's
 // clusterID matches this Transport's ceremony.
 //
 // Returns an error if the inbox is full — callers may drop or backoff.

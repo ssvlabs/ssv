@@ -4,9 +4,7 @@ import "errors"
 
 // ibe_share_storage.go declares the interfaces, on-disk record shape, and
 // storage schema for per-cluster IBE share material used by the TBFT
-// proposer-duty path under Option B. See docs/TBFT-DKG-TASKS.md (Phase D)
-// for the full plan; the design stub landed in Phase A3 and the
-// implementation now lives alongside.
+// proposer-duty path under Option B.
 //
 // Why this lives in ssvsigner/ekm:
 //
@@ -35,8 +33,7 @@ var ErrIBEShareNotFound = errors.New("ekm: ibe share not found for cluster")
 
 // ErrIBEShareNotImplemented is returned by signer implementations that do
 // not support IBE-share storage. RemoteKeyManager returns this until the
-// ssv-signer / Web3Signer drand-DST extension lands (tracked as FW1 in
-// docs/TBFT-DKG-TASKS.md).
+// ssv-signer / Web3Signer drand-DST extension lands.
 var ErrIBEShareNotImplemented = errors.New("ekm: ibe share storage not implemented for this signer")
 
 // IBEShareBytesProvider is implemented by signers that can return the
@@ -57,13 +54,13 @@ type IBEShareBytesProvider interface {
 	// for the cluster's IBE keypair (one G1 point per coefficient,
 	// threshold = f+1 entries). polyCommits[0] equals GetClusterIBEPubKey.
 	// Used to derive each operator's IBE-share pubkey in-protocol when
-	// per-NR-partial verification is enabled (see Phase E5).
+	// per-NR-partial verification is enabled.
 	GetClusterIBEPolyCommits(clusterID [32]byte) ([][]byte, error)
 }
 
 // IBEShareWriter is implemented by signers that can persist IBE share
 // material produced by a successful DKG ceremony. Single atomic write at
-// FinishPhase per docs/TBFT-DKG-TASKS.md D9; mid-DKG state is intentionally
+// FinishPhase; mid-DKG state is intentionally
 // not persisted.
 type IBEShareWriter interface {
 	// AddIBEShare persists the share material for (clusterID, generation).

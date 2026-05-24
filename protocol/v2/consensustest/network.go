@@ -300,7 +300,7 @@ func (c ClockSkewedNetwork) SlowOpAnchor() time.Duration { return c.Inner.SlowOp
 //
 // CALIBRATE: Median should match observed SSV mainnet propagation P50 per
 // message kind (proposer-duty leader broadcast P50 ≈ 100ms based on community
-// telemetry; not size-aware in this model — see SizedDelay note in plan).
+// telemetry; not size-aware in this model).
 // Sigma should be fit from the observed P99/P50 ratio in the same telemetry.
 //
 // Stateless; safe to share across sims. Determinism preserved via the

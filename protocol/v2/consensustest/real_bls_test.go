@@ -17,7 +17,7 @@
 // here just confirm the cross-protocol matrix holds with the OBFT-side
 // crypto upgrade.
 //
-// First-iteration coverage: single-sim per (n, K, scenario) cell. The plan's
+// First-iteration coverage: single-sim per (n, K, scenario) cell. A
 // 40/30/20/10 n-distribution and ~6000-sim deep sweep are aspirational —
 // current ~17s wall time leaves room to scale up later by adding seed sweeps,
 // network-jitter variation, and additional byz patterns.

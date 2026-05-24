@@ -1,11 +1,10 @@
 // Package dkg implements the Pedersen DKG ceremony between SSV cluster
 // operators that produces a per-cluster threshold IBE keypair for use by
-// the TBFT proposer-duty path under Option B. See docs/TBFT-DKG-TASKS.md
-// for the design and phasing.
+// the TBFT proposer-duty path under Option B.
 //
 // This package is intentionally independent of the SSV transport. The
 // Coordinator type talks to peers through an injected Transport
-// interface; production hooks SSV's P2P broadcaster behind it (Phase C),
+// interface; production hooks SSV's P2P broadcaster behind it,
 // while tests use a synthetic in-memory transport.
 package dkg
 

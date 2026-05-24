@@ -40,10 +40,8 @@ const (
 )
 
 // ProposerRunner runs the proposer duty using an OBFT-family protocol for
-// consensus (bare OBFT or 2abOBFT, selected per cluster). The QBFT path was
-// removed in favor of OBFT exclusively (see docs/OBFT.md +
-// docs/IBE-INTEGRATION.md). Construction requires exactly one of OBFTController
-// or TwoabController.
+// consensus (bare OBFT or 2abOBFT, selected per cluster; see docs/OBFT.md).
+// Construction requires exactly one of OBFTController or TwoabController.
 //
 // The two variants share all beacon-side lifecycle hooks (FetchCandidate /
 // HostValidate / SubmitOutput / OnMissedSlot) — those operate on the shared
@@ -126,7 +124,7 @@ type ProposerRunnerOptions struct {
 	// OBFTController owns the cluster's bare-OBFT primitives (BLSSigner for
 	// value-signing, KyberSigner for IBE-tag signing under the DST-trick
 	// approach, TLockIBE for layer encryption, plus the pubkey-shares map and
-	// committee). See docs/IBE-INTEGRATION.md and protocol/v2/ssv/runner/obft.
+	// committee). See protocol/v2/ssv/runner/obft.
 	//
 	// Exactly one of OBFTController / TwoabController must be set: the non-nil
 	// one selects the runner's consensus variant. NewProposerRunner errors if
