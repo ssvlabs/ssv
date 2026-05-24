@@ -165,9 +165,14 @@ consensustest-with-real-bls:
 #   - While running, a live progress display is drawn to the terminal: one bar
 #     per protocol (each aggregating all of that protocol's runs) under a
 #     centered overall header, stretched to the terminal width and redrawn in
-#     place. The total sim count is computed up front, so the percentages are
-#     run-wide, not per-sweep. When the output isn't a terminal (CI / piped) it
-#     falls back to a periodic one-line summary.
+#     place. The block always fits the terminal so the in-place redraw stays
+#     exact (otherwise it can't reach scrolled-off / wrapped lines and stacks a
+#     fresh copy each tick): if the protocol set is taller than the window, the
+#     rows that don't fit collapse into a single "+N more" aggregate line, and on
+#     a window too narrow for even one bar it shows just the header line. The
+#     total sim count is computed up front, so the percentages are run-wide, not
+#     per-sweep. When the output isn't a terminal (CI / piped) it falls back to a
+#     periodic one-line summary.
 #   - Interrupting the run (Ctrl-C / SIGINT) stops gracefully: it abandons the
 #     in-progress batch, writes the results computed so far to data.js, and
 #     exits — so a long run can be cut short without losing completed data. A
