@@ -73,6 +73,16 @@ const PROTOCOL_NOTES = {
 // BFT_start — the chart axis is absolute slot time.
 const SLOT_END_MS = 4000;
 
+// SUBMIT_DEADLINE_MS is the latest a decision can land and still be
+// submittable: the relay cutoff minus the header-submit headroom. Mirrors
+// the Go sim's deadline (RelayCutoff − HeaderSubmitHeadroom = 4000 − 100),
+// which is what the native adapters clip "ready to submit, past the submit
+// deadline" against. The post-hoc BFT_start shift (shiftCell) uses the SAME
+// cutoff so a shifted-out decider is treated identically to a natively-late
+// one — not the looser slot-end edge.
+const HEADER_SUBMIT_HEADROOM_MS = 100;
+const SUBMIT_DEADLINE_MS = SLOT_END_MS - HEADER_SUBMIT_HEADROOM_MS;
+
 // BFT_STARTS is the fixed set of "BFT pipeline begins at" offsets the
 // picker offers. It is NOT a sweep axis — the sweep runs only at
 // BFT_start=0 and every other value is derived in the UI. The chart
@@ -971,17 +981,6 @@ function renderConditionsSection(data) {
 const GROUP_READY_DEPTH_0 = 'Cluster ready to submit (at layer 0 / round 1), past the submit deadline';
 const GROUP_READY_DEPTH_1 = 'Cluster ready to submit (at layer 1 / round 2), past the submit deadline';
 const GROUP_READY_DEPTH_2P = 'Cluster ready to submit (at layer 2+ / round 3+), past the submit deadline';
-// GROUP_PIPELINE_OVERFLOW is a UI-synthesized row — no adapter emits it.
-// Pipeline-shift protocols (PSigs / QBFT family) are swept only at
-// BFT_start=0; the UI shifts decision times by +BFT_start post-hoc
-// (shiftCell). A sample that decided within-slot at BFT_start=0 but whose
-// decide_time + BFT_start exceeds the slot end is dropped from the shifted
-// success count — yet it carries no MissReason, because it was a success
-// in the BFT_start=0 sim. rebuildFailureBreakdown reconstructs this row
-// from the shift's drop so the table reconciles with the CDF chart's
-// shifted success rate. Only ever non-zero for pipeline-shift protocols at
-// BFT_start > 0; the count falls out as deciders − survivors (0 otherwise).
-const GROUP_PIPELINE_OVERFLOW = 'Decided, but pipeline shift pushed submission past slot end';
 function canonicalizeMissReason(reason) {
   if (reason === 'Cluster ready to submit, past the submit deadline') {
     return GROUP_READY_DEPTH_0;
@@ -1013,7 +1012,6 @@ const FAILURE_TOP_ORDER = [
   GROUP_READY_DEPTH_0,
   GROUP_READY_DEPTH_1,
   GROUP_READY_DEPTH_2P,
-  GROUP_PIPELINE_OVERFLOW,
 ];
 const FAILURE_BOTTOM_ORDER = [
   'Cluster never reached consensus before slot end',
@@ -1052,10 +1050,12 @@ function sortFailureReasons(reasons, totals) {
 // BFT_start-aware view as the CDF chart above
 // (shiftedCell(findBaselineCellForScenario(...))): OBFT-family rows come
 // from the selected BFT_start's real sim cell, pipeline-shift rows from
-// the shifted BFT_start=0 cell — plus a synthesized GROUP_PIPELINE_OVERFLOW
-// row capturing shift-induced misses that carry no adapter MissReason (see
-// that const). This keeps the table's totals reconciled with the chart's
-// shifted success rate at every BFT_start.
+// the shifted BFT_start=0 cell. Shift-induced misses (deciders whose
+// shifted submission lands past the submit deadline) carry no adapter
+// MissReason, so they're folded into the "ready to submit, past the submit
+// deadline" bucket — the same outcome as a natively-late decision. This
+// keeps the table's totals reconciled with the chart's shifted success rate
+// at every BFT_start.
 //
 // Cells where the protocol had zero failures of that reason render as
 // "—" rather than "0" so the eye catches active rows; cells where the
@@ -1073,10 +1073,11 @@ function rebuildFailureBreakdown(data) {
   // resolves OBFT-family to the matching pre-computed BFT_start cell and
   // pipeline-shift protocols to their BFT_start=0 cell; shiftedCell then
   // applies the post-hoc +BFT_start shift (a no-op for OBFT-family). The
-  // per-protocol overflow drop (deciders that no longer fit the slot once
-  // shifted) is captured here and surfaced as GROUP_PIPELINE_OVERFLOW —
-  // it is 0 for OBFT-family and for BFT_start=0, so the row only appears
-  // for pipeline-shift protocols at BFT_start > 0.
+  // per-protocol overflow drop (deciders that no longer fit the submit
+  // deadline once shifted) is captured here and folded into the
+  // ready-to-submit-past-deadline bucket below — it is 0 for OBFT-family and
+  // for BFT_start=0, so it only contributes for pipeline-shift protocols at
+  // BFT_start > 0.
   const cellByProtocol = {};
   const overflowByProtocol = {};
   for (const p of activeNames) {
@@ -1091,10 +1092,11 @@ function rebuildFailureBreakdown(data) {
   // Union of canonicalized reasons + per-protocol counts. Multiple raw
   // reasons may map to one canonical row (e.g. OBFT's "ready at layer
   // 0" + QBFT's "ready at round 1" both → GROUP_READY_DEPTH_0); counts
-  // are summed under the canonical key per protocol. The synthesized
-  // pipeline-overflow drop adds one more row for the protocols that have
-  // it (disjoint from the adapter misses: those never decided in-slot,
-  // the overflow ones decided in-slot at BFT_start=0 then shifted out).
+  // are summed under the canonical key per protocol. The pipeline-shift
+  // overflow drop folds into that same ready-to-submit-past-deadline bucket
+  // (it joins natively-late misses there: those decided late in-slot, the
+  // overflow ones decided in-slot at BFT_start=0 then shifted past the
+  // deadline — both are "decided, but too late to submit").
   const reasonTotals = {}; // canonical reason -> total count across active protocols
   const perCell = {};      // protocol -> canonical reason -> count
   let anyFailure = false;
@@ -1114,10 +1116,18 @@ function rebuildFailureBreakdown(data) {
     const overflow = overflowByProtocol[p] || 0;
     if (overflow > 0) {
       anyFailure = true;
-      perCell[p][GROUP_PIPELINE_OVERFLOW] =
-        (perCell[p][GROUP_PIPELINE_OVERFLOW] || 0) + overflow;
-      reasonTotals[GROUP_PIPELINE_OVERFLOW] =
-        (reasonTotals[GROUP_PIPELINE_OVERFLOW] || 0) + overflow;
+      // A pipeline-shift decider whose decide_time + BFT_start exceeds the
+      // submit deadline is, at the shifted BFT_start, the same outcome as a
+      // natively-late decision: "ready to submit, past the submit deadline".
+      // Fold it into that bucket rather than calling out the shift mechanism.
+      // We lack per-sample decision rounds for the dropped samples
+      // (decidedRounds is only a histogram), so the whole overflow lands in
+      // the round-1 / depth-0 bucket — exact for the common all-honest case
+      // (QBFT decides at round 1), an approximation when decisions span rounds.
+      perCell[p][GROUP_READY_DEPTH_0] =
+        (perCell[p][GROUP_READY_DEPTH_0] || 0) + overflow;
+      reasonTotals[GROUP_READY_DEPTH_0] =
+        (reasonTotals[GROUP_READY_DEPTH_0] || 0) + overflow;
     }
   }
   if (!anyFailure) return; // hide entirely when no failures to show
@@ -1183,8 +1193,9 @@ function layerColorClass(protocol, bucketKey) {
 // complementing the failure breakdown toward ~100%).
 // Reads decidedRounds (a depth→count histogram) from the UNSHIFTED base cell:
 // the round at which a decision was reached is shift-invariant — a later
-// BFT_start only clips deciders past the deadline (captured as overflow in
-// the failure breakdown), it doesn't change which layer/round decided. Color
+// BFT_start only clips deciders past the deadline (folded into "ready to
+// submit, past the submit deadline" in the failure breakdown), it doesn't
+// change which layer/round decided. Color
 // encodes MEV-density per family (see layerColorClass). Hidden when no active
 // protocol has decision data (all n/a / 0% success).
 function rebuildLayerBreakdown(data) {
@@ -1833,7 +1844,11 @@ function buildBFTStartPicker() {
 // family ONLY: those protocols' whole pipeline shifts with BFT_start
 // (one BFT_start=0 sim is equivalent to running at any BFT_start), so
 // the UI shifts post-hoc; the sample plots at decide_time + BFT_start
-// and fails when the shifted value overflows SLOT_END_MS. OBFT-family
+// and fails when the shifted value overflows SUBMIT_DEADLINE_MS (the
+// relay cutoff minus submit headroom — the same deadline the native
+// adapters clip "ready to submit, past the submit deadline" against, so a
+// shifted-out decider is bucketed identically to a natively-late one). The
+// sample still plots up to SLOT_END_MS on the absolute-time x-axis. OBFT-family
 // cells are handled at the lookup layer (shiftedCell short-circuits
 // for them); calling shiftCell on an OBFT-family cell at BFT_start > 0
 // returns null — the lookup should have picked the right BFT_start
@@ -1851,7 +1866,7 @@ function shiftCell(cell, bftStart) {
   const adjusted = [];
   for (let i = 0; i < samples.length; i++) {
     const shifted = samples[i] + bftStart;
-    if (shifted <= SLOT_END_MS) adjusted.push(shifted);
+    if (shifted <= SUBMIT_DEADLINE_MS) adjusted.push(shifted);
   }
   let decisionTime = null;
   if (adjusted.length > 0) {
