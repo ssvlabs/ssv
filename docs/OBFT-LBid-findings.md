@@ -1,6 +1,6 @@
 # OBFT L_Bid appendix — findings & remediation analysis
 
-Working analysis for [Appendix B — L_Bid mini-consensus extension](OBFT.md) (`docs/OBFT.md`). **Status: roadmap executed — all 7 items below have been applied to `docs/OBFT.md` (Appendix B + touched main-spec sections) and reviewed (uncommitted).** This document captures the validated findings, their impact against the two end-goals, the fixes (now landed), and the safety argument for each.
+Working analysis for [Appendix B — L_Bid mini-consensus extension](OBFT.md) (`docs/OBFT.md`). **Status: roadmap executed — all 7 items below have been applied to `docs/OBFT.md` (Appendix B + touched main-spec sections) and reviewed.** This document captures the validated findings, their impact against the two end-goals, the fixes (now landed), and the safety argument for each.
 
 Line references are against `docs/OBFT.md` at the time of writing (commit `0911dc631`); they will drift as the spec is edited — section names are the durable locator.
 
