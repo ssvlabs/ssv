@@ -55,56 +55,70 @@ body {
   white-space: nowrap;
 }
 
+/* ---- Result section cards ----
+ * The three result panels — decision-layer breakdown, failure breakdown,
+ * and the scenario heatmap — each render as a white card on the grey page
+ * bg so they read as distinct sections. The two breakdown hosts hide
+ * themselves (:empty) when there's no data / no failures at the operating
+ * point, so an empty bordered box never shows. */
+.conditions-layers,
+.conditions-failures,
+section.heatmap:not(.empty) {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  padding: 0.9em 1.1em 1.1em;
+  margin-top: 1em;
+}
+.conditions-layers:empty,
+.conditions-failures:empty {
+  display: none;
+}
+
 /* ---- Heatmap overview ---- */
 
 section.heatmap {
-  padding-top: 1.2em;
   --hcols: 3;
 }
+/* Empty state (no data for the current operating point) is a plain notice,
+ * not a card — drop the card chrome, keep a little top spacing. */
+section.heatmap.empty {
+  padding-top: 1.2em;
+}
+/* Heatmap section heading — matches the breakdown-table titles so all three
+ * result cards share one header style. */
+.heatmap-section-title {
+  margin: 0 0 0.5em 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text);
+}
 
-/* Shared grid template — every .hrow inside every card uses the same
- * column geometry so cells align vertically across cards and the
- * column-header bar. Both rules below stay in sync.
- *
- * Trailing trim (right inset) is needed so the rightmost cell sits at
- * roughly the same distance from the section's right edge as the
- * scenario-name TEXT sits from the section's left edge (.hname has
- * 0.7em internal padding-left on top of the card's 1em padding-left,
- * for a 1.7em total left text inset). Without it the rightmost cell
- * stops at only 1em — visibly less padded than the left side.
- *
- * The split between .heatmap-cols (outside the card) and .hrow
- * (inside the card, which itself has 1em right padding) reflects
- * where the inset is sourced from: col headers absorb the full 1.7em
- * in their own padding-right; data rows get only the 0.7em difference
- * because the card's padding already contributes 1em. */
+/* Shared grid template — the column header (.heatmap-cols) and every data
+ * row (.hrow) use the same column geometry, so protocol columns line up
+ * vertically across the header and all groups. For that to be exact, the
+ * header and the rows must share the same horizontal insets: 1em left /
+ * 1.7em right, in root-em units. The header sources them from its own
+ * padding; the rows from .heatmap-group's padding (.hrow itself carries
+ * none). The breakdown tables mirror the same 1rem / 1.7rem insets so columns
+ * line up across all three result cards too. */
 .heatmap-cols, .hrow {
   display: grid;
-  /* Fixed 280px first column + equal flexible data columns, no column gap —
-   * the breakdown tables mirror this exact geometry so every protocol column
-   * lines up across sections. Pills get their visual separation from .hcell
-   * side margins instead of a grid gap. */
+  /* Fixed 280px first column + equal flexible data columns, no column gap.
+   * Pills get their visual separation from .hcell side margins instead of a
+   * grid gap. */
   grid-template-columns: 280px repeat(var(--hcols), minmax(0, 1fr));
   gap: 2px 0;
   align-items: center;
 }
 
-/* Column header bar — sits above the cards. Padded 1em left (mirrors
- * the card's padding-left) and 1.7em right (mirrors the card's
- * padding-right plus the data-row right trim) so col positions line
- * up with the rightmost data cell's right edge. */
+/* Column header bar — sits above the group rows, with the same 1em left /
+ * 1.7em right inset as the groups so its columns align with the data cells. */
 .heatmap-cols {
   padding: 0 1.7em 0 1em;
   margin-bottom: 0.6em;
   font-variant-numeric: tabular-nums;
-}
-
-/* Data rows inside the card already inherit 1em right inset from
- * .heatmap-group's padding-right; the extra 0.7em here brings the
- * total right inset to 1.7em, matching the col header's right
- * padding above and the scenario-name TEXT inset on the left. */
-.hrow {
-  padding-right: 0.7em;
 }
 .col-head {
   background: var(--header-bg);
@@ -143,15 +157,14 @@ section.heatmap {
   justify-content: flex-start;
 }
 
-/* Group card — one per Scenario.Group. Surface bg + subtle border so
- * each group reads as its own chunk against the grey page bg. */
+/* Group block — one per Scenario.Group. The whole heatmap is one card, so
+ * groups are flat: the uppercase label + a small gap separate them. The group
+ * carries the full 1em left / 1.7em right inset (matching the column header);
+ * since .hrow has no padding of its own, this is also the source of the data
+ * rows' inset, so row columns align with the header and the breakdown tables. */
 .heatmap-group {
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.7em 1em 0.9em;
-  margin-bottom: 0.7em;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  padding: 0.2em 1.7em 0.4em 1em;
+  margin-bottom: 0.3em;
 }
 .heatmap-group-label {
   margin: 0 0 0.5em;
@@ -575,12 +588,9 @@ section.conditions .conditions-legend {
   min-width: 9.6em;
 }
 
-/* Failure-breakdown table — sits below the CDF chart. Hidden (host
- * stays empty) when every active protocol has 100% success at the
- * current operating point. */
-.conditions-failures {
-  margin-top: 1em;
-}
+/* Failure-breakdown table — sits below the CDF chart, inside its own card
+ * (see "Result section cards"). The host hides itself (:empty) when every
+ * active protocol has 100% success at the current operating point. */
 .conditions-failures-title {
   margin: 0 0 0.5em 0;
   font-size: 0.95em;
@@ -649,10 +659,9 @@ section.conditions .conditions-legend {
 }
 
 /* Decision layer/round breakdown — mirrors the failure-breakdown table,
-   with per-(family, depth) MEV-density cell shading. */
-.conditions-layers {
-  margin-top: 1em;
-}
+   with per-(family, depth) MEV-density cell shading. Rendered inside its own
+   card (see "Result section cards"); hides itself (:empty) when no active
+   protocol has decision data. */
 .conditions-layers-title {
   margin: 0 0 0.5em 0;
   font-size: 0.95em;

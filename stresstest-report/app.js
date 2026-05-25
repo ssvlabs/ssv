@@ -1531,9 +1531,10 @@ function applyChartDefaults() {
 
 // renderHeatmap draws a grid of scenario rows × protocol columns
 // colored by the currently-selected baseline operating point
-// (K/BTT/profile). Each Scenario.Group becomes its own card so groups
-// read as visually distinct chunks rather than rows in one wall of
-// data. Clicking a row updates the Conditions chart's selected scenario.
+// (K/BTT/profile). The whole heatmap is one section card; each
+// Scenario.Group is a flat block within it (uppercase label + a small gap)
+// so groups read as distinct chunks rather than one wall of data. Clicking
+// a row updates the Conditions chart's selected scenario.
 //
 // Source: p2p_baseline, resolved per cell via findBaselineCellForScenario —
 // K-dependent families (OBFT/2abOBFT) at (selectedK, selectedBTT,
@@ -1570,11 +1571,13 @@ function renderHeatmap(data) {
   const activeProtos = filteredProtocols(data.protocols);
   const grouped = groupProtocolsByFamily(activeProtos);
   // --hcols drives the shared grid template (both column-header rows +
-  // every .hrow inside every card) so columns align across cards. Counts
-  // the grouped layout: each family contributes cushions.length columns
-  // (empty slots included) plus one column per ladder-less solo.
+  // every .hrow) so columns align across groups. Counts the grouped layout:
+  // each family contributes cushions.length columns (empty slots included)
+  // plus one column per ladder-less solo.
   const colCount = grouped.families.length * grouped.cushions.length + grouped.solos.length;
   section.style.setProperty('--hcols', String(colCount));
+
+  section.appendChild(h('h3', { class: 'heatmap-section-title' }, 'Scenario comparison'));
 
   // Column header — one two-row grid: the "scenario" corner and ladder-less
   // solos span both rows; each family super-header spans its cushion columns
@@ -1617,8 +1620,8 @@ function renderHeatmap(data) {
   });
 
   order.forEach((g) => {
-    const card = h('div', { class: 'heatmap-group' });
-    card.appendChild(h('h3', { class: 'heatmap-group-label' }, g));
+    const group = h('div', { class: 'heatmap-group' });
+    group.appendChild(h('h3', { class: 'heatmap-group-label' }, g));
     const rows = h('div', { class: 'heatmap-rows' });
     // Within each group: non-adversarial (honest-cluster failure modes)
     // first, intentional-byz scenarios last. Stable sort preserves catalog
@@ -1672,8 +1675,8 @@ function renderHeatmap(data) {
       }
       rows.appendChild(row);
     });
-    card.appendChild(rows);
-    section.appendChild(card);
+    group.appendChild(rows);
+    section.appendChild(group);
   });
 
   return section;
@@ -1681,7 +1684,7 @@ function renderHeatmap(data) {
 
 // CELL_BG_ALPHA controls how strongly the heatmap cell tint shows through.
 // 0.45 keeps the gradient legible while letting the underlying surface
-// (white .heatmap-group card on non-adversarial rows; faint crisscross
+// (the white heatmap card on non-adversarial rows; faint crisscross
 // pattern on adversarial rows) bleed through — the cell colors read as
 // "labels" over the row's identity rather than swallowing it.
 const CELL_BG_ALPHA = 0.45;
@@ -1716,8 +1719,8 @@ function rateToColor(rate) {
     light = 42 + t * 18;
   }
   const bg = `hsla(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%, ${CELL_BG_ALPHA})`;
-  // Effective luminance after compositing onto the white .heatmap-group
-  // card. With surface = (1,1,1), L_effective = α·L_bg + (1−α)·1.
+  // Effective luminance after compositing onto the white heatmap card.
+  // With surface = (1,1,1), L_effective = α·L_bg + (1−α)·1.
   const lBgEffective = CELL_BG_ALPHA * relativeLuminance(hue, sat, light) + (1 - CELL_BG_ALPHA);
   const lDark = 0.0114; // sRGB luminance of #1a1a1a
   const lLight = 0.9131; // sRGB luminance of #f7fafc
