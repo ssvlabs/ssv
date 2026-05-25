@@ -518,6 +518,76 @@ func TestLogNormalMixture_HeavyTailed(t *testing.T) {
 	}
 }
 
+// TestLogNormalMixture_MaxDelay — WithMaxDelay(d) clamps every draw at d
+// (and d<=0 is a no-op default), while leaving sub-cap draws bit-for-bit
+// identical. Guards the cap that heavy_tail / slow_heavy_tail rely on to
+// keep their σ-fattened tails physical.
+func TestLogNormalMixture_MaxDelay(t *testing.T) {
+	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(24) // huge uncapped tail
+	const (
+		cap = 1 * time.Second
+		N   = 200_000
+	)
+	capped := base.WithMaxDelay(cap)
+
+	// 1) No draw exceeds the cap, and some draws hit it (cap is active).
+	hits := 0
+	rng := mrand.New(mrand.NewSource(7))
+	for i := 0; i < N; i++ {
+		d := capped.Delay(rng, 1, 2, ct.KindCommit)
+		require.LessOrEqualf(t, d, cap, "capped draw %v exceeds cap %v", d, cap)
+		if d == cap {
+			hits++
+		}
+	}
+	require.Positivef(t, hits, "expected some draws to hit the %v cap on a heavy tail", cap)
+
+	// 2) No cap (default, and d<=0) lets the tail exceed the cap.
+	for _, m := range []*ct.LogNormalMixtureDelay{base, base.WithMaxDelay(0), base.WithMaxDelay(-1)} {
+		over := 0
+		r := mrand.New(mrand.NewSource(7))
+		for i := 0; i < N; i++ {
+			if m.Delay(r, 1, 2, ct.KindCommit) > cap {
+				over++
+			}
+		}
+		require.Positivef(t, over, "no-cap mixture should produce draws above %v", cap)
+	}
+
+	// 3) Exact semantics: capped draw == min(uncapped, cap) per sample
+	// (WithMaxDelay only sets the bound, so the RNG stream is identical).
+	rc := mrand.New(mrand.NewSource(11))
+	ru := mrand.New(mrand.NewSource(11))
+	for i := 0; i < N; i++ {
+		dc := capped.Delay(rc, 1, 2, ct.KindCommit)
+		du := base.Delay(ru, 1, 2, ct.KindCommit)
+		want := du
+		if want > cap {
+			want = cap
+		}
+		require.Equalf(t, want, dc, "capped draw must equal min(uncapped, cap) at sample %d", i)
+	}
+}
+
+// TestP2PProfiles_HeavyTailsCapped guards that heavy_tail and
+// slow_heavy_tail keep their 5s WithMaxDelay bound wired in — without it
+// the σ-fattened tail runs to 59s / DroppedDelay (1h), which the cap
+// exists to prevent.
+func TestP2PProfiles_HeavyTailsCapped(t *testing.T) {
+	const (
+		cap = 5 * time.Second
+		N   = 300_000
+	)
+	for _, name := range []string{"heavy_tail", "slow_heavy_tail"} {
+		m := ct.P2PProfile(name)
+		rng := mrand.New(mrand.NewSource(7))
+		for i := 0; i < N; i++ {
+			d := m.Delay(rng, 1, 2, ct.KindCommit)
+			require.LessOrEqualf(t, d, cap, "%s: draw %v exceeds the 5s cap", name, d)
+		}
+	}
+}
+
 // sampleMixtureP99 estimates the P99 of a mixture by drawing N samples
 // and taking the 99th percentile. Empirical rather than analytic so
 // the test doesn't import the internal mixtureQuantile helper.

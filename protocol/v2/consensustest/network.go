@@ -403,6 +403,13 @@ type LogNormalMixtureDelay struct {
 	// transcendental that's constant for the lifetime of the model. 0 for
 	// non-positive medians, which Delay short-circuits before reading mu.
 	mu []float64
+	// maxDelay, when > 0, caps each Delay draw at this upper bound (set
+	// via WithMaxDelay). Keeps σ-heavy derived profiles (e.g. HeavyTailed)
+	// from emitting unphysical multi-minute / DroppedDelay outliers while
+	// preserving the body of the distribution. Like slowOpAnchor it is not
+	// propagated through Slowed/HeavyTailed (which build fresh mixtures);
+	// set it explicitly afterward.
+	maxDelay time.Duration
 }
 
 type LogNormalComponent struct {
@@ -466,12 +473,20 @@ func (l *LogNormalMixtureDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKin
 	// Same overflow guard as LogNormalDelay: clamp extreme tail draws to
 	// DroppedDelay so time.Duration(+Inf) can't silently become a negative
 	// duration downstream.
-	if raw > float64(DroppedDelay) || math.IsNaN(raw) || math.IsInf(raw, 1) {
-		return DroppedDelay
+	var d time.Duration
+	switch {
+	case raw > float64(DroppedDelay) || math.IsNaN(raw) || math.IsInf(raw, 1):
+		d = DroppedDelay
+	default:
+		d = time.Duration(raw)
+		if d < time.Nanosecond {
+			d = time.Nanosecond
+		}
 	}
-	d := time.Duration(raw)
-	if d < time.Nanosecond {
-		d = time.Nanosecond
+	// maxDelay (WithMaxDelay) caps the tail at a realistic bound so a
+	// σ-heavy profile can't emit multi-minute / DroppedDelay outliers.
+	if l.maxDelay > 0 && d > l.maxDelay {
+		d = l.maxDelay
 	}
 	return d
 }
@@ -501,6 +516,20 @@ func (l *LogNormalMixtureDelay) SlowOpAnchor() time.Duration {
 func (l *LogNormalMixtureDelay) WithSlowOpAnchor(d time.Duration) *LogNormalMixtureDelay {
 	cp := *l
 	cp.slowOpAnchor = d
+	return &cp
+}
+
+// WithMaxDelay returns a copy of `l` whose Delay output is clamped at
+// `d` (an inclusive upper bound on each per-hop draw). Use it to bound a
+// σ-heavy profile (e.g. HeavyTailed) at a realistic worst case instead
+// of letting the lognormal tail run to multi-minute / DroppedDelay
+// outliers. d <= 0 means "no cap" (the default). Components/cumWeights
+// are shared with the original (immutable post-construction), so the
+// copy is cheap; like WithSlowOpAnchor it is not propagated through
+// Slowed/HeavyTailed, so chain it after those.
+func (l *LogNormalMixtureDelay) WithMaxDelay(d time.Duration) *LogNormalMixtureDelay {
+	cp := *l
+	cp.maxDelay = d
 	return &cp
 }
 
@@ -603,11 +632,15 @@ func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //     from Prod_1_2_3_4_*, Stage_53_54_55_56_*, Stage_97_98_99_100_*.
 //   - slow: prod with each component median ×80 (same shape, shifted
 //     right by 80× — models a uniformly much-slower-than-prod mesh).
-//   - heavy_tail: prod with each component σ scaled so the probability
-//     of drawing above the original P99 is 24× (medians unchanged —
-//     models prod with rarer events spiking much higher / more often).
-//   - slow_heavy_tail: prod ∘ slow ∘ heavy_tail; uniformly slower mesh
-//     with bursty rare events on top.
+//   - heavy_tail: prod's median with the tail fattened hard (σ scaled
+//     for ~31× the >P99 outlier frequency) so p90 reaches ~200ms, then
+//     capped at 5s. Hyper-skewed by design — median ≈ prod (1.5ms) but
+//     the top ~10% explodes to 200ms–5s, and ~3% of hops pile at the 5s
+//     cap. Models rare-but-severe spikes; a smoothly slower body is
+//     `slow`.
+//   - slow_heavy_tail: slow (prod medians ×80) with the tail fattened (σ
+//     for ~4× the >P99 outlier frequency) and capped at 5s — a genuine
+//     slow-and-heavy-tail (p90 ≈ 400ms, <1% at the cap).
 var P2PProfileNames = []string{
 	"prod",
 	"stage1",
@@ -638,9 +671,9 @@ func P2PProfile(name string) NetworkModel {
 		// gets its own calibrated slow-op magnitude.
 		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).WithSlowOpAnchor(slowSlowOpAnchor)
 	case "heavy_tail":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(24).WithSlowOpAnchor(heavyTailSlowOpAnchor)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(31).WithMaxDelay(5 * time.Second).WithSlowOpAnchor(heavyTailSlowOpAnchor)
 	case "slow_heavy_tail":
-		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(24).WithSlowOpAnchor(slowHeavyTailSlowOpAnchor)
+		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(4).WithMaxDelay(5 * time.Second).WithSlowOpAnchor(slowHeavyTailSlowOpAnchor)
 	default:
 		panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
 	}
@@ -690,7 +723,9 @@ func (l *LogNormalMixtureDelay) Slowed(factor float64) *LogNormalMixtureDelay {
 // of drawing a value above the original mixture's P99 grows by
 // `outlierFreqMultiplier`. Each component's median is left unchanged,
 // so the mixture's overall median shifts by only a few percent.
-// Used by derived profiles like "heavy_tail" (outlier-freq×24 over prod).
+// Used by heavy_tail (×31 over prod) and slow_heavy_tail (×4 over the
+// slowed base), each then bounded via WithMaxDelay so the σ-scaled tail
+// stays physical.
 //
 // For a single-component mixture, the math admits the closed-form
 // scale σ_new = σ_old · Φ^{-1}(0.99) / Φ^{-1}(1 − k·(1−0.99)). For
