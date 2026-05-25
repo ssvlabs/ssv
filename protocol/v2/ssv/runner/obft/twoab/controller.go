@@ -325,9 +325,10 @@ func (c *Controller) ApplyHostValidity(slot phase0.Slot, layer int, value []byte
 
 // FirePhase2a fires the one-shot Phase-2a emission for the slot: the operator
 // emits exactly one of KindValue / KindNoValue / KindCommit-NRDirect per its
-// local state. Returns the emission (exactly one of the three is non-nil, or
-// all nil if not yet fireable). The caller broadcasts the returned message and
-// then polls OwnValueMsg / OwnCommit for any cascade-fired follow-ups.
+// local state. On success exactly one of the three is non-nil; all three are
+// nil only when the returned error is non-nil (no live instance, or a Phase-2a
+// build failure). The caller broadcasts the returned message and then polls
+// OwnValueMsg / OwnCommit for any cascade-fired follow-ups.
 func (c *Controller) FirePhase2a(slot phase0.Slot) (*twoabcore.ValueMsg, *twoabcore.NoValueMsg, *twoabcore.Commit, error) {
 	r, err := c.lookup(slot)
 	if err != nil {

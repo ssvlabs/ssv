@@ -169,6 +169,8 @@ func verifyInnerSignerMatchesOuter(env *wire.Envelope, outerSigner spectypes.Ope
 	case wire.KindCertificate:
 		// Certificate has no inner OperatorID; outer signer is the only
 		// identity binding, no extra check needed.
+	default:
+		return fmt.Errorf("OBFT envelope: unknown kind 0x%02x", byte(env.Kind))
 	}
 	return nil
 }
@@ -192,6 +194,8 @@ func verifyEnvelopeCrypto(env *wire.Envelope, verifier *obftcore.Verifier) error
 		if err := verifier.VerifyCertificate(env.Certificate); err != nil {
 			return fmt.Errorf("OBFT certificate verification: %w", err)
 		}
+	default:
+		return fmt.Errorf("OBFT crypto verification: unknown envelope kind 0x%02x", byte(env.Kind))
 	}
 	return nil
 }

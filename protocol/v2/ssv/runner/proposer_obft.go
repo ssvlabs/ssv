@@ -452,6 +452,11 @@ func checkInnerSignerMatchesOuter(env *wire.Envelope, outerSigner spectypes.Oper
 	case wire.KindCertificate:
 		// Certificate has no inner OperatorID; outer signer is the only
 		// identity binding.
+		if env.Certificate == nil {
+			return fmt.Errorf("obft dispatch: nil Certificate body")
+		}
+	default:
+		return fmt.Errorf("obft dispatch: unknown envelope kind 0x%02x", byte(env.Kind))
 	}
 	return nil
 }
