@@ -179,6 +179,36 @@ func TestConfigForCluster_KDerivedFromClusterSize(t *testing.T) {
 	}
 }
 
+// TestConfigForCluster_RecoveryFloor confirms a production-built Config carries
+// the max(RefloodDelay, 1·BTT) recovery floor on L_0's broadcast target — the
+// end-to-end production lock (obft/base.BroadcastTargetOffset's math is unit-
+// tested there; this pins that ConfigForCluster's tCommit/B_0/BTT wiring
+// produces the floored deadline the runner broadcasts by). Mirrors 2abOBFT,
+// which carries its max(SafetyBuffer, 1·BTT) floor in resolveBudget.
+func TestConfigForCluster_RecoveryFloor(t *testing.T) {
+	committee := []spectypes.OperatorID{1, 2, 3, 4} // n=4 → K=f+1=2=DefaultK
+
+	// Default RefloodDelay (700ms): B_0 = 2·BTT + 700 = 1100ms ≥ 3·BTT, so the
+	// floor is dormant and the L_0 broadcast target equals the B_k-budget
+	// deadline T_commit − B_0.
+	cfgDefault, err := ConfigForCluster(phase0.Slot(1), committee, [32]byte{0x01}, nil)
+	require.NoError(t, err)
+	require.Equal(t, cfgDefault.BroadcastMaxOffsetForLayer(0), cfgDefault.BroadcastTargetForLayer(0),
+		"floor dormant at default RefloodDelay (B_0 ≥ 3·BTT): target = budget deadline")
+
+	// RefloodDelay≈0 opt-out (1ns; Go's zero-means-default forbids a literal 0
+	// — see ConfigOverrides.RefloodDelay): B_0 = 2·BTT < 3·BTT, so the floor
+	// binds and the production L_0 broadcast target is pulled to T_commit −
+	// 3·BTT, 1·BTT earlier than the B_k-budget deadline.
+	cfgOptOut, err := ConfigForCluster(phase0.Slot(1), committee, [32]byte{0x01},
+		&ConfigOverrides{RefloodDelay: time.Nanosecond})
+	require.NoError(t, err)
+	require.Equal(t, cfgOptOut.TCommit-3*cfgOptOut.BTT, cfgOptOut.BroadcastTargetForLayer(0),
+		"floor active at RefloodDelay≈0: L_0 broadcast target = T_commit − 3·BTT")
+	require.Less(t, cfgOptOut.BroadcastTargetForLayer(0), cfgOptOut.BroadcastMaxOffsetForLayer(0),
+		"floored target is 1·BTT earlier than the B_k-budget deadline at the opt-out")
+}
+
 // HeaderSubmitHeadroom (100ms), summing to RelayCutoff − T_commit.
 // Catches accidental drift between the spec's named components and the
 // derived T_commit value.
