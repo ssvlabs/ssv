@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/observability/log/fields"
 )
 
 const (
@@ -216,8 +217,8 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 		// for execution") already carries the descriptor details, this is
 		// the counterpart confirming dispatch at the gate.
 		h.logger.Debug("dispatched event-driven validator registration duties",
-			zap.Uint64("slot", uint64(slot)),
-			zap.Int("count", eventDrivenDispatched))
+			fields.Slot(slot),
+			fields.Count(eventDrivenDispatched))
 	}
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
