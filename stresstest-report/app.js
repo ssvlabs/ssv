@@ -1043,9 +1043,9 @@ function sortFailureReasons(reasons, totals) {
 // rebuildFailureBreakdown populates the failure-breakdown table beneath
 // the CDF chart. One row per distinct MissReason observed across the
 // active protocols at the current operating point; one column per active
-// protocol grouped by family (cushion as sub-columns), with the
-// per-iteration count (and a percent-of-iters secondary value). Raw
-// reasons are canonicalized via
+// protocol grouped by family (cushion as sub-columns). Each cell shows the
+// failure share (% of iterations), tinted by severity (rateToColor of the
+// complement — the success ramp inverted). Raw reasons are canonicalized via
 // canonicalizeMissReason so same-shape outcomes across adapters share
 // one row; the row sort goes through sortFailureReasons (pinned top
 // block, count-sorted middle, pinned bottom block).
@@ -1146,21 +1146,22 @@ function rebuildFailureBreakdown(data) {
 
   // One cell per (protocol, reason): empty when the family lacks that
   // cushion; n/a when the protocol didn't run (missing / iterations==0);
-  // "—" for zero failures of this reason (so the eye catches non-zero
-  // rows); otherwise the count + percent-of-iterations. grp marks the
-  // first column of each family group for the separator.
+  // "—" for zero failures of this reason (so the eye catches non-zero rows);
+  // otherwise the percent-of-iterations, tinted by severity. The tint reuses
+  // the success-cell ramp inverted (rateToColor of the complement): a small
+  // failure reads green, a larger one warms toward red. grp marks the first
+  // column of each family group for the separator.
   const failCell = (name, reason, grp) => {
-    const cls = (extra) => 'count' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
+    const cls = (extra) => 'fail-cell' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
     if (!name) return h('td', { class: cls('empty') });
     const cell = cellByProtocol[name];
     if (!cell || cell.iterations === 0) return h('td', { class: cls('na') }, 'n/a');
     const count = perCell[name][reason] || 0;
     if (count === 0) return h('td', { class: cls('zero') }, '—');
-    const pct = (count / cell.iterations) * 100;
-    const td = h('td', { class: cls() });
-    td.appendChild(h('span', { class: 'count-n' }, String(count)));
-    td.appendChild(h('span', { class: 'count-pct' }, ' (' + pct.toFixed(2) + '%)'));
-    return td;
+    const rate = count / cell.iterations;
+    const { bg, fg } = rateToColor(1 - rate);
+    return h('td', { class: cls(), style: `background: ${bg}; color: ${fg}` },
+      (rate * 100).toFixed(2) + '%');
   };
 
   const tbody = h('tbody');

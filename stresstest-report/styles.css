@@ -642,20 +642,14 @@ section.conditions .conditions-legend {
 .grouped-table .grp {
   border-left: 1px solid #d7dde5;
 }
-/* Failure table — count + percent cells (the reason column width now comes
- * from the shared .col-rowhead so it aligns with the other sections). */
-.conditions-failures-table td.count.zero,
-.conditions-failures-table td.count.na {
+/* Failure table — each populated cell (.fail-cell, mirroring the layer
+ * table's .layer-cell) shows just the failure %, tinted by severity
+ * (background/color set inline by rateToColor, the success ramp run inverted).
+ * The reason-column width comes from the shared .col-rowhead so it aligns with
+ * the other sections; zero ("—") and n/a cells stay muted. */
+.conditions-failures-table td.fail-cell.zero,
+.conditions-failures-table td.fail-cell.na {
   color: var(--na);
-}
-.conditions-failures-table .count-pct {
-  color: var(--text-faint);
-  font-size: 0.85em;
-}
-/* Let a large "N (P%)" wrap (count over percent) inside the narrow fixed
- * column instead of spilling past it; small counts still sit on one line. */
-.conditions-failures-table td.count {
-  white-space: normal;
 }
 
 /* Decision layer/round breakdown — mirrors the failure-breakdown table,
@@ -668,16 +662,18 @@ section.conditions .conditions-legend {
   font-weight: 600;
   color: var(--text);
 }
-/* Decision-layer table — per-(family, depth) MEV-density cell shading. */
+/* Decision-layer table — per-(family, depth) MEV-density cell shading. Tints
+ * at 0.45 alpha to match the heatmap cells and the failure table
+ * (CELL_BG_ALPHA), so every shaded cell across the page reads at one strength. */
 .conditions-layers-table td.layer-cell.zero,
 .conditions-layers-table td.layer-cell.na {
   color: var(--na);
 }
 .conditions-layers-table td.layer-cell.layer-mev {
-  background: rgba(16, 185, 129, 0.16); /* green — MEV-fresh (L_0 / QBFT round) */
+  background: rgba(16, 185, 129, 0.45); /* green — MEV-fresh (L_0 / QBFT round) */
 }
 .conditions-layers-table td.layer-cell.layer-fallback {
-  background: rgba(217, 119, 6, 0.16); /* amber — deeper safe-parent fallback */
+  background: rgba(217, 119, 6, 0.45); /* amber — deeper safe-parent fallback */
 }
 .conditions-layers-note {
   margin: 0.5em 0 0 0;
