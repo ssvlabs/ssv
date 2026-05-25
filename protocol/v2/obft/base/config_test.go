@@ -155,6 +155,37 @@ func TestConfig_DerivedOffsets(t *testing.T) {
 	require.Equal(t, 3, cfg.QEnc())
 }
 
+// TestBroadcastTargetOffset_RecoveryFloor locks the max(RefloodDelay, 1·BTT)
+// recovery floor (a 3·BTT broadcast window = 2·BTT peer-reflood-V cascade +
+// 1·BTT margin) that the production runner and the consensustest adapter both
+// broadcast by, mirroring 2abOBFT's max(SafetyBuffer, 1·BTT). Without it the
+// h_V=1 σ-upgrade lands exactly at T_commit and loses the view-fix race at the
+// RefloodDelay=0 opt-out. Default-config paths exercise only the dormant case
+// (B_0 ≥ 3·BTT at RefloodDelay=700ms), so this pins the active case directly.
+func TestBroadcastTargetOffset_RecoveryFloor(t *testing.T) {
+	btt := 200 * time.Millisecond
+	tCommit := 3600 * time.Millisecond
+
+	// Floor dormant: B_0 = 2·BTT + 700ms = 1100ms ≥ 3·BTT (default RefloodDelay)
+	// → plain T_commit − B_0.
+	require.Equal(t, 2500*time.Millisecond, BroadcastTargetOffset(tCommit, 1100*time.Millisecond, btt))
+	// Floor active: B_0 = 2·BTT = 400ms < 3·BTT (RefloodDelay=0) → floored to
+	// T_commit − 3·BTT, 1·BTT earlier than the plain T_commit − B_0 = 3200ms.
+	require.Equal(t, 3000*time.Millisecond, BroadcastTargetOffset(tCommit, 2*btt, btt))
+	// Backups (B_k = T_commit) broadcast at BFT_start.
+	require.Equal(t, time.Duration(0), BroadcastTargetOffset(tCommit, tCommit, btt))
+	// Extreme BTT (T_commit < 3·BTT): primary clamps to BFT_start.
+	require.Equal(t, time.Duration(0), BroadcastTargetOffset(500*time.Millisecond, 2*btt, btt))
+
+	// The method delegates and never exceeds the B_k-budget deadline
+	// (the floor only ever pulls the broadcast earlier).
+	cfg := validBaseConfig()
+	for k := range cfg.Layers {
+		require.LessOrEqual(t, cfg.BroadcastTargetForLayer(k), cfg.BroadcastMaxOffsetForLayer(k),
+			"layer %d: floored target must be ≤ the B_k budget deadline", k)
+	}
+}
+
 // ---- M3: per-layer staggered broadcast deadlines (BroadcastBudget) ----
 
 // validStaggeredConfig returns a config with spec-recommended per-layer

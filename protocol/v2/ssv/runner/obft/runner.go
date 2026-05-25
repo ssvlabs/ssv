@@ -88,13 +88,19 @@ func RunProposerSlot(
 				return
 			}
 			// Spec §Failure modes / Late deepest-layer leader broadcast:
-			// host-side hard deadline at T_broadcast_max_k =
-			// max(0, T_commit − B_k). Past this point, receivers
-			// reject the bundle as "first observed past T_commit".
-			// Aborting the fetch instead converts the pathology into
-			// the cleanly-handled "silent leader" mode (NR-quorum →
-			// fall-through). Defense-in-depth on top of the K ≥ f+2
-			// minimum that already provides the recovery layer.
+			// host-side hard deadline at the layer's broadcast target. Past
+			// this point, receivers reject the bundle as "first observed past
+			// T_commit". Aborting the fetch instead converts the pathology
+			// into the cleanly-handled "silent leader" mode (NR-quorum →
+			// fall-through). Defense-in-depth on top of the K ≥ f+2 minimum
+			// that already provides the recovery layer.
+			//
+			// The deadline is the recovery-floored target
+			// `BroadcastTargetForLayer = max(0, T_commit − max(B_k, 3·BTT))`,
+			// not the plain `T_commit − B_k`: the 1·BTT floor (dormant at
+			// RefloodDelay ≥ 1·BTT) keeps the primary's h_V=1 peer-reflood-V
+			// σ-upgrade landing before the view-fix at the RefloodDelay=0
+			// opt-out — matching 2abOBFT and the consensustest model.
 			//
 			// `B_k` is a target (spec §Setting). When `B_k ≥ T_commit`
 			// the per-layer target clamps to 0 — best-effort broadcast
@@ -103,7 +109,7 @@ func RunProposerSlot(
 			// falls back to T_commit, the protocol-wide hard wall (peers
 			// reject past T_commit regardless), so the leader still
 			// attempts the fetch instead of going silent.
-			deadlineOffset := cfg.BroadcastMaxOffsetForLayer(layer)
+			deadlineOffset := cfg.BroadcastTargetForLayer(layer)
 			if deadlineOffset == 0 {
 				deadlineOffset = cfg.TCommit
 			}

@@ -176,6 +176,36 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 	return 0
 }
 
+// BroadcastTargetOffset returns the recovery-floored broadcast target for a
+// layer: `max(0, T_commit − max(B_k, 3·BTT))`. The `3·BTT` floor (a 2·BTT
+// peer-reflood-V recovery cascade + a 1·BTT margin) guarantees the h_V=1
+// σ-upgrade lands before the T_commit view-fix even when `B_k < 3·BTT` (i.e.
+// RefloodDelay < 1·BTT), mirroring 2abOBFT's `max(SafetyBuffer, 1·BTT)`
+// resolve-window floor. The floor is dormant when `B_k ≥ 3·BTT` (the common
+// case at default RefloodDelay), where it coincides with the plain
+// `T_commit − B_k`.
+//
+// This is the offset leaders should actually broadcast by; it is the single
+// source shared by the production runner's fetch/broadcast deadline and the
+// consensustest adapter's FetchAt. `BroadcastMaxOffsetForLayer` is the looser
+// `B_k`-budget deadline (the spec's `T_broadcast_max_k`), retained for FetchAt
+// validation and diagnostics — the actual broadcast may land earlier by the
+// floor.
+func BroadcastTargetOffset(tCommit, broadcastBudget, btt time.Duration) time.Duration {
+	if floor := 3 * btt; broadcastBudget < floor {
+		broadcastBudget = floor
+	}
+	if d := tCommit - broadcastBudget; d > 0 {
+		return d
+	}
+	return 0
+}
+
+// BroadcastTargetForLayer returns BroadcastTargetOffset for layer k.
+func (c *Config) BroadcastTargetForLayer(k int) time.Duration {
+	return BroadcastTargetOffset(c.TCommit, c.Layers[k].BroadcastBudget, c.BTT)
+}
+
 // DefaultBroadcastBudget returns a spec-conforming B_k schedule for K layers
 // at the given BTT, RefloodDelay, and T_commit. Per spec §Setting, the
 // primary L_0's B_0 is sized to accommodate one gossipsub IHAVE/IWANT reflood

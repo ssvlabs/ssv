@@ -81,9 +81,16 @@ const (
 // at Config A):
 //
 //   - L_0 (primary) is MEV-fresh: fetches from RANDAO_done onward (~150ms
-//     past slot start) and broadcasts by `T_broadcast_max_0 = T_commit −
-//     B_0` where `B_0 = 2·BTT + RefloodDelay` covers one IWANT round-trip
-//     plus one IHAVE/IWANT reflood cycle for mesh-flaky receivers.
+//     past slot start) and broadcasts by its recovery-floored target
+//     `BroadcastTargetForLayer(0) = max(0, T_commit − max(B_0, 3·BTT))`,
+//     where `B_0 = 2·BTT + RefloodDelay` covers one IWANT round-trip plus
+//     one IHAVE/IWANT reflood cycle for mesh-flaky receivers. The 3·BTT
+//     floor is dormant at RefloodDelay ≥ 1·BTT (a no-op at the Config A
+//     default below, where it equals `T_commit − B_0`); at the
+//     RefloodDelay=0 opt-out it pulls the broadcast 1·BTT earlier so the
+//     h_V=1 peer-reflood-V σ-upgrade still lands before T_commit — see
+//     obft/base BroadcastTargetOffset; mirrors 2abOBFT's
+//     max(SafetyBuffer, 1·BTT).
 //   - L_1..L_{K-1} (backups) are last-resort safety nets: each fetches at
 //     slot start from a deepest-confirmed parent (FetchAt = 0) and
 //     broadcasts at BFT_start (B_k = T_commit clamps T_broadcast_max_k to

@@ -963,15 +963,15 @@ func TestAdapter_ByzWitnessForgery_TriggersSafetyDetection(t *testing.T) {
 //
 // The variant's only mechanism is `B_0 = 2·BTT` instead of
 // `2·BTT + RefloodDelay`. T_commit is back-derived from RelayCutoff
-// (not from B_0), so it's unchanged. The primary's broadcast deadline
-// `T_broadcast_max_0 = T_commit − B_0` lands exactly RefloodDelay
-// LATER under OBFT-no-reflood — the MEV-fresh-fetch property the variant
-// buys. The actual fetch, however, carries the recovery margin
-// max(RefloodDelay, 1·BTT): at RefloodDelay=700ms the 1·BTT floor is
-// dormant (fetch = deadline), but at RefloodDelay=0 it pulls the fetch
-// 1·BTT earlier than the deadline. So under the early-emit rule the
-// DecisionTime gap is RefloodDelay − 1·BTT = 500ms — narrower than the
-// 700ms broadcast-deadline gap (which still tracks B_0 exactly).
+// (not from B_0), so it's unchanged. The primary's broadcast is its
+// recovery-floored target `max(0, T_commit − max(B_0, 3·BTT))`: at
+// RefloodDelay=700ms the 1·BTT floor is dormant (target = T_commit − B_0),
+// but at RefloodDelay=0 it pulls the broadcast to T_commit − 3·BTT (1·BTT
+// earlier than the naive T_commit − 2·BTT). So OBFT-no-reflood broadcasts
+// RefloodDelay − 1·BTT = 500ms later than bare OBFT — and both the
+// broadcast-time gap (DecidingBroadcastTime) and the early-emit-driven
+// DecisionTime gap are that same 500ms, the floor narrowing the naive 700ms
+// RefloodDelay gap by 1·BTT.
 //
 // The "OBFT-no-reflood misses under degraded mesh" effect — where bare OBFT's
 // RefloodDelay cushion absorbs the lazy-push recovery RTT and OBFT-no-reflood
@@ -992,10 +992,10 @@ func TestAdapter_NoRefloodDelay_VariantBehavior(t *testing.T) {
 
 	require.True(t, outOBFT.Decided, "bare OBFT must decide on healthy on-budget mesh")
 	require.True(t, outRD0.Decided, "OBFT-no-reflood must decide on healthy on-budget mesh — eager push reaches everyone, no RefloodDelay needed")
-	require.Equal(t, 700*time.Millisecond, outRD0.DecidingBroadcastTime-outOBFT.DecidingBroadcastTime,
-		"the broadcast-time gap should equal the RefloodDelay subtracted from B_0 exactly (T_commit − B_0 lands 700ms later for OBFT-no-reflood)")
+	require.Equal(t, 500*time.Millisecond, outRD0.DecidingBroadcastTime-outOBFT.DecidingBroadcastTime,
+		"broadcast-time gap = RefloodDelay − 1·BTT floor = 500ms: the recovery floor pulls OBFT-no-reflood's RefloodDelay=0 broadcast to T_commit − 3·BTT, 1·BTT earlier than the naive T_commit − B_0")
 	require.Equal(t, 500*time.Millisecond, outRD0.DecisionTime-outOBFT.DecisionTime,
-		"DecisionTime gap = RefloodDelay − 1·BTT = 500ms: the recovery floor max(RefloodDelay, 1·BTT) lifts the no-reflood variant's actual fetch 1·BTT earlier than its B_0 deadline, narrowing the decision gap below the 700ms broadcast-deadline gap")
+		"DecisionTime gap = RefloodDelay − 1·BTT = 500ms (matches the broadcast-time gap; both reflect the recovery-floored schedule)")
 
 	// Adversarial-parity invariant: when cfg.RefloodDelay is already 0
 	// (the default for adversarial scenarios), the NoRefloodDelay flag

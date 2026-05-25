@@ -140,31 +140,17 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		}
 	}
 
-	// recoveryMargin is the slack before T_commit for L_0's peer-reflood-V
-	// σ-upgrade: max(RefloodDelay, 1·BTT). The 1·BTT structural floor mirrors
-	// 2abOBFT's max(SafetyBuffer, 1·BTT) (twoab/adapter.go resolveBudget) and
-	// guarantees one propagation hop of recovery headroom before the T_commit
-	// view-fix even at RefloodDelay=0 — so the h_V=1 peer-reflood-V σ-upgrade
-	// lands in time. Replaces the former flat BTT/4 fetchBuffer.
-	recoveryMargin := max(refloodDelay, cfg.BTT)
-	// Per-layer broadcast schedule with the spec's runtime clamp
-	// `T_broadcast_max_k = max(0, T_commit − B_k)` (obft/base/types.go §B_k).
-	// The primary L_0 (the only shallow layer, B_0 < T_commit) broadcasts
-	// 2·BTT (the peer-reflood-V recovery cascade) + recoveryMargin before
-	// T_commit; backups (B_k = T_commit) clamp to BFT_start. A layer whose
-	// designed fetch lands before slot start floors to 0.
+	// Per-layer broadcast schedule = obftbase.BroadcastTargetOffset: the
+	// recovery-floored target max(0, T_commit − max(B_k, 3·BTT)). The 3·BTT
+	// floor (2·BTT peer-reflood-V cascade + 1·BTT margin) keeps the primary
+	// L_0's h_V=1 σ-upgrade landing before T_commit even at RefloodDelay=0,
+	// mirroring 2abOBFT's max(SafetyBuffer, 1·BTT). Shared with the production
+	// runner (runner/obft/runner.go) so sim and production broadcast at the
+	// identical floored target; backups (B_k = T_commit) floor to BFT_start.
+	// Replaces the former flat BTT/4 fetchBuffer.
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
-		var fa time.Duration
-		if broadcastBudget[k] < tCommit {
-			fa = tCommit - 2*cfg.BTT - recoveryMargin
-		} else {
-			fa = tCommit - broadcastBudget[k]
-		}
-		if fa < 0 {
-			fa = 0
-		}
-		fetchAt[k] = fa
+		fetchAt[k] = obftbase.BroadcastTargetOffset(tCommit, broadcastBudget[k], cfg.BTT)
 	}
 
 	bw := ct.NewBandwidthReport()
@@ -197,9 +183,8 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
-	// Stamp the L_0 BFT_start-independence threshold = the unclamped
-	// fetchAt[0] (= T_commit − 2·BTT − max(RefloodDelay, 1·BTT), floored at
-	// 0). This is exactly the `fa` computed for k=0 in the fetchAt loop above
+	// Stamp the L_0 BFT_start-independence threshold = fetchAt[0] (the
+	// recovery-floored L_0 broadcast target, obftbase.BroadcastTargetOffset)
 	// — the largest BFT_start for which L_0's schedule is identical to
 	// BFT_start=0. The report UI reuses this (BFT_start=0) cell at or below
 	// this value (see Outcome.BFTStartIndependenceThreshold).
@@ -207,23 +192,16 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// The value is a pure function of cfg (BFT_start is not a sim
 	// parameter — the sim always runs at BFT_start=0), so it's stamped
 	// unconditionally on the single cell, regardless of decided/miss.
-	bftIndep := tCommit - 2*cfg.BTT - recoveryMargin
-	if bftIndep < 0 {
-		bftIndep = 0
-	}
+	bftIndep := fetchAt[0]
 	out.BFTStartIndependenceThreshold = &bftIndep
-	// Stamp the deciding-layer broadcast deadline (T_broadcast_max_k for
-	// k=DecidedRound). Mirrors the fetchAt[] clamp above:
-	// max(0, T_commit − B_k). The reporting layer surfaces this
-	// as `DecidingBroadcastTime` for the UI to label per-cell timing.
-	// broadcastBudget[k] is already clamped to ≤ tCommit upstream, so
-	// the subtraction never goes negative.
-	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(broadcastBudget) {
-		bt := tCommit - broadcastBudget[out.DecidedRound]
-		if bt < 0 {
-			bt = 0
-		}
-		out.DecidingBroadcastTime = bt
+	// Stamp the deciding-layer broadcast fire time = fetchAt[DecidedRound]
+	// (the recovery-floored BroadcastTargetOffset — the actual broadcast,
+	// which the floor may pull earlier than the B_k-budget deadline
+	// T_commit − B_k). The reporting layer surfaces this as
+	// `DecidingBroadcastTime` for the UI to label per-cell timing; matches
+	// 2abOBFT, which reports its floored t0Broadcast.
+	if out.Decided && out.DecidedRound >= 0 && out.DecidedRound < len(fetchAt) {
+		out.DecidingBroadcastTime = fetchAt[out.DecidedRound]
 	}
 	// Capture pre-clip state so post-clip MissReason can reference the
 	// layer the protocol DID internally reach (DecidedRound is reset to
