@@ -105,8 +105,12 @@ func (s *sim) drainQueue(op spectypes.OperatorID) {
 	}
 	for {
 		if !inst.CanProcessMessages() {
-			// Decided / no longer relevant: discard the remainder, as the
-			// production runner stops consuming once the duty is done.
+			// Instance stopped processing: round-exhausted (reached CutOffRound)
+			// or marked irrelevant. NB an ordinary decide does NOT trip this —
+			// MarkDecided leaves CanProcessMessages true, so post-decide drains
+			// fall through and process/drop normally. Here every remaining
+			// message would reject non-retryably, so discard the queue rather
+			// than drain it one by one.
 			s.pending[op] = nil
 			return
 		}
@@ -118,8 +122,8 @@ func (s *sim) drainQueue(op spectypes.OperatorID) {
 		keep := make([]pendingMsg, 0, len(q))
 		for _, item := range q {
 			if !inst.CanProcessMessages() {
-				// Decided mid-pass: stop here; the outer loop discards the
-				// remainder (the production runner stops consuming on decide).
+				// Stopped processing mid-pass (e.g. a round-change bumped the
+				// round to CutOffRound); the outer loop discards the remainder.
 				break
 			}
 			pm, err := specqbft.NewProcessingMessage(item.msg)
