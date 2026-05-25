@@ -1044,11 +1044,11 @@ function sortFailureReasons(reasons, totals) {
 // the CDF chart. One row per distinct MissReason observed across the
 // active protocols at the current operating point; one column per active
 // protocol grouped by family (cushion as sub-columns). Each cell shows the
-// failure share (% of iterations), tinted by severity (rateToColor of the
-// complement — the success ramp inverted). Raw reasons are canonicalized via
-// canonicalizeMissReason so same-shape outcomes across adapters share
-// one row; the row sort goes through sortFailureReasons (pinned top
-// block, count-sorted middle, pinned bottom block).
+// failure share (% of iterations), tinted by severity via failRateToColor (a
+// single red ramp: subtle at ~0%, capping at a soft red past ~60%). Raw
+// reasons are canonicalized via canonicalizeMissReason so same-shape outcomes
+// across adapters share one row; the row sort goes through sortFailureReasons
+// (pinned top block, count-sorted middle, pinned bottom block).
 //
 // The table follows the BFT_start picker, using the same per-protocol
 // BFT_start-aware view as the CDF chart above
@@ -1147,10 +1147,9 @@ function rebuildFailureBreakdown(data) {
   // One cell per (protocol, reason): empty when the family lacks that
   // cushion; n/a when the protocol didn't run (missing / iterations==0);
   // "—" for zero failures of this reason (so the eye catches non-zero rows);
-  // otherwise the percent-of-iterations, tinted by severity. The tint reuses
-  // the success-cell ramp inverted (rateToColor of the complement): a small
-  // failure reads green, a larger one warms toward red. grp marks the first
-  // column of each family group for the separator.
+  // otherwise the percent-of-iterations, tinted by severity via failRateToColor
+  // — a single red ramp from barely-there at ~0%, capped at a soft red past
+  // ~60% (never green/yellow). grp marks the first column of each family group.
   const failCell = (name, reason, grp) => {
     const cls = (extra) => 'fail-cell' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
     if (!name) return h('td', { class: cls('empty') });
@@ -1159,7 +1158,7 @@ function rebuildFailureBreakdown(data) {
     const count = perCell[name][reason] || 0;
     if (count === 0) return h('td', { class: cls('zero') }, '—');
     const rate = count / cell.iterations;
-    const { bg, fg } = rateToColor(1 - rate);
+    const { bg, fg } = failRateToColor(rate);
     return h('td', { class: cls(), style: `background: ${bg}; color: ${fg}` },
       (rate * 100).toFixed(2) + '%');
   };
@@ -1178,16 +1177,17 @@ function rebuildFailureBreakdown(data) {
   host.appendChild(table);
 }
 
-// layerColorClass picks the MEV-density color for a (protocol, depth-bucket)
-// cell. OBFT/2abOBFT decide the MEV-fresh block at L_0 and fall through to
-// deeper-confirmed safe parents (L_1+, not MEV) → depth 0 green, deeper amber.
-// QBFT rounds are all MEV blocks (R2 re-fetches a fresh one) and PSigs signs
-// the single pre-agreed V → green at every depth. Deliberately approximate;
-// see the note rendered under the table.
-function layerColorClass(protocol, bucketKey) {
+// isMevFresh reports whether a (protocol, depth-bucket) cell represents a
+// fresh-MEV-block decision (vs a no-MEV fallback). OBFT/2abOBFT capture MEV
+// only at L_0; L_1+ fall through to deeper-confirmed safe parents with no MEV.
+// QBFT re-fetches a fresh block every round (R2+ still MEV) and PSigs signs the
+// single pre-agreed V, so both are MEV-fresh at every depth. The cell's cyan
+// intensity then scales with its (success-only) share; fallback cells render
+// the flat pale low end of the ramp. Deliberately approximate; see the note.
+function isMevFresh(protocol, bucketKey) {
   const obftFamily = protocol.startsWith('OBFT') || protocol.startsWith('2abOBFT');
-  if (!obftFamily) return 'layer-mev';
-  return bucketKey === 0 ? 'layer-mev' : 'layer-fallback';
+  if (!obftFamily) return true;
+  return bucketKey === 0;
 }
 
 // rebuildLayerBreakdown populates the decision layer/round table between the
@@ -1200,9 +1200,9 @@ function layerColorClass(protocol, bucketKey) {
 // the round at which a decision was reached is shift-invariant — a later
 // BFT_start only clips deciders past the deadline (folded into "ready to
 // submit, past the submit deadline" in the failure breakdown), it doesn't
-// change which layer/round decided. Color
-// encodes MEV-density per family (see layerColorClass). Hidden when no active
-// protocol has decision data (all n/a / 0% success).
+// change which layer/round decided. Cell color encodes MEV density — a
+// pale→bright cyan ramp scaled by the share (see isMevFresh / mevDensityColor).
+// Hidden when no active protocol has decision data (all n/a / 0% success).
 function rebuildLayerBreakdown(data) {
   const host = document.getElementById('conditions-layers');
   if (!host) return;
@@ -1252,7 +1252,12 @@ function rebuildLayerBreakdown(data) {
     if (!cellByProtocol[name]) return h('td', { class: cls('na') }, 'n/a');
     const v = pct[name][idx];
     if (v <= 0) return h('td', { class: cls('zero') }, '—');
-    return h('td', { class: cls(layerColorClass(name, depthKey)) }, v.toFixed(2) + '%');
+    // Cyan intensity = MEV density: it scales with the (success-only) share for
+    // MEV-fresh decisions, and is pinned to 0 (the flat pale low end) for no-MEV
+    // fallback cells (OBFT/2abOBFT L_1+).
+    const intensity = isMevFresh(name, depthKey) ? v / 100 : 0;
+    const { bg, fg } = mevDensityColor(intensity);
+    return h('td', { class: cls(), style: `background: ${bg}; color: ${fg}` }, v.toFixed(2) + '%');
   };
 
   const tbody = h('tbody');
@@ -1268,8 +1273,8 @@ function rebuildLayerBreakdown(data) {
   table.appendChild(tbody);
   host.appendChild(table);
   host.appendChild(h('p', { class: 'conditions-layers-note' },
-    'Each cell is the share of iterations that decided at that layer (OBFT/2abOBFT) or round (QBFT). ' +
-    'Green = the decision landed on a fresh MEV block; amber = it fell back to a deeper safe parent with no MEV (OBFT/2abOBFT, L_1+ only).'));
+    'Each cell is the share of iterations that successfully decided at that layer (OBFT/2abOBFT) or round (QBFT). ' +
+    'Cyan intensity tracks MEV density — brighter, stronger cyan = more iterations captured a fresh MEV block; pale cyan = little or no MEV (incl. the deeper safe-parent fallback at OBFT/2abOBFT L_1+).'));
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap
@@ -1731,9 +1736,9 @@ function rateToColor(rate) {
   return { bg, fg };
 }
 
-// relativeLuminance returns WCAG relative luminance for an HSL color.
-// Converts HSL → sRGB → linearized RGB → weighted sum.
-function relativeLuminance(h, s, l) {
+// hslToRgb converts an HSL color (h in degrees, s/l in %) to sRGB channels
+// in [0, 1].
+function hslToRgb(h, s, l) {
   const hp = h / 360, sp = s / 100, lp = l / 100;
   const q = lp < 0.5 ? lp * (1 + sp) : lp + sp - lp * sp;
   const p = 2 * lp - q;
@@ -1745,9 +1750,65 @@ function relativeLuminance(h, s, l) {
     if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
     return p;
   };
-  const rgb = [hueToRGB(hp + 1 / 3), hueToRGB(hp), hueToRGB(hp - 1 / 3)];
+  return [hueToRGB(hp + 1 / 3), hueToRGB(hp), hueToRGB(hp - 1 / 3)];
+}
+
+// srgbLuminance returns WCAG relative luminance for sRGB channels in [0, 1].
+function srgbLuminance(rgb) {
   const lin = rgb.map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
   return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+// relativeLuminance returns WCAG relative luminance for an HSL color.
+function relativeLuminance(h, s, l) {
+  return srgbLuminance(hslToRgb(h, s, l));
+}
+
+// pickContrastText returns the more legible of dark/light text for a cell
+// whose HSL+alpha tint is composited over the white card. Shared by
+// failRateToColor and mevDensityColor — it flips to light text if a tint ever
+// composites dark enough to need it (both ramps currently stay light).
+function pickContrastText(hue, sat, light, alpha) {
+  const composited = hslToRgb(hue, sat, light).map((c) => alpha * c + (1 - alpha));
+  const lBg = srgbLuminance(composited);
+  const lDark = 0.0114, lLight = 0.9131;
+  const cDark = (Math.max(lBg, lDark) + 0.05) / (Math.min(lBg, lDark) + 0.05);
+  const cLight = (Math.max(lBg, lLight) + 0.05) / (Math.min(lBg, lLight) + 0.05);
+  return cLight > cDark ? '#f7fafc' : '#1a1a1a';
+}
+
+// failRateToColor maps a failure rate in [0, 1] to a single-hue red tint:
+// barely-there at ~0%, deepening to a soft, see-through red that caps at the
+// ~60% point — past ~60% failure it stops getting redder, so solid 100% blocks
+// read as a calm red, not a loud one. Run at half opacity for a light tint.
+// Unlike rateToColor (the success ramp), it never passes through green/yellow.
+function failRateToColor(rate) {
+  const r = Math.max(0, Math.min(1, rate));
+  const hue = 2, sat = 75, light = 45; // a fixed deep red
+  // Rise toward the cap by r=0.6, then hold (no redder past ~60% failure), and
+  // halve the result for transparency so the tint stays see-through.
+  const alpha = (0.06 + Math.min(r, 0.6) * 0.86) * 0.5; // ~0.03 → 0.288 (cap)
+  const bg = `hsla(${hue}, ${sat}%, ${light}%, ${alpha.toFixed(3)})`;
+  return { bg, fg: pickContrastText(hue, sat, light, alpha) };
+}
+
+// mevDensityColor maps an MEV-density intensity in [0, 1] to a cyan tint that
+// deepens with density: a pale, low-saturation cyan at ~0% (and for no-MEV
+// fallback cells), with saturation climbing fast and lightness easing down so
+// it reads as cyan early. The ramp caps at ~60% (like the failure table) — past
+// that the cyan holds steady rather than intensifying. Used by the
+// decision-layer table: intensity = the cell's (success-only) share for
+// MEV-fresh decisions, 0 for no-MEV fallback cells.
+function mevDensityColor(intensity) {
+  const t = Math.max(0, Math.min(1, intensity));
+  // Cap at ~60%: shares past 60% render the same as 60% (no brighter cyan).
+  const tc = Math.min(t, 0.6);
+  const hue = 187;
+  const sat = 40 + Math.pow(tc, 0.29) * 22; // 40% (low) → ~59% at the 0.6 cap
+  const light = 78 - tc * 26;               // 78% (light) → ~62% (clear cyan) at the cap
+  const alpha = 0.69 + tc * 0.13;           // 0.69 (cyan shows clearly) → ~0.77 at the cap
+  const bg = `hsla(${hue}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%, ${alpha.toFixed(3)})`;
+  return { bg, fg: pickContrastText(hue, sat, light, alpha) };
 }
 
 // renderHeatmapCell colors a single cell by success rate via rateToColor.
