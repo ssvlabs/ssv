@@ -139,22 +139,29 @@ func TestWrapBaselineForInstability_PreservesHealthyMeshSettings(t *testing.T) {
 // regression where the wrap silently fails to apply to the mesh path
 // would still fail this test.
 //
-// Production-mesh isolation: Healthy's Apply enables two recovery
-// features that mask mesh-transport miss-events — gossip backstop
+// Production-mesh isolation: Healthy's Apply enables recovery features
+// that mask mesh-transport miss-events — the gossip backstop
 // (cfg.Mesh.Gossip.Enabled = true) and a RefloodDelay-aware primary
 // broadcast budget (cfg.RefloodDelay = 700ms widens B_0 from 2·BTT to
 // 2·BTT + 700ms, absorbing the instability-induced arrival jitter). Both
-// are correct Healthy-scenario behavior but would let extreme
-// instability decide 100%, defeating this test's premise. Disable both
-// locally so the test stays focused on its narrow assertion (wrap
-// plumbing reaches the eager-mesh path).
+// are correct Healthy-scenario behavior that would let extreme instability
+// decide 100%, so both are disabled locally. A third feature is intrinsic
+// and CANNOT be disabled: the L_0 schedule always carries a structural
+// recovery margin of max(RefloodDelay, 1·BTT) (the 1·BTT floor mirrors
+// 2abOBFT's max(SafetyBuffer, 1·BTT)), so even at RefloodDelay=0 the
+// primary keeps 1·BTT of headroom before T_commit. To surface miss-events
+// past that floor + B_0 = 3·BTT window, the network is harshened here
+// (Median = BTT, Sigma = 0.6) over 40 iters so extreme's slow-op + loss
+// disruption degrades success below the all-honest baseline. The test
+// still asserts only the loose inequality (extreme < none) to avoid
+// pinning tuning numbers (wrap plumbing reaches the eager-mesh path).
 func TestMeshHealthy_RespondsToInstability(t *testing.T) {
-	const iters = 20
+	const iters = 40
 	btt := 300 * time.Millisecond
 	base := ct.DefaultProposerDutyConfig(btt)
 	base.Delivery = ct.DeliveryMesh
-	base.Network = ct.LogNormalDelay{Median: btt / 2, Sigma: 0.5}
-	base.Mesh.HopDelay = ct.LogNormalDelay{Median: btt / 3, Sigma: 0.5}
+	base.Network = ct.LogNormalDelay{Median: btt, Sigma: 0.6}
+	base.Mesh.HopDelay = ct.LogNormalDelay{Median: btt / 2, Sigma: 0.6}
 
 	healthy := ct.Catalog[0] // catalog_baseline.go places Healthy first
 	require.Equal(t, "Healthy", healthy.Name)

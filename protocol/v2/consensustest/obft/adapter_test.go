@@ -159,11 +159,12 @@ func TestRecovery_PeerVOnHV1(t *testing.T) {
 //
 // Recovery requires FetchAt[0]+2·BTT < T_commit so V-drop receivers
 // emit BEFORE the evtPhaseTwoStart T_commit fallback locks them into
-// NR. At very high BTT the V-drop emit chain stretches past T_commit
-// and recovery fails — the test bound of 600ms BTT stays comfortably
-// inside the envelope. Framework now matches production sizing (Δ_2 =
-// 1·BTT spec-aligned), so the envelope here equals what production
-// sees — no framework-vs-production divergence.
+// NR. The recovery margin is max(RefloodDelay, 1·BTT) — the structural
+// 1·BTT floor mirrors 2abOBFT's max(SafetyBuffer, 1·BTT); at
+// DefaultProposerDutyConfig's RefloodDelay=0 that is a full 1·BTT, so
+// recovery holds at every BTT in range as long as the schedule fits
+// (T_commit ≥ 3·BTT, true through the 600ms degraded bound). Framework
+// matches production sizing (Δ_2 = 1·BTT spec-aligned).
 func TestRecovery_PeerVOnHV1_DegradedBTT(t *testing.T) {
 	// Operational SSV BTT envelope: 100ms (LAN-fast) to 600ms (degraded
 	// WAN).
@@ -300,29 +301,27 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 // TestAdapter_OpportunisticDecisionTime asserts the observer-mode metric
 // is active AND that commits fire on L0Ready close (not at T_commit):
 // under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum at L_0
-// reaches at FetchAt[0] + 2·BTT = 3550ms (was 3800ms = T_commit + 1·BTT
+// reaches at FetchAt[0] + 2·BTT = 3400ms (was 3800ms = T_commit + 1·BTT
 // under the prior sync-at-T_commit emit; was 3850ms = RoundEndOffset
-// pre-observer-mode). Pinning this 300ms total saving catches both
-// regressions: (a) vQuorumAt not being written by the commit-arrival
-// path, and (b) the framework's evtCommitEmit not being scheduled on
-// L0Ready close.
+// pre-observer-mode). Pinning this saving catches both regressions:
+// (a) vQuorumAt not being written by the commit-arrival path, and (b) the
+// framework's evtCommitEmit not being scheduled on L0Ready close.
 func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
-	// At BTT=200ms: T_commit=3600ms (Δ_2=1·BTT spec-aligned), B_0=2·BTT=400ms,
-	// fetchBuffer=BTT/4=50ms → FetchAt[0]=3150ms. L_0 leader emits Phase-1
-	// (and its own early commit) at 3150ms; Phase-1 arrives at peers at 3350ms
-	// → ApplyHostValidity closes L0Ready on the σ-retention path → peers
-	// early-emit commits at 3350ms → arrivals at 3550ms. The qV-th σ-partial
+	// At BTT=200ms: T_commit=3600ms (Δ_2=1·BTT spec-aligned), recovery margin
+	// = max(RefloodDelay, 1·BTT) = 200ms (RefloodDelay=0) → FetchAt[0] =
+	// T_commit − 2·BTT − 200ms = 3000ms. L_0 leader emits Phase-1 (and its
+	// own early commit) at 3000ms; Phase-1 arrives at peers at 3200ms →
+	// ApplyHostValidity closes L0Ready on the σ-retention path → peers
+	// early-emit commits at 3200ms → arrivals at 3400ms. The qV-th σ-partial
 	// arrival hits σ-quorum at that moment; walk cost at L_0 is 0 (no
-	// fall-through). Total saving vs schedule-anchored 3850ms is 300ms (50ms
-	// vs sync-emit's 3800ms + another 250ms from the L0Ready-driven early-
-	// emit).
-	require.Equal(t, 3550*time.Millisecond, out.DecisionTime,
-		"observer-mode + L0Ready-driven emit should catch L_0 σ-quorum at FetchAt[0] + 2·BTT = 3550ms "+
+	// fall-through).
+	require.Equal(t, 3400*time.Millisecond, out.DecisionTime,
+		"observer-mode + L0Ready-driven emit should catch L_0 σ-quorum at FetchAt[0] + 2·BTT = 3400ms "+
 			"(was 3800ms under sync-at-T_commit emit; was schedule-anchored 3850ms pre-observer)")
 }
 
@@ -522,73 +521,68 @@ func TestAdapter_OfflineAggregator_HealthyOneRecon(t *testing.T) {
 		out.OfflineAgg)
 }
 
-// TestAdapter_MaxMEVFetch_HealthyAtBoundary exercises the OBFT.md §Timing
-// budget max-MEV operating point: every leader broadcasts EXACTLY at
-// T_broadcast_max_k (LeaderBroadcastOffset = 0 for every layer). Per spec
-// §Setting, `B_0 = 1 BTT` decomposes as "0.5 BTT typical-mesh propagation +
-// 0.5 BTT convergence buffer" — so the test uses `ConstantDelay{D: BTT/2}`
-// (matching P99 ≈ 150ms typical propagation in the spec's Config A) leaving
-// the half-BTT convergence buffer intact. Bundle arrives at
-// T_broadcast_max_0 + 0.5 BTT = T_commit − 0.5 BTT, comfortably inside the
-// acceptance window. Cluster decides at L_0.
+// TestAdapter_HealthyDecidesAtBroadcastDeadline exercises the default
+// schedule under typical-mesh propagation: each leader broadcasts on its
+// per-layer schedule (L_0 at T_commit − 2·BTT − max(RefloodDelay, 1·BTT)),
+// and with `ConstantDelay{D: BTT/2}` the L_0 bundle arrives well inside the
+// [slot_start, T_commit] acceptance window, so the cluster decides at L_0.
 //
-// Validates: (a) Protocol.MaxMEVFetch zeros the fetch buffer end-to-end,
-// (b) the spec's B_k = "typical propagation + convergence buffer" decomposition
-// at max-MEV fetch holds in simulation.
-func TestAdapter_MaxMEVFetch_HealthyAtBoundary(t *testing.T) {
+// Validates that the default schedule (no fetch buffer; recovery margin
+// max(RefloodDelay, 1·BTT)) lands the healthy path at L_0 under typical
+// propagation.
+func TestAdapter_HealthyDecidesAtBroadcastDeadline(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	cfg.Network = ct.ConstantDelay{D: cfg.BTT / 2} // typical-mesh propagation per spec B_k decomposition
+	cfg.Network = ct.ConstantDelay{D: cfg.BTT / 2} // typical-mesh propagation
 
-	out, err := obftadapter.Protocol{MaxMEVFetch: true}.Run(cfg)
+	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
-	require.True(t, out.Decided, "max-MEV op-point should decide at L_0 (typical propagation + convergence buffer)")
-	require.Equal(t, 0, out.DecidedRound, "max-MEV op-point must decide at L_0 fastest path")
+	require.True(t, out.Decided, "healthy path should decide at L_0 under typical propagation")
+	require.Equal(t, 0, out.DecidedRound, "should decide at L_0 fastest path")
 
 	rep := ct.ComputeSafetyReport(out)
 	require.True(t, rep.SingleV, "SingleV: %s", rep)
 	require.True(t, rep.NoOfflineDoubleV, "NoOfflineDoubleV: %s", rep)
-	t.Logf("MaxMEVFetch op-point: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
+	t.Logf("default schedule, typical propagation: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
 }
 
-// TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed exercises
-// the spec's pathology: max-MEV fetch (zero broadcast offset) PLUS full-BTT
-// propagation (= 1 BTT, no convergence buffer left within B_0). Per spec
-// §Setting, this is the boundary where event-ordering between the L_0 arrival
-// and the operator's T_commit view can flip the outcome from σ to NR. With
-// the test sim's deterministic event ordering (evtPhaseTwoStart at seq N
-// fires before evtPhase1Arrival at seq N+M when both land at T_commit), the
-// operator commits NR at L_0 → fall-through to L_1.
+// TestAdapter_FallsThroughWhenConvergenceBufferConsumed exercises the spec's
+// pathology: propagation consumes the entire L_0 recovery window with zero
+// margin, so even the peer-reflood-V σ-upgrade can't beat the T_commit
+// view-fix. The L_0 recovery window is 2·BTT (recovery cascade) +
+// max(RefloodDelay, 1·BTT) (recovery margin) = 3·BTT at
+// DefaultProposerDutyConfig's RefloodDelay=0, so the test uses
+// `ConstantDelay{D: 3·BTT}`: the L_0 bundle arrives exactly at T_commit. Per
+// the sim's deterministic event ordering (evtPhaseTwoStart at seq N fires
+// before evtPhase1Arrival at seq N+M when both land at T_commit), non-leader
+// ops commit NR at L_0 → fall-through to L_1.
 //
-// Validates: (a) the spec's "convergence buffer in B_k" warning is observable
-// — at the exact boundary, max-MEV fetch is NOT guaranteed at L_0 under
-// full-BTT propagation, (b) the K-layer fall-through MECHANISM reaches L_1
-// internally (visible in MissReason). Post Δ_2 tightening to spec-aligned
-// 1·BTT, the post-T_commit budget is too narrow (1·BTT + ε_3 = 250ms) to
-// also absorb the 2·BTT commit propagation that fall-through requires —
+// Validates: (a) at the exact window boundary L_0 success is NOT guaranteed
+// under full-window propagation, (b) the K-layer fall-through MECHANISM
+// reaches L_1 internally (visible in MissReason). Post Δ_2 tightening to
+// spec-aligned 1·BTT, the post-T_commit budget is too narrow (1·BTT + ε_3 =
+// 250ms) to also absorb the commit propagation that fall-through requires —
 // the cluster reaches L_1 σ-quorum past the relay submit deadline. The
-// MissReason exposes the fall-through outcome precisely. This test now
-// doubles as a regression guard against re-loosening Δ_2.
-func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
+// MissReason exposes the fall-through outcome precisely. This test doubles as
+// a regression guard against re-loosening Δ_2.
+func TestAdapter_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-	// Override Network to 2·BTT propagation — under the reflood-aware schedule
-	// (B_0 = 2·BTT + RefloodDelay; this test uses DefaultProposerDutyConfig
-	// which leaves the framework-default RefloodDelay=0), this consumes the
-	// entire B_0 budget with zero margin. The spec pathology this test
-	// exercises: max-MEV fetch (zero broadcast offset) + propagation exactly
-	// at B_0 boundary → ordering between L_0 arrival and T_commit can flip
-	// the outcome from σ to NR.
-	cfg.Network = ct.ConstantDelay{D: 2 * cfg.BTT}
+	// Override Network to 3·BTT propagation — the full L_0 recovery window
+	// (2·BTT cascade + max(RefloodDelay, 1·BTT) margin = 3·BTT at the
+	// framework-default RefloodDelay=0), consumed with zero margin. The
+	// pathology: the L_0 bundle arrives exactly at T_commit, so ordering
+	// between the arrival and the T_commit view-fix flips the outcome from σ
+	// to NR.
+	cfg.Network = ct.ConstantDelay{D: 3 * cfg.BTT}
 
-	out, err := obftadapter.Protocol{MaxMEVFetch: true}.Run(cfg)
+	out, err := obftadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)
-	// At spec-aligned Δ_2 = 1·BTT, T_commit = 3600ms (was 3400ms at framework's
-	// prior 2·BTT conservatism). Commits go out at T_commit, arrive at T_commit
-	// + 2·BTT = 4000ms (Network = 2·BTT), L_1 σ-quorum + 1·ε_3 walk cost lands
-	// at 4050ms — past the relay submit deadline of 3900ms. Fall-through reaches
-	// L_1 correctly (visible in MissReason); the cluster just has no time to
-	// submit the cert.
+	// At spec-aligned Δ_2 = 1·BTT, T_commit = 3600ms. Commits go out at
+	// T_commit, arrive at T_commit + 3·BTT = 4200ms (Network = 3·BTT), L_1
+	// σ-quorum + 1·ε_3 walk cost lands at 4250ms — past the relay submit
+	// deadline of 3900ms. Fall-through reaches L_1 correctly (visible in
+	// MissReason); the cluster just has no time to submit the cert.
 	require.False(t, out.Decided,
-		"max-MEV + 2·BTT propagation at spec-aligned Δ_2 = 1·BTT: fall-through reaches L_1 internally but past submit deadline; if this assertion starts passing, Δ_2 has been re-loosened")
+		"full-window propagation at spec-aligned Δ_2 = 1·BTT: fall-through reaches L_1 internally but past submit deadline; if this assertion starts passing, Δ_2 has been re-loosened")
 	require.Contains(t, out.MissReason, "layer 1",
 		"MissReason should expose K-layer fall-through reaching L_1 internally (mechanism (b) intact)")
 	require.Contains(t, out.MissReason, "past the submit deadline",
@@ -596,7 +590,7 @@ func TestAdapter_MaxMEVFetch_FallsThroughWhenConvergenceBufferConsumed(t *testin
 
 	rep := ct.ComputeSafetyReport(out)
 	require.True(t, rep.SingleV, "SingleV: %s", rep)
-	t.Logf("MaxMEVFetch + 2·BTT propagation: internally reached fall-through at %v but past submit deadline (%q)",
+	t.Logf("full-window (3·BTT) propagation: internally reached fall-through at %v but past submit deadline (%q)",
 		out.DecisionTime, out.MissReason)
 }
 
@@ -972,9 +966,12 @@ func TestAdapter_ByzWitnessForgery_TriggersSafetyDetection(t *testing.T) {
 // (not from B_0), so it's unchanged. The primary's broadcast deadline
 // `T_broadcast_max_0 = T_commit − B_0` lands exactly RefloodDelay
 // LATER under OBFT-no-reflood — the MEV-fresh-fetch property the variant
-// buys. Under the early-emit rule the cluster's DecisionTime cascades
-// by the same gap (operators emit Phase-2 commits on L_0 observation,
-// so a later broadcast → later decision).
+// buys. The actual fetch, however, carries the recovery margin
+// max(RefloodDelay, 1·BTT): at RefloodDelay=700ms the 1·BTT floor is
+// dormant (fetch = deadline), but at RefloodDelay=0 it pulls the fetch
+// 1·BTT earlier than the deadline. So under the early-emit rule the
+// DecisionTime gap is RefloodDelay − 1·BTT = 500ms — narrower than the
+// 700ms broadcast-deadline gap (which still tracks B_0 exactly).
 //
 // The "OBFT-no-reflood misses under degraded mesh" effect — where bare OBFT's
 // RefloodDelay cushion absorbs the lazy-push recovery RTT and OBFT-no-reflood
@@ -997,8 +994,8 @@ func TestAdapter_NoRefloodDelay_VariantBehavior(t *testing.T) {
 	require.True(t, outRD0.Decided, "OBFT-no-reflood must decide on healthy on-budget mesh — eager push reaches everyone, no RefloodDelay needed")
 	require.Equal(t, 700*time.Millisecond, outRD0.DecidingBroadcastTime-outOBFT.DecidingBroadcastTime,
 		"the broadcast-time gap should equal the RefloodDelay subtracted from B_0 exactly (T_commit − B_0 lands 700ms later for OBFT-no-reflood)")
-	require.Equal(t, 700*time.Millisecond, outRD0.DecisionTime-outOBFT.DecisionTime,
-		"DecisionTime gap equals the broadcast-time gap (early-emit fires on L_0 observation; cluster reaches quorum 700ms later for OBFT-no-reflood)")
+	require.Equal(t, 500*time.Millisecond, outRD0.DecisionTime-outOBFT.DecisionTime,
+		"DecisionTime gap = RefloodDelay − 1·BTT = 500ms: the recovery floor max(RefloodDelay, 1·BTT) lifts the no-reflood variant's actual fetch 1·BTT earlier than its B_0 deadline, narrowing the decision gap below the 700ms broadcast-deadline gap")
 
 	// Adversarial-parity invariant: when cfg.RefloodDelay is already 0
 	// (the default for adversarial scenarios), the NoRefloodDelay flag

@@ -4,7 +4,7 @@ decided=true round=1 decisionTime=3.85s missReason=""
 200ms	Phase1Arrival[from=2 to=1 layer=1 v=020000000000]
 200ms	Phase1Arrival[from=2 to=3 layer=1 v=020000000000]
 200ms	Phase1Arrival[from=2 to=4 layer=1 v=020000000000]
-3.15s	LeaderFetch[layer=0]
+3s	LeaderFetch[layer=0]
 3.6s	PhaseTwoStart
 3.8s	CommitArrival[from=1 to=2]
 3.8s	CommitArrival[from=1 to=3]

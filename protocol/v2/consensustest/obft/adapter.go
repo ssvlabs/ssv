@@ -24,21 +24,13 @@ const (
 
 // Protocol is the OBFT adapter. Use as `obft.Protocol{}` for the canonical
 // variant, or set the variant knobs below (RefloodDelayOverride,
-// NoRefloodDelay, MaxMEVFetch) to register cushion / max-MEV variants
-// alongside it in the stress matrix without name collisions.
+// NoRefloodDelay) to register cushion variants alongside it in the stress
+// matrix without name collisions.
 type Protocol struct {
 	// VariantName overrides the reported protocol name. Empty → "OBFT".
-	// Used for registering cushion / MaxMEV-style variants alongside the
-	// canonical adapter in the stress matrix without name collisions.
+	// Used for registering cushion variants alongside the canonical adapter
+	// in the stress matrix without name collisions.
 	VariantName string
-
-	// MaxMEVFetch removes the per-layer fetch buffer (the BTT/4 margin
-	// between leader fetch and T_broadcast_max_k). When true, every leader
-	// fetches and broadcasts exactly at its T_broadcast_max_k — the spec's
-	// max-MEV operating point per OBFT.md §Timing budget. Mainly useful
-	// for adapter-level unit tests exercising the spec's B_k decomposition
-	// boundary; the stress driver doesn't register this variant.
-	MaxMEVFetch bool
 
 	// NoRefloodDelay forces the broadcast budget to use RefloodDelay=0
 	// regardless of cfg.RefloodDelay. Models the "fully-meshed cluster,
@@ -148,19 +140,27 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		}
 	}
 
-	// Per-layer fetch buffer: BTT/4 by default, 0 under MaxMEVFetch
-	// (the spec's max-MEV-freshness boundary — leader fetches and
-	// broadcasts at T_broadcast_max_k exactly).
-	fetchBuffer := cfg.BTT / 4
-	if p.MaxMEVFetch {
-		fetchBuffer = 0
-	}
-	// Apply the spec's runtime clamp `T_broadcast_max_k = max(0,
-	// T_commit − B_k)` (obft/base/types.go §B_k). A layer whose designed
-	// fetch lands before slot start floors to 0.
+	// recoveryMargin is the slack before T_commit for L_0's peer-reflood-V
+	// σ-upgrade: max(RefloodDelay, 1·BTT). The 1·BTT structural floor mirrors
+	// 2abOBFT's max(SafetyBuffer, 1·BTT) (twoab/adapter.go resolveBudget) and
+	// guarantees one propagation hop of recovery headroom before the T_commit
+	// view-fix even at RefloodDelay=0 — so the h_V=1 peer-reflood-V σ-upgrade
+	// lands in time. Replaces the former flat BTT/4 fetchBuffer.
+	recoveryMargin := max(refloodDelay, cfg.BTT)
+	// Per-layer broadcast schedule with the spec's runtime clamp
+	// `T_broadcast_max_k = max(0, T_commit − B_k)` (obft/base/types.go §B_k).
+	// The primary L_0 (the only shallow layer, B_0 < T_commit) broadcasts
+	// 2·BTT (the peer-reflood-V recovery cascade) + recoveryMargin before
+	// T_commit; backups (B_k = T_commit) clamp to BFT_start. A layer whose
+	// designed fetch lands before slot start floors to 0.
 	fetchAt := make([]time.Duration, cfg.K)
 	for k := 0; k < cfg.K; k++ {
-		fa := tCommit - broadcastBudget[k] - fetchBuffer
+		var fa time.Duration
+		if broadcastBudget[k] < tCommit {
+			fa = tCommit - 2*cfg.BTT - recoveryMargin
+		} else {
+			fa = tCommit - broadcastBudget[k]
+		}
 		if fa < 0 {
 			fa = 0
 		}
@@ -198,16 +198,16 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
 	// Stamp the L_0 BFT_start-independence threshold = the unclamped
-	// fetchAt[0] (= T_commit − B_0 − fetchBuffer, floored at 0). This is
-	// exactly the `fa` computed for k=0 in the fetchAt loop above — the
-	// largest BFT_start for which L_0's schedule is identical to
-	// BFT_start=0. The report UI reuses this (BFT_start=0) cell at or
-	// below this value (see Outcome.BFTStartIndependenceThreshold).
+	// fetchAt[0] (= T_commit − 2·BTT − max(RefloodDelay, 1·BTT), floored at
+	// 0). This is exactly the `fa` computed for k=0 in the fetchAt loop above
+	// — the largest BFT_start for which L_0's schedule is identical to
+	// BFT_start=0. The report UI reuses this (BFT_start=0) cell at or below
+	// this value (see Outcome.BFTStartIndependenceThreshold).
 	//
 	// The value is a pure function of cfg (BFT_start is not a sim
 	// parameter — the sim always runs at BFT_start=0), so it's stamped
 	// unconditionally on the single cell, regardless of decided/miss.
-	bftIndep := tCommit - broadcastBudget[0] - fetchBuffer
+	bftIndep := tCommit - 2*cfg.BTT - recoveryMargin
 	if bftIndep < 0 {
 		bftIndep = 0
 	}

@@ -229,9 +229,8 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.CommitAttestation = computeAttestation(cfg, out)
 	// Stamp the L_0 BFT_start-independence threshold = the unclamped
-	// fetchAt[0] (= T0Broadcast − B_0, floored at 0; no fetchBuffer term —
-	// 2ab's fetchAt loop doesn't use one). This is the `fa` computed for
-	// k=0 above — the largest BFT_start for which L_0's schedule is
+	// fetchAt[0] (= T0Broadcast − B_0, floored at 0). This is the `fa`
+	// computed for k=0 above — the largest BFT_start for which L_0's schedule is
 	// identical to BFT_start=0. The report UI reuses this (BFT_start=0)
 	// cell at or below this value (see
 	// Outcome.BFTStartIndependenceThreshold).
