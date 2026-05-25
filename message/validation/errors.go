@@ -191,6 +191,9 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 
 func (mv *messageValidator) handleValidationSuccess(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
 	recordAcceptedMessage(ctx, messageRole(decodedMessage))
+	if mv.observer == nil {
+		return pubsub.ValidationAccept
+	}
 	mv.observeSSVValidation(ctx, peerID, mv.buildLoggerFields(decodedMessage), SSVValidationAccepted, "valid", nil)
 	return pubsub.ValidationAccept
 }
