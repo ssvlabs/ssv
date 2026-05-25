@@ -26,11 +26,16 @@ type ProgressTracker struct {
 	bars  []*protoBar
 	index map[string]int // protocol name -> bars index; read-only after New
 	start time.Time
-	// drawn tracks whether the multi-line block has been printed once, so
-	// subsequent renders move the cursor back up over it before redrawing. Only
-	// touched by emit, which is called sequentially (the renderer goroutine,
+	// prevLines is the line count of the block the last emit printed; the next
+	// emit rewinds the cursor over exactly that many lines before erasing and
+	// redrawing. It must reflect the PREVIOUS frame, not the current one: a
+	// terminal resize can change the block's height between frames (the height
+	// clamp in frameLines shows fewer bars on a shorter viewport), and rewinding
+	// by the current height then misaligns the erase, leaving the old block's top
+	// behind as a stale copy ("stacking"). 0 means nothing has been drawn yet.
+	// Only touched by emit, which is called sequentially (the renderer goroutine,
 	// then the final emit in stop after wg.Wait).
-	drawn bool
+	prevLines int
 }
 
 // protoBar is one protocol's progress: a fixed total and an atomically-updated
@@ -147,17 +152,29 @@ func (p *ProgressTracker) emit(w io.Writer, tty bool) {
 		return
 	}
 	cols, rows := terminalSize(w)
-	lines := p.frameLines(cols, rows)
-	if p.drawn {
-		// Move up over the previously-printed block (every line but the last),
-		// return to column 0, and erase to end of screen before redrawing. The
-		// block is sized to fit the viewport (see frameLines), so the cursor-up
-		// never has to reach past the top of the screen into scrollback (which it
-		// can't — that's what made earlier frames "stack").
-		fmt.Fprintf(w, "\033[%dA\r\033[J", len(lines)-1)
+	p.redraw(w, p.frameLines(cols, rows))
+}
+
+// redraw writes one terminal frame in place: it rewinds the cursor over the
+// previously drawn block (tracked in prevLines), erases to end of screen, prints
+// `lines`, then records the new height for the next call. Rewinding by the
+// PREVIOUS frame's height — not this one's — keeps the erase aligned when a
+// resize changes the block's line count between frames; rewinding by the current
+// height instead leaves the old block's top behind as a stale copy ("stacking").
+// The block is sized to fit the viewport (see frameLines), so on a stable size
+// the cursor-up never has to reach past the top of the screen into scrollback
+// (which it can't). A 1-line previous frame needs no vertical move, and "\033[0A"
+// would wrongly move up one line (param 0 defaults to 1), so the cursor-up is
+// guarded. Split from emit so the cursor math is unit-testable without a TTY.
+func (p *ProgressTracker) redraw(w io.Writer, lines []string) {
+	if p.prevLines > 0 {
+		if p.prevLines > 1 {
+			fmt.Fprintf(w, "\033[%dA", p.prevLines-1)
+		}
+		fmt.Fprint(w, "\r\033[J")
 	}
 	fmt.Fprint(w, strings.Join(lines, "\n"))
-	p.drawn = true
+	p.prevLines = len(lines)
 }
 
 // overallLine summarizes total progress + elapsed; used as the header and as

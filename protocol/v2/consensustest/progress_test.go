@@ -236,3 +236,50 @@ func TestEmitMultiBar(t *testing.T) {
 		t.Errorf("subsequent frame should redraw the block in place: %q", second)
 	}
 }
+
+// TestRedrawRewindsByPreviousHeight is the regression test for the "stacking"
+// bug: a terminal resize changes the block's line count between frames (the
+// height clamp shows fewer bars on a shorter viewport), and the in-place redraw
+// must rewind by the PREVIOUS frame's height, not the new one's. Rewinding by the
+// new (smaller) count erases only the bottom of the old block and leaves its top
+// on screen as a stale copy. redraw is exercised directly so the frame heights
+// can be varied without a real TTY.
+func TestRedrawRewindsByPreviousHeight(t *testing.T) {
+	var p ProgressTracker
+	var buf strings.Builder
+
+	// First frame (5 lines): nothing drawn yet, so no cursor movement.
+	p.redraw(&buf, []string{"a", "b", "c", "d", "e"})
+	if strings.Contains(buf.String(), "\033[") {
+		t.Errorf("first frame must not move the cursor: %q", buf.String())
+	}
+
+	// Shrink to 2 lines: rewind must be over the previous 5-line frame (up 4),
+	// not the current 2-line one (which would be up 1 and leave 3 stale lines).
+	buf.Reset()
+	p.redraw(&buf, []string{"x", "y"})
+	if !strings.HasPrefix(buf.String(), "\033[4A\r\033[J") {
+		t.Errorf("rewind should be up 4 (previous frame 5 lines - 1), got %q", buf.String())
+	}
+
+	// Grow back to 3 lines: rewind over the previous 2-line frame (up 1).
+	buf.Reset()
+	p.redraw(&buf, []string{"p", "q", "r"})
+	if !strings.HasPrefix(buf.String(), "\033[1A\r\033[J") {
+		t.Errorf("rewind should be up 1 (previous frame 2 lines - 1), got %q", buf.String())
+	}
+
+	// A 1-line previous frame: the next rewind must NOT emit a cursor-up, since
+	// "\033[0A" moves up one line (param 0 defaults to 1) and would clobber the
+	// line above the block — just carriage-return and erase.
+	buf.Reset()
+	p.redraw(&buf, []string{"solo"}) // prevLines becomes 1
+	buf.Reset()
+	p.redraw(&buf, []string{"a", "b"})
+	if strings.Contains(buf.String(), "\033[0A") {
+		t.Errorf("after a 1-line frame, redraw must not emit a cursor-up: %q", buf.String())
+	}
+	if !strings.HasPrefix(buf.String(), "\r\033[J") {
+		t.Errorf("after a 1-line frame, redraw should rewind with just CR+erase: %q", buf.String())
+	}
+}
