@@ -942,21 +942,21 @@ OBFT is OBFTR with `R = 1` and the round-retry machinery stripped. They share Ph
 
 ### A.2 — Comparison with [2abOBFT](2abOBFT.md)
 
-[2abOBFT](2abOBFT.md) is the Phase-2a/2b successor that recovers equivocation σ-locked splits and validity-divergence in-protocol. The Phase-2 split adds +1 RTT per round but removes the Class B byz-grief surface and brings Class A validity-divergence into recovery scope.
+[2abOBFT](2abOBFT.md) is the single-round Phase-2a/2b successor. Both protocols carry the Phase-1 leader σ-witness; 2abOBFT replaces OBFTR's R-round retry with a `KindNoValue` no-lock + upgrade, recovering **σ-locked-split (f-f) equivocation** and **transient mesh-flakiness** at L_0 and deciding a **late L_0-leader at L_0** — in a single round, at the cost of OBFTR's cross-round partition-tail retry. The residual misses (1-1-1 equivocation, the 2-2 validity boundary) are shared.
 
 | Aspect | OBFTR | [2abOBFT](2abOBFT.md) |
 |---|---|---|
-| Phase 1 σ_V | Yes — leader signs σ_V at Phase 1 (cryptographic head-start) | **No** — leader broadcasts only `(V, σ^op)`; σ-commitment happens at Phase 2b alongside non-leaders |
-| Phase 2 split | Single Phase 2 + Phase 2.5 (L_C signaling) | 2a (verdict broadcast / σ-eligibility observation) + 2b (σ-emit on cluster-converged V) |
-| Equivocation σ-locked split (1-1-1, etc.) | Slot misses (slashable) | **Recovered** via convergence rule |
-| h_V=1 selective-delivery deadlock | Slot misses | **Recovered** (Phase-2a verdict pool establishes σ-eligibility cluster-wide before Phase-2b binding) |
+| Phase-1 leader σ-witness | Yes — leader signs σ_V at Phase 1 (cryptographic head-start) | **Yes** — leader signs the per-layer σ-witness `LWitness` at Phase 1 (same head-start) |
+| Phase-2 structure | Single Phase 2 + Phase 2.5 (L_C signaling), per round | Phase-2 split: 2a (`KindValue` / `KindNoValue` / `KindCommit-NRDirect`) + dynamic 2b (`KindCommit-NR`, fired once the no-value cohort reaches `qEnc`) |
+| σ-locked-split equivocation (f-f) | Slot misses (slashable; R-invariant) | **Recovered at L_0** — witness head-start + peer-reflood-V harvest of the value, then upgrade |
+| 1-1-1 equivocation | Slot misses (slashable) | Slot misses (σ-locked, no NR pivot) — shared residual |
+| h_V=1 selective-delivery | Slot misses — OBFTR's witness section carries σ_L^V but not V, so V-drop receivers can't recover (no peer-reflood-V) | **Recovered at L_0** under healthy mesh (peer-reflood-V: `KindValue` carries V + the forwarded witness); degraded-mesh tail misses |
 | Validity-divergence (re-org during acceptance) | Out of scope (assumption 3) — slot misses cleanly | **Recovered within f-bound** (3-of-4 majorities at f=1 n=4); 2-2 splits still slot-miss |
 | Transient mesh-flakiness | Recovered across R-rounds (cross-round retention) | **Recovered in a single round** (`KindNoValue` no-lock) |
-| New regression vs OBFTR | n/a | **2-1-byz-defect** — byz leader equivocates V/V', verdict-claims σV(V), withholds σ at Phase-2b (NR-emit or silent). Slot misses. OBFTR succeeded here via Phase-1 σ_V lock. |
-| Round structure | R rounds (configurable) | Single round |
-| Healthy-path latency per round | 2 RTTs | 3 RTTs (Phase 1 + Phase 2a + Phase 2b) |
+| Round structure | R rounds — cross-round retry catches partitions up to the R·BTT absorption window | Single round — no cross-round retry; partitions beyond one round's window miss |
+| Healthy-path latency | 2 RTTs per round | 2 RTTs (Phase 2b adds a round only on NR fall-through) |
 
-**2abOBFT is OBFTR's natural recovery-scope extension at the cost of removing R-round retry.** For deployments where the Class B grief patterns matter (high-MEV proposer slots, mesh-flakiness conditions), 2abOBFT closes them in-protocol rather than relying on assumption 4 alone.
+**2abOBFT trades OBFTR's R-round retry for single-round recovery of σ-locked-split equivocation and transient mesh-flakiness** (via the `KindNoValue` no-lock + the Phase-1 witness head-start). For deployments where those grief patterns matter more than partition-tail retry (high-MEV proposer slots, adversarial-byz clusters, mesh-flakiness conditions), 2abOBFT closes them in-protocol rather than relying on assumption 4 alone; the shared residual (1-1-1 equivocation, the 2-2 validity boundary) remains.
 
 ### A.3 — Comparison with QBFT
 
