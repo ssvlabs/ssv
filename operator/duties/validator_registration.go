@@ -194,7 +194,8 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
-	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue))
+	shares := h.validatorProvider.SelfValidators()
+	duties := make([]*spectypes.ValidatorDuty, 0, len(h.eventQueue)+len(shares))
 
 	// Drain the event-driven queue.
 	pendingItems := make([]*queuedRegistration, 0, len(h.eventQueue))
@@ -222,7 +223,6 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
 	registrationSlots := h.beaconConfig.SlotsPerEpoch * frequencyEpochs
 
-	shares := h.validatorProvider.SelfValidators()
 	for _, share := range shares {
 		if !share.IsAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 			// Only attesting validators are eligible for registration duties.
@@ -247,7 +247,9 @@ func (h *ValidatorRegistrationHandler) processExecution(ctx context.Context, epo
 			zap.String("validator_pubkey", pk.String()))
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, duties, h.dutyExecutionDeadline(slot))
+	if len(duties) > 0 {
+		h.dutiesExecutor.ExecuteDuties(ctx, duties, h.dutyExecutionDeadline(slot))
+	}
 }
 
 // blockSlot returns slot that happens (corresponds to) at the same time as block.
