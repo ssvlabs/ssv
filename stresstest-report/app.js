@@ -93,10 +93,12 @@ const SUBMIT_DEADLINE_MS = SLOT_END_MS - HEADER_SUBMIT_HEADROOM_MS;
 //     BFT_start=0 decision times by +BFT_start; a sample fails when the
 //     shifted time overflows the relay deadline. Shown at every BFT_start.
 //   OBFT / 2abOBFT (slot-anchored, schedule derived backward from the
-//     relay cutoff): feasible only while the configured broadcast budget
-//     B_0 fits between BFT_start and the commit/backstop anchor — i.e.
+//     relay cutoff): feasible only while the leader can broadcast early
+//     enough between BFT_start and the commit/backstop anchor — i.e.
 //     for picker values ≤ the cell's emitted bftStartIndependenceMs
-//     threshold (= the adapter's unclamped fetchAt[0] = anchor − B_0). At
+//     threshold (= the adapter's unclamped fetchAt[0] = the recovery-floored
+//     broadcast target, anchor − max(B_0, 3·BTT) for OBFT / anchor − B_0 for
+//     2abOBFT). At
 //     or below it the schedule is bit-identical to BFT_start=0, so the
 //     BFT_start=0 cell is the exact result. ABOVE it the budget no longer
 //     fits: L_0 (the MEV layer) can't reliably land and the cluster would
@@ -575,10 +577,11 @@ function findPipelineShiftBaselineCell(data, scenarioName, protocol, instability
 // the catalog is swept only at BFT_start=0):
 //   - picker ≤ threshold  → reuse the BFT_start=0 cell (the schedule is
 //     bit-identical there, so this is exact);
-//   - picker > threshold  → n/a. Above it the configured broadcast budget
-//     B_0 no longer fits between BFT_start and the anchor, so L_0 (the
-//     MEV layer) can't reliably land and the cluster would fall through
-//     to L_1+ (safe parent, not MEV). That isn't a deployable config, so
+//   - picker > threshold  → n/a. Above it the leader can't broadcast early
+//     enough — the recovery-floored broadcast window no longer fits between
+//     BFT_start and the anchor — so L_0 (the MEV layer) can't reliably land
+//     and the cluster would fall through to L_1+ (safe parent, not MEV).
+//     That isn't a deployable config, so
 //     we render n/a rather than a clamped/degraded result. No round-up:
 //     configs above the threshold are never simulated.
 // Pipeline-shift protocols (QBFT family, PSigs) are K-independent and pull
@@ -619,12 +622,13 @@ function findBaselineCellForScenario(data, scenario, protocol) {
   // BFT_start=0, so the BFT_start=0 cell is the exact result.
   if (selectedBFTStart <= threshold) return cell0;
 
-  // Above the threshold the configured broadcast budget B_0 no longer
-  // fits between BFT_start and the commit/backstop anchor: the leader
-  // would have to broadcast below its designed budget, so L_0 (the MEV
-  // layer) can't reliably land and the cluster falls through to L_1+
-  // (deeper-confirmed safe parent — not MEV). That isn't a config anyone
-  // deploys, so render n/a rather than a clamped/degraded "success". No
+  // Above the threshold the leader can't broadcast early enough — the
+  // recovery-floored broadcast window no longer fits between BFT_start and
+  // the commit/backstop anchor: the leader would have to broadcast below its
+  // designed budget, so L_0 (the MEV layer) can't reliably land and the
+  // cluster falls through to L_1+ (deeper-confirmed safe parent — not MEV).
+  // That isn't a config anyone deploys, so render n/a rather than a
+  // clamped/degraded "success". No
   // round-up to a later cell — configs above the threshold are never
   // simulated.
   return null;
@@ -1819,7 +1823,7 @@ function buildBFTStartPicker() {
     class: 'sm-slot-picker-label',
     title: 'BFT_start = time the protocol\'s primary broadcast pipeline begins (= end of pre-fetch / pre-consensus).\n' +
       '\n' +
-      'OBFT-family: derived from the single BFT_start=0 sim. At/below the cell\'s BFT_start-independence threshold (emitted per-variant by the sweep — the point below which the schedule is bit-identical to BFT_start=0) the BFT_start=0 cell is the exact result. Above it the configured broadcast budget B_0 no longer fits before the commit/backstop anchor, so L_0 (the MEV layer) can\'t reliably land and the cluster would fall through to L_1+ (safe parent, not MEV): the config is not deployable, so it renders n/a — no clamping, no round-up.\n' +
+      'OBFT-family: derived from the single BFT_start=0 sim. At/below the cell\'s BFT_start-independence threshold (emitted per-variant by the sweep — the point below which the schedule is bit-identical to BFT_start=0) the BFT_start=0 cell is the exact result. Above it the leader can\'t broadcast early enough — the recovery-floored broadcast window no longer fits before the commit/backstop anchor — so L_0 (the MEV layer) can\'t reliably land and the cluster would fall through to L_1+ (safe parent, not MEV): the config is not deployable, so it renders n/a — no clamping, no round-up.\n' +
       '\n' +
       'QBFT / PSigs: cells are pipeline-shifted post-hoc (sample t → t + BFT_start), dropped when shifted t exceeds the relay cutoff.',
   }, 'BFT_start:');

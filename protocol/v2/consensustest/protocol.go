@@ -323,11 +323,14 @@ type Outcome struct {
 	// under "Unknown failure (adapter did not set MissReason)" as a
 	// safety net. Empty when Decided=true.
 	MissReason string
-	// DecidingBroadcastTime is the slot-anchored T_broadcast_max_k for
-	// k=DecidedRound — i.e. the absolute slot time at which the deciding
-	// layer's primary broadcast fired (= max(0, T_commit − B_k)
-	// per the spec's runtime clamp). Reported for diagnostic / UI use
-	// and per-sample timeline rendering.
+	// DecidingBroadcastTime is the absolute slot time at which the deciding
+	// layer's primary broadcast fired = the recovery-floored broadcast target
+	// for k=DecidedRound (OBFT: obft/base.BroadcastTargetOffset =
+	// max(0, T_commit − max(B_k, 3·BTT)); 2abOBFT: its T0Broadcast-anchored
+	// offset, the anchor already carrying the SafetyBuffer floor). The
+	// recovery floor may pull this earlier than the looser B_k-budget deadline
+	// T_commit − B_k (the spec's T_broadcast_max_k). Reported for diagnostic /
+	// UI use and per-sample timeline rendering.
 	//
 	// Set only by adapters with a slot-anchored Phase-1 schedule (OBFT
 	// family and 2abOBFT family). The QBFT adapter has no slot-anchored
@@ -337,11 +340,11 @@ type Outcome struct {
 	DecidingBroadcastTime time.Duration
 	// BFTStartIndependenceThreshold is the largest BFT_start for which the
 	// deciding-layer (L_0) primary broadcast schedule is bit-identical to
-	// BFT_start=0 — i.e. the *unclamped* fetchAt[0] (= anchor − B_0,
-	// floored at 0, where anchor = T_commit for OBFT / T0Broadcast for
-	// 2abOBFT and B_0 = broadcastBudget[0]). At or below this value the
-	// spec clamp `max(BFT_start, anchor − B_0)` is dormant at L_0, so the
-	// sim's (BFT_start=0) cell is an exact stand-in for that BFT_start;
+	// BFT_start=0 — i.e. the *unclamped* fetchAt[0] = the recovery-floored L_0
+	// broadcast target (OBFT: max(0, T_commit − max(B_0, 3·BTT)); 2abOBFT:
+	// T0Broadcast − B_0, its anchor already carrying the SafetyBuffer floor).
+	// At or below this value the spec clamp `max(BFT_start, ·)` is dormant at
+	// L_0, so the sim's (BFT_start=0) cell is an exact stand-in for that BFT_start;
 	// above it the cell is only an approximation. BFT_start is not a sim
 	// parameter — the sim always runs at BFT_start=0 and the report UI
 	// reads this serialized value to decide which picker BFT_starts a cell

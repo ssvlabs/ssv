@@ -484,9 +484,10 @@ type cellPayload struct {
 	// percentiles. omitted when no sim decided.
 	DecisionTimes []int `json:"decisionTimes,omitempty"`
 	// DecidingBroadcastTimes is index-aligned with DecisionTimes: entry
-	// i is T_broadcast_max (slot-anchored, in ms; = max(0,
-	// T_commit − B_k) per the spec's runtime clamp) for the deciding
-	// layer of the i-th decision sample. Reported for diagnostic /
+	// i is the recovery-floored broadcast target (slot-anchored, in ms;
+	// OBFT: max(0, T_commit − max(B_k, 3·BTT)), which may be earlier than the
+	// B_k-budget deadline T_commit − B_k; 2abOBFT: its floored T0Broadcast
+	// offset) for the deciding layer of the i-th decision sample. Reported for diagnostic /
 	// per-sample timeline rendering. BFT_start is not a sweep axis (the
 	// sim runs at BFT_start=0); the UI derives BFT_start post-hoc. Zero
 	// values for protocols with no slot-anchored broadcast (QBFT family,
