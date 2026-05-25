@@ -276,3 +276,27 @@ func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
 		"QBFT-SSV at prod/extreme/mesh must be BTT-invariant; got spread %.1fpp across BTT ∈ {100, 300, 500}ms (%v)",
 		100*(hi-lo), successRates)
 }
+
+// TestInstabilityLevels_Monotonic locks in the calibration invariant:
+// Level increments by one and every severity knob is non-decreasing
+// none → extreme, so a higher picker level is never milder on any axis.
+// Guards against re-introducing an inversion — PersistP and
+// SlowOpsFraction were both inverted across moderate/high/extreme before
+// this was enforced.
+func TestInstabilityLevels_Monotonic(t *testing.T) {
+	levels := ct.InstabilityLevels
+	wantNames := []string{"none", "low", "moderate", "high", "extreme"}
+	require.Len(t, levels, len(wantNames))
+	for i, name := range wantNames {
+		require.Equalf(t, name, levels[i].Name, "level %d name", i)
+		require.Equalf(t, i, levels[i].Level, "level %d Level field", i)
+	}
+	for i := 1; i < len(levels); i++ {
+		prev, cur := levels[i-1], levels[i]
+		require.GreaterOrEqualf(t, cur.LossRate, prev.LossRate, "LossRate non-decreasing %s→%s", prev.Name, cur.Name)
+		require.GreaterOrEqualf(t, cur.BurstFactor, prev.BurstFactor, "BurstFactor non-decreasing %s→%s", prev.Name, cur.Name)
+		require.GreaterOrEqualf(t, cur.SlowOpsFraction, prev.SlowOpsFraction, "SlowOpsFraction non-decreasing %s→%s", prev.Name, cur.Name)
+		require.GreaterOrEqualf(t, cur.SlowMul, prev.SlowMul, "SlowMul non-decreasing %s→%s", prev.Name, cur.Name)
+		require.GreaterOrEqualf(t, cur.PersistP, prev.PersistP, "PersistP non-decreasing %s→%s", prev.Name, cur.Name)
+	}
+}

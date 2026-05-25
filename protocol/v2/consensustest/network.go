@@ -509,9 +509,9 @@ func (l *LogNormalMixtureDelay) WithSlowOpAnchor(d time.Duration) *LogNormalMixt
 // profiles. Hand-tuned to represent the real-world magnitude of a "slow
 // operator" in each operating environment (CPU stall, GC pause, NIC
 // contention) — NOT derived from the profile's median hop time. The
-// instability wrap multiplies these by SlowMul (1.5 at low → 2.8 at
+// instability wrap multiplies these by SlowMul (1.75 at low → 2.8 at
 // extreme), producing per-hop slow-op extra-delays in the
-// 375 ms (low/prod) → 1.26 s (extreme/slow_heavy_tail) range.
+// 438 ms (low/prod) → 1.26 s (extreme/slow_heavy_tail) range.
 //
 // Calibration rationale: real prod-mainnet slow operators exhibit
 // hundreds-of-ms response degradation under load, not the multi-second

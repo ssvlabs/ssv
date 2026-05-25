@@ -15,8 +15,8 @@ import (
 // model specific named failure modes whose semantics would be muddied
 // by extra randomness.
 //
-// Levels span "barely visible" (low) to "near-breaking-point"
-// (extreme); see InstabilityLevels for the calibrated parameter
+// Levels span "barely visible" (low) to the harshest modeled mesh
+// stress (extreme); see InstabilityLevels for the calibrated parameter
 // values. Level=0 ("none") is the no-wrap pass-through that
 // reproduces the pre-instability behavior.
 //
@@ -72,44 +72,46 @@ func (l InstabilityLevel) slowCountForN(n int) int {
 	return count
 }
 
-// InstabilityLevels are the 5 calibrated picker values. SlowOpsFraction
-// was originally anchored to the n=4 raw-count calibration
-// (low=1, moderate=2, high=2, extreme=3); high and extreme were
-// subsequently dialled back to leave a clearer gap between adjacent
-// levels at the larger cluster sizes (and below). Counts at each n
-// come from ceil(SlowOpsFraction × n), capped at n−1:
+// InstabilityLevels are the 5 calibrated picker values. Every
+// severity-relevant knob is monotonically non-decreasing none →
+// extreme, so a higher level is at least as harsh on every axis.
+// Slow-op counts come from ceil(SlowOpsFraction × n), capped at n−1 so
+// the leader (op1) always stays fast:
 //
 //	level     fraction  n=4  n=7  n=10  n=13
 //	low       0.25       1    2    3     4
-//	moderate  0.50       2    4    5     7
-//	high      0.35       2    3    4     5
-//	extreme   0.55       3    4    6     8
+//	moderate  0.40       2    3    4     6
+//	high      0.50       2    4    5     7
+//	extreme   0.60       3    5    6     8
 //
-// (moderate and high collide at n=4 — by design, anchored to the
-// original n=4 calibration — but diverge for larger n. LossRate,
-// BurstFactor, SlowMul, and PersistP further separate adjacent
-// levels.)
+// Counts are strictly ordered at the larger supported sizes (n = 7, 10,
+// 13). At n = 4 the n−1 cap leaves only three distinct counts for four
+// non-zero levels, so moderate and high tie there (2 of 4 slow) and
+// separate via the intensity knobs (LossRate, BurstFactor, SlowMul,
+// PersistP), which are themselves monotonic.
 //
-// Tuning notes (expect a round of empirical adjustment per cluster
-// size if you change ranges):
+// Tuning notes. Every knob is monotonic none → extreme, so the Healthy
+// success curve is monotonically non-increasing:
 //   - none      pass-through; reproduces pre-instability stats.
-//   - low       very rare instabilities; Healthy success rate should
-//     be ≥ 99% — basically indistinguishable from "none"
-//     unless the user looks carefully.
-//   - moderate  occasional disruption; success rate drops a few %.
-//   - high      sustained-but-recoverable instability; success rate
-//     drops 10-30%.
-//   - extreme   clearly worse than high but still informative —
-//     success rate should land in roughly the 0-30% range
-//     so per-protocol differences stay visible (going all
-//     the way to 0% just collapses every protocol to the
-//     same flat line).
+//   - low       mild instability; the gentlest step above none.
+//   - moderate  occasional disruption.
+//   - high      sustained-but-recoverable instability.
+//   - extreme   the harshest informative point — deliberately short of
+//     a total wipeout so per-protocol differences stay visible.
+//
+// Absolute degradation is modest in Healthy's mesh config: it keeps its
+// recovery features on (gossip backstop + RefloodDelay=700ms), which
+// absorb most instability-induced misses, so success stays high for most
+// protocols and the levels separate them mainly at the harsh end
+// (high/extreme, more so at larger n). Expect a round of empirical
+// adjustment per cluster size if you change ranges; while the recovery
+// features dominate, raising the knobs alone yields diminishing returns.
 var InstabilityLevels = []InstabilityLevel{
 	{Name: "none", Level: 0},
-	{Name: "low", Level: 1, LossRate: 0.005, BurstFactor: 5, SlowOpsFraction: 0.25, SlowMul: 1.5, PersistP: 0.5},
-	{Name: "moderate", Level: 2, LossRate: 0.02, BurstFactor: 5, SlowOpsFraction: 0.50, SlowMul: 2.0, PersistP: 0.7},
-	{Name: "high", Level: 3, LossRate: 0.07, BurstFactor: 6, SlowOpsFraction: 0.35, SlowMul: 2.1, PersistP: 0.55},
-	{Name: "extreme", Level: 4, LossRate: 0.10, BurstFactor: 6, SlowOpsFraction: 0.55, SlowMul: 2.8, PersistP: 0.60},
+	{Name: "low", Level: 1, LossRate: 0.0125, BurstFactor: 5, SlowOpsFraction: 0.25, SlowMul: 1.75, PersistP: 0.55},
+	{Name: "moderate", Level: 2, LossRate: 0.02, BurstFactor: 5, SlowOpsFraction: 0.40, SlowMul: 2.0, PersistP: 0.6},
+	{Name: "high", Level: 3, LossRate: 0.08, BurstFactor: 6, SlowOpsFraction: 0.50, SlowMul: 2.4, PersistP: 0.65},
+	{Name: "extreme", Level: 4, LossRate: 0.10, BurstFactor: 6, SlowOpsFraction: 0.60, SlowMul: 2.8, PersistP: 0.70},
 }
 
 // IsBaselineGroup reports whether `s` is one of the Group=="Baseline"
@@ -180,9 +182,9 @@ func WrapBaselineForInstability(s Scenario, level InstabilityLevel) Scenario {
 		// per-mesh-edge instances of the same markov-slow + lossy
 		// wrappers. The mesh transport feeds them mesh-endpoint
 		// OperatorIDs (cluster + relay synthetic IDs), so the chains
-		// key per mesh edge — relay-to-relay edges no longer collapse
-		// into shared state with op-to-relay edges. Healthy in
-		// mesh-mode now genuinely responds to the instability axis.
+		// key per mesh edge — relay-to-relay edges don't share state
+		// with op-to-relay edges, so Healthy in mesh-mode responds to
+		// the instability axis.
 		// Per-hop anchor read separately (mesh hop model may differ
 		// from cfg.Network, e.g. mesh-mode uses BTT/3 LogNormal anchor
 		// while direct may use a calibrated mixture).
