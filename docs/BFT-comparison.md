@@ -211,7 +211,7 @@ These failure modes depend on protocol *structure*, not on BTT or start time. Th
 | **Validity-divergence, honest majority (3-1 / 1-3)** (head-change splits honest verdicts) | ✗ slot miss (no in-protocol V-disagreement resolution) | ✓ via R2 at moved head | ✓ (3-σ → L_0; 1-σ-3NV → NR fall-through to L_1) | ✓ (same) | ✓ (same) |
 | **Validity-divergence 2-2 split** | ✗ slot miss | ✓ if head moves R1→R2 | ✗ (algebraic limit) | ✗ (algebraic limit) | ✗ (algebraic limit) |
 | **2-1 partial equivocation** (byz delivers V to 2f honest, V' to one) | n/a | ✓ via R2 | ✓ via Phase-1 σ_V crypto-lock | ✓ via Phase-1 σ_V (R-invariant) | ✓ at L_0 via leader witness |
-| **Transient mesh-flakiness** | ✗ if too few honest partials reach in time, threshold under-quorum | ✓ via R2 round-reset | ✗ slot miss (cross-phase exclusivity) | ✗ (R-invariant) | ✓ (KindNoValue no-lock + upgrade once mesh delivers V) |
+| **Transient mesh-flakiness** | ✗ if too few honest partials reach in time, threshold under-quorum | ✓ via R2 round-reset | ✗ slot miss (cross-phase exclusivity) | ✓ via R-round retry | ✓ (KindNoValue no-lock + upgrade once mesh delivers V) |
 | **Multi-leader silent (K-1 = 3 silent in K=4)** | n/a (no leader rotation) | ✗ multiple round-changes exceed budget | ✓ in-round K-layer fall-through | ✓ in-round | ✓ in-round |
 | **Sustained partition > absorption window** | ✗ | ✗ | ✗ | ✗ (extends to R·BTT, then misses) | ✗ |
 | **> f operators offline / byz** | ✗ | ✗ | ✗ | ✗ | ✗ |
