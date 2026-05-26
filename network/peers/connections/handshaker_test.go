@@ -75,7 +75,9 @@ func TestVerifyTheirNodeInfo_RejectsNilMetadata(t *testing.T) {
 
 	// Swap the default mock NodeInfoIndex for a recording variant so we can
 	// assert directly that SetNodeInfo was never called on the rejection path.
-	recorder := &recordingNodeInfoIndex{NodeInfoIndex: td.Handshaker.nodeInfos.(mock.NodeInfoIndex)}
+	base, ok := td.Handshaker.nodeInfos.(mock.NodeInfoIndex)
+	require.True(t, ok, "expected getTestingData to wire mock.NodeInfoIndex")
+	recorder := &recordingNodeInfoIndex{NodeInfoIndex: base}
 	td.Handshaker.nodeInfos = recorder
 
 	// Build a NodeInfo with Metadata == nil and have the (mocked) stream

@@ -140,9 +140,9 @@ type MockPeersIndex struct {
 }
 
 func (m *MockPeersIndex) Self() *records.NodeInfo {
-	// Mirror the real peersIndex.Self which returns a clone — this ensures
-	// the Identity handler tests exercise the same Clone path that runs in
-	// production, including its nil-Metadata behavior.
+	// Mirror the real peersIndex.Self which returns a clone — keeps the mock
+	// faithful to production semantics so test callers can't accidentally
+	// mutate the stored NodeInfo through the returned pointer.
 	return m.self.Clone()
 }
 
