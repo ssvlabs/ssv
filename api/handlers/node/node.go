@@ -53,15 +53,9 @@ func NewNode(
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.peersIndex.Self()
 	resp := identityJSON{
-		PeerID: h.network.LocalPeer(),
-	}
-	// invariant: setupPeerServices initializes self.Metadata at startup, so on
-	// the live path nodeInfo.Metadata is always non-nil. The guard mirrors the
-	// `peers` handler below and keeps the response well-formed even if the
-	// invariant is weakened in the future.
-	if nodeInfo != nil && nodeInfo.Metadata != nil {
-		resp.Subnets = nodeInfo.Metadata.Subnets
-		resp.Version = nodeInfo.Metadata.NodeVersion
+		PeerID:  h.network.LocalPeer(),
+		Subnets: nodeInfo.Metadata.Subnets,
+		Version: nodeInfo.Metadata.NodeVersion,
 	}
 	for _, addr := range h.network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())

@@ -170,8 +170,11 @@ func middlewareRecover(logger *zap.Logger) func(next http.Handler) http.Handler 
 					return
 				}
 				if err, ok := rvr.(error); ok && errors.Is(err, http.ErrAbortHandler) {
-					// Don't recover — let http.ErrAbortHandler propagate as
-					// the standard library expects.
+					// Re-panic so net/http's outer recover (in conn.serve)
+					// catches the sentinel and silently aborts the response
+					// / closes the connection — the behavior callers rely
+					// on. The panic stays within this single request's
+					// goroutine, so it cannot crash the process.
 					panic(rvr)
 				}
 				logger.Error("panic serving SSV API request",
