@@ -516,7 +516,7 @@ func scheduleValueMsg(s *sim, from twoab.OperatorID, vm *twoab.ValueMsg) []desim
 		return nil
 	}
 	if s.cfg.Aggregator != nil {
-		recordValueMsgToAggregator(s.cfg.Aggregator, vm)
+		recordValueMsgToAggregator(s.cfg.Aggregator, from, vm)
 	}
 	bytes := valueMsgSize(vm)
 	vmCap := vm
@@ -559,7 +559,7 @@ func scheduleNoValueMsg(s *sim, from twoab.OperatorID, nv *twoab.NoValueMsg) []d
 		return nil
 	}
 	if s.cfg.Aggregator != nil {
-		recordNoValueMsgToAggregator(s.cfg.Aggregator, nv)
+		recordNoValueMsgToAggregator(s.cfg.Aggregator, from, nv)
 	}
 	bytes := noValueMsgSize(nv)
 	nvCap := nv
@@ -600,7 +600,7 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []desim.Sche
 		return nil
 	}
 	if s.cfg.Aggregator != nil {
-		recordCommitToAggregator(s.cfg.Aggregator, c)
+		recordCommitToAggregator(s.cfg.Aggregator, from, c)
 	}
 	bytes := commitSize(c)
 	cCap := c
@@ -637,24 +637,28 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []desim.Sche
 }
 
 // recordValueMsgToAggregator records per-layer σ / encrypted-claim partials
-// from a ValueMsg into the offline aggregator. KindValue carries the
-// emitter's σ partial on V at L_0 in L0Partial — ObserveSigma at L_0.
-// L_k>0 SigmaChained LayerEntries contribute as encrypted claims keyed by
-// the plaintext V (not the encrypted Payload — that differs per emitter
-// and would scatter contributions across buckets, defeating qV counting).
-// Credits the claimed sender's OperatorID, matching the byz-observer
-// model from base OBFT.
-func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
+// from a ValueMsg under two parallel views (see OBFT base
+// recordCommitToAggregator docstring for the claimed-sender vs by-emitter
+// distinction). KindValue carries the emitter's σ partial on V at L_0 in
+// L0Partial — ObserveSigma at L_0. L_k>0 SigmaChained LayerEntries
+// contribute as encrypted claims keyed by the plaintext V (not the
+// encrypted Payload — that differs per emitter and would scatter
+// contributions across buckets, defeating qV counting).
+func recordValueMsgToAggregator(agg *ct.OfflineAggregator, emitter twoab.OperatorID, vm *twoab.ValueMsg) {
 	from := ct.OperatorID(vm.OperatorID)
+	em := ct.OperatorID(emitter)
 	if len(vm.L0Partial) > 0 {
 		agg.ObserveSigma(from, 0, vm.V)
+		agg.ObserveSigmaByEmitter(em, 0, vm.V)
 	}
 	for _, e := range vm.LayerEntries {
 		switch e.Kind {
 		case twoab.LayerEntrySigmaChained:
 			agg.ObserveEncryptedClaim(from, e.Layer, e.V)
+			agg.ObserveSigmaByEmitter(em, e.Layer, e.V)
 		case twoab.LayerEntryNRPlaintext:
 			agg.ObserveNR(from, e.Layer)
+			agg.ObserveNRByEmitter(em, e.Layer)
 		}
 	}
 }
@@ -662,21 +666,26 @@ func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
 // recordNoValueMsgToAggregator records per-layer σ / NR partials from a
 // NoValueMsg into the offline aggregator. NoValueMsg has the same K-1
 // LayerEntries shape as ValueMsg. SigmaChained entries keyed by V (same
-// rationale as recordValueMsgToAggregator).
-func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, nv *twoab.NoValueMsg) {
+// rationale as recordValueMsgToAggregator). Records under both
+// claimed-sender and by-emitter views.
+func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, emitter twoab.OperatorID, nv *twoab.NoValueMsg) {
 	from := ct.OperatorID(nv.OperatorID)
+	em := ct.OperatorID(emitter)
 	for _, e := range nv.LayerEntries {
 		switch e.Kind {
 		case twoab.LayerEntrySigmaChained:
 			agg.ObserveEncryptedClaim(from, e.Layer, e.V)
+			agg.ObserveSigmaByEmitter(em, e.Layer, e.V)
 		case twoab.LayerEntryNRPlaintext:
 			agg.ObserveNR(from, e.Layer)
+			agg.ObserveNRByEmitter(em, e.Layer)
 		}
 	}
 }
 
 // recordCommitToAggregator records per-layer σ / NR partials from a
-// Commit into the offline aggregator. Commit is NR-side only:
+// Commit into the offline aggregator under both claimed-sender and
+// by-emitter views. Commit is NR-side only:
 //   - Side=NR: NR tag partial at L_0 → ObserveNR at L_0.
 //   - Side=NRDirect: NR tag partial at L_0 + K-1 LayerEntries (the
 //     NRDirect emission bundles the L_k>0 commitments with the L_0
@@ -684,19 +693,24 @@ func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, nv *twoab.NoValueMs
 //
 // The σ partial rides in KindValue (handled by
 // recordValueMsgToAggregator's ObserveSigma), not in Commit.
-func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
+func recordCommitToAggregator(agg *ct.OfflineAggregator, emitter twoab.OperatorID, c *twoab.Commit) {
 	from := ct.OperatorID(c.OperatorID)
+	em := ct.OperatorID(emitter)
 	switch c.Side {
 	case twoab.CommitSideNR:
 		agg.ObserveNR(from, 0)
+		agg.ObserveNRByEmitter(em, 0)
 	case twoab.CommitSideNRDirect:
 		agg.ObserveNR(from, 0)
+		agg.ObserveNRByEmitter(em, 0)
 		for _, e := range c.LayerEntries {
 			switch e.Kind {
 			case twoab.LayerEntrySigmaChained:
 				agg.ObserveEncryptedClaim(from, e.Layer, e.V)
+				agg.ObserveSigmaByEmitter(em, e.Layer, e.V)
 			case twoab.LayerEntryNRPlaintext:
 				agg.ObserveNR(from, e.Layer)
+				agg.ObserveNRByEmitter(em, e.Layer)
 			}
 		}
 	}

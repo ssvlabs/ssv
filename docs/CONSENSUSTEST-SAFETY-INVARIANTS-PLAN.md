@@ -109,6 +109,8 @@ type OfflineAggregator struct {
 }
 ```
 
+Same two maps are mirrored on `OfflineAggReport` (populated by `AttemptAll` via map-reference sharing — no copy, safe because the aggregator is discarded post-AttemptAll by adapter callers). Bucket-3 `ComputeSafetyReport` consumes via `o.OfflineAgg.SigmaByEmitter` / `o.OfflineAgg.NRByEmitter` without needing a reference to the live aggregator.
+
 Adapters call a new `ObserveSigmaByEmitter(emitter, layer, v)` / `ObserveNRByEmitter(emitter, layer)` alongside the existing claimed-sender path. Adapters know the emitter at observation time (it's the byz pattern's target operator, or the honest sender's own ID).
 
 Alternative considered: keep a single map and have it record both pieces of info. Rejected — the two views are used for different invariants (aggregator-bypass detection wants claimed-sender; per-op invariants want emitter) and conflating them complicates the check logic in `AttemptAll` / `ComputeSafetyReport`. Memory cost of two maps is trivial at consensustest scale.
@@ -420,9 +422,12 @@ func (a *OfflineAggregator) ObserveSigmaByEmitter(emitter OperatorID, layer int,
 func (a *OfflineAggregator) ObserveNRByEmitter(emitter OperatorID, layer int) {...}
 ```
 
-Adapter call sites:
-- [`obft/events.go:287-305`](../protocol/v2/consensustest/obft/events.go) `recordCommitToAggregator` — add by-emitter calls. The emitter is determined by the adapter at the call-site (`recordCommitToAggregator` is invoked from `evtCommitArrival.Handle` which knows the *actual* sender, not the forged one). Plumb the emitter through as a new parameter.
-- [`twoab/events.go:603-695`](../protocol/v2/consensustest/twoab/events.go) — same shape for `recordCommitToAggregator` and `recordValueMsgToAggregator`.
+Adapter call sites (commit 2 plumbs `emitter` through every record-function signature; Witnesses[] entries in OBFT base are intentionally NOT recorded by-emitter — they're peer-forwards of the leader's σ_V, not the emitter's own EKM commitment):
+
+- [`obft/events.go`](../protocol/v2/consensustest/obft/events.go):
+  - Leader-broadcast handler: `ObserveSigmaByEmitter(leader, layer, V)` alongside the existing `ObserveSigma`.
+  - `recordCommitToAggregator(agg, emitter, c)`: σ-side entries (plaintext L_0 + encrypted L_k>0) record by-emitter via `ObserveSigmaByEmitter`; NR partials via `ObserveNRByEmitter`; Witnesses[] stays claimed-sender-only.
+- [`twoab/events.go`](../protocol/v2/consensustest/twoab/events.go): same shape across `recordValueMsgToAggregator`, `recordNoValueMsgToAggregator`, `recordCommitToAggregator` — all three gain an `emitter` parameter. Phase-2a `vm.L0Partial`, Phase-2a `LayerEntrySigmaChained`, and Phase-2b NRDirect `LayerEntrySigmaChained` all record σ-by-emitter; NR-side entries (Side=NR / NR-tag partials / `LayerEntryNRPlaintext`) record NR-by-emitter.
 
 `ComputeSafetyReport` adds three new traversals after the existing checks (filter reads `o.Byz`, not a parameter):
 

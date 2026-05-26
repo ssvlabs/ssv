@@ -41,8 +41,14 @@ func (e *evtLeaderFetch) Handle(h desim.Host) []desim.Scheduled {
 			_ = s.instances[leader].ApplyHostValidity(e.layer, p.V, leaderValid)
 		}
 		// OfflineAggregator: leader's σ_L^V partial hits the wire.
+		// Claimed-sender path (ObserveSigma) is keyed on bundle's leader
+		// identity, which under byz LeaderBroadcastPlan may differ from the
+		// actual emitter. By-emitter path is the actual leader (the op who
+		// built/emitted the bundle — same operator at the LeaderBroadcastPlan
+		// boundary, no identity forgery in current byz patterns at this site).
 		if s.cfg.Aggregator != nil {
 			s.cfg.Aggregator.ObserveSigma(ct.OperatorID(leader), e.layer, bundle.Value)
+			s.cfg.Aggregator.ObserveSigmaByEmitter(ct.OperatorID(leader), e.layer, bundle.Value)
 		}
 		bundleBytes := phase1BundleSize(bundle)
 		// Per-leader delay added on top of the per-pair network delay; used
@@ -214,8 +220,10 @@ func emitOwnCommit(s *sim, op obftbase.OperatorID) {
 	c = s.cfg.Byz.OverrideCommit(s, op, c)
 	// OfflineAggregator: op's Commit hits the wire — record per-layer
 	// σ side (plaintext at L_0, encrypted-claim at L_k>0) and per-NR.
+	// emitter=op for the by-emitter view; c.OperatorID may be forged under
+	// identity-forgery byz patterns (ByzAggregatorBypass / ByzWitnessForgery).
 	if s.cfg.Aggregator != nil {
-		recordCommitToAggregator(s.cfg.Aggregator, c)
+		recordCommitToAggregator(s.cfg.Aggregator, op, c)
 	}
 	// Byz patterns may delay their own KindCommit dispatch to land past
 	// RoundEndOffset, exercising the spec §Phase 3 late-arrival
@@ -229,7 +237,7 @@ func emitOwnCommit(s *sim, op obftbase.OperatorID) {
 	for _, extra := range s.cfg.Byz.BuildExtraCommits(s, op, c) {
 		extra := extra
 		if s.cfg.Aggregator != nil {
-			recordCommitToAggregator(s.cfg.Aggregator, extra)
+			recordCommitToAggregator(s.cfg.Aggregator, op, extra)
 		}
 		s.emitToAll(op, ct.KindCommit, -1, commitSize(extra), extraDelay, func(to obftbase.OperatorID) desim.Event {
 			return &evtCommitArrival{from: op, to: to, commit: cloneCommit(extra)}
@@ -273,19 +281,31 @@ func maybeEarlyCommit(s *sim, op obftbase.OperatorID) []desim.Scheduled {
 }
 
 // recordCommitToAggregator extracts every σ / NR / encrypted-onion partial
-// from c and records it in the aggregator. Models the "byz observes every
-// Commit dispatched on the wire" assumption — credits c.OperatorID (the
-// claimed sender on the wire), NOT the actual emitter. Honest commits
-// have c.OperatorID == emitter so this is identity; byz commits with
-// forged c.OperatorID get credited to the forged identity, which is the
-// adversary-observable view by design (validates the safety machinery
-// against forged-identity attacks via byzAggregatorBypass).
+// from c and records it in the aggregator under two parallel views:
+//
+//   - Claimed-sender view (SigmaPartials / EncryptedClaims / NRPartials,
+//     keyed on c.OperatorID). Models the "byz observes every Commit
+//     dispatched on the wire" assumption — credits the claimed sender,
+//     NOT the actual emitter. Honest commits have c.OperatorID == emitter
+//     so this is identity; byz commits with forged c.OperatorID get
+//     credited to the forged identity, which is the adversary-observable
+//     view by design (validates the safety machinery against
+//     forged-identity attacks via byzAggregatorBypass).
+//
+//   - By-emitter view (SigmaByEmitter / NRByEmitter, keyed on the
+//     genuine sender `emitter`). Used by bucket-2 per-op invariants
+//     (cross-phase exclusivity, single-σ-V) that apply to the operator's
+//     own EKM commitment regardless of forged claims. Witnesses[] entries
+//     are recorded ONLY in the claimed-sender view (they are forwards of
+//     the leader's already-signed σ_V, not the emitter's own σ-side
+//     commitment).
 //
 // At L_0 the EncryptedLayer.Ciphertext holds the plaintext σ partial bytes
 // directly (no IBE wrapping); deeper layers carry chained-IBE ciphertext.
 // Layer index drives the classification — not Ciphertext-emptiness.
-func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obftbase.Commit) {
+func recordCommitToAggregator(agg *ct.OfflineAggregator, emitter obftbase.OperatorID, c *obftbase.Commit) {
 	from := ct.OperatorID(c.OperatorID)
+	em := ct.OperatorID(emitter)
 	for layer, el := range c.Layers {
 		if len(el.Value) == 0 {
 			continue
@@ -295,11 +315,18 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *obftbase.Commit) {
 		} else {
 			agg.ObserveEncryptedClaim(from, layer, el.Value)
 		}
+		// By-emitter view: σ-side commitment regardless of wire format.
+		agg.ObserveSigmaByEmitter(em, layer, el.Value)
 	}
 	for _, nr := range c.NRPartials {
 		agg.ObserveNR(from, nr.Layer)
+		agg.ObserveNRByEmitter(em, nr.Layer)
 	}
 	for _, w := range c.Witnesses {
+		// Witnesses are forwards of the leader's σ_V partial, not the
+		// emitter's own σ-side commitment. Record in claimed-sender view
+		// only (with the witnessed leader as the operator); B1/B2 per-op
+		// checks intentionally skip witnesses.
 		agg.ObserveSigmaByValueRoot(ct.OperatorID(w.Leader), w.Layer, w.ValueRoot)
 	}
 }

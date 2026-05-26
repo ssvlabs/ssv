@@ -48,11 +48,49 @@ type OfflineAggregator struct {
 	// layer k unlocks the chain for k+1.
 	NRPartials map[int]map[OperatorID]struct{}
 
+	// SigmaByEmitter records per-(actual-emitter, layer, value-hash) σ-side
+	// commitments — covers both plaintext σ partials and encrypted-claim σ
+	// entries. Distinct from SigmaPartials/EncryptedClaims (which key by
+	// c.OperatorID, the claimed sender) because byzantine identity forgery
+	// would mislead per-op invariant checks. The actual emitter is the
+	// operator who built and emitted the message, regardless of what
+	// c.OperatorID was stamped. Adapters call ObserveSigmaByEmitter at
+	// observation sites passing the genuine sender.
+	//
+	// Consumed by bucket-2 per-op invariants:
+	//   - B1 cross-phase exclusivity (σ-XOR-NR per layer): no honest emitter
+	//     appears in both SigmaByEmitter and NRByEmitter at the same layer.
+	//   - B2 single-σ-V per layer: no honest emitter appears in
+	//     SigmaByEmitter at the same layer with two distinct value_hashes.
+	//
+	// Honest-vs-byz filtering is applied at check time using Outcome.Byz,
+	// not at observation time — the maps stay complete for diagnostic dumps.
+	SigmaByEmitter map[ByEmitterSigmaKey]struct{}
+
+	// NRByEmitter records per-(actual-emitter, layer) NR-tag partial
+	// commitments. Parallel to SigmaByEmitter; bucket-2 B1 reads both.
+	NRByEmitter map[ByEmitterNRKey]struct{}
+
 	// QV is the σ-quorum threshold (= 2f+1 from cfg.N).
 	QV int
 
 	// QEnc is the NR-quorum threshold (= 2f+1; same as QV in OBFT).
 	QEnc int
+}
+
+// ByEmitterSigmaKey identifies a (actual-emitter, layer, value-hash) σ
+// observation. Distinct from SigmaKey (which omits emitter) — see
+// OfflineAggregator.SigmaByEmitter docstring.
+type ByEmitterSigmaKey struct {
+	Emitter   OperatorID
+	Layer     int
+	ValueHash [32]byte
+}
+
+// ByEmitterNRKey identifies a (actual-emitter, layer) NR observation.
+type ByEmitterNRKey struct {
+	Emitter OperatorID
+	Layer   int
 }
 
 // SigmaKey identifies a (layer, value-hash) bucket.
@@ -89,6 +127,18 @@ type OfflineAggReport struct {
 	// regression — see docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md).
 	// Not consumed by any safety check today.
 	SigmaCardinality map[SigmaKey]int
+
+	// SigmaByEmitter / NRByEmitter mirror the same-named OfflineAggregator
+	// maps — they're exposed on the post-sim report so that consumers reading
+	// Outcome.OfflineAgg (e.g., ComputeSafetyReport's bucket-2 honest-op
+	// invariants in a future commit) can iterate them without holding a
+	// reference to the live OfflineAggregator. AttemptAll shares the same
+	// map references (no copy); the aggregator is discarded by the adapter
+	// post-AttemptAll so the sharing is safe. See OfflineAggregator's
+	// SigmaByEmitter docstring for the claimed-sender-vs-actual-emitter
+	// semantics.
+	SigmaByEmitter map[ByEmitterSigmaKey]struct{}
+	NRByEmitter    map[ByEmitterNRKey]struct{}
 }
 
 // NewOfflineAggregator returns an empty aggregator sized for cluster N.
@@ -99,6 +149,8 @@ func NewOfflineAggregator(n int) *OfflineAggregator {
 		SigmaPartials:   make(map[SigmaKey]map[OperatorID]struct{}),
 		EncryptedClaims: make(map[SigmaKey]map[OperatorID]struct{}),
 		NRPartials:      make(map[int]map[OperatorID]struct{}),
+		SigmaByEmitter:  make(map[ByEmitterSigmaKey]struct{}),
+		NRByEmitter:     make(map[ByEmitterNRKey]struct{}),
 		QV:              q,
 		QEnc:            q,
 	}
@@ -144,6 +196,38 @@ func (a *OfflineAggregator) ObserveEncryptedClaim(op OperatorID, layer int, v []
 	a.EncryptedClaims[k][op] = struct{}{}
 }
 
+// ObserveSigmaByEmitter records a σ-side commitment from the named actual
+// emitter on V at layer. Plaintext σ partials, encrypted-claim σ entries,
+// and any other σ-side EKM commitment paths all flow through this call;
+// the by-emitter view doesn't distinguish wire format because B2 (single-σ-V
+// per layer) is a property of the operator's signing decision, not the
+// wire-format the partial rides in.
+//
+// Callers MUST pass the actual emitter (the operator who built and emitted
+// the message), not the claimed sender c.OperatorID — under byzantine
+// identity forgery the two differ, and per-op invariants apply to the
+// emitter's own commitment.
+//
+// Distinct from ObserveSigma, which keys on claimed-sender for the
+// aggregator-bypass detection model.
+func (a *OfflineAggregator) ObserveSigmaByEmitter(emitter OperatorID, layer int, v []byte) {
+	a.SigmaByEmitter[ByEmitterSigmaKey{
+		Emitter:   emitter,
+		Layer:     layer,
+		ValueHash: hashValue(v),
+	}] = struct{}{}
+}
+
+// ObserveNRByEmitter records an NR-side commitment from the named actual
+// emitter at layer. Same emitter-vs-claimed-sender distinction as
+// ObserveSigmaByEmitter.
+func (a *OfflineAggregator) ObserveNRByEmitter(emitter OperatorID, layer int) {
+	a.NRByEmitter[ByEmitterNRKey{
+		Emitter: emitter,
+		Layer:   layer,
+	}] = struct{}{}
+}
+
 // ObserveNR records that op contributed an NR partial at layer.
 func (a *OfflineAggregator) ObserveNR(op OperatorID, layer int) {
 	if a.NRPartials[layer] == nil {
@@ -177,6 +261,10 @@ func (a *OfflineAggregator) AttemptAll() OfflineAggReport {
 	rep := OfflineAggReport{
 		NoOfflineDoubleV: true,
 		SigmaCardinality: make(map[SigmaKey]int),
+		// Share map references — the aggregator is discarded post-AttemptAll
+		// by adapter callers, so no aliasing hazard.
+		SigmaByEmitter: a.SigmaByEmitter,
+		NRByEmitter:    a.NRByEmitter,
 	}
 	seen := make(map[[32]byte]struct{})
 
