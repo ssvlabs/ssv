@@ -1685,12 +1685,20 @@ function renderHeatmap(data) {
   return section;
 }
 
-// CELL_BG_ALPHA controls how strongly the heatmap cell tint shows through.
-// 0.45 keeps the gradient legible while letting the underlying surface
-// (the white heatmap card on non-adversarial rows; faint crisscross
-// pattern on adversarial rows) bleed through — the cell colors read as
-// "labels" over the row's identity rather than swallowing it.
+// CELL_BG_ALPHA is the peak alpha used by the success ramp (hit by yellow at
+// rate=0.9 and held through green at 100%). 0.45 keeps the gradient legible
+// while letting the underlying surface (the white heatmap card on non-
+// adversarial rows; faint crisscross pattern on adversarial rows) bleed
+// through — the cell colors read as "labels" over the row's identity rather
+// than swallowing it.
 const CELL_BG_ALPHA = 0.45;
+
+// EXTREME_BAD_ALPHA is the shared red intensity used at both ramps' worst
+// case: rateToColor(0) (0% success) and failRateToColor(≥0.6) (a failure
+// reason covering most/all iterations). Sits between the prior split
+// (0.288 ↔ 0.45) so the two tables agree visually on "totally bad" without
+// either side screaming or whispering on its own.
+const EXTREME_BAD_ALPHA = 0.37;
 
 // rateToColor maps a success rate in [0, 1] to a {bg, fg} pair used as
 // the heatmap cell / legend chip colors. Two-segment ramp:
@@ -1700,31 +1708,34 @@ const CELL_BG_ALPHA = 0.45;
 // 0%→90% varies hue + saturation + lightness so failure cells deepen
 // continuously (no flat zone below 80% like the prior implementation);
 // 90%→100% transitions yellow → green with the saturation winding back.
-// The result is emitted at CELL_BG_ALPHA so cells read as tinted
-// overlays over the row background rather than opaque blocks.
+// Alpha tapers from EXTREME_BAD_ALPHA at 0% up to CELL_BG_ALPHA at 90%+
+// so the 0% endpoint matches failRateToColor's cap.
 //
 // Foreground is picked for best WCAG contrast against the EFFECTIVE
 // (alpha-blended-with-white) cell color so text stays legible even with
 // the underlying card showing through.
 function rateToColor(rate) {
-  let hue, sat, light;
+  let hue, sat, light, alpha;
   if (rate >= 1.0) {
     hue = 125; sat = 55; light = 65;
+    alpha = CELL_BG_ALPHA;
   } else if (rate >= 0.9) {
     const t = (rate - 0.9) / 0.1;
     hue = 52 + t * 73;
     sat = 90 - t * 35;
     light = 60 + t * 5;
+    alpha = CELL_BG_ALPHA;
   } else {
     const t = rate / 0.9;
     hue = t * 52;
     sat = 75 + t * 15;
     light = 42 + t * 18;
+    alpha = EXTREME_BAD_ALPHA + t * (CELL_BG_ALPHA - EXTREME_BAD_ALPHA);
   }
-  const bg = `hsla(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%, ${CELL_BG_ALPHA})`;
+  const bg = `hsla(${hue.toFixed(1)}, ${sat.toFixed(1)}%, ${light.toFixed(1)}%, ${alpha.toFixed(3)})`;
   // Effective luminance after compositing onto the white heatmap card.
   // With surface = (1,1,1), L_effective = α·L_bg + (1−α)·1.
-  const lBgEffective = CELL_BG_ALPHA * relativeLuminance(hue, sat, light) + (1 - CELL_BG_ALPHA);
+  const lBgEffective = alpha * relativeLuminance(hue, sat, light) + (1 - alpha);
   const lDark = 0.0114; // sRGB luminance of #1a1a1a
   const lLight = 0.9131; // sRGB luminance of #f7fafc
   const ratioDark = (Math.max(lBgEffective, lDark) + 0.05) / (Math.min(lBgEffective, lDark) + 0.05);
@@ -1775,16 +1786,16 @@ function pickContrastText(hue, sat, light, alpha) {
 }
 
 // failRateToColor maps a failure rate in [0, 1] to a single-hue red tint:
-// barely-there at ~0%, deepening to a soft, see-through red that caps at the
-// ~60% point — past ~60% failure it stops getting redder, so solid 100% blocks
-// read as a calm red, not a loud one. Run at half opacity for a light tint.
-// Unlike rateToColor (the success ramp), it never passes through green/yellow.
+// barely-there at ~0%, deepening to EXTREME_BAD_ALPHA at r=0.6 and holding
+// from there. hue/sat/light match rateToColor(0) so the cap lines up with
+// the success ramp's 0% endpoint. Unlike rateToColor (the success ramp),
+// it never passes through green/yellow.
 function failRateToColor(rate) {
   const r = Math.max(0, Math.min(1, rate));
-  const hue = 2, sat = 75, light = 45; // a fixed deep red
-  // Rise toward the cap by r=0.6, then hold (no redder past ~60% failure), and
-  // halve the result for transparency so the tint stays see-through.
-  const alpha = (0.06 + Math.min(r, 0.6) * 0.86) * 0.5; // ~0.03 → 0.288 (cap)
+  const hue = 0, sat = 75, light = 42; // matches rateToColor(0)
+  // Rise toward the cap by r=0.6, then hold (no redder past ~60% failure).
+  const tc = Math.min(r, 0.6);
+  const alpha = 0.03 + (tc / 0.6) * (EXTREME_BAD_ALPHA - 0.03); // ~0.03 → EXTREME_BAD_ALPHA
   const bg = `hsla(${hue}, ${sat}%, ${light}%, ${alpha.toFixed(3)})`;
   return { bg, fg: pickContrastText(hue, sat, light, alpha) };
 }
