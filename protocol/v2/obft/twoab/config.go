@@ -57,6 +57,7 @@ type (
 	// Shared wire types owned by the parent obft package.
 	Certificate  = obft.Certificate
 	Output       = obft.Output
+	LayerAttempt = obft.LayerAttempt
 	Phase1Bundle = obft.Phase1Bundle
 	// Shared cluster/layer-topology type.
 	LayerSpec = obft.LayerSpec

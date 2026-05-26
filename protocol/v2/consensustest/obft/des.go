@@ -250,6 +250,16 @@ func (s *sim) outcome() rawOutcome {
 			}
 		}
 		o.evidenceByRule = evidenceByRule(s.instances[op].Evidence())
+		// Snapshot the most-recent Resolve walk's per-layer trace. The
+		// trace is overwritten on every Resolve call; capturing here
+		// reflects the LAST Resolve fired for this op during the sim —
+		// which is the one corresponding to the final outcome state
+		// (decision time for deciders, last failed attempt for misses).
+		// Bounded by K (≤ N at the production K=N convention) so cost
+		// is negligible.
+		if trace := s.instances[op].LastResolveLayerAttempts(); len(trace) > 0 {
+			o.resolveLayerAttempts = append([]obftbase.LayerAttempt(nil), trace...)
+		}
 		out.perOp[ct.OperatorID(op)] = o
 	}
 	return out

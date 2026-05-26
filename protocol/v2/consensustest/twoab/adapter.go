@@ -426,12 +426,13 @@ type rawOutcome struct {
 }
 
 type rawOpOutcome struct {
-	decided        bool
-	layer          int
-	value          []byte
-	time           time.Duration
-	err            string
-	evidenceByRule map[string]int
+	decided              bool
+	layer                int
+	value                []byte
+	time                 time.Duration
+	err                  string
+	evidenceByRule       map[string]int
+	resolveLayerAttempts []twoab.LayerAttempt
 }
 
 func (r rawOutcome) toCT(agg *ct.OfflineAggregator, bw *ct.BandwidthReport) ct.Outcome {
@@ -457,15 +458,32 @@ func (r rawOutcome) toCT(agg *ct.OfflineAggregator, bw *ct.BandwidthReport) ct.O
 			bandwidthOut = bw.PerOperatorOut[op]
 			bandwidthIn = bw.PerOperatorIn[op]
 		}
+		var layerAttempts []ct.LayerAttempt
+		if len(oo.resolveLayerAttempts) > 0 {
+			layerAttempts = make([]ct.LayerAttempt, len(oo.resolveLayerAttempts))
+			for i, la := range oo.resolveLayerAttempts {
+				layerAttempts[i] = ct.LayerAttempt{
+					Layer:         la.Layer,
+					SigmaPoolSize: la.SigmaPoolSize,
+					QV:            la.QV,
+					SigmaReached:  la.SigmaReached,
+					Decided:       la.Decided,
+					NRPoolSize:    la.NRPoolSize,
+					QEnc:          la.QEnc,
+					NRReached:     la.NRReached,
+				}
+			}
+		}
 		out.PerOp[op] = ct.OperatorOutcome{
-			Decided:        oo.decided,
-			Value:          append([]byte(nil), oo.value...),
-			Round:          oo.layer,
-			Time:           oo.time,
-			Err:            oo.err,
-			EvidenceByRule: evMap,
-			BandwidthOut:   bandwidthOut,
-			BandwidthIn:    bandwidthIn,
+			Decided:              oo.decided,
+			Value:                append([]byte(nil), oo.value...),
+			Round:                oo.layer,
+			Time:                 oo.time,
+			Err:                  oo.err,
+			EvidenceByRule:       evMap,
+			BandwidthOut:         bandwidthOut,
+			BandwidthIn:          bandwidthIn,
+			ResolveLayerAttempts: layerAttempts,
 		}
 	}
 	if agg != nil {

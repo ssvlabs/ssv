@@ -299,6 +299,11 @@ func (s *sim) outcome() rawOutcome {
 			}
 		}
 		o.evidenceByRule = evidenceByRule(s.instances[op].Evidence())
+		// Snapshot the most-recent Resolve walk's per-layer trace. See
+		// OBFT base adapter's outcome() for the same plumbing rationale.
+		if trace := s.instances[op].LastResolveLayerAttempts(); len(trace) > 0 {
+			o.resolveLayerAttempts = append([]twoab.LayerAttempt(nil), trace...)
+		}
 		out.perOp[ct.OperatorID(op)] = o
 	}
 	out.deadlockKind = classifyDeadlock(s, out.deadlockLayer)

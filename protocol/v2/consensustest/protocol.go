@@ -445,6 +445,33 @@ type OperatorOutcome struct {
 	// operator. Adapters that don't instrument bandwidth leave both at zero.
 	BandwidthOut int64
 	BandwidthIn  int64
+
+	// ResolveLayerAttempts is the per-layer trace from this operator's
+	// most recent Phase-3 Resolve walk. Populated by OBFT-family adapters
+	// (OBFT base + 2abOBFT) from the underlying Instance's
+	// LastResolveLayerAttempts(); empty/nil for protocol families
+	// without a layered Resolve walk (QBFT, PSigs). Consumed by the
+	// bucket-3 walk-consistency safety invariant (D1) in
+	// ComputeSafetyReport.
+	ResolveLayerAttempts []LayerAttempt
+}
+
+// LayerAttempt records one layer's Phase-3 walk-state from a single
+// honest operator's Resolve. Adapter-translated mirror of
+// obft.LayerAttempt (we don't import obft at the framework level to
+// keep the framework protocol-family-agnostic). See
+// obft/message.go LayerAttempt for the field-by-field semantics
+// (snapshot at walk-time, SigmaPoolSize = largest sigGroup, deepest
+// layer's NR fields zero, etc.).
+type LayerAttempt struct {
+	Layer         int
+	SigmaPoolSize int
+	QV            int
+	SigmaReached  bool
+	Decided       bool
+	NRPoolSize    int
+	QEnc          int
+	NRReached     bool
 }
 
 // EvidenceCount is a convenience: total fires across all rules for this op.

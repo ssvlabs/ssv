@@ -341,6 +341,17 @@ type Instance struct {
 	// the per-mutator check below is defense-in-depth for any caller that
 	// bypasses the adapter (direct Instance use in tests / future plumbing).
 	ended bool
+
+	// lastResolveTrace records the most recent Resolve walk's per-layer
+	// state. Overwritten on every Resolve call (the walk is idempotent /
+	// re-runnable, and later runs reflect more observed partials). Read
+	// post-Resolve via LastResolveLayerAttempts() — consumed by the
+	// consensustest framework's bucket-3 walk-consistency check.
+	//
+	// Cost: bounded by K (≤ N at the production K=N convention), one
+	// struct append per layer per Resolve call. Negligible against the
+	// crypto cost of σ-pool reconstruction at each layer.
+	lastResolveTrace []LayerAttempt
 }
 
 // NewInstance creates a new OBFT instance bound to `ownOperatorID`.

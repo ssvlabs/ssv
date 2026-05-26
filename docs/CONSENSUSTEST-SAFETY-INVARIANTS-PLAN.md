@@ -275,7 +275,7 @@ All four buckets land in **one mega-PR**. Internal commit ordering preserves bis
 1. **Commit 1 — Bucket 1 wiring (revised scope) + `Outcome.Byz` + 2abOBFT recording fix**. OBFT + 2abOBFT `computeAttestation` populates C2 only (C1/C4 deferred per [§Bucket 1 implementation findings](#bucket-1-implementation-findings--c1c4-deferred-2abobft-recording-fixed)). Adds the `OfflineAggReport.SigmaCardinality` map (computed in `AttemptAll`) — kept as plumbing for diagnostic + future C1 follow-up even though commit 1 doesn't consume it. Adds `Outcome.Byz` field; all four adapters' `Run` paths copy `cfg.Byz` into it (OBFT + 2abOBFT for the bucket-2/3 honest-op filtering; QBFT + PSigs for symmetry / future-proofing). Updates [`safety.go`](../protocol/v2/consensustest/safety.go) `SafetyReport` COVERAGE docstring to reflect OBFTCommitKindValid now instrumented (with kind always valid by construction — vacuously true check, useful as descriptive tag in panic diagnostics). Fixes pre-existing 2abOBFT aggregator recording bug (`e.Payload` → `e.V`). No `SafetyReport` schema change; existing tests stay green.
 2. **Commit 2 — `OfflineAggregator` by-emitter maps + observation methods**. Pure extension; no consumers yet. Adapter call sites at [`obft/events.go`](../protocol/v2/consensustest/obft/events.go) and [`twoab/events.go`](../protocol/v2/consensustest/twoab/events.go) plumb the actual emitter through `recordCommitToAggregator(agg, emitter, c)` and call `ObserveSigmaByEmitter` / `ObserveNRByEmitter`. No `SafetyReport` change yet — the data is collected but not checked.
 3. **Commit 3 — Bucket 2 SafetyReport fields (B1, B2)**. Adds `HonestCrossPhaseExclusive`, `HonestSingleSigmaV` to `SafetyReport` with paired evidence slices (`CrossPhaseEvidence`, `SingleSigmaVEvidence`) and supporting types (`CrossPhaseViolation`, `SingleSigmaVViolation`). `ComputeSafetyReport` reads `o.OfflineAgg.SigmaByEmitter` / `NRByEmitter` filtered via `o.Byz.IsByz` / `IsCrashed` (no signature change). `IsViolation` / `String` / `SafetyPanic` updated for the new fields with deterministic-ordering evidence dumps. Bucket-4 negative tests for B1/B2 (B3 subsumed by B1's leader-case sub-test) land as synthetic-outcome tests in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) — see [§Negative-test design](#negative-test-design--synthetic-outcomes-not-byz-patterns) for the rationale.
-4. **Commit 4 — Bucket 3 protocol-side instrumentation**. `obft.Output.LayerAttempts` + `tryReconstructLayer` hook + `twoab` analog. Adapter copies into `OperatorOutcome.ResolveLayerAttempts`. No `SafetyReport` change yet — protocol side ships first so the adapter's data plumbing is bisectable separately from the safety check.
+4. **Commit 4 — Bucket 3 protocol-side instrumentation**. Adds `obft.LayerAttempt` exported type alongside `obft.Output`; `obft/base` and `obft/twoab` alias it. `Instance.lastResolveTrace` unexported field on both, populated by `Resolve` via the existing per-layer walk loop (`tryReconstructLayer` / `tryDeriveNextLayerKey` return signatures extended to also report pool size). Exported getter `Instance.LastResolveLayerAttempts() []LayerAttempt` on both. Adapter copies the trace through `rawOpOutcome.resolveLayerAttempts` → `ct.LayerAttempt` (defined in consensustest, separate from `obft.LayerAttempt` to keep the framework protocol-family-agnostic; adapter does trivial field-by-field translation). New `OperatorOutcome.ResolveLayerAttempts []LayerAttempt` field on the framework side. No `SafetyReport` change yet — protocol side ships first so the adapter's data plumbing is bisectable separately from the safety check.
 5. **Commit 5 — Bucket 3 SafetyReport field (D1) + B5 adapter-side panic guard**. `HonestWalkConsistent` added; D1 synthetic-outcome negative test lands in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go). B5 guard added to both adapters' `toCT` translation.
 6. **Commit 6 — `stresstest-negative` Makefile target**. Aggregates the existing `TestAdapter_.*_TriggersSafetyDetection` adapter tests (real-byz patterns proving `NoOfflineDoubleV` fires) and the new `TestSafety_Honest*` synthetic-outcome tests (proving B1/B2/D1 fire) into a single fast CI smoke. No `matrix_test.go` changes needed since the bucket-3/4 negative tests don't add catalog-excluded byz patterns.
 
@@ -475,31 +475,52 @@ Default values: `HonestCrossPhaseExclusive` and `HonestSingleSigmaV` default to 
 
 ### Bucket 3 — per-op walk-state assertions
 
-New field on `obft.Output` ([`protocol/v2/obft/base/...`](../protocol/v2/obft/base/)):
+New `LayerAttempt` type in [`obft/message.go`](../protocol/v2/obft/message.go) (re-aliased into `obft/base` and `obft/twoab` so callers use unqualified `LayerAttempt`):
 
 ```go
-type Output struct {
-    // ... existing fields ...
-
-    // LayerAttempts records per-layer Resolve outcomes during the walk.
-    // Populated only when Instance.cfg.TraceEnabled is true (otherwise
-    // nil — production runner path pays nothing).
-    LayerAttempts []LayerAttempt
-}
-
+// obft.LayerAttempt — protocol-side trace record.
 type LayerAttempt struct {
     Layer         int
-    SigmaPoolSize int  // distinct σ partials on the largest V's group
-    QV            int  // σ-quorum threshold at this layer (= qV)
+    SigmaPoolSize int  // largest sigGroup's distinct-emitter count
+    QV            int  // σ-quorum threshold at this layer (= 2f+1)
     SigmaReached  bool // SigmaPoolSize >= QV
-    Decided       bool // walk returned an Output at this layer
-    NRPoolSize    int  // distinct NR partials on nr_tag_layer
-    QEnc          int
-    NRReached     bool // NRPoolSize >= QEnc
+    Decided       bool // walk produced an Output at this layer
+    NRPoolSize    int  // distinct-emitter NR partials at this layer
+    QEnc          int  // 0 at the deepest layer (no NR tag)
+    NRReached     bool
 }
 ```
 
-`tryReconstructLayer` ([`base/phase3.go:104`](../protocol/v2/obft/base/phase3.go)) appends to `LayerAttempts` before returning. `tryDeriveNextLayerKey` similarly. The same pattern is mirrored in `twoab.Instance.Resolve`.
+Trace lives on `Instance` (not `Output`) so it's accessible on the failure path too — `Resolve` returns `nil, error` on no-quorum / deadlock, and `Output.LayerAttempts` wouldn't carry the trace through that path. Walk state is genuinely needed by D1 in BOTH success and failure paths (D1 catches "σ-quorum reachable but walk advanced anyway" as one case, and "σ-quorum reachable but walk returned no-quorum" as another).
+
+```go
+// Instance gains an unexported field.
+type Instance struct {
+    // ... existing fields ...
+    lastResolveTrace []LayerAttempt
+}
+
+// And an exported getter for adapter / framework consumers.
+func (i *Instance) LastResolveLayerAttempts() []LayerAttempt
+```
+
+`tryReconstructLayer` and `tryDeriveNextLayerKey` signatures change to also return the pool size:
+
+```go
+// BEFORE
+func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output, error)
+func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error)
+
+// AFTER — second return is the largest sigGroup / NR-pool size at this
+// layer, regardless of quorum reached. Resolve assembles the
+// LayerAttempt from these values + the instance-level QV / QEnc.
+func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output, int, error)
+func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, int, error)
+```
+
+`Resolve` resets `lastResolveTrace` at the start (per-call snapshot, not accumulated across the idempotent re-runs), appends one `LayerAttempt` per layer visited. The deepest layer's attempt has zero NR fields (no NR tag at the deepest layer per spec).
+
+Same instrumentation pattern in `twoab.Instance.Resolve` — the Phase-3 walk structure is identical between OBFT base and 2abOBFT (Phase-2a / Phase-2b emissions feed the σ-pool / NR-pool that Resolve consumes; no separate hook points needed). The single `LayerAttempt` schema is reused via `twoab.LayerAttempt = obft.LayerAttempt`.
 
 `OperatorOutcome` gains:
 
@@ -507,14 +528,21 @@ type LayerAttempt struct {
 type OperatorOutcome struct {
     // ... existing fields ...
 
-    // ResolveLayerAttempts mirrors obft.Output.LayerAttempts (or twoab's
-    // analog) when the adapter populated it. Empty / nil ⇒ adapter didn't
-    // instrument (e.g., older adapter, or trace disabled).
+    // ResolveLayerAttempts is the per-layer trace from this operator's
+    // most recent Phase-3 Resolve walk. Populated by OBFT-family adapters
+    // (OBFT base + 2abOBFT) from the underlying Instance's
+    // LastResolveLayerAttempts(); empty/nil for protocol families
+    // without a layered Resolve walk (QBFT, PSigs).
     ResolveLayerAttempts []LayerAttempt
 }
 ```
 
-Adapter copies `Output.LayerAttempts` into `OperatorOutcome.ResolveLayerAttempts` in the rawOutcome → ct.Outcome translation ([`obft/adapter.go:349-386`](../protocol/v2/consensustest/obft/adapter.go) `toCT`).
+Note: `ct.LayerAttempt` is a separate-but-identical type defined in `consensustest/protocol.go` so the framework stays protocol-family-agnostic (doesn't import `obft`). Adapters translate `obft.LayerAttempt` → `ct.LayerAttempt` field-by-field in `toCT`. Trivial copy.
+
+Adapter copies the trace via the instance getter in the rawOutcome → ct.Outcome translation:
+- [`obft/des.go outcome()`](../protocol/v2/consensustest/obft/des.go) — captures `s.instances[op].LastResolveLayerAttempts()` into a new `rawOpOutcome.resolveLayerAttempts` field.
+- [`obft/adapter.go toCT`](../protocol/v2/consensustest/obft/adapter.go) — translates obft.LayerAttempt → ct.LayerAttempt.
+- Mirrored in [`twoab/des.go`](../protocol/v2/consensustest/twoab/des.go) + [`twoab/adapter.go`](../protocol/v2/consensustest/twoab/adapter.go).
 
 `ComputeSafetyReport` walk-state check:
 
@@ -624,6 +652,6 @@ Bucket 1 and Bucket 2 are independent. Bucket 3 depends on the protocol-side `Ou
 
 `SafetyReport.IsViolation()` becomes the central panic-trigger; adding a new field is one line. The panic message stays structured and self-diagnosing.
 
-## Implementation flag — 2abOBFT walk-state trace
+## Implementation flag — 2abOBFT walk-state trace [resolved]
 
-2abOBFT's Resolve walks differently from OBFT base (Phase-2a / Phase-2b interaction). The Bucket-3 instrumentation may need multiple hook points rather than a single one. Confirm shape by reading `twoab/instance.go` Resolve during commit 4; adjust the `LayerAttempts` schema if Phase-2a/Phase-2b need to be distinguishable in the trace. Not a blocker for the plan — flagged so the implementation phase doesn't get caught flat-footed.
+Resolved during commit 4: `twoab.Instance.Resolve` has the same single-pass Phase-3 walk loop as `obft/base.Instance.Resolve` — the same instrumentation pattern (per-layer attempt struct, populated by `tryReconstructLayer` / `tryDeriveNextLayerKey`) works for both adapters. Phase-2a / Phase-2b emissions feed the σ-pool / NR-pool that Resolve consumes; no separate hook points needed. The single `LayerAttempt` schema is shared via `twoab.LayerAttempt = obft.LayerAttempt` (same type alias pattern as `Output`).

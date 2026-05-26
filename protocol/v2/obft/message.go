@@ -28,6 +28,42 @@ type Output struct {
 	Signature Signature
 }
 
+// LayerAttempt records one layer's worth of Phase-3 walk state for
+// per-operator diagnostic and consensustest's bucket-3 walk-consistency
+// invariant. Populated by Instance.Resolve as it iterates layers
+// 0..K-1; readable post-Resolve via Instance.LastResolveLayerAttempts.
+//
+// Frozen at the moment the walk visited the layer — subsequent layers'
+// decryption may unlock further σ partials that would have changed an
+// earlier layer's outcome if re-checked. The OBFT spec § Phase 3 walk
+// is monotonic (later partials cannot un-decide an earlier layer), so
+// the snapshot is sufficient for "did the walk see a σ-quorum at this
+// layer" without re-running.
+//
+// SigmaPoolSize counts the LARGEST sigGroup at this layer (the V most
+// likely to reach qV cluster-wide); under leader equivocation multiple
+// groups exist but at most one can reach qV per Pigeonhole 2. QV is the
+// σ-quorum threshold for this instance (= 2f+1). NRPoolSize and QEnc
+// have the same shape for the NR-pool side. The "Reached" booleans are
+// pre-computed for downstream convenience: SigmaReached = SigmaPoolSize
+// >= QV, NRReached = NRPoolSize >= QEnc.
+//
+// Decided is true iff the walk produced an Output at this layer
+// (necessarily implies SigmaReached). The deepest layer (K-1) has no
+// NR tag — NRPoolSize and QEnc are 0 / NRReached false there
+// regardless of any contributions, since the protocol doesn't aggregate
+// NR partials at the deepest layer (there's no L_K to advance to).
+type LayerAttempt struct {
+	Layer         int
+	SigmaPoolSize int
+	QV            int
+	SigmaReached  bool
+	Decided       bool
+	NRPoolSize    int
+	QEnc          int
+	NRReached     bool
+}
+
 // ValueRoot returns the 32-byte identifier (sha256) used to refer to a value
 // on the wire without retransmitting the full bytes. Cluster-wide stable:
 // every honest operator computes the same value_root for the same V. Distinct

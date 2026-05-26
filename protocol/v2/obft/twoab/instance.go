@@ -269,6 +269,13 @@ type Instance struct {
 	evidenceObserved map[evidenceObservedKey]bool
 
 	ended bool
+
+	// lastResolveTrace mirrors obft/base's same-named field — per-layer
+	// Resolve walk state, overwritten on each Resolve call. See
+	// obft/base.Instance.lastResolveTrace and LastResolveLayerAttempts
+	// for the semantics; consumed by consensustest's bucket-3
+	// walk-consistency invariant.
+	lastResolveTrace []LayerAttempt
 }
 
 // RetentionSource discriminates how a retained Phase-1 bundle reached

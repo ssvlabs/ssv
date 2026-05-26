@@ -54,22 +54,42 @@ func (i *Instance) Resolve() (*Output, error) {
 	// order (outermost-first).
 	chainedKeys := make([][]byte, K)
 
+	// Reset the per-layer trace for this Resolve call (see Instance
+	// lastResolveTrace docstring for the snapshot semantics).
+	i.lastResolveTrace = i.lastResolveTrace[:0]
+	qV := i.cfg.QV()
+	qEnc := i.cfg.QEnc()
+
 	for k := 0; k < K; k++ {
 		// Try σ-pool reconstruction at this layer.
-		out, err := i.tryReconstructLayer(k, chainedKeys)
+		out, sigmaPoolSize, err := i.tryReconstructLayer(k, chainedKeys)
+		attempt := LayerAttempt{
+			Layer:         k,
+			SigmaPoolSize: sigmaPoolSize,
+			QV:            qV,
+			SigmaReached:  sigmaPoolSize >= qV,
+			Decided:       out != nil,
+		}
 		if err != nil {
+			i.lastResolveTrace = append(i.lastResolveTrace, attempt)
 			return nil, fmt.Errorf("twoab: layer %d reconstruction: %w", k, err)
 		}
 		if out != nil {
+			i.lastResolveTrace = append(i.lastResolveTrace, attempt)
 			return out, nil
 		}
 
 		// σ-quorum did not reach. Try NR-quorum to advance to next layer.
 		// At the deepest layer there is no NR tag — the walk terminates.
 		if k == K-1 {
+			i.lastResolveTrace = append(i.lastResolveTrace, attempt)
 			break
 		}
-		nextKey, err := i.tryDeriveNextLayerKey(k)
+		nextKey, nrPoolSize, err := i.tryDeriveNextLayerKey(k)
+		attempt.NRPoolSize = nrPoolSize
+		attempt.QEnc = qEnc
+		attempt.NRReached = nextKey != nil
+		i.lastResolveTrace = append(i.lastResolveTrace, attempt)
 		if err != nil {
 			return nil, fmt.Errorf("twoab: layer %d NR aggregation: %w", k, err)
 		}
@@ -84,12 +104,28 @@ func (i *Instance) Resolve() (*Output, error) {
 	return nil, &ResolveError{StoppedAtLayer: K - 1, Reason: ResolveFailureExhaustion}
 }
 
+// LastResolveLayerAttempts returns a snapshot of the most recent
+// Resolve() walk's per-layer state. Mirrors obft/base's getter — same
+// semantics and caller contract (slice owned by the caller; overwritten
+// on next Resolve). Consumed by the consensustest framework's bucket-3
+// walk-consistency invariant.
+func (i *Instance) LastResolveLayerAttempts() []LayerAttempt {
+	if i == nil {
+		return nil
+	}
+	return i.lastResolveTrace
+}
+
 // tryReconstructLayer attempts σ-quorum reconstruction at `layer`.
 //
 // Returns:
-//   - (*Output, nil) — σ-quorum reached, output produced.
-//   - (nil, nil) — no σ-quorum (caller should attempt NR-advance).
-//   - (nil, error) — internal error (e.g., aggregation crypto failure).
+//   - (*Output, poolSize, nil) — σ-quorum reached, output produced.
+//   - (nil, poolSize, nil) — no σ-quorum (caller should attempt NR-advance).
+//   - (nil, poolSize, error) — internal error (e.g., aggregation crypto failure).
+//
+// poolSize is the largest sigGroup's distinct-emitter count at this
+// layer; mirrors the OBFT base helper for symmetry with the Resolve
+// trace.
 //
 // At L_0: σ partials come from sigmaPool[0]. Populated via
 // verifyAndPoolL0Partial in phase2a.go from peer ValueMsg.L0Partial (the
@@ -107,7 +143,7 @@ func (i *Instance) Resolve() (*Output, error) {
 // decryption failure or post-decryption verification failure, Rule 4 fires.
 // The leader's plaintext witness and its own decrypted chained entry (if
 // any) key the same OperatorID, so they coalesce — no double-count.
-func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output, error) {
+func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output, int, error) {
 	groups := make(map[[32]byte]*sigGroup)
 
 	// 1) σ-pool entries already populated for this layer.
@@ -146,19 +182,23 @@ func (i *Instance) tryReconstructLayer(layer int, chainedKeys [][]byte) (*Output
 
 	// 3) Pick the group with the most partials; check qV.
 	winning := selectWinningGroup(groups)
-	if winning == nil || len(winning.partials) < i.cfg.QV() {
-		return nil, nil
+	poolSize := 0
+	if winning != nil {
+		poolSize = len(winning.partials)
+	}
+	if winning == nil || poolSize < i.cfg.QV() {
+		return nil, poolSize, nil
 	}
 
 	full, err := i.signer.AggregatePartials(winning.partials)
 	if err != nil {
-		return nil, fmt.Errorf("aggregate σ partials: %w", err)
+		return nil, poolSize, fmt.Errorf("aggregate σ partials: %w", err)
 	}
 	return &Output{
 		Layer:     layer,
 		Value:     append(Value{}, winning.value...),
 		Signature: full,
-	}, nil
+	}, poolSize, nil
 }
 
 // sigGroup holds σ partials grouped by the V they sign at a given layer.
@@ -246,18 +286,26 @@ func (i *Instance) extractSigmaFromEntries(op OperatorID, layer int, entries []L
 }
 
 // tryDeriveNextLayerKey aggregates ≥ qEnc NR partials on nr_tag_layer.
-// Returns the aggregated full signature (= chained-decryption key for
-// layer+1's outermost wrap), or nil if NR-quorum did not reach.
-func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, error) {
+//
+// Returns:
+//   - (key, poolSize, nil) — NR-quorum reached; key is the aggregated
+//     full signature (chained-decryption key for layer+1's outermost wrap).
+//   - (nil, poolSize, nil) — NR-quorum did not reach.
+//   - (nil, poolSize, error) — internal error.
+//
+// poolSize is the count of distinct-emitter NR partials observed at this
+// layer; mirrors the OBFT base helper for the Resolve trace.
+func (i *Instance) tryDeriveNextLayerKey(layer int) ([]byte, int, error) {
 	partials := i.nrTagPool[layer]
-	if len(partials) < i.cfg.QEnc() {
-		return nil, nil
+	poolSize := len(partials)
+	if poolSize < i.cfg.QEnc() {
+		return nil, poolSize, nil
 	}
 	full, err := i.tagSigner.AggregatePartials(partials)
 	if err != nil {
-		return nil, err
+		return nil, poolSize, err
 	}
-	return []byte(full), nil
+	return []byte(full), poolSize, nil
 }
 
 // recoverV locates the V bytes corresponding to a given (layer, vRoot).
