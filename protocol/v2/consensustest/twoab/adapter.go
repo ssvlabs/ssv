@@ -233,7 +233,8 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
-	out.Byz = cfg.Byz
+	// Deep-copy via Clone — see OBFT base adapter for the rationale.
+	out.Byz = cfg.Byz.Clone()
 	out.CommitAttestation = computeAttestation(cfg, out, recordingHost)
 	// Stamp the L_0 BFT_start-independence threshold = the unclamped
 	// fetchAt[0] (= T0Broadcast − B_0, floored at 0). This is the `fa`
@@ -356,9 +357,9 @@ func computeAttestation(cfg ct.SimConfig, out ct.Outcome, recordingHost *ct.Reco
 	if out.Decided {
 		att.OBFTCommitKindChecked = true
 		if out.DecidedRound == 0 {
-			att.OBFTCommitKind = "sigma"
+			att.OBFTCommitKind = ct.OBFTCommitKindSigma
 		} else {
-			att.OBFTCommitKind = "nr"
+			att.OBFTCommitKind = ct.OBFTCommitKindNR
 		}
 
 		// C1 — defensive sentinel; see obft/adapter.go's same wiring.

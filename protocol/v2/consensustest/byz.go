@@ -66,6 +66,25 @@ func (p ByzPattern) PrimaryByz() OperatorID {
 	return p.ByzOperators[0]
 }
 
+// Clone returns a deep copy with independent slice backing arrays for
+// ByzOperators / Recipients / Crashed. Used by the adapter's toCT
+// boundary so that Outcome.Byz becomes immune to post-Run mutations of
+// the caller's cfg.Byz (e.g., a builder pattern that appends to the
+// caller's Crashed slice between Runs would otherwise mutate every
+// captured Outcome.Byz under the captured Outcome's feet). All other
+// fields are value-typed and copy via struct assignment.
+func (p ByzPattern) Clone() ByzPattern {
+	return ByzPattern{
+		Kind:         p.Kind,
+		ByzOperators: append([]OperatorID(nil), p.ByzOperators...),
+		Recipients:   append([]OperatorID(nil), p.Recipients...),
+		Crashed:      append([]OperatorID(nil), p.Crashed...),
+		CrashedCount: p.CrashedCount,
+		K:            p.K,
+		Layer:        p.Layer,
+	}
+}
+
 // IsByz reports whether op is in ByzOperators.
 func (p ByzPattern) IsByz(op OperatorID) bool {
 	for _, b := range p.ByzOperators {

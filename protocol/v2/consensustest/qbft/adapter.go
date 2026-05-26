@@ -175,7 +175,8 @@ func run(cfg ct.SimConfig, rt, rtRecoveryExtra time.Duration) (ct.Outcome, error
 		return ct.Outcome{}, err
 	}
 	out := rawOut.toCT(desCfg.Bandwidth)
-	out.Byz = cfg.Byz
+	// Deep-copy via Clone — see OBFT base adapter for the rationale.
+	out.Byz = cfg.Byz.Clone()
 	out.CommitAttestation = computeAttestation(rawOut)
 
 	// Pre-clip snapshot: ClipLateDecision resets DecidedRound to -1, so

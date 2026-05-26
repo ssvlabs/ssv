@@ -427,7 +427,7 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 		r.NoEquivocationAccepted = false
 	}
 	if att.OBFTCommitKindChecked && o.Decided {
-		if att.OBFTCommitKind != "sigma" && att.OBFTCommitKind != "nr" {
+		if att.OBFTCommitKind != OBFTCommitKindSigma && att.OBFTCommitKind != OBFTCommitKindNR {
 			r.OBFTCommitKindValid = false
 		}
 	}

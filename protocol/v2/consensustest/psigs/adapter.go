@@ -92,7 +92,8 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 
 	rawOut := runDES(desCfg)
 	out := rawOut.toCT(desCfg.Bandwidth)
-	out.Byz = cfg.Byz
+	// Deep-copy via Clone — see OBFT base adapter for the rationale.
+	out.Byz = cfg.Byz.Clone()
 
 	// Same submit-deadline semantic as OBFT / QBFT: a cluster that hasn't
 	// aggregated qV partials by RelayCutoff − HeaderSubmitHeadroom can't

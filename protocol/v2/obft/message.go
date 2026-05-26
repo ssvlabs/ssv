@@ -53,6 +53,18 @@ type Output struct {
 // NR tag — NRPoolSize and QEnc are 0 / NRReached false there
 // regardless of any contributions, since the protocol doesn't aggregate
 // NR partials at the deepest layer (there's no L_K to advance to).
+//
+// V identity is intentionally NOT recorded. Pigeonhole 2 guarantees at
+// most one V reaches qV cluster-wide per layer, so SigmaReached at a
+// given layer unambiguously identifies the (cluster-wide unique) V
+// that reached quorum there — the consumer can cross-reference against
+// Outcome.DecidedValue / oo.Value without ambiguity. If a future
+// protocol relaxes Pigeonhole 2 (multiple V's can reach qV at the
+// same layer), this struct needs a V / ValueRoot field and bucket-3 D1
+// in safety.go needs per-V trace fields to disambiguate "honest op's
+// local Resolve reached qV on V_b while the cluster cert is on V_a"
+// regressions. The cluster-wide check (NoOfflineDoubleV) catches the
+// double-V end-state regardless.
 type LayerAttempt struct {
 	Layer         int
 	SigmaPoolSize int

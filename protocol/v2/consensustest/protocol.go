@@ -424,8 +424,8 @@ type CommitAttestation struct {
 
 	// OBFTCommitKindValid (OBFT-specific): when set, the adapter recorded
 	// the certificate kind that justified the commit. Valid kinds are
-	// "sigma" and "nr"; any other value (including empty when checked) is
-	// a violation.
+	// OBFTCommitKindSigma and OBFTCommitKindNR; any other value
+	// (including empty when checked) is a violation.
 	OBFTCommitKindChecked bool
 	OBFTCommitKind        string
 
@@ -436,6 +436,17 @@ type CommitAttestation struct {
 	OBFTHostValidityChecked   bool
 	OBFTHostValidityRejecters int
 }
+
+// OBFTCommitKind* are the only valid CommitAttestation.OBFTCommitKind
+// values. Adapters write these; safety.go's check validates against
+// these. Centralized so adapter writers + safety check stay in sync —
+// the field is a descriptive tag today (always one of these two by
+// construction), but a regression that writes any other value trips
+// the OBFTCommitKindValid check.
+const (
+	OBFTCommitKindSigma = "sigma" // decision at L_0 via direct σ-quorum
+	OBFTCommitKindNR    = "nr"    // decision at L_k>0 via NR-fall-through
+)
 
 type OperatorOutcome struct {
 	Decided bool

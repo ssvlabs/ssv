@@ -111,22 +111,26 @@ func TestSafety_OBFTCommitKindValid(t *testing.T) {
 	}{
 		{
 			name:   "OK_sigma",
-			att:    ct.CommitAttestation{OBFTCommitKindChecked: true, OBFTCommitKind: "sigma"},
+			att:    ct.CommitAttestation{OBFTCommitKindChecked: true, OBFTCommitKind: ct.OBFTCommitKindSigma},
 			wantOK: true,
 		},
 		{
 			name:   "OK_nr",
-			att:    ct.CommitAttestation{OBFTCommitKindChecked: true, OBFTCommitKind: "nr"},
+			att:    ct.CommitAttestation{OBFTCommitKindChecked: true, OBFTCommitKind: ct.OBFTCommitKindNR},
 			wantOK: true,
 		},
 		{
-			name:      "VIOLATION_unknown_kind",
+			name: "VIOLATION_unknown_kind",
+			// Literal "rogue" intentionally — verifies the check rejects
+			// any value not in {OBFTCommitKindSigma, OBFTCommitKindNR}.
 			att:       ct.CommitAttestation{OBFTCommitKindChecked: true, OBFTCommitKind: "rogue"},
 			wantOK:    false,
 			wantPanic: true,
 		},
 		{
-			name:      "VIOLATION_empty_kind",
+			name: "VIOLATION_empty_kind",
+			// Literal "" intentionally — covers the zero-value case
+			// distinctly from "rogue".
 			att:       ct.CommitAttestation{OBFTCommitKindChecked: true, OBFTCommitKind: ""},
 			wantOK:    false,
 			wantPanic: true,
@@ -612,13 +616,20 @@ func TestSafety_HonestWalkConsistent(t *testing.T) {
 			// op1 has Round=-1 (cert-gossip-decide) but its local trace
 			// shows σ-reached at L_0 (an earlier parallel Resolve made
 			// progress before cert arrived). Case (b)'s mismatch check
-			// must skip when Round=-1.
+			// gates on Round >= 0 and so skips op1 unconditionally —
+			// not via clusterLocalDecidedOn or any other state query.
+			// op2 below is a realistic-cluster-shape decoy (the
+			// scenario being modeled is "cert arrived from a peer who
+			// locally decided"); it does NOT participate in the
+			// assertion — removing op2 leaves the test passing for the
+			// same reason. Mirrors the cluster-decider context shape
+			// other sub-tests use, kept for consistency.
 			perOp: map[ct.OperatorID]ct.OperatorOutcome{
 				op1: {Decided: true, Round: -1, Value: vA,
 					ResolveLayerAttempts: []ct.LayerAttempt{
 						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
 					}},
-				op2: {Decided: true, Round: 0, Value: vA, // cluster local-decider on V_a
+				op2: {Decided: true, Round: 0, Value: vA, // cluster local-decider on V_a (context decoy)
 					ResolveLayerAttempts: []ct.LayerAttempt{
 						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
 					}},
