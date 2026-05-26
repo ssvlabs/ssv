@@ -8,10 +8,25 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/observability/log"
 )
+
+// recordingNodeInfoIndex wraps mock.NodeInfoIndex and records every
+// SetNodeInfo call so tests can assert directly on storage rather than
+// inferring it from a downstream side-effect.
+type recordingNodeInfoIndex struct {
+	mock.NodeInfoIndex
+	setCalls []peer.ID
+}
+
+func (r *recordingNodeInfoIndex) SetNodeInfo(id peer.ID, _ *records.NodeInfo) {
+	r.setCalls = append(r.setCalls, id)
+}
+
+var _ peers.NodeInfoIndex = (*recordingNodeInfoIndex)(nil)
 
 // TestHandshakeTestData is a test for testing data and mocks
 func TestHandshakeTestData(t *testing.T) {
@@ -58,6 +73,11 @@ func TestVerifyTheirNodeInfo_RejectsNilMetadata(t *testing.T) {
 	testLogger := log.TestLogger(t)
 	td := getTestingData(t)
 
+	// Swap the default mock NodeInfoIndex for a recording variant so we can
+	// assert directly that SetNodeInfo was never called on the rejection path.
+	recorder := &recordingNodeInfoIndex{NodeInfoIndex: td.Handshaker.nodeInfos.(mock.NodeInfoIndex)}
+	td.Handshaker.nodeInfos = recorder
+
 	// Build a NodeInfo with Metadata == nil and have the (mocked) stream
 	// controller return its sealed bytes — that's what Consume on the local
 	// side will parse and pass to verifyTheirNodeInfo.
@@ -84,11 +104,8 @@ func TestVerifyTheirNodeInfo_RejectsNilMetadata(t *testing.T) {
 	require.Error(t, pi.LastHandshakeError)
 
 	// Crucially: verify that we did NOT store a NodeInfo for this peer.
-	// `mock.NodeInfoIndex.SetNodeInfo` is a no-op so we assert via a sentinel
-	// observation: the only side-effect on a successful path is updateNodeSubnets
-	// adding subnets to the index — for a nil-Metadata reject we expect none.
-	_, ok := td.Handshaker.subnetsIdx.GetPeerSubnets(td.SenderPeerID)
-	require.False(t, ok, "subnets should not have been recorded for a rejected peer")
+	// Direct assertion via the recording index — no proxy needed.
+	require.Empty(t, recorder.setCalls, "SetNodeInfo must not be called when handshake is rejected")
 }
 
 // TestPeerAgentVersion exercises the AgentVersion lookup helper across the
