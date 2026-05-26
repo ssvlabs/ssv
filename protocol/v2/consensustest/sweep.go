@@ -267,6 +267,15 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 // pipeline-shifting QBFT-family / PSigs cells wholesale and applying the
 // per-cell BFT_start-independence threshold (cellPayload
 // .BFTStartIndependenceMs) for OBFT-family cells.
+// BaselineSeverProbValues is the per-pair sustained-severance axis
+// emitted by p2p_baseline as a global picker dimension. Dialled in the
+// report UI to see all baseline cells at a chosen partition level.
+// Kept sparse on purpose — each value multiplies the baseline cell
+// count linearly. Mirrors a subset of p2p_partitions' dedicated sweep
+// values; the dedicated sweep keeps a finer-grained set for smooth
+// degradation-curve rendering.
+var BaselineSeverProbValues = []float64{0, 0.15, 0.30, 0.50}
+
 func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bttValues []time.Duration) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	baselineOnly := filterBaselineScenarios(scenarios)
@@ -275,57 +284,71 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	// operators on the Baseline group only (Healthy), drawn per-seed in
 	// Validate. Like instability, faulty_nodes>0 emits only Baseline-group
 	// scenarios — non-Baseline rows are crash-invariant here and the UI
-	// falls back to their faulty_nodes=0 cell.
+	// falls back to their faulty_nodes=0 cell. SeverProb follows the
+	// same asymmetric pattern: adversarial scenarios run on DeliveryDirect
+	// (mesh-only severance is a no-op for them), so SeverProb>0 emits
+	// only Baseline-group cells too.
 	faultyNodes := FaultyNodesRange(n)
-	pts := make([]SweepPoint, 0, len(bttValues)*len(profiles)*len(InstabilityLevels)*len(faultyNodes))
-	for _, btt := range bttValues {
-		for _, profile := range profiles {
-			profileIdx := P2PProfileIndex(profile)
-			for _, level := range InstabilityLevels {
-				for _, fn := range faultyNodes {
-					base := withClusterSize(DefaultProposerDutyConfig(btt), n)
-					base.K = k
-					// Calibrated profile drives BOTH direct and mesh paths.
-					// At n=4 the cluster typically fits inside one
-					// gossipsub mesh, so per-hop ≈ cluster-wide for real
-					// prod; using the same profile for cfg.Network and
-					// cfg.Mesh.HopDelay keeps the report's direct and
-					// mesh columns anchored to the same empirical data
-					// instead of one being synthetic. Fresh per-point
-					// instances so stateful wrappers (loss / correlated /
-					// markov-slow added by Apply or instability wraps)
-					// compose on independent state per sim.
-					base.Network = P2PProfile(profile)
-					base.Mesh.HopDelay = P2PProfile(profile)
-					// At level=0 AND fn=0 we run the full catalog (the
-					// wraps are no-ops for non-Baseline anyway, but this
-					// is what the heatmap reads for the bulk of
-					// scenarios). When either degradation axis is active
-					// only the Baseline group (Healthy) reruns under the
-					// wrap(s).
-					pointScenarios := scenarios
-					if level.Level > 0 || fn > 0 {
-						pointScenarios = baselineOnly
+	pts := make([]SweepPoint, 0, len(BaselineSeverProbValues)*len(bttValues)*len(profiles)*len(InstabilityLevels)*len(faultyNodes))
+	for _, severProb := range BaselineSeverProbValues {
+		severProb := severProb
+		for _, btt := range bttValues {
+			for _, profile := range profiles {
+				profileIdx := P2PProfileIndex(profile)
+				for _, level := range InstabilityLevels {
+					for _, fn := range faultyNodes {
+						base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+						base.K = k
+						// Calibrated profile drives BOTH direct and mesh paths.
+						// At n=4 the cluster typically fits inside one
+						// gossipsub mesh, so per-hop ≈ cluster-wide for real
+						// prod; using the same profile for cfg.Network and
+						// cfg.Mesh.HopDelay keeps the report's direct and
+						// mesh columns anchored to the same empirical data
+						// instead of one being synthetic. Fresh per-point
+						// instances so stateful wrappers (loss / correlated /
+						// markov-slow added by Apply or instability wraps)
+						// compose on independent state per sim.
+						base.Network = P2PProfile(profile)
+						base.Mesh.HopDelay = P2PProfile(profile)
+						// At every degradation axis = 0 we run the full
+						// catalog (wraps are no-ops for non-Baseline
+						// anyway, but this is what the heatmap reads for
+						// the bulk of scenarios). When any degradation
+						// axis is active only Baseline (Healthy) reruns.
+						pointScenarios := scenarios
+						if level.Level > 0 || fn > 0 || severProb > 0 {
+							pointScenarios = baselineOnly
+						}
+						pts = append(pts, SweepPoint{
+							Label: fmt.Sprintf("n=%d K=%d BTT=%dms profile=%s instab=%s faulty=%d sever=%.2f",
+								n, k, btt.Milliseconds(), profile, level.Name, fn, severProb),
+							Fields: map[FieldKey]float64{
+								FieldN:           float64(n),
+								FieldK:           float64(k),
+								FieldBTT:         float64(btt.Milliseconds()),
+								FieldP2PProfile:  float64(profileIdx),
+								FieldInstability: float64(level.Level),
+								FieldFaultyNodes: float64(fn),
+								FieldSeverProb:   severProb,
+							},
+							Config: BatchConfig{
+								Iterations:        fallback,
+								IterationsByGroup: byGroup,
+								Base:              base,
+								Scenarios: wrapAllForFaultyNodes(
+									wrapAllForInstability(
+										cloneScenariosWithMesh(pointScenarios, severProb > 0, func(mesh *MeshConfig) {
+											mesh.SeverProb = severProb
+										}),
+										level,
+									),
+									fn,
+								),
+								Protocols: protocols,
+							},
+						})
 					}
-					pts = append(pts, SweepPoint{
-						Label: fmt.Sprintf("n=%d K=%d BTT=%dms profile=%s instab=%s faulty=%d",
-							n, k, btt.Milliseconds(), profile, level.Name, fn),
-						Fields: map[FieldKey]float64{
-							FieldN:           float64(n),
-							FieldK:           float64(k),
-							FieldBTT:         float64(btt.Milliseconds()),
-							FieldP2PProfile:  float64(profileIdx),
-							FieldInstability: float64(level.Level),
-							FieldFaultyNodes: float64(fn),
-						},
-						Config: BatchConfig{
-							Iterations:        fallback,
-							IterationsByGroup: byGroup,
-							Base:              base,
-							Scenarios:         wrapAllForFaultyNodes(wrapAllForInstability(pointScenarios, level), fn),
-							Protocols:         protocols,
-						},
-					})
 				}
 			}
 		}
@@ -513,9 +536,12 @@ func p2pPartitionsSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 	// SeverProb axis: 0 anchors the unsevered baseline; 5-20% spans
 	// realistic per-connection failure rates (NAT churn, peer-score
 	// evictions, regional routing issues that persist longer than a
-	// slot). Past 0.20 the signal would be dominated by guaranteed
-	// miss territory and stop carrying useful gradient.
-	probs := []float64{0, 0.05, 0.10, 0.20}
+	// slot); 30-50% pushes into severe-partition territory where
+	// most nodes lose most eager paths and gossip recovery dominates.
+	// The 5/10/20 values keep the gentle-degradation curve from the
+	// initial release; 30/50 align with the baseline picker's coarser
+	// dial (BaselineSeverProbValues) for cross-chart comparison.
+	probs := []float64{0, 0.05, 0.10, 0.20, 0.30, 0.50}
 	pts := make([]SweepPoint, 0, len(probs))
 	for _, prob := range probs {
 		prob := prob

@@ -171,6 +171,17 @@ let selectedInstability = 0;
 // current (N,K,BTT,profile) slice.
 let selectedFaultyNodes = 0;
 
+// selectedSeverProb is the p2p_partition picker value (the per-pair
+// sustained-severance fraction baked into MeshConfig.SeverProb on the
+// Go side; values mirror BaselineSeverProbValues in sweep.go). Like
+// instability and faulty_nodes it only affects the Baseline-group
+// scenario (Healthy) in the heatmap and conditions chart — adversarial
+// scenarios run on DeliveryDirect where MeshConfig.SeverProb is a
+// no-op, so non-Baseline rows fall back to the SeverProb=0 cell via
+// findBaselineCellForScenario. Legacy data.js generated before the
+// SeverProb axis existed has no field and resolves to 0 via `?? 0`.
+let selectedSeverProb = 0;
+
 // activeProtocols is the set of protocol names currently shown in the
 // heatmap, charts, and collapsible legends. Initialized in main() from
 // localStorage (key: stresstest-active-protocols). Default (empty
@@ -379,6 +390,7 @@ function initBaselineSelections(data) {
   selectedP2pProfile = pickClosest(dims.P2pProfiles, selectedP2pProfile);
   selectedInstability = pickClosest(dims.Instabilities, selectedInstability);
   selectedFaultyNodes = pickClosest(dims.FaultyNodesValues, selectedFaultyNodes);
+  selectedSeverProb = pickClosest(dims.SeverProbs, selectedSeverProb);
 }
 
 // precomputeBFTShifts warms shiftedCell's cache for the heatmap's source
@@ -397,7 +409,7 @@ function initBaselineSelections(data) {
 function precomputeBFTShifts(data) {
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   let points = sweep
-    ? sweep.points.filter((pt) => pt.fields && baselineAxesMatch(pt.fields, 0, 0, 0))
+    ? sweep.points.filter((pt) => pt.fields && baselineAxesMatch(pt.fields, 0, 0, 0, 0))
     : [];
   if (points.length === 0) {
     const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
@@ -500,28 +512,29 @@ function onBFTStartChange(newBFTStart) {
 // top (K-dependent OBFT-family lookups); the K-independent pipeline-shift
 // lookup (findPipelineShiftBaselineCell) omits it. Points emitted before
 // an axis existed carry no key for it and default to 0 for backward-compat.
-function baselineAxesMatch(f, instability, faultyNodes, bftStart) {
+function baselineAxesMatch(f, instability, faultyNodes, bftStart, severProb) {
   return (
     f.N === selectedN &&
     f.BTT === selectedBTT &&
     f.p2p_profile === selectedP2pProfile &&
     (f.Instability ?? 0) === instability &&
     (f.FaultyNodes ?? 0) === faultyNodes &&
-    (f.BFT_start ?? 0) === bftStart
+    (f.BFT_start ?? 0) === bftStart &&
+    (f.SeverProb ?? 0) === severProb
   );
 }
 
 // findBaselinePointAtBFTStart looks up the p2p_baseline point at the
 // current (N, K, BTT, profile) and the requested instability +
 // BFT_start. Returns null when no matching point exists.
-function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart) {
+function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart, severProb) {
   if (!data) return null;
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep) return null;
   for (const pt of sweep.points) {
     const f = pt.fields;
     if (!f) continue;
-    if (f.K === selectedK && baselineAxesMatch(f, instability, faultyNodes, bftStart)) {
+    if (f.K === selectedK && baselineAxesMatch(f, instability, faultyNodes, bftStart, severProb)) {
       return { sweep, point: pt };
     }
   }
@@ -532,8 +545,8 @@ function findBaselinePointAtBFTStart(data, instability, faultyNodes, bftStart) {
 // (callers that don't need to vary BFT_start, e.g. heatmap legend
 // rendering). Forwards to findBaselinePointAtBFTStart with
 // BFT_start=0.
-function findBaselinePointAtInstability(data, instability, faultyNodes) {
-  return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0);
+function findBaselinePointAtInstability(data, instability, faultyNodes, severProb) {
+  return findBaselinePointAtBFTStart(data, instability, faultyNodes ?? 0, 0, severProb ?? 0);
 }
 
 // pickKIndependentCell selects a K-independent (pipeline-shift) protocol's
@@ -562,12 +575,12 @@ function pickKIndependentCell(candidates, scenarioName, protocol) {
 // p2p_baseline cell across every K-slice at the current (N, BTT, profile)
 // and the given instability / faulty / BFT_start. See pickKIndependentCell
 // for the selection policy.
-function findPipelineShiftBaselineCell(data, scenarioName, protocol, instability, faultyNodes, bftStart) {
+function findPipelineShiftBaselineCell(data, scenarioName, protocol, instability, faultyNodes, bftStart, severProb) {
   if (!data) return null;
   const sweep = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sweep) return null;
   const candidates = sweep.points.filter(
-    (pt) => pt.fields && baselineAxesMatch(pt.fields, instability, faultyNodes, bftStart));
+    (pt) => pt.fields && baselineAxesMatch(pt.fields, instability, faultyNodes, bftStart, severProb));
   return pickKIndependentCell(candidates, scenarioName, protocol);
 }
 
@@ -598,20 +611,25 @@ function findBaselineCellForScenario(data, scenario, protocol) {
   const isBaseline = scenario && scenario.group === 'Baseline';
   const wantInstab = isBaseline ? selectedInstability : 0;
   const wantFaulty = isBaseline ? selectedFaultyNodes : 0;
+  // Adversarial scenarios run on DeliveryDirect where MeshConfig.SeverProb
+  // is a no-op; p2pBaselineSweep emits non-Baseline cells only at
+  // SeverProb=0. Falling back to 0 here keeps those rows readable
+  // regardless of the global picker.
+  const wantSever = isBaseline ? selectedSeverProb : 0;
 
   // Pipeline-shift protocols are K-independent — K is a layer count only
   // OBFT/2abOBFT consume, so the K picker must not change their data. Resolve
   // their BFT_start=0 cell from any K-slice; shiftedCell applies the exact
   // +BFT_start post-hoc, so BFT_start=0 is the right source at any picker.
   if (isPipelineShiftProtocol(protocol)) {
-    return findPipelineShiftBaselineCell(data, scenario.name, protocol, wantInstab, wantFaulty, 0);
+    return findPipelineShiftBaselineCell(data, scenario.name, protocol, wantInstab, wantFaulty, 0, wantSever);
   }
 
   // OBFT-family is K-dependent: resolve at the selected K. The BFT_start=0
   // cell is the shape-anchor (always present) and carries the emitted
   // bftStartIndependenceMs threshold this protocol's schedule is invariant
   // below.
-  const base0 = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, 0);
+  const base0 = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, 0, wantSever);
   const cell0 = base0 ? findCell(base0.point, scenario.name, protocol) : null;
 
   const threshold = cell0 ? cell0.bftStartIndependenceMs : undefined;
@@ -620,7 +638,7 @@ function findBaselineCellForScenario(data, scenario, protocol) {
   // this picker shifts the schedule, so try the exact cell and degrade to
   // the BFT_start=0 cell rather than render n/a.
   if (threshold == null) {
-    const m = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, selectedBFTStart);
+    const m = findBaselinePointAtBFTStart(data, wantInstab, wantFaulty, selectedBFTStart, wantSever);
     const c = m ? findCell(m.point, scenario.name, protocol) : null;
     return c || cell0;
   }
@@ -654,6 +672,7 @@ function availableBaselineDimensions(data) {
   const p2pProfileSet = new Set();
   const instabilitySet = new Set();
   const faultyNodesSet = new Set();
+  const severProbSet = new Set();
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (sw) {
     for (const pt of sw.points) {
@@ -672,6 +691,10 @@ function availableBaselineDimensions(data) {
       // faulty_nodes range is N-dependent (0..(N-1)/3); collect the values
       // actually produced so the picker greys per-N slice. Always seed 0.
       if (typeof f.FaultyNodes === 'number') faultyNodesSet.add(f.FaultyNodes);
+      // SeverProb axis: collect values present in data so the picker
+      // shows whatever the Go-side BaselineSeverProbValues was at run
+      // time (auto-discovered, no JS-side mirror needed).
+      if (typeof f.SeverProb === 'number') severProbSet.add(f.SeverProb);
     }
   }
   // Backfill 0..4 so the picker always shows all 5 levels even on
@@ -681,6 +704,9 @@ function availableBaselineDimensions(data) {
   // faulty_nodes=0 is always a valid choice (pre-crash behavior); legacy
   // data without the FaultyNodes field falls back to 0 via findBaseline*.
   faultyNodesSet.add(0);
+  // SeverProb=0 is always a valid choice (the unsevered baseline); legacy
+  // data without the SeverProb field falls back to 0 via findBaseline*.
+  severProbSet.add(0);
   return {
     Ns: [...Nset].sort((a, b) => a - b),
     Ks: [...Kset].sort((a, b) => a - b),
@@ -688,6 +714,7 @@ function availableBaselineDimensions(data) {
     P2pProfiles: [...p2pProfileSet].sort((a, b) => a - b),
     Instabilities: [...instabilitySet].sort((a, b) => a - b),
     FaultyNodesValues: [...faultyNodesSet].sort((a, b) => a - b),
+    SeverProbs: [...severProbSet].sort((a, b) => a - b),
   };
 }
 
@@ -696,7 +723,7 @@ function availableBaselineDimensions(data) {
 // to grey out buttons whose specific combination wasn't produced by
 // any `make stresstest` run. Points without Instability in Fields
 // (legacy data) match instability=0 only.
-function baselinePointExists(data, n, k, btt, p2pProfile, instability, faultyNodes) {
+function baselinePointExists(data, n, k, btt, p2pProfile, instability, faultyNodes, severProb) {
   const sw = data.sweeps.find((s) => s.name === 'p2p_baseline');
   if (!sw) return false;
   return sw.points.some((pt) => {
@@ -708,7 +735,8 @@ function baselinePointExists(data, n, k, btt, p2pProfile, instability, faultyNod
       f.BTT === btt &&
       f.p2p_profile === p2pProfile &&
       (f.Instability ?? 0) === instability &&
-      (f.FaultyNodes ?? 0) === (faultyNodes ?? 0)
+      (f.FaultyNodes ?? 0) === (faultyNodes ?? 0) &&
+      (f.SeverProb ?? 0) === (severProb ?? 0)
     );
   });
 }
@@ -822,7 +850,10 @@ function renderConditionsSection(data) {
   const wantedFaulty = scenario && scenario.group === 'Baseline'
     ? selectedFaultyNodes
     : 0;
-  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty);
+  const wantedSever = scenario && scenario.group === 'Baseline'
+    ? selectedSeverProb
+    : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty, wantedSever);
   if (scenario) {
     titleEl.textContent = scenario.title || scenario.name;
     if (scenario.note) {
@@ -849,19 +880,19 @@ function renderConditionsSection(data) {
     buildBaselinePicker('N:', dims.Ns.length ? dims.Ns : [selectedN], null,
       () => selectedN,
       (v) => { selectedN = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes)),
+      (v) => !baselinePointExists(data, v, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes, selectedSeverProb)),
   );
   pickers.appendChild(
     buildBaselinePicker('K:', dims.Ks.length ? dims.Ks : [selectedK], null,
       () => selectedK,
       (v) => { selectedK = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes)),
+      (v) => !baselinePointExists(data, selectedN, v, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes, selectedSeverProb)),
   );
   pickers.appendChild(
     buildBaselinePicker('BTT:', dims.BTTs.length ? dims.BTTs : [selectedBTT], ' ms',
       () => selectedBTT,
       (v) => { selectedBTT = v; saveSelectedBTT(); onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pProfile, selectedInstability, selectedFaultyNodes)),
+      (v) => !baselinePointExists(data, selectedN, selectedK, v, selectedP2pProfile, selectedInstability, selectedFaultyNodes, selectedSeverProb)),
   );
   pickers.appendChild(
     // The p2p_profile picker shows the calibrated mixture LABEL (prod /
@@ -874,7 +905,7 @@ function renderConditionsSection(data) {
       (v) => P2P_PROFILE_LABELS[v] || ('p' + v),
       () => selectedP2pProfile,
       (v) => { selectedP2pProfile = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability, selectedFaultyNodes),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, v, selectedInstability, selectedFaultyNodes, selectedSeverProb),
     ),
   );
   pickers.appendChild(
@@ -887,7 +918,7 @@ function renderConditionsSection(data) {
       (v) => INSTABILITY_NAMES[v] || ('L' + v),
       () => selectedInstability,
       (v) => { selectedInstability = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, v, selectedFaultyNodes),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, v, selectedFaultyNodes, selectedSeverProb),
     ),
   );
   pickers.appendChild(
@@ -901,7 +932,23 @@ function renderConditionsSection(data) {
       null,
       () => selectedFaultyNodes,
       (v) => { selectedFaultyNodes = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, v),
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, v, selectedSeverProb),
+    ),
+  );
+  pickers.appendChild(
+    // p2p_partition: per-pair sustained-severance fraction
+    // (MeshConfig.SeverProb on the Go side). Labels render as
+    // percentages ("0%", "15%", "30%", "50%") to match how the
+    // dedicated p2p_partitions chart axis reads. disabledFor greys
+    // values absent from the current slice; legacy data without
+    // SeverProb fields shows only the 0% button (others greyed).
+    buildBaselinePickerLabeled(
+      'p2p_partition:',
+      dims.SeverProbs.length ? dims.SeverProbs : [selectedSeverProb],
+      (v) => Math.round(v * 100) + '%',
+      () => selectedSeverProb,
+      (v) => { selectedSeverProb = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes, v),
     ),
   );
   pickers.appendChild(buildBFTStartPicker());
@@ -1323,7 +1370,10 @@ function rebuildConditionsChart(data) {
   const wantedFaulty = scenario && scenario.group === 'Baseline'
     ? selectedFaultyNodes
     : 0;
-  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty);
+  const wantedSever = scenario && scenario.group === 'Baseline'
+    ? selectedSeverProb
+    : 0;
+  const match = findBaselinePointAtInstability(data, wantedInstab, wantedFaulty, wantedSever);
   if (!match || !scenario) return;
   const onePtSweep = { ...match.sweep, points: [match.point] };
   // Per-protocol BFT_start-aware lookup (see renderConditionsSection
@@ -1551,7 +1601,7 @@ function renderHeatmap(data) {
   // non-Baseline) but the Baseline row's cell will be missing —
   // rendered as an empty cell so the user sees "this level wasn't
   // generated yet" without losing the rest of the heatmap.
-  const level0 = findBaselinePointAtInstability(data, 0, 0);
+  const level0 = findBaselinePointAtInstability(data, 0, 0, 0);
   if (!level0) {
     const legacy = data.sweeps.find((s) => s.name === 'p2p_normal');
     if (!legacy || legacy.points.length === 0) {
