@@ -50,7 +50,7 @@ const (
 //
 // Operator-facing surface: operators supply BTT (deployment P99 + δ) plus the
 // deployment-environment values (RelayCutoff, HeaderSubmitHeadroom,
-// RefloodDelay). All protocol timings derive deterministically so every
+// SafetyBuffer). All protocol timings derive deterministically so every
 // operator in a cluster computes identical values.
 type ConfigOverrides struct {
 	K                    int
@@ -58,15 +58,12 @@ type ConfigOverrides struct {
 	RelayCutoff          time.Duration // application hard deadline (e.g. 4s for proposer duty)
 	HeaderSubmitHeadroom time.Duration // reserved for cert broadcast + relay submit (absolute)
 
-	// RefloodDelay is the cluster's worst-case gossipsub reflood latency
-	// (bounded by HeartbeatInterval). It is the default for SafetyBuffer.
-	// Zero → DefaultRefloodDelay.
-	RefloodDelay time.Duration
-
 	// SafetyBuffer is the post-TPhase2a mesh-tail tolerance: the wall-clock
-	// during which late peer KindValues propagate and σ-pool fills. Zero →
-	// derived from RefloodDelay. Lowering it reclaims MEV-fetch headroom at
-	// the cost of σ-pool-fill tolerance; see docs/2abOBFT.md §Timing.
+	// during which late peer KindValues propagate and σ-pool fills. Sized
+	// to the cluster's worst-case gossipsub reflood latency (bounded by
+	// HeartbeatInterval). Zero → DefaultRefloodDelay (700ms, one
+	// HeartbeatInterval). Lowering it reclaims MEV-fetch headroom at the
+	// cost of σ-pool-fill tolerance; see docs/2abOBFT.md §Timing.
 	SafetyBuffer time.Duration
 
 	// Test-only protocol-timing overrides. Production callers MUST NOT set
@@ -114,20 +111,14 @@ func (o *ConfigOverrides) headerSubmitHeadroom() time.Duration {
 	return o.HeaderSubmitHeadroom
 }
 
-func (o *ConfigOverrides) refloodDelay() time.Duration {
-	if o == nil || o.RefloodDelay == 0 {
-		return DefaultRefloodDelay
-	}
-	return o.RefloodDelay
-}
-
-// safetyBuffer returns the explicit SafetyBuffer override if set, else the
-// RefloodDelay-derived default (matching bare OBFT's structural budget).
+// safetyBuffer returns the explicit SafetyBuffer override if set, else
+// the package default (matching bare OBFT's structural budget — one
+// HeartbeatInterval of mesh-tail tolerance).
 func (o *ConfigOverrides) safetyBuffer() time.Duration {
 	if o != nil && o.SafetyBuffer != 0 {
 		return o.SafetyBuffer
 	}
-	return o.refloodDelay()
+	return DefaultRefloodDelay
 }
 
 func (o *ConfigOverrides) eps3() time.Duration {

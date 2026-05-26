@@ -17,7 +17,7 @@ func TestConfigForCluster_Defaults(t *testing.T) {
 
 	require.Equal(t, DefaultK, cfg.K())
 	require.Equal(t, DefaultBTT, cfg.BTT)
-	require.Equal(t, DefaultRefloodDelay, cfg.SafetyBuffer, "default SafetyBuffer = RefloodDelay")
+	require.Equal(t, DefaultRefloodDelay, cfg.SafetyBuffer, "default SafetyBuffer = DefaultRefloodDelay")
 
 	// T_0_broadcast = TPhase2a − BTT, and must land within the slot.
 	require.Equal(t, cfg.TPhase2a-cfg.BTT, cfg.T0Broadcast())
