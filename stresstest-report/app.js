@@ -83,19 +83,19 @@ const SLOT_END_MS = 4000;
 const HEADER_SUBMIT_HEADROOM_MS = 100;
 const SUBMIT_DEADLINE_MS = SLOT_END_MS - HEADER_SUBMIT_HEADROOM_MS;
 
-// BFT_STARTS is the fixed set of "BFT pipeline begins at" offsets the
-// picker offers. It is NOT a sweep axis — the sweep runs only at
-// BFT_start=0 and every other value is derived in the UI. The chart
-// x-axis is absolute slot time; cdfBFTStartPlugin draws a dashed marker
-// at BFT_start showing where in the slot the BFT actually starts (= end
-// of pre-fetch / pre-consensus).
+// BFT_START_MIN / MAX / STEP define the "BFT pipeline begins at" range the
+// picker exposes — a continuous 100ms-step slider from 0 to 3600 ms. BFT_start
+// is NOT a sweep axis: the sweep runs only at BFT_start=0 and every other
+// value is derived in the UI. The chart x-axis is absolute slot time;
+// cdfBFTStartPlugin draws a dashed marker at BFT_start showing where in the
+// slot the BFT actually starts (= end of pre-fetch / pre-consensus).
 //   QBFT / PSigs (pipeline-shift, forward-scheduled): the UI shifts the
 //     BFT_start=0 decision times by +BFT_start; a sample fails when the
-//     shifted time overflows the relay deadline. Shown at every BFT_start.
+//     shifted time overflows the relay deadline. Shown at every slider value.
 //   OBFT / 2abOBFT (slot-anchored, schedule derived backward from the
 //     relay cutoff): feasible only while the leader can broadcast early
 //     enough between BFT_start and the commit/backstop anchor — i.e.
-//     for picker values ≤ the cell's emitted bftStartIndependenceMs
+//     for slider values ≤ the cell's emitted bftStartIndependenceMs
 //     threshold (= the adapter's unclamped fetchAt[0] = the recovery-floored
 //     broadcast target, anchor − max(B_0, 3·BTT) for OBFT / anchor − B_0 for
 //     2abOBFT). At
@@ -107,8 +107,10 @@ const SUBMIT_DEADLINE_MS = SLOT_END_MS - HEADER_SUBMIT_HEADROOM_MS;
 //     clamp-and-run or round up to a later cell. The threshold is
 //     per-cell/per-variant (it tracks each variant's
 //     RefloodDelay/SafetyBuffer), so smaller-cushion variants stay
-//     feasible to a later BFT_start. See findBaselineCellForScenario.
-const BFT_STARTS = [0, 800, 1000, 1200, 1400, 1500, 1600, 2000, 2400, 2800, 3200, 3400, 3600];
+//     feasible to a later slider value. See findBaselineCellForScenario.
+const BFT_START_MIN = 0;
+const BFT_START_MAX = 3600;
+const BFT_START_STEP = 100;
 
 // selectedBFTStart is the page-level BFT_start used by the Conditions
 // chart at the top, the heatmap cell colors, and the cdfBFTStartPlugin's
@@ -405,8 +407,8 @@ function precomputeBFTShifts(data) {
     point.cells.forEach((cell) => {
       if (!cell.decisionTimes || cell.decisionTimes.length === 0) return;
       if (!isPipelineShiftProtocol(cell.protocol)) return;
-      for (let i = 1; i < BFT_STARTS.length; i++) {
-        shiftedCell(cell, BFT_STARTS[i]);
+      for (let bs = BFT_START_MIN + BFT_START_STEP; bs <= BFT_START_MAX; bs += BFT_START_STEP) {
+        shiftedCell(cell, bs);
       }
     });
   });
@@ -449,25 +451,30 @@ function shiftedCell(cell, bftStart) {
   return cell.bftShifts[bftStart];
 }
 
-// onBFTStartChange is the central handler for BFT_start picker clicks
-// on the Conditions section. Updates state and re-renders every view
-// that derives from BFT_start: heatmap cell colors + the Normal
-// operations chart. Per-collapsible BFT_start pickers route through
-// their own state (collapsibleState[name].bftStart) and re-render
-// only their section.
-function onBFTStartChange(newBFTStart) {
+// onBFTStartLive is the lightweight, drag-time BFT_start update: it re-colors
+// the heatmap cells IN PLACE (via updateHeatmapForBFTStart) instead of
+// rebuilding the section DOM — much faster, so rAF-coalesced slider drags can
+// actually track the slider at frame rate without falling behind. The
+// Conditions section (with the slider) is left untouched so the user's drag
+// isn't interrupted by the slider being replaced mid-interaction.
+function onBFTStartLive(newBFTStart) {
   if (newBFTStart === selectedBFTStart) return;
   selectedBFTStart = newBFTStart;
+  updateHeatmapForBFTStart(window.REPORT_DATA);
+}
+
+// onBFTStartChange is the commit handler: it fires on slider release (the
+// 'change' event) or on direct picker interaction by the per-collapsible
+// pickers. The heatmap is re-colored in place if its value isn't already
+// current from the live updates. The Conditions section is rebuilt here (so
+// the chart's BFT_start dashed marker catches up after staying static through
+// any mid-drag live updates), and the picker rebuild is what swaps the slider.
+function onBFTStartChange(newBFTStart) {
   const data = window.REPORT_DATA;
-  // Re-render heatmap section in place so cell colors reflect the new
-  // BFT_start. The Conditions section's picker rebuilds via its own
-  // renderConditionsSection re-mount below.
-  const oldOverview = document.getElementById('overview');
-  if (oldOverview) {
-    oldOverview.replaceWith(renderHeatmap(data));
+  if (newBFTStart !== selectedBFTStart) {
+    selectedBFTStart = newBFTStart;
+    updateHeatmapForBFTStart(data);
   }
-  // Re-render Conditions section so the BFT_start picker's active
-  // button updates and the chart redraws.
   const oldCond = document.getElementById('conditions');
   if (oldCond) {
     oldCond.replaceWith(renderConditionsSection(data));
@@ -1468,23 +1475,10 @@ function renderCollapsibleBody(body, sweep, data, state) {
 // buildLocalSlotPicker / buildLocalMetricToggle — picker variants that
 // drive the per-collapsible state instead of the module-level globals.
 function buildLocalSlotPicker(state, onChange) {
-  const picker = h('div', { class: 'sm-slot-picker' });
-  picker.appendChild(h('span', { class: 'sm-slot-picker-label' }, 'BFT_start:'));
-  BFT_STARTS.forEach((s) => {
-    const active = s === state.bftStart;
-    const btn = h(
-      'button',
-      { type: 'button', class: 'sm-slot-btn' + (active ? ' active' : '') },
-      `${s} ms`,
-    );
-    btn.addEventListener('click', () => {
-      if (state.bftStart === s) return;
-      state.bftStart = s;
-      onChange();
-    });
-    picker.appendChild(btn);
-  });
-  return picker;
+  return buildBFTStartSlider(
+    () => state.bftStart,
+    (v) => { if (state.bftStart === v) return; state.bftStart = v; onChange(); },
+  );
 }
 
 function buildLocalMetricToggle(state, onChange) {
@@ -1650,7 +1644,10 @@ function renderHeatmap(data) {
         if (!name) { row.appendChild(h('div', { class: 'hcell empty' })); return; }
         const cell = findBaselineCellForScenario(data, sc, name);
         if (cell && cell.iterations > 0) hasData = true;
-        row.appendChild(renderHeatmapCell(cell, sc));
+        const cellEl = renderHeatmapCell(cell, sc);
+        // data-protocol marks this cell for in-place re-coloring (slider drag).
+        cellEl.setAttribute('data-protocol', name);
+        row.appendChild(cellEl);
       };
       grouped.families.forEach((fam) => {
         grouped.cushions.forEach((c) => addCell(fam.byCushion[c] || null));
@@ -1812,19 +1809,20 @@ function mevDensityColor(intensity) {
 }
 
 // renderHeatmapCell colors a single cell by success rate via rateToColor.
-// n/a cells (iterations=0) render grey. The row carries the click
-// handler; cells just visualize per-protocol values. successRate / p99
-// reflect the active BFT_start via shiftedCell.
-function renderHeatmapCell(cell, scenario) {
+// n/a cells (iterations=0) render grey. The row carries the click handler;
+// cells just visualize per-protocol values. successRate / p99 reflect the
+// active BFT_start via shiftedCell. If an `existing` element is passed, this
+// updates it in place instead of creating a new div — the in-place path is
+// used by updateHeatmapForBFTStart so slider drags can re-color without
+// rebuilding the heatmap DOM.
+function renderHeatmapCell(cell, scenario, existing) {
+  const el = existing || document.createElement('div');
   if (!cell || cell.iterations === 0) {
-    return h(
-      'div',
-      {
-        class: 'hcell na',
-        title: "protocol doesn't work under this configuration",
-      },
-      'n/a',
-    );
+    el.className = 'hcell na';
+    el.setAttribute('title', "protocol doesn't work under this configuration");
+    el.textContent = 'n/a';
+    el.style.cssText = '';
+    return el;
   }
   const shifted = shiftedCell(cell, selectedBFTStart);
   const rate = shifted.successRate;
@@ -1837,15 +1835,34 @@ function renderHeatmapCell(cell, scenario) {
   // budget (default 10) where 1/N = 10% increments dominate the rate
   // and the P99 may be derived from very few successful samples.
   const samplesNote = `${successes}/${cell.iterations} successes (P99 from ${successes} samples)`;
-  return h(
-    'div',
-    {
-      class: 'hcell',
-      style: `--hcell-bg: ${bg}; --hcell-fg: ${fg}`,
-      title: `${scenario.title || scenario.name} · ${cell.protocol}\n${pct}% success · ${p99}\n${samplesNote}\nClick to drill in`,
-    },
-    `${pct}%`,
-  );
+  el.className = 'hcell';
+  el.setAttribute('title', `${scenario.title || scenario.name} · ${cell.protocol}\n${pct}% success · ${p99}\n${samplesNote}\nClick to drill in`);
+  el.style.cssText = `--hcell-bg: ${bg}; --hcell-fg: ${fg}`;
+  el.textContent = `${pct}%`;
+  return el;
+}
+
+// updateHeatmapForBFTStart re-colors the existing heatmap cells in place for
+// the current selectedBFTStart, instead of rebuilding the section DOM. ~10x
+// faster than a full replaceWith(renderHeatmap(data)) since it skips column
+// headers, group cards, row creation, and DOM allocation for ~300+ cells —
+// crucial for the slider's drag-time live updates (rAF-coalesced) to actually
+// keep up with the user. Only MEV-fresh / fallback cells are touched (cells
+// tagged with data-protocol on addCell); empty family-cushion slots stay
+// blank. The caller bumps selectedBFTStart before invoking this.
+function updateHeatmapForBFTStart(data) {
+  const section = document.querySelector('section.heatmap:not(.empty)');
+  if (!section) return;
+  section.querySelectorAll('.hrow[data-scenario]').forEach((row) => {
+    const scName = row.getAttribute('data-scenario');
+    const scenario = data.scenarios.find((s) => s.name === scName);
+    if (!scenario) return;
+    row.querySelectorAll('.hcell[data-protocol]').forEach((cellEl) => {
+      const protoName = cellEl.getAttribute('data-protocol');
+      const cell = findBaselineCellForScenario(data, scenario, protoName);
+      renderHeatmapCell(cell, scenario, cellEl);
+    });
+  });
 }
 
 // selectHeatmapRow visually marks the row containing `el` as selected,
@@ -1873,39 +1890,76 @@ function destroyCurrentChart() {
   }
 }
 
-// buildBFTStartPicker renders the page-level BFT_start picker shown in
-// the Conditions section. Clicks route through onBFTStartChange, which
-// re-renders the heatmap (cell colors track BFT_start) and the
-// Conditions section (active button + chart).
-//
-// The label carries a tooltip describing the per-cell reuse behavior
-// so users hover-discover why two adjacent picker values (e.g. 800ms
-// and 1000ms) may yield identical legend rates for an OBFT-family cell.
-// See findBaselineCellForScenario / cellPayload.BFTStartIndependenceMs.
-function buildBFTStartPicker() {
+// BFT_START_TOOLTIP: hover text on the BFT_start label, explaining the
+// per-cell reuse behavior for OBFT-family and the post-hoc shift for QBFT/PSigs.
+// Shared by both the page-level and per-collapsible BFT_start sliders so users
+// hover-discover why two close values may yield identical legend rates for an
+// OBFT-family cell. See findBaselineCellForScenario / BFTStartIndependenceMs.
+const BFT_START_TOOLTIP =
+  'BFT_start = time the protocol\'s primary broadcast pipeline begins (= end of pre-fetch / pre-consensus).\n\n' +
+  'OBFT-family: derived from the single BFT_start=0 sim. At/below the cell\'s BFT_start-independence threshold (emitted per-variant by the sweep — the point below which the schedule is bit-identical to BFT_start=0) the BFT_start=0 cell is the exact result. Above it the leader can\'t broadcast early enough — the recovery-floored broadcast window no longer fits before the commit/backstop anchor — so L_0 (the MEV layer) can\'t reliably land and the cluster would fall through to L_1+ (safe parent, not MEV): the config is not deployable, so it renders n/a — no clamping, no round-up.\n\n' +
+  'QBFT / PSigs: cells are pipeline-shifted post-hoc (sample t → t + BFT_start), dropped when shifted t exceeds the relay cutoff.';
+
+// buildBFTStartSlider renders the shared BFT_start range slider used by both
+// the page-level Conditions picker and the per-collapsible pickers — a 100ms-
+// step input from BFT_START_MIN to BFT_START_MAX. The value label updates live
+// as the slider drags. If a `liveChange` callback is provided, each drag step
+// schedules a rAF; the rAF fires before the next paint with the LATEST slider
+// value (multiple input events between paints are coalesced into one update),
+// so the heatmap tracks the slider at the display's frame rate without ever
+// gapping out the way a fixed-interval throttle does. `onChange` always fires
+// on 'change' (slider release / direct click) for the full commit.
+function buildBFTStartSlider(getValue, onChange, liveChange) {
   const picker = h('div', { class: 'sm-slot-picker' });
-  const label = h('span', {
+  picker.appendChild(h('span', {
     class: 'sm-slot-picker-label',
-    title: 'BFT_start = time the protocol\'s primary broadcast pipeline begins (= end of pre-fetch / pre-consensus).\n' +
-      '\n' +
-      'OBFT-family: derived from the single BFT_start=0 sim. At/below the cell\'s BFT_start-independence threshold (emitted per-variant by the sweep — the point below which the schedule is bit-identical to BFT_start=0) the BFT_start=0 cell is the exact result. Above it the leader can\'t broadcast early enough — the recovery-floored broadcast window no longer fits before the commit/backstop anchor — so L_0 (the MEV layer) can\'t reliably land and the cluster would fall through to L_1+ (safe parent, not MEV): the config is not deployable, so it renders n/a — no clamping, no round-up.\n' +
-      '\n' +
-      'QBFT / PSigs: cells are pipeline-shifted post-hoc (sample t → t + BFT_start), dropped when shifted t exceeds the relay cutoff.',
-  }, 'BFT_start:');
-  picker.appendChild(label);
-  BFT_STARTS.forEach((bftStart) => {
-    const btn = h(
-      'button',
-      {
-        type: 'button',
-        class: 'sm-slot-btn' + (bftStart === selectedBFTStart ? ' active' : ''),
-      },
-      `${bftStart} ms`,
-    );
-    btn.addEventListener('click', () => onBFTStartChange(bftStart));
-    picker.appendChild(btn);
+    title: BFT_START_TOOLTIP,
+  }, 'BFT_start:'));
+  const v0 = getValue();
+  const slider = h('input', {
+    type: 'range',
+    min: String(BFT_START_MIN),
+    max: String(BFT_START_MAX),
+    step: String(BFT_START_STEP),
+    value: String(v0),
+    class: 'sm-bft-slider',
+    'aria-label': 'BFT_start (ms)',
   });
+  const valueLabel = h('span', { class: 'sm-bft-value' }, `${v0} ms`);
+  // rAF coalescing for live drag updates: input events update `liveLatest`
+  // and schedule a rAF if one isn't already pending; the rAF callback fires
+  // with the latest value, coalescing multiple input events into one paint.
+  let liveRafId = 0;
+  let liveLatest = 0;
+  slider.addEventListener('input', () => {
+    valueLabel.textContent = `${slider.value} ms`;
+    if (!liveChange) return;
+    liveLatest = parseInt(slider.value, 10);
+    if (liveRafId === 0) {
+      liveRafId = requestAnimationFrame(() => {
+        liveRafId = 0;
+        liveChange(liveLatest);
+      });
+    }
+  });
+  slider.addEventListener('change', () => {
+    // Cancel any pending live update so the commit isn't followed by a stale
+    // rAF re-render with the same value.
+    if (liveRafId !== 0) { cancelAnimationFrame(liveRafId); liveRafId = 0; }
+    onChange(parseInt(slider.value, 10));
+  });
+  picker.appendChild(slider);
+  picker.appendChild(valueLabel);
   return picker;
+}
+
+// buildBFTStartPicker renders the page-level BFT_start slider shown in
+// the Conditions section. Drag-time updates re-render the heatmap only (via
+// onBFTStartLive, coalesced per animation frame so the colors track the slider
+// continuously during drag). The full commit (heatmap + Conditions section,
+// chart marker, picker rebuild) fires on slider release via onBFTStartChange.
+function buildBFTStartPicker() {
+  return buildBFTStartSlider(() => selectedBFTStart, onBFTStartChange, onBFTStartLive);
 }
 
 // shiftCell returns a pipeline-shifted view of `cell` in absolute slot

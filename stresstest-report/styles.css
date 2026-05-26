@@ -209,6 +209,10 @@ section.heatmap.empty {
   background: var(--hcell-bg);
   color: var(--hcell-fg, #1a1a1a);
   font-size: 0.88em;
+  /* Smooth color fades when the BFT_start slider re-tints cells in place
+   * (updateHeatmapForBFTStart). Transitions only fire because the cell DOM
+   * stays the same — a full replaceWith would skip them. */
+  transition: background-color 180ms ease, color 180ms ease;
 }
 .hcell.na {
   background: #e2e8f0;
@@ -393,6 +397,23 @@ section.heatmap.empty {
   border-color: var(--accent);
   border-style: dashed;
   opacity: 0.7;
+}
+
+/* BFT_start slider — a 100ms-step range input from 0 to 3600 ms, replacing
+ * the discrete-button picker. Sits in the same .sm-slot-picker row beside the
+ * label and a live value readout (.sm-bft-value). */
+.sm-bft-slider {
+  flex: 0 1 240px;
+  min-width: 140px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+}
+.sm-bft-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  font-size: 0.9em;
+  min-width: 4.5em;
 }
 
 /* Chart canvas wrapper — Chart.js needs an explicit height on the
