@@ -63,8 +63,8 @@ func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHa
 		outFeed:     new(event.Feed),
 		withPing:    withPing,
 	}
-	ws.RegisterHandler("query", "/query", ws.handleQuery)
-	ws.RegisterHandler("stream", "/stream", ws.handleStream)
+	ws.registerHandler("query", "/query", ws.handleQuery)
+	ws.registerHandler("stream", "/stream", ws.handleStream)
 	return &ws
 }
 
@@ -121,8 +121,8 @@ func (ws *wsServer) BroadcastFeed() *event.Feed {
 	return ws.outFeed
 }
 
-// RegisterHandler mounts a websocket endpoint at endPoint, served by handler.
-func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(*websocket.Conn)) {
+// registerHandler mounts a websocket endpoint at endPoint, served by handler.
+func (ws *wsServer) registerHandler(name, endPoint string, handler func(*websocket.Conn)) {
 	wrappedHandler := func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, w.Header())
 		if err != nil {
@@ -135,7 +135,10 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(*websock
 		// http.Server.Shutdown doesn't close upgraded websockets, so on
 		// server ctx cancel we close ours up-front — unblocking any
 		// read/write pending in the handler so the deferred close above
-		// gets to run.
+		// gets to run. The AfterFunc closure and the defer can both call
+		// conn.Close on a server-ctx cancel that races handler return;
+		// gorilla's *websocket.Conn.Close is safe to call twice (the
+		// second call returns an error but does not panic).
 		stop := context.AfterFunc(ws.ctx, func() { _ = conn.Close() })
 		defer stop()
 
@@ -148,7 +151,7 @@ func (ws *wsServer) RegisterHandler(name, endPoint string, handler func(*websock
 }
 
 // handleQuery receives query message and respond async. The websocket
-// is closed by wsServer.RegisterHandler's wrapper on return.
+// is closed by wsServer.registerHandler's wrapper on return.
 func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	if ws.handler == nil {
 		return
@@ -190,7 +193,7 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 }
 
 // handleStream registers the connection for broadcasting of stream
-// messages. The websocket is closed by wsServer.RegisterHandler's
+// messages. The websocket is closed by wsServer.registerHandler's
 // wrapper on return; handleStream only releases what it owns: the
 // *wsSession's ctx and the broadcaster registration.
 func (ws *wsServer) handleStream(wsc *websocket.Conn) {

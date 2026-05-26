@@ -111,9 +111,11 @@ func (s *wsSession) Send(msg []byte) {
 // s.Close on exit, propagating ctx-cancel — ReadLoop notices on the
 // next scheduling once wrappedHandler closes ws.
 //
-// The for-condition is load-bearing: Go's select randomizes among
-// ready cases, so without it, messages queued before Send-overflow
-// would still drain to the wire after cancel.
+// The for-condition bounds post-cancel drain to at most one extra
+// message: Go's select randomizes among ready cases, so once ctx is
+// canceled the select may still pick the send arm once before the
+// loop re-checks; without the condition the same race could repeat
+// across iterations and drain the whole queue.
 func (s *wsSession) WriteLoop(logger *zap.Logger) {
 	defer s.Close()
 

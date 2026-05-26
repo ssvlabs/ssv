@@ -265,6 +265,13 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// have rejected-rate=0, so a regression that stops rewarding accepts or
 	// starts rewarding ignores would otherwise slip through. Returns "" if
 	// the invariant holds.
+	//
+	// Coverage gap: when the observer is the ignored-only node, both checks
+	// skip (observer is the "lower" side of the accepted/ignored check and
+	// the "higher" side of the ignored/rejected one), so that observer gets
+	// no bucket coverage at all. The rate invariant still applies there; the
+	// three other observers each still run at least one bucket check, which
+	// is enough to catch a real regression.
 	bucketInvariantViolation := func(peers []peerScore, observer NodeIndex) string {
 		scoreByIdx := map[NodeIndex]float64{}
 		for _, p := range peers {
