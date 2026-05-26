@@ -460,3 +460,182 @@ func TestSafety_HonestSingleSigmaV(t *testing.T) {
 		})
 	}
 }
+
+// TestSafety_HonestWalkConsistent — bucket-2 D1 invariant.
+// Synthetic-outcome tests: constructs an Outcome with per-op
+// ResolveLayerAttempts that simulates a hypothetical Resolve-side
+// regression. Two violation cases:
+//   - WalkDecidedNoSigmaSource: op decided, trace has no σ-reached
+//     layer, AND cluster's local-decide signal has no matching V (no
+//     PerOp entry with Decided=true && Round>=0 && Value=oo.Value).
+//   - WalkAdvancedPastSigma: op decided locally at layer K, trace has
+//     σ-reached at L < K — walk advanced past a σ-decidable layer.
+//
+// Excluded from violation (OK cases):
+//   - Empty / nil ResolveLayerAttempts (adapter not instrumented).
+//   - Byz / crashed op (filtered out).
+//   - Clip-late ops (oo.Decided=false + Err="missed relay deadline"):
+//     the protocol internally decided; the deadline check turned off
+//     PerOp.Decided. Not a Resolve regression.
+//   - Cert-gossip-decide with no local σ-reached (Round=-1) AND
+//     cluster has a local-decider on this V (legitimate catch-up via
+//     cert).
+//   - Cert-gossip-decide (Round=-1) with a local σ-reached trace
+//     (e.g., the op had a parallel partial Resolve that errored after
+//     SigmaReached but before completing). Case (b) skips when
+//     oo.Round == -1 so this is not flagged.
+func TestSafety_HonestWalkConsistent(t *testing.T) {
+	op1 := ct.OperatorID(1)
+	op2 := ct.OperatorID(2)
+	vA := []byte("V_a")
+	vB := []byte("V_b")
+
+	tests := []struct {
+		name         string
+		perOp        map[ct.OperatorID]ct.OperatorOutcome
+		byz          ct.ByzPattern
+		wantOK       bool
+		wantPanic    bool
+		wantReasons  []ct.WalkInconsistencyReason
+		wantEvOps    []ct.OperatorID
+	}{
+		{
+			name: "OK_no_trace_graceful_default",
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: 0, Value: vA},
+				// no ResolveLayerAttempts on op1 — adapter didn't instrument
+			},
+			wantOK: true,
+		},
+		{
+			name: "OK_decided_at_first_sigma_reached",
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: 0, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK: true,
+		},
+		{
+			name: "OK_decided_at_fallthrough_layer",
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: 1, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: false, NRReached: true, QV: 3, QEnc: 3},
+						{Layer: 1, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK: true,
+		},
+		{
+			name: "OK_clip_late_decided",
+			// Protocol internally decided (trace shows SigmaReached at L_0),
+			// but ClipLateDecision turned off oo.Decided because the
+			// decision time was past the relay deadline. Not a Resolve
+			// regression — should be skipped via the Err=missed-deadline
+			// gate.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: false, Round: -1, Value: nil, Err: "missed relay deadline",
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK: true,
+		},
+		{
+			name: "OK_cert_gossip_decide_with_cluster_local_decider",
+			// op1 decided via cert (Round=-1, empty trace). op2 decided
+			// locally on the same V (Round=0). Legitimate catch-up.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: -1, Value: vA},
+				op2: {Decided: true, Round: 0, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK: true,
+		},
+		{
+			name: "OK_cert_gossip_decide_skip_case_b",
+			// op1 has Round=-1 (cert-gossip-decide) but its local trace
+			// shows σ-reached at L_0 (an earlier parallel Resolve made
+			// progress before cert arrived). Case (b)'s mismatch check
+			// must skip when Round=-1.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: -1, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+				op2: {Decided: true, Round: 0, Value: vA, // cluster local-decider on V_a
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK: true,
+		},
+		{
+			name: "VIOLATION_decided_no_sigma_source",
+			// op1 claims decided on V_a but its trace shows no
+			// σ-reached layer AND no other op locally-decided on V_a.
+			// No σ-quorum source anywhere → regression.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: 0, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: false, QV: 3, SigmaPoolSize: 1},
+					}},
+				// no other op decided on V_a
+			},
+			wantOK:      false,
+			wantPanic:   true,
+			wantReasons: []ct.WalkInconsistencyReason{ct.WalkDecidedNoSigmaSource},
+			wantEvOps:   []ct.OperatorID{op1},
+		},
+		{
+			name: "VIOLATION_advanced_past_sigma",
+			// op1 decided at L_1 but trace shows σ-reached at L_0 too.
+			// Walk should have decided at L_0, not advanced to L_1.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: 1, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+						{Layer: 1, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK:      false,
+			wantPanic:   true,
+			wantReasons: []ct.WalkInconsistencyReason{ct.WalkAdvancedPastSigma},
+			wantEvOps:   []ct.OperatorID{op1},
+		},
+		{
+			name: "OK_byz_emitter_filtered",
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op2: {Decided: true, Round: 1, Value: vB,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+						{Layer: 1, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			byz:    ct.ByzPattern{ByzOperators: []ct.OperatorID{op2}},
+			wantOK: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := ct.Outcome{
+				PerOp: tc.perOp,
+				Byz:   tc.byz,
+			}
+			r := ct.ComputeSafetyReport(out)
+			require.Equal(t, tc.wantOK, r.HonestWalkConsistent, "unexpected HonestWalkConsistent: %s", r)
+			require.Equal(t, tc.wantPanic, r.IsViolation())
+			if !tc.wantOK {
+				require.Len(t, r.WalkConsistencyEvidence, len(tc.wantReasons))
+				for i, reason := range tc.wantReasons {
+					require.Equal(t, reason, r.WalkConsistencyEvidence[i].Reason)
+					require.Equal(t, tc.wantEvOps[i], r.WalkConsistencyEvidence[i].Operator)
+				}
+			}
+		})
+	}
+}

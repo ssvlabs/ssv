@@ -123,6 +123,30 @@ type SafetyReport struct {
 	// filter via Outcome.Byz.
 	HonestSingleSigmaV bool
 
+	// HonestWalkConsistent: every honest decider's Phase-3 walk visited
+	// layers consistently with the per-op decision outcome. Two
+	// violation cases (D1 from docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md):
+	//   (a) Decided=true + ResolveLayerAttempts shows no σ-reached layer
+	//       AND cluster-wide aggregator never reconstructed this V — i.e.,
+	//       decision without any plausible σ-quorum source. Legitimate
+	//       cert-gossip-decide is the legal case here (cluster
+	//       reconstructed σ-quorum at some layer/V, this op caught up
+	//       via Certificate without local Resolve); the
+	//       clusterReachedSigmaQuorumAt lookup distinguishes the two.
+	//   (b) Decided=true + decided at a layer DEEPER than the shallowest
+	//       σ-reached layer in the trace — i.e., walk advanced past a
+	//       σ-decidable layer. Resolve-side regression. Skipped when
+	//       oo.Round == -1 (cert-gossip-decide: the op's local trace may
+	//       show a σ-reached layer where Resolve internally decided, but
+	//       the adapter stamps Round=-1 for cert-gossip; this is not a
+	//       regression).
+	// Default true. Skipped per op when ResolveLayerAttempts is empty
+	// (graceful degradation for adapters / protocol families without a
+	// layered walk — e.g., QBFT / PSigs) or when ClipLateDecision turned
+	// off oo.Decided post-Resolve (the op's internal Resolve still
+	// succeeded; ClipLate is a deadline check, not a regression).
+	HonestWalkConsistent bool
+
 	// DistinctOutputs records (Round, Value) pairs for diagnostic dumps;
 	// length > 1 means SingleV was violated.
 	DistinctOutputs []OutputTuple
@@ -136,6 +160,10 @@ type SafetyReport struct {
 	// triples that violated single-σ-V. Non-empty iff
 	// HonestSingleSigmaV=false.
 	SingleSigmaVEvidence []SingleSigmaVViolation
+
+	// WalkConsistencyEvidence enumerates the per-op walk-consistency
+	// violations. Non-empty iff HonestWalkConsistent=false.
+	WalkConsistencyEvidence []WalkConsistencyViolation
 }
 
 // CrossPhaseViolation identifies one honest operator that emitted both
@@ -157,6 +185,45 @@ type SingleSigmaVViolation struct {
 	ValueHashB [32]byte
 }
 
+// WalkConsistencyViolation describes one honest operator's walk-state
+// inconsistency. Reason names the violation case (a, b, or c — see
+// HonestWalkConsistent's docstring). DecidedLayer is -1 when the op
+// did not decide. SigmaReachedLayers is the sorted-ascending list of
+// layers where the op's local σ-pool view reached qV during Resolve.
+type WalkConsistencyViolation struct {
+	Operator           OperatorID
+	Reason             WalkInconsistencyReason
+	DecidedLayer       int
+	SigmaReachedLayers []int
+}
+
+// WalkInconsistencyReason names the two D1 violation cases.
+type WalkInconsistencyReason int
+
+const (
+	// WalkDecidedNoSigmaSource — op decided but ResolveLayerAttempts
+	// shows no σ-reached layer AND the cluster-wide aggregator never
+	// reconstructed this V. Decision without any plausible σ-quorum
+	// source — neither local Resolve nor cluster-wide reconstruction.
+	WalkDecidedNoSigmaSource WalkInconsistencyReason = iota + 1
+	// WalkAdvancedPastSigma — op decided at a layer DEEPER than the
+	// shallowest σ-reached layer in the trace. Walk advanced past a
+	// σ-decidable layer.
+	WalkAdvancedPastSigma
+)
+
+// String returns the spec-aligned label for the violation case.
+func (r WalkInconsistencyReason) String() string {
+	switch r {
+	case WalkDecidedNoSigmaSource:
+		return "decided-no-sigma-source"
+	case WalkAdvancedPastSigma:
+		return "advanced-past-sigma"
+	default:
+		return "unknown"
+	}
+}
+
 // IsViolation reports whether any load-bearing safety property is false.
 // Terminated is excluded (soft warning, see SafetyReport.Terminated).
 //
@@ -176,7 +243,8 @@ func (r SafetyReport) IsViolation() bool {
 		!r.OBFTCommitKindValid ||
 		!r.OBFTHostValidityRespect ||
 		!r.HonestCrossPhaseExclusive ||
-		!r.HonestSingleSigmaV
+		!r.HonestSingleSigmaV ||
+		!r.HonestWalkConsistent
 }
 
 type OutputTuple struct {
@@ -189,7 +257,8 @@ func (r SafetyReport) String() string {
 	if r.SingleV && r.Terminated && r.HonestAgreement && r.NoOfflineDoubleV &&
 		r.QuorumBackedDecision && r.NoEquivocationAccepted &&
 		r.OBFTCommitKindValid && r.OBFTHostValidityRespect &&
-		r.HonestCrossPhaseExclusive && r.HonestSingleSigmaV {
+		r.HonestCrossPhaseExclusive && r.HonestSingleSigmaV &&
+		r.HonestWalkConsistent {
 		return "SAFETY OK"
 	}
 	parts := []string{}
@@ -204,6 +273,9 @@ func (r SafetyReport) String() string {
 	}
 	if !r.HonestSingleSigmaV {
 		parts = append(parts, fmt.Sprintf("HonestSingleSigmaV=FAIL (%d honest op(s) emitted σ on two distinct V's at same layer)", len(r.SingleSigmaVEvidence)))
+	}
+	if !r.HonestWalkConsistent {
+		parts = append(parts, fmt.Sprintf("HonestWalkConsistent=FAIL (%d honest op(s) walked inconsistently with decision)", len(r.WalkConsistencyEvidence)))
 	}
 	if !r.QuorumBackedDecision {
 		parts = append(parts, "QuorumBackedDecision=FAIL (decision lacks quorum-sized signature set)")
@@ -256,6 +328,7 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 		OBFTHostValidityRespect:   true,
 		HonestCrossPhaseExclusive: true,
 		HonestSingleSigmaV:        true,
+		HonestWalkConsistent:      true,
 	}
 
 	distinctValues := [][]byte{}
@@ -409,7 +482,135 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 		return r.SingleSigmaVEvidence[i].Layer < r.SingleSigmaVEvidence[j].Layer
 	})
 
+	// D1 — Per-op walk-state consistency: every honest decider's
+	// ResolveLayerAttempts must be consistent with their decision. See
+	// HonestWalkConsistent docstring for the three violation cases.
+	// Skipped per op when ResolveLayerAttempts is empty (adapter / proto
+	// family doesn't instrument — graceful default).
+	//
+	// Iterate o.PerOp deterministically by sorted op ID so the panic
+	// message ordering is stable across runs.
+	opIDs := make([]OperatorID, 0, len(o.PerOp))
+	for op := range o.PerOp {
+		opIDs = append(opIDs, op)
+	}
+	sort.Slice(opIDs, func(i, j int) bool { return opIDs[i] < opIDs[j] })
+	for _, op := range opIDs {
+		oo := o.PerOp[op]
+		if o.Byz.IsByz(op) || o.Byz.IsCrashed(op) {
+			continue
+		}
+		if len(oo.ResolveLayerAttempts) == 0 {
+			continue // graceful default — adapter didn't instrument
+		}
+		sigmaReachedAt := []int{}
+		for _, la := range oo.ResolveLayerAttempts {
+			if la.SigmaReached {
+				sigmaReachedAt = append(sigmaReachedAt, la.Layer)
+			}
+		}
+		// Skip when ClipLateDecision turned off oo.Decided post-Resolve:
+		// the op's internal Resolve still succeeded (the trace reflects
+		// that), but a deadline check marked the outcome as undecided
+		// for slot-submission accounting. Not a Resolve-side regression
+		// the walk-consistency check should flag.
+		if !oo.Decided && oo.Err == "missed relay deadline" {
+			continue
+		}
+		// Case (a): Decided=true + no σ-reached layer locally. Split
+		// by Round semantics:
+		//   - oo.Round >= 0 (local-decide claim): the op asserts they
+		//     reconstructed locally at this layer. The trace MUST
+		//     confirm via a σ-reached entry. Empty trace = real
+		//     regression (Resolve or adapter mis-recorded the decision).
+		//   - oo.Round == -1 (cert-gossip-decide): the op caught up via
+		//     a Certificate from another op's local-decide. Legitimate
+		//     iff the cluster has some OTHER op marked as local-decider
+		//     on this V; if no operator anywhere reached σ-quorum
+		//     locally, the cert is bogus.
+		if oo.Decided && len(sigmaReachedAt) == 0 {
+			legitimate := false
+			if oo.Round == -1 {
+				// Cert-gossip-decide path — search for a cluster local
+				// decider on V (excluding the op under question, since
+				// it claims cert-decide and isn't a local-decider).
+				legitimate = clusterLocalDecidedOn(o, op, oo.Value)
+			}
+			if !legitimate {
+				r.HonestWalkConsistent = false
+				r.WalkConsistencyEvidence = append(r.WalkConsistencyEvidence,
+					WalkConsistencyViolation{
+						Operator:           op,
+						Reason:             WalkDecidedNoSigmaSource,
+						DecidedLayer:       oo.Round,
+						SigmaReachedLayers: sigmaReachedAt,
+					})
+			}
+			continue
+		}
+		// Case (b): Decided=true at layer K > min(sigmaReachedAt). Walk
+		// advanced past a σ-reachable layer. ResolveLayerAttempts is
+		// appended in walk order so sigmaReachedAt is ascending; the
+		// shallowest σ-reached layer is sigmaReachedAt[0].
+		//
+		// Skipped when oo.Round == -1 (cert-gossip-decide stamps -1 as
+		// "layer unknown to this op since they didn't reconstruct
+		// locally" — the op may have a σ-reached trace from a parallel
+		// local Resolve that errored out before completing; the cluster
+		// decided via different ops' σ-quorum and gossiped a cert; not
+		// a regression).
+		if oo.Decided && oo.Round >= 0 && len(sigmaReachedAt) > 0 && oo.Round != sigmaReachedAt[0] {
+			r.HonestWalkConsistent = false
+			r.WalkConsistencyEvidence = append(r.WalkConsistencyEvidence,
+				WalkConsistencyViolation{
+					Operator:           op,
+					Reason:             WalkAdvancedPastSigma,
+					DecidedLayer:       oo.Round,
+					SigmaReachedLayers: sigmaReachedAt,
+				})
+		}
+	}
+
 	return r
+}
+
+// clusterLocalDecidedOn reports whether any operator OTHER than
+// `exclude` is marked as locally-decided (PerOp.Decided=true with
+// PerOp.Round>=0) on V. Used by D1's case-(a) cert-gossip branch to
+// distinguish legitimate cluster catch-up (some other op
+// reconstructed σ-quorum locally → gossipped a cert → `exclude` op
+// applied the cert) from a bogus-cert regression (no operator
+// anywhere reached σ-quorum locally but `exclude` op claims a
+// cert-decide).
+//
+// Resolve only returns Output on real σ-quorum (the protocol's
+// load-bearing invariant), so a local-decide (Round>=0) implies
+// σ-quorum was reached at that operator. The cluster's own verdict is
+// the authoritative signal — the offline aggregator's
+// Reconstructions / SigmaCardinality are conservative
+// under-approximations of protocol-side σ-pool reconstruction (they
+// check each source independently; the protocol combines).
+//
+// `exclude` is the op under question — we don't want to use it as its
+// own evidence of legitimacy (case-(a) is specifically about op
+// claiming a cert-decide with no local source).
+//
+// Graceful default: returns true when PerOp is empty (no operator data
+// available — can't disambiguate; assume legitimate to avoid false
+// positives).
+func clusterLocalDecidedOn(o Outcome, exclude OperatorID, v []byte) bool {
+	if len(o.PerOp) == 0 {
+		return true
+	}
+	for op, oo := range o.PerOp {
+		if op == exclude {
+			continue
+		}
+		if oo.Decided && oo.Round >= 0 && bytes.Equal(oo.Value, v) {
+			return true
+		}
+	}
+	return false
 }
 
 // dedupCrossPhaseEvidence collapses duplicate (op, layer) records that
@@ -478,6 +679,13 @@ func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expecte
 		for _, e := range report.SingleSigmaVEvidence {
 			msg += fmt.Sprintf(" op=%d layer=%d V_a=%x V_b=%x;",
 				e.Operator, e.Layer, e.ValueHashA[:6], e.ValueHashB[:6])
+		}
+	}
+	if !report.HonestWalkConsistent {
+		msg += "\n  walk-consistency evidence:"
+		for _, e := range report.WalkConsistencyEvidence {
+			msg += fmt.Sprintf(" op=%d reason=%s decided-layer=%d σ-reached=%v;",
+				e.Operator, e.Reason, e.DecidedLayer, e.SigmaReachedLayers)
 		}
 	}
 	// Iterate ops in sorted order so the panic message is deterministic

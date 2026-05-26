@@ -410,6 +410,15 @@ func (r rawOutcome) toCT(agg *ct.OfflineAggregator, bw *ct.BandwidthReport) ct.O
 				}
 			}
 		}
+		// B5 — adapter-side single-decision-per-op guard. Under current
+		// adapter code this can't trigger (perOp is built fresh, one entry
+		// per op); the guard is defensive future-proofing against a
+		// refactor that introduces a re-decision path. Protocol-side B5
+		// is enforced by i.committed / i.ended in obft.Instance; this
+		// is the adapter-side mirror.
+		if _, exists := out.PerOp[op]; exists {
+			panic(fmt.Sprintf("consensustest/obft: adapter wrote PerOp[%d] twice — B5 violation (single-decision-per-op)", op))
+		}
 		out.PerOp[op] = ct.OperatorOutcome{
 			Decided:              oo.decided,
 			Value:                append([]byte(nil), oo.value...),

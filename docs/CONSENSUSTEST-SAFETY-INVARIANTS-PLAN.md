@@ -276,7 +276,7 @@ All four buckets land in **one mega-PR**. Internal commit ordering preserves bis
 2. **Commit 2 — `OfflineAggregator` by-emitter maps + observation methods**. Pure extension; no consumers yet. Adapter call sites at [`obft/events.go`](../protocol/v2/consensustest/obft/events.go) and [`twoab/events.go`](../protocol/v2/consensustest/twoab/events.go) plumb the actual emitter through `recordCommitToAggregator(agg, emitter, c)` and call `ObserveSigmaByEmitter` / `ObserveNRByEmitter`. No `SafetyReport` change yet — the data is collected but not checked.
 3. **Commit 3 — Bucket 2 SafetyReport fields (B1, B2)**. Adds `HonestCrossPhaseExclusive`, `HonestSingleSigmaV` to `SafetyReport` with paired evidence slices (`CrossPhaseEvidence`, `SingleSigmaVEvidence`) and supporting types (`CrossPhaseViolation`, `SingleSigmaVViolation`). `ComputeSafetyReport` reads `o.OfflineAgg.SigmaByEmitter` / `NRByEmitter` filtered via `o.Byz.IsByz` / `IsCrashed` (no signature change). `IsViolation` / `String` / `SafetyPanic` updated for the new fields with deterministic-ordering evidence dumps. Bucket-4 negative tests for B1/B2 (B3 subsumed by B1's leader-case sub-test) land as synthetic-outcome tests in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) — see [§Negative-test design](#negative-test-design--synthetic-outcomes-not-byz-patterns) for the rationale.
 4. **Commit 4 — Bucket 3 protocol-side instrumentation**. Adds `obft.LayerAttempt` exported type alongside `obft.Output`; `obft/base` and `obft/twoab` alias it. `Instance.lastResolveTrace` unexported field on both, populated by `Resolve` via the existing per-layer walk loop (`tryReconstructLayer` / `tryDeriveNextLayerKey` return signatures extended to also report pool size). Exported getter `Instance.LastResolveLayerAttempts() []LayerAttempt` on both. Adapter copies the trace through `rawOpOutcome.resolveLayerAttempts` → `ct.LayerAttempt` (defined in consensustest, separate from `obft.LayerAttempt` to keep the framework protocol-family-agnostic; adapter does trivial field-by-field translation). New `OperatorOutcome.ResolveLayerAttempts []LayerAttempt` field on the framework side. No `SafetyReport` change yet — protocol side ships first so the adapter's data plumbing is bisectable separately from the safety check.
-5. **Commit 5 — Bucket 3 SafetyReport field (D1) + B5 adapter-side panic guard**. `HonestWalkConsistent` added; D1 synthetic-outcome negative test lands in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go). B5 guard added to both adapters' `toCT` translation.
+5. **Commit 5 — Bucket 3 SafetyReport field (D1) + B5 adapter-side panic guard**. `HonestWalkConsistent` added with `WalkConsistencyEvidence` slice + `WalkConsistencyViolation` + `WalkInconsistencyReason` enum (two reasons: `WalkDecidedNoSigmaSource`, `WalkAdvancedPastSigma`). `ComputeSafetyReport` iterates `o.PerOp` filtered via `o.Byz`, reading each op's `ResolveLayerAttempts`. Three skip cases (graceful defaults, not violations): empty trace, byz/crashed op, clip-late op (`oo.Err == "missed relay deadline"`). Case (a) splits by `oo.Round` semantics — local-decide-claim with empty σ-trace is a regression; cert-gossip-decide checks the cluster verdict via `clusterLocalDecidedOn` (some OTHER op has Decided=true && Round>=0 on the same V → legitimate catch-up). Case (b) only fires for `oo.Round >= 0` (cert-gossip's Round=-1 is excluded to avoid false positives where local Resolve parallel-progressed before cert arrived). D1 synthetic-outcome negative test lands in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) (9 sub-tests covering all violation + OK shapes). B5 guard added to both adapters' `toCT` translation as defensive future-proofing.
 6. **Commit 6 — `stresstest-negative` Makefile target**. Aggregates the existing `TestAdapter_.*_TriggersSafetyDetection` adapter tests (real-byz patterns proving `NoOfflineDoubleV` fires) and the new `TestSafety_Honest*` synthetic-outcome tests (proving B1/B2/D1 fire) into a single fast CI smoke. No `matrix_test.go` changes needed since the bucket-3/4 negative tests don't add catalog-excluded byz patterns.
 
 The single-PR scope means reviewers see the full coverage picture in one place; commit boundaries keep the diff navigable. Each commit ships green on `make unit-test`; the final state ships green on `make stresstest`.
@@ -544,15 +544,23 @@ Adapter copies the trace via the instance getter in the rawOutcome → ct.Outcom
 - [`obft/adapter.go toCT`](../protocol/v2/consensustest/obft/adapter.go) — translates obft.LayerAttempt → ct.LayerAttempt.
 - Mirrored in [`twoab/des.go`](../protocol/v2/consensustest/twoab/des.go) + [`twoab/adapter.go`](../protocol/v2/consensustest/twoab/adapter.go).
 
-`ComputeSafetyReport` walk-state check:
+`ComputeSafetyReport` walk-state check (per-op, in deterministic sorted-op order):
 
 ```go
-for op, oo := range o.PerOp {
+for _, op := range sortedOpIDs(o.PerOp) {
+    oo := o.PerOp[op]
     if o.Byz.IsByz(op) || o.Byz.IsCrashed(op) {
         continue
     }
     if len(oo.ResolveLayerAttempts) == 0 {
-        continue // adapter didn't instrument; can't check (graceful default)
+        continue // adapter didn't instrument; graceful default
+    }
+    // Clip-late skip: protocol internally decided (trace reflects
+    // that), but ClipLateDecision turned off oo.Decided because the
+    // decision time was past the relay deadline. Not a Resolve-side
+    // regression — slot accounting only.
+    if !oo.Decided && oo.Err == "missed relay deadline" {
+        continue
     }
     sigmaReachedAt := []int{}
     for _, la := range oo.ResolveLayerAttempts {
@@ -560,46 +568,48 @@ for op, oo := range o.PerOp {
             sigmaReachedAt = append(sigmaReachedAt, la.Layer)
         }
     }
-    // (a) sigmaReachedAt empty + oo.Decided=true: decision without
-    //     σ-quorum at any traced layer. Could be legitimate cert-gossip
-    //     decide (cluster reached σ-quorum elsewhere; this op caught up via
-    //     KindCertificate) — only flag if the cluster-wide σ-cardinality
-    //     at oo.Round is ALSO short of qV. Otherwise the trace is empty by
-    //     virtue of the op short-circuiting to cert-decide before Resolve
-    //     ran, and that's correct.
-    if len(sigmaReachedAt) == 0 && oo.Decided {
-        if !clusterReachedSigmaQuorumAt(o, oo.Round, oo.Value) {
+    // Case (a) — Decided + empty σ-trace. Split by oo.Round:
+    //   - Round >= 0 (local-decide claim): trace MUST confirm via a
+    //     σ-reached entry; empty trace = real regression (Resolve or
+    //     adapter mis-recorded the decision).
+    //   - Round == -1 (cert-gossip-decide): legitimate iff some OTHER
+    //     op has Decided=true && Round>=0 on this V (cluster has a
+    //     local-decider that gossipped the cert this op applied);
+    //     missing → bogus cert.
+    if oo.Decided && len(sigmaReachedAt) == 0 {
+        legitimate := false
+        if oo.Round == -1 {
+            legitimate = clusterLocalDecidedOn(o, op, oo.Value)
+        }
+        if !legitimate {
             r.HonestWalkConsistent = false
             r.WalkConsistencyEvidence = append(r.WalkConsistencyEvidence,
-                WalkConsistencyViolation{Operator: op, DecidedLayer: oo.Round})
+                WalkConsistencyViolation{Operator: op,
+                    Reason: WalkDecidedNoSigmaSource, DecidedLayer: oo.Round})
         }
         continue
     }
-    // (b) sigmaReachedAt non-empty + !oo.Decided: walk had a σ-decidable
-    //     layer but failed to decide. Resolve-side regression.
-    if len(sigmaReachedAt) > 0 && !oo.Decided {
+    // Case (b) — Decided at deeper layer than shallowest σ-reached.
+    // Walk advanced past a σ-decidable layer. Skipped when Round==-1
+    // (cert-gossip-decide may have a parallel local trace that
+    // SigmaReached at some layer; not a regression).
+    if oo.Decided && oo.Round >= 0 && len(sigmaReachedAt) > 0 && oo.Round != sigmaReachedAt[0] {
         r.HonestWalkConsistent = false
         r.WalkConsistencyEvidence = append(r.WalkConsistencyEvidence,
-            WalkConsistencyViolation{Operator: op, DecidedLayer: -1,
-                SigmaReachedLayers: sigmaReachedAt})
-        continue
-    }
-    // (c) sigmaReachedAt non-empty + oo.Decided=true + oo.Round !=
-    //     min(sigmaReachedAt): walk advanced past a σ-reachable layer.
-    if len(sigmaReachedAt) > 0 && oo.Decided && oo.Round != sigmaReachedAt[0] {
-        r.HonestWalkConsistent = false
-        r.WalkConsistencyEvidence = append(r.WalkConsistencyEvidence,
-            WalkConsistencyViolation{Operator: op, DecidedLayer: oo.Round,
+            WalkConsistencyViolation{Operator: op,
+                Reason: WalkAdvancedPastSigma, DecidedLayer: oo.Round,
                 SigmaReachedLayers: sigmaReachedAt})
     }
 }
 ```
 
-`clusterReachedSigmaQuorumAt(o, layer, v)` is the cluster-wide sanity check using `OfflineAggReport.SigmaCardinality` from bucket 1; it distinguishes legitimate cert-gossip-decide (cluster σ-quorum reached, this op caught up via certificate) from a real regression (cluster never had σ-quorum but op decided anyway).
+`clusterLocalDecidedOn(o, exclude, v)` returns true when some operator OTHER than `exclude` has `Decided=true && Round>=0 && Value=v` — i.e., the cluster has at least one local-decider on V (which implies σ-quorum was reached locally there per Resolve's load-bearing contract). Implemented as a simple linear scan of PerOp; chosen over reading `OfflineAggReport.SigmaCardinality` because the offline aggregator's view is a conservative under-approximation of protocol-side σ-pool reconstruction (the protocol combines plaintext SigmaPartials + chain-unlocked EncryptedClaims + own-partial cache at each operator; the aggregator can miss combined-source reconstructions). The cluster's own verdict is the authoritative signal.
 
 `sigmaReachedAt` is naturally sorted ascending because `ResolveLayerAttempts` is appended in walk order — `sigmaReachedAt[0]` is `min(sigmaReachedAt)`.
 
-Gated on `len(oo.ResolveLayerAttempts) > 0` so an adapter that hasn't migrated yet (or scenarios with trace off) doesn't break.
+The original case (b) ("decided=false + σ-reached at some layer = walk failed to decide despite a σ-decidable layer") was dropped during implementation — under correct Resolve instrumentation `SigmaReached ↔ Decided` per layer (Resolve returns Output as soon as σ-quorum reaches), so the case is unreachable. Keeping it would only false-flag clip-late-decided ops where the protocol internally decided but ClipLateDecision turned off PerOp.Decided post-Resolve.
+
+Three skip cases (graceful, not violations): empty ResolveLayerAttempts (adapter didn't instrument), byz/crashed op, and clip-late op (`!oo.Decided && oo.Err == "missed relay deadline"`).
 
 ### Bucket 4 — negative tests, all synthetic-outcome
 
