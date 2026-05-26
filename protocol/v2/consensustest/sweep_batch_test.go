@@ -92,6 +92,7 @@ func TestDefaultSweeps_NamesAndShape(t *testing.T) {
 		"p2p_baseline":          len(bttValues) * len(profiles) * 5 * len(ct.FaultyNodesRange(4)), // BTT × profile × instability × faulty_nodes (n=4)
 		"p2p_increasing_BTT":    len(bttValues),                                                   // BTT
 		"p2p_packet_loss":       5,                                                                // LossRate
+		"p2p_partitions":        4,                                                                // SeverProb
 		"p2p_correlated_delays": 4,                                                                // BadLinkProb
 		"p2p_node_slowness":     4,                                                                // slow-op count
 		"p2p_instability":       5,                                                                // instability level

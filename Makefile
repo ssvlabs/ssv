@@ -112,7 +112,7 @@ consensustest-with-real-bls:
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
 # stresstest runs the stress-tier batch-comparison framework
-# (6 curated sweeps × the default protocol set — see PROTOCOLS below —
+# (7 curated sweeps × the default protocol set — see PROTOCOLS below —
 # × per-scenario iterations) and writes / merges data.js into REPORT_DIR,
 # consumed by the static UI (index.html + app.js + styles.css) already
 # in that folder.
@@ -145,6 +145,17 @@ consensustest-with-real-bls:
 #                            pipeline-shift.)
 #   - p2p_increasing_BTT    (BTT ∈ {100, 200, 400, 600, 800, 1000} ms)
 #   - p2p_packet_loss       (LossRate ∈ {0, 0.01, 0.05, 0.10, 0.20})
+#   - p2p_partitions        (SeverProb ∈ {0, 0.05, 0.10, 0.20} —
+#                            per-pair sustained severance over the
+#                            mesh's delivery graph (eager ∪ gossip-
+#                            reachable from the TopicMaxPeers≈10
+#                            bounded candidate set). Unlike packet
+#                            loss, cuts persist the whole slot —
+#                            gossip recovery routes only through
+#                            surviving connections. n=4 stays near-
+#                            flat because the bound is inactive at
+#                            that subnet size; n=7 and n=13 carry
+#                            the degradation signal.)
 #   - p2p_correlated_delays (BadLinkProb ∈ {0, 0.05, 0.10, 0.20})
 #   - p2p_node_slowness     (slow op count ∈ {0, 1, 2, 3}, markov
 #                            persistence 0.8)

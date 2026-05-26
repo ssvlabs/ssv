@@ -243,14 +243,14 @@ Bias-measurement A/B (in `mesh_sweep_test.go`):
 
 Measured outcome (recorded in the commit message): bias is essentially zero at the sweep's `LossRate=0.20` ceiling (0% at n=7 and n=13), 0.3% at the past-sweep stress point (LossRate=0.30, n=7). The existing committed `data.js` is unaffected within statistical noise. The bound is therefore justified entirely on its foundational role for the partition sweep, not on correcting past results.
 
-### Commit 2 — Sweep, field, report
+### Commit 2 — Sweep, field, report (landed)
 
-- `p2pPartitionsSweep` in `sweep.go`; register in `DefaultSweeps`.
-- `FieldSeverProb` key.
-- Helper `cloneScenariosWithMesh`.
-- `Makefile` sweep-list update + the sweep-name list near the top.
-- `stresstest-report/app.js` axis rendering.
-- Smoke test: `make stresstest PROTOCOLS=OBFT-700,QBFT-700,PSigs CLUSTER_SIZES_N=7 ITERATIONS_BASELINE_OPERATIONS=500` and verify monotone curve on the `p2p_partitions` cells.
+- `p2pPartitionsSweep` in `sweep.go`, registered in `DefaultSweeps` between `p2pPacketLossSweep` and `p2pCorrelatedDelaysSweep` (both are "missing-message" sweeps — transient and sustained, respectively).
+- `FieldSeverProb FieldKey = "SeverProb"` alongside the existing `FieldKey` block.
+- `cloneScenariosWithMesh` helper next to `wrapScenariosNetwork` — MeshConfig-mutating sibling that goes through `CloneScenarioWith` for the same Healthy-reverts-to-direct safety reason.
+- `Makefile` sweep-list updated (entry + bumped "6 curated sweeps" → 7); `sweep_batch_test.go`'s sweep-name pin extended with `p2p_partitions: 4`.
+- No `stresstest-report/app.js` change needed: the generic collapsible renderer (`renderCollapsibleBody` → `buildTrendLineChart`) picks up new sweeps automatically and reads `sweep.axisLabel` directly, so adding a sweep is a pure data-side change.
+- Smoke validation deferred to a live `make stresstest` run; cross-sweep invariants (e.g. `TestSweeps_HealthyStaysMesh`, `TestDefaultSweeps_NamesAndShape`) are green so the sweep registration is structurally sound.
 
 ## Validation
 
@@ -259,8 +259,14 @@ Measured outcome (recorded in the commit message): bias is essentially zero at t
 - **Unit**: 10 new `TestMesh_*` tests cover bound and severance — rate, symmetry, determinism, filter coverage on both layers, and the small-subnet inactive path. All pass; full `./protocol/v2/consensustest/...` suite green.
 - **Cross-sweep bias** (the `p2p_packet_loss` re-run): `TestMeshHealthy_GossipPoolBoundShiftsLossRecovery` runs the bounded vs unbounded A/B over `(n=7, loss=0.20)`, `(n=7, loss=0.30)`, `(n=13, loss=0.20)` at 300 iters each. Bias is **0% at the sweep ceiling** and 0.3% at the stressed point — the existing `p2p_baseline` and `p2p_packet_loss` numbers are unaffected within statistical noise. The bound is justified entirely by its foundational role for the partition sweep, not by correcting past results.
 
-### Sweep (Commit 2 — to come)
+### Sweep (Commit 2 — landed; smoke validation pending)
 
+Structural invariants (green in unit suite):
+- Sweep registers in `DefaultSweeps` and is named consistently across `Makefile`, `sweep.go`, and `sweep_batch_test.go`.
+- Healthy keeps `DeliveryMesh` post-wrap (`TestSweeps_HealthyStaysMesh` covers every `DefaultSweeps` point, including the new `p2p_partitions` cells).
+- Sweep shape: 4 points, each carrying `FieldN` / `FieldK` / `FieldSeverProb` (`TestDefaultSweeps_NamesAndShape`).
+
+End-to-end signal (to verify with a live run):
 - `p2p_partitions` monotone in `SeverProb`: miss-rate(0) ≤ miss-rate(0.05) ≤ … ≤ miss-rate(0.20), within statistical noise.
 - n=4 cell near-flat (bound inactive at small subnet) — confirm this rather than a bug.
 - n=7 and n=13 cells show monotone degradation.

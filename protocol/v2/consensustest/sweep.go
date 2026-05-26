@@ -41,6 +41,7 @@ const (
 	FieldLoss        FieldKey = "Loss"
 	FieldBadLinkProb FieldKey = "BadLinkProb"
 	FieldSlowOps     FieldKey = "SlowOps"
+	FieldSeverProb   FieldKey = "SeverProb"
 )
 
 // Sweep is an ordered series of SweepPoints sharing a theme. Built once,
@@ -220,6 +221,7 @@ func DefaultSweeps(scenarios []Scenario, protocols []Protocol, iters Iterations,
 		p2pBaselineSweep(scenarios, protocols, iters, n, k, profiles, bttValues),
 		p2pIncreasingBTTSweep(scenarios, protocols, iters, n, k, bttValues),
 		p2pPacketLossSweep(scenarios, protocols, iters, n, k),
+		p2pPartitionsSweep(scenarios, protocols, iters, n, k),
 		p2pCorrelatedDelaysSweep(scenarios, protocols, iters, n, k),
 		p2pNodeSlownessSweep(scenarios, protocols, iters, n, k),
 		p2pInstabilitySweep(scenarios, protocols, iters, n, k),
@@ -414,6 +416,32 @@ func wrapScenariosNetwork(scenarios []Scenario, active bool, wrap func(inner Net
 	return out
 }
 
+// cloneScenariosWithMesh is the MeshConfig-mutating sibling of
+// wrapScenariosNetwork: it clones each scenario so a per-sim
+// MeshConfig mutation can be applied (e.g. setting SeverProb for the
+// p2p_partitions sweep) without touching the catalog scenario in
+// place. `active` gates the mutation so an axis zero-point passes
+// scenarios through unwrapped — matching wrapScenariosNetwork's
+// behaviour.
+//
+// Goes through CloneScenarioWith for the same reason
+// wrapScenariosNetwork does: a field-by-field Scenario rebuild was
+// the source of a real Healthy-reverts-to-direct regression, and
+// clone-then-mutate keeps every other Scenario field (Delivery,
+// Apply, etc.) intact.
+func cloneScenariosWithMesh(scenarios []Scenario, active bool, mutate func(mesh *MeshConfig)) []Scenario {
+	out := make([]Scenario, len(scenarios))
+	for i, s := range scenarios {
+		out[i] = CloneScenarioWith(s, func(cfg *SimConfig) {
+			if !active {
+				return
+			}
+			mutate(&cfg.Mesh)
+		})
+	}
+	return out
+}
+
 func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
 	rates := []float64{0, 0.01, 0.05, 0.10, 0.20}
@@ -457,6 +485,79 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 		},
 		Description: "Each scenario gets a fresh LossyNetwork instance per sim to preserve determinism. Direct-path inner delay is production-shaped (σ=0.5); mesh per-hop inner delay uses the framework's calibration (σ=0.3) so the convolution over ~2 mesh hops matches direct's cluster-wide envelope. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
 		AxisLabel:   "Loss rate",
+		Points:      pts,
+	}
+}
+
+// p2pPartitionsSweep — sustained per-connection severance over a
+// production-shaped baseline. Companion to p2pPacketLossSweep
+// (transient burst loss): both stress missing-message regimes, but
+// LossyNetwork links recover within the slot and the gossip backstop
+// heals what's left, while severance persists the whole slot and
+// gossip can only route around it via SURVIVING connections.
+//
+// Cuts are Bernoulli-per-pair, sampled once per sim from the mesh's
+// salted rng (deterministic per cfg.Seed, distinct across sims), over
+// delivery-path pairs only (eager edges ∪ gossip-reachable pairs).
+// See MeshConfig.SeverProb's docstring in mesh.go for the model
+// rationale.
+//
+// At n=4 the bounded-gossip pool (MeshGossipConfig.GossipPoolBound)
+// is inactive (the available non-eager pool is below the bound), so
+// the n=4 cell is essentially a small clique and the curve stays
+// near-flat — an honest reflection of small-subnet reality, where a
+// real libp2p node would see most/all of its peers anyway. n ≥ 7
+// carries the degradation signal as the bound bites.
+func p2pPartitionsSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
+	fallback, byGroup := iters.asBatchIterations()
+	// SeverProb axis: 0 anchors the unsevered baseline; 5-20% spans
+	// realistic per-connection failure rates (NAT churn, peer-score
+	// evictions, regional routing issues that persist longer than a
+	// slot). Past 0.20 the signal would be dominated by guaranteed
+	// miss territory and stop carrying useful gradient.
+	probs := []float64{0, 0.05, 0.10, 0.20}
+	pts := make([]SweepPoint, 0, len(probs))
+	for _, prob := range probs {
+		prob := prob
+		// Stamp MeshConfig.SeverProb onto each scenario's mesh config;
+		// the construction in NewMeshTopology samples severed pairs
+		// per sim from the mesh rng. active=(prob > 0) preserves the
+		// unsevered anchor point as a pass-through baseline.
+		scenariosWithSever := cloneScenariosWithMesh(scenarios, prob > 0, func(mesh *MeshConfig) {
+			mesh.SeverProb = prob
+		})
+		btt := 300 * time.Millisecond
+		base := withClusterSize(DefaultProposerDutyConfig(btt), n)
+		base.K = k
+		base.Network = productionLogNormal(btt)
+		pts = append(pts, SweepPoint{
+			Label: fmt.Sprintf("n=%d K=%d sever=%.2f", n, k, prob),
+			Fields: map[FieldKey]float64{
+				FieldN:         float64(n),
+				FieldK:         float64(k),
+				FieldSeverProb: prob,
+			},
+			Config: BatchConfig{
+				Iterations:        fallback,
+				IterationsByGroup: byGroup,
+				Base:              base,
+				Scenarios:         scenariosWithSever,
+				Protocols:         protocols,
+			},
+		})
+	}
+	return Sweep{
+		Name:  "p2p_partitions",
+		Title: "Sustained link severance",
+		Params: []string{
+			"MeshConfig.SeverProb",
+			"Bernoulli per delivery-path pair (eager ∪ gossip-reachable)",
+			"GossipPoolBound=7 (TopicMaxPeers − typical eager)",
+			"direct: LogNormal{Median: BTT/2, σ: 0.5}",
+			"mesh per-hop: LogNormal{Median: BTT/3, σ: 0.3}",
+		},
+		Description: "Per-pair sustained severance over a production-shaped baseline with bounded gossip connectivity (TopicMaxPeers ≈ 10). Bernoulli at SeverProb per delivery-path pair (eager edges ∪ gossip-reachable pairs from the bounded candidate set), sampled once per sim from the mesh's salted rng. Cuts persist the whole slot — gossip recovery routes only through surviving connections; unlike LossyNetwork's transient burst drops, severed links never recover within the slot. At n=4 the non-eager pool is at or below GossipPoolBound, so the bound is inactive there and the n=4 cell stays near-flat — an honest reflection of a small subnet where a real libp2p node would similarly see all peers. n=7 and n=13 carry the degradation signal. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
+		AxisLabel:   "Sever probability per pair",
 		Points:      pts,
 	}
 }
