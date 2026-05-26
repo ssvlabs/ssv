@@ -279,6 +279,36 @@ stresstest-clean:
 	@rm -f "$(abspath $(REPORT_DIR))/data.js" "$(abspath $(REPORT_DIR))"/data.js.*.tmp
 	@echo "Cleaned $(abspath $(REPORT_DIR))/data.js"
 
+# stresstest-negative aggregates the safety-machinery negative tests
+# into a single fast CI smoke check. Two regex branches:
+#   - TestAdapter_.*_TriggersSafetyDetection — real-byz adapter tests
+#     in obft/ and twoab/ that exercise NoOfflineDoubleV firing under
+#     ByzAggregatorBypass / ByzWitnessForgery (forged-identity attacks
+#     against the safety machinery).
+#   - TestSafety_Honest* — synthetic-outcome tests in
+#     consensustest/safety_test.go that exercise the per-op invariants
+#     B1 (HonestCrossPhaseExclusive), B2 (HonestSingleSigmaV), D1
+#     (HonestWalkConsistent). These hand-craft Outcome literals
+#     simulating hypothetical EKM / Resolve-side regressions and
+#     assert the corresponding SafetyReport field fires.
+#
+# Together: prove that EVERY load-bearing safety invariant the
+# framework checks (per docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md)
+# fires correctly on the inputs that should trigger it. A machinery
+# regression — e.g., a refactor that silently breaks SigmaByEmitter
+# population, or a check-gating bug — would surface here as a test
+# failure, not as a silent green stresstest.
+#
+# Run-time: seconds. Wire into the same CI job as `make unit-test`.
+.PHONY: stresstest-negative
+stresstest-negative:
+	@echo "Running stresstest negative-test smoke (machinery regression check)"
+	@go test -tags blst_enabled -timeout 5m -v \
+		-run '^TestAdapter_.*_TriggersSafetyDetection$$|^TestSafety_Honest' \
+		./protocol/v2/consensustest/... \
+		./protocol/v2/consensustest/obft/... \
+		./protocol/v2/consensustest/twoab/...
+
 .PHONY: docker-spec-test
 docker-spec-test:
 	@echo "Running spec tests in docker"
