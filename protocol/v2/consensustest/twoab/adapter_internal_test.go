@@ -1,10 +1,14 @@
 package twoab
 
 import (
+	"crypto/sha256"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
 )
 
 // classifyTwoabMiss is unreachable from the external test package and is
@@ -111,4 +115,171 @@ func TestClassifyDeadlockKind(t *testing.T) {
 			require.Equal(t, tc.want, classifyDeadlockKind(tc.hostRejected, tc.distinctValues))
 		})
 	}
+}
+
+// TestRecorder_LayerEntryKeyedByV_NotPayload is the regression test for
+// the bucket-1 fix (commit 834e4d10e): twoab/events.go's
+// recordValueMsgToAggregator / recordNoValueMsgToAggregator /
+// recordCommitToAggregator were passing e.Payload (encrypted ciphertext,
+// differs per emitter under chained-IBE) to ObserveEncryptedClaim,
+// scattering contributions across distinct buckets and rendering
+// NoOfflineDoubleV at 2abOBFT L_k>0 vacuous. The fix passes e.V
+// (plaintext) so the cluster-wide aggregator counts cluster-wide
+// distinct emitters on the same V.
+//
+// This test catches a regression where someone changes back to
+// e.Payload: it constructs LayerEntries with V_plaintext set AND a
+// distinct Payload, then asserts the recorder keys buckets by
+// sha256(V_plaintext) — NOT sha256(Payload). All three recorder
+// functions are exercised because each independently consumes the V
+// field.
+func TestRecorder_LayerEntryKeyedByV_NotPayload(t *testing.T) {
+	const layer = 1 // L_k>0; EncryptedClaims path
+	emitter := twoab.OperatorID(2)
+	v := twoab.Value("V_plaintext_at_L1")
+	payload := []byte("ciphertext_garbage_differs_per_emitter")
+	vRoot := sha256.Sum256(v)
+	payloadRoot := sha256.Sum256(payload)
+	require.NotEqual(t, vRoot, payloadRoot,
+		"test invariant: V plaintext and Payload ciphertext must hash distinctly")
+
+	t.Run("recordValueMsgToAggregator", func(t *testing.T) {
+		agg := ct.NewOfflineAggregator(4)
+		vm := &twoab.ValueMsg{
+			OperatorID: emitter,
+			V:          twoab.Value("V_at_L0"),
+			ValueRoot:  sha256.Sum256([]byte("V_at_L0")),
+			L0Partial:  twoab.Signature{0x01},
+			LayerEntries: []twoab.LayerEntry{
+				{Layer: layer, Kind: twoab.LayerEntrySigmaChained, V: v, Payload: payload},
+			},
+		}
+		recordValueMsgToAggregator(agg, emitter, vm)
+		assertSigmaBucketedByV(t, agg, emitter, layer, vRoot, payloadRoot)
+	})
+
+	t.Run("recordNoValueMsgToAggregator", func(t *testing.T) {
+		agg := ct.NewOfflineAggregator(4)
+		nv := &twoab.NoValueMsg{
+			OperatorID: emitter,
+			LayerEntries: []twoab.LayerEntry{
+				{Layer: layer, Kind: twoab.LayerEntrySigmaChained, V: v, Payload: payload},
+			},
+		}
+		recordNoValueMsgToAggregator(agg, emitter, nv)
+		assertSigmaBucketedByV(t, agg, emitter, layer, vRoot, payloadRoot)
+	})
+
+	t.Run("recordCommitToAggregator_NRDirect", func(t *testing.T) {
+		agg := ct.NewOfflineAggregator(4)
+		c := &twoab.Commit{
+			OperatorID: emitter,
+			Side:       twoab.CommitSideNRDirect,
+			LayerEntries: []twoab.LayerEntry{
+				{Layer: layer, Kind: twoab.LayerEntrySigmaChained, V: v, Payload: payload},
+			},
+		}
+		recordCommitToAggregator(agg, emitter, c)
+		assertSigmaBucketedByV(t, agg, emitter, layer, vRoot, payloadRoot)
+	})
+}
+
+// assertSigmaBucketedByV verifies the post-recorder aggregator state
+// keys the SigmaChained entry by V's hash (claimed-sender path via
+// EncryptedClaims; by-emitter path via SigmaByEmitter), NOT by
+// Payload's hash. Fires loudly if someone reverts the bucket-1 fix.
+func assertSigmaBucketedByV(t *testing.T, agg *ct.OfflineAggregator, emitter twoab.OperatorID, layer int, vRoot, payloadRoot [32]byte) {
+	t.Helper()
+	em := ct.OperatorID(emitter)
+	// Claimed-sender path: EncryptedClaims[(layer, vRoot)] must have the
+	// emitter. EncryptedClaims[(layer, payloadRoot)] MUST be empty.
+	vKey := ct.SigmaKey{Layer: layer, ValueHash: vRoot}
+	payloadKey := ct.SigmaKey{Layer: layer, ValueHash: payloadRoot}
+	require.Contains(t, agg.EncryptedClaims, vKey,
+		"EncryptedClaims must contain a bucket keyed by sha256(V); regression: someone reverted e.V → e.Payload")
+	require.Contains(t, agg.EncryptedClaims[vKey], em,
+		"EncryptedClaims[V_root] must record the emitter")
+	require.NotContains(t, agg.EncryptedClaims, payloadKey,
+		"EncryptedClaims must NOT contain a bucket keyed by sha256(Payload); regression: someone reverted to e.Payload")
+
+	// By-emitter path: SigmaByEmitter[(emitter, layer, vRoot)] must be
+	// present; SigmaByEmitter[(emitter, layer, payloadRoot)] absent.
+	vEmitterKey := ct.ByEmitterSigmaKey{Emitter: em, Layer: layer, ValueHash: vRoot}
+	payloadEmitterKey := ct.ByEmitterSigmaKey{Emitter: em, Layer: layer, ValueHash: payloadRoot}
+	require.Contains(t, agg.SigmaByEmitter, vEmitterKey,
+		"SigmaByEmitter must record (emitter, layer, sha256(V))")
+	require.NotContains(t, agg.SigmaByEmitter, payloadEmitterKey,
+		"SigmaByEmitter must NOT key on sha256(Payload)")
+}
+
+// TestRecorder_B3SubsumedByB1_LeaderCrossSigns is the integration test
+// covering the bucket-2 claim "HonestCrossPhaseExclusive subsumes B3
+// (leader's Phase-1 σ_V counts toward σ-side, so a leader who NR/NV's
+// their own layer triggers the same collision)" — specifically for
+// 2abOBFT's split recording paths: σ_V flows through
+// recordValueMsgToAggregator's vm.L0Partial branch, while NR flows
+// through recordCommitToAggregator's CommitSideNR branch. Both must
+// record under the same emitter identity for the B1 check at L_0 to
+// fire when a (hypothetically buggy) leader emits both.
+//
+// Synthesizes the recording side directly: the protocol-side σ-XOR-NR
+// gate (transitionToSigma / transitionToNR in obft/twoab.Instance)
+// would prevent this in correct code; this test exercises only the
+// recorders + the safety check, simulating the EKM-bypass regression
+// that B1 is meant to catch.
+func TestRecorder_B3SubsumedByB1_LeaderCrossSigns(t *testing.T) {
+	leader := twoab.OperatorID(1)
+	v := twoab.Value("V_at_L0")
+	agg := ct.NewOfflineAggregator(4)
+
+	// 1. Leader emits ValueMsg with L0Partial — records σ at L_0 for
+	//    leader via ObserveSigma + ObserveSigmaByEmitter.
+	vm := &twoab.ValueMsg{
+		OperatorID: leader,
+		V:          v,
+		ValueRoot:  sha256.Sum256(v),
+		L0Partial:  twoab.Signature{0x01},
+	}
+	recordValueMsgToAggregator(agg, leader, vm)
+
+	// 2. Same leader emits a Commit Side=NR — records NR at L_0 for
+	//    leader via ObserveNR + ObserveNRByEmitter. Under correct
+	//    protocol this is impossible (σ-XOR-NR EKM gate); the test
+	//    simulates the regression where the gate breaks.
+	c := &twoab.Commit{
+		OperatorID: leader,
+		Side:       twoab.CommitSideNR,
+	}
+	recordCommitToAggregator(agg, leader, c)
+
+	// 3. Assert both maps record the leader at L_0.
+	em := ct.OperatorID(leader)
+	sigKey := ct.ByEmitterSigmaKey{Emitter: em, Layer: 0, ValueHash: sha256.Sum256(v)}
+	nrKey := ct.ByEmitterNRKey{Emitter: em, Layer: 0}
+	require.Contains(t, agg.SigmaByEmitter, sigKey,
+		"leader's L0Partial must record under SigmaByEmitter[leader, L_0, V]")
+	require.Contains(t, agg.NRByEmitter, nrKey,
+		"leader's Commit Side=NR must record under NRByEmitter[leader, L_0]")
+
+	// 4. Run the offline-aggregator report + ComputeSafetyReport and
+	//    assert HonestCrossPhaseExclusive fires. The check filters
+	//    byzantine ops via Outcome.Byz; with empty byz set, leader is
+	//    treated as honest → the σ+NR collision flags B1.
+	report := agg.AttemptAll()
+	out := ct.Outcome{
+		Decided:      true,
+		DecidedValue: []byte(v),
+		DecidedRound: 0,
+		PerOp: map[ct.OperatorID]ct.OperatorOutcome{
+			em: {Decided: true, Round: 0, Value: []byte(v)},
+		},
+		OfflineAgg: report,
+		// Byz: zero-value → leader treated as honest; B1 check fires.
+	}
+	r := ct.ComputeSafetyReport(out)
+	require.False(t, r.HonestCrossPhaseExclusive,
+		"leader σ_V + NR at L_0 must trigger B1 (subsumes B3)")
+	require.Len(t, r.CrossPhaseEvidence, 1, "evidence must name the offending op + layer")
+	require.Equal(t, em, r.CrossPhaseEvidence[0].Operator)
+	require.Equal(t, 0, r.CrossPhaseEvidence[0].Layer)
 }

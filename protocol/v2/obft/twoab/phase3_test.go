@@ -308,3 +308,101 @@ func TestRecoverV_KGt0_FallsBackToRetainedBundle(t *testing.T) {
 	require.True(t, ok, "recoverV must fall back to the retained bundle at k>0")
 	require.Equal(t, v, got)
 }
+
+// TestLastResolveLayerAttempts_DecidedAtL0 — 2abOBFT mirror of OBFT
+// base's same-named test. Locks in the trace shape: single entry at
+// L_0 with SigmaReached=true, Decided=true.
+func TestLastResolveLayerAttempts_DecidedAtL0(t *testing.T) {
+	s := newSim(t, 4)
+	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
+	s.applyHostValidityAll(0, Value("V0"), true)
+	s.firePhase2aAll()
+
+	out, err := s.instances[2].Resolve()
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Equal(t, 0, out.Layer)
+
+	trace := s.instances[2].LastResolveLayerAttempts()
+	require.Len(t, trace, 1)
+	require.Equal(t, 0, trace[0].Layer)
+	require.True(t, trace[0].SigmaReached)
+	require.True(t, trace[0].Decided)
+	require.GreaterOrEqual(t, trace[0].SigmaPoolSize, trace[0].QV)
+	require.Equal(t, 3, trace[0].QV, "QV = 2f+1 = 3 at n=4")
+}
+
+// TestLastResolveLayerAttempts_DecidedAtFallthrough — 2abOBFT mirror of
+// OBFT base's same-named test. Fall-through via NR-quorum at L_0 →
+// σ-quorum at L_1.
+func TestLastResolveLayerAttempts_DecidedAtFallthrough(t *testing.T) {
+	s := newSim(t, 4)
+	// Nobody has V_0 at L_0; L_1 leader delivers with valid verdict.
+	s.deliverPhase1(1, s.candidates[1], s.allOperators(), observedEarly)
+	s.applyHostValidityAll(1, s.candidates[1], true)
+	s.firePhase2aAll()
+
+	out, err := s.instances[2].Resolve()
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Equal(t, 1, out.Layer)
+
+	trace := s.instances[2].LastResolveLayerAttempts()
+	require.GreaterOrEqual(t, len(trace), 2, "fallthrough trace must include L_0 + deciding layer")
+	require.Equal(t, 0, trace[0].Layer)
+	require.False(t, trace[0].SigmaReached, "L_0 σ-pool empty without bundle")
+	require.False(t, trace[0].Decided)
+	require.True(t, trace[0].NRReached, "L_0 NR-pool reached qEnc → chain unlocked")
+
+	deciding := trace[len(trace)-1]
+	require.Equal(t, 1, deciding.Layer)
+	require.True(t, deciding.SigmaReached)
+	require.True(t, deciding.Decided)
+}
+
+// TestLastResolveLayerAttempts_ExhaustionWalk — 2abOBFT mirror.
+// No σ-quorum anywhere → walk exhausts. Trace has K entries with all
+// Decided=false.
+func TestLastResolveLayerAttempts_ExhaustionWalk(t *testing.T) {
+	s := newSim(t, 4)
+	// No bundles delivered anywhere → all ops NR.
+	s.firePhase2aAll()
+
+	_, err := s.instances[2].Resolve()
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrNoQuorum), "no σ-quorum → ErrNoQuorum (possibly wrapped); got %v", err)
+
+	trace := s.instances[2].LastResolveLayerAttempts()
+	require.Len(t, trace, s.K, "exhaustion walk must record one attempt per visited layer")
+	for k := 0; k < s.K; k++ {
+		require.Equal(t, k, trace[k].Layer)
+		require.False(t, trace[k].SigmaReached, "L_%d σ-pool empty (no σ-side emissions)", k)
+		require.False(t, trace[k].Decided)
+	}
+}
+
+// TestLastResolveLayerAttempts_PreservedAcrossEndedInstance — 2abOBFT
+// mirror. Finalize must not clear the trace from the prior successful
+// Resolve.
+func TestLastResolveLayerAttempts_PreservedAcrossEndedInstance(t *testing.T) {
+	s := newSim(t, 4)
+	s.deliverPhase1(0, Value("V0"), s.allOperators(), observedEarly)
+	s.applyHostValidityAll(0, Value("V0"), true)
+	s.firePhase2aAll()
+
+	_, err := s.instances[2].Resolve()
+	require.NoError(t, err)
+	traceBefore := s.instances[2].LastResolveLayerAttempts()
+	require.NotEmpty(t, traceBefore)
+
+	s.instances[2].Finalize()
+	out, err := s.instances[2].Resolve()
+	require.ErrorIs(t, err, ErrInstanceEnded)
+	require.Nil(t, out)
+
+	traceAfter := s.instances[2].LastResolveLayerAttempts()
+	require.Equal(t, len(traceBefore), len(traceAfter))
+	for i := range traceBefore {
+		require.Equal(t, traceBefore[i], traceAfter[i])
+	}
+}
