@@ -349,8 +349,8 @@ func (l LogNormalDelay) Delay(rng *mrand.Rand, _, _ OperatorID, _ MsgKind) time.
 // tail dramatically — p99 by ~22%, p99.9 by ~73%, p99.99 by ~85%. A
 // 3-component lognormal mixture fits every quantile from p50 through
 // p99.9 within ~4%. See Prod_1_2_3_4_CalibratedLogNormalMixture /
-// Stage_53_54_55_56_CalibratedLogNormalMixture /
-// Stage_97_98_99_100_CalibratedLogNormalMixture for the fitted
+// Stage_3_4_6_7_CalibratedLogNormalMixture /
+// Stage_81_82_83_84_CalibratedLogNormalMixture for the fitted
 // parameters and tools/scout for the analysis used to derive them.
 //
 // Model:
@@ -584,39 +584,67 @@ func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 	}).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 }
 
-// Stage_53_54_55_56_CalibratedLogNormalMixture returns the 3-component lognormal mixture
-// fitted to 24h of SSV stage-hoodi `COMMITTEE-53_54_55_56` cross-op QBFT
-// propagation latency data (proposal+prepare+commit pooled, n=342,030
-// sender→receiver pairs sampled 2026-05-13 11:00Z → 2026-05-14 10:30Z).
+// Stage_3_4_6_7_CalibratedLogNormalMixture returns the 3-component lognormal mixture
+// fitted to 24h of SSV stage-hoodi `COMMITTEE-3_4_6_7` cross-op QBFT
+// propagation latency data (proposal+prepare+commit pooled, n=129,124
+// sender→receiver pairs sampled 2026-05-25 10:15Z → 2026-05-26 10:15Z).
 //
-// Empirical quantile reproduction within: p50 +1.4%, p90 +0.9%, p95 +1.2%,
-// p99 −0.05%, p99.9 +12%; p99.99 is under-predicted by ~65% because the
-// stage extreme tail is dominated by a handful of multi-second events
-// (likely QBFT round-change timeouts) that are not lognormal.
-func Stage_53_54_55_56_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
+// Picked as the "stage1" empirical profile because of its extreme-tail
+// regime: median is comparable to prod (2.5 ms vs prod 2.9 ms) and p90
+// stays under 11 ms, but p99 explodes to 2.27 s and p99.9 reaches
+// 3.05 s — the upper tail is dominated by what look like QBFT
+// round-change timeouts. Use this profile to exercise consensus
+// robustness against rare-but-catastrophic propagation delays.
+//
+// Empirical fit (3-component): p50 −1.0%, p75 +1.7%, p90 +40%,
+// p95 +4.8%, p99 −58%, p99.9 +277%, p99.99 +2293%. The 3-component
+// lognormal cannot capture the sharp jump from p95 (72 ms) to p99
+// (2.27 s) — there is a near-cliff in the empirical distribution that
+// the mixture smears across. If your scenario depends on the
+// rare-event tail, swap to the 4-component refit below, which
+// reproduces every quantile through p99.9 within 17%:
+//
+//	{Weight: 0.0733, Median:    660 * time.Microsecond, Sigma: 1.7494},
+//	{Weight: 0.8331, Median:   2081 * time.Microsecond, Sigma: 0.6213},
+//	{Weight: 0.0734, Median:  55262 * time.Microsecond, Sigma: 1.0140},
+//	{Weight: 0.0202, Median: 2124411 * time.Microsecond, Sigma: 0.3103},
+func Stage_3_4_6_7_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 	return NewLogNormalMixtureDelay([]LogNormalComponent{
-		{Weight: 0.0905, Median: 318 * time.Microsecond, Sigma: 1.6463},
-		{Weight: 0.3759, Median: 1084 * time.Microsecond, Sigma: 0.7824},
-		{Weight: 0.5337, Median: 2581 * time.Microsecond, Sigma: 0.4030},
+		{Weight: 0.2886, Median: 1081 * time.Microsecond, Sigma: 0.2955},
+		{Weight: 0.4743, Median: 2885 * time.Microsecond, Sigma: 0.2701},
+		{Weight: 0.2371, Median: 8377 * time.Microsecond, Sigma: 2.7428},
 	}).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 }
 
-// Stage_97_98_99_100_CalibratedLogNormalMixture is fit to 24h of stage-hoodi
-// `COMMITTEE-97_98_99_100` cross-op QBFT propagation latency (n=342,409
-// pairs sampled 2026-05-13 10:00Z → 2026-05-14 10:30Z).
+// Stage_81_82_83_84_CalibratedLogNormalMixture is fit to 24h of stage-hoodi
+// `COMMITTEE-81_82_83_84` cross-op QBFT propagation latency (n=365,975
+// pairs sampled 2026-05-25 10:07Z → 2026-05-26 10:07Z).
 //
-// Empirical fit (3-component): p50 +1.9%, p90 −0.6%, p99 −10.5%,
-// p99.9 +86%, p99.99 +117%. The 3-component fit struggles above p99
-// on this cluster because the tail is composed of bandwidth-bound
-// proposer events (p99 = 40 ms) that exceed the lognormal-mixture
-// regime. If your scenario specifically cares about the p99–p99.9
-// region here, consider the 4-component refit logged in
-// tools/scout/analysis/output/stage-hoodi_97-100_mixture3_fit.json.
-func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
+// Picked as the "stage2" empirical profile because of its bimodal
+// regime: median is prod-like (1.4 ms) but the body fans out hard —
+// p90 jumps to 40 ms, p95 to 181 ms, p99 to 833 ms. Unlike stage1
+// (3,4,6,7), where the bulk of the distribution is fast and only the
+// extreme tail breaks, here a meaningful slice (≥5%) of every QBFT
+// round is genuinely slow. Use this profile to exercise prepare/commit
+// quorum and round-1 completion under a sustained degraded mesh.
+//
+// Empirical fit (3-component): p50 −1.6%, p75 +2.3%, p90 +10.3%,
+// p95 −17.3%, p99 +29.5%, p99.9 +455%, p99.99 +1377%. The
+// 3-component fit handles p50–p99 within ~30% but breaks down beyond
+// p99 because the upper tail behaves like its own distribution rather
+// than the lognormal extension of the body. If your scenario depends
+// on the p99–p99.9 region, swap to the 4-component refit below, which
+// reproduces every quantile through p99.9 within 47%:
+//
+//	{Weight: 0.1925, Median:    971 * time.Microsecond, Sigma: 1.3022},
+//	{Weight: 0.6088, Median:   1212 * time.Microsecond, Sigma: 0.4646},
+//	{Weight: 0.1223, Median:  21857 * time.Microsecond, Sigma: 0.7311},
+//	{Weight: 0.0763, Median: 280123 * time.Microsecond, Sigma: 0.9162},
+func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 	return NewLogNormalMixtureDelay([]LogNormalComponent{
-		{Weight: 0.1379, Median: 976 * time.Microsecond, Sigma: 1.9473},
-		{Weight: 0.4049, Median: 2261 * time.Microsecond, Sigma: 0.9452},
-		{Weight: 0.4573, Median: 3519 * time.Microsecond, Sigma: 0.3800},
+		{Weight: 0.1266, Median: 602 * time.Microsecond, Sigma: 0.6364},
+		{Weight: 0.5553, Median: 1268 * time.Microsecond, Sigma: 0.4203},
+		{Weight: 0.3182, Median: 14542 * time.Microsecond, Sigma: 2.3151},
 	}).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 }
 
@@ -629,7 +657,7 @@ func Stage_97_98_99_100_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //
 // Six profiles:
 //   - prod / stage1 / stage2: the three empirically-fitted mixtures
-//     from Prod_1_2_3_4_*, Stage_53_54_55_56_*, Stage_97_98_99_100_*.
+//     from Prod_1_2_3_4_*, Stage_3_4_6_7_*, Stage_81_82_83_84_*.
 //   - slow: prod with each component median ×80 (same shape, shifted
 //     right by 80× — models a uniformly much-slower-than-prod mesh).
 //   - heavy_tail: prod's median with the tail fattened hard (σ scaled
@@ -660,9 +688,9 @@ func P2PProfile(name string) NetworkModel {
 	case "prod":
 		return Prod_1_2_3_4_CalibratedLogNormalMixture()
 	case "stage1":
-		return Stage_53_54_55_56_CalibratedLogNormalMixture()
+		return Stage_3_4_6_7_CalibratedLogNormalMixture()
 	case "stage2":
-		return Stage_97_98_99_100_CalibratedLogNormalMixture()
+		return Stage_81_82_83_84_CalibratedLogNormalMixture()
 	case "slow":
 		// Slowed/HeavyTailed produce fresh mixtures with zero
 		// slowOpAnchor (the prod constructor's anchor doesn't propagate
