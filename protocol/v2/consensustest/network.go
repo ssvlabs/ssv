@@ -603,8 +603,8 @@ func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // sender→receiver pairs sampled 2026-05-25 10:15Z → 2026-05-26 10:15Z).
 //
 // Picked as the "stage1" empirical profile because of its extreme-tail
-// regime: median is comparable to prod (2.5 ms vs prod 2.9 ms) and p90
-// stays under 11 ms, but p99 explodes to 2.27 s and p99.9 reaches
+// regime: median is comparable to prod (2.5 ms vs prod ~1.5 ms) and
+// p90 stays under 11 ms, but p99 explodes to 2.27 s and p99.9 reaches
 // 3.05 s — the upper tail is dominated by what look like QBFT
 // round-change timeouts. Use this profile to exercise consensus
 // robustness against rare-but-catastrophic propagation delays.
@@ -675,10 +675,11 @@ func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //     ~190k cross-op pairs). Median 1.5ms, p99 8.4ms. The canonical
 //     "normal mesh" empirical profile.
 //   - stage1: 24h of stage-hoodi `COMMITTEE-3_4_6_7` (~129k pairs)
-//     with a rare-but-catastrophic propagation tail — median 1.5ms,
-//     but p99 jumps to 2.27s (what look like QBFT round-change
-//     timeouts). Use to exercise consensus robustness against rare
-//     slow-event spikes. 4-component fit, capped at 5s.
+//     with a rare-but-catastrophic propagation tail — median 2.5ms
+//     (prod-comparable), but p99 jumps to 2.27s and p99.9 reaches
+//     3.05s (what look like QBFT round-change timeouts). Use to
+//     exercise consensus robustness against rare slow-event spikes.
+//     4-component fit, capped at 5s.
 //   - stage2: 24h of stage-hoodi `COMMITTEE-81_82_83_84` (~366k
 //     pairs) with sustained bimodal degradation — median 1.4ms but
 //     a meaningful ≥5% slice of every round is genuinely slow
