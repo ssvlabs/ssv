@@ -240,3 +240,259 @@ func TestMesh_ValidateDelay(t *testing.T) {
 	}, []ct.OperatorID{1, 2, 3, 4})
 	require.Equal(t, vd, m.ValidateDelay())
 }
+
+// TestMesh_GossipPoolBound_RestrictsAtN7 — at n=7 the non-eager pool
+// (10 per protocol peer) exceeds the default GossipPoolBound (7), so
+// NonMeshPeers returns a strict subset on average. Per-node count is
+// a Bernoulli draw with p_g = bound/pool = 0.7 — individual peers can
+// occasionally land at the full pool, but the mean across the 7
+// protocol peers should sit close to the bound, and the majority of
+// peers should see a strict restriction.
+func TestMesh_GossipPoolBound_RestrictsAtN7(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	m := ct.NewMeshTopology(42, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
+	const pool = 10 // total(14) - 1 - eager(3)
+	sumGossip, restricted := 0, 0
+	for _, op := range cluster {
+		node := m.NodeForOperator(op)
+		got := len(m.NonMeshPeers(node))
+		require.LessOrEqual(t, got, pool,
+			"op=%d: gossip degree %d exceeds non-eager pool %d", op, got, pool)
+		if got < pool {
+			restricted++
+		}
+		sumGossip += got
+	}
+	avg := float64(sumGossip) / float64(len(cluster))
+	// Mean across 7 Bernoulli(p=0.7, n=10) draws has stddev ≈ 0.55, so a
+	// 2-unit window around the bound is ~3.6σ — robust to seed choice
+	// and decisively rejects the unbounded case (mean would be 10).
+	require.InDelta(t, 7.0, avg, 2.0,
+		"average protocol-peer gossip degree %.2f outside expected 7±2", avg)
+	// Per-node P(restricted) = 1 − 0.7^10 ≈ 0.972, so ≥ 4-of-7 is
+	// essentially certain even allowing for unlucky seeds.
+	require.GreaterOrEqual(t, restricted, 4,
+		"expected most protocol peers to be restricted; got %d/%d", restricted, len(cluster))
+}
+
+// TestMesh_GossipPoolBound_Symmetric — undirected by construction:
+// X ∈ NonMeshPeers(Y) iff Y ∈ NonMeshPeers(X).
+func TestMesh_GossipPoolBound_Symmetric(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	m := ct.NewMeshTopology(123, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
+	total := ct.MeshNode(m.TotalNodes())
+	for a := ct.MeshNode(0); a < total; a++ {
+		for _, b := range m.NonMeshPeers(a) {
+			found := false
+			for _, p := range m.NonMeshPeers(b) {
+				if p == a {
+					found = true
+					break
+				}
+			}
+			require.True(t, found,
+				"asymmetry: %d ∈ NonMeshPeers(%d) but %d ∉ NonMeshPeers(%d)",
+				b, a, a, b)
+		}
+	}
+}
+
+// TestMesh_GossipPoolBound_Determinism — same seed → identical gossip set.
+func TestMesh_GossipPoolBound_Determinism(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	cfg := ct.MeshConfig{HopDelay: testHopDelay()}
+	m1 := ct.NewMeshTopology(99, cfg, cluster)
+	m2 := ct.NewMeshTopology(99, cfg, cluster)
+	total := ct.MeshNode(m1.TotalNodes())
+	for node := ct.MeshNode(0); node < total; node++ {
+		require.Equal(t, m1.NonMeshPeers(node), m2.NonMeshPeers(node),
+			"non-mesh peers differ for node %d under identical seed", node)
+	}
+}
+
+// TestMesh_GossipPoolBound_InactiveAtN4 — at n=4 the non-eager pool
+// (4 per protocol peer) is below the default bound (7), so the
+// construction is skipped and NonMeshPeers returns the full pool.
+// Matches the "small subnet ≈ clique" regime — a real libp2p node in
+// such a small subnet would similarly see all peers anyway.
+func TestMesh_GossipPoolBound_InactiveAtN4(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4}
+	m := ct.NewMeshTopology(42, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
+	for _, op := range cluster {
+		node := m.NodeForOperator(op)
+		require.Equal(t, 4, len(m.NonMeshPeers(node)),
+			"op=%d: small-subnet bound should be inactive (expected full pool=4)", op)
+	}
+}
+
+// TestMesh_GossipPoolBound_ExplicitUnbounded — an explicit bound larger
+// than any pool keeps the legacy unbounded NonMeshPeers behaviour (the
+// construction-skip path when bound exceeds pool).
+func TestMesh_GossipPoolBound_ExplicitUnbounded(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	cfg := ct.MeshConfig{
+		HopDelay: testHopDelay(),
+		Gossip:   ct.MeshGossipConfig{GossipPoolBound: 1 << 30},
+	}
+	m := ct.NewMeshTopology(42, cfg, cluster)
+	for _, op := range cluster {
+		node := m.NodeForOperator(op)
+		require.Equal(t, 10, len(m.NonMeshPeers(node)),
+			"op=%d: explicit huge bound should keep full pool", op)
+	}
+}
+
+// deliverySetForNode returns the union of `node`'s eager neighbours
+// and its gossip candidate set — the full set of mesh nodes it can
+// exchange messages with on either layer. Used by the SeverProb
+// tests to confirm the access-time filter touches both layers.
+func deliverySetForNode(m *ct.MeshTopology, node ct.MeshNode) map[ct.MeshNode]struct{} {
+	out := make(map[ct.MeshNode]struct{})
+	for _, nb := range m.Neighbors(node) {
+		out[nb] = struct{}{}
+	}
+	for _, peer := range m.NonMeshPeers(node) {
+		out[peer] = struct{}{}
+	}
+	return out
+}
+
+// countDeliveryPairs sums |Neighbors| + |NonMeshPeers| across all
+// nodes and halves it (each edge counted from both endpoints). Used
+// to measure surviving connections under severance.
+func countDeliveryPairs(m *ct.MeshTopology) int {
+	total := 0
+	for a := ct.MeshNode(0); a < ct.MeshNode(m.TotalNodes()); a++ {
+		total += len(m.Neighbors(a))
+		total += len(m.NonMeshPeers(a))
+	}
+	return total / 2
+}
+
+// TestMesh_SeverProb_RateMatches — across many seeds the surviving
+// fraction of delivery pairs should approach 1 − SeverProb. Per-seed
+// pairs are compared (same seed: same Layer-1 gossip-connection set,
+// so any reduction in the severed build comes from Layer 2 only).
+func TestMesh_SeverProb_RateMatches(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	const (
+		trials    = 100
+		severProb = 0.30
+	)
+	var baseSum, sevSum int
+	for seed := int64(1); seed <= trials; seed++ {
+		base := ct.NewMeshTopology(seed, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
+		sev := ct.NewMeshTopology(seed, ct.MeshConfig{
+			HopDelay:  testHopDelay(),
+			SeverProb: severProb,
+		}, cluster)
+		baseSum += countDeliveryPairs(base)
+		sevSum += countDeliveryPairs(sev)
+	}
+	surviving := float64(sevSum) / float64(baseSum)
+	expected := 1.0 - severProb
+	require.InDelta(t, expected, surviving, 0.03,
+		"surviving fraction %.3f outside expected %.3f ± 0.03 over %d trials",
+		surviving, expected, trials)
+}
+
+// TestMesh_SeverProb_Symmetric — severance is undirected by
+// construction: if X is in Y's delivery set, Y must be in X's.
+func TestMesh_SeverProb_Symmetric(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	cfg := ct.MeshConfig{HopDelay: testHopDelay(), SeverProb: 0.30}
+	m := ct.NewMeshTopology(42, cfg, cluster)
+	total := ct.MeshNode(m.TotalNodes())
+	for a := ct.MeshNode(0); a < total; a++ {
+		setA := deliverySetForNode(m, a)
+		for b := ct.MeshNode(0); b < total; b++ {
+			if a == b {
+				continue
+			}
+			setB := deliverySetForNode(m, b)
+			_, aInB := setB[a]
+			_, bInA := setA[b]
+			require.Equalf(t, bInA, aInB,
+				"delivery asymmetry: b=%d ∈ delivery(a=%d) is %v but a ∈ delivery(b) is %v",
+				b, a, bInA, aInB)
+		}
+	}
+}
+
+// TestMesh_SeverProb_Determinism — same seed + same SeverProb →
+// identical Neighbors and NonMeshPeers across builds.
+func TestMesh_SeverProb_Determinism(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	cfg := ct.MeshConfig{HopDelay: testHopDelay(), SeverProb: 0.25}
+	m1 := ct.NewMeshTopology(99, cfg, cluster)
+	m2 := ct.NewMeshTopology(99, cfg, cluster)
+	total := ct.MeshNode(m1.TotalNodes())
+	for node := ct.MeshNode(0); node < total; node++ {
+		require.Equal(t, m1.Neighbors(node), m2.Neighbors(node),
+			"Neighbors differ for node %d under identical seed+SeverProb", node)
+		require.Equal(t, m1.NonMeshPeers(node), m2.NonMeshPeers(node),
+			"NonMeshPeers differ for node %d under identical seed+SeverProb", node)
+	}
+}
+
+// TestMesh_SeverProb_FiltersBothLayers — comparing a SeverProb=0
+// baseline with a SeverProb>0 build at the same seed, every peer
+// missing from the severed build's delivery set must also have been
+// in the baseline (i.e. the only thing severance can do is remove,
+// never add) — verified separately for Neighbors (eager layer) and
+// NonMeshPeers (gossip layer) to pin that BOTH filters fire.
+func TestMesh_SeverProb_FiltersBothLayers(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	base := ct.NewMeshTopology(42, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
+	sev := ct.NewMeshTopology(42, ct.MeshConfig{
+		HopDelay:  testHopDelay(),
+		SeverProb: 0.30,
+	}, cluster)
+	total := ct.MeshNode(base.TotalNodes())
+	asSet := func(s []ct.MeshNode) map[ct.MeshNode]struct{} {
+		out := make(map[ct.MeshNode]struct{}, len(s))
+		for _, v := range s {
+			out[v] = struct{}{}
+		}
+		return out
+	}
+
+	eagerCut, gossipCut := 0, 0
+	for node := ct.MeshNode(0); node < total; node++ {
+		baseNbr := asSet(base.Neighbors(node))
+		sevNbr := asSet(sev.Neighbors(node))
+		for nb := range sevNbr {
+			_, ok := baseNbr[nb]
+			require.True(t, ok, "severance added neighbour %d to node %d", nb, node)
+		}
+		eagerCut += len(baseNbr) - len(sevNbr)
+
+		baseNonMesh := asSet(base.NonMeshPeers(node))
+		sevNonMesh := asSet(sev.NonMeshPeers(node))
+		for peer := range sevNonMesh {
+			_, ok := baseNonMesh[peer]
+			require.True(t, ok, "severance added non-mesh peer %d to node %d", peer, node)
+		}
+		gossipCut += len(baseNonMesh) - len(sevNonMesh)
+	}
+	// At p=0.30 over many delivery pairs across 14 nodes, both layers
+	// should see at least one cut with near-certainty. Failing either
+	// would mean the filter only fires on one side.
+	require.Greater(t, eagerCut, 0, "expected ≥1 eager-edge severance at p=0.30")
+	require.Greater(t, gossipCut, 0, "expected ≥1 gossip-edge severance at p=0.30")
+}
+
+// TestMesh_SeverProb_Zero — SeverProb=0 leaves Neighbors aliasing the
+// internal slice (no allocation, no filtering), matching pre-Layer-2
+// behaviour exactly.
+func TestMesh_SeverProb_Zero(t *testing.T) {
+	cluster := []ct.OperatorID{1, 2, 3, 4, 5, 6, 7}
+	cfg := ct.MeshConfig{HopDelay: testHopDelay(), SeverProb: 0}
+	m := ct.NewMeshTopology(42, cfg, cluster)
+	baseline := ct.NewMeshTopology(42, ct.MeshConfig{HopDelay: testHopDelay()}, cluster)
+	total := ct.MeshNode(m.TotalNodes())
+	for node := ct.MeshNode(0); node < total; node++ {
+		require.Equal(t, baseline.Neighbors(node), m.Neighbors(node))
+		require.Equal(t, baseline.NonMeshPeers(node), m.NonMeshPeers(node))
+	}
+}

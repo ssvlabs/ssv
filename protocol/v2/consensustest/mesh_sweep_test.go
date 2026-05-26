@@ -1,6 +1,7 @@
 package consensustest_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -194,6 +195,98 @@ func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 	require.Greater(t, noneDec, extremeDec,
 		"mesh-mode healthy should degrade with instability (none=%d, extreme=%d)",
 		noneDec, extremeDec)
+}
+
+// TestMeshHealthy_GossipPoolBoundShiftsLossRecovery quantifies the
+// over-connectivity bias the GossipPoolBound change addresses. At
+// n ≥ 7 with LossyNetwork layered on the production mesh+gossip
+// stack, the legacy unbounded gossip layer recovered dropped messages
+// via a richer IHAVE pool than real libp2p (10 candidates per protocol
+// peer at n=7, 22 at n=13 — vs real per-subnet ~2 non-mesh peers under
+// D=8 / TopicMaxPeers=10). Bounding the candidate pool to
+// TopicMaxPeers−eager ≈ 7 brings the recovery layer in line with real
+// per-subnet connectivity; some sims that previously squeaked through
+// the deadline are expected to miss.
+//
+// Sweeps a small (n, LossRate) matrix bracketing the standard
+// p2p_packet_loss range (LossRate=0.20 ceiling) plus one stressed
+// point past it. Logs decided counts on both sides so the bias
+// magnitude is recorded across cells; the directional invariant
+// (bounded ≤ unbounded) is asserted softly — equal counts are common
+// at lower stress, but a wild flip would indicate something
+// pathological in the bound construction.
+func TestMeshHealthy_GossipPoolBoundShiftsLossRecovery(t *testing.T) {
+	cases := []struct {
+		n, k     int
+		lossRate float64
+	}{
+		{n: 7, k: 3, lossRate: 0.20},  // top of sweep's LossRate range
+		{n: 7, k: 3, lossRate: 0.30},  // past sweep range; more pressure
+		{n: 13, k: 5, lossRate: 0.20}, // largest pool difference (22 vs 7)
+	}
+	const iters = 300
+	btt := 300 * time.Millisecond
+	healthy := ct.Catalog[0]
+	require.Equal(t, "Healthy", healthy.Name)
+	require.NotNil(t, healthy.Apply)
+
+	for _, c := range cases {
+		c := c
+		t.Run(fmt.Sprintf("n=%d/loss=%.2f", c.n, c.lossRate), func(t *testing.T) {
+			base := ct.DefaultProposerDutyConfig(btt)
+			base.N = c.n
+			base.Operators = make([]ct.OperatorID, c.n)
+			for i := 0; i < c.n; i++ {
+				base.Operators[i] = ct.OperatorID(i + 1)
+			}
+			base.K = c.k
+
+			run := func(gossipPoolBound int) int {
+				var decided int
+				for i := 0; i < iters; i++ {
+					cfg := base
+					cfg.Seed = int64(i + 1)
+					cfg.Delivery = healthy.Delivery
+					healthy.Apply(&cfg)
+					// Apply doesn't touch GossipPoolBound; set it explicitly
+					// here so this test controls the bounded/unbounded axis.
+					cfg.Mesh.Gossip.GossipPoolBound = gossipPoolBound
+					// Fresh LossyNetwork per sim (per its docstring) — wraps
+					// the production direct + mesh shapes used by the
+					// p2p_packet_loss sweep.
+					innerDirect := ct.LogNormalDelay{Median: btt / 2, Sigma: 0.5}
+					innerMesh := ct.LogNormalDelay{Median: btt / 3, Sigma: 0.3}
+					cfg.Network = ct.NewLossyNetwork(innerDirect, c.lossRate, 5)
+					cfg.Mesh.HopDelay = ct.NewLossyNetwork(innerMesh, c.lossRate, 5)
+
+					out, err := obftadapter.Protocol{}.Run(cfg)
+					require.NoError(t, err)
+					if out.Decided {
+						decided++
+					}
+				}
+				return decided
+			}
+
+			unboundedDec := run(1 << 30) // legacy: full non-eager pool
+			boundedDec := run(7)         // default: TopicMaxPeers − eager
+
+			delta := unboundedDec - boundedDec
+			t.Logf("unbounded: %d/%d (%.1f%%); bounded: %d/%d (%.1f%%); bias: %d (%.1f%%)",
+				unboundedDec, iters, 100*float64(unboundedDec)/float64(iters),
+				boundedDec, iters, 100*float64(boundedDec)/float64(iters),
+				delta, 100*float64(delta)/float64(iters))
+
+			// Soft directional check — bounded can match unbounded at low
+			// stress (no drops to recover) and may very rarely flip due
+			// to per-heartbeat IHAVE-selection variance under a smaller
+			// pool with the same Dlazy=6 cap. A large reverse flip would
+			// indicate a bug.
+			require.LessOrEqual(t, boundedDec-unboundedDec, iters/20,
+				"bounded should not significantly exceed unbounded (reverse delta=%d)",
+				boundedDec-unboundedDec)
+		})
+	}
 }
 
 // TestInstability_BTTInvariantUnderEmpiricalProfile pins the load-bearing

@@ -63,6 +63,35 @@ type MeshConfig struct {
 	// libp2p's full gossip protocol; defaults match SSV's
 	// network/topics/params/gossipsub.go overrides.
 	Gossip MeshGossipConfig
+
+	// SeverProb is the per-pair Bernoulli probability that a connection
+	// between two mesh nodes is severed for the entire sim. Sampled
+	// once per sim from the mesh's salted rng (deterministic per
+	// cfg.Seed, distinct across sims). Models sustained peer-connection
+	// failure (NAT/firewall blips, peer-score evictions, regional
+	// routing issues that persist longer than a slot).
+	//
+	// Severed pairs are removed from BOTH the eager mesh (Neighbors)
+	// AND the gossip candidate set (NonMeshPeers), so eager-push +
+	// reflood AND IHAVE/IWANT recovery both fail across them —
+	// modeling "the libp2p connection between these two peers is
+	// down" rather than "one direction has packet loss."
+	//
+	// Sampled only over delivery-path pairs (eager edges plus, when
+	// GossipPoolBound is active, the bounded gossip-connection set).
+	// Pairs outside the delivery graph carry no messages anyway, so
+	// rolling them would dilute the user-facing semantics ("X% of
+	// connections are down" rather than "X% of all node-pairs").
+	//
+	// Distinct from p2p_packet_loss (LossyNetwork): that is transient
+	// burst loss that recovers within the slot and is healed by the
+	// gossip backstop; SeverProb is sustained for the whole slot, so
+	// recovery routes only through SURVIVING connections.
+	//
+	// 0 (default) disables severance. The build-time isConnected check
+	// runs on the unfiltered eager-mesh graph, so severance never
+	// trips it — partitions are emitted as an access-time overlay.
+	SeverProb float64
 }
 
 // MeshGossipConfig parameterizes the lazy-push IHAVE/IWANT backstop.
@@ -116,6 +145,32 @@ type MeshGossipConfig struct {
 	// IHAVE goes to max(Dlazy, ceil(GossipFactor × |non-mesh peers|)).
 	// libp2p default; SSV does not override.
 	GossipFactor float64
+
+	// GossipPoolBound caps the per-node IHAVE candidate set, mirroring
+	// real libp2p where a topic-subscribed node maintains at most
+	// `TopicMaxPeers` connections (= 10 in SSV — see
+	// network/p2p/config.go). Without this cap, NonMeshPeers returns
+	// every non-eager mesh node, which over-represents recovery at
+	// scale: real per-subnet non-mesh-connected pool is
+	// `TopicMaxPeers - D` ≈ 2 peers, whereas the unbounded model pool
+	// is 4 at n=4 and 22 at n=13 (~2-3× too rich).
+	//
+	// Each sim builds a symmetric per-node gossip-connection set,
+	// deterministic from the mesh seed, sampled to give expected
+	// per-node degree ≈ `TopicMaxPeers - typicalEagerDegree = 7`.
+	// NonMeshPeers consults that set when this field is > 0.
+	//
+	// At small total-node counts where the available non-eager pool
+	// is already ≤ this bound (e.g. n=4: 4 non-eager peers per
+	// protocol op), the bound is inactive and gossip falls back to
+	// the full non-eager neighbourhood — matching the "small subnet
+	// ≈ clique" regime where real libp2p would also see most/all of
+	// the subnet anyway.
+	//
+	// 0 (legacy / unbounded) is replaced by the SSV default (7) in
+	// WithDefaults. To opt out of the bound intentionally, set a
+	// large value (e.g. math.MaxInt32).
+	GossipPoolBound int
 }
 
 // WithDefaults returns a copy of g with any zero fields filled in to
@@ -137,6 +192,11 @@ func (g MeshGossipConfig) WithDefaults() MeshGossipConfig {
 	}
 	if g.GossipFactor == 0 {
 		g.GossipFactor = 0.25
+	}
+	if g.GossipPoolBound == 0 {
+		// TopicMaxPeers (10) − typical eager degree (3) = 7. See the
+		// GossipPoolBound field docstring for the calibration rationale.
+		g.GossipPoolBound = 7
 	}
 	return g
 }
@@ -203,6 +263,24 @@ type nodeMcache struct {
 // shared sentinel-0 and collapsed link state across unrelated edges.
 const RelayEndpointBase OperatorID = 1_000_000
 
+// meshLinkKey is an undirected mesh-node pair key — used by the per-sim
+// gossip-connection set (gossipConn) and the per-sim severed-pair set
+// (severed) to model the libp2p connection abstraction at the mesh-node
+// level. Distinct from network.go's linkKey which is keyed per
+// OperatorID and shared with direct-mode NetworkModel wrappers; mesh
+// nodes include relays whose synthetic endpoints don't survive that
+// keying.
+type meshLinkKey struct {
+	a, b MeshNode
+}
+
+func newMeshLinkKey(a, b MeshNode) meshLinkKey {
+	if a > b {
+		a, b = b, a
+	}
+	return meshLinkKey{a: a, b: b}
+}
+
 // MeshTopology is the per-sim mesh state: peer-to-peer graph, per-node
 // seen-MsgID sets for dedup, per-node mcache for the lazy-push backstop,
 // hop-delay sampler, and the MsgID counter. Built once at sim start
@@ -249,6 +327,20 @@ type MeshTopology struct {
 	// history to keep per-node ring sizes uniform.
 	mcache        []nodeMcache
 	mcacheHistory int
+	// gossipConn is the per-sim symmetric gossip candidate set:
+	// undirected pairs that may exchange IHAVE/IWANT. Built once in
+	// NewMeshTopology when MeshGossipConfig.GossipPoolBound is set AND
+	// the available non-eager pool exceeds it. nil → NonMeshPeers
+	// returns the full non-eager neighbourhood (legacy / small-subnet
+	// path). See MeshGossipConfig.GossipPoolBound for the calibration
+	// rationale.
+	gossipConn map[meshLinkKey]struct{}
+	// severed is the per-sim sustained-cut set: undirected pairs that
+	// cannot exchange messages on either layer (eager or gossip) for
+	// the whole sim. Built once in NewMeshTopology when
+	// MeshConfig.SeverProb > 0; nil otherwise. Neighbors and
+	// NonMeshPeers both consult this set and exclude severed pairs.
+	severed map[meshLinkKey]struct{}
 }
 
 // NewMeshTopology builds the per-sim mesh deterministically from `seed`.
@@ -396,6 +488,84 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 		panic(fmt.Sprintf("consensustest: mesh topology disconnected at n=%d (seed=%d) — wiring bug", n, seed))
 	}
 
+	// Bound the gossip candidate pool to model real libp2p's per-topic
+	// `TopicMaxPeers` cap. Activates only when bound > 0 (default 7 via
+	// MeshGossipConfig.WithDefaults) AND the available non-eager pool
+	// per node would otherwise exceed it; smaller subnets fall through
+	// to the unbounded path, matching how a real node in a tiny subnet
+	// sees most/all of its peers anyway.
+	//
+	// p_g is chosen using protocol-peer eager degree (3) so a typical
+	// protocol op's expected gossip degree matches the bound exactly.
+	// Relays have eager degree ≥ 3 so end up with marginally smaller
+	// expected gossip degree — accepted (≲ 10% spread) in exchange for
+	// undirected-pair symmetry by construction.
+	if m.gossip.GossipPoolBound > 0 {
+		const typicalEager = 3
+		poolPerNode := total - 1 - typicalEager
+		if poolPerNode > m.gossip.GossipPoolBound {
+			pg := float64(m.gossip.GossipPoolBound) / float64(poolPerNode)
+			m.gossipConn = make(map[meshLinkKey]struct{})
+			for a := MeshNode(0); a < MeshNode(total); a++ {
+				eagerSet := make(map[MeshNode]struct{}, len(m.neighbors[a]))
+				for _, nb := range m.neighbors[a] {
+					eagerSet[nb] = struct{}{}
+				}
+				for b := a + 1; b < MeshNode(total); b++ {
+					if _, isEager := eagerSet[b]; isEager {
+						continue
+					}
+					if rng.Float64() < pg {
+						m.gossipConn[newMeshLinkKey(a, b)] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	// Sample sustained per-connection severance. Models real-world
+	// peer-link failures that persist longer than a slot (NAT/firewall
+	// blips, peer-score evictions, regional routing). Rolled only over
+	// delivery-path pairs (eager + gossip-reachable) so SeverProb
+	// represents the fraction of actually-existing connections cut,
+	// not the fraction of all node-pairs. Iteration order is the same
+	// deterministic upper-triangular walk used above so per-seed
+	// reproducibility holds.
+	//
+	// Access-time only — Neighbors and NonMeshPeers consult m.severed
+	// but the eager-mesh graph (m.neighbors) is untouched, so the
+	// build-time isConnected invariant is preserved and a severed
+	// pair simply has no surviving delivery path through either
+	// transport layer.
+	if cfg.SeverProb > 0 {
+		m.severed = make(map[meshLinkKey]struct{})
+		for a := MeshNode(0); a < MeshNode(total); a++ {
+			eagerSet := make(map[MeshNode]struct{}, len(m.neighbors[a]))
+			for _, nb := range m.neighbors[a] {
+				eagerSet[nb] = struct{}{}
+			}
+			for b := a + 1; b < MeshNode(total); b++ {
+				_, isEager := eagerSet[b]
+				// Gossip-reachable iff in gossipConn (bound active) OR
+				// gossipConn is nil and the pair is non-eager (the
+				// small-subnet / explicit-unbounded path, where every
+				// non-eager pair sits in the gossip candidate set).
+				var isGossipReachable bool
+				if m.gossipConn != nil {
+					_, isGossipReachable = m.gossipConn[newMeshLinkKey(a, b)]
+				} else {
+					isGossipReachable = !isEager
+				}
+				if !isEager && !isGossipReachable {
+					continue
+				}
+				if rng.Float64() < cfg.SeverProb {
+					m.severed[newMeshLinkKey(a, b)] = struct{}{}
+				}
+			}
+		}
+	}
+
 	return m
 }
 
@@ -482,10 +652,24 @@ func (m *MeshTopology) IsSeen(node MeshNode, id MsgID) bool {
 	return ok
 }
 
-// Neighbors returns `node`'s mesh peers. Caller must NOT mutate the
-// returned slice — it aliases internal state.
+// Neighbors returns `node`'s eager-mesh peers. When MeshConfig.SeverProb
+// is active, pairs in the per-sim severed set are filtered out so eager
+// push and reflood cannot use them. Caller must NOT mutate the returned
+// slice — when no severance is active it aliases internal state; under
+// severance a fresh filtered slice is allocated each call.
 func (m *MeshTopology) Neighbors(node MeshNode) []MeshNode {
-	return m.neighbors[node]
+	if m.severed == nil {
+		return m.neighbors[node]
+	}
+	raw := m.neighbors[node]
+	out := make([]MeshNode, 0, len(raw))
+	for _, nb := range raw {
+		if _, sev := m.severed[newMeshLinkKey(node, nb)]; sev {
+			continue
+		}
+		out = append(out, nb)
+	}
+	return out
 }
 
 // TotalNodes returns the mesh's node count (cluster ops + relays).
@@ -658,11 +842,22 @@ func (m *MeshTopology) MCacheGossipMids(node MeshNode, windowSlots int) []MsgID 
 	return mids
 }
 
-// NonMeshPeers returns the set of mesh nodes that are NOT direct
-// mesh-neighbors of `node` (and not `node` itself). Real gossipsub
-// gossips IHAVE to topic peers outside the eager-push mesh; this
-// helper bounds the recipient pool the same way. Result is freshly
-// allocated.
+// NonMeshPeers returns the IHAVE candidate set for `node` — the mesh
+// nodes it may exchange lazy-push gossip with, excluding self and
+// eager-mesh neighbours. Real gossipsub gossips IHAVE to topic peers
+// outside the eager-push mesh; this helper bounds the recipient pool
+// the same way.
+//
+// Two access-time overlays narrow the result further:
+//
+//   - When MeshGossipConfig.GossipPoolBound is active, peers outside
+//     the per-sim bounded gossip-connection set are excluded — so a
+//     node's effective per-subnet connectivity matches real libp2p's
+//     `TopicMaxPeers` cap rather than the full non-eager clique.
+//   - When MeshConfig.SeverProb is active, severed pairs are excluded
+//     too — so IHAVE / IWANT / reinject all fail across them.
+//
+// Result is freshly allocated.
 func (m *MeshTopology) NonMeshPeers(node MeshNode) []MeshNode {
 	total := MeshNode(m.TotalNodes())
 	nbrs := m.neighbors[node]
@@ -677,6 +872,16 @@ func (m *MeshTopology) NonMeshPeers(node MeshNode) []MeshNode {
 		}
 		if _, isNbr := nbrSet[i]; isNbr {
 			continue
+		}
+		if m.gossipConn != nil {
+			if _, ok := m.gossipConn[newMeshLinkKey(node, i)]; !ok {
+				continue
+			}
+		}
+		if m.severed != nil {
+			if _, sev := m.severed[newMeshLinkKey(node, i)]; sev {
+				continue
+			}
 		}
 		out = append(out, i)
 	}
