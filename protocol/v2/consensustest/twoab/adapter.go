@@ -30,7 +30,7 @@ const (
 )
 
 // Protocol is the 2abOBFT adapter. Use as `twoab.Protocol{}` for the
-// canonical variant (SafetyBuffer = cfg.RefloodDelay, matching bare OBFT's
+// canonical variant (SafetyBuffer = cfg.SafetyBuffer, matching bare OBFT's
 // structural budget), or with `SafetyBufferOverride` to model a tighter
 // or looser deployment.
 type Protocol struct {
@@ -39,7 +39,7 @@ type Protocol struct {
 
 	// SafetyBufferOverride, when non-nil, sets the SafetyBuffer used to
 	// widen the σ-pool absorption budget post-TPhase2a. Default (nil)
-	// uses cfg.RefloodDelay so 2abOBFT matches bare OBFT's total post-
+	// uses cfg.SafetyBuffer so 2abOBFT matches bare OBFT's total post-
 	// broadcast structural budget at default. Lower SafetyBuffer (e.g.
 	// 300ms / 500ms) reclaims MEV-fetch headroom at the cost of σ-pool-
 	// fill tolerance: the cluster commits to slot-miss rather than wait
@@ -50,7 +50,7 @@ type Protocol struct {
 	// so the cluster's σ-pool[V_0] fills in 1 hop from TPhase2a.
 	// SafetyBuffer plays the role of "σ-pool fill absorption budget for
 	// IHAVE/IWANT recovery when initial KindValue eager-push doesn't reach
-	// all honest peers" — conceptually close to OBFT's RefloodDelay role (a
+	// all honest peers" — conceptually close to OBFT's SafetyBuffer role (a
 	// lazy-pull recovery window). The leader's pre-Phase-2a window
 	// (`B_0 = 1·BTT`) stays at the structural minimum; ops who don't
 	// observe V by TPhase2a fire KindNoValue and upgrade to KindValue once
@@ -85,13 +85,13 @@ func (p Protocol) Name() string {
 func (p Protocol) IsBaselineOnly() bool { return p.BaselineOnly }
 
 // safetyBuffer returns the SafetyBuffer for this variant: the override
-// if set, otherwise cfg.RefloodDelay (the spec default that matches bare
+// if set, otherwise cfg.SafetyBuffer (the spec default that matches bare
 // OBFT's structural budget).
 func (p Protocol) safetyBuffer(cfg ct.SimConfig) time.Duration {
 	if p.SafetyBufferOverride != nil {
 		return *p.SafetyBufferOverride
 	}
-	return cfg.RefloodDelay
+	return cfg.SafetyBuffer
 }
 
 func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
@@ -122,7 +122,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	//     time target — V_0 has 1·BTT to propagate before Phase 2a fires.
 	//   - SafetyBuffer shifts TPhase2a earlier in the slot, widening the
 	//     post-TPhase2a σ-pool fill window (1-hop peer KindValue
-	//     propagation). Default sizing uses SafetyBuffer = RefloodDelay
+	//     propagation). Default sizing uses SafetyBuffer = SafetyBuffer
 	//     so 2abOBFT and bare OBFT have the same total post-broadcast
 	//     structural budget.
 	//
@@ -156,7 +156,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// safety/liveness case-walk. At SafetyBuffer=0 the max degenerates
 	// to 2·BTT (identical to the old sum) — eager-push configs unaffected.
 	btt := cfg.BTT
-	// SafetyBuffer: default = cfg.RefloodDelay (matches bare OBFT's
+	// SafetyBuffer: default = cfg.SafetyBuffer (matches bare OBFT's
 	// structural budget); the SafetyBufferOverride variant field lets
 	// stresstest variants exercise tighter / looser configurations.
 	safetyBuffer := p.safetyBuffer(cfg)

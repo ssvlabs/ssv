@@ -64,7 +64,7 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 	// BFT_start, so backup FetchAt must be 0.
 	const btt = 150 * time.Millisecond // P99=100 + δ=50 fixture
 	const tCommit = 1500 * time.Millisecond
-	// RefloodDelay=0 in sim tests: idealized eager-push delivery; mesh-reflood
+	// SafetyBuffer=0 in sim tests: idealized eager-push delivery; mesh-reflood
 	// scenarios are exercised via test-specific schedules, not via the static
 	// reflood-absorption budget.
 	budgets, err := DefaultBroadcastBudget(K, btt, 0, tCommit)
@@ -122,7 +122,7 @@ func newSimWithK(t *testing.T, n, K int) *sim {
 // newSimWithStaggeredBudgets builds a cluster with per-layer BroadcastBudget
 // set to a custom staggered test fixture (B_0=0.5·BTT, B_1=1·BTT, B_2=2·BTT,
 // B_3=5·BTT) — exercises the per-layer-budget mechanism end-to-end. The
-// current spec schedule is primary-vs-backup (B_0 = 2·BTT + RefloodDelay;
+// current spec schedule is primary-vs-backup (B_0 = 2·BTT + SafetyBuffer;
 // B_1..B_{K-1} = T_commit per [docs/OBFT.md §Setting](OBFT.md)); these
 // staggered ratios are a non-canonical test fixture, not spec-recommended.
 func newSimWithStaggeredBudgets(t *testing.T, n int) *sim {

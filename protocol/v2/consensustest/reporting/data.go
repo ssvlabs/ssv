@@ -522,7 +522,7 @@ type cellPayload struct {
 	// BFT_starts the cell covers exactly vs. approximately. Replaces the
 	// UI's former JS-side sizing mirror, so the threshold stays correct as
 	// the adapters' timing evolves and reflects the cell's actual
-	// per-scenario RefloodDelay / SafetyBuffer.
+	// per-scenario SafetyBuffer / SafetyBuffer.
 	//
 	// A *int (not omitempty-on-int) so an emitted 0 — clamp engages at
 	// any BFT_start>0 — is distinct from "not emitted". Emitted by

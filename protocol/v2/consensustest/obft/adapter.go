@@ -23,7 +23,7 @@ const (
 )
 
 // Protocol is the OBFT adapter. Use as `obft.Protocol{}` for the canonical
-// variant, or set RefloodDelayOverride to register cushion variants
+// variant, or set SafetyBufferOverride to register cushion variants
 // alongside it in the stress matrix without name collisions.
 type Protocol struct {
 	// VariantName overrides the reported protocol name. Empty → "OBFT".
@@ -31,16 +31,16 @@ type Protocol struct {
 	// in the stress matrix without name collisions.
 	VariantName string
 
-	// RefloodDelayOverride, when non-nil, sets the broadcast budget's
-	// RefloodDelay to an explicit value regardless of cfg.RefloodDelay.
+	// SafetyBufferOverride, when non-nil, sets the broadcast budget's
+	// SafetyBuffer to an explicit value regardless of cfg.SafetyBuffer.
 	// Registers the cushion-ladder variants: OBFT-0 (override=0), OBFT-300
 	// (override=300ms), OBFT-500 (override=500ms), OBFT-700 (override=700ms,
 	// matches bare OBFT on Healthy). Analogue of 2abOBFT's
 	// SafetyBufferOverride and QBFT-300's fixed cushion. Unlike 2abOBFT-300
 	// (which collapses onto 2abOBFT-0 at BTT≥300 via the max(SB,BTT)
-	// crossover), OBFT's B_0 = 2·BTT + RefloodDelay is linear in RefloodDelay,
+	// crossover), OBFT's B_0 = 2·BTT + SafetyBuffer is linear in SafetyBuffer,
 	// so OBFT-300 stays distinct from OBFT-0 at every BTT.
-	RefloodDelayOverride *time.Duration
+	SafetyBufferOverride *time.Duration
 
 	// BaselineOnly marks a variant that only runs on Baseline-group
 	// (Healthy) scenarios — RunBatch renders it n/a on adversarial
@@ -87,7 +87,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// longer carries Delta2 / BroadcastBudget / FetchAt on SimConfig; OBFT
 	// family adapters own the spec's BTT-as-unit conventions. Δ_2 = 1·BTT
 	// matches the spec recommendation — reflood lives in B_0 (per-scenario
-	// cfg.RefloodDelay folded into the primary-layer broadcast budget), not
+	// cfg.SafetyBuffer folded into the primary-layer broadcast budget), not
 	// in Δ_2; see OBFT.md §Timing budget. Production SSV adapter uses the
 	// same sizing.
 	delta2 := cfg.BTT
@@ -99,20 +99,20 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 			phase3JitterBuffer, epsilon3, delta2)
 	}
 
-	// cfg.RefloodDelay is the per-scenario opt-in for the spec's reflood-
-	// absorption budget (`B_0 = 2·BTT + RefloodDelay`). Default 0:
+	// cfg.SafetyBuffer is the per-scenario opt-in for the spec's reflood-
+	// absorption budget (`B_0 = 2·BTT + SafetyBuffer`). Default 0:
 	// adversarial scenarios and direct-delivery sims model idealized
 	// eager-push, no schedule-level reflood absorption. Production-
-	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
+	// realistic-mesh scenarios set cfg.SafetyBuffer >0 (typically 700ms
 	// to match libp2p heartbeat), mirroring the production SSV adapter's
-	// DefaultRefloodDelay. RefloodDelayOverride pins an explicit value
+	// DefaultSafetyBuffer. SafetyBufferOverride pins an explicit value
 	// for the cushion-ladder variants (OBFT-0 / OBFT-300 / OBFT-500 /
-	// OBFT-700) regardless of cfg.RefloodDelay.
-	refloodDelay := cfg.RefloodDelay
-	if p.RefloodDelayOverride != nil {
-		refloodDelay = *p.RefloodDelayOverride
+	// OBFT-700) regardless of cfg.SafetyBuffer.
+	safetyBuffer := cfg.SafetyBuffer
+	if p.SafetyBufferOverride != nil {
+		safetyBuffer = *p.SafetyBufferOverride
 	}
-	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, cfg.BTT, refloodDelay, tCommit)
+	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, cfg.BTT, safetyBuffer, tCommit)
 	if err != nil {
 		return ct.Outcome{}, fmt.Errorf("%w: obft adapter: derive BroadcastBudget: %v",
 			ct.ErrConfigOutOfEnvelope, err)
@@ -129,7 +129,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// Per-layer broadcast schedule = obftbase.BroadcastTargetOffset: the
 	// recovery-floored target max(0, T_commit − max(B_k, 3·BTT)). The 3·BTT
 	// floor (2·BTT peer-reflood-V cascade + 1·BTT margin) keeps the primary
-	// L_0's h_V=1 σ-upgrade landing before T_commit even at RefloodDelay=0,
+	// L_0's h_V=1 σ-upgrade landing before T_commit even at SafetyBuffer=0,
 	// mirroring 2abOBFT's max(SafetyBuffer, 1·BTT). Shared with the production
 	// runner (runner/obft/runner.go) so sim and production broadcast at the
 	// identical floored target; backups (B_k = T_commit) floor to BFT_start.

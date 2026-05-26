@@ -49,7 +49,7 @@ func TestProtocol_Healthy_n4_K4_RealBLS(t *testing.T) {
 	}
 	btt := 150 * time.Millisecond
 	tCommit := 1500 * time.Millisecond
-	// RefloodDelay=0: test fixture uses idealized eager-push (no reflood
+	// SafetyBuffer=0: test fixture uses idealized eager-push (no reflood
 	// absorption needed for blsbackend integration tests).
 	budgets, err := obft.DefaultBroadcastBudget(K, btt, 0, tCommit)
 	require.NoError(t, err)

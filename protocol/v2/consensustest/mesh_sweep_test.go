@@ -104,12 +104,12 @@ func TestMeshHealthy_RespondsToSigma(t *testing.T) {
 
 // TestWrapBaselineForInstability_PreservesHealthyMeshSettings pins the
 // inheritance contract that the production-mesh scenario design relies
-// on: Healthy's Apply sets cfg.RefloodDelay = 700ms and
+// on: Healthy's Apply sets cfg.SafetyBuffer = 700ms and
 // cfg.Mesh.Gossip.Enabled = true, and WrapBaselineForInstability must
 // preserve both across all instability levels. The wrap currently only
 // mutates cfg.Network and cfg.Mesh.HopDelay (sub-field writes); a
 // future rebuild that wholesale-reassigned cfg.Mesh or reset
-// cfg.RefloodDelay would silently strip Healthy's production-mesh
+// cfg.SafetyBuffer would silently strip Healthy's production-mesh
 // settings — exactly the class of regression that motivated
 // CloneScenarioWith. Direct field-level assertion locks this in.
 func TestWrapBaselineForInstability_PreservesHealthyMeshSettings(t *testing.T) {
@@ -124,8 +124,8 @@ func TestWrapBaselineForInstability_PreservesHealthyMeshSettings(t *testing.T) {
 			cfg.Delivery = wrapped.Delivery
 			require.NotNil(t, wrapped.Apply)
 			wrapped.Apply(&cfg)
-			require.Equal(t, 700*time.Millisecond, cfg.RefloodDelay,
-				"RefloodDelay must survive wrap at level=%s", level.Name)
+			require.Equal(t, 700*time.Millisecond, cfg.SafetyBuffer,
+				"SafetyBuffer must survive wrap at level=%s", level.Name)
 			require.True(t, cfg.Mesh.Gossip.Enabled,
 				"Mesh.Gossip.Enabled must survive wrap at level=%s", level.Name)
 		})
@@ -142,14 +142,14 @@ func TestWrapBaselineForInstability_PreservesHealthyMeshSettings(t *testing.T) {
 //
 // Production-mesh isolation: Healthy's Apply enables recovery features
 // that mask mesh-transport miss-events — the gossip backstop
-// (cfg.Mesh.Gossip.Enabled = true) and a RefloodDelay-aware primary
-// broadcast budget (cfg.RefloodDelay = 700ms widens B_0 from 2·BTT to
+// (cfg.Mesh.Gossip.Enabled = true) and a SafetyBuffer-aware primary
+// broadcast budget (cfg.SafetyBuffer = 700ms widens B_0 from 2·BTT to
 // 2·BTT + 700ms, absorbing the instability-induced arrival jitter). Both
 // are correct Healthy-scenario behavior that would let extreme instability
 // decide 100%, so both are disabled locally. A third feature is intrinsic
 // and CANNOT be disabled: the L_0 schedule always carries a structural
-// recovery margin of max(RefloodDelay, 1·BTT) (the 1·BTT floor mirrors
-// 2abOBFT's max(SafetyBuffer, 1·BTT)), so even at RefloodDelay=0 the
+// recovery margin of max(SafetyBuffer, 1·BTT) (the 1·BTT floor mirrors
+// 2abOBFT's max(SafetyBuffer, 1·BTT)), so even at SafetyBuffer=0 the
 // primary keeps 1·BTT of headroom before T_commit. To surface miss-events
 // past that floor + B_0 = 3·BTT window, the network is harshened here
 // (Median = BTT, Sigma = 0.6) over 40 iters so extreme's slow-op + loss
@@ -177,9 +177,9 @@ func TestMeshHealthy_RespondsToInstability(t *testing.T) {
 			if wrapped.Apply != nil {
 				wrapped.Apply(&cfg)
 			}
-			// Disable gossip + RefloodDelay locally — see test doc on isolation.
+			// Disable gossip + SafetyBuffer locally — see test doc on isolation.
 			cfg.Mesh.Gossip.Enabled = false
-			cfg.RefloodDelay = 0
+			cfg.SafetyBuffer = 0
 			out, err := obftadapter.Protocol{}.Run(cfg)
 			require.NoError(t, err)
 			if out.Decided {
@@ -315,7 +315,7 @@ func TestMeshHealthy_GossipPoolBoundShiftsLossRecovery(t *testing.T) {
 // though the slow-op anchor isn't).
 //
 // Production-mesh isolation: Healthy's Apply enables the lazy-push
-// gossip backstop AND sets cfg.RefloodDelay=700ms (widening B_0 by
+// gossip backstop AND sets cfg.SafetyBuffer=700ms (widening B_0 by
 // 700ms). Both would mask the instability-induced miss-events this
 // test relies on for non-trivial BTT-invariance assertions, so both
 // are disabled locally after Apply.
@@ -347,9 +347,9 @@ func TestInstability_BTTInvariantUnderEmpiricalProfile(t *testing.T) {
 			if wrapped.Apply != nil {
 				wrapped.Apply(&c)
 			}
-			// Disable gossip + RefloodDelay locally — see test doc on isolation.
+			// Disable gossip + SafetyBuffer locally — see test doc on isolation.
 			c.Mesh.Gossip.Enabled = false
-			c.RefloodDelay = 0
+			c.SafetyBuffer = 0
 			out, err := qbftadapter.QBFTSSV{}.Run(c)
 			require.NoError(t, err)
 			if out.Decided {

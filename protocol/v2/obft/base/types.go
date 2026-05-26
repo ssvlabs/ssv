@@ -109,7 +109,7 @@ type Config struct {
 	// for KindCommit messages emitted by T_commit (the synchronous
 	// fallback) to reach all honest peers before Phase 3. Reflood
 	// absorption is structurally provided by per-layer `B_k` via the
-	// primary-vs-backup reflood-aware schedule (`B_0 = 2·BTT + RefloodDelay`
+	// primary-vs-backup reflood-aware schedule (`B_0 = 2·BTT + SafetyBuffer`
 	// for the MEV-fresh primary; `B_1..B_{K-1} = T_commit` for all backups
 	// broadcasting at BFT_start), so Delta2 no longer carries a reflood
 	// cushion. Sub-1·BTT sizings are sub-BFT (Phase-2 propagation can't
@@ -131,7 +131,7 @@ type Config struct {
 	// §Setting: BTT = P99 + δ, where P99 is the cluster gossipsub propagation
 	// at the deployment's chosen tail percentile and δ is the clock-skew
 	// bound. Used as the unit for time-budget formulas (e.g. Delta2 = 1 BTT
-	// recommended at tightened sizing; B_0 = 2·BTT + RefloodDelay primary,
+	// recommended at tightened sizing; B_0 = 2·BTT + SafetyBuffer primary,
 	// B_1..B_{K-1} = T_commit backups). Concrete sizing at Config A:
 	// P99 = 150ms, δ = 50ms, BTT = 200ms.
 	BTT time.Duration
@@ -180,9 +180,9 @@ func (c *Config) BroadcastMaxOffsetForLayer(k int) time.Duration {
 // layer: `max(0, T_commit − max(B_k, 3·BTT))`. The `3·BTT` floor (a 2·BTT
 // peer-reflood-V recovery cascade + a 1·BTT margin) guarantees the h_V=1
 // σ-upgrade lands before the T_commit view-fix even when `B_k < 3·BTT` (i.e.
-// RefloodDelay < 1·BTT), mirroring 2abOBFT's `max(SafetyBuffer, 1·BTT)`
+// SafetyBuffer < 1·BTT), mirroring 2abOBFT's `max(SafetyBuffer, 1·BTT)`
 // resolve-window floor. The floor is dormant when `B_k ≥ 3·BTT` (the common
-// case at default RefloodDelay), where it coincides with the plain
+// case at default SafetyBuffer), where it coincides with the plain
 // `T_commit − B_k`.
 //
 // This is the offset leaders should actually broadcast by; it is the single
@@ -207,28 +207,28 @@ func (c *Config) BroadcastTargetForLayer(k int) time.Duration {
 }
 
 // DefaultBroadcastBudget returns a spec-conforming B_k schedule for K layers
-// at the given BTT, RefloodDelay, and T_commit. Per spec §Setting, the
+// at the given BTT, SafetyBuffer, and T_commit. Per spec §Setting, the
 // primary L_0's B_0 is sized to accommodate one gossipsub IHAVE/IWANT reflood
 // cycle when initial eager-push fails to reach all honest peers; backups
 // L_1..L_{K-1} all broadcast at BFT_start (B_k = T_commit) with the
 // deepest-confirmed-parent fetch strategy:
 //
-//	B_0           = 2·BTT + RefloodDelay  (primary, MEV-fresh)
+//	B_0           = 2·BTT + SafetyBuffer  (primary, MEV-fresh)
 //	B_1..B_{K-1}  = T_commit              (backups broadcast at BFT_start)
 //
-// `RefloodDelay` is the worst-case gossipsub-lazy-push latency before a
+// `SafetyBuffer` is the worst-case gossipsub-lazy-push latency before a
 // retransmission cycle completes — bounded by the cluster's HeartbeatInterval.
-// At RefloodDelay = 0 the primary budget collapses to 2·BTT (the "fully-
+// At SafetyBuffer = 0 the primary budget collapses to 2·BTT (the "fully-
 // meshed cluster, eager push reliable" assumption); production SSV
-// deployments use RefloodDelay = 700ms (SSV's gossipsub HeartbeatInterval).
+// deployments use SafetyBuffer = 700ms (SSV's gossipsub HeartbeatInterval).
 //
-// At K=4 returns [2·BTT+RefloodDelay, T_commit, T_commit, T_commit]. At K=3
-// returns [2·BTT+RefloodDelay, T_commit, T_commit]. At K=2 returns
-// [2·BTT+RefloodDelay, T_commit]. At K=1 returns [T_commit] (degenerate
+// At K=4 returns [2·BTT+SafetyBuffer, T_commit, T_commit, T_commit]. At K=3
+// returns [2·BTT+SafetyBuffer, T_commit, T_commit]. At K=2 returns
+// [2·BTT+SafetyBuffer, T_commit]. At K=1 returns [T_commit] (degenerate
 // single-layer case — L_0 IS the deepest).
 //
 // At extreme degraded operating points where T_commit shrinks below
-// 2·BTT + RefloodDelay, B_0 can exceed T_commit. The protocol's runtime
+// 2·BTT + SafetyBuffer, B_0 can exceed T_commit. The protocol's runtime
 // `T_broadcast_max_k = max(0, T_commit − B_k)` clamps the primary's
 // target at slot start, so the configuration remains valid (the primary
 // becomes a redundant peer of the backups; cluster still operates).
@@ -238,15 +238,15 @@ func (c *Config) BroadcastTargetForLayer(k int) time.Duration {
 // helper is for tests and minimal callers that want an obviously-correct
 // default. Required by Validate: every LayerSpec.BroadcastBudget entry
 // must be > 0 and the slice must be non-decreasing.
-func DefaultBroadcastBudget(K int, btt, refloodDelay, tCommit time.Duration) ([]time.Duration, error) {
+func DefaultBroadcastBudget(K int, btt, safetyBuffer, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft: DefaultBroadcastBudget K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("obft: DefaultBroadcastBudget BTT=%v must be > 0", btt)
 	}
-	if refloodDelay < 0 {
-		return nil, fmt.Errorf("obft: DefaultBroadcastBudget RefloodDelay=%v must be >= 0", refloodDelay)
+	if safetyBuffer < 0 {
+		return nil, fmt.Errorf("obft: DefaultBroadcastBudget SafetyBuffer=%v must be >= 0", safetyBuffer)
 	}
 	out := make([]time.Duration, K)
 	if K == 1 {
@@ -254,7 +254,7 @@ func DefaultBroadcastBudget(K int, btt, refloodDelay, tCommit time.Duration) ([]
 		return out, nil
 	}
 	// L_0: primary with reflood-aware budget. Cap at T_commit (degraded case).
-	b0 := 2*btt + refloodDelay
+	b0 := 2*btt + safetyBuffer
 	if b0 > tCommit {
 		b0 = tCommit
 	}

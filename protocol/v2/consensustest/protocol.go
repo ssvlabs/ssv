@@ -78,24 +78,24 @@ type SimConfig struct {
 	// adapter derives every internal timing budget from it. Framework-side
 	// sizing (spec-aligned, post-tightening): OBFT Δ_2 = 1·BTT (spec
 	// recommendation; reflood absorbed by B_0, not by Δ_2 — see
-	// RefloodDelay); 2abOBFT Δ_2a + Δ_2b = 3·BTT total (Δ_2a =
+	// SafetyBuffer); 2abOBFT Δ_2a + Δ_2b = 3·BTT total (Δ_2a =
 	// 2·BTT structural minimum per 2abOBFT.md §Setting, Δ_2b =
 	// 1·BTT spec-aligned); QBFT pristine per-round RT = 3·BTT (R1)
 	// / 4·BTT (rounds ≥ 2, +1·BTT ROUND_CHANGE hop), QBFTSSV flat 2s.
 	BTT time.Duration
 
-	// RefloodDelay is the per-scenario reflood-absorption budget folded
+	// SafetyBuffer is the per-scenario reflood-absorption budget folded
 	// into the OBFT-family primary-layer broadcast schedule (`B_0 = 2·BTT
-	// + RefloodDelay`; backups unaffected). Default 0: adversarial scenarios
+	// + SafetyBuffer`; backups unaffected). Default 0: adversarial scenarios
 	// and direct-delivery sims model idealized eager-push and don't pay
 	// schedule-level reflood absorption. Production-realistic-mesh
-	// scenarios opt in by setting cfg.RefloodDelay equal to the mesh's
+	// scenarios opt in by setting cfg.SafetyBuffer equal to the mesh's
 	// gossip heartbeat (700ms by default), matching the production SSV
-	// adapter's DefaultRefloodDelay. An absolute duration, not a BTT
+	// adapter's DefaultSafetyBuffer. An absolute duration, not a BTT
 	// multiple — reflood-cycle latency is a libp2p deployment constant
 	// (mirrors QBFT-SSV's fixed 2s round-timeout convention). Ignored by
 	// QBFT and PSigs adapters (no spec-level reflood-absorption concept).
-	RefloodDelay time.Duration
+	SafetyBuffer time.Duration
 
 	Network NetworkModel
 	Host    HostPattern
@@ -483,8 +483,8 @@ func (c *SimConfig) Validate() error {
 	if c.BTT <= 0 {
 		return fmt.Errorf("consensustest: BTT must be > 0")
 	}
-	if c.RefloodDelay < 0 {
-		return fmt.Errorf("consensustest: RefloodDelay must be >= 0")
+	if c.SafetyBuffer < 0 {
+		return fmt.Errorf("consensustest: SafetyBuffer must be >= 0")
 	}
 	if c.RelayCutoff <= 0 {
 		return fmt.Errorf("consensustest: RelayCutoff must be > 0")

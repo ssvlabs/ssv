@@ -98,7 +98,7 @@ func ValueRoot(v Value) [32]byte {
 // operator-tunable in production. 2abOBFT does not yet have an SSV-runner
 // adapter; when it's built, the adapter should expose `BTT` plus
 // deployment-environment values (`RelayCutoff`, `HeaderSubmitHeadroom`,
-// `RefloodDelay` — used as the default for `SafetyBuffer`) and derive
+// `SafetyBuffer` — used as the default for `SafetyBuffer`) and derive
 // protocol timings internally. Until the runner-adapter is built, callers
 // (currently consensustest only) construct this Config directly with
 // explicit protocol timings.
@@ -155,7 +155,7 @@ type Config struct {
 	// keeping the wall-clock pre-broadcast headroom unchanged at default
 	// SafetyBuffer.
 	//
-	// Default sizing: `SafetyBuffer = RefloodDelay` (the cluster's
+	// Default sizing: `SafetyBuffer = SafetyBuffer` (the cluster's
 	// gossipsub HeartbeatInterval — typically 700ms in SSV deployments).
 	// At this default, 2abOBFT and bare OBFT have the same total
 	// post-broadcast structural budget and the same MEV-fetch headroom.
@@ -164,7 +164,7 @@ type Config struct {
 	// at the cost of σ-pool-fill tolerance: the cluster commits to
 	// slot-miss rather than wait for late peer KindValue arrivals when
 	// the network's per-hop latency tail exceeds 1·BTT. Higher
-	// SafetyBuffer (e.g. 1·BTT + RefloodDelay) widens the tolerance at
+	// SafetyBuffer (e.g. 1·BTT + SafetyBuffer) widens the tolerance at
 	// the cost of MEV-fetch headroom. SafetyBuffer is decoupled from the
 	// network's HeartbeatInterval (the gossipsub constant); SafetyBuffer
 	// is a protocol-level configurable, not a network parameter.

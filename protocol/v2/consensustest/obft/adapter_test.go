@@ -159,9 +159,9 @@ func TestRecovery_PeerVOnHV1(t *testing.T) {
 //
 // Recovery requires FetchAt[0]+2·BTT < T_commit so V-drop receivers
 // emit BEFORE the evtPhaseTwoStart T_commit fallback locks them into
-// NR. The recovery margin is max(RefloodDelay, 1·BTT) — the structural
+// NR. The recovery margin is max(SafetyBuffer, 1·BTT) — the structural
 // 1·BTT floor mirrors 2abOBFT's max(SafetyBuffer, 1·BTT); at
-// DefaultProposerDutyConfig's RefloodDelay=0 that is a full 1·BTT, so
+// DefaultProposerDutyConfig's SafetyBuffer=0 that is a full 1·BTT, so
 // recovery holds at every BTT in range as long as the schedule fits
 // (T_commit ≥ 3·BTT, true through the 600ms degraded bound). Framework
 // matches production sizing (Δ_2 = 1·BTT spec-aligned).
@@ -313,7 +313,7 @@ func TestAdapter_OpportunisticDecisionTime(t *testing.T) {
 	require.True(t, out.Decided, "healthy should decide")
 	require.Equal(t, 0, out.DecidedRound, "decided at L_0 fastest path")
 	// At BTT=200ms: T_commit=3600ms (Δ_2=1·BTT spec-aligned), recovery margin
-	// = max(RefloodDelay, 1·BTT) = 200ms (RefloodDelay=0) → FetchAt[0] =
+	// = max(SafetyBuffer, 1·BTT) = 200ms (SafetyBuffer=0) → FetchAt[0] =
 	// T_commit − 2·BTT − 200ms = 3000ms. L_0 leader emits Phase-1 (and its
 	// own early commit) at 3000ms; Phase-1 arrives at peers at 3200ms →
 	// ApplyHostValidity closes L0Ready on the σ-retention path → peers
@@ -523,12 +523,12 @@ func TestAdapter_OfflineAggregator_HealthyOneRecon(t *testing.T) {
 
 // TestAdapter_HealthyDecidesAtBroadcastDeadline exercises the default
 // schedule under typical-mesh propagation: each leader broadcasts on its
-// per-layer schedule (L_0 at T_commit − 2·BTT − max(RefloodDelay, 1·BTT)),
+// per-layer schedule (L_0 at T_commit − 2·BTT − max(SafetyBuffer, 1·BTT)),
 // and with `ConstantDelay{D: BTT/2}` the L_0 bundle arrives well inside the
 // [slot_start, T_commit] acceptance window, so the cluster decides at L_0.
 //
 // Validates that the default schedule (no fetch buffer; recovery margin
-// max(RefloodDelay, 1·BTT)) lands the healthy path at L_0 under typical
+// max(SafetyBuffer, 1·BTT)) lands the healthy path at L_0 under typical
 // propagation.
 func TestAdapter_HealthyDecidesAtBroadcastDeadline(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
@@ -549,8 +549,8 @@ func TestAdapter_HealthyDecidesAtBroadcastDeadline(t *testing.T) {
 // pathology: propagation consumes the entire L_0 recovery window with zero
 // margin, so even the peer-reflood-V σ-upgrade can't beat the T_commit
 // view-fix. The L_0 recovery window is 2·BTT (recovery cascade) +
-// max(RefloodDelay, 1·BTT) (recovery margin) = 3·BTT at
-// DefaultProposerDutyConfig's RefloodDelay=0, so the test uses
+// max(SafetyBuffer, 1·BTT) (recovery margin) = 3·BTT at
+// DefaultProposerDutyConfig's SafetyBuffer=0, so the test uses
 // `ConstantDelay{D: 3·BTT}`: the L_0 bundle arrives exactly at T_commit. Per
 // the sim's deterministic event ordering (evtPhaseTwoStart at seq N fires
 // before evtPhase1Arrival at seq N+M when both land at T_commit), non-leader
@@ -567,8 +567,8 @@ func TestAdapter_HealthyDecidesAtBroadcastDeadline(t *testing.T) {
 func TestAdapter_FallsThroughWhenConvergenceBufferConsumed(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	// Override Network to 3·BTT propagation — the full L_0 recovery window
-	// (2·BTT cascade + max(RefloodDelay, 1·BTT) margin = 3·BTT at the
-	// framework-default RefloodDelay=0), consumed with zero margin. The
+	// (2·BTT cascade + max(SafetyBuffer, 1·BTT) margin = 3·BTT at the
+	// framework-default SafetyBuffer=0), consumed with zero margin. The
 	// pathology: the L_0 bundle arrives exactly at T_commit, so ordering
 	// between the arrival and the T_commit view-fix flips the outcome from σ
 	// to NR.

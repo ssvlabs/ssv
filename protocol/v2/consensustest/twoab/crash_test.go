@@ -41,7 +41,7 @@ func TestCrash_NonLeaderDirect(t *testing.T) {
 func TestCrash_Mesh(t *testing.T) {
 	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
 	cfg.Delivery = ct.DeliveryMesh
-	cfg.RefloodDelay = 700 * time.Millisecond
+	cfg.SafetyBuffer = 700 * time.Millisecond
 	cfg.Byz = ct.ByzPattern{Crashed: []ct.OperatorID{1}}
 	out, err := twoabadapter.Protocol{}.Run(cfg)
 	require.NoError(t, err)

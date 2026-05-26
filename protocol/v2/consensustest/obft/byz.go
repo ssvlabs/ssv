@@ -675,8 +675,8 @@ func (b byzLateLeaderBroadcast) LeaderBroadcastPlan(_ *sim, _ obftbase.OperatorI
 // OverrideOwnPhase1Delay returns a BTT-scaled delay (6×BTT) so the byz
 // leader's bundle arrives past T_commit at every honest receiver regardless
 // of operating point. Under the primary-vs-backup schedule the primary L_0
-// has B_0 = 2·BTT + RefloodDelay; adversarial scenarios that use this byz
-// strategy keep the framework-default RefloodDelay=0 (the production-mesh
+// has B_0 = 2·BTT + SafetyBuffer; adversarial scenarios that use this byz
+// strategy keep the framework-default SafetyBuffer=0 (the production-mesh
 // opt-in only fires on Healthy), so B_0 = 2·BTT and the 6·BTT delay
 // pushes the bundle to T_commit + 4·BTT, past T_commit at all receivers.
 // Hardcoded delay would silently fail at BTT > 200ms.

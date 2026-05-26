@@ -43,7 +43,7 @@ The "2ab" in the name reflects a Phase-2 split. **Phase 2a** is the σ-side term
   - `fetchAt[k] = T_0_broadcast − B_k`, where `B_k` is the per-layer broadcast budget — `(k+2)·BTT` for the shallower layers and `T_0_broadcast` for the deepest (so its fetch deadline clamps to `BFT_start`). Non-decreasing in `k`: deeper layers fetch earlier, from deeper-confirmed parents, making their values re-org-resistant.
   - `resolveDeadline = TPhase2a + max(1·BTT + SafetyBuffer, 2·BTT) + ε_3`, clamped to `T_relay_cutoff − HeaderSubmitHeadroom − phase3JitterBuffer`. See [§Timing](#timing-parameters).
 
-- **`SafetyBuffer`** — the absorption budget for σ-pool fill via gossipsub IHAVE/IWANT recovery when the initial `KindValue` eager-push doesn't reach all honest peers in one hop. Protocol-level configurable, **independent of** the gossipsub `HeartbeatInterval`. Default `SafetyBuffer = 700ms` (matching SSV's `RefloodDelay`); see [§Timing](#timing-parameters) for the lean/loose spectrum and the crossover behavior.
+- **`SafetyBuffer`** — the absorption budget for σ-pool fill via gossipsub IHAVE/IWANT recovery when the initial `KindValue` eager-push doesn't reach all honest peers in one hop. Protocol-level configurable, **independent of** the gossipsub `HeartbeatInterval`. Default `SafetyBuffer = 700ms` (matching SSV's `SafetyBuffer`); see [§Timing](#timing-parameters) for the lean/loose spectrum and the crossover behavior.
 
 - **`ε_3 ≈ 50ms`** — local Phase-3 processing (BLS aggregation + IBE decryption walk + certificate construction); propagation-independent.
 
@@ -219,7 +219,7 @@ resolveWindow = max( 1·BTT + SafetyBuffer ,  2·BTT )  =  1·BTT + max(SafetyBu
 
 Reserving the `max` (rather than the sum) reclaims `min(1·BTT, SafetyBuffer)` of MEV-fetch headroom (a later `TPhase2a` ⇒ later leader fetch).
 
-**SafetyBuffer crossover.** Because the window is `1·BTT + max(SafetyBuffer, 1·BTT)`, `SafetyBuffer` only widens it *above* the `1·BTT` crossover. Below `1·BTT`, the `2·BTT` NR-fall-through path dominates and a smaller `SafetyBuffer` reclaims MEV headroom for nothing extra (at `BTT ≥ 300ms` a 300ms `SafetyBuffer` ≡ 0). The recommended spectrum: **lean** (`SafetyBuffer = 0`; max MEV headroom, no mesh-tail tolerance), **default** (`= RefloodDelay = 700ms`; one IHAVE/IWANT cycle), **loose** (`= RefloodDelay + 1·BTT`; one cycle + jitter tail). All are absolute milliseconds — sized to the reflood (IHAVE/IWANT) cycle rather than as BTT multiples — and tunable independently of the gossipsub `HeartbeatInterval` (the default merely matches `RefloodDelay`).
+**SafetyBuffer crossover.** Because the window is `1·BTT + max(SafetyBuffer, 1·BTT)`, `SafetyBuffer` only widens it *above* the `1·BTT` crossover. Below `1·BTT`, the `2·BTT` NR-fall-through path dominates and a smaller `SafetyBuffer` reclaims MEV headroom for nothing extra (at `BTT ≥ 300ms` a 300ms `SafetyBuffer` ≡ 0). The recommended spectrum: **lean** (`SafetyBuffer = 0`; max MEV headroom, no mesh-tail tolerance), **default** (`= SafetyBuffer = 700ms`; one IHAVE/IWANT cycle), **loose** (`= SafetyBuffer + 1·BTT`; one cycle + jitter tail). All are absolute milliseconds — sized to the reflood (IHAVE/IWANT) cycle rather than as BTT multiples — and tunable independently of the gossipsub `HeartbeatInterval` (the default merely matches `SafetyBuffer`).
 
 ## Preconditions on the host application
 

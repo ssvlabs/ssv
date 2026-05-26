@@ -98,8 +98,8 @@ func RunProposerSlot(
 			// The deadline is the recovery-floored target
 			// `BroadcastTargetForLayer = max(0, T_commit − max(B_k, 3·BTT))`,
 			// not the plain `T_commit − B_k`: the 1·BTT floor (dormant at
-			// RefloodDelay ≥ 1·BTT) keeps the primary's h_V=1 peer-reflood-V
-			// σ-upgrade landing before the view-fix at the RefloodDelay=0
+			// SafetyBuffer ≥ 1·BTT) keeps the primary's h_V=1 peer-reflood-V
+			// σ-upgrade landing before the view-fix at the SafetyBuffer=0
 			// opt-out — matching 2abOBFT and the consensustest model.
 			//
 			// `B_k` is a target (spec §Setting). When `B_k ≥ T_commit`

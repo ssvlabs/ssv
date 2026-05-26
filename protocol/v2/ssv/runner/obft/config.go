@@ -23,7 +23,7 @@ import (
 // Spec Config A operating point (BTT = 200ms, RelayCutoff = 4000ms,
 // HeaderSubmitHeadroom = 100ms):
 //   - Δ_2 = 1 BTT = 200ms (recommended; KindCommit propagation cycle).
-//     Reflood absorption lives in the primary's B_0 = 2·BTT + RefloodDelay
+//     Reflood absorption lives in the primary's B_0 = 2·BTT + SafetyBuffer
 //     (backups L_1..L_{K-1} have B_k = T_commit), so Δ_2 no longer
 //     carries a reflood cushion.
 //   - ε_3 ≈ 50ms (absolute; local CPU reconstruction)
@@ -41,7 +41,7 @@ const (
 	DefaultJitterBuffer         = 50 * time.Millisecond // residual jitter between Phase-3-complete and cert/submit
 
 	// Δ_2 = 1 BTT recommended; defaultDelta2 derives from DefaultBTT.
-	// Reflood lives in B_k via RefloodDelay — Δ_2 only needs to cover
+	// Reflood lives in B_k via SafetyBuffer — Δ_2 only needs to cover
 	// the synchronous-fallback KindCommit propagation cycle.
 	DefaultDelta2 = 1 * DefaultBTT
 
@@ -62,19 +62,19 @@ const (
 	// discussion.
 	DefaultK = 2
 
-	// DefaultRefloodDelay is the worst-case gossipsub-lazy-push latency
+	// DefaultSafetyBuffer is the worst-case gossipsub-lazy-push latency
 	// before a retransmission cycle completes, defaulted to SSV's gossipsub
 	// HeartbeatInterval (network/topics/params/gossipsub.go). Used to size
-	// the primary layer's broadcast budget B_0 = 2·BTT + RefloodDelay so
+	// the primary layer's broadcast budget B_0 = 2·BTT + SafetyBuffer so
 	// that one full IHAVE/IWANT reflood cycle fits within the primary's
 	// absorption window for mesh-flaky receivers — without it, a missed
 	// eager-push at L_0 forecloses L_0 σ-quorum even under partial-
 	// synchrony assumptions. Backups L_1..L_{K-1} use B_k = T_commit and
-	// broadcast at BFT_start (RefloodDelay does not affect them). Deployments
+	// broadcast at BFT_start (SafetyBuffer does not affect them). Deployments
 	// running on dense, fully-meshed clusters where eager-push reliably
 	// reaches all peers (typically n=4 fully connected) MAY override to a
 	// lower value (down to 0) to recover MEV-fetch headroom at L_0.
-	DefaultRefloodDelay = 700 * time.Millisecond
+	DefaultSafetyBuffer = 700 * time.Millisecond
 )
 
 // Per-layer schedule defaults (spec §Setting, §Application / Timing budget
@@ -83,11 +83,11 @@ const (
 //   - L_0 (primary) is MEV-fresh: fetches from RANDAO_done onward (~150ms
 //     past slot start) and broadcasts by its recovery-floored target
 //     `BroadcastTargetForLayer(0) = max(0, T_commit − max(B_0, 3·BTT))`,
-//     where `B_0 = 2·BTT + RefloodDelay` covers one IWANT round-trip plus
+//     where `B_0 = 2·BTT + SafetyBuffer` covers one IWANT round-trip plus
 //     one IHAVE/IWANT reflood cycle for mesh-flaky receivers. The 3·BTT
-//     floor is dormant at RefloodDelay ≥ 1·BTT (a no-op at the Config A
+//     floor is dormant at SafetyBuffer ≥ 1·BTT (a no-op at the Config A
 //     default below, where it equals `T_commit − B_0`); at the
-//     RefloodDelay=0 opt-out it pulls the broadcast 1·BTT earlier so the
+//     SafetyBuffer=0 opt-out it pulls the broadcast 1·BTT earlier so the
 //     h_V=1 peer-reflood-V σ-upgrade still lands before T_commit — see
 //     obft/base BroadcastTargetOffset; mirrors 2abOBFT's
 //     max(SafetyBuffer, 1·BTT).
@@ -97,7 +97,7 @@ const (
 //     BFT_start). They trade MEV-fresh fetch for the maximally-wide
 //     propagation absorption window — the entire commit budget.
 //
-// At Config A (BTT = 200ms, TCommit = 3600ms, RefloodDelay = 700ms) the
+// At Config A (BTT = 200ms, TCommit = 3600ms, SafetyBuffer = 700ms) the
 // K=2 default schedule resolves to:
 //   - budget  = [B_0=1100ms, T_commit=3600ms].
 //   - fetchAt = [153ms, 0]ms — L_0 fetches just past RANDAO_done;
@@ -124,7 +124,7 @@ const (
 // defaults; all backups use FetchAt=0 + B_k=T_commit.
 const (
 	primaryFetchDefault        = 153 * time.Millisecond
-	primaryBudgetDefaultBTT100 = 200 // 2.0 BTT — paired with +RefloodDelay added at compute time
+	primaryBudgetDefaultBTT100 = 200 // 2.0 BTT — paired with +SafetyBuffer added at compute time
 )
 
 // ConfigOverrides allows callers to override the default deployment-environment
@@ -132,7 +132,7 @@ const (
 //
 // **Operator-facing surface (Q-I2 / spec docs/OBFT.md §Application):** operators
 // supply `BTT` (the deployment's P99 + δ unit) plus deployment-environment values
-// (`RelayCutoff`, `HeaderSubmitHeadroom`, `RefloodDelay`). All protocol timings —
+// (`RelayCutoff`, `HeaderSubmitHeadroom`, `SafetyBuffer`). All protocol timings —
 // `T_commit`, `Δ_2`, `ε_3`, JitterBuffer — derive deterministically from `BTT`
 // and the deployment-environment values via spec-recommended formulas, so all
 // operators in a cluster compute identical values. This prevents per-operator
@@ -147,11 +147,11 @@ type ConfigOverrides struct {
 	RelayCutoff          time.Duration // application hard deadline (e.g. 4s for proposer duty)
 	HeaderSubmitHeadroom time.Duration // reserved for cert broadcast + relay submit (absolute)
 
-	// RefloodDelay is the worst-case gossipsub-lazy-push latency before a
+	// SafetyBuffer is the worst-case gossipsub-lazy-push latency before a
 	// retransmission cycle completes — bounded by the cluster's
-	// HeartbeatInterval. When zero, defaults to DefaultRefloodDelay (700ms,
+	// HeartbeatInterval. When zero, defaults to DefaultSafetyBuffer (700ms,
 	// matching SSV's configured HeartbeatInterval). The primary L_0's
-	// B_0 = 2·BTT + RefloodDelay so one full IHAVE/IWANT cycle fits in the
+	// B_0 = 2·BTT + SafetyBuffer so one full IHAVE/IWANT cycle fits in the
 	// primary's absorption window for mesh-flaky receivers; backups
 	// L_1..L_{K-1} have B_k = T_commit and broadcast at BFT_start with
 	// deepest-confirmed-parent fetch (no MEV-fetch budget, maximally-wide
@@ -159,7 +159,7 @@ type ConfigOverrides struct {
 	// reaches all peers reliably may use a tiny positive value (e.g.
 	// 1·time.Nanosecond) to opt out — Go's zero-means-default convention
 	// prevents passing 0 explicitly.
-	RefloodDelay time.Duration
+	SafetyBuffer time.Duration
 
 	// Test-only protocol-timing overrides. Production callers MUST NOT set
 	// these — operator-supplied `BTT` is the only protocol-timing input, and
@@ -181,8 +181,8 @@ type ConfigOverrides struct {
 	// BroadcastBudget overrides the default per-layer absorption windows
 	// `B_k` (T_commit-anchored, per spec §Setting). When nil,
 	// ConfigForCluster substitutes DefaultBroadcastBudgetSchedule(K, BTT,
-	// RefloodDelay, T_commit) which produces a non-decreasing schedule
-	// conforming to spec (K=2 default Config A: B_0 = 2·BTT + RefloodDelay =
+	// SafetyBuffer, T_commit) which produces a non-decreasing schedule
+	// conforming to spec (K=2 default Config A: B_0 = 2·BTT + SafetyBuffer =
 	// 1100ms; B_1 = T_commit = 3600ms. K=4 up-tier: B = [1100, 3600, 3600,
 	// 3600]ms). Backups broadcast at BFT_start in all cases. At degraded
 	// operating points B_0 caps at T_commit so the schedule stays
@@ -220,11 +220,11 @@ func (o *ConfigOverrides) headerSubmitHeadroom() time.Duration {
 	return o.HeaderSubmitHeadroom
 }
 
-func (o *ConfigOverrides) refloodDelay() time.Duration {
-	if o == nil || o.RefloodDelay == 0 {
-		return DefaultRefloodDelay
+func (o *ConfigOverrides) safetyBuffer() time.Duration {
+	if o == nil || o.SafetyBuffer == 0 {
+		return DefaultSafetyBuffer
 	}
-	return o.RefloodDelay
+	return o.SafetyBuffer
 }
 
 // eps3 derives from absolute ε_3 (doesn't scale with BTT per spec).
@@ -248,7 +248,7 @@ func (o *ConfigOverrides) jitterBuffer() time.Duration {
 
 // delta2 derives as 1 BTT per spec §Phase 2 recommendation (KindCommit
 // synchronous-fallback propagation cycle). Reflood lives in B_k via
-// RefloodDelay. Test-only override via delta2Override field.
+// SafetyBuffer. Test-only override via delta2Override field.
 func (o *ConfigOverrides) delta2() time.Duration {
 	if o != nil && o.delta2Override != 0 {
 		return o.delta2Override
@@ -286,42 +286,42 @@ func defaultFetchSchedule(K int) []time.Duration {
 // absorption windows paired with defaultFetchSchedule. Implements the
 // post-tighten spec §Setting design:
 //
-//	B_0           = 2·BTT + RefloodDelay  (primary, MEV-fresh)
+//	B_0           = 2·BTT + SafetyBuffer  (primary, MEV-fresh)
 //	B_1..B_{K-1}  = T_commit              (backups broadcast at BFT_start)
 //
-// where `RefloodDelay` is the worst-case gossipsub IHAVE/IWANT reflood
+// where `SafetyBuffer` is the worst-case gossipsub IHAVE/IWANT reflood
 // latency (bounded by HeartbeatInterval; defaults to 700ms for SSV
 // deployments). The primary's 2·BTT base absorbs propagation (1·BTT P99
-// + 1·BTT IWANT round-trip); the additive RefloodDelay accommodates one
+// + 1·BTT IWANT round-trip); the additive SafetyBuffer accommodates one
 // full reflood cycle when initial eager-push fails to reach all honest
 // peers. Backups trade MEV-fresh fetch for the maximally-wide propagation
 // absorption window — the entire commit budget.
 //
 // For K=1 returns [T_commit] (degenerate single-layer case — primary IS
-// deepest). For K≥2 returns [2·BTT+RefloodDelay, T_commit, ..., T_commit].
+// deepest). For K≥2 returns [2·BTT+SafetyBuffer, T_commit, ..., T_commit].
 //
 // At extreme degraded operating points where T_commit shrinks below
-// 2·BTT + RefloodDelay, B_0 is capped at T_commit so the schedule stays
+// 2·BTT + SafetyBuffer, B_0 is capped at T_commit so the schedule stays
 // non-decreasing. The primary's target then clamps at BFT_start (same as
 // the backups), and the primary becomes a redundant peer of the backups
 // — cluster still operates. Operators who want the primary's MEV-fetch
 // headroom preserved can widen T_commit (loosen Δ_2 / ε_3 / header
-// headroom), lower RefloodDelay for denser meshes, or supply a custom
+// headroom), lower SafetyBuffer for denser meshes, or supply a custom
 // schedule.
 //
-// Spec example values at BTT=200ms, RefloodDelay=700ms, T_commit=3600ms
+// Spec example values at BTT=200ms, SafetyBuffer=700ms, T_commit=3600ms
 // (Config A): K=2 default → [1100, 3600]ms; K=4 up-tier → [1100, 3600,
-// 3600, 3600]ms. At BTT=200ms, RefloodDelay=0 (fully-meshed cluster):
+// 3600, 3600]ms. At BTT=200ms, SafetyBuffer=0 (fully-meshed cluster):
 // K=2 → [400, 3600]ms; K=4 → [400, 3600, 3600, 3600]ms.
-func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Duration) ([]time.Duration, error) {
+func DefaultBroadcastBudgetSchedule(K int, btt, safetyBuffer, tCommit time.Duration) ([]time.Duration, error) {
 	if K < 1 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule K=%d must be ≥ 1", K)
 	}
 	if btt <= 0 {
 		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule BTT=%v must be > 0", btt)
 	}
-	if refloodDelay < 0 {
-		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule RefloodDelay=%v must be >= 0", refloodDelay)
+	if safetyBuffer < 0 {
+		return nil, fmt.Errorf("obft adapter: DefaultBroadcastBudgetSchedule SafetyBuffer=%v must be >= 0", safetyBuffer)
 	}
 	out := make([]time.Duration, K)
 	if K == 1 {
@@ -329,7 +329,7 @@ func DefaultBroadcastBudgetSchedule(K int, btt, refloodDelay, tCommit time.Durat
 		return out, nil
 	}
 	// L_0: primary with reflood-aware budget. Cap at T_commit (degraded case).
-	b0 := btt*time.Duration(primaryBudgetDefaultBTT100)/100 + refloodDelay
+	b0 := btt*time.Duration(primaryBudgetDefaultBTT100)/100 + safetyBuffer
 	if b0 > tCommit {
 		b0 = tCommit
 	}
@@ -402,7 +402,7 @@ func ConfigForCluster(
 	broadcastBudget := overrides.BroadcastBudget
 	if broadcastBudget == nil {
 		var err error
-		broadcastBudget, err = DefaultBroadcastBudgetSchedule(K, overrides.btt(), overrides.refloodDelay(), overrides.tCommit())
+		broadcastBudget, err = DefaultBroadcastBudgetSchedule(K, overrides.btt(), overrides.safetyBuffer(), overrides.tCommit())
 		if err != nil {
 			return nil, fmt.Errorf("obft adapter: %w", err)
 		}

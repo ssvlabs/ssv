@@ -53,10 +53,10 @@ const PROTOCOL_COLORS = {
 // the cushion variants. The QBFT ladder is deliberately uneven (no-reflood
 // also drops a structural 1·BTT), so its note spells out the per-round timers.
 const PROTOCOL_NOTES = {
-  'OBFT-0': 'OBFT, RefloodDelay=0 — no lazy-push cushion in B_0.',
-  'OBFT-300': 'OBFT, RefloodDelay=300ms (B_0 = 2·BTT + 300).',
-  'OBFT-500': 'OBFT, RefloodDelay=500ms (B_0 = 2·BTT + 500).',
-  'OBFT-700': 'OBFT, RefloodDelay=700ms (B_0 = 2·BTT + 700).',
+  'OBFT-0': 'OBFT, SafetyBuffer=0 — no lazy-push cushion in B_0.',
+  'OBFT-300': 'OBFT, SafetyBuffer=300ms (B_0 = 2·BTT + 300).',
+  'OBFT-500': 'OBFT, SafetyBuffer=500ms (B_0 = 2·BTT + 500).',
+  'OBFT-700': 'OBFT, SafetyBuffer=700ms (B_0 = 2·BTT + 700).',
   '2abOBFT-0': '2abOBFT, SafetyBuffer=0.',
   '2abOBFT-300': '2abOBFT, SafetyBuffer=300ms (≡ lower rungs at BTT ≥ 300 via the max(SB,BTT) crossover).',
   '2abOBFT-500': '2abOBFT, SafetyBuffer=500ms (≡ lower rungs at BTT ≥ 500).',
@@ -106,7 +106,7 @@ const SUBMIT_DEADLINE_MS = SLOT_END_MS - HEADER_SUBMIT_HEADROOM_MS;
 //     the config is not deployable and the UI renders n/a. It does NOT
 //     clamp-and-run or round up to a later cell. The threshold is
 //     per-cell/per-variant (it tracks each variant's
-//     RefloodDelay/SafetyBuffer), so smaller-cushion variants stay
+//     SafetyBuffer/SafetyBuffer), so smaller-cushion variants stay
 //     feasible to a later slider value. See findBaselineCellForScenario.
 const BFT_START_MIN = 0;
 const BFT_START_MAX = 3600;

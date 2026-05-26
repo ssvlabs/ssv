@@ -32,13 +32,13 @@ import (
 func compressedTestSchedule(t *testing.T) (broadcastBudget, fetchAt []time.Duration) {
 	t.Helper()
 	var err error
-	// RefloodDelay=0 in the compressed-timing test fixture: the small
+	// SafetyBuffer=0 in the compressed-timing test fixture: the small
 	// TCommit=200ms / BTT=30ms scale can't accommodate production's 700ms
-	// RefloodDelay. Tests exercising RefloodDelay-aware sizing use full-
+	// SafetyBuffer. Tests exercising SafetyBuffer-aware sizing use full-
 	// scale BTT and tCommit values.
 	broadcastBudget, err = DefaultBroadcastBudgetSchedule(4, 30*time.Millisecond, 0, 200*time.Millisecond)
 	require.NoError(t, err)
-	// At BTT=30ms, RefloodDelay=0: budgets = [60, 200, 200, 200]ms;
+	// At BTT=30ms, SafetyBuffer=0: budgets = [60, 200, 200, 200]ms;
 	// T_broadcast_max per layer = [140, 0, 0, 0]ms. Only L_0 has positive
 	// broadcast deadline; backups all clamp to BFT_start.
 	fetchAt = []time.Duration{

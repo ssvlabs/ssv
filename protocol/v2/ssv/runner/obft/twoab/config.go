@@ -35,7 +35,7 @@ const (
 	DefaultHeaderSubmitHeadroom = 100 * time.Millisecond
 	DefaultEps3                 = 50 * time.Millisecond  // ε_3, absolute (local CPU reconstruction)
 	DefaultJitterBuffer         = 50 * time.Millisecond  // residual jitter (Phase-3-complete → cert/submit)
-	DefaultRefloodDelay         = 700 * time.Millisecond // default SafetyBuffer (cluster HeartbeatInterval)
+	DefaultSafetyBuffer         = 700 * time.Millisecond // default SafetyBuffer (cluster HeartbeatInterval)
 
 	// DefaultK = f+1 = 2 at n=4 (BFT-liveness minimum), per docs/2abOBFT.md
 	// §Application. Deployments preferring deeper fall-through can set K ∈
@@ -61,7 +61,7 @@ type ConfigOverrides struct {
 	// SafetyBuffer is the post-TPhase2a mesh-tail tolerance: the wall-clock
 	// during which late peer KindValues propagate and σ-pool fills. Sized
 	// to the cluster's worst-case gossipsub reflood latency (bounded by
-	// HeartbeatInterval). Zero → DefaultRefloodDelay (700ms, one
+	// HeartbeatInterval). Zero → DefaultSafetyBuffer (700ms, one
 	// HeartbeatInterval). Lowering it reclaims MEV-fetch headroom at the
 	// cost of σ-pool-fill tolerance; see docs/2abOBFT.md §Timing.
 	SafetyBuffer time.Duration
@@ -118,7 +118,7 @@ func (o *ConfigOverrides) safetyBuffer() time.Duration {
 	if o != nil && o.SafetyBuffer != 0 {
 		return o.SafetyBuffer
 	}
-	return DefaultRefloodDelay
+	return DefaultSafetyBuffer
 }
 
 func (o *ConfigOverrides) eps3() time.Duration {

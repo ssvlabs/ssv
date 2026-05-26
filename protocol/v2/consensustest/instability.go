@@ -100,7 +100,7 @@ func (l InstabilityLevel) slowCountForN(n int) int {
 //     a total wipeout so per-protocol differences stay visible.
 //
 // Absolute degradation is modest in Healthy's mesh config: it keeps its
-// recovery features on (gossip backstop + RefloodDelay=700ms), which
+// recovery features on (gossip backstop + SafetyBuffer=700ms), which
 // absorb most instability-induced misses, so success stays high for most
 // protocols and the levels separate them mainly at the harsh end
 // (high/extreme, more so at larger n). Expect a round of empirical

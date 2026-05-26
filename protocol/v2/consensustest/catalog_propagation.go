@@ -135,8 +135,8 @@ var scenarioMeshFlakiness = Scenario{
 		// sized to exceed the pre-reflood-aware OBFT B_0 = 1·BTT (causing
 		// the OBFT mesh-flakiness deadlock the scenario was designed to
 		// document). Under the reflood-aware primary-vs-backup schedule
-		// (B_0 = 2·BTT + RefloodDelay for the primary; this scenario
-		// keeps the framework default RefloodDelay=0 since it runs on
+		// (B_0 = 2·BTT + SafetyBuffer for the primary; this scenario
+		// keeps the framework default SafetyBuffer=0 since it runs on
 		// DeliveryDirect — its per-(from, to) primitives lose meaning
 		// under mesh-reflood, so the production-mesh opt-in only fires
 		// on Healthy), so B_0 = 2·BTT and this 2·BTT delay no longer
@@ -183,8 +183,8 @@ var scenarioMeshFlakiness = Scenario{
 		cfg.Byz = ByzPattern{Kind: ByzSigmaRefusal, ByzOperators: byzOps}
 	},
 	Expect: map[string]ExpectClass{
-		// OBFT: under the reflood-aware primary B_0 = 2·BTT + RefloodDelay
-		// (this scenario keeps RefloodDelay=0 default, so B_0 = 2·BTT),
+		// OBFT: under the reflood-aware primary B_0 = 2·BTT + SafetyBuffer
+		// (this scenario keeps SafetyBuffer=0 default, so B_0 = 2·BTT),
 		// 2·BTT flaky-receiver delay is absorbed by L_0's primary window
 		// — flaky ops still receive V on time and σ-emit. σ-pool =
 		// N-f-byz_silent reaches qV at L_0. **Improvement** vs the

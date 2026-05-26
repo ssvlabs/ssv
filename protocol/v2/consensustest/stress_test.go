@@ -257,7 +257,7 @@ func TestStress(t *testing.T) {
 	// Variant families in the matrix:
 	//   - Cushion ladder per consensus family — OBFT / 2abOBFT / QBFT each
 	//     ship rungs X-0 / X-300 / X-500 / X-700, naming the mesh-tail cushion
-	//     in ms: RefloodDelay folded into OBFT's primary B_0; SafetyBuffer for
+	//     in ms: SafetyBuffer folded into OBFT's primary B_0; SafetyBuffer for
 	//     2abOBFT; the per-round RT cushion for QBFT. Each rung is a FIXED,
 	//     scenario-independent cushion (so the names are accurate on every
 	//     scenario). See the per-family comments below for the exact mapping
@@ -268,18 +268,18 @@ func TestStress(t *testing.T) {
 	protocols := []ct.Protocol{
 		// Within each family, variants are listed least-safe → most-safe (least
 		// mesh-tail cushion → most), so the report reads floor → production.
-		// OBFT cushion ladder — RefloodDelay = 0 / 300 / 500 / 700ms (the
+		// OBFT cushion ladder — SafetyBuffer = 0 / 300 / 500 / 700ms (the
 		// reflood absorption folded into the primary's B_0 = 2·BTT +
-		// RefloodDelay). Each rung is a FIXED, scenario-independent cushion
-		// (RefloodDelayOverride), so the names are accurate on every scenario —
+		// SafetyBuffer). Each rung is a FIXED, scenario-independent cushion
+		// (SafetyBufferOverride), so the names are accurate on every scenario —
 		// including adversarial, where the generic bare OBFT would instead
-		// collapse to cfg.RefloodDelay=0. B_0 is linear in RefloodDelay, so all
+		// collapse to cfg.SafetyBuffer=0. B_0 is linear in SafetyBuffer, so all
 		// four rungs stay distinct at every BTT (unlike the 2abOBFT ladder,
 		// whose lower rungs collapse via the max(SB,BTT) crossover).
-		obftadapter.Protocol{VariantName: "OBFT-0", RefloodDelayOverride: durPtr(0), BaselineOnly: true},
-		obftadapter.Protocol{VariantName: "OBFT-300", RefloodDelayOverride: durPtr(300 * time.Millisecond), BaselineOnly: true},
-		obftadapter.Protocol{VariantName: "OBFT-500", RefloodDelayOverride: durPtr(500 * time.Millisecond), BaselineOnly: true},
-		obftadapter.Protocol{VariantName: "OBFT-700", RefloodDelayOverride: durPtr(700 * time.Millisecond)},
+		obftadapter.Protocol{VariantName: "OBFT-0", SafetyBufferOverride: durPtr(0), BaselineOnly: true},
+		obftadapter.Protocol{VariantName: "OBFT-300", SafetyBufferOverride: durPtr(300 * time.Millisecond), BaselineOnly: true},
+		obftadapter.Protocol{VariantName: "OBFT-500", SafetyBufferOverride: durPtr(500 * time.Millisecond), BaselineOnly: true},
+		obftadapter.Protocol{VariantName: "OBFT-700", SafetyBufferOverride: durPtr(700 * time.Millisecond)},
 		// 2abOBFT cushion ladder — SafetyBuffer = 0 / 300 / 500 / 700ms (the
 		// post-TPhase2a σ-pool fill window). Fixed per rung (SafetyBufferOverride).
 		// Note: the resolve window is max(1·BTT + SafetyBuffer, 2·BTT), so a

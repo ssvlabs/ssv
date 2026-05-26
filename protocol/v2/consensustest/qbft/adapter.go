@@ -33,10 +33,10 @@ const defaultMaxRounds = 12
 // QBFT is the reflood-aware variant (Name "QBFT") — the realistic,
 // production-shaped reference. Its per-round timer is the pristine
 // structural minimum plus one full gossip-backstop recovery cushion
-// (RefloodDelay heartbeat + 1·BTT IWANT round-trip): round 1 =
-// 3·BTT + (RefloodDelay + 1·BTT) = 4·BTT + RefloodDelay; rounds ≥ 2 add
-// the 1·BTT ROUND_CHANGE hop = 5·BTT + RefloodDelay. This matches OBFT's
-// reflood budget (B_0 = 2·BTT + RefloodDelay, whose 2·BTT base already
+// (SafetyBuffer heartbeat + 1·BTT IWANT round-trip): round 1 =
+// 3·BTT + (SafetyBuffer + 1·BTT) = 4·BTT + SafetyBuffer; rounds ≥ 2 add
+// the 1·BTT ROUND_CHANGE hop = 5·BTT + SafetyBuffer. This matches OBFT's
+// reflood budget (B_0 = 2·BTT + SafetyBuffer, whose 2·BTT base already
 // carries the IWANT round-trip that QBFT's tight per-emission base lacks),
 // so the two compare apples-to-apples on mesh-tail tolerance. Compare
 // against bare OBFT (also reflood-aware).
@@ -45,9 +45,9 @@ type QBFT struct{}
 func (QBFT) Name() string { return "QBFT" }
 
 func (QBFT) Run(cfg ct.SimConfig) (ct.Outcome, error) {
-	// R1 = 3·BTT + (RefloodDelay + 1·BTT cushion) = 4·BTT + RefloodDelay;
-	// rtRecoveryExtra = 1·BTT (the ROUND_CHANGE hop) → R≥2 = 5·BTT + RefloodDelay.
-	return run(cfg, 4*cfg.BTT+cfg.RefloodDelay, cfg.BTT)
+	// R1 = 3·BTT + (SafetyBuffer + 1·BTT cushion) = 4·BTT + SafetyBuffer;
+	// rtRecoveryExtra = 1·BTT (the ROUND_CHANGE hop) → R≥2 = 5·BTT + SafetyBuffer.
+	return run(cfg, 4*cfg.BTT+cfg.SafetyBuffer, cfg.BTT)
 }
 
 // QBFT0 is the pristine structural-floor variant, reported as
@@ -86,7 +86,7 @@ func (QBFT300) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 // QBFT500 / QBFT700 are the 500ms / 700ms cushion rungs ("QBFT-500" /
 // "QBFT-700"): same reflood-aware structure, fixed cushion, R1 = 4·BTT +
 // {500,700}ms. QBFT-700 is the fixed-cushion analogue of the generic bare
-// QBFT (which uses scenario cfg.RefloodDelay = 700 on Healthy / 0 on
+// QBFT (which uses scenario cfg.SafetyBuffer = 700 on Healthy / 0 on
 // adversarial); the stress matrix uses the explicit QBFT-700 rung so the
 // cushion is named and scenario-independent.
 type QBFT500 struct{}

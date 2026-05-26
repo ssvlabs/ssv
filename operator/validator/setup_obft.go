@@ -73,10 +73,10 @@ func buildOBFTControllerForProposer(
 	// BroadcastBudget must be built with the SAME K so its length matches
 	// ConfigForCluster's expectation.
 	//
-	// Primary-vs-backup schedule (spec §Setting): B_0 = 2·BTT + RefloodDelay
+	// Primary-vs-backup schedule (spec §Setting): B_0 = 2·BTT + SafetyBuffer
 	// for the MEV-fresh primary; B_1..B_{K-1} = T_commit for backups
 	// (broadcast at BFT_start with deepest-confirmed-parent fetch). At
-	// production defaults (BTT=200ms, RefloodDelay=700ms, T_commit=3400ms),
+	// production defaults (BTT=200ms, SafetyBuffer=700ms, T_commit=3400ms),
 	// K=2: [1100, 3400]ms. Larger K extends backups uniformly:
 	// K=3: [1100, 3400, 3400]ms; K=4: [1100, 3400, 3400, 3400]ms.
 	n := len(ssvShare.Committee)
@@ -85,7 +85,7 @@ func buildOBFTControllerForProposer(
 	if minK := f + 1; K < minK {
 		K = minK
 	}
-	broadcastBudget, err := obftadapter.DefaultBroadcastBudgetSchedule(K, obftadapter.DefaultBTT, obftadapter.DefaultRefloodDelay, obftadapter.DefaultTCommit)
+	broadcastBudget, err := obftadapter.DefaultBroadcastBudgetSchedule(K, obftadapter.DefaultBTT, obftadapter.DefaultSafetyBuffer, obftadapter.DefaultTCommit)
 	if err != nil {
 		return nil, fmt.Errorf("build OBFT broadcast budget: %w", err)
 	}
