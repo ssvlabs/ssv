@@ -257,6 +257,23 @@ func (s *sim) outcome() rawOutcome {
 		// (decision time for deciders, last failed attempt for misses).
 		// Bounded by K (≤ N at the production K=N convention) so cost
 		// is negligible.
+		//
+		// LOAD-BEARING for the bucket-3 D1 check in safety.go: the
+		// trace captured here must reflect the SAME Resolve walk that
+		// produced the o.decided / o.round fields above (set from
+		// s.resolved[op] which is written by resolveOpAndBroadcastCert).
+		// Today this holds because the event-scheduling guards in
+		// events.go (s.vQuorumAt-guard on tryOpportunisticResolve,
+		// s.resolved-guard on evtResolveRerun) ensure the last
+		// Resolve() invocation is the one that set s.resolved[op]. A
+		// future refactor that decouples them (e.g., drops the
+		// s.resolved-guard on evtResolveRerun, or adds an
+		// opportunistic post-evtResolve Resolve to refresh metrics)
+		// would produce false-positive D1 case-(b) violations (trace
+		// from a later, shallower-σ walk vs. Round from the first,
+		// deeper-σ walk). If that refactor lands, either capture the
+		// trace snapshot at the s.resolved[op] write-site instead, or
+		// re-derive D1's case-(b) logic.
 		if trace := s.instances[op].LastResolveLayerAttempts(); len(trace) > 0 {
 			o.resolveLayerAttempts = append([]obftbase.LayerAttempt(nil), trace...)
 		}

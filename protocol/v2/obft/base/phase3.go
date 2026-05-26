@@ -117,15 +117,21 @@ func (i *Instance) Resolve() (*Output, error) {
 }
 
 // LastResolveLayerAttempts returns a snapshot of the most recent
-// Resolve() walk's per-layer state. Each entry records that layer's
-// σ-pool / NR-pool sizes, quorum thresholds, whether each side reached,
-// and whether the walk decided at this layer.
+// successful (or partial-walk) Resolve() call's per-layer state. Each
+// entry records that layer's σ-pool / NR-pool sizes, quorum thresholds,
+// whether each side reached, and whether the walk decided at this
+// layer.
 //
-// Returns nil if Resolve has not been called (or the instance was
-// already-ended on the call). The returned slice is owned by the
+// Returns nil iff no prior Resolve has populated the trace. A
+// subsequent Resolve on an already-ended Instance returns
+// ErrInstanceEnded BEFORE the per-call trace-reset, so the trace
+// from the last pre-ended walk survives — this is the intended
+// behavior (caller's last-snapshot view of "how did the final walk go"
+// remains valid even if the Instance was ended between then and the
+// LastResolveLayerAttempts call). The returned slice is owned by the
 // caller — Instance.Resolve overwrites its backing array on the next
-// call, so callers must copy if they need to retain across multiple
-// Resolves.
+// non-ended Resolve call, so callers must copy if they need to retain
+// across multiple Resolves.
 //
 // Used by the consensustest framework's bucket-3 walk-consistency
 // invariant (docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md); production

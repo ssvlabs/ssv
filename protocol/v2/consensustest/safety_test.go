@@ -292,7 +292,19 @@ func TestSafety_HonestCrossPhaseExclusive(t *testing.T) {
 			name: "VIOLATION_leader_sigma_V_and_nr_at_own_layer",
 			// B3 case: the layer leader's Phase-1 σ_V is their σ-side
 			// commitment; emitting NR at own layer is a spec violation.
-			// Same shape as the generic case at the check level.
+			//
+			// EXERCISES THE SAME CODE PATH as
+			// VIOLATION_honest_op_sigma_and_nr_same_layer above — the
+			// B1 check at safety.go reads only SigmaByEmitter /
+			// NRByEmitter without any layer-leader awareness, so
+			// distinguishing "leader's σ_V at own layer" from "any
+			// honest op's σ at any layer" requires no additional
+			// machinery (the by-emitter map records all σ-side
+			// commitments uniformly — leader Phase-1 σ_V via
+			// ObserveSigmaByEmitter at the leader-broadcast site;
+			// peer σ-onion via recordCommitToAggregator). Kept as
+			// explicit documentation that the B1 check covers B3 by
+			// construction; not a separate path.
 			sigma: []ct.ByEmitterSigmaKey{
 				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xBB)},
 			},

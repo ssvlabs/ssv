@@ -290,7 +290,14 @@ func (a *OfflineAggregator) AttemptAll() OfflineAggReport {
 	}
 	for k, claims := range a.EncryptedClaims {
 		if k.Layer == 0 {
-			continue // L_0 plaintext already in SigmaPartials
+			// Defensive: under current adapters (obft/events.go +
+			// twoab/events.go) L_0 plaintext is routed through
+			// ObserveSigma → SigmaPartials, never through
+			// ObserveEncryptedClaim → EncryptedClaims. This branch is
+			// unreachable today; kept against a future spec change
+			// where a LayerEntry[0] with SigmaChained kind would
+			// otherwise double-count into SigmaPartials.
+			continue
 		}
 		unlocked := true
 		for shallow := 0; shallow < k.Layer; shallow++ {

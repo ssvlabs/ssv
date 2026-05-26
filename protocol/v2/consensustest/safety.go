@@ -199,9 +199,12 @@ type CrossPhaseViolation struct {
 
 // SingleSigmaVViolation identifies one honest operator that emitted σ
 // on two distinct V's at the same layer. ValueHashA and ValueHashB are
-// the first two distinct value hashes found (an operator with > 2 V's
-// would only surface the first pair; the iteration ordering is
-// non-deterministic but the violation is unambiguous either way).
+// the lex-smallest pair of distinct value hashes found for this
+// (operator, layer) — ComputeSafetyReport sorts the gathered hashes
+// before picking the first two, so the recorded pair is deterministic
+// across runs even though Go map iteration is randomized. An operator
+// with > 2 V's would only surface the lex-smallest pair; the violation
+// is unambiguous regardless of which pair is reported.
 type SingleSigmaVViolation struct {
 	Operator   OperatorID
 	Layer      int
@@ -693,12 +696,19 @@ func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expecte
 		o.OfflineAgg,
 	)
 	// Surface the CommitAttestation diagnostic fields whenever any of the
-	// attestation-driven invariants fired. Without these, panic messages
-	// for quorum / equivocation / σ-or-NR / host-validity failures would
-	// say "FAIL" without showing the offending counts/kind.
+	// attestation-driven invariants OR the per-op honest invariants
+	// (B1/B2/D1) fired. Equivocation counts + quorum sizes are useful
+	// for disambiguating B1/B2 panics ("honest cross-signed vs. byz
+	// equivocated and Rule 3 caught some") and for D1 panics
+	// ("decided without σ-source vs. quorum-short reconstruction"),
+	// not just for the C-invariant failures. Without these, panic
+	// messages would say "FAIL" without showing the offending
+	// counts/kind.
 	att := o.CommitAttestation
 	if !report.QuorumBackedDecision || !report.NoEquivocationAccepted ||
-		!report.OBFTCommitKindValid || !report.OBFTHostValidityRespect {
+		!report.OBFTCommitKindValid || !report.OBFTHostValidityRespect ||
+		!report.HonestCrossPhaseExclusive || !report.HonestSingleSigmaV ||
+		!report.HonestWalkConsistent {
 		msg += fmt.Sprintf(
 			"\n  attestation: quorumSigners=%d quorumRequired=%d equivObserved=%d equivAccepted=%d obftCommitKind=%q obftHostValidityRejecters=%d",
 			att.QuorumSigners, att.QuorumRequired,
