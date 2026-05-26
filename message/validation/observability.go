@@ -27,17 +27,18 @@ var (
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages successfully validated and accepted")))
 
-	messageValidationsIgnoredCounter = metrics.New(
+	// Possibly sparse (UNKNOWN from audit): depends on validation failure rate.
+	messageValidationsIgnoredCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "ignored"),
 			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total number of messages that failed validation and were ignored")))
+			metric.WithDescription("total number of messages that failed validation and were ignored"))))
 
-	messageValidationsRejectedCounter = metrics.New(
+	messageValidationsRejectedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "rejected"),
 			metric.WithUnit("{message_validation}"),
-			metric.WithDescription("total number of messages that failed validation and were rejected")))
+			metric.WithDescription("total number of messages that failed validation and were rejected"))))
 
 	messageValidationDurationHistogram = metrics.New(
 		meter.Float64Histogram(

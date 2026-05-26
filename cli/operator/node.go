@@ -147,16 +147,26 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		observabilityOptions := []observability.Option{
-			observability.WithLogger(
-				cfg.LogLevel,
-				cfg.LogLevelFormat,
-				cfg.LogFormat,
-				cfg.LogFilePath,
-				cfg.LogFileSize,
-				cfg.LogFileBackups,
-			),
+		if err := observability.InitializeLogger(
+			cfg.LogLevel,
+			cfg.LogLevelFormat,
+			cfg.LogFormat,
+			cfg.LogFilePath,
+			cfg.LogFileSize,
+			cfg.LogFileBackups,
+		); err != nil {
+			log.Fatal("could not initialize logger", zap.Error(err))
 		}
+
+		logger := zap.L()
+		defer ssvlog.CapturePanic(logger)
+
+		// Metric and trace provider initialization is deferred until later in startup
+		// (after operatorDataStore is set up) so that operator_id can be baked into the
+		// OTel resource attributes — every emitted metric/trace is then automatically
+		// labeled with the operator. Metrics emitted before that point are dropped, which
+		// is an acceptable trade-off for accurate per-operator labeling.
+		observabilityOptions := []observability.Option{}
 		if cfg.MetricsAPIPort > 0 {
 			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
 		}
@@ -164,22 +174,14 @@ var StartNodeCmd = &cobra.Command{
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
 
-		observabilityShutdown, err := observability.Initialize(
-			cmd.Context(),
-			cmd.Parent().Short,
-			cmd.Parent().Version,
-			observabilityOptions...)
-		if err != nil {
-			log.Fatal("could not initialize observability configuration", zap.Error(err))
-		}
-
-		logger := zap.L()
-		defer ssvlog.CapturePanic(logger)
-
+		var observabilityShutdown func(context.Context) error
 		defer func() {
+			if observabilityShutdown == nil {
+				return // Initialize never ran (e.g. fatal before reaching it)
+			}
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			if err = observabilityShutdown(shutdownCtx); err != nil {
+			if err := observabilityShutdown(shutdownCtx); err != nil {
 				logger.Error("could not shutdown observability stack", zap.Error(err))
 			}
 		}()
@@ -359,6 +361,36 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
+
+		// Now that operatorDataStore is set up, initialize metric + trace providers with
+		// operator_id baked into the OTel resource attributes (only if the ID is ready —
+		// new operators not yet registered on-chain will have ID=0 and we skip the label
+		// rather than emit misleading metrics; the operator will need to restart after
+		// registration to pick up the correct ID in metric labels).
+		if operatorDataStore.OperatorIDReady() {
+			observabilityOptions = append(observabilityOptions,
+				observability.WithResourceAttributes(
+					observability.OperatorIDAttribute(operatorDataStore.GetOperatorID()),
+				),
+			)
+		}
+		observabilityShutdown, err = observability.Initialize(
+			cmd.Context(),
+			cmd.Parent().Short,
+			cmd.Parent().Version,
+			observabilityOptions...,
+		)
+		if err != nil {
+			logger.Fatal("could not initialize observability metrics/traces", zap.Error(err))
+		}
+
+		// Emit baseline (zero) samples for sparse counters so PromQL increase()/rate()
+		// returns correct values across process restarts. See observability/metrics/baseline.go.
+		// Caveat: this only baselines the unlabeled time series; counters that emit with
+		// per-call attributes still produce one un-baselined series per attribute set on
+		// first increment — improving that is future work (per-attribute-set baselines).
+		metrics.EmitBaselines(cmd.Context())
+
 		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 		var validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
 		if !cfg.ExporterOptions.Enabled {

@@ -25,11 +25,12 @@ var (
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of successfully processed events(logs)")))
 
-	eventsProcessFailureCounter = metrics.New(
+	// Sparse: only fires when contract event processing fails (rare).
+	eventsProcessFailureCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "events_failed"),
 			metric.WithUnit("{event}"),
-			metric.WithDescription("total number of failures during event(log) processing")))
+			metric.WithDescription("total number of failures during event(log) processing"))))
 
 	lastProcessedBlockGauge = metrics.New(
 		meter.Int64Gauge(

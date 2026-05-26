@@ -47,22 +47,25 @@ var (
 			observability.InstrumentName(observabilityNamespace, "validators.per_status"),
 			metric.WithDescription("total number of validators by status")))
 
-	validatorsRemovedCounter = metrics.New(
+	// Sparse: validator lifecycle removals are rare.
+	validatorsRemovedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "validators.removed"),
 			metric.WithUnit("{validator}"),
-			metric.WithDescription("total number of validator errors")))
+			metric.WithDescription("total number of validators removed"))))
 
-	validatorErrorsCounter = metrics.New(
+	// Sparse: validator-level errors are rare.
+	validatorErrorsCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "errors"),
 			metric.WithUnit("{validator}"),
-			metric.WithDescription("total number of validator errors")))
-	routerDroppedMessagesCounter = metrics.New(
+			metric.WithDescription("total number of validator errors"))))
+	// Sparse: only fires on message-router back-pressure or ctx cancellation.
+	routerDroppedMessagesCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "router.messages.dropped"),
 			metric.WithUnit("{message}"),
-			metric.WithDescription("total number of router-dropped messages by reason")))
+			metric.WithDescription("total number of router-dropped messages by reason"))))
 
 	routerBufferFillGauge = metrics.New(
 		meter.Int64Gauge(

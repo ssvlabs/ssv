@@ -19,23 +19,24 @@ const (
 var (
 	meter = otel.Meter(observabilityComponentName)
 
-	connectedCounter = metrics.New(
+	// Sparse: per-connection lifecycle events on a steady-state node are infrequent.
+	connectedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "connected"),
 			metric.WithUnit("{connection}"),
-			metric.WithDescription("total number of connected peers")))
+			metric.WithDescription("total number of connected peers"))))
 
-	disconnectedCounter = metrics.New(
+	disconnectedCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "disconnected"),
 			metric.WithUnit("{connection}"),
-			metric.WithDescription("total number of disconnected peers")))
+			metric.WithDescription("total number of disconnected peers"))))
 
-	filteredCounter = metrics.New(
+	filteredCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "filtered"),
 			metric.WithUnit("{connection}"),
-			metric.WithDescription("total number of filtered connections")))
+			metric.WithDescription("total number of filtered connections"))))
 )
 
 func recordConnected(ctx context.Context, direction network.Direction) {

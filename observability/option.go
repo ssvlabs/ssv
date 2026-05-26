@@ -1,6 +1,18 @@
 package observability
 
+import "go.opentelemetry.io/otel/attribute"
+
 type Option func(*Config)
+
+// WithResourceAttributes adds custom attributes to the OTel resource describing this
+// process. Every metric and trace emitted by the SDK is automatically annotated with
+// the resource attributes — useful for late-known process-global facts like operator_id,
+// which is only available after the operator data store is initialized.
+func WithResourceAttributes(attrs ...attribute.KeyValue) Option {
+	return func(cfg *Config) {
+		cfg.resourceAttrs = append(cfg.resourceAttrs, attrs...)
+	}
+}
 
 // WithMetrics enables OpenTelemetry metrics collection for the application.
 // When enabled, a Prometheus provider will be initialized.
@@ -22,17 +34,3 @@ func WithTraces() Option {
 	}
 }
 
-// WithLogger configures the global application logger.
-// It sets log level, format, output file settings, and enables the logger.
-// If this option is not applied, a no-op logger will be used instead.
-func WithLogger(level, levelFormat, format, filePath string, fileSize, fileBackups int) Option {
-	return func(cfg *Config) {
-		cfg.logger.enabled = true
-		cfg.logger.level = level
-		cfg.logger.levelFormat = levelFormat
-		cfg.logger.format = format
-		cfg.logger.filePath = filePath
-		cfg.logger.fileSize = fileSize
-		cfg.logger.fileBackups = fileBackups
-	}
-}

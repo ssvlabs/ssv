@@ -48,11 +48,13 @@ var (
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers discovered")))
 
-	peerRejectionsCounter = metrics.New(
+	// Possibly sparse (UNKNOWN from audit): peer rejections during discovery may be rare
+	// depending on network topology — register conservatively.
+	peerRejectionsCounter = metrics.RegisterSparseCounter(metrics.New(
 		meter.Int64Counter(
 			observability.InstrumentName(observabilityNamespace, "peers.skipped"),
 			metric.WithUnit("{peer}"),
-			metric.WithDescription("total number of peers skipped during discovery")))
+			metric.WithDescription("total number of peers skipped during discovery"))))
 
 	peerAcceptedCounter = metrics.New(
 		meter.Int64Counter(

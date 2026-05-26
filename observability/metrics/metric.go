@@ -10,7 +10,10 @@ import (
 
 var (
 	// logger is defined as global var here to keep package API as simple as possible (instead of returning error we log them with this logger in some places)
-	logger                  *zap.Logger
+	// Defaults to a no-op logger so that calls during package init (e.g. metrics.New
+	// reporting instrument creation errors) don't panic if InitLogger hasn't run yet.
+	// InitLogger replaces this with the configured global zap logger.
+	logger                  = zap.NewNop()
 	SecondsHistogramBuckets = []float64{0, 0.001, 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10}
 )
 
