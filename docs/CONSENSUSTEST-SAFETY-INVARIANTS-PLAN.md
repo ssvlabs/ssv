@@ -34,7 +34,7 @@ In-scope:
 - Bucket 3 — per-op D1 walk-state assertion (single per-op decision-layer, σ-pool snapshot vs decision-layer consistency).
 - Bucket 4 — paired negative test per new invariant.
 - B5 (one-decision-per-op) — implemented as an adapter-side panic guard rather than a `SafetyReport` field; see [§Decisions / B5](#b5-one-decision-per-op---adapter-side-panic-not-safetyreport-field).
-- New Makefile target `stresstest-negative` — runs all `*TriggersSafetyDetection` tests as a quick CI smoke; see [§Decisions / Test targets](#test-targets--add-stresstest-negative-makefile-smoke).
+- New Makefile target `stresstest-negative` — runs all `*TriggersSafetyDetection` adapter tests + `TestSafety_Honest*` synthetic-outcome tests as a quick CI smoke; see [§Decisions / Test targets](#test-targets--add-stresstest-negative-makefile-smoke).
 
 Out of scope (separate follow-ups):
 - C1 (`QuorumBackedDecision`), C3 (`OBFTHostValidityRespect`), C4 (`NoEquivocationAccepted` real count) — implementation discovered each needs deeper protocol-side instrumentation than bucket 1's "wire what's already there" framing assumed. Deferral details in [§Bucket 1 implementation findings](#bucket-1-implementation-findings--c1c4-deferred-2abobft-recording-fixed).
@@ -165,31 +165,31 @@ Bucket 2 / Bucket 3 then iterate by-emitter maps filtering via `o.Byz.IsByz(op) 
 
 Alternative considered: have the adapter pre-filter at observation time (only call `ObserveByEmitter` for non-byz emitters). Rejected — the by-emitter maps are also useful for diagnostic dumps where seeing byz-emitted partials matters. Filtering at check time keeps the data complete.
 
-### Negative-test design — sibling pattern to `ByzAggregatorBypass`
+### Negative-test design — synthetic outcomes, not byz patterns
 
-The existing negative-test pattern at [`adapter_test.go:776-808`](../protocol/v2/consensustest/obft/adapter_test.go):
+The original plan sketched byz patterns for B1/B2/B3 modelled on `ByzAggregatorBypass` / `ByzWitnessForgery`. Commit-3 implementation surfaced that this shape doesn't fit the per-op honest-only invariants:
 
-1. Define a byz pattern that *deliberately* violates the invariant (`ByzAggregatorBypass`, `ByzWitnessForgery`).
-2. Run via `Protocol.Run(cfg)` directly (NOT via `RunScenarioOnProtocol`, which would panic on safety violation).
-3. Inspect `ComputeSafetyReport` explicitly with `require.False(..., NoOfflineDoubleV, ...)`.
-4. **Pattern is excluded from the catalog** so matrix runs don't crash.
+- B1/B2's check filters out byz operators via `o.Byz.IsByz(op)` (the invariant applies to *honest* operators specifically — byz are *allowed* to violate σ-XOR-NR and single-σ-V).
+- A byz pattern that makes a *byz* op cross-sign (e.g., the existing `byzCrossSigning`) correctly records the violation in `SigmaByEmitter` + `NRByEmitter`, but the check skips that operator because it's in `cfg.Byz.ByzOperators`.
+- Making the check fire requires simulating "an honest op did the impossible" — i.e., a hypothetical EKM regression. No realistic byz attack maps to this.
 
-Apply same shape per new invariant (3 byz patterns; D1 uses synthetic-outcome injection):
+So B1/B2 negative tests live in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) as synthetic-outcome tests, identical in shape to D1's planned approach: hand-build an `Outcome` with the by-emitter map state that would result from an honest op cross-signing, assert `ComputeSafetyReport` fires the check.
 
-| Invariant | New byz pattern (or test shape) | What it injects | Asserts |
-|---|---|---|---|
-| B1 σ-XOR-NR per op | `ByzHonestCrossSign_SigmaAndNR` | One "byz" op emits both σ at L_k AND NR partial on `nr_tag_k` in their KindCommit | `HonestCrossPhaseExclusive == false` |
-| B2 single-σ-V | `ByzHonestCrossSign_TwoSigmas` | One byz op emits σ on V_a AND σ on V_b at the same layer | `HonestSingleSigmaV == false` |
-| B3 leader-σ locks σ-side | `ByzHonestLeaderNRAtOwnLayer` | Leader emits Phase-1 σ_V AND NR partial on `nr_tag_k` at own layer | `HonestCrossPhaseExclusive == false` (specialised case) |
-| D1 walk-state | *synthetic-outcome test* (no byz pattern) | Test constructs an `Outcome` directly with an honest op whose `ResolveLayerAttempts` shows σ-quorum at L_k but `oo.Round != k` | `HonestWalkConsistent == false` |
+Test layout (one `TestSafety_*` per new field, each with table-driven sub-tests covering VIOLATION + OK cases):
 
-D1's test is structurally different — D1 is a Resolve-side regression we can't trigger from a byz pattern (a byz can't *make* an honest's local Resolve advance incorrectly). Instead the test hands `ComputeSafetyReport` a hand-built `Outcome` with an inconsistent `ResolveLayerAttempts` + decision layer combination. Lives in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) alongside the other synthetic-outcome tests for `CommitAttestation` invariants. This is acceptable because the negative test's job is only to verify the new check actually fires, not to model a realistic attack.
+| Invariant | Test name | Sub-tests |
+|---|---|---|
+| B1 σ-XOR-NR per honest op (subsumes B3 leader case) | `TestSafety_HonestCrossPhaseExclusive` | OK_empty_maps, OK_distinct_layers_sigma_then_nr, VIOLATION_honest_op_sigma_and_nr_same_layer, VIOLATION_leader_sigma_V_and_nr_at_own_layer (B3 case), OK_byz_emitter_filtered, OK_crashed_op_filtered |
+| B2 single-σ-V per honest op | `TestSafety_HonestSingleSigmaV` | OK_empty_map, OK_one_V_per_layer, OK_same_V_different_emitters, VIOLATION_honest_op_two_Vs_same_layer, OK_byz_emitter_filtered |
+| D1 walk-state | `TestSafety_HonestWalkConsistent` (commit 5) | TBD per commit-5 design |
 
-The three B1/B2/B3 byz patterns are excluded from the catalog (D1 doesn't need a byz pattern at all). Documented at the byz-kind enum like the existing pattern at [`byz.go:121-133`](../protocol/v2/consensustest/byz.go).
+B3 is **not a separate SafetyReport field** — the leader's Phase-1 σ_V is recorded in `SigmaByEmitter` alongside any NR partial they emit at the same layer, so the B1 check catches the spec-§411 leader-σ-locks-σ-side rule by construction. The `VIOLATION_leader_sigma_V_and_nr_at_own_layer` sub-test under `TestSafety_HonestCrossPhaseExclusive` documents this; no separate test name needed.
+
+No new byz patterns, no new `ByzKind` constants, no catalog-exclusion entries needed for B1/B2/B3.
 
 ### Catalog inclusion — none of the new patterns enter the catalog
 
-Negative-test patterns deliberately produce safety violations. Adding them to the matrix would crash every matrix run. Same convention as `ByzAggregatorBypass`, `ByzWitnessForgery`. Documented at the byz-kind enum.
+D1's synthetic-outcome test (commit 5) and B1/B2's synthetic-outcome tests don't run via the catalog so there's nothing to exclude. The Bucket-1 catalog scenarios continue to exercise the new B1/B2 checks indirectly: under any catalog scenario, all-honest cluster scenarios populate `SigmaByEmitter` / `NRByEmitter` with legal observations, and the checks confirm "no honest emitter cross-signs / dual-σ's" — silent confirmation that the EKM enforcement is intact under real-protocol paths.
 
 ### B5 one-decision-per-op — adapter-side panic as defensive future-proofing
 
@@ -236,10 +236,15 @@ The bucket-4 negative tests are `go test` units (not stresstest scenarios) and r
 stresstest-negative:
 	@echo "Running stresstest negative-test smoke (machinery regression check)"
 	@go test -tags blst_enabled -timeout 5m -v \
-		-run '^TestAdapter_.*_TriggersSafetyDetection$$' \
+		-run '^TestAdapter_.*_TriggersSafetyDetection$$|^TestSafety_Honest' \
+		./protocol/v2/consensustest/... \
 		./protocol/v2/consensustest/obft/... \
 		./protocol/v2/consensustest/twoab/...
 ```
+
+Two regex branches:
+- `TestAdapter_.*_TriggersSafetyDetection` — existing real-byz-pattern tests in adapter test files (`ByzAggregatorBypass` / `ByzWitnessForgery` proving `NoOfflineDoubleV` fires).
+- `TestSafety_Honest*` — new synthetic-outcome tests in `safety_test.go` (`TestSafety_HonestCrossPhaseExclusive`, `TestSafety_HonestSingleSigmaV`, `TestSafety_HonestWalkConsistent` from commit 5).
 
 Cheap enough to run on every PR. Wire into the relevant CI job alongside `make unit-test`.
 
@@ -269,10 +274,10 @@ All four buckets land in **one mega-PR**. Internal commit ordering preserves bis
 
 1. **Commit 1 — Bucket 1 wiring (revised scope) + `Outcome.Byz` + 2abOBFT recording fix**. OBFT + 2abOBFT `computeAttestation` populates C2 only (C1/C4 deferred per [§Bucket 1 implementation findings](#bucket-1-implementation-findings--c1c4-deferred-2abobft-recording-fixed)). Adds the `OfflineAggReport.SigmaCardinality` map (computed in `AttemptAll`) — kept as plumbing for diagnostic + future C1 follow-up even though commit 1 doesn't consume it. Adds `Outcome.Byz` field; all four adapters' `Run` paths copy `cfg.Byz` into it (OBFT + 2abOBFT for the bucket-2/3 honest-op filtering; QBFT + PSigs for symmetry / future-proofing). Updates [`safety.go`](../protocol/v2/consensustest/safety.go) `SafetyReport` COVERAGE docstring to reflect OBFTCommitKindValid now instrumented (with kind always valid by construction — vacuously true check, useful as descriptive tag in panic diagnostics). Fixes pre-existing 2abOBFT aggregator recording bug (`e.Payload` → `e.V`). No `SafetyReport` schema change; existing tests stay green.
 2. **Commit 2 — `OfflineAggregator` by-emitter maps + observation methods**. Pure extension; no consumers yet. Adapter call sites at [`obft/events.go`](../protocol/v2/consensustest/obft/events.go) and [`twoab/events.go`](../protocol/v2/consensustest/twoab/events.go) plumb the actual emitter through `recordCommitToAggregator(agg, emitter, c)` and call `ObserveSigmaByEmitter` / `ObserveNRByEmitter`. No `SafetyReport` change yet — the data is collected but not checked.
-3. **Commit 3 — Bucket 2 SafetyReport fields (B1, B2)**. Adds `HonestCrossPhaseExclusive`, `HonestSingleSigmaV` to `SafetyReport`; `ComputeSafetyReport` reads `o.Byz` for filtering (no signature change). Bucket-4 negative tests for B1/B2/B3 land in this commit (B3 is detected by B1's check at the leader-σ collision).
+3. **Commit 3 — Bucket 2 SafetyReport fields (B1, B2)**. Adds `HonestCrossPhaseExclusive`, `HonestSingleSigmaV` to `SafetyReport` with paired evidence slices (`CrossPhaseEvidence`, `SingleSigmaVEvidence`) and supporting types (`CrossPhaseViolation`, `SingleSigmaVViolation`). `ComputeSafetyReport` reads `o.OfflineAgg.SigmaByEmitter` / `NRByEmitter` filtered via `o.Byz.IsByz` / `IsCrashed` (no signature change). `IsViolation` / `String` / `SafetyPanic` updated for the new fields with deterministic-ordering evidence dumps. Bucket-4 negative tests for B1/B2 (B3 subsumed by B1's leader-case sub-test) land as synthetic-outcome tests in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) — see [§Negative-test design](#negative-test-design--synthetic-outcomes-not-byz-patterns) for the rationale.
 4. **Commit 4 — Bucket 3 protocol-side instrumentation**. `obft.Output.LayerAttempts` + `tryReconstructLayer` hook + `twoab` analog. Adapter copies into `OperatorOutcome.ResolveLayerAttempts`. No `SafetyReport` change yet — protocol side ships first so the adapter's data plumbing is bisectable separately from the safety check.
 5. **Commit 5 — Bucket 3 SafetyReport field (D1) + B5 adapter-side panic guard**. `HonestWalkConsistent` added; D1 synthetic-outcome negative test lands in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go). B5 guard added to both adapters' `toCT` translation.
-6. **Commit 6 — `stresstest-negative` Makefile target + catalog-exclusion entries in `matrix_test.go`**.
+6. **Commit 6 — `stresstest-negative` Makefile target**. Aggregates the existing `TestAdapter_.*_TriggersSafetyDetection` adapter tests (real-byz patterns proving `NoOfflineDoubleV` fires) and the new `TestSafety_Honest*` synthetic-outcome tests (proving B1/B2/D1 fire) into a single fast CI smoke. No `matrix_test.go` changes needed since the bucket-3/4 negative tests don't add catalog-excluded byz patterns.
 
 The single-PR scope means reviewers see the full coverage picture in one place; commit boundaries keep the diff navigable. Each commit ships green on `make unit-test`; the final state ships green on `make stresstest`.
 
@@ -568,63 +573,48 @@ for op, oo := range o.PerOp {
 
 Gated on `len(oo.ResolveLayerAttempts) > 0` so an adapter that hasn't migrated yet (or scenarios with trace off) doesn't break.
 
-### Bucket 4 — negative tests, one per new invariant
+### Bucket 4 — negative tests, all synthetic-outcome
 
-Per-pattern shape mirrors [`TestAdapter_ByzAggregatorBypass_TriggersSafetyDetection`](../protocol/v2/consensustest/obft/adapter_test.go):
+All bucket-4 negative tests live in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) as table-driven synthetic-outcome tests — the per-op invariants (B1, B2, D1) all describe regressions that don't naturally arise under any byz pattern (the checks intentionally filter out byz operators; the violations they catch are hypothetical EKM / Resolve-side bugs in honest code). Synthetic Outcomes are sufficient for the bucket-4 goal: prove that the check fires on hand-crafted inputs that match the violation shape.
 
-```go
-func TestAdapter_HonestCrossSign_SigmaAndNR_TriggersDetection(t *testing.T) {
-    cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
-    cfg.Byz = ct.ByzPattern{
-        Kind:         ct.ByzHonestCrossSign_SigmaAndNR,
-        ByzOperators: []ct.OperatorID{2}, // op2 emits σ AND NR at L_0
-    }
-    out, err := obftadapter.Protocol{}.Run(cfg)
-    require.NoError(t, err)
-
-    rep := ct.ComputeSafetyReport(out, cfg.Byz)
-    require.False(t, rep.HonestCrossPhaseExclusive,
-        "honest cross-sign MUST trigger HonestCrossPhaseExclusive=false; got: %s", rep)
-    require.GreaterOrEqual(t, len(rep.CrossPhaseEvidence), 1)
-    t.Logf("HonestCrossSign_SigmaAndNR: %s", rep)
-}
-```
-
-Note: the byz pattern is *named* "honest" in the sense that it emits with its real identity (no forgery) but violates the EKM σ-XOR-NR rule. The adapter implements this by directly overriding the commit-build path to bypass `transitionToSigma` / `transitionToNR` checks — see the existing `byzCrossSigning` ([`obft/byz.go:559`](../protocol/v2/consensustest/obft/byz.go)) for the shape (it already does this but ALSO silences the leader; the new pattern keeps the operator otherwise-honest).
-
-Open subtlety: `byzCrossSigning` exists already and exercises Rule 1 (cross-signing) evidence reporting. The bucket-4 negative test for B1 is structurally similar but with a *different* assertion target — the new one asserts `HonestCrossPhaseExclusive`, the existing one asserts Rule 1 evidence count. Acceptable to share the byz pattern between tests, or to clone it under a more telegraphing name; lean toward cloning so the negative-test discoverability stays clean (`ByzHonestCrossSign_SigmaAndNR` lives in the same family as `ByzAggregatorBypass` / `ByzWitnessForgery`, all of which are catalog-excluded by convention).
-
-Tests live in:
-- [`protocol/v2/consensustest/obft/adapter_test.go`](../protocol/v2/consensustest/obft/adapter_test.go) — OBFT-side.
-- [`protocol/v2/consensustest/twoab/adapter_test.go`](../protocol/v2/consensustest/twoab/adapter_test.go) — 2abOBFT-side.
-
-Test layout: 7 negative tests total. B1/B2/B3 land per-adapter (3 × 2 = 6 byz-pattern tests). D1 lives once in `safety_test.go` as a synthetic-outcome test (the check is adapter-agnostic). D1 differs from B1/B2/B3 — it's synthetic-outcome injection rather than byz-pattern-driven:
+Example shape (B1):
 
 ```go
-// D1's negative test: directly construct an Outcome with an honest op
-// whose ResolveLayerAttempts shows σ-quorum at L_0 but oo.Round = 1.
-// Doesn't run the sim — just hands ComputeSafetyReport an inconsistent
-// Outcome and asserts the check fires.
-func TestSafety_WalkConsistency_TriggersDetection(t *testing.T) {
-    out := ct.Outcome{
-        PerOp: map[ct.OperatorID]ct.OperatorOutcome{
-            1: {Decided: true, Round: 1, Value: []byte("v"),
-               ResolveLayerAttempts: []ct.LayerAttempt{
-                   {Layer: 0, SigmaReached: true, Decided: false},
-                   {Layer: 1, SigmaReached: true, Decided: true},
-               }},
+func TestSafety_HonestCrossPhaseExclusive(t *testing.T) {
+    op1 := ct.OperatorID(1)
+    tests := []struct {
+        name   string
+        sigma  []ct.ByEmitterSigmaKey
+        nr     []ct.ByEmitterNRKey
+        byz    ct.ByzPattern
+        wantOK bool
+        // ...
+    }{
+        // ... OK cases ...
+        {
+            name:   "VIOLATION_honest_op_sigma_and_nr_same_layer",
+            sigma:  []ct.ByEmitterSigmaKey{{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xAA)}},
+            nr:     []ct.ByEmitterNRKey{{Emitter: op1, Layer: 0}},
+            wantOK: false,
         },
-        // Byz: zero-value, so op1 is treated as honest.
     }
-    rep := ct.ComputeSafetyReport(out)
-    require.False(t, rep.HonestWalkConsistent)
-    require.GreaterOrEqual(t, len(rep.WalkConsistencyEvidence), 1)
+    // ... assert ComputeSafetyReport flags HonestCrossPhaseExclusive=false
 }
 ```
 
-D1 lives in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) (alongside the synthetic-outcome tests for the existing `CommitAttestation` invariants), not in the adapter tests — it doesn't need an adapter at all. The check itself is adapter-agnostic, so one test exercises both adapters' semantics.
+Test layout (lives entirely in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go); no adapter-side test files touched):
 
-Plus catalog-exclusion sanity in [`matrix_test.go`](../protocol/v2/consensustest/matrix_test.go) (extend the existing `ct.ByzAggregatorBypass: "..."` map with the three new B1/B2/B3 patterns; D1 is `safety_test.go`-only and doesn't need a byz-kind entry).
+| Invariant | Test name | # sub-tests (commit 3 / commit 5) |
+|---|---|---|
+| B1 σ-XOR-NR per honest op (subsumes B3) | `TestSafety_HonestCrossPhaseExclusive` | 6 (commit 3) |
+| B2 single-σ-V per honest op | `TestSafety_HonestSingleSigmaV` | 5 (commit 3) |
+| D1 walk-state | `TestSafety_HonestWalkConsistent` | TBD (commit 5) |
+
+Each sub-test covers both VIOLATION cases (the check fires correctly) and OK cases (graceful default-true on empty maps; byz emitter filtered out; crashed op filtered out; legal distinct-layer / different-V scenarios that look superficially similar but don't violate the invariant). 11 sub-tests in commit 3 (B1: 6, B2: 5).
+
+D1 lives in [`safety_test.go`](../protocol/v2/consensustest/safety_test.go) (commit 5), alongside the synthetic-outcome tests for the existing `CommitAttestation` invariants. The check itself is adapter-agnostic, so one test exercises both adapters' semantics.
+
+No new byz patterns are introduced by buckets 2-4, so no catalog-exclusion entries are needed in `matrix_test.go` — the existing `ByzAggregatorBypass` / `ByzWitnessForgery` exclusions remain unchanged.
 
 ### Bucket interactions
 

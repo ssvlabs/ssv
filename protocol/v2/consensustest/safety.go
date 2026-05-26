@@ -10,13 +10,22 @@ import (
 // every Outcome regardless of protocol or scenario. Any false field is a
 // load-bearing safety violation; the framework panics on any of:
 // SingleV, HonestAgreement, NoOfflineDoubleV, QuorumBackedDecision,
-// NoEquivocationAccepted, OBFTCommitKindValid, OBFTHostValidityRespect.
+// NoEquivocationAccepted, OBFTCommitKindValid, OBFTHostValidityRespect,
+// HonestCrossPhaseExclusive, HonestSingleSigmaV.
 //
 // COVERAGE — what is actually instrumented today:
 //
 //   - SingleV, HonestAgreement, NoOfflineDoubleV are computed by the
 //     framework from every Outcome's PerOp + OfflineAgg fields and
 //     ALWAYS fire on a violation, regardless of adapter.
+//   - HonestCrossPhaseExclusive and HonestSingleSigmaV are computed
+//     from the OfflineAgg's by-emitter maps (SigmaByEmitter /
+//     NRByEmitter — populated by OBFT-family adapters in
+//     recordCommitToAggregator and friends), filtered to honest
+//     operators via Outcome.Byz. Bucket-2 per-op invariants from
+//     docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md. Empty by-emitter
+//     maps (adapters that don't populate them, or synthetic-outcome
+//     tests) iterate to zero violations — graceful default-true.
 //   - NoEquivocationAccepted has EquivocationChecked=true in both
 //     OBFT and 2abOBFT adapters, but EquivocationsAccepted is hard-
 //     wired to 0 there because the adapters' internal Rule3 enforcement
@@ -43,8 +52,11 @@ import (
 // The defense-in-depth picture: a hypothetical adapter regression that
 // accepted an equivocation or a sub-quorum certificate would surface as
 // a SingleV / NoOfflineDoubleV violation upstream — those two are the
-// load-bearing universal checks. The five protocol-specific invariants
-// are layered diagnostics that distinguish "what went wrong" once the
+// load-bearing universal checks. HonestCrossPhaseExclusive +
+// HonestSingleSigmaV catch the per-operator EKM regression class
+// directly (rather than only transitively via NoOfflineDoubleV's
+// "double-V reconstructable" end-state). The remaining invariants are
+// layered diagnostics that distinguish "what went wrong" once the
 // universal checks fire (or that future-proof the report against
 // adapter changes).
 type SafetyReport struct {
@@ -92,20 +104,69 @@ type SafetyReport struct {
 	// predicate rejected the decided value. Default true.
 	OBFTHostValidityRespect bool
 
+	// HonestCrossPhaseExclusive: every honest operator emitted σ-XOR-NR
+	// per (slot, layer) — no honest emitter appears in both
+	// SigmaByEmitter and NRByEmitter at the same layer. Spec:
+	// OBFT.md:411 (Pigeonhole 1, EKM-enforced cross-phase exclusivity).
+	// Subsumes B3 (leader-σ locks σ-side, layer's leader cannot emit
+	// NR/NV for own layer) since the leader's σ_V observation is
+	// recorded by-emitter alongside the NR partial that would be the
+	// violation. Default true. Computed from OfflineAgg by-emitter
+	// maps; honest filter via Outcome.Byz.
+	HonestCrossPhaseExclusive bool
+
+	// HonestSingleSigmaV: every honest operator emitted at most one
+	// σ-on-V per (slot, layer) — no honest emitter appears in
+	// SigmaByEmitter at the same layer with two distinct value_hashes.
+	// Spec: OBFT.md:411 (single-σ-V exclusivity, EKM-enforced).
+	// Default true. Computed from OfflineAgg by-emitter maps; honest
+	// filter via Outcome.Byz.
+	HonestSingleSigmaV bool
+
 	// DistinctOutputs records (Round, Value) pairs for diagnostic dumps;
 	// length > 1 means SingleV was violated.
 	DistinctOutputs []OutputTuple
+
+	// CrossPhaseEvidence enumerates honest (op, layer) pairs that
+	// violated cross-phase exclusivity. Non-empty iff
+	// HonestCrossPhaseExclusive=false.
+	CrossPhaseEvidence []CrossPhaseViolation
+
+	// SingleSigmaVEvidence enumerates honest (op, layer, two value_hashes)
+	// triples that violated single-σ-V. Non-empty iff
+	// HonestSingleSigmaV=false.
+	SingleSigmaVEvidence []SingleSigmaVViolation
+}
+
+// CrossPhaseViolation identifies one honest operator that emitted both
+// σ-side and NR-side at the same layer.
+type CrossPhaseViolation struct {
+	Operator OperatorID
+	Layer    int
+}
+
+// SingleSigmaVViolation identifies one honest operator that emitted σ
+// on two distinct V's at the same layer. ValueHashA and ValueHashB are
+// the first two distinct value hashes found (an operator with > 2 V's
+// would only surface the first pair; the iteration ordering is
+// non-deterministic but the violation is unambiguous either way).
+type SingleSigmaVViolation struct {
+	Operator   OperatorID
+	Layer      int
+	ValueHashA [32]byte
+	ValueHashB [32]byte
 }
 
 // IsViolation reports whether any load-bearing safety property is false.
 // Terminated is excluded (soft warning, see SafetyReport.Terminated).
 //
-// Today's effective coverage (per the SafetyReport doc): SingleV +
-// HonestAgreement + NoOfflineDoubleV are the ones that can actually
-// fire across the adapter set. The remaining four are kept here so a
-// future adapter that opts into the corresponding *Checked gate
-// participates in the panic path without a framework-side change; until
-// then they default to true and don't contribute violations.
+// Today's effective coverage (per the SafetyReport doc): SingleV,
+// HonestAgreement, NoOfflineDoubleV, HonestCrossPhaseExclusive, and
+// HonestSingleSigmaV are the ones that can actually fire across the
+// adapter set. The remaining four are kept here so a future adapter
+// that opts into the corresponding *Checked gate participates in the
+// panic path without a framework-side change; until then they default
+// to true and don't contribute violations.
 func (r SafetyReport) IsViolation() bool {
 	return !r.SingleV ||
 		!r.HonestAgreement ||
@@ -113,7 +174,9 @@ func (r SafetyReport) IsViolation() bool {
 		!r.QuorumBackedDecision ||
 		!r.NoEquivocationAccepted ||
 		!r.OBFTCommitKindValid ||
-		!r.OBFTHostValidityRespect
+		!r.OBFTHostValidityRespect ||
+		!r.HonestCrossPhaseExclusive ||
+		!r.HonestSingleSigmaV
 }
 
 type OutputTuple struct {
@@ -125,7 +188,8 @@ type OutputTuple struct {
 func (r SafetyReport) String() string {
 	if r.SingleV && r.Terminated && r.HonestAgreement && r.NoOfflineDoubleV &&
 		r.QuorumBackedDecision && r.NoEquivocationAccepted &&
-		r.OBFTCommitKindValid && r.OBFTHostValidityRespect {
+		r.OBFTCommitKindValid && r.OBFTHostValidityRespect &&
+		r.HonestCrossPhaseExclusive && r.HonestSingleSigmaV {
 		return "SAFETY OK"
 	}
 	parts := []string{}
@@ -134,6 +198,12 @@ func (r SafetyReport) String() string {
 	}
 	if !r.NoOfflineDoubleV {
 		parts = append(parts, "NoOfflineDoubleV=FAIL (offline aggregator could rebuild ≥ 2 V sigs)")
+	}
+	if !r.HonestCrossPhaseExclusive {
+		parts = append(parts, fmt.Sprintf("HonestCrossPhaseExclusive=FAIL (%d honest op(s) emitted σ AND NR at same layer)", len(r.CrossPhaseEvidence)))
+	}
+	if !r.HonestSingleSigmaV {
+		parts = append(parts, fmt.Sprintf("HonestSingleSigmaV=FAIL (%d honest op(s) emitted σ on two distinct V's at same layer)", len(r.SingleSigmaVEvidence)))
 	}
 	if !r.QuorumBackedDecision {
 		parts = append(parts, "QuorumBackedDecision=FAIL (decision lacks quorum-sized signature set)")
@@ -176,14 +246,16 @@ func (r SafetyReport) String() string {
 // can a violation be reported.
 func ComputeSafetyReport(o Outcome) SafetyReport {
 	r := SafetyReport{
-		SingleV:                 true,
-		Terminated:              true,
-		HonestAgreement:         true,
-		NoOfflineDoubleV:        true,
-		QuorumBackedDecision:    true,
-		NoEquivocationAccepted:  true,
-		OBFTCommitKindValid:     true,
-		OBFTHostValidityRespect: true,
+		SingleV:                   true,
+		Terminated:                true,
+		HonestAgreement:           true,
+		NoOfflineDoubleV:          true,
+		QuorumBackedDecision:      true,
+		NoEquivocationAccepted:    true,
+		OBFTCommitKindValid:       true,
+		OBFTHostValidityRespect:   true,
+		HonestCrossPhaseExclusive: true,
+		HonestSingleSigmaV:        true,
 	}
 
 	distinctValues := [][]byte{}
@@ -265,7 +337,99 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 		}
 	}
 
+	// B1 — Cross-phase exclusivity per honest emitter: no honest op
+	// appears in both SigmaByEmitter and NRByEmitter at the same layer.
+	// Spec: OBFT.md:411 Pigeonhole 1. Subsumes B3 (layer leader's
+	// Phase-1 σ_V counts toward σ-side, so a leader who NR/NV's their
+	// own layer triggers the same collision).
+	//
+	// Iteration ordering is non-deterministic across Go's map; we sort
+	// the resulting evidence slice for deterministic panic messages
+	// (the existing pattern in SafetyPanic).
+	for sigKey := range o.OfflineAgg.SigmaByEmitter {
+		op := sigKey.Emitter
+		if o.Byz.IsByz(op) || o.Byz.IsCrashed(op) {
+			continue
+		}
+		nrKey := ByEmitterNRKey{Emitter: op, Layer: sigKey.Layer}
+		if _, hasNR := o.OfflineAgg.NRByEmitter[nrKey]; hasNR {
+			r.HonestCrossPhaseExclusive = false
+			r.CrossPhaseEvidence = append(r.CrossPhaseEvidence,
+				CrossPhaseViolation{Operator: op, Layer: sigKey.Layer})
+		}
+	}
+	// Dedup CrossPhaseEvidence (multiple σ entries for the same (op,
+	// layer) on different V's would otherwise produce duplicate
+	// records). The B1 violation is "this op did the σ+NR collision",
+	// not "this op did it N times".
+	r.CrossPhaseEvidence = dedupCrossPhaseEvidence(r.CrossPhaseEvidence)
+	sort.Slice(r.CrossPhaseEvidence, func(i, j int) bool {
+		if r.CrossPhaseEvidence[i].Operator != r.CrossPhaseEvidence[j].Operator {
+			return r.CrossPhaseEvidence[i].Operator < r.CrossPhaseEvidence[j].Operator
+		}
+		return r.CrossPhaseEvidence[i].Layer < r.CrossPhaseEvidence[j].Layer
+	})
+
+	// B2 — Single-σ-V per honest emitter per layer: no honest op
+	// appears in SigmaByEmitter at the same layer with two distinct
+	// value_hashes. Spec: OBFT.md:411 single-σ-V exclusivity.
+	type opLayerKey struct {
+		Op    OperatorID
+		Layer int
+	}
+	sigmaByOpLayer := map[opLayerKey][][32]byte{}
+	for sigKey := range o.OfflineAgg.SigmaByEmitter {
+		op := sigKey.Emitter
+		if o.Byz.IsByz(op) || o.Byz.IsCrashed(op) {
+			continue
+		}
+		k := opLayerKey{Op: op, Layer: sigKey.Layer}
+		sigmaByOpLayer[k] = append(sigmaByOpLayer[k], sigKey.ValueHash)
+	}
+	for k, hashes := range sigmaByOpLayer {
+		if len(hashes) > 1 {
+			r.HonestSingleSigmaV = false
+			// First two distinct hashes (lex-sorted for determinism).
+			sort.Slice(hashes, func(i, j int) bool {
+				return bytes.Compare(hashes[i][:], hashes[j][:]) < 0
+			})
+			r.SingleSigmaVEvidence = append(r.SingleSigmaVEvidence,
+				SingleSigmaVViolation{
+					Operator:   k.Op,
+					Layer:      k.Layer,
+					ValueHashA: hashes[0],
+					ValueHashB: hashes[1],
+				})
+		}
+	}
+	sort.Slice(r.SingleSigmaVEvidence, func(i, j int) bool {
+		if r.SingleSigmaVEvidence[i].Operator != r.SingleSigmaVEvidence[j].Operator {
+			return r.SingleSigmaVEvidence[i].Operator < r.SingleSigmaVEvidence[j].Operator
+		}
+		return r.SingleSigmaVEvidence[i].Layer < r.SingleSigmaVEvidence[j].Layer
+	})
+
 	return r
+}
+
+// dedupCrossPhaseEvidence collapses duplicate (op, layer) records that
+// arise when an op has multiple σ entries (different V's) at the same
+// layer that also collide with an NR entry. The B1 violation is the
+// collision itself; multiplicity isn't informative.
+func dedupCrossPhaseEvidence(evs []CrossPhaseViolation) []CrossPhaseViolation {
+	if len(evs) <= 1 {
+		return evs
+	}
+	seen := make(map[CrossPhaseViolation]struct{}, len(evs))
+	out := evs[:0]
+	for _, e := range evs {
+		if _, dup := seen[e]; dup {
+			continue
+		}
+		seen[e] = struct{}{}
+		out = append(out, e)
+	}
+	return out
 }
 
 // SafetyPanic panics with a structured diagnostic. Should never fire on a
@@ -299,6 +463,22 @@ func SafetyPanic(report SafetyReport, scenarioName, protocolName string, expecte
 			att.EquivocationsObserved, att.EquivocationsAccepted,
 			att.OBFTCommitKind, att.OBFTHostValidityRejecters,
 		)
+	}
+	// Surface per-op evidence for the by-emitter invariants. Without
+	// these, B1/B2 panics would say "FAIL (N op(s))" without naming
+	// which ops at which layers.
+	if !report.HonestCrossPhaseExclusive {
+		msg += "\n  cross-phase evidence:"
+		for _, e := range report.CrossPhaseEvidence {
+			msg += fmt.Sprintf(" op=%d layer=%d;", e.Operator, e.Layer)
+		}
+	}
+	if !report.HonestSingleSigmaV {
+		msg += "\n  single-σ-V evidence:"
+		for _, e := range report.SingleSigmaVEvidence {
+			msg += fmt.Sprintf(" op=%d layer=%d V_a=%x V_b=%x;",
+				e.Operator, e.Layer, e.ValueHashA[:6], e.ValueHashB[:6])
+		}
 	}
 	// Iterate ops in sorted order so the panic message is deterministic
 	// across runs (Go map iteration is randomized). EvidenceByRule's %v

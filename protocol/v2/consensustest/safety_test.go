@@ -218,3 +218,245 @@ func TestSafety_EquivocationDoesNotGateOnDecided(t *testing.T) {
 	require.False(t, r.NoEquivocationAccepted, "equivocation evidence must fire even when undecided")
 	require.True(t, r.IsViolation(), "equivocation violation must be reported regardless of Decided")
 }
+
+// hashForTest is a stable hash placeholder for synthetic tests — the
+// actual content of the bytes doesn't matter, only that distinct V's
+// produce distinct [32]byte values. Using fmt-style prefixed bytes keeps
+// the test readable when a violation prints `V_a=68656c...` etc.
+func hashForTest(b byte) [32]byte {
+	var h [32]byte
+	h[0] = b
+	return h
+}
+
+// TestSafety_HonestCrossPhaseExclusive — bucket-2 B1 invariant.
+// Synthetic-outcome tests since no realistic byz pattern can make an
+// HONEST operator cross-sign (the check filters byz out by construction
+// via Outcome.Byz). The tests hand ComputeSafetyReport a hand-crafted
+// Outcome with by-emitter map state simulating a hypothetical EKM
+// regression where an honest op emitted σ and NR at the same layer.
+//
+// Cases cover:
+//   - VIOLATION: honest op σ + NR at L_k (the generic case)
+//   - VIOLATION (B3 subsumed): honest LEADER σ_V + NR at own layer
+//     (the spec-§411 "Each layer's leader's Phase-1 σ counts as their
+//     σ-side commitment" rule — surfaces as the same check)
+//   - OK: byz emitter cross-signs → filtered out by Outcome.Byz
+//   - OK: distinct layers, σ at L_0 and NR at L_1 — legal per spec
+//     (cross-phase exclusivity is per-layer, not per-slot)
+//   - OK: empty by-emitter maps (adapter didn't instrument, or no
+//     observations) → graceful default-true
+func TestSafety_HonestCrossPhaseExclusive(t *testing.T) {
+	op1 := ct.OperatorID(1)
+	op2 := ct.OperatorID(2)
+	vA := []byte("V_a")
+
+	tests := []struct {
+		name      string
+		sigma     []ct.ByEmitterSigmaKey
+		nr        []ct.ByEmitterNRKey
+		byz       ct.ByzPattern
+		wantOK    bool
+		wantPanic bool
+		wantEvOps []ct.OperatorID // expected operators in CrossPhaseEvidence
+	}{
+		{
+			name:      "OK_empty_maps",
+			wantOK:    true,
+			wantPanic: false,
+		},
+		{
+			name: "OK_distinct_layers_sigma_then_nr",
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xAA)},
+			},
+			nr: []ct.ByEmitterNRKey{
+				{Emitter: op1, Layer: 1}, // different layer → legal
+			},
+			wantOK:    true,
+			wantPanic: false,
+		},
+		{
+			name: "VIOLATION_honest_op_sigma_and_nr_same_layer",
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xAA)},
+			},
+			nr: []ct.ByEmitterNRKey{
+				{Emitter: op1, Layer: 0}, // same layer → cross-phase collision
+			},
+			wantOK:    false,
+			wantPanic: true,
+			wantEvOps: []ct.OperatorID{op1},
+		},
+		{
+			name: "VIOLATION_leader_sigma_V_and_nr_at_own_layer",
+			// B3 case: the layer leader's Phase-1 σ_V is their σ-side
+			// commitment; emitting NR at own layer is a spec violation.
+			// Same shape as the generic case at the check level.
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xBB)},
+			},
+			nr: []ct.ByEmitterNRKey{
+				{Emitter: op1, Layer: 0},
+			},
+			wantOK:    false,
+			wantPanic: true,
+			wantEvOps: []ct.OperatorID{op1},
+		},
+		{
+			name: "OK_byz_emitter_filtered",
+			// Byz emitter cross-signs; the check skips ops in Byz set,
+			// so this is not a HonestCrossPhaseExclusive violation. (It
+			// IS still slashable evidence at the Rule 1 level, recorded
+			// in OperatorOutcome.EvidenceByRule — but that's a different
+			// invariant.)
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op2, Layer: 0, ValueHash: hashForTest(0xCC)},
+			},
+			nr: []ct.ByEmitterNRKey{
+				{Emitter: op2, Layer: 0},
+			},
+			byz:       ct.ByzPattern{ByzOperators: []ct.OperatorID{op2}},
+			wantOK:    true,
+			wantPanic: false,
+		},
+		{
+			name: "OK_crashed_op_filtered",
+			// Crashed ops are also filtered (the per-op invariants apply
+			// only to live honest emitters).
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op2, Layer: 0, ValueHash: hashForTest(0xDD)},
+			},
+			nr: []ct.ByEmitterNRKey{
+				{Emitter: op2, Layer: 0},
+			},
+			byz:       ct.ByzPattern{Crashed: []ct.OperatorID{op2}},
+			wantOK:    true,
+			wantPanic: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sigma := make(map[ct.ByEmitterSigmaKey]struct{}, len(tc.sigma))
+			for _, k := range tc.sigma {
+				sigma[k] = struct{}{}
+			}
+			nr := make(map[ct.ByEmitterNRKey]struct{}, len(tc.nr))
+			for _, k := range tc.nr {
+				nr[k] = struct{}{}
+			}
+			out := ct.Outcome{
+				PerOp: map[ct.OperatorID]ct.OperatorOutcome{
+					op1: {Decided: true, Value: vA},
+				},
+				OfflineAgg: ct.OfflineAggReport{
+					NoOfflineDoubleV: true,
+					SigmaByEmitter:   sigma,
+					NRByEmitter:      nr,
+				},
+				Byz: tc.byz,
+			}
+			r := ct.ComputeSafetyReport(out)
+			require.Equal(t, tc.wantOK, r.HonestCrossPhaseExclusive, "unexpected HonestCrossPhaseExclusive: %s", r)
+			require.Equal(t, tc.wantPanic, r.IsViolation())
+			if !tc.wantOK {
+				require.Len(t, r.CrossPhaseEvidence, len(tc.wantEvOps))
+				for i, op := range tc.wantEvOps {
+					require.Equal(t, op, r.CrossPhaseEvidence[i].Operator)
+				}
+			}
+		})
+	}
+}
+
+// TestSafety_HonestSingleSigmaV — bucket-2 B2 invariant. Synthetic
+// outcomes simulating an honest op emitting σ on two distinct V's at
+// the same layer (a spec-§411 single-σ-V violation, which under correct
+// EKM should be cryptographically impossible).
+func TestSafety_HonestSingleSigmaV(t *testing.T) {
+	op1 := ct.OperatorID(1)
+	op2 := ct.OperatorID(2)
+	vA := []byte("V_a")
+
+	tests := []struct {
+		name      string
+		sigma     []ct.ByEmitterSigmaKey
+		byz       ct.ByzPattern
+		wantOK    bool
+		wantPanic bool
+		wantEvOps []ct.OperatorID
+	}{
+		{
+			name:      "OK_empty_map",
+			wantOK:    true,
+			wantPanic: false,
+		},
+		{
+			name: "OK_one_V_per_layer",
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xAA)},
+				{Emitter: op1, Layer: 1, ValueHash: hashForTest(0xBB)},
+			},
+			wantOK:    true,
+			wantPanic: false,
+		},
+		{
+			name: "OK_same_V_different_emitters",
+			// Multiple ops emitting σ on the same V at the same layer
+			// is the normal σ-quorum buildup pattern; no violation.
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xAA)},
+				{Emitter: op2, Layer: 0, ValueHash: hashForTest(0xAA)},
+			},
+			wantOK:    true,
+			wantPanic: false,
+		},
+		{
+			name: "VIOLATION_honest_op_two_Vs_same_layer",
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xAA)},
+				{Emitter: op1, Layer: 0, ValueHash: hashForTest(0xBB)}, // same op, same layer, different V
+			},
+			wantOK:    false,
+			wantPanic: true,
+			wantEvOps: []ct.OperatorID{op1},
+		},
+		{
+			name: "OK_byz_emitter_filtered",
+			sigma: []ct.ByEmitterSigmaKey{
+				{Emitter: op2, Layer: 0, ValueHash: hashForTest(0xAA)},
+				{Emitter: op2, Layer: 0, ValueHash: hashForTest(0xBB)},
+			},
+			byz:       ct.ByzPattern{ByzOperators: []ct.OperatorID{op2}},
+			wantOK:    true,
+			wantPanic: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sigma := make(map[ct.ByEmitterSigmaKey]struct{}, len(tc.sigma))
+			for _, k := range tc.sigma {
+				sigma[k] = struct{}{}
+			}
+			out := ct.Outcome{
+				PerOp: map[ct.OperatorID]ct.OperatorOutcome{
+					op1: {Decided: true, Value: vA},
+				},
+				OfflineAgg: ct.OfflineAggReport{
+					NoOfflineDoubleV: true,
+					SigmaByEmitter:   sigma,
+				},
+				Byz: tc.byz,
+			}
+			r := ct.ComputeSafetyReport(out)
+			require.Equal(t, tc.wantOK, r.HonestSingleSigmaV, "unexpected HonestSingleSigmaV: %s", r)
+			require.Equal(t, tc.wantPanic, r.IsViolation())
+			if !tc.wantOK {
+				require.Len(t, r.SingleSigmaVEvidence, len(tc.wantEvOps))
+				for i, op := range tc.wantEvOps {
+					require.Equal(t, op, r.SingleSigmaVEvidence[i].Operator)
+				}
+			}
+		})
+	}
+}
