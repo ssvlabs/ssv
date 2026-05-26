@@ -141,6 +141,24 @@ var (
 			metric.WithDescription("proposal parent root did not match cached HeadEvent"))))
 )
 
+// registerProposalParentBaselines pre-emits Add(ctx, 0) for each (counter, beacon_client)
+// combination so that PromQL increase()/rate() return correct values for per-client
+// queries after process restart. Without this, each labeled time series starts at the
+// first real increment with no prior sample, and Prometheus has nothing to compute a
+// delta from. Configured beacon addresses are passed in because they're only known after
+// GoClient construction.
+func registerProposalParentBaselines(clients []Client) {
+	metrics.RegisterLabeledBaseline(func(ctx context.Context) {
+		for _, c := range clients {
+			attr := metric.WithAttributes(observability.BeaconClientAttribute(c.Address()))
+			proposalParentVerifyCounter.Add(ctx, 0, attr)
+			proposalParentMatchCounter.Add(ctx, 0, attr)
+			proposalParentCacheMissCounter.Add(ctx, 0, attr)
+			proposalParentMismatchCounter.Add(ctx, 0, attr)
+		}
+	})
+}
+
 func recordRequest(
 	ctx context.Context,
 	logger *zap.Logger,

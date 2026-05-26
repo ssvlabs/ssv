@@ -28,6 +28,9 @@ import (
 var (
 	sparseCountersMu sync.Mutex
 	sparseCounters   []metric.Int64Counter
+
+	labeledBaselinesMu sync.Mutex
+	labeledBaselineFns []func(context.Context)
 )
 
 // RegisterSparseCounter declares a counter as sparse (rarely incremented). Returns the
@@ -41,6 +44,12 @@ var (
 //
 // Call EmitBaselines exactly once at startup, after observability.Initialize has set up
 // the MeterProvider.
+//
+// Note: this only baselines the unlabeled time series. Counters that emit with per-call
+// attributes still produce one un-baselined series per attribute set on first labeled
+// increment. For counters whose attribute combinations are bounded and known at startup
+// (e.g. labeled by a fixed set of configured beacon addresses or validator roles), use
+// RegisterLabeledBaseline to pre-emit baselines for each attribute combination.
 func RegisterSparseCounter(c metric.Int64Counter) metric.Int64Counter {
 	sparseCountersMu.Lock()
 	defer sparseCountersMu.Unlock()
@@ -48,13 +57,39 @@ func RegisterSparseCounter(c metric.Int64Counter) metric.Int64Counter {
 	return c
 }
 
-// EmitBaselines emits Add(ctx, 0) for every counter registered via RegisterSparseCounter,
-// giving Prometheus a baseline sample for each. Call once at startup after the OTel
-// MeterProvider is installed (i.e. after observability.Initialize completes).
+// RegisterLabeledBaseline lets a package contribute a custom baseline-emission function
+// that knows the specific attribute combinations it will use at runtime. Useful when a
+// counter is labeled by a bounded, runtime-known set of values (e.g. the addresses of
+// configured beacon clients, the small set of validator roles).
+//
+// The registered function is invoked from EmitBaselines, after the OTel MeterProvider is
+// installed. The function should iterate its known attribute combinations and emit
+// Add(ctx, 0, WithAttributes(...)) for each, so PromQL increase()/rate() return correct
+// values for per-label queries even after process restart.
+func RegisterLabeledBaseline(fn func(context.Context)) {
+	labeledBaselinesMu.Lock()
+	defer labeledBaselinesMu.Unlock()
+	labeledBaselineFns = append(labeledBaselineFns, fn)
+}
+
+// EmitBaselines emits Add(ctx, 0) for every counter registered via RegisterSparseCounter
+// (the unlabeled series), then invokes every function registered via
+// RegisterLabeledBaseline (which handle per-attribute-set baselines). Call once at startup
+// after the OTel MeterProvider is installed (i.e. after observability.Initialize completes).
 func EmitBaselines(ctx context.Context) {
 	sparseCountersMu.Lock()
-	defer sparseCountersMu.Unlock()
 	for _, c := range sparseCounters {
 		c.Add(ctx, 0)
+	}
+	sparseCountersMu.Unlock()
+
+	// Copy the slice under lock, then invoke without the lock — defensive in case any
+	// registered function indirectly triggers another registration.
+	labeledBaselinesMu.Lock()
+	fns := make([]func(context.Context), len(labeledBaselineFns))
+	copy(fns, labeledBaselineFns)
+	labeledBaselinesMu.Unlock()
+	for _, fn := range fns {
+		fn(ctx)
 	}
 }
