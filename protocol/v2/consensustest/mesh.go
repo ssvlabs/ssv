@@ -77,11 +77,14 @@ type MeshConfig struct {
 	// modeling "the libp2p connection between these two peers is
 	// down" rather than "one direction has packet loss."
 	//
-	// Sampled only over delivery-path pairs (eager edges plus, when
-	// GossipPoolBound is active, the bounded gossip-connection set).
-	// Pairs outside the delivery graph carry no messages anyway, so
-	// rolling them would dilute the user-facing semantics ("X% of
-	// connections are down" rather than "X% of all node-pairs").
+	// Sampled only over delivery-path pairs (any pair that can exchange
+	// messages on either layer): eager edges + the per-sim gossip
+	// candidate set. The candidate set is the bounded gossipConn when
+	// GossipPoolBound is active, and the full non-eager neighbourhood
+	// otherwise (small-subnet / explicit-unbounded path). Pairs outside
+	// the delivery graph carry no messages anyway, so rolling them
+	// would dilute the user-facing semantics ("X% of connections are
+	// down" rather than "X% of all node-pairs").
 	//
 	// Distinct from p2p_packet_loss (LossyNetwork): that is transient
 	// burst loss that recovers within the slot and is healed by the
@@ -507,10 +510,7 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 			pg := float64(m.gossip.GossipPoolBound) / float64(poolPerNode)
 			m.gossipConn = make(map[meshLinkKey]struct{})
 			for a := MeshNode(0); a < MeshNode(total); a++ {
-				eagerSet := make(map[MeshNode]struct{}, len(m.neighbors[a]))
-				for _, nb := range m.neighbors[a] {
-					eagerSet[nb] = struct{}{}
-				}
+				eagerSet := m.eagerSetFor(a)
 				for b := a + 1; b < MeshNode(total); b++ {
 					if _, isEager := eagerSet[b]; isEager {
 						continue
@@ -540,19 +540,17 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 	if cfg.SeverProb > 0 {
 		m.severed = make(map[meshLinkKey]struct{})
 		for a := MeshNode(0); a < MeshNode(total); a++ {
-			eagerSet := make(map[MeshNode]struct{}, len(m.neighbors[a]))
-			for _, nb := range m.neighbors[a] {
-				eagerSet[nb] = struct{}{}
-			}
+			eagerSet := m.eagerSetFor(a)
 			for b := a + 1; b < MeshNode(total); b++ {
 				_, isEager := eagerSet[b]
+				key := newMeshLinkKey(a, b)
 				// Gossip-reachable iff in gossipConn (bound active) OR
 				// gossipConn is nil and the pair is non-eager (the
 				// small-subnet / explicit-unbounded path, where every
 				// non-eager pair sits in the gossip candidate set).
 				var isGossipReachable bool
 				if m.gossipConn != nil {
-					_, isGossipReachable = m.gossipConn[newMeshLinkKey(a, b)]
+					_, isGossipReachable = m.gossipConn[key]
 				} else {
 					isGossipReachable = !isEager
 				}
@@ -560,7 +558,7 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 					continue
 				}
 				if rng.Float64() < cfg.SeverProb {
-					m.severed[newMeshLinkKey(a, b)] = struct{}{}
+					m.severed[key] = struct{}{}
 				}
 			}
 		}
@@ -650,6 +648,22 @@ func (m *MeshTopology) MarkSeen(node MeshNode, id MsgID) bool {
 func (m *MeshTopology) IsSeen(node MeshNode, id MsgID) bool {
 	_, ok := m.seen[node][id]
 	return ok
+}
+
+// eagerSetFor returns `node`'s eager-mesh neighbours as a membership
+// set for O(1) "is this peer an eager neighbour" lookups. Allocates
+// a fresh map per call — used by NewMeshTopology's per-outer-pair
+// setup (Layer 1 gossipConn + Layer 2 severance construction) and by
+// NonMeshPeers' per-call filter setup, where inlining the same
+// build-the-set-from-a-slice idiom three times added noise without
+// improving anything.
+func (m *MeshTopology) eagerSetFor(node MeshNode) map[MeshNode]struct{} {
+	nbrs := m.neighbors[node]
+	out := make(map[MeshNode]struct{}, len(nbrs))
+	for _, nbr := range nbrs {
+		out[nbr] = struct{}{}
+	}
+	return out
 }
 
 // Neighbors returns `node`'s eager-mesh peers. When MeshConfig.SeverProb
@@ -860,11 +874,7 @@ func (m *MeshTopology) MCacheGossipMids(node MeshNode, windowSlots int) []MsgID 
 // Result is freshly allocated.
 func (m *MeshTopology) NonMeshPeers(node MeshNode) []MeshNode {
 	total := MeshNode(m.TotalNodes())
-	nbrs := m.neighbors[node]
-	nbrSet := make(map[MeshNode]struct{}, len(nbrs))
-	for _, nbr := range nbrs {
-		nbrSet[nbr] = struct{}{}
-	}
+	nbrSet := m.eagerSetFor(node)
 	out := make([]MeshNode, 0, int(total)-len(nbrSet)-1)
 	for i := MeshNode(0); i < total; i++ {
 		if i == node {
@@ -873,13 +883,14 @@ func (m *MeshTopology) NonMeshPeers(node MeshNode) []MeshNode {
 		if _, isNbr := nbrSet[i]; isNbr {
 			continue
 		}
+		key := newMeshLinkKey(node, i)
 		if m.gossipConn != nil {
-			if _, ok := m.gossipConn[newMeshLinkKey(node, i)]; !ok {
+			if _, ok := m.gossipConn[key]; !ok {
 				continue
 			}
 		}
 		if m.severed != nil {
-			if _, sev := m.severed[newMeshLinkKey(node, i)]; sev {
+			if _, sev := m.severed[key]; sev {
 				continue
 			}
 		}
