@@ -208,6 +208,87 @@ func TestNodeHandlers(t *testing.T) {
 	}
 }
 
+// TestPeers_SkipsNilMetadata verifies that the Peers and Health handlers don't
+// panic when a peer's stored NodeInfo lacks a Metadata block. This happens in
+// practice when a peer sends a NodeInfo envelope without the Metadata entry —
+// we now reject such peers at handshake time, but historical entries in the
+// index (or any future reader path) must not crash the API handler.
+func TestPeers_SkipsNilMetadata(t *testing.T) {
+	node := CreateTestNode(t)
+
+	// Swap in a NodeInfo with Metadata == nil. CreateTestNode wires a
+	// MockPeersIndex that returns the same NodeInfo for every peer ID, so
+	// both connected peers end up looking like nil-Metadata peers.
+	mockIdx, ok := node.peersIndex.(*MockPeersIndex)
+	require.True(t, ok)
+	mockIdx.nodeInfo = &records.NodeInfo{
+		NetworkID: "mainnet",
+		// Metadata intentionally left nil
+	}
+
+	t.Run("peers handler does not panic", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "/v1/node/peers", nil)
+		require.NoError(t, err)
+
+		rr := httptest.NewRecorder()
+		api.Handler(node.Peers).ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+
+		var peers []peerInfo
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &peers))
+		// Peers with nil Metadata still appear in the response — only the
+		// Version field is empty, since we skip the NodeVersion assignment.
+		require.GreaterOrEqual(t, len(peers), 1)
+		for _, p := range peers {
+			require.Empty(t, p.Version, "expected empty version for nil-metadata peer")
+		}
+	})
+
+	t.Run("health handler does not panic", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "/v1/node/health", nil)
+		require.NoError(t, err)
+
+		rr := httptest.NewRecorder()
+		api.Handler(node.Health).ServeHTTP(rr, req)
+
+		require.Equal(t, http.StatusOK, rr.Code)
+	})
+}
+
+// TestIdentity_SkipsNilMetadata verifies that the Identity handler doesn't
+// panic when the local self NodeInfo lacks a Metadata block. Local self should
+// always have Metadata in practice (set in p2p_setup.go), so this is a
+// belt-and-suspenders check matching the same defensive guard added on the
+// peers handler.
+func TestIdentity_SkipsNilMetadata(t *testing.T) {
+	node := CreateTestNode(t)
+
+	mockIdx, ok := node.peersIndex.(*MockPeersIndex)
+	require.True(t, ok)
+	mockIdx.self = &records.NodeInfo{
+		NetworkID: "self",
+		// Metadata intentionally left nil
+	}
+
+	req, err := http.NewRequest("GET", "/v1/node/identity", nil)
+	require.NoError(t, err)
+
+	rr := httptest.NewRecorder()
+	api.Handler(node.Identity).ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	var resp nodeIdentity
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	// PeerID and Addresses are independent of Metadata and should still be
+	// populated; Subnets/Version are sourced from Metadata and should be empty.
+	require.NotEmpty(t, resp.PeerID)
+	require.NotEmpty(t, resp.Addresses)
+	require.Empty(t, resp.Version)
+	require.Empty(t, resp.Subnets)
+}
+
 // TestHealthCheckJSONString verifies that healthCheckJSON.String() returns correctly formatted JSON.
 func TestHealthCheckJSONString(t *testing.T) {
 	hc := healthCheckJSON{
