@@ -341,9 +341,17 @@ type MeshTopology struct {
 	// severed is the per-sim sustained-cut set: undirected pairs that
 	// cannot exchange messages on either layer (eager or gossip) for
 	// the whole sim. Built once in NewMeshTopology when
-	// MeshConfig.SeverProb > 0; nil otherwise. Neighbors and
-	// NonMeshPeers both consult this set and exclude severed pairs.
+	// MeshConfig.SeverProb > 0; nil otherwise. NonMeshPeers consults
+	// this set directly on every call; Neighbors uses the
+	// severedNeighbors cache below.
 	severed map[meshLinkKey]struct{}
+	// severedNeighbors mirrors `neighbors` with severed pairs filtered
+	// out, built once after `severed` is populated. nil when severance
+	// is inactive. Pre-computing this lets Neighbors return an aliased
+	// slice on the severance path instead of allocating per call —
+	// eager-mesh forwarding (the hottest delivery path) gets the same
+	// no-allocation contract under severance as without it.
+	severedNeighbors [][]MeshNode
 }
 
 // NewMeshTopology builds the per-sim mesh deterministically from `seed`.
@@ -500,9 +508,10 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 	//
 	// p_g is chosen using protocol-peer eager degree (3) so a typical
 	// protocol op's expected gossip degree matches the bound exactly.
-	// Relays have eager degree ≥ 3 so end up with marginally smaller
-	// expected gossip degree — accepted (≲ 10% spread) in exchange for
-	// undirected-pair symmetry by construction.
+	// Relays have eager degree ≥ 3 (some pick up extra edges in the
+	// Phase 3 topup), so their expected gossip degree runs slightly
+	// lower than protocol peers'. Accepted in exchange for undirected-
+	// pair symmetry by construction.
 	if m.gossip.GossipPoolBound > 0 {
 		const typicalEager = 3
 		poolPerNode := total - 1 - typicalEager
@@ -561,6 +570,22 @@ func NewMeshTopology(seed int64, cfg MeshConfig, cluster []OperatorID) *MeshTopo
 					m.severed[key] = struct{}{}
 				}
 			}
+		}
+		// Pre-compute the per-node filtered eager-neighbour list so
+		// Neighbors returns an aliased slice instead of allocating per
+		// call. Done after the severed map is fully populated so the
+		// filter sees the final set.
+		m.severedNeighbors = make([][]MeshNode, total)
+		for a := MeshNode(0); a < MeshNode(total); a++ {
+			raw := m.neighbors[a]
+			filtered := make([]MeshNode, 0, len(raw))
+			for _, nb := range raw {
+				if _, sev := m.severed[newMeshLinkKey(a, nb)]; sev {
+					continue
+				}
+				filtered = append(filtered, nb)
+			}
+			m.severedNeighbors[a] = filtered
 		}
 	}
 
@@ -669,21 +694,14 @@ func (m *MeshTopology) eagerSetFor(node MeshNode) map[MeshNode]struct{} {
 // Neighbors returns `node`'s eager-mesh peers. When MeshConfig.SeverProb
 // is active, pairs in the per-sim severed set are filtered out so eager
 // push and reflood cannot use them. Caller must NOT mutate the returned
-// slice — when no severance is active it aliases internal state; under
-// severance a fresh filtered slice is allocated each call.
+// slice — it aliases internal state (either m.neighbors directly or,
+// under severance, the pre-built m.severedNeighbors cache; the cache
+// keeps eager-mesh forwarding allocation-free in both regimes).
 func (m *MeshTopology) Neighbors(node MeshNode) []MeshNode {
-	if m.severed == nil {
-		return m.neighbors[node]
+	if m.severedNeighbors != nil {
+		return m.severedNeighbors[node]
 	}
-	raw := m.neighbors[node]
-	out := make([]MeshNode, 0, len(raw))
-	for _, nb := range raw {
-		if _, sev := m.severed[newMeshLinkKey(node, nb)]; sev {
-			continue
-		}
-		out = append(out, nb)
-	}
-	return out
+	return m.neighbors[node]
 }
 
 // TotalNodes returns the mesh's node count (cluster ops + relays).

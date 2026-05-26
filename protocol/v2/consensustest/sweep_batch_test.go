@@ -60,7 +60,7 @@ func TestRunSweep_Smoke(t *testing.T) {
 	}
 }
 
-// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the six
+// TestDefaultSweeps_NamesAndShape — DefaultSweeps returns the seven
 // curated sweeps with the documented names and the expected point
 // counts. Each run is one (n, k) slice; reruns at different (n, k)
 // merge into the report. Doesn't actually RUN the sweeps (would take
