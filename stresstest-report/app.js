@@ -922,6 +922,24 @@ function renderConditionsSection(data) {
     ),
   );
   pickers.appendChild(
+    // p2p_partition: per-pair sustained-severance fraction
+    // (MeshConfig.SeverProb on the Go side). Labels render as
+    // percentages ("0%", "15%", "30%", "50%") to match how the
+    // dedicated p2p_partitions chart axis reads. disabledFor greys
+    // values absent from the current slice; legacy data without
+    // SeverProb fields shows only the 0% button (others greyed).
+    // Placed alongside the other p2p_* pickers (profile, instability)
+    // so the p2p-related controls cluster together.
+    buildBaselinePickerLabeled(
+      'p2p_partition:',
+      dims.SeverProbs.length ? dims.SeverProbs : [selectedSeverProb],
+      (v) => Math.round(v * 100) + '%',
+      () => selectedSeverProb,
+      (v) => { selectedSeverProb = v; onConditionsChange(); },
+      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes, v),
+    ),
+  );
+  pickers.appendChild(
     // faulty_nodes: number of completely-crashed operators (0..f). Numeric
     // picker (no name mapping). disabledFor greys values absent from the
     // current (N,K,BTT,profile,instability) slice — the range is
@@ -933,22 +951,6 @@ function renderConditionsSection(data) {
       () => selectedFaultyNodes,
       (v) => { selectedFaultyNodes = v; onConditionsChange(); },
       (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, v, selectedSeverProb),
-    ),
-  );
-  pickers.appendChild(
-    // p2p_partition: per-pair sustained-severance fraction
-    // (MeshConfig.SeverProb on the Go side). Labels render as
-    // percentages ("0%", "15%", "30%", "50%") to match how the
-    // dedicated p2p_partitions chart axis reads. disabledFor greys
-    // values absent from the current slice; legacy data without
-    // SeverProb fields shows only the 0% button (others greyed).
-    buildBaselinePickerLabeled(
-      'p2p_partition:',
-      dims.SeverProbs.length ? dims.SeverProbs : [selectedSeverProb],
-      (v) => Math.round(v * 100) + '%',
-      () => selectedSeverProb,
-      (v) => { selectedSeverProb = v; onConditionsChange(); },
-      (v) => !baselinePointExists(data, selectedN, selectedK, selectedBTT, selectedP2pProfile, selectedInstability, selectedFaultyNodes, v),
     ),
   );
   pickers.appendChild(buildBFTStartPicker());
