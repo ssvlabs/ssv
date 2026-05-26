@@ -122,9 +122,10 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	//     time target — V_0 has 1·BTT to propagate before Phase 2a fires.
 	//   - SafetyBuffer shifts TPhase2a earlier in the slot, widening the
 	//     post-TPhase2a σ-pool fill window (1-hop peer KindValue
-	//     propagation). Default sizing uses SafetyBuffer = SafetyBuffer
+	//     propagation). Default sizing is one HeartbeatInterval (700ms)
 	//     so 2abOBFT and bare OBFT have the same total post-broadcast
-	//     structural budget.
+	//     structural budget (both fold the same SafetyBuffer into their
+	//     respective schedules).
 	//
 	// We pick TPhase2a to fit within the slot's submit pipeline: the
 	// runner-level deadline is RelayCutoff − HeaderSubmitHeadroom; the

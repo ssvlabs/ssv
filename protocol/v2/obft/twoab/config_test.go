@@ -8,7 +8,7 @@ import (
 )
 
 // healthyConfig returns a spec-conforming Config at the SSV default
-// operating point (n=4, f=1, K=2, BTT=200ms, SafetyBuffer=SafetyBuffer=700ms).
+// operating point (n=4, f=1, K=2, BTT=200ms, SafetyBuffer=700ms).
 func healthyConfig() *Config {
 	const (
 		btt          = 200 * time.Millisecond
