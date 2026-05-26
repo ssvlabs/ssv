@@ -533,12 +533,16 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 				sigmaReachedAt = append(sigmaReachedAt, la.Layer)
 			}
 		}
-		// Skip when ClipLateDecision turned off oo.Decided post-Resolve:
-		// the op's internal Resolve still succeeded (the trace reflects
-		// that), but a deadline check marked the outcome as undecided
-		// for slot-submission accounting. Not a Resolve-side regression
-		// the walk-consistency check should flag.
-		if !oo.Decided && oo.Err == "missed relay deadline" {
+		// Skip when ClipLateDecision turned off oo.Decided post-Resolve.
+		// Strictly redundant under the current check shape — both case
+		// (a) and case (b) below gate on oo.Decided, so a non-decided
+		// op already short-circuits via either check. Kept defensively:
+		// any future walk-consistency case that DOESN'T gate on
+		// oo.Decided (e.g., "trace shows σ-reached layer K, claims to
+		// have decided at L, but PerOp.Decided is false") would
+		// otherwise false-flag clip-late-decided ops where the op's
+		// internal Resolve genuinely succeeded.
+		if !oo.Decided && oo.Err == ErrMissedRelayDeadline {
 			continue
 		}
 		// Case (a): Decided=true + no σ-reached layer locally. Split
@@ -576,6 +580,15 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 		// advanced past a σ-reachable layer. ResolveLayerAttempts is
 		// appended in walk order so sigmaReachedAt is ascending; the
 		// shallowest σ-reached layer is sigmaReachedAt[0].
+		//
+		// Uses `!=` rather than `>` as belt-and-suspenders. The `<`
+		// case (PerOp.Round shallower than min sigmaReachedAt) is
+		// impossible by construction under correct Resolve: Resolve
+		// returns Output at the first σ-reached layer, so sigmaReachedAt
+		// always contains Round under correct walks. The `!=` catches
+		// both the spec-aligned "advanced past" regression AND a
+		// hypothetical adapter inconsistency where PerOp.Round
+		// disagrees with the trace.
 		//
 		// Skipped when oo.Round == -1 (cert-gossip-decide stamps -1 as
 		// "layer unknown to this op since they didn't reconstruct
@@ -623,6 +636,10 @@ func ComputeSafetyReport(o Outcome) SafetyReport {
 // available — can't disambiguate; assume legitimate to avoid false
 // positives).
 func clusterLocalDecidedOn(o Outcome, exclude OperatorID, v []byte) bool {
+	// Unreachable from D1's caller (it iterates PerOp; an empty map
+	// never enters the loop body). Defensive for direct callers / future
+	// reuse — empty PerOp means "no data to disambiguate", so return
+	// true (legitimate) to avoid false-flagging.
 	if len(o.PerOp) == 0 {
 		return true
 	}

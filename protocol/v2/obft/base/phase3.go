@@ -91,7 +91,12 @@ func (i *Instance) Resolve() (*Output, error) {
 		nextKey, nrPoolSize, err := i.tryDeriveNextLayerKey(k)
 		attempt.NRPoolSize = nrPoolSize
 		attempt.QEnc = qEnc
-		attempt.NRReached = nextKey != nil
+		// NRReached reflects "NR-pool reached qEnc cluster-wide", not
+		// "aggregation key was successfully derived". Under crypto
+		// failure (poolSize ≥ qEnc but AggregatePartials errors)
+		// nextKey is nil yet the quorum WAS reached — match the
+		// LayerAttempt docstring's NRPoolSize >= QEnc semantic.
+		attempt.NRReached = nrPoolSize >= qEnc
 		i.lastResolveTrace = append(i.lastResolveTrace, attempt)
 		if err != nil {
 			return nil, fmt.Errorf("obft: layer %d NR aggregation: %w", k, err)

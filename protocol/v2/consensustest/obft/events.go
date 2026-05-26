@@ -46,6 +46,12 @@ func (e *evtLeaderFetch) Handle(h desim.Host) []desim.Scheduled {
 		// actual emitter. By-emitter path is the actual leader (the op who
 		// built/emitted the bundle — same operator at the LeaderBroadcastPlan
 		// boundary, no identity forgery in current byz patterns at this site).
+		//
+		// TODO: if any future byz pattern adds non-leader impersonation of
+		// the Phase-1 leader broadcast here, switch the ObserveSigmaByEmitter
+		// call to use the actual emitter (the byz op) rather than `leader`
+		// (the role identity) — otherwise the per-op invariants would
+		// silently miscredit the σ_V partial to the impersonated role.
 		if s.cfg.Aggregator != nil {
 			s.cfg.Aggregator.ObserveSigma(ct.OperatorID(leader), e.layer, bundle.Value)
 			s.cfg.Aggregator.ObserveSigmaByEmitter(ct.OperatorID(leader), e.layer, bundle.Value)

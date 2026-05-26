@@ -88,7 +88,11 @@ func (i *Instance) Resolve() (*Output, error) {
 		nextKey, nrPoolSize, err := i.tryDeriveNextLayerKey(k)
 		attempt.NRPoolSize = nrPoolSize
 		attempt.QEnc = qEnc
-		attempt.NRReached = nextKey != nil
+		// See obft/base/phase3.go for the rationale: NRReached
+		// reflects "NR-pool reached qEnc cluster-wide", not "aggregation
+		// key was derived". Crypto failure leaves nextKey=nil but the
+		// quorum WAS reached.
+		attempt.NRReached = nrPoolSize >= qEnc
 		i.lastResolveTrace = append(i.lastResolveTrace, attempt)
 		if err != nil {
 			return nil, fmt.Errorf("twoab: layer %d NR aggregation: %w", k, err)

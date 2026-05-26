@@ -292,12 +292,21 @@ func ClipLateDecision(out *Outcome, deadline time.Duration) {
 			oo.Decided = false
 			oo.Round = -1
 			if oo.Err == "" {
-				oo.Err = "missed relay deadline"
+				oo.Err = ErrMissedRelayDeadline
 			}
 			out.PerOp[op] = oo
 		}
 	}
 }
+
+// ErrMissedRelayDeadline is the OperatorOutcome.Err value
+// ClipLateDecision stamps on ops whose internal Resolve succeeded but
+// past the submit deadline. Exposed as a package-level const so the
+// safety check at ComputeSafetyReport (which skips ClipLate-decided
+// ops in the bucket-3 D1 walk-consistency check) compares against the
+// same literal — a rename would break both call sites in lockstep
+// rather than silently bypassing the skip.
+const ErrMissedRelayDeadline = "missed relay deadline"
 
 // Outcome is the algorithm-agnostic per-sim result.
 type Outcome struct {

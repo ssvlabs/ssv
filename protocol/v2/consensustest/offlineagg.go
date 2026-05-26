@@ -129,14 +129,22 @@ type OfflineAggReport struct {
 	SigmaCardinality map[SigmaKey]int
 
 	// SigmaByEmitter / NRByEmitter mirror the same-named OfflineAggregator
-	// maps — they're exposed on the post-sim report so that consumers reading
+	// maps — exposed on the post-sim report so consumers reading
 	// Outcome.OfflineAgg (e.g., ComputeSafetyReport's bucket-2 honest-op
-	// invariants in a future commit) can iterate them without holding a
-	// reference to the live OfflineAggregator. AttemptAll shares the same
-	// map references (no copy); the aggregator is discarded by the adapter
-	// post-AttemptAll so the sharing is safe. See OfflineAggregator's
-	// SigmaByEmitter docstring for the claimed-sender-vs-actual-emitter
-	// semantics.
+	// invariants) can iterate them without holding a reference to the live
+	// OfflineAggregator. See OfflineAggregator's SigmaByEmitter docstring
+	// for the claimed-sender-vs-actual-emitter semantics.
+	//
+	// WARNING — shared map references with the live aggregator: AttemptAll
+	// shares (no copy) for cost-savings. Safe under the contract "the
+	// aggregator is discarded by the adapter post-AttemptAll" — every
+	// adapter today follows this. If a future caller re-uses the
+	// aggregator (e.g., calls AttemptAll twice, holds the aggregator for
+	// diagnostics while also retaining the report, or calls Observe*
+	// methods post-AttemptAll), these maps mutate under the report's
+	// feet, which would break any safety check or diagnostic that
+	// captured the report and expected stable data. If you need that
+	// usage pattern, deep-copy here in AttemptAll instead of aliasing.
 	SigmaByEmitter map[ByEmitterSigmaKey]struct{}
 	NRByEmitter    map[ByEmitterNRKey]struct{}
 }
