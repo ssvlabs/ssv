@@ -23,31 +23,19 @@ const (
 )
 
 // Protocol is the OBFT adapter. Use as `obft.Protocol{}` for the canonical
-// variant, or set the variant knobs below (RefloodDelayOverride,
-// NoRefloodDelay) to register cushion variants alongside it in the stress
-// matrix without name collisions.
+// variant, or set RefloodDelayOverride to register cushion variants
+// alongside it in the stress matrix without name collisions.
 type Protocol struct {
 	// VariantName overrides the reported protocol name. Empty → "OBFT".
 	// Used for registering cushion variants alongside the canonical adapter
 	// in the stress matrix without name collisions.
 	VariantName string
 
-	// NoRefloodDelay forces the broadcast budget to use RefloodDelay=0
-	// regardless of cfg.RefloodDelay. Models the "fully-meshed cluster,
-	// eager push reliable" assumption (OBFT.md §Setting `RefloodDelay=0`
-	// path) — same protocol, no schedule-level cushion for lazy-push
-	// recovery. Lets the stress driver run OBFT vs OBFT-with-RD=0 on
-	// identical scenarios, directly quantifying how much the
-	// HeartbeatInterval-sized cushion in `B_0 = 2·BTT + RefloodDelay`
-	// is worth under each operating point. Default false: variant
-	// respects cfg.RefloodDelay (Healthy: 700ms; adversarial: 0).
-	NoRefloodDelay bool
-
 	// RefloodDelayOverride, when non-nil, sets the broadcast budget's
-	// RefloodDelay to an explicit value regardless of cfg.RefloodDelay or
-	// NoRefloodDelay. Registers the OBFT-300 variant (RefloodDelay=300ms):
-	// the intermediate point between OBFT-0 (RefloodDelay=0) and bare OBFT
-	// (cfg.RefloodDelay, 700ms on Healthy). Analogue of 2abOBFT's
+	// RefloodDelay to an explicit value regardless of cfg.RefloodDelay.
+	// Registers the cushion-ladder variants: OBFT-0 (override=0), OBFT-300
+	// (override=300ms), OBFT-500 (override=500ms), OBFT-700 (override=700ms,
+	// matches bare OBFT on Healthy). Analogue of 2abOBFT's
 	// SafetyBufferOverride and QBFT-300's fixed cushion. Unlike 2abOBFT-300
 	// (which collapses onto 2abOBFT-0 at BTT≥300 via the max(SB,BTT)
 	// crossover), OBFT's B_0 = 2·BTT + RefloodDelay is linear in RefloodDelay,
@@ -117,14 +105,12 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	// eager-push, no schedule-level reflood absorption. Production-
 	// realistic-mesh scenarios set cfg.RefloodDelay >0 (typically 700ms
 	// to match libp2p heartbeat), mirroring the production SSV adapter's
-	// DefaultRefloodDelay. NoRefloodDelay (variant knob) forces 0
-	// regardless — used by the OBFT-no-reflood variant to probe the
-	// cushion's value on otherwise-identical scenarios.
+	// DefaultRefloodDelay. RefloodDelayOverride pins an explicit value
+	// for the cushion-ladder variants (OBFT-0 / OBFT-300 / OBFT-500 /
+	// OBFT-700) regardless of cfg.RefloodDelay.
 	refloodDelay := cfg.RefloodDelay
 	if p.RefloodDelayOverride != nil {
 		refloodDelay = *p.RefloodDelayOverride
-	} else if p.NoRefloodDelay {
-		refloodDelay = 0
 	}
 	broadcastBudget, err := obftbase.DefaultBroadcastBudget(cfg.K, cfg.BTT, refloodDelay, tCommit)
 	if err != nil {
