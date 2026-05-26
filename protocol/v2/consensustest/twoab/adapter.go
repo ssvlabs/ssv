@@ -228,6 +228,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
+	out.Byz = cfg.Byz
 	out.CommitAttestation = computeAttestation(cfg, out)
 	// Stamp the L_0 BFT_start-independence threshold = the unclamped
 	// fetchAt[0] (= T0Broadcast − B_0, floored at 0). This is the `fa`
@@ -315,23 +316,44 @@ func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Dur
 }
 
 // computeAttestation populates Outcome.CommitAttestation from data already
-// visible at the adapter boundary. Equivocation is counted from Rule 2
-// (LeaderEquivocation) + Rule 3 (CrossCommitEquivocation, per-layer) +
-// Rule 6a (Phase2Equivocation, 2ab-specific) evidence fires.
+// visible at the adapter boundary. Each *Checked flag is set only when this
+// adapter actually performs the corresponding cross-check; the framework
+// treats unset flags as "uninstrumented, no violation reportable".
 //
-// Left uninstrumented (same as base; would require deeper Instance
-// introspection):
-//   - Quorum: would require plumbing the partial-signature count out of
-//     twoab.Instance.BuildCertificate. The Instance internally enforces
-//     ≥ 2f+1 distinct valid partials before emitting Output.
-//   - 2abOBFTCommitKind (σ-quorum at L_0 vs NR-unlocked deeper σ): the
-//     final cert is always a σ-signature on V regardless of path.
-//   - OBFTHostValidityRespect: 2ab's host re-validation at Phase-2a /
-//     Phase-2b sign time means the layer-naive comparison over-reports.
-//     Requires plumbing per-op acceptance-layer through the DES boundary.
+// Instrumented (mirrors OBFT base — see obft/adapter.go computeAttestation
+// docstring for full rationale on each invariant):
+//   - OBFTCommitKindValid (C2): naive — L_0 ⇒ "sigma"; L_k>0 ⇒ "nr".
+//     Descriptive tag only; check at safety.go validates kind ∈
+//     {"sigma", "nr"}.
+//   - Equivocation: Rule 2 + Rule 3 + Rule 6a (2ab-specific) evidence
+//     fires count into EquivocationsObserved. EquivocationsAccepted = 0
+//     (see C4 deferral note below).
+//
+// Left uninstrumented (separate follow-ups):
+//   - QuorumBackedDecision (C1): aggregator's SigmaCardinality
+//     underapproximates the protocol's σ-pool view in scenarios that
+//     combine plaintext leader-σ_V with chain-decrypted peer partials, or
+//     under partition occlusion. False-positives flag legitimate
+//     decisions. SigmaCardinality plumbing is added in this commit for
+//     future use; the safety check needs protocol-side per-decision
+//     quorum-count emission from twoab.Instance.Resolve.
+//   - NoEquivocationAccepted (C4): real EquivocationsAccepted count needs
+//     per-emitter visibility — bucket 2's SigmaByEmitter map.
+//   - OBFTHostValidityRespect (C3): 2ab's host re-validation at Phase-2a /
+//     Phase-2b means a layer-naive comparison over-reports. Requires
+//     plumbing per-op acceptance-layer through the DES boundary.
 func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 	att := ct.CommitAttestation{
 		EquivocationChecked: true,
+	}
+
+	if out.Decided {
+		att.OBFTCommitKindChecked = true
+		if out.DecidedRound == 0 {
+			att.OBFTCommitKind = "sigma"
+		} else {
+			att.OBFTCommitKind = "nr"
+		}
 	}
 
 	for _, oo := range out.PerOp {

@@ -168,6 +168,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		return ct.Outcome{}, err
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
+	out.Byz = cfg.Byz
 	out.CommitAttestation = computeAttestation(cfg, out)
 	// Stamp the L_0 BFT_start-independence threshold = fetchAt[0] (the
 	// recovery-floored L_0 broadcast target, obftbase.BroadcastTargetOffset)
@@ -244,37 +245,58 @@ func classifyOBFTMiss(preDecided bool, preRound int, preTime, deadline time.Dura
 // adapter actually performs the corresponding cross-check; the framework
 // treats unset flags as "uninstrumented, no violation reportable".
 //
-// Currently instrumented:
-//   - Equivocation: Rule2 (LeaderEquivocation) + Rule3 (CrossOnion /
+// Instrumented:
+//   - OBFTCommitKindValid (C2): descriptive tag — L_0 decisions ⇒ "sigma";
+//     L_k>0 decisions ⇒ "nr". Technically imprecise (L_k>0 σ-quorum can
+//     theoretically reach via witness sections alone without NR-fallthrough)
+//     but the existing OBFTCommitKindValid check only validates kind ∈
+//     {"sigma", "nr"} — the imprecision is benign. Path-precise
+//     classification would need obft.Output to carry a DecisionKind tag
+//     from Resolve; deferred.
+//   - Equivocation: Rule 2 (LeaderEquivocation) + Rule 3 (CrossOnion /
 //     CommitEquivocation) evidence fires are counted into
-//     EquivocationsObserved. EquivocationsAccepted stays at 0 — OBFT's
-//     internal Rule3 enforcement excludes equivocating partials from σ /
-//     NR quorums by construction, so any actually-accepted equivocation
-//     would already manifest as a NoOfflineDoubleV / SingleV violation
-//     upstream. The framework therefore needs no additional gate here; the
-//     EquivocationsObserved count is diagnostic, distinguishing
-//     "vacuously safe" runs (==0) from "tested safe" runs (>0).
+//     EquivocationsObserved. Diagnostic — distinguishes "vacuously safe"
+//     (==0) from "tested safe" (>0). EquivocationsAccepted stays at 0
+//     (see C4 deferral note below).
 //
-// Left uninstrumented (need deeper introspection than the adapter boundary
-// currently exposes — deferred to a follow-up):
-//   - Quorum: would require plumbing the partial-signature count out of
-//     obft.Instance.BuildCertificate. obft.Instance internally enforces
-//     ≥ 2f+1 distinct valid partials before emitting Output; that
-//     invariant is correctness-of-protocol, not currently re-verified at
-//     the framework level.
-//   - OBFTCommitKind: distinguishing σ-quorum-commit from NR-quorum-commit
-//     requires inspecting which path obft.Instance took to build the cert
-//     (direct L_0 σ-quorum vs. NR-unlocked deeper σ-reconstruction). The
-//     final cert is always a σ-signature on V regardless of path.
-//   - OBFTHostValidityRespect: OBFT's validate-once-and-lock property means
-//     a layer-naive comparison (decided_layer vs current host verdict)
-//     over-reports — scenarios like HostFlipMidSlot have ops legitimately
-//     decide at L_1 on a V they accepted at L_0 when the host's L_1
-//     verdict is "invalid". A correct check requires plumbing each op's
-//     recorded acceptance-layer through the DES boundary.
+// Left uninstrumented (need protocol-side instrumentation deeper than the
+// adapter boundary exposes — separate follow-ups):
+//   - QuorumBackedDecision (C1): the aggregator's view of cluster-wide
+//     σ-pool cardinality (via OfflineAggReport.SigmaCardinality) is an
+//     UNDERAPPROXIMATION of the protocol's local σ-pool view in scenarios
+//     where the protocol combines plaintext leader-σ_V (delivered via
+//     bundle, not via aggregator-recorded onion path) with chain-decrypted
+//     peer partials, or where partition occludes message visibility to
+//     specific receivers. False-positives flag legitimate decisions. A
+//     correct C1 check needs the protocol to emit a per-decision quorum
+//     count from obft.Instance.Resolve; deferred. The data plumbing
+//     (SigmaCardinality on OfflineAggReport) is added in this commit for
+//     future use.
+//   - NoEquivocationAccepted (C4): OfflineAggregator's SigmaPartials
+//     records every wire-emitted partial (regardless of Instance-side
+//     Rule 3 filtering), so counting "dual emissions in pools" would
+//     falsely flag legitimate ByzCrossSigning / ByzCrossOnionEquivocation
+//     scenarios. A real count needs per-emitter decision-pool visibility
+//     — bucket 2's SigmaByEmitter map enables this; deferred to that
+//     commit. Rule 3 binary failure is transitively caught by
+//     NoOfflineDoubleV.
+//   - OBFTHostValidityRespect (C3): validate-once-and-lock means a
+//     layer-naive comparison over-reports. Requires plumbing each op's
+//     acceptance-layer through the DES boundary. Separate follow-up.
 func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 	att := ct.CommitAttestation{
 		EquivocationChecked: true,
+	}
+
+	if out.Decided {
+		att.OBFTCommitKindChecked = true
+		// C2 naive classification — descriptively imprecise but safety.go's
+		// check only validates kind ∈ {"sigma", "nr"}.
+		if out.DecidedRound == 0 {
+			att.OBFTCommitKind = "sigma"
+		} else {
+			att.OBFTCommitKind = "nr"
+		}
 	}
 
 	for _, oo := range out.PerOp {

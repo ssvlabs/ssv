@@ -639,7 +639,9 @@ func scheduleCommit(s *sim, from twoab.OperatorID, c *twoab.Commit) []desim.Sche
 // recordValueMsgToAggregator records per-layer σ / encrypted-claim partials
 // from a ValueMsg into the offline aggregator. KindValue carries the
 // emitter's σ partial on V at L_0 in L0Partial — ObserveSigma at L_0.
-// L_k>0 SigmaChained LayerEntries contribute as encrypted claims.
+// L_k>0 SigmaChained LayerEntries contribute as encrypted claims keyed by
+// the plaintext V (not the encrypted Payload — that differs per emitter
+// and would scatter contributions across buckets, defeating qV counting).
 // Credits the claimed sender's OperatorID, matching the byz-observer
 // model from base OBFT.
 func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
@@ -650,7 +652,7 @@ func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
 	for _, e := range vm.LayerEntries {
 		switch e.Kind {
 		case twoab.LayerEntrySigmaChained:
-			agg.ObserveEncryptedClaim(from, e.Layer, e.Payload)
+			agg.ObserveEncryptedClaim(from, e.Layer, e.V)
 		case twoab.LayerEntryNRPlaintext:
 			agg.ObserveNR(from, e.Layer)
 		}
@@ -659,13 +661,14 @@ func recordValueMsgToAggregator(agg *ct.OfflineAggregator, vm *twoab.ValueMsg) {
 
 // recordNoValueMsgToAggregator records per-layer σ / NR partials from a
 // NoValueMsg into the offline aggregator. NoValueMsg has the same K-1
-// LayerEntries shape as ValueMsg.
+// LayerEntries shape as ValueMsg. SigmaChained entries keyed by V (same
+// rationale as recordValueMsgToAggregator).
 func recordNoValueMsgToAggregator(agg *ct.OfflineAggregator, nv *twoab.NoValueMsg) {
 	from := ct.OperatorID(nv.OperatorID)
 	for _, e := range nv.LayerEntries {
 		switch e.Kind {
 		case twoab.LayerEntrySigmaChained:
-			agg.ObserveEncryptedClaim(from, e.Layer, e.Payload)
+			agg.ObserveEncryptedClaim(from, e.Layer, e.V)
 		case twoab.LayerEntryNRPlaintext:
 			agg.ObserveNR(from, e.Layer)
 		}
@@ -691,7 +694,7 @@ func recordCommitToAggregator(agg *ct.OfflineAggregator, c *twoab.Commit) {
 		for _, e := range c.LayerEntries {
 			switch e.Kind {
 			case twoab.LayerEntrySigmaChained:
-				agg.ObserveEncryptedClaim(from, e.Layer, e.Payload)
+				agg.ObserveEncryptedClaim(from, e.Layer, e.V)
 			case twoab.LayerEntryNRPlaintext:
 				agg.ObserveNR(from, e.Layer)
 			}

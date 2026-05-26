@@ -75,6 +75,20 @@ type OfflineReconstruction struct {
 type OfflineAggReport struct {
 	NoOfflineDoubleV bool
 	Reconstructions  []OfflineReconstruction
+
+	// SigmaCardinality is the cluster-wide σ-pool cardinality per (layer,
+	// value_hash) bucket — the count an offline aggregator could collect
+	// toward σ-quorum. At L_0: equals |SigmaPartials[(0, V)]| (plaintext
+	// σ partials). At L_k>0: equals |SigmaPartials[(k, V)]| (plaintext
+	// leader-σ_V + witness-section partials) PLUS |EncryptedClaims[(k, V)]|
+	// when the chain is unlocked (NR-quorum reached at every shallower
+	// layer); equals just |SigmaPartials[(k, V)]| when chain is sealed.
+	// Pre-computed in AttemptAll. Plumbing for diagnostic + a future C1
+	// QuorumBackedDecision check (which needs protocol-side per-decision
+	// quorum-count emission to disambiguate underapproximation vs
+	// regression — see docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md).
+	// Not consumed by any safety check today.
+	SigmaCardinality map[SigmaKey]int
 }
 
 // NewOfflineAggregator returns an empty aggregator sized for cluster N.
@@ -160,8 +174,40 @@ func (a *OfflineAggregator) ObserveNR(op OperatorID, layer int) {
 // reconstructions) so false positives risk only spurious safety panics, not
 // missed violations.
 func (a *OfflineAggregator) AttemptAll() OfflineAggReport {
-	rep := OfflineAggReport{NoOfflineDoubleV: true}
+	rep := OfflineAggReport{
+		NoOfflineDoubleV: true,
+		SigmaCardinality: make(map[SigmaKey]int),
+	}
 	seen := make(map[[32]byte]struct{})
+
+	// Pre-compute SigmaCardinality across every observed bucket. At L_0:
+	// plaintext SigmaPartials only. At L_k>0: SigmaPartials (plaintext
+	// leader σ_V + witness-section partials) + EncryptedClaims when the
+	// chain is unlocked. The cardinality is the union-cardinality across
+	// emitters (dedup per emitter); we approximate it as the sum of the
+	// two distinct-emitter sets since SigmaPartials and EncryptedClaims at
+	// the same (layer, V) are populated from different message-sections so
+	// rarely double-count the same emitter — and any overcount is benign
+	// (lets the count reach qV legitimately).
+	for k, partials := range a.SigmaPartials {
+		rep.SigmaCardinality[k] = len(partials)
+	}
+	for k, claims := range a.EncryptedClaims {
+		if k.Layer == 0 {
+			continue // L_0 plaintext already in SigmaPartials
+		}
+		unlocked := true
+		for shallow := 0; shallow < k.Layer; shallow++ {
+			if len(a.NRPartials[shallow]) < a.QEnc {
+				unlocked = false
+				break
+			}
+		}
+		if !unlocked {
+			continue
+		}
+		rep.SigmaCardinality[k] += len(claims)
+	}
 
 	// Direct σ-quorums (primarily L_0 in OBFT, but applicable at any layer
 	// where σ is recorded plaintext on the wire).

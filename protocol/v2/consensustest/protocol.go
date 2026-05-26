@@ -376,6 +376,14 @@ type Outcome struct {
 	// invariant leave the corresponding *Checked field zero — the framework
 	// treats unchecked invariants as no-violation-reportable.
 	CommitAttestation CommitAttestation
+
+	// Byz snapshots the sim's byzantine + crashed membership so per-op
+	// safety invariants can filter honest-only checks without threading a
+	// parameter through every ComputeSafetyReport call site. Adapters
+	// populate from cfg.Byz during toCT. Synthetic-outcome tests get
+	// zero-value ByzPattern (no byz / no crashed) — correct default for
+	// honest-only synthetic cases.
+	Byz ByzPattern
 }
 
 // CommitAttestation carries adapter-introspected evidence for the

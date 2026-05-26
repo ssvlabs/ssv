@@ -24,15 +24,21 @@ import (
 //     Any actually-accepted equivocation would manifest upstream as a
 //     NoOfflineDoubleV / SingleV violation; this invariant is a
 //     diagnostic on top of that catch.
-//   - QuorumBackedDecision, OBFTCommitKindValid, OBFTHostValidityRespect
-//     are advertised invariants whose *Checked gates are NOT set by any
-//     adapter today. They default to true and CANNOT fire on a
-//     violation under the current adapters. They are kept in the struct
-//     so a future adapter can opt in without a framework-side change,
-//     and so a regression that ever toggles a *Checked flag without
-//     also routing the predicate through still trips IsViolation. See
-//     each adapter's computeAttestation docstring for the "left
-//     uninstrumented" rationale and deferral notes.
+//   - OBFTCommitKindValid has OBFTCommitKindChecked=true in both OBFT
+//     and 2abOBFT adapters, with OBFTCommitKind set to "sigma" (decision
+//     at L_0) or "nr" (decision at L_k>0) — always one of the two valid
+//     values by construction, so the check is vacuously true. Useful as
+//     a descriptive tag in panic diagnostics rather than a load-bearing
+//     gate; a regression that ever sets an invalid kind would trip it.
+//   - QuorumBackedDecision, OBFTHostValidityRespect are advertised
+//     invariants whose *Checked gates are NOT set by any adapter today.
+//     They default to true and CANNOT fire on a violation under the
+//     current adapters. They are kept in the struct so a future adapter
+//     can opt in without a framework-side change, and so a regression
+//     that ever toggles a *Checked flag without also routing the
+//     predicate through still trips IsViolation. See each adapter's
+//     computeAttestation docstring for the "left uninstrumented"
+//     rationale and deferral notes.
 //
 // The defense-in-depth picture: a hypothetical adapter regression that
 // accepted an equivocation or a sub-quorum certificate would surface as
