@@ -45,15 +45,26 @@ import (
 //     values by construction, so the check is vacuously true. Useful as
 //     a descriptive tag in panic diagnostics rather than a load-bearing
 //     gate; a regression that ever sets an invalid kind would trip it.
-//   - QuorumBackedDecision, OBFTHostValidityRespect are advertised
-//     invariants whose *Checked gates are NOT set by any adapter today.
-//     They default to true and CANNOT fire on a violation under the
-//     current adapters. They are kept in the struct so a future adapter
-//     can opt in without a framework-side change, and so a regression
-//     that ever toggles a *Checked flag without also routing the
-//     predicate through still trips IsViolation. See each adapter's
-//     computeAttestation docstring for the "left uninstrumented"
-//     rationale and deferral notes.
+//   - QuorumBackedDecision (Phase 2 C1) has QuorumChecked=true in both
+//     OBFT and 2abOBFT adapters when at least one operator decided
+//     locally (Round>=0) at the cluster-decided layer. QuorumSigners is
+//     the SigmaPoolSize from that op's ResolveLayerAttempts at the
+//     deciding layer — the protocol's own per-decision quorum count.
+//     QuorumRequired = 2f+1. Defensive sentinel against a Resolve-gate
+//     bypass: tryReconstructLayer only returns Output when poolSize >=
+//     qV, so the check is vacuously satisfied under correct Resolve.
+//     Stays uninstrumented (graceful) for cert-gossip-only clusters
+//     where no op has a local-decider trace at the cluster's decided
+//     layer.
+//   - OBFTHostValidityRespect (Phase 2 C3) has OBFTHostValidityChecked=true
+//     in both OBFT and 2abOBFT adapters whenever the cluster decided.
+//     OBFTHostValidityRejecters counts honest, non-crashed σ-emitters
+//     on the decided (layer, V) whose locked host verdict (from the
+//     adapter's RecordingHostPattern wrapper, first-write-wins per
+//     spec validate-once-and-lock) was invalid. A non-zero count is the
+//     C3 violation: the protocol allowed σ-emission despite a
+//     locked-invalid host verdict — bucket-2 HonestCrossPhaseExclusive
+//     doesn't catch this because the regression produces no NR-collision.
 //
 // The defense-in-depth picture: a hypothetical adapter regression that
 // accepted an equivocation or a sub-quorum certificate would surface as
@@ -64,10 +75,14 @@ import (
 // "double-V reconstructable" end-state); HonestWalkConsistent catches
 // Resolve-side regressions where an honest op's walk would have
 // advanced past a σ-decidable layer (also rather than only transitively
-// via NoOfflineDoubleV). The remaining invariants are layered
-// diagnostics that distinguish "what went wrong" once the universal
-// checks fire (or that future-proof the report against adapter
-// changes).
+// via NoOfflineDoubleV); QuorumBackedDecision is a defensive sentinel
+// against a Resolve-gate-bypass that would return Output without genuine
+// qV; OBFTHostValidityRespect catches the σ-emit-despite-invalid-host
+// regression that HonestCrossPhaseExclusive doesn't fire on (no NR
+// collision). NoEquivocationAccepted and OBFTCommitKindValid are
+// layered diagnostics that distinguish "what went wrong" once the
+// universal checks fire (or that future-proof the report against
+// adapter changes).
 type SafetyReport struct {
 	// SingleV: at most one distinct Value is reconstructed cluster-wide
 	// (Pigeonhole claim: "at most one full V signature per slot"). Round

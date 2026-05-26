@@ -106,6 +106,49 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 	t.Logf("mesh-mode healthy: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
 }
 
+// TestAdapter_C1_QuorumBackedDecisionWiring mirrors the OBFT base
+// adapter's same-named test. See obft/adapter_test.go for the
+// rationale. Wiring test for Phase 2 C1.
+func TestAdapter_C1_QuorumBackedDecisionWiring(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	out, err := twoabadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided)
+	require.Equal(t, 0, out.DecidedRound)
+
+	att := out.CommitAttestation
+	require.True(t, att.QuorumChecked, "QuorumChecked must be set under a healthy sim")
+	require.Equal(t, 3, att.QuorumRequired, "QuorumRequired = 2f+1 = 3 at n=4")
+	require.GreaterOrEqual(t, att.QuorumSigners, att.QuorumRequired,
+		"QuorumSigners must be >= QuorumRequired under correct Resolve; got %d", att.QuorumSigners)
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.QuorumBackedDecision, "QuorumBackedDecision: %s", rep)
+}
+
+// TestAdapter_C3_HostValidityRecordingWiring mirrors the OBFT base
+// adapter's same-named test. See obft/adapter_test.go for the
+// rationale. Wiring test for Phase 2 C3.
+func TestAdapter_C3_HostValidityRecordingWiring(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Host = ct.HostInvalidForOperators{
+		Layer:     0,
+		Operators: map[ct.OperatorID]bool{4: true},
+	}
+	out, err := twoabadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "3 honest σ-emitters at L_0 → qV reached")
+
+	att := out.CommitAttestation
+	require.True(t, att.OBFTHostValidityChecked, "OBFTHostValidityChecked must be set on a decided sim")
+	require.Equal(t, 0, att.OBFTHostValidityRejecters,
+		"op4 had invalid verdict and correctly NV-emitted → 0 rejecters; got %d",
+		att.OBFTHostValidityRejecters)
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.OBFTHostValidityRespect, "OBFTHostValidityRespect: %s", rep)
+}
+
 // TestAdapter_HealthyAtClusterSizes verifies the adapter runs healthy at
 // every SSV-supported cluster size (n=4, 7, 10, 13). Mirrors the bare
 // OBFT adapter's TestAdapter_HealthyAtClusterSizes.

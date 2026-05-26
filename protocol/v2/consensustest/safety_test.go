@@ -461,7 +461,7 @@ func TestSafety_HonestSingleSigmaV(t *testing.T) {
 	}
 }
 
-// TestSafety_HonestWalkConsistent — bucket-2 D1 invariant.
+// TestSafety_HonestWalkConsistent — bucket-3 D1 invariant.
 // Synthetic-outcome tests: constructs an Outcome with per-op
 // ResolveLayerAttempts that simulates a hypothetical Resolve-side
 // regression. Two violation cases:

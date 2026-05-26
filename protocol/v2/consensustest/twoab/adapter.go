@@ -14,7 +14,9 @@
 package twoab
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"sort"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -199,6 +201,9 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 
 	bw := ct.NewBandwidthReport()
+	// Wrap cfg.Host with a verdict-recording delegate (Phase 2 C3 wiring).
+	// Same shape as OBFT base — see obft/adapter.go for rationale.
+	recordingHost := ct.NewRecordingHostPattern(cfg.Host)
 	desCfg := desConfig{
 		N:                    cfg.N,
 		K:                    cfg.K,
@@ -212,7 +217,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		FetchAt:              fetchAt,
 		BroadcastBudget:      broadcastBudget,
 		Network:              cfg.Network,
-		Host:                 cfg.Host,
+		Host:                 recordingHost,
 		Byz:                  internal,
 		Seed:                 cfg.Seed,
 		TraceEnabled:         cfg.TraceEnabled,
@@ -229,7 +234,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.Byz = cfg.Byz
-	out.CommitAttestation = computeAttestation(cfg, out)
+	out.CommitAttestation = computeAttestation(cfg, out, recordingHost)
 	// Stamp the L_0 BFT_start-independence threshold = the unclamped
 	// fetchAt[0] (= T0Broadcast − B_0, floored at 0). This is the `fa`
 	// computed for k=0 above — the largest BFT_start for which L_0's schedule is
@@ -322,27 +327,28 @@ func classifyTwoabMiss(preDecided bool, preRound int, preTime, deadline time.Dur
 //
 // Instrumented (mirrors OBFT base — see obft/adapter.go computeAttestation
 // docstring for full rationale on each invariant):
+//   - QuorumBackedDecision (C1): cluster-wide σ-pool size at the decided
+//     (layer, V), read from any local-decider's ResolveLayerAttempts. C1
+//     stays uninstrumented when no local-decider trace is available (D1
+//     covers cert-gossip cases independently).
 //   - OBFTCommitKindValid (C2): naive — L_0 ⇒ "sigma"; L_k>0 ⇒ "nr".
 //     Descriptive tag only; check at safety.go validates kind ∈
 //     {"sigma", "nr"}.
+//   - OBFTHostValidityRespect (C3): cross-references SigmaByEmitter at the
+//     decided (layer, V) against the RecordingHostPattern verdicts,
+//     counting honest emitters whose locked host verdict was invalid.
+//     2abOBFT's first-write-wins verdict recording (in
+//     RecordingHostPattern) handles Phase-2a re-validation correctly per
+//     spec validate-once-and-lock.
 //   - Equivocation: Rule 2 + Rule 3 + Rule 6a (2ab-specific) evidence
 //     fires count into EquivocationsObserved. EquivocationsAccepted = 0
 //     (see C4 deferral note below).
 //
-// Left uninstrumented (separate follow-ups):
-//   - QuorumBackedDecision (C1): aggregator's SigmaCardinality
-//     underapproximates the protocol's σ-pool view in scenarios that
-//     combine plaintext leader-σ_V with chain-decrypted peer partials, or
-//     under partition occlusion. False-positives flag legitimate
-//     decisions. SigmaCardinality plumbing is added in this commit for
-//     future use; the safety check needs protocol-side per-decision
-//     quorum-count emission from twoab.Instance.Resolve.
-//   - NoEquivocationAccepted (C4): real EquivocationsAccepted count needs
-//     per-emitter visibility — bucket 2's SigmaByEmitter map.
-//   - OBFTHostValidityRespect (C3): 2ab's host re-validation at Phase-2a /
-//     Phase-2b means a layer-naive comparison over-reports. Requires
-//     plumbing per-op acceptance-layer through the DES boundary.
-func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
+// Left uninstrumented:
+//   - NoEquivocationAccepted (C4): bucket-2's HonestSingleSigmaV already
+//     catches the spec-§411 single-σ-V regression directly via the
+//     by-emitter map.
+func computeAttestation(cfg ct.SimConfig, out ct.Outcome, recordingHost *ct.RecordingHostPattern) ct.CommitAttestation {
 	att := ct.CommitAttestation{
 		EquivocationChecked: true,
 	}
@@ -354,6 +360,19 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 		} else {
 			att.OBFTCommitKind = "nr"
 		}
+
+		// C1 — defensive sentinel; see obft/adapter.go's same wiring.
+		if poolSize, ok := decidedLayerPoolSize(out); ok {
+			f := (cfg.N - 1) / 3
+			att.QuorumChecked = true
+			att.QuorumRequired = 2*f + 1
+			att.QuorumSigners = poolSize
+		}
+
+		// C3 — count rejecters cross-referencing SigmaByEmitter at the
+		// decided (layer, V) against the recording host's verdicts.
+		att.OBFTHostValidityChecked = true
+		att.OBFTHostValidityRejecters = countHostValidityRejecters(out, recordingHost)
 	}
 
 	for _, oo := range out.PerOp {
@@ -367,6 +386,56 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 	}
 
 	return att
+}
+
+// decidedLayerPoolSize — mirrors obft/adapter.go's helper. See that
+// docstring for semantics.
+func decidedLayerPoolSize(out ct.Outcome) (int, bool) {
+	opIDs := make([]ct.OperatorID, 0, len(out.PerOp))
+	for op := range out.PerOp {
+		opIDs = append(opIDs, op)
+	}
+	sort.Slice(opIDs, func(i, j int) bool { return opIDs[i] < opIDs[j] })
+	for _, op := range opIDs {
+		oo := out.PerOp[op]
+		if !oo.Decided || oo.Round != out.DecidedRound {
+			continue
+		}
+		for _, la := range oo.ResolveLayerAttempts {
+			if la.Layer == out.DecidedRound && la.Decided {
+				return la.SigmaPoolSize, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// countHostValidityRejecters — mirrors obft/adapter.go's helper. See
+// that docstring for semantics.
+func countHostValidityRejecters(out ct.Outcome, recordingHost *ct.RecordingHostPattern) int {
+	if recordingHost == nil || len(recordingHost.Verdicts) == 0 {
+		return 0
+	}
+	decidedHash := sha256.Sum256(out.DecidedValue)
+	rejecters := 0
+	for sigKey := range out.OfflineAgg.SigmaByEmitter {
+		if sigKey.Layer != out.DecidedRound || sigKey.ValueHash != decidedHash {
+			continue
+		}
+		emitter := sigKey.Emitter
+		if out.Byz.IsByz(emitter) || out.Byz.IsCrashed(emitter) {
+			continue
+		}
+		verdictKey := ct.HostVerdictKey{
+			Op:        emitter,
+			Layer:     out.DecidedRound,
+			ValueHash: decidedHash,
+		}
+		if verdict, recorded := recordingHost.Verdicts[verdictKey]; recorded && !verdict {
+			rejecters++
+		}
+	}
+	return rejecters
 }
 
 // desConfig is the 2ab-DES-internal configuration, built by Run.

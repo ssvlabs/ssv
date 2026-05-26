@@ -36,8 +36,9 @@ In-scope:
 - B5 (one-decision-per-op) — implemented as an adapter-side panic guard rather than a `SafetyReport` field; see [§Decisions / B5](#b5-one-decision-per-op---adapter-side-panic-not-safetyreport-field).
 - New Makefile target `stresstest-negative` — runs all `*TriggersSafetyDetection` adapter tests + `TestSafety_Honest*` synthetic-outcome tests as a quick CI smoke; see [§Decisions / Test targets](#test-targets--add-stresstest-negative-makefile-smoke).
 
-Out of scope (separate follow-ups):
-- C1 (`QuorumBackedDecision`), C3 (`OBFTHostValidityRespect`), C4 (`NoEquivocationAccepted` real count) — implementation discovered each needs deeper protocol-side instrumentation than bucket 1's "wire what's already there" framing assumed. Deferral details in [§Bucket 1 implementation findings](#bucket-1-implementation-findings--c1c4-deferred-2abobft-recording-fixed).
+Out of scope for Phase 1 (later resolved or still deferred):
+- C1 (`QuorumBackedDecision`), C3 (`OBFTHostValidityRespect`) — Phase-1 deferrals; **resolved in Phase 2** ([§Phase 2](#phase-2--c1--c3-follow-ups-resolved)). Both flip the previously-inert `*Checked` gates by reading protocol-side data Phase 1 added (C1 reads bucket-3 `ResolveLayerAttempts`; C3 reads a `RecordingHostPattern` wrapper's verdict map).
+- C4 (`NoEquivocationAccepted` real count) — stays deferred indefinitely; bucket-2's `HonestSingleSigmaV` subsumes its spec intent (catches the same per-op single-σ-V regression directly).
 - Bucket 5 — `ExpectEvidence` field on scenarios (slashing-evidence-must-fire when expected).
 - Bucket 6 — `go-mutesting` harness with mutation-coverage CI.
 - L_Bid mini-consensus invariants (out of current stresstest scope).
@@ -76,13 +77,13 @@ Net bucket-1 deliverable:
 - `safety.go` SafetyReport docstring updated to reflect C2 now-instrumented status
 - 2abOBFT recording bug fix (`e.Payload` → `e.V` in 3 call sites)
 
-C1 / C4 / C3 are tracked as separate follow-ups, with C1 + C4 both unblocked once Buckets 2 and 3 land their protocol-side / per-emitter plumbing.
+C1 + C3 follow-ups landed in [§Phase 2](#phase-2--c1--c3-follow-ups-resolved). C4 stays deferred indefinitely — bucket-2's `HonestSingleSigmaV` already subsumes its spec intent.
 
-### C3 OBFTHostValidityRespect — deferred, not rolled into bucket 1
+### C3 OBFTHostValidityRespect — deferred from bucket 1, resolved in Phase 2
 
-The adapter docstrings in [`obft/adapter.go`](../protocol/v2/consensustest/obft/adapter.go) and [`twoab/adapter.go`](../protocol/v2/consensustest/twoab/adapter.go) (search for `OBFTHostValidityRespect (C3)`) call out that a layer-naive comparison "decided_layer vs current host verdict" over-reports — scenarios like `HostFlipMidSlot` legitimately have operators decide at L_1 on a V they accepted at L_0 when the host's L_1 verdict is now "invalid". A correct check needs each operator's *acceptance-layer* (= the layer at which the host stamped a valid verdict on the decided V), plumbed through the DES boundary into `OperatorOutcome`.
+Phase-1 framing assumed C3 needed an *acceptance-layer* field plumbed through `OperatorOutcome` (and a layer-naive comparison would over-report under scenarios like `HostFlipMidSlot` where operators decide at L_1 on a V they accepted at L_0). That framing turned out too narrow.
 
-That's a new field + new adapter-side bookkeeping. It doesn't fit the "wire what's already there" framing of bucket 1; it's a separate project the same size as bucket 3. Punt to a follow-up.
+Phase 2's design (see [§Phase 2](#phase-2--c1--c3-follow-ups-resolved)) takes a different tack: wrap `cfg.Host` with `RecordingHostPattern` at adapter entry, then cross-reference recorded verdicts against `SigmaByEmitter` at the decided (layer, V). The recording is keyed by `(op, layer, value_hash)` — pinpoint, not layer-naive. First-write-wins captures the locked verdict per spec validate-once-and-lock. No new `OperatorOutcome` field needed.
 
 ### Per-op data source for bucket 2 — extend OfflineAggregator, key on actual emitter
 
@@ -686,3 +687,209 @@ Bucket 1 and Bucket 2 are independent. Bucket 3 depends on the protocol-side `Ou
 ## Implementation flag — 2abOBFT walk-state trace [resolved]
 
 Resolved during commit 4: `twoab.Instance.Resolve` has the same single-pass Phase-3 walk loop as `obft/base.Instance.Resolve` — the same instrumentation pattern (per-layer attempt struct, populated by `tryReconstructLayer` / `tryDeriveNextLayerKey`) works for both adapters. Phase-2a / Phase-2b emissions feed the σ-pool / NR-pool that Resolve consumes; no separate hook points needed. The single `LayerAttempt` schema is shared via `twoab.LayerAttempt = obft.LayerAttempt` (same type alias pattern as `Output`).
+
+## Phase 2 — C1 / C3 follow-ups [resolved]
+
+Phase 1 (buckets 1-3) deferred three of the four originally-planned `CommitAttestation` invariants. C4 turned out redundant with bucket 2's `HonestSingleSigmaV` (B2 catches the same spec-§411 invariant directly). C1 and C3 each cover a regression class that Phase 1 *doesn't* catch — Phase 2 closes both.
+
+### Goal
+
+Flip the existing `*Checked` gates for two of the originally-deferred `CommitAttestation` fields, so the (already-defined, already-tested) safety checks in `safety.go` start firing on regressions:
+
+1. **C1 `QuorumBackedDecision`** — fires if `Instance.Resolve` returns an `*Output` for which the cluster-wide σ-pool count was actually short of qV. Defensive sentinel; under correct Resolve the helper itself enforces this, so the check is vacuously satisfied — but if a future refactor breaks the gate, the check catches it instead of silently producing an under-qV signature.
+2. **C3 `OBFTHostValidityRespect`** — fires if an honest operator σ-emitted on the decided V despite their locked host verdict being invalid. Catches a real coverage gap: bucket-2 `HonestCrossPhaseExclusive` doesn't fire here because the regression produces only an extra σ-emit (no NR-side collision).
+
+C4 stays deferred indefinitely; `HonestSingleSigmaV` (B2) subsumes its spec intent.
+
+### Why each closes a real gap
+
+**C1**: today, if a protocol regression returned `*Output` with `len(winning.partials) < qV` (the helper's gate is somehow bypassed), nothing catches it directly. `HonestWalkConsistent` (D1) catches *most* of this via `WalkDecidedNoSigmaSource` — IF the trace correctly recorded `SigmaReached: false` at the decided layer. But under a regression where both the trace AND the Output are wrongly set together, D1 is fooled. C1 is an independent cross-check on the protocol's own quorum gate.
+
+**C3**: today, if a regression let an honest op σ-emit on V despite the host's locked verdict being invalid (e.g., a missed `if hostVerdict { ... }` guard), nothing fires:
+- `HonestCrossPhaseExclusive` (B1) doesn't fire — the regression produces σ-emit only, no NR-emit collision.
+- `HonestSingleSigmaV` (B2) doesn't fire — only one σ-on-V emission.
+- `NoOfflineDoubleV` doesn't fire — only one V reconstructs.
+
+The protocol-side `i.hostValidity` flag is supposed to prevent σ-emit when invalid. C3 is the framework's cross-check that the flag is being respected.
+
+### Scope
+
+In-scope:
+- C1 wiring in OBFT + 2abOBFT `computeAttestation` (reuses bucket-3 `LayerAttempts` — no protocol-side API change).
+- C3 wiring: wrapping `HostPattern` at the adapter level that records `(op, layer, value_hash) → verdict`; `computeAttestation` cross-references against `SigmaByEmitter` at the decided (layer, V).
+- Adapter-level wiring tests verifying the new fields populate correctly under known scenarios.
+
+Out-of-scope:
+- New SafetyReport fields: not needed. Both C1 and C3 flip the existing `*Checked` gates on already-defined `SafetyReport.QuorumBackedDecision` / `SafetyReport.OBFTHostValidityRespect` fields. The existing checks (tested in `safety_test.go` via `TestSafety_QuorumBackedDecision` and `TestSafety_OBFTHostValidityRespect`) continue to work as-is.
+- New `OperatorOutcome` field for host verdicts: not needed. The verdict tracking is adapter-internal — `computeAttestation` reads the recording-host's map directly and produces `Rejecters` count.
+
+### Decisions (resolved during design)
+
+#### C1 data source — reuse `ResolveLayerAttempts` (option B)
+
+The bucket-3 trace already records per-layer σ-pool size + `Decided` flag. The deciding-layer attempt is `out.ResolveLayerAttempts[i] where attempt.Decided == true && attempt.Layer == out.DecidedRound`; its `SigmaPoolSize` IS the quorum count.
+
+Rejected alternative: new `Output.QuorumSize int` field. Saves a protocol-side API change and ties C1 naturally to the bucket-3 instrumentation. The trace is already plumbed end-to-end (Instance → adapter → `ct.OperatorOutcome`), so C1 just adds a lookup in `computeAttestation`. ~10 lines.
+
+For ops that decided via cert-gossip (`Round == -1`, empty trace), C1 doesn't apply per-op — the cluster's quorum count is tracked via the local-decider's trace, not the cert-receiver's. `computeAttestation` populates from `out.DecidedRound` + `out.DecidedValue` looking at *any* op's trace that matches (using the cluster's verdict — at least one local-decider exists per [§Bucket 3 walk-state](#bucket-3--per-op-walk-state-assertions)). If no local-decider's trace is available, C1 stays uninstrumented (graceful default).
+
+#### C3 V-multiplicity — keyed by `(layer, value_hash)`
+
+Under leader equivocation an op may evaluate multiple V's at the same layer (retained ≥ 2 V's per spec §Phase 1 retention rules). The recording-host stores per `(op, layer, value_hash) → verdict` so multiple entries per (op, layer) are fine. Lookup at check time is by `(decidedLayer, sha256(decidedV))` specifically — pinpoint, no ambiguity.
+
+#### C3 hook point — wrapping `HostPattern` at the adapter level
+
+The adapter currently passes `cfg.Host` (a `HostPattern` interface) into `Instance` config unchanged. Phase 2 introduces a `recordingHostPattern` wrapper that delegates `Validate` calls to the inner `cfg.Host` and records `(op, layer, value_hash) → verdict` into a per-sim map. The adapter wraps before passing into Instance.
+
+Rejected alternative: add a hook inside `obft.Instance` for protocol-side verdict capture. The wrapping pattern is simpler (single point, no Instance API change), and the adapter has full visibility into every `host.Validate` call anyway because the call is routed through the framework's `HostPattern`.
+
+#### C3 2abOBFT re-validation — record only first verdict (option A)
+
+2abOBFT may re-evaluate V at Phase-2a (after observing the network state). Per spec § Head-change handling, the verdict SHOULD be stable (validate-once-and-lock). The recording-host's `RecordVerdict(op, layer, v_root, verdict)` discards subsequent verdicts when an entry for the same key already exists — first-write-wins. This way:
+- Under correct protocol behavior, the locked-first verdict is what's stored.
+- Under a regression where the protocol re-evaluates and acts on a flipped verdict, the recording-host's first-write-wins captures the locked verdict; if the σ-emit happened against the *flipped* (later) verdict, C3 cross-reference flags it.
+
+Rejected alternative: record every verdict and check consistency. Adds complexity for marginal additional coverage; the validate-once-and-lock invariant is enforced cryptographically (EKM single-σ-V slashing-protection log) so re-evaluation drift is bounded.
+
+#### Implementation order — single mega-commit (option B)
+
+C1 and C3 share the same wiring shape (both flip a `*Checked` gate on existing fields) and the same review surface (both touch `computeAttestation` in both adapters + plan doc updates). Splitting adds review overhead without bisectability value (neither breaks anything else). Single commit named `consensustest: safety-invariants phase 2 — wire C1 + C3`.
+
+### Architecture
+
+#### C1 — `QuorumBackedDecision` wiring
+
+[`protocol/v2/consensustest/obft/adapter.go`](../protocol/v2/consensustest/obft/adapter.go) `computeAttestation`:
+
+```go
+if out.Decided {
+    att.OBFTCommitKindChecked = true
+    if out.DecidedRound == 0 {
+        att.OBFTCommitKind = "sigma"
+    } else {
+        att.OBFTCommitKind = "nr"
+    }
+
+    // C1 — read the deciding-layer's σ-pool count from any local-decider's
+    // trace. Find an op with PerOp.Decided=true && Round==out.DecidedRound
+    // && ResolveLayerAttempts non-empty; the attempt at out.DecidedRound
+    // has SigmaPoolSize ≥ qV when Resolve correctly enforced the gate.
+    f := (cfg.N - 1) / 3
+    qV := 2*f + 1
+    if poolSize, ok := decidedLayerPoolSize(out); ok {
+        att.QuorumChecked = true
+        att.QuorumRequired = qV
+        att.QuorumSigners = poolSize
+    }
+}
+```
+
+`decidedLayerPoolSize(out)` helper iterates `out.PerOp`, finds any op with `Decided && Round == out.DecidedRound`, returns the matching `LayerAttempt.SigmaPoolSize`. Returns `(0, false)` if no local-decider is available (all ops cert-gossip-decided) — C1 stays uninstrumented for that scenario; D1 covers cert-gossip via `clusterLocalDecidedOn`.
+
+Same shape in [`twoab/adapter.go`](../protocol/v2/consensustest/twoab/adapter.go).
+
+#### C3 — `OBFTHostValidityRespect` wiring
+
+New exported `RecordingHostPattern` type in [`consensustest/host.go`](../protocol/v2/consensustest/host.go) (shared by both OBFT base and 2abOBFT adapters — `HostPattern` is protocol-agnostic so the wrapper lives at the framework level, not duplicated per adapter):
+
+```go
+// HostVerdictKey identifies one (op, layer, value_hash) verdict observation.
+type HostVerdictKey struct {
+    Op        OperatorID
+    Layer     int
+    ValueHash [32]byte
+}
+
+// RecordingHostPattern wraps an inner HostPattern, delegates Validate to
+// it, and records (op, layer, value_hash) → verdict. First-write-wins
+// per key — captures the locked verdict per spec validate-once-and-lock.
+type RecordingHostPattern struct {
+    Inner    HostPattern
+    Verdicts map[HostVerdictKey]bool
+}
+
+func NewRecordingHostPattern(inner HostPattern) *RecordingHostPattern { ... }
+func (r *RecordingHostPattern) Validate(op OperatorID, layer int, v []byte, phase Phase) bool { ... }
+```
+
+Adapter `Run()` wraps `cfg.Host` before passing into `desCfg.Host` and into `computeAttestation`:
+
+```go
+recordingHost := ct.NewRecordingHostPattern(cfg.Host)
+desCfg := desConfig{ ..., Host: recordingHost, ... }
+// ... runDES ...
+out.CommitAttestation = computeAttestation(cfg, out, recordingHost)
+```
+
+The `countHostValidityRejecters` helper iterates `out.OfflineAgg.SigmaByEmitter`, filters to entries at the decided `(layer, value_hash)`, skips byz/crashed emitters, and counts honest emitters whose recorded verdict is `false`:
+
+```go
+func countHostValidityRejecters(out ct.Outcome, recordingHost *ct.RecordingHostPattern) int {
+    if recordingHost == nil || len(recordingHost.Verdicts) == 0 {
+        return 0
+    }
+    decidedHash := sha256.Sum256(out.DecidedValue)
+    rejecters := 0
+    for sigKey := range out.OfflineAgg.SigmaByEmitter {
+        if sigKey.Layer != out.DecidedRound || sigKey.ValueHash != decidedHash {
+            continue
+        }
+        emitter := sigKey.Emitter
+        if out.Byz.IsByz(emitter) || out.Byz.IsCrashed(emitter) {
+            continue
+        }
+        verdictKey := ct.HostVerdictKey{
+            Op:        emitter,
+            Layer:     out.DecidedRound,
+            ValueHash: decidedHash,
+        }
+        if verdict, recorded := recordingHost.Verdicts[verdictKey]; recorded && !verdict {
+            rejecters++
+        }
+    }
+    return rejecters
+}
+```
+
+Honest emitters with no recorded verdict (e.g., never called `Validate` on this V — shouldn't happen for σ-contributors but defensive) are counted as 0 (no explicit rejection observed). The check fires only on explicit `verdict=false` records — this means a regression where σ-emit bypasses host validation entirely (no Validate call) would NOT be caught here. That class of regression is rarer and would require separate instrumentation.
+
+Same `decidedLayerPoolSize` and `countHostValidityRejecters` helpers are duplicated in [`twoab/adapter.go`](../protocol/v2/consensustest/twoab/adapter.go) (the helpers are adapter-internal and identical between the two; could be factored to a shared package in a follow-up).
+
+For cert-gossip-decided ops that never σ-emitted locally, they don't appear in `SigmaByEmitter` at the decided layer — they're not in scope for the rejecter count. Correct, since cert-gossip catch-up doesn't involve host validation by definition.
+
+### Tests
+
+#### Existing synthetic-outcome tests (already passing — confirm)
+
+[`safety_test.go`](../protocol/v2/consensustest/safety_test.go) already has:
+- `TestSafety_QuorumBackedDecision` — tests `safety.go`'s gating on `QuorumChecked && QuorumSigners < QuorumRequired`. After Phase 2 wiring, the test continues to pass (the gating logic is unchanged; just the adapter now populates the fields under real sims).
+- `TestSafety_OBFTHostValidityRespect` — tests gating on `OBFTHostValidityChecked && Rejecters > 0`. Same — continues to pass.
+
+#### New adapter-wiring tests
+
+Two new tests verify that `computeAttestation` correctly populates the new fields under known scenarios:
+
+- `TestAdapter_C1_QuorumBackedDecisionWiring` (in obft + twoab adapter_test.go): run Healthy scenario, verify `out.CommitAttestation.QuorumChecked == true` and `QuorumSigners >= QuorumRequired`.
+- `TestAdapter_C3_HostValidityRecordingWiring` (in obft + twoab adapter_test.go): run a scenario with a host that returns invalid for one op, verify the recording-host captured the verdict and `computeAttestation` reflects no rejector (since the invalid op didn't σ-emit per spec); also verify a Healthy scenario produces 0 rejectors.
+
+These don't exercise the violation case (would require deliberately bypassing the protocol's σ-emit gate, which is a protocol-side regression that's hard to inject). The violation-fires path is covered by the existing `TestSafety_*` synthetic-outcome tests against the gating logic.
+
+#### `stresstest-negative` Makefile target
+
+The two new adapter-wiring tests follow the `TestAdapter_*` naming pattern. They match the existing `^TestAdapter_.*_TriggersSafetyDetection$` regex iff renamed to suffix `_TriggersSafetyDetection` — which doesn't fit their semantics (they verify wiring, not detection-firing). Update the Makefile regex to also include `TestAdapter_C1_` / `TestAdapter_C3_` (or generalize to `^TestAdapter_(C[0-9]+|.*_TriggersSafetyDetection)`).
+
+### Order of work — single mega-commit
+
+One commit titled `consensustest: safety-invariants phase 2 — wire C1 + C3`. Internal structure:
+
+1. `obft/adapter.go` + `twoab/adapter.go`:
+   - Add `recordingHostPattern` type.
+   - `Run()` wraps `cfg.Host`.
+   - `computeAttestation` reads the wrapper's verdicts + cross-references `SigmaByEmitter` for the decided V → populates `OBFTHostValidityChecked` + `OBFTHostValidityRejecters`.
+   - `computeAttestation` reads deciding-layer's `LayerAttempt.SigmaPoolSize` → populates `QuorumChecked` + `QuorumRequired` + `QuorumSigners`.
+2. `safety.go` COVERAGE docstring: move `QuorumBackedDecision` + `OBFTHostValidityRespect` out of the "uninstrumented" group into the "instrumented" group; document that they fire on regressions now.
+3. Adapter-wiring tests: `TestAdapter_C1_QuorumBackedDecisionWiring` + `TestAdapter_C3_HostValidityRecordingWiring` (each in obft + twoab adapter_test.go).
+4. Makefile: extend `stresstest-negative` regex.
+5. This plan doc: mark `[resolved]` on the Phase 2 section.
+
+Expected diff: ~250 lines code + ~100 lines tests + ~50 lines doc.

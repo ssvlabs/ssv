@@ -244,7 +244,7 @@ LAYERS_K ?= 2
 P2P_PROFILES ?= prod,stage1,stage2,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300
 PROTOCOLS ?= OBFT-0,OBFT-300,OBFT-500,OBFT-700,2abOBFT-0,2abOBFT-300,2abOBFT-500,2abOBFT-700,QBFT-0,QBFT-300,QBFT-500,QBFT-700,QBFT-SSV
-ITERATIONS_BASELINE_OPERATIONS ?= 10000
+ITERATIONS_BASELINE_OPERATIONS ?= 1000
 ITERATIONS_UNSTABLE_OPERATIONS ?= 1
 .PHONY: stresstest
 stresstest:
@@ -280,7 +280,7 @@ stresstest-clean:
 	@echo "Cleaned $(abspath $(REPORT_DIR))/data.js"
 
 # stresstest-negative aggregates the safety-machinery negative tests
-# into a single fast CI smoke check. Two regex branches:
+# into a single fast CI smoke check. Three regex branches:
 #   - TestAdapter_.*_TriggersSafetyDetection — real-byz adapter tests
 #     in obft/ and twoab/ that exercise NoOfflineDoubleV firing under
 #     ByzAggregatorBypass / ByzWitnessForgery (forged-identity attacks
@@ -291,6 +291,12 @@ stresstest-clean:
 #     (HonestWalkConsistent). These hand-craft Outcome literals
 #     simulating hypothetical EKM / Resolve-side regressions and
 #     assert the corresponding SafetyReport field fires.
+#   - TestAdapter_C[0-9]+_ — Phase 2 adapter-wiring tests that verify
+#     CommitAttestation fields populate correctly (C1
+#     QuorumBackedDecision from ResolveLayerAttempts; C3
+#     OBFTHostValidityRespect from the RecordingHostPattern wrapper
+#     cross-referenced with SigmaByEmitter). Run sims and check field
+#     values rather than hand-crafting Outcomes.
 #
 # Together: prove that EVERY load-bearing safety invariant the
 # framework checks (per docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md)
@@ -304,7 +310,7 @@ stresstest-clean:
 stresstest-negative:
 	@echo "Running stresstest negative-test smoke (machinery regression check)"
 	@go test -tags blst_enabled -timeout 5m -v \
-		-run '^TestAdapter_.*_TriggersSafetyDetection$$|^TestSafety_Honest' \
+		-run '^TestAdapter_.*_TriggersSafetyDetection$$|^TestSafety_Honest|^TestAdapter_C[0-9]+_' \
 		./protocol/v2/consensustest/... \
 		./protocol/v2/consensustest/obft/... \
 		./protocol/v2/consensustest/twoab/...

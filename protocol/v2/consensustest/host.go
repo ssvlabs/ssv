@@ -76,3 +76,65 @@ type HostInvalidUntilLayer struct {
 func (h HostInvalidUntilLayer) Validate(_ OperatorID, layer int, _ []byte, _ Phase) bool {
 	return layer > h.InvalidUntilLayer
 }
+
+// HostVerdictKey identifies one (op, layer, value_hash) verdict observation.
+// Used by RecordingHostPattern to dedup-and-store the locked verdict per
+// spec validate-once-and-lock semantics.
+type HostVerdictKey struct {
+	Op        OperatorID
+	Layer     int
+	ValueHash [32]byte
+}
+
+// RecordingHostPattern wraps an inner HostPattern, delegates Validate calls
+// to it, and records each (op, layer, value_hash) → verdict observation in
+// Verdicts. First-write-wins per key — captures the FIRST verdict each op
+// produced for each (layer, V), matching the protocol's
+// validate-once-and-lock contract (§Head-change handling). Subsequent
+// re-evaluations of the same key (e.g., 2abOBFT Phase-2a re-validation)
+// are silently dropped. Under a regression where the protocol acts on a
+// re-evaluated flipped verdict instead of the locked first one, the
+// recorded verdict still reflects the locked state — the Phase 2 C3
+// safety check then catches the σ-emit-against-flipped-verdict regression.
+//
+// Used by the consensustest framework's Phase 2 C3 invariant
+// (docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md § Phase 2 — C1/C3
+// follow-ups). The adapter wraps cfg.Host with this wrapper at Run()
+// entry and passes the wrapper into the desCfg; computeAttestation
+// post-sim cross-references Verdicts against
+// Outcome.OfflineAgg.SigmaByEmitter at the decided (layer, V) to count
+// honest emitters whose locked verdict was invalid.
+//
+// Map writes are unsynchronized — safe because the consensustest DES runs
+// sequentially (event handlers don't execute concurrently). Production
+// concurrent use would need a mutex.
+type RecordingHostPattern struct {
+	Inner    HostPattern
+	Verdicts map[HostVerdictKey]bool
+}
+
+// NewRecordingHostPattern wraps inner with a verdict-recording delegate.
+// The returned wrapper's Verdicts is non-nil; safe to read after Run()
+// completes.
+func NewRecordingHostPattern(inner HostPattern) *RecordingHostPattern {
+	return &RecordingHostPattern{
+		Inner:    inner,
+		Verdicts: make(map[HostVerdictKey]bool),
+	}
+}
+
+// Validate delegates to the inner host, records the verdict under
+// first-write-wins semantics, and returns the inner's result unchanged
+// (the wrapper is transparent to callers).
+func (r *RecordingHostPattern) Validate(op OperatorID, layer int, v []byte, phase Phase) bool {
+	verdict := r.Inner.Validate(op, layer, v, phase)
+	key := HostVerdictKey{
+		Op:        op,
+		Layer:     layer,
+		ValueHash: hashValue(v),
+	}
+	if _, exists := r.Verdicts[key]; !exists {
+		r.Verdicts[key] = verdict
+	}
+	return verdict
+}

@@ -298,6 +298,70 @@ func TestAdapter_HealthyMesh_N4(t *testing.T) {
 	t.Logf("mesh-mode healthy: decided at %v on L_%d", out.DecisionTime, out.DecidedRound)
 }
 
+// TestAdapter_C1_QuorumBackedDecisionWiring verifies that
+// computeAttestation populates QuorumChecked / QuorumSigners /
+// QuorumRequired from a local-decider's ResolveLayerAttempts trace
+// under a healthy scenario. The protocol's tryReconstructLayer only
+// returns Output when SigmaPoolSize >= qV, so the wiring should always
+// produce QuorumSigners >= QuorumRequired (= 2f+1) here.
+//
+// This is the wiring test for Phase 2 C1 (see
+// docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md § Phase 2). Negative-path
+// gating (QuorumSigners < QuorumRequired triggers the safety panic) is
+// tested at the framework level in safety_test.go's
+// TestSafety_QuorumBackedDecision.
+func TestAdapter_C1_QuorumBackedDecisionWiring(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided)
+	require.Equal(t, 0, out.DecidedRound)
+
+	att := out.CommitAttestation
+	require.True(t, att.QuorumChecked, "QuorumChecked must be set under a healthy sim")
+	require.Equal(t, 3, att.QuorumRequired, "QuorumRequired = 2f+1 = 3 at n=4")
+	require.GreaterOrEqual(t, att.QuorumSigners, att.QuorumRequired,
+		"QuorumSigners must be >= QuorumRequired under correct Resolve; got %d", att.QuorumSigners)
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.QuorumBackedDecision, "QuorumBackedDecision: %s", rep)
+}
+
+// TestAdapter_C3_HostValidityRecordingWiring verifies that the
+// adapter-wrapped RecordingHostPattern records host verdicts and that
+// computeAttestation populates OBFTHostValidityChecked /
+// OBFTHostValidityRejecters from cross-referencing SigmaByEmitter at
+// the decided (layer, V) against the recorded verdicts.
+//
+// Scenario: op4's host returns invalid for V_0 at L_0. Under correct
+// protocol behavior, op4 NV-emits (no σ-emit), so op4 doesn't appear
+// in SigmaByEmitter at (0, V_0). Rejecters = 0 even though op4's
+// recorded verdict was invalid. This is the legitimate path — the
+// validate-once-and-lock gate prevented σ-emission as expected.
+//
+// Wiring test for Phase 2 C3 (see plan doc). Negative-path gating
+// (Rejecters > 0 triggers the safety panic) is tested at the framework
+// level in safety_test.go's TestSafety_OBFTHostValidityRespect.
+func TestAdapter_C3_HostValidityRecordingWiring(t *testing.T) {
+	cfg := ct.DefaultProposerDutyConfig(200 * time.Millisecond)
+	cfg.Host = ct.HostInvalidForOperators{
+		Layer:     0,
+		Operators: map[ct.OperatorID]bool{4: true},
+	}
+	out, err := obftadapter.Protocol{}.Run(cfg)
+	require.NoError(t, err)
+	require.True(t, out.Decided, "3 honest σ-emitters at L_0 (op1, op2, op3) + leader σ_V → qV reached")
+
+	att := out.CommitAttestation
+	require.True(t, att.OBFTHostValidityChecked, "OBFTHostValidityChecked must be set on a decided sim")
+	require.Equal(t, 0, att.OBFTHostValidityRejecters,
+		"op4 had invalid verdict and correctly NV-emitted (not in SigmaByEmitter) → 0 rejecters; got %d",
+		att.OBFTHostValidityRejecters)
+
+	rep := ct.ComputeSafetyReport(out)
+	require.True(t, rep.OBFTHostValidityRespect, "OBFTHostValidityRespect: %s", rep)
+}
+
 // TestAdapter_OpportunisticDecisionTime asserts the observer-mode metric
 // is active AND that commits fire on L0Ready close (not at T_commit):
 // under DeliveryDirect at BTT=200ms (ConstantDelay), σ-quorum at L_0

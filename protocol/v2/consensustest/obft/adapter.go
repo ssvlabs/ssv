@@ -5,7 +5,9 @@
 package obft
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"sort"
 	"time"
 
 	ct "github.com/ssvlabs/ssv/protocol/v2/consensustest"
@@ -140,6 +142,10 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 
 	bw := ct.NewBandwidthReport()
+	// Wrap cfg.Host with a verdict-recording delegate (Phase 2 C3 wiring).
+	// computeAttestation reads recordingHost.Verdicts post-sim to populate
+	// CommitAttestation.OBFTHostValidityRejecters.
+	recordingHost := ct.NewRecordingHostPattern(cfg.Host)
 	desCfg := desConfig{
 		N:               cfg.N,
 		K:               cfg.K,
@@ -152,7 +158,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 		FetchAt:         fetchAt,
 		BroadcastBudget: broadcastBudget,
 		Network:         cfg.Network,
-		Host:            cfg.Host,
+		Host:            recordingHost,
 		Byz:             internal,
 		Seed:            cfg.Seed,
 		TraceEnabled:    cfg.TraceEnabled,
@@ -169,7 +175,7 @@ func (p Protocol) Run(cfg ct.SimConfig) (ct.Outcome, error) {
 	}
 	out := rawOut.toCT(desCfg.Aggregator, desCfg.Bandwidth)
 	out.Byz = cfg.Byz
-	out.CommitAttestation = computeAttestation(cfg, out)
+	out.CommitAttestation = computeAttestation(cfg, out, recordingHost)
 	// Stamp the L_0 BFT_start-independence threshold = fetchAt[0] (the
 	// recovery-floored L_0 broadcast target, obftbase.BroadcastTargetOffset)
 	// — the largest BFT_start for which L_0's schedule is identical to
@@ -246,6 +252,13 @@ func classifyOBFTMiss(preDecided bool, preRound int, preTime, deadline time.Dura
 // treats unset flags as "uninstrumented, no violation reportable".
 //
 // Instrumented:
+//   - QuorumBackedDecision (C1): cluster-wide σ-pool size at the decided
+//     (layer, V), read from any local-decider's ResolveLayerAttempts trace
+//     (the deciding-layer's LayerAttempt.SigmaPoolSize is the protocol's
+//     own quorum count). QuorumRequired = 2f+1 (qV). When no local-decider
+//     trace is available (cert-gossip-only cluster), C1 stays
+//     uninstrumented — D1's HonestWalkConsistent.clusterLocalDecidedOn
+//     covers cert-gossip cases independently.
 //   - OBFTCommitKindValid (C2): descriptive tag — L_0 decisions ⇒ "sigma";
 //     L_k>0 decisions ⇒ "nr". Technically imprecise (L_k>0 σ-quorum can
 //     theoretically reach via witness sections alone without NR-fallthrough)
@@ -253,37 +266,30 @@ func classifyOBFTMiss(preDecided bool, preRound int, preTime, deadline time.Dura
 //     {"sigma", "nr"} — the imprecision is benign. Path-precise
 //     classification would need obft.Output to carry a DecisionKind tag
 //     from Resolve; deferred.
+//   - OBFTHostValidityRespect (C3): cross-references SigmaByEmitter at the
+//     decided (layer, V) against the RecordingHostPattern's verdict map,
+//     counting honest emitters whose locked host verdict on the decided V
+//     was invalid. Catches the protocol-side regression "honest σ-emitted
+//     despite locked-invalid host verdict" — a regression that bucket-2
+//     HonestCrossPhaseExclusive doesn't fire on (the regression produces
+//     no NR-collision). RecordingHostPattern wraps cfg.Host at the
+//     adapter level and records first-write-wins per (op, layer, value_hash)
+//     to capture the locked verdict per spec validate-once-and-lock.
 //   - Equivocation: Rule 2 (LeaderEquivocation) + Rule 3 (CrossOnion /
 //     CommitEquivocation) evidence fires are counted into
 //     EquivocationsObserved. Diagnostic — distinguishes "vacuously safe"
 //     (==0) from "tested safe" (>0). EquivocationsAccepted stays at 0
 //     (see C4 deferral note below).
 //
-// Left uninstrumented (need protocol-side instrumentation deeper than the
-// adapter boundary exposes — separate follow-ups):
-//   - QuorumBackedDecision (C1): the aggregator's view of cluster-wide
-//     σ-pool cardinality (via OfflineAggReport.SigmaCardinality) is an
-//     UNDERAPPROXIMATION of the protocol's local σ-pool view in scenarios
-//     where the protocol combines plaintext leader-σ_V (delivered via
-//     bundle, not via aggregator-recorded onion path) with chain-decrypted
-//     peer partials, or where partition occludes message visibility to
-//     specific receivers. False-positives flag legitimate decisions. A
-//     correct C1 check needs the protocol to emit a per-decision quorum
-//     count from obft.Instance.Resolve; deferred. The data plumbing
-//     (SigmaCardinality on OfflineAggReport) is added in this commit for
-//     future use.
-//   - NoEquivocationAccepted (C4): OfflineAggregator's SigmaPartials
-//     records every wire-emitted partial (regardless of Instance-side
-//     Rule 3 filtering), so counting "dual emissions in pools" would
-//     falsely flag legitimate ByzCrossSigning / ByzCrossOnionEquivocation
-//     scenarios. A real count needs per-emitter decision-pool visibility
-//     — bucket 2's SigmaByEmitter map enables this; deferred to that
-//     commit. Rule 3 binary failure is transitively caught by
-//     NoOfflineDoubleV.
-//   - OBFTHostValidityRespect (C3): validate-once-and-lock means a
-//     layer-naive comparison over-reports. Requires plumbing each op's
-//     acceptance-layer through the DES boundary. Separate follow-up.
-func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
+// Left uninstrumented:
+//   - NoEquivocationAccepted (C4): bucket-2's HonestSingleSigmaV already
+//     catches the spec-§411 single-σ-V regression directly via the
+//     by-emitter map (filtered to honest ops); C4 would be redundant.
+//     OfflineAggregator's claimed-sender SigmaPartials can't be used
+//     directly (would false-flag legitimate byz equivocation that Rule 3
+//     filtered at the Instance level). Rule 3 binary failures are
+//     transitively caught by NoOfflineDoubleV.
+func computeAttestation(cfg ct.SimConfig, out ct.Outcome, recordingHost *ct.RecordingHostPattern) ct.CommitAttestation {
 	att := ct.CommitAttestation{
 		EquivocationChecked: true,
 	}
@@ -297,6 +303,28 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 		} else {
 			att.OBFTCommitKind = "nr"
 		}
+
+		// C1 — read the deciding-layer's σ-pool count from any local
+		// decider's ResolveLayerAttempts trace. The protocol's
+		// tryReconstructLayer only returns Output when sigmaPoolSize >= qV,
+		// so this should always pass under correct Resolve. Defensive
+		// sentinel against a regression that bypasses the gate. If no local
+		// decider trace is available (cert-gossip-only cluster), C1 stays
+		// uninstrumented (graceful — D1 covers cert-gossip independently).
+		if poolSize, ok := decidedLayerPoolSize(out); ok {
+			f := (cfg.N - 1) / 3
+			att.QuorumChecked = true
+			att.QuorumRequired = 2*f + 1
+			att.QuorumSigners = poolSize
+		}
+
+		// C3 — for each non-byz emitter that contributed σ on the decided V
+		// at the decided layer, look up the RecordingHostPattern's verdict
+		// for (emitter, decidedRound, sha256(decidedValue)). Count
+		// rejecters (locked verdict was invalid → σ-emit shouldn't have
+		// happened).
+		att.OBFTHostValidityChecked = true
+		att.OBFTHostValidityRejecters = countHostValidityRejecters(out, recordingHost)
 	}
 
 	for _, oo := range out.PerOp {
@@ -310,6 +338,71 @@ func computeAttestation(_ ct.SimConfig, out ct.Outcome) ct.CommitAttestation {
 	}
 
 	return att
+}
+
+// decidedLayerPoolSize returns the σ-pool size at the decided layer,
+// read from any local-decider's ResolveLayerAttempts trace. The
+// protocol's tryReconstructLayer only returns Output when
+// SigmaPoolSize >= qV, so any matching attempt is a valid quorum
+// count for C1. Returns (0, false) when no local-decider trace is
+// available (cluster decided via cert-gossip exclusively) — C1 stays
+// uninstrumented and D1's clusterLocalDecidedOn covers cert-gossip
+// cases independently.
+//
+// Iterates PerOp in sorted op-ID order so the picked-trace is
+// deterministic across runs (Go map iteration is randomized).
+func decidedLayerPoolSize(out ct.Outcome) (int, bool) {
+	opIDs := make([]ct.OperatorID, 0, len(out.PerOp))
+	for op := range out.PerOp {
+		opIDs = append(opIDs, op)
+	}
+	sort.Slice(opIDs, func(i, j int) bool { return opIDs[i] < opIDs[j] })
+	for _, op := range opIDs {
+		oo := out.PerOp[op]
+		if !oo.Decided || oo.Round != out.DecidedRound {
+			continue
+		}
+		for _, la := range oo.ResolveLayerAttempts {
+			if la.Layer == out.DecidedRound && la.Decided {
+				return la.SigmaPoolSize, true
+			}
+		}
+	}
+	return 0, false
+}
+
+// countHostValidityRejecters counts honest, non-crashed σ-emitters on
+// the decided (layer, V) whose RecordingHostPattern verdict was
+// invalid. A non-zero count is the C3 violation: the protocol allowed
+// σ-emission despite a locked-invalid host verdict (the validate-once-
+// and-lock contract was violated).
+//
+// Reads SigmaByEmitter (by actual emitter, not claimed-sender) so
+// byzantine identity forgery doesn't add false positives.
+func countHostValidityRejecters(out ct.Outcome, recordingHost *ct.RecordingHostPattern) int {
+	if recordingHost == nil || len(recordingHost.Verdicts) == 0 {
+		return 0
+	}
+	decidedHash := sha256.Sum256(out.DecidedValue)
+	rejecters := 0
+	for sigKey := range out.OfflineAgg.SigmaByEmitter {
+		if sigKey.Layer != out.DecidedRound || sigKey.ValueHash != decidedHash {
+			continue
+		}
+		emitter := sigKey.Emitter
+		if out.Byz.IsByz(emitter) || out.Byz.IsCrashed(emitter) {
+			continue
+		}
+		verdictKey := ct.HostVerdictKey{
+			Op:        emitter,
+			Layer:     out.DecidedRound,
+			ValueHash: decidedHash,
+		}
+		if verdict, recorded := recordingHost.Verdicts[verdictKey]; recorded && !verdict {
+			rejecters++
+		}
+	}
+	return rejecters
 }
 
 // desConfig is the OBFT-DES-internal configuration, built by Run.
