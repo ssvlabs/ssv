@@ -11,7 +11,7 @@ import (
 // load-bearing safety violation; the framework panics on any of:
 // SingleV, HonestAgreement, NoOfflineDoubleV, QuorumBackedDecision,
 // NoEquivocationAccepted, OBFTCommitKindValid, OBFTHostValidityRespect,
-// HonestCrossPhaseExclusive, HonestSingleSigmaV.
+// HonestCrossPhaseExclusive, HonestSingleSigmaV, HonestWalkConsistent.
 //
 // COVERAGE — what is actually instrumented today:
 //
@@ -26,6 +26,12 @@ import (
 //     docs/CONSENSUSTEST-SAFETY-INVARIANTS-PLAN.md. Empty by-emitter
 //     maps (adapters that don't populate them, or synthetic-outcome
 //     tests) iterate to zero violations — graceful default-true.
+//   - HonestWalkConsistent is computed from each honest op's
+//     OperatorOutcome.ResolveLayerAttempts trace (populated by
+//     OBFT-family adapters from obft.Instance.LastResolveLayerAttempts),
+//     filtered via Outcome.Byz. Bucket-3 D1 invariant. Empty trace
+//     (non-OBFT-family adapter, or instrumented op where Resolve
+//     never ran) iterates to zero violations — graceful default-true.
 //   - NoEquivocationAccepted has EquivocationChecked=true in both
 //     OBFT and 2abOBFT adapters, but EquivocationsAccepted is hard-
 //     wired to 0 there because the adapters' internal Rule3 enforcement
@@ -55,10 +61,13 @@ import (
 // load-bearing universal checks. HonestCrossPhaseExclusive +
 // HonestSingleSigmaV catch the per-operator EKM regression class
 // directly (rather than only transitively via NoOfflineDoubleV's
-// "double-V reconstructable" end-state). The remaining invariants are
-// layered diagnostics that distinguish "what went wrong" once the
-// universal checks fire (or that future-proof the report against
-// adapter changes).
+// "double-V reconstructable" end-state); HonestWalkConsistent catches
+// Resolve-side regressions where an honest op's walk would have
+// advanced past a σ-decidable layer (also rather than only transitively
+// via NoOfflineDoubleV). The remaining invariants are layered
+// diagnostics that distinguish "what went wrong" once the universal
+// checks fire (or that future-proof the report against adapter
+// changes).
 type SafetyReport struct {
 	// SingleV: at most one distinct Value is reconstructed cluster-wide
 	// (Pigeonhole claim: "at most one full V signature per slot"). Round

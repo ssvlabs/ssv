@@ -123,7 +123,7 @@ Two design options:
 
 **A) Adapter-side post-hoc reconstruction.** After the sim ends, the adapter replays each honest op's accumulated message view through a fresh `obft.Instance.Resolve` and records which layers σ'd. Then compares against the actual decision.
 
-**B) Instance-side hook.** Add a `ResolveLayerTrace` field to `obft.Output`, populated by `tryReconstructLayer` with `(layer, sigmaPoolSize, qV, decided)` records. Adapter copies into `OperatorOutcome`.
+**B) Instance-side hook.** Instrument `Instance.Resolve` itself to record per-layer walk state, expose via a getter. Adapter copies into `OperatorOutcome`.
 
 Pick B. Reasons:
 - A double-replays consensus per op (~N× cost on `make stresstest`).
@@ -131,9 +131,30 @@ Pick B. Reasons:
 - B is ~20 lines of additive instrumentation in `tryReconstructLayer`; the trace is empty on the non-decided path and small on the decided path.
 - B also exposes useful diagnostic data for failure debugging (you can see how far Resolve got).
 
-The trace is a debugging side-channel; it does NOT change Resolve's return contract. Append-only mode behind the existing `i.cfg.TraceEnabled` toggle, so production-runner paths skip it.
+The trace is a debugging side-channel; it does NOT change Resolve's return contract. Cost: bounded by K (≤ N at the production K=N convention), one struct append per layer per Resolve call — negligible against the crypto cost of σ-pool reconstruction at each layer. Always populated (no opt-in toggle); production runner paths simply ignore the field.
 
-Update — naming: the new field on `Output` is `LayerTrace []LayerAttempt` with `LayerAttempt = struct{ Layer int; SigmaPoolSize int; QV int; Decided bool; NRPoolSize int }`. Adapter copies into `OperatorOutcome.ResolveLayerAttempts` (new field).
+**Implementation shape (as landed in commit 4):** `LayerAttempt` exported type in `obft/message.go` alongside `Output`, re-aliased into `obft/base` and `obft/twoab` so callers use unqualified `LayerAttempt`:
+
+```go
+type LayerAttempt struct {
+    Layer         int
+    SigmaPoolSize int
+    QV            int
+    SigmaReached  bool
+    Decided       bool
+    NRPoolSize    int
+    QEnc          int
+    NRReached     bool
+}
+```
+
+`Instance.lastResolveTrace []LayerAttempt` is an UNEXPORTED field — the trace lives on `Instance` (not on `Output`) so it's accessible on the failure path too (`Resolve` returns `nil`-Output on no-quorum / deadlock, but D1 needs walk state in BOTH success and failure paths). Exported getter:
+
+```go
+func (i *Instance) LastResolveLayerAttempts() []LayerAttempt
+```
+
+Resolve resets `lastResolveTrace` at the start of each call (per-call snapshot, idempotent re-runs reflect the LATEST call's walk state, not accumulated). Failure paths also append the attempt before returning the error so debugging tools see how far the walk got before the crypto failure / deadlock. Adapter calls the getter post-Resolve and copies into `OperatorOutcome.ResolveLayerAttempts` (defined as `ct.LayerAttempt` in `consensustest/protocol.go`, a separate-but-identical type so the framework stays protocol-family-agnostic — adapter does trivial field-by-field translation).
 
 ### 2abOBFT parity — same buckets, same shape, minor adaptations
 
@@ -181,7 +202,7 @@ Test layout (one `TestSafety_*` per new field, each with table-driven sub-tests 
 |---|---|---|
 | B1 σ-XOR-NR per honest op (subsumes B3 leader case) | `TestSafety_HonestCrossPhaseExclusive` | OK_empty_maps, OK_distinct_layers_sigma_then_nr, VIOLATION_honest_op_sigma_and_nr_same_layer, VIOLATION_leader_sigma_V_and_nr_at_own_layer (B3 case), OK_byz_emitter_filtered, OK_crashed_op_filtered |
 | B2 single-σ-V per honest op | `TestSafety_HonestSingleSigmaV` | OK_empty_map, OK_one_V_per_layer, OK_same_V_different_emitters, VIOLATION_honest_op_two_Vs_same_layer, OK_byz_emitter_filtered |
-| D1 walk-state | `TestSafety_HonestWalkConsistent` (commit 5) | TBD per commit-5 design |
+| D1 walk-state | `TestSafety_HonestWalkConsistent` | OK_no_trace_graceful_default, OK_decided_at_first_sigma_reached, OK_decided_at_fallthrough_layer, OK_clip_late_decided, OK_cert_gossip_decide_with_cluster_local_decider (empty-trace early-gate path), OK_cert_gossip_after_failed_local_resolve_with_cluster_local_decider (exercises clusterLocalDecidedOn), VIOLATION_cert_gossip_no_cluster_local_decider, OK_cert_gossip_decide_skip_case_b, VIOLATION_decided_no_sigma_source (Round>=0 + empty σ-trace), VIOLATION_advanced_past_sigma, OK_byz_emitter_filtered |
 
 B3 is **not a separate SafetyReport field** — the leader's Phase-1 σ_V is recorded in `SigmaByEmitter` alongside any NR partial they emit at the same layer, so the B1 check catches the spec-§411 leader-σ-locks-σ-side rule by construction. The `VIOLATION_leader_sigma_V_and_nr_at_own_layer` sub-test under `TestSafety_HonestCrossPhaseExclusive` documents this; no separate test name needed.
 

@@ -546,7 +546,9 @@ func TestSafety_HonestWalkConsistent(t *testing.T) {
 		{
 			name: "OK_cert_gossip_decide_with_cluster_local_decider",
 			// op1 decided via cert (Round=-1, empty trace). op2 decided
-			// locally on the same V (Round=0). Legitimate catch-up.
+			// locally on the same V (Round=0). op1 is skipped via the
+			// empty-trace early gate; op2 passes case (b) (decided at
+			// sigmaReachedAt[0]).
 			perOp: map[ct.OperatorID]ct.OperatorOutcome{
 				op1: {Decided: true, Round: -1, Value: vA},
 				op2: {Decided: true, Round: 0, Value: vA,
@@ -555,6 +557,43 @@ func TestSafety_HonestWalkConsistent(t *testing.T) {
 					}},
 			},
 			wantOK: true,
+		},
+		{
+			name: "OK_cert_gossip_after_failed_local_resolve_with_cluster_local_decider",
+			// op1 ran local Resolve (trace non-empty showing no σ-reached
+			// anywhere) and then decided via cert. case (a) cert-gossip
+			// branch fires; clusterLocalDecidedOn finds op2 as a real
+			// local-decider on V_a → legitimate.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: -1, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: false, QV: 3, SigmaPoolSize: 1, NRReached: true, QEnc: 3},
+						{Layer: 1, SigmaReached: false, QV: 3, SigmaPoolSize: 1},
+					}},
+				op2: {Decided: true, Round: 0, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: true, Decided: true, QV: 3, SigmaPoolSize: 3},
+					}},
+			},
+			wantOK: true,
+		},
+		{
+			name: "VIOLATION_cert_gossip_no_cluster_local_decider",
+			// op1 has cert-gossip-decide with a non-empty failed-Resolve
+			// trace. No OTHER op is a local-decider on V_a → bogus cert
+			// regression. case (a) cert-gossip branch fires
+			// clusterLocalDecidedOn(exclude=op1) → no match → flag.
+			perOp: map[ct.OperatorID]ct.OperatorOutcome{
+				op1: {Decided: true, Round: -1, Value: vA,
+					ResolveLayerAttempts: []ct.LayerAttempt{
+						{Layer: 0, SigmaReached: false, QV: 3, SigmaPoolSize: 1},
+					}},
+				// op2 isn't in PerOp → no cluster-side local-decider on V_a.
+			},
+			wantOK:      false,
+			wantPanic:   true,
+			wantReasons: []ct.WalkInconsistencyReason{ct.WalkDecidedNoSigmaSource},
+			wantEvOps:   []ct.OperatorID{op1},
 		},
 		{
 			name: "OK_cert_gossip_decide_skip_case_b",
