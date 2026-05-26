@@ -267,14 +267,16 @@ func productionLogNormal(btt time.Duration) LogNormalDelay {
 // pipeline-shifting QBFT-family / PSigs cells wholesale and applying the
 // per-cell BFT_start-independence threshold (cellPayload
 // .BFTStartIndependenceMs) for OBFT-family cells.
-// BaselineSeverProbValues is the per-pair sustained-severance axis
-// emitted by p2p_baseline as a global picker dimension. Dialled in the
-// report UI to see all baseline cells at a chosen partition level.
+// SeverProbValues is the canonical per-pair sustained-severance axis
+// — single source for both the p2p_baseline 5th cross-product axis
+// (mirrored in the report UI's p2p_partition picker) and the dedicated
+// p2p_partitions sweep. Sharing one slice keeps the dedicated chart's
+// x-axis labels lined up with the global picker buttons, so users
+// reading the curve and dialing the global knob see the same values.
+//
 // Kept sparse on purpose — each value multiplies the baseline cell
-// count linearly. Mirrors a subset of p2p_partitions' dedicated sweep
-// values; the dedicated sweep keeps a finer-grained set for smooth
-// degradation-curve rendering.
-var BaselineSeverProbValues = []float64{0, 0.15, 0.30, 0.50}
+// count linearly. Tune here to trade resolution for wall time.
+var SeverProbValues = []float64{0, 0.15, 0.30, 0.50}
 
 func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int, profiles []string, bttValues []time.Duration) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
@@ -289,8 +291,8 @@ func p2pBaselineSweep(scenarios []Scenario, protocols []Protocol, iters Iteratio
 	// (mesh-only severance is a no-op for them), so SeverProb>0 emits
 	// only Baseline-group cells too.
 	faultyNodes := FaultyNodesRange(n)
-	pts := make([]SweepPoint, 0, len(BaselineSeverProbValues)*len(bttValues)*len(profiles)*len(InstabilityLevels)*len(faultyNodes))
-	for _, severProb := range BaselineSeverProbValues {
+	pts := make([]SweepPoint, 0, len(SeverProbValues)*len(bttValues)*len(profiles)*len(InstabilityLevels)*len(faultyNodes))
+	for _, severProb := range SeverProbValues {
 		severProb := severProb
 		for _, btt := range bttValues {
 			for _, profile := range profiles {
@@ -533,15 +535,13 @@ func p2pPacketLossSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 // carries the degradation signal as the bound bites.
 func p2pPartitionsSweep(scenarios []Scenario, protocols []Protocol, iters Iterations, n, k int) Sweep {
 	fallback, byGroup := iters.asBatchIterations()
-	// SeverProb axis: 0 anchors the unsevered baseline; 5-20% spans
-	// realistic per-connection failure rates (NAT churn, peer-score
-	// evictions, regional routing issues that persist longer than a
-	// slot); 30-50% pushes into severe-partition territory where
-	// most nodes lose most eager paths and gossip recovery dominates.
-	// The 5/10/20 values keep the gentle-degradation curve from the
-	// initial release; 30/50 align with the baseline picker's coarser
-	// dial (BaselineSeverProbValues) for cross-chart comparison.
-	probs := []float64{0, 0.05, 0.10, 0.20, 0.30, 0.50}
+	// SeverProb axis aligned with SeverProbValues — the canonical
+	// per-sim severance set also driving the p2p_baseline 5th axis
+	// and the report's p2p_partition global picker. Sharing one slice
+	// keeps this chart's x-axis labels matching the global dial so
+	// users reading the curve and dialing the knob see the same
+	// values.
+	probs := SeverProbValues
 	pts := make([]SweepPoint, 0, len(probs))
 	for _, prob := range probs {
 		prob := prob
@@ -582,7 +582,7 @@ func p2pPartitionsSweep(scenarios []Scenario, protocols []Protocol, iters Iterat
 			"direct: LogNormal{Median: BTT/2, σ: 0.5}",
 			"mesh per-hop: LogNormal{Median: BTT/3, σ: 0.3}",
 		},
-		Description: "Per-pair sustained severance over a production-shaped baseline with bounded gossip connectivity (TopicMaxPeers ≈ 10). Bernoulli at SeverProb per delivery-path pair (eager edges ∪ gossip-reachable pairs from the bounded candidate set), sampled once per sim from the mesh's salted rng. Cuts persist the whole slot — gossip recovery routes only through surviving connections; unlike LossyNetwork's transient burst drops, severed links never recover within the slot. At n=4 the non-eager pool is at or below GossipPoolBound, so the bound is inactive there and the n=4 cell stays near-flat — an honest reflection of a small subnet where a real libp2p node would similarly see all peers. n=7 and n=13 carry the degradation signal. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
+		Description: "Per-pair sustained severance over a production-shaped baseline with bounded gossip connectivity (TopicMaxPeers ≈ 10). Bernoulli at SeverProb per delivery-path pair (eager edges ∪ gossip-reachable pairs from the bounded candidate set), sampled once per sim from the mesh's salted rng. Cuts persist the whole slot — gossip recovery routes only through surviving connections; unlike LossyNetwork's transient burst drops, severed links never recover within the slot. Axis values share consensustest.SeverProbValues with the p2p_baseline 5th axis, so this chart's x-axis lines up with the report's global p2p_partition picker. At n=4 the non-eager pool is at or below GossipPoolBound, so the bound is inactive there and the n=4 cell stays near-flat — an honest reflection of a small subnet where a real libp2p node would similarly see all peers. n=7 and n=13 carry the degradation signal. One (n, K) slice per run; the chart filters by the currently-selected (n, K).",
 		AxisLabel:   "Sever probability per pair",
 		Points:      pts,
 	}

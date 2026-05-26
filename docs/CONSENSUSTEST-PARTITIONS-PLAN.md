@@ -2,7 +2,7 @@
 
 Design plan for a new `p2p_partitions` stress-test sweep — a sustained per-connection severance axis. Companion to (and depends on) the mesh transport introduced under the (now-removed) `CONSENSUSTEST-MESH-PLAN.md`.
 
-> **Phase 2 follow-up (landed after v1).** The dedicated sweep below shipped first as a standalone chart. A follow-up commit added SeverProb as a 5th axis on `p2p_baseline` plus a global `p2p_partition` picker in the report UI, so the heatmap / conditions chart re-render at the dialled severance level (alongside the existing N / K / BTT / profile / instability / faulty_nodes pickers). The dedicated `p2p_partitions` chart stays — it still carries the smooth degradation curve. See "Phase 2 — global picker" near the end of this doc.
+> **Phase 2 follow-up (landed after v1).** The dedicated sweep below shipped first as a standalone chart. A follow-up commit added SeverProb as a 5th axis on `p2p_baseline` plus a global `p2p_partition` picker in the report UI, so the heatmap / conditions chart re-render at the dialled severance level (alongside the existing N / K / BTT / profile / instability / faulty_nodes pickers). The dedicated `p2p_partitions` chart stays — its axis is now aligned with the global picker (both read `consensustest.SeverProbValues`). See "Phase 2 — global picker" near the end of this doc.
 
 ## Goal
 
@@ -285,12 +285,11 @@ End-to-end signal (to verify with a live run):
 
 The v1 above shipped a *dedicated chart* with a SeverProb x-axis. After early feedback ("I want a knob like the BTT / instability pickers to dial severance globally"), Phase 2 added:
 
-- **`BaselineSeverProbValues = {0, 0.15, 0.30, 0.50}`** — a 5th axis on the `p2p_baseline` cross-product. Follows the existing asymmetric-axis pattern: SeverProb > 0 emits only Baseline-group cells, because adversarial scenarios run on `DeliveryDirect` where `MeshConfig.SeverProb` is a no-op (matches how `instability` and `faulty_nodes` already work).
+- **`SeverProbValues = {0, 0.15, 0.30, 0.50}`** — single canonical axis used by both the `p2p_baseline` 5th cross-product axis (mirrored as the report's global picker) **and** the dedicated `p2p_partitions` sweep. Sharing one slice means the dedicated chart's x-axis labels stay aligned with the global dial — users reading the curve and turning the knob see identical values. Follows the existing asymmetric-axis pattern: SeverProb > 0 emits only Baseline-group cells, because adversarial scenarios run on `DeliveryDirect` where `MeshConfig.SeverProb` is a no-op (matches how `instability` and `faulty_nodes` already work).
 - **`p2p_partition` picker** in the report's conditions section — renders SeverProb values as percentage labels, threads through `baselineAxesMatch` / `findBaselinePointAt*` / `baselinePointExists` / `findBaselineCellForScenario`. Adversarial rows fall back to SeverProb=0 (the cell the asymmetric axis emits).
-- **Dedicated sweep widened** from `{0, 5%, 10%, 20%}` to `{0, 5%, 10%, 20%, 30%, 50%}` so the curve still has the smooth low-end shape and overlaps the picker's coarser dial at the high end.
 - **Back-compat**: legacy data.js without `SeverProb` fields shows only the 0% button (others greyed by `baselinePointExists`); cells without `SeverProb` resolve to 0 via `?? 0` in `baselineAxesMatch` / `findBaselinePointAt*`.
 
-**Cost**: baseline cell count multiplies by `len(BaselineSeverProbValues) = 4`. The default `make stresstest` run takes ~4× more wall time on the baseline sweep per (n, K) slice; other sweeps unaffected. Tunable by editing the picker's value list.
+**Cost**: baseline cell count multiplies by `len(SeverProbValues) = 4`. The default `make stresstest` run takes ~4× more wall time on the baseline sweep per (n, K) slice; other sweeps unaffected. Tunable by editing `SeverProbValues` in `sweep.go`.
 
 The dedicated `p2p_partitions` sweep stays — it's the right shape for "show me the partition-vs-success curve at one glance," while the global picker is the right shape for "show me everything at 30% partition."
 
@@ -301,7 +300,7 @@ The dedicated `p2p_partitions` sweep stays — it's the right shape for "show me
 - ✅ Isolation or degradation? **Degradation curve.** Isolation needs correlated cuts (deferred).
 - ✅ Fidelity scope (A1/A2)? **A1, reframed** — keep eager mesh degree-3 (calibration), bound only the gossip pool.
 - ✅ Pair universe? **Delivery-path pairs (eager + gossip-reachable), undirected.** Non-delivery pairs carry no messages, so rolling them would dilute the user-facing meaning of `SeverProb`.
-- ✅ Percentage semantics? **Bernoulli per pair, dedicated sweep `p ∈ {0, 0.05, 0.10, 0.20, 0.30, 0.50}`; global picker (Phase 2) `p ∈ {0, 0.15, 0.30, 0.50}`.**
+- ✅ Percentage semantics? **Bernoulli per pair, shared axis `consensustest.SeverProbValues = {0, 0.15, 0.30, 0.50}` — used by both the dedicated `p2p_partitions` sweep and the global picker (Phase 2).**
 - ✅ Subnet size? **Keep `r = n`.** Document n=4 cell as near-flat.
 - ✅ Iteration budget? **Inherits Baseline (10000)** via the existing scenario-cloning pattern.
 - ✅ Mesh-mode only? **Yes.**
