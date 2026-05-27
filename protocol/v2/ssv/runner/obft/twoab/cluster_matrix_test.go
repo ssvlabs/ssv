@@ -15,12 +15,19 @@ import (
 	twoabcore "github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
 )
 
-// 2abOBFT cluster-matrix verification: parameterizes the real-BLS
-// Healthy scenario over the (n, K) ∈ {4: 2,3,4} ∪ {7: 3..7} matrix to
-// confirm the protocol works end-to-end at K > 2. The non-matrix
-// tests (TestRunProposerSlot_RealBLS_Healthy_n4 at K=4) cover only one
-// cell — this verifies the σ-quorum + chained-IBE machinery scales
-// across the full f+1..N fall-through depth at both cluster sizes.
+// 2abOBFT cluster-matrix verification: parameterizes the three
+// existing 2abOBFT runner scenarios — stub Healthy, real-BLS Healthy,
+// real-BLS SilentL0Leader_NRFallThrough — over the (n, K) ∈
+// {4: 2,3,4} ∪ {7: 3..7} matrix. The non-matrix counterparts
+// (TestRunProposerSlot_Healthy_n4 + RealBLS_* siblings) each cover
+// one cell; the matrix variants exercise the protocol across the
+// full f+1..N fall-through depth at both cluster sizes:
+//
+//   - σ-quorum + chained-IBE encryption (Healthy path), and
+//   - chained-IBE *decryption* via NR-quorum unlock (NR fall-through),
+//
+// at every K from BFT-liveness floor (f+1) up to maximum depth (N) —
+// which the existing per-scenario tests never exercised at K > 2.
 //
 // The helpers introduced here (matrixCell, twoabMatrixCells,
 // compressedTestOverridesForK) are shared with the safety bridge that
