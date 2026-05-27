@@ -65,8 +65,9 @@ import (
 //     (brackets the BFT-liveness floor + SSV's K=N convention at n=4).
 //   - P2P_PROFILES — comma-separated calibrated mesh-hop profile names
 //     for the p2p_baseline sweep's profile axis. Valid values: prod,
-//     stage1a, stage2a, slow, heavy_tail, slow_heavy_tail, stage1b,
-//     stage2b. Default: all eight. See ct.P2PProfileNames / ct.P2PProfile.
+//     stage1a, stage1b, stage2a, stage2b, slow, heavy_tail,
+//     slow_heavy_tail. Default: all eight. See ct.P2PProfileNames /
+//     ct.P2PProfile.
 //   - PROTOCOLS — comma-separated protocol names to include in the sweep
 //     (e.g. "OBFT-700,QBFT-700,PSigs"). Test-level default (unset / empty):
 //     all registered protocols. `make stresstest` overrides this with a
@@ -160,8 +161,8 @@ func TestStress(t *testing.T) {
 
 	// P2P_PROFILES — comma-separated calibrated mesh-hop profile names
 	// for the p2p_baseline sweep's profile axis. Default: all eight
-	// (prod, stage1a, stage2a, slow, heavy_tail, slow_heavy_tail,
-	// stage1b, stage2b) from ct.P2PProfileNames. Each name becomes one
+	// (prod, stage1a, stage1b, stage2a, stage2b, slow, heavy_tail,
+	// slow_heavy_tail) from ct.P2PProfileNames. Each name becomes one
 	// point in the BTT × profile × instability cross-product, with both
 	// cfg.Network and cfg.Mesh.HopDelay sourced from the named profile.
 	// Duplicates are dropped, preserving first-occurrence order.

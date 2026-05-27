@@ -146,9 +146,9 @@ var DefaultBaselineBTTValues = []time.Duration{
 //  1. p2p_baseline — BTT × profile × instability × faulty_nodes
 //     cross-product. BTT from the `bttValues` parameter (default {100,
 //     200, 300, 400} ms via BTT_VALUES_MS env var), profile from the
-//     `profiles` parameter (default {prod, stage1a, stage2a, slow,
-//     heavy_tail, slow_heavy_tail, stage1b, stage2b} via P2P_PROFILES
-//     env var), instability ∈ {none, low, moderate, high, extreme},
+//     `profiles` parameter (default {prod, stage1a, stage1b, stage2a,
+//     stage2b, slow, heavy_tail, slow_heavy_tail} via P2P_PROFILES env
+//     var), instability ∈ {none, low, moderate, high, extreme},
 //     faulty_nodes ∈ [0, f].
 //     Level=0 AND faulty_nodes=0 emits the full catalog; otherwise emits
 //     ONLY Baseline-group scenarios. The sim always runs at BFT_start=0;
@@ -286,12 +286,12 @@ var SeverProbValues = []float64{0, 0.15, 0.30, 0.50}
 // what they saw before the extraction.
 const p2pBaselineSweepDescription = "" +
 	"Calibrated empirical baseline across (n, K, BTT, profile, instability, faulty_nodes). " +
-	"Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry: " +
-	"`prod` is healthy mainnet (p99=8.4ms); " +
-	"`stage1a` is a stage-hoodi cluster with a rare-but-catastrophic propagation tail (p99=2.27s, dominated by what look like QBFT round-change timeouts); " +
-	"`stage2a` is a stage-hoodi cluster with sustained bimodal degradation (median 1.4ms but ≥5% of every round is genuinely slow — p90=40ms, p99=833ms). " +
-	"Both stage1a and stage2a use 4-component lognormal mixtures capped at 5s. " +
-	"`stage1b` and `stage2b` are stage1a / stage2a pushed harder via .Slowed(2).HeavyTailed(2) (2x median, 2x mixture-level >P99 outlier mass); the 5s cap inherits through the derivation — stage1b saturates at the cap from p99 onward, stage2b only at p99.9. " +
+	"Profile selects a per-hop latency mixture fitted to real SSV gossipsub telemetry. " +
+	"`prod` is healthy mainnet (p99=8.4ms). " +
+	"`stage1a` is a stage-hoodi cluster with a rare-but-catastrophic propagation tail (p99=2.27s, dominated by what look like QBFT round-change timeouts) — 4-component lognormal mixture capped at 5s. " +
+	"`stage1b` is stage1a pushed harder via .Slowed(2).HeavyTailed(2) (2x median, 2x mixture-level >P99 outlier mass); the 5s cap inherits through the derivation — saturates at the cap from p99 onward. " +
+	"`stage2a` is a stage-hoodi cluster with sustained bimodal degradation (median 1.4ms but ≥5% of every round is genuinely slow — p90=40ms, p99=833ms), 4-component lognormal mixture capped at 5s. " +
+	"`stage2b` is stage2a pushed harder via the same .Slowed(2).HeavyTailed(2) composition; the 5s cap inherits — only p99.9 saturates (body breathes more than stage1b). " +
 	"`slow`, `heavy_tail`, `slow_heavy_tail` are derived from prod (`slow` = median ×80; `heavy_tail` = prod median + a hard-fattened tail (p90 ≈ 200ms) capped at 5s; `slow_heavy_tail` = slow + a fattened tail (p90 ≈ 400ms) capped at 5s). " +
 	"Per-hop ≈ cluster-wide at n=4 (cluster ops typically share a gossipsub mesh), so cfg.Network and cfg.Mesh.HopDelay both use the selected profile; larger-n cells are an extrapolation. " +
 	"Important: under empirical profiles, the BTT axis is a PROTOCOL-BUDGET axis, not a network-speed axis — the network model is the profile (≈ 1-10 ms in prod), while BTT (driver-overridable via BTT_VALUES_MS) drives the protocol's internal timing budgets. " +

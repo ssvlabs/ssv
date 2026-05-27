@@ -198,11 +198,11 @@ consensustest-with-real-bls:
 #     any n where K < MinK(n). Override to e.g. `LAYERS_K=2,3,4` to
 #     fill in the matrix.
 #   - P2P_PROFILES    (default = all eight) — comma-separated calibrated
-#     mesh-hop profile names. Valid: prod, stage1a, stage2a, slow,
-#     heavy_tail, slow_heavy_tail, stage1b, stage2b. Each name becomes
-#     one point in the BTT × profile × instability × BFT_start
-#     cross-product, with both cfg.Network and cfg.Mesh.HopDelay sourced
-#     from the named profile.
+#     mesh-hop profile names. Valid: prod, stage1a, stage1b, stage2a,
+#     stage2b, slow, heavy_tail, slow_heavy_tail. Each name becomes one
+#     point in the BTT × profile × instability × BFT_start cross-product,
+#     with both cfg.Network and cfg.Mesh.HopDelay sourced from the named
+#     profile.
 #   - BTT_VALUES_MS   (default 100,200,300,400) — comma-separated BTT
 #     values in ms. Shared by the p2p_baseline and p2p_increasing_BTT
 #     sweeps; drives the protocol's internal timing budgets (the network
@@ -242,7 +242,7 @@ consensustest-with-real-bls:
 REPORT_DIR ?= ./stresstest-report
 CLUSTER_SIZES_N ?= 4
 LAYERS_K ?= 2
-P2P_PROFILES ?= prod,stage1a,stage2a,slow,heavy_tail,slow_heavy_tail,stage1b,stage2b
+P2P_PROFILES ?= prod,stage1a,stage1b,stage2a,stage2b,slow,heavy_tail,slow_heavy_tail
 BTT_VALUES_MS ?= 100,200,300
 PROTOCOLS ?= OBFT-0,OBFT-300,OBFT-500,OBFT-700,2abOBFT-0,2abOBFT-300,2abOBFT-500,2abOBFT-700,QBFT-0,QBFT-300,QBFT-500,QBFT-700,QBFT-SSV
 ITERATIONS_BASELINE_OPERATIONS ?= 1000

@@ -684,8 +684,9 @@ func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // to the stress driver and to the report UI. Order is load-bearing: the
 // index is what gets stored in the per-point Fields["p2p_profile"]
 // float64 (the payload's Fields map is float64-valued, so profile
-// identity is encoded as a stable index into this slice). Keep the
-// order stable across releases; new profiles append at the end.
+// identity is encoded as the index into this slice). Reorders are
+// allowed but require regenerating any in-flight data.js (which is
+// gitignored — no checked-in artifact carries pre-existing indices).
 //
 // Eight profiles:
 //   - prod: 24h of healthy SSV prod-mainnet (`COMMITTEE-1_2_3_4`,
@@ -697,12 +698,23 @@ func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //     3.05s (what look like QBFT round-change timeouts). Use to
 //     exercise consensus robustness against rare slow-event spikes.
 //     4-component fit, capped at 5s.
+//   - stage1b: stage1a pushed harder — .Slowed(2) shifts every
+//     quantile 2x, .HeavyTailed(2) re-fits σ so mixture-level >(post-Slow
+//     P99) outlier mass doubles. The 5s cap inherits from stage1a
+//     through both derivations. Median 4.8ms, p90 92ms, p95 536ms, and
+//     p99 / p99.9 both saturate at the 5s cap. Strictest empirical-body
+//     profile we sweep.
 //   - stage2a: 24h of stage-hoodi `COMMITTEE-81_82_83_84` (~366k
 //     pairs) with sustained bimodal degradation — median 1.4ms but
 //     a meaningful ≥5% slice of every round is genuinely slow
 //     (p90=40ms, p95=181ms, p99=833ms). Use to exercise prepare /
 //     commit quorum and round-1 completion under a sustained
 //     degraded mesh. 4-component fit, capped at 5s.
+//   - stage2b: stage2a pushed harder — same .Slowed(2).HeavyTailed(2)
+//     composition; 5s cap inherits from stage2a. Median 3.2ms, p90
+//     109ms, p95 411ms, p99 3.2s, p99.9 at the 5s cap. Body breathes
+//     more than stage1b (cap binds only at p99.9), lands between
+//     stage2a and slow_heavy_tail.
 //   - slow: prod with each component median ×80 (same shape, shifted
 //     right by 80× — models a uniformly much-slower-than-prod mesh).
 //   - heavy_tail: prod's median with the tail fattened hard (σ scaled
@@ -714,31 +726,22 @@ func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //   - slow_heavy_tail: slow (prod medians ×80) with the tail fattened (σ
 //     for ~4× the >P99 outlier frequency) and capped at 5s — a genuine
 //     slow-and-heavy-tail (p90 ≈ 400ms, <1% at the cap).
-//   - stage1b: stage1a pushed harder — .Slowed(2) shifts every
-//     quantile 2x, .HeavyTailed(2) re-fits σ so mixture-level >(post-Slow
-//     P99) outlier mass doubles. The 5s cap inherits from stage1a
-//     through both derivations. Median 4.8ms, p90 92ms, p95 536ms, and
-//     p99 / p99.9 both saturate at the 5s cap. Strictest empirical-body
-//     profile we sweep.
-//   - stage2b: stage2a pushed harder — same .Slowed(2).HeavyTailed(2)
-//     composition; 5s cap inherits from stage2a. Median 3.2ms, p90
-//     109ms, p95 411ms, p99 3.2s, p99.9 at the 5s cap. Body breathes
-//     more than stage1b (cap binds only at p99.9), lands between
-//     stage2a and slow_heavy_tail.
 //
-// Index stability: stage1b / stage2b append at the end (indices 6 / 7)
-// to preserve the index→profile mapping that report data depends on.
-// stage1a / stage2a are renames of the former stage1 / stage2 entries
-// at indices 1 / 2; the underlying mixture is identical.
+// Order groups paired variants (a/b siblings adjacent) for picker
+// readability: prod → stage1{a,b} → stage2{a,b} → slow → heavy_tail →
+// slow_heavy_tail. Local data.js files generated before a reorder
+// display old indices under new labels, so reorders require a fresh
+// `make stresstest` to relabel correctly — checked-in code carries no
+// pre-existing indices (data.js is gitignored).
 var P2PProfileNames = []string{
 	"prod",
 	"stage1a",
+	"stage1b",
 	"stage2a",
+	"stage2b",
 	"slow",
 	"heavy_tail",
 	"slow_heavy_tail",
-	"stage1b",
-	"stage2b",
 }
 
 // P2PProfile returns a fresh NetworkModel for the named profile. The
@@ -752,8 +755,18 @@ func P2PProfile(name string) NetworkModel {
 		return Prod_1_2_3_4_CalibratedLogNormalMixture()
 	case "stage1a":
 		return Stage_3_4_6_7_CalibratedLogNormalMixture()
+	case "stage1b":
+		// stage1a body+tail pushed harder: 2x median (Slowed(2)) +
+		// 2x mixture-level >P99 outlier mass (HeavyTailed(2)). The 5s
+		// cap inherits from stage1a (Slowed/HeavyTailed preserve
+		// maxDelay); only the operator-anchor needs re-applying — same
+		// operators, harder mesh.
+		return Stage_3_4_6_7_CalibratedLogNormalMixture().Slowed(2).HeavyTailed(2).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 	case "stage2a":
 		return Stage_81_82_83_84_CalibratedLogNormalMixture()
+	case "stage2b":
+		// stage2a body+tail pushed harder; same composition as stage1b.
+		return Stage_81_82_83_84_CalibratedLogNormalMixture().Slowed(2).HeavyTailed(2).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 	case "slow":
 		// Slowed/HeavyTailed reset slowOpAnchor on derivation (the
 		// anchor calibrates operator-host context, not mesh shape — see
@@ -767,16 +780,6 @@ func P2PProfile(name string) NetworkModel {
 		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(31).WithMaxDelay(5 * time.Second).WithSlowOpAnchor(heavyTailSlowOpAnchor)
 	case "slow_heavy_tail":
 		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(4).WithMaxDelay(5 * time.Second).WithSlowOpAnchor(slowHeavyTailSlowOpAnchor)
-	case "stage1b":
-		// stage1a body+tail pushed harder: 2x median (Slowed(2)) +
-		// 2x mixture-level >P99 outlier mass (HeavyTailed(2)). The 5s
-		// cap inherits from stage1a (Slowed/HeavyTailed preserve
-		// maxDelay); only the operator-anchor needs re-applying — same
-		// operators, harder mesh.
-		return Stage_3_4_6_7_CalibratedLogNormalMixture().Slowed(2).HeavyTailed(2).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
-	case "stage2b":
-		// stage2a body+tail pushed harder; same composition as stage1b.
-		return Stage_81_82_83_84_CalibratedLogNormalMixture().Slowed(2).HeavyTailed(2).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 	default:
 		panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
 	}
