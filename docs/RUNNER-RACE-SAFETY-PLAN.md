@@ -11,7 +11,7 @@ A new `runner-safety-stress` Makefile target that:
 3. Taps the broadcast bus to record every wire emission.
 4. After each slot, reconstructs a `ct.Outcome` from (recorded wire trace + per-Instance `LastResolveLayerAttempts` + per-op Controller state).
 5. Calls `ct.ComputeSafetyReport` on the reconstructed `Outcome` and asserts `IsViolation() == false`.
-6. Runs the whole thing under `-race -count=80 -cpu=1,4,8` so timing-pressure variation amplifies race-window exposure (~1.5h wall-time at target sizing; see [§Iteration count](#iteration-count--target-15h-default-53h-nightly-deep)).
+6. Runs the whole thing under `-race -count=80 -cpu=1,4,8` so timing-pressure variation amplifies race-window exposure (~38 min wall on the implementer's hardware, measured in commit 7's calibration sweep — comfortably under the 120m Makefile timeout; see [§Iteration count](#iteration-count--measured-38-min-default-25h-nightly-deep)).
 
 Combines the two earlier options I sketched (A: stress-amplify existing tests; B: real-cluster integration test) — neither alone surfaces "safety under races" because the existing tests assert only `no error`, not the deep invariants. The bridge supplies the missing assertion.
 
@@ -65,7 +65,7 @@ In-scope:
 - 2abOBFT runner (`protocol/v2/ssv/runner/obft/twoab/`) same (n, K) matrix. Existing fixtures (`buildSmokeCluster` + `buildBLSCluster`) already accept any K via `ConfigOverrides.K`, but the only K values runtime-exercised by tests were K=2 (stub Healthy) and K=4 (real-BLS Healthy + SilentL0Leader); commit 4 adds matrix-driven verification across K ∈ {f+1..N} at both n=4 and n=7.
 - 3-scenario canonical set per protocol (Healthy, LateCommit, SilentL0Leader_NRFallThrough) — convergence work in commits 3 (OBFT base SilentL0Leader_NRFallThrough) and 5 (2abOBFT LateCommit). See [§Scenarios](#scenarios) for why OpportunisticTiming is not bridged.
 - 10 consensustest safety invariants applied to the reconstructed Outcome.
-- New Makefile target with `-count=80 -cpu=1,4,8 -race` (default ≈ 1.5h; nightly-deep variant at `-count=320` ≈ 5.3h). Sub-test count is 48 per outer iter (3 scenarios × 8 cells × 2 protocols).
+- New Makefile target with `-count=80 -cpu=1,4,8 -race` (default ≈ 38 min measured; nightly-deep variant at `-count=320` ≈ 2.5h measured). Sub-test count is 48 per outer iter (3 scenarios × 8 cells × 2 protocols).
 
 Out of scope:
 - QBFT / PSigs runners (the safety invariants are OBFT-family-specific).
@@ -130,27 +130,28 @@ Existing fixtures use n=4 / K=4 hardcoded; the bridge parameterizes via `t.Run("
 
 n=10 and n=13 are excluded — n=4 + n=7 cover the production-relevant small / medium subnet sizes, and larger n would inflate wall-time without proportional coverage gain (the safety invariants are size-independent at the check level).
 
-### Iteration count — target ~1.5h default, ~5.3h nightly-deep
+### Iteration count — measured ~38 min default, ~2.5h nightly-deep
 
-Per-iteration estimate at the **3-scenario × 8-cell × 2-protocol = 48 sub-test** matrix, conservative (more goroutines + more lock contention at n=7 under `-race`):
+Calibration sweep (commit 7) at the **3-scenario × 8-cell × 2-protocol = 48 sub-test** matrix on the implementer's machine (Apple Silicon dev laptop):
 
-| Component | Cost |
+| Component | Cost (measured at `-count=2 -race`) |
 |---|---|
-| OBFT base — 2 existing scenarios (Healthy, LateCommit) at n=4 / K=4 (measured) | ~0.6s |
-| 3rd scenario (SilentL0Leader_NRFallThrough at n=4 / K=4, extrapolated from 2abOBFT's measured equivalent) | ~0.2s |
-| 2abOBFT — 3 scenarios at n=4 / K=2 (existing 2 ≈ 0.4s measured; LateCommit ≈ 0.2s extrapolated) | ~0.6s |
-| Per-cell cost at n=4 (combined OBFT + 2abOBFT × 3 scenarios) | ~1.4s × 3 K-values = 4.2s |
-| Per-cell cost at n=7 (≈ 2× via more goroutines) | ~2.8s × 5 K-values = 14s |
-| Per-iter total across 8 cells | ~18s |
-| × 3 cpu-points (`-cpu=1,4,8`) | ~54s per outer iter |
+| OBFT base (24 sub-tests) at `-cpu=1` | 17.7s |
+| 2abOBFT (24 sub-tests) at `-cpu=1` | 11.8s |
+| OBFT base at `-cpu=4` | 17.3s |
+| 2abOBFT at `-cpu=4` | 9.9s |
+| OBFT base at `-cpu=8` | 17.1s |
+| 2abOBFT at `-cpu=8` | 9.7s |
+| `-count=2 × -cpu=1,4,8` total wall | **56.8s** |
 
-Default target — fits in a long PR-gate cycle, ~1.5h:
-- `-count=80` ⇒ 80 × 54s ≈ 72 min projected; comfortable headroom for actual-vs-projected slowdown. (Could push to `-count=100` if calibration confirms; defer the bump to commit 7.)
+Per-iteration cost (one of the 3 cpu-points): ~28s for 48 sub-tests under `-race -count=1`. Extrapolations:
 
-Nightly-deep target — for finding rare race windows:
-- `-count=320` ⇒ 320 × 54s ≈ 288 min ≈ 4.8h.
+- **Default `-count=80`**: 56.8s × 40 ≈ **38 min** wall (under the original 1.5h target; ~half the conservative projection).
+- **Deep `-count=320`**: 56.8s × 160 ≈ **2.5h** wall (well under the 5.9h projection; ~half the original estimate).
 
-Both numbers are projections; commit 7's calibration sweep on the implementer's machine will validate. If actual wall-time exceeds 2h on the default, reduce `-count`. If well under 1h, can increase `-count` or add cpu-points (`-cpu=1,2,4,8,16`).
+The implementer's machine is reasonably fast; slower CI hardware may push these toward 60-90 min default / 4-5h deep. Both numbers leave ample headroom against the Makefile's 120m / 360m timeouts. If a future calibration on slower hardware exceeds the timeout, raise the timeout flag in the Makefile rather than lower `-count` — the iteration count is the load-bearing parameter for race-window coverage.
+
+The Makefile target accepts `SAFETY_STRESS_COUNT` as a per-run override (e.g., `SAFETY_STRESS_COUNT=10` for a 5-min smoke run during local development).
 
 ### Stress amplification config
 
@@ -327,31 +328,31 @@ func TestSafetyBridge_OBFT_Healthy(t *testing.T) {
 
 ### Component 4 — Makefile target
 
+As built in commit 7 (`make runner-safety-stress` / `make runner-safety-stress-deep`):
+
 ```makefile
+SAFETY_STRESS_COUNT ?= 80
 .PHONY: runner-safety-stress
 runner-safety-stress:
-	@echo "Running runner-safety stress (real goroutines + safety invariants + -race amplification, ≈ 1.5h)"
+	@echo "Running runner-safety stress (real goroutines + safety invariants + -race × -cpu=1,4,8 × -count=$(SAFETY_STRESS_COUNT))"
 	@for cpu in 1 4 8; do \
 		echo ">> -cpu=$$cpu"; \
-		go test -tags blst_enabled -race -count=80 -cpu=$$cpu -timeout 120m \
+		go test -tags blst_enabled -race -count=$(SAFETY_STRESS_COUNT) -cpu=$$cpu -timeout 120m \
 			-run '^TestSafetyBridge_' \
-			./protocol/v2/ssv/runner/obft/... \
-			./protocol/v2/ssv/runner/obft/twoab/... || exit 1; \
+			./protocol/v2/ssv/runner/obft/... || exit 1; \
 	done
 
 .PHONY: runner-safety-stress-deep
 runner-safety-stress-deep:
-	@echo "Running runner-safety stress deep (≈ 5.3h — nightly only)"
-	@for cpu in 1 4 8; do \
-		echo ">> -cpu=$$cpu"; \
-		go test -tags blst_enabled -race -count=320 -cpu=$$cpu -timeout 360m \
-			-run '^TestSafetyBridge_' \
-			./protocol/v2/ssv/runner/obft/... \
-			./protocol/v2/ssv/runner/obft/twoab/... || exit 1; \
-	done
+	@$(MAKE) runner-safety-stress SAFETY_STRESS_COUNT=320
 ```
 
-The default target is too heavy for every-PR-gate (~1.5h); wire into nightly CI. The deep variant is even heavier (~5.3h); run only on demand or scheduled weekly.
+Notes:
+- A single `./protocol/v2/ssv/runner/obft/...` path picks up both the OBFT base bridge (in the package itself) and the 2abOBFT bridge (in the `twoab` subpackage) — `...` recurses.
+- `SAFETY_STRESS_COUNT` is overridable per-run (e.g., `SAFETY_STRESS_COUNT=10` for a fast smoke check; the deep variant just bumps it to 320).
+- `runner-safety-stress-deep` re-enters via `$(MAKE)` so both targets share the exact same recipe — one source of truth for the test command.
+
+Default ≈ 38 min wall on the implementer's hardware (measured); wire into nightly CI. The deep variant ≈ 2.5h; run on demand or scheduled weekly.
 
 ## Order of work
 
@@ -375,7 +376,7 @@ Seven mandatory commits + one optional. Split keeps each commit ≤ ~250 lines o
 
 6. **Commit 6 — 2abOBFT bridge** (full matrix × 3 scenarios). New `race_safety_bridge_test.go` in `protocol/v2/ssv/runner/obft/twoab/`. Same architecture as commit 1: `recordingBlsBus` wrapping the real-BLS `blsBus` (the bridge uses the production-grade async-delivery path, matching OBFT base's choice of real-BLS `broadcastBus` over stub `smokeBus`). `recordValueMsgWire` / `recordNoValueMsgWire` / `recordCommitWire` translators mirror `consensustest/twoab/events.go`'s recorders — `KindPhase1Bundle` is intentionally NOT recorded (leader's σ contribution rides in its own `KindValue.L0Partial`; recording both would double-count). `scenarioConfig` uses a `silentFor` field returning a `map[OperatorID]bool` (matching `blsBus.silent`) rather than OBFT base's drop-predicate function — 2abOBFT's SilentL0Leader suppresses ALL outbound from L_0 leader, not just specific message kinds. Bridge wraps all 3 scenarios × 8 cells = 24 2abOBFT sub-tests. **Full coverage complete: 48 sub-tests across both protocols.**
 
-7. **Commit 7 — `runner-safety-stress` Makefile target + iteration tuning**. New target with `-count=80 -cpu=1,4,8 -race -timeout=120m` (default ≈ 1.5h). Nightly-deep target `runner-safety-stress-deep` with `-count=320 -timeout=360m` (≈ 5.9h). Includes a one-time calibration sweep on the implementer's machine to confirm the projection — if actual wall-time exceeds 2h on default, reduce `-count` and document the actual measured number in this plan doc.
+7. **Commit 7 — `runner-safety-stress` Makefile target + iteration tuning**. New targets `runner-safety-stress` (`-count=80 -cpu=1,4,8 -race -timeout=120m`) and `runner-safety-stress-deep` (`-count=320`, shares the same recipe via `$(MAKE)` re-entry). `SAFETY_STRESS_COUNT` env var overrides `-count` for local smoke runs. Includes a one-time calibration sweep on the implementer's machine — measured ≈ 38 min default / ≈ 2.5h deep, both ~half the original projections. Numbers documented in [§Iteration count](#iteration-count--measured-38-min-default-25h-nightly-deep).
 
 Optional follow-up commit (defer unless real-world findings motivate):
 

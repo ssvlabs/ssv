@@ -111,6 +111,46 @@ consensustest-real-bls:
 	@echo "Running consensustest real-BLS suite"
 	@go test -tags "blst_enabled lfs real_bls" -timeout 15m -v ./protocol/v2/consensustest/...
 
+# runner-safety-stress amplifies the OBFT-family safety-bridge tests
+# (TestSafetyBridge_OBFT_* + TestSafetyBridge_2abOBFT_*, 48 sub-tests
+# total: 3 scenarios × 8 (n, K) cells × 2 protocols) under -race +
+# -count=N + -cpu=X,Y,Z stress. Each iteration is an independent
+# goroutine-scheduling realization; varying GOMAXPROCS varies the
+# timing-pressure regime.
+#
+# The bridge reconstructs a ct.Outcome from the captured wire trace
+# + per-Instance Resolve trace, then applies consensustest's 10 safety
+# invariants. Where unit-test under -race only asserts "no error",
+# this asserts "safety holds across the reconstructed Outcome" —
+# catching race-induced wire-state inconsistencies that the -race
+# detector alone can't surface (those are semantic races, not Go-level
+# data races).
+#
+# Design: docs/RUNNER-RACE-SAFETY-PLAN.md.
+#
+# Iteration count: -count=80 × 3 cpu points = 240 iterations per test.
+# Calibration target: ≈ 1.5h wall on a typical dev machine. Wire into
+# nightly CI, not every-PR gate. Override -count via SAFETY_STRESS_COUNT
+# for local tuning (e.g. SAFETY_STRESS_COUNT=10 for a 10-min smoke run).
+SAFETY_STRESS_COUNT ?= 80
+.PHONY: runner-safety-stress
+runner-safety-stress:
+	@echo "Running runner-safety stress (real goroutines + safety invariants + -race × -cpu=1,4,8 × -count=$(SAFETY_STRESS_COUNT))"
+	@for cpu in 1 4 8; do \
+		echo ">> -cpu=$$cpu"; \
+		go test -tags blst_enabled -race -count=$(SAFETY_STRESS_COUNT) -cpu=$$cpu -timeout 120m \
+			-run '^TestSafetyBridge_' \
+			./protocol/v2/ssv/runner/obft/... || exit 1; \
+	done
+
+# runner-safety-stress-deep is the same target with deeper amplification
+# for nightly / weekly findings — increases -count to 320 (≈ 4× the
+# default) and expands the timeout accordingly. Use when looking for
+# rare race windows that the default count might not hit.
+.PHONY: runner-safety-stress-deep
+runner-safety-stress-deep:
+	@$(MAKE) runner-safety-stress SAFETY_STRESS_COUNT=320
+
 # stresstest runs the stress-tier batch-comparison framework
 # (7 curated sweeps × the default protocol set — see PROTOCOLS below —
 # × per-scenario iterations) and writes / merges data.js into REPORT_DIR,
