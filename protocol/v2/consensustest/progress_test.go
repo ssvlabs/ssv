@@ -1,6 +1,7 @@
 package consensustest
 
 import (
+	"io"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -281,5 +282,167 @@ func TestRedrawRewindsByPreviousHeight(t *testing.T) {
 	}
 	if !strings.HasPrefix(buf.String(), "\r\033[J") {
 		t.Errorf("after a 1-line frame, redraw should rewind with just CR+erase: %q", buf.String())
+	}
+}
+
+// TestLog_ClearsAndRedraws is the core Log coordination test: while the
+// renderer is active and a block is on screen, Log must erase the block,
+// write the log line as scroll history, and re-emit the block beneath it,
+// all as a single coordinated sequence on the output writer.
+func TestLog_ClearsAndRedraws(t *testing.T) {
+	p := NewProgressTracker(
+		[]string{"OBFT-700", "QBFT-SSV"},
+		map[string]int64{"OBFT-700": 1000, "QBFT-SSV": 1000},
+	)
+	p.Add("OBFT-700", 250)
+	p.Add("QBFT-SSV", 1000)
+
+	var buf strings.Builder
+	p.w = &buf
+	p.tty = true
+	p.active = true
+
+	// Establish prevLines via an initial emit — frame is 3 lines (header + 2 bars).
+	p.emit(&buf, true)
+	if p.prevLines != 3 {
+		t.Fatalf("after initial emit, prevLines=%d, want 3", p.prevLines)
+	}
+	buf.Reset()
+
+	p.Log("a log line")
+	got := buf.String()
+
+	// The clear must come first: cursor-up by prevLines-1 then CR+erase.
+	if !strings.HasPrefix(got, "\033[2A\r\033[J") {
+		t.Errorf("Log should emit cursor-up + erase before writing, got %q", got)
+	}
+	// The line itself must be in there, followed by a newline so it scrolls.
+	if !strings.Contains(got, "a log line\n") {
+		t.Errorf("Log should write the message + newline into scroll history, got %q", got)
+	}
+	// And a fresh frame must follow (the redraw beneath). Easiest signal: the
+	// progress percentages of the two bars (independent: 25% and 100%).
+	if !strings.Contains(got, "25.0%") || !strings.Contains(got, "100.0%") {
+		t.Errorf("Log should redraw the block beneath the log line, got %q", got)
+	}
+	// prevLines should be reset to the new frame's height (3 again).
+	if p.prevLines != 3 {
+		t.Errorf("after Log, prevLines=%d, want 3 (redraw should re-establish it)", p.prevLines)
+	}
+}
+
+// TestLog_NoRedrawPostStop verifies that after stop has cleared the tracker's
+// active state (and parked the cursor below the final block), Log writes the
+// message plainly — no cursor escapes, no redraw.
+func TestLog_NoRedrawPostStop(t *testing.T) {
+	p := NewProgressTracker(
+		[]string{"OBFT-700"},
+		map[string]int64{"OBFT-700": 100},
+	)
+	var buf strings.Builder
+	p.w = &buf
+	p.tty = true
+	p.active = false // post-stop state
+	p.prevLines = 0  // stop clears prevLines too
+
+	p.Log("post-stop line")
+	got := buf.String()
+	if got != "post-stop line\n" {
+		t.Errorf("post-stop Log should write only the message + newline, got %q", got)
+	}
+	if strings.Contains(got, "\033[") {
+		t.Errorf("post-stop Log must not emit cursor escapes, got %q", got)
+	}
+}
+
+// TestLog_BeforeStart verifies that Log called before StartRenderer (w == nil)
+// falls back to the package-level stderr writer — so callers don't have to
+// gate their Log calls on the renderer lifecycle. Tracker state stays
+// untouched.
+func TestLog_BeforeStart(t *testing.T) {
+	p := NewProgressTracker(
+		[]string{"OBFT-700"},
+		map[string]int64{"OBFT-700": 100},
+	)
+
+	var captured strings.Builder
+	origStderr, origCharFn := stderr, isCharDeviceFn
+	stderr = &captured
+	defer func() { stderr = origStderr; isCharDeviceFn = origCharFn }()
+
+	p.Log("before start")
+
+	if got := captured.String(); got != "before start\n" {
+		t.Errorf("pre-start Log should write to stderr, got %q", got)
+	}
+	if p.w != nil {
+		t.Errorf("pre-start Log should not touch p.w, got %v", p.w)
+	}
+	if p.active {
+		t.Errorf("pre-start Log should not flip active, got true")
+	}
+}
+
+// TestLog_NilReceiver mirrors Add's nil-receiver no-op contract so callers
+// can use `var p *ProgressTracker` without branching.
+func TestLog_NilReceiver(t *testing.T) {
+	var p *ProgressTracker
+	p.Log("nothing to log") // must not panic
+}
+
+// TestLog_MirrorsToStderr exercises the mirror-to-stderr branch's three paths:
+//
+//   - mirror fires when w != stderr AND stderr is non-char-device — captures
+//     the `... 2>&1 | tee out.log` case the routing would otherwise drop;
+//   - no mirror when w == stderr (would double-write to the same FD);
+//   - no mirror when stderr is a char device (would double-print on the user's
+//     terminal in an interactive run).
+func TestLog_MirrorsToStderr(t *testing.T) {
+	origStderr, origCharFn := stderr, isCharDeviceFn
+	defer func() { stderr = origStderr; isCharDeviceFn = origCharFn }()
+
+	p := NewProgressTracker(
+		[]string{"OBFT-700"},
+		map[string]int64{"OBFT-700": 100},
+	)
+	p.tty = false // non-tty path: no clear/redraw, just plain write — keeps the
+	// assertions focused on the mirror branch.
+	p.active = true
+
+	// Case 1: captured stderr (non-char-device), distinct from w → mirror fires.
+	var w1, err1 strings.Builder
+	stderr = &err1
+	isCharDeviceFn = func(io.Writer) bool { return false }
+	p.w = &w1
+	p.Log("captured")
+	if !strings.Contains(w1.String(), "captured") {
+		t.Errorf("case 1: primary write to w missing: %q", w1.String())
+	}
+	if !strings.Contains(err1.String(), "captured") {
+		t.Errorf("case 1: mirror to stderr missing: %q", err1.String())
+	}
+
+	// Case 2: p.w is the same writer as stderr → no mirror, single write.
+	var shared strings.Builder
+	stderr = &shared
+	isCharDeviceFn = func(io.Writer) bool { return false }
+	p.w = &shared
+	p.Log("same-fd")
+	// Exactly one occurrence in the buffer — Log fired once.
+	if got, want := strings.Count(shared.String(), "same-fd"), 1; got != want {
+		t.Errorf("case 2: want %d write of 'same-fd', got %d (buffer=%q)", want, got, shared.String())
+	}
+
+	// Case 3: stderr is a char device → no mirror.
+	var w3, err3 strings.Builder
+	stderr = &err3
+	isCharDeviceFn = func(io.Writer) bool { return true }
+	p.w = &w3
+	p.Log("char-dev")
+	if !strings.Contains(w3.String(), "char-dev") {
+		t.Errorf("case 3: primary write to w missing: %q", w3.String())
+	}
+	if got := err3.String(); got != "" {
+		t.Errorf("case 3: mirror should be skipped on char-device stderr, got %q", got)
 	}
 }

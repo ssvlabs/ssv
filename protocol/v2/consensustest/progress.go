@@ -33,9 +33,37 @@ type ProgressTracker struct {
 	// clamp in frameLines shows fewer bars on a shorter viewport), and rewinding
 	// by the current height then misaligns the erase, leaving the old block's top
 	// behind as a stale copy ("stacking"). 0 means nothing has been drawn yet.
-	// Only touched by emit, which is called sequentially (the renderer goroutine,
-	// then the final emit in stop after wg.Wait).
+	//
+	// Resize is only one stacking trigger; foreign writes between frames are
+	// another (e.g. t.Logf streamed by `go test -v` to the same terminal, which
+	// pushes the cursor down without the tracker noticing). The PREVIOUS-frame
+	// rewind alone doesn't help there. The structural fix is to route every
+	// in-renderer-lifetime write through Log, which acquires outMu and performs
+	// a clear + write + redraw triple — so the cursor stays where prevLines
+	// says it is. Writes that bypass Log (anything else on the same FD) can
+	// still corrupt the display; the load-bearing invariant is "every write to
+	// p.w goes through outMu, and outMu callers leave prevLines accurate".
+	//
+	// Touched only under outMu — the renderer goroutine, stop's final emit,
+	// and Log all acquire outMu before reading or writing it.
 	prevLines int
+
+	// outMu serialises every write to w and protects prevLines. The renderer
+	// goroutine acquires it on each tick (via emit); stop acquires it around
+	// the final emit + state reset; Log acquires it around its clear + write +
+	// redraw triple. Without this, foreign writes to w from anywhere outside
+	// the tracker can interleave with the cursor-relative redraw and leave the
+	// in-place block stacked above the new frame.
+	outMu sync.Mutex
+	// w / tty record StartRenderer's output destination so Log knows where to
+	// write without re-discovering it on every call. nil w means StartRenderer
+	// hasn't been called (or the tracker is empty / nil and never will).
+	w   io.Writer
+	tty bool
+	// active is true between StartRenderer's entry and stop's completion. Log
+	// uses it to decide whether to do the clear + redraw dance (active) or
+	// just plain-write to w (post-stop).
+	active bool
 }
 
 // protoBar is one protocol's progress: a fixed total and an atomically-updated
@@ -65,6 +93,17 @@ const (
 	minBarCells = 8
 )
 
+// stderr is the writer Log mirrors to when stderr is a captured (non-TTY) FD
+// different from the tracker's writer (e.g. on `... 2>&1 | tee out.log`).
+// Package-level for test substitution; production callers leave it at
+// os.Stderr.
+var stderr io.Writer = os.Stderr
+
+// isCharDeviceFn is the char-device check Log uses to decide whether to mirror
+// to stderr; package-level so tests can drive either branch without relying on
+// the test environment having a real TTY on a known FD.
+var isCharDeviceFn = isCharDevice
+
 // NewProgressTracker builds a tracker with one bar per protocol, in `names`
 // order, each sized to totals[name] (a name absent from totals gets total 0).
 func NewProgressTracker(names []string, totals map[string]int64) *ProgressTracker {
@@ -87,6 +126,64 @@ func (p *ProgressTracker) Add(name string, n int64) {
 	}
 }
 
+// Log writes a line through the tracker so it interleaves cleanly with the
+// live progress block: while the renderer is active, it clears the in-place
+// block, writes the line as normal scroll history, then re-emits the block
+// beneath it. Outside the renderer's active lifetime (before StartRenderer,
+// after stop) it falls back to a plain write to the tracker's writer, or to
+// the package-level stderr when StartRenderer was never called.
+//
+// This is the coordination point that prevents the foreign-write desync that
+// the in-place cursor math is vulnerable to: anything routed through Log is
+// serialised with the renderer's redraw cycle under outMu, and prevLines
+// stays accurate. Anything that writes to the same FD without going through
+// Log can still corrupt the display.
+//
+// On `... 2>&1 | tee out.log` style invocations the tracker's writer is
+// /dev/tty (not captured by tee), so Log also mirrors the line to stderr
+// when stderr is a captured (non-TTY) FD different from the tracker's writer.
+// In plain interactive runs (stderr is the terminal) and in CI (writer is
+// stderr) the mirror is skipped, so the line writes exactly once.
+//
+// Safe for concurrent use; nil receiver is a no-op (matches Add). A bad
+// format string panics in fmt.Sprintf — caller error; the deferred Unlock
+// releases outMu either way.
+func (p *ProgressTracker) Log(format string, args ...any) {
+	if p == nil {
+		return
+	}
+	msg := fmt.Sprintf(format, args...)
+	p.outMu.Lock()
+	defer p.outMu.Unlock()
+	if p.w == nil {
+		// Renderer never started — fall back to stderr so callers needn't gate
+		// on lifecycle. Matches t.Logf's destination in the same situation.
+		fmt.Fprintln(stderr, msg)
+		return
+	}
+	if p.active && p.tty && p.prevLines > 0 {
+		// Erase the live block; cursor lands at its top, ready to scroll the
+		// log line into history below the cleared region.
+		if p.prevLines > 1 {
+			fmt.Fprintf(p.w, "\033[%dA", p.prevLines-1)
+		}
+		fmt.Fprint(p.w, "\r\033[J")
+		p.prevLines = 0
+	}
+	fmt.Fprintln(p.w, msg)
+	// Mirror to stderr when stderr is a captured (non-TTY) FD different from
+	// our writer — recovers the tee / shell-redirected capture path that a
+	// /dev/tty-only write would lose. Skipped when w == stderr (would double-
+	// write to the same FD) and when stderr is the user's terminal (would
+	// double-print visibly).
+	if p.w != stderr && !isCharDeviceFn(stderr) {
+		fmt.Fprintln(stderr, msg)
+	}
+	if p.active {
+		p.emitLocked(p.w, p.tty) // redraw the block beneath the new log line
+	}
+}
+
 // grandTotal is the sum of every protocol's total.
 func (p *ProgressTracker) grandTotal() int64 {
 	var t int64
@@ -103,6 +200,11 @@ func (p *ProgressTracker) grandTotal() int64 {
 // a single roll-up line so the block never overflows the viewport; otherwise it
 // prints a single overall line every 30s (log-friendly). Returns a no-op stop
 // for a nil tracker or an empty run.
+//
+// While the renderer is active, callers that need to interject text (lifecycle
+// log lines from the test driver) MUST go through Log — it serialises with the
+// renderer's redraw cycle so the in-place block doesn't desync. Anything that
+// writes to w directly bypasses that coordination and risks the stacking bug.
 func (p *ProgressTracker) StartRenderer(w io.Writer) (stop func()) {
 	if p == nil || p.grandTotal() <= 0 {
 		return func() {}
@@ -112,6 +214,17 @@ func (p *ProgressTracker) StartRenderer(w io.Writer) (stop func()) {
 	if tty {
 		interval = 1 * time.Second
 	}
+
+	// Record the destination + active state before launching the goroutine so
+	// Log (which reads p.w / p.tty / p.active under outMu) sees a consistent
+	// snapshot. The `go` statement provides a happens-before edge for the
+	// goroutine; Log acquires outMu, so external callers are covered too.
+	p.outMu.Lock()
+	p.w = w
+	p.tty = tty
+	p.active = true
+	p.outMu.Unlock()
+
 	doneCh := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -124,7 +237,7 @@ func (p *ProgressTracker) StartRenderer(w io.Writer) (stop func()) {
 			case <-doneCh:
 				return
 			case <-ticker.C:
-				p.emit(w, tty)
+				p.emit(w, tty) // emit acquires outMu internally
 			}
 		}
 	}()
@@ -137,36 +250,66 @@ func (p *ProgressTracker) StartRenderer(w io.Writer) (stop func()) {
 		once.Do(func() {
 			close(doneCh)
 			wg.Wait()
-			p.emit(w, tty) // final snapshot (typically 100%)
+			p.outMu.Lock()
+			defer p.outMu.Unlock()
+			p.emitLocked(w, tty) // final snapshot (typically 100%)
 			if tty {
 				fmt.Fprintln(w) // move the cursor below the block
 			}
+			// Clear active + prevLines so any post-stop Log call writes plainly
+			// without trying to rewind into the now-parked cursor position.
+			p.active = false
+			p.prevLines = 0
 		})
 	}
 }
 
+// emit acquires outMu and emits one frame. Used by callers that don't already
+// hold the mutex — the renderer goroutine and tests. Internal callers that
+// hold outMu (stop's final emit, Log's redraw-after-clear) use emitLocked.
 func (p *ProgressTracker) emit(w io.Writer, tty bool) {
+	p.outMu.Lock()
+	defer p.outMu.Unlock()
+	p.emitLocked(w, tty)
+}
+
+// emitLocked emits one frame; caller must hold outMu.
+func (p *ProgressTracker) emitLocked(w io.Writer, tty bool) {
 	if !tty {
 		// Log-friendly: one plain overall line per emit, no cursor control.
 		fmt.Fprintf(w, "stresstest progress: %s\n", p.overallLine())
 		return
 	}
 	cols, rows := terminalSize(w)
-	p.redraw(w, p.frameLines(cols, rows))
+	p.redrawLocked(w, p.frameLines(cols, rows))
 }
 
-// redraw writes one terminal frame in place: it rewinds the cursor over the
-// previously drawn block (tracked in prevLines), erases to end of screen, prints
-// `lines`, then records the new height for the next call. Rewinding by the
-// PREVIOUS frame's height — not this one's — keeps the erase aligned when a
-// resize changes the block's line count between frames; rewinding by the current
-// height instead leaves the old block's top behind as a stale copy ("stacking").
-// The block is sized to fit the viewport (see frameLines), so on a stable size
-// the cursor-up never has to reach past the top of the screen into scrollback
-// (which it can't). A 1-line previous frame needs no vertical move, and "\033[0A"
-// would wrongly move up one line (param 0 defaults to 1), so the cursor-up is
-// guarded. Split from emit so the cursor math is unit-testable without a TTY.
+// redraw acquires outMu and writes the new frame in place. Tests drive the
+// redraw directly through this entry point; production callers that hold the
+// mutex (emitLocked, Log) call redrawLocked.
 func (p *ProgressTracker) redraw(w io.Writer, lines []string) {
+	p.outMu.Lock()
+	defer p.outMu.Unlock()
+	p.redrawLocked(w, lines)
+}
+
+// redrawLocked writes one terminal frame in place: it rewinds the cursor over
+// the previously drawn block (tracked in prevLines), erases to end of screen,
+// prints `lines`, then records the new height for the next call. Rewinding by
+// the PREVIOUS frame's height — not this one's — keeps the erase aligned when
+// a resize changes the block's line count between frames; rewinding by the
+// current height instead leaves the old block's top behind as a stale copy
+// ("stacking"). The block is sized to fit the viewport (see frameLines), so on
+// a stable size the cursor-up never has to reach past the top of the screen
+// into scrollback (which it can't). A 1-line previous frame needs no vertical
+// move, and "\033[0A" would wrongly move up one line (param 0 defaults to 1),
+// so the cursor-up is guarded.
+//
+// Caller must hold outMu — every write to p.w runs under that lock so foreign
+// writes from elsewhere in the test driver can't interleave with the cursor
+// math. Callers that want to interject text scroll a line into history via Log,
+// which clears the block, writes, and then re-emits beneath the new line.
+func (p *ProgressTracker) redrawLocked(w io.Writer, lines []string) {
 	if p.prevLines > 0 {
 		if p.prevLines > 1 {
 			fmt.Fprintf(w, "\033[%dA", p.prevLines-1)

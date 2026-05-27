@@ -2,7 +2,6 @@ package consensustest_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -463,7 +462,11 @@ func TestStress(t *testing.T) {
 		case <-sigCh:
 			close(cancel)
 			stopProgress() // clear the live block before printing the notice
-			fmt.Fprintf(progressOut, "\ninterrupt — stopping after the in-flight batch and saving partial data (Ctrl-C again to force quit)\n")
+			// progress.Log is post-stop here (stopProgress flipped active=false)
+			// so it just plain-writes via the tracker's coordinated path. The
+			// previous leading "\n" is no longer needed — stop already parked
+			// the cursor below the cleared block.
+			progress.Log("interrupt — stopping after the in-flight batch and saving partial data (Ctrl-C again to force quit)")
 			select {
 			case <-sigCh:
 				os.Exit(130)
@@ -474,25 +477,24 @@ func TestStress(t *testing.T) {
 	}()
 
 	totalStart := time.Now()
-	t.Logf("=== %d (n, K) operating points to run: %v (%s simulations total)",
+	progress.Log("=== %d (n, K) operating points to run: %v (%s simulations total)",
 		len(pairs), pairs, ct.CommaInt(grandTotal))
 	for pairIdx, w := range work {
 		pp := w.pair
 		sweeps := w.sweeps
 		pairStart := time.Now()
-		t.Logf("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)
+		progress.Log("--- [%d/%d] n=%d K=%d", pairIdx+1, len(pairs), pp.n, pp.k)
 		results := make([]ct.SweepResult, 0, len(sweeps))
 		for _, sw := range sweeps {
-			pointLabels := make([]string, len(sw.Points))
-			for i, pt := range sw.Points {
-				pointLabels[i] = pt.Label
-			}
-			t.Logf("    sweep %s: %d sweep points [%s] × baseline=%d unstable=%d iterations × %d scenarios × %d protocols [%s]",
-				sw.Name, len(sw.Points), strings.Join(pointLabels, ", "),
-				iters.Baseline, iters.Unstable, len(scenarios), len(w.protocolNames), strings.Join(w.protocolNames, ", "))
+			// One-line summary — the full per-point label list (which used to
+			// be joined into the log line) wraps to many KB of scroll history
+			// per sweep boundary and is reachable from the report UI anyway.
+			progress.Log("    sweep %s: %d points × baseline=%d unstable=%d iter × %d scenarios × %d protocols",
+				sw.Name, len(sw.Points),
+				iters.Baseline, iters.Unstable, len(scenarios), len(w.protocolNames))
 			swStart := time.Now()
 			results = append(results, ct.RunSweep(t, sw))
-			t.Logf("        %s wallclock: %v", sw.Name, time.Since(swStart))
+			progress.Log("        %s wallclock: %v", sw.Name, time.Since(swStart))
 			if ct.IsCancelled(cancel) {
 				break // interrupted: stop launching sweeps; partial results saved below
 			}
@@ -521,15 +523,21 @@ func TestStress(t *testing.T) {
 			UnstableIterations: iters.Unstable,
 			Wallclock:          time.Since(totalStart),
 		}, dir))
-		t.Logf("    n=%d K=%d wallclock: %v (cumulative %v)", pp.n, pp.k, time.Since(pairStart), time.Since(totalStart))
+		progress.Log("    n=%d K=%d wallclock: %v (cumulative %v)", pp.n, pp.k, time.Since(pairStart), time.Since(totalStart))
 		if ct.IsCancelled(cancel) {
 			// Interrupted: the partial results for this pair were just written
 			// above (merged into data.js). Exit gracefully — skip the remaining
 			// pairs and the full-run smoke check below.
-			t.Logf("interrupted: saved partial data through n=%d K=%d to %s/data.js", pp.n, pp.k, dir)
+			progress.Log("interrupted: saved partial data through n=%d K=%d to %s/data.js", pp.n, pp.k, dir)
 			return
 		}
 	}
+
+	// Stop the renderer before the final summary t.Logfs: otherwise they'd race
+	// with the still-ticking renderer the same way every other lifecycle log
+	// did. The deferred stopProgress() above remains as a safety net for the
+	// early-return panic path — sync.Once makes the second call a no-op.
+	stopProgress()
 
 	t.Logf("Report data written: %s/data.js", dir)
 	t.Logf("Open: %s/index.html", dir)
