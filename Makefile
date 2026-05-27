@@ -126,9 +126,19 @@ consensustest-real-bls:
 # detector alone can't surface (those are semantic races, not Go-level
 # data races).
 #
-# Iteration count: -count=80 × 3 cpu points = 240 iterations per test.
-# Measured ≈ 38 min wall on a typical dev machine (deep variant
-# ≈ 2.5h). Wire into nightly CI, not every-PR gate. Override -count
+# Why -cpu=1,4,8,16,32 (5 points, not a single value): each setting
+# produces a structurally different scheduler regime, not nested
+# subsets of each other. GOMAXPROCS=1 catches cooperative-yield races
+# (deterministic single-thread schedule, no parallelism); 4 matches
+# typical CI environments (small Linux VMs); 8 saturates the cluster's
+# steady-state goroutine count (~30-50 long-lived); 16 saturates
+# emission bursts (~50 simultaneous goroutines during Phase-2a fire
+# + bus fan-out); 32 stresses oversubscribed context-switching. Higher
+# values plateau because cluster burst goroutine count caps near 50.
+#
+# Iteration count: -count=80 × 5 cpu points = 400 iterations per test.
+# Measured ≈ 62 min wall on a typical dev machine (deep variant
+# ≈ 4.1h). Wire into nightly CI, not every-PR gate. Override -count
 # via SAFETY_STRESS_COUNT for local tuning (e.g. SAFETY_STRESS_COUNT=10
 # for a fast smoke run).
 #
@@ -149,9 +159,9 @@ consensustest-real-bls:
 # Three expansion tiers, increasing cost / coverage:
 #
 #   Tier 1: 1 scenario per untested class (~4 new). Wall ≈ 2× current
-#           (~1.4h default / ~5h deep). Fits in nightly CI.
+#           (~2h default / ~8h deep). Default still fits in nightly CI.
 #   Tier 2: 3-5 timing variants per class (~16-20 new). Wall ≈ 5×
-#           (~3h default / ~12h deep). Weekly run.
+#           (~5h default / ~20h deep). Weekly run.
 #   Tier 3: full delay-sweep across all wire kinds and offset values
 #           (Coyote-lite). Wall ≈ 10-15×; impractical without dedicated
 #           CI hardware.
@@ -167,8 +177,8 @@ consensustest-real-bls:
 SAFETY_STRESS_COUNT ?= 80
 .PHONY: runner-safety-stress
 runner-safety-stress:
-	@echo "Running runner-safety stress (real goroutines + safety invariants + -race × -cpu=1,4,8 × -count=$(SAFETY_STRESS_COUNT))"
-	@for cpu in 1 4 8; do \
+	@echo "Running runner-safety stress (real goroutines + safety invariants + -race × -cpu=1,4,8,16,32 × -count=$(SAFETY_STRESS_COUNT))"
+	@for cpu in 1 4 8 16 32; do \
 		echo ">> -cpu=$$cpu"; \
 		go test -tags blst_enabled -race -count=$(SAFETY_STRESS_COUNT) -cpu=$$cpu -timeout 120m \
 			-run '^TestSafetyBridge_' \
