@@ -3,6 +3,7 @@ package obft
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -353,10 +354,33 @@ func lateCommitDelayPredicate(n int, victim spectypes.OperatorID, delay time.Dur
 	}
 }
 
+// committeeFromNodes returns the cluster's operator IDs in ascending
+// (rotation-stable) order — matching the production runner's leader-
+// rotation convention.
+func committeeFromNodes(nodes []*runnerNode) []spectypes.OperatorID {
+	out := make([]spectypes.OperatorID, len(nodes))
+	for i, n := range nodes {
+		out[i] = n.op
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// l0Leader computes the L_0 leader at (slot, committee) under the
+// production runner's leader-rotation rule: idx = slot % n on the
+// ascending-sorted committee. Match for leaderForLayer at layer=0.
+func l0Leader(committee []spectypes.OperatorID, slot phase0.Slot) spectypes.OperatorID {
+	if len(committee) == 0 {
+		return 0
+	}
+	return committee[uint64(slot)%uint64(len(committee))]
+}
+
 // scenarioConfig parameterizes a runner scenario for the bridge:
 // runner overrides (per (n, K) cell), bus shape (with or without
-// delay), and ctx timeout. The bridge's runScenarioWithSafetyCheck
-// runs the scenario at the given cell and asserts safety.
+// delay), drop predicate (for SilentL0Leader etc.), and ctx timeout.
+// The bridge's runScenarioWithSafetyCheck runs the scenario at the
+// given cell and asserts safety.
 type scenarioConfig struct {
 	name      string
 	timeout   time.Duration
@@ -364,6 +388,12 @@ type scenarioConfig struct {
 	// delayFor returns the bus's delayFn for the given cell; nil → no
 	// delay (use newBroadcastBus instead of newBroadcastBusWithDelay).
 	delayFor func(cell matrixCell) delayFn
+	// dropPredicate, if non-nil, suppresses outbound emissions matching
+	// the predicate (called with the emitting op + decoded envelope).
+	// Used by SilentL0Leader to drop the L_0 leader's Phase-1 bundle.
+	// Per-cell context (which op is L_0 leader for the cell's slot) is
+	// captured via closure.
+	dropPredicate func(cell matrixCell, slot phase0.Slot, committee []spectypes.OperatorID) func(from spectypes.OperatorID, env *wire.Envelope) bool
 }
 
 // healthyScenarioConfig: nominal-conditions cluster. All ops receive
@@ -457,9 +487,21 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	}
 	recordingBus := newRecordingBroadcastBus(bus)
 	defer bus.stop()
+
+	var dropFn func(from spectypes.OperatorID, env *wire.Envelope) bool
+	if cfg.dropPredicate != nil {
+		committee := committeeFromNodes(nodes)
+		dropFn = cfg.dropPredicate(cell, slot, committee)
+	}
+
 	for _, n := range nodes {
 		n := n
-		n.hooks.broadcastFn = func(ctx context.Context, slot phase0.Slot, data []byte) error {
+		n.hooks.broadcastFn = func(_ context.Context, _ phase0.Slot, data []byte) error {
+			if dropFn != nil {
+				if env, err := wire.Unwrap(data); err == nil && env != nil && dropFn(n.op, env) {
+					return nil // suppressed; never reaches the recording bus or peers
+				}
+			}
 			recordingBus.broadcast(n.op, data)
 			return nil
 		}
@@ -489,6 +531,50 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	rep := ct.ComputeSafetyReport(outcome)
 	require.Falsef(t, rep.IsViolation(),
 		"safety violation at %s n=%d K=%d: %s", cfg.name, cell.n, cell.K, rep)
+}
+
+// silentL0LeaderScenarioConfig: suppresses the L_0 leader's Phase-1
+// bundle on the wire (the leader's Instance still self-observes
+// internally, but no peer ever sees V_0). All non-leader honest ops
+// NR-emit at L_0 per the silent-leader rule; NR-quorum unlocks the
+// chain to L_1; cluster decides at L_1 via the L_1 leader's bundle.
+//
+// At K=2 this is the canonical f+1=K case — only one fall-through
+// layer. At K=3..N the cluster could fall through further (e.g., if
+// L_1 was also silent), but the scenario keeps only L_0 silent so
+// every cell deterministically decides at L_1.
+//
+// Safety must hold under real concurrent goroutine scheduling at
+// every matrix cell — that's the bridge assertion.
+func silentL0LeaderScenarioConfig() scenarioConfig {
+	return scenarioConfig{
+		name:    "SilentL0Leader_NRFallThrough",
+		timeout: 5 * time.Second, // larger budget for the NR-unlock + L_1 σ-quorum walk.
+		overrides: func(t *testing.T, cell matrixCell) *ConfigOverrides {
+			budget, fetchAt := compressedTestScheduleForK(t, cell.K)
+			return &ConfigOverrides{
+				K:               cell.K,
+				tCommitOverride: 200 * time.Millisecond,
+				delta2Override:  60 * time.Millisecond,
+				eps3Override:    60 * time.Millisecond,
+				BTT:             30 * time.Millisecond,
+				FetchAt:         fetchAt,
+				BroadcastBudget: budget,
+			}
+		},
+		dropPredicate: func(cell matrixCell, slot phase0.Slot, committee []spectypes.OperatorID) func(from spectypes.OperatorID, env *wire.Envelope) bool {
+			l0 := l0Leader(committee, slot)
+			return func(from spectypes.OperatorID, env *wire.Envelope) bool {
+				if from != l0 {
+					return false
+				}
+				if env.Kind != wire.KindPhase1Bundle {
+					return false
+				}
+				return env.Phase1Bundle != nil && env.Phase1Bundle.Layer == 0
+			}
+		},
+	}
 }
 
 // TestSafetyBridge_OBFT_Healthy iterates the (n, K) matrix and runs
@@ -525,6 +611,25 @@ func TestSafetyBridge_OBFT_OpportunisticTiming(t *testing.T) {
 // opportunistic-poll re-resolve path.
 func TestSafetyBridge_OBFT_LateCommit(t *testing.T) {
 	cfg := lateCommitScenarioConfig()
+	for _, cell := range obftMatrixCells() {
+		cell := cell
+		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
+			runScenarioWithSafetyCheck(t, cell, cfg)
+		})
+	}
+}
+
+// TestSafetyBridge_OBFT_SilentL0Leader iterates the matrix with the
+// SilentL0Leader_NRFallThrough config. L_0 leader's Phase-1 bundle is
+// suppressed on the wire; cluster falls through to L_1 via NR-quorum
+// unlock + chain decryption. Safety must hold across the deeper-
+// layer recovery path under real concurrent scheduling.
+//
+// This is the OBFT-base-side equivalent of 2abOBFT's existing
+// TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough — convergence
+// work per docs/RUNNER-RACE-SAFETY-PLAN.md § Scenario convergence.
+func TestSafetyBridge_OBFT_SilentL0Leader(t *testing.T) {
+	cfg := silentL0LeaderScenarioConfig()
 	for _, cell := range obftMatrixCells() {
 		cell := cell
 		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
