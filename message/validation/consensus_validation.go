@@ -34,32 +34,32 @@ func (mv *messageValidator) validateConsensusMessage(
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
 		e.want = maxEncodedConsensusMsgSize
-		return nil, e
+		return nil, withValidationStage(SSVValidationStageConsensus, e)
 	}
 
 	consensusMessage, err := specqbft.DecodeMessage(ssvMessage.Data)
 	if err != nil {
 		e := ErrUndecodableMessageData
 		e.innerErr = err
-		return nil, e
+		return nil, withValidationStage(SSVValidationStageConsensus, e)
 	}
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.committee); err != nil {
-		return consensusMessage, err
+		return consensusMessage, withValidationStage(SSVValidationStageConsensus, err)
 	}
 
 	state := mv.validatorState(ssvMessage.GetID(), committeeInfo)
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, receivedAt, state); err != nil {
-		return consensusMessage, err
+		return consensusMessage, withValidationStage(SSVValidationStageConsensus, err)
 	}
 
 	if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
-		return consensusMessage, err
+		return consensusMessage, withValidationStage(SSVValidationStageConsensus, err)
 	}
 
 	if err := ctx.Err(); err != nil {
-		return consensusMessage, err
+		return consensusMessage, withValidationStage(SSVValidationStageContext, err)
 	}
 
 	for i := range signedSSVMessage.Signatures {
@@ -67,18 +67,18 @@ func (mv *messageValidator) validateConsensusMessage(
 		signature := signedSSVMessage.Signatures[i]
 
 		if err := ctx.Err(); err != nil {
-			return consensusMessage, err
+			return consensusMessage, withValidationStage(SSVValidationStageContext, err)
 		}
 
 		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
 			e := ErrSignatureVerification
 			e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
-			return consensusMessage, e
+			return consensusMessage, withValidationStage(SSVValidationStageSignatureVerify, e)
 		}
 	}
 
 	if err := mv.updateConsensusState(signedSSVMessage, consensusMessage, committeeInfo, receivedFrom, state); err != nil {
-		return consensusMessage, err
+		return consensusMessage, withValidationStage(SSVValidationStageStateUpdate, err)
 	}
 
 	return consensusMessage, nil

@@ -39,6 +39,31 @@ type connHandler struct {
 	peerObserver        *peertrace.Observer
 }
 
+type acceptConnectionError struct {
+	reason string
+	err    error
+}
+
+func (e acceptConnectionError) Error() string {
+	return e.err.Error()
+}
+
+func (e acceptConnectionError) Unwrap() error {
+	return e.err
+}
+
+func newAcceptConnectionError(reason string, err error) error {
+	return acceptConnectionError{reason: reason, err: err}
+}
+
+func connectionReason(err error) string {
+	var acceptErr acceptConnectionError
+	if errors.As(err, &acceptErr) {
+		return acceptErr.reason
+	}
+	return connectionHandshakeReasonHandshakeError
+}
+
 // NewConnHandler creates a new connection handler
 func NewConnHandler(
 	ctx context.Context,
@@ -66,6 +91,18 @@ func NewConnHandler(
 
 // Handle configures a network notifications handler that handshakes and tracks all p2p connections
 func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
+	var ignoredConnection = errors.New("ignored connection")
+	connectionOutcome := func(err error) string {
+		switch {
+		case err == nil:
+			return connectionHandshakeOutcomeSuccess
+		case errors.Is(err, ignoredConnection):
+			return connectionHandshakeOutcomeIgnored
+		default:
+			return connectionHandshakeOutcomeFailure
+		}
+	}
+
 	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
@@ -94,11 +131,10 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		delete(ongoingHandshakes, pid)
 	}
 
-	var ignoredConnection = errors.New("ignored connection")
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				err = fmt.Errorf("panic: %v", r)
+				err = newAcceptConnectionError(connectionHandshakeReasonPanic, fmt.Errorf("panic: %v", r))
 			}
 		}()
 
@@ -107,7 +143,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		if !beginHandshake(pid) {
 			// Another connection with the same peer is already being handled.
 			logger.Debug("peer is already being handled")
-			return ignoredConnection
+			return newAcceptConnectionError(connectionHandshakeReasonAlreadyHandling, ignoredConnection)
 		}
 		defer func() {
 			// Unset this peer as being handled.
@@ -117,7 +153,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		switch ch.peerInfos.State(pid) {
 		case peers.StateConnected, peers.StateConnecting:
 			logger.Debug("peer is already connected or connecting")
-			return ignoredConnection
+			return newAcceptConnectionError(connectionHandshakeReasonAlreadyConnected, ignoredConnection)
 		}
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
@@ -133,13 +169,13 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			for {
 				select {
 				case <-deadline.C:
-					return errors.New("peer hasn't sent a handshake request")
+					return newAcceptConnectionError(connectionHandshakeReasonTimeoutNoHandshake, errors.New("peer hasn't sent a handshake request"))
 				case <-ticker.C:
 					// Check if peer has sent a handshake request.
 					if pi := ch.peerInfos.PeerInfo(pid); pi != nil && pi.LastHandshake.After(start) {
 						if pi.LastHandshakeError != nil {
 							// Handshake failed.
-							return fmt.Errorf("peer handshake request failed: %w", pi.LastHandshakeError)
+							return newAcceptConnectionError(connectionHandshakeReasonHandshakeError, fmt.Errorf("peer handshake request failed: %w", pi.LastHandshakeError))
 						}
 
 						// Handshake succeeded.
@@ -147,13 +183,13 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 					}
 
 					if net.Connectedness(pid) != libp2pnetwork.Connected {
-						return errors.New("lost connection")
+						return newAcceptConnectionError(connectionHandshakeReasonLostConnection, errors.New("lost connection"))
 					}
 				}
 			}
 
 			if !ch.sharesEnoughSubnets(conn) {
-				return errors.New("peer doesn't share enough subnets")
+				return newAcceptConnectionError(connectionHandshakeReasonSubnetsMismatch, errors.New("peer doesn't share enough subnets"))
 			}
 
 			return nil
@@ -164,7 +200,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 
 		ch.peerInfos.SetState(pid, peers.StateConnecting)
 		if err := ch.handshaker.Handshake(logger, conn); err != nil {
-			return fmt.Errorf("could not handshake: %w", err)
+			return newAcceptConnectionError(connectionHandshakeReasonHandshakeError, fmt.Errorf("could not handshake: %w", err))
 		}
 
 		logger.Debug("handshake completed successfully")
@@ -189,12 +225,19 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			// Handle the connection (could be either incoming or outgoing) without blocking.
 			go func() {
 				logger := connLogger(conn)
+				start := time.Now()
 				err := acceptConnection(logger, net, conn)
 				if err == nil {
 					if ch.connIdx.AtLimit(conn.Stat().Direction) {
-						err = errors.New("reached total connected peers limit")
+						err = newAcceptConnectionError(connectionHandshakeReasonMaxPeersLimit, errors.New("reached total connected peers limit"))
 					}
 				}
+				outcome := connectionOutcome(err)
+				reason := connectionHandshakeReasonSuccess
+				if err != nil {
+					reason = connectionReason(err)
+				}
+				recordConnectionHandshake(ch.ctx, conn.Stat().Direction, outcome, reason, time.Since(start))
 				if errors.Is(err, ignoredConnection) {
 					return
 				}

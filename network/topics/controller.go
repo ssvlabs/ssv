@@ -300,6 +300,11 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 		}
 
 		if err := ctrl.msgHandler(ctx, topicNameFull, msg); err != nil {
+			recordPubsubMessageHandlerError(ctx, topicNameFull)
+			ctrl.peerObserver.Observe(ctx, logger, "pubsub_message_handler_error", msg.ReceivedFrom,
+				zap.String("topic", topicNameFull),
+				zap.Error(err),
+			)
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}
@@ -320,8 +325,11 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		validator := ctrl.msgValidator.ValidatorForTopic(name)
 		wrappedValidator := func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			recordPubsubMessageReceived(ctx, name)
+			start := time.Now()
 			result := validator(ctx, p, pmsg)
-			ctrl.peerObserver.ObserveValidation(ctx, ctrl.logger, p, name, validationResultString(result), len(pmsg.Data),
+			resultString := validationResultString(result)
+			recordPubsubMessageValidated(ctx, name, resultString, time.Since(start))
+			ctrl.peerObserver.ObserveValidation(ctx, ctrl.logger, p, name, resultString, len(pmsg.Data),
 				zap.Int("validation_result_code", int(result)),
 			)
 			return result

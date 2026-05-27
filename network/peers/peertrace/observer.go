@@ -46,6 +46,18 @@ var (
 			observability.InstrumentName(observabilityNamespace, "ssv_validations"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of SSV-level validation decisions for messages from configured highlighted peers by outcome and reason")))
+
+	highlightedPeerPubsubRejectsCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "pubsub_rejects"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of pubsub reject trace events involving configured highlighted peers by topic and reason")))
+
+	highlightedPeerPubsubDropsCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "pubsub_drops"),
+			metric.WithUnit("{message}"),
+			metric.WithDescription("total number of pubsub drop trace events involving configured highlighted peers by event type and topic")))
 )
 
 // Config defines peers that should be highlighted in p2p logs and metrics.
@@ -191,6 +203,9 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger,
 		zap.String("peer_source", match.Source),
 		zap.String("ssv_validation_result", event.Outcome),
 		zap.String("ssv_validation_reason", event.Reason),
+		zap.String("ssv_validation_stage", event.Stage),
+		zap.String("topic", event.Topic),
+		zap.Int("payload_size", event.PayloadSize),
 		zap.String("role", event.Role.String()),
 		zap.Int32("role_id", int32(event.Role)),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(event.SSVMessageType)),
@@ -218,9 +233,39 @@ func (o *Observer) ObserveSSVValidation(ctx context.Context, logger *zap.Logger,
 		attribute.String("ssv.p2p.highlight.label", o.label),
 		attribute.String("ssv.p2p.ssv_validation.result", event.Outcome),
 		attribute.String("ssv.p2p.ssv_validation.reason", event.Reason),
+		attribute.String("ssv.p2p.ssv_validation.stage", event.Stage),
+		attribute.String("ssv.p2p.pubsub.topic", event.Topic),
 		attribute.String("ssv.p2p.message.role", event.Role.String()),
 		attribute.String("ssv.p2p.message.type", ssvmessage.MsgTypeToString(event.SSVMessageType)),
 		attribute.String("ssv.p2p.qbft.message.type", qbftMessageType),
+		attribute.String("ssv.p2p.peer.id", match.ID.String()),
+	))
+}
+
+func (o *Observer) ObservePubsubReject(ctx context.Context, pid peer.ID, topic string, reason string) {
+	match, ok := o.Match(pid)
+	if !ok {
+		return
+	}
+
+	highlightedPeerPubsubRejectsCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("ssv.p2p.highlight.label", o.label),
+		attribute.String("ssv.p2p.pubsub.topic", topic),
+		attribute.String("ssv.p2p.pubsub.reject.reason", reason),
+		attribute.String("ssv.p2p.peer.id", match.ID.String()),
+	))
+}
+
+func (o *Observer) ObservePubsubDrop(ctx context.Context, pid peer.ID, eventType string, topic string) {
+	match, ok := o.Match(pid)
+	if !ok {
+		return
+	}
+
+	highlightedPeerPubsubDropsCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("ssv.p2p.highlight.label", o.label),
+		attribute.String("ssv.p2p.pubsub.drop.event", eventType),
+		attribute.String("ssv.p2p.pubsub.topic", topic),
 		attribute.String("ssv.p2p.peer.id", match.ID.String()),
 	))
 }

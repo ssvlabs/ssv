@@ -7,6 +7,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.uber.org/zap"
 	zapobserver "go.uber.org/zap/zaptest/observer"
 
@@ -127,12 +131,84 @@ func TestObserveSSVValidation_UsesProvidedLogger(t *testing.T) {
 	core, logs := zapobserver.New(zap.InfoLevel)
 	logger := zap.New(core)
 	observer.ObserveSSVValidation(t.Context(), logger, ssvvalidation.SSVValidationEvent{
-		PeerID:  pid,
-		Outcome: ssvvalidation.SSVValidationAccepted,
-		Reason:  "valid",
+		PeerID:      pid,
+		Outcome:     ssvvalidation.SSVValidationAccepted,
+		Reason:      "valid",
+		Stage:       ssvvalidation.SSVValidationStageComplete,
+		Topic:       "ssv.v2.42",
+		PayloadSize: 128,
 	})
 
 	require.Len(t, logs.All(), 1)
 	require.Equal(t, "p2p highlighted peer ssv validation", logs.All()[0].Message)
-	require.Equal(t, ssvvalidation.SSVValidationAccepted, logs.All()[0].ContextMap()["ssv_validation_result"])
+	fields := logs.All()[0].ContextMap()
+	require.Equal(t, ssvvalidation.SSVValidationAccepted, fields["ssv_validation_result"])
+	require.Equal(t, ssvvalidation.SSVValidationStageComplete, fields["ssv_validation_stage"])
+	require.Equal(t, "ssv.v2.42", fields["topic"])
+	require.Equal(t, int64(128), fields["payload_size"])
+}
+
+func TestObservePubsubRejectAndDrop_RecordHighlightedMetrics(t *testing.T) {
+	reader := metric.NewManualReader()
+	provider := metric.NewMeterProvider(metric.WithReader(reader))
+	previousProvider := otel.GetMeterProvider()
+	otel.SetMeterProvider(provider)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(previousProvider)
+		require.NoError(t, provider.Shutdown(t.Context()))
+	})
+
+	observer, err := New(Config{
+		Label: "attack-simulator",
+		Peers: attackSimulatorPublicKey,
+	})
+	require.NoError(t, err)
+
+	var pid peer.ID
+	for highlightedPeer := range observer.peers {
+		pid = highlightedPeer
+	}
+
+	observer.ObservePubsubReject(t.Context(), pid, "ssv.v2.42", "validation failed")
+	observer.ObservePubsubDrop(t.Context(), pid, "drop_rpc", "multiple")
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+
+	requirePeertraceMetricSum(t, rm, "ssv.p2p.highlighted_peer.pubsub_rejects", map[string]string{
+		"ssv.p2p.highlight.label":      "attack-simulator",
+		"ssv.p2p.pubsub.topic":         "ssv.v2.42",
+		"ssv.p2p.pubsub.reject.reason": "validation failed",
+		"ssv.p2p.peer.id":              pid.String(),
+	})
+	requirePeertraceMetricSum(t, rm, "ssv.p2p.highlighted_peer.pubsub_drops", map[string]string{
+		"ssv.p2p.highlight.label":   "attack-simulator",
+		"ssv.p2p.pubsub.drop.event": "drop_rpc",
+		"ssv.p2p.pubsub.topic":      "multiple",
+		"ssv.p2p.peer.id":           pid.String(),
+	})
+}
+
+func requirePeertraceMetricSum(t *testing.T, rm metricdata.ResourceMetrics, metricName string, attrs map[string]string) {
+	t.Helper()
+
+	for _, scopeMetrics := range rm.ScopeMetrics {
+		for _, metric := range scopeMetrics.Metrics {
+			if metric.Name != metricName {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			require.Len(t, sum.DataPoints, 1)
+			require.EqualValues(t, 1, sum.DataPoints[0].Value)
+			for key, expected := range attrs {
+				value, ok := sum.DataPoints[0].Attributes.Value(attribute.Key(key))
+				require.True(t, ok)
+				require.Equal(t, expected, value.AsString())
+			}
+			return
+		}
+	}
+
+	t.Fatalf("%s metric was not collected", metricName)
 }

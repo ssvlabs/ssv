@@ -1,6 +1,8 @@
 package streams
 
 import (
+	"context"
+
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,6 +15,23 @@ import (
 const (
 	observabilityName      = "github.com/ssvlabs/ssv/network/streams"
 	observabilityNamespace = "ssv.p2p.stream"
+
+	streamOperationAttribute   = "ssv.p2p.stream.operation"
+	streamErrorReasonAttribute = "ssv.p2p.stream.error.reason"
+)
+
+const (
+	streamOperationDial          = "dial"
+	streamOperationWriteRequest  = "write_request"
+	streamOperationCloseWrite    = "close_write"
+	streamOperationReadResponse  = "read_response"
+	streamOperationReadRequest   = "read_request"
+	streamOperationWriteResponse = "write_response"
+
+	streamErrorReasonError            = "error"
+	streamErrorReasonOversizedPayload = "oversized_payload"
+	streamErrorReasonReset            = "reset"
+	streamErrorReasonTimeout          = "timeout"
 )
 
 var (
@@ -47,6 +66,12 @@ var (
 			observability.InstrumentName(observabilityNamespace, "payloads.oversized"),
 			metric.WithUnit("{payload}"),
 			metric.WithDescription("total number of oversized stream payloads rejected")))
+
+	streamErrorsCounter = metrics.New(
+		meter.Int64Counter(
+			observability.InstrumentName(observabilityNamespace, "errors"),
+			metric.WithUnit("{error}"),
+			metric.WithDescription("total number of p2p stream errors by protocol, operation, and reason")))
 )
 
 func protocolIDAttribute(id protocol.ID) attribute.KeyValue {
@@ -57,4 +82,12 @@ func protocolIDAttribute(id protocol.ID) attribute.KeyValue {
 func streamDirectionAttribute(direction string) attribute.KeyValue {
 	const attrName = "ssv.p2p.stream.direction"
 	return attribute.String(attrName, direction)
+}
+
+func recordStreamError(ctx context.Context, id protocol.ID, operation string, reason string) {
+	streamErrorsCounter.Add(ctx, 1, metric.WithAttributes(
+		protocolIDAttribute(id),
+		attribute.String(streamOperationAttribute, operation),
+		attribute.String(streamErrorReasonAttribute, reason),
+	))
 }

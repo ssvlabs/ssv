@@ -143,8 +143,11 @@ var (
 	ErrZeroRound                               = Error{text: "zero round", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, pmsg *pubsub.Message, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
+	stage := validationStageFromError(err)
+	topic := pubsubMessageTopic(pmsg)
+	payloadSize := pubsubMessagePayloadSize(pmsg)
 
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
@@ -153,12 +156,12 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		recordIgnoredMessage(ctx, loggerFields.Role, validationTimeoutReason)
-		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, validationTimeoutReason, err)
+		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, validationTimeoutReason, stage, topic, payloadSize, err)
 		logger.Debug("ignoring message due to validation timeout", zap.Error(err))
 		return pubsub.ValidationIgnore
 	case errors.Is(err, context.Canceled):
 		recordIgnoredMessage(ctx, loggerFields.Role, validationCanceledReason)
-		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, validationCanceledReason, err)
+		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, validationCanceledReason, stage, topic, payloadSize, err)
 		logger.Debug("ignoring message due to validation cancellation", zap.Error(err))
 		return pubsub.ValidationIgnore
 	}
@@ -166,7 +169,7 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	var valErr Error
 	if !errors.As(err, &valErr) {
 		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
-		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, err.Error(), err)
+		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, err.Error(), stage, topic, payloadSize, err)
 		logger.Debug("ignoring invalid message", zap.Error(err))
 		return pubsub.ValidationIgnore
 	}
@@ -176,7 +179,7 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 			logger.Debug("ignoring invalid message", zap.Error(valErr))
 		}
 		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
-		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, valErr.Text(), valErr)
+		mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationIgnored, valErr.Text(), stage, topic, payloadSize, valErr)
 		return pubsub.ValidationIgnore
 	}
 
@@ -185,16 +188,17 @@ func (mv *messageValidator) handleValidationError(ctx context.Context, peerID pe
 	}
 
 	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
-	mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationRejected, valErr.Text(), valErr)
+	mv.observeSSVValidation(ctx, peerID, loggerFields, SSVValidationRejected, valErr.Text(), stage, topic, payloadSize, valErr)
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationSuccess(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, pmsg *pubsub.Message) pubsub.ValidationResult {
 	recordAcceptedMessage(ctx, messageRole(decodedMessage))
 	if mv.observer == nil {
 		return pubsub.ValidationAccept
 	}
-	mv.observeSSVValidation(ctx, peerID, mv.buildLoggerFields(decodedMessage), SSVValidationAccepted, "valid", nil)
+	mv.observeSSVValidation(ctx, peerID, mv.buildLoggerFields(decodedMessage), SSVValidationAccepted, "valid",
+		SSVValidationStageComplete, pubsubMessageTopic(pmsg), pubsubMessagePayloadSize(pmsg), nil)
 	return pubsub.ValidationAccept
 }
 
@@ -204,6 +208,9 @@ func (mv *messageValidator) observeSSVValidation(
 	loggerFields *LoggerFields,
 	outcome string,
 	reason string,
+	stage string,
+	topic string,
+	payloadSize int,
 	err error,
 ) {
 	if mv.observer == nil {
@@ -217,6 +224,9 @@ func (mv *messageValidator) observeSSVValidation(
 		PeerID:         peerID,
 		Outcome:        outcome,
 		Reason:         reason,
+		Stage:          stage,
+		Topic:          topic,
+		PayloadSize:    payloadSize,
 		Role:           loggerFields.Role,
 		SSVMessageType: loggerFields.SSVMessageType,
 		Slot:           loggerFields.Slot,
@@ -231,4 +241,18 @@ func (mv *messageValidator) observeSSVValidation(
 		event.Error = err.Error()
 	}
 	mv.observer.ObserveSSVValidation(ctx, mv.logger, event)
+}
+
+func pubsubMessageTopic(pmsg *pubsub.Message) string {
+	if pmsg == nil {
+		return ""
+	}
+	return pmsg.GetTopic()
+}
+
+func pubsubMessagePayloadSize(pmsg *pubsub.Message) int {
+	if pmsg == nil {
+		return 0
+	}
+	return len(pmsg.GetData())
 }
