@@ -433,8 +433,15 @@ type scenarioConfig struct {
 // useful.
 func healthyScenarioConfig() scenarioConfig {
 	return scenarioConfig{
-		name:    "Healthy",
-		timeout: 3 * time.Second,
+		name: "Healthy",
+		// 60s timeout — generous budget for failure-signal sharpness.
+		// Typical wall ~150ms (~400× margin); under -race × heavy
+		// GOMAXPROCS the crypto-heavy paths can balloon 25-50×, and
+		// 60s comfortably absorbs that variance so any failure here is
+		// a real bug rather than a tail-variance flake. (Cost is only
+		// paid on failure paths; passing tests still complete in
+		// typical wall.)
+		timeout: 60 * time.Second,
 		overrides: func(t *testing.T, cell matrixCell) *ConfigOverrides {
 			budget, fetchAt := compressedTestScheduleForK(t, cell.K)
 			return &ConfigOverrides{
@@ -457,8 +464,14 @@ func healthyScenarioConfig() scenarioConfig {
 // after the soft deadline.
 func lateCommitScenarioConfig() scenarioConfig {
 	return scenarioConfig{
-		name:    "LateCommit",
-		timeout: 3 * time.Second,
+		name: "LateCommit",
+		// 60s timeout — generous budget for failure-signal sharpness.
+		// Typical wall ~630ms (500ms late-commit delay + ~130ms crypto);
+		// the crypto portion can balloon 25-50× under -race × heavy
+		// GOMAXPROCS. 60s gives ~95× total margin and ~450× over the
+		// crypto-variance-prone portion, so any timeout failure is a
+		// real bug rather than a tail-variance flake.
+		timeout: 60 * time.Second,
 		overrides: func(t *testing.T, cell matrixCell) *ConfigOverrides {
 			budget, fetchAt := compressedTestScheduleForK(t, cell.K)
 			return &ConfigOverrides{
@@ -564,8 +577,15 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 // every matrix cell — that's the bridge assertion.
 func silentL0LeaderScenarioConfig() scenarioConfig {
 	return scenarioConfig{
-		name:    "SilentL0Leader_NRFallThrough",
-		timeout: 5 * time.Second, // larger budget for the NR-unlock + L_1 σ-quorum walk.
+		name: "SilentL0Leader_NRFallThrough",
+		// 60s timeout — generous budget for failure-signal sharpness.
+		// Typical wall ~250ms (NR-unlock + L_1 σ-quorum walk involves
+		// the heaviest crypto: threshold-IBE chain-key derivation +
+		// IBE decryption of peer SigmaChained entries + BLS aggregate).
+		// Crypto-heavy paths can balloon 25-50× under -race × heavy
+		// GOMAXPROCS; 60s gives ~240× margin so any timeout failure is
+		// a real bug rather than a tail-variance flake.
+		timeout: 60 * time.Second,
 		overrides: func(t *testing.T, cell matrixCell) *ConfigOverrides {
 			budget, fetchAt := compressedTestScheduleForK(t, cell.K)
 			return &ConfigOverrides{

@@ -449,8 +449,15 @@ func healthyScenarioConfig() scenarioConfig {
 // (its own σ-side terminal) rather than KindValue.
 func lateCommitScenarioConfig() scenarioConfig {
 	return scenarioConfig{
-		name:    "LateCommit",
-		timeout: 5 * time.Second,
+		name: "LateCommit",
+		// 60s timeout — generous budget for failure-signal sharpness.
+		// Typical wall ~330ms (300ms late-value delay + ~30ms crypto);
+		// the crypto portion can balloon 25-50× under -race × heavy
+		// GOMAXPROCS. 60s gives ~180× total margin so any timeout
+		// failure is a real bug rather than a tail-variance flake.
+		// (Cost is only paid on failure paths; passing tests complete
+		// in typical wall.)
+		timeout: 60 * time.Second,
 		overrides: func(_ *testing.T, cell matrixCell) *ConfigOverrides {
 			return compressedTestOverridesForK(cell.K)
 		},

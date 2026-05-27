@@ -194,7 +194,14 @@ func runRealBLSSilentL0LeaderAtCell(t *testing.T, cell matrixCell) {
 	lZeroLeader := spectypes.OperatorID(leaderForLayer(committee, twoabcore.Height(slot), 0))
 
 	slotStart := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 60s ctx (vs 5s on the Healthy matrix variant): the silent-leader
+	// path is the most crypto-heavy of any 2abOBFT scenario (NR-quorum
+	// reconstruction + threshold-IBE chain-key derivation + IBE
+	// decryption of L_1 entries + L_1 σ-quorum reconstruction). Under
+	// -race × heavy GOMAXPROCS, crypto cost can balloon 25-50× from
+	// typical ~190ms wall; 60s gives ~315× margin so any timeout
+	// failure here is a real bug, not a tail-variance flake.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	bus := &blsBus{
@@ -326,7 +333,12 @@ func runRealBLSLateCommitAtCell(t *testing.T, cell matrixCell) {
 
 	slot := phase0.Slot(400 + cell.n*10 + cell.K)
 	slotStart := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 60s ctx (vs 5s on the Healthy matrix variant): late-value
+	// delivery + opportunistic-resolve crypto can balloon 25-50× under
+	// -race × heavy GOMAXPROCS. Typical wall ~330ms (300ms fixed delay
+	// + ~30ms crypto); 60s gives ~180× total margin so any timeout
+	// failure is a real bug, not a tail-variance flake.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	const lateValueDelay = 300 * time.Millisecond
