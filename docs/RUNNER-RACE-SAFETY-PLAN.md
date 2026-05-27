@@ -20,7 +20,7 @@ Combines the two earlier options I sketched (A: stress-amplify existing tests; B
 The bridge wraps **three canonical scenarios per protocol**, each exercising a distinct runner-side path. The scenario set is the *union* of what OBFT base and 2abOBFT currently have, mirrored across both protocols for consistency (some scenarios already exist on one side and need to be built on the other — see [§Scenario convergence](#scenario-convergence) below).
 
 - **Healthy** (`TestRunProposerSlot_Healthy_*`): clean run with all Phase-1 bundles arriving on time, all hosts validating, no late commits. Verifies the runner correctly drives the protocol through Phase 1 → Phase 2 → Phase 3 under nominal conditions. Decision lands at L_0.
-- **LateCommit** (`TestRunProposerSlot_LateCommit_OpportunisticResolve`): a configurable subset of KindCommits to op1 (`n - qV + 1` peers, parameterized over cluster size) is deliberately delayed past RoundEndOffset (T_commit + Δ_2 + ε_3). Exercises spec § Phase 3 "Re-running on late KindCommit arrivals" — the runner's opportunistic polling must salvage the slot for op1 by re-Resolving when the late commits arrive. Catches a regression where the runner stops polling at RoundEndOffset.
+- **LateCommit** (OBFT base: `TestRunProposerSlot_LateCommit_OpportunisticResolve`; 2abOBFT: `TestRunProposerSlot_RealBLS_LateCommit_Matrix`): a configurable subset of the σ-pool-fill messages to op1 (`n - qV + 1` peers, parameterized over cluster size) is deliberately delayed past the soft Phase-3 deadline. **The delayed wire-kind differs by protocol**: OBFT base delays `KindCommit` (carries σ partials there) past RoundEndOffset (T_commit + Δ_2 + ε_3); 2abOBFT delays `KindValue` (carries `ValueMsg.L0Partial` — the σ-side terminal emission) past Phase-2a's fire time. Both exercise the same opportunistic-resolve poll semantics — the runner must re-Resolve when the late σ-pool fills past the soft deadline. Catches a regression where the runner stops polling at the soft deadline.
 - **SilentL0Leader_NRFallThrough** (`TestRunProposerSlot_SilentL0Leader_NRFallThrough`): the L_0 leader's Phase-1 bundle is suppressed before broadcast (or arrives so late it's past T_commit at every receiver). All non-leader ops NR-emit at L_0 per the silent-leader rule, NR-quorum unlocks chain, L_1's leader broadcast carries the decision. Verifies the runner correctly drives the deeper-layer recovery path under real concurrency.
 
 All three are wrapped by the bridge → the 10 safety invariants must hold on the reconstructed Outcome regardless of which runner path the scenario exercises.
@@ -29,15 +29,15 @@ All three are wrapped by the bridge → the 10 safety invariants must hold on th
 
 ### Scenario convergence
 
-OBFT base and 2abOBFT runner tests today have asymmetric scenario coverage. The convergence picture (post commit-3 self-review):
+OBFT base and 2abOBFT runner tests started with asymmetric scenario coverage. The convergence picture (post commits 3 + 5):
 
-| Scenario | OBFT base | 2abOBFT | This plan |
-|---|---|---|---|
-| Healthy | ✓ existing (`TestRunProposerSlot_Healthy_n4_K4`) | ✓ existing (`TestRunProposerSlot_Healthy_n4`) | wrap both |
-| LateCommit | ✓ existing (`TestRunProposerSlot_LateCommit_OpportunisticResolve`) | ✗ **needs build** | wrap OBFT base existing; **build 2abOBFT scenario in commit 5** |
-| SilentL0Leader_NRFallThrough | ✗ **needs build** | ✓ existing (`TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough`) | wrap 2abOBFT existing; **build OBFT base scenario in commit 3** |
+| Scenario | OBFT base | 2abOBFT |
+|---|---|---|
+| Healthy | ✓ existing (`TestRunProposerSlot_Healthy_n4_K4`); matrix wrapper in `TestSafetyBridge_OBFT_Healthy` | ✓ existing (`TestRunProposerSlot_Healthy_n4`); matrix wrapper in `TestRunProposerSlot_RealBLS_Healthy_Matrix` |
+| LateCommit | ✓ existing (`TestRunProposerSlot_LateCommit_OpportunisticResolve`); matrix wrapper in `TestSafetyBridge_OBFT_LateCommit` | ✓ **built in commit 5** (`TestRunProposerSlot_RealBLS_LateCommit_Matrix` — delays `KindValue`, not `KindCommit`; see [§Scenarios](#scenarios)) |
+| SilentL0Leader_NRFallThrough | ✓ **built in commit 3** (`TestSafetyBridge_OBFT_SilentL0Leader`) | ✓ existing (`TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough`); matrix wrapper in `TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough_Matrix` |
 
-Building the missing scenarios is mechanical — each is a small variation on existing scenarios (silent-leader suppression in the broadcast bus, delayed-commit predicate). The protocol-level paths already exist; only the runner-test fixtures need adding.
+Building the missing scenarios was mechanical — each was a small variation on existing scenarios (silent-leader suppression in the broadcast bus, late-σ-pool-fill predicate). The protocol-level paths already existed; only the runner-test fixtures needed adding. Commit 6 wraps every scenario with the safety bridge on the 2abOBFT side; OBFT base bridges are already in place via commits 1-3.
 
 ## Why
 
