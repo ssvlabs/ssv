@@ -1118,8 +1118,9 @@ function sortFailureReasons(reasons, totals) {
 // Totals stay reconciled with the chart's shifted success rate at every BFT_start.
 //
 // Cells where the protocol had zero failures of that reason render as
-// "—" rather than "0" so the eye catches active rows; cells where the
-// protocol's cell is missing entirely render as "n/a". Hidden when
+// 0.00% in muted color (via the .zero CSS class) so the tinted, non-zero
+// cells catch the eye against a uniformly-formatted backdrop; cells where
+// the protocol's cell is missing entirely render as "n/a". Hidden when
 // every active protocol has 100% success at this point.
 function rebuildFailureBreakdown(data) {
   const host = document.getElementById('conditions-failures');
@@ -1205,17 +1206,18 @@ function rebuildFailureBreakdown(data) {
 
   // One cell per (protocol, reason): empty when the family lacks that
   // cushion; n/a when the protocol didn't run (missing / iterations==0);
-  // "—" for zero failures of this reason (so the eye catches non-zero rows);
-  // otherwise the percent-of-iterations, tinted by severity via failRateToColor
-  // — a single red ramp from barely-there at ~0%, capped at a soft red past
-  // ~60% (never green/yellow). grp marks the first column of each family group.
+  // 0.00% in muted color (.zero class) for zero failures of this reason (so
+  // the tinted, non-zero cells catch the eye); otherwise the percent-of-
+  // iterations, tinted by severity via failRateToColor — a single red ramp
+  // from barely-there at ~0%, capped at a soft red past ~60% (never
+  // green/yellow). grp marks the first column of each family group.
   const failCell = (name, reason, grp) => {
     const cls = (extra) => 'fail-cell' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
     if (!name) return h('td', { class: cls('empty') });
     const cell = cellByProtocol[name];
     if (!cell || cell.iterations === 0) return h('td', { class: cls('na') }, 'n/a');
     const count = perCell[name][reason] || 0;
-    if (count === 0) return h('td', { class: cls('zero') }, '—');
+    if (count === 0) return h('td', { class: cls('zero') }, '0.00%');
     const rate = count / cell.iterations;
     const { bg, fg } = failRateToColor(rate);
     return h('td', { class: cls(), style: `background: ${bg}; color: ${fg}` },
@@ -1320,7 +1322,8 @@ function decisionDepthCounts(cell, bftStart) {
 //     (those iterations did decide at R2), but renders pale (no fresh MEV was
 //     submitted in time). isMevFresh gates fallback cells (OBFT/2abOBFT L_1+)
 //     to flat-pale regardless — they carry no fresh MEV even when timely.
-// Hidden when no active protocol has decision data (all n/a / 0% success).
+// Hidden when no active protocol decided anything (every cell would be n/a
+// or 0.00% at every depth).
 function rebuildLayerBreakdown(data) {
   const host = document.getElementById('conditions-layers');
   if (!host) return;
@@ -1334,10 +1337,12 @@ function rebuildLayerBreakdown(data) {
     // base (unshifted) cell — n/a above the OBFT-family threshold, the
     // BFT_start=0 cell for pipeline-shift protocols.
     const base = findBaselineCellForScenario(data, scenario, p);
-    if (base && base.decidedRounds && base.iterations > 0) {
-      cellByProtocol[p] = base;
-      anyData = true;
-    }
+    if (!base || base.iterations <= 0) continue;
+    // Accept any cell that simulated, even with zero successes — those render
+    // as 0.00% at every depth (the sim ran, decided nothing). Only cells that
+    // are genuinely missing (out-of-envelope or no data point) stay as n/a.
+    cellByProtocol[p] = base;
+    if (base.decidedRounds) anyData = true;
   }
   if (!anyData) return;
   const buckets = [
@@ -1358,15 +1363,18 @@ function rebuildLayerBreakdown(data) {
   table.appendChild(buildGroupedTableHeader('Layer / Round', grouped));
 
   // One cell per (protocol, depth): empty when the family lacks that
-  // cushion, n/a when the protocol has no data, "—" for a zero share.
-  // grp marks the first column of each family group for the separator.
+  // cushion; n/a when the cell is missing entirely (out-of-envelope or no
+  // data point); 0.00% in muted color (.zero class) for a zero share (the
+  // sim ran but didn't decide at this depth — or didn't decide at any
+  // depth, when a protocol has 0% overall success). grp marks the first
+  // column of each family group for the separator.
   const layerCell = (name, idx, depthKey, grp) => {
     const cls = (extra) => 'layer-cell' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
     if (!name) return h('td', { class: cls('empty') });
     if (!cellByProtocol[name]) return h('td', { class: cls('na') }, 'n/a');
     const c = counts[name];
     const decided = c.decided[idx];
-    if (decided <= 0) return h('td', { class: cls('zero') }, '—');
+    if (decided <= 0) return h('td', { class: cls('zero') }, '0.00%');
     // Cyan intensity = MEV actually captured: scales with the share that BOTH
     // decided at this depth AND landed timely under the current BFT_start
     // (c.timely[idx]/iterations), so untimely deciders drop out of the color

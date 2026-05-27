@@ -668,7 +668,8 @@ section.conditions .conditions-legend {
  * (background/color set inline by failRateToColor: a single red ramp, subtle
  * at ~0% up to a soft red capped near the ~60% point). The reason-column width
  * comes from the shared .col-rowhead so it aligns with the other sections;
- * zero ("—") and n/a cells stay muted. */
+ * zero (0.00%) and n/a cells stay muted (color only — the eye still picks up
+ * the tinted, non-zero cells). */
 .conditions-failures-table td.fail-cell.zero,
 .conditions-failures-table td.fail-cell.na {
   color: var(--na);
@@ -686,8 +687,10 @@ section.conditions .conditions-legend {
 }
 /* Decision-layer table — per-(family, depth) MEV-density shading. Cell
  * background/color are set inline by mevDensityColor: a pale→bright cyan ramp
- * scaled by each cell's (success-only) share for MEV-fresh decisions, the pale
- * low end for no-MEV fallback cells. Zero ("—") and n/a cells stay muted. */
+ * scaled by each cell's timely-success share for MEV-fresh decisions (the
+ * subset that landed before the submit deadline under the current BFT_start),
+ * the pale low end for no-MEV fallback cells. Zero (0.00%) and n/a cells stay
+ * muted (color only — the tinted, non-zero cells catch the eye). */
 .conditions-layers-table td.layer-cell.zero,
 .conditions-layers-table td.layer-cell.na {
   color: var(--na);
