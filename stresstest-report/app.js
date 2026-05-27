@@ -154,7 +154,7 @@ let selectedP2pProfile = 0;
 // protocol/v2/consensustest/network.go. Order is load-bearing: the
 // Go-side stores the profile choice in Fields["p2p_profile"] as the
 // index into this slice, and the picker round-trips via the same index.
-const P2P_PROFILE_LABELS = ['prod', 'stage1', 'stage2', 'slow', 'heavy_tail', 'slow_heavy_tail'];
+const P2P_PROFILE_LABELS = ['prod', 'stage1a', 'stage2a', 'slow', 'heavy_tail', 'slow_heavy_tail', 'stage1b', 'stage2b'];
 // selectedInstability is the p2p_instability picker value (0..4 →
 // none / low / moderate / high / extreme; see InstabilityLevels in
 // protocol/v2/consensustest/instability.go). Only affects the
@@ -896,9 +896,9 @@ function renderConditionsSection(data) {
   );
   pickers.appendChild(
     // The p2p_profile picker shows the calibrated mixture LABEL (prod /
-    // stage1 / stage2 / slow / heavy_tail / slow_heavy_tail) instead
-    // of the float index; the data axis is still the index that the
-    // Go side stores in Fields["p2p_profile"].
+    // stage1a / stage2a / slow / heavy_tail / slow_heavy_tail / stage1b /
+    // stage2b) instead of the float index; the data axis is still the
+    // index that the Go side stores in Fields["p2p_profile"].
     buildBaselinePickerLabeled(
       'p2p_profile:',
       dims.P2pProfiles.length ? dims.P2pProfiles : [selectedP2pProfile],

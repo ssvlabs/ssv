@@ -193,7 +193,7 @@ func TestPhase2_AllSweepPoints_NoSetupErrors(t *testing.T) {
 		qbftadapter.QBFT0{},
 	}
 	iters := ct.Iterations{Baseline: 1, Unstable: 1}
-	profiles := []string{"prod", "stage1", "stage2"}
+	profiles := []string{"prod", "stage1a", "stage2a"}
 	sweeps := ct.DefaultSweeps([]ct.Scenario{healthy}, protocols, iters, 4, 4, profiles, ct.DefaultBaselineBTTValues)
 	require.NotEmpty(t, sweeps, "DefaultSweeps must return at least one sweep")
 

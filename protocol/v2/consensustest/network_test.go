@@ -430,6 +430,8 @@ func TestLogNormalMixture_ComponentSelectionWeights(t *testing.T) {
 // TestLogNormalMixture_Slowed — Slowed(k) scales each component's
 // median by k while keeping σ. The mixture's overall median should
 // move by ~k as well (each component's median × k, weights unchanged).
+// Also asserts maxDelay propagation: a capped parent yields a capped
+// derived mixture (the b-variant construction relies on this).
 func TestLogNormalMixture_Slowed(t *testing.T) {
 	base := ct.Prod_1_2_3_4_CalibratedLogNormalMixture()
 	slowed := base.Slowed(4)
@@ -441,6 +443,18 @@ func TestLogNormalMixture_Slowed(t *testing.T) {
 			"component %d weight must be unchanged", i)
 		require.InEpsilonf(t, float64(c.Median)*4, float64(slowed.Components[i].Median), 1e-9,
 			"component %d median must scale by factor", i)
+	}
+
+	// maxDelay propagates through Slowed (hygiene cap survives derivation).
+	// Apply a small cap to a heavy mixture so the cap binds; sample
+	// behaviorally and assert no draw exceeds it.
+	const cap = 50 * time.Millisecond
+	cappedSlowed := ct.Prod_1_2_3_4_CalibratedLogNormalMixture().
+		WithMaxDelay(cap).Slowed(80)
+	rng := mrand.New(mrand.NewSource(11))
+	for i := 0; i < 100_000; i++ {
+		d := cappedSlowed.Delay(rng, 1, 2, ct.KindCommit)
+		require.LessOrEqualf(t, d, cap, "Slowed draw %v exceeds parent cap %v", d, cap)
 	}
 }
 
@@ -516,6 +530,17 @@ func TestLogNormalMixture_HeavyTailed(t *testing.T) {
 		require.InEpsilonf(t, scale0, got, 1e-9,
 			"component %d sigma scale (%v) must match component 0 scale (%v)", i, got, scale0)
 	}
+
+	// maxDelay propagates through HeavyTailed (hygiene cap survives
+	// derivation). Apply a small cap to the σ-heavy mixture so the cap
+	// binds; sample behaviorally and assert no draw exceeds it.
+	const propagatedCap = 100 * time.Millisecond
+	cappedHeavy := base.WithMaxDelay(propagatedCap).HeavyTailed(k)
+	rng := mrand.New(mrand.NewSource(13))
+	for i := 0; i < 100_000; i++ {
+		d := cappedHeavy.Delay(rng, 1, 2, ct.KindCommit)
+		require.LessOrEqualf(t, d, propagatedCap, "HeavyTailed draw %v exceeds parent cap %v", d, propagatedCap)
+	}
 }
 
 // TestLogNormalMixture_MaxDelay — WithMaxDelay(d) clamps every draw at d
@@ -569,16 +594,21 @@ func TestLogNormalMixture_MaxDelay(t *testing.T) {
 	}
 }
 
-// TestP2PProfiles_HeavyTailsCapped guards that heavy_tail and
-// slow_heavy_tail keep their 5s WithMaxDelay bound wired in — without it
-// the σ-fattened tail runs to 59s / DroppedDelay (1h), which the cap
-// exists to prevent.
+// TestP2PProfiles_HeavyTailsCapped guards that every profile with a 5s
+// WithMaxDelay bound keeps it wired in — without it the σ-fattened tail
+// runs to 59s / DroppedDelay (1h), which the cap exists to prevent.
+// Stage1b / stage2b also catch the maxDelay-inheritance contract on
+// Slowed/HeavyTailed: their parents (stage1a / stage2a) set the cap and
+// the b-variant constructors rely on it propagating through .Slowed(2)
+// .HeavyTailed(2) without an explicit re-apply. If a future Slowed /
+// HeavyTailed change drops the cap, these draws blow past 5s and this
+// test fails.
 func TestP2PProfiles_HeavyTailsCapped(t *testing.T) {
 	const (
 		cap = 5 * time.Second
 		N   = 300_000
 	)
-	for _, name := range []string{"heavy_tail", "slow_heavy_tail"} {
+	for _, name := range []string{"stage1a", "stage1b", "stage2a", "stage2b", "heavy_tail", "slow_heavy_tail"} {
 		m := ct.P2PProfile(name)
 		rng := mrand.New(mrand.NewSource(7))
 		for i := 0; i < N; i++ {
@@ -678,11 +708,13 @@ func TestSlowOpAnchor_EmpiricalProfiles_PerProfileCalibration(t *testing.T) {
 		want    time.Duration
 	}{
 		{"prod", 250 * time.Millisecond},
-		{"stage1", 250 * time.Millisecond},
-		{"stage2", 250 * time.Millisecond},
+		{"stage1a", 250 * time.Millisecond},
+		{"stage2a", 250 * time.Millisecond},
 		{"slow", 375 * time.Millisecond},
 		{"heavy_tail", 300 * time.Millisecond},
 		{"slow_heavy_tail", 450 * time.Millisecond},
+		{"stage1b", 250 * time.Millisecond},
+		{"stage2b", 250 * time.Millisecond},
 	}
 	for _, c := range cases {
 		require.Equalf(t, c.want, ct.P2PProfile(c.profile).SlowOpAnchor(),

@@ -406,9 +406,13 @@ type LogNormalMixtureDelay struct {
 	// maxDelay, when > 0, caps each Delay draw at this upper bound (set
 	// via WithMaxDelay). Keeps σ-heavy derived profiles (e.g. HeavyTailed)
 	// from emitting unphysical multi-minute / DroppedDelay outliers while
-	// preserving the body of the distribution. Like slowOpAnchor it is not
-	// propagated through Slowed/HeavyTailed (which build fresh mixtures);
-	// set it explicitly afterward.
+	// preserving the body of the distribution. Propagated through
+	// Slowed/HeavyTailed: the cap is a hygiene bound (a slower / heavier-
+	// tailed version of the same mixture should respect the same ceiling
+	// unless explicitly relaxed). Override on a derived mixture via
+	// WithMaxDelay(d); remove with WithMaxDelay(0). Contrast with
+	// slowOpAnchor, which is reset on derivation because it calibrates
+	// operator-host context, not mesh shape.
 	maxDelay time.Duration
 }
 
@@ -553,21 +557,22 @@ func (l *LogNormalMixtureDelay) WithMaxDelay(d time.Duration) *LogNormalMixtureD
 // budget, but only just. The earlier 500-900 ms anchor draft would have
 // produced ~5-7 s cumulative, trivially dominating the deadline.
 //
-// Stage1 / stage2 worst-case is dominated by the network tail rather
-// than slow-op tax: a single capped-at-5s tail draw (the σ-heavy
-// 4-component fit + WithMaxDelay) already exceeds RelayCutoff before
-// any slow-op tax is added. That's by design for the catastrophic-tail
-// / bimodal-degraded profiles — the network shape itself encodes the
-// stress, the slow-op anchor doesn't need to.
+// Stage1a / stage1b / stage2a / stage2b worst-case is dominated by the
+// network tail rather than slow-op tax: a single capped-at-5s tail draw
+// (the σ-heavy 4-component fit + WithMaxDelay) already exceeds
+// RelayCutoff before any slow-op tax is added. That's by design for the
+// catastrophic-tail / bimodal-degraded profiles — the network shape
+// itself encodes the stress, the slow-op anchor doesn't need to.
 //
-// The three empirical mixtures (prod, stage1, stage2) share an
-// anchor because the slow-op tax models operator-side response
-// degradation (CPU stalls, GC pauses, disk/NIC contention) — a
-// property of the operator host, independent of the mesh
-// propagation shape. The stronger disruption stage1 (catastrophic
-// tail) and stage2 (sustained bimodal) emit lives in the body+tail
-// of their per-hop delay distributions; piling extra slow-op tax on
-// top would double-count the network's contribution. The derived
+// The five empirical-derived mixtures (prod, stage1a, stage1b, stage2a,
+// stage2b) share an anchor because the slow-op tax models operator-side
+// response degradation (CPU stalls, GC pauses, disk/NIC contention) — a
+// property of the operator host, independent of the mesh propagation
+// shape. The stronger disruption stage1a (catastrophic tail) / stage1b
+// (catastrophic tail, harder) and stage2a (sustained bimodal) / stage2b
+// (sustained bimodal, harder) emit lives in the body+tail of their
+// per-hop delay distributions; piling extra slow-op tax on top would
+// double-count the network's contribution. The synthetic derived
 // profiles (slow, heavy_tail, slow_heavy_tail) get distinct anchors
 // because they shape-scale prod and conceptually shift the
 // operator-load context too.
@@ -602,12 +607,17 @@ func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // propagation latency data (proposal+prepare+commit pooled, n=129,124
 // sender→receiver pairs sampled 2026-05-25 10:15Z → 2026-05-26 10:15Z).
 //
-// Picked as the "stage1" empirical profile because of its extreme-tail
+// Picked as the "stage1a" empirical profile because of its extreme-tail
 // regime: median is comparable to prod (2.5 ms vs prod ~1.5 ms) and
 // p90 stays under 11 ms, but p99 explodes to 2.27 s and p99.9 reaches
 // 3.05 s — the upper tail is dominated by what look like QBFT
 // round-change timeouts. Use this profile to exercise consensus
-// robustness against rare-but-catastrophic propagation delays.
+// robustness against rare-but-catastrophic propagation delays. The
+// stage1b profile is this same mixture pushed harder
+// (.Slowed(2).HeavyTailed(2)): median 2x, mixture-level >P99 outlier
+// probability 2x; the 5s cap inherits through the derivation. stage1b
+// saturates at the cap from p99 onward — same operational regime as
+// heavy_tail's upper tail, with a fatter body.
 //
 // Empirical fit (4-component): reproduces every quantile through
 // p99.9 within 17%. A simpler 3-component fit was used originally
@@ -619,9 +629,10 @@ func Prod_1_2_3_4_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //
 // WithMaxDelay(5s) caps the σ=1.75 / σ=1.01 components so the
 // extreme tail can't run to multi-minute / DroppedDelay outliers;
-// matches heavy_tail / slow_heavy_tail's hygiene bound. The cap
-// sits above the empirical p99.9 (3.05 s) with margin, so "slow
-// but eventual delivery" stays the operational semantic.
+// matches heavy_tail / slow_heavy_tail / stage1b / stage2a / stage2b's
+// hygiene bound. The cap sits above the empirical p99.9 (3.05 s) with
+// margin, so "slow but eventual delivery" stays the operational
+// semantic.
 func Stage_3_4_6_7_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 	return NewLogNormalMixtureDelay([]LogNormalComponent{
 		{Weight: 0.0733, Median: 660 * time.Microsecond, Sigma: 1.7494},
@@ -635,13 +646,18 @@ func Stage_3_4_6_7_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // `COMMITTEE-81_82_83_84` cross-op QBFT propagation latency (n=365,975
 // pairs sampled 2026-05-25 10:07Z → 2026-05-26 10:07Z).
 //
-// Picked as the "stage2" empirical profile because of its bimodal
+// Picked as the "stage2a" empirical profile because of its bimodal
 // regime: median is prod-like (1.4 ms) but the body fans out hard —
-// p90 jumps to 40 ms, p95 to 181 ms, p99 to 833 ms. Unlike stage1
+// p90 jumps to 40 ms, p95 to 181 ms, p99 to 833 ms. Unlike stage1a
 // (3,4,6,7), where the bulk of the distribution is fast and only the
 // extreme tail breaks, here a meaningful slice (≥5%) of every QBFT
 // round is genuinely slow. Use this profile to exercise prepare/commit
-// quorum and round-1 completion under a sustained degraded mesh.
+// quorum and round-1 completion under a sustained degraded mesh. The
+// stage2b profile is this same mixture pushed harder
+// (.Slowed(2).HeavyTailed(2)): median 2x, mixture-level >P99 outlier
+// probability 2x; the 5s cap inherits through the derivation. stage2b's
+// p99 sits below the cap (≈3.2 s); only p99.9 saturates — body breathes
+// more than stage1b.
 //
 // Empirical fit (4-component): reproduces every quantile through
 // p99.9 within 47%. A simpler 3-component fit was used originally
@@ -651,9 +667,10 @@ func Stage_3_4_6_7_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // tail into separate components.
 //
 // WithMaxDelay(5s) caps the σ-heavy components for hygiene; matches
-// the cap on heavy_tail / slow_heavy_tail / stage1. p99 is 833 ms
-// so the cap is well above empirical observations — "slow but
-// eventual delivery" stays the operational semantic.
+// the cap on heavy_tail / slow_heavy_tail / stage1a / stage1b /
+// stage2b. p99 is 833 ms so the cap is well above empirical
+// observations — "slow but eventual delivery" stays the operational
+// semantic.
 func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 	return NewLogNormalMixtureDelay([]LogNormalComponent{
 		{Weight: 0.1925, Median: 971 * time.Microsecond, Sigma: 1.3022},
@@ -670,17 +687,17 @@ func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 // identity is encoded as a stable index into this slice). Keep the
 // order stable across releases; new profiles append at the end.
 //
-// Six profiles:
+// Eight profiles:
 //   - prod: 24h of healthy SSV prod-mainnet (`COMMITTEE-1_2_3_4`,
 //     ~190k cross-op pairs). Median 1.5ms, p99 8.4ms. The canonical
 //     "normal mesh" empirical profile.
-//   - stage1: 24h of stage-hoodi `COMMITTEE-3_4_6_7` (~129k pairs)
+//   - stage1a: 24h of stage-hoodi `COMMITTEE-3_4_6_7` (~129k pairs)
 //     with a rare-but-catastrophic propagation tail — median 2.5ms
 //     (prod-comparable), but p99 jumps to 2.27s and p99.9 reaches
 //     3.05s (what look like QBFT round-change timeouts). Use to
 //     exercise consensus robustness against rare slow-event spikes.
 //     4-component fit, capped at 5s.
-//   - stage2: 24h of stage-hoodi `COMMITTEE-81_82_83_84` (~366k
+//   - stage2a: 24h of stage-hoodi `COMMITTEE-81_82_83_84` (~366k
 //     pairs) with sustained bimodal degradation — median 1.4ms but
 //     a meaningful ≥5% slice of every round is genuinely slow
 //     (p90=40ms, p95=181ms, p99=833ms). Use to exercise prepare /
@@ -697,13 +714,31 @@ func Stage_81_82_83_84_CalibratedLogNormalMixture() *LogNormalMixtureDelay {
 //   - slow_heavy_tail: slow (prod medians ×80) with the tail fattened (σ
 //     for ~4× the >P99 outlier frequency) and capped at 5s — a genuine
 //     slow-and-heavy-tail (p90 ≈ 400ms, <1% at the cap).
+//   - stage1b: stage1a pushed harder — .Slowed(2) shifts every
+//     quantile 2x, .HeavyTailed(2) re-fits σ so mixture-level >(post-Slow
+//     P99) outlier mass doubles. The 5s cap inherits from stage1a
+//     through both derivations. Median 4.8ms, p90 92ms, p95 536ms, and
+//     p99 / p99.9 both saturate at the 5s cap. Strictest empirical-body
+//     profile we sweep.
+//   - stage2b: stage2a pushed harder — same .Slowed(2).HeavyTailed(2)
+//     composition; 5s cap inherits from stage2a. Median 3.2ms, p90
+//     109ms, p95 411ms, p99 3.2s, p99.9 at the 5s cap. Body breathes
+//     more than stage1b (cap binds only at p99.9), lands between
+//     stage2a and slow_heavy_tail.
+//
+// Index stability: stage1b / stage2b append at the end (indices 6 / 7)
+// to preserve the index→profile mapping that report data depends on.
+// stage1a / stage2a are renames of the former stage1 / stage2 entries
+// at indices 1 / 2; the underlying mixture is identical.
 var P2PProfileNames = []string{
 	"prod",
-	"stage1",
-	"stage2",
+	"stage1a",
+	"stage2a",
 	"slow",
 	"heavy_tail",
 	"slow_heavy_tail",
+	"stage1b",
+	"stage2b",
 }
 
 // P2PProfile returns a fresh NetworkModel for the named profile. The
@@ -715,21 +750,33 @@ func P2PProfile(name string) NetworkModel {
 	switch name {
 	case "prod":
 		return Prod_1_2_3_4_CalibratedLogNormalMixture()
-	case "stage1":
+	case "stage1a":
 		return Stage_3_4_6_7_CalibratedLogNormalMixture()
-	case "stage2":
+	case "stage2a":
 		return Stage_81_82_83_84_CalibratedLogNormalMixture()
 	case "slow":
-		// Slowed/HeavyTailed produce fresh mixtures with zero
-		// slowOpAnchor (the prod constructor's anchor doesn't propagate
-		// through derivations — see the slowOpAnchor field doc). Set
-		// the per-profile anchor explicitly here so each derived profile
-		// gets its own calibrated slow-op magnitude.
+		// Slowed/HeavyTailed reset slowOpAnchor on derivation (the
+		// anchor calibrates operator-host context, not mesh shape — see
+		// the slowOpAnchor field doc). Set the per-profile anchor
+		// explicitly here so each derived profile gets its own calibrated
+		// slow-op magnitude. maxDelay is propagated; prod has none, so
+		// `slow` inherits no cap.
 		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).WithSlowOpAnchor(slowSlowOpAnchor)
 	case "heavy_tail":
+		// prod has no cap, so this is the first cap in the chain.
 		return Prod_1_2_3_4_CalibratedLogNormalMixture().HeavyTailed(31).WithMaxDelay(5 * time.Second).WithSlowOpAnchor(heavyTailSlowOpAnchor)
 	case "slow_heavy_tail":
 		return Prod_1_2_3_4_CalibratedLogNormalMixture().Slowed(80).HeavyTailed(4).WithMaxDelay(5 * time.Second).WithSlowOpAnchor(slowHeavyTailSlowOpAnchor)
+	case "stage1b":
+		// stage1a body+tail pushed harder: 2x median (Slowed(2)) +
+		// 2x mixture-level >P99 outlier mass (HeavyTailed(2)). The 5s
+		// cap inherits from stage1a (Slowed/HeavyTailed preserve
+		// maxDelay); only the operator-anchor needs re-applying — same
+		// operators, harder mesh.
+		return Stage_3_4_6_7_CalibratedLogNormalMixture().Slowed(2).HeavyTailed(2).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
+	case "stage2b":
+		// stage2a body+tail pushed harder; same composition as stage1b.
+		return Stage_81_82_83_84_CalibratedLogNormalMixture().Slowed(2).HeavyTailed(2).WithSlowOpAnchor(calibratedEmpiricalSlowOpAnchor)
 	default:
 		panic(fmt.Sprintf("consensustest: unknown P2P profile %q; valid: %v", name, P2PProfileNames))
 	}
@@ -756,6 +803,11 @@ func P2PProfileIndex(name string) int {
 // in time by the same factor. Used by derived profiles like "slow"
 // (factor=80 over prod).
 //
+// Propagates the parent's maxDelay (hygiene cap survives derivation;
+// override with WithMaxDelay) but resets slowOpAnchor — see the
+// slowOpAnchor field doc for the operator-context-vs-mesh-shape
+// rationale.
+//
 // Panics on factor ≤ 0 — a non-positive scaling factor would either
 // invert or collapse the distribution and almost certainly signals a
 // caller bug.
@@ -771,7 +823,7 @@ func (l *LogNormalMixtureDelay) Slowed(factor float64) *LogNormalMixtureDelay {
 			Sigma:  c.Sigma,
 		}
 	}
-	return NewLogNormalMixtureDelay(out)
+	return NewLogNormalMixtureDelay(out).WithMaxDelay(l.maxDelay)
 }
 
 // HeavyTailed returns a copy of `l` with every component's Sigma
@@ -781,7 +833,13 @@ func (l *LogNormalMixtureDelay) Slowed(factor float64) *LogNormalMixtureDelay {
 // so the mixture's overall median shifts by only a few percent.
 // Used by heavy_tail (×31 over prod) and slow_heavy_tail (×4 over the
 // slowed base), each then bounded via WithMaxDelay so the σ-scaled tail
-// stays physical.
+// stays physical; also by stage1b / stage2b (×2 over the slowed stage
+// base), which inherit the parent's 5s cap.
+//
+// Propagates the parent's maxDelay (hygiene cap survives derivation;
+// override with WithMaxDelay) but resets slowOpAnchor — see the
+// slowOpAnchor field doc for the operator-context-vs-mesh-shape
+// rationale.
 //
 // For a single-component mixture, the math admits the closed-form
 // scale σ_new = σ_old · Φ^{-1}(0.99) / Φ^{-1}(1 − k·(1−0.99)). For
@@ -855,7 +913,7 @@ func (l *LogNormalMixtureDelay) HeavyTailed(outlierFreqMultiplier float64) *LogN
 			Sigma:  c.Sigma * scale,
 		}
 	}
-	return NewLogNormalMixtureDelay(out)
+	return NewLogNormalMixtureDelay(out).WithMaxDelay(l.maxDelay)
 }
 
 // mixtureCDF returns the analytic mixture CDF at `x` (sum of weighted

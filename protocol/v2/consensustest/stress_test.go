@@ -65,8 +65,8 @@ import (
 //     (brackets the BFT-liveness floor + SSV's K=N convention at n=4).
 //   - P2P_PROFILES — comma-separated calibrated mesh-hop profile names
 //     for the p2p_baseline sweep's profile axis. Valid values: prod,
-//     stage1, stage2, slow, heavy_tail, slow_heavy_tail. Default: all
-//     six. See ct.P2PProfileNames / ct.P2PProfile.
+//     stage1a, stage2a, slow, heavy_tail, slow_heavy_tail, stage1b,
+//     stage2b. Default: all eight. See ct.P2PProfileNames / ct.P2PProfile.
 //   - PROTOCOLS — comma-separated protocol names to include in the sweep
 //     (e.g. "OBFT-700,QBFT-700,PSigs"). Test-level default (unset / empty):
 //     all registered protocols. `make stresstest` overrides this with a
@@ -88,7 +88,7 @@ import (
 // Or directly (test-internal fallbacks — see Makefile for higher
 // budgets that the `make stresstest` wrapper sets):
 //
-//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2 P2P_PROFILES=prod,stage1,stage2 \
+//	REPORT_DIR=./reports CLUSTER_SIZES_N=4 LAYERS_K=2 P2P_PROFILES=prod,stage1a,stage2a \
 //	    ITERATIONS_BASELINE_OPERATIONS=100 ITERATIONS_UNSTABLE_OPERATIONS=10 \
 //	    go test -timeout 30m -run TestStress ./protocol/v2/consensustest/
 func TestStress(t *testing.T) {
@@ -159,12 +159,12 @@ func TestStress(t *testing.T) {
 	slices.Sort(layersK)
 
 	// P2P_PROFILES — comma-separated calibrated mesh-hop profile names
-	// for the p2p_baseline sweep's profile axis. Default: all six
-	// (prod, stage1, stage2, slow, heavy_tail, slow_heavy_tail) from
-	// ct.P2PProfileNames. Each name becomes one point in the
-	// BTT × profile × instability cross-product, with both cfg.Network
-	// and cfg.Mesh.HopDelay sourced from the named profile. Duplicates
-	// are dropped, preserving first-occurrence order.
+	// for the p2p_baseline sweep's profile axis. Default: all eight
+	// (prod, stage1a, stage2a, slow, heavy_tail, slow_heavy_tail,
+	// stage1b, stage2b) from ct.P2PProfileNames. Each name becomes one
+	// point in the BTT × profile × instability cross-product, with both
+	// cfg.Network and cfg.Mesh.HopDelay sourced from the named profile.
+	// Duplicates are dropped, preserving first-occurrence order.
 	p2pProfilesRaw := os.Getenv("P2P_PROFILES")
 	if p2pProfilesRaw == "" {
 		p2pProfilesRaw = strings.Join(ct.P2PProfileNames, ",")
