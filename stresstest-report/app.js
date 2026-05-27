@@ -1112,10 +1112,10 @@ function sortFailureReasons(reasons, totals) {
 // from the selected BFT_start's real sim cell, pipeline-shift rows from
 // the shifted BFT_start=0 cell. Shift-induced misses (deciders whose
 // shifted submission lands past the submit deadline) carry no adapter
-// MissReason, so they're folded into the "ready to submit, past the submit
-// deadline" bucket — the same outcome as a natively-late decision. This
-// keeps the table's totals reconciled with the chart's shifted success rate
-// at every BFT_start.
+// MissReason, but their deciding depth is recovered via decisionDepthCounts,
+// so each folds into the matching per-depth "ready to submit, past the submit
+// deadline" row — the same outcome as a natively-late decision at that depth.
+// Totals stay reconciled with the chart's shifted success rate at every BFT_start.
 //
 // Cells where the protocol had zero failures of that reason render as
 // "—" rather than "0" so the eye catches active rows; cells where the
@@ -1134,29 +1134,32 @@ function rebuildFailureBreakdown(data) {
   // pipeline-shift protocols to their BFT_start=0 cell; shiftedCell then
   // applies the post-hoc +BFT_start shift (a no-op for OBFT-family). The
   // per-protocol overflow drop (deciders that no longer fit the submit
-  // deadline once shifted) is captured here and folded into the
-  // ready-to-submit-past-deadline bucket below — it is 0 for OBFT-family and
-  // for BFT_start=0, so it only contributes for pipeline-shift protocols at
-  // BFT_start > 0.
+  // deadline once shifted) is split by deciding depth (decisionDepthCounts)
+  // and folded into the matching depth-d ready-to-submit-past-deadline row
+  // below — zero for OBFT-family and for BFT_start=0, so it only contributes
+  // for pipeline-shift protocols at BFT_start > 0.
   const cellByProtocol = {};
-  const overflowByProtocol = {};
+  // overflowByDepth[p] = [overflow_0, overflow_1, overflow_2+] — pipeline-shift
+  // deciders whose decideTime + BFT_start exceeded the submit deadline, split
+  // across depth buckets via decisionDepthCounts (decided − timely). Zero for
+  // OBFT-family by construction (no shift applied there).
+  const overflowByDepth = {};
   for (const p of activeNames) {
     const base = findBaselineCellForScenario(data, scenario, p);
     const cell = shiftedCell(base, selectedBFTStart);
     if (!cell) continue;
     cellByProtocol[p] = cell;
-    const deciders = base && base.decisionTimes ? base.decisionTimes.length : 0;
-    const survivors = cell.decisionTimes ? cell.decisionTimes.length : 0;
-    overflowByProtocol[p] = Math.max(0, deciders - survivors);
+    const { decided, timely } = decisionDepthCounts(base, selectedBFTStart);
+    overflowByDepth[p] = decided.map((n, d) => Math.max(0, n - timely[d]));
   }
   // Union of canonicalized reasons + per-protocol counts. Multiple raw
   // reasons may map to one canonical row (e.g. OBFT's "ready at layer
   // 0" + QBFT's "ready at round 1" both → GROUP_READY_DEPTH_0); counts
   // are summed under the canonical key per protocol. The pipeline-shift
-  // overflow drop folds into that same ready-to-submit-past-deadline bucket
-  // (it joins natively-late misses there: those decided late in-slot, the
-  // overflow ones decided in-slot at BFT_start=0 then shifted past the
-  // deadline — both are "decided, but too late to submit").
+  // overflow joins natively-late misses in the matching depth-d ready-to-
+  // submit-past-deadline row: those decided late in-slot, the overflow ones
+  // decided in-slot at BFT_start=0 then shifted past the deadline — both are
+  // "decided, but too late to submit" at their actual deciding depth.
   const reasonTotals = {}; // canonical reason -> total count across active protocols
   const perCell = {};      // protocol -> canonical reason -> count
   let anyFailure = false;
@@ -1173,21 +1176,21 @@ function rebuildFailureBreakdown(data) {
         reasonTotals[reason] = (reasonTotals[reason] || 0) + count;
       }
     }
-    const overflow = overflowByProtocol[p] || 0;
-    if (overflow > 0) {
-      anyFailure = true;
-      // A pipeline-shift decider whose decide_time + BFT_start exceeds the
-      // submit deadline is, at the shifted BFT_start, the same outcome as a
-      // natively-late decision: "ready to submit, past the submit deadline".
-      // Fold it into that bucket rather than calling out the shift mechanism.
-      // We lack per-sample decision rounds for the dropped samples
-      // (decidedRounds is only a histogram), so the whole overflow lands in
-      // the round-1 / depth-0 bucket — exact for the common all-honest case
-      // (QBFT decides at round 1), an approximation when decisions span rounds.
-      perCell[p][GROUP_READY_DEPTH_0] =
-        (perCell[p][GROUP_READY_DEPTH_0] || 0) + overflow;
-      reasonTotals[GROUP_READY_DEPTH_0] =
-        (reasonTotals[GROUP_READY_DEPTH_0] || 0) + overflow;
+    // A pipeline-shift decider whose decide_time + BFT_start exceeds the
+    // submit deadline is, at the shifted BFT_start, the same outcome as a
+    // natively-late decision: "ready to submit, past the submit deadline" at
+    // its actual deciding depth. decisionDepthCounts recovered that depth (sort-
+    // by-time ≡ sort-by-depth), so each dropped sample folds into the matching
+    // depth-d row of the ready-past-deadline family.
+    const overflow = overflowByDepth[p];
+    if (overflow) {
+      for (let d = 0; d < 3; d++) {
+        if (overflow[d] <= 0) continue;
+        anyFailure = true;
+        const reason = FAILURE_TOP_ORDER[d];
+        perCell[p][reason] = (perCell[p][reason] || 0) + overflow[d];
+        reasonTotals[reason] = (reasonTotals[reason] || 0) + overflow[d];
+      }
     }
   }
   if (!anyFailure) return; // hide entirely when no failures to show
@@ -1238,12 +1241,64 @@ function rebuildFailureBreakdown(data) {
 // only at L_0; L_1+ fall through to deeper-confirmed safe parents with no MEV.
 // QBFT re-fetches a fresh block every round (R2+ still MEV) and PSigs signs the
 // single pre-agreed V, so both are MEV-fresh at every depth. The cell's cyan
-// intensity then scales with its (success-only) share; fallback cells render
-// the flat pale low end of the ramp. Deliberately approximate; see the note.
+// intensity then scales with its timely (decided AND on-time under the current
+// BFT_start) share via decisionDepthCounts — so the color reflects MEV
+// actually captured, not just MEV opportunity (a late-decided R2 still shows
+// in the displayed %, but loses its color because the slot was already gone).
+// Fallback cells render the flat pale low end of the ramp regardless of
+// timeliness — no fresh MEV to capture there even when the decision lands in
+// time.
 function isMevFresh(protocol, bucketKey) {
   const obftFamily = protocol.startsWith('OBFT') || protocol.startsWith('2abOBFT');
   if (!obftFamily) return true;
   return bucketKey === 0;
+}
+
+// decisionDepthCounts returns two parallel arrays per depth bucket
+// [L_0/R1, L_1/R2, L_2+/R3+]:
+//   decided[d] — iterations that decided at depth d (sum of decidedRounds for
+//                that bucket, shift-invariant).
+//   timely[d]  — subset that ALSO landed in time to submit under bftStart
+//                (decisionTime + shift ≤ the submit deadline).
+// The layer/round table reads decided for the displayed % and timely for the
+// color (so the color tracks MEV actually captured, not just MEV opportunity).
+// The failure breakdown reads decided[d] − timely[d] to attribute shift-induced
+// overflow to its real deciding depth.
+//
+// We have no per-sample depth tag in the data (decidedRounds is a histogram),
+// but cell.decisionTimes is sorted ascending and protocol layers/rounds are
+// temporally separated by construction: OBFT/2abOBFT L_K fires only after
+// L_(K-1)'s commit window closes; QBFT R(k+1) fires only after R(k)'s round
+// timer expires. So time-order ≡ depth-order: the first N_0 sorted samples
+// are depth 0, the next N_1 are depth 1, the rest are depth 2+, where
+// N_d = decidedRounds[d]. Applying the shift in that order yields the timely
+// count per bucket without needing a per-sample depth tag.
+//
+// Pipeline-shift protocols add +bftStart per sample (mirrors shiftCell);
+// OBFT-family adds 0 — the lookup already resolved to the matching BFT_start
+// sim (or n/a above the independence threshold), and the schedule is bit-
+// identical below it, so decision times are already absolute under the current
+// BFT_start. Either way decided[d] equals timely[d] for OBFT-family (no
+// shift-induced overflow there by construction).
+function decisionDepthCounts(cell, bftStart) {
+  const decided = [0, 0, 0];
+  const timely = [0, 0, 0];
+  if (!cell || !cell.decisionTimes || !cell.decidedRounds) return { decided, timely };
+  for (const [depthStr, count] of Object.entries(cell.decidedRounds)) {
+    const depth = parseInt(depthStr, 10);
+    const idx = depth <= 0 ? 0 : depth === 1 ? 1 : 2;
+    decided[idx] += count;
+  }
+  const shift = isPipelineShiftProtocol(cell.protocol) ? bftStart : 0;
+  const times = cell.decisionTimes;
+  let i = 0;
+  for (let bucket = 0; bucket < 3; bucket++) {
+    const end = Math.min(i + decided[bucket], times.length);
+    for (; i < end; i++) {
+      if (times[i] + shift <= SUBMIT_DEADLINE_MS) timely[bucket]++;
+    }
+  }
+  return { decided, timely };
 }
 
 // rebuildLayerBreakdown populates the decision layer/round table between the
@@ -1252,12 +1307,19 @@ function isMevFresh(protocol, bucketKey) {
 // family (cushion as sub-columns); each cell is the % of total iterations
 // that decided at that depth (so a column's rows sum to its success rate,
 // complementing the failure breakdown toward ~100%).
-// Reads decidedRounds (a depth→count histogram) from the UNSHIFTED base cell:
-// the round at which a decision was reached is shift-invariant — a later
-// BFT_start only clips deciders past the deadline (folded into "ready to
-// submit, past the submit deadline" in the failure breakdown), it doesn't
-// change which layer/round decided. Cell color encodes MEV density — a
-// pale→bright cyan ramp scaled by the share (see isMevFresh / mevDensityColor).
+//
+// Two quantities, two readings:
+//   - displayed %: from decidedRounds (a depth→count histogram) on the base
+//     cell — shift-invariant. A later BFT_start only clips deciders past the
+//     submit deadline (folded into "ready to submit, past the submit deadline"
+//     in the failure breakdown), it doesn't change which layer/round decided.
+//   - color intensity: from decisionDepthCounts — counts only iterations
+//     that BOTH decided at this depth AND landed timely under the current
+//     BFT_start, so the color tracks MEV ACTUALLY CAPTURED. A R2 cell whose
+//     decisions all arrive past the submit deadline still shows the same %
+//     (those iterations did decide at R2), but renders pale (no fresh MEV was
+//     submitted in time). isMevFresh gates fallback cells (OBFT/2abOBFT L_1+)
+//     to flat-pale regardless — they carry no fresh MEV even when timely.
 // Hidden when no active protocol has decision data (all n/a / 0% success).
 function rebuildLayerBreakdown(data) {
   const host = document.getElementById('conditions-layers');
@@ -1283,16 +1345,12 @@ function rebuildLayerBreakdown(data) {
     { key: 1, label: 'L_1 / R2' },
     { key: 2, label: 'L_2+ / R3+' },
   ];
-  const pct = {}; // protocol -> [bucket0%, bucket1%, bucket2%]
+  // counts[p] = { decided: [n_0, n_1, n_2+], timely: [n_0, n_1, n_2+] } —
+  // raw iteration counts per depth bucket. Display % = decided[idx]/iterations
+  // (shift-invariant); color intensity = timely[idx]/iterations (shift-dependent).
+  const counts = {};
   for (const p of activeNames) {
-    const cell = cellByProtocol[p];
-    pct[p] = [0, 0, 0];
-    if (!cell) continue;
-    for (const [depthStr, count] of Object.entries(cell.decidedRounds)) {
-      const depth = parseInt(depthStr, 10);
-      const idx = depth <= 0 ? 0 : depth === 1 ? 1 : 2;
-      pct[p][idx] += (count / cell.iterations) * 100;
-    }
+    counts[p] = decisionDepthCounts(cellByProtocol[p], selectedBFTStart);
   }
   host.appendChild(h('h3', { class: 'conditions-layers-title' }, 'Decided layer / round (MEV density)'));
   const grouped = groupProtocolsByFamily(activeNames);
@@ -1306,14 +1364,18 @@ function rebuildLayerBreakdown(data) {
     const cls = (extra) => 'layer-cell' + (extra ? ' ' + extra : '') + (grp ? ' grp' : '');
     if (!name) return h('td', { class: cls('empty') });
     if (!cellByProtocol[name]) return h('td', { class: cls('na') }, 'n/a');
-    const v = pct[name][idx];
-    if (v <= 0) return h('td', { class: cls('zero') }, '—');
-    // Cyan intensity = MEV density: it scales with the (success-only) share for
-    // MEV-fresh decisions, and is pinned to 0 (the flat pale low end) for no-MEV
-    // fallback cells (OBFT/2abOBFT L_1+).
-    const intensity = isMevFresh(name, depthKey) ? v / 100 : 0;
+    const c = counts[name];
+    const decided = c.decided[idx];
+    if (decided <= 0) return h('td', { class: cls('zero') }, '—');
+    // Cyan intensity = MEV actually captured: scales with the share that BOTH
+    // decided at this depth AND landed timely under the current BFT_start
+    // (c.timely[idx]/iterations), so untimely deciders drop out of the color
+    // even though they stay in the displayed %. Pinned to 0 (flat pale low end)
+    // for no-MEV fallback cells (OBFT/2abOBFT L_1+) regardless.
+    const iters = cellByProtocol[name].iterations;
+    const intensity = isMevFresh(name, depthKey) ? c.timely[idx] / iters : 0;
     const { bg, fg } = mevDensityColor(intensity);
-    return h('td', { class: cls(), style: `background: ${bg}; color: ${fg}` }, v.toFixed(2) + '%');
+    return h('td', { class: cls(), style: `background: ${bg}; color: ${fg}` }, (decided / iters * 100).toFixed(2) + '%');
   };
 
   const tbody = h('tbody');
@@ -1329,8 +1391,8 @@ function rebuildLayerBreakdown(data) {
   table.appendChild(tbody);
   host.appendChild(table);
   host.appendChild(h('p', { class: 'conditions-layers-note' },
-    'Each cell is the share of iterations that successfully decided at that layer (OBFT/2abOBFT) or round (QBFT). ' +
-    'Cyan intensity tracks MEV density — brighter, stronger cyan = more iterations captured a fresh MEV block; pale cyan = little or no MEV (incl. the deeper safe-parent fallback at OBFT/2abOBFT L_1+).'));
+    'Each cell shows the share of iterations that successfully decided at that layer (OBFT/2abOBFT) or round (QBFT) — shift-invariant. ' +
+    'Cyan intensity tracks MEV actually captured under the current BFT_start: brighter cyan = more iterations decided here AND landed timely (fresh MEV in hand at submit time); pale cyan = few timely captures — either because deciders arrived past the submit deadline, or because the depth carries no fresh MEV anyway (OBFT/2abOBFT L_1+ safe-parent fallback).'));
 }
 
 // onConditionsChange — picker click handler. Re-renders the heatmap
