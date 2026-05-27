@@ -53,8 +53,14 @@ func RunProposerSlot(
 	if err != nil {
 		return fmt.Errorf("obft runner: start instance: %w", err)
 	}
-	// EndInstance seals the instance (sets the ended flag) and removes it from
-	// the controller's tracking map atomically.
+	// Defer order matters: hostDrainWG.Wait is deferred first so it runs
+	// LAST (LIFO). EndInstance, deferred second, runs first — it seals
+	// the instance (sets the ended flag) and closes the host-validation
+	// channel under instanceMu, which is the signal the drain goroutine
+	// waits for. Without this ordering, Wait would block forever if the
+	// drain goroutine is still selecting.
+	var hostDrainWG sync.WaitGroup
+	defer hostDrainWG.Wait()
 	defer ctrl.EndInstance(slot)
 
 	// Replay any envelopes that arrived before StartNewInstance — peers with
@@ -72,7 +78,11 @@ func RunProposerSlot(
 	// L_0-ready channel on the peer-V σ branch and lets the V-drop
 	// receiver early-emit σ_i^V on the harvested V. The goroutine exits
 	// when the channel is closed (EndInstance → Finalize) or ctx fires.
-	go drainHostValidationRequests(ctx, sched, slot)
+	hostDrainWG.Add(1)
+	go func() {
+		defer hostDrainWG.Done()
+		drainHostValidationRequests(ctx, sched, slot)
+	}()
 
 	cfg := inst.Config
 

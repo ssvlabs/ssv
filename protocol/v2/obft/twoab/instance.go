@@ -684,6 +684,12 @@ func (i *Instance) Ended() bool { return i.ended }
 // from multiple goroutines are NOT safe and would race on the
 // `i.ended = true` write versus the `close(...)` call; the type-level
 // contract precludes this.
+//
+// Note: l0ReadyCh is NOT closed by Finalize. It's only ever closed by
+// maybeSignalL0Ready when the L_0 emission becomes determinable; if
+// that never happens (e.g., V never retained + host-valid), the channel
+// stays open. Callers waiting on l0ReadyCh MUST bound their wait via
+// ctx and/or the TPhase2a backstop timer — see RunProposerSlot's select.
 func (i *Instance) Finalize() {
 	if i.ended {
 		return

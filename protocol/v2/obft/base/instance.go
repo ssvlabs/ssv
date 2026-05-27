@@ -723,6 +723,12 @@ func (i *Instance) Evidence() []Evidence {
 //
 // Idempotent — safe to call repeatedly.
 //
+// Note: l0ReadyCh is NOT closed by Finalize. It's only ever closed by
+// maybeSignalL0Ready when the L_0 emission becomes determinable; if
+// that never happens (e.g., V never retained + host-valid), the channel
+// stays open. Callers waiting on l0ReadyCh MUST bound their wait via
+// ctx and/or the T_commit backstop timer — see RunProposerSlot's select.
+//
 // Note on Rule 5 attribution scope: both the cryptoFake verdict (partial
 // fails verify against op's own pubshare on the claimed V — unambiguous
 // byzantine) and the unknownV verdict (partial verifies but claimed V is

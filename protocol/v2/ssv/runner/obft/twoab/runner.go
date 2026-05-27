@@ -42,6 +42,13 @@ func RunProposerSlot(
 	if err != nil {
 		return fmt.Errorf("twoab runner: start instance: %w", err)
 	}
+	// Defer order matters: hostDrainWG.Wait is deferred first so it runs
+	// LAST (LIFO). EndInstance, deferred second, runs first — it closes
+	// the host-validation channel under instanceMu, which is the signal
+	// the drain goroutine waits for. Without this ordering, Wait would
+	// block forever if the drain goroutine is still selecting.
+	var hostDrainWG sync.WaitGroup
+	defer hostDrainWG.Wait()
 	defer ctrl.EndInstance(slot)
 
 	// Replay envelopes that arrived before StartNewInstance.
@@ -50,7 +57,11 @@ func RunProposerSlot(
 	// Drain host-validation requests (peer-reflood-V harvest path): each verdict
 	// fed back via ApplyHostValidity can close L0ReadyCh / cascade an emission.
 	// Exits when the channel closes (EndInstance) or ctx fires.
-	go sched.RunHostValidationDrain(ctx, slot)
+	hostDrainWG.Add(1)
+	go func() {
+		defer hostDrainWG.Done()
+		sched.RunHostValidationDrain(ctx, slot)
+	}()
 
 	cfg := inst.Config
 
