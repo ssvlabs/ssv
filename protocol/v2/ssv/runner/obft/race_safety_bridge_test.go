@@ -2,6 +2,7 @@ package obft
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -291,33 +292,169 @@ func pickClusterRound(perOp map[ct.OperatorID]ct.OperatorOutcome) int {
 	return -1
 }
 
-// TestSafetyBridge_OBFT_Healthy_n4_K4 — commit-1 smoke test. Runs the
-// healthy scenario through the production runner cluster, captures the
-// wire trace + per-Instance state, reconstructs a ct.Outcome, asserts
-// the 10 consensustest safety invariants hold under real-goroutine
-// scheduling.
-//
-// Validates the bridge end-to-end at the canonical single cell
-// (n=4 / K=4) before commit 2 scales it across the (n, K) matrix and
-// commit 3 adds the SilentL0Leader_NRFallThrough scenario.
-func TestSafetyBridge_OBFT_Healthy_n4_K4(t *testing.T) {
-	budget, fetchAt := compressedTestSchedule(t)
-	overrides := &ConfigOverrides{
-		K:               4,
-		tCommitOverride: 200 * time.Millisecond,
-		delta2Override:  60 * time.Millisecond,
-		eps3Override:    60 * time.Millisecond,
-		BTT:             30 * time.Millisecond,
-		FetchAt:         fetchAt,
-		BroadcastBudget: budget,
+// matrixCell — (n, K) parameterization of a runner cluster test.
+type matrixCell struct {
+	n int
+	K int
+}
+
+// obftMatrixCells returns the canonical OBFT-family cluster matrix:
+// n ∈ {4, 7} × K ∈ {f+1..N} = 8 cells. Spans the BFT-liveness floor
+// (K=f+1) through the maximum-fall-through depth (K=n) for each
+// cluster size.
+func obftMatrixCells() []matrixCell {
+	return []matrixCell{
+		{4, 2}, {4, 3}, {4, 4},
+		{7, 3}, {7, 4}, {7, 5}, {7, 6}, {7, 7},
 	}
+}
 
-	nodes := buildCluster(t, 4, overrides)
+// compressedTestScheduleForK is the K-parameterized variant of the
+// existing compressedTestSchedule. Uses the same compressed timing
+// (TCommit=200ms, BTT=30ms, SafetyBuffer=0) but produces (FetchAt,
+// BroadcastBudget) slices of the requested length. L_0 fetches at
+// 100ms; backups L_1..L_{K-1} fetch at slot start (0).
+func compressedTestScheduleForK(t *testing.T, K int) (broadcastBudget, fetchAt []time.Duration) {
+	t.Helper()
+	var err error
+	broadcastBudget, err = DefaultBroadcastBudgetSchedule(K, 30*time.Millisecond, 0, 200*time.Millisecond)
+	require.NoError(t, err)
+	fetchAt = make([]time.Duration, K)
+	if K > 0 {
+		fetchAt[0] = 100 * time.Millisecond
+	}
+	return
+}
 
-	const slot = phase0.Slot(17)
+// lateCommitDelayPredicate returns a delayFn that delays KindCommit
+// arrivals at the victim op from the highest-numbered (n - qV + 1)
+// peers, leaving the victim's timely σ-pool short of qV until the
+// delayed commits arrive. Mirrors the regression-shape of the existing
+// hardcoded "from == 3 || from == 4" predicate (n=4 / qV=3 → delay 2
+// peers) but parameterized over (n, qV) so it works at any cell.
+//
+// At n=4 / qV=3: delays ops 3, 4 (2 peers); leaves op2 timely + own
+// self-observation = 2 partials, < qV=3 — opportunistic resolve must
+// salvage when the delayed commits arrive.
+//
+// At n=7 / qV=5: delays ops 5, 6, 7 (3 peers); leaves ops 2-4 timely
+// + own = 4 partials, < qV=5 — same regression shape, salvage path
+// must still work.
+func lateCommitDelayPredicate(n int, victim spectypes.OperatorID, delay time.Duration) delayFn {
+	f := (n - 1) / 3
+	qV := 2*f + 1
+	delayCount := n - qV + 1
+	firstDelayedOp := spectypes.OperatorID(n - delayCount + 1)
+	return func(from, to spectypes.OperatorID, kind byte) time.Duration {
+		if kind == byte(wire.KindCommit) && to == victim && from >= firstDelayedOp && int(from) <= n {
+			return delay
+		}
+		return 0
+	}
+}
+
+// scenarioConfig parameterizes a runner scenario for the bridge:
+// runner overrides (per (n, K) cell), bus shape (with or without
+// delay), and ctx timeout. The bridge's runScenarioWithSafetyCheck
+// runs the scenario at the given cell and asserts safety.
+type scenarioConfig struct {
+	name      string
+	timeout   time.Duration
+	overrides func(t *testing.T, cell matrixCell) *ConfigOverrides
+	// delayFor returns the bus's delayFn for the given cell; nil → no
+	// delay (use newBroadcastBus instead of newBroadcastBusWithDelay).
+	delayFor func(cell matrixCell) delayFn
+}
+
+// healthyScenarioConfig: nominal-conditions cluster. All ops receive
+// L_0 bundle on time, all hosts valid. Bridge asserts safety on the
+// resulting wire. Subsumes the OpportunisticTiming wire-shape (same
+// config + no delay) — the OpportunisticTiming scenario's distinct
+// regression class is exercised by its dedicated TestRunProposerSlot
+// test which asserts the elapsed-time property; the bridge variant
+// only adds the safety-check overlay.
+func healthyScenarioConfig() scenarioConfig {
+	return scenarioConfig{
+		name:    "Healthy",
+		timeout: 3 * time.Second,
+		overrides: func(t *testing.T, cell matrixCell) *ConfigOverrides {
+			budget, fetchAt := compressedTestScheduleForK(t, cell.K)
+			return &ConfigOverrides{
+				K:               cell.K,
+				tCommitOverride: 200 * time.Millisecond,
+				delta2Override:  60 * time.Millisecond,
+				eps3Override:    60 * time.Millisecond,
+				BTT:             30 * time.Millisecond,
+				FetchAt:         fetchAt,
+				BroadcastBudget: budget,
+			}
+		},
+	}
+}
+
+// opportunisticTimingScenarioConfig: same wire shape as Healthy.
+// Wrapped under a distinct test name so the bridge's coverage matrix
+// explicitly documents that safety invariants hold under the
+// observer-mode timing config (no regression cascades safety into
+// scope here, but the symmetric scenario set is the right shape for
+// future regression classes that might).
+func opportunisticTimingScenarioConfig() scenarioConfig {
+	cfg := healthyScenarioConfig()
+	cfg.name = "OpportunisticTiming"
+	return cfg
+}
+
+// lateCommitScenarioConfig: delays a (n, qV)-parameterized subset of
+// KindCommit arrivals at op1 (the canonical victim) past
+// RoundEndOffset. Exercises the runner's opportunistic poll path —
+// safety must hold even when the cluster reaches σ-quorum strictly
+// after the soft deadline.
+func lateCommitScenarioConfig() scenarioConfig {
+	return scenarioConfig{
+		name:    "LateCommit",
+		timeout: 3 * time.Second,
+		overrides: func(t *testing.T, cell matrixCell) *ConfigOverrides {
+			budget, fetchAt := compressedTestScheduleForK(t, cell.K)
+			return &ConfigOverrides{
+				K:               cell.K,
+				tCommitOverride: 200 * time.Millisecond,
+				delta2Override:  60 * time.Millisecond,
+				eps3Override:    60 * time.Millisecond,
+				BTT:             30 * time.Millisecond,
+				FetchAt:         fetchAt,
+				BroadcastBudget: budget,
+			}
+		},
+		delayFor: func(cell matrixCell) delayFn {
+			const lateCommitDelay = 500 * time.Millisecond
+			const victim spectypes.OperatorID = 1
+			return lateCommitDelayPredicate(cell.n, victim, lateCommitDelay)
+		},
+	}
+}
+
+// runScenarioWithSafetyCheck — bridge entry-point. Builds the cluster
+// at (n, K), runs the scenario via the existing RunProposerSlot
+// fixture but with the recordingBroadcastBus wire-tap installed,
+// reconstructs the Outcome post-slot, asserts
+// ComputeSafetyReport.IsViolation() == false.
+//
+// Slot id is derived from the cell + scenario name to avoid any
+// cross-test state collision under -count=N.
+func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfig) {
+	t.Helper()
+	overrides := cfg.overrides(t, cell)
+	nodes := buildCluster(t, cell.n, overrides)
+
+	slot := phase0.Slot(100 + cell.n*10 + cell.K)
 	slotStart := time.Now()
 
-	bus := newBroadcastBus(nodes, slotStart)
+	var bus *broadcastBus
+	if cfg.delayFor != nil {
+		bus = newBroadcastBusWithDelay(nodes, slotStart, cfg.delayFor(cell))
+	} else {
+		bus = newBroadcastBus(nodes, slotStart)
+	}
 	recordingBus := newRecordingBroadcastBus(bus)
 	defer bus.stop()
 	for _, n := range nodes {
@@ -328,7 +465,7 @@ func TestSafetyBridge_OBFT_Healthy_n4_K4(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -338,22 +475,60 @@ func TestSafetyBridge_OBFT_Healthy_n4_K4(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			err := RunProposerSlot(ctx, n.sched, slot, slotStart)
-			require.NoErrorf(t, err, "op %d RunProposerSlot", n.op)
+			require.NoErrorf(t, err, "op %d RunProposerSlot at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
 		}()
 	}
 	wg.Wait()
 
-	// Sanity: every op submitted an output. The bridge's per-op
-	// reconstruction depends on this; a missing op would mean the
-	// scenario didn't complete and the safety check would test an
-	// incomplete state.
 	for _, n := range nodes {
-		require.NotNilf(t, n.submittedOutput(), "op %d submitted no output", n.op)
+		require.NotNilf(t, n.submittedOutput(),
+			"op %d submitted no output at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
 	}
 
-	// Bridge entry-point: reconstruct + assert.
 	outcome := reconstructOutcome(nodes, slot, recordingBus.snapshot())
 	rep := ct.ComputeSafetyReport(outcome)
 	require.Falsef(t, rep.IsViolation(),
-		"safety violation under real-runner scheduling: %s", rep)
+		"safety violation at %s n=%d K=%d: %s", cfg.name, cell.n, cell.K, rep)
+}
+
+// TestSafetyBridge_OBFT_Healthy iterates the (n, K) matrix and runs
+// the Healthy scenario at each cell with the safety-bridge overlay.
+// Subsumes the commit-1 single-cell smoke test (n=4 / K=4 is the
+// first matrix entry).
+func TestSafetyBridge_OBFT_Healthy(t *testing.T) {
+	cfg := healthyScenarioConfig()
+	for _, cell := range obftMatrixCells() {
+		cell := cell
+		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
+			runScenarioWithSafetyCheck(t, cell, cfg)
+		})
+	}
+}
+
+// TestSafetyBridge_OBFT_OpportunisticTiming iterates the matrix with
+// the OpportunisticTiming config. Wire shape identical to Healthy
+// under non-regression code; the named scenario documents that safety
+// holds at the observer-mode timing point.
+func TestSafetyBridge_OBFT_OpportunisticTiming(t *testing.T) {
+	cfg := opportunisticTimingScenarioConfig()
+	for _, cell := range obftMatrixCells() {
+		cell := cell
+		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
+			runScenarioWithSafetyCheck(t, cell, cfg)
+		})
+	}
+}
+
+// TestSafetyBridge_OBFT_LateCommit iterates the matrix with the
+// LateCommit config (delays a parameterized subset of KindCommits to
+// op1 past RoundEndOffset). Safety must hold under the runner's
+// opportunistic-poll re-resolve path.
+func TestSafetyBridge_OBFT_LateCommit(t *testing.T) {
+	cfg := lateCommitScenarioConfig()
+	for _, cell := range obftMatrixCells() {
+		cell := cell
+		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
+			runScenarioWithSafetyCheck(t, cell, cfg)
+		})
+	}
 }
