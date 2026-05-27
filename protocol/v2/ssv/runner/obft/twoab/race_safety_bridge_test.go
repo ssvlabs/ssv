@@ -23,11 +23,10 @@ import (
 // cluster setup with a wire-tap on the blsBus + a post-slot
 // reconstruction of a ct.Outcome, so consensustest's 10 safety
 // invariants can be applied to the wire-state produced by real-
-// goroutine scheduling of the production runner.
+// goroutine scheduling of the production runner. See the Makefile's
+// runner-safety-stress target for stress amplification.
 //
-// Design: docs/RUNNER-RACE-SAFETY-PLAN.md § Architecture.
-//
-// Scope (2abOBFT side, commit 6 of the plan):
+// File contents:
 //
 //   - recordingBlsBus + capturedEmission: wire-tap that decodes
 //     every emission via wire.Unwrap and records the typed envelope
@@ -52,8 +51,8 @@ import (
 //
 // Matrix helpers (matrixCell, twoabMatrixCells,
 // compressedTestOverridesForK) + LateCommit predicate
-// (lateValueDelayPredicate) live in cluster_matrix_test.go (introduced
-// in commits 4 + 5); this file consumes them.
+// (lateValueDelayPredicate) live in cluster_matrix_test.go; this file
+// consumes them.
 
 // recordingBlsBus wraps an existing *blsBus, decoding + capturing
 // every emission's typed envelope before forwarding to the inner bus
@@ -441,10 +440,13 @@ func healthyScenarioConfig() scenarioConfig {
 // runner's opportunistic-resolve poll path — safety must hold even
 // when the cluster reaches σ-quorum strictly after the soft deadline.
 //
-// Reuses the lateValueDelayPredicate helper from cluster_matrix_test.go
-// (commit 5). Helper named for the wire kind it delays (KindValue is
-// 2abOBFT's σ-side terminal carrying ValueMsg.L0Partial); the scenario
-// name follows OBFT-base parity convention (see plan doc § Scenarios).
+// Reuses the lateValueDelayPredicate helper from cluster_matrix_test.go.
+// Helper named for the wire kind it delays (KindValue is 2abOBFT's
+// σ-side terminal carrying ValueMsg.L0Partial — see
+// lateValueDelayPredicate's docstring for the protocol note); the
+// scenario name "LateCommit" is kept for parity with OBFT base's
+// scenario of the same name, even though OBFT base delays KindCommit
+// (its own σ-side terminal) rather than KindValue.
 func lateCommitScenarioConfig() scenarioConfig {
 	return scenarioConfig{
 		name:    "LateCommit",
@@ -583,7 +585,7 @@ func TestSafetyBridge_2abOBFT_Healthy(t *testing.T) {
 // Mirror of OBFT base's TestSafetyBridge_OBFT_LateCommit; both
 // scenarios exercise opportunistic resolve, but the wire-kind being
 // delayed differs by protocol — see lateValueDelayPredicate's
-// docstring + docs/RUNNER-RACE-SAFETY-PLAN.md § Scenarios.
+// docstring for the σ-side-terminal asymmetry between the protocols.
 func TestSafetyBridge_2abOBFT_LateCommit(t *testing.T) {
 	cfg := lateCommitScenarioConfig()
 	for _, cell := range twoabMatrixCells() {

@@ -21,12 +21,9 @@ import (
 // SilentL0Leader_NRFallThrough, real-BLS LateCommit — over the
 // (n, K) ∈ {4: 2,3,4} ∪ {7: 3..7} matrix. The non-matrix
 // counterparts (TestRunProposerSlot_Healthy_n4 + RealBLS_Healthy_n4 +
-// RealBLS_SilentL0Leader_NRFallThrough) each cover one cell; LateCommit
-// is built fresh in this commit (commit 5 of the bridge plan — see
-// docs/RUNNER-RACE-SAFETY-PLAN.md § Scenario convergence).
-//
-// The matrix variants exercise the protocol across the full f+1..N
-// fall-through depth at both cluster sizes:
+// RealBLS_SilentL0Leader_NRFallThrough) each cover one cell; this
+// file's matrix variants exercise the protocol across the full
+// f+1..N fall-through depth at both cluster sizes:
 //
 //   - σ-quorum + chained-IBE encryption (Healthy path),
 //   - chained-IBE *decryption* via NR-quorum unlock (NR fall-through), and
@@ -36,12 +33,11 @@ import (
 // which the existing per-scenario tests never exercised at K > 2.
 //
 // The helpers introduced here (matrixCell, twoabMatrixCells,
-// compressedTestOverridesForK) are shared with the safety bridge that
-// commit 6 layers on top of these scenarios — they live in a non-
-// bridge file so commit 4 can verify K > 2 works ahead of the bridge
-// landing (bisectability).
-//
-// Design: docs/RUNNER-RACE-SAFETY-PLAN.md § Order of work — commit 4.
+// compressedTestOverridesForK) are also consumed by the safety bridge
+// in race_safety_bridge_test.go — they live in this non-bridge file
+// so a fixture-level regression at K > 2 surfaces here (as a clean
+// convergence failure) before the bridge's safety-check overlay
+// muddies the diagnostic.
 
 // matrixCell — (n, K) parameterization of a 2abOBFT runner cluster
 // test. Mirror of OBFT base's matrixCell (different package — the two
@@ -55,8 +51,10 @@ type matrixCell struct {
 // n ∈ {4, 7} × K ∈ {f+1..N} = 8 cells. Spans the BFT-liveness floor
 // (K=f+1) through the maximum fall-through depth (K=n) for each
 // cluster size. Aligned with OBFT base's obftMatrixCells (same set —
-// the two protocols share the same n / K relevance range; see plan
-// doc § Cluster matrix).
+// the two protocols share the same n / K relevance range; n=10/13
+// are excluded since the safety invariants are size-independent and
+// larger cluster sizes inflate wall-time without proportional coverage
+// gain).
 func twoabMatrixCells() []matrixCell {
 	return []matrixCell{
 		{4, 2}, {4, 3}, {4, 4},
@@ -83,8 +81,10 @@ func compressedTestOverridesForK(K int) *ConfigOverrides {
 // at every (n, K) cell using buildBLSCluster + the async blsBus +
 // real-BLS crypto, and asserts convergence at each cell. Validates
 // that the 2abOBFT runner's K > 2 fall-through machinery (chained
-// IBE, layer-rotation, σ-pool gating) is sound end-to-end before
-// commit 6's safety bridge layers race-detector amplification on top.
+// IBE, layer-rotation, σ-pool gating) is sound end-to-end at the
+// non-bridge fixture level — the safety bridge in
+// race_safety_bridge_test.go layers race-detector amplification +
+// per-Outcome safety checks on top.
 //
 // The (n=4, K=4) cell overlaps with TestRunProposerSlot_RealBLS_
 // Healthy_n4 — that single-cell test is retained as a faster smoke
@@ -289,17 +289,16 @@ func lateValueDelayPredicate(n int, victim spectypes.OperatorID, delay time.Dura
 // Resolve on the state-delta channel when the late values land and
 // complete σ-quorum at L_0.
 //
-// Mirror of OBFT base's TestSafetyBridge_OBFT_LateCommit and
-// TestRunProposerSlot_LateCommit_OpportunisticResolve — convergence
-// work per docs/RUNNER-RACE-SAFETY-PLAN.md § Scenario convergence
-// (commit 5: build 2abOBFT-side LateCommit since both protocols share
-// the opportunistic-resolve poll semantics, even though the wire-kind
-// carrying σ partials differs — see lateValueDelayPredicate's protocol
-// note).
+// Counterpart to OBFT base's TestSafetyBridge_OBFT_LateCommit and
+// TestRunProposerSlot_LateCommit_OpportunisticResolve. Both protocols
+// share the opportunistic-resolve poll semantics, but the wire-kind
+// carrying σ partials differs — see lateValueDelayPredicate's
+// protocol note for the KindValue-vs-KindCommit asymmetry.
 //
-// The "LateCommit" in the test name is borrowed from OBFT base for
-// scenario parity at the bridge level (commit 6); the helper is named
-// lateValueDelayPredicate to reflect the 2abOBFT-accurate wire kind.
+// The "LateCommit" in the test name is kept for parity with OBFT
+// base's scenario of the same name (which delays KindCommit, its
+// own σ-side terminal); the helper is named lateValueDelayPredicate
+// to reflect the 2abOBFT-accurate wire kind it actually delays.
 func TestRunProposerSlot_RealBLS_LateCommit_Matrix(t *testing.T) {
 	for _, cell := range twoabMatrixCells() {
 		cell := cell

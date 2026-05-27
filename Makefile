@@ -126,12 +126,44 @@ consensustest-real-bls:
 # detector alone can't surface (those are semantic races, not Go-level
 # data races).
 #
-# Design: docs/RUNNER-RACE-SAFETY-PLAN.md.
-#
 # Iteration count: -count=80 × 3 cpu points = 240 iterations per test.
-# Calibration target: ≈ 1.5h wall on a typical dev machine. Wire into
-# nightly CI, not every-PR gate. Override -count via SAFETY_STRESS_COUNT
-# for local tuning (e.g. SAFETY_STRESS_COUNT=10 for a 10-min smoke run).
+# Measured ≈ 38 min wall on a typical dev machine (deep variant
+# ≈ 2.5h). Wire into nightly CI, not every-PR gate. Override -count
+# via SAFETY_STRESS_COUNT for local tuning (e.g. SAFETY_STRESS_COUNT=10
+# for a fast smoke run).
+#
+# TODO — tiered extension plan (build when motivated by real-world
+# findings; preemptive expansion not justified by current evidence):
+#
+# Today's 3 scenarios cover the high-probability + high-severity
+# production race classes. Other race windows exist but are guarded
+# by mutex discipline and not actively tested:
+#   * cert-during-Resolve (peer cert arrives mid-Resolve)
+#   * EndInstance-during-Cert (slot teardown races inbound cert)
+#   * Phase-1-during-Phase-2a (bundle arrives at backstop-fire instant)
+#   * NR-vs-σ pool quorum simultaneity (both fill at near-identical wall-clock)
+#
+# Both buses already expose the delayFn injection point
+# (broadcastBus in OBFT base, blsBus in twoab — see *_test.go).
+# Adding a scenario per untested class is mechanical on top of that.
+# Three expansion tiers, increasing cost / coverage:
+#
+#   Tier 1: 1 scenario per untested class (~4 new). Wall ≈ 2× current
+#           (~1.4h default / ~5h deep). Fits in nightly CI.
+#   Tier 2: 3-5 timing variants per class (~16-20 new). Wall ≈ 5×
+#           (~3h default / ~12h deep). Weekly run.
+#   Tier 3: full delay-sweep across all wire kinds and offset values
+#           (Coyote-lite). Wall ≈ 10-15×; impractical without dedicated
+#           CI hardware.
+#
+# Tighter race windows may also need higher -count to hit reliably:
+# random scheduling hits LateCommit-class races every iter, but tight
+# cert-vs-Resolve windows may fire on only 1-5% of iters → need ~300+
+# iters for 95% confidence. When adding scenarios, prefer cranking
+# -count for that specific scenario over uniform inflation.
+#
+# Trigger to build: (a) production race incident the bridge missed, or
+# (b) code-review-identified concrete race class with reproducer.
 SAFETY_STRESS_COUNT ?= 80
 .PHONY: runner-safety-stress
 runner-safety-stress:

@@ -21,11 +21,17 @@ import (
 // with a wire-tap on the broadcast bus + a post-slot reconstruction of
 // a ct.Outcome, so consensustest's 10 safety invariants can be applied
 // to the wire-state produced by real-goroutine scheduling of the
-// production runner.
+// production runner. The 2abOBFT-side mirror lives at
+// protocol/v2/ssv/runner/obft/twoab/race_safety_bridge_test.go.
 //
-// Design: docs/RUNNER-RACE-SAFETY-PLAN.md § Architecture.
+// Where unit-test under -race only asserts "no error" on the runner,
+// this asserts "safety holds across the reconstructed Outcome" —
+// catching race-induced wire-state inconsistencies that the -race
+// detector alone can't surface (those are semantic races, not
+// Go-level data races). See the Makefile's runner-safety-stress
+// target for stress amplification.
 //
-// Scope (OBFT base side, commits 1-3 of the plan):
+// File contents:
 //
 //   - recordingBroadcastBus + capturedEmission: wire-tap that decodes
 //     every emission via wire.Unwrap and records the typed envelope
@@ -45,9 +51,6 @@ import (
 //         re-resolve path (late KindCommits past RoundEndOffset).
 //       * TestSafetyBridge_OBFT_SilentL0Leader — NR-quorum unlock +
 //         fall-through to L_1 (L_0 leader bundle suppressed).
-//
-// Deferred to subsequent commits per the plan: 2abOBFT bridge mirror
-// (commits 4-6) + runner-safety-stress Makefile target (commit 7).
 //
 // Design note — why no separate OpportunisticTiming-bridge scenario:
 // the existing TestRunProposerSlot_OpportunisticTiming_NoDelta2Wait
@@ -624,9 +627,9 @@ func TestSafetyBridge_OBFT_LateCommit(t *testing.T) {
 // unlock + chain decryption. Safety must hold across the deeper-
 // layer recovery path under real concurrent scheduling.
 //
-// This is the OBFT-base-side equivalent of 2abOBFT's existing
-// TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough — convergence
-// work per docs/RUNNER-RACE-SAFETY-PLAN.md § Scenario convergence.
+// Counterpart to 2abOBFT's
+// TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough +
+// TestSafetyBridge_2abOBFT_SilentL0Leader.
 func TestSafetyBridge_OBFT_SilentL0Leader(t *testing.T) {
 	cfg := silentL0LeaderScenarioConfig()
 	for _, cell := range obftMatrixCells() {
