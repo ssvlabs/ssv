@@ -15,6 +15,7 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/obft/blsbackend"
 	twoabcore "github.com/ssvlabs/ssv/protocol/v2/obft/twoab"
+	"github.com/ssvlabs/ssv/protocol/v2/obft/twoab/wire"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -131,15 +132,36 @@ func buildBLSCluster(t *testing.T, n int, overrides *ConfigOverrides) *blsCluste
 	return &blsCluster{nodes: nodes, masterPub: masterPub, verifier: verifier}
 }
 
+// delayFn returns the per-message delivery delay for a given (from → to,
+// envelope kind) tuple. Returning 0 means deliver immediately. The kind
+// byte is the twoab/wire.MessageKind value (KindPhase1Bundle, KindValue,
+// KindNoValue, KindCommit, KindCertificate).
+//
+// Mirror of OBFT base's delayFn (different package; types are independent).
+type delayFn func(from, to spectypes.OperatorID, kind byte) time.Duration
+
 // blsBus delivers each broadcast to every peer on its own goroutine through the
 // real DispatchBytes router — async delivery under the race detector, the
 // production inbound path end-to-end.
+//
+// Optional `silent` set drops all outbound from listed ops (crashed-sender
+// sim); optional `delay` function defers per-(from,to,kind) delivery for
+// late-arrival scenarios (e.g. LateCommit exercising the opportunistic-
+// resolve poll path).
 type blsBus struct {
 	nodes     []*blsNode
 	slotStart time.Time
 	silent    map[spectypes.OperatorID]bool // outbound from these ops is dropped (crashed-sender sim)
+	delay     delayFn                       // nil → deliver every message immediately
 	wg        sync.WaitGroup
 	once      sync.Once
+}
+
+// newBlsBusWithDelay returns a blsBus that defers delivery per the supplied
+// delayFn. Used by late-arrival scenarios (LateCommit). Same shape as OBFT
+// base's newBroadcastBusWithDelay.
+func newBlsBusWithDelay(nodes []*blsNode, slotStart time.Time, delay delayFn) *blsBus {
+	return &blsBus{nodes: nodes, slotStart: slotStart, delay: delay}
 }
 
 func (b *blsBus) broadcast(from spectypes.OperatorID, data []byte) {
@@ -147,15 +169,30 @@ func (b *blsBus) broadcast(from spectypes.OperatorID, data []byte) {
 		return // send-silent op: all outbound dropped, inbound still works
 	}
 	observedOffset := time.Since(b.slotStart)
+	// Peek at the envelope kind so the delay rule can dispatch on it without
+	// each delivery goroutine reparsing. Matches OBFT base's broadcastBus.
+	var kind byte
+	if b.delay != nil {
+		if env, err := wire.Unwrap(data); err == nil && env != nil {
+			kind = byte(env.Kind)
+		}
+	}
 	for _, n := range b.nodes {
 		if n.op == from {
 			continue
 		}
 		n := n
 		dataCopy := append([]byte{}, data...)
+		var d time.Duration
+		if b.delay != nil {
+			d = b.delay(from, n.op, kind)
+		}
 		b.wg.Add(1)
 		go func() {
 			defer b.wg.Done()
+			if d > 0 {
+				time.Sleep(d)
+			}
 			_ = DispatchBytes(context.Background(), n.sched, dataCopy, observedOffset)
 		}()
 	}
