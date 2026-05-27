@@ -21,7 +21,7 @@ The bridge wraps **three canonical scenarios per protocol**, each exercising a d
 
 - **Healthy** (`TestRunProposerSlot_Healthy_*`): clean run with all Phase-1 bundles arriving on time, all hosts validating, no late commits. Verifies the runner correctly drives the protocol through Phase 1 → Phase 2 → Phase 3 under nominal conditions. Decision lands at L_0.
 - **LateCommit** (OBFT base: `TestRunProposerSlot_LateCommit_OpportunisticResolve`; 2abOBFT: `TestRunProposerSlot_RealBLS_LateCommit_Matrix`): a configurable subset of the σ-pool-fill messages to op1 (`n - qV + 1` peers, parameterized over cluster size) is deliberately delayed past the soft Phase-3 deadline. **The delayed wire-kind differs by protocol**: OBFT base delays `KindCommit` (carries σ partials there) past RoundEndOffset (T_commit + Δ_2 + ε_3); 2abOBFT delays `KindValue` (carries `ValueMsg.L0Partial` — the σ-side terminal emission) past Phase-2a's fire time. Both exercise the same opportunistic-resolve poll semantics — the runner must re-Resolve when the late σ-pool fills past the soft deadline. Catches a regression where the runner stops polling at the soft deadline.
-- **SilentL0Leader_NRFallThrough** (`TestRunProposerSlot_SilentL0Leader_NRFallThrough`): the L_0 leader's Phase-1 bundle is suppressed before broadcast (or arrives so late it's past T_commit at every receiver). All non-leader ops NR-emit at L_0 per the silent-leader rule, NR-quorum unlocks chain, L_1's leader broadcast carries the decision. Verifies the runner correctly drives the deeper-layer recovery path under real concurrency.
+- **SilentL0Leader_NRFallThrough** (OBFT base: `TestSafetyBridge_OBFT_SilentL0Leader` — built in commit 3; 2abOBFT: `TestRunProposerSlot_RealBLS_SilentL0Leader_NRFallThrough` and its matrix wrapper): the L_0 leader's Phase-1 bundle / outbound is suppressed before broadcast. All non-leader ops NR-emit at L_0 per the silent-leader rule, NR-quorum unlocks the chain, L_1's leader broadcast carries the decision. Verifies the runner correctly drives the deeper-layer recovery path under real concurrency.
 
 All three are wrapped by the bridge → the 10 safety invariants must hold on the reconstructed Outcome regardless of which runner path the scenario exercises.
 
@@ -156,9 +156,9 @@ The Makefile target accepts `SAFETY_STRESS_COUNT` as a per-run override (e.g., `
 ### Stress amplification config
 
 - `-race` always on — catches Go-level data races.
-- `-count=80` (default) / `-count=320` (nightly-deep) per scenario — each iteration is an independent goroutine-scheduling realization.
+- `-count=80` (default) / `-count=320` (nightly-deep) per scenario — each iteration is an independent goroutine-scheduling realization. Override via `SAFETY_STRESS_COUNT=N` for local tuning.
 - `-cpu=1,4,8` varies GOMAXPROCS — different timing-pressure regimes surface different race windows. `-cpu=1` serializes everything (catches races that only fire under cooperative scheduling); `-cpu=4` matches typical CI environments; `-cpu=8` introduces realistic contention pressure.
-- `-timeout=120m` (default) / `-timeout=360m` (nightly-deep) — generous headroom over the projection.
+- `-timeout 120m` per cpu invocation (both default and deep targets). The Makefile loops over `-cpu=1,4,8` as separate `go test` invocations, so each invocation's wall is ~1/3 of total. At -count=320 that's ~50 min per invocation, well under 120m.
 
 ### Real-BLS coverage — inherited, no extra config needed
 
@@ -170,7 +170,7 @@ This means the bridge complements (rather than duplicates) the existing `make co
 |---|---|---|---|
 | `make stresstest` (DES, stub BLS) | ✓ (10⁶-10⁷ seeds — deep statistical sampling) | ✗ | ✗ |
 | `make consensustest-real-bls` (DES, real BLS) | ✓ (medium-depth sampling — slower per-seed) | ✓ | ✗ |
-| `make runner-safety-stress` (race bridge, real BLS, planned) | ✓ (shallow sampling — ~100s iters) | ✓ | ✓ |
+| `make runner-safety-stress` (race bridge, real BLS) | ✓ (shallow sampling — 240 iters at -count=80, 960 at deep) | ✓ | ✓ |
 | `make unit-test` (production runner under `-race`) | ✗ (only `no error` asserted today) | ✓ | ✓ |
 
 Three orthogonal axes, three useful targets — no two are interchangeable:
@@ -191,7 +191,7 @@ The new `runner-safety-stress` and `runner-safety-stress-deep` targets already f
 
 ### Failure handling
 
-When `ComputeSafetyReport.IsViolation()` returns true, the bridge calls the existing `ct.SafetyPanic` with the reconstructed Outcome — same structured diagnostic the DES uses, including seed-equivalent test-run identity. The test fails loudly with the full state dump.
+When `ComputeSafetyReport.IsViolation()` returns true, the bridge asserts via `require.Falsef` with the report's `String()` method providing the full diagnostic (per-invariant findings, op IDs, layers, value roots). Standard Go-test failure path — no separate panic mechanism. The DES uses `ct.SafetyPanic` for its sim-loop integration; the bridge's per-cell `t.Run` shape doesn't need that.
 
 ### What NOT to assert
 
@@ -206,73 +206,88 @@ Only the 10 safety invariants. Those are timing-independent.
 
 Three architectural components (the bridge module, the outcome reconstructor, the matrix-parameterized test wrapper) plus the Makefile target. The seven mandatory commits in [§Order of work](#order-of-work) carve these by surface area rather than by component (e.g., commit 1 builds bridge+reconstructor end-to-end for one cell; commits 2-3 scale OBFT base; commits 4-6 mirror to 2abOBFT including fixture extension + missing scenarios).
 
-### Component 1 — `RecordingBroadcastBus` infrastructure
+The code sketches below show the as-built design (post-implementation, reflecting the final files). Early planning sketches kept a tagged-union `capturedEmission`; implementation simplified to reuse the existing `*wire.Envelope` (which already discriminates per Kind).
 
-New file `protocol/v2/ssv/runner/obft/race_safety_bridge_test.go` (and twoab equivalent). Defines:
+### Component 1 — Recording bus infrastructure
+
+New file `protocol/v2/ssv/runner/obft/race_safety_bridge_test.go` (OBFT base) + `protocol/v2/ssv/runner/obft/twoab/race_safety_bridge_test.go` (2abOBFT). Each wraps its protocol's existing bus:
 
 ```go
-// recordingBroadcastBus wraps the existing broadcastBus, intercepts every
-// emission, decodes the wire bytes, and records the resulting OBFT
-// message into a captured-wire list. Delegates to the inner bus
-// otherwise.
-type recordingBroadcastBus struct {
-    inner    *broadcastBus
+// OBFT base: wraps broadcastBus. 2abOBFT: wraps blsBus.
+type recordingBroadcastBus struct { // 2abOBFT name: recordingBlsBus
+    inner    *broadcastBus           // or *blsBus
     mu       sync.Mutex
     captured []capturedEmission
 }
 
 type capturedEmission struct {
-    from    spectypes.OperatorID  // genuine emitter (network-layer identity)
-    kind    obftWireKind          // bundle / commit / certificate
-    bundle  *obft.Phase1Bundle    // populated iff kind == bundle
-    commit  *obft.Commit          // populated iff kind == commit
-    cert    *obft.Certificate     // populated iff kind == certificate
+    from     spectypes.OperatorID // genuine network-level emitter
+    envelope *wire.Envelope       // already a discriminated union by Kind
 }
 ```
 
-The decode path: existing `broadcastBus.broadcast(from, data)` deserializes `data` into one of the OBFT message types via the existing wire-format decoder. The wrapper does the same decode + records before forwarding.
+The decode path: existing bus's `broadcast(from, data)` deserializes `data` via `wire.Unwrap`. The wrapper does the same decode + appends the (from, envelope) pair to `captured` under mu, then forwards to the inner bus unchanged. Decode failures (malformed envelope) are silently skipped — the inner bus's dispatch will reject them anyway.
 
-`runnerNode.hooks.broadcastFn` gets pointed at the wrapper instead of `bus.broadcast` directly.
+The runner's broadcast hook (`runnerNode.hooks.broadcastFn` on OBFT base, `blsNode.broadcastFn` on 2abOBFT) is pointed at the wrapper instead of the inner bus directly.
 
 ### Component 2 — Outcome reconstruction
 
-Same file: a `reconstructOutcome(nodes []*runnerNode, captured []capturedEmission) ct.Outcome` function.
+Same file: a `reconstructOutcome(nodes, slot, captured) ct.Outcome` function. The wire-replay loop dispatches on `envelope.Kind`:
 
 ```go
-func reconstructOutcome(nodes []*runnerNode, captured []capturedEmission) ct.Outcome {
+func reconstructOutcome(nodes []*runnerNode, slot phase0.Slot, captured []capturedEmission) ct.Outcome {
     n := len(nodes)
     agg := ct.NewOfflineAggregator(n)
 
-    // Replay captured wire trace into the aggregator.
+    // Replay captured wire trace into the aggregator. The recorded
+    // KindSet differs by protocol:
+    //   OBFT base: KindPhase1Bundle + KindCommit observed; KindCertificate
+    //              skipped (no pool contribution).
+    //   2abOBFT:   KindValue + KindNoValue + KindCommit observed;
+    //              KindPhase1Bundle + KindCertificate skipped. Phase1Bundle
+    //              is skipped specifically because the leader's σ partial
+    //              already rides in its own KindValue.L0Partial — recording
+    //              both would double-count.
     for _, em := range captured {
-        switch em.kind {
-        case wireKindBundle:
-            // Leader broadcast: ObserveSigma + ObserveSigmaByEmitter.
-            agg.ObserveSigma(ct.OperatorID(em.bundle.OperatorID), em.bundle.Layer, em.bundle.Value)
-            agg.ObserveSigmaByEmitter(ct.OperatorID(em.from), em.bundle.Layer, em.bundle.Value)
-        case wireKindCommit:
-            // Mirror obft/events.go recordCommitToAggregator's logic
-            // (σ at L_0, EncryptedClaim at L_k>0, NR partials, witnesses).
-            recordCommitWire(agg, em.from, em.commit)
-        case wireKindCertificate:
-            // Certs don't add to σ/NR pools; they just propagate the
-            // already-reconstructed signature. No aggregator update.
+        switch em.envelope.Kind {
+        case wire.KindPhase1Bundle: // OBFT base only
+            recordPhase1BundleWire(agg, em.from, em.envelope.Phase1Bundle)
+        case wire.KindValue: // 2abOBFT only
+            recordValueMsgWire(agg, em.from, em.envelope.ValueMsg)
+        case wire.KindNoValue: // 2abOBFT only
+            recordNoValueMsgWire(agg, em.from, em.envelope.NoValueMsg)
+        case wire.KindCommit: // both protocols
+            recordCommitWire(agg, em.from, em.envelope.Commit)
+        case wire.KindCertificate:
+            // Skipped — propagates already-reconstructed sig; no pool delta.
         }
     }
 
     perOp := make(map[ct.OperatorID]ct.OperatorOutcome, n)
     for _, node := range nodes {
-        out := node.submittedOutput()
-        inst := node.ctrl.instanceForSlot(slot).instance // internal access
-        var oo ct.OperatorOutcome
-        if out != nil {
+        oo := ct.OperatorOutcome{Round: -1}
+        if out := node.submittedOutput(); out != nil {
             oo.Decided = true
-            oo.Value = out.Value
+            oo.Value = append([]byte(nil), out.Value...)
             oo.Round = out.Layer
-        } else {
-            oo.Round = -1
         }
-        oo.ResolveLayerAttempts = convertLayerAttempts(inst.LastResolveLayerAttempts())
+        // Per-Instance trace via extractInstanceTrace helper that holds
+        // both the Controller's mu (for the instances-map lookup) and
+        // the RunningInstance's instanceMu (so the read is serialized
+        // against any in-progress Resolve goroutine — defensive under
+        // -race even after wg.Wait()).
+        if trace := extractInstanceTrace(node, slot); len(trace) > 0 {
+            oo.ResolveLayerAttempts = convertLayerAttempts(trace)
+            // Cert-gossip-decide convention (matches DES adapter): if
+            // local Resolve never reached a Decided layer but the op
+            // still submitted, the submit came via cert gossip — set
+            // Round=-1 so D1's case-(a) cert-gossip branch fires.
+            if oo.Decided && !traceHasDecided(trace) {
+                oo.Round = -1
+            }
+        } else if oo.Decided {
+            oo.Round = -1 // cert-gossip-decide before any local Resolve
+        }
         perOp[ct.OperatorID(node.op)] = oo
     }
 
@@ -287,11 +302,21 @@ func reconstructOutcome(nodes []*runnerNode, captured []capturedEmission) ct.Out
 }
 ```
 
-The `recordCommitWire` helper mirrors `consensustest/obft/events.go recordCommitToAggregator` logic but operates on the production wire type (which is the same `obft.Commit`). Both paths handle:
-- `c.Layers[0]` plaintext σ → `ObserveSigma + ObserveSigmaByEmitter`
-- `c.Layers[k>0]` encrypted onion → `ObserveEncryptedClaim + ObserveSigmaByEmitter`
-- `c.NRPartials` → `ObserveNR + ObserveNRByEmitter`
-- `c.Witnesses[]` → `ObserveSigmaByValueRoot` (claimed-sender path only — same as DES)
+The `record*Wire` helpers mirror `consensustest/{obft,twoab}/events.go`'s `record*ToAggregator` recorders. Each handles its protocol's pool-contribution rules:
+
+- **OBFT base — recordCommitWire** on `*obft.Commit`:
+  - `c.Layers[0]` plaintext σ → `ObserveSigma + ObserveSigmaByEmitter`
+  - `c.Layers[k>0]` encrypted onion → `ObserveEncryptedClaim + ObserveSigmaByEmitter`
+  - `c.NRPartials` → `ObserveNR + ObserveNRByEmitter`
+  - `c.Witnesses[]` → `ObserveSigmaByValueRoot` (claimed-sender path only — same as DES)
+
+- **2abOBFT — recordValueMsgWire** on `*twoab.ValueMsg`:
+  - `vm.L0Partial` → `ObserveSigma at L_0 + ObserveSigmaByEmitter` (the σ-side terminal at L_0)
+  - `vm.LayerEntries` (SigmaChained / NRPlaintext) → `ObserveEncryptedClaim` / `ObserveNR` at L_k>0
+
+- **2abOBFT — recordNoValueMsgWire** on `*twoab.NoValueMsg`: identical to ValueMsg's LayerEntries handling but no L_0 payload.
+
+- **2abOBFT — recordCommitWire** on `*twoab.Commit`: NR-side only (Side=NR → ObserveNR at L_0; Side=NRDirect → ObserveNR at L_0 plus LayerEntries).
 
 ### Component 3 — Matrix-parameterized test wrapper
 
@@ -314,17 +339,20 @@ func obftMatrixCells() []matrixCell {
 }
 
 func TestSafetyBridge_OBFT_Healthy(t *testing.T) {
+    cfg := healthyScenarioConfig()
     for _, cell := range obftMatrixCells() {
+        cell := cell
         t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
-            runScenarioWithSafetyCheck(t, cell.n, cell.K, scenarioHealthy)
+            runScenarioWithSafetyCheck(t, cell, cfg)
         })
     }
 }
 // Same shape for TestSafetyBridge_OBFT_LateCommit and
-// TestSafetyBridge_OBFT_SilentL0Leader.
+// TestSafetyBridge_OBFT_SilentL0Leader (each calls its own
+// *ScenarioConfig() factory); same shape mirrored on the 2abOBFT side.
 ```
 
-`runScenarioWithSafetyCheck` is the bridge entry-point: builds the cluster at (n, K), runs the scenario, captures the wire, reconstructs the Outcome, asserts `ComputeSafetyReport.IsViolation() == false`. Single helper consumed by all three OBFT scenarios + mirror three 2abOBFT scenarios.
+`runScenarioWithSafetyCheck(t, cell, cfg)` is the bridge entry-point: builds the cluster at the cell's (n, K), runs the scenario per `cfg` (overrides + optional delay + optional silent-set), captures the wire, reconstructs the Outcome, asserts `ComputeSafetyReport.IsViolation() == false`. Single helper consumed by all three OBFT scenarios + mirror three 2abOBFT scenarios = 6 test-function entries total.
 
 ### Component 4 — Makefile target
 
