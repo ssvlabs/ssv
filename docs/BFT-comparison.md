@@ -31,7 +31,7 @@ Per-protocol jitter / reflood cushion:
 - **2abOBFT**: in the `SafetyBuffer` σ-pool fill window (default `700ms`, matching `SafetyBuffer`) — absorbs one gossipsub IHAVE/IWANT cycle for a late `KindValue` / forwarded witness. Phase 2a fires async on `L0Ready` (no fixed window) and the NR-side commit is dynamic; per-emission propagation tightened to `1·BTT`.
 - **OBFTR**: in cross-round retention — bundles missing round r's σ-window remain usable in round r+1. Per-round Δ_2 = `1·BTT` (KindCommit_r propagation only).
 - **QBFT** (reflood-aware): `SafetyBuffer + 1·BTT` added to each round's timer (R1 = 4·BTT + SafetyBuffer, R≥2 = 5·BTT + SafetyBuffer) — one gossip-backstop recovery (heartbeat + IWANT round-trip), matching OBFT's `B_0` reflood budget. The realistic mesh-tolerant default; compare against bare OBFT.
-- **QBFT-no-reflood**: *no* cushion — each round's timer equals that round's exact decision time (R1 = 3·BTT, R≥2 = 4·BTT incl the ROUND_CHANGE hop). The zero-cushion structural floor; compare against other protocols' no-reflood variants (e.g. OBFT-no-reflood).
+- **QBFT-no-reflood**: *no* cushion — each round's timer equals that round's exact decision time (R1 = 3·BTT, R≥2 = 4·BTT incl the ROUND_CHANGE hop). The zero-cushion structural floor; compare against other protocols' no-reflood variants (e.g. OBFT-0).
 - **QBFT-SSV**: in round-timer slack `RT − R1 = 10·BTT − 4·BTT = 6·BTT` at BTT=200ms (production-anchored `RT = 2000ms`).
 
 **This is the production-survival sizing for mission-critical roles.** For SSV proposer duty: missing a slot is per-slot economic loss + signal to stakers, so the configuration target is worst-case completion under recommended sizing. The structural cushions above are sized for P99→P9999 absorption.
@@ -41,7 +41,7 @@ QBFT is recomputed under the unified 1·BTT-per-emission convention for apples-t
 - **QBFT-no-reflood**: per-round RT derived from BTT — `R1 = 3·BTT`, `R≥2 = 4·BTT` (the +1·BTT is the ROUND_CHANGE hop) — with no cushion. Each round's timer is exactly that round's decision time, so recovery rounds fire as early as soundly possible.
 - **QBFT-SSV**: current SSV production behavior (`RT = 2000ms`); jitter absorbed by the wide `RT − R1` slack.
 
-All three share the same R1 healthy-path timing (4 BTT = 3 BTT consensus + 1 BTT post-consensus at tightened per-emission). They differ in RT and consequently in how many rounds fit the slot budget — the no-reflood floor's tight timers fit the most (~9 rounds at BTT=100 within a 4s slot), the reflood default fewer (a cushion per round), QBFT-SSV the fewest (~2). The no-reflood floor is the zero-cushion structural reference (compare against OBFT-no-reflood); bare QBFT is the realistic reflood-aware default (compare against bare OBFT); QBFT-SSV is the production-deployed timing.
+All three share the same R1 healthy-path timing (4 BTT = 3 BTT consensus + 1 BTT post-consensus at tightened per-emission). They differ in RT and consequently in how many rounds fit the slot budget — the no-reflood floor's tight timers fit the most (~9 rounds at BTT=100 within a 4s slot), the reflood default fewer (a cushion per round), QBFT-SSV the fewest (~2). The no-reflood floor is the zero-cushion structural reference (compare against OBFT-0); bare QBFT is the realistic reflood-aware default (compare against bare OBFT); QBFT-SSV is the production-deployed timing.
 
 ## Protocol summary
 
@@ -328,7 +328,7 @@ The **MEV-fetch budget asymmetry is a structural OBFT-family advantage over QBFT
 - **Adversarial-byz robustness within single round**: 2abOBFT — recovers σ-locked-split equivocation and transient mesh-flakiness (via `KindNoValue` no-lock + upgrade), plus h_V=1, 2-1 partial equivocation, and honest-majority validity-divergence, with no round-2 budget cost; misses 1-1-1 and the 2-2 boundary (deterred via Assumption 4). Bare OBFT recovers h_V=1, 2-1, and honest-majority validity but not σ-locked-split or transient mesh-flakiness.
 - **Multi-round partition tail absorption**: OBFTR(R=2) — under tightened sizing, R1+R2 (6 BTT = 1200ms at BTT=200ms) fits at every BFT_start. Significantly more attractive than under the older 2·BTT/emission framing.
 - **QBFT-SSV (current SSV)**: production-mature; under tightened per-emission sizing, R1 fits at every BFT_start at BTT=200ms; R2 fits at BFT_start ≤ 800ms. Misses at BTT ≥ 600ms beyond BFT_start ≤ 1200ms.
-- **QBFT-no-reflood**: zero-cushion structural reference — same R1 timing as QBFT-SSV but tight per-round timers let R2 fit at BFT_start ≤ 1800ms and R3 at BFT_start ≤ 1200ms with BTT=200ms. Under jitter it round-changes on any tail (by design); compare against OBFT-no-reflood. Not the production deployment (that's QBFT-SSV).
+- **QBFT-no-reflood**: zero-cushion structural reference — same R1 timing as QBFT-SSV but tight per-round timers let R2 fit at BFT_start ≤ 1800ms and R3 at BFT_start ≤ 1200ms with BTT=200ms. Under jitter it round-changes on any tail (by design); compare against OBFT-0. Not the production deployment (that's QBFT-SSV).
 
 ## OBFT + L_Bid mini-consensus extension
 

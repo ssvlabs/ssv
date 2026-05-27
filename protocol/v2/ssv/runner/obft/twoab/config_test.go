@@ -17,7 +17,7 @@ func TestConfigForCluster_Defaults(t *testing.T) {
 
 	require.Equal(t, DefaultK, cfg.K())
 	require.Equal(t, DefaultBTT, cfg.BTT)
-	require.Equal(t, DefaultSafetyBuffer, cfg.SafetyBuffer, "default SafetyBuffer = DefaultSafetyBuffer")
+	require.Equal(t, DefaultSafetyBuffer, cfg.SafetyBuffer, "SafetyBuffer must default to package constant when unset")
 
 	// T_0_broadcast = TPhase2a − BTT, and must land within the slot.
 	require.Equal(t, cfg.TPhase2a-cfg.BTT, cfg.T0Broadcast())
