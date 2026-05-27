@@ -478,8 +478,16 @@ func lateCommitScenarioConfig() scenarioConfig {
 // every matrix cell — that's the bridge assertion.
 func silentL0LeaderScenarioConfig() scenarioConfig {
 	return scenarioConfig{
-		name:    "SilentL0Leader_NRFallThrough",
-		timeout: 5 * time.Second,
+		name: "SilentL0Leader_NRFallThrough",
+		// 10s (vs 5s on Healthy/LateCommit): the silent-leader path does the
+		// most sequential crypto work of any scenario — NR-quorum reconstruction
+		// at L_0 (threshold-IBE chain-key derivation), chain-key decryption
+		// of L_1 SigmaChained entries from each peer, σ-quorum reconstruction
+		// at L_1 (BLS threshold aggregate). Under -race × high GOMAXPROCS
+		// (32+), the per-op crypto cost can balloon ~25-50×; the 10s margin
+		// (~50× typical 190ms wall) absorbs tail variance without masking
+		// real deadlocks (which would still fail at 10s).
+		timeout: 10 * time.Second,
 		overrides: func(_ *testing.T, cell matrixCell) *ConfigOverrides {
 			return compressedTestOverridesForK(cell.K)
 		},
@@ -538,6 +546,15 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	}
 	wg.Wait()
 
+	// If any op failed (runErr or no submitted output), dump full cluster
+	// state BEFORE the assertions t.Fatalf bail out. The dump captures the
+	// per-op resolve-trace pool sizes (σ-pool, NR-pool) at each layer +
+	// captured-emission count — load-bearing diagnostics for understanding
+	// rare race-stress failures where convergence stalls.
+	if anyOpFailed(cl.nodes) {
+		dumpClusterDiagnostic(t, cl.nodes, slot, recordingBus.snapshot(), cfg.name, cell)
+	}
+
 	for _, n := range cl.nodes {
 		require.NoErrorf(t, n.runErr, "op %d RunProposerSlot at %s n=%d K=%d", n.op, cfg.name, cell.n, cell.K)
 		require.NotNilf(t, n.submittedOutput(),
@@ -562,6 +579,67 @@ func runScenarioWithSafetyCheck(t *testing.T, cell matrixCell, cfg scenarioConfi
 	rep := ct.ComputeSafetyReport(outcome)
 	require.Falsef(t, rep.IsViolation(),
 		"safety violation at %s n=%d K=%d: %s", cfg.name, cell.n, cell.K, rep)
+}
+
+// anyOpFailed reports whether any op had a runErr or failed to submit
+// an Output. Used by runScenarioWithSafetyCheck to decide whether to
+// emit a diagnostic dump before the test's failing assertions bail out.
+func anyOpFailed(nodes []*blsNode) bool {
+	for _, n := range nodes {
+		if n.runErr != nil || n.submittedOutput() == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// dumpClusterDiagnostic emits a per-op state dump for failing scenarios:
+// runErr, submittedOutput, and the per-layer resolve-trace pool sizes
+// (σ-pool / NR-pool against qV / qEnc). Plus the captured-wire-emission
+// count for sanity (a stalled bus would show 0 or very few emissions
+// here). Called only on failure to keep passing-test logs quiet.
+//
+// Interpreting the dump when investigating a failure:
+//   - All ops decided except one + the failing op's σ-pool sizes are
+//     short of qV at every layer → the failing op's local convergence
+//     stalled (lost message, locked-out scheduler, etc.).
+//   - All ops decided + only the failing op's submit was nil → submit
+//     path bug (host-validate? SubmitOutput hook?).
+//   - No op decided + low captured-emission count → bus delivery stuck.
+//   - No op decided + high captured-emission count → protocol-level
+//     non-convergence (would also surface as repro-able outside -race).
+func dumpClusterDiagnostic(t *testing.T, nodes []*blsNode, slot phase0.Slot, captured []capturedEmission, scenarioName string, cell matrixCell) {
+	t.Helper()
+	t.Logf("=== DIAGNOSTIC DUMP: scenario=%s n=%d K=%d slot=%d ===", scenarioName, cell.n, cell.K, slot)
+	t.Logf("Captured wire emissions: %d", len(captured))
+	for _, n := range nodes {
+		var runErrStr string
+		if n.runErr != nil {
+			runErrStr = n.runErr.Error()
+		} else {
+			runErrStr = "<nil>"
+		}
+		out := n.submittedOutput()
+		var outStr string
+		if out == nil {
+			outStr = "<nil>"
+		} else {
+			outStr = fmt.Sprintf("Layer=%d Value=%x", out.Layer, out.Value)
+		}
+		t.Logf("  op %d: runErr=%s submittedOutput=%s", n.op, runErrStr, outStr)
+		trace := extractInstanceTrace(n, slot)
+		if trace == nil {
+			t.Logf("    resolveTrace: <none — no Instance for slot or Instance.LastResolveLayerAttempts() returned nil>")
+			continue
+		}
+		t.Logf("    resolveTrace (%d layers):", len(trace))
+		for _, la := range trace {
+			t.Logf("      L_%d: σ-pool=%d/qV=%d σ-reached=%v decided=%v | NR-pool=%d/qEnc=%d NR-reached=%v",
+				la.Layer, la.SigmaPoolSize, la.QV, la.SigmaReached, la.Decided,
+				la.NRPoolSize, la.QEnc, la.NRReached)
+		}
+	}
+	t.Logf("=== END DIAGNOSTIC DUMP ===")
 }
 
 // TestSafetyBridge_2abOBFT_Healthy iterates the (n, K) matrix and runs
