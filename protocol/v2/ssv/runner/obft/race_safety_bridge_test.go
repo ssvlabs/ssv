@@ -25,11 +25,37 @@ import (
 //
 // Design: docs/RUNNER-RACE-SAFETY-PLAN.md § Architecture.
 //
-// This file implements the bridge foundation (commit 1 of the plan) +
-// a single-cell Healthy smoke test that validates the architecture end-
-// to-end at n=4 / K=4. Matrix parameterization (commit 2), additional
-// scenarios (commit 3), and the Makefile target (commit 7) come in
-// subsequent commits.
+// Scope (OBFT base side, commits 1-3 of the plan):
+//
+//   - recordingBroadcastBus + capturedEmission: wire-tap that decodes
+//     every emission via wire.Unwrap and records the typed envelope
+//     before forwarding to the inner broadcastBus.
+//   - recordPhase1BundleWire / recordCommitWire: production-wire-side
+//     translators mirroring consensustest/obft/events.go's
+//     OfflineAggregator observations.
+//   - extractInstanceTrace + reconstructOutcome: produce a ct.Outcome
+//     suitable for ComputeSafetyReport from the captured wire +
+//     per-Instance LastResolveLayerAttempts.
+//   - Matrix parameterization (matrixCell + obftMatrixCells) +
+//     compressedTestScheduleForK + lateCommitDelayPredicate + l0Leader.
+//   - Three scenarios at every (n, K) cell, each exercising a
+//     distinct runner-side path:
+//       * TestSafetyBridge_OBFT_Healthy — nominal path (decides at L_0).
+//       * TestSafetyBridge_OBFT_LateCommit — opportunistic-poll
+//         re-resolve path (late KindCommits past RoundEndOffset).
+//       * TestSafetyBridge_OBFT_SilentL0Leader — NR-quorum unlock +
+//         fall-through to L_1 (L_0 leader bundle suppressed).
+//
+// Deferred to subsequent commits per the plan: 2abOBFT bridge mirror
+// (commits 4-6) + runner-safety-stress Makefile target (commit 7).
+//
+// Design note — why no separate OpportunisticTiming-bridge scenario:
+// the existing TestRunProposerSlot_OpportunisticTiming_NoDelta2Wait
+// asserts a TIMING property (submission < T_commit + Δ_2). Its WIRE
+// shape is identical to Healthy under non-regression code; a bridge
+// variant would assert safety on identical wire output as Healthy,
+// providing zero incremental coverage. Kept as a single Healthy
+// bridge instead.
 
 // recordingBroadcastBus wraps an existing *broadcastBus, decoding +
 // capturing every emission's typed envelope before forwarding to the
@@ -398,11 +424,10 @@ type scenarioConfig struct {
 
 // healthyScenarioConfig: nominal-conditions cluster. All ops receive
 // L_0 bundle on time, all hosts valid. Bridge asserts safety on the
-// resulting wire. Subsumes the OpportunisticTiming wire-shape (same
-// config + no delay) — the OpportunisticTiming scenario's distinct
-// regression class is exercised by its dedicated TestRunProposerSlot
-// test which asserts the elapsed-time property; the bridge variant
-// only adds the safety-check overlay.
+// resulting wire. Also subsumes the OpportunisticTiming wire-shape
+// (identical config under non-regression code) — see the file-level
+// design note for why a separate OpportunisticTiming bridge isn't
+// useful.
 func healthyScenarioConfig() scenarioConfig {
 	return scenarioConfig{
 		name:    "Healthy",
@@ -420,18 +445,6 @@ func healthyScenarioConfig() scenarioConfig {
 			}
 		},
 	}
-}
-
-// opportunisticTimingScenarioConfig: same wire shape as Healthy.
-// Wrapped under a distinct test name so the bridge's coverage matrix
-// explicitly documents that safety invariants hold under the
-// observer-mode timing config (no regression cascades safety into
-// scope here, but the symmetric scenario set is the right shape for
-// future regression classes that might).
-func opportunisticTimingScenarioConfig() scenarioConfig {
-	cfg := healthyScenarioConfig()
-	cfg.name = "OpportunisticTiming"
-	return cfg
 }
 
 // lateCommitScenarioConfig: delays a (n, qV)-parameterized subset of
@@ -583,20 +596,6 @@ func silentL0LeaderScenarioConfig() scenarioConfig {
 // first matrix entry).
 func TestSafetyBridge_OBFT_Healthy(t *testing.T) {
 	cfg := healthyScenarioConfig()
-	for _, cell := range obftMatrixCells() {
-		cell := cell
-		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
-			runScenarioWithSafetyCheck(t, cell, cfg)
-		})
-	}
-}
-
-// TestSafetyBridge_OBFT_OpportunisticTiming iterates the matrix with
-// the OpportunisticTiming config. Wire shape identical to Healthy
-// under non-regression code; the named scenario documents that safety
-// holds at the observer-mode timing point.
-func TestSafetyBridge_OBFT_OpportunisticTiming(t *testing.T) {
-	cfg := opportunisticTimingScenarioConfig()
 	for _, cell := range obftMatrixCells() {
 		cell := cell
 		t.Run(fmt.Sprintf("n%d_K%d", cell.n, cell.K), func(t *testing.T) {
