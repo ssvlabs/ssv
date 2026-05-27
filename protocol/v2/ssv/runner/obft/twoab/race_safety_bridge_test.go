@@ -479,15 +479,22 @@ func lateCommitScenarioConfig() scenarioConfig {
 func silentL0LeaderScenarioConfig() scenarioConfig {
 	return scenarioConfig{
 		name: "SilentL0Leader_NRFallThrough",
-		// 10s (vs 5s on Healthy/LateCommit): the silent-leader path does the
+		// 60s (vs 5s on Healthy/LateCommit): the silent-leader path does the
 		// most sequential crypto work of any scenario — NR-quorum reconstruction
 		// at L_0 (threshold-IBE chain-key derivation), chain-key decryption
 		// of L_1 SigmaChained entries from each peer, σ-quorum reconstruction
 		// at L_1 (BLS threshold aggregate). Under -race × high GOMAXPROCS
-		// (32+), the per-op crypto cost can balloon ~25-50×; the 10s margin
-		// (~50× typical 190ms wall) absorbs tail variance without masking
-		// real deadlocks (which would still fail at 10s).
-		timeout: 10 * time.Second,
+		// (32+), the per-op crypto cost can balloon ~25-50× — enough to
+		// occasionally exhaust the old 5s budget.
+		//
+		// 60s gives ~315× margin over typical 190ms wall. Cost is paid only
+		// on failure paths (passing tests complete in ~190ms regardless of
+		// timeout). The intentionally generous budget makes the failure
+		// signal sharp: a hit at 60s is almost certainly a real bug (no
+		// reasonable scheduling delay lasts a minute), not a long-tail
+		// timing artifact. Avoids re-investigating the same flake repeatedly
+		// at smaller bumps (5s → 10s → 20s → ...).
+		timeout: 60 * time.Second,
 		overrides: func(_ *testing.T, cell matrixCell) *ConfigOverrides {
 			return compressedTestOverridesForK(cell.K)
 		},
