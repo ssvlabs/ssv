@@ -436,12 +436,14 @@ func ConfigForCluster(
 		Delta2:    overrides.delta2(),
 		Eps3:      overrides.eps3(),
 		BTT:       overrides.btt(),
-		// The runner-layer Verifier.VerifyCommitNRPartials in
-		// verifier.go runs the BLS verify on every NR partial before
-		// dispatch hands the Commit to Instance, so the in-Instance
-		// repeat is pure waste in production. See the field's doc-comment
-		// in obftcore types.go and docs/OBFT-PERFORMANCE-AUDIT-PLAN.md §F5
-		// for the safety contract.
+		// The validation-layer Verifier.VerifyCommitNRPartials (invoked
+		// from message/validation/obft_validation.go on every inbound
+		// KindCommit envelope; Verifier is constructed via the helper in
+		// runner/obft/verifier.go) runs the BLS verify on every NR partial
+		// before the envelope is dispatched to Instance, so the in-Instance
+		// repeat is pure waste on the production path. See the field's
+		// doc-comment in obftcore types.go and docs/OBFT-PERFORMANCE-AUDIT-PLAN.md
+		// §F5 for the safety contract.
 		SkipNRPartialReverify: true,
 	}
 	return cfg, nil

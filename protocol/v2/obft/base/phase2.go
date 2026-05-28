@@ -323,11 +323,11 @@ func (i *Instance) ObserveCommit(c *Commit) error {
 	// depth for any path that bypasses validation (tests, future plumbing).
 	//
 	// Config.SkipNRPartialReverify gates the in-Instance repeat so the
-	// production runner — which always runs the upstream Verifier before
-	// dispatch — skips ~18 ms/slot of redundant BLS verifies. Callers that
-	// can't guarantee the upstream verify (consensustest, ad-hoc test
-	// harnesses) leave it at the default false. See the field's doc-comment
-	// in types.go for the safety contract.
+	// production path — where message/validation/obft_validation.go runs
+	// Verifier.VerifyCommitNRPartials before dispatch — skips ~18 ms/slot
+	// of redundant BLS verifies. Callers that can't guarantee the upstream
+	// verify (consensustest, ad-hoc test harnesses) leave it at the default
+	// false. See the field's doc-comment in types.go for the safety contract.
 	if !i.cfg.SkipNRPartialReverify {
 		if err := i.verifyCommitNRPartials(c); err != nil {
 			return err

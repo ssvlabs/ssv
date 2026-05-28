@@ -11,12 +11,14 @@ import (
 // Tests for the Config.SkipNRPartialReverify gate (audit finding F5). See
 // docs/OBFT-F1-F5-IMPLEMENTATION-PLAN.md for the safety contract.
 //
-// The flag exists because the production runner's `Verifier.VerifyCommitNRPartials`
-// already runs the same BLS verify before dispatch hands the Commit to
-// Instance — the in-Instance repeat is pure defense-in-depth for paths that
-// bypass the runner-layer Verifier (consensustest, ad-hoc test harnesses).
-// The flag defaults false so any unknown / unaudited code path keeps the
-// in-Instance verify active; only the production runner sets it true.
+// The flag exists because the validation layer
+// (message/validation/obft_validation.go) runs the runner's
+// Verifier.VerifyCommitNRPartials on every inbound KindCommit envelope
+// before dispatch hands the Commit to Instance — the in-Instance repeat
+// is pure defense-in-depth for paths that bypass that validation
+// (consensustest, ad-hoc test harnesses). The flag defaults false so any
+// unknown / unaudited code path keeps the in-Instance verify active; only
+// the production runner sets it true.
 
 // TestObft_SkipNRPartialReverify_DefaultStillVerifies — with the default
 // (zero) Config.SkipNRPartialReverify, ObserveCommit MUST run the in-Instance
@@ -52,12 +54,12 @@ func TestObft_SkipNRPartialReverify_DefaultStillVerifies(t *testing.T) {
 // TestObft_SkipNRPartialReverify_TrueBypassesVerify — with the flag set
 // true, ObserveCommit MUST NOT run the in-Instance NR-partial BLS verify, so
 // a Commit that would otherwise be rejected for a malformed NR partial is
-// accepted. In production this is safe because the runner-layer Verifier
-// already ran the verify upstream and would have rejected the Commit before
-// it reached Instance. The test just confirms the flag actually skips the
-// call — it does NOT model the upstream Verifier; this is the safety hole
-// that the "MUST keep the flag false in any path that doesn't run the
-// upstream Verifier" contract closes.
+// accepted. In production this is safe because the validation layer's
+// Verifier.VerifyCommitNRPartials already ran the verify and would have
+// rejected the envelope before it reached Instance. The test just confirms
+// the flag actually skips the call — it does NOT model the upstream
+// validation; this is the safety hole that the "MUST keep the flag false in
+// any path that doesn't run the upstream Verifier" contract closes.
 func TestObft_SkipNRPartialReverify_TrueBypassesVerify(t *testing.T) {
 	s := newSim(t, 4)
 
